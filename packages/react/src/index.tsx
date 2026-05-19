@@ -325,12 +325,7 @@ export const Cell = React.memo((props: CellProps) => {
 						onChange={(e) => setValue(e.target.value)}
 						onMouseDown={(e) => e.stopPropagation()}
 						onDoubleClick={(e) => e.stopPropagation()}
-						onBlur={() => {
-							// Delay blur commit slightly to avoid transient double-click focus races
-							setTimeout(() => {
-								handleCommit();
-							}, 150);
-						}}
+						onBlur={handleCommit}
 						onKeyDown={(e) => {
 							if (e.key === 'Enter') {
 								e.stopPropagation();
