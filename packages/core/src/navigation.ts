@@ -240,7 +240,6 @@ export class GridNavigationController {
 				focusedCell: { row, col },
 				selectedRange: { start: { row, col }, end: { row, col } },
 			});
-			this.setCellEditing(row, col, true);
 			return;
 		}
 
@@ -261,6 +260,23 @@ export class GridNavigationController {
 			focusedCell: { row, col },
 			selectedRange: { start: { row, col }, end: { row, col } },
 		});
+	};
+
+	/**
+	 * Handle MouseClick events to trigger edit mode.
+	 */
+	public handleClick = (row: number, col: number, event: MouseEvent): void => {
+		const trigger = this.options.editTrigger ?? 'doubleClick';
+		if (trigger !== 'singleClick') return;
+
+		const state = this.store.getState();
+		const range = state.selectedRange;
+		// Only enter editing if the selection is a single cell (not a multi-cell range drag)
+		const isSingleCell = !range || (range.start.row === range.end.row && range.start.col === range.end.col);
+
+		if (isSingleCell) {
+			this.setCellEditing(row, col, true);
+		}
 	};
 
 	/**

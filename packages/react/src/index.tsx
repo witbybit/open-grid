@@ -177,6 +177,7 @@ export interface UseGridCellPropsResult {
 		onMouseDown: (e: React.MouseEvent) => void;
 		onMouseEnter: () => void;
 		onDoubleClick: (e: React.MouseEvent) => void;
+		onClick: (e: React.MouseEvent) => void;
 	};
 }
 
@@ -234,6 +235,14 @@ export function useGridCellProps(options: UseGridCellPropsOptions): UseGridCellP
 		[row, col, navigation, isEditing]
 	);
 
+	const onClick = useCallback(
+		(e: React.MouseEvent) => {
+			if (isEditing) return;
+			navigation.handleClick(row, col, e.nativeEvent);
+		},
+		[row, col, navigation, isEditing]
+	);
+
 	const colWidth = useGridSelector((state) => state.colWidths[col] ?? 100);
 
 	const combinedClassName = useMemo(() => {
@@ -263,6 +272,7 @@ export function useGridCellProps(options: UseGridCellPropsOptions): UseGridCellP
 			onMouseDown,
 			onMouseEnter,
 			onDoubleClick,
+			onClick,
 		},
 	};
 }

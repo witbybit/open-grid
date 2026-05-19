@@ -191,4 +191,38 @@ describe('GridNavigationController E2E Simulation', () => {
 		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 0 });
 		expect(mockEvent.preventDefault).toHaveBeenCalled();
 	});
+
+	it('should NOT trigger edit mode on mouse down but should trigger on click when editTrigger is singleClick and no drag occurred', () => {
+		const store = new GridStore({ rowCount: 10, colCount: 5 });
+		const controller = new GridNavigationController(store, { editTrigger: 'singleClick' });
+
+		// Mouse down should focus but NOT edit
+		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
+		expect(store.getState().focusedCell).toEqual({ row: 0, col: 0 });
+		expect(store.getState().activeEditCell).toBeNull();
+
+		// Click on single cell should enter edit mode
+		controller.handleClick(0, 0, {} as any);
+		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 0 });
+	});
+
+	it('should NOT trigger edit mode on click in singleClick mode if a multi-cell range drag occurred', () => {
+		const store = new GridStore({ rowCount: 10, colCount: 5 });
+		const controller = new GridNavigationController(store, { editTrigger: 'singleClick' });
+
+		// Mouse down starts selection
+		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
+		// Drag to another cell
+		controller.handleMouseEnter(1, 1);
+
+		// Verify multi-cell selection is active
+		expect(store.getState().selectedRange).toEqual({
+			start: { row: 0, col: 0 },
+			end: { row: 1, col: 1 },
+		});
+
+		// Click (releasing selection) should NOT trigger edit mode
+		controller.handleClick(0, 0, {} as any);
+		expect(store.getState().activeEditCell).toBeNull();
+	});
 });

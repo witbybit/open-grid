@@ -42,7 +42,10 @@ const StatusCellEditor = ({ row, col, value, api }: CellEditorProps) => {
 			onBlur={() => {
 				// Delay blur closure slightly to avoid double-click focus races
 				setTimeout(() => {
-					api.setState({ activeEditCell: null, activeEditValue: '' });
+					const state = api.getState();
+					if (state.activeEditCell?.row === row && state.activeEditCell?.col === col) {
+						api.setState({ activeEditCell: null, activeEditValue: '' });
+					}
 				}, 150);
 			}}
 			className='absolute inset-0 w-full h-full px-3 text-sm bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-medium cursor-pointer'
