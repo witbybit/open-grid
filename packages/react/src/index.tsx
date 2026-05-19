@@ -305,12 +305,12 @@ export const Cell = React.memo((props: CellProps) => {
 	const { cellProps, cellState, isEditing, value, setValue, api } = useGridCellProps(props);
 
 	const handleCommit = useCallback(() => {
-		navigation.commitEdit(row, col);
-	}, [row, col, navigation]);
+		api.stopEditing(false);
+	}, [api]);
 
 	const handleCancel = useCallback(() => {
-		navigation.setCellEditing(row, col, false);
-	}, [row, col, navigation]);
+		api.stopEditing(true);
+	}, [api]);
 
 	return (
 		<div {...cellProps}>

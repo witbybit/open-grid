@@ -225,4 +225,35 @@ describe('GridNavigationController E2E Simulation', () => {
 		controller.handleClick(0, 0, {} as any);
 		expect(store.getState().activeEditCell).toBeNull();
 	});
+
+	it('should support stopEditing API to commit or cancel cell edit state correctly', () => {
+		const store = new GridStore({ rowCount: 10, colCount: 5 });
+		const controller = new GridNavigationController(store);
+
+		// Focus and edit cell 0,0
+		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
+		controller.setCellEditing(0, 0, true);
+		store.setState({ activeEditValue: 'New value' });
+
+		// Act: stopEditing with cancel=true
+		store.stopEditing(true);
+
+		// Assert: editing stopped, value reverted
+		expect(store.getState().activeEditCell).toBeNull();
+		expect(store.getCellState(0, 0).isEditing).toBe(false);
+		expect(store.getCellState(0, 0).value).toBe('');
+
+		// Focus and edit cell 0,0 again
+		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
+		controller.setCellEditing(0, 0, true);
+		store.setState({ activeEditValue: 'Committed value' });
+
+		// Act: stopEditing with cancel=false
+		store.stopEditing(false);
+
+		// Assert: editing stopped, value committed
+		expect(store.getState().activeEditCell).toBeNull();
+		expect(store.getCellState(0, 0).isEditing).toBe(false);
+		expect(store.getCellState(0, 0).value).toBe('Committed value');
+	});
 });

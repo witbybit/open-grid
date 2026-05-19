@@ -28,8 +28,8 @@ const StatusCellEditor = ({ row, col, value, api }: CellEditorProps) => {
 				// 1. Programmatically update the cell value
 				api.setCellValue(row, col, nextVal);
 
-				// 2. Programmatically close editing mode by clearing registers
-				api.setState({ activeEditCell: null, activeEditValue: '' });
+				// 2. Programmatically close editing mode using the new API
+				api.stopEditing(false);
 
 				// 3. E2E GridApi control: If status becomes "Inactive", set Price and Qty to 0!
 				if (nextVal === 'Inactive') {
@@ -42,10 +42,7 @@ const StatusCellEditor = ({ row, col, value, api }: CellEditorProps) => {
 			onBlur={() => {
 				// Delay blur closure slightly to avoid double-click focus races
 				setTimeout(() => {
-					const state = api.getState();
-					if (state.activeEditCell?.row === row && state.activeEditCell?.col === col) {
-						api.setState({ activeEditCell: null, activeEditValue: '' });
-					}
+					api.stopEditing(false);
 				}, 150);
 			}}
 			className='absolute inset-0 w-full h-full px-3 text-sm bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-medium cursor-pointer'

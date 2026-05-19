@@ -61,6 +61,7 @@ export interface GridApi {
 	setRowHeight(row: number, height: number): void;
 	addEventListener<T = any>(type: string, callback: GridEventListener<T>): () => void;
 	dispatchEvent<T = any>(type: string, payload: T): void;
+	stopEditing(cancel?: boolean): void;
 }
 
 export class GridStore implements GridApi {
@@ -241,6 +242,57 @@ export class GridStore implements GridApi {
 			oldValue,
 			newValue: value,
 		});
+	};
+
+	/**
+	 * Stop editing on the active edit cell, committing or canceling the changes.
+	 */
+	public stopEditing = (cancel: boolean = false): void => {
+		const state = this.state;
+		const active = state.activeEditCell;
+		if (!active) return;
+
+		const { row, col } = active;
+		const key = `${row},${col}`;
+		const cell = this.getCellState(row, col);
+
+		if (cancel) {
+			this.setState((s) => ({
+				cells: {
+					...s.cells,
+					[key]: {
+						...cell,
+						isEditing: false,
+					},
+				},
+				activeEditCell: null,
+				activeEditValue: '',
+			}));
+		} else {
+			const activeEditValue = state.activeEditValue;
+			// 1. Dispatch event with oldValue and newValue details
+			this.dispatchEvent('cellValueChanged', {
+				row,
+				col,
+				oldValue: cell.value,
+				newValue: activeEditValue,
+			});
+
+			// 2. Perform atomic state update for values and editing state
+			this.setState((s) => ({
+				cells: {
+					...s.cells,
+					[key]: {
+						...cell,
+						value: activeEditValue,
+						computedValue: activeEditValue,
+						isEditing: false,
+					},
+				},
+				activeEditCell: null,
+				activeEditValue: '',
+			}));
+		}
 	};
 
 	/**

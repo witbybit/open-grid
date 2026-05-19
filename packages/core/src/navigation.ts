@@ -15,6 +15,14 @@ export class GridNavigationController {
 	constructor(store: GridStore, options: GridNavigationOptions = {}) {
 		this.store = store;
 		this.options = options;
+
+		// Bind store event listener to invoke options callback when edits are committed
+		if (this.options.onCellValueChanged) {
+			this.store.addEventListener('cellValueChanged', (event) => {
+				const { row, col, newValue } = event.payload;
+				this.options.onCellValueChanged?.(row, col, newValue);
+			});
+		}
 	}
 
 	/**
@@ -320,56 +328,11 @@ export class GridNavigationController {
 	}
 
 	public commitEdit(row: number, col: number): void {
-		const key = `${row},${col}`;
-		const cell = this.store.getCellState(row, col);
-		if (!cell.isEditing) return;
-
-		const activeEditValue = this.store.getState().activeEditValue;
-
-		// 1. Manually dispatch event with correct deltas
-		this.store.dispatchEvent('cellValueChanged', {
-			row,
-			col,
-			oldValue: cell.value,
-			newValue: activeEditValue,
-		});
-
-		// 2. Perform atomic single state update for value, computedValue, and isEditing
-		this.store.setState((state) => ({
-			cells: {
-				...state.cells,
-				[key]: {
-					...cell,
-					value: activeEditValue,
-					computedValue: activeEditValue,
-					isEditing: false,
-				},
-			},
-			activeEditCell: null,
-			activeEditValue: '',
-		}));
-
-		if (this.options.onCellValueChanged) {
-			this.options.onCellValueChanged(row, col, activeEditValue);
-		}
+		this.store.stopEditing(false);
 	}
 
 	public cancelEdit(row: number, col: number): void {
-		const key = `${row},${col}`;
-		const cell = this.store.getCellState(row, col);
-		if (!cell.isEditing) return;
-
-		this.store.setState((state) => ({
-			cells: {
-				...state.cells,
-				[key]: {
-					...cell,
-					isEditing: false,
-				},
-			},
-			activeEditCell: null,
-			activeEditValue: '',
-		}));
+		this.store.stopEditing(true);
 	}
 }
 export { GridStore };
