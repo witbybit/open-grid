@@ -1,0 +1,24 @@
+{
+	"name": "open-grid",
+	"private": true,
+	"version": "1.0.0",
+	"description": "Headless high-performance spreadsheet and grid engine",
+	"scripts": {
+		"build": "pnpm --filter \"@open-grid/*\" run build",
+		"test": "pnpm --filter \"@open-grid/*\" run test",
+		"dev:demo": "pnpm --filter \"demo-app\" run dev",
+		"format": "prettier --write .",
+		"format:check": "prettier --check ."
+	},
+	"devDependencies": {
+		"prettier": "^3.2.5",
+		"typescript": "^5.4.5",
+		"typescript-eslint": "^7.10.0",
+		"vitest": "^1.6.0"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"esbuild"
+		]
+	}
+}
