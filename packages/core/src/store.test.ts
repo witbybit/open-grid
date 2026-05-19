@@ -75,9 +75,33 @@ describe('GridStore micro-store functionality', () => {
 			payload: { row: 0, col: 1, oldValue: '', newValue: 'Neon stand' },
 		});
 	});
+
+	it('should emit focus and selection events once when helper APIs are used', () => {
+		const store = new GridStore({ rowCount: 5, colCount: 5 });
+		const focusListener = vi.fn();
+		const selectionListener = vi.fn();
+
+		store.addEventListener('focusChanged', focusListener);
+		store.addEventListener('selectionChanged', selectionListener);
+
+		store.setFocusedCell(1, 2);
+		store.setSelectedRange({ row: 1, col: 2 }, { row: 3, col: 4 });
+
+		expect(focusListener).toHaveBeenCalledTimes(1);
+		expect(selectionListener).toHaveBeenCalledTimes(1);
+		expect(focusListener).toHaveBeenCalledWith({
+			type: 'focusChanged',
+			payload: { focusedCell: { row: 1, col: 2 } },
+		});
+		expect(selectionListener).toHaveBeenCalledWith({
+			type: 'selectionChanged',
+			payload: { selectedRange: { start: { row: 1, col: 2 }, end: { row: 3, col: 4 } } },
+		});
+	});
 });
 
 import { GridNavigationController } from './navigation.js';
+import { ServerRowModelController } from './serverRowModel.js';
 
 describe('GridNavigationController E2E Simulation', () => {
 	it('should successfully update focused cell on ArrowDown navigation', () => {
@@ -257,6 +281,23 @@ describe('GridNavigationController E2E Simulation', () => {
 		expect(store.getCellState(0, 0).value).toBe('Committed value');
 	});
 
+	it('should preserve the committed value when printable-key editing is cancelled', () => {
+		const store = new GridStore({ rowCount: 10, colCount: 5 });
+		const controller = new GridNavigationController(store);
+
+		store.setCellValue(0, 0, 'Original');
+		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
+		controller.handleKeyDown({ key: 'X', preventDefault: vi.fn() } as any);
+
+		expect(store.getState().activeEditValue).toBe('X');
+		expect(store.getCellState(0, 0).value).toBe('Original');
+
+		store.stopEditing(true);
+
+		expect(store.getCellState(0, 0).value).toBe('Original');
+		expect(store.getState().activeEditCell).toBeNull();
+	});
+
 	it('should ensure focused cell in edit mode goes to non-edit on stopEditing', () => {
 		const store = new GridStore({ rowCount: 10, colCount: 5 });
 		const controller = new GridNavigationController(store);
@@ -276,5 +317,45 @@ describe('GridNavigationController E2E Simulation', () => {
 
 		// Assert
 		expect(store.getCellState(0, 0).isEditing).toBe(false);
+	});
+});
+
+describe('ServerRowModelController', () => {
+	it('should pass current sort and filter models to the datasource', async () => {
+		const store = new GridStore({
+			rowCount: 10,
+			colCount: 5,
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+			filterModel: { status: { type: 'equals', filter: 'Active' } },
+		});
+		const getRows = vi.fn().mockResolvedValue({ rows: [['row-0']], totalCount: 1 });
+		const controller = new ServerRowModelController(store, { datasource: { getRows }, blockSize: 1 });
+
+		controller.getRow(0);
+		await vi.waitFor(() => expect(getRows).toHaveBeenCalledTimes(1));
+
+		expect(getRows).toHaveBeenCalledWith({
+			startRow: 0,
+			endRow: 1,
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+			filterModel: { status: { type: 'equals', filter: 'Active' } },
+		});
+
+		controller.dispose();
+	});
+
+	it('should purge loaded server blocks when sort or filter changes', async () => {
+		const store = new GridStore({ rowCount: 10, colCount: 5 });
+		const getRows = vi.fn().mockResolvedValue({ rows: [['row-0']], totalCount: 1 });
+		const controller = new ServerRowModelController(store, { datasource: { getRows }, blockSize: 1 });
+
+		controller.getRow(0);
+		await vi.waitFor(() => expect(store.getState().loadedBlocks[0]).toEqual([['row-0']]));
+
+		store.setState({ sortModel: [{ colId: 'name', sort: 'desc' }] });
+		expect(store.getState().loadedBlocks).toEqual({});
+		expect(store.getState().loadingBlocks).toEqual({});
+
+		controller.dispose();
 	});
 });

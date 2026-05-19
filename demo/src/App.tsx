@@ -18,20 +18,18 @@ import { Cpu, Server, RefreshCw, Zap, TableProperties, HelpCircle, Layers, Termi
 // ==========================================
 // A. Custom Status Editor using GridApi
 // ==========================================
-const StatusCellEditor = ({ row, col, value, api }: CellEditorProps) => {
+const StatusCellEditor = ({ row, col, value, onChange, onCommit, api }: CellEditorProps) => {
 	return (
 		<select
 			autoFocus
 			value={value}
 			onChange={(e) => {
 				const nextVal = e.target.value;
-				// 1. Programmatically update the cell value
-				api.setCellValue(row, col, nextVal);
+				onChange(nextVal);
 
-				// 2. Programmatically close editing mode using the new API
-				api.stopEditing(false);
+				// Commit after updating activeEditValue so stopEditing writes the selected value.
+				onCommit();
 
-				// 3. E2E GridApi control: If status becomes "Inactive", set Price and Qty to 0!
 				if (nextVal === 'Inactive') {
 					api.setCellValue(row, 2, '0');
 					api.setCellValue(row, 3, '0');
@@ -42,7 +40,7 @@ const StatusCellEditor = ({ row, col, value, api }: CellEditorProps) => {
 			onBlur={() => {
 				// Delay blur closure slightly to avoid double-click focus races
 				setTimeout(() => {
-					api.stopEditing(false);
+					onCommit();
 				}, 150);
 			}}
 			className='absolute inset-0 w-full h-full px-3 text-sm bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-medium cursor-pointer'
@@ -191,12 +189,9 @@ function GridView({
 	// Keyboard navigation attachment
 	useEffect(() => {
 		const handleGlobalKeyDown = (e: KeyboardEvent) => {
-			console.log('[GridEngine] handleGlobalKeyDown e.key:', e.key, 'activeElement:', document.activeElement);
 			// Only capture keyboard if focusing inside grid or body
 			if (document.activeElement === document.body || containerRef.current?.contains(document.activeElement)) {
 				navigation.handleKeyDown(e);
-			} else {
-				console.log('[GridEngine] e.key IGNORED: activeElement is outside grid:', document.activeElement);
 			}
 		};
 

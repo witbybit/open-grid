@@ -129,6 +129,8 @@ export function useGridNavigationController(options: GridNavigationOptions = {})
 		});
 	}, [store]);
 
+	useEffect(() => () => controller.dispose(), [controller]);
+
 	return controller;
 }
 

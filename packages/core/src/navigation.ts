@@ -11,6 +11,7 @@ export class GridNavigationController {
 	private isSelecting = false;
 	private rangeStart: GridCellCoordinate | null = null;
 	private options: GridNavigationOptions;
+	private unsubscribeCellValueChanged?: () => void;
 
 	constructor(store: GridStore, options: GridNavigationOptions = {}) {
 		this.store = store;
@@ -18,21 +19,24 @@ export class GridNavigationController {
 
 		// Bind store event listener to invoke options callback when edits are committed
 		if (this.options.onCellValueChanged) {
-			this.store.addEventListener('cellValueChanged', (event) => {
+			this.unsubscribeCellValueChanged = this.store.addEventListener('cellValueChanged', (event) => {
 				const { row, col, newValue } = event.payload;
 				this.options.onCellValueChanged?.(row, col, newValue);
 			});
 		}
 	}
 
+	public dispose(): void {
+		this.unsubscribeCellValueChanged?.();
+		this.unsubscribeCellValueChanged = undefined;
+	}
+
 	/**
 	 * Handle standard keyboard movements and selection expansions.
 	 */
 	public handleKeyDown = (event: KeyboardEvent): void => {
-		console.log('[GridEngine] handleKeyDown event:', event.key);
 		const state = this.store.getState();
 		const active = state.focusedCell;
-		console.log('[GridEngine] focusedCell state:', active);
 		if (!active) return;
 
 		const row = active.row;
@@ -319,7 +323,6 @@ export class GridNavigationController {
 				[key]: {
 					...cell,
 					isEditing,
-					value: isEditing && initialChar !== '' ? initialChar : cell.value,
 				},
 			},
 			activeEditCell: isEditing ? { row, col } : null,

@@ -319,10 +319,6 @@ export class GridStore implements GridApi {
 		this.setState({
 			focusedCell: nextFocus,
 		});
-
-		this.dispatchEvent('focusChanged', {
-			focusedCell: nextFocus,
-		});
 	};
 
 	/**
@@ -332,10 +328,6 @@ export class GridStore implements GridApi {
 		const nextRange = start !== null && end !== null ? { start, end } : null;
 
 		this.setState({
-			selectedRange: nextRange,
-		});
-
-		this.dispatchEvent('selectionChanged', {
 			selectedRange: nextRange,
 		});
 	};

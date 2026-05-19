@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { GridStore, GridNavigationController } from '@open-grid/core';
-import { GridProvider, Cell, useCellEditState } from './index.js';
+import { GridProvider, Cell, useCellEditState, useGridNavigationController } from './index.js';
 
 // Simple Hook Inspector Component to test useCellEditState
 const HookInspector = ({ row, col }: { row: number; col: number }) => {
@@ -17,6 +17,11 @@ const HookInspector = ({ row, col }: { row: number; col: number }) => {
 			</button>
 		</div>
 	);
+};
+
+const NavigationControllerOwner = ({ onCellValueChanged }: { onCellValueChanged: (row: number, col: number, val: any) => void }) => {
+	useGridNavigationController({ onCellValueChanged });
+	return null;
 };
 
 describe('React Bindings hooks and components', () => {
@@ -136,5 +141,24 @@ describe('React Bindings hooks and components', () => {
 
 		// Clean up global listener
 		window.removeEventListener('keydown', keydownSpy);
+	});
+
+	it('should dispose navigation controller event listeners on unmount', () => {
+		const store = new GridStore({ rowCount: 5, colCount: 5 });
+		const onCellValueChanged = vi.fn();
+
+		const { unmount } = render(
+			<GridProvider store={store}>
+				<NavigationControllerOwner onCellValueChanged={onCellValueChanged} />
+			</GridProvider>
+		);
+
+		unmount();
+
+		act(() => {
+			store.setCellValue(0, 0, 'After unmount');
+		});
+
+		expect(onCellValueChanged).not.toHaveBeenCalled();
 	});
 });

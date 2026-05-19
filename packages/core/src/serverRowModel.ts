@@ -20,6 +20,7 @@ export class ServerRowModelController {
 	private store: GridStore;
 	private datasource: IGridDatasource;
 	private blockSize: number;
+	private unsubscribers: Array<() => void> = [];
 
 	constructor(store: GridStore, options: ServerRowModelOptions) {
 		this.store = store;
@@ -28,6 +29,15 @@ export class ServerRowModelController {
 
 		// Set model type in store
 		this.store.setState({ rowModelType: 'server' });
+		this.unsubscribers.push(
+			this.store.addEventListener('sortChanged', () => this.purgeCache()),
+			this.store.addEventListener('filterChanged', () => this.purgeCache())
+		);
+	}
+
+	public dispose(): void {
+		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
+		this.unsubscribers = [];
 	}
 
 	/**
@@ -79,8 +89,8 @@ export class ServerRowModelController {
 			const response = await this.datasource.getRows({
 				startRow,
 				endRow,
-				sortModel: null, // Custom sorting parameter support
-				filterModel: null, // Custom filtering parameter support
+				sortModel: state.sortModel,
+				filterModel: state.filterModel,
 			});
 
 			this.store.setState((curr) => {
