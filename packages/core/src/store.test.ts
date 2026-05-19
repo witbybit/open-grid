@@ -256,4 +256,25 @@ describe('GridNavigationController E2E Simulation', () => {
 		expect(store.getCellState(0, 0).isEditing).toBe(false);
 		expect(store.getCellState(0, 0).value).toBe('Committed value');
 	});
+
+	it('should ensure focused cell in edit mode goes to non-edit on stopEditing', () => {
+		const store = new GridStore({ rowCount: 10, colCount: 5 });
+		const controller = new GridNavigationController(store);
+
+		// Focus cell 0,0 and set it to editing
+		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
+		controller.setCellEditing(0, 0, true);
+
+		// Clear activeEditCell manually but leave focusedCell and isEditing in cells
+		store.setState({ activeEditCell: null });
+
+		expect(store.getState().focusedCell).toEqual({ row: 0, col: 0 });
+		expect(store.getCellState(0, 0).isEditing).toBe(true);
+
+		// Act
+		store.stopEditing();
+
+		// Assert
+		expect(store.getCellState(0, 0).isEditing).toBe(false);
+	});
 });

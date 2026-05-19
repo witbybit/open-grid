@@ -333,8 +333,10 @@ export const Cell = React.memo((props: CellProps) => {
 						}}
 						onKeyDown={(e) => {
 							if (e.key === 'Enter') {
+								e.stopPropagation();
 								handleCommit();
 							} else if (e.key === 'Escape') {
+								e.stopPropagation();
 								handleCancel();
 							}
 						}}
