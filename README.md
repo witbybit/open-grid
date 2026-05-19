@@ -68,16 +68,19 @@ graph TD
 
 The central API handle available anywhere via context (`useGridApi()`):
 
-| Method                 | Type Signature                                 | Description                                                            |
-| :--------------------- | :--------------------------------------------- | :--------------------------------------------------------------------- |
-| **`getState`**         | `() => GridState`                              | Retrieves the entire synchronous state snapshot.                       |
-| **`setState`**         | `(updater: GridStateUpdater) => void`          | Updates specific keys in state, triggering selective listeners.        |
-| **`setCellValue`**     | `(row: number, col: number, val: any) => void` | Updates a cell value and dispatches `cellValueChanged` event.          |
-| **`getCellState`**     | `(row: number, col: number) => CellState`      | Safely reads a cell's current value, computed formula, or edit status. |
-| **`setFocusedCell`**   | `(row: number, col: number) => void`           | Focuses on a specific coordinate and dispatches `focusChanged` event.  |
-| **`setSelectedRange`** | `(start: Coord, end: Coord) => void`           | Highlights a range selection and dispatches `selectionChanged` event.  |
-| **`setColumnWidth`**   | `(col: number, width: number) => void`         | Resizes a column and dispatches `columnResized` event.                 |
-| **`setRowHeight`**     | `(row: number, height: number) => void`        | Resizes a row and dispatches `rowResized` event.                       |
+| Method                 | Type Signature                                                 | Description                                                            |
+| :--------------------- | :------------------------------------------------------------- | :--------------------------------------------------------------------- |
+| **`getState`**         | `() => GridState`                                              | Retrieves the entire synchronous state snapshot.                       |
+| **`setState`**         | `(updater: GridStateUpdater) => void`                          | Updates specific keys in state, triggering selective listeners.        |
+| **`setCellValue`**     | `(row: number, col: number, val: any, computed?: any) => void` | Updates a cell value and dispatches `cellValueChanged` event.          |
+| **`getCellState`**     | `(row: number, col: number) => CellState`                      | Safely reads a cell's current value, computed formula, or edit status. |
+| **`setFocusedCell`**   | `(row: number \| null, col: number \| null) => void`           | Focuses on a specific coordinate and dispatches `focusChanged` event.  |
+| **`setSelectedRange`** | `(start: Coord \| null, end: Coord \| null) => void`           | Highlights a range selection and dispatches `selectionChanged` event.  |
+| **`setColumnWidth`**   | `(col: number, width: number) => void`                         | Resizes a column and dispatches `columnResized` event.                 |
+| **`setRowHeight`**     | `(row: number, height: number) => void`                        | Resizes a row and dispatches `rowResized` event.                       |
+| **`stopEditing`**      | `(cancel?: boolean) => void`                                   | Commits or cancels the active cell edit transaction.                   |
+| **`addEventListener`** | `(type: string, cb: GridEventListener) => () => void`          | Subscribes to core engine events (e.g. value changes, resize).         |
+| **`dispatchEvent`**    | `(type: string, payload: any) => void`                         | Broadcasts custom events through the grid engine.                      |
 
 ---
 
@@ -117,31 +120,31 @@ Extend your column schema lists to register custom editor React components:
 import { CellEditorProps } from '@open-grid/react';
 
 const StatusCellEditor = ({ row, col, value, api }: CellEditorProps) => {
-  return (
-    <select
-      autoFocus
-      value={value}
-      onChange={(e) => {
-        const nextVal = e.target.value;
+	return (
+		<select
+			autoFocus
+			value={value}
+			onChange={(e) => {
+				const nextVal = e.target.value;
 
-        // 1. Programmatically write status value to this cell
-        api.setCellValue(row, col, nextVal);
+				// 1. Programmatically write status value to this cell
+				api.setCellValue(row, col, nextVal);
 
-        // 2. Programmatically close editing mode
-        api.setState({ activeEditCell: null, activeEditValue: '' });
+				// 2. Programmatically close editing mode using stopEditing API
+				api.stopEditing(false);
 
-        // 3. E2E GridApi Side-Effect: Set Price (Col 2) & Qty (Col 3) to 0 if status is Inactive
-        if (nextVal === 'Inactive') {
-          api.setCellValue(row, 2, '0');
-          api.setCellValue(row, 3, '0');
-        }
-      }}
-      className="absolute inset-0 bg-slate-900 text-white border-2 border-purple-500"
-    >
-      <option value="Active">Active</option>
-      <option value="Inactive">Inactive</option>
-    </select>
-  );
+				// 3. E2E GridApi Side-Effect: Set Price (Col 2) & Qty (Col 3) to 0 if status is Inactive
+				if (nextVal === 'Inactive') {
+					api.setCellValue(row, 2, '0');
+					api.setCellValue(row, 3, '0');
+				}
+			}}
+			className='absolute inset-0 bg-slate-900 text-white border-2 border-purple-500'
+		>
+			<option value='Active'>Active</option>
+			<option value='Inactive'>Inactive</option>
+		</select>
+	);
 };
 
 const COLUMNS = [
