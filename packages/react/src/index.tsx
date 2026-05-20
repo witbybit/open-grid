@@ -566,3 +566,60 @@ const CellComponent = <TRowData,>(props: CellProps<TRowData>) => {
 export const Cell = React.memo(CellComponent) as (<TRowData>(props: CellProps<TRowData>) => React.ReactElement | null) & { displayName?: string };
 
 Cell.displayName = 'Cell';
+
+// ============================================================================
+// Headless Grid Dimensions Hook
+// ============================================================================
+
+export interface UseGridDimensionsResult {
+	/** Ref for the scrollable container (body) */
+	containerRef: React.RefObject<HTMLDivElement>;
+	/** Ref for the header container */
+	headerRef: React.RefObject<HTMLDivElement>;
+	/** Total width of all columns */
+	totalWidth: number;
+	/** All columns */
+	columns: ColumnDef<any>[];
+}
+
+/**
+ * Headless hook that provides grid dimensions and refs.
+ * Automatically calculates total width and syncs header scroll.
+ * You handle virtualization however you want.
+ */
+export function useGridDimensions<TRowData = unknown>(): UseGridDimensionsResult {
+	const containerRef = useRef<HTMLDivElement>(null);
+	const headerRef = useRef<HTMLDivElement>(null);
+	const api = useGridApi<TRowData>();
+
+	const columns = useGridKeySelector('dataVersion', (state) => state.columns);
+
+	// Automatically calculate total width from columns
+	const totalWidth = useGridKeySelector('columnWidths', (state) => {
+		return columns.reduce((sum, col) => {
+			const colWidth = state.columnWidths[col.field] ?? col.width ?? 100;
+			return sum + colWidth;
+		}, 0);
+	});
+
+	// Automatically sync horizontal scroll between header and body
+	useEffect(() => {
+		const container = containerRef.current;
+		const header = headerRef.current;
+		if (!container || !header) return;
+
+		const handleScroll = () => {
+			header.scrollLeft = container.scrollLeft;
+		};
+
+		container.addEventListener('scroll', handleScroll);
+		return () => container.removeEventListener('scroll', handleScroll);
+	}, []);
+
+	return {
+		containerRef,
+		headerRef,
+		totalWidth,
+		columns,
+	};
+}

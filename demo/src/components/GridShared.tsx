@@ -10,7 +10,7 @@ import {
 	CellRendererProps,
 	GridNavigationController,
 } from '@open-grid/core';
-import { useGridApi, useGridKeySelector, useGridNavigationController, Cell as ReactCell } from '@open-grid/react';
+import { useGridApi, useGridKeySelector, useGridNavigationController, useGridDimensions, Cell as ReactCell } from '@open-grid/react';
 
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
@@ -400,9 +400,10 @@ interface VirtualRowProps {
 	navigation: GridNavigationController<any>;
 	rowHeights: Record<string, number>;
 	defaultHeight: number;
+	totalWidth: number;
 }
 
-const VirtualRow = React.memo(({ rowIndex, virtualRow, api, navigation, rowHeights, defaultHeight }: VirtualRowProps) => {
+const VirtualRow = React.memo(({ rowIndex, virtualRow, api, navigation, rowHeights, defaultHeight, totalWidth }: VirtualRowProps) => {
 	GlobalRenderTracker.incrementRowRender(rowIndex);
 
 	const dataVersion = useGridKeySelector('dataVersion', (state) => state.dataVersion);
@@ -417,10 +418,12 @@ const VirtualRow = React.memo(({ rowIndex, virtualRow, api, navigation, rowHeigh
 		return (
 			<div
 				data-virtual-row
-				className='absolute left-0 top-0 w-full flex border-b border-slate-900 items-center px-4 bg-slate-950/40 text-slate-500 animate-pulse text-xs'
+				className='absolute left-0 top-0 flex border-b border-slate-900 items-center px-4 bg-slate-950/40 text-slate-500 animate-pulse text-xs'
 				style={{
 					height: `${virtualRow.size}px`,
 					transform: `translateY(${virtualRow.start}px)`,
+					width: `${totalWidth}px`,
+					minWidth: '100%',
 				}}
 			>
 				Loading chunk data...
@@ -431,10 +434,12 @@ const VirtualRow = React.memo(({ rowIndex, virtualRow, api, navigation, rowHeigh
 	return (
 		<div
 			data-virtual-row
-			className='absolute left-0 top-0 w-full flex border-b border-slate-900 hover:bg-slate-900/10'
+			className='absolute left-0 top-0 flex border-b border-slate-900 hover:bg-slate-900/10'
 			style={{
 				height: `${virtualRow.size}px`,
 				transform: `translateY(${virtualRow.start}px)`,
+				width: `${totalWidth}px`,
+				minWidth: '100%',
 			}}
 		>
 			{columns.map((col) => (
@@ -451,9 +456,9 @@ VirtualRow.displayName = 'VirtualRow';
 // ============================================================================
 
 export interface GridViewProps {
-	rowHeights: Record<string, number>;
+	rowHeights?: Record<string, number>;
 	defaultHeight?: number;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	clientController?: ClientRowModelController<any>;
 	serverController?: ServerRowModelController;
 	editTrigger?: 'singleClick' | 'doubleClick';
@@ -461,22 +466,22 @@ export interface GridViewProps {
 }
 
 export function GridView({
-	rowHeights,
+	rowHeights = {},
 	defaultHeight = 38,
-	onCellValueChanged,
+	onCellValueChanged = () => {},
 	serverController,
 	editTrigger = 'doubleClick',
 	arrowKeyNavigationEdit = false,
 }: GridViewProps) {
-	const containerRef = useRef<HTMLDivElement>(null);
 	const api = useGridApi<any>();
+	
+	// Use headless hook - only provides dimensions and refs, no virtualization coupling
+	const { containerRef, headerRef, totalWidth, columns } = useGridDimensions();
 
 	const rowCount = useGridKeySelector('dataVersion', (state) => {
 		const rowModel = api.getRowModel();
 		return rowModel ? rowModel.getRowCount() : 0;
 	});
-
-	const columns = useGridKeySelector('dataVersion', (state) => state.columns);
 
 	const navigation = useGridNavigationController<any>({
 		onCellValueChanged: (rowId, colField, val) => {
@@ -503,9 +508,9 @@ export function GridView({
 			window.removeEventListener('keydown', handleGlobalKeyDown);
 			window.removeEventListener('mouseup', navigation.handleMouseUp);
 		};
-	}, [navigation]);
+	}, [navigation, containerRef]);
 
-	// Virtualizer
+	// Virtualizer - you choose your own virtualization library
 	const rowVirtualizer = useVirtualizer({
 		count: rowCount,
 		getScrollElement: () => containerRef.current,
@@ -519,6 +524,7 @@ export function GridView({
 	});
 
 	const virtualRows = rowVirtualizer.getVirtualItems();
+	
 	useEffect(() => {
 		if (serverController && virtualRows.length > 0) {
 			serverController.loadVisibleBlocks(virtualRows.map((row) => row.index));
@@ -527,16 +533,18 @@ export function GridView({
 
 	return (
 		<div className='flex flex-col h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative'>
-			{/* Header */}
-			<div className='flex bg-slate-900 border-b border-slate-800 shrink-0 select-none z-10 overflow-hidden'>
-				{columns.map((col) => (
-					<HeaderCell key={col.field} colField={col.field} header={col.header} width={col.width} api={api} />
-				))}
+			{/* Header - automatically synced with body scroll via useGridDimensions */}
+			<div ref={headerRef} className='bg-slate-900 border-b border-slate-800 shrink-0 select-none z-10 overflow-hidden'>
+				<div className='flex' style={{ width: `${totalWidth}px`, minWidth: '100%' }}>
+					{columns.map((col) => (
+						<HeaderCell key={col.field} colField={col.field} header={col.header} width={col.width} api={api} />
+					))}
+				</div>
 			</div>
 
-			{/* Scroll Canvas */}
+			{/* Body - automatically handles horizontal and vertical scrolling */}
 			<div ref={containerRef} className='flex-1 overflow-auto outline-none' tabIndex={0}>
-				<div className='relative w-full' style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+				<div className='relative' style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: `${totalWidth}px`, minWidth: '100%' }}>
 					{virtualRows.map((virtualRow) => (
 						<VirtualRow
 							key={virtualRow.key}
@@ -546,6 +554,7 @@ export function GridView({
 							navigation={navigation}
 							rowHeights={rowHeights}
 							defaultHeight={defaultHeight}
+							totalWidth={totalWidth}
 						/>
 					))}
 				</div>
