@@ -6,29 +6,32 @@ A lightweight, unstyled, and modular headless grid engine built specifically for
 
 ## ⚡ Key Technical Architecture
 
-To bypass the React virtual DOM rendering bottleneck (which slows down standard grids), the core operates on an **out-of-render state loop**:
+To bypass the React virtual DOM rendering bottleneck (which slows down standard grids), the core operates on an **out-of-render state loop** driven by an object-oriented **Row Node Tree**:
 
 ```mermaid
 graph TD
-    A[GridStore / Pub-Sub Database] --> B[Row Models]
-    B --> C[Client-Side Row Model]
-    B --> D[Server-Side Infinite Block Paginator]
+    A[GridStore / Pub-Sub Database] --> B[RowNode Tree]
+    B --> C[Viewport Range Calculator]
+    C --> D[Visible Row Nodes slice]
 
     A --> E[GridNavigationController / Keyboard State Machine]
-    A --> F[Pluggable Formulas & Recalculators]
+    A --> F[Dynamic Formulas & Accessors]
 
     A --> G[Framework Adapters]
     G --> H[@open-grid/react bindings]
 
-    H --> I[Developer's Custom DOM / TanStack Virtualizer / Canvas]
+    H --> I[Isolated Cell-Level Subscribers]
+    I --> J[O(1) Cell paint via targeted cell:value listener]
 ```
 
 ### Core Architecture Highlights
 
-1. **Targeted Micro-Subscriptions**: Cell components subscribe strictly to their own coordinate key (e.g. `cell:r,c`). Mutating a single cell's value or coordinates triggers _only_ that cell's component render tree, keeping performance `O(1)` per update.
-2. **Dynamic Listener Garbage Collection**: Subscription listeners are active only for elements currently in the scroll viewport. Scrolling elements out of the viewport automatically unmounts them, dereferencing their subscriptions to prevent memory leaks and keep lookups lightning-fast.
-3. **Unified Programmatic API (`GridApi`)**: Exposes an absolute control handle which is injected into all custom cell components, headers, and editor inputs, giving them full programmatic control over cells, sizes, focus, and selection.
-4. **Complete Layout Freedom**: We render no table elements. We manage keyboard traps, scroll caching blocks, coordinates, dimensions, and selection math. The developer has total styling freedom to construct their DOM tree (standard table tags, flex, canvas, virtualizers).
+1. **Stateful RowNode Tree**: Decouples business record arrays from layout metadata (like vertical coordinates, selected/expanded states, and explicit heights). Allows grid operations to run at pure $O(1)$ complexity.
+2. **Cellular Value Cache**: Prevents redundant `valueGetter` calculations or path split operations on scrolling by caching cell computations directly on individual `RowNode` structures.
+3. **Pre-Compiled Path Getters**: Compiles column accessors into optimized functional selectors upon schema registration, eliminating runtime string manipulations and garbage collection pressures.
+4. **Targeted Micro-Subscriptions**: Cell components subscribe strictly to their specific coordinate keys (e.g. `cell:value:${rowId}:${colField}`). Value edits trigger _only_ the affected cell component, keeping performance extremely clean.
+5. **Dynamic Listener Garbage Collection**: Subscription listeners are active only for elements currently in the scroll viewport. Scrolling elements out of the viewport automatically unmounts them, dereferencing their subscriptions to prevent memory leaks.
+6. **Unified Programmatic API (`GridApi`)**: Exposes an absolute control handle which is injected into custom components, headers, and editors to programmatically control coordinates, edit states, selections, and transactions.
 
 ---
 
@@ -43,6 +46,7 @@ graph TD
   │   ├── core/
   │   │   ├── src/
   │   │   │   ├── store.ts       # Granular pub-sub GridStore & GridApi
+  │   │   │   ├── rowModel.ts    # Stateful RowNode trees & indexing
   │   │   │   ├── navigation.ts  # Keyboard & mouse math listeners
   │   │   │   ├── serverRowModel.ts # Block paginator cache
   │   │   │   └── store.test.ts  # Vitest unit test suite
@@ -54,11 +58,32 @@ graph TD
   └── apps/
       └── demo/
           ├── src/
-          │   ├── App.tsx        # High-fidelity virtualized showcase dashboard
-          │   └── index.css      # Tailwind setup & glow styles
+          │   ├── App.tsx        # High-fidelity virtualized showroom playground
+          │   └── index.css      # Glassmorphism panels & glow style setups
           ├── vite.config.ts
           └── tailwind.config.js
 ```
+
+---
+
+## 🎛️ Interactive Showroom Dashboard
+
+The workspace demo has been expanded into an immersive 3-column playground demonstrating every dimension of the grid engine:
+
+### 1. Dedicated Showroom Pages
+
+- **Calculations Arena**: Simulates heavy database sheets with 10k rows. Mutating a cell triggers lightning-fast recalculations of derived columns in pure $O(1)$ updates.
+- **Infinite Server Scroll**: Handles 100k rows via a paginated block lazy loader. Demonstrates simulated network lags, loading skeleton views, and server cache purging.
+- **Spreadsheet Workspace**: 500 rows with multi-range cell selection, drag highlights, batch arithmetic adjustments (+10%, clear, fill), and real-time range aggregation (Sum/Average tooltip).
+- **Custom Editors & Renderers**: Employs stars rating selectors, custom ranges/progress sliders, and badges within a high-performance grid viewport.
+- **Dynamic Layout Panel**: Renders compact/normal/spacious layout selectors, column visibility toggles, and live drag-resizing.
+
+### 2. Live Telemetry & Observability Deck
+
+- **Grid Telemetry Hub**: Counts rows, columns, active virtual layout renderers, and total event listeners.
+- **Render Flash Monitor**: Offers a "Flash Cells on Render" CSS-glow toggler to visually prove that updates remain localized to edited cells with zero sibling row re-renders.
+- **Latency & Calculation Profiler**: Charts state transaction profiles in sub-millisecond durations.
+- **Live Event Log Stream**: Terminal log console broadcasting grid events.
 
 ---
 
@@ -66,60 +91,46 @@ graph TD
 
 ### 1. `GridApi` State Mutation Methods
 
-The central API handle available anywhere via context (`useGridApi()`):
+The central API handle is accessible anywhere in your component tree:
 
-| Method                 | Type Signature                                                 | Description                                                            |
-| :--------------------- | :------------------------------------------------------------- | :--------------------------------------------------------------------- |
-| **`getState`**         | `() => GridState`                                              | Retrieves the entire synchronous state snapshot.                       |
-| **`setState`**         | `(updater: GridStateUpdater) => void`                          | Updates specific keys in state, triggering selective listeners.        |
-| **`setCellValue`**     | `(row: number, col: number, val: any, computed?: any) => void` | Updates a cell value and dispatches `cellValueChanged` event.          |
-| **`getCellState`**     | `(row: number, col: number) => CellState`                      | Safely reads a cell's current value, computed formula, or edit status. |
-| **`setFocusedCell`**   | `(row: number \| null, col: number \| null) => void`           | Focuses on a specific coordinate and dispatches `focusChanged` event.  |
-| **`setSelectedRange`** | `(start: Coord \| null, end: Coord \| null) => void`           | Highlights a range selection and dispatches `selectionChanged` event.  |
-| **`setColumnWidth`**   | `(col: number, width: number) => void`                         | Resizes a column and dispatches `columnResized` event.                 |
-| **`setRowHeight`**     | `(row: number, height: number) => void`                        | Resizes a row and dispatches `rowResized` event.                       |
-| **`stopEditing`**      | `(cancel?: boolean) => void`                                   | Commits or cancels the active cell edit transaction.                   |
-| **`addEventListener`** | `(type: string, cb: GridEventListener) => () => void`          | Subscribes to core engine events (e.g. value changes, resize).         |
-| **`dispatchEvent`**    | `(type: string, payload: any) => void`                         | Broadcasts custom events through the grid engine.                      |
+| Method                 | Type Signature                                                      | Description                                                                      |
+| :--------------------- | :------------------------------------------------------------------ | :------------------------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------- |
+| **`getState`**         | `() => GridState`                                                   | Retrieves the entire synchronous state snapshot.                                 |
+| **`setState`**         | `(updater: Partial<GridState>                                       | ((s: GridState) => Partial<GridState>)) => void`                                 | Updates specific keys in state, triggering selective listeners. |
+| **`setCellValue`**     | `(rowId: string, colField: string, val: any) => void`               | Updates a cell value and dispatches `cellValueChanged` event.                    |
+| **`stopEditing`**      | `(cancel?: boolean) => void`                                        | Commits or cancels the active cell edit transaction.                             |
+| **`setFocusedCell`**   | `(rowId: string                                                     | null, colField: string                                                           | null) => void`                                                  | Focuses on a specific coordinate and dispatches `focusChanged` event. |
+| **`setSelectedRange`** | `(start: { rowId: string; colField: string }                        | null, end: { rowId: string; colField: string }                                   | null) => void`                                                  | Highlights a range selection and dispatches `selectionChanged` event. |
+| **`setColumnWidth`**   | `(colField: string, width: number) => void`                         | Resizes a column and dispatches `columnResized` event.                           |
+| **`subscribeToKey`**   | `(key: string, listener: (state: GridState) => void) => () => void` | Subscribes selectively to a single key (e.g. `cell:value:${rowId}:${colField}`). |
+| **`addEventListener`** | `(type: string, cb: GridEventListener) => () => void`               | Subscribes to core engine events (e.g. value changes, resize).                   |
 
 ---
 
 ## 🔌 Pluggable Event System
 
-The core store broadcasts structured event payloads when functional shifts occur. You can register custom callbacks or event logging plugins using:
+The core store broadcasts structured event payloads when functional shifts occur:
 
 ```typescript
 const unsub = api.addEventListener('cellValueChanged', (event) => {
-	const { row, col, oldValue, newValue } = event.payload;
-	console.log(`Cell at (${row}, ${col}) changed from ${oldValue} to ${newValue}`);
+	const { rowId, colField, oldValue, newValue } = event.payload;
+	console.log(`Cell at rowId ${rowId}, column ${colField} changed to ${newValue}`);
 });
 
 // Call unsub() to clean up listener bindings
 unsub();
 ```
 
-### Supported Events
-
-- **`cellValueChanged`**: Dispatched on cell updates. Payload: `{ row: number, col: number, oldValue: any, newValue: any }`
-- **`columnResized`**: Dispatched on header drag-resize. Payload: `{ col: number, width: number }`
-- **`rowResized`**: Dispatched on row index drag-resize. Payload: `{ row: number, height: number }`
-- **`focusChanged`**: Dispatched on cell focus updates. Payload: `{ focusedCell: GridCellCoordinate \| null }`
-- **`selectionChanged`**: Dispatched on selection range expansion. Payload: `{ selectedRange: GridCellRange \| null }`
-
 ---
 
 ## 🎨 Custom Cell Editors & Renderers
 
-Developing custom inputs is extremely easy. The grid core provides standard prop interfaces which include the fully-empowered `GridApi` to execute dynamic cross-cell calculations or programmatically modify other cells from inside the editor.
-
-### 1. Column Definitions Configuration
-
-Extend your column schema lists to register custom editor React components:
+Developing custom inputs is extremely easy. The grid core provides standard prop interfaces which include the fully-empowered `GridApi` to execute dynamic cross-cell calculations:
 
 ```typescript
 import { CellEditorProps } from '@open-grid/react';
 
-const StatusCellEditor = ({ row, col, value, api }: CellEditorProps) => {
+const StatusCellEditor = ({ rowId, colField, value, api }: CellEditorProps) => {
 	return (
 		<select
 			autoFocus
@@ -128,30 +139,24 @@ const StatusCellEditor = ({ row, col, value, api }: CellEditorProps) => {
 				const nextVal = e.target.value;
 
 				// 1. Programmatically write status value to this cell
-				api.setCellValue(row, col, nextVal);
+				api.setCellValue(rowId, colField, nextVal);
 
 				// 2. Programmatically close editing mode using stopEditing API
 				api.stopEditing(false);
 
-				// 3. E2E GridApi Side-Effect: Set Price (Col 2) & Qty (Col 3) to 0 if status is Inactive
+				// 3. E2E GridApi Side-Effect: Set Price & Qty to 0 if status is Inactive
 				if (nextVal === 'Inactive') {
-					api.setCellValue(row, 2, '0');
-					api.setCellValue(row, 3, '0');
+					api.setCellValue(rowId, 'price', '0');
+					api.setCellValue(rowId, 'quantity', '0');
 				}
 			}}
-			className='absolute inset-0 bg-slate-900 text-white border-2 border-purple-500'
+			className='absolute inset-0 bg-slate-900 text-white border border-purple-500'
 		>
 			<option value='Active'>Active</option>
 			<option value='Inactive'>Inactive</option>
 		</select>
 	);
 };
-
-const COLUMNS = [
-  { header: 'Product Name', width: 180 },
-  { header: 'Price ($)', width: 120 },
-  { header: 'Status', width: 120, cellEditor: StatusCellEditor },
-];
 ```
 
 ---
@@ -170,23 +175,17 @@ pnpm install
 
 #### Run Vitest Unit Tests
 
-Executes the comprehensive core state test suite verifying coordinate selections, targeted subscriptions, events, and dimensions:
-
 ```bash
 pnpm run test
 ```
 
 #### Compile TS Workspace Packages
 
-Runs TypeScript compiler on core and react packages:
-
 ```bash
 pnpm run build
 ```
 
 #### Launch Vite Dashboard Dev Server
-
-Fires up the premium virtualized React demonstration dashboard locally:
 
 ```bash
 pnpm dev:demo
@@ -198,7 +197,5 @@ Once active, navigate your browser to the local URL (default is `http://localhos
 
 ## 👑 Author & Creator
 
-**Rishikesh Kumar**
+**Rishikesh Kumar**  
 Lead Architect of Grid Engine
-
----
