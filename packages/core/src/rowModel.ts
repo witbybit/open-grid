@@ -174,7 +174,92 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	public updateRows(updater: (rows: TData[]) => TData[]): void {
 		const currentRows = this.allNodes.map((n) => n.data);
 		const nextRows = updater(currentRows);
-		this.setRows(nextRows);
+
+		if (nextRows.length !== this.allNodes.length) {
+			this.setRows(nextRows);
+			return;
+		}
+
+		const rowIdField = this.store.getState().rowIdField;
+		const changedNodes: RowNode<TData>[] = [];
+		const changedFieldsByRow = new Map<string, Set<string>>();
+
+		for (let i = 0; i < this.allNodes.length; i++) {
+			const node = this.allNodes[i];
+			const nextRow = nextRows[i];
+			if (!nextRow) continue;
+
+			// Verify that the row ID is the same
+			const nextId = String(nextRow[rowIdField]);
+			if (node.id !== nextId) {
+				// Structural mismatch of row IDs, fallback to full setRows
+				this.setRows(nextRows);
+				return;
+			}
+
+			const prevRow = node.data;
+			if (prevRow !== nextRow) {
+				// Find which fields actually changed
+				const changedFields = new Set<string>();
+				const prevKeys = Object.keys(prevRow as object);
+				const nextKeys = Object.keys(nextRow as object);
+				const allKeys = new Set([...prevKeys, ...nextKeys]);
+				
+				for (const key of allKeys) {
+					if ((prevRow as any)[key] !== (nextRow as any)[key]) {
+						changedFields.add(key);
+					}
+				}
+
+				if (changedFields.size > 0) {
+					node.data = nextRow;
+					node.clearValueCache();
+					changedNodes.push(node);
+					changedFieldsByRow.set(node.id, changedFields);
+				}
+			}
+		}
+
+		if (changedNodes.length === 0) return;
+
+		// Check if any of the changed fields are part of the active sort or filter models
+		const state = this.store.getState();
+		let needsFullRefresh = false;
+
+		if (state.sortModel && state.sortModel.length > 0) {
+			for (const sortItem of state.sortModel) {
+				for (const [_, fields] of changedFieldsByRow) {
+					if (fields.has(sortItem.colId)) {
+						needsFullRefresh = true;
+						break;
+					}
+				}
+				if (needsFullRefresh) break;
+			}
+		}
+
+		if (!needsFullRefresh && state.filterModel && Object.keys(state.filterModel).length > 0) {
+			for (const filterColId of Object.keys(state.filterModel)) {
+				for (const [_, fields] of changedFieldsByRow) {
+					if (fields.has(filterColId)) {
+						needsFullRefresh = true;
+						break;
+					}
+				}
+				if (needsFullRefresh) break;
+			}
+		}
+
+		if (needsFullRefresh) {
+			this.refresh();
+		} else {
+			// No sorting or filtering is affected! We can just notify coordinate-targeted listeners for all columns on the changed rows
+			this.store.startTransaction();
+			for (const node of changedNodes) {
+				this.store.triggerCellNotifications(node.id);
+			}
+			this.store.endTransaction();
+		}
 	}
 
 	public getRow = (index: number): TData | null => {
@@ -213,10 +298,6 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		node.data = updatedRow;
 		node.clearValueCache();
-
-		this.store.setState({
-			dataVersion: this.store.getState().dataVersion + 1,
-		});
 	};
 
 	public refresh(): void {

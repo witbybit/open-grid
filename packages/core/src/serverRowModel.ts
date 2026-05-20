@@ -107,10 +107,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 		node.data = updatedRow;
 		node.clearValueCache();
-
-		this.store.setState({
-			dataVersion: this.store.getState().dataVersion + 1,
-		});
 	};
 
 	private fetchBlock = async (blockIndex: number): Promise<void> => {
@@ -153,9 +149,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			}
 
 			// Patch loaded rows into the array and index map
-			let currentTop = startRow > 0 && this.activeNodes[startRow - 1]
-				? (this.activeNodes[startRow - 1]!.rowTop + this.activeNodes[startRow - 1]!.rowHeight)
-				: (startRow * curr.defaultRowHeight);
+			let currentTop =
+				startRow > 0 && this.activeNodes[startRow - 1]
+					? this.activeNodes[startRow - 1]!.rowTop + this.activeNodes[startRow - 1]!.rowHeight
+					: startRow * curr.defaultRowHeight;
 
 			response.rows.forEach((row, idx) => {
 				const globalIdx = startRow + idx;

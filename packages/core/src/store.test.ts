@@ -44,23 +44,23 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 
-		const dataVersionListener = vi.fn();
+		const cellValueListener = vi.fn();
 		const focusListener = vi.fn();
 
-		store.subscribeToKey('dataVersion', dataVersionListener);
+		store.subscribeToKey('cell:value:1:name', cellValueListener);
 		store.subscribeToKey('focusedCell', focusListener);
 
 		// Act 1: Set focused cell
 		store.setState({ focusedCell: { rowId: '1', colField: 'name' } });
 
 		expect(focusListener).toHaveBeenCalledTimes(1);
-		expect(dataVersionListener).toHaveBeenCalledTimes(0);
+		expect(cellValueListener).toHaveBeenCalledTimes(0);
 
 		// Act 2: Change cell value
 		store.setCellValue('1', 'name', 'Product Updated');
 
 		expect(focusListener).toHaveBeenCalledTimes(1);
-		expect(dataVersionListener).toHaveBeenCalledTimes(1);
+		expect(cellValueListener).toHaveBeenCalledTimes(1);
 
 		controller.dispose();
 	});

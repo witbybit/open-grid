@@ -491,13 +491,17 @@ const CellComponent = <TRowData,>(props: CellProps<TRowData>) => {
 		return api.getState().columns.find((c) => c.field === colField);
 	}, [api, colField]);
 
-	const rowData = useMemo(() => {
+	const rowData = (() => {
 		const rowModel = api.getRowModel();
 		if (!rowModel) return null;
+		if (rowModel.getRowNodeById) {
+			const node = rowModel.getRowNodeById(rowId);
+			return node ? node.data : null;
+		}
 		const idx = rowModel.getRowIndexById(rowId);
 		if (idx === -1) return null;
 		return rowModel.getRow(idx);
-	}, [api, rowId, api.getState().dataVersion]);
+	})();
 
 	const CustomEditor = colDef?.cellEditor as React.ComponentType<CellEditorProps<TRowData>> | undefined;
 	const CustomRenderer = colDef?.cellRenderer as React.ComponentType<CellRendererProps<TRowData>> | undefined;

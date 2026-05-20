@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { GridStore, GridNavigationController, ClientRowModelController } from '@open-grid/core';
-import { GridProvider, Cell, useCellEditState, useGridNavigationController } from './index.js';
+import { GridProvider, Cell, useCellEditState, useGridNavigationController, useGridKeySelector } from './index.js';
 
 interface TestRow {
 	id: string;
@@ -343,4 +343,84 @@ describe('React Bindings hooks and components', () => {
 
 		controller.dispose();
 	});
+
+	it('should NOT re-render other rows or virtual rows during editing or focus transitions', () => {
+		let virtualRowRenderCount = 0;
+		const TestVirtualRow = React.memo(({ rowIndex, id }: { rowIndex: number; id: string }) => {
+			virtualRowRenderCount++;
+			// Subscribe to dataVersion exactly like VirtualRow in demo
+			useGridKeySelector('dataVersion', (state) => state.dataVersion);
+			return <Cell rowId={id} colField="name" />;
+		});
+
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			rowIdField: 'id',
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Row 1' },
+				{ id: '2', name: 'Row 2' },
+				{ id: '3', name: 'Row 3' },
+			],
+			columns: store.getState().columns,
+			rowIdField: 'id',
+		});
+		const navigation = new GridNavigationController<TestRow>({
+			onCellValueChanged: (rowId, colField, val) => {
+				controller.updateRows((rows) =>
+					rows.map((row) => (row.id === rowId ? { ...row, [colField]: val as string } : row))
+				);
+			},
+		});
+		store.registerFeature(navigation);
+
+		render(
+			<GridProvider store={store}>
+				<div>
+					<TestVirtualRow rowIndex={0} id="1" />
+					<TestVirtualRow rowIndex={1} id="2" />
+					<TestVirtualRow rowIndex={2} id="3" />
+				</div>
+			</GridProvider>
+		);
+
+		// Record initial render count (should be 3)
+		expect(virtualRowRenderCount).toBe(3);
+
+		// Act 1: Focus cell 1:name
+		act(() => {
+			store.setFocusedCell('1', 'name');
+		});
+
+		// Verify no virtual rows re-rendered!
+		expect(virtualRowRenderCount).toBe(3);
+
+		// Act 2: Start editing cell 1:name
+		act(() => {
+			navigation.setCellEditing('1', 'name', true);
+		});
+
+		// Verify no virtual rows re-rendered!
+		expect(virtualRowRenderCount).toBe(3);
+
+		// Act 3: Stop editing cell 1:name
+		act(() => {
+			navigation.setCellEditing('1', 'name', false);
+		});
+
+		// Verify no virtual rows re-rendered!
+		expect(virtualRowRenderCount).toBe(3);
+
+		// Act 4: Actually edit the cell value and commit
+		act(() => {
+			store.setCellValue('1', 'name', 'Row 1 Mod');
+		});
+
+		// Verify no virtual rows re-rendered!
+		expect(virtualRowRenderCount).toBe(3);
+
+		controller.dispose();
+	});
 });
+

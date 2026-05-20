@@ -94,6 +94,7 @@ const COLUMNS: ColumnDef<DemoRow>[] = [
 ];
 
 const DEFAULT_ROW_HEIGHT = 38;
+const EMPTY_ROW_HEIGHTS: Record<string, number> = {};
 
 function generateRows(count: number, prefix: 'R' | 'SR'): DemoRow[] {
 	const statuses: DemoRow['status'][] = ['Active', 'Pending', 'Inactive'];
@@ -126,7 +127,7 @@ interface HeaderCellProps<TRowData = unknown> {
 }
 
 const HeaderCellComponent = <TRowData,>({ colField, header, width = 100, api }: HeaderCellProps<TRowData>) => {
-	const colWidth = useGridSelector((state) => state.columnWidths[colField] ?? width);
+	const colWidth = useGridKeySelector(`colWidth:${colField}`, (state) => state.columnWidths[colField] ?? width);
 
 	const handleMouseDown = (e: React.MouseEvent) => {
 		e.preventDefault();
@@ -207,7 +208,8 @@ interface VirtualRowProps {
 }
 
 const VirtualRow = React.memo(({ rowIndex, virtualRow, api, navigation, rowHeights }: VirtualRowProps) => {
-	const dataVersion = useGridSelector((state) => state.dataVersion);
+	console.log(`[VirtualRow RENDER] rowIndex: ${rowIndex}`);
+	const dataVersion = useGridKeySelector('dataVersion', (state) => state.dataVersion);
 	const row = useMemo(() => {
 		const rowModel = api.getRowModel();
 		return rowModel ? rowModel.getRow(rowIndex) : null;
@@ -248,7 +250,7 @@ VirtualRow.displayName = 'VirtualRow';
 function GridView({ rowHeights, onCellValueChanged, serverController, editTrigger = 'doubleClick', arrowKeyNavigationEdit = false }: GridViewProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const api = useGridApi<DemoRow>();
-	const rowCount = useGridSelector((state) => {
+	const rowCount = useGridKeySelector('dataVersion', (state) => {
 		const rowModel = api.getRowModel();
 		return rowModel ? rowModel.getRowCount() : 0;
 	});
@@ -329,15 +331,11 @@ interface StateInspectorProps {
 }
 
 const StateInspectorContent = () => {
-	const gridStateInfo = useGridSelector((state) => {
-		const focus = state.focusedCell;
-		const range = state.selectedRange;
+	const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
+	const selectedRange = useGridKeySelector('selectedRange', (state) => state.selectedRange);
 
-		const focusText = focus ? `Row ID: ${focus.rowId}, Col Field: ${focus.colField}` : 'None';
-		const rangeText = range ? `(${range.start.rowId},${range.start.colField}) to (${range.end.rowId},${range.end.colField})` : 'None';
-
-		return `Focused Cell: ${focusText} | Selected Range: ${rangeText}`;
-	});
+	const focusText = focusedCell ? `Row ID: ${focusedCell.rowId}, Col Field: ${focusedCell.colField}` : 'None';
+	const rangeText = selectedRange ? `(${selectedRange.start.rowId},${selectedRange.start.colField}) to (${selectedRange.end.rowId},${selectedRange.end.colField})` : 'None';
 
 	return (
 		<div className='p-5 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
@@ -346,7 +344,7 @@ const StateInspectorContent = () => {
 				State Inspector
 			</h3>
 			<div className='p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-purple-400 leading-relaxed break-all'>
-				{gridStateInfo}
+				Focused Cell: {focusText} | Selected Range: {rangeText}
 			</div>
 			<p className='text-slate-500 text-[10px] leading-relaxed'>
 				* Cells represent stable rowIds and column fields instead of duplicative physical coordinate offsets. Focus remains stable even during
@@ -355,6 +353,7 @@ const StateInspectorContent = () => {
 		</div>
 	);
 };
+
 
 const StateInspector = React.memo(({ store }: StateInspectorProps) => {
 	return (
@@ -638,7 +637,7 @@ export default function App() {
 					{activeTab === 'client' ? (
 						<GridProvider store={clientStore}>
 							<GridView
-								rowHeights={{}}
+								rowHeights={EMPTY_ROW_HEIGHTS}
 								onCellValueChanged={handleClientCellValueChanged}
 								clientController={clientController}
 								editTrigger={editTrigger}
@@ -648,7 +647,7 @@ export default function App() {
 					) : (
 						<GridProvider store={serverStore}>
 							<GridView
-								rowHeights={{}}
+								rowHeights={EMPTY_ROW_HEIGHTS}
 								onCellValueChanged={() => {}}
 								serverController={serverController}
 								editTrigger={editTrigger}

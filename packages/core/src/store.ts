@@ -205,6 +205,7 @@ export interface GridApi<TRowData = unknown> {
 	getFeature<T = unknown>(name: string): T | null;
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
+	triggerCellNotifications(rowId: string): void;
 	destroy(): void;
 }
 
@@ -517,12 +518,9 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			this.rowModel.setCellValue(rowId, colField, value);
 		}
 
-		// Trigger coordinate-targeted cell value key listener
-		const cellValKey = `cell:value:${rowId}:${colField}`;
-		const targeted = this.keyListeners.get(cellValKey);
-		if (targeted) {
-			targeted.forEach((listener) => listener(this.state));
-		}
+		// Trigger coordinate-targeted cell value key listener for ALL columns on this row,
+		// ensuring calculated columns (with valueGetters depending on other row data) also update.
+		this.triggerCellNotifications(rowId);
 
 		// Trigger cellValueChanged listener
 		this.dispatchEvent('cellValueChanged', {
@@ -531,6 +529,19 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			oldValue,
 			newValue: value,
 		});
+	};
+
+	/**
+	 * Trigger coordinate-targeted cell value key listeners for all columns on a specific row.
+	 */
+	public triggerCellNotifications = (rowId: string): void => {
+		for (const col of this.state.columns) {
+			const cellValKey = `cell:value:${rowId}:${col.field}`;
+			const targeted = this.keyListeners.get(cellValKey);
+			if (targeted) {
+				targeted.forEach((listener) => listener(this.state));
+			}
+		}
 	};
 
 	/**
