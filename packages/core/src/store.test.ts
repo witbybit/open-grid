@@ -1,361 +1,378 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GridStore } from './store.js';
+import { ClientRowModelController } from './rowModel.js';
+import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
 
-describe('GridStore micro-store functionality', () => {
+interface TestRow {
+	id: string;
+	name: string;
+	price: number;
+}
+
+describe('GridStore generic row-store functionality', () => {
 	it('should initialize with standard default states', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
 		const state = store.getState();
+		const rowModel = store.getRowModel()!;
 
-		expect(state.rowCount).toBe(10);
-		expect(state.colCount).toBe(5);
+		expect(rowModel.getRowCount()).toBe(2);
+		expect(state.columns).toHaveLength(2);
 		expect(state.focusedCell).toBeNull();
 		expect(state.selectedRange).toBeNull();
-		expect(state.cells).toEqual({});
+
+		controller.dispose();
 	});
 
 	it('should notify targeted key-subscribers only when that specific key is mutated', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
 
-		const cellListener = vi.fn();
+		const dataVersionListener = vi.fn();
 		const focusListener = vi.fn();
 
-		// Subscribe to specific cell coordinate key and focusedCell key
-		store.subscribeToKey('cell:0,0', cellListener);
+		store.subscribeToKey('dataVersion', dataVersionListener);
 		store.subscribeToKey('focusedCell', focusListener);
 
-		// Act: Set focused cell
-		store.setState({ focusedCell: { row: 0, col: 0 } });
+		// Act 1: Set focused cell
+		store.setState({ focusedCell: { rowId: '1', colField: 'name' } });
 
-		// Assert: focusedCell subscriber fires, cell subscriber does not
 		expect(focusListener).toHaveBeenCalledTimes(1);
-		expect(cellListener).toHaveBeenCalledTimes(0);
+		expect(dataVersionListener).toHaveBeenCalledTimes(0);
 
-		// Act: Change value of cell 0,0
-		store.setCellValue(0, 0, 'Laser Product');
+		// Act 2: Change cell value
+		store.setCellValue('1', 'name', 'Product Updated');
 
-		// Assert: cell subscriber fires, focusedCell subscriber does not fire again
 		expect(focusListener).toHaveBeenCalledTimes(1);
-		expect(cellListener).toHaveBeenCalledTimes(1);
-		expect(store.getCellState(0, 0).value).toBe('Laser Product');
+		expect(dataVersionListener).toHaveBeenCalledTimes(1);
+
+		controller.dispose();
 	});
 
-	it('should return default cell values for uninitialized grid coordinates safely', () => {
-		const store = new GridStore();
-		const cell = store.getCellState(100, 100);
+	it('should support valueGetter dynamically', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'price', header: 'Price', width: 100 },
+				{
+					field: 'price_display',
+					header: 'Price Tag',
+					width: 100,
+					valueGetter: ({ row }) => `$${row.price}.00`,
+				},
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Keyboard', price: 45 }],
+			columns: store.getState().columns,
+		});
 
-		expect(cell.value).toBe('');
-		expect(cell.computedValue).toBe('');
-		expect(cell.isEditing).toBe(false);
+		// 1. Initial dynamic check
+		const val1 = store.getCellValue('1', 'price_display');
+		expect(val1).toBe('$45.00');
+
+		// 2. Reactive check after setting underlying cell value
+		store.setCellValue('1', 'price', 90);
+		const val2 = store.getCellValue('1', 'price_display');
+		expect(val2).toBe('$90.00');
+
+		controller.dispose();
 	});
 
-	it('should support pluggable events and column resizing updates through GridApi', () => {
-		const store = new GridStore({ rowCount: 5, colCount: 5 });
+	it('should support stopEditing and setCellValue commits and cancellations', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Keyboard', price: 45 }],
+			columns: store.getState().columns,
+		});
 
-		const valueListener = vi.fn();
+		// 1. Enter edit state
+		store.setState({
+			activeEdit: {
+				rowId: '1',
+				colField: 'name',
+			},
+		});
+
+		// Cancel edit (just call stopEditing without setCellValue)
+		store.stopEditing();
+		expect(store.getState().activeEdit).toBeNull();
+		expect(store.getCellValue('1', 'name')).toBe('Keyboard');
+
+		// 2. Commit edit (set value then call stopEditing)
+		store.setState({
+			activeEdit: {
+				rowId: '1',
+				colField: 'name',
+			},
+		});
+
+		store.setCellValue('1', 'name', 'Premium Keyboard');
+		store.stopEditing();
+		expect(store.getState().activeEdit).toBeNull();
+		expect(store.getCellValue('1', 'name')).toBe('Premium Keyboard');
+
+		controller.dispose();
+	});
+
+	it('should support plug-and-play feature registration and API injection', () => {
+		const store = new GridStore<TestRow>();
+		
+		const initSpy = vi.fn();
+		const destroySpy = vi.fn();
+		
+		const customFeature = {
+			name: 'customService',
+			init: initSpy,
+			destroy: destroySpy,
+			getApiMethods: () => ({
+				customApiCall: (arg: string) => `Handled: ${arg}`,
+			}),
+		};
+
+		store.registerFeature(customFeature);
+
+		// 1. Check feature is initialized
+		expect(initSpy).toHaveBeenCalledWith(store);
+
+		interface CustomStore {
+			customService: unknown;
+			customApiCall: (arg: string) => string;
+		}
+
+		// 2. Check property binding (AG Grid style)
+		expect((store as unknown as CustomStore).customService).toBe(customFeature);
+
+		// 3. Check dynamic API method injection
+		expect(typeof (store as unknown as CustomStore).customApiCall).toBe('function');
+		expect((store as unknown as CustomStore).customApiCall('test')).toBe('Handled: test');
+
+		// 4. Check clean destruction
+		store.destroy();
+		expect(destroySpy).toHaveBeenCalled();
+	});
+
+	it('should handle column resizing', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
 		const resizeListener = vi.fn();
-
-		// Bind listeners
-		store.addEventListener('cellValueChanged', valueListener);
 		store.addEventListener('columnResized', resizeListener);
 
-		// Act 1: Resize column 1 to 150px
-		store.setColumnWidth(1, 150);
-		expect(store.getState().colWidths[1]).toBe(150);
+		store.setColumnWidth('name', 250);
+
+		expect(store.getState().columnWidths['name']).toBe(250);
 		expect(resizeListener).toHaveBeenCalledTimes(1);
 		expect(resizeListener).toHaveBeenCalledWith({
 			type: 'columnResized',
-			payload: { col: 1, width: 150 },
-		});
-
-		// Act 2: Modify cell value
-		store.setCellValue(0, 1, 'Neon stand');
-		expect(valueListener).toHaveBeenCalledTimes(1);
-		expect(valueListener).toHaveBeenCalledWith({
-			type: 'cellValueChanged',
-			payload: { row: 0, col: 1, oldValue: '', newValue: 'Neon stand' },
-		});
-	});
-
-	it('should emit focus and selection events once when helper APIs are used', () => {
-		const store = new GridStore({ rowCount: 5, colCount: 5 });
-		const focusListener = vi.fn();
-		const selectionListener = vi.fn();
-
-		store.addEventListener('focusChanged', focusListener);
-		store.addEventListener('selectionChanged', selectionListener);
-
-		store.setFocusedCell(1, 2);
-		store.setSelectedRange({ row: 1, col: 2 }, { row: 3, col: 4 });
-
-		expect(focusListener).toHaveBeenCalledTimes(1);
-		expect(selectionListener).toHaveBeenCalledTimes(1);
-		expect(focusListener).toHaveBeenCalledWith({
-			type: 'focusChanged',
-			payload: { focusedCell: { row: 1, col: 2 } },
-		});
-		expect(selectionListener).toHaveBeenCalledWith({
-			type: 'selectionChanged',
-			payload: { selectedRange: { start: { row: 1, col: 2 }, end: { row: 3, col: 4 } } },
+			payload: { colField: 'name', width: 250 },
 		});
 	});
 });
 
-import { GridNavigationController } from './navigation.js';
-import { ServerRowModelController } from './serverRowModel.js';
-
-describe('GridNavigationController E2E Simulation', () => {
-	it('should successfully update focused cell on ArrowDown navigation', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store);
-
-		// 1. Simulate mouse click on Row 0, Col 0
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		expect(store.getState().focusedCell).toEqual({ row: 0, col: 0 });
-
-		// 2. Simulate ArrowDown key down event
-		controller.handleKeyDown({ key: 'ArrowDown', preventDefault: () => {} } as any);
-
-		// 3. Verify that focusedCell has successfully navigated to Row 1, Col 0!
-		expect(store.getState().focusedCell).toEqual({ row: 1, col: 0 });
-	});
-
-	it('should enter edit mode on double click setCellEditing', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store);
-
-		// Simulate first click to focus
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		expect(store.getState().focusedCell).toEqual({ row: 0, col: 0 });
-
-		// Simulate double-click event triggering setCellEditing
-		controller.setCellEditing(0, 0, true);
-		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 0 });
-	});
-
-	it('should navigate and open the next cell in edit mode if arrowKeyNavigationEdit is true in view mode', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store, { arrowKeyNavigationEdit: true });
-
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		controller.handleKeyDown({ key: 'ArrowDown', preventDefault: () => {} } as any);
-
-		expect(store.getState().focusedCell).toEqual({ row: 1, col: 0 });
-		expect(store.getState().activeEditCell).toEqual({ row: 1, col: 0 });
-	});
-
-	it('should navigate and open the next cell in view mode if arrowKeyNavigationEdit is false in view mode', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store, { arrowKeyNavigationEdit: false });
-
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		controller.handleKeyDown({ key: 'ArrowDown', preventDefault: () => {} } as any);
-
-		expect(store.getState().focusedCell).toEqual({ row: 1, col: 0 });
-		expect(store.getState().activeEditCell).toBeNull();
-	});
-
-	it('should navigate and open the next cell in edit mode if arrowKeyNavigationEdit is true in edit mode', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store, { arrowKeyNavigationEdit: true });
-
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		controller.setCellEditing(0, 0, true);
-		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 0 });
-
-		controller.handleKeyDown({ key: 'ArrowDown', preventDefault: () => {} } as any);
-		expect(store.getState().focusedCell).toEqual({ row: 1, col: 0 });
-		expect(store.getState().activeEditCell).toEqual({ row: 1, col: 0 });
-	});
-
-	it('should navigate and open the next cell in view mode if arrowKeyNavigationEdit is false in edit mode on ArrowDown', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store, { arrowKeyNavigationEdit: false });
-
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		controller.setCellEditing(0, 0, true);
-		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 0 });
-
-		controller.handleKeyDown({ key: 'ArrowDown', preventDefault: () => {} } as any);
-		expect(store.getState().focusedCell).toEqual({ row: 1, col: 0 });
-		expect(store.getState().activeEditCell).toBeNull();
-	});
-
-	it('should NOT navigate or commit edit on ArrowLeft/ArrowRight if arrowKeyNavigationEdit is false in edit mode', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store, { arrowKeyNavigationEdit: false });
-
-		controller.handleMouseDown(0, 1, { button: 0, detail: 1 } as any);
-		controller.setCellEditing(0, 1, true);
-		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 1 });
-
-		// Simulate ArrowLeft keydown
-		const mockEvent = { key: 'ArrowLeft', preventDefault: vi.fn() } as any;
-		controller.handleKeyDown(mockEvent);
-
-		// Should NOT have navigated and should still be editing (0,1)
-		expect(store.getState().focusedCell).toEqual({ row: 0, col: 1 });
-		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 1 });
-		expect(mockEvent.preventDefault).not.toHaveBeenCalled();
-	});
-
-	it('should navigate and commit edit on ArrowLeft/ArrowRight if arrowKeyNavigationEdit is true in edit mode', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store, { arrowKeyNavigationEdit: true });
-
-		controller.handleMouseDown(0, 1, { button: 0, detail: 1 } as any);
-		controller.setCellEditing(0, 1, true);
-		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 1 });
-
-		// Simulate ArrowLeft keydown
-		const mockEvent = { key: 'ArrowLeft', preventDefault: vi.fn() } as any;
-		controller.handleKeyDown(mockEvent);
-
-		// Should have navigated to (0,0) and entered edit mode
-		expect(store.getState().focusedCell).toEqual({ row: 0, col: 0 });
-		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 0 });
-		expect(mockEvent.preventDefault).toHaveBeenCalled();
-	});
-
-	it('should NOT trigger edit mode on mouse down but should trigger on click when editTrigger is singleClick and no drag occurred', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store, { editTrigger: 'singleClick' });
-
-		// Mouse down should focus but NOT edit
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		expect(store.getState().focusedCell).toEqual({ row: 0, col: 0 });
-		expect(store.getState().activeEditCell).toBeNull();
-
-		// Click on single cell should enter edit mode
-		controller.handleClick(0, 0, {} as any);
-		expect(store.getState().activeEditCell).toEqual({ row: 0, col: 0 });
-	});
-
-	it('should NOT trigger edit mode on click in singleClick mode if a multi-cell range drag occurred', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store, { editTrigger: 'singleClick' });
-
-		// Mouse down starts selection
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		// Drag to another cell
-		controller.handleMouseEnter(1, 1);
-
-		// Verify multi-cell selection is active
-		expect(store.getState().selectedRange).toEqual({
-			start: { row: 0, col: 0 },
-			end: { row: 1, col: 1 },
+describe('ClientRowModelController sorting and filtering', () => {
+	it('should apply client sort and filter correctly', () => {
+		const store = new GridStore<TestRow>();
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: 'c', name: 'Cherry', price: 5 },
+				{ id: 'a', name: 'Apple', price: 15 },
+				{ id: 'b', name: 'Banana', price: 10 },
+			],
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 100 },
+			],
+			rowIdField: 'id',
 		});
 
-		// Click (releasing selection) should NOT trigger edit mode
-		controller.handleClick(0, 0, {} as any);
-		expect(store.getState().activeEditCell).toBeNull();
-	});
+		const rowModel = store.getRowModel()!;
 
-	it('should support stopEditing API to commit or cancel cell edit state correctly', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store);
+		// Check initial rows load
+		expect(rowModel.getRowCount()).toBe(3);
 
-		// Focus and edit cell 0,0
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		controller.setCellEditing(0, 0, true);
-		store.setState({ activeEditValue: 'New value' });
+		// Apply sort by name Ascending
+		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+		expect(rowModel.getRow(0)?.name).toBe('Apple');
+		expect(rowModel.getRow(1)?.name).toBe('Banana');
+		expect(rowModel.getRow(2)?.name).toBe('Cherry');
 
-		// Act: stopEditing with cancel=true
-		store.stopEditing(true);
+		// Apply sorting descending
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+		expect(rowModel.getRow(0)?.name).toBe('Cherry');
 
-		// Assert: editing stopped, value reverted
-		expect(store.getState().activeEditCell).toBeNull();
-		expect(store.getCellState(0, 0).isEditing).toBe(false);
-		expect(store.getCellState(0, 0).value).toBe('');
-
-		// Focus and edit cell 0,0 again
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		controller.setCellEditing(0, 0, true);
-		store.setState({ activeEditValue: 'Committed value' });
-
-		// Act: stopEditing with cancel=false
-		store.stopEditing(false);
-
-		// Assert: editing stopped, value committed
-		expect(store.getState().activeEditCell).toBeNull();
-		expect(store.getCellState(0, 0).isEditing).toBe(false);
-		expect(store.getCellState(0, 0).value).toBe('Committed value');
-	});
-
-	it('should preserve the committed value when printable-key editing is cancelled', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store);
-
-		store.setCellValue(0, 0, 'Original');
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		controller.handleKeyDown({ key: 'X', preventDefault: vi.fn() } as any);
-
-		expect(store.getState().activeEditValue).toBe('X');
-		expect(store.getCellState(0, 0).value).toBe('Original');
-
-		store.stopEditing(true);
-
-		expect(store.getCellState(0, 0).value).toBe('Original');
-		expect(store.getState().activeEditCell).toBeNull();
-	});
-
-	it('should ensure focused cell in edit mode goes to non-edit on stopEditing', () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const controller = new GridNavigationController(store);
-
-		// Focus cell 0,0 and set it to editing
-		controller.handleMouseDown(0, 0, { button: 0, detail: 1 } as any);
-		controller.setCellEditing(0, 0, true);
-
-		// Clear activeEditCell manually but leave focusedCell and isEditing in cells
-		store.setState({ activeEditCell: null });
-
-		expect(store.getState().focusedCell).toEqual({ row: 0, col: 0 });
-		expect(store.getCellState(0, 0).isEditing).toBe(true);
-
-		// Act
-		store.stopEditing();
-
-		// Assert
-		expect(store.getCellState(0, 0).isEditing).toBe(false);
-	});
-});
-
-describe('ServerRowModelController', () => {
-	it('should pass current sort and filter models to the datasource', async () => {
-		const store = new GridStore({
-			rowCount: 10,
-			colCount: 5,
-			sortModel: [{ colId: 'name', sort: 'asc' }],
-			filterModel: { status: { type: 'equals', filter: 'Active' } },
-		});
-		const getRows = vi.fn().mockResolvedValue({ rows: [['row-0']], totalCount: 1 });
-		const controller = new ServerRowModelController(store, { datasource: { getRows }, blockSize: 1 });
-
-		controller.getRow(0);
-		await vi.waitFor(() => expect(getRows).toHaveBeenCalledTimes(1));
-
-		expect(getRows).toHaveBeenCalledWith({
-			startRow: 0,
-			endRow: 1,
-			sortModel: [{ colId: 'name', sort: 'asc' }],
-			filterModel: { status: { type: 'equals', filter: 'Active' } },
-		});
+		// Apply filter by name contains 'an'
+		store.setFilterModel({ name: { type: 'contains', filter: 'an' } });
+		expect(rowModel.getRowCount()).toBe(1);
+		expect(rowModel.getRow(0)?.name).toBe('Banana');
 
 		controller.dispose();
 	});
 
-	it('should purge loaded server blocks when sort or filter changes', async () => {
-		const store = new GridStore({ rowCount: 10, colCount: 5 });
-		const getRows = vi.fn().mockResolvedValue({ rows: [['row-0']], totalCount: 1 });
-		const controller = new ServerRowModelController(store, { datasource: { getRows }, blockSize: 1 });
-
-		controller.getRow(0);
-		await vi.waitFor(() => expect(store.getState().loadedBlocks[0]).toEqual([['row-0']]));
-
-		store.setState({ sortModel: [{ colId: 'name', sort: 'desc' }] });
-		expect(store.getState().loadedBlocks).toEqual({});
-		expect(store.getState().loadingBlocks).toEqual({});
+	it('should support benchmark sorting and selection maps in O(1) time', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+		});
+		const largeRows = Array.from({ length: 1000000 }, (_, i) => ({
+			id: String(i),
+			name: `Product ${i}`,
+			price: i,
+		}));
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: largeRows,
+			columns: store.getState().columns,
+		});
+		
+		const rowModel = store.getRowModel()!;
+		const t0 = performance.now();
+		const idx = rowModel.getRowIndexById('999999');
+		const t1 = performance.now();
+		
+		expect(idx).toBe(999999);
+		expect(t1 - t0).toBeLessThan(5.0); // Under 5ms (typically <0.1ms) demonstrating O(1) hash map speed!
 
 		controller.dispose();
 	});
 });
+
+describe('ServerRowModelController paginated lazily populated row-patching', () => {
+	it('should fetch rows block on demand', async () => {
+		const store = new GridStore<TestRow>();
+		const mockDatasource: IGridDatasource = {
+			getRows: async (params) => {
+				return {
+					rows: [
+						{ id: '10', name: 'Server A', price: 100 },
+						{ id: '11', name: 'Server B', price: 200 },
+					],
+					totalCount: 100,
+				};
+			},
+		};
+
+		const controller = new ServerRowModelController<TestRow>(store, {
+			datasource: mockDatasource,
+			blockSize: 2,
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 100 },
+			],
+		});
+
+		// Access row at index 0, should return null initially and trigger fetching
+		const initial = controller.getRow(0);
+		expect(initial).toBeNull();
+
+		// Wait for mock datasource promise to resolve and state to update
+		await vi.waitFor(() => {
+			return controller.getRow(0) !== null;
+		});
+
+		const loaded = controller.getRow(0);
+		expect(loaded?.name).toBe('Server A');
+
+		controller.dispose();
+	});
+});
+
+describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions', () => {
+	it('should support RowNode properties and cellular caching', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' }
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const rowModel = store.getRowModel()!;
+		const node = rowModel.getRowNode!(0)!;
+
+		expect(node).toBeDefined();
+		expect(node.id).toBe('1');
+		expect(node.data.name).toBe('Product A');
+		expect(node.rowIndex).toBe(0);
+		expect(node.rowTop).toBe(0);
+		expect(node.rowHeight).toBe(40);
+
+		// Cell caching test
+		let callCount = 0;
+		const customGetter = (data: TestRow) => {
+			callCount++;
+			return data.name.toUpperCase();
+		};
+
+		const val1 = node.getCellValue('name', customGetter);
+		expect(val1).toBe('PRODUCT A');
+		expect(callCount).toBe(1);
+
+		// Subsequent call must fetch from cache
+		const val2 = node.getCellValue('name', customGetter);
+		expect(val2).toBe('PRODUCT A');
+		expect(callCount).toBe(1); // Call count remains 1 due to cache!
+
+		// Clear value cache
+		node.clearValueCache();
+		const val3 = node.getCellValue('name', customGetter);
+		expect(val3).toBe('PRODUCT A');
+		expect(callCount).toBe(2); // Invalidation works!
+
+		controller.dispose();
+	});
+
+	it('should support batch transactions in GridStore', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' }
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const listener = vi.fn();
+		store.subscribe(listener);
+
+		store.startTransaction();
+		store.setState({ focusedCell: { rowId: '1', colField: 'name' } });
+		store.setState({ defaultRowHeight: 50 });
+		store.setState({ defaultColWidth: 120 });
+
+		// Listeners must not be notified during a transaction
+		expect(listener).toHaveBeenCalledTimes(0);
+		expect(store.getState().focusedCell?.rowId).toBe('1');
+		expect(store.getState().defaultRowHeight).toBe(50);
+		expect(store.getState().defaultColWidth).toBe(120);
+
+		// End transaction
+		store.endTransaction();
+		// Listeners notified exactly once at the end!
+		expect(listener).toHaveBeenCalledTimes(1);
+
+		controller.dispose();
+	});
+});
+

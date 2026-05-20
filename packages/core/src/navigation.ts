@@ -1,29 +1,37 @@
-import { GridStore, GridCellCoordinate } from './store.js';
+import { GridStore, GridCellPointer, GridFeature, GridApi } from './store.js';
 
 export interface GridNavigationOptions {
-	onCellValueChanged?: (row: number, col: number, val: any) => void;
+	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	editTrigger?: 'singleClick' | 'doubleClick'; // default: 'doubleClick'
 	arrowKeyNavigationEdit?: boolean; // default: false
 }
 
-export class GridNavigationController {
-	private store: GridStore;
+export class GridNavigationController<TRowData = unknown> implements GridFeature<TRowData> {
+	readonly name = 'navigation';
+	private store!: GridStore<TRowData>;
 	private isSelecting = false;
-	private rangeStart: GridCellCoordinate | null = null;
+	private rangeStart: GridCellPointer | null = null;
 	private options: GridNavigationOptions;
 	private unsubscribeCellValueChanged?: () => void;
 
-	constructor(store: GridStore, options: GridNavigationOptions = {}) {
-		this.store = store;
+	constructor(options: GridNavigationOptions = {}) {
 		this.options = options;
+	}
+
+	public init(api: GridApi<TRowData>): void {
+		this.store = api as GridStore<TRowData>;
 
 		// Bind store event listener to invoke options callback when edits are committed
 		if (this.options.onCellValueChanged) {
-			this.unsubscribeCellValueChanged = this.store.addEventListener('cellValueChanged', (event) => {
-				const { row, col, newValue } = event.payload;
-				this.options.onCellValueChanged?.(row, col, newValue);
+			this.unsubscribeCellValueChanged = this.store.addEventListener<{ rowId: string; colField: string; newValue: unknown }>('cellValueChanged', (event) => {
+				const { rowId, colField, newValue } = event.payload;
+				this.options.onCellValueChanged?.(rowId, colField, newValue);
 			});
 		}
+	}
+
+	public destroy(): void {
+		this.dispose();
 	}
 
 	public dispose(): void {
@@ -31,20 +39,48 @@ export class GridNavigationController {
 		this.unsubscribeCellValueChanged = undefined;
 	}
 
+	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
+		const rowModel = this.store.getRowModel();
+		if (!rowModel) return null;
+		const state = this.store.getState();
+		const row = rowModel.getRow(rowIdx);
+		const col = state.columns[colIdx];
+		if (!row || !col) return null;
+		return {
+			rowId: String(row[state.rowIdField as keyof TRowData]),
+			colField: col.field,
+		};
+	}
+
+	private getCoordsFromPointer(pointer: GridCellPointer | null): { rowIdx: number; colIdx: number } | null {
+		if (!pointer) return null;
+		const rowModel = this.store.getRowModel();
+		if (!rowModel) return null;
+		const state = this.store.getState();
+		const rowIdx = rowModel.getRowIndexById(pointer.rowId);
+		const colIdx = state.columns.findIndex((c) => c.field === pointer.colField);
+		if (rowIdx === -1 || colIdx === -1) return null;
+		return { rowIdx, colIdx };
+	}
+
 	/**
 	 * Handle standard keyboard movements and selection expansions.
 	 */
 	public handleKeyDown = (event: KeyboardEvent): void => {
+		const rowModel = this.store.getRowModel();
+		if (!rowModel) return;
 		const state = this.store.getState();
 		const active = state.focusedCell;
 		if (!active) return;
 
-		const row = active.row;
-		const col = active.col;
-		const maxRow = state.rowCount - 1;
-		const maxCol = state.colCount - 1;
+		const coords = this.getCoordsFromPointer(active);
+		if (!coords) return;
 
-		const cellState = this.store.getCellState(row, col);
+		const { rowIdx: row, colIdx: col } = coords;
+		const maxRow = rowModel.getRowCount() - 1;
+		const maxCol = state.columns.length - 1;
+
+		const cellState = this.store.getCellState(active.rowId, active.colField);
 		const isEditing = cellState.isEditing;
 
 		// 1. Navigation logic when NOT in cell editing mode
@@ -90,7 +126,7 @@ export class GridNavigationController {
 				case 'Enter':
 					event.preventDefault();
 					// Enter edit mode
-					this.setCellEditing(row, col, true);
+					this.setCellEditing(active.rowId, active.colField, true);
 					return;
 				case 'Escape':
 					event.preventDefault();
@@ -101,7 +137,7 @@ export class GridNavigationController {
 					// Any printable character starts typing immediately (Excel style!)
 					if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
 						event.preventDefault();
-						this.setCellEditing(row, col, true, event.key);
+						this.setCellEditing(active.rowId, active.colField, true);
 					}
 					return;
 			}
@@ -109,10 +145,13 @@ export class GridNavigationController {
 			if (handled) {
 				event.preventDefault();
 
+				const targetPointer = this.getPointerFromCoords(nextRow, nextCol);
+				if (!targetPointer) return;
+
 				if (event.shiftKey) {
 					// Expand selection range
 					const start = this.rangeStart || active;
-					const end = { row: nextRow, col: nextCol };
+					const end = targetPointer;
 
 					this.rangeStart = start;
 					this.store.setState({
@@ -120,15 +159,15 @@ export class GridNavigationController {
 					});
 				} else {
 					// Reset selection range and move focus
-					this.rangeStart = { row: nextRow, col: nextCol };
+					this.rangeStart = targetPointer;
 					this.store.setState({
-						focusedCell: { row: nextRow, col: nextCol },
-						selectedRange: { start: { row: nextRow, col: nextCol }, end: { row: nextRow, col: nextCol } },
+						focusedCell: targetPointer,
+						selectedRange: { start: targetPointer, end: targetPointer },
 					});
 
 					// Opt-in: Auto-edit on arrow key navigation
 					if (this.options.arrowKeyNavigationEdit) {
-						this.setCellEditing(nextRow, nextCol, true);
+						this.setCellEditing(targetPointer.rowId, targetPointer.colField, true);
 					}
 				}
 			}
@@ -136,92 +175,126 @@ export class GridNavigationController {
 		// 2. Keyboard handling when IN editing mode
 		else {
 			switch (event.key) {
-				case 'ArrowUp':
+				case 'ArrowUp': {
 					event.preventDefault();
-					this.commitEdit(row, col);
+					this.commitEdit();
 					const upRow = Math.max(0, row - 1);
-					this.rangeStart = { row: upRow, col };
-					this.store.setState({
-						focusedCell: { row: upRow, col },
-						selectedRange: { start: { row: upRow, col }, end: { row: upRow, col } },
-					});
-					if (this.options.arrowKeyNavigationEdit) {
-						this.setCellEditing(upRow, col, true);
+					const target = this.getPointerFromCoords(upRow, col);
+					if (target) {
+						this.rangeStart = target;
+						this.store.setState({
+							focusedCell: target,
+							selectedRange: { start: target, end: target },
+						});
+						if (this.options.arrowKeyNavigationEdit) {
+							if (target.rowId !== active.rowId || target.colField !== active.colField) {
+								this.setCellEditing(target.rowId, target.colField, true);
+							}
+						}
 					}
 					break;
-				case 'ArrowDown':
+				}
+				case 'ArrowDown': {
 					event.preventDefault();
-					this.commitEdit(row, col);
+					this.commitEdit();
 					const downRow = Math.min(maxRow, row + 1);
-					this.rangeStart = { row: downRow, col };
-					this.store.setState({
-						focusedCell: { row: downRow, col },
-						selectedRange: { start: { row: downRow, col }, end: { row: downRow, col } },
-					});
-					if (this.options.arrowKeyNavigationEdit) {
-						this.setCellEditing(downRow, col, true);
+					const target = this.getPointerFromCoords(downRow, col);
+					if (target) {
+						this.rangeStart = target;
+						this.store.setState({
+							focusedCell: target,
+							selectedRange: { start: target, end: target },
+						});
+						if (this.options.arrowKeyNavigationEdit) {
+							if (target.rowId !== active.rowId || target.colField !== active.colField) {
+								this.setCellEditing(target.rowId, target.colField, true);
+							}
+						}
 					}
 					break;
-				case 'ArrowLeft':
+				}
+				case 'ArrowLeft': {
 					if (this.options.arrowKeyNavigationEdit) {
 						event.preventDefault();
-						this.commitEdit(row, col);
+						this.commitEdit();
 						const leftCol = Math.max(0, col - 1);
-						this.rangeStart = { row, col: leftCol };
-						this.store.setState({
-							focusedCell: { row, col: leftCol },
-							selectedRange: { start: { row, col: leftCol }, end: { row, col: leftCol } },
-						});
-						this.setCellEditing(row, leftCol, true);
+						const target = this.getPointerFromCoords(row, leftCol);
+						if (target) {
+							this.rangeStart = target;
+							this.store.setState({
+								focusedCell: target,
+								selectedRange: { start: target, end: target },
+							});
+							if (target.rowId !== active.rowId || target.colField !== active.colField) {
+								this.setCellEditing(target.rowId, target.colField, true);
+							}
+						}
 					}
 					break;
-				case 'ArrowRight':
+				}
+				case 'ArrowRight': {
 					if (this.options.arrowKeyNavigationEdit) {
 						event.preventDefault();
-						this.commitEdit(row, col);
+						this.commitEdit();
 						const rightCol = Math.min(maxCol, col + 1);
-						this.rangeStart = { row, col: rightCol };
-						this.store.setState({
-							focusedCell: { row, col: rightCol },
-							selectedRange: { start: { row, col: rightCol }, end: { row, col: rightCol } },
-						});
-						this.setCellEditing(row, rightCol, true);
+						const target = this.getPointerFromCoords(row, rightCol);
+						if (target) {
+							this.rangeStart = target;
+							this.store.setState({
+								focusedCell: target,
+								selectedRange: { start: target, end: target },
+							});
+							if (target.rowId !== active.rowId || target.colField !== active.colField) {
+								this.setCellEditing(target.rowId, target.colField, true);
+							}
+						}
 					}
 					break;
-				case 'Enter':
+				}
+				case 'Enter': {
 					event.preventDefault();
 					// Commit and move down
-					this.commitEdit(row, col);
+					this.commitEdit();
 					const nextRow = Math.min(maxRow, row + 1);
-					this.rangeStart = { row: nextRow, col };
-					this.store.setState({
-						focusedCell: { row: nextRow, col },
-						selectedRange: { start: { row: nextRow, col }, end: { row: nextRow, col } },
-					});
-					// Opt-in: Auto-edit on enter movement
-					if (this.options.arrowKeyNavigationEdit) {
-						this.setCellEditing(nextRow, col, true);
+					const target = this.getPointerFromCoords(nextRow, col);
+					if (target) {
+						this.rangeStart = target;
+						this.store.setState({
+							focusedCell: target,
+							selectedRange: { start: target, end: target },
+						});
+						if (this.options.arrowKeyNavigationEdit) {
+							if (target.rowId !== active.rowId || target.colField !== active.colField) {
+								this.setCellEditing(target.rowId, target.colField, true);
+							}
+						}
 					}
 					break;
-				case 'Tab':
+				}
+				case 'Tab': {
 					event.preventDefault();
 					// Commit and move right
-					this.commitEdit(row, col);
+					this.commitEdit();
 					const nextCol = event.shiftKey ? Math.max(0, col - 1) : Math.min(maxCol, col + 1);
-					this.rangeStart = { row, col: nextCol };
-					this.store.setState({
-						focusedCell: { row, col: nextCol },
-						selectedRange: { start: { row, col: nextCol }, end: { row, col: nextCol } },
-					});
-					// Opt-in: Auto-edit on tab movement
-					if (this.options.arrowKeyNavigationEdit) {
-						this.setCellEditing(row, nextCol, true);
+					const target = this.getPointerFromCoords(row, nextCol);
+					if (target) {
+						this.rangeStart = target;
+						this.store.setState({
+							focusedCell: target,
+							selectedRange: { start: target, end: target },
+						});
+						if (this.options.arrowKeyNavigationEdit) {
+							if (target.rowId !== active.rowId || target.colField !== active.colField) {
+								this.setCellEditing(target.rowId, target.colField, true);
+							}
+						}
 					}
 					break;
+				}
 				case 'Escape':
 					event.preventDefault();
 					// Rollback edits
-					this.cancelEdit(row, col);
+					this.cancelEdit();
 					break;
 			}
 		}
@@ -230,7 +303,7 @@ export class GridNavigationController {
 	/**
 	 * Handle MouseDown events to initiate cell selection and focus.
 	 */
-	public handleMouseDown = (row: number, col: number, event: MouseEvent): void => {
+	public handleMouseDown = (rowId: string, colField: string, event: MouseEvent): void => {
 		// Left click only
 		if (event.button !== 0) return;
 
@@ -240,67 +313,67 @@ export class GridNavigationController {
 
 		// Handle singleClick edit trigger
 		if (trigger === 'singleClick') {
-			if (prevFocus && (prevFocus.row !== row || prevFocus.col !== col)) {
-				const prevCellState = this.store.getCellState(prevFocus.row, prevFocus.col);
+			if (prevFocus && (prevFocus.rowId !== rowId || prevFocus.colField !== colField)) {
+				const prevCellState = this.store.getCellState(prevFocus.rowId, prevFocus.colField);
 				if (prevCellState.isEditing) {
-					this.commitEdit(prevFocus.row, prevFocus.col);
+					this.commitEdit();
 				}
 			}
+			const pointer: GridCellPointer = { rowId, colField };
 			this.isSelecting = true;
-			this.rangeStart = { row, col };
+			this.rangeStart = pointer;
 			this.store.setState({
-				focusedCell: { row, col },
-				selectedRange: { start: { row, col }, end: { row, col } },
+				focusedCell: pointer,
+				selectedRange: { start: pointer, end: pointer },
 			});
 			return;
 		}
 
-		// In doubleClick trigger, double-click is safely isolated inside React's onDoubleClick event to prevent focus races.
-
 		// If focused on another cell, save its edit first
-		if (prevFocus && (prevFocus.row !== row || prevFocus.col !== col)) {
-			const prevCellState = this.store.getCellState(prevFocus.row, prevFocus.col);
+		if (prevFocus && (prevFocus.rowId !== rowId || prevFocus.colField !== colField)) {
+			const prevCellState = this.store.getCellState(prevFocus.rowId, prevFocus.colField);
 			if (prevCellState.isEditing) {
-				this.commitEdit(prevFocus.row, prevFocus.col);
+				this.commitEdit();
 			}
 		}
 
+		const pointer: GridCellPointer = { rowId, colField };
 		this.isSelecting = true;
-		this.rangeStart = { row, col };
+		this.rangeStart = pointer;
 
 		this.store.setState({
-			focusedCell: { row, col },
-			selectedRange: { start: { row, col }, end: { row, col } },
+			focusedCell: pointer,
+			selectedRange: { start: pointer, end: pointer },
 		});
 	};
 
 	/**
 	 * Handle MouseClick events to trigger edit mode.
 	 */
-	public handleClick = (row: number, col: number, event: MouseEvent): void => {
+	public handleClick = (rowId: string, colField: string, event: MouseEvent): void => {
 		const trigger = this.options.editTrigger ?? 'doubleClick';
 		if (trigger !== 'singleClick') return;
 
 		const state = this.store.getState();
 		const range = state.selectedRange;
 		// Only enter editing if the selection is a single cell (not a multi-cell range drag)
-		const isSingleCell = !range || (range.start.row === range.end.row && range.start.col === range.end.col);
+		const isSingleCell = !range || (range.start.rowId === range.end.rowId && range.start.colField === range.end.colField);
 
 		if (isSingleCell) {
-			this.setCellEditing(row, col, true);
+			this.setCellEditing(rowId, colField, true);
 		}
 	};
 
 	/**
 	 * Handle MouseEnter event to calculate dragged cell ranges.
 	 */
-	public handleMouseEnter = (row: number, col: number): void => {
+	public handleMouseEnter = (rowId: string, colField: string): void => {
 		if (!this.isSelecting || !this.rangeStart) return;
 
 		this.store.setState({
 			selectedRange: {
 				start: this.rangeStart,
-				end: { row, col },
+				end: { rowId, colField },
 			},
 		});
 	};
@@ -313,28 +386,24 @@ export class GridNavigationController {
 	};
 
 	// Helper Methods
-	public setCellEditing(row: number, col: number, isEditing: boolean, initialChar: string = ''): void {
-		const key = `${row},${col}`;
-		const cell = this.store.getCellState(row, col);
-
-		this.store.setState((state) => ({
-			cells: {
-				...state.cells,
-				[key]: {
-					...cell,
-					isEditing,
+	public setCellEditing(rowId: string, colField: string, isEditing: boolean): void {
+		if (isEditing) {
+			this.store.setState({
+				activeEdit: {
+					rowId,
+					colField,
 				},
-			},
-			activeEditCell: isEditing ? { row, col } : null,
-			activeEditValue: isEditing ? (initialChar !== '' ? initialChar : (cell.value ?? '')) : '',
-		}));
+			});
+		} else {
+			this.store.stopEditing();
+		}
 	}
 
-	public commitEdit(row: number, col: number): void {
+	public commitEdit(): void {
 		this.store.stopEditing(false);
 	}
 
-	public cancelEdit(row: number, col: number): void {
+	public cancelEdit(): void {
 		this.store.stopEditing(true);
 	}
 }

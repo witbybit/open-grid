@@ -1,35 +1,46 @@
-import React, { createContext, useContext, useMemo, useSyncExternalStore, useRef, useCallback, useEffect } from 'react';
-import { GridStore, GridState, GridNavigationController, GridNavigationOptions, GridApi, CellState } from '@open-grid/core';
+import React, { createContext, useContext, useMemo, useSyncExternalStore, useRef, useCallback, useEffect, useState } from 'react';
+import {
+	GridStore,
+	GridState,
+	GridNavigationController,
+	GridNavigationOptions,
+	GridApi,
+	CellState,
+	GridCellPointer,
+	ColumnDef,
+	CellEditorProps,
+	CellRendererProps,
+} from '@open-grid/core';
 
 // Create Grid Context
-const GridContext = createContext<GridStore | null>(null);
+const GridContext = createContext<GridStore<unknown> | null>(null);
 
-export interface GridProviderProps {
-	store: GridStore;
+export interface GridProviderProps<TRowData = unknown> {
+	store: GridStore<TRowData>;
 	children: React.ReactNode;
 }
 
-export function GridProvider({ store, children }: GridProviderProps) {
-	return <GridContext.Provider value={store}>{children}</GridContext.Provider>;
+export function GridProvider<TRowData = unknown>({ store, children }: GridProviderProps<TRowData>) {
+	return <GridContext.Provider value={store as unknown as GridStore<unknown>}>{children}</GridContext.Provider>;
 }
 
-export function useGridStore(): GridStore {
+export function useGridStore<TRowData = unknown>(): GridStore<TRowData> {
 	const context = useContext(GridContext);
 	if (!context) {
 		throw new Error('useGridStore must be used within a GridProvider');
 	}
-	return context;
+	return context as unknown as GridStore<TRowData>;
 }
 
-export function useGridApi(): GridApi {
-	return useGridStore();
+export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
+	return useGridStore<TRowData>();
 }
 
 /**
  * Custom selector hook utilizing useSyncExternalStore for targeted re-renders.
  */
-export function useGridSelector<T>(selector: (state: GridState) => T): T {
-	const store = useGridStore();
+export function useGridSelector<T, TRowData = unknown>(selector: (state: GridState<TRowData>) => T): T {
+	const store = useGridStore<TRowData>();
 
 	const selectorRef = useRef(selector);
 	selectorRef.current = selector;
@@ -40,10 +51,10 @@ export function useGridSelector<T>(selector: (state: GridState) => T): T {
 }
 
 /**
- * Targeted selector for individual keys to achieve optimal performance (e.g. focusedCell, loadedBlocks).
+ * Targeted selector for individual keys to achieve optimal performance.
  */
-export function useGridKeySelector<T>(key: string, selector: (state: GridState) => T): T {
-	const store = useGridStore();
+export function useGridKeySelector<T, TRowData = unknown>(key: string, selector: (state: GridState<TRowData>) => T): T {
+	const store = useGridStore<TRowData>();
 
 	const selectorRef = useRef(selector);
 	selectorRef.current = selector;
@@ -57,69 +68,120 @@ export function useGridKeySelector<T>(key: string, selector: (state: GridState) 
 
 /**
  * High-performance hook subscribing strictly to a single cell's coordinate changes.
+ * Employs stable primitive snapshot resolution to prevent React render loops.
  */
-export function useGridCell(row: number, col: number) {
-	const store = useGridStore();
-	const key = `cell:${row},${col}`;
+export function useGridCell<TRowData = unknown>(rowId: string, colField: string): unknown {
+	const store = useGridStore<TRowData>();
 
-	const subscribe = useCallback((onStoreChange: () => void) => store.subscribeToKey(key, onStoreChange), [store, key]);
+	const subscribe = useCallback(
+		(onStoreChange: () => void) => {
+			const unsubVal = store.subscribeToKey(`cell:value:${rowId}:${colField}`, onStoreChange);
+			const unsubData = store.subscribeToKey('dataVersion', onStoreChange);
+			return () => {
+				unsubVal();
+				unsubData();
+			};
+		},
+		[store, rowId, colField]
+	);
 
-	const getSnapshot = useCallback(() => store.getCellState(row, col), [store, row, col]);
+	const getSnapshot = useCallback(() => {
+		return store.getCellValue(rowId, colField);
+	}, [store, rowId, colField]);
 
-	const cellState = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-
-	return cellState;
+	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 /**
  * Targeted hook for checking dynamic selection boundary states without re-rendering the whole table.
  */
-export function useCellSelectionState(row: number, col: number) {
-	const isFocused = useGridKeySelector('focusedCell', (s) => s.focusedCell?.row === row && s.focusedCell?.col === col);
+export function useCellSelectionState<TRowData = unknown>(rowId: string, colField: string) {
+	const store = useGridStore<TRowData>();
 
-	const isSelected = useGridKeySelector('selectedRange', (s) => {
+	const subscribe = useCallback(
+		(onStoreChange: () => void) => {
+			const unsubFocus = store.subscribeToKey(`cell:focus:${rowId}:${colField}`, onStoreChange);
+			const unsubSelect = store.subscribeToKey(`cell:select:${rowId}:${colField}`, onStoreChange);
+			return () => {
+				unsubFocus();
+				unsubSelect();
+			};
+		},
+		[store, rowId, colField]
+	);
+
+	const prevRef = useRef<{ isFocused: boolean; isSelected: boolean } | null>(null);
+
+	const getSnapshot = useCallback(() => {
+		const s = store.getState();
+		const isFocused = s.focusedCell?.rowId === rowId && s.focusedCell?.colField === colField;
+
+		let isSelected = false;
 		const range = s.selectedRange;
-		if (!range) return false;
-		const minRow = Math.min(range.start.row, range.end.row);
-		const maxRow = Math.max(range.start.row, range.end.row);
-		const minCol = Math.min(range.start.col, range.end.col);
-		const maxCol = Math.max(range.start.col, range.end.col);
-		return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
-	});
+		if (range) {
+			const rowModel = store.getRowModel();
+			if (rowModel) {
+				const startIdx = rowModel.getRowIndexById(range.start.rowId);
+				const endIdx = rowModel.getRowIndexById(range.end.rowId);
+				const currentIdx = rowModel.getRowIndexById(rowId);
 
-	return { isFocused, isSelected };
+				const startColIdx = s.columns.findIndex((c) => c.field === range.start.colField);
+				const endColIdx = s.columns.findIndex((c) => c.field === range.end.colField);
+				const currentColIdx = s.columns.findIndex((c) => c.field === colField);
+
+				if (startIdx !== -1 && endIdx !== -1 && currentIdx !== -1 && startColIdx !== -1 && endColIdx !== -1 && currentColIdx !== -1) {
+					const minRow = Math.min(startIdx, endIdx);
+					const maxRow = Math.max(startIdx, endIdx);
+					const minCol = Math.min(startColIdx, endColIdx);
+					const maxCol = Math.max(startColIdx, endColIdx);
+					isSelected = currentIdx >= minRow && currentIdx <= maxRow && currentColIdx >= minCol && currentColIdx <= maxCol;
+				}
+			}
+		}
+
+		const next = { isFocused, isSelected };
+		if (prevRef.current && prevRef.current.isFocused === isFocused && prevRef.current.isSelected === isSelected) {
+			return prevRef.current;
+		}
+		prevRef.current = next;
+		return next;
+	}, [store, rowId, colField]);
+
+	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 /**
- * React hook yielding custom input and focus bindings for active edit registers.
+ * React hook yielding custom focus bindings for active edit registers.
  */
-export function useCellEditState(row: number, col: number) {
-	const store = useGridStore();
-	const isEditing = useGridKeySelector('activeEditCell', (s) => s.activeEditCell?.row === row && s.activeEditCell?.col === col);
+export function useCellEditState<TRowData = unknown>(rowId: string, colField: string) {
+	const store = useGridStore<TRowData>();
 
-	// Only subscribe to edit value updates when this cell is the active editor, preventing O(N) re-renders on every keystroke
-	const value = useGridKeySelector('activeEditValue', (s) =>
-		s.activeEditCell?.row === row && s.activeEditCell?.col === col ? s.activeEditValue : ''
+	const subscribe = useCallback(
+		(onStoreChange: () => void) => store.subscribeToKey(`cell:edit:${rowId}:${colField}`, onStoreChange),
+		[store, rowId, colField]
 	);
 
-	const setValue = (val: string) => {
-		store.setState({ activeEditValue: val });
-	};
+	const getSnapshot = useCallback(() => {
+		const s = store.getState();
+		return s.activeEdit?.rowId === rowId && s.activeEdit?.colField === colField;
+	}, [store, rowId, colField]);
 
-	return { isEditing, value, setValue };
+	const isEditing = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+	return { isEditing };
 }
 
 /**
  * Controller integration hook mapping standard interaction event handlers.
  */
-export function useGridNavigationController(options: GridNavigationOptions = {}) {
-	const store = useGridStore();
+export function useGridNavigationController<TRowData = unknown>(options: GridNavigationOptions = {}) {
+	const store = useGridStore<TRowData>();
 	const optionsRef = useRef(options);
 	optionsRef.current = options;
 
 	const controller = useMemo(() => {
-		return new GridNavigationController(store, {
-			onCellValueChanged: (row, col, val) => optionsRef.current.onCellValueChanged?.(row, col, val),
+		const nav = new GridNavigationController<TRowData>({
+			onCellValueChanged: (rowId, colField, val) => optionsRef.current.onCellValueChanged?.(rowId, colField, val),
 			get editTrigger() {
 				return optionsRef.current.editTrigger;
 			},
@@ -127,6 +189,8 @@ export function useGridNavigationController(options: GridNavigationOptions = {})
 				return optionsRef.current.arrowKeyNavigationEdit;
 			},
 		});
+		store.registerFeature(nav);
+		return nav;
 	}, [store]);
 
 	useEffect(() => () => controller.dispose(), [controller]);
@@ -134,45 +198,26 @@ export function useGridNavigationController(options: GridNavigationOptions = {})
 	return controller;
 }
 
-export interface CellRendererProps {
-	row: number;
-	col: number;
-	value: any;
-	computedValue: any;
-	api: GridApi;
-}
-
-export interface CellEditorProps {
-	row: number;
-	col: number;
-	value: any;
-	onChange: (val: any) => void;
-	onCommit: () => void;
-	onCancel: () => void;
-	api: GridApi;
-}
-
-export interface UseGridCellPropsOptions {
-	row: number;
-	col: number;
-	navigation: GridNavigationController;
-	ref?: React.RefObject<any>;
+export interface UseGridCellPropsOptions<TRowData = unknown> {
+	rowId: string;
+	colField: string;
+	navigation?: GridNavigationController<TRowData>;
+	ref?: React.RefObject<HTMLDivElement>;
 	className?: string;
 	focusedClassName?: string;
 	selectedClassName?: string;
+	api?: GridApi<TRowData>;
 }
 
-export interface UseGridCellPropsResult {
-	ref: React.RefObject<any>;
+export interface UseGridCellPropsResult<TRowData = unknown> {
+	ref: React.RefObject<HTMLDivElement>;
 	cellState: CellState;
 	isFocused: boolean;
 	isSelected: boolean;
 	isEditing: boolean;
-	value: string;
-	setValue: (val: string) => void;
-	api: GridApi;
+	api: GridApi<TRowData>;
 	cellProps: {
-		ref: React.RefObject<any>;
+		ref: React.RefObject<HTMLDivElement>;
 		tabIndex: number;
 		className: string;
 		style?: React.CSSProperties;
@@ -187,24 +232,111 @@ export interface UseGridCellPropsResult {
  * Advanced React hook for full rendering customizability. Generates ready-to-spread props
  * handling element focus sync, range selection styles, and drag events out-of-the-box.
  */
-export function useGridCellProps(options: UseGridCellPropsOptions): UseGridCellPropsResult {
+export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOptions<TRowData>): UseGridCellPropsResult<TRowData> {
 	const {
-		row,
-		col,
-		navigation,
+		rowId,
+		colField,
+		navigation: propNavigation,
 		ref: userRef,
 		className = 'flex items-center px-3 h-full border-r border-slate-800 text-sm select-none relative transition-colors duration-75 outline-none bg-slate-950 text-slate-300',
 		focusedClassName = 'bg-slate-900 border-2 border-purple-500 z-10',
 		selectedClassName = 'bg-purple-500/10',
+		api: propApi,
 	} = options;
 
-	const localRef = useRef<any>(null);
-	const cellRef = userRef || localRef;
+	const localRef = useRef<HTMLDivElement>(null);
+	const cellRef = (userRef || localRef) as React.RefObject<HTMLDivElement>;
 
-	const cellState = useGridCell(row, col);
-	const { isFocused, isSelected } = useCellSelectionState(row, col);
-	const { isEditing, value, setValue } = useCellEditState(row, col);
-	const api = useGridApi();
+	const contextApi = useContext(GridContext);
+	const api = propApi || (contextApi as unknown as GridApi<TRowData>);
+	if (!api) {
+		throw new Error('GridApi must be provided either via props or GridProvider context.');
+	}
+
+	const prevSnapshotRef = useRef<{
+		value: unknown;
+		isFocused: boolean;
+		isSelected: boolean;
+		isEditing: boolean;
+		colWidth: number;
+	} | null>(null);
+
+	const subscribe = useCallback(
+		(onStoreChange: () => void) => {
+			const unsubCellFocus = api.subscribeToKey(`cell:focus:${rowId}:${colField}`, onStoreChange);
+			const unsubCellSelect = api.subscribeToKey(`cell:select:${rowId}:${colField}`, onStoreChange);
+			const unsubCellEdit = api.subscribeToKey(`cell:edit:${rowId}:${colField}`, onStoreChange);
+			const unsubCellVal = api.subscribeToKey(`cell:value:${rowId}:${colField}`, onStoreChange);
+			const unsubData = api.subscribeToKey('dataVersion', onStoreChange);
+			const unsubWidth = api.subscribeToKey(`colWidth:${colField}`, onStoreChange);
+			return () => {
+				unsubCellFocus();
+				unsubCellSelect();
+				unsubCellEdit();
+				unsubCellVal();
+				unsubData();
+				unsubWidth();
+			};
+		},
+		[api, rowId, colField]
+	);
+
+	const getSnapshot = useCallback(() => {
+		const state = api.getState();
+		const value = api.getCellValue(rowId, colField);
+		const isFocused = state.focusedCell?.rowId === rowId && state.focusedCell?.colField === colField;
+
+		let isSelected = false;
+		const range = state.selectedRange;
+		if (range) {
+			const rowModel = api.getRowModel();
+			if (rowModel) {
+				const startIdx = rowModel.getRowIndexById(range.start.rowId);
+				const endIdx = rowModel.getRowIndexById(range.end.rowId);
+				const currentIdx = rowModel.getRowIndexById(rowId);
+
+				const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
+				const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
+				const currentColIdx = state.columns.findIndex((c) => c.field === colField);
+
+				if (startIdx !== -1 && endIdx !== -1 && currentIdx !== -1 && startColIdx !== -1 && endColIdx !== -1 && currentColIdx !== -1) {
+					const minRow = Math.min(startIdx, endIdx);
+					const maxRow = Math.max(startIdx, endIdx);
+					const minCol = Math.min(startColIdx, endColIdx);
+					const maxCol = Math.max(startColIdx, endColIdx);
+					isSelected = currentIdx >= minRow && currentIdx <= maxRow && currentColIdx >= minCol && currentColIdx <= maxCol;
+				}
+			}
+		}
+
+		const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === colField;
+		const colWidth = state.columnWidths[colField] ?? 100;
+
+		const nextSnapshot = { value, isFocused, isSelected, isEditing, colWidth };
+
+		// Ref-based shallow equality memoization
+		if (
+			prevSnapshotRef.current &&
+			prevSnapshotRef.current.value === value &&
+			prevSnapshotRef.current.isFocused === isFocused &&
+			prevSnapshotRef.current.isSelected === isSelected &&
+			prevSnapshotRef.current.isEditing === isEditing &&
+			prevSnapshotRef.current.colWidth === colWidth
+		) {
+			return prevSnapshotRef.current;
+		}
+
+		prevSnapshotRef.current = nextSnapshot;
+		return nextSnapshot;
+	}, [api, rowId, colField]);
+
+	const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+	const { value: cellValue, isFocused, isSelected, isEditing, colWidth } = snapshot;
+
+	const navigation = propNavigation || api.getFeature<GridNavigationController<TRowData>>('navigation');
+	if (!navigation) {
+		throw new Error('GridNavigationController feature is not registered on the store');
+	}
 
 	// Focus synchronization effect
 	useEffect(() => {
@@ -214,38 +346,33 @@ export function useGridCellProps(options: UseGridCellPropsOptions): UseGridCellP
 				cellRef.current?.focus();
 			}
 		}
-	}, [isFocused, isEditing]);
+	}, [isFocused, isEditing, cellRef]);
 
 	const onMouseDown = useCallback(
 		(e: React.MouseEvent) => {
 			if (isEditing) return;
 			cellRef.current?.focus();
-			navigation.handleMouseDown(row, col, e.nativeEvent);
+			navigation.handleMouseDown(rowId, colField, e.nativeEvent);
 		},
-		[row, col, navigation, isEditing]
+		[rowId, colField, navigation, isEditing, cellRef]
 	);
 
 	const onMouseEnter = useCallback(() => {
-		navigation.handleMouseEnter(row, col);
-	}, [row, col, navigation]);
+		navigation.handleMouseEnter(rowId, colField);
+	}, [rowId, colField, navigation]);
 
-	const onDoubleClick = useCallback(
-		(e: React.MouseEvent) => {
-			if (isEditing) return;
-			navigation.setCellEditing(row, col, true);
-		},
-		[row, col, navigation, isEditing]
-	);
+	const onDoubleClick = useCallback(() => {
+		if (isEditing) return;
+		navigation.setCellEditing(rowId, colField, true);
+	}, [rowId, colField, navigation, isEditing]);
 
 	const onClick = useCallback(
 		(e: React.MouseEvent) => {
 			if (isEditing) return;
-			navigation.handleClick(row, col, e.nativeEvent);
+			navigation.handleClick(rowId, colField, e.nativeEvent);
 		},
-		[row, col, navigation, isEditing]
+		[rowId, colField, navigation, isEditing]
 	);
-
-	const colWidth = useGridSelector((state) => state.colWidths[col] ?? 100);
 
 	const combinedClassName = useMemo(() => {
 		let classes = className + ' ';
@@ -257,14 +384,20 @@ export function useGridCellProps(options: UseGridCellPropsOptions): UseGridCellP
 		return classes.trim();
 	}, [isFocused, isSelected, className, focusedClassName, selectedClassName]);
 
+	const cellState = useMemo<CellState>(() => {
+		return {
+			value: cellValue,
+			computedValue: cellValue,
+			isEditing,
+		};
+	}, [cellValue, isEditing]);
+
 	return {
 		ref: cellRef,
 		cellState,
 		isFocused,
 		isSelected,
 		isEditing,
-		value,
-		setValue,
 		api,
 		cellProps: {
 			ref: cellRef,
@@ -279,55 +412,118 @@ export function useGridCellProps(options: UseGridCellPropsOptions): UseGridCellP
 	};
 }
 
-export interface CellProps {
-	row: number;
-	col: number;
-	navigation: GridNavigationController;
+export interface CellProps<TRowData = unknown> {
+	rowId: string;
+	colField: string;
+	api?: GridApi<TRowData>;
+	navigation?: GridNavigationController<TRowData>;
 	className?: string;
 	focusedClassName?: string;
 	selectedClassName?: string;
-	customEditor?: React.ComponentType<{
-		row: number;
-		col: number;
-		value: string;
-		onChange: (val: string) => void;
-		api: GridApi;
-		onCommit: () => void;
-		onCancel: () => void;
-	}>;
-	renderValue?: (value: any, computedValue: any) => React.ReactNode;
+	renderValue?: (value: unknown, computedValue: unknown) => React.ReactNode;
 }
 
 /**
  * High-performance, plug-and-play Grid Cell component.
  * Evaluates O(1) state transitions under React Scan, handling inputs, blurs, commits, and style overlays.
  */
-export const Cell = React.memo((props: CellProps) => {
-	const { row, col, navigation, customEditor: CustomEditor, renderValue } = props;
-	const { cellProps, cellState, isEditing, value, setValue, api } = useGridCellProps(props);
+const CellComponent = <TRowData,>(props: CellProps<TRowData>) => {
+	const { rowId, colField, renderValue } = props;
+	const { cellProps, cellState, isEditing, api } = useGridCellProps<TRowData>(props);
 
-	const handleCommit = useCallback(() => {
-		api.stopEditing(false);
-	}, [api]);
+	// Tiny, fast, isolated typing state
+	const [localValue, setLocalValue] = useState<unknown>(cellState.value);
+
+	const localValueRef = useRef(localValue);
+	localValueRef.current = localValue;
+
+	const isCancelledRef = useRef(false);
+	const isCommittedRef = useRef(false);
+
+	useEffect(() => {
+		const unsubscribe = api.addEventListener<{ rowId: string; colField: string; cancel: boolean }>('editStopped', (event) => {
+			if (event.payload.rowId === rowId && event.payload.colField === colField) {
+				if (event.payload.cancel) {
+					isCancelledRef.current = true;
+				}
+			}
+		});
+
+		if (isEditing) {
+			isCancelledRef.current = false;
+			isCommittedRef.current = false;
+			setLocalValue(cellState.value);
+		} else {
+			// Editing stopped! Check if we need to auto-commit
+			if (!isCancelledRef.current && !isCommittedRef.current) {
+				isCommittedRef.current = true;
+				api.setCellValue(rowId, colField, localValueRef.current);
+			}
+		}
+
+		return () => {
+			unsubscribe();
+			if (isEditing && !isCancelledRef.current && !isCommittedRef.current) {
+				isCommittedRef.current = true;
+				api.setCellValue(rowId, colField, localValueRef.current);
+			}
+		};
+	}, [isEditing, cellState.value, api, rowId, colField]);
+
+	const handleCommit = useCallback(
+		(finalValue?: unknown) => {
+			isCommittedRef.current = true;
+			const isEvent = finalValue && typeof finalValue === 'object' && ('nativeEvent' in finalValue || 'target' in finalValue);
+			const valToCommit = finalValue !== undefined && !isEvent ? finalValue : localValue;
+			api.setCellValue(rowId, colField, valToCommit);
+			api.stopEditing();
+		},
+		[api, rowId, colField, localValue]
+	);
 
 	const handleCancel = useCallback(() => {
-		api.stopEditing(true);
+		isCancelledRef.current = true;
+		api.stopEditing();
 	}, [api]);
+
+	// Find the column definition to check for custom editors or renderers
+	const colDef = useMemo(() => {
+		return api.getState().columns.find((c) => c.field === colField);
+	}, [api, colField]);
+
+	const rowData = useMemo(() => {
+		const rowModel = api.getRowModel();
+		if (!rowModel) return null;
+		const idx = rowModel.getRowIndexById(rowId);
+		if (idx === -1) return null;
+		return rowModel.getRow(idx);
+	}, [api, rowId, api.getState().dataVersion]);
+
+	const CustomEditor = colDef?.cellEditor as React.ComponentType<CellEditorProps<TRowData>> | undefined;
+	const CustomRenderer = colDef?.cellRenderer as React.ComponentType<CellRendererProps<TRowData>> | undefined;
 
 	return (
 		<div {...cellProps}>
 			{isEditing ? (
 				CustomEditor ? (
-					<CustomEditor row={row} col={col} value={value} onChange={setValue} api={api} onCommit={handleCommit} onCancel={handleCancel} />
+					<CustomEditor
+						rowId={rowId}
+						colField={colField}
+						value={localValue}
+						onChange={setLocalValue}
+						api={api}
+						onCommit={handleCommit}
+						onCancel={handleCancel}
+					/>
 				) : (
 					<input
 						autoFocus
 						className='absolute inset-0 w-full h-full px-3 text-sm bg-slate-900 text-white border-2 border-purple-500 outline-none z-20'
-						value={value}
-						onChange={(e) => setValue(e.target.value)}
+						value={typeof localValue === 'string' || typeof localValue === 'number' ? String(localValue) : ''}
+						onChange={(e) => setLocalValue(e.target.value)}
 						onMouseDown={(e) => e.stopPropagation()}
 						onDoubleClick={(e) => e.stopPropagation()}
-						onBlur={handleCommit}
+						onBlur={() => handleCommit()}
 						onKeyDown={(e) => {
 							if (e.key === 'Enter') {
 								e.stopPropagation();
@@ -339,13 +535,30 @@ export const Cell = React.memo((props: CellProps) => {
 						}}
 					/>
 				)
+			) : CustomRenderer && rowData ? (
+				<CustomRenderer
+					value={cellState.value}
+					computedValue={cellState.computedValue}
+					row={rowData}
+					rowId={rowId}
+					colField={colField}
+					api={api}
+				/>
 			) : renderValue ? (
 				renderValue(cellState.value, cellState.computedValue)
 			) : (
-				<span className='truncate'>{cellState.computedValue ?? cellState.value}</span>
+				<span className='truncate'>
+					{typeof cellState.computedValue === 'string' || typeof cellState.computedValue === 'number'
+						? String(cellState.computedValue)
+						: typeof cellState.value === 'string' || typeof cellState.value === 'number'
+							? String(cellState.value)
+							: ''}
+				</span>
 			)}
 		</div>
 	);
-});
+};
+
+export const Cell = React.memo(CellComponent) as (<TRowData>(props: CellProps<TRowData>) => React.ReactElement | null) & { displayName?: string };
 
 Cell.displayName = 'Cell';

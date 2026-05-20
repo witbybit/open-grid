@@ -1,38 +1,53 @@
-import { GridStore } from './store.js';
+import { GridStore, ColumnDef, RowModel, RowNode, getValueByPath, setValueByPath } from './store.js';
 
 export interface GetRowsParams {
 	startRow: number;
 	endRow: number;
-	sortModel: any;
-	filterModel: any;
+	sortModel: unknown;
+	filterModel: unknown;
 }
 
 export interface IGridDatasource {
-	getRows(params: GetRowsParams): Promise<{ rows: any[]; totalCount?: number }>;
+	getRows(params: GetRowsParams): Promise<{ rows: unknown[]; totalCount?: number }>;
 }
 
-export interface ServerRowModelOptions {
+export interface ServerRowModelOptions<TData = unknown> {
 	blockSize?: number;
 	datasource: IGridDatasource;
+	columns: Array<ColumnDef<TData>>;
+	rowIdField?: keyof TData & string;
 }
 
-export class ServerRowModelController {
-	private store: GridStore;
+export class ServerRowModelController<TData = unknown> implements RowModel<TData> {
+	private store: GridStore<TData>;
 	private datasource: IGridDatasource;
 	private blockSize: number;
+	private activeNodes: Array<RowNode<TData> | null> = [];
+	private nodeMap = new Map<string, RowNode<TData>>();
+	private rowIdMap = new Map<string, number>();
+	private loadingBlocks: Record<number, boolean> = {};
 	private unsubscribers: Array<() => void> = [];
 
-	constructor(store: GridStore, options: ServerRowModelOptions) {
+	constructor(store: GridStore<TData>, options: ServerRowModelOptions<TData>) {
 		this.store = store;
 		this.datasource = options.datasource;
 		this.blockSize = options.blockSize ?? 100;
 
-		// Set model type in store
-		this.store.setState({ rowModelType: 'server' });
+		// Set base columns and config in store
+		this.store.setState({
+			columns: options.columns,
+			rowIdField: options.rowIdField ?? ('id' as keyof TData & string),
+		});
+
+		this.store.registerRowModel(this);
+
 		this.unsubscribers.push(
 			this.store.addEventListener('sortChanged', () => this.purgeCache()),
 			this.store.addEventListener('filterChanged', () => this.purgeCache())
 		);
+
+		// Trigger initial fetch of block 0 to obtain totalCount and sparse placeholders
+		this.fetchBlock(0);
 	}
 
 	public dispose(): void {
@@ -40,97 +55,171 @@ export class ServerRowModelController {
 		this.unsubscribers = [];
 	}
 
-	/**
-	 * Safe access to get a row by its index. Triggers fetching if within missing blocks.
-	 */
-	public getRow = (rowIndex: number): { data: any | null; isLoading: boolean } => {
-		const blockIndex = Math.floor(rowIndex / this.blockSize);
-		const state = this.store.getState();
-
-		const block = state.loadedBlocks[blockIndex];
-		const isFetching = state.loadingBlocks[blockIndex];
-
-		if (!block && !isFetching) {
-			// Trigger lazy load asynchronously
-			this.fetchBlock(blockIndex);
-		}
-
-		if (isFetching) {
-			return { data: null, isLoading: true };
-		}
-
-		if (block) {
-			const internalIndex = rowIndex % this.blockSize;
-			const rowData = block[internalIndex];
-			return { data: rowData ?? null, isLoading: false };
-		}
-
-		return { data: null, isLoading: true };
+	public getRow = (rowIndex: number): TData | null => {
+		const node = this.activeNodes[rowIndex];
+		return node ? node.data : null;
 	};
 
-	/**
-	 * Trigger fetch of a given block index using the datasource.
-	 */
+	public getRowNode = (rowIndex: number): RowNode<TData> | null => {
+		return this.activeNodes[rowIndex] ?? null;
+	};
+
+	public loadVisibleBlocks = (visibleRowIndices: number[]): void => {
+		const visibleBlocks = new Set<number>();
+		visibleRowIndices.forEach((idx) => {
+			visibleBlocks.add(Math.floor(idx / this.blockSize));
+		});
+
+		visibleBlocks.forEach((blockIdx) => {
+			const startRow = blockIdx * this.blockSize;
+			const isAlreadyLoaded = this.activeNodes[startRow] !== undefined && this.activeNodes[startRow] !== null;
+
+			if (!isAlreadyLoaded && !this.loadingBlocks[blockIdx]) {
+				this.fetchBlock(blockIdx);
+			}
+		});
+	};
+
+	public getRowCount = (): number => {
+		return this.activeNodes.length;
+	};
+
+	public getRowIndexById = (rowId: string): number => {
+		const idx = this.rowIdMap.get(rowId);
+		return idx !== undefined ? idx : -1;
+	};
+
+	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
+		return this.nodeMap.get(rowId) ?? null;
+	};
+
+	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
+		const node = this.getRowNodeById(rowId);
+		if (!node) return;
+
+		const col = this.store.getState().columns.find((c) => c.field === colField);
+		const updatedRow = { ...node.data };
+		if (col?.valueSetter) {
+			col.valueSetter(updatedRow, value);
+		} else {
+			setValueByPath(updatedRow, colField, value);
+		}
+
+		node.data = updatedRow;
+		node.clearValueCache();
+
+		this.store.setState({
+			dataVersion: this.store.getState().dataVersion + 1,
+		});
+	};
+
 	private fetchBlock = async (blockIndex: number): Promise<void> => {
-		const state = this.store.getState();
-
 		// Prevent duplicate calls
-		if (state.loadingBlocks[blockIndex]) return;
+		if (this.loadingBlocks[blockIndex]) return;
 
-		// Set loading state
-		this.store.setState((curr) => ({
-			loadingBlocks: { ...curr.loadingBlocks, [blockIndex]: true },
-		}));
+		this.loadingBlocks[blockIndex] = true;
 
 		const startRow = blockIndex * this.blockSize;
 		const endRow = startRow + this.blockSize;
+
+		const state = this.store.getState();
+		const requestSortModel = state.sortModel;
+		const requestFilterModel = state.filterModel;
+		const requestSignature = JSON.stringify({ sortModel: requestSortModel, filterModel: requestFilterModel });
 
 		try {
 			const response = await this.datasource.getRows({
 				startRow,
 				endRow,
-				sortModel: state.sortModel,
-				filterModel: state.filterModel,
+				sortModel: requestSortModel,
+				filterModel: requestFilterModel,
 			});
 
-			this.store.setState((curr) => {
-				const nextLoading = { ...curr.loadingBlocks };
-				delete nextLoading[blockIndex];
+			// If parameters changed since the request was initiated, discard this result
+			const curr = this.store.getState();
+			const currentSignature = JSON.stringify({ sortModel: curr.sortModel, filterModel: curr.filterModel });
 
-				const updates: Partial<typeof curr> = {
-					loadedBlocks: {
-						...curr.loadedBlocks,
-						[blockIndex]: response.rows,
-					},
-					loadingBlocks: nextLoading,
-				};
+			delete this.loadingBlocks[blockIndex];
 
-				// If total count returned, update overall grid bounds
-				if (typeof response.totalCount === 'number') {
-					updates.rowCount = response.totalCount;
+			if (currentSignature !== requestSignature) {
+				return;
+			}
+
+			const rowIdField = curr.rowIdField;
+
+			// Fill with sparse nulls up to startRow if array is not large enough
+			while (this.activeNodes.length < startRow) {
+				this.activeNodes.push(null);
+			}
+
+			// Patch loaded rows into the array and index map
+			let currentTop = startRow > 0 && this.activeNodes[startRow - 1]
+				? (this.activeNodes[startRow - 1]!.rowTop + this.activeNodes[startRow - 1]!.rowHeight)
+				: (startRow * curr.defaultRowHeight);
+
+			response.rows.forEach((row, idx) => {
+				const globalIdx = startRow + idx;
+				const typedRow = row as TData;
+				if (typedRow) {
+					const id = String((typedRow as Record<string, unknown>)[rowIdField as string]);
+					let node = this.nodeMap.get(id);
+					if (node) {
+						node.data = typedRow;
+						node.clearValueCache();
+					} else {
+						node = new RowNode<TData>(id, typedRow);
+					}
+
+					node.rowIndex = globalIdx;
+					const explicitHeight = curr.rowHeights[node.id];
+					node.rowHeight = explicitHeight !== undefined ? explicitHeight : curr.defaultRowHeight;
+					node.rowTop = currentTop;
+					currentTop += node.rowHeight;
+
+					this.activeNodes[globalIdx] = node;
+					this.nodeMap.set(id, node);
+					this.rowIdMap.set(id, globalIdx);
+				} else {
+					this.activeNodes[globalIdx] = null;
 				}
+			});
 
-				return updates;
+			// If total count returned, ensure array size matches
+			if (typeof response.totalCount === 'number') {
+				while (this.activeNodes.length < response.totalCount) {
+					this.activeNodes.push(null);
+				}
+			}
+
+			// We need to re-layout from the start row onwards to adjust all subsequent heights/tops if they are loaded
+			let layoutTop = 0;
+			this.activeNodes.forEach((node, index) => {
+				if (node) {
+					node.rowIndex = index;
+					node.rowTop = layoutTop;
+					layoutTop += node.rowHeight;
+				} else {
+					layoutTop += curr.defaultRowHeight;
+				}
+			});
+
+			this.store.setState({
+				dataVersion: curr.dataVersion + 1,
 			});
 		} catch (error) {
 			console.error(`GridEngine: Failed to fetch row block ${blockIndex}`, error);
-
-			// Clear loading state
-			this.store.setState((curr) => {
-				const nextLoading = { ...curr.loadingBlocks };
-				delete nextLoading[blockIndex];
-				return { loadingBlocks: nextLoading };
-			});
+			delete this.loadingBlocks[blockIndex];
 		}
 	};
 
-	/**
-	 * Reset block cache and trigger fresh data loading.
-	 */
 	public purgeCache = (): void => {
+		this.loadingBlocks = {};
+		this.activeNodes = [];
+		this.nodeMap.clear();
+		this.rowIdMap.clear();
 		this.store.setState({
-			loadedBlocks: {},
-			loadingBlocks: {},
+			dataVersion: this.store.getState().dataVersion + 1,
 		});
+		this.fetchBlock(0);
 	};
 }
