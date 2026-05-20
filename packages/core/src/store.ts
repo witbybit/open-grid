@@ -34,8 +34,8 @@ export class RowNode<TRowData = any> {
 	public id!: string;
 	public data!: TRowData;
 	public rowIndex: number = -1; // Current visible index position
-	public rowTop: number = 0;     // Computed absolute vertical pixel coordinate
-	public rowHeight: number = 40;  // Explicit height tracker
+	public rowTop: number = 0; // Computed absolute vertical pixel coordinate
+	public rowHeight: number = 40; // Explicit height tracker
 	public selected: boolean = false;
 	public expanded: boolean = false;
 
@@ -80,9 +80,20 @@ export interface CellEditorProps<TRowData = unknown> {
 	rowId: string;
 	colField: string;
 	value: unknown;
+	/**
+	 * Update the local editing value without committing.
+	 * Use this for text inputs where user is still typing.
+	 */
 	onChange: (value: unknown) => void;
 	api: GridApi<TRowData>;
+	/**
+	 * Commit the value and exit edit mode.
+	 * If no value is provided, commits the current value from onChange.
+	 */
 	onCommit: (finalValue?: unknown) => void;
+	/**
+	 * Cancel editing and revert to original value.
+	 */
 	onCancel: () => void;
 }
 
@@ -133,7 +144,6 @@ export function compilePathGetter(path: string): (data: any) => any {
 		return curr;
 	};
 }
-
 
 export interface RowModel<TRowData = unknown> {
 	getRow(index: number): TRowData | null;
@@ -251,7 +261,6 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			}
 		}
 	}
-
 
 	public registerRowModel = (rowModel: RowModel<TRowData>): void => {
 		this.rowModel = rowModel;
@@ -431,7 +440,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	 * Subscribe to a targeted key or location
 	 */
 	public subscribeToKey = (key: string, listener: Listener<TRowData>): (() => void) => {
-		console.log('SUBSCRIBE TO KEY:', key);
+		// console.log('SUBSCRIBE TO KEY:', key);
 		if (!this.keyListeners.has(key)) {
 			this.keyListeners.set(key, new Set());
 		}
@@ -565,7 +574,6 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		this.dispatchEvent('editStopped', { rowId, colField, cancel });
 	};
 
-
 	/**
 	 * Helper to get cell state safely.
 	 */
@@ -648,7 +656,11 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		if (this.features.has(feature.name)) {
 			const existing = this.features.get(feature.name);
 			if (existing?.destroy) {
-				try { existing.destroy(); } catch (e) { console.error(e); }
+				try {
+					existing.destroy();
+				} catch (e) {
+					console.error(e);
+				}
 			}
 		}
 		this.features.set(feature.name, feature);
@@ -670,7 +682,11 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	public destroy = (): void => {
 		this.features.forEach((feature) => {
 			if (feature.destroy) {
-				try { feature.destroy(); } catch (e) { console.error(e); }
+				try {
+					feature.destroy();
+				} catch (e) {
+					console.error(e);
+				}
 			}
 		});
 		this.features.clear();
@@ -698,4 +714,3 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		}
 	};
 }
-

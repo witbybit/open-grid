@@ -611,114 +611,149 @@ export default function App() {
 
 			{/* Three-Column Showroom Layout */}
 			<div className='flex-1 min-h-0 flex gap-6 mt-6 overflow-hidden'>
-				{/* COLUMN A: GORGEOUS SIDEBAR NAVIGATION (230px) */}
-				<div className='w-56 shrink-0 flex flex-col justify-between overflow-y-auto glass-panel p-4 rounded-xl border border-slate-900/50 relative'>
+				{/* COLUMN A: GORGEOUS SIDEBAR NAVIGATION */}
+				<div
+					className={`${leftSidebarCollapsed ? 'w-16 p-2' : 'w-56 p-4'} shrink-0 flex flex-col justify-between overflow-y-auto glass-panel rounded-xl border border-slate-900/50 relative transition-all duration-300 ease-in-out`}
+				>
 					<div className='flex flex-col gap-5'>
-						<div className='px-1.5 py-0.5'>
-							<span className='text-[9px] font-bold text-slate-500 uppercase tracking-wider'>Showcase Showrooms</span>
+						<div className={`flex items-center justify-between ${leftSidebarCollapsed ? 'flex-col gap-3' : ''} px-1.5 py-0.5`}>
+							{!leftSidebarCollapsed && (
+								<span className='text-[9px] font-bold text-slate-500 uppercase tracking-wider truncate'>Showrooms</span>
+							)}
+							<button
+								onClick={() => setLeftSidebarCollapsed(!leftSidebarCollapsed)}
+								className='p-1 rounded-lg hover:bg-slate-800/60 text-slate-400 hover:text-white transition-all duration-200 shadow-sm border border-slate-800/30'
+								title={leftSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+							>
+								{leftSidebarCollapsed ? <PanelLeftOpen className='w-4 h-4' /> : <PanelLeftClose className='w-4 h-4' />}
+							</button>
 						</div>
 
 						<nav className='flex flex-col gap-1.5'>
 							<a
 								href='#perf'
-								className={`w-full flex flex-col gap-0.5 px-3 py-2.5 rounded-xl text-left transition-all group ${
+								title={leftSidebarCollapsed ? 'Calculations Arena (10k Rows • Real-time Math)' : undefined}
+								className={`w-full flex ${leftSidebarCollapsed ? 'justify-center p-3' : 'flex-col gap-0.5 px-3 py-2.5'} rounded-xl text-left transition-all group ${
 									activePage === 'perf'
 										? 'bg-purple-600 text-white shadow-lg shadow-purple-600/10'
 										: 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
 								}`}
 							>
 								<div className='flex items-center gap-2 text-xs font-bold'>
-									<Cpu className='w-3.5 h-3.5 shrink-0' />
-									Calculations Arena
+									<Cpu className='w-4 h-4 shrink-0' />
+									{!leftSidebarCollapsed && 'Calculations Arena'}
 								</div>
-								<span className={`text-[9px] ${activePage === 'perf' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
-									10k Rows • Real-time Math
-								</span>
+								{!leftSidebarCollapsed && (
+									<span className={`text-[9px] ${activePage === 'perf' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
+										10k Rows • Real-time Math
+									</span>
+								)}
 							</a>
 
 							<a
 								href='#server'
-								className={`w-full flex flex-col gap-0.5 px-3 py-2.5 rounded-xl text-left transition-all group ${
+								title={leftSidebarCollapsed ? 'Infinite Server Scroll (100k Rows • Delayed Chunks)' : undefined}
+								className={`w-full flex ${leftSidebarCollapsed ? 'justify-center p-3' : 'flex-col gap-0.5 px-3 py-2.5'} rounded-xl text-left transition-all group ${
 									activePage === 'server'
 										? 'bg-purple-600 text-white shadow-lg shadow-purple-600/10'
 										: 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
 								}`}
 							>
 								<div className='flex items-center gap-2 text-xs font-bold'>
-									<Database className='w-3.5 h-3.5 shrink-0' />
-									Infinite Server scroll
+									<Database className='w-4 h-4 shrink-0' />
+									{!leftSidebarCollapsed && 'Infinite Scroll'}
 								</div>
-								<span className={`text-[9px] ${activePage === 'server' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
-									100k Rows • Delayed Chunks
-								</span>
+								{!leftSidebarCollapsed && (
+									<span className={`text-[9px] ${activePage === 'server' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
+										100k Rows • Delayed Chunks
+									</span>
+								)}
 							</a>
 
 							<a
 								href='#ranges'
-								className={`w-full flex flex-col gap-0.5 px-3 py-2.5 rounded-xl text-left transition-all group ${
+								title={leftSidebarCollapsed ? 'Spreadsheet Selection (Multi-Range • Batch Math)' : undefined}
+								className={`w-full flex ${leftSidebarCollapsed ? 'justify-center p-3' : 'flex-col gap-0.5 px-3 py-2.5'} rounded-xl text-left transition-all group ${
 									activePage === 'ranges'
 										? 'bg-purple-600 text-white shadow-lg shadow-purple-600/10'
 										: 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
 								}`}
 							>
 								<div className='flex items-center gap-2 text-xs font-bold'>
-									<FileSpreadsheet className='w-3.5 h-3.5 shrink-0' />
-									Spreadsheet Selection
+									<FileSpreadsheet className='w-4 h-4 shrink-0' />
+									{!leftSidebarCollapsed && 'Spreadsheet Selection'}
 								</div>
-								<span className={`text-[9px] ${activePage === 'ranges' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
-									Multi-Range • Batch Math
-								</span>
+								{!leftSidebarCollapsed && (
+									<span className={`text-[9px] ${activePage === 'ranges' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
+										Multi-Range • Batch Math
+									</span>
+								)}
 							</a>
 
 							<a
 								href='#editors'
-								className={`w-full flex flex-col gap-0.5 px-3 py-2.5 rounded-xl text-left transition-all group ${
+								title={leftSidebarCollapsed ? 'Custom Editor / Renderer (Ratings • Progress Slider)' : undefined}
+								className={`w-full flex ${leftSidebarCollapsed ? 'justify-center p-3' : 'flex-col gap-0.5 px-3 py-2.5'} rounded-xl text-left transition-all group ${
 									activePage === 'editors'
 										? 'bg-purple-600 text-white shadow-lg shadow-purple-600/10'
 										: 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
 								}`}
 							>
 								<div className='flex items-center gap-2 text-xs font-bold'>
-									<Sliders className='w-3.5 h-3.5 shrink-0' />
-									Custom Editor / Renderer
+									<Sliders className='w-4 h-4 shrink-0' />
+									{!leftSidebarCollapsed && 'Custom Editors'}
 								</div>
-								<span className={`text-[9px] ${activePage === 'editors' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
-									Ratings • Progress Slider
-								</span>
+								{!leftSidebarCollapsed && (
+									<span className={`text-[9px] ${activePage === 'editors' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
+										Ratings • Progress Slider
+									</span>
+								)}
 							</a>
 
 							<a
 								href='#layout'
-								className={`w-full flex flex-col gap-0.5 px-3 py-2.5 rounded-xl text-left transition-all group ${
+								title={leftSidebarCollapsed ? 'Dynamic Visibility (Hide Columns • Compact Row)' : undefined}
+								className={`w-full flex ${leftSidebarCollapsed ? 'justify-center p-3' : 'flex-col gap-0.5 px-3 py-2.5'} rounded-xl text-left transition-all group ${
 									activePage === 'layout'
 										? 'bg-purple-600 text-white shadow-lg shadow-purple-600/10'
 										: 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
 								}`}
 							>
 								<div className='flex items-center gap-2 text-xs font-bold'>
-									<Layout className='w-3.5 h-3.5 shrink-0' />
-									Dynamic Visibility
+									<Layout className='w-4 h-4 shrink-0' />
+									{!leftSidebarCollapsed && 'Dynamic Visibility'}
 								</div>
-								<span className={`text-[9px] ${activePage === 'layout' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
-									Hide Columns • Compact Row
-								</span>
+								{!leftSidebarCollapsed && (
+									<span className={`text-[9px] ${activePage === 'layout' ? 'text-purple-200' : 'text-slate-500'} font-medium`}>
+										Hide Columns • Compact Row
+									</span>
+								)}
 							</a>
 						</nav>
 					</div>
 
-					<div className='flex flex-col gap-3 pt-4 border-t border-slate-900/60'>
-						<div className='flex items-center justify-between p-2 rounded-lg bg-slate-950/40 border border-slate-900/80'>
-							<div className='flex items-center gap-1.5 text-[10px] text-slate-400 font-bold'>
-								<Sparkles className='w-3 h-3 text-purple-400' />
-								Grid Engine
+					<div className='flex flex-col gap-3 pt-4 border-t border-slate-900/60 items-center justify-center'>
+						{leftSidebarCollapsed ? (
+							<div
+								title='Grid Engine v3.1.0'
+								className='p-2 rounded-lg bg-slate-950/40 border border-slate-900/80 text-purple-400 cursor-help'
+							>
+								<Sparkles className='w-4 h-4' />
 							</div>
-							<span className='font-mono text-[9px] text-slate-500 font-semibold'>v3.1.0</span>
-						</div>
+						) : (
+							<div className='flex items-center justify-between w-full p-2 rounded-lg bg-slate-950/40 border border-slate-900/80'>
+								<div className='flex items-center gap-1.5 text-[10px] text-slate-400 font-bold'>
+									<Sparkles className='w-3 h-3 text-purple-400' />
+									Grid Engine
+								</div>
+								<span className='font-mono text-[9px] text-slate-500 font-semibold'>v3.1.0</span>
+							</div>
+						)}
 					</div>
 				</div>
 
-				{/* COLUMN B: MAIN GRID AND TELEMETRY VIEWPORTS (FLEX-1) */}
-				<div className='flex-1 min-h-0 min-w-0 flex flex-col gap-5 overflow-y-auto pr-1.5'>
+				{/* COLUMN B: MAIN GRID AND VIEWPORTS */}
+				<div className='flex-1 min-h-0 min-w-0 flex flex-col gap-5 overflow-hidden pr-1.5'>
 					{/* Active Showcase Title Banner */}
 					<div className='flex items-center justify-between bg-slate-900/10 border border-slate-900 rounded-xl p-3.5 relative overflow-hidden shrink-0'>
 						<div className='absolute right-0 top-0 translate-x-6 -translate-y-6 w-20 h-20 bg-purple-600/10 rounded-full blur-xl' />
@@ -814,6 +849,14 @@ export default function App() {
 									))}
 								</div>
 							)}
+							<button
+								onClick={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
+								className='flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-950 hover:bg-slate-900 font-bold text-[10px] text-slate-300 hover:text-white border border-slate-850 hover:border-slate-750 transition-all font-sans'
+								title={rightSidebarCollapsed ? 'Open Controls Sidebar' : 'Hide Controls Sidebar'}
+							>
+								{rightSidebarCollapsed ? <PanelRightOpen className='w-3 h-3' /> : <PanelRightClose className='w-3 h-3' />}
+								{!rightSidebarCollapsed ? 'Hide Controls' : 'Show Controls'}
+							</button>
 						</div>
 					</div>
 
@@ -842,7 +885,7 @@ export default function App() {
 					)}
 
 					{/* Visual Interactive Grid viewport */}
-					<div className='flex-1 h-96 min-h-[300px] shrink-0'>
+					<div className='flex-1 min-h-0 flex flex-col'>
 						{activePage === 'perf' && (
 							<CalculationsArena
 								store={perfStore}
@@ -900,8 +943,10 @@ export default function App() {
 					</div>
 				</div>
 
-				{/* COLUMN C: PRESERVED RIGHT-SIDE CONTROLS SIDEBAR (310px) */}
-				<div className='w-72 shrink-0 flex flex-col gap-4 overflow-y-auto pl-1 glass-panel p-4 rounded-xl border border-slate-900/50'>
+				{/* COLUMN C: PRESERVED RIGHT-SIDE CONTROLS SIDEBAR */}
+				<div
+					className={`${rightSidebarCollapsed ? 'w-0 p-0 border-0 overflow-hidden' : 'w-72 p-4 border border-slate-900/50'} shrink-0 flex flex-col gap-4 overflow-y-auto pl-1 glass-panel rounded-xl transition-all duration-300 ease-in-out`}
+				>
 					{/* Coordinate Inspector */}
 					<StateInspector store={activeStore} />
 

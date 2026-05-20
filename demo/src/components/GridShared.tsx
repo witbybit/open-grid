@@ -257,7 +257,7 @@ export const ProgressSliderEditor = ({ value, onChange, onCommit }: CellEditorPr
 				autoFocus
 				value={Number(value) || 0}
 				onChange={(e) => onChange(e.target.value)}
-				onBlur={onCommit}
+				onMouseUp={() => onCommit()}
 				className='w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500'
 			/>
 		</div>
@@ -279,18 +279,14 @@ export const StatusBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 	);
 };
 
-export const StatusDropdownEditor = ({ value, onChange, onCommit }: CellEditorProps<any>) => {
+export const StatusDropdownEditor = ({ value, onCommit }: CellEditorProps<any>) => {
 	return (
 		<select
 			autoFocus
 			value={value as string}
-			onChange={(e) => {
-				onChange(e.target.value);
-				onCommit();
-			}}
+			onChange={(e) => onCommit(e.target.value)}
 			onMouseDown={(e) => e.stopPropagation()}
 			onDoubleClick={(e) => e.stopPropagation()}
-			onBlur={onCommit}
 			className='absolute inset-0 w-full h-full px-3 text-xs bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-semibold cursor-pointer'
 		>
 			<option value='Active'>Active</option>

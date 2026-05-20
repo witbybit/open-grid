@@ -23,10 +23,13 @@ export class GridNavigationController<TRowData = unknown> implements GridFeature
 
 		// Bind store event listener to invoke options callback when edits are committed
 		if (this.options.onCellValueChanged) {
-			this.unsubscribeCellValueChanged = this.store.addEventListener<{ rowId: string; colField: string; newValue: unknown }>('cellValueChanged', (event) => {
-				const { rowId, colField, newValue } = event.payload;
-				this.options.onCellValueChanged?.(rowId, colField, newValue);
-			});
+			this.unsubscribeCellValueChanged = this.store.addEventListener<{ rowId: string; colField: string; newValue: unknown }>(
+				'cellValueChanged',
+				(event) => {
+					const { rowId, colField, newValue } = event.payload;
+					this.options.onCellValueChanged?.(rowId, colField, newValue);
+				}
+			);
 		}
 	}
 
@@ -407,4 +410,3 @@ export class GridNavigationController<TRowData = unknown> implements GridFeature
 		this.store.stopEditing(true);
 	}
 }
-export { GridStore };
