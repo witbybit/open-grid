@@ -117,24 +117,15 @@ export function useCellSelectionState<TRowData = unknown>(rowId: string, colFiel
 		const isFocused = s.focusedCell?.rowId === rowId && s.focusedCell?.colField === colField;
 
 		let isSelected = false;
-		const range = s.selectedRange;
-		if (range) {
+		const bounds = s.selectedRangeBounds;
+		if (bounds) {
 			const rowModel = store.getRowModel();
 			if (rowModel) {
-				const startIdx = rowModel.getRowIndexById(range.start.rowId);
-				const endIdx = rowModel.getRowIndexById(range.end.rowId);
 				const currentIdx = rowModel.getRowIndexById(rowId);
+				const currentColIdx = store.getColumnIndex(colField);
 
-				const startColIdx = s.columns.findIndex((c) => c.field === range.start.colField);
-				const endColIdx = s.columns.findIndex((c) => c.field === range.end.colField);
-				const currentColIdx = s.columns.findIndex((c) => c.field === colField);
-
-				if (startIdx !== -1 && endIdx !== -1 && currentIdx !== -1 && startColIdx !== -1 && endColIdx !== -1 && currentColIdx !== -1) {
-					const minRow = Math.min(startIdx, endIdx);
-					const maxRow = Math.max(startIdx, endIdx);
-					const minCol = Math.min(startColIdx, endColIdx);
-					const maxCol = Math.max(startColIdx, endColIdx);
-					isSelected = currentIdx >= minRow && currentIdx <= maxRow && currentColIdx >= minCol && currentColIdx <= maxCol;
+				if (currentIdx !== -1 && currentColIdx !== -1) {
+					isSelected = currentIdx >= bounds.minRow && currentIdx <= bounds.maxRow && currentColIdx >= bounds.minCol && currentColIdx <= bounds.maxCol;
 				}
 			}
 		}
@@ -287,24 +278,15 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 		const isFocused = state.focusedCell?.rowId === rowId && state.focusedCell?.colField === colField;
 
 		let isSelected = false;
-		const range = state.selectedRange;
-		if (range) {
+		const bounds = state.selectedRangeBounds;
+		if (bounds) {
 			const rowModel = api.getRowModel();
 			if (rowModel) {
-				const startIdx = rowModel.getRowIndexById(range.start.rowId);
-				const endIdx = rowModel.getRowIndexById(range.end.rowId);
 				const currentIdx = rowModel.getRowIndexById(rowId);
+				const currentColIdx = api.getColumnIndex(colField);
 
-				const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
-				const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
-				const currentColIdx = state.columns.findIndex((c) => c.field === colField);
-
-				if (startIdx !== -1 && endIdx !== -1 && currentIdx !== -1 && startColIdx !== -1 && endColIdx !== -1 && currentColIdx !== -1) {
-					const minRow = Math.min(startIdx, endIdx);
-					const maxRow = Math.max(startIdx, endIdx);
-					const minCol = Math.min(startColIdx, endColIdx);
-					const maxCol = Math.max(startColIdx, endColIdx);
-					isSelected = currentIdx >= minRow && currentIdx <= maxRow && currentColIdx >= minCol && currentColIdx <= maxCol;
+				if (currentIdx !== -1 && currentColIdx !== -1) {
+					isSelected = currentIdx >= bounds.minRow && currentIdx <= bounds.maxRow && currentColIdx >= bounds.minCol && currentColIdx <= bounds.maxCol;
 				}
 			}
 		}
@@ -488,7 +470,7 @@ const CellComponent = <TRowData,>(props: CellProps<TRowData>) => {
 
 	// Find the column definition to check for custom editors or renderers
 	const colDef = useMemo(() => {
-		return api.getState().columns.find((c) => c.field === colField);
+		return api.getColumnDef(colField);
 	}, [api, colField]);
 
 	const rowData = (() => {

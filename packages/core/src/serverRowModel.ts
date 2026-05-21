@@ -97,7 +97,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		const node = this.getRowNodeById(rowId);
 		if (!node) return;
 
-		const col = this.store.getState().columns.find((c) => c.field === colField);
+		const col = this.store.getColumnDef(colField);
 		const updatedRow = { ...node.data };
 		if (col?.valueSetter) {
 			col.valueSetter(updatedRow, value);

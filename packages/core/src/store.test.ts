@@ -65,6 +65,36 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('should precompute selection range bounds reactively inside selectedRangeBounds', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getState().selectedRangeBounds).toBeNull();
+
+		// Act 1: Select range from row 1, col 'id' to row 2, col 'name'
+		store.setSelectedRange({ rowId: '1', colField: 'id' }, { rowId: '2', colField: 'name' });
+
+		const bounds = store.getState().selectedRangeBounds;
+		expect(bounds).not.toBeNull();
+		expect(bounds?.minRow).toBe(0);
+		expect(bounds?.maxRow).toBe(1);
+		expect(bounds?.minCol).toBe(0);
+		expect(bounds?.maxCol).toBe(1);
+
+		controller.dispose();
+	});
+
 	it('should support valueGetter dynamically', () => {
 		const store = new GridStore<TestRow>({
 			columns: [

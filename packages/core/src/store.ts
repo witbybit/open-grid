@@ -186,6 +186,15 @@ export interface GridState<TRowData = unknown> {
 
 	// React cache invalidator
 	dataVersion: number;
+
+	selectedRangeBounds: GridCellRangeBounds | null;
+}
+
+export interface GridCellRangeBounds {
+	minRow: number;
+	maxRow: number;
+	minCol: number;
+	maxCol: number;
 }
 
 export type GridStateUpdater<TRowData = unknown> = Partial<GridState<TRowData>> | ((state: GridState<TRowData>) => Partial<GridState<TRowData>>);
@@ -216,6 +225,8 @@ export interface GridApi<TRowData = unknown> {
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
 	triggerCellNotifications(rowId: string): void;
+	getColumnIndex(colField: string): number;
+	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
 	destroy(): void;
 }
 
@@ -228,6 +239,8 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	private features = new Map<string, GridFeature<TRowData>>();
 
 	private compiledGetters = new Map<string, (data: TRowData) => any>();
+	private columnIndexMap = new Map<string, number>();
+	private columnMap = new Map<string, ColumnDef<TRowData>>();
 	private isBatching = false;
 	private batchedStateUpdates: Partial<GridState<TRowData>> = {};
 	private preTransactionState: GridState<TRowData> | null = null;
@@ -246,6 +259,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			sortModel: null,
 			filterModel: null,
 			dataVersion: 0,
+			selectedRangeBounds: null,
 			...initialState,
 		};
 		if (this.state.columns) {
@@ -255,9 +269,14 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 
 	private updateCompiledGetters(columns: ColumnDef<TRowData>[]): void {
 		this.compiledGetters.clear();
-		for (const col of columns) {
+		this.columnIndexMap.clear();
+		this.columnMap.clear();
+		for (let i = 0; i < columns.length; i++) {
+			const col = columns[i];
 			if (col.field) {
 				this.compiledGetters.set(col.field, compilePathGetter(col.field));
+				this.columnIndexMap.set(col.field, i);
+				this.columnMap.set(col.field, col);
 			}
 		}
 	}
@@ -283,8 +302,8 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		const endIdx = this.rowModel.getRowIndexById(range.end.rowId);
 		if (startIdx === -1 || endIdx === -1) return cells;
 
-		const startColIdx = this.state.columns.findIndex((c) => c.field === range.start.colField);
-		const endColIdx = this.state.columns.findIndex((c) => c.field === range.end.colField);
+		const startColIdx = this.getColumnIndex(range.start.colField);
+		const endColIdx = this.getColumnIndex(range.end.colField);
 		if (startColIdx === -1 || endColIdx === -1) return cells;
 
 		const minRow = Math.min(startIdx, endIdx);
@@ -304,6 +323,25 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		return cells;
 	}
 
+	private calculateRangeBounds(range: GridCellRange | null | undefined): GridCellRangeBounds | null {
+		if (!range || !this.rowModel) return null;
+
+		const startIdx = this.rowModel.getRowIndexById(range.start.rowId);
+		const endIdx = this.rowModel.getRowIndexById(range.end.rowId);
+		if (startIdx === -1 || endIdx === -1) return null;
+
+		const startColIdx = this.getColumnIndex(range.start.colField);
+		const endColIdx = this.getColumnIndex(range.end.colField);
+		if (startColIdx === -1 || endColIdx === -1) return null;
+
+		return {
+			minRow: Math.min(startIdx, endIdx),
+			maxRow: Math.max(startIdx, endIdx),
+			minCol: Math.min(startColIdx, endColIdx),
+			maxCol: Math.max(startColIdx, endColIdx),
+		};
+	}
+
 	/**
 	 * Update the store state and selectively trigger listeners for modified keys.
 	 */
@@ -316,6 +354,9 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			if (nextState.columns) {
 				this.updateCompiledGetters(nextState.columns);
 			}
+			if (nextState.selectedRange !== undefined || nextState.columns !== undefined || nextState.dataVersion !== undefined) {
+				this.state.selectedRangeBounds = this.calculateRangeBounds(this.state.selectedRange);
+			}
 			return;
 		}
 
@@ -327,6 +368,10 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 
 		// Construct new state
 		this.state = { ...prevState, ...nextState };
+
+		if (nextState.selectedRange !== undefined || nextState.columns !== undefined || nextState.dataVersion !== undefined) {
+			this.state.selectedRangeBounds = this.calculateRangeBounds(this.state.selectedRange !== undefined ? nextState.selectedRange : prevState.selectedRange);
+		}
 
 		this.notifyChanges(prevState, Object.keys(nextState));
 	};
@@ -492,7 +537,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	 */
 	public getCellValue = (rowId: string, colField: string): unknown => {
 		if (!this.rowModel) return '';
-		const col = this.state.columns.find((c) => c.field === colField);
+		const col = this.getColumnDef(colField);
 		if (!col) return '';
 
 		const node = this.rowModel.getRowNodeById ? this.rowModel.getRowNodeById(rowId) : null;
@@ -677,6 +722,15 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 
 	public getFeature = <T = unknown>(name: string): T | null => {
 		return (this.features.get(name) as unknown as T) || null;
+	};
+
+	public getColumnIndex = (colField: string): number => {
+		const idx = this.columnIndexMap.get(colField);
+		return idx !== undefined ? idx : -1;
+	};
+
+	public getColumnDef = (colField: string): ColumnDef<TRowData> | undefined => {
+		return this.columnMap.get(colField);
 	};
 
 	public destroy = (): void => {

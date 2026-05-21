@@ -61,7 +61,7 @@ export class GridNavigationController<TRowData = unknown> implements GridFeature
 		if (!rowModel) return null;
 		const state = this.store.getState();
 		const rowIdx = rowModel.getRowIndexById(pointer.rowId);
-		const colIdx = state.columns.findIndex((c) => c.field === pointer.colField);
+		const colIdx = this.store.getColumnIndex(pointer.colField);
 		if (rowIdx === -1 || colIdx === -1) return null;
 		return { rowIdx, colIdx };
 	}
