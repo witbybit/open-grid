@@ -406,3 +406,79 @@ describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions'
 	});
 });
 
+describe('Phase 2 Engine Scalability Subsystems', () => {
+	it('should correctly schedule tasks across Interactive, Render, and Stream Priority Lanes', async () => {
+		const { TransactionScheduler, PriorityLane } = await import('./scheduler.js');
+		const scheduler = new TransactionScheduler();
+
+		const tracking: string[] = [];
+
+		scheduler.schedule(PriorityLane.Stream, () => tracking.push('stream-1'));
+		scheduler.schedule(PriorityLane.Render, () => tracking.push('render-1'));
+		scheduler.schedule(PriorityLane.Interactive, () => tracking.push('interactive-1'));
+
+		// Interactive lane must execute synchronously and immediately
+		expect(tracking).toContain('interactive-1');
+		expect(tracking).not.toContain('render-1');
+		expect(tracking).not.toContain('stream-1');
+
+		// Sync flush of other lanes
+		scheduler.flushAllSync();
+		expect(tracking).toEqual(['interactive-1', 'render-1', 'stream-1']);
+	});
+
+	it('should cache cumulative geometry and map offsets using binary search in O(log N) time', async () => {
+		const { ViewportGeometry } = await import('./viewportGeometry.js');
+		const geometry = new ViewportGeometry();
+
+		const widths = [100, 150, 200, 80]; // Cumulative offsets: 0, 100, 250, 450
+		geometry.updateColumns(widths, 100);
+
+		expect(geometry.colLefts[0]).toBe(0);
+		expect(geometry.colLefts[1]).toBe(100);
+		expect(geometry.colLefts[2]).toBe(250);
+		expect(geometry.colLefts[3]).toBe(450);
+
+		// Binary search index mappings at offsets
+		expect(geometry.getIndexAtOffset(50, geometry.colLefts)).toBe(0);
+		expect(geometry.getIndexAtOffset(150, geometry.colLefts)).toBe(1);
+		expect(geometry.getIndexAtOffset(300, geometry.colLefts)).toBe(2);
+		expect(geometry.getIndexAtOffset(500, geometry.colLefts)).toBe(3);
+	});
+
+	it('should pool and dispatch cell subscriptions using packed 32-bit composite binary keys with stable numeric IDs', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: 'row-a', name: 'Product A', price: 10 },
+				{ id: 'row-b', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		const valueListener = vi.fn();
+		const focusListener = vi.fn();
+
+		// Subscribe using standard cell key pattern
+		store.subscribeToKey('cell:value:row-a:name', valueListener);
+		store.subscribeToKey('cell:focus:row-b:name', focusListener);
+
+		// Act 1: Focus row-b:name
+		store.setFocusedCell('row-b', 'name');
+		expect(focusListener).toHaveBeenCalledTimes(1);
+		expect(valueListener).toHaveBeenCalledTimes(0);
+
+		// Act 2: Mutate row-a:name value
+		store.setCellValue('row-a', 'name', 'Product Custom');
+		expect(focusListener).toHaveBeenCalledTimes(1);
+		expect(valueListener).toHaveBeenCalledTimes(1);
+
+		controller.dispose();
+	});
+});
+

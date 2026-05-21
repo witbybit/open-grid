@@ -1,4 +1,9 @@
 import type { FilterModel, SortModel } from './rowModel.js';
+import { PriorityLane, TransactionScheduler } from './scheduler.js';
+import { ColumnController } from './columnController.js';
+import { RowController } from './rowController.js';
+import { FocusController } from './focusController.js';
+import { SelectionController } from './selectionController.js';
 
 export interface GridCellPointer {
 	rowId: string;
@@ -235,15 +240,33 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	private listeners = new Set<Listener<TRowData>>();
 	private keyListeners = new Map<string, Set<Listener<TRowData>>>();
 	private eventListeners = new Map<string, Set<GridEventListener<unknown>>>();
-	private rowModel: RowModel<TRowData> | null = null;
 	private features = new Map<string, GridFeature<TRowData>>();
 
 	private compiledGetters = new Map<string, (data: TRowData) => any>();
-	private columnIndexMap = new Map<string, number>();
-	private columnMap = new Map<string, ColumnDef<TRowData>>();
 	private isBatching = false;
 	private batchedStateUpdates: Partial<GridState<TRowData>> = {};
 	private preTransactionState: GridState<TRowData> | null = null;
+
+	// Core specialized controllers & scheduler
+	public columnController: ColumnController<TRowData>;
+	public rowController: RowController<TRowData>;
+	public focusController: FocusController;
+	public selectionController: SelectionController;
+	public scheduler: TransactionScheduler;
+
+	// Stable auto-incrementing numeric ID mappings to prevent string GC pressure
+	private rowIdToNumeric = new Map<string, number>();
+	private colFieldToNumeric = new Map<string, number>();
+	private numericToRowId = new Map<number, string>();
+	private numericToColField = new Map<number, string>();
+	private nextRowNumeric = 0;
+	private nextColNumeric = 0;
+
+	// Coordinate-targeted listener pools indexed by composite packed numeric keys
+	private coordValueListeners = new Map<number, Set<Listener<TRowData>>>();
+	private coordFocusListeners = new Map<number, Set<Listener<TRowData>>>();
+	private coordSelectListeners = new Map<number, Set<Listener<TRowData>>>();
+	private coordEditListeners = new Map<number, Set<Listener<TRowData>>>();
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
 		this.state = {
@@ -262,6 +285,17 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			selectedRangeBounds: null,
 			...initialState,
 		};
+
+		// Initialize specialized controller layers
+		this.columnController = new ColumnController<TRowData>(this.state.defaultColWidth);
+		this.rowController = new RowController<TRowData>(this.state.defaultRowHeight);
+		this.focusController = new FocusController();
+		this.selectionController = new SelectionController();
+		this.scheduler = new TransactionScheduler();
+
+		this.columnController.updateColumns(this.state.columns, this.state.columnWidths, this.state.defaultColWidth);
+		this.rowController.refreshRowGeometry(this.state.rowHeights, this.state.defaultRowHeight);
+
 		if (this.state.columns) {
 			this.updateCompiledGetters(this.state.columns);
 		}
@@ -269,25 +303,65 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 
 	private updateCompiledGetters(columns: ColumnDef<TRowData>[]): void {
 		this.compiledGetters.clear();
-		this.columnIndexMap.clear();
-		this.columnMap.clear();
 		for (let i = 0; i < columns.length; i++) {
 			const col = columns[i];
 			if (col.field) {
 				this.compiledGetters.set(col.field, compilePathGetter(col.field));
-				this.columnIndexMap.set(col.field, i);
-				this.columnMap.set(col.field, col);
 			}
 		}
 	}
 
+	public getRowNumericId(rowId: string): number {
+		let numId = this.rowIdToNumeric.get(rowId);
+		if (numId === undefined) {
+			numId = this.nextRowNumeric++;
+			this.rowIdToNumeric.set(rowId, numId);
+			this.numericToRowId.set(numId, rowId);
+		}
+		return numId;
+	}
+
+	public getColNumericId(colField: string): number {
+		let numId = this.colFieldToNumeric.get(colField);
+		if (numId === undefined) {
+			numId = this.nextColNumeric++;
+			this.colFieldToNumeric.set(colField, numId);
+			this.numericToColField.set(numId, colField);
+		}
+		return numId;
+	}
+
+	private notifyCoordListeners(type: 'value' | 'focus' | 'select' | 'edit', rowId: string, colField: string): void {
+		const rNum = this.getRowNumericId(rowId);
+		const cNum = this.getColNumericId(colField);
+		const packed = (rNum << 12) | (cNum & 0xfff);
+
+		let targetMap: Map<number, Set<Listener<TRowData>>>;
+		if (type === 'value') targetMap = this.coordValueListeners;
+		else if (type === 'focus') targetMap = this.coordFocusListeners;
+		else if (type === 'select') targetMap = this.coordSelectListeners;
+		else targetMap = this.coordEditListeners;
+
+		const set = targetMap.get(packed);
+		if (set) {
+			set.forEach((listener) => {
+				try {
+					listener(this.state);
+				} catch (e) {
+					console.error(`GridEngine: Error in coordinate notification (${type})`, e);
+				}
+			});
+		}
+	}
+
 	public registerRowModel = (rowModel: RowModel<TRowData>): void => {
-		this.rowModel = rowModel;
+		this.rowController.registerRowModel(rowModel);
+		this.rowController.refreshRowGeometry(this.state.rowHeights, this.state.defaultRowHeight);
 		this.setState({ dataVersion: this.state.dataVersion + 1 });
 	};
 
 	public getRowModel = (): RowModel<TRowData> | null => {
-		return this.rowModel;
+		return this.rowController.getRowModel();
 	};
 
 	public getState = (): GridState<TRowData> => {
@@ -296,10 +370,11 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 
 	private getCellsInRange(range: GridCellRange | null): Set<string> {
 		const cells = new Set<string>();
-		if (!range || !this.rowModel) return cells;
+		const rowModel = this.getRowModel();
+		if (!range || !rowModel) return cells;
 
-		const startIdx = this.rowModel.getRowIndexById(range.start.rowId);
-		const endIdx = this.rowModel.getRowIndexById(range.end.rowId);
+		const startIdx = rowModel.getRowIndexById(range.start.rowId);
+		const endIdx = rowModel.getRowIndexById(range.end.rowId);
 		if (startIdx === -1 || endIdx === -1) return cells;
 
 		const startColIdx = this.getColumnIndex(range.start.colField);
@@ -312,7 +387,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		const maxCol = Math.max(startColIdx, endColIdx);
 
 		for (let r = minRow; r <= maxRow; r++) {
-			const row = this.rowModel.getRow(r);
+			const row = rowModel.getRow(r);
 			if (!row) continue;
 			const rowId = String(row[this.state.rowIdField]);
 			for (let c = minCol; c <= maxCol; c++) {
@@ -324,26 +399,17 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	}
 
 	private calculateRangeBounds(range: GridCellRange | null | undefined): GridCellRangeBounds | null {
-		if (!range || !this.rowModel) return null;
-
-		const startIdx = this.rowModel.getRowIndexById(range.start.rowId);
-		const endIdx = this.rowModel.getRowIndexById(range.end.rowId);
-		if (startIdx === -1 || endIdx === -1) return null;
-
-		const startColIdx = this.getColumnIndex(range.start.colField);
-		const endColIdx = this.getColumnIndex(range.end.colField);
-		if (startColIdx === -1 || endColIdx === -1) return null;
-
-		return {
-			minRow: Math.min(startIdx, endIdx),
-			maxRow: Math.max(startIdx, endIdx),
-			minCol: Math.min(startColIdx, endColIdx),
-			maxCol: Math.max(startColIdx, endColIdx),
-		};
+		const rowModel = this.getRowModel();
+		if (!range || !rowModel) return null;
+		return this.selectionController.calculateRangeBounds(
+			range,
+			(id) => rowModel.getRowIndexById(id),
+			(field) => this.getColumnIndex(field)
+		);
 	}
 
 	/**
-	 * Update the store state and selectively trigger listeners for modified keys.
+	 * Update the store state, rebuilding float matrices and scheduling notifications.
 	 */
 	public setState = (updater: GridStateUpdater<TRowData>): void => {
 		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
@@ -351,26 +417,52 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		if (this.isBatching) {
 			this.batchedStateUpdates = { ...this.batchedStateUpdates, ...nextState };
 			this.state = { ...this.state, ...nextState };
-			if (nextState.columns) {
-				this.updateCompiledGetters(nextState.columns);
+
+			if (nextState.columns !== undefined || nextState.columnWidths !== undefined || nextState.defaultColWidth !== undefined) {
+				this.columnController.updateColumns(this.state.columns, this.state.columnWidths, this.state.defaultColWidth);
+				this.updateCompiledGetters(this.state.columns);
 			}
+
+			const rowModel = this.getRowModel();
+			if (rowModel && (nextState.rowHeights !== undefined || nextState.defaultRowHeight !== undefined || nextState.dataVersion !== undefined)) {
+				this.rowController.refreshRowGeometry(this.state.rowHeights, this.state.defaultRowHeight);
+			}
+
 			if (nextState.selectedRange !== undefined || nextState.columns !== undefined || nextState.dataVersion !== undefined) {
 				this.state.selectedRangeBounds = this.calculateRangeBounds(this.state.selectedRange);
 			}
 			return;
 		}
 
-		if (nextState.columns) {
-			this.updateCompiledGetters(nextState.columns);
-		}
-
 		const prevState = this.state;
-
-		// Construct new state
 		this.state = { ...prevState, ...nextState };
 
+		if (nextState.columns !== undefined || nextState.columnWidths !== undefined || nextState.defaultColWidth !== undefined) {
+			this.columnController.updateColumns(this.state.columns, this.state.columnWidths, this.state.defaultColWidth);
+			this.updateCompiledGetters(this.state.columns);
+		}
+
+		const rowModel = this.getRowModel();
+		if (rowModel && (nextState.rowHeights !== undefined || nextState.defaultRowHeight !== undefined || nextState.dataVersion !== undefined)) {
+			this.rowController.refreshRowGeometry(this.state.rowHeights, this.state.defaultRowHeight);
+		}
+
 		if (nextState.selectedRange !== undefined || nextState.columns !== undefined || nextState.dataVersion !== undefined) {
-			this.state.selectedRangeBounds = this.calculateRangeBounds(this.state.selectedRange !== undefined ? nextState.selectedRange : prevState.selectedRange);
+			this.state.selectedRangeBounds = this.calculateRangeBounds(
+				nextState.selectedRange !== undefined ? nextState.selectedRange : prevState.selectedRange
+			);
+		}
+
+		// Delegate focusedCell and selectedRange syncs to their controllers
+		if (nextState.focusedCell !== undefined) {
+			if (this.state.focusedCell) {
+				this.focusController.setFocusedCell(this.state.focusedCell.rowId, this.state.focusedCell.colField);
+			} else {
+				this.focusController.setFocusedCell(null, null);
+			}
+		}
+		if (nextState.selectedRange !== undefined) {
+			this.selectionController.setSelectedRange(this.state.selectedRange, this.state.selectedRangeBounds);
 		}
 
 		this.notifyChanges(prevState, Object.keys(nextState));
@@ -387,27 +479,37 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		if (updatedKeys.size === 0) return;
 
 		// Notify global listeners
-		this.listeners.forEach((listener) => listener(this.state));
+		this.listeners.forEach((listener) => {
+			try {
+				listener(this.state);
+			} catch (e) {
+				console.error('GridEngine: Error in global store listener', e);
+			}
+		});
 
 		// Notify targeted key listeners
 		updatedKeys.forEach((key) => {
 			const targeted = this.keyListeners.get(key);
 			if (targeted) {
-				targeted.forEach((listener) => listener(this.state));
+				targeted.forEach((listener) => {
+					try {
+						listener(this.state);
+					} catch (e) {
+						console.error(`GridEngine: Error in targeted key listener for ${key}`, e);
+					}
+				});
 			}
 		});
 
-		// Trigger targeted coordinate notifications
+		// Trigger targeted coordinate notifications using binary coordinates
 		if (updatedKeys.has('focusedCell')) {
 			const prev = prevState.focusedCell;
 			const curr = this.state.focusedCell;
 			if (prev) {
-				const listeners = this.keyListeners.get(`cell:focus:${prev.rowId}:${prev.colField}`);
-				if (listeners) listeners.forEach((l) => l(this.state));
+				this.notifyCoordListeners('focus', prev.rowId, prev.colField);
 			}
 			if (curr) {
-				const listeners = this.keyListeners.get(`cell:focus:${curr.rowId}:${curr.colField}`);
-				if (listeners) listeners.forEach((l) => l(this.state));
+				this.notifyCoordListeners('focus', curr.rowId, curr.colField);
 			}
 		}
 
@@ -415,33 +517,29 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			const prev = prevState.activeEdit;
 			const curr = this.state.activeEdit;
 			if (prev) {
-				const listeners = this.keyListeners.get(`cell:edit:${prev.rowId}:${prev.colField}`);
-				if (listeners) listeners.forEach((l) => l(this.state));
+				this.notifyCoordListeners('edit', prev.rowId, prev.colField);
 			}
 			if (curr) {
-				const listeners = this.keyListeners.get(`cell:edit:${curr.rowId}:${curr.colField}`);
-				if (listeners) listeners.forEach((l) => l(this.state));
+				this.notifyCoordListeners('edit', curr.rowId, curr.colField);
 			}
 		}
 
 		if (updatedKeys.has('selectedRange')) {
-			const prevCells = this.getCellsInRange(prevState.selectedRange);
-			const currCells = this.getCellsInRange(this.state.selectedRange);
-
-			// Symmetric difference: cells in one range but not both
-			const symDiff = new Set<string>();
-			prevCells.forEach((c) => {
-				if (!currCells.has(c)) symDiff.add(c);
-			});
-			currCells.forEach((c) => {
-				if (!prevCells.has(c)) symDiff.add(c);
-			});
-
-			symDiff.forEach((cellKey) => {
-				const [rowId, colField] = cellKey.split(':');
-				const listeners = this.keyListeners.get(`cell:select:${rowId}:${colField}`);
-				if (listeners) listeners.forEach((l) => l(this.state));
-			});
+			// Utilize SelectionController's numeric symmetric difference invalidator
+			const dirty = this.selectionController.getDirtyCoordinates(prevState.selectedRangeBounds, this.state.selectedRangeBounds);
+			const rowModel = this.getRowModel();
+			if (dirty.length > 0 && rowModel) {
+				const rowIdField = this.state.rowIdField;
+				for (let i = 0; i < dirty.length; i++) {
+					const { rowIdx, colIdx } = dirty[i];
+					const row = rowModel.getRow(rowIdx);
+					const col = this.state.columns[colIdx];
+					if (row && col) {
+						const rowId = String(row[rowIdField]);
+						this.notifyCoordListeners('select', rowId, col.field);
+					}
+				}
+			}
 		}
 
 		if (updatedKeys.has('columnWidths')) {
@@ -482,10 +580,37 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	};
 
 	/**
-	 * Subscribe to a targeted key or location
+	 * Subscribe targeted listeners to a cell's coordinates or standard string keys.
+	 * Decodes standard strings on-the-fly to hook into packed 32-bit composite keys.
 	 */
 	public subscribeToKey = (key: string, listener: Listener<TRowData>): (() => void) => {
-		// console.log('SUBSCRIBE TO KEY:', key);
+		const match = key.match(/^cell:(value|focus|select|edit):([^:]+):([^:]+)$/);
+		if (match) {
+			const [, type, rowId, colField] = match;
+			const rNum = this.getRowNumericId(rowId);
+			const cNum = this.getColNumericId(colField);
+			const packed = (rNum << 12) | (cNum & 0xfff);
+
+			let targetMap: Map<number, Set<Listener<TRowData>>>;
+			if (type === 'value') targetMap = this.coordValueListeners;
+			else if (type === 'focus') targetMap = this.coordFocusListeners;
+			else if (type === 'select') targetMap = this.coordSelectListeners;
+			else targetMap = this.coordEditListeners;
+
+			if (!targetMap.has(packed)) {
+				targetMap.set(packed, new Set());
+			}
+			const set = targetMap.get(packed)!;
+			set.add(listener);
+
+			return () => {
+				set.delete(listener);
+				if (set.size === 0) {
+					targetMap.delete(packed);
+				}
+			};
+		}
+
 		if (!this.keyListeners.has(key)) {
 			this.keyListeners.set(key, new Set());
 		}
@@ -536,15 +661,16 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	 * Helper to get value of a single cell.
 	 */
 	public getCellValue = (rowId: string, colField: string): unknown => {
-		if (!this.rowModel) return '';
+		const rowModel = this.getRowModel();
+		if (!rowModel) return '';
 		const col = this.getColumnDef(colField);
 		if (!col) return '';
 
-		const node = this.rowModel.getRowNodeById ? this.rowModel.getRowNodeById(rowId) : null;
+		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
 		if (!node) {
-			const idx = this.rowModel.getRowIndexById(rowId);
+			const idx = rowModel.getRowIndexById(rowId);
 			if (idx === -1) return '';
-			const row = this.rowModel.getRow(idx);
+			const row = rowModel.getRow(idx);
 			if (!row) return '';
 			if (col.valueGetter) {
 				const dummyNode = new RowNode<TRowData>(rowId, row);
@@ -568,8 +694,9 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		const oldValue = this.getCellValue(rowId, colField);
 		if (oldValue === value) return;
 
-		if (this.rowModel?.setCellValue) {
-			this.rowModel.setCellValue(rowId, colField, value);
+		const rowModel = this.getRowModel();
+		if (rowModel?.setCellValue) {
+			rowModel.setCellValue(rowId, colField, value);
 		}
 
 		// Trigger coordinate-targeted cell value key listener for ALL columns on this row,
@@ -590,11 +717,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	 */
 	public triggerCellNotifications = (rowId: string): void => {
 		for (const col of this.state.columns) {
-			const cellValKey = `cell:value:${rowId}:${col.field}`;
-			const targeted = this.keyListeners.get(cellValKey);
-			if (targeted) {
-				targeted.forEach((listener) => listener(this.state));
-			}
+			this.notifyCoordListeners('value', rowId, col.field);
 		}
 	};
 
@@ -610,10 +733,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		this.setState({ activeEdit: null });
 
 		// Trigger selective cell refresh
-		const targeted = this.keyListeners.get(`cell:edit:${rowId}:${colField}`);
-		if (targeted) {
-			targeted.forEach((listener) => listener(this.state));
-		}
+		this.notifyCoordListeners('edit', rowId, colField);
 
 		// Dispatch 'editStopped' event
 		this.dispatchEvent('editStopped', { rowId, colField, cancel });
@@ -725,12 +845,11 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	};
 
 	public getColumnIndex = (colField: string): number => {
-		const idx = this.columnIndexMap.get(colField);
-		return idx !== undefined ? idx : -1;
+		return this.columnController.getColumnIndex(colField);
 	};
 
 	public getColumnDef = (colField: string): ColumnDef<TRowData> | undefined => {
-		return this.columnMap.get(colField);
+		return this.columnController.getColumnDef(colField);
 	};
 
 	public destroy = (): void => {
@@ -747,6 +866,17 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		this.listeners.clear();
 		this.keyListeners.clear();
 		this.eventListeners.clear();
+
+		this.coordValueListeners.clear();
+		this.coordFocusListeners.clear();
+		this.coordSelectListeners.clear();
+		this.coordEditListeners.clear();
+		this.rowIdToNumeric.clear();
+		this.colFieldToNumeric.clear();
+		this.numericToRowId.clear();
+		this.numericToColField.clear();
+
+		this.scheduler.flushAllSync();
 	};
 
 	public startTransaction = (): void => {
