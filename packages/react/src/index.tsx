@@ -78,10 +78,11 @@ export function useGridCell<TRowData = unknown>(rowId: string, colField: string)
 
 	const subscribe = useCallback(
 		(onStoreChange: () => void) => {
-			const unsubVal = store.subscribeToKey(`cell:value:${rowId}:${colField}`, onStoreChange);
+			const sub = { rowId, colField, onStoreChange };
+			store.registerCellSubscription(sub);
 			const unsubData = store.subscribeToKey('dataVersion', onStoreChange);
 			return () => {
-				unsubVal();
+				store.unregisterCellSubscription(sub);
 				unsubData();
 			};
 		},
@@ -103,11 +104,10 @@ export function useCellSelectionState<TRowData = unknown>(rowId: string, colFiel
 
 	const subscribe = useCallback(
 		(onStoreChange: () => void) => {
-			const unsubFocus = store.subscribeToKey(`cell:focus:${rowId}:${colField}`, onStoreChange);
-			const unsubSelect = store.subscribeToKey(`cell:select:${rowId}:${colField}`, onStoreChange);
+			const sub = { rowId, colField, onStoreChange };
+			store.registerCellSubscription(sub);
 			return () => {
-				unsubFocus();
-				unsubSelect();
+				store.unregisterCellSubscription(sub);
 			};
 		},
 		[store, rowId, colField]
@@ -164,7 +164,13 @@ export function useCellEditState<TRowData = unknown>(rowId: string, colField: st
 	const store = useGridStore<TRowData>();
 
 	const subscribe = useCallback(
-		(onStoreChange: () => void) => store.subscribeToKey(`cell:edit:${rowId}:${colField}`, onStoreChange),
+		(onStoreChange: () => void) => {
+			const sub = { rowId, colField, onStoreChange };
+			store.registerCellSubscription(sub);
+			return () => {
+				store.unregisterCellSubscription(sub);
+			};
+		},
 		[store, rowId, colField]
 	);
 

@@ -47,21 +47,21 @@ describe('GridStore generic row-store functionality', () => {
 		const cellValueListener = vi.fn();
 		const focusListener = vi.fn();
 
-		store.subscribeToKey('cell:value:1:name', cellValueListener);
+		store.registerCellSubscription({ rowId: '1', colField: 'name', onStoreChange: cellValueListener });
 		store.subscribeToKey('focusedCell', focusListener);
 
 		// Act 1: Set focused cell
 		store.setState({ focusedCell: { rowId: '1', colField: 'name' } });
 
 		expect(focusListener).toHaveBeenCalledTimes(1);
-		expect(cellValueListener).toHaveBeenCalledTimes(0);
+		expect(cellValueListener).toHaveBeenCalledTimes(1);
 
 		// Act 2: Change cell value
 		store.setCellValue('1', 'name', 'Product Updated');
 		store.flushCellUpdatesSync();
 
 		expect(focusListener).toHaveBeenCalledTimes(1);
-		expect(cellValueListener).toHaveBeenCalledTimes(1);
+		expect(cellValueListener).toHaveBeenCalledTimes(2);
 
 		controller.dispose();
 	});
@@ -463,8 +463,8 @@ describe('Phase 2 Engine Scalability Subsystems', () => {
 		const focusListener = vi.fn();
 
 		// Subscribe using standard cell key pattern
-		store.subscribeToKey('cell:value:row-a:name', valueListener);
-		store.subscribeToKey('cell:focus:row-b:name', focusListener);
+		store.registerCellSubscription({ rowId: 'row-a', colField: 'name', onStoreChange: valueListener });
+		store.registerCellSubscription({ rowId: 'row-b', colField: 'name', onStoreChange: focusListener });
 
 		// Act 1: Focus row-b:name
 		store.setFocusedCell('row-b', 'name');
@@ -495,7 +495,7 @@ describe('GridStore Scoped Batch Transactions and Properties', () => {
 		});
 
 		const listener = vi.fn();
-		store.subscribeToKey('cell:value:1:price', listener);
+		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
 
 		store.batch(() => {
 			store.setCellValue('1', 'price', 15);
@@ -524,7 +524,7 @@ describe('GridStore Scoped Batch Transactions and Properties', () => {
 		});
 
 		const listener = vi.fn();
-		store.subscribeToKey('cell:value:1:price', listener);
+		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
 
 		// batchedUpdates is true by default (library manages batching internally)
 		expect(store.batchedUpdates).toBe(true);
@@ -558,7 +558,7 @@ describe('GridStore Scoped Batch Transactions and Properties', () => {
 		});
 
 		const listener = vi.fn();
-		store.subscribeToKey('cell:value:1:price', listener);
+		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
 
 		expect(() => {
 			store.batch(() => {
@@ -589,8 +589,8 @@ describe('GridStore Scoped Batch Transactions and Properties', () => {
 		const nameListener = vi.fn();
 		const priceListener = vi.fn();
 
-		store.subscribeToKey('cell:value:1:name', nameListener);
-		store.subscribeToKey('cell:value:1:price', priceListener);
+		store.registerCellSubscription({ rowId: '1', colField: 'name', onStoreChange: nameListener });
+		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: priceListener });
 
 		// Trigger cell value change on price
 		store.batch(() => {

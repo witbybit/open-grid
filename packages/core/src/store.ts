@@ -301,20 +301,6 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	public viewportController: ViewportController;
 	public dagEngine: DagEngine;
 
-	// Stable auto-incrementing numeric ID mappings to prevent string GC pressure
-	private rowIdToNumeric = new Map<string, number>();
-	private colFieldToNumeric = new Map<string, number>();
-	private numericToRowId = new Map<number, string>();
-	private numericToColField = new Map<number, string>();
-	private nextRowNumeric = 0;
-	private nextColNumeric = 0;
-
-	// Coordinate-targeted listener pools indexed by composite packed numeric keys
-	private coordValueListeners = new Map<number, Set<Listener<TRowData>>>();
-	private coordFocusListeners = new Map<number, Set<Listener<TRowData>>>();
-	private coordSelectListeners = new Map<number, Set<Listener<TRowData>>>();
-	private coordEditListeners = new Map<number, Set<Listener<TRowData>>>();
-
 	// DMSR: Dynamic Multiplexed Subscription Registry
 	private cellSubscriptions = new Map<string, Set<CellSubscription>>();
 	private colSubscriptions = new Map<string, Set<CellSubscription>>();
@@ -369,48 +355,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		}
 	}
 
-	public getRowNumericId(rowId: string): number {
-		let numId = this.rowIdToNumeric.get(rowId);
-		if (numId === undefined) {
-			numId = this.nextRowNumeric++;
-			this.rowIdToNumeric.set(rowId, numId);
-			this.numericToRowId.set(numId, rowId);
-		}
-		return numId;
-	}
-
-	public getColNumericId(colField: string): number {
-		let numId = this.colFieldToNumeric.get(colField);
-		if (numId === undefined) {
-			numId = this.nextColNumeric++;
-			this.colFieldToNumeric.set(colField, numId);
-			this.numericToColField.set(numId, colField);
-		}
-		return numId;
-	}
-
-	private notifyCoordListeners(type: 'value' | 'focus' | 'select' | 'edit', rowId: string, colField: string): void {
-		const rNum = this.getRowNumericId(rowId);
-		const cNum = this.getColNumericId(colField);
-		const packed = (rNum << 12) | (cNum & 0xfff);
-
-		let targetMap: Map<number, Set<Listener<TRowData>>>;
-		if (type === 'value') targetMap = this.coordValueListeners;
-		else if (type === 'focus') targetMap = this.coordFocusListeners;
-		else if (type === 'select') targetMap = this.coordSelectListeners;
-		else targetMap = this.coordEditListeners;
-
-		const set = targetMap.get(packed);
-		if (set) {
-			set.forEach((listener) => {
-				try {
-					listener(this.state);
-				} catch (e) {
-					console.error(`GridEngine: Error in coordinate notification (${type})`, e);
-				}
-			});
-		}
-
+	private notifyCellChange(rowId: string, colField: string): void {
 		// DMSR: Notify targeted cell subscriptions
 		const cellKey = `${rowId}:${colField}`;
 		const cellSubs = this.cellSubscriptions.get(cellKey);
@@ -711,10 +656,10 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			const prev = prevState.focusedCell;
 			const curr = this.state.focusedCell;
 			if (prev) {
-				this.notifyCoordListeners('focus', prev.rowId, prev.colField);
+				this.notifyCellChange(prev.rowId, prev.colField);
 			}
 			if (curr) {
-				this.notifyCoordListeners('focus', curr.rowId, curr.colField);
+				this.notifyCellChange(curr.rowId, curr.colField);
 			}
 		}
 
@@ -722,10 +667,10 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			const prev = prevState.activeEdit;
 			const curr = this.state.activeEdit;
 			if (prev) {
-				this.notifyCoordListeners('edit', prev.rowId, prev.colField);
+				this.notifyCellChange(prev.rowId, prev.colField);
 			}
 			if (curr) {
-				this.notifyCoordListeners('edit', curr.rowId, curr.colField);
+				this.notifyCellChange(curr.rowId, curr.colField);
 			}
 		}
 
@@ -740,7 +685,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 					const col = this.state.columns[colIdx];
 					if (row && col) {
 						const rowId = this.getRowId(row);
-						this.notifyCoordListeners('select', rowId, col.field);
+						this.notifyCellChange(rowId, col.field);
 					}
 				}
 			}
@@ -809,37 +754,9 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	};
 
 	/**
-	 * Subscribe targeted listeners to a cell's coordinates or standard string keys.
-	 * Decodes standard strings on-the-fly to hook into packed 32-bit composite keys.
+	 * Subscribe targeted listeners to standard string keys.
 	 */
 	public subscribeToKey = (key: string, listener: Listener<TRowData>): (() => void) => {
-		const match = key.match(/^cell:(value|focus|select|edit):([^:]+):([^:]+)$/);
-		if (match) {
-			const [, type, rowId, colField] = match;
-			const rNum = this.getRowNumericId(rowId);
-			const cNum = this.getColNumericId(colField);
-			const packed = (rNum << 12) | (cNum & 0xfff);
-
-			let targetMap: Map<number, Set<Listener<TRowData>>>;
-			if (type === 'value') targetMap = this.coordValueListeners;
-			else if (type === 'focus') targetMap = this.coordFocusListeners;
-			else if (type === 'select') targetMap = this.coordSelectListeners;
-			else targetMap = this.coordEditListeners;
-
-			if (!targetMap.has(packed)) {
-				targetMap.set(packed, new Set());
-			}
-			const set = targetMap.get(packed)!;
-			set.add(listener);
-
-			return () => {
-				set.delete(listener);
-				if (set.size === 0) {
-					targetMap.delete(packed);
-				}
-			};
-		}
-
 		if (!this.keyListeners.has(key)) {
 			this.keyListeners.set(key, new Set());
 		}
@@ -992,7 +909,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			// Notify subscribers of all affected (invalidated) cells
 			for (const key of invalidatedKeys) {
 				const [rId, cField] = this.splitBatchKey(key);
-				this.notifyCoordListeners('value', rId, cField);
+				this.notifyCellChange(rId, cField);
 			}
 		}
 
@@ -1010,7 +927,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	 */
 	public triggerCellNotifications = (rowId: string): void => {
 		for (const col of this.state.columns) {
-			this.notifyCoordListeners('value', rowId, col.field);
+			this.notifyCellChange(rowId, col.field);
 		}
 	};
 
@@ -1020,7 +937,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	private flushCellUpdates(): void {
 		this.cellUpdateBatch.forEach((key) => {
 			const [rowId, colField] = this.splitBatchKey(key);
-			this.notifyCoordListeners('value', rowId, colField);
+			this.notifyCellChange(rowId, colField);
 		});
 		this.cellUpdateBatch.clear();
 		this.batchFlushScheduled = false;
@@ -1084,7 +1001,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		this.setState({ activeEdit: null });
 
 		// Trigger selective cell refresh
-		this.notifyCoordListeners('edit', rowId, colField);
+		this.notifyCellChange(rowId, colField);
 
 		// Dispatch 'editStopped' event
 		this.dispatchEvent('editStopped', { rowId, colField, cancel });
@@ -1238,15 +1155,6 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		this.listeners.clear();
 		this.keyListeners.clear();
 		this.eventListeners.clear();
-
-		this.coordValueListeners.clear();
-		this.coordFocusListeners.clear();
-		this.coordSelectListeners.clear();
-		this.coordEditListeners.clear();
-		this.rowIdToNumeric.clear();
-		this.colFieldToNumeric.clear();
-		this.numericToRowId.clear();
-		this.numericToColField.clear();
 
 		this.cellSubscriptions.clear();
 		this.colSubscriptions.clear();
