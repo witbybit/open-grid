@@ -58,6 +58,7 @@ describe('GridStore generic row-store functionality', () => {
 
 		// Act 2: Change cell value
 		store.setCellValue('1', 'name', 'Product Updated');
+		store.flushCellUpdatesSync();
 
 		expect(focusListener).toHaveBeenCalledTimes(1);
 		expect(cellValueListener).toHaveBeenCalledTimes(1);
@@ -165,10 +166,10 @@ describe('GridStore generic row-store functionality', () => {
 
 	it('should support plug-and-play feature registration and API injection', () => {
 		const store = new GridStore<TestRow>();
-		
+
 		const initSpy = vi.fn();
 		const destroySpy = vi.fn();
-		
+
 		const customFeature = {
 			name: 'customService',
 			init: initSpy,
@@ -270,12 +271,12 @@ describe('ClientRowModelController sorting and filtering', () => {
 			rows: largeRows,
 			columns: store.getState().columns,
 		});
-		
+
 		const rowModel = store.getRowModel()!;
 		const t0 = performance.now();
 		const idx = rowModel.getRowIndexById('999999');
 		const t1 = performance.now();
-		
+
 		expect(idx).toBe(999999);
 		expect(t1 - t0).toBeLessThan(5.0); // Under 5ms (typically <0.1ms) demonstrating O(1) hash map speed!
 
@@ -328,7 +329,7 @@ describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions'
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'name', header: 'Name' },
-				{ field: 'price', header: 'Price' }
+				{ field: 'price', header: 'Price' },
 			],
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
@@ -373,9 +374,7 @@ describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions'
 
 	it('should support batch transactions in GridStore', () => {
 		const store = new GridStore<TestRow>({
-			columns: [
-				{ field: 'name', header: 'Name' }
-			],
+			columns: [{ field: 'name', header: 'Name' }],
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
@@ -474,6 +473,7 @@ describe('Phase 2 Engine Scalability Subsystems', () => {
 
 		// Act 2: Mutate row-a:name value
 		store.setCellValue('row-a', 'name', 'Product Custom');
+		store.flushCellUpdatesSync();
 		expect(focusListener).toHaveBeenCalledTimes(1);
 		expect(valueListener).toHaveBeenCalledTimes(1);
 
@@ -481,3 +481,127 @@ describe('Phase 2 Engine Scalability Subsystems', () => {
 	});
 });
 
+describe('GridStore Scoped Batch Transactions and Properties', () => {
+	it('should support scoped batch transactions and execute them exactly once', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const listener = vi.fn();
+		store.subscribeToKey('cell:value:1:price', listener);
+
+		store.batch(() => {
+			store.setCellValue('1', 'price', 15);
+			store.setCellValue('1', 'price', 20);
+			// Listener shouldn't be notified immediately
+			expect(listener).toHaveBeenCalledTimes(0);
+		});
+
+		// Listener should be notified exactly once (batch() always flushes sync on exit)
+		expect(listener).toHaveBeenCalledTimes(1);
+		expect(store.getCellValue('1', 'price')).toBe(20);
+
+		controller.dispose();
+	});
+
+	it('should support batchedUpdates property getter and setter', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const listener = vi.fn();
+		store.subscribeToKey('cell:value:1:price', listener);
+
+		// batchedUpdates is true by default (library manages batching internally)
+		expect(store.batchedUpdates).toBe(true);
+
+		store.setCellValue('1', 'price', 15);
+		store.setCellValue('1', 'price', 20);
+		expect(listener).toHaveBeenCalledTimes(0);
+
+		// Disabling batchedUpdates should trigger flush
+		store.batchedUpdates = false;
+		expect(store.batchedUpdates).toBe(false);
+		expect(listener).toHaveBeenCalledTimes(1);
+
+		// Re-enabling should work
+		store.batchedUpdates = true;
+		expect(store.batchedUpdates).toBe(true);
+
+		controller.dispose();
+	});
+
+	it('should correctly flush even if callback throws an error', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const listener = vi.fn();
+		store.subscribeToKey('cell:value:1:price', listener);
+
+		expect(() => {
+			store.batch(() => {
+				store.setCellValue('1', 'price', 15);
+				throw new Error('Test Error');
+			});
+		}).toThrow('Test Error');
+
+		// The update should still have been flushed (batch() flushes sync in finally)
+		expect(listener).toHaveBeenCalledTimes(1);
+		expect(store.getCellValue('1', 'price')).toBe(15);
+
+		controller.dispose();
+	});
+
+	it('should only notify subscribers of edited and dependent cells, not all columns on the row', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const nameListener = vi.fn();
+		const priceListener = vi.fn();
+
+		store.subscribeToKey('cell:value:1:name', nameListener);
+		store.subscribeToKey('cell:value:1:price', priceListener);
+
+		// Trigger cell value change on price
+		store.batch(() => {
+			store.setCellValue('1', 'price', 15);
+		});
+
+		// The price cell listener should be notified exactly once
+		expect(priceListener).toHaveBeenCalledTimes(1);
+		// The name cell listener should NOT be notified at all since it has no dependency on price
+		expect(nameListener).toHaveBeenCalledTimes(0);
+
+		controller.dispose();
+	});
+});

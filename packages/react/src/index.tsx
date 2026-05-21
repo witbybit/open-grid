@@ -12,6 +12,7 @@ import {
 	CellRendererProps,
 	ServerRowModelController,
 	ViewportRange,
+	CellSubscription,
 } from '@open-grid/core';
 
 // Create Grid Context
@@ -123,7 +124,20 @@ export function useCellSelectionState<TRowData = unknown>(rowId: string, colFiel
 		if (bounds) {
 			const rowModel = store.getRowModel();
 			if (rowModel) {
-				const currentIdx = rowModel.getRowIndexById(rowId);
+				// Optimized: Try to get cached row index from RowNode first
+				let currentIdx = -1;
+				if (rowModel.getRowNodeById) {
+					const node = rowModel.getRowNodeById(rowId);
+					if (node && node.rowIndex !== -1) {
+						currentIdx = node.rowIndex;
+					}
+				}
+				
+				// Fallback to index lookup if node not available
+				if (currentIdx === -1) {
+					currentIdx = rowModel.getRowIndexById(rowId);
+				}
+				
 				const currentColIdx = store.getColumnIndex(colField);
 
 				if (currentIdx !== -1 && currentColIdx !== -1) {
@@ -221,6 +235,7 @@ export interface UseGridCellPropsResult<TRowData = unknown> {
 		ref: React.RefObject<HTMLDivElement>;
 		tabIndex: number;
 		className: string;
+		'data-col-field': string;
 		style?: React.CSSProperties;
 		onMouseDown: (e: React.MouseEvent) => void;
 		onMouseEnter: () => void;
@@ -267,48 +282,76 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 		colWidth: number;
 	} | null>(null);
 
+	const prevCoordsRef = useRef({ rowId, colField });
+	const onStoreChangeRef = useRef<() => void>();
+
+	const cellSub = useMemo(() => {
+		const sub: CellSubscription = {
+			rowId,
+			colField,
+			onStoreChange: () => {
+				onStoreChangeRef.current?.();
+			}
+		};
+		return sub;
+	}, [api]);
+
+	// Synchronously track coordinate shifts during render without side-effects warning
+	if (prevCoordsRef.current.rowId !== rowId || prevCoordsRef.current.colField !== colField) {
+		const oldRowId = prevCoordsRef.current.rowId;
+		const oldColField = prevCoordsRef.current.colField;
+		cellSub.rowId = rowId;
+		cellSub.colField = colField;
+		api.updateCellSubscription(cellSub, oldRowId, oldColField, rowId, colField);
+		prevCoordsRef.current = { rowId, colField };
+	}
+
 	const subscribe = useCallback(
 		(onStoreChange: () => void) => {
-			const unsubCellFocus = api.subscribeToKey(`cell:focus:${rowId}:${colField}`, onStoreChange);
-			const unsubCellSelect = api.subscribeToKey(`cell:select:${rowId}:${colField}`, onStoreChange);
-			const unsubCellEdit = api.subscribeToKey(`cell:edit:${rowId}:${colField}`, onStoreChange);
-			const unsubCellVal = api.subscribeToKey(`cell:value:${rowId}:${colField}`, onStoreChange);
-			const unsubData = api.subscribeToKey('dataVersion', onStoreChange);
-			const unsubWidth = api.subscribeToKey(`colWidth:${colField}`, onStoreChange);
+			onStoreChangeRef.current = onStoreChange;
+			api.registerCellSubscription(cellSub);
 			return () => {
-				unsubCellFocus();
-				unsubCellSelect();
-				unsubCellEdit();
-				unsubCellVal();
-				unsubData();
-				unsubWidth();
+				api.unregisterCellSubscription(cellSub);
 			};
 		},
-		[api, rowId, colField]
+		[api, cellSub]
 	);
-
+ 
 	const getSnapshot = useCallback(() => {
 		const state = api.getState();
 		const cellState = api.getCellState(rowId, colField);
 		const isFocused = state.focusedCell?.rowId === rowId && state.focusedCell?.colField === colField;
-
+ 
 		let isSelected = false;
 		const bounds = state.selectedRangeBounds;
 		if (bounds) {
 			const rowModel = api.getRowModel();
 			if (rowModel) {
-				const currentIdx = rowModel.getRowIndexById(rowId);
+				// Optimized: Try to get cached row index from RowNode first
+				let currentIdx = -1;
+				if (rowModel.getRowNodeById) {
+					const node = rowModel.getRowNodeById(rowId);
+					if (node && node.rowIndex !== -1) {
+						currentIdx = node.rowIndex;
+					}
+				}
+				
+				// Fallback to index lookup if node not available
+				if (currentIdx === -1) {
+					currentIdx = rowModel.getRowIndexById(rowId);
+				}
+				
 				const currentColIdx = api.getColumnIndex(colField);
-
+ 
 				if (currentIdx !== -1 && currentColIdx !== -1) {
 					isSelected = currentIdx >= bounds.minRow && currentIdx <= bounds.maxRow && currentColIdx >= bounds.minCol && currentColIdx <= bounds.maxCol;
 				}
 			}
 		}
-
+ 
 		const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === colField;
 		const colWidth = state.columnWidths[colField] ?? 100;
-
+ 
 		const nextSnapshot = { cellState, isFocused, isSelected, isEditing, colWidth };
 
 		// Ref-based shallow equality memoization
@@ -399,6 +442,7 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 			ref: cellRef,
 			tabIndex: -1,
 			className: combinedClassName,
+			'data-col-field': colField,
 			style: { width: colWidth },
 			onMouseDown,
 			onMouseEnter,
@@ -443,7 +487,7 @@ const CellComponent = <TRowData,>(props: CellProps<TRowData>) => {
 	localValueRef.current = localValue;
 
 	const isCancelledRef = useRef(false);
-	const isCommittedRef = useRef(false);
+	const isCommittedRef = useRef(!isEditing);
 
 	useEffect(() => {
 		const unsubscribe = api.addEventListener<{ rowId: string; colField: string; cancel: boolean }>('editStopped', (event) => {
@@ -510,6 +554,7 @@ const CellComponent = <TRowData,>(props: CellProps<TRowData>) => {
 
 	const CustomEditor = colDef?.cellEditor as React.ComponentType<CellEditorProps<TRowData>> | undefined;
 	const CustomRenderer = colDef?.cellRenderer as React.ComponentType<CellRendererProps<TRowData>> | undefined;
+
 
 	return (
 		<div {...cellProps}>
@@ -636,18 +681,18 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 
 	const viewportRef = useRef<HTMLDivElement>(null);
 	const scrollerRef = useRef<HTMLDivElement>(null);
-	const containerRef = scrollerRef; // Legacy alias to scrollerRef
+	const containerRef = scrollerRef; // Legacy alias
 	const headerRef = useRef<HTMLDivElement>(null);
 	const pinnedLeftRef = useRef<HTMLDivElement>(null);
 	const pinnedRightRef = useRef<HTMLDivElement>(null);
 	const horizontalScrollerRef = useRef<HTMLDivElement>(null);
-	const scrollTimeoutRef = useRef<any>(null);
+	// Scroll position kept in a ref — scroll alone never causes a React re-render.
+	// Only visible range crossings (stored in GridState) trigger re-renders.
+	const scrollStateRef = useRef({ scrollTop: 0, scrollLeft: 0 });
+	const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
 	const api = useGridApi<TRowData>();
 	const store = useGridStore<TRowData>();
-
-	const [scrollState, setScrollState] = useState({ scrollTop: 0, scrollLeft: 0 });
-	const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
 	// Sync pin configuration with ViewportController
 	useEffect(() => {
@@ -657,7 +702,7 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 		store.viewportController.pinBottomRows = pinBottomRows;
 	}, [store, pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
 
-	// Setup ResizeObserver to track container viewport size
+	// ResizeObserver: track container dimensions
 	useEffect(() => {
 		const target = viewportRef.current || scrollerRef.current;
 		if (!target) return;
@@ -668,22 +713,21 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 		setDimensions({ width: rect.width, height: rect.height });
 
 		if (typeof ResizeObserver === 'undefined') return;
-
 		const observer = new ResizeObserver((entries) => {
 			if (!entries || entries.length === 0) return;
 			const { width, height } = entries[0].contentRect;
-			const sizeChanged = store.viewportController.setViewportSize(width, height);
-			if (sizeChanged) {
+			if (store.viewportController.setViewportSize(width, height)) {
 				store.viewportController.updateVisibleRanges(store);
+				setDimensions({ width, height });
 			}
-			setDimensions({ width, height });
 		});
-
 		observer.observe(target);
 		return () => observer.disconnect();
 	}, [store]);
 
-	// Handle scroll events synchronously to prevent blank pages on scroll
+	// Scroll handler: pure DOM work + viewport range update.
+	// scrollStateRef update is a ref mutation — zero React renders from scroll events.
+	// Re-renders happen only when visibleRowRange/visibleColRange change (store key notification).
 	const handleScroll = useCallback(() => {
 		const scroller = scrollerRef.current;
 		if (!scroller) return;
@@ -692,75 +736,48 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 		const sTop = scroller.scrollTop;
 		const sLeft = hScroller ? hScroller.scrollLeft : scroller.scrollLeft;
 
-		// 1. Direct DOM Update for horizontal header scroll synchronization
-		if (headerRef.current) {
-			headerRef.current.scrollLeft = sLeft;
-		}
+		// Sync header scroll position directly (DOM mutation, no React)
+		if (headerRef.current) headerRef.current.scrollLeft = sLeft;
 
-		// 2. Core viewport state update (synchronous)
-		store.viewportController.setScrollPosition(sTop, sLeft);
+		// Update velocity + scroll position in the viewport controller
+		store.viewportController.setScrollPosition(sTop, sLeft, performance.now());
 
-		// 3. Update visible ranges in core and notify subscribers if boundary crossed
-		const rangeChanged = store.viewportController.updateVisibleRanges(store);
+		// Update scroll ref (no re-render)
+		scrollStateRef.current = { scrollTop: sTop, scrollLeft: sLeft };
 
-		// 4. Update React scrollState to trigger re-renders only on boundary crossing, otherwise debounce
-		if (rangeChanged) {
-			setScrollState({ scrollTop: sTop, scrollLeft: sLeft });
-		} else {
-			if (scrollTimeoutRef.current) {
-				clearTimeout(scrollTimeoutRef.current);
-			}
-			scrollTimeoutRef.current = setTimeout(() => {
-				setScrollState({ scrollTop: sTop, scrollLeft: sLeft });
-			}, 150);
-		}
+		// Update visible ranges — this fires store notifications which drive re-renders
+		// only when a range boundary is crossed (not every scroll pixel)
+		store.viewportController.updateVisibleRanges(store);
 	}, [store]);
 
-	// Listen to scroll events on both vertical (outer) and horizontal (center) scrollers
 	useEffect(() => {
 		const scroller = scrollerRef.current;
 		const hScroller = horizontalScrollerRef.current;
 		if (!scroller) return;
-
 		scroller.addEventListener('scroll', handleScroll, { passive: true });
-		if (hScroller) {
-			hScroller.addEventListener('scroll', handleScroll, { passive: true });
-		}
-
+		if (hScroller) hScroller.addEventListener('scroll', handleScroll, { passive: true });
 		return () => {
 			scroller.removeEventListener('scroll', handleScroll);
-			if (hScroller) {
-				hScroller.removeEventListener('scroll', handleScroll);
-			}
-			if (scrollTimeoutRef.current) {
-				clearTimeout(scrollTimeoutRef.current);
-			}
+			if (hScroller) hScroller.removeEventListener('scroll', handleScroll);
 		};
 	}, [handleScroll]);
 
-	// Setup navigation controller (opt-in / opt-out)
+	// Navigation controller
 	const navigation = useGridNavigationController<TRowData>({
 		onCellValueChanged: (rowId, colField, val) => {
-			if (enableNavigation) {
-				navigationOptions.onCellValueChanged?.(rowId, colField, val);
-			}
+			if (enableNavigation) navigationOptions.onCellValueChanged?.(rowId, colField, val);
 		},
 		editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
 		arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
 	});
 
-	// Keyboard and mouse navigation listeners (opt-in / opt-out)
 	useEffect(() => {
 		if (!enableNavigation) return;
-
 		const handleGlobalKeyDown = (e: KeyboardEvent) => {
 			const activeEl = document.activeElement;
 			const isInside = containerRef.current?.contains(activeEl) || activeEl === document.body;
-			if (isInside) {
-				navigation.handleKeyDown(e);
-			}
+			if (isInside) navigation.handleKeyDown(e);
 		};
-
 		window.addEventListener('keydown', handleGlobalKeyDown);
 		window.addEventListener('mouseup', navigation.handleMouseUp);
 		return () => {
@@ -769,13 +786,12 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 		};
 	}, [navigation, enableNavigation]);
 
-	// Subscribe to store key changes so we re-render on grid structural updates
+	// Reactive subscriptions that drive re-renders
 	const columns = useGridKeySelector<ColumnDef<TRowData>[], TRowData>('columns', (state) => state.columns as ColumnDef<TRowData>[]);
 	const dataVersion = useGridKeySelector<number, TRowData>('dataVersion', (state) => state.dataVersion);
 	const columnWidths = useGridKeySelector<Record<string, number>, TRowData>('columnWidths', (state) => state.columnWidths);
-	const rowHeights = useGridKeySelector<Record<string, number>, TRowData>('rowHeights', (state) => state.rowHeights);
 
-	// Subscribe to visible index ranges from core GridState to limit React re-renders strictly to range crossings
+	// Visible range subscriptions: re-render only when range boundaries are crossed
 	const visibleRowRange = useGridKeySelector<ViewportRange, TRowData>('visibleRowRange', (state) => state.visibleRowRange);
 	const visibleColRange = useGridKeySelector<ViewportRange, TRowData>('visibleColRange', (state) => state.visibleColRange);
 
@@ -783,28 +799,22 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 	const rowCount = rowModel ? rowModel.getRowCount() : 0;
 	const colCount = columns.length;
 
-	// Calculate total sizes
-	const totalWidth = useMemo(() => store.columnController.getTotalWidth(), [columns, columnWidths, dataVersion, store]);
-	const totalHeight = useMemo(() => store.rowController.getTotalHeight(), [rowCount, rowHeights, dataVersion, store]);
+	// Derive layout values from columnWidths (stable reference from store, changes only on resize commit)
+	const totalWidth = useMemo(() => store.columnController.getTotalWidth(), [columnWidths, colCount]);
+	const totalHeight = useMemo(() => store.rowController.getTotalHeight(), [dataVersion, rowCount]);
 
-	// Calculate width occupied by pinned columns
 	const leftPinnedWidth = useMemo(() => {
 		let w = 0;
-		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
-			w += store.columnController.getColWidth(i);
-		}
+		for (let i = 0; i < pinLeftColumns && i < colCount; i++) w += store.columnController.getColWidth(i);
 		return w;
-	}, [columns, columnWidths, pinLeftColumns, colCount, dataVersion, store]);
+	}, [columnWidths, pinLeftColumns, colCount]);
 
 	const rightPinnedWidth = useMemo(() => {
 		let w = 0;
-		for (let i = 0; i < pinRightColumns && i < colCount; i++) {
-			w += store.columnController.getColWidth(colCount - 1 - i);
-		}
+		for (let i = 0; i < pinRightColumns && i < colCount; i++) w += store.columnController.getColWidth(colCount - 1 - i);
 		return w;
-	}, [columns, columnWidths, pinRightColumns, colCount, dataVersion, store]);
+	}, [columnWidths, pinRightColumns, colCount]);
 
-	// Generate Pinned Left Columns
 	const leftPinnedCols = useMemo(() => {
 		const cols = [];
 		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
@@ -817,9 +827,8 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 			});
 		}
 		return cols;
-	}, [columns, columnWidths, pinLeftColumns, colCount, dataVersion, store]);
+	}, [columnWidths, pinLeftColumns, colCount, columns]);
 
-	// Generate Pinned Right Columns
 	const rightPinnedCols = useMemo(() => {
 		const cols = [];
 		const startIdx = colCount - pinRightColumns;
@@ -836,15 +845,17 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 			cumulativeLeft += width;
 		}
 		return cols;
-	}, [columns, columnWidths, pinRightColumns, colCount, dataVersion, store]);
+	}, [columnWidths, pinRightColumns, colCount, columns]);
 
-	// Generate scrollable center columns inside center range (excluding left/right pinned)
 	const centerCols = useMemo(() => {
 		const cols = [];
 		const start = Math.max(pinLeftColumns, visibleColRange.startIdx);
 		const end = Math.min(colCount - 1 - pinRightColumns, visibleColRange.endIdx);
-		for (let i = start; i <= end && i < colCount; i++) {
-			if (i < 0) continue;
+		// Overscan: 3 columns each side for smoother horizontal scrolling
+		const overscanStart = Math.max(start - 3, pinLeftColumns);
+		const overscanEnd = Math.min(end + 3, colCount - 1 - pinRightColumns);
+		for (let i = overscanStart; i <= overscanEnd && i < colCount; i++) {
+			if (i < pinLeftColumns || i >= colCount - pinRightColumns) continue;
 			cols.push({
 				index: i,
 				field: columns[i].field,
@@ -854,58 +865,151 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 			});
 		}
 		return cols;
-	}, [columns, columnWidths, visibleColRange.startIdx, visibleColRange.endIdx, pinLeftColumns, pinRightColumns, colCount, dataVersion, store]);
+	}, [columnWidths, visibleColRange.startIdx, visibleColRange.endIdx, pinLeftColumns, pinRightColumns, colCount, columns]);
 
-	// Generate visible rows inside row range
 	const visibleRows = useMemo(() => {
+		if (!rowModel) return [];
 		const rows = [];
-		if (rowModel) {
-			for (let i = visibleRowRange.startIdx; i <= visibleRowRange.endIdx && i < rowCount; i++) {
-				const row = rowModel.getRow(i);
-				const id = row ? store.getRowId(row) : `__loading_${i}__`;
-				rows.push({
-					index: i,
-					id,
-					top: store.rowController.getRowTop(i),
-					height: store.rowController.getRowHeight(i),
-				});
-			}
+		const { startIdx, endIdx } = visibleRowRange;
+		for (let i = startIdx; i <= endIdx && i < rowCount; i++) {
+			const node = rowModel.getRowNode(i);
+			const id = node ? node.id : `__loading_${i}__`;
+			rows.push({
+				index: i,
+				id,
+				top: store.rowController.getRowTop(i),
+				height: store.rowController.getRowHeight(i),
+			});
 		}
 		return rows;
-	}, [rowModel, rowHeights, visibleRowRange.startIdx, visibleRowRange.endIdx, rowCount, store, dataVersion]);
+	}, [rowModel, visibleRowRange, rowCount, dataVersion]);
 
-	// Notify server block loader on scrolling visible row indexes
 	useEffect(() => {
 		if (serverController && visibleRows.length > 0) {
 			serverController.loadVisibleBlocks(visibleRows.map((row) => row.index));
 		}
 	}, [visibleRows, serverController]);
 
-	// Handle column resizing mouse down
+	// -------------------------------------------------------------------------
+	// DOM-first column resize (AG-Grid / TanStack approach)
+	// During drag: inject a <style> rule targeting [data-col-field] attributes.
+	// Zero React re-renders during drag. Single setColumnWidth commit on mouseup.
+	// -------------------------------------------------------------------------
+	const resizeStyleRef = useRef<HTMLStyleElement | null>(null);
+
 	const handleHeaderResizeMouseDown = useCallback(
 		(colField: string, currentWidth: number, e: React.MouseEvent) => {
 			e.preventDefault();
 			e.stopPropagation();
 
+			// Lazily create the style element once
+			if (!resizeStyleRef.current) {
+				const style = document.createElement('style');
+				document.head.appendChild(style);
+				resizeStyleRef.current = style;
+			}
+
 			const startX = e.clientX;
 			const startWidth = currentWidth;
+			let liveWidth = startWidth;
+
+			// Apply resize cursor to body during drag
+			document.body.style.cursor = 'col-resize';
+			document.body.style.userSelect = 'none';
 
 			const handleMouseMove = (moveEvent: MouseEvent) => {
 				const deltaX = moveEvent.clientX - startX;
-				const nextWidth = Math.max(60, startWidth + deltaX);
-				store.setColumnWidth(colField, nextWidth);
+				liveWidth = Math.max(60, startWidth + deltaX);
+				const activeDeltaX = liveWidth - startWidth;
+
+				let css = `[data-col-field] [data-col-field] { left: auto !important; right: auto !important; width: 100% !important; min-width: 0 !important; max-width: none !important; }\n`;
+				css += `[data-col-field="${colField}"] { width: ${liveWidth}px !important; min-width: ${liveWidth}px !important; max-width: ${liveWidth}px !important; }\n`;
+
+				const colIndex = columns.findIndex((c) => c.field === colField);
+				if (colIndex === -1) return;
+
+				const isLeftPinned = colIndex < pinLeftColumns;
+				const isRightPinned = colIndex >= columns.length - pinRightColumns;
+				const isCenter = !isLeftPinned && !isRightPinned;
+				const innerCenterWidth = Math.max(0, totalWidth - leftPinnedWidth - rightPinnedWidth);
+
+				if (isLeftPinned) {
+					// 1. Shift subsequent left pinned columns
+					leftPinnedCols.forEach((col) => {
+						if (col.index > colIndex) {
+							css += `[data-col-field="${col.field}"] { left: ${col.left + activeDeltaX}px !important; }\n`;
+						}
+					});
+					// 2. Adjust left pinned lanes width
+					css += `[data-pinned-lane="left"] { width: ${leftPinnedWidth + activeDeltaX}px !important; }\n`;
+					// 3. Shift center header lane left style
+					css += `[data-lane="center-header"] { left: ${leftPinnedWidth + activeDeltaX}px !important; }\n`;
+				} else if (isCenter) {
+					// 1. Shift subsequent center columns
+					centerCols.forEach((col) => {
+						if (col.index > colIndex) {
+							css += `[data-col-field="${col.field}"] { left: ${col.left - leftPinnedWidth + activeDeltaX}px !important; }\n`;
+						}
+					});
+					// 2. Adjust center lane widths
+					css += `[data-lane="center-header-inner"] { width: ${innerCenterWidth + activeDeltaX}px !important; }\n`;
+					css += `[data-lane="center-cells"] { width: ${innerCenterWidth + activeDeltaX}px !important; }\n`;
+				} else if (isRightPinned) {
+					// 1. Shift subsequent right pinned columns
+					rightPinnedCols.forEach((col) => {
+						if (col.index > colIndex) {
+							css += `[data-col-field="${col.field}"] { left: ${col.left + activeDeltaX}px !important; }\n`;
+						}
+					});
+					// 2. Adjust right pinned lanes width
+					css += `[data-pinned-lane="right"] { width: ${rightPinnedWidth + activeDeltaX}px !important; }\n`;
+					// 3. Adjust center header lane right style
+					css += `[data-lane="center-header"] { right: ${rightPinnedWidth + activeDeltaX}px !important; }\n`;
+				}
+
+				// Adjust the total width of the scroller's child container
+				css += `[data-grid-scroller-child] { width: ${totalWidth + activeDeltaX}px !important; }\n`;
+
+				resizeStyleRef.current!.textContent = css;
 			};
 
 			const handleMouseUp = () => {
 				document.removeEventListener('mousemove', handleMouseMove);
 				document.removeEventListener('mouseup', handleMouseUp);
+				document.body.style.cursor = '';
+				document.body.style.userSelect = '';
+				// Clear the CSS override
+				if (resizeStyleRef.current) resizeStyleRef.current.textContent = '';
+				// Commit final width to store exactly once
+				if (liveWidth !== startWidth) store.setColumnWidth(colField, liveWidth);
 			};
 
 			document.addEventListener('mousemove', handleMouseMove);
 			document.addEventListener('mouseup', handleMouseUp);
 		},
-		[store]
+		[
+			store,
+			columns,
+			leftPinnedCols,
+			centerCols,
+			rightPinnedCols,
+			leftPinnedWidth,
+			rightPinnedWidth,
+			totalWidth,
+			pinLeftColumns,
+			pinRightColumns,
+		]
 	);
+
+	// Cleanup style element on unmount
+	useEffect(() => {
+		return () => {
+			if (resizeStyleRef.current) {
+				resizeStyleRef.current.remove();
+				resizeStyleRef.current = null;
+			}
+		};
+	}, []);
 
 	return {
 		viewportRef,
@@ -920,7 +1024,7 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 		leftPinnedWidth,
 		rightPinnedWidth,
 		columns,
-		scrollState,
+		scrollState: scrollStateRef.current,
 		dimensions,
 		leftPinnedCols,
 		rightPinnedCols,

@@ -120,47 +120,44 @@ export default function App() {
 	// A. PAGE 1: CLIENT PERFORMANCE CALCULATION PLAYGROUND (10k Rows)
 	// --------------------------------------------------------------------------
 
-	const clientColumns = useMemo<ColumnDef<PerformanceRow>[]>(
-		() => {
-			const cols: ColumnDef<PerformanceRow>[] = [
-				{ field: 'id', header: 'Row ID', width: 80 },
-				{ field: 'name', header: 'Product Name', width: 170 },
-				{ field: 'price', header: 'Price ($)', width: 110 },
-				{ field: 'quantity', header: 'Quantity', width: 90 },
-				{
-					field: 'subtotal',
-					header: 'Subtotal ($)',
-					width: 130,
+	const clientColumns = useMemo<ColumnDef<PerformanceRow>[]>(() => {
+		const cols: ColumnDef<PerformanceRow>[] = [
+			{ field: 'id', header: 'Row ID', width: 80 },
+			{ field: 'name', header: 'Product Name', width: 170 },
+			{ field: 'price', header: 'Price ($)', width: 110 },
+			{ field: 'quantity', header: 'Quantity', width: 90 },
+			{
+				field: 'subtotal',
+				header: 'Subtotal ($)',
+				width: 130,
+				valueGetter: ({ row }) => {
+					const price = parseFloat(row.price) || 0;
+					const qty = parseFloat(row.quantity) || 0;
+					return (price * qty).toFixed(2);
+				},
+			},
+			{
+				field: 'status',
+				header: 'Status',
+				width: 110,
+				cellEditor: StatusDropdownEditor,
+				cellRenderer: StatusBadgeRenderer,
+			},
+		];
+		if (massiveColumns) {
+			for (let i = 0; i < 1000; i++) {
+				cols.push({
+					field: `col_${i}`,
+					header: `Col ${i}`,
+					width: 100,
 					valueGetter: ({ row }) => {
-						const price = parseFloat(row.price) || 0;
-						const qty = parseFloat(row.quantity) || 0;
-						return (price * qty).toFixed(2);
+						return `Val ${i}`;
 					},
-				},
-				{
-					field: 'status',
-					header: 'Status',
-					width: 110,
-					cellEditor: StatusDropdownEditor,
-					cellRenderer: StatusBadgeRenderer,
-				},
-			];
-			if (massiveColumns) {
-				for (let i = 0; i < 1000; i++) {
-					cols.push({
-						field: `col_${i}`,
-						header: `Col ${i}`,
-						width: 100,
-						valueGetter: ({ row }) => {
-							return `Val ${i}`;
-						}
-					});
-				}
+				});
 			}
-			return cols;
-		},
-		[massiveColumns]
-	);
+		}
+		return cols;
+	}, [massiveColumns]);
 
 	const perfStore = useMemo(() => {
 		return new GridStore<PerformanceRow>({
@@ -323,7 +320,7 @@ export default function App() {
 		// Pre-populate formula strings for cascading evaluations on Row S-1000 onwards
 		for (let i = 0; i < 15; i++) {
 			const rowId = `S-${1000 + i}`;
-			const row = rows.find(r => r.id === rowId);
+			const row = rows.find((r) => r.id === rowId);
 			if (row) {
 				row.C = `=SUM([${rowId}:A],[${rowId}:B])`;
 				row.D = `=[${rowId}:C]*2`;
@@ -991,7 +988,7 @@ export default function App() {
 				<div
 					className={`${rightSidebarCollapsed ? 'w-0 p-0 border-0 overflow-hidden' : 'w-72 p-4 border border-slate-900/50'} shrink-0 flex flex-col gap-4 overflow-y-auto pl-1 glass-panel rounded-xl transition-all duration-300 ease-in-out`}
 				>
- 					{/* Coordinate Inspector */}
+					{/* Coordinate Inspector */}
 					<StateInspector store={activeStore} />
 
 					{/* Recycled Viewport Engine Configuration */}
@@ -1012,9 +1009,7 @@ export default function App() {
 								/>
 								<div className='flex flex-col'>
 									<span className='text-[11px] font-bold text-slate-200 leading-tight'>2D Recycled engine</span>
-									<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>
-										Enable 2D recycled viewport virtualization
-									</span>
+									<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>Enable 2D recycled viewport virtualization</span>
 								</div>
 							</label>
 

@@ -8,7 +8,7 @@ export enum PriorityLane {
 export class TransactionScheduler {
 	private pendingQueue = new Map<PriorityLane, Array<() => void>>();
 	private frameRequested = false;
-	private streamTimeout: any = null;
+	private streamFrameId: any = null;
 	private idleCallbackId: any = null;
 
 	public schedule(lane: PriorityLane, update: () => void): void {
@@ -38,33 +38,45 @@ export class TransactionScheduler {
 			});
 		} else {
 			// Fallback for Node / testing environments
-			setTimeout(() => {
+			queueMicrotask(() => {
 				this.frameRequested = false;
 				this.flushLane(PriorityLane.Render);
-			}, 0);
+			});
 		}
 	}
 
 	private requestStreamFlush(): void {
-		if (this.streamTimeout) return;
-		this.streamTimeout = setTimeout(() => {
-			this.streamTimeout = null;
-			this.flushLane(PriorityLane.Stream);
-		}, 50); // Throttled streaming into 50ms batching windows
+		if (this.streamFrameId !== null) return;
+		if (typeof requestAnimationFrame !== 'undefined') {
+			this.streamFrameId = requestAnimationFrame(() => {
+				this.streamFrameId = null;
+				this.flushLane(PriorityLane.Stream);
+			});
+		} else {
+			queueMicrotask(() => {
+				this.streamFrameId = null;
+				this.flushLane(PriorityLane.Stream);
+			});
+		}
 	}
 
 	private requestIdleFlush(): void {
-		if (this.idleCallbackId) return;
+		if (this.idleCallbackId !== null) return;
 		if (typeof requestIdleCallback !== 'undefined') {
 			this.idleCallbackId = requestIdleCallback(() => {
 				this.idleCallbackId = null;
 				this.flushLane(PriorityLane.Recalculation);
 			});
-		} else {
-			this.idleCallbackId = setTimeout(() => {
+		} else if (typeof requestAnimationFrame !== 'undefined') {
+			this.idleCallbackId = requestAnimationFrame(() => {
 				this.idleCallbackId = null;
 				this.flushLane(PriorityLane.Recalculation);
-			}, 100);
+			});
+		} else {
+			queueMicrotask(() => {
+				this.idleCallbackId = null;
+				this.flushLane(PriorityLane.Recalculation);
+			});
 		}
 	}
 
@@ -83,15 +95,17 @@ export class TransactionScheduler {
 	}
 
 	public flushAllSync(): void {
-		if (this.streamTimeout) {
-			clearTimeout(this.streamTimeout);
-			this.streamTimeout = null;
+		if (this.streamFrameId !== null) {
+			if (typeof cancelAnimationFrame !== 'undefined') {
+				cancelAnimationFrame(this.streamFrameId);
+			}
+			this.streamFrameId = null;
 		}
-		if (this.idleCallbackId) {
+		if (this.idleCallbackId !== null) {
 			if (typeof cancelIdleCallback !== 'undefined') {
 				cancelIdleCallback(this.idleCallbackId);
-			} else {
-				clearTimeout(this.idleCallbackId);
+			} else if (typeof cancelAnimationFrame !== 'undefined') {
+				cancelAnimationFrame(this.idleCallbackId);
 			}
 			this.idleCallbackId = null;
 		}

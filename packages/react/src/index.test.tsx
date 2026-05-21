@@ -20,30 +20,22 @@ const HookInspector = ({ rowId, colField }: { rowId: string; colField: string })
 };
 
 const DimensionsInspector = () => {
-	const {
-		leftPinnedWidth,
-		rightPinnedWidth,
-		totalWidth,
-		totalHeight,
-		leftPinnedCols,
-		rightPinnedCols,
-		centerCols,
-		visibleRows,
-	} = useGridDimensions<any>({
-		pinLeftColumns: 1,
-		pinRightColumns: 1,
-	});
+	const { leftPinnedWidth, rightPinnedWidth, totalWidth, totalHeight, leftPinnedCols, rightPinnedCols, centerCols, visibleRows } =
+		useGridDimensions<any>({
+			pinLeftColumns: 1,
+			pinRightColumns: 1,
+		});
 
 	return (
 		<div>
-			<div data-testid="left-pinned-width">{leftPinnedWidth}</div>
-			<div data-testid="right-pinned-width">{rightPinnedWidth}</div>
-			<div data-testid="total-width">{totalWidth}</div>
-			<div data-testid="total-height">{totalHeight}</div>
-			<div data-testid="left-cols-count">{leftPinnedCols.length}</div>
-			<div data-testid="right-cols-count">{rightPinnedCols.length}</div>
-			<div data-testid="center-cols-count">{centerCols.length}</div>
-			<div data-testid="visible-rows-count">{visibleRows.length}</div>
+			<div data-testid='left-pinned-width'>{leftPinnedWidth}</div>
+			<div data-testid='right-pinned-width'>{rightPinnedWidth}</div>
+			<div data-testid='total-width'>{totalWidth}</div>
+			<div data-testid='total-height'>{totalHeight}</div>
+			<div data-testid='left-cols-count'>{leftPinnedCols.length}</div>
+			<div data-testid='right-cols-count'>{rightPinnedCols.length}</div>
+			<div data-testid='center-cols-count'>{centerCols.length}</div>
+			<div data-testid='visible-rows-count'>{visibleRows.length}</div>
 		</div>
 	);
 };
@@ -138,12 +130,7 @@ describe('React Bindings hooks and components', () => {
 					header: 'Name',
 					width: 100,
 					cellEditor: ({ value, onChange, onCommit }) => (
-						<input
-							data-testid="custom-editor"
-							value={value as string}
-							onChange={(e) => onChange(e.target.value)}
-							onBlur={onCommit}
-						/>
+						<input data-testid='custom-editor' value={value as string} onChange={(e) => onChange(e.target.value)} onBlur={onCommit} />
 					),
 				},
 			],
@@ -348,9 +335,10 @@ describe('React Bindings hooks and components', () => {
 		// 1. Verify initial subtotal ($20) is rendered
 		expect(screen.getByText('$20')).toBeDefined();
 
-		// 2. Mutate price programmatically
+		// 2. Mutate price programmatically (flush sync since batching is always on)
 		act(() => {
 			store.setCellValue('cake', 'price', 25);
+			store.flushCellUpdatesSync();
 		});
 
 		// 3. Subtotal should immediately update to $50 and re-render without user focus/clicking!
@@ -365,7 +353,7 @@ describe('React Bindings hooks and components', () => {
 			virtualRowRenderCount++;
 			// Subscribe to dataVersion exactly like VirtualRow in demo
 			useGridKeySelector('dataVersion', (state) => state.dataVersion);
-			return <Cell rowId={id} colField="name" />;
+			return <Cell rowId={id} colField='name' />;
 		});
 
 		const store = new GridStore<TestRow>({
@@ -381,9 +369,7 @@ describe('React Bindings hooks and components', () => {
 		});
 		const navigation = new GridNavigationController<TestRow>({
 			onCellValueChanged: (rowId, colField, val) => {
-				controller.updateRows((rows) =>
-					rows.map((row) => (row.id === rowId ? { ...row, [colField]: val as string } : row))
-				);
+				controller.updateRows((rows) => rows.map((row) => (row.id === rowId ? { ...row, [colField]: val as string } : row)));
 			},
 		});
 		store.registerFeature(navigation);
@@ -391,9 +377,9 @@ describe('React Bindings hooks and components', () => {
 		render(
 			<GridProvider store={store}>
 				<div>
-					<TestVirtualRow rowIndex={0} id="1" />
-					<TestVirtualRow rowIndex={1} id="2" />
-					<TestVirtualRow rowIndex={2} id="3" />
+					<TestVirtualRow rowIndex={0} id='1' />
+					<TestVirtualRow rowIndex={1} id='2' />
+					<TestVirtualRow rowIndex={2} id='3' />
 				</div>
 			</GridProvider>
 		);
@@ -477,4 +463,3 @@ describe('React Bindings hooks and components', () => {
 		controller.dispose();
 	});
 });
-

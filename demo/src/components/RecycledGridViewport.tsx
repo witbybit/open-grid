@@ -66,6 +66,7 @@ const PinnedLeftRow = React.memo(({ row, cols, api, navigation }: PinnedLeftRowP
 			{cols.map((col) => (
 				<div
 					key={col.field}
+					data-col-field={col.field}
 					className='absolute top-0 bottom-0 border-r border-slate-900/60'
 					style={{
 						left: col.left,
@@ -92,6 +93,7 @@ const PinnedRightRow = React.memo(({ row, cols, api, navigation }: PinnedRightRo
 			{cols.map((col) => (
 				<div
 					key={col.field}
+					data-col-field={col.field}
 					className='absolute top-0 bottom-0 border-r border-slate-900/60'
 					style={{
 						left: col.left,
@@ -119,6 +121,7 @@ const CenterRow = React.memo(({ row, cols, leftPinnedWidth, api, navigation }: C
 			{cols.map((col) => (
 				<div
 					key={col.field}
+					data-col-field={col.field}
 					className='absolute top-0 bottom-0 border-r border-slate-900/60'
 					style={{
 						left: col.left - leftPinnedWidth,
@@ -198,12 +201,14 @@ export function RecycledGridViewport({
 				{/* Pinned Left Header Lane */}
 				{pinLeftColumns > 0 && (
 					<div
+						data-pinned-lane='left'
 						className='absolute left-0 top-0 bottom-0 border-r border-slate-800 bg-slate-900/95 z-25 overflow-hidden flex flex-row shadow-[4px_0_10px_rgba(0,0,0,0.2)]'
 						style={{ width: leftPinnedWidth }}
 					>
 						{leftPinnedCols.map((col) => (
 							<div
 								key={`h-pin-l-${col.field}`}
+								data-col-field={col.field}
 								className='absolute h-full flex items-center px-4 border-r border-slate-800/40 bg-slate-900/90 text-slate-400 select-none truncate group'
 								style={{ left: col.left, width: col.width }}
 							>
@@ -220,16 +225,18 @@ export function RecycledGridViewport({
 				{/* Scrollable Center Header Lane */}
 				<div
 					ref={headerRef}
+					data-lane='center-header'
 					className='absolute top-0 bottom-0 overflow-hidden flex flex-row'
 					style={{
 						left: leftPinnedWidth,
 						right: rightPinnedWidth,
 					}}
 				>
-					<div className='relative h-full' style={{ width: innerCenterWidth }}>
+					<div data-lane='center-header-inner' className='relative h-full' style={{ width: innerCenterWidth }}>
 						{centerCols.map((col) => (
 							<div
 								key={`h-center-${col.field}`}
+								data-col-field={col.field}
 								className='absolute h-full flex items-center px-4 border-r border-slate-800/40 text-slate-400 select-none truncate group'
 								style={{
 									left: col.left - leftPinnedWidth,
@@ -249,12 +256,14 @@ export function RecycledGridViewport({
 				{/* Pinned Right Header Lane */}
 				{pinRightColumns > 0 && (
 					<div
+						data-pinned-lane='right'
 						className='absolute right-0 top-0 bottom-0 border-l border-slate-800 bg-slate-900/95 z-25 overflow-hidden flex flex-row shadow-[-4px_0_10px_rgba(0,0,0,0.2)]'
 						style={{ width: rightPinnedWidth }}
 					>
 						{rightPinnedCols.map((col) => (
 							<div
 								key={`h-pin-r-${col.field}`}
+								data-col-field={col.field}
 								className='absolute h-full flex items-center px-4 border-r border-slate-800/40 bg-slate-900/90 text-slate-400 select-none truncate group'
 								style={{ left: col.left, width: col.width }}
 							>
@@ -279,6 +288,7 @@ export function RecycledGridViewport({
 					className='absolute inset-0 overflow-auto bg-slate-950 scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-800/80 outline-none animate-fade-in'
 				>
 					<div
+						data-grid-scroller-child
 						className='relative flex flex-row'
 						style={{
 							minWidth: '100%',
@@ -289,6 +299,7 @@ export function RecycledGridViewport({
 						{/* Pinned Left Cells Lane */}
 						{pinLeftColumns > 0 && (
 							<div
+								data-pinned-lane='left'
 								className='sticky left-0 top-0 bottom-0 z-20 border-r border-slate-850 bg-slate-950 shadow-[4px_0_15px_rgba(0,0,0,0.4)] shrink-0 overflow-hidden'
 								style={{
 									width: leftPinnedWidth,
@@ -303,6 +314,7 @@ export function RecycledGridViewport({
 
 						{/* Scrollable Center Cells Lane */}
 						<div
+							data-lane='center-cells'
 							className='relative grow shrink-0'
 							style={{
 								width: innerCenterWidth,
@@ -310,13 +322,21 @@ export function RecycledGridViewport({
 							}}
 						>
 							{visibleRows.map((row) => (
-								<CenterRow key={row.id} row={row} cols={centerCols} leftPinnedWidth={leftPinnedWidth} api={api} navigation={navigation} />
+								<CenterRow
+									key={row.id}
+									row={row}
+									cols={centerCols}
+									leftPinnedWidth={leftPinnedWidth}
+									api={api}
+									navigation={navigation}
+								/>
 							))}
 						</div>
 
 						{/* Pinned Right Cells Lane */}
 						{pinRightColumns > 0 && (
 							<div
+								data-pinned-lane='right'
 								className='sticky right-0 top-0 bottom-0 z-20 border-l border-slate-850 bg-slate-950 shadow-[-4px_0_15px_rgba(0,0,0,0.4)] shrink-0 overflow-hidden'
 								style={{
 									width: rightPinnedWidth,

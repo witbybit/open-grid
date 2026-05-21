@@ -7,6 +7,12 @@ import { SelectionController } from './selectionController.js';
 import { ViewportController, ViewportRange } from './viewportController.js';
 import { DagEngine } from './calculations/dagEngine.js';
 
+export interface CellSubscription {
+	rowId: string;
+	colField: string;
+	onStoreChange: () => void;
+}
+
 export interface GridCellPointer {
 	rowId: string;
 	colField: string;
@@ -241,6 +247,11 @@ export interface GridApi<TRowData = unknown> {
 	getColumnIndex(colField: string): number;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
 	viewportController: ViewportController;
+	batch(callback: () => void): void;
+	batchedUpdates: boolean;
+	registerCellSubscription(sub: CellSubscription): void;
+	unregisterCellSubscription(sub: CellSubscription): void;
+	updateCellSubscription(sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void;
 	destroy(): void;
 }
 
@@ -257,6 +268,29 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	private isBatching = false;
 	private batchedStateUpdates: Partial<GridState<TRowData>> = {};
 	private preTransactionState: GridState<TRowData> | null = null;
+
+	// Cell update batching for improved performance during bulk operations
+	private cellUpdateBatch = new Set<string>();
+	private batchFlushScheduled = false;
+	private _batchedUpdates = true; // Always on — library manages batching internally
+
+	/**
+	 * Creates a serialized coordinate batch key from rowId and colField.
+	 */
+	private createBatchKey(rowId: string, colField: string): string {
+		return `${rowId}:${colField}`;
+	}
+
+	/**
+	 * Splits a serialized coordinate batch key into its constituent rowId and colField.
+	 */
+	private splitBatchKey(key: string): [string, string] {
+		const colonIdx = key.indexOf(':');
+		if (colonIdx === -1) {
+			return [key, ''];
+		}
+		return [key.substring(0, colonIdx), key.substring(colonIdx + 1)];
+	}
 
 	// Core specialized controllers & scheduler
 	public columnController: ColumnController<TRowData>;
@@ -280,6 +314,10 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	private coordFocusListeners = new Map<number, Set<Listener<TRowData>>>();
 	private coordSelectListeners = new Map<number, Set<Listener<TRowData>>>();
 	private coordEditListeners = new Map<number, Set<Listener<TRowData>>>();
+
+	// DMSR: Dynamic Multiplexed Subscription Registry
+	private cellSubscriptions = new Map<string, Set<CellSubscription>>();
+	private colSubscriptions = new Map<string, Set<CellSubscription>>();
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
 		this.state = {
@@ -372,7 +410,87 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 				}
 			});
 		}
+
+		// DMSR: Notify targeted cell subscriptions
+		const cellKey = `${rowId}:${colField}`;
+		const cellSubs = this.cellSubscriptions.get(cellKey);
+		if (cellSubs) {
+			cellSubs.forEach(sub => {
+				try {
+					sub.onStoreChange();
+				} catch(e) {
+					console.error(`GridEngine: Error in DMSR coordinate notification`, e);
+				}
+			});
+		}
 	}
+
+	public registerCellSubscription = (sub: CellSubscription): void => {
+		const cellKey = `${sub.rowId}:${sub.colField}`;
+		if (!this.cellSubscriptions.has(cellKey)) {
+			this.cellSubscriptions.set(cellKey, new Set());
+		}
+		this.cellSubscriptions.get(cellKey)!.add(sub);
+
+		if (!this.colSubscriptions.has(sub.colField)) {
+			this.colSubscriptions.set(sub.colField, new Set());
+		}
+		this.colSubscriptions.get(sub.colField)!.add(sub);
+	};
+
+	public unregisterCellSubscription = (sub: CellSubscription): void => {
+		const cellKey = `${sub.rowId}:${sub.colField}`;
+		const cellSet = this.cellSubscriptions.get(cellKey);
+		if (cellSet) {
+			cellSet.delete(sub);
+			if (cellSet.size === 0) {
+				this.cellSubscriptions.delete(cellKey);
+			}
+		}
+
+		const colSet = this.colSubscriptions.get(sub.colField);
+		if (colSet) {
+			colSet.delete(sub);
+			if (colSet.size === 0) {
+				this.colSubscriptions.delete(sub.colField);
+			}
+		}
+	};
+
+	public updateCellSubscription = (sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void => {
+		// Remove from old cell key
+		const oldCellKey = `${oldRowId}:${oldColField}`;
+		const oldCellSet = this.cellSubscriptions.get(oldCellKey);
+		if (oldCellSet) {
+			oldCellSet.delete(sub);
+			if (oldCellSet.size === 0) {
+				this.cellSubscriptions.delete(oldCellKey);
+			}
+		}
+
+		// Add to new cell key
+		const newCellKey = `${newRowId}:${newColField}`;
+		if (!this.cellSubscriptions.has(newCellKey)) {
+			this.cellSubscriptions.set(newCellKey, new Set());
+		}
+		this.cellSubscriptions.get(newCellKey)!.add(sub);
+
+		// If column changed, update column subscriptions
+		if (oldColField !== newColField) {
+			const oldColSet = this.colSubscriptions.get(oldColField);
+			if (oldColSet) {
+				oldColSet.delete(sub);
+				if (oldColSet.size === 0) {
+					this.colSubscriptions.delete(oldColField);
+				}
+			}
+
+			if (!this.colSubscriptions.has(newColField)) {
+				this.colSubscriptions.set(newColField, new Set());
+			}
+			this.colSubscriptions.get(newColField)!.add(sub);
+		}
+	};
 
 	public registerRowModel = (rowModel: RowModel<TRowData>): void => {
 		this.rowController.registerRowModel(rowModel);
@@ -636,7 +754,32 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 				if (prevWidths[colField] !== currWidths[colField]) {
 					const listeners = this.keyListeners.get(`colWidth:${colField}`);
 					if (listeners) listeners.forEach((l) => l(this.state));
+
+					// DMSR: Notify column width subscriptions
+					const colSubs = this.colSubscriptions.get(colField);
+					if (colSubs) {
+						colSubs.forEach(sub => {
+							try {
+								sub.onStoreChange();
+							} catch (e) {
+								console.error(`GridEngine: Error in DMSR column notification`, e);
+							}
+						});
+					}
 				}
+			});
+		}
+
+		// DMSR: If dataVersion changed, notify ALL active cell subscriptions
+		if (updatedKeys.has('dataVersion')) {
+			this.cellSubscriptions.forEach(subs => {
+				subs.forEach(sub => {
+					try {
+						sub.onStoreChange();
+					} catch (e) {
+						console.error(`GridEngine: Error in DMSR dataVersion notification`, e);
+					}
+				});
 			});
 		}
 
@@ -791,6 +934,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 
 	/**
 	 * Helper to set value of a single cell and trigger cellValueChanged.
+	 * Uses batched notifications for improved performance during bulk updates.
 	 */
 	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
 		const oldValue = this.getCellValue(rowId, colField);
@@ -811,14 +955,43 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		// and collect all invalidated cell keys so we can notify their subscribers.
 		const invalidatedKeys = this.dagEngine.invalidateCell(rowId, colField);
 
-		// Trigger coordinate-targeted cell value key listener for ALL columns on this row,
-		// ensuring calculated columns (with valueGetters depending on other row data) also update.
-		this.triggerCellNotifications(rowId);
+		// Also invalidate any dynamic valueGetter columns on this same row
+		for (let i = 0; i < this.state.columns.length; i++) {
+			const col = this.state.columns[i];
+			if (col.valueGetter) {
+				const key = this.createBatchKey(rowId, col.field);
+				if (!invalidatedKeys.includes(key)) {
+					invalidatedKeys.push(key);
+				}
+			}
+		}
 
-		// Notify subscribers of all affected (invalidated) cells on other rows.
-		for (const key of invalidatedKeys) {
-			const [rId, cField] = key.split(':');
-			if (rId !== rowId) {
+		if (this._batchedUpdates) {
+			// Batch cell notifications for better performance
+			// Add all affected (invalidated) cells to the batch
+			for (const key of invalidatedKeys) {
+				this.cellUpdateBatch.add(key);
+			}
+
+			// Schedule batched flush on next animation frame if not already scheduled
+			if (!this.batchFlushScheduled) {
+				this.batchFlushScheduled = true;
+				if (typeof requestAnimationFrame !== 'undefined') {
+					requestAnimationFrame(() => {
+						this.flushCellUpdates();
+					});
+				} else {
+					// Fallback for non-browser environments - use microtask
+					Promise.resolve().then(() => {
+						this.flushCellUpdates();
+					});
+				}
+			}
+		} else {
+			// Immediate mode: notify synchronously (for tests or when batching is disabled)
+			// Notify subscribers of all affected (invalidated) cells
+			for (const key of invalidatedKeys) {
+				const [rId, cField] = this.splitBatchKey(key);
 				this.notifyCoordListeners('value', rId, cField);
 			}
 		}
@@ -840,6 +1013,64 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			this.notifyCoordListeners('value', rowId, col.field);
 		}
 	};
+
+	/**
+	 * Flush batched cell updates using requestAnimationFrame for optimal performance.
+	 */
+	private flushCellUpdates(): void {
+		this.cellUpdateBatch.forEach((key) => {
+			const [rowId, colField] = this.splitBatchKey(key);
+			this.notifyCoordListeners('value', rowId, colField);
+		});
+		this.cellUpdateBatch.clear();
+		this.batchFlushScheduled = false;
+	}
+
+	/**
+	 * Flush any pending batched cell updates immediately (synchronous).
+	 * Useful for testing or when immediate updates are required.
+	 */
+	public flushCellUpdatesSync(): void {
+		if (this.cellUpdateBatch.size > 0) {
+			this.flushCellUpdates();
+		}
+	}
+
+	/**
+	 * Scoped transaction/batching API.
+	 * Executes the callback within a batch transaction, collecting all cell updates
+	 * and flushing them synchronously exactly once when the callback completes.
+	 */
+	public batch = (callback: () => void): void => {
+		const prev = this._batchedUpdates;
+		this._batchedUpdates = true;
+		try {
+			callback();
+		} finally {
+			this._batchedUpdates = prev;
+			// Always flush synchronously on batch exit to guarantee exactly-once notification semantics
+			if (this.cellUpdateBatch.size > 0) {
+				this.flushCellUpdatesSync();
+			}
+		}
+	};
+
+	/**
+	 * Getter for batched updates configuration.
+	 */
+	public get batchedUpdates(): boolean {
+		return this._batchedUpdates;
+	}
+
+	/**
+	 * Setter for batched updates configuration.
+	 */
+	public set batchedUpdates(enabled: boolean) {
+		this._batchedUpdates = enabled;
+		if (!enabled && this.cellUpdateBatch.size > 0) {
+			this.flushCellUpdates();
+		}
+	}
 
 	/**
 	 * Stop editing on the active edit cell, committing or canceling the changes.
@@ -1016,6 +1247,13 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		this.colFieldToNumeric.clear();
 		this.numericToRowId.clear();
 		this.numericToColField.clear();
+
+		this.cellSubscriptions.clear();
+		this.colSubscriptions.clear();
+
+		// Clean up batched cell updates
+		this.cellUpdateBatch.clear();
+		this.batchFlushScheduled = false;
 
 		this.scheduler.flushAllSync();
 	};
