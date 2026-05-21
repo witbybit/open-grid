@@ -4,7 +4,7 @@ import { ColumnController } from './columnController.js';
 import { RowController } from './rowController.js';
 import { FocusController } from './focusController.js';
 import { SelectionController } from './selectionController.js';
-import { ViewportController } from './viewportController.js';
+import { ViewportController, ViewportRange } from './viewportController.js';
 import { DagEngine } from './calculations/dagEngine.js';
 
 export interface GridCellPointer {
@@ -195,6 +195,10 @@ export interface GridState<TRowData = unknown> {
 	dataVersion: number;
 
 	selectedRangeBounds: GridCellRangeBounds | null;
+
+	// 2D Recycled Viewport Range states
+	visibleRowRange: ViewportRange;
+	visibleColRange: ViewportRange;
 }
 
 export interface GridCellRangeBounds {
@@ -236,6 +240,7 @@ export interface GridApi<TRowData = unknown> {
 	triggerCellNotifications(rowId: string): void;
 	getColumnIndex(colField: string): number;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
+	viewportController: ViewportController;
 	destroy(): void;
 }
 
@@ -290,6 +295,8 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			filterModel: null,
 			dataVersion: 0,
 			selectedRangeBounds: null,
+			visibleRowRange: { startIdx: 0, endIdx: 0 },
+			visibleColRange: { startIdx: 0, endIdx: 0 },
 			...initialState,
 		};
 
@@ -308,6 +315,10 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		if (this.state.columns) {
 			this.updateCompiledGetters(this.state.columns);
 		}
+
+		// Compute initial visible ranges based on initial layout geometry
+		this.state.visibleRowRange = this.viewportController.getVisibleRowRange(this.rowController);
+		this.state.visibleColRange = this.viewportController.getVisibleColumnRange(this.columnController);
 	}
 
 	private updateCompiledGetters(columns: ColumnDef<TRowData>[]): void {
@@ -463,6 +474,20 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			if (nextState.selectedRange !== undefined || nextState.columns !== undefined || nextState.dataVersion !== undefined) {
 				this.state.selectedRangeBounds = this.calculateRangeBounds(this.state.selectedRange);
 			}
+
+			const needsRangeUpdate =
+				nextState.columns !== undefined ||
+				nextState.columnWidths !== undefined ||
+				nextState.rowHeights !== undefined ||
+				nextState.dataVersion !== undefined ||
+				nextState.defaultRowHeight !== undefined ||
+				nextState.defaultColWidth !== undefined;
+
+			if (needsRangeUpdate) {
+				this.state.visibleRowRange = this.viewportController.getVisibleRowRange(this.rowController);
+				this.state.visibleColRange = this.viewportController.getVisibleColumnRange(this.columnController);
+			}
+
 			return;
 		}
 
@@ -497,7 +522,37 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			this.selectionController.setSelectedRange(this.state.selectedRange, this.state.selectedRangeBounds);
 		}
 
-		this.notifyChanges(prevState, Object.keys(nextState));
+		// Re-calculate visible ranges if relevant geometry/data properties changed
+		const needsRangeUpdate =
+			nextState.columns !== undefined ||
+			nextState.columnWidths !== undefined ||
+			nextState.rowHeights !== undefined ||
+			nextState.dataVersion !== undefined ||
+			nextState.defaultRowHeight !== undefined ||
+			nextState.defaultColWidth !== undefined;
+
+		const affectedKeysList = Object.keys(nextState);
+		if (needsRangeUpdate) {
+			const nextRowRange = this.viewportController.getVisibleRowRange(this.rowController);
+			const nextColRange = this.viewportController.getVisibleColumnRange(this.columnController);
+
+			const rowRangeChanged =
+				!prevState.visibleRowRange ||
+				prevState.visibleRowRange.startIdx !== nextRowRange.startIdx ||
+				prevState.visibleRowRange.endIdx !== nextRowRange.endIdx;
+			const colRangeChanged =
+				!prevState.visibleColRange ||
+				prevState.visibleColRange.startIdx !== nextColRange.startIdx ||
+				prevState.visibleColRange.endIdx !== nextColRange.endIdx;
+
+			if (rowRangeChanged || colRangeChanged) {
+				this.state.visibleRowRange = nextRowRange;
+				this.state.visibleColRange = nextColRange;
+				affectedKeysList.push('visibleRowRange', 'visibleColRange');
+			}
+		}
+
+		this.notifyChanges(prevState, affectedKeysList);
 	};
 
 	private notifyChanges(prevState: GridState<TRowData>, affectedKeys: Iterable<string>): void {

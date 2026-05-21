@@ -11,6 +11,7 @@ import {
 	CellEditorProps,
 	CellRendererProps,
 	ServerRowModelController,
+	ViewportRange,
 } from '@open-grid/core';
 
 // Create Grid Context
@@ -599,6 +600,9 @@ export interface UseGridDimensionsResult<TRowData = unknown> {
 	scrollerRef: React.RefObject<HTMLDivElement>;
 	containerRef: React.RefObject<HTMLDivElement>; // Legacy alias to scrollerRef
 	headerRef: React.RefObject<HTMLDivElement>;
+	pinnedLeftRef: React.RefObject<HTMLDivElement>;
+	pinnedRightRef: React.RefObject<HTMLDivElement>;
+	horizontalScrollerRef: React.RefObject<HTMLDivElement>;
 	totalWidth: number;
 	totalHeight: number;
 	leftPinnedWidth: number;
@@ -634,13 +638,16 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 	const scrollerRef = useRef<HTMLDivElement>(null);
 	const containerRef = scrollerRef; // Legacy alias to scrollerRef
 	const headerRef = useRef<HTMLDivElement>(null);
+	const pinnedLeftRef = useRef<HTMLDivElement>(null);
+	const pinnedRightRef = useRef<HTMLDivElement>(null);
+	const horizontalScrollerRef = useRef<HTMLDivElement>(null);
+	const scrollTimeoutRef = useRef<any>(null);
+
 	const api = useGridApi<TRowData>();
 	const store = useGridStore<TRowData>();
 
 	const [scrollState, setScrollState] = useState({ scrollTop: 0, scrollLeft: 0 });
 	const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-
-
 
 	// Sync pin configuration with ViewportController
 	useEffect(() => {
@@ -657,6 +664,7 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 
 		const rect = target.getBoundingClientRect();
 		store.viewportController.setViewportSize(rect.width, rect.height);
+		store.viewportController.updateVisibleRanges(store);
 		setDimensions({ width: rect.width, height: rect.height });
 
 		if (typeof ResizeObserver === 'undefined') return;
@@ -664,7 +672,10 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 		const observer = new ResizeObserver((entries) => {
 			if (!entries || entries.length === 0) return;
 			const { width, height } = entries[0].contentRect;
-			store.viewportController.setViewportSize(width, height);
+			const sizeChanged = store.viewportController.setViewportSize(width, height);
+			if (sizeChanged) {
+				store.viewportController.updateVisibleRanges(store);
+			}
 			setDimensions({ width, height });
 		});
 
@@ -677,39 +688,55 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 		const scroller = scrollerRef.current;
 		if (!scroller) return;
 
+		const hScroller = horizontalScrollerRef.current;
 		const sTop = scroller.scrollTop;
-		const sLeft = scroller.scrollLeft;
+		const sLeft = hScroller ? hScroller.scrollLeft : scroller.scrollLeft;
 
-		const changed = store.viewportController.setScrollPosition(sTop, sLeft);
-		if (changed) {
+		// 1. Direct DOM Update for horizontal header scroll synchronization
+		if (headerRef.current) {
+			headerRef.current.scrollLeft = sLeft;
+		}
+
+		// 2. Core viewport state update (synchronous)
+		store.viewportController.setScrollPosition(sTop, sLeft);
+
+		// 3. Update visible ranges in core and notify subscribers if boundary crossed
+		const rangeChanged = store.viewportController.updateVisibleRanges(store);
+
+		// 4. Update React scrollState to trigger re-renders only on boundary crossing, otherwise debounce
+		if (rangeChanged) {
 			setScrollState({ scrollTop: sTop, scrollLeft: sLeft });
+		} else {
+			if (scrollTimeoutRef.current) {
+				clearTimeout(scrollTimeoutRef.current);
+			}
+			scrollTimeoutRef.current = setTimeout(() => {
+				setScrollState({ scrollTop: sTop, scrollLeft: sLeft });
+			}, 150);
 		}
 	}, [store]);
 
-	// Listen to scroll events on scrollerRef
+	// Listen to scroll events on both vertical (outer) and horizontal (center) scrollers
 	useEffect(() => {
 		const scroller = scrollerRef.current;
+		const hScroller = horizontalScrollerRef.current;
 		if (!scroller) return;
 
 		scroller.addEventListener('scroll', handleScroll, { passive: true });
+		if (hScroller) {
+			hScroller.addEventListener('scroll', handleScroll, { passive: true });
+		}
+
 		return () => {
 			scroller.removeEventListener('scroll', handleScroll);
+			if (hScroller) {
+				hScroller.removeEventListener('scroll', handleScroll);
+			}
+			if (scrollTimeoutRef.current) {
+				clearTimeout(scrollTimeoutRef.current);
+			}
 		};
 	}, [handleScroll]);
-
-	// Sync horizontal scroll to headerRef
-	useEffect(() => {
-		const scroller = scrollerRef.current;
-		const header = headerRef.current;
-		if (!scroller || !header) return;
-
-		const syncHeader = () => {
-			header.scrollLeft = scroller.scrollLeft;
-		};
-
-		scroller.addEventListener('scroll', syncHeader, { passive: true });
-		return () => scroller.removeEventListener('scroll', syncHeader);
-	}, []);
 
 	// Setup navigation controller (opt-in / opt-out)
 	const navigation = useGridNavigationController<TRowData>({
@@ -748,6 +775,10 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 	const columnWidths = useGridKeySelector<Record<string, number>, TRowData>('columnWidths', (state) => state.columnWidths);
 	const rowHeights = useGridKeySelector<Record<string, number>, TRowData>('rowHeights', (state) => state.rowHeights);
 
+	// Subscribe to visible index ranges from core GridState to limit React re-renders strictly to range crossings
+	const visibleRowRange = useGridKeySelector<ViewportRange, TRowData>('visibleRowRange', (state) => state.visibleRowRange);
+	const visibleColRange = useGridKeySelector<ViewportRange, TRowData>('visibleColRange', (state) => state.visibleColRange);
+
 	const rowModel = store.getRowModel();
 	const rowCount = rowModel ? rowModel.getRowCount() : 0;
 	const colCount = columns.length;
@@ -772,10 +803,6 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 		}
 		return w;
 	}, [columns, columnWidths, pinRightColumns, colCount, dataVersion, store]);
-
-	// Compute visible index ranges from ViewportController
-	const rowRange = store.viewportController.getVisibleRowRange(store.rowController);
-	const colRange = store.viewportController.getVisibleColumnRange(store.columnController);
 
 	// Generate Pinned Left Columns
 	const leftPinnedCols = useMemo(() => {
@@ -814,8 +841,8 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 	// Generate scrollable center columns inside center range (excluding left/right pinned)
 	const centerCols = useMemo(() => {
 		const cols = [];
-		const start = Math.max(pinLeftColumns, colRange.startIdx);
-		const end = Math.min(colCount - 1 - pinRightColumns, colRange.endIdx);
+		const start = Math.max(pinLeftColumns, visibleColRange.startIdx);
+		const end = Math.min(colCount - 1 - pinRightColumns, visibleColRange.endIdx);
 		for (let i = start; i <= end && i < colCount; i++) {
 			if (i < 0) continue;
 			cols.push({
@@ -827,13 +854,13 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 			});
 		}
 		return cols;
-	}, [columns, columnWidths, colRange.startIdx, colRange.endIdx, pinLeftColumns, pinRightColumns, colCount, dataVersion, store]);
+	}, [columns, columnWidths, visibleColRange.startIdx, visibleColRange.endIdx, pinLeftColumns, pinRightColumns, colCount, dataVersion, store]);
 
 	// Generate visible rows inside row range
 	const visibleRows = useMemo(() => {
 		const rows = [];
 		if (rowModel) {
-			for (let i = rowRange.startIdx; i <= rowRange.endIdx && i < rowCount; i++) {
+			for (let i = visibleRowRange.startIdx; i <= visibleRowRange.endIdx && i < rowCount; i++) {
 				const row = rowModel.getRow(i);
 				const id = row ? store.getRowId(row) : `__loading_${i}__`;
 				rows.push({
@@ -845,7 +872,7 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 			}
 		}
 		return rows;
-	}, [rowModel, rowHeights, rowRange.startIdx, rowRange.endIdx, rowCount, store, dataVersion]);
+	}, [rowModel, rowHeights, visibleRowRange.startIdx, visibleRowRange.endIdx, rowCount, store, dataVersion]);
 
 	// Notify server block loader on scrolling visible row indexes
 	useEffect(() => {
@@ -885,6 +912,9 @@ export function useGridDimensions<TRowData = unknown>(options: UseGridDimensions
 		scrollerRef,
 		containerRef,
 		headerRef,
+		pinnedLeftRef,
+		pinnedRightRef,
+		horizontalScrollerRef,
 		totalWidth,
 		totalHeight,
 		leftPinnedWidth,

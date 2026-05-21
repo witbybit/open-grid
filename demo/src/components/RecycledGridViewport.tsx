@@ -152,6 +152,9 @@ export function RecycledGridViewport({
 		scrollerRef,
 		containerRef,
 		headerRef,
+		pinnedLeftRef,
+		pinnedRightRef,
+		horizontalScrollerRef,
 		totalWidth,
 		totalHeight,
 		leftPinnedWidth,
@@ -267,71 +270,66 @@ export function RecycledGridViewport({
 			</div>
 
 			{/* ---------------------------------------------------------------------- */}
-			{/* 2. Grid Body Area (3-lane synchronized viewport layout) */}
+			{/* 2. Grid Body Area (Single-scroller sticky-pinned layout) */}
 			{/* ---------------------------------------------------------------------- */}
 			<div ref={viewportRef} className='relative flex-1 overflow-hidden'>
-				{/* Pinned Left Cells Lane */}
-				{pinLeftColumns > 0 && (
-					<div
-						className='absolute left-0 top-0 bottom-0 border-r border-slate-850 bg-slate-950 z-20 overflow-hidden shadow-[4px_0_15px_rgba(0,0,0,0.4)]'
-						style={{ width: leftPinnedWidth }}
-					>
-						<div
-							className='absolute left-0 right-0 top-0'
-							style={{
-								transform: `translateY(${-scrollState.scrollTop}px)`,
-								height: totalHeight,
-							}}
-						>
-							{visibleRows.map((row) => (
-								<PinnedLeftRow key={row.id} row={row} cols={leftPinnedCols} api={api} navigation={navigation} />
-							))}
-						</div>
-					</div>
-				)}
-
-				{/* Scrollable Center Cells Viewport */}
 				<div
 					ref={scrollerRef}
 					tabIndex={0}
-					className='absolute top-0 bottom-0 overflow-auto bg-slate-950 scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-800/80 outline-none animate-fade-in'
-					style={{
-						left: leftPinnedWidth,
-						right: rightPinnedWidth,
-					}}
+					className='absolute inset-0 overflow-auto bg-slate-950 scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-800/80 outline-none animate-fade-in'
 				>
 					<div
-						className='relative animate-fade-in'
+						className='relative flex flex-row'
 						style={{
-							width: innerCenterWidth,
+							minWidth: '100%',
+							width: totalWidth,
 							height: totalHeight,
 						}}
 					>
-						{visibleRows.map((row) => (
-							<CenterRow key={row.id} row={row} cols={centerCols} leftPinnedWidth={leftPinnedWidth} api={api} navigation={navigation} />
-						))}
-					</div>
-				</div>
+						{/* Pinned Left Cells Lane */}
+						{pinLeftColumns > 0 && (
+							<div
+								className='sticky left-0 top-0 bottom-0 z-20 border-r border-slate-850 bg-slate-950 shadow-[4px_0_15px_rgba(0,0,0,0.4)] shrink-0 overflow-hidden'
+								style={{
+									width: leftPinnedWidth,
+									height: totalHeight,
+								}}
+							>
+								{visibleRows.map((row) => (
+									<PinnedLeftRow key={row.id} row={row} cols={leftPinnedCols} api={api} navigation={navigation} />
+								))}
+							</div>
+						)}
 
-				{/* Pinned Right Cells Lane */}
-				{pinRightColumns > 0 && (
-					<div
-						className='absolute right-0 top-0 bottom-0 border-l border-slate-850 bg-slate-950 z-20 overflow-hidden shadow-[-4px_0_15px_rgba(0,0,0,0.4)]'
-						style={{ width: rightPinnedWidth }}
-					>
+						{/* Scrollable Center Cells Lane */}
 						<div
-							className='absolute left-0 right-0 top-0'
+							className='relative grow shrink-0'
 							style={{
-								transform: `translateY(${-scrollState.scrollTop}px)`,
+								width: innerCenterWidth,
 								height: totalHeight,
 							}}
 						>
 							{visibleRows.map((row) => (
-								<PinnedRightRow key={row.id} row={row} cols={rightPinnedCols} api={api} navigation={navigation} />
+								<CenterRow key={row.id} row={row} cols={centerCols} leftPinnedWidth={leftPinnedWidth} api={api} navigation={navigation} />
 							))}
 						</div>
+
+						{/* Pinned Right Cells Lane */}
+						{pinRightColumns > 0 && (
+							<div
+								className='sticky right-0 top-0 bottom-0 z-20 border-l border-slate-850 bg-slate-950 shadow-[-4px_0_15px_rgba(0,0,0,0.4)] shrink-0 overflow-hidden'
+								style={{
+									width: rightPinnedWidth,
+									height: totalHeight,
+								}}
+							>
+								{visibleRows.map((row) => (
+									<PinnedRightRow key={row.id} row={row} cols={rightPinnedCols} api={api} navigation={navigation} />
+								))}
+							</div>
+						)}
 					</div>
-				)}
+				</div>
 			</div>
 		</div>
 	);

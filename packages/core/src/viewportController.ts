@@ -179,4 +179,32 @@ export class ViewportController {
 
 		return { startIdx, endIdx };
 	}
+
+	/**
+	 * Recalculate visible ranges and update store state if they have changed.
+	 * Returns true if the visible ranges actually changed.
+	 */
+	public updateVisibleRanges(store: any): boolean {
+		const rowRange = this.getVisibleRowRange(store.rowController);
+		const colRange = this.getVisibleColumnRange(store.columnController);
+
+		const currState = store.getState();
+		const rowChanged =
+			!currState.visibleRowRange ||
+			currState.visibleRowRange.startIdx !== rowRange.startIdx ||
+			currState.visibleRowRange.endIdx !== rowRange.endIdx;
+		const colChanged =
+			!currState.visibleColRange ||
+			currState.visibleColRange.startIdx !== colRange.startIdx ||
+			currState.visibleColRange.endIdx !== colRange.endIdx;
+
+		if (rowChanged || colChanged) {
+			store.setState({
+				visibleRowRange: rowRange,
+				visibleColRange: colRange,
+			});
+			return true;
+		}
+		return false;
+	}
 }
