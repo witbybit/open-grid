@@ -9,3 +9,5 @@ export * from './columnController.js';
 export * from './rowController.js';
 export * from './focusController.js';
 export * from './selectionController.js';
+export * from './viewportController.js';
+export * from './calculations/dagEngine.js';

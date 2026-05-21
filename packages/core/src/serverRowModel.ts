@@ -15,7 +15,7 @@ export interface ServerRowModelOptions<TData = unknown> {
 	blockSize?: number;
 	datasource: IGridDatasource;
 	columns: Array<ColumnDef<TData>>;
-	rowIdField?: keyof TData & string;
+	getRowId?: (row: TData) => string;
 }
 
 export class ServerRowModelController<TData = unknown> implements RowModel<TData> {
@@ -36,7 +36,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		// Set base columns and config in store
 		this.store.setState({
 			columns: options.columns,
-			rowIdField: options.rowIdField ?? ('id' as keyof TData & string),
+			getRowId: options.getRowId,
 		});
 
 		this.store.registerRowModel(this);
@@ -141,8 +141,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				return;
 			}
 
-			const rowIdField = curr.rowIdField;
-
 			// Fill with sparse nulls up to startRow if array is not large enough
 			while (this.activeNodes.length < startRow) {
 				this.activeNodes.push(null);
@@ -158,7 +156,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				const globalIdx = startRow + idx;
 				const typedRow = row as TData;
 				if (typedRow) {
-					const id = String((typedRow as Record<string, unknown>)[rowIdField as string]);
+					const id = this.store.getRowId(typedRow);
 					let node = this.nodeMap.get(id);
 					if (node) {
 						node.data = typedRow;

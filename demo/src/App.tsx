@@ -64,6 +64,12 @@ export default function App() {
 	const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
 	const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
 
+	// 2D Virtualized Viewport & Pinning State
+	const [use2DRecycled, setUse2DRecycled] = useState<boolean>(true);
+	const [pinLeftColumns, setPinLeftColumns] = useState<number>(1);
+	const [pinRightColumns, setPinRightColumns] = useState<number>(1);
+	const [massiveColumns, setMassiveColumns] = useState<boolean>(false);
+
 	useEffect(() => {
 		const handleHashChange = () => {
 			const hash = window.location.hash.slice(1);
@@ -115,30 +121,45 @@ export default function App() {
 	// --------------------------------------------------------------------------
 
 	const clientColumns = useMemo<ColumnDef<PerformanceRow>[]>(
-		() => [
-			{ field: 'id', header: 'Row ID', width: 80 },
-			{ field: 'name', header: 'Product Name', width: 170 },
-			{ field: 'price', header: 'Price ($)', width: 110 },
-			{ field: 'quantity', header: 'Quantity', width: 90 },
-			{
-				field: 'subtotal',
-				header: 'Subtotal ($)',
-				width: 130,
-				valueGetter: ({ row }) => {
-					const price = parseFloat(row.price) || 0;
-					const qty = parseFloat(row.quantity) || 0;
-					return (price * qty).toFixed(2);
+		() => {
+			const cols: ColumnDef<PerformanceRow>[] = [
+				{ field: 'id', header: 'Row ID', width: 80 },
+				{ field: 'name', header: 'Product Name', width: 170 },
+				{ field: 'price', header: 'Price ($)', width: 110 },
+				{ field: 'quantity', header: 'Quantity', width: 90 },
+				{
+					field: 'subtotal',
+					header: 'Subtotal ($)',
+					width: 130,
+					valueGetter: ({ row }) => {
+						const price = parseFloat(row.price) || 0;
+						const qty = parseFloat(row.quantity) || 0;
+						return (price * qty).toFixed(2);
+					},
 				},
-			},
-			{
-				field: 'status',
-				header: 'Status',
-				width: 110,
-				cellEditor: StatusDropdownEditor,
-				cellRenderer: StatusBadgeRenderer,
-			},
-		],
-		[]
+				{
+					field: 'status',
+					header: 'Status',
+					width: 110,
+					cellEditor: StatusDropdownEditor,
+					cellRenderer: StatusBadgeRenderer,
+				},
+			];
+			if (massiveColumns) {
+				for (let i = 0; i < 1000; i++) {
+					cols.push({
+						field: `col_${i}`,
+						header: `Col ${i}`,
+						width: 100,
+						valueGetter: ({ row }) => {
+							return `Val ${i}`;
+						}
+					});
+				}
+			}
+			return cols;
+		},
+		[massiveColumns]
 	);
 
 	const perfStore = useMemo(() => {
@@ -154,7 +175,6 @@ export default function App() {
 		return new ClientRowModelController<PerformanceRow>(perfStore, {
 			rows: perfRows,
 			columns: clientColumns,
-			rowIdField: 'id',
 		});
 	}, [perfStore, perfRows, clientColumns]);
 
@@ -271,7 +291,6 @@ export default function App() {
 			datasource: mockDatasource,
 			blockSize: 100,
 			columns: serverColumns,
-			rowIdField: 'id',
 		});
 	}, [serverStore, mockDatasource, serverColumns]);
 
@@ -299,13 +318,25 @@ export default function App() {
 		});
 	}, [spreadsheetColumns]);
 
-	const spreadsheetRows = useMemo(() => generateSpreadsheetRows(500), []);
+	const spreadsheetRows = useMemo(() => {
+		const rows = generateSpreadsheetRows(500);
+		// Pre-populate formula strings for cascading evaluations on Row S-1000 onwards
+		for (let i = 0; i < 15; i++) {
+			const rowId = `S-${1000 + i}`;
+			const row = rows.find(r => r.id === rowId);
+			if (row) {
+				row.C = `=SUM([${rowId}:A],[${rowId}:B])`;
+				row.D = `=[${rowId}:C]*2`;
+				row.E = `=[${rowId}:D]+10`;
+			}
+		}
+		return rows;
+	}, []);
 
 	const spreadsheetController = useMemo(() => {
 		return new ClientRowModelController<SpreadsheetRow>(spreadsheetStore, {
 			rows: spreadsheetRows,
 			columns: spreadsheetColumns,
-			rowIdField: 'id',
 		});
 	}, [spreadsheetStore, spreadsheetRows, spreadsheetColumns]);
 
@@ -447,7 +478,6 @@ export default function App() {
 		return new ClientRowModelController<CustomShowcaseRow>(customStore, {
 			rows: customRows,
 			columns: customColumns,
-			rowIdField: 'id',
 		});
 	}, [customStore, customRows, customColumns]);
 
@@ -513,7 +543,6 @@ export default function App() {
 		return new ClientRowModelController<PerformanceRow>(layoutStore, {
 			rows: layoutRows,
 			columns: layoutColumns,
-			rowIdField: 'id',
 		});
 	}, [layoutStore, layoutRows, layoutColumns]);
 
@@ -894,6 +923,9 @@ export default function App() {
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								rowHeightsMap={rowHeightsMap}
 								onCellValueChanged={handlePerfCellValueChanged}
+								use2DRecycled={use2DRecycled}
+								pinLeftColumns={pinLeftColumns}
+								pinRightColumns={pinRightColumns}
 							/>
 						)}
 
@@ -904,6 +936,9 @@ export default function App() {
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								rowHeightsMap={rowHeightsMap}
+								use2DRecycled={use2DRecycled}
+								pinLeftColumns={pinLeftColumns}
+								pinRightColumns={pinRightColumns}
 							/>
 						)}
 
@@ -915,6 +950,9 @@ export default function App() {
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								rowHeightsMap={rowHeightsMap}
 								onCellValueChanged={handleSpreadsheetCellValueChanged}
+								use2DRecycled={use2DRecycled}
+								pinLeftColumns={pinLeftColumns}
+								pinRightColumns={pinRightColumns}
 							/>
 						)}
 
@@ -926,6 +964,9 @@ export default function App() {
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								rowHeightsMap={rowHeightsMap}
 								onCellValueChanged={handleCustomCellValueChanged}
+								use2DRecycled={use2DRecycled}
+								pinLeftColumns={pinLeftColumns}
+								pinRightColumns={pinRightColumns}
 							/>
 						)}
 
@@ -938,6 +979,9 @@ export default function App() {
 								rowHeightsMap={rowHeightsMap}
 								onCellValueChanged={handleLayoutCellValueChanged}
 								compactLayout={compactLayout}
+								use2DRecycled={use2DRecycled}
+								pinLeftColumns={pinLeftColumns}
+								pinRightColumns={pinRightColumns}
 							/>
 						)}
 					</div>
@@ -947,8 +991,79 @@ export default function App() {
 				<div
 					className={`${rightSidebarCollapsed ? 'w-0 p-0 border-0 overflow-hidden' : 'w-72 p-4 border border-slate-900/50'} shrink-0 flex flex-col gap-4 overflow-y-auto pl-1 glass-panel rounded-xl transition-all duration-300 ease-in-out`}
 				>
-					{/* Coordinate Inspector */}
+ 					{/* Coordinate Inspector */}
 					<StateInspector store={activeStore} />
+
+					{/* Recycled Viewport Engine Configuration */}
+					<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
+						<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+							<Zap className='w-4 h-4 text-amber-400' />
+							Recycled Viewport Engine
+						</h3>
+
+						<div className='flex flex-col gap-3.5'>
+							{/* Toggle switch for 2D Recycled engine */}
+							<label className='flex items-center gap-2 p-2 rounded-lg bg-slate-950/60 border border-slate-900 hover:border-slate-850 cursor-pointer select-none transition-all'>
+								<input
+									type='checkbox'
+									checked={use2DRecycled}
+									onChange={(e) => setUse2DRecycled(e.target.checked)}
+									className='rounded border-slate-800 text-purple-600 focus:ring-purple-500/20 w-3 h-3 bg-slate-950 cursor-pointer'
+								/>
+								<div className='flex flex-col'>
+									<span className='text-[11px] font-bold text-slate-200 leading-tight'>2D Recycled engine</span>
+									<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>
+										Enable 2D recycled viewport virtualization
+									</span>
+								</div>
+							</label>
+
+							{/* Pinned Lanes Control */}
+							<div className='grid grid-cols-2 gap-2.5'>
+								<label className='flex flex-col gap-1'>
+									<span className='text-[9px] text-slate-500 font-bold uppercase tracking-wider'>Pin Left Cols</span>
+									<input
+										type='number'
+										min={0}
+										max={5}
+										value={pinLeftColumns}
+										onChange={(e) => setPinLeftColumns(Math.max(0, parseInt(e.target.value) || 0))}
+										className='w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-[10px] text-slate-200 outline-none focus:border-purple-500 transition-all font-bold font-sans'
+									/>
+								</label>
+
+								<label className='flex flex-col gap-1'>
+									<span className='text-[9px] text-slate-500 font-bold uppercase tracking-wider'>Pin Right Cols</span>
+									<input
+										type='number'
+										min={0}
+										max={5}
+										value={pinRightColumns}
+										onChange={(e) => setPinRightColumns(Math.max(0, parseInt(e.target.value) || 0))}
+										className='w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-[10px] text-slate-200 outline-none focus:border-purple-500 transition-all font-bold font-sans'
+									/>
+								</label>
+							</div>
+
+							{/* Massive columns mode for perf pages */}
+							{(activePage === 'perf' || activePage === 'server') && (
+								<label className='flex items-center gap-2 p-2 rounded-lg bg-slate-950/60 border border-slate-900 hover:border-slate-850 cursor-pointer select-none transition-all'>
+									<input
+										type='checkbox'
+										checked={massiveColumns}
+										onChange={(e) => setMassiveColumns(e.target.checked)}
+										className='rounded border-slate-800 text-purple-600 focus:ring-purple-500/20 w-3 h-3 bg-slate-950 cursor-pointer'
+									/>
+									<div className='flex flex-col'>
+										<span className='text-[11px] font-bold text-slate-200 leading-tight'>1,000+ Column Scale</span>
+										<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>
+											Enable 1,000 extra dynamically-evaluated columns
+										</span>
+									</div>
+								</label>
+							)}
+						</div>
+					</div>
 
 					{/* Sorting and Filtering controls */}
 					<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>

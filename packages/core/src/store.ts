@@ -4,6 +4,8 @@ import { ColumnController } from './columnController.js';
 import { RowController } from './rowController.js';
 import { FocusController } from './focusController.js';
 import { SelectionController } from './selectionController.js';
+import { ViewportController } from './viewportController.js';
+import { DagEngine } from './calculations/dagEngine.js';
 
 export interface GridCellPointer {
 	rowId: string;
@@ -171,7 +173,7 @@ export interface ColumnDef<TRowData = unknown> {
 }
 
 export interface GridState<TRowData = unknown> {
-	rowIdField: keyof TRowData & string;
+	getRowId?: (row: TRowData) => string;
 	columns: ColumnDef<TRowData>[];
 
 	focusedCell: GridCellPointer | null;
@@ -209,6 +211,8 @@ export type Listener<TRowData = unknown> = (state: GridState<TRowData>) => void;
 export interface GridApi<TRowData = unknown> {
 	getState(): GridState<TRowData>;
 	setState(updater: GridStateUpdater<TRowData>): void;
+	getRowId(row: TRowData): string;
+	isRowLoading(rowId: string): boolean;
 	getCellValue(rowId: string, colField: string): unknown;
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 	getCellState(rowId: string, colField: string): CellState;
@@ -237,6 +241,8 @@ export interface GridApi<TRowData = unknown> {
 
 export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	private state: GridState<TRowData>;
+	private autoRowIdMap = new WeakMap<any, string>();
+	private autoRowIdCounter = 0;
 	private listeners = new Set<Listener<TRowData>>();
 	private keyListeners = new Map<string, Set<Listener<TRowData>>>();
 	private eventListeners = new Map<string, Set<GridEventListener<unknown>>>();
@@ -253,6 +259,8 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	public focusController: FocusController;
 	public selectionController: SelectionController;
 	public scheduler: TransactionScheduler;
+	public viewportController: ViewportController;
+	public dagEngine: DagEngine;
 
 	// Stable auto-incrementing numeric ID mappings to prevent string GC pressure
 	private rowIdToNumeric = new Map<string, number>();
@@ -270,7 +278,6 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
 		this.state = {
-			rowIdField: 'id' as keyof TRowData & string,
 			columns: [],
 			focusedCell: null,
 			selectedRange: null,
@@ -292,6 +299,8 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		this.focusController = new FocusController();
 		this.selectionController = new SelectionController();
 		this.scheduler = new TransactionScheduler();
+		this.viewportController = new ViewportController();
+		this.dagEngine = new DagEngine();
 
 		this.columnController.updateColumns(this.state.columns, this.state.columnWidths, this.state.defaultColWidth);
 		this.rowController.refreshRowGeometry(this.state.rowHeights, this.state.defaultRowHeight);
@@ -368,6 +377,29 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		return this.state;
 	};
 
+	public getRowId = (row: TRowData): string => {
+		if (this.state.getRowId) {
+			return this.state.getRowId(row);
+		}
+		if (typeof row === 'object' && row !== null) {
+			const anyRow = row as any;
+			if (anyRow.id !== undefined && anyRow.id !== null) {
+				return String(anyRow.id);
+			}
+			let id = this.autoRowIdMap.get(row);
+			if (id === undefined) {
+				id = `__row_${this.autoRowIdCounter++}__`;
+				this.autoRowIdMap.set(row, id);
+			}
+			return id;
+		}
+		return String(row);
+	};
+
+	public isRowLoading = (rowId: string): boolean => {
+		return rowId.startsWith('__loading_');
+	};
+
 	private getCellsInRange(range: GridCellRange | null): Set<string> {
 		const cells = new Set<string>();
 		const rowModel = this.getRowModel();
@@ -389,7 +421,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		for (let r = minRow; r <= maxRow; r++) {
 			const row = rowModel.getRow(r);
 			if (!row) continue;
-			const rowId = String(row[this.state.rowIdField]);
+			const rowId = this.getRowId(row);
 			for (let c = minCol; c <= maxCol; c++) {
 				const colField = this.state.columns[c].field;
 				cells.add(`${rowId}:${colField}`);
@@ -529,13 +561,12 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 			const dirty = this.selectionController.getDirtyCoordinates(prevState.selectedRangeBounds, this.state.selectedRangeBounds);
 			const rowModel = this.getRowModel();
 			if (dirty.length > 0 && rowModel) {
-				const rowIdField = this.state.rowIdField;
 				for (let i = 0; i < dirty.length; i++) {
 					const { rowIdx, colIdx } = dirty[i];
 					const row = rowModel.getRow(rowIdx);
 					const col = this.state.columns[colIdx];
 					if (row && col) {
-						const rowId = String(row[rowIdField]);
+						const rowId = this.getRowId(row);
 						this.notifyCoordListeners('select', rowId, col.field);
 					}
 				}
@@ -661,30 +692,46 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	 * Helper to get value of a single cell.
 	 */
 	public getCellValue = (rowId: string, colField: string): unknown => {
-		const rowModel = this.getRowModel();
-		if (!rowModel) return '';
-		const col = this.getColumnDef(colField);
-		if (!col) return '';
+		const getRawValue = (rId: string, cField: string): any => {
+			const rowModel = this.getRowModel();
+			if (!rowModel) return '';
+			const col = this.getColumnDef(cField);
+			if (!col) return '';
 
-		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
-		if (!node) {
-			const idx = rowModel.getRowIndexById(rowId);
-			if (idx === -1) return '';
-			const row = rowModel.getRow(idx);
-			if (!row) return '';
-			if (col.valueGetter) {
-				const dummyNode = new RowNode<TRowData>(rowId, row);
-				return col.valueGetter({ node: dummyNode, row, colField });
+			const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rId) : null;
+			if (!node) {
+				const idx = rowModel.getRowIndexById(rId);
+				if (idx === -1) return '';
+				const row = rowModel.getRow(idx);
+				if (!row) return '';
+				if (col.valueGetter) {
+					const dummyNode = new RowNode<TRowData>(rId, row);
+					return col.valueGetter({ node: dummyNode, row, colField: cField });
+				}
+				const getter = this.compiledGetters.get(cField) || compilePathGetter(cField);
+				return getter(row);
 			}
-			const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
-			return getter(row);
+
+			if (col.valueGetter) {
+				return col.valueGetter({ node, row: node.data, colField: cField });
+			}
+			const getter = this.compiledGetters.get(cField) || compilePathGetter(cField);
+			return node.getCellValue(cField, getter);
+		};
+
+		// Check if the raw value itself is a formula starting with '='
+		const rawVal = getRawValue(rowId, colField);
+		if (typeof rawVal === 'string' && rawVal.startsWith('=')) {
+			if (!this.dagEngine.hasFormula(rowId, colField) || this.dagEngine.getFormula(rowId, colField) !== rawVal) {
+				this.dagEngine.registerFormula(rowId, colField, rawVal);
+			}
 		}
 
-		if (col.valueGetter) {
-			return col.valueGetter({ node, row: node.data, colField });
+		if (this.dagEngine.hasFormula(rowId, colField)) {
+			return this.dagEngine.getCellValue(rowId, colField, getRawValue);
 		}
-		const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
-		return node.getCellValue(colField, getter);
+
+		return rawVal;
 	};
 
 	/**
@@ -694,14 +741,32 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		const oldValue = this.getCellValue(rowId, colField);
 		if (oldValue === value) return;
 
+		if (typeof value === 'string' && value.startsWith('=')) {
+			this.dagEngine.registerFormula(rowId, colField, value);
+		} else {
+			this.dagEngine.clearFormula(rowId, colField);
+		}
+
 		const rowModel = this.getRowModel();
 		if (rowModel?.setCellValue) {
 			rowModel.setCellValue(rowId, colField, value);
 		}
 
+		// Invalidate this cell and all its dependents in the DAG engine,
+		// and collect all invalidated cell keys so we can notify their subscribers.
+		const invalidatedKeys = this.dagEngine.invalidateCell(rowId, colField);
+
 		// Trigger coordinate-targeted cell value key listener for ALL columns on this row,
 		// ensuring calculated columns (with valueGetters depending on other row data) also update.
 		this.triggerCellNotifications(rowId);
+
+		// Notify subscribers of all affected (invalidated) cells on other rows.
+		for (const key of invalidatedKeys) {
+			const [rId, cField] = key.split(':');
+			if (rId !== rowId) {
+				this.notifyCoordListeners('value', rId, cField);
+			}
+		}
 
 		// Trigger cellValueChanged listener
 		this.dispatchEvent('cellValueChanged', {
@@ -743,12 +808,33 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	 * Helper to get cell state safely.
 	 */
 	public getCellState = (rowId: string, colField: string): CellState => {
-		const value = this.getCellValue(rowId, colField);
+		const computedValue = this.getCellValue(rowId, colField);
 		const isEditing = this.state.activeEdit?.rowId === rowId && this.state.activeEdit?.colField === colField;
+
+		let value = computedValue;
+		if (this.dagEngine.hasFormula(rowId, colField)) {
+			value = this.dagEngine.getFormula(rowId, colField);
+		} else {
+			// Find raw value from row data if it exists
+			const rowModel = this.getRowModel();
+			if (rowModel) {
+				const idx = rowModel.getRowIndexById(rowId);
+				if (idx !== -1) {
+					const row = rowModel.getRow(idx);
+					if (row) {
+						const col = this.getColumnDef(colField);
+						if (col && !col.valueGetter) {
+							const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
+							value = getter(row);
+						}
+					}
+				}
+			}
+		}
 
 		return {
 			value,
-			computedValue: value,
+			computedValue,
 			isEditing,
 		};
 	};

@@ -50,7 +50,7 @@ export class GridNavigationController<TRowData = unknown> implements GridFeature
 		const col = state.columns[colIdx];
 		if (!row || !col) return null;
 		return {
-			rowId: String(row[state.rowIdField as keyof TRowData]),
+			rowId: this.store.getRowId(row),
 			colField: col.field,
 		};
 	}

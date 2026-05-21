@@ -232,7 +232,6 @@ describe('ClientRowModelController sorting and filtering', () => {
 				{ field: 'id', header: 'ID', width: 50 },
 				{ field: 'name', header: 'Name', width: 100 },
 			],
-			rowIdField: 'id',
 		});
 
 		const rowModel = store.getRowModel()!;

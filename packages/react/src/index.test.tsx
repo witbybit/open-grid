@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { GridStore, GridNavigationController, ClientRowModelController } from '@open-grid/core';
-import { GridProvider, Cell, useCellEditState, useGridNavigationController, useGridKeySelector } from './index.js';
+import { GridProvider, Cell, useCellEditState, useGridNavigationController, useGridKeySelector, useGridDimensions } from './index.js';
 
 interface TestRow {
 	id: string;
@@ -19,6 +19,35 @@ const HookInspector = ({ rowId, colField }: { rowId: string; colField: string })
 	);
 };
 
+const DimensionsInspector = () => {
+	const {
+		leftPinnedWidth,
+		rightPinnedWidth,
+		totalWidth,
+		totalHeight,
+		leftPinnedCols,
+		rightPinnedCols,
+		centerCols,
+		visibleRows,
+	} = useGridDimensions<any>({
+		pinLeftColumns: 1,
+		pinRightColumns: 1,
+	});
+
+	return (
+		<div>
+			<div data-testid="left-pinned-width">{leftPinnedWidth}</div>
+			<div data-testid="right-pinned-width">{rightPinnedWidth}</div>
+			<div data-testid="total-width">{totalWidth}</div>
+			<div data-testid="total-height">{totalHeight}</div>
+			<div data-testid="left-cols-count">{leftPinnedCols.length}</div>
+			<div data-testid="right-cols-count">{rightPinnedCols.length}</div>
+			<div data-testid="center-cols-count">{centerCols.length}</div>
+			<div data-testid="visible-rows-count">{visibleRows.length}</div>
+		</div>
+	);
+};
+
 const NavigationControllerOwner = ({ onCellValueChanged }: { onCellValueChanged: (rowId: string, colField: string, val: unknown) => void }) => {
 	useGridNavigationController<TestRow>({ onCellValueChanged });
 	return null;
@@ -28,12 +57,10 @@ describe('React Bindings hooks and components', () => {
 	it('should yield correct editing state via useCellEditState hook', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
-			rowIdField: 'id',
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
-			rowIdField: 'id',
 		});
 
 		render(
@@ -62,12 +89,10 @@ describe('React Bindings hooks and components', () => {
 	it('should render standard Cell in view mode and transition to edit mode on blur/onKeyDown', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
-			rowIdField: 'id',
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
 			rows: [{ id: '1', name: 'Cell Content' }],
 			columns: store.getState().columns,
-			rowIdField: 'id',
 		});
 		const navigation = new GridNavigationController<TestRow>({});
 		store.registerFeature(navigation);
@@ -122,12 +147,10 @@ describe('React Bindings hooks and components', () => {
 					),
 				},
 			],
-			rowIdField: 'id',
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
 			rows: [{ id: '1', name: 'Original Name' }],
 			columns: store.getState().columns,
-			rowIdField: 'id',
 		});
 		const navigation = new GridNavigationController<TestRow>({});
 		store.registerFeature(navigation);
@@ -162,12 +185,10 @@ describe('React Bindings hooks and components', () => {
 	it('should stop keydown propagation and commit/cancel on Enter and Escape', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
-			rowIdField: 'id',
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
 			rows: [{ id: '1', name: 'Cell Content' }],
 			columns: store.getState().columns,
-			rowIdField: 'id',
 		});
 		const navigation = new GridNavigationController<TestRow>({});
 		store.registerFeature(navigation);
@@ -222,7 +243,6 @@ describe('React Bindings hooks and components', () => {
 	it('should commit the current changes on arrow navigation from the cell when editing', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
-			rowIdField: 'id',
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
 			rows: [
@@ -230,7 +250,6 @@ describe('React Bindings hooks and components', () => {
 				{ id: '2', name: 'Original Two' },
 			],
 			columns: store.getState().columns,
-			rowIdField: 'id',
 		});
 		const navigation = new GridNavigationController<TestRow>({});
 		store.registerFeature(navigation);
@@ -269,12 +288,10 @@ describe('React Bindings hooks and components', () => {
 	it('should dispose navigation controller event listeners on unmount', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
-			rowIdField: 'id',
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
 			rows: [{ id: '1', name: 'Cell Content' }],
 			columns: store.getState().columns,
-			rowIdField: 'id',
 		});
 		const onCellValueChanged = vi.fn();
 
@@ -313,12 +330,10 @@ describe('React Bindings hooks and components', () => {
 					valueGetter: ({ row }) => `$${row.price * row.qty}`,
 				},
 			],
-			rowIdField: 'id',
 		});
 		const controller = new ClientRowModelController<RecipeRow>(store, {
 			rows: [{ id: 'cake', price: 10, qty: 2 }],
 			columns: store.getState().columns,
-			rowIdField: 'id',
 		});
 
 		const navigation = new GridNavigationController<RecipeRow>({});
@@ -355,7 +370,6 @@ describe('React Bindings hooks and components', () => {
 
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
-			rowIdField: 'id',
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
 			rows: [
@@ -364,7 +378,6 @@ describe('React Bindings hooks and components', () => {
 				{ id: '3', name: 'Row 3' },
 			],
 			columns: store.getState().columns,
-			rowIdField: 'id',
 		});
 		const navigation = new GridNavigationController<TestRow>({
 			onCellValueChanged: (rowId, colField, val) => {
@@ -420,6 +433,47 @@ describe('React Bindings hooks and components', () => {
 		// Verify no virtual rows re-rendered!
 		expect(virtualRowRenderCount).toBe(3);
 
+		controller.dispose();
+	});
+
+	it('should compute grid dimensions, scroll tracking, and pinned lanes via useGridDimensions', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'age', header: 'Age', width: 80 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Row 1' },
+				{ id: '2', name: 'Row 2' },
+				{ id: '3', name: 'Row 3' },
+			],
+			columns: store.getState().columns,
+		});
+		const navigation = new GridNavigationController<TestRow>({});
+		store.registerFeature(navigation);
+
+		// Set viewport size manually on viewportController to simulate visible viewport bounds
+		store.viewportController.setViewportSize(200, 100);
+
+		render(
+			<GridProvider store={store}>
+				<DimensionsInspector />
+			</GridProvider>
+		);
+
+		// With pinLeftColumns=1, pinRightColumns=1, and 3 total columns (width 50, 100, 80):
+		// Left pinned width: col 0 (width 50) => 50
+		// Right pinned width: col 2 (width 80) => 80
+		// Center column: col 1 (width 100)
+		expect(screen.getByTestId('left-pinned-width').textContent).toBe('50');
+		expect(screen.getByTestId('right-pinned-width').textContent).toBe('80');
+		expect(screen.getByTestId('left-cols-count').textContent).toBe('1');
+		expect(screen.getByTestId('right-cols-count').textContent).toBe('1');
+
+		// Clean up
 		controller.dispose();
 	});
 });

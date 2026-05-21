@@ -21,7 +21,6 @@ export type FilterModel = Record<string, FilterModelItem | unknown>;
 export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
 	columns: Array<ColumnDef<TData>>;
-	rowIdField?: keyof TData & string;
 }
 
 function getFilterItemValue(item: FilterModelItem | unknown): { operator: FilterOperator; filter: unknown } {
@@ -133,7 +132,6 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		// Set base columns and config in store
 		this.store.setState({
 			columns: options.columns,
-			rowIdField: options.rowIdField ?? ('id' as keyof TData & string),
 		});
 
 		this.store.registerRowModel(this);
@@ -151,11 +149,10 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	}
 
 	public setRows(rows: TData[]): void {
-		const rowIdField = this.store.getState().rowIdField;
 		const nextNodeMap = new Map<string, RowNode<TData>>();
 
 		this.allNodes = rows.map((row) => {
-			const id = String(row[rowIdField]);
+			const id = this.store.getRowId(row);
 			let node = this.nodeMap.get(id);
 			if (node) {
 				node.data = row;
@@ -180,7 +177,6 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			return;
 		}
 
-		const rowIdField = this.store.getState().rowIdField;
 		const changedNodes: RowNode<TData>[] = [];
 		const changedFieldsByRow = new Map<string, Set<string>>();
 
@@ -190,7 +186,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			if (!nextRow) continue;
 
 			// Verify that the row ID is the same
-			const nextId = String(nextRow[rowIdField]);
+			const nextId = this.store.getRowId(nextRow);
 			if (node.id !== nextId) {
 				// Structural mismatch of row IDs, fallback to full setRows
 				this.setRows(nextRows);
@@ -306,7 +302,6 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		this.activeNodes = visible.map((v) => v.node);
 
-		const rowIdField = state.rowIdField;
 		this.rowIdMap.clear();
 
 		let currentTop = 0;

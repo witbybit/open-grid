@@ -10,6 +10,7 @@ import {
 	ColumnDef,
 	CellEditorProps,
 	CellRendererProps,
+	ServerRowModelController,
 } from '@open-grid/core';
 
 // Create Grid Context
@@ -198,6 +199,13 @@ export interface UseGridCellPropsOptions<TRowData = unknown> {
 	focusedClassName?: string;
 	selectedClassName?: string;
 	api?: GridApi<TRowData>;
+
+	// Opt-out options for custom visualization behaviors
+	disableFocusSync?: boolean;
+	disableMouseDown?: boolean;
+	disableMouseEnter?: boolean;
+	disableDoubleClick?: boolean;
+	disableClick?: boolean;
 }
 
 export interface UseGridCellPropsResult<TRowData = unknown> {
@@ -206,6 +214,7 @@ export interface UseGridCellPropsResult<TRowData = unknown> {
 	isFocused: boolean;
 	isSelected: boolean;
 	isEditing: boolean;
+	isLoading: boolean;
 	api: GridApi<TRowData>;
 	cellProps: {
 		ref: React.RefObject<HTMLDivElement>;
@@ -233,6 +242,11 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 		focusedClassName = 'bg-slate-900 border-2 border-purple-500 z-10',
 		selectedClassName = 'bg-purple-500/10',
 		api: propApi,
+		disableFocusSync = false,
+		disableMouseDown = false,
+		disableMouseEnter = false,
+		disableDoubleClick = false,
+		disableClick = false,
 	} = options;
 
 	const localRef = useRef<HTMLDivElement>(null);
@@ -245,7 +259,7 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 	}
 
 	const prevSnapshotRef = useRef<{
-		value: unknown;
+		cellState: CellState;
 		isFocused: boolean;
 		isSelected: boolean;
 		isEditing: boolean;
@@ -274,7 +288,7 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 
 	const getSnapshot = useCallback(() => {
 		const state = api.getState();
-		const value = api.getCellValue(rowId, colField);
+		const cellState = api.getCellState(rowId, colField);
 		const isFocused = state.focusedCell?.rowId === rowId && state.focusedCell?.colField === colField;
 
 		let isSelected = false;
@@ -294,12 +308,13 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 		const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === colField;
 		const colWidth = state.columnWidths[colField] ?? 100;
 
-		const nextSnapshot = { value, isFocused, isSelected, isEditing, colWidth };
+		const nextSnapshot = { cellState, isFocused, isSelected, isEditing, colWidth };
 
 		// Ref-based shallow equality memoization
 		if (
 			prevSnapshotRef.current &&
-			prevSnapshotRef.current.value === value &&
+			prevSnapshotRef.current.cellState.value === cellState.value &&
+			prevSnapshotRef.current.cellState.computedValue === cellState.computedValue &&
 			prevSnapshotRef.current.isFocused === isFocused &&
 			prevSnapshotRef.current.isSelected === isSelected &&
 			prevSnapshotRef.current.isEditing === isEditing &&
@@ -313,7 +328,7 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 	}, [api, rowId, colField]);
 
 	const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-	const { value: cellValue, isFocused, isSelected, isEditing, colWidth } = snapshot;
+	const { cellState, isFocused, isSelected, isEditing, colWidth } = snapshot;
 
 	const navigation = propNavigation || api.getFeature<GridNavigationController<TRowData>>('navigation');
 	if (!navigation) {
@@ -322,38 +337,43 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 
 	// Focus synchronization effect
 	useEffect(() => {
+		if (disableFocusSync) return;
 		if (isFocused && !isEditing) {
 			const gridContainer = cellRef.current?.closest('[tabindex]');
 			if (document.activeElement === document.body || (gridContainer && gridContainer.contains(document.activeElement))) {
 				cellRef.current?.focus();
 			}
 		}
-	}, [isFocused, isEditing, cellRef]);
+	}, [isFocused, isEditing, cellRef, disableFocusSync]);
 
 	const onMouseDown = useCallback(
 		(e: React.MouseEvent) => {
+			if (disableMouseDown) return;
 			if (isEditing) return;
 			cellRef.current?.focus();
 			navigation.handleMouseDown(rowId, colField, e.nativeEvent);
 		},
-		[rowId, colField, navigation, isEditing, cellRef]
+		[rowId, colField, navigation, isEditing, cellRef, disableMouseDown]
 	);
 
 	const onMouseEnter = useCallback(() => {
+		if (disableMouseEnter) return;
 		navigation.handleMouseEnter(rowId, colField);
-	}, [rowId, colField, navigation]);
+	}, [rowId, colField, navigation, disableMouseEnter]);
 
 	const onDoubleClick = useCallback(() => {
+		if (disableDoubleClick) return;
 		if (isEditing) return;
 		navigation.setCellEditing(rowId, colField, true);
-	}, [rowId, colField, navigation, isEditing]);
+	}, [rowId, colField, navigation, isEditing, disableDoubleClick]);
 
 	const onClick = useCallback(
 		(e: React.MouseEvent) => {
+			if (disableClick) return;
 			if (isEditing) return;
 			navigation.handleClick(rowId, colField, e.nativeEvent);
 		},
-		[rowId, colField, navigation, isEditing]
+		[rowId, colField, navigation, isEditing, disableClick]
 	);
 
 	const combinedClassName = useMemo(() => {
@@ -366,20 +386,13 @@ export function useGridCellProps<TRowData = unknown>(options: UseGridCellPropsOp
 		return classes.trim();
 	}, [isFocused, isSelected, className, focusedClassName, selectedClassName]);
 
-	const cellState = useMemo<CellState>(() => {
-		return {
-			value: cellValue,
-			computedValue: cellValue,
-			isEditing,
-		};
-	}, [cellValue, isEditing]);
-
 	return {
 		ref: cellRef,
 		cellState,
 		isFocused,
 		isSelected,
 		isEditing,
+		isLoading: api.isRowLoading(rowId),
 		api,
 		cellProps: {
 			ref: cellRef,
@@ -402,6 +415,7 @@ export interface CellProps<TRowData = unknown> {
 	className?: string;
 	focusedClassName?: string;
 	selectedClassName?: string;
+	isLoading?: boolean;
 	renderValue?: (value: unknown, computedValue: unknown) => React.ReactNode;
 }
 
@@ -411,7 +425,15 @@ export interface CellProps<TRowData = unknown> {
  */
 const CellComponent = <TRowData,>(props: CellProps<TRowData>) => {
 	const { rowId, colField, renderValue } = props;
-	const { cellProps, cellState, isEditing, api } = useGridCellProps<TRowData>(props);
+	const { cellProps, cellState, isEditing, api, isLoading } = useGridCellProps<TRowData>(props);
+
+	if (isLoading) {
+		return (
+			<div className='flex items-center px-3 h-full border-r border-slate-800 text-sm select-none relative transition-colors duration-75 outline-none bg-slate-950 text-slate-300 w-full'>
+				<div className='h-3 w-4/5 bg-slate-800/40 rounded animate-pulse' />
+			</div>
+		);
+	}
 
 	// Tiny, fast, isolated typing state
 	const [localValue, setLocalValue] = useState<unknown>(cellState.value);
@@ -550,58 +572,332 @@ export const Cell = React.memo(CellComponent) as (<TRowData>(props: CellProps<TR
 Cell.displayName = 'Cell';
 
 // ============================================================================
-// Headless Grid Dimensions Hook
+// Unified & Modular Headless Grid Dimensions Hook
 // ============================================================================
 
-export interface UseGridDimensionsResult {
-	/** Ref for the scrollable container (body) */
-	containerRef: React.RefObject<HTMLDivElement>;
-	/** Ref for the header container */
+export interface UseGridDimensionsOptions<TRowData = any> {
+	// Pinned configuration (0 = disabled)
+	pinLeftColumns?: number;
+	pinRightColumns?: number;
+	pinTopRows?: number;
+	pinBottomRows?: number;
+
+	// Server-side loader controller (optional)
+	serverController?: ServerRowModelController<TRowData>;
+
+	// Feature opt-in / opt-out controls
+	enableNavigation?: boolean; // Default true
+	navigationOptions?: {
+		editTrigger?: 'singleClick' | 'doubleClick';
+		arrowKeyNavigationEdit?: boolean;
+		onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
+	};
+}
+
+export interface UseGridDimensionsResult<TRowData = unknown> {
+	viewportRef: React.RefObject<HTMLDivElement>;
+	scrollerRef: React.RefObject<HTMLDivElement>;
+	containerRef: React.RefObject<HTMLDivElement>; // Legacy alias to scrollerRef
 	headerRef: React.RefObject<HTMLDivElement>;
-	/** Total width of all columns */
 	totalWidth: number;
-	/** All columns */
-	columns: ColumnDef<any>[];
+	totalHeight: number;
+	leftPinnedWidth: number;
+	rightPinnedWidth: number;
+	columns: ColumnDef<TRowData>[];
+	scrollState: { scrollTop: number; scrollLeft: number };
+	dimensions: { width: number; height: number };
+	leftPinnedCols: Array<{ index: number; field: string; header: string; left: number; width: number }>;
+	rightPinnedCols: Array<{ index: number; field: string; header: string; left: number; width: number }>;
+	centerCols: Array<{ index: number; field: string; header: string; left: number; width: number }>;
+	visibleRows: Array<{ index: number; id: string; top: number; height: number }>;
+	api: GridApi<TRowData>;
+	navigation: GridNavigationController<TRowData>;
+	handleHeaderResizeMouseDown: (colField: string, currentWidth: number, e: React.MouseEvent) => void;
 }
 
 /**
- * Headless hook that provides grid dimensions and refs.
- * Automatically calculates total width and syncs header scroll.
- * You handle virtualization however you want.
+ * Headless hook coordinating grid size, scroll synchronization, pinned lanes, overscan queries,
+ * header resizes, and arrow navigation key hooks, fully supporting custom custom styles.
  */
-export function useGridDimensions<TRowData = unknown>(): UseGridDimensionsResult {
-	const containerRef = useRef<HTMLDivElement>(null);
+export function useGridDimensions<TRowData = unknown>(options: UseGridDimensionsOptions<TRowData> = {}): UseGridDimensionsResult<TRowData> {
+	const {
+		pinLeftColumns = 0,
+		pinRightColumns = 0,
+		pinTopRows = 0,
+		pinBottomRows = 0,
+		serverController,
+		enableNavigation = true,
+		navigationOptions = {},
+	} = options;
+
+	const viewportRef = useRef<HTMLDivElement>(null);
+	const scrollerRef = useRef<HTMLDivElement>(null);
+	const containerRef = scrollerRef; // Legacy alias to scrollerRef
 	const headerRef = useRef<HTMLDivElement>(null);
 	const api = useGridApi<TRowData>();
+	const store = useGridStore<TRowData>();
 
-	const columns = useGridKeySelector('dataVersion', (state) => state.columns);
+	const [scrollState, setScrollState] = useState({ scrollTop: 0, scrollLeft: 0 });
+	const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
-	// Automatically calculate total width from columns
-	const totalWidth = useGridKeySelector('columnWidths', (state) => {
-		return columns.reduce((sum, col) => {
-			const colWidth = state.columnWidths[col.field] ?? col.width ?? 100;
-			return sum + colWidth;
-		}, 0);
-	});
 
-	// Automatically sync horizontal scroll between header and body
+
+	// Sync pin configuration with ViewportController
 	useEffect(() => {
-		const container = containerRef.current;
-		const header = headerRef.current;
-		if (!container || !header) return;
+		store.viewportController.pinLeftColumns = pinLeftColumns;
+		store.viewportController.pinRightColumns = pinRightColumns;
+		store.viewportController.pinTopRows = pinTopRows;
+		store.viewportController.pinBottomRows = pinBottomRows;
+	}, [store, pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
 
-		const handleScroll = () => {
-			header.scrollLeft = container.scrollLeft;
+	// Setup ResizeObserver to track container viewport size
+	useEffect(() => {
+		const target = viewportRef.current || scrollerRef.current;
+		if (!target) return;
+
+		const rect = target.getBoundingClientRect();
+		store.viewportController.setViewportSize(rect.width, rect.height);
+		setDimensions({ width: rect.width, height: rect.height });
+
+		if (typeof ResizeObserver === 'undefined') return;
+
+		const observer = new ResizeObserver((entries) => {
+			if (!entries || entries.length === 0) return;
+			const { width, height } = entries[0].contentRect;
+			store.viewportController.setViewportSize(width, height);
+			setDimensions({ width, height });
+		});
+
+		observer.observe(target);
+		return () => observer.disconnect();
+	}, [store]);
+
+	// Handle scroll events synchronously to prevent blank pages on scroll
+	const handleScroll = useCallback(() => {
+		const scroller = scrollerRef.current;
+		if (!scroller) return;
+
+		const sTop = scroller.scrollTop;
+		const sLeft = scroller.scrollLeft;
+
+		const changed = store.viewportController.setScrollPosition(sTop, sLeft);
+		if (changed) {
+			setScrollState({ scrollTop: sTop, scrollLeft: sLeft });
+		}
+	}, [store]);
+
+	// Listen to scroll events on scrollerRef
+	useEffect(() => {
+		const scroller = scrollerRef.current;
+		if (!scroller) return;
+
+		scroller.addEventListener('scroll', handleScroll, { passive: true });
+		return () => {
+			scroller.removeEventListener('scroll', handleScroll);
+		};
+	}, [handleScroll]);
+
+	// Sync horizontal scroll to headerRef
+	useEffect(() => {
+		const scroller = scrollerRef.current;
+		const header = headerRef.current;
+		if (!scroller || !header) return;
+
+		const syncHeader = () => {
+			header.scrollLeft = scroller.scrollLeft;
 		};
 
-		container.addEventListener('scroll', handleScroll);
-		return () => container.removeEventListener('scroll', handleScroll);
+		scroller.addEventListener('scroll', syncHeader, { passive: true });
+		return () => scroller.removeEventListener('scroll', syncHeader);
 	}, []);
 
+	// Setup navigation controller (opt-in / opt-out)
+	const navigation = useGridNavigationController<TRowData>({
+		onCellValueChanged: (rowId, colField, val) => {
+			if (enableNavigation) {
+				navigationOptions.onCellValueChanged?.(rowId, colField, val);
+			}
+		},
+		editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
+		arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
+	});
+
+	// Keyboard and mouse navigation listeners (opt-in / opt-out)
+	useEffect(() => {
+		if (!enableNavigation) return;
+
+		const handleGlobalKeyDown = (e: KeyboardEvent) => {
+			const activeEl = document.activeElement;
+			const isInside = containerRef.current?.contains(activeEl) || activeEl === document.body;
+			if (isInside) {
+				navigation.handleKeyDown(e);
+			}
+		};
+
+		window.addEventListener('keydown', handleGlobalKeyDown);
+		window.addEventListener('mouseup', navigation.handleMouseUp);
+		return () => {
+			window.removeEventListener('keydown', handleGlobalKeyDown);
+			window.removeEventListener('mouseup', navigation.handleMouseUp);
+		};
+	}, [navigation, enableNavigation]);
+
+	// Subscribe to store key changes so we re-render on grid structural updates
+	const columns = useGridKeySelector<ColumnDef<TRowData>[], TRowData>('columns', (state) => state.columns as ColumnDef<TRowData>[]);
+	const dataVersion = useGridKeySelector<number, TRowData>('dataVersion', (state) => state.dataVersion);
+	const columnWidths = useGridKeySelector<Record<string, number>, TRowData>('columnWidths', (state) => state.columnWidths);
+	const rowHeights = useGridKeySelector<Record<string, number>, TRowData>('rowHeights', (state) => state.rowHeights);
+
+	const rowModel = store.getRowModel();
+	const rowCount = rowModel ? rowModel.getRowCount() : 0;
+	const colCount = columns.length;
+
+	// Calculate total sizes
+	const totalWidth = useMemo(() => store.columnController.getTotalWidth(), [columns, columnWidths, dataVersion, store]);
+	const totalHeight = useMemo(() => store.rowController.getTotalHeight(), [rowCount, rowHeights, dataVersion, store]);
+
+	// Calculate width occupied by pinned columns
+	const leftPinnedWidth = useMemo(() => {
+		let w = 0;
+		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
+			w += store.columnController.getColWidth(i);
+		}
+		return w;
+	}, [columns, columnWidths, pinLeftColumns, colCount, dataVersion, store]);
+
+	const rightPinnedWidth = useMemo(() => {
+		let w = 0;
+		for (let i = 0; i < pinRightColumns && i < colCount; i++) {
+			w += store.columnController.getColWidth(colCount - 1 - i);
+		}
+		return w;
+	}, [columns, columnWidths, pinRightColumns, colCount, dataVersion, store]);
+
+	// Compute visible index ranges from ViewportController
+	const rowRange = store.viewportController.getVisibleRowRange(store.rowController);
+	const colRange = store.viewportController.getVisibleColumnRange(store.columnController);
+
+	// Generate Pinned Left Columns
+	const leftPinnedCols = useMemo(() => {
+		const cols = [];
+		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
+			cols.push({
+				index: i,
+				field: columns[i].field,
+				header: columns[i].header,
+				left: store.columnController.getColLeft(i),
+				width: store.columnController.getColWidth(i),
+			});
+		}
+		return cols;
+	}, [columns, columnWidths, pinLeftColumns, colCount, dataVersion, store]);
+
+	// Generate Pinned Right Columns
+	const rightPinnedCols = useMemo(() => {
+		const cols = [];
+		const startIdx = colCount - pinRightColumns;
+		let cumulativeLeft = 0;
+		for (let i = startIdx; i < colCount && i >= 0; i++) {
+			const width = store.columnController.getColWidth(i);
+			cols.push({
+				index: i,
+				field: columns[i].field,
+				header: columns[i].header,
+				left: cumulativeLeft,
+				width,
+			});
+			cumulativeLeft += width;
+		}
+		return cols;
+	}, [columns, columnWidths, pinRightColumns, colCount, dataVersion, store]);
+
+	// Generate scrollable center columns inside center range (excluding left/right pinned)
+	const centerCols = useMemo(() => {
+		const cols = [];
+		const start = Math.max(pinLeftColumns, colRange.startIdx);
+		const end = Math.min(colCount - 1 - pinRightColumns, colRange.endIdx);
+		for (let i = start; i <= end && i < colCount; i++) {
+			if (i < 0) continue;
+			cols.push({
+				index: i,
+				field: columns[i].field,
+				header: columns[i].header,
+				left: store.columnController.getColLeft(i),
+				width: store.columnController.getColWidth(i),
+			});
+		}
+		return cols;
+	}, [columns, columnWidths, colRange.startIdx, colRange.endIdx, pinLeftColumns, pinRightColumns, colCount, dataVersion, store]);
+
+	// Generate visible rows inside row range
+	const visibleRows = useMemo(() => {
+		const rows = [];
+		if (rowModel) {
+			for (let i = rowRange.startIdx; i <= rowRange.endIdx && i < rowCount; i++) {
+				const row = rowModel.getRow(i);
+				const id = row ? store.getRowId(row) : `__loading_${i}__`;
+				rows.push({
+					index: i,
+					id,
+					top: store.rowController.getRowTop(i),
+					height: store.rowController.getRowHeight(i),
+				});
+			}
+		}
+		return rows;
+	}, [rowModel, rowHeights, rowRange.startIdx, rowRange.endIdx, rowCount, store, dataVersion]);
+
+	// Notify server block loader on scrolling visible row indexes
+	useEffect(() => {
+		if (serverController && visibleRows.length > 0) {
+			serverController.loadVisibleBlocks(visibleRows.map((row) => row.index));
+		}
+	}, [visibleRows, serverController]);
+
+	// Handle column resizing mouse down
+	const handleHeaderResizeMouseDown = useCallback(
+		(colField: string, currentWidth: number, e: React.MouseEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const startX = e.clientX;
+			const startWidth = currentWidth;
+
+			const handleMouseMove = (moveEvent: MouseEvent) => {
+				const deltaX = moveEvent.clientX - startX;
+				const nextWidth = Math.max(60, startWidth + deltaX);
+				store.setColumnWidth(colField, nextWidth);
+			};
+
+			const handleMouseUp = () => {
+				document.removeEventListener('mousemove', handleMouseMove);
+				document.removeEventListener('mouseup', handleMouseUp);
+			};
+
+			document.addEventListener('mousemove', handleMouseMove);
+			document.addEventListener('mouseup', handleMouseUp);
+		},
+		[store]
+	);
+
 	return {
+		viewportRef,
+		scrollerRef,
 		containerRef,
 		headerRef,
 		totalWidth,
+		totalHeight,
+		leftPinnedWidth,
+		rightPinnedWidth,
 		columns,
+		scrollState,
+		dimensions,
+		leftPinnedCols,
+		rightPinnedCols,
+		centerCols,
+		visibleRows,
+		api,
+		navigation,
+		handleHeaderResizeMouseDown,
 	};
 }

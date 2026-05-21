@@ -364,7 +364,15 @@ interface CellProps {
 	navigation: GridNavigationController<any>;
 }
 
-const Cell = React.memo(({ rowId, colField, api, navigation }: CellProps) => {
+export const Cell = React.memo(({ rowId, colField, api, navigation }: CellProps) => {
+	if (api.isRowLoading(rowId)) {
+		return (
+			<div className='flex items-center w-full h-full px-3 bg-slate-950/20 select-none'>
+				<div className='h-3 w-4/5 bg-slate-800/40 rounded animate-pulse' />
+			</div>
+		);
+	}
+
 	const renderCount = GlobalRenderTracker.incrementCellRender(rowId, colField);
 
 	const flashKey = `${rowId}:${colField}-${renderCount}`;
