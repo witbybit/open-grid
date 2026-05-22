@@ -280,10 +280,12 @@ export class GridEngine<TRowData = unknown> {
 	public batch = (callback: () => void): void => {
 		const prev = this._batchedUpdates;
 		this._batchedUpdates = true;
+		this.stateManager.startTransaction();
 		try {
 			callback();
 		} finally {
 			this._batchedUpdates = prev;
+			this.stateManager.endTransaction();
 			if (this.cellUpdateBatch.size > 0) {
 				this.flushCellUpdatesSync();
 			}

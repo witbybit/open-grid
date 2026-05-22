@@ -35,6 +35,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	// Active tracking maps
 	private activeRows = new Map<number, PooledRow>(); // rowIndex -> PooledRow
 	private unsubscribeStore: (() => void) | null = null;
+	private unsubscribeCellValueChanged: (() => void) | null = null;
 	private pendingPaint = false;
 
 	// Track current ranges to prevent redundant renders
@@ -42,7 +43,15 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private currentColRange: ViewportRange = { startIdx: -1, endIdx: -1 };
 
 	// Micro-bridge for React custom renderers/editors
-	public onMountReactPortal?: (cellKey: string, container: HTMLElement, value: unknown, node: RowNode, col: ColumnDef, isEditing: boolean, isLoading: boolean) => void;
+	public onMountReactPortal?: (
+		cellKey: string,
+		container: HTMLElement,
+		value: unknown,
+		node: RowNode,
+		col: ColumnDef,
+		isEditing: boolean,
+		isLoading: boolean
+	) => void;
 	public onUnmountReactPortal?: (cellKey: string) => void;
 
 	constructor(engine: GridEngine<TRowData>) {
@@ -69,7 +78,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		// Create spacer representing virtual height/width
 		this.scrollSpacer = document.createElement('div');
 		this.scrollSpacer.className = 'og-scroll-spacer';
-		
+
 		// Create GPU composite layers
 		this.centerLayer = document.createElement('div');
 		this.centerLayer.className = 'og-layer-center';
@@ -124,6 +133,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			this.schedulePaint();
 		});
 
+		// Subscribe to cell value change events to trigger repaints immediately
+		this.unsubscribeCellValueChanged = this.engine.eventBus.addEventListener('cellValueChanged', () => {
+			this.schedulePaint();
+		});
+
 		// Run first layout calculation and repaint
 		this.fullPaint();
 	}
@@ -135,6 +149,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		if (this.unsubscribeStore) {
 			this.unsubscribeStore();
 			this.unsubscribeStore = null;
+		}
+
+		if (this.unsubscribeCellValueChanged) {
+			this.unsubscribeCellValueChanged();
+			this.unsubscribeCellValueChanged = null;
 		}
 
 		this.scrollEngine.unbind();
@@ -219,18 +238,20 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		if (this.centerLayer) {
 			const viewportWidth = this.engine.viewport.viewportWidth;
 			const targetWidth = `${Math.max(totalWidth, viewportWidth)}px`;
-			
+
 			this.centerLayer.style.width = targetWidth;
 			this.centerLayer.style.height = `${totalHeight}px`;
-			
+
 			if (this.headerLayer) this.headerLayer.style.width = targetWidth;
-			
-			const pinLeftWidth = this.engine.viewport.pinLeftColumns > 0 ? this.engine.geometry.colLefts[this.engine.viewport.pinLeftColumns] || 0 : 0;
+
+			const pinLeftWidth =
+				this.engine.viewport.pinLeftColumns > 0 ? this.engine.geometry.colLefts[this.engine.viewport.pinLeftColumns] || 0 : 0;
 			if (this.leftLayer) this.leftLayer.style.width = `${pinLeftWidth}px`;
 			if (this.headerLeftLayer) this.headerLeftLayer.style.width = `${pinLeftWidth}px`;
-			
+
 			const firstRightPinColIdx = colCount - this.engine.viewport.pinRightColumns;
-			const pinRightWidth = this.engine.viewport.pinRightColumns > 0 ? totalWidth - (this.engine.geometry.colLefts[firstRightPinColIdx] || totalWidth) : 0;
+			const pinRightWidth =
+				this.engine.viewport.pinRightColumns > 0 ? totalWidth - (this.engine.geometry.colLefts[firstRightPinColIdx] || totalWidth) : 0;
 			if (this.rightLayer) this.rightLayer.style.width = `${pinRightWidth}px`;
 			if (this.headerRightLayer) this.headerRightLayer.style.width = `${pinRightWidth}px`;
 		}
@@ -317,7 +338,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				const rowEl = this.rowPool.acquire();
 				const leftEl = this.rowPool.acquire();
 				const rightEl = this.rowPool.acquire();
-				
+
 				pooledRow = {
 					element: rowEl,
 					leftElement: leftEl,
@@ -353,7 +374,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			pooledRow.element.style.height = `${rowHeight}px`;
 			pooledRow.element.dataset.rowIndex = String(r);
 			pooledRow.element.dataset.rowId = node.id;
-			
+
 			if (pooledRow.leftElement) {
 				pooledRow.leftElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
 				pooledRow.leftElement.style.height = `${rowHeight}px`;
@@ -518,9 +539,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			const cellValue = this.engine.data.getCellValue(node.id, col.field);
 			const cellKey = createCellKey(node.id, col.field);
 
-			const isEditing =
-				state.activeEdit?.rowId === node.id &&
-				state.activeEdit?.colField === col.field;
+			const isEditing = state.activeEdit?.rowId === node.id && state.activeEdit?.colField === col.field;
 
 			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously)
 			if ((col.cellRenderer || isEditing) && !isLoading) {
@@ -675,7 +694,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			if (!col) return;
 
 			const headerCell = document.createElement('div');
-			
+
 			let className = 'og-header-cell';
 			let cellLeft = this.engine.geometry.colLefts[c];
 			const cellWidth = this.engine.geometry.colWidths[c];
@@ -697,7 +716,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			headerCell.className = className;
 			headerCell.style.transform = `translate3d(${cellLeft}px, 0, 0)`;
 			headerCell.style.width = `${cellWidth}px`;
-			
+
 			// Use span or inner container so text does not overlap the resize handle
 			const textSpan = document.createElement('span');
 			textSpan.textContent = col.header || col.field;
@@ -712,7 +731,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			// Premium resize handle
 			const resizeHandle = document.createElement('div');
 			resizeHandle.className = 'og-header-resize-handle';
-			
+
 			resizeHandle.addEventListener('mousedown', (e: MouseEvent) => {
 				e.preventDefault();
 				e.stopPropagation();
@@ -724,7 +743,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				const onMouseMove = (moveEvent: MouseEvent) => {
 					const deltaX = moveEvent.clientX - startX;
 					currentWidth = Math.max(30, startWidth + deltaX);
-					
+
 					// Drag real-time update inside geometry
 					this.engine.setColumnWidth(col.field, currentWidth);
 				};
@@ -839,7 +858,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			} else if (c >= colCount - pinRightColumns) {
 				const firstRightPinColIdx = colCount - pinRightColumns;
 				const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
-				const left = (viewportWidth - pinnedRightWidth) + (cellLeft - firstRightPinColLeft);
+				const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
 				return { left, right: left + cellWidth };
 			} else {
 				const unclippedLeft = cellLeft - scrollLeft;
@@ -1138,6 +1157,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
       .og-cell-focused {
         outline: 2px solid var(--og-focus-ring);
         outline-offset: -2px;
+        background-color: var(--og-selection-bg);
         z-index: 20;
       }
 
@@ -1178,6 +1198,48 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
       .og-header-resize-handle:hover {
         background-color: var(--og-focus-ring);
+      }
+
+      /* Premium Glassmorphic Context Menu styles */
+      .og-context-menu {
+        position: fixed;
+        z-index: 1000;
+        background: rgba(15, 23, 42, 0.88);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+        padding: 6px 0;
+        min-width: 190px;
+        font-family: var(--og-font-family), inherit;
+        color: #f1f5f9;
+        opacity: 0;
+        transform: scale(0.95);
+        transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: none;
+      }
+      .og-context-menu.og-visible {
+        opacity: 1;
+        transform: scale(1);
+        pointer-events: auto;
+      }
+      .og-context-menu-item {
+        display: flex;
+        align-items: center;
+        padding: 8px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background-color 0.12s ease, color 0.12s ease;
+      }
+      .og-context-menu-item:hover {
+        background-color: var(--og-focus-ring, #3b82f6);
+        color: #ffffff;
+      }
+      .og-context-menu-divider {
+        height: 1px;
+        background-color: rgba(255, 255, 255, 0.08);
+        margin: 4px 0;
       }
     `;
 

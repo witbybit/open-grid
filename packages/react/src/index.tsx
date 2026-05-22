@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useSyncExternalStore, useRef, useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { GridStore, GridState, GridNavigationController, GridNavigationOptions, GridApi, RenderEngine } from '@open-grid/core';
+import { GridStore, GridState, GridNavigationController, GridNavigationOptions, GridApi, RenderEngine, GridContextMenuPlugin, GridContextMenuOptions } from '@open-grid/core';
 
 // Create Grid Context
 const GridContext = createContext<GridStore<unknown> | null>(null);
@@ -252,6 +252,8 @@ export interface OpenGridProps<TRowData = unknown> {
 	pinTopRows?: number;
 	pinBottomRows?: number;
 	enableNavigation?: boolean;
+	enableContextMenu?: boolean;
+	contextMenuOptions?: GridContextMenuOptions<TRowData>;
 	navigationOptions?: {
 		editTrigger?: 'singleClick' | 'doubleClick';
 		arrowKeyNavigationEdit?: boolean;
@@ -281,6 +283,8 @@ function OpenGridInner<TRowData = unknown>({
 	pinTopRows = 0,
 	pinBottomRows = 0,
 	enableNavigation = true,
+	enableContextMenu = true,
+	contextMenuOptions,
 	navigationOptions = {},
 }: OpenGridProps<TRowData> & { store: GridStore<TRowData> }) {
 	const [portals, setPortals] = useState<Map<string, PortalData>>(new Map());
@@ -359,6 +363,28 @@ function OpenGridInner<TRowData = unknown>({
 			renderEngineRef.current = null;
 		};
 	}, [store, mountPortal, unmountPortal]);
+
+	// Context Menu plugin controller
+	const contextMenu = useMemo(() => {
+		if (!enableContextMenu) return null;
+		const plugin = new GridContextMenuPlugin<TRowData>(contextMenuOptions);
+		store.registerPlugin(plugin);
+		return plugin;
+	}, [store, enableContextMenu]);
+
+	useEffect(() => {
+		if (contextMenu && contextMenuOptions) {
+			contextMenu.setOptions(contextMenuOptions);
+		}
+	}, [contextMenu, contextMenuOptions]);
+
+	useEffect(() => {
+		return () => {
+			if (contextMenu) {
+				contextMenu.onDestroy();
+			}
+		};
+	}, [contextMenu]);
 
 	// Navigation controller
 	const navigation = useGridNavigationController<TRowData>({
@@ -458,6 +484,23 @@ function OpenGridInner<TRowData = unknown>({
 		[store, navigation]
 	);
 
+	const handleContextMenu = useCallback(
+		(e: MouseEvent) => {
+			if (!enableContextMenu || !contextMenu) return;
+
+			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
+			if (!cellEl) return;
+			const colField = cellEl.dataset.colField;
+			const rowEl = cellEl.closest('.og-row') as HTMLElement;
+			const rowId = rowEl?.dataset.rowId;
+			if (!colField || !rowId) return;
+
+			e.preventDefault();
+			contextMenu.show(rowId, colField, e.clientX, e.clientY);
+		},
+		[enableContextMenu, contextMenu]
+	);
+
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
@@ -466,14 +509,16 @@ function OpenGridInner<TRowData = unknown>({
 		container.addEventListener('mouseover', handleMouseOver);
 		container.addEventListener('click', handleClick);
 		container.addEventListener('dblclick', handleDoubleClick);
+		container.addEventListener('contextmenu', handleContextMenu);
 
 		return () => {
 			container.removeEventListener('mousedown', handleMouseDown);
 			container.removeEventListener('mouseover', handleMouseOver);
 			container.removeEventListener('click', handleClick);
 			container.removeEventListener('dblclick', handleDoubleClick);
+			container.removeEventListener('contextmenu', handleContextMenu);
 		};
-	}, [handleMouseDown, handleMouseOver, handleClick, handleDoubleClick]);
+	}, [handleMouseDown, handleMouseOver, handleClick, handleDoubleClick, handleContextMenu]);
 
 	return (
 		<div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>

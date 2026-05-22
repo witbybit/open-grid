@@ -33,3 +33,6 @@ export * from './renderer/domPool.js';
 export * from './renderer/scrollEngine.js';
 export * from './renderer/IGridRenderer.js';
 export * from './renderer/renderEngine.js';
+
+// Phase 5 Plugins Exports
+export * from './contextMenu.js';
