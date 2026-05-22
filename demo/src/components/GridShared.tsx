@@ -300,34 +300,61 @@ export const PriceBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 // ============================================================================
 
 export interface GridViewProps {
+	store?: GridStore<any>;
+	pinLeftColumns?: number;
+	pinRightColumns?: number;
+	pinTopRows?: number;
+	pinBottomRows?: number;
 	rowHeights?: Record<string, number>;
 	defaultHeight?: number;
 	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	clientController?: ClientRowModelController<any>;
-	serverController?: ServerRowModelController;
+	serverController?: ServerRowModelController<any>;
 	editTrigger?: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit?: boolean;
+	className?: string;
 }
 
 export function GridView({
+	store,
+	pinLeftColumns = 0,
+	pinRightColumns = 0,
+	pinTopRows = 0,
+	pinBottomRows = 0,
 	rowHeights = {},
 	defaultHeight = 38,
 	onCellValueChanged = () => {},
 	editTrigger = 'doubleClick',
 	arrowKeyNavigationEdit = false,
+	className = '',
 }: GridViewProps) {
-	const store = useGridStore<PerformanceRow>();
+	// Resolve activeStore using either prop or React context hook, handling errors gracefully
+	let activeStore: GridStore<any>;
+	try {
+		const contextStore = useGridStore<any>();
+		activeStore = store || contextStore;
+	} catch (e) {
+		if (store) {
+			activeStore = store;
+		} else {
+			throw e;
+		}
+	}
 
 	useEffect(() => {
-		store.setState({
+		activeStore.setState({
 			rowHeights: rowHeights ?? {},
 			defaultRowHeight: defaultHeight ?? 38,
 		});
-	}, [store, rowHeights, defaultHeight]);
+	}, [activeStore, rowHeights, defaultHeight]);
 
 	return (
-		<div className='w-full h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative'>
+		<div className={`w-full h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative ${className}`}>
 			<OpenGrid
+				pinLeftColumns={pinLeftColumns}
+				pinRightColumns={pinRightColumns}
+				pinTopRows={pinTopRows}
+				pinBottomRows={pinBottomRows}
 				enableNavigation={true}
 				navigationOptions={{
 					editTrigger,
