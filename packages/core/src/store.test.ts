@@ -605,3 +605,138 @@ describe('GridStore Scoped Batch Transactions and Properties', () => {
 		controller.dispose();
 	});
 });
+
+describe('GridStore Command Bus and Undo/Redo functionality', () => {
+	it('should support undo and redo for cell value modifications', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		expect(store.canUndo()).toBe(false);
+		expect(store.canRedo()).toBe(false);
+
+		// Act 1: Set value
+		store.setCellValue('1', 'price', 25);
+		expect(store.getCellValue('1', 'price')).toBe(25);
+		expect(store.canUndo()).toBe(true);
+		expect(store.canRedo()).toBe(false);
+
+		// Act 2: Undo
+		store.undo();
+		expect(store.getCellValue('1', 'price')).toBe(10);
+		expect(store.canUndo()).toBe(false);
+		expect(store.canRedo()).toBe(true);
+
+		// Act 3: Redo
+		store.redo();
+		expect(store.getCellValue('1', 'price')).toBe(25);
+		expect(store.canUndo()).toBe(true);
+		expect(store.canRedo()).toBe(false);
+
+		controller.dispose();
+	});
+
+	it('should support undo and redo for column width and row height resizing', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			defaultRowHeight: 40,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		// 1. Column Width Undo/Redo
+		store.setColumnWidth('name', 200);
+		expect(store.getState().columnWidths['name']).toBe(200);
+		expect(store.canUndo()).toBe(true);
+
+		store.undo();
+		expect(store.getState().columnWidths['name']).toBe(100);
+
+		store.redo();
+		expect(store.getState().columnWidths['name']).toBe(200);
+
+		// 2. Row Height Undo/Redo
+		store.setRowHeight('1', 80);
+		expect(store.getState().rowHeights['1']).toBe(80);
+
+		store.undo();
+		expect(store.getState().rowHeights['1']).toBe(40);
+
+		store.redo();
+		expect(store.getState().rowHeights['1']).toBe(80);
+
+		controller.dispose();
+	});
+
+	it('should support undo and redo for sort and filter models', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Banana', price: 10 },
+				{ id: '2', name: 'Apple', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// 1. Sort Model Undo/Redo
+		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+		expect(store.getState().sortModel).toEqual([{ colId: 'name', sort: 'asc' }]);
+
+		store.undo();
+		expect(store.getState().sortModel).toBeNull();
+
+		store.redo();
+		expect(store.getState().sortModel).toEqual([{ colId: 'name', sort: 'asc' }]);
+
+		// 2. Filter Model Undo/Redo
+		store.setFilterModel({ name: { type: 'contains', filter: 'App' } });
+		expect(store.getState().filterModel).toEqual({ name: { type: 'contains', filter: 'App' } });
+
+		store.undo();
+		expect(store.getState().filterModel).toBeNull();
+
+		store.redo();
+		expect(store.getState().filterModel).toEqual({ name: { type: 'contains', filter: 'App' } });
+
+		controller.dispose();
+	});
+
+	it('should enforce the history capacity limit (max 100 entries)', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		// We resize the column 105 times (widths 101 to 205)
+		// The original width is 100.
+		// The 1st action sets it to 101 (reverts to 100).
+		// The 5th action sets it to 105 (reverts to 104).
+		// The 6th action sets it to 106 (reverts to 105).
+		// If capacity is 100, the first 5 actions (which resize to 101, 102, 103, 104, 105) will be evicted from the undo stack.
+		// The oldest remaining entry in the undo stack is the 6th action (resize to 106, undo should revert to 105).
+		// Therefore, if we undo all the way (100 times), the width should end up at 105, NOT 100.
+		for (let i = 1; i <= 105; i++) {
+			store.setColumnWidth('name', 100 + i);
+		}
+
+		expect(store.getState().columnWidths['name']).toBe(205);
+
+		// Undo all the way
+		while (store.canUndo()) {
+			store.undo();
+		}
+
+		// The width should be 105 because the oldest undoable action was setting it to 106 (which reverted to 105)
+		expect(store.getState().columnWidths['name']).toBe(105);
+	});
+});

@@ -17,6 +17,8 @@ export * from './engine/GridEngine.js';
 export * from './engine/GridEngineConfig.js';
 export * from './state/StateManager.js';
 export * from './commands/CommandBus.js';
+export * from './commands/CommandTypes.js';
+export * from './commands/CommandHistory.js';
 export * from './events/EventBus.js';
 export * from './models/DataModel.js';
 export * from './models/ColumnModel.js';

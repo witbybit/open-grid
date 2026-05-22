@@ -254,6 +254,10 @@ export interface GridApi<TRowData = unknown> {
 	unregisterCellSubscription(sub: CellSubscription): void;
 	updateCellSubscription(sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void;
 	flushCellUpdatesSync(): void;
+	undo(): void;
+	redo(): void;
+	canUndo(): boolean;
+	canRedo(): boolean;
 	destroy(): void;
 }
 
@@ -341,7 +345,10 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
-		this.engine.data.setCellValue(rowId, colField, value);
+		this.engine.commandBus.dispatch({
+			type: 'SET_CELL_VALUE',
+			payload: { rowId, colField, value, undoable: true },
+		});
 	};
 
 	public getCellState = (rowId: string, colField: string): CellState => {
@@ -376,27 +383,45 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	};
 
 	public setFocusedCell = (rowId: string | null, colField: string | null): void => {
-		this.engine.setFocusedCell(rowId, colField);
+		this.engine.commandBus.dispatch({
+			type: 'FOCUS_CELL',
+			payload: { rowId, colField },
+		});
 	};
 
 	public setSelectedRange = (start: GridCellPointer | null, end: GridCellPointer | null): void => {
-		this.engine.setSelectedRange(start, end);
+		this.engine.commandBus.dispatch({
+			type: 'SELECT_CELL',
+			payload: { start, end },
+		});
 	};
 
 	public setColumnWidth = (colField: string, width: number): void => {
-		this.engine.setColumnWidth(colField, width);
+		this.engine.commandBus.dispatch({
+			type: 'SET_COLUMN_WIDTH',
+			payload: { colField, width },
+		});
 	};
 
 	public setRowHeight = (rowId: string, height: number): void => {
-		this.engine.setRowHeight(rowId, height);
+		this.engine.commandBus.dispatch({
+			type: 'SET_ROW_HEIGHT',
+			payload: { rowId, height },
+		});
 	};
 
 	public setSortModel = (sortModel: SortModel | null): void => {
-		this.setState({ sortModel });
+		this.engine.commandBus.dispatch({
+			type: 'SET_SORT_MODEL',
+			payload: { sortModel },
+		});
 	};
 
 	public setFilterModel = (filterModel: FilterModel | null): void => {
-		this.setState({ filterModel });
+		this.engine.commandBus.dispatch({
+			type: 'SET_FILTER_MODEL',
+			payload: { filterModel },
+		});
 	};
 
 	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {
@@ -408,18 +433,10 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	};
 
 	public stopEditing = (cancel: boolean = false): void => {
-		const activeEdit = this.state.activeEdit;
-		if (!activeEdit) return;
-
-		const { rowId, colField } = activeEdit;
-
-		this.setState({ activeEdit: null });
-
-		// Trigger selective cell refresh
-		this.engine.notifyCellChange(rowId, colField);
-
-		// Dispatch 'editStopped' event
-		this.dispatchEvent('editStopped', { rowId, colField, cancel });
+		this.engine.commandBus.dispatch({
+			type: 'STOP_EDIT',
+			payload: { cancel },
+		});
 	};
 
 	public startTransaction = (): void => {
@@ -513,6 +530,22 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 
 	public getFeature = <T = unknown>(name: string): T | null => {
 		return (this.features.get(name) as unknown as T) || null;
+	};
+
+	public undo = (): void => {
+		this.engine.undo();
+	};
+
+	public redo = (): void => {
+		this.engine.redo();
+	};
+
+	public canUndo = (): boolean => {
+		return this.engine.commandHistory.canUndo();
+	};
+
+	public canRedo = (): boolean => {
+		return this.engine.commandHistory.canRedo();
 	};
 
 	public destroy = (): void => {

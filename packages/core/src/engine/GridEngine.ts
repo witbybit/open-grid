@@ -1,6 +1,7 @@
 import type { GridState, GridStateUpdater, Listener, RowModel, CellSubscription, GridEventListener, ColumnDef } from '../store.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandBus } from '../commands/CommandBus.js';
+import { CommandHistory } from '../commands/CommandHistory.js';
 import { EventBus } from '../events/EventBus.js';
 import { DataModel } from '../models/DataModel.js';
 import { ColumnModel } from '../models/ColumnModel.js';
@@ -11,6 +12,7 @@ import { SelectionModel } from '../models/SelectionModel.js';
 import { EditModel } from '../models/EditModel.js';
 import { DagEngine } from '../calculations/dagEngine.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
+import type { SortModel, FilterModel } from '../rowModel.js';
 
 export class GridEngine<TRowData = unknown> {
 	// Models
@@ -26,6 +28,7 @@ export class GridEngine<TRowData = unknown> {
 	// Infrastructure
 	public readonly stateManager: StateManager<TRowData>;
 	public readonly commandBus: CommandBus;
+	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus;
 
 	// Row Model registered internally
@@ -40,6 +43,7 @@ export class GridEngine<TRowData = unknown> {
 
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.commandBus = new CommandBus();
+		this.commandHistory = new CommandHistory();
 		this.eventBus = new EventBus();
 		this.dagEngine = new DagEngine();
 
@@ -98,6 +102,7 @@ export class GridEngine<TRowData = unknown> {
 				...state,
 				...payload,
 			}));
+			this.commandHistory.clear();
 		});
 
 		this.commandBus.registerHandler('SELECT_CELL', (payload: { start: any; end: any }) => {
@@ -109,7 +114,120 @@ export class GridEngine<TRowData = unknown> {
 		});
 
 		this.commandBus.registerHandler('SET_COLUMN_WIDTH', (payload: { colField: string; width: number }) => {
-			this.setColumnWidth(payload.colField, payload.width);
+			const colField = payload.colField;
+			const newWidth = payload.width;
+			const oldWidth = this.stateManager.getState().columnWidths[colField] ?? this.stateManager.getState().defaultColWidth;
+
+			if (oldWidth === newWidth) return;
+
+			this.setColumnWidth(colField, newWidth);
+
+			this.commandHistory.add({
+				undo: () => {
+					this.setColumnWidth(colField, oldWidth);
+				},
+				redo: () => {
+					this.setColumnWidth(colField, newWidth);
+				}
+			});
+		});
+
+		this.commandBus.registerHandler('SET_ROW_HEIGHT', (payload: { rowId: string; height: number }) => {
+			const rowId = payload.rowId;
+			const newHeight = payload.height;
+			const oldHeight = this.stateManager.getState().rowHeights[rowId] ?? this.stateManager.getState().defaultRowHeight;
+
+			if (oldHeight === newHeight) return;
+
+			this.setRowHeight(rowId, newHeight);
+
+			this.commandHistory.add({
+				undo: () => {
+					this.setRowHeight(rowId, oldHeight);
+				},
+				redo: () => {
+					this.setRowHeight(rowId, newHeight);
+				}
+			});
+		});
+
+		this.commandBus.registerHandler('SET_SORT_MODEL', (payload: { sortModel: SortModel | null }) => {
+			const newSort = payload.sortModel;
+			const oldSort = this.stateManager.getState().sortModel;
+
+			this.stateManager.setState({ sortModel: newSort });
+
+			this.commandHistory.add({
+				undo: () => {
+					this.stateManager.setState({ sortModel: oldSort });
+				},
+				redo: () => {
+					this.stateManager.setState({ sortModel: newSort });
+				}
+			});
+		});
+
+		this.commandBus.registerHandler('SET_FILTER_MODEL', (payload: { filterModel: FilterModel | null }) => {
+			const newFilter = payload.filterModel;
+			const oldFilter = this.stateManager.getState().filterModel;
+
+			this.stateManager.setState({ filterModel: newFilter });
+
+			this.commandHistory.add({
+				undo: () => {
+					this.stateManager.setState({ filterModel: oldFilter });
+				},
+				redo: () => {
+					this.stateManager.setState({ filterModel: newFilter });
+				}
+			});
+		});
+
+		this.commandBus.registerHandler('SET_CELL_VALUE', (payload: { rowId: string; colField: string; value: unknown; undoable?: boolean }) => {
+			const { rowId, colField, value, undoable = true } = payload;
+			const oldValue = this.data.getCellValue(rowId, colField);
+
+			if (oldValue === value) return;
+
+			this.data.setCellValue(rowId, colField, value);
+
+			if (undoable) {
+				this.commandHistory.add({
+					undo: () => {
+						this.commandBus.dispatch({
+							type: 'SET_CELL_VALUE',
+							payload: { rowId, colField, value: oldValue, undoable: false }
+						});
+					},
+					redo: () => {
+						this.commandBus.dispatch({
+							type: 'SET_CELL_VALUE',
+							payload: { rowId, colField, value, undoable: false }
+						});
+					}
+				});
+			}
+		});
+
+		this.commandBus.registerHandler('START_EDIT', (payload: { rowId: string; colField: string }) => {
+			const { rowId, colField } = payload;
+			this.stateManager.setState({
+				activeEdit: { rowId, colField }
+			});
+			this.notifyCellChange(rowId, colField);
+			this.eventBus.dispatchEvent('editStarted', { rowId, colField });
+		});
+
+		this.commandBus.registerHandler('STOP_EDIT', (payload: { cancel?: boolean }) => {
+			const activeEdit = this.stateManager.getState().activeEdit;
+			if (!activeEdit) return;
+
+			const { rowId, colField } = activeEdit;
+			const cancel = !!payload.cancel;
+
+			this.stateManager.setState({ activeEdit: null });
+			this.notifyCellChange(rowId, colField);
+			this.eventBus.dispatchEvent('editStopped', { rowId, colField, cancel });
 		});
 	}
 
@@ -438,6 +556,14 @@ export class GridEngine<TRowData = unknown> {
 			this.eventBus.dispatchEvent('filterChanged', { filterModel: currState.filterModel });
 		}
 	};
+
+	public undo(): void {
+		this.commandHistory.undo();
+	}
+
+	public redo(): void {
+		this.commandHistory.redo();
+	}
 
 	public destroy(): void {
 		this.cellSubscriptions.clear();

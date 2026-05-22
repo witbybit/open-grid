@@ -1,4 +1,4 @@
-export interface GridCommand<T = any> {
+interface GridCommand<T = any> {
 	type: string;
 	payload: T;
 }
