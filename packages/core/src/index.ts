@@ -11,3 +11,17 @@ export * from './focusController.js';
 export * from './selectionController.js';
 export * from './viewportController.js';
 export * from './calculations/dagEngine.js';
+
+// Modern v2 Kernel Architecture Exports
+export * from './engine/GridEngine.js';
+export * from './engine/GridEngineConfig.js';
+export * from './state/StateManager.js';
+export * from './commands/CommandBus.js';
+export * from './events/EventBus.js';
+export * from './models/DataModel.js';
+export * from './models/ColumnModel.js';
+export * from './models/ViewportModel.js';
+export * from './models/GeometryModel.js';
+export * from './models/FocusModel.js';
+export * from './models/SelectionModel.js';
+export * from './models/EditModel.js';
