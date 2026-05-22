@@ -145,20 +145,28 @@ export function setValueByPath(obj: unknown, path: string, value: unknown): bool
 	return true;
 }
 
+const pathGetterCache = new Map<string, (data: any) => any>();
+
 export function compilePathGetter(path: string): (data: any) => any {
 	if (!path) return () => undefined;
+	if (pathGetterCache.has(path)) return pathGetterCache.get(path)!;
+
+	let getter: (data: any) => any;
 	if (!path.includes('.')) {
-		return (data: any) => (data ? data[path] : undefined);
+		getter = (data: any) => (data ? data[path] : undefined);
+	} else {
+		const parts = path.split('.');
+		getter = (data: any) => {
+			let curr = data;
+			for (let i = 0; i < parts.length; i++) {
+				if (curr === null || curr === undefined) return undefined;
+				curr = curr[parts[i]];
+			}
+			return curr;
+		};
 	}
-	const parts = path.split('.');
-	return (data: any) => {
-		let curr = data;
-		for (let i = 0; i < parts.length; i++) {
-			if (curr === null || curr === undefined) return undefined;
-			curr = curr[parts[i]];
-		}
-		return curr;
-	};
+	pathGetterCache.set(path, getter);
+	return getter;
 }
 
 export interface RowModel<TRowData = unknown> {

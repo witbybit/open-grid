@@ -1,4 +1,5 @@
 import { GridStore, ColumnDef, RowModel, RowNode, getValueByPath, setValueByPath, compilePathGetter } from './store.js';
+import { createCellKey } from './ids.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -32,17 +33,25 @@ function getFilterItemValue(item: FilterModelItem | unknown): { operator: Filter
 }
 
 function compareValues(a: unknown, b: unknown): number {
-	if (a == null && b == null) return 0;
+	if (a === b) return 0;
 	if (a == null) return -1;
 	if (b == null) return 1;
 
-	const aNumber = typeof a === 'number' ? a : Number(a);
-	const bNumber = typeof b === 'number' ? b : Number(b);
+	if (typeof a === 'number' && typeof b === 'number') {
+		return a - b;
+	}
+
+	const aNumber = Number(a);
+	const bNumber = Number(b);
 	if (!Number.isNaN(aNumber) && !Number.isNaN(bNumber)) {
 		return aNumber - bNumber;
 	}
 
-	return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+	const aStr = String(a);
+	const bStr = String(b);
+	if (aStr < bStr) return -1;
+	if (aStr > bStr) return 1;
+	return 0;
 }
 
 function matchesFilter(value: unknown, item: FilterModelItem | unknown): boolean {
@@ -82,6 +91,39 @@ export function getColumnValue<TData>(node: RowNode<TData>, column: ColumnDef<TD
 	return node.getCellValue(column.field, getter);
 }
 
+interface PreparedFilter<TData> {
+	column: ColumnDef<TData>;
+	getter: (node: RowNode<TData>) => unknown;
+	operator: FilterOperator;
+	textFilter: string;
+	numericFilter: number;
+}
+
+function matchesPreparedFilter(value: unknown, pf: PreparedFilter<any>): boolean {
+	const textValue = String(value ?? '').toLowerCase();
+	const numericValue = Number(value);
+
+	switch (pf.operator) {
+		case 'equals':
+			return textValue === pf.textFilter;
+		case 'startsWith':
+			return textValue.startsWith(pf.textFilter);
+		case 'endsWith':
+			return textValue.endsWith(pf.textFilter);
+		case 'gt':
+			return numericValue > pf.numericFilter;
+		case 'gte':
+			return numericValue >= pf.numericFilter;
+		case 'lt':
+			return numericValue < pf.numericFilter;
+		case 'lte':
+			return numericValue <= pf.numericFilter;
+		case 'contains':
+		default:
+			return textValue.includes(pf.textFilter);
+	}
+}
+
 export function applyClientSortAndFilter<TData>(
 	nodes: RowNode<TData>[],
 	columns: Array<ColumnDef<TData>>,
@@ -95,23 +137,91 @@ export function applyClientSortAndFilter<TData>(
 
 	let result = nodes.map((node, sourceIndex) => ({ node, sourceIndex }));
 
+	// 1. Pre-compile and pre-resolve active filters to avoid O(N) entries allocations, string manipulation, and Map lookups
+	const preparedFilters: PreparedFilter<TData>[] = [];
 	if (filterModel) {
-		result = result.filter(({ node }) =>
-			Object.entries(filterModel).every(([colId, item]) => matchesFilter(getColumnValue(node, columnById.get(colId)), item))
-		);
+		for (const [colId, item] of Object.entries(filterModel)) {
+			const { operator, filter } = getFilterItemValue(item);
+			if (filter == null || filter === '') continue;
+
+			const column = columnById.get(colId);
+			if (!column) continue;
+
+			const textFilter = String(filter).toLowerCase();
+			const numericFilter = Number(filter);
+
+			let getter: (node: RowNode<TData>) => unknown;
+			if (column.valueGetter) {
+				const colValGetter = column.valueGetter;
+				getter = (node: RowNode<TData>) => colValGetter({ node, row: node.data, colField: column.field });
+			} else {
+				const pathGetter = compilePathGetter(column.field);
+				getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
+			}
+
+			preparedFilters.push({
+				column,
+				getter,
+				operator,
+				textFilter,
+				numericFilter,
+			});
+		}
 	}
 
+	if (preparedFilters.length > 0) {
+		result = result.filter(({ node }) => {
+			for (let i = 0; i < preparedFilters.length; i++) {
+				const pf = preparedFilters[i];
+				const val = pf.getter(node);
+				if (!matchesPreparedFilter(val, pf)) {
+					return false;
+				}
+			}
+			return true;
+		});
+	}
+
+	// 2. Pre-compile sort getters to avoid O(N log N) getter compilations and map lookups
 	if (sortModel?.length) {
-		result = [...result].sort((left, right) => {
-			for (const sortItem of sortModel) {
-				const column = columnById.get(sortItem.colId);
-				const comparison = compareValues(getColumnValue(left.node, column), getColumnValue(right.node, column));
+		const precompiledSortGetters = sortModel.map((sortItem) => {
+			const column = columnById.get(sortItem.colId);
+			let getter: (node: RowNode<TData>) => unknown;
+			if (column) {
+				if (column.valueGetter) {
+					const colValGetter = column.valueGetter;
+					getter = (node: RowNode<TData>) => colValGetter({ node, row: node.data, colField: column.field });
+				} else {
+					const pathGetter = compilePathGetter(column.field);
+					getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
+				}
+			} else {
+				getter = () => undefined;
+			}
+			return getter;
+		});
+
+		// Schwartzian transform: extract sort keys in O(N) using pre-allocated arrays to minimize allocation overhead
+		const sortData = result.map((item) => {
+			const keys = new Array(sortModel.length);
+			for (let i = 0; i < sortModel.length; i++) {
+				keys[i] = precompiledSortGetters[i](item.node);
+			}
+			return { item, keys };
+		});
+
+		sortData.sort((left, right) => {
+			for (let i = 0; i < sortModel.length; i++) {
+				const sortItem = sortModel[i];
+				const comparison = compareValues(left.keys[i], right.keys[i]);
 				if (comparison !== 0) {
 					return sortItem.sort === 'desc' ? -comparison : comparison;
 				}
 			}
-			return left.sourceIndex - right.sourceIndex;
+			return left.item.sourceIndex - right.item.sourceIndex;
 		});
+
+		result = sortData.map((d) => d.item);
 	}
 
 	return result;
@@ -217,6 +327,31 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		if (changedNodes.length === 0) return;
 
+		// Invalidate changed cells in the DAG calculation engine and gather affected dependent keys
+		const allInvalidatedKeys = new Set<string>();
+		for (const [rowId, fields] of changedFieldsByRow) {
+			for (const field of fields) {
+				const cellKey = createCellKey(rowId, field);
+				allInvalidatedKeys.add(cellKey);
+
+				// Update DAG engine formula registration
+				const node = this.nodeMap.get(rowId);
+				if (node) {
+					const nextVal = (node.data as any)[field];
+					if (typeof nextVal === 'string' && nextVal.startsWith('=')) {
+						this.store.dagEngine.registerFormula(rowId, field, nextVal);
+					} else {
+						this.store.dagEngine.clearFormula(rowId, field);
+					}
+				}
+
+				const invalidated = this.store.dagEngine.invalidateCell(rowId, field);
+				for (const k of invalidated) {
+					allInvalidatedKeys.add(k);
+				}
+			}
+		}
+
 		// Check if any of the changed fields are part of the active sort or filter models
 		const state = this.store.getState();
 		let needsFullRefresh = false;
@@ -248,10 +383,18 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (needsFullRefresh) {
 			this.refresh();
 		} else {
-			// No sorting or filtering is affected! We can just notify coordinate-targeted listeners for all columns on the changed rows
+			// No sorting or filtering is affected! Notify coordinates for changed rows and their formula dependents
 			this.store.startTransaction();
 			for (const node of changedNodes) {
-				this.store.triggerCellNotifications(node.id);
+				for (const col of state.columns) {
+					this.store.engine.notifyCellChange(node.id, col.field);
+				}
+			}
+			for (const key of allInvalidatedKeys) {
+				const colonIdx = key.indexOf(':');
+				const rId = colonIdx === -1 ? key : key.substring(0, colonIdx);
+				const cField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
+				this.store.engine.notifyCellChange(rId, cField);
 			}
 			this.store.endTransaction();
 			this.store.setState({ dataVersion: state.dataVersion + 1 });

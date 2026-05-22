@@ -1,5 +1,6 @@
 import { DOMPool, PooledRow } from './domPool.js';
 import { ScrollEngine } from './scrollEngine.js';
+import { createCellKey } from '../ids.js';
 import type { IGridRenderer } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RowNode, ColumnDef } from '../store.js';
@@ -101,8 +102,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		this.scrollViewport.appendChild(this.headerLayer);
 		this.scrollViewport.appendChild(this.headerLeftLayer);
 		this.scrollViewport.appendChild(this.headerRightLayer);
-		this.scrollViewport.appendChild(this.overlayLayer);
 		this.container.appendChild(this.scrollViewport);
+		this.container.appendChild(this.overlayLayer);
 
 		// Bind scroll events to scroll engine
 		this.scrollEngine.bind(this.scrollViewport, this.onScroll);
@@ -223,10 +224,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			this.centerLayer.style.height = `${totalHeight}px`;
 			
 			if (this.headerLayer) this.headerLayer.style.width = targetWidth;
-			if (this.overlayLayer) {
-				this.overlayLayer.style.width = targetWidth;
-				this.overlayLayer.style.height = `${totalHeight}px`;
-			}
 			
 			const pinLeftWidth = this.engine.viewport.pinLeftColumns > 0 ? this.engine.geometry.colLefts[this.engine.viewport.pinLeftColumns] || 0 : 0;
 			if (this.leftLayer) this.leftLayer.style.width = `${pinLeftWidth}px`;
@@ -504,7 +501,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 			// Bind value
 			const cellValue = this.engine.data.getCellValue(node.id, col.field);
-			const cellKey = `${node.id}:${col.field}`;
+			const cellKey = createCellKey(node.id, col.field);
 
 			const isEditing =
 				state.activeEdit?.rowId === node.id &&
@@ -512,15 +509,24 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 			// Custom renderer hook trigger or fast direct text bind
 			if (col.cellRenderer || isEditing) {
-				// Set content empty so custom React portal doesn't clash with stale text
-				cell.textContent = '';
+				if (cell.dataset.cellKey !== cellKey) {
+					if (cell.dataset.cellKey && this.onUnmountReactPortal) {
+						this.onUnmountReactPortal(cell.dataset.cellKey);
+					}
+					// Set content empty so custom React portal doesn't clash with stale text
+					cell.textContent = '';
+					cell.dataset.cellKey = cellKey;
+				}
 				if (this.onMountReactPortal) {
 					const isLoading = this.engine.data.isRowLoading(node.id);
 					this.onMountReactPortal(cellKey, cell, cellValue, node, col, isEditing, isLoading);
 				}
 			} else {
-				if (this.onUnmountReactPortal) {
-					this.onUnmountReactPortal(cellKey);
+				if (cell.dataset.cellKey) {
+					if (this.onUnmountReactPortal) {
+						this.onUnmountReactPortal(cell.dataset.cellKey);
+					}
+					delete cell.dataset.cellKey;
 				}
 				// Fast path text mutation
 				const nextValText = cellValue != null ? String(cellValue) : '';
@@ -556,14 +562,22 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private releaseCell(pooledRow: PooledRow, colIdx: number): void {
 		const cell = pooledRow.cells[colIdx];
 		if (cell) {
-			// Trigger unmount React portal bridge if applicable
-			const col = this.engine.stateManager.getState().columns[colIdx];
-			if (col && this.onUnmountReactPortal) {
-				const cellKey = `${pooledRow.boundRowId}:${col.field}`;
-				this.onUnmountReactPortal(cellKey);
+			if (cell.dataset.cellKey) {
+				if (this.onUnmountReactPortal) {
+					this.onUnmountReactPortal(cell.dataset.cellKey);
+				}
+				delete cell.dataset.cellKey;
+			} else {
+				// Trigger unmount React portal bridge if applicable
+				const col = this.engine.stateManager.getState().columns[colIdx];
+				if (col && this.onUnmountReactPortal) {
+					const cellKey = createCellKey(pooledRow.boundRowId, col.field);
+					this.onUnmountReactPortal(cellKey);
+				}
 			}
 
-			if (cell.parentNode === pooledRow.element) {
+			// Detach from ANY parent (center, left pinned, or right pinned row element)
+			if (cell.parentNode) {
 				try {
 					cell.remove();
 				} catch (e) {
@@ -745,23 +759,16 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		const rowModel = this.engine.getRowModel()!;
 		const rowCount = rowModel.getRowCount();
-		const colCount = state.columns.length;
+		const columns = state.columns;
+		const colCount = columns.length;
 
 		// Check if selection limits lie inside current loaded row scope
 		const minRow = Math.max(0, bounds.minRow);
 		const maxRow = Math.min(rowCount - 1, bounds.maxRow);
+		const minCol = Math.max(0, bounds.minCol);
+		const maxCol = Math.min(colCount - 1, bounds.maxCol);
 
-		if (minRow > maxRow || bounds.minCol > bounds.maxCol) return;
-
-		const top = this.engine.geometry.rowTops[minRow];
-		const bottomRowTop = this.engine.geometry.rowTops[maxRow];
-		const bottomRowHeight = this.engine.geometry.rowHeights[maxRow];
-		const height = bottomRowTop + bottomRowHeight - top;
-
-		const left = this.engine.geometry.colLefts[bounds.minCol];
-		const rightColLeft = this.engine.geometry.colLefts[bounds.maxCol];
-		const rightColWidth = this.engine.geometry.colWidths[bounds.maxCol];
-		const width = rightColLeft + rightColWidth - left;
+		if (minRow > maxRow || minCol > maxCol) return;
 
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
@@ -772,34 +779,86 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		const viewportHeight = this.engine.viewport.viewportHeight;
 		const viewportWidth = this.engine.viewport.viewportWidth;
 
-		// Determine correct screen coordinates for selection overlay
-		let selectionLeft = left - scrollLeft;
-		if (bounds.minCol === bounds.maxCol) {
-			const c = bounds.minCol;
-			if (c < pinLeftColumns) {
-				selectionLeft = left;
-			} else if (c >= colCount - pinRightColumns) {
-				let widthToRight = 0;
-				for (let i = c + 1; i < colCount; i++) {
-					widthToRight += this.engine.geometry.colWidths[i];
-				}
-				selectionLeft = viewportWidth - widthToRight - rightColWidth;
-			}
+		// 1. Calculate pinned column widths for clamping
+		let pinnedLeftWidth = 0;
+		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
+			pinnedLeftWidth += this.engine.geometry.colWidths[i] || 0;
 		}
 
-		let selectionTop = top - scrollTop;
-		if (bounds.minRow === bounds.maxRow) {
-			const r = bounds.minRow;
+		let pinnedRightWidth = 0;
+		for (let i = 0; i < pinRightColumns && i < colCount; i++) {
+			pinnedRightWidth += this.engine.geometry.colWidths[colCount - 1 - i] || 0;
+		}
+
+		// 2. Calculate pinned row heights for clamping
+		let pinnedTopHeight = 0;
+		for (let i = 0; i < pinTopRows && i < rowCount; i++) {
+			pinnedTopHeight += this.engine.geometry.rowHeights[i] || 0;
+		}
+
+		let pinnedBottomHeight = 0;
+		for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
+			pinnedBottomHeight += this.engine.geometry.rowHeights[rowCount - 1 - i] || 0;
+		}
+
+		// Helper to get clamped X coordinate range for a column
+		const getClampedX = (c: number): { left: number; right: number } => {
+			const cellLeft = this.engine.geometry.colLefts[c] || 0;
+			const cellWidth = this.engine.geometry.colWidths[c] || 0;
+
+			if (c < pinLeftColumns) {
+				return { left: cellLeft, right: cellLeft + cellWidth };
+			} else if (c >= colCount - pinRightColumns) {
+				const firstRightPinColIdx = colCount - pinRightColumns;
+				const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
+				const left = (viewportWidth - pinnedRightWidth) + (cellLeft - firstRightPinColLeft);
+				return { left, right: left + cellWidth };
+			} else {
+				const unclippedLeft = cellLeft - scrollLeft;
+				const unclippedRight = unclippedLeft + cellWidth;
+				const left = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedLeft));
+				const right = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedRight));
+				return { left, right };
+			}
+		};
+
+		// Helper to get clamped Y coordinate range for a row
+		const getClampedY = (r: number): { top: number; bottom: number } => {
+			const rowTop = this.engine.geometry.rowTops[r] || 0;
+			const rowHeight = this.engine.geometry.rowHeights[r] || 0;
+
 			if (r < pinTopRows) {
-				selectionTop = top;
+				return { top: rowTop, bottom: rowTop + rowHeight };
 			} else if (r >= rowCount - pinBottomRows) {
 				let heightToBottom = 0;
 				for (let i = r + 1; i < rowCount; i++) {
-					heightToBottom += this.engine.geometry.rowHeights[i];
+					heightToBottom += this.engine.geometry.rowHeights[i] || 0;
 				}
-				selectionTop = viewportHeight - heightToBottom - bottomRowHeight;
+				const top = viewportHeight - 40 - heightToBottom - rowHeight;
+				return { top, bottom: top + rowHeight };
+			} else {
+				const unclippedTop = rowTop - scrollTop;
+				const unclippedBottom = unclippedTop + rowHeight;
+				const top = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedTop));
+				const bottom = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedBottom));
+				return { top, bottom };
 			}
-		}
+		};
+
+		const xRangeMin = getClampedX(minCol);
+		const xRangeMax = getClampedX(maxCol);
+		const yRangeMin = getClampedY(minRow);
+		const yRangeMax = getClampedY(maxRow);
+
+		const selectionLeft = xRangeMin.left;
+		const selectionRight = xRangeMax.right;
+		const selectionTop = yRangeMin.top;
+		const selectionBottom = yRangeMax.bottom;
+
+		const width = selectionRight - selectionLeft;
+		const height = selectionBottom - selectionTop;
+
+		if (width <= 0 || height <= 0) return;
 
 		// Selection border element
 		const selectionBorder = document.createElement('div');
@@ -957,10 +1016,14 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
       }
 
       .og-layer-overlay {
-        grid-area: 1 / 1 / 2 / 2;
+        position: absolute;
+        top: 40px;
+        left: 0;
+        right: 0;
+        bottom: 0;
         z-index: 40;
         pointer-events: none;
-        margin-top: 40px;
+        overflow: hidden;
       }
 
       .og-row {

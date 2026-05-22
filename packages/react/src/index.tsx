@@ -303,6 +303,18 @@ function OpenGridInner<TRowData = unknown>({
 
 	const mountPortal = useCallback((cellKey: string, container: HTMLElement, value: unknown, node: any, col: any, isEditing: boolean, isLoading: boolean) => {
 		setPortals((prev) => {
+			const existing = prev.get(cellKey);
+			if (
+				existing &&
+				existing.container === container &&
+				existing.value === value &&
+				existing.node === node &&
+				existing.col === col &&
+				existing.isEditing === isEditing &&
+				existing.isLoading === isLoading
+			) {
+				return prev;
+			}
 			const next = new Map(prev);
 			next.set(cellKey, { cellKey, container, value, node, col, isEditing, isLoading });
 			return next;

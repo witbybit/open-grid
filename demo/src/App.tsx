@@ -151,7 +151,7 @@ export default function App() {
 					header: `Col ${i}`,
 					width: 100,
 					valueGetter: ({ row }) => {
-						return `Val ${i}`;
+						return (row as any)[`col_${i}`] ?? `Val ${i}`;
 					},
 				});
 			}

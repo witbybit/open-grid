@@ -24,6 +24,10 @@ export function createCellId(rowId: GridId, colId: GridId): string {
 	return `cell:${normalizeGridId(rowId)}:${normalizeGridId(colId)}`;
 }
 
+export function createCellKey(rowId: GridId, colField: string): string {
+	return `${normalizeGridId(rowId)}:${colField}`;
+}
+
 export function createCellCoordKey(row: number, col: number): string {
 	return `${row},${col}`;
 }

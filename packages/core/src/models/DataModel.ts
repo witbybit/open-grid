@@ -79,6 +79,10 @@ export class DataModel<TRowData = unknown> {
 			if (!this.engine.dagEngine.hasFormula(rowId, colField) || this.engine.dagEngine.getFormula(rowId, colField) !== rawVal) {
 				this.engine.dagEngine.registerFormula(rowId, colField, rawVal);
 			}
+		} else {
+			if (this.engine.dagEngine.hasFormula(rowId, colField)) {
+				this.engine.dagEngine.clearFormula(rowId, colField);
+			}
 		}
 
 		if (this.engine.dagEngine.hasFormula(rowId, colField)) {
