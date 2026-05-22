@@ -151,7 +151,7 @@ export function PortalCell({ rowId, colField, value, col, node, isEditing, isLoa
 	if (isLoading) {
 		return (
 			<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', padding: '0 12px' }}>
-				<div style={{ height: '12px', width: '80%', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px' }} />
+				<div className="og-cell-loading-skeleton" style={{ height: '16px', width: '80%', borderRadius: '4px' }} />
 			</div>
 		);
 	}

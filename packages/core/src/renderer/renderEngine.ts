@@ -3,7 +3,7 @@ import { ScrollEngine } from './scrollEngine.js';
 import { createCellKey } from '../ids.js';
 import type { IGridRenderer } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { RowNode, ColumnDef } from '../store.js';
+import { RowNode, type ColumnDef } from '../store.js';
 import type { ViewportRange } from '../viewportController.js';
 
 /**
@@ -252,8 +252,12 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	 */
 	private recycleViewport(): void {
 		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getRowCount() : 0;
-		const colCount = this.engine.stateManager.getState().columns.length;
+		let rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const state = this.engine.stateManager.getState();
+		if (state.loading && rowCount === 0) {
+			rowCount = state.loadingSkeletonCount ?? 15;
+		}
+		const colCount = state.columns.length;
 
 		if (rowCount === 0 || colCount === 0) {
 			this.clearActiveRows();
@@ -297,10 +301,13 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 
 		// Phase 2: Render/Reposition rows in current range
-		const columns = this.engine.stateManager.getState().columns;
+		const columns = state.columns;
 
 		const renderRow = (r: number) => {
-			const node = rowModel!.getRowNode(r);
+			let node = rowModel ? rowModel.getRowNode(r) : null;
+			if (!node && state.loading) {
+				node = new RowNode(`__loading_${r}`, null as any);
+			}
 			if (!node) return;
 
 			let pooledRow = this.activeRows.get(r);
@@ -369,6 +376,9 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			}
 			if (node.selected) {
 				rowClassName += ' og-row-selected';
+			}
+			if (this.engine.data.isRowLoading(node.id)) {
+				rowClassName += ' og-row-loading';
 			}
 			pooledRow.element.className = rowClassName;
 			if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
@@ -472,7 +482,9 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			const state = this.engine.stateManager.getState();
 			const isFocused = state.focusedCell?.rowId === node.id && state.focusedCell?.colField === col.field;
 
-			// Handle classes including pinning and focus
+			const isLoading = this.engine.data.isRowLoading(node.id) || !!col.loading;
+
+			// Handle classes including pinning, focus, and loading
 			let cellClassName = 'og-cell';
 			if (c < pinLeftColumns) {
 				cellClassName += ' og-cell-pinned-left';
@@ -497,6 +509,9 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			} else {
 				cell.removeAttribute('tabindex');
 			}
+			if (isLoading) {
+				cellClassName += ' og-cell-loading';
+			}
 			cell.className = cellClassName;
 
 			// Bind value
@@ -507,8 +522,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				state.activeEdit?.rowId === node.id &&
 				state.activeEdit?.colField === col.field;
 
-			// Custom renderer hook trigger or fast direct text bind
-			if (col.cellRenderer || isEditing) {
+			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously)
+			if ((col.cellRenderer || isEditing) && !isLoading) {
 				if (cell.dataset.cellKey !== cellKey) {
 					if (cell.dataset.cellKey && this.onUnmountReactPortal) {
 						this.onUnmountReactPortal(cell.dataset.cellKey);
@@ -518,7 +533,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 					cell.dataset.cellKey = cellKey;
 				}
 				if (this.onMountReactPortal) {
-					const isLoading = this.engine.data.isRowLoading(node.id);
 					this.onMountReactPortal(cellKey, cell, cellValue, node, col, isEditing, isLoading);
 				}
 			} else {
@@ -528,10 +542,24 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 					}
 					delete cell.dataset.cellKey;
 				}
-				// Fast path text mutation
-				const nextValText = cellValue != null ? String(cellValue) : '';
-				if (cell.textContent !== nextValText) {
-					cell.textContent = nextValText;
+				if (isLoading) {
+					if (!cell.querySelector('.og-cell-loading-skeleton')) {
+						cell.textContent = '';
+						const skeleton = document.createElement('div');
+						skeleton.className = 'og-cell-loading-skeleton';
+						cell.appendChild(skeleton);
+					}
+				} else {
+					// Clean up skeleton if transitioning from loading to loaded state
+					const skeletonEl = cell.querySelector('.og-cell-loading-skeleton');
+					if (skeletonEl) {
+						skeletonEl.remove();
+					}
+					// Fast path text mutation
+					const nextValText = cellValue != null ? String(cellValue) : '';
+					if (cell.textContent !== nextValText) {
+						cell.textContent = nextValText;
+					}
 				}
 			}
 		};
@@ -919,6 +947,41 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
         --og-selection-border: rgba(59, 130, 246, 0.6);
         --og-selection-bg: rgba(59, 130, 246, 0.04);
         --og-focus-ring: #3b82f6;
+
+        /* Premium Skeleton CSS Variables */
+        --og-skeleton-start: #1e293b;
+        --og-skeleton-mid: #334155;
+        --og-skeleton-end: #1e293b;
+        --og-skeleton-width: 75%;
+        --og-skeleton-height: 14px;
+        --og-skeleton-border-radius: 4px;
+        --og-skeleton-animation-duration: 1.5s;
+      }
+
+      @keyframes og-shimmer {
+        0% {
+          background-position: -200% 0;
+        }
+        100% {
+          background-position: 200% 0;
+        }
+      }
+
+      .og-cell-loading-skeleton {
+        width: var(--og-skeleton-width);
+        height: var(--og-skeleton-height);
+        border-radius: var(--og-skeleton-border-radius);
+        background: linear-gradient(90deg, 
+          var(--og-skeleton-start) 25%, 
+          var(--og-skeleton-mid) 50%, 
+          var(--og-skeleton-end) 75%
+        );
+        background-size: 200% 100%;
+        animation: og-shimmer var(--og-skeleton-animation-duration) infinite linear;
+      }
+
+      .og-row-loading {
+        pointer-events: none;
       }
 
       .og-grid-container {

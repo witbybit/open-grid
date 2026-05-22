@@ -14,4 +14,5 @@ export interface GridEngineConfig<TRowData = unknown> {
 	filterModel?: FilterModel | null;
 	activeEdit?: GridCellPointer | null;
 	plugins?: any[];
+	loadingSkeletonCount?: number;
 }

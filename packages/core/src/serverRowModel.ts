@@ -25,6 +25,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	private activeNodes: Array<RowNode<TData> | null> = [];
 	private nodeMap = new Map<string, RowNode<TData>>();
 	private rowIdMap = new Map<string, number>();
+	private loadingNodeMap = new Map<number, RowNode<TData>>();
 	private loadingBlocks: Record<number, boolean> = {};
 	private unsubscribers: Array<() => void> = [];
 
@@ -61,7 +62,20 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	};
 
 	public getRowNode = (rowIndex: number): RowNode<TData> | null => {
-		return this.activeNodes[rowIndex] ?? null;
+		const node = this.activeNodes[rowIndex];
+		if (node) {
+			return node;
+		}
+		// Synthesize a stable loading RowNode to display shimmers for unloaded blocks
+		if (rowIndex >= 0 && rowIndex < this.getRowCount()) {
+			let loadingNode = this.loadingNodeMap.get(rowIndex);
+			if (!loadingNode) {
+				loadingNode = new RowNode<TData>(`__loading_${rowIndex}`, null as any);
+				this.loadingNodeMap.set(rowIndex, loadingNode);
+			}
+			return loadingNode;
+		}
+		return null;
 	};
 
 	public loadVisibleBlocks = (visibleRowIndices: number[]): void => {
@@ -69,6 +83,32 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		visibleRowIndices.forEach((idx) => {
 			visibleBlocks.add(Math.floor(idx / this.blockSize));
 		});
+
+		// Dynamic predictive pre-fetching based on scrolling velocity
+		if (visibleRowIndices.length > 0) {
+			const velocity = this.store.engine.viewport.getVelocity();
+			const vy = velocity.vy; // px/ms
+
+			const minRow = Math.min(...visibleRowIndices);
+			const maxRow = Math.max(...visibleRowIndices);
+			const minBlock = Math.floor(minRow / this.blockSize);
+			const maxBlock = Math.floor(maxRow / this.blockSize);
+			const totalBlocks = Math.ceil(this.getRowCount() / this.blockSize);
+
+			if (vy > 0.1) {
+				// Scrolling down: proactively pre-fetch next 1 or 2 blocks
+				const ahead1 = maxBlock + 1;
+				const ahead2 = maxBlock + 2;
+				if (ahead1 < totalBlocks) visibleBlocks.add(ahead1);
+				if (ahead2 < totalBlocks) visibleBlocks.add(ahead2);
+			} else if (vy < -0.1) {
+				// Scrolling up: proactively pre-fetch previous 1 or 2 blocks
+				const ahead1 = minBlock - 1;
+				const ahead2 = minBlock - 2;
+				if (ahead1 >= 0) visibleBlocks.add(ahead1);
+				if (ahead2 >= 0) visibleBlocks.add(ahead2);
+			}
+		}
 
 		visibleBlocks.forEach((blockIdx) => {
 			const startRow = blockIdx * this.blockSize;
@@ -115,6 +155,14 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 		this.loadingBlocks[blockIndex] = true;
 
+		// Set initial mount loading state and schedule immediate repaint only if fetching block 0
+		if (blockIndex === 0) {
+			this.store.setState((s) => ({
+				loading: true,
+				dataVersion: s.dataVersion + 1,
+			}));
+		}
+
 		const startRow = blockIndex * this.blockSize;
 		const endRow = startRow + this.blockSize;
 
@@ -138,6 +186,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			delete this.loadingBlocks[blockIndex];
 
 			if (currentSignature !== requestSignature) {
+				const hasActiveFetches = Object.keys(this.loadingBlocks).length > 0;
+				this.store.setState({
+					loading: hasActiveFetches,
+				});
 				return;
 			}
 
@@ -147,7 +199,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			}
 
 			// Patch loaded rows into the array and index map
-
 			response.rows.forEach((row, idx) => {
 				const globalIdx = startRow + idx;
 				const typedRow = row as TData;
@@ -177,13 +228,19 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			}
 
 			// Layout geometry will be updated by GridEngine using GeometryModel
-
+			const hasActiveFetches = Object.keys(this.loadingBlocks).length > 0;
 			this.store.setState({
+				loading: hasActiveFetches,
 				dataVersion: curr.dataVersion + 1,
 			});
 		} catch (error) {
 			console.error(`GridEngine: Failed to fetch row block ${blockIndex}`, error);
 			delete this.loadingBlocks[blockIndex];
+			const hasActiveFetches = Object.keys(this.loadingBlocks).length > 0;
+			this.store.setState({
+				loading: hasActiveFetches,
+				dataVersion: this.store.getState().dataVersion + 1,
+			});
 		}
 	};
 
@@ -192,7 +249,9 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.activeNodes = [];
 		this.nodeMap.clear();
 		this.rowIdMap.clear();
+		this.loadingNodeMap.clear();
 		this.store.setState({
+			loading: true,
 			dataVersion: this.store.getState().dataVersion + 1,
 		});
 		this.fetchBlock(0);

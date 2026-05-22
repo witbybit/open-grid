@@ -183,6 +183,7 @@ export interface ColumnDef<TRowData = unknown> {
 	field: string;
 	header: string;
 	width?: number;
+	loading?: boolean;
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
 	valueSetter?: (row: TRowData, value: unknown) => boolean;
 	cellRenderer?: (props: CellRendererProps<TRowData>) => unknown;
@@ -192,6 +193,8 @@ export interface ColumnDef<TRowData = unknown> {
 export interface GridState<TRowData = unknown> {
 	getRowId?: (row: TRowData) => string;
 	columns: ColumnDef<TRowData>[];
+	loading?: boolean;
+	loadingSkeletonCount?: number;
 
 	focusedCell: GridCellPointer | null;
 	selectedRange: GridCellRange | null;
@@ -305,6 +308,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			sortModel: initialState.sortModel || null,
 			filterModel: initialState.filterModel || null,
 			getRowId: initialState.getRowId,
+			loadingSkeletonCount: initialState.loadingSkeletonCount,
 		});
 
 		// Initialize specialized controller layers with the core engine

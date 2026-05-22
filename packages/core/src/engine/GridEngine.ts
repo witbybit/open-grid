@@ -73,6 +73,7 @@ export class GridEngine<TRowData = unknown> {
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
 			visibleColRange: { startIdx: 0, endIdx: 0 },
 			getRowId: config.getRowId,
+			loadingSkeletonCount: config.loadingSkeletonCount,
 		};
 
 		// Construct StateManager with coordinate state update bridging
@@ -247,7 +248,11 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	private getRowHeightsList(rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number): number[] {
-		const count = rowModel.getRowCount();
+		let count = rowModel.getRowCount();
+		const state = this.stateManager.getState();
+		if (state.loading && count === 0) {
+			count = state.loadingSkeletonCount ?? 15;
+		}
 		const heights: number[] = [];
 		for (let i = 0; i < count; i++) {
 			const node = rowModel.getRowNode(i);
@@ -430,7 +435,7 @@ export class GridEngine<TRowData = unknown> {
 			this.columns.updateColumns(currState.columns, currState.columnWidths, currState.defaultColWidth);
 		}
 
-		if (this.rowModel && (updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('dataVersion'))) {
+		if (this.rowModel && (updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('dataVersion') || updatedSet.has('loading'))) {
 			this.geometry.updateRows(
 				this.getRowHeightsList(this.rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight
@@ -461,7 +466,8 @@ export class GridEngine<TRowData = unknown> {
 			updatedSet.has('rowHeights') ||
 			updatedSet.has('dataVersion') ||
 			updatedSet.has('defaultRowHeight') ||
-			updatedSet.has('defaultColWidth');
+			updatedSet.has('defaultColWidth') ||
+			updatedSet.has('loading');
 
 		if (needsRangeUpdate) {
 			const nextRowRange = this.viewport.getVisibleRowRange(this.rowModel ? this.rowModel.getRowCount() : 0);

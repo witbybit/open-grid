@@ -233,7 +233,7 @@ export default function App() {
 			getRows: async (params) => {
 				const start = performance.now();
 				// Simulated server response lag
-				await new Promise((resolve) => setTimeout(resolve, 450));
+				await new Promise((resolve) => setTimeout(resolve, 3000));
 
 				const filterModel = params.filterModel as FilterModel | undefined;
 				const sortModel = params.sortModel as SortModel | undefined;

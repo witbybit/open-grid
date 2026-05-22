@@ -46,6 +46,10 @@ export class DataModel<TRowData = unknown> {
 	}
 
 	public getCellValue = (rowId: string, colField: string): unknown => {
+		if (this.isRowLoading(rowId)) {
+			return '';
+		}
+
 		const getRawValue = (rId: string, cField: string): any => {
 			const rowModel = this.engine.getRowModel();
 			if (!rowModel) return '';
