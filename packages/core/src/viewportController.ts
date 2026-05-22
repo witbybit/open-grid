@@ -9,7 +9,7 @@ export interface ViewportRange {
 
 export class ViewportController {
 	private engine?: GridEngine<any>;
-	
+
 	private fallbackScrollTop = 0;
 	private fallbackScrollLeft = 0;
 	private fallbackViewportWidth = 0;

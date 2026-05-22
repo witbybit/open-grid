@@ -1,30 +1,30 @@
 export enum Priority {
 	// ─── SYNC (execute immediately, block frame) ─────
-	CRITICAL = 0,     // Error recovery, corruption repair
+	CRITICAL = 0, // Error recovery, corruption repair
 
 	// ─── HIGH (execute in current rAF frame) ─────────
-	SCROLL = 1,       // Scroll-driven viewport updates
-	ANIMATION = 2,    // Active animations (resize drag, etc.)
+	SCROLL = 1, // Scroll-driven viewport updates
+	ANIMATION = 2, // Active animations (resize drag, etc.)
 
 	// ─── NORMAL (execute if frame budget allows) ──────
-	INPUT = 3,        // User input (click, keyboard)
-	EDIT = 4,         // Cell editing operations
-	SELECTION = 5,    // Selection range updates
+	INPUT = 3, // User input (click, keyboard)
+	EDIT = 4, // Cell editing operations
+	SELECTION = 5, // Selection range updates
 
 	// ─── LOW (defer to next frame or idle) ────────────
-	DATA_UPDATE = 6,  // Data changes from external sources
-	HOVER = 7,        // Hover effects
+	DATA_UPDATE = 6, // Data changes from external sources
+	HOVER = 7, // Hover effects
 
 	// ─── IDLE (execute during idle periods) ───────────
-	RECALC = 8,       // Formula recalculation
-	MEASUREMENT = 9,  // Auto-size measurements
-	PREFETCH = 10,    // Predictive data loading
+	RECALC = 8, // Formula recalculation
+	MEASUREMENT = 9, // Auto-size measurements
+	PREFETCH = 10, // Predictive data loading
 }
 
 export enum PriorityLane {
 	Interactive = 0, // Immediate execution (e.g. typing, arrow navigation)
-	Render = 1,      // requestAnimationFrame (e.g. scrolling, layout changes, resizing)
-	Stream = 2,      // Microtask/delayed execution (e.g. websocket stream updates)
+	Render = 1, // requestAnimationFrame (e.g. scrolling, layout changes, resizing)
+	Stream = 2, // Microtask/delayed execution (e.g. websocket stream updates)
 	Recalculation = 3, // Idle callback / deferred execution (e.g. formulas, sorting, filtering)
 }
 
@@ -75,7 +75,7 @@ export class FrameBudget {
 
 /**
  * FrameScheduler — Frame-budget-aware task scheduler.
- * 
+ *
  * Runs on a requestAnimationFrame loop and processes tasks in priority order.
  * Defers work exceeding the frame budget to the subsequent frames.
  */
@@ -120,12 +120,12 @@ export class FrameScheduler {
 			cancel: () => {
 				const queue = this.queues.get(priority);
 				if (queue) {
-					const index = queue.findIndex(t => t.id === id);
+					const index = queue.findIndex((t) => t.id === id);
 					if (index !== -1) {
 						queue.splice(index, 1);
 					}
 				}
-			}
+			},
 		};
 	}
 
@@ -237,7 +237,7 @@ export class FrameScheduler {
 			Priority.EDIT,
 			Priority.SELECTION,
 			Priority.DATA_UPDATE,
-			Priority.HOVER
+			Priority.HOVER,
 		]) {
 			const queue = this.queues.get(priority);
 			if (queue && queue.length > 0) return true;
@@ -246,11 +246,7 @@ export class FrameScheduler {
 	}
 
 	private hasIdleWork(): boolean {
-		for (const priority of [
-			Priority.RECALC,
-			Priority.MEASUREMENT,
-			Priority.PREFETCH
-		]) {
+		for (const priority of [Priority.RECALC, Priority.MEASUREMENT, Priority.PREFETCH]) {
 			const queue = this.queues.get(priority);
 			if (queue && queue.length > 0) return true;
 		}

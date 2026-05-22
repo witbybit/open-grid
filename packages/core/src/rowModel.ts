@@ -117,7 +117,6 @@ export function applyClientSortAndFilter<TData>(
 	return result;
 }
 
-
 export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
 	private store: GridStore<TData>;
 	private allNodes: RowNode<TData>[] = [];
@@ -200,7 +199,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				const prevKeys = Object.keys(prevRow as object);
 				const nextKeys = Object.keys(nextRow as object);
 				const allKeys = new Set([...prevKeys, ...nextKeys]);
-				
+
 				for (const key of allKeys) {
 					if ((prevRow as any)[key] !== (nextRow as any)[key]) {
 						changedFields.add(key);
@@ -255,6 +254,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				this.store.triggerCellNotifications(node.id);
 			}
 			this.store.endTransaction();
+			this.store.setState({ dataVersion: state.dataVersion + 1 });
 		}
 	}
 
@@ -322,4 +322,3 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		});
 	}
 }
-

@@ -86,7 +86,7 @@ export class ColumnController<TRowData = unknown> {
 		if (this.engine) {
 			return this.engine.columns.getColumnDef(colField);
 		}
-		return this.fallbackColumns.find(c => c.field === colField);
+		return this.fallbackColumns.find((c) => c.field === colField);
 	}
 
 	public getColLeft(colIdx: number): number {

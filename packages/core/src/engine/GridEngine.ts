@@ -97,13 +97,16 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	private setupCommandHandlers(): void {
-		this.commandBus.registerHandler('SET_DATA', (payload: { columns?: ColumnDef<TRowData>[]; defaultColWidth?: number; defaultRowHeight?: number }) => {
-			this.stateManager.setState((state) => ({
-				...state,
-				...payload,
-			}));
-			this.commandHistory.clear();
-		});
+		this.commandBus.registerHandler(
+			'SET_DATA',
+			(payload: { columns?: ColumnDef<TRowData>[]; defaultColWidth?: number; defaultRowHeight?: number }) => {
+				this.stateManager.setState((state) => ({
+					...state,
+					...payload,
+				}));
+				this.commandHistory.clear();
+			}
+		);
 
 		this.commandBus.registerHandler('SELECT_CELL', (payload: { start: any; end: any }) => {
 			this.setSelectedRange(payload.start, payload.end);
@@ -128,7 +131,7 @@ export class GridEngine<TRowData = unknown> {
 				},
 				redo: () => {
 					this.setColumnWidth(colField, newWidth);
-				}
+				},
 			});
 		});
 
@@ -147,7 +150,7 @@ export class GridEngine<TRowData = unknown> {
 				},
 				redo: () => {
 					this.setRowHeight(rowId, newHeight);
-				}
+				},
 			});
 		});
 
@@ -163,7 +166,7 @@ export class GridEngine<TRowData = unknown> {
 				},
 				redo: () => {
 					this.stateManager.setState({ sortModel: newSort });
-				}
+				},
 			});
 		});
 
@@ -179,7 +182,7 @@ export class GridEngine<TRowData = unknown> {
 				},
 				redo: () => {
 					this.stateManager.setState({ filterModel: newFilter });
-				}
+				},
 			});
 		});
 
@@ -196,15 +199,15 @@ export class GridEngine<TRowData = unknown> {
 					undo: () => {
 						this.commandBus.dispatch({
 							type: 'SET_CELL_VALUE',
-							payload: { rowId, colField, value: oldValue, undoable: false }
+							payload: { rowId, colField, value: oldValue, undoable: false },
 						});
 					},
 					redo: () => {
 						this.commandBus.dispatch({
 							type: 'SET_CELL_VALUE',
-							payload: { rowId, colField, value, undoable: false }
+							payload: { rowId, colField, value, undoable: false },
 						});
-					}
+					},
 				});
 			}
 		});
@@ -212,7 +215,7 @@ export class GridEngine<TRowData = unknown> {
 		this.commandBus.registerHandler('START_EDIT', (payload: { rowId: string; colField: string }) => {
 			const { rowId, colField } = payload;
 			this.stateManager.setState({
-				activeEdit: { rowId, colField }
+				activeEdit: { rowId, colField },
 			});
 			this.notifyCellChange(rowId, colField);
 			this.eventBus.dispatchEvent('editStarted', { rowId, colField });
@@ -345,13 +348,7 @@ export class GridEngine<TRowData = unknown> {
 		}
 	};
 
-	public updateCellSubscription = (
-		sub: CellSubscription,
-		oldRowId: string,
-		oldColField: string,
-		newRowId: string,
-		newColField: string
-	): void => {
+	public updateCellSubscription = (sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void => {
 		const oldCellKey = `${oldRowId}:${oldColField}`;
 		const oldCellSet = this.cellSubscriptions.get(oldCellKey);
 		if (oldCellSet) {
@@ -434,7 +431,10 @@ export class GridEngine<TRowData = unknown> {
 		}
 
 		if (this.rowModel && (updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('dataVersion'))) {
-			this.geometry.updateRows(this.getRowHeightsList(this.rowModel, currState.rowHeights, currState.defaultRowHeight), currState.defaultRowHeight);
+			this.geometry.updateRows(
+				this.getRowHeightsList(this.rowModel, currState.rowHeights, currState.defaultRowHeight),
+				currState.defaultRowHeight
+			);
 		}
 
 		if (updatedSet.has('selectedRange') || updatedSet.has('columns') || updatedSet.has('dataVersion')) {

@@ -3,39 +3,43 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { GridStore, GridNavigationController, ClientRowModelController } from '@open-grid/core';
-import { GridProvider, Cell, useCellEditState, useGridNavigationController, useGridKeySelector, useGridDimensions } from './index.js';
+import {
+	GridProvider,
+	PortalCell,
+	PortalManager,
+	OpenGrid,
+	useGridNavigationController,
+	useGridKeySelector,
+	useGridStore,
+	useGridApi,
+	useGridSelector,
+} from './index.js';
+
+// Mock ResizeObserver for jsdom environment
+class MockResizeObserver {
+	observe = vi.fn();
+	unobserve = vi.fn();
+	disconnect = vi.fn();
+}
+globalThis.ResizeObserver = MockResizeObserver as any;
 
 interface TestRow {
 	id: string;
 	name: string;
 }
 
-const HookInspector = ({ rowId, colField }: { rowId: string; colField: string }) => {
-	const { isEditing } = useCellEditState<TestRow>(rowId, colField);
-	return (
-		<div>
-			<span data-testid='is-editing'>{isEditing ? 'yes' : 'no'}</span>
-		</div>
-	);
-};
-
-const DimensionsInspector = () => {
-	const { leftPinnedWidth, rightPinnedWidth, totalWidth, totalHeight, leftPinnedCols, rightPinnedCols, centerCols, visibleRows } =
-		useGridDimensions<any>({
-			pinLeftColumns: 1,
-			pinRightColumns: 1,
-		});
+const SelectorInspector = () => {
+	const focused = useGridSelector((s) => s.focusedCell);
+	const dataVersion = useGridKeySelector('dataVersion', (s) => s.dataVersion);
+	const store = useGridStore<TestRow>();
+	const api = useGridApi<TestRow>();
 
 	return (
 		<div>
-			<div data-testid='left-pinned-width'>{leftPinnedWidth}</div>
-			<div data-testid='right-pinned-width'>{rightPinnedWidth}</div>
-			<div data-testid='total-width'>{totalWidth}</div>
-			<div data-testid='total-height'>{totalHeight}</div>
-			<div data-testid='left-cols-count'>{leftPinnedCols.length}</div>
-			<div data-testid='right-cols-count'>{rightPinnedCols.length}</div>
-			<div data-testid='center-cols-count'>{centerCols.length}</div>
-			<div data-testid='visible-rows-count'>{visibleRows.length}</div>
+			<span data-testid='focused-cell'>{focused ? `${focused.rowId}:${focused.colField}` : 'none'}</span>
+			<span data-testid='data-version'>{dataVersion}</span>
+			<span data-testid='store-exists'>{store ? 'yes' : 'no'}</span>
+			<span data-testid='api-exists'>{api ? 'yes' : 'no'}</span>
 		</div>
 	);
 };
@@ -45,8 +49,8 @@ const NavigationControllerOwner = ({ onCellValueChanged }: { onCellValueChanged:
 	return null;
 };
 
-describe('React Bindings hooks and components', () => {
-	it('should yield correct editing state via useCellEditState hook', () => {
+describe('React Adapter (v2 API and Architecture)', () => {
+	it('should provide context and support selector hooks', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
@@ -57,72 +61,97 @@ describe('React Bindings hooks and components', () => {
 
 		render(
 			<GridProvider store={store}>
-				<HookInspector rowId='1' colField='name' />
+				<SelectorInspector />
 			</GridProvider>
 		);
 
-		expect(screen.getByTestId('is-editing').textContent).toBe('no');
+		expect(screen.getByTestId('store-exists').textContent).toBe('yes');
+		expect(screen.getByTestId('api-exists').textContent).toBe('yes');
+		expect(screen.getByTestId('focused-cell').textContent).toBe('none');
+		expect(screen.getByTestId('data-version').textContent).toBe('2'); // starts at 1, +1 after ClientRowModelController refresh
 
-		// Act: Enter edit mode programmatically
+		// Focus cell and verify selector updates
 		act(() => {
-			store.setState({
-				activeEdit: {
-					rowId: '1',
-					colField: 'name',
-				},
-			});
+			store.setFocusedCell('1', 'name');
 		});
+		expect(screen.getByTestId('focused-cell').textContent).toBe('1:name');
 
-		expect(screen.getByTestId('is-editing').textContent).toBe('yes');
+		// Update rows and verify key selector updates
+		act(() => {
+			controller.setRows([{ id: '1', name: 'Product B' }]);
+		});
+		expect(screen.getByTestId('data-version').textContent).toBe('3');
 
 		controller.dispose();
 	});
 
-	it('should render standard Cell in view mode and transition to edit mode on blur/onKeyDown', () => {
+	it('should render custom cell renderer via PortalCell', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellRenderer: ({ value }) => <span data-testid='custom-renderer'>{String(value)}!!!</span>,
+				},
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: store.getState().columns,
+		});
+
+		const colDef = store.getColumnDef('name');
+		const node = store.getRowModel()!.getRowNode(0)!;
+
+		render(
+			<GridProvider store={store}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} />
+			</GridProvider>
+		);
+
+		expect(screen.getByTestId('custom-renderer').textContent).toBe('Product A!!!');
+		controller.dispose();
+	});
+
+	it('should render default text input when editing and no custom editor via PortalCell', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Cell Content' }],
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
-		const navigation = new GridNavigationController<TestRow>({});
-		store.registerFeature(navigation);
+
+		const colDef = store.getColumnDef('name');
+		const node = store.getRowModel()!.getRowNode(0)!;
+
+		// Set active edit state
+		act(() => {
+			store.setState({
+				activeEdit: { rowId: '1', colField: 'name' },
+			});
+		});
 
 		render(
 			<GridProvider store={store}>
-				<Cell rowId='1' colField='name' />
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} />
 			</GridProvider>
 		);
 
-		// Assert: cell displays text
-		expect(screen.getByText('Cell Content')).toBeDefined();
-
-		// Act: Enter editing mode programmatically
-		act(() => {
-			navigation.setCellEditing('1', 'name', true);
-		});
-
-		// Assert: cell displays input
 		const input = screen.getByRole('textbox') as HTMLInputElement;
 		expect(input).toBeDefined();
-		expect(input.value).toBe('Cell Content');
+		expect(input.value).toBe('Product A');
 
-		// Act: Type value in input
-		fireEvent.change(input, { target: { value: 'Cell Value Mod' } });
-
-		// Act: Blur the input
+		// Commit edit by blurring
+		fireEvent.change(input, { target: { value: 'Product B' } });
 		fireEvent.blur(input);
 
-		// Assert: should exit editing and commit changes immediately
-		expect(store.getState().activeEdit).toBeNull();
-		expect(store.getCellValue('1', 'name')).toBe('Cell Value Mod');
-		expect(screen.queryByRole('textbox')).toBeNull();
-
+		expect(store.getCellValue('1', 'name')).toBe('Product B');
 		controller.dispose();
 	});
 
-	it('should ignore event objects passed to onCommit and commit the correct local value', () => {
+	it('should render custom cell editor via PortalCell', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{
@@ -130,145 +159,85 @@ describe('React Bindings hooks and components', () => {
 					header: 'Name',
 					width: 100,
 					cellEditor: ({ value, onChange, onCommit }) => (
-						<input data-testid='custom-editor' value={value as string} onChange={(e) => onChange(e.target.value)} onBlur={onCommit} />
+						<input
+							data-testid='custom-editor'
+							value={String(value)}
+							onChange={(e) => onChange(e.target.value)}
+							onBlur={() => onCommit()}
+						/>
 					),
 				},
 			],
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Original Name' }],
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
-		const navigation = new GridNavigationController<TestRow>({});
-		store.registerFeature(navigation);
 
-		render(
-			<GridProvider store={store}>
-				<Cell rowId='1' colField='name' />
-			</GridProvider>
-		);
+		const colDef = store.getColumnDef('name');
+		const node = store.getRowModel()!.getRowNode(0)!;
 
-		// Enter editing mode programmatically
-		act(() => {
-			navigation.setCellEditing('1', 'name', true);
-		});
-
-		const input = screen.getByTestId('custom-editor') as HTMLInputElement;
-		expect(input.value).toBe('Original Name');
-
-		// Type value
-		fireEvent.change(input, { target: { value: 'Successfully Edited!' } });
-
-		// Trigger blur, passing FocusEvent to onCommit
-		fireEvent.blur(input);
-
-		// Assert: should ignore event object, exit editing, and commit correct string value
-		expect(store.getState().activeEdit).toBeNull();
-		expect(store.getCellValue('1', 'name')).toBe('Successfully Edited!');
-
-		controller.dispose();
-	});
-
-	it('should stop keydown propagation and commit/cancel on Enter and Escape', () => {
-		const store = new GridStore<TestRow>({
-			columns: [{ field: 'name', header: 'Name', width: 100 }],
-		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Cell Content' }],
-			columns: store.getState().columns,
-		});
-		const navigation = new GridNavigationController<TestRow>({});
-		store.registerFeature(navigation);
-
-		render(
-			<GridProvider store={store}>
-				<Cell rowId='1' colField='name' />
-			</GridProvider>
-		);
-
-		// Activate edit mode
-		act(() => {
-			navigation.setCellEditing('1', 'name', true);
-		});
-
-		const input = screen.getByRole('textbox') as HTMLInputElement;
-		fireEvent.change(input, { target: { value: 'Modified Content' } });
-
-		// Track propagation
-		const keydownSpy = vi.fn();
-		window.addEventListener('keydown', keydownSpy);
-
-		// Press Enter key on input
-		fireEvent.keyDown(input, { key: 'Enter' });
-
-		// Assert: Enter event propagation is stopped and edit is committed
-		expect(keydownSpy).not.toHaveBeenCalled();
-		expect(store.getState().activeEdit).toBeNull();
-		expect(store.getCellValue('1', 'name')).toBe('Modified Content');
-
-		// Re-enter edit mode
-		act(() => {
-			navigation.setCellEditing('1', 'name', true);
-		});
-
-		const input2 = screen.getByRole('textbox') as HTMLInputElement;
-		fireEvent.change(input2, { target: { value: 'Reverted Content' } });
-
-		// Press Escape key on input
-		fireEvent.keyDown(input2, { key: 'Escape' });
-
-		// Assert: Escape event propagation is stopped and edit is cancelled
-		expect(keydownSpy).not.toHaveBeenCalled();
-		expect(store.getState().activeEdit).toBeNull();
-		expect(store.getCellValue('1', 'name')).toBe('Modified Content'); // value reverted to last committed
-
-		// Clean up global listener
-		window.removeEventListener('keydown', keydownSpy);
-		controller.dispose();
-	});
-
-	it('should commit the current changes on arrow navigation from the cell when editing', () => {
-		const store = new GridStore<TestRow>({
-			columns: [{ field: 'name', header: 'Name', width: 100 }],
-		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [
-				{ id: '1', name: 'Original One' },
-				{ id: '2', name: 'Original Two' },
-			],
-			columns: store.getState().columns,
-		});
-		const navigation = new GridNavigationController<TestRow>({});
-		store.registerFeature(navigation);
-
-		render(
-			<GridProvider store={store}>
-				<Cell rowId='1' colField='name' />
-				<Cell rowId='2' colField='name' />
-			</GridProvider>
-		);
-
-		// Focus the cell and activate edit mode
+		// Set active edit state
 		act(() => {
 			store.setState({
-				focusedCell: { rowId: '1', colField: 'name' },
+				activeEdit: { rowId: '1', colField: 'name' },
 			});
-			navigation.setCellEditing('1', 'name', true);
 		});
 
-		const input = screen.getByRole('textbox') as HTMLInputElement;
-		fireEvent.change(input, { target: { value: 'Modified One' } });
+		render(
+			<GridProvider store={store}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} />
+			</GridProvider>
+		);
 
-		// Simulate ArrowDown keypress (navigation to cell 2)
-		act(() => {
-			navigation.handleKeyDown(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+		const input = screen.getByTestId('custom-editor') as HTMLInputElement;
+		expect(input).toBeDefined();
+		expect(input.value).toBe('Product A');
+
+		// Commit edit
+		fireEvent.change(input, { target: { value: 'Product B' } });
+		fireEvent.blur(input);
+
+		expect(store.getCellValue('1', 'name')).toBe('Product B');
+		controller.dispose();
+	});
+
+	it('should render portals inside PortalManager', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellRenderer: ({ value }) => <span data-testid='portal-content'>{String(value)}</span>,
+				},
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: store.getState().columns,
 		});
 
-		// Assert: should exit editing, commit changes to store, and move focus to cell 2
-		expect(store.getState().activeEdit).toBeNull();
-		expect(store.getCellValue('1', 'name')).toBe('Modified One');
-		expect(store.getState().focusedCell).toEqual({ rowId: '2', colField: 'name' });
+		const container = document.createElement('div');
+		document.body.appendChild(container);
 
+		const colDef = store.getColumnDef('name');
+		const node = store.getRowModel()!.getRowNode(0)!;
+
+		const portals = new Map();
+		portals.set('1:name', {
+			cellKey: '1:name',
+			container,
+			value: 'Product A',
+			node,
+			col: colDef,
+		});
+
+		render(<PortalManager portals={portals} store={store} />);
+
+		expect(screen.getByTestId('portal-content').textContent).toBe('Product A');
+
+		document.body.removeChild(container);
 		controller.dispose();
 	});
 
@@ -298,168 +267,23 @@ describe('React Bindings hooks and components', () => {
 		controller.dispose();
 	});
 
-	it('should instantly re-render Cell components when dependent values trigger dynamic valueGetters', () => {
-		interface RecipeRow {
-			id: string;
-			price: number;
-			qty: number;
-		}
-
-		const store = new GridStore<RecipeRow>({
-			columns: [
-				{ field: 'id', header: 'ID', width: 50 },
-				{ field: 'price', header: 'Price', width: 50 },
-				{ field: 'qty', header: 'Qty', width: 50 },
-				{
-					field: 'subtotal',
-					header: 'Subtotal',
-					width: 80,
-					valueGetter: ({ row }) => `$${row.price * row.qty}`,
-				},
-			],
-		});
-		const controller = new ClientRowModelController<RecipeRow>(store, {
-			rows: [{ id: 'cake', price: 10, qty: 2 }],
-			columns: store.getState().columns,
-		});
-
-		const navigation = new GridNavigationController<RecipeRow>({});
-		store.registerFeature(navigation);
-
-		render(
-			<GridProvider store={store}>
-				<Cell rowId='cake' colField='subtotal' />
-			</GridProvider>
-		);
-
-		// 1. Verify initial subtotal ($20) is rendered
-		expect(screen.getByText('$20')).toBeDefined();
-
-		// 2. Mutate price programmatically (flush sync since batching is always on)
-		act(() => {
-			store.setCellValue('cake', 'price', 25);
-			store.flushCellUpdatesSync();
-		});
-
-		// 3. Subtotal should immediately update to $50 and re-render without user focus/clicking!
-		expect(screen.getByText('$50')).toBeDefined();
-
-		controller.dispose();
-	});
-
-	it('should NOT re-render other rows or virtual rows during editing or focus transitions', () => {
-		let virtualRowRenderCount = 0;
-		const TestVirtualRow = React.memo(({ rowIndex, id }: { rowIndex: number; id: string }) => {
-			virtualRowRenderCount++;
-			// Subscribe to dataVersion exactly like VirtualRow in demo
-			useGridKeySelector('dataVersion', (state) => state.dataVersion);
-			return <Cell rowId={id} colField='name' />;
-		});
-
+	it('should mount OpenGrid component and setup rendering container', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
 		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [
-				{ id: '1', name: 'Row 1' },
-				{ id: '2', name: 'Row 2' },
-				{ id: '3', name: 'Row 3' },
-			],
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
-		const navigation = new GridNavigationController<TestRow>({
-			onCellValueChanged: (rowId, colField, val) => {
-				controller.updateRows((rows) => rows.map((row) => (row.id === rowId ? { ...row, [colField]: val as string } : row)));
-			},
-		});
-		store.registerFeature(navigation);
 
-		render(
-			<GridProvider store={store}>
-				<div>
-					<TestVirtualRow rowIndex={0} id='1' />
-					<TestVirtualRow rowIndex={1} id='2' />
-					<TestVirtualRow rowIndex={2} id='3' />
-				</div>
-			</GridProvider>
-		);
+		const { container, unmount } = render(<OpenGrid store={store} pinLeftColumns={1} enableNavigation={true} />);
 
-		// Record initial render count (should be 3)
-		expect(virtualRowRenderCount).toBe(3);
+		// Verify that a div element with relative position has been rendered inside OpenGrid
+		const openGridDiv = container.firstElementChild as HTMLElement;
+		expect(openGridDiv).toBeDefined();
+		expect(openGridDiv.style.position).toBe('relative');
 
-		// Act 1: Focus cell 1:name
-		act(() => {
-			store.setFocusedCell('1', 'name');
-		});
-
-		// Verify no virtual rows re-rendered!
-		expect(virtualRowRenderCount).toBe(3);
-
-		// Act 2: Start editing cell 1:name
-		act(() => {
-			navigation.setCellEditing('1', 'name', true);
-		});
-
-		// Verify no virtual rows re-rendered!
-		expect(virtualRowRenderCount).toBe(3);
-
-		// Act 3: Stop editing cell 1:name
-		act(() => {
-			navigation.setCellEditing('1', 'name', false);
-		});
-
-		// Verify no virtual rows re-rendered!
-		expect(virtualRowRenderCount).toBe(3);
-
-		// Act 4: Actually edit the cell value and commit
-		act(() => {
-			store.setCellValue('1', 'name', 'Row 1 Mod');
-		});
-
-		// Verify no virtual rows re-rendered!
-		expect(virtualRowRenderCount).toBe(3);
-
-		controller.dispose();
-	});
-
-	it('should compute grid dimensions, scroll tracking, and pinned lanes via useGridDimensions', () => {
-		const store = new GridStore<TestRow>({
-			columns: [
-				{ field: 'id', header: 'ID', width: 50 },
-				{ field: 'name', header: 'Name', width: 100 },
-				{ field: 'age', header: 'Age', width: 80 },
-			],
-		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [
-				{ id: '1', name: 'Row 1' },
-				{ id: '2', name: 'Row 2' },
-				{ id: '3', name: 'Row 3' },
-			],
-			columns: store.getState().columns,
-		});
-		const navigation = new GridNavigationController<TestRow>({});
-		store.registerFeature(navigation);
-
-		// Set viewport size manually on viewportController to simulate visible viewport bounds
-		store.viewportController.setViewportSize(200, 100);
-
-		render(
-			<GridProvider store={store}>
-				<DimensionsInspector />
-			</GridProvider>
-		);
-
-		// With pinLeftColumns=1, pinRightColumns=1, and 3 total columns (width 50, 100, 80):
-		// Left pinned width: col 0 (width 50) => 50
-		// Right pinned width: col 2 (width 80) => 80
-		// Center column: col 1 (width 100)
-		expect(screen.getByTestId('left-pinned-width').textContent).toBe('50');
-		expect(screen.getByTestId('right-pinned-width').textContent).toBe('80');
-		expect(screen.getByTestId('left-cols-count').textContent).toBe('1');
-		expect(screen.getByTestId('right-cols-count').textContent).toBe('1');
-
-		// Clean up
+		unmount();
 		controller.dispose();
 	});
 });

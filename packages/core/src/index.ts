@@ -27,3 +27,8 @@ export * from './models/GeometryModel.js';
 export * from './models/FocusModel.js';
 export * from './models/SelectionModel.js';
 export * from './models/EditModel.js';
+
+// Phase 4 Render Engine Foundation Exports
+export * from './renderer/domPool.js';
+export * from './renderer/scrollEngine.js';
+export * from './renderer/renderEngine.js';
