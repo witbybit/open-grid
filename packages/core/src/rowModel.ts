@@ -304,15 +304,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		this.rowIdMap.clear();
 
-		let currentTop = 0;
 		this.activeNodes.forEach((node, index) => {
 			if (node) {
-				node.rowIndex = index;
-				node.rowTop = currentTop;
-				const explicitHeight = state.rowHeights[node.id];
-				node.rowHeight = explicitHeight !== undefined ? explicitHeight : state.defaultRowHeight;
-
-				currentTop += node.rowHeight;
 				this.rowIdMap.set(node.id, index);
 			}
 		});

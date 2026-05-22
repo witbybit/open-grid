@@ -343,9 +343,6 @@ describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions'
 		expect(node).toBeDefined();
 		expect(node.id).toBe('1');
 		expect(node.data.name).toBe('Product A');
-		expect(node.rowIndex).toBe(0);
-		expect(node.rowTop).toBe(0);
-		expect(node.rowHeight).toBe(40);
 
 		// Cell caching test
 		let callCount = 0;

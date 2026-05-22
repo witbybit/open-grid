@@ -147,10 +147,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			}
 
 			// Patch loaded rows into the array and index map
-			let currentTop =
-				startRow > 0 && this.activeNodes[startRow - 1]
-					? this.activeNodes[startRow - 1]!.rowTop + this.activeNodes[startRow - 1]!.rowHeight
-					: startRow * curr.defaultRowHeight;
 
 			response.rows.forEach((row, idx) => {
 				const globalIdx = startRow + idx;
@@ -164,12 +160,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 					} else {
 						node = new RowNode<TData>(id, typedRow);
 					}
-
-					node.rowIndex = globalIdx;
-					const explicitHeight = curr.rowHeights[node.id];
-					node.rowHeight = explicitHeight !== undefined ? explicitHeight : curr.defaultRowHeight;
-					node.rowTop = currentTop;
-					currentTop += node.rowHeight;
 
 					this.activeNodes[globalIdx] = node;
 					this.nodeMap.set(id, node);
@@ -186,17 +176,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				}
 			}
 
-			// We need to re-layout from the start row onwards to adjust all subsequent heights/tops if they are loaded
-			let layoutTop = 0;
-			this.activeNodes.forEach((node, index) => {
-				if (node) {
-					node.rowIndex = index;
-					node.rowTop = layoutTop;
-					layoutTop += node.rowHeight;
-				} else {
-					layoutTop += curr.defaultRowHeight;
-				}
-			});
+			// Layout geometry will be updated by GridEngine using GeometryModel
 
 			this.store.setState({
 				dataVersion: curr.dataVersion + 1,

@@ -23,7 +23,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 	// Layer DOM elements
 	private centerLayer: HTMLDivElement | null = null;
+	private leftLayer: HTMLDivElement | null = null;
+	private rightLayer: HTMLDivElement | null = null;
 	private headerLayer: HTMLDivElement | null = null;
+	private headerLeftLayer: HTMLDivElement | null = null;
+	private headerRightLayer: HTMLDivElement | null = null;
 	private overlayLayer: HTMLDivElement | null = null;
 	private styleTag: HTMLStyleElement | null = null;
 
@@ -64,25 +68,41 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		// Create spacer representing virtual height/width
 		this.scrollSpacer = document.createElement('div');
 		this.scrollSpacer.className = 'og-scroll-spacer';
-		this.scrollViewport.appendChild(this.scrollSpacer);
-
-		// Create GPU composite center layer
+		
+		// Create GPU composite layers
 		this.centerLayer = document.createElement('div');
-		this.centerLayer.className = 'og-layer og-layer-center';
-		this.scrollViewport.appendChild(this.centerLayer);
+		this.centerLayer.className = 'og-layer-center';
 
-		// Create horizontal-scrolling header layer
+		this.leftLayer = document.createElement('div');
+		this.leftLayer.className = 'og-layer-left';
+
+		this.rightLayer = document.createElement('div');
+		this.rightLayer.className = 'og-layer-right';
+
+		// Create horizontal-scrolling header layers
 		this.headerLayer = document.createElement('div');
-		this.headerLayer.className = 'og-layer og-layer-header';
+		this.headerLayer.className = 'og-layer-header';
+
+		this.headerLeftLayer = document.createElement('div');
+		this.headerLeftLayer.className = 'og-layer-header-left';
+
+		this.headerRightLayer = document.createElement('div');
+		this.headerRightLayer.className = 'og-layer-header-right';
 
 		// Create visual overlay layer (selection & focus ring)
 		this.overlayLayer = document.createElement('div');
-		this.overlayLayer.className = 'og-layer og-layer-overlay';
+		this.overlayLayer.className = 'og-layer-overlay';
 
-		// Assemble DOM tree
+		// Assemble DOM tree using CSS Grid overlap
+		this.scrollViewport.appendChild(this.scrollSpacer);
+		this.scrollViewport.appendChild(this.centerLayer);
+		this.scrollViewport.appendChild(this.leftLayer);
+		this.scrollViewport.appendChild(this.rightLayer);
+		this.scrollViewport.appendChild(this.headerLayer);
+		this.scrollViewport.appendChild(this.headerLeftLayer);
+		this.scrollViewport.appendChild(this.headerRightLayer);
+		this.scrollViewport.appendChild(this.overlayLayer);
 		this.container.appendChild(this.scrollViewport);
-		this.container.appendChild(this.headerLayer);
-		this.container.appendChild(this.overlayLayer);
 
 		// Bind scroll events to scroll engine
 		this.scrollEngine.bind(this.scrollViewport, this.onScroll);
@@ -197,8 +217,25 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		if (this.centerLayer) {
 			const viewportWidth = this.engine.viewport.viewportWidth;
-			this.centerLayer.style.width = `${Math.max(totalWidth, viewportWidth)}px`;
+			const targetWidth = `${Math.max(totalWidth, viewportWidth)}px`;
+			
+			this.centerLayer.style.width = targetWidth;
 			this.centerLayer.style.height = `${totalHeight}px`;
+			
+			if (this.headerLayer) this.headerLayer.style.width = targetWidth;
+			if (this.overlayLayer) {
+				this.overlayLayer.style.width = targetWidth;
+				this.overlayLayer.style.height = `${totalHeight}px`;
+			}
+			
+			const pinLeftWidth = this.engine.viewport.pinLeftColumns > 0 ? this.engine.geometry.colLefts[this.engine.viewport.pinLeftColumns] || 0 : 0;
+			if (this.leftLayer) this.leftLayer.style.width = `${pinLeftWidth}px`;
+			if (this.headerLeftLayer) this.headerLeftLayer.style.width = `${pinLeftWidth}px`;
+			
+			const firstRightPinColIdx = colCount - this.engine.viewport.pinRightColumns;
+			const pinRightWidth = this.engine.viewport.pinRightColumns > 0 ? totalWidth - (this.engine.geometry.colLefts[firstRightPinColIdx] || totalWidth) : 0;
+			if (this.rightLayer) this.rightLayer.style.width = `${pinRightWidth}px`;
+			if (this.headerRightLayer) this.headerRightLayer.style.width = `${pinRightWidth}px`;
 		}
 
 		// 2. Recycle viewport
@@ -272,10 +309,15 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			let pooledRow = this.activeRows.get(r);
 
 			if (!pooledRow) {
-				// Acquire an unused row div from the pool
+				// Acquire unused row divs from the pool
 				const rowEl = this.rowPool.acquire();
+				const leftEl = this.rowPool.acquire();
+				const rightEl = this.rowPool.acquire();
+				
 				pooledRow = {
 					element: rowEl,
+					leftElement: leftEl,
+					rightElement: rightEl,
 					cells: [],
 					boundRowIndex: r,
 					boundRowId: node.id,
@@ -283,10 +325,10 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				};
 				this.activeRows.set(r, pooledRow);
 
-				// Append row div to center layer
-				if (this.centerLayer) {
-					this.centerLayer.appendChild(rowEl);
-				}
+				// Append row divs to center layer
+				if (this.centerLayer) this.centerLayer.appendChild(rowEl);
+				if (this.leftLayer) this.leftLayer.appendChild(leftEl);
+				if (this.rightLayer) this.rightLayer.appendChild(rightEl);
 			}
 
 			// Reposition row via fast translate3d transform promote
@@ -307,6 +349,19 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			pooledRow.element.style.height = `${rowHeight}px`;
 			pooledRow.element.dataset.rowIndex = String(r);
 			pooledRow.element.dataset.rowId = node.id;
+			
+			if (pooledRow.leftElement) {
+				pooledRow.leftElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
+				pooledRow.leftElement.style.height = `${rowHeight}px`;
+				pooledRow.leftElement.dataset.rowIndex = String(r);
+				pooledRow.leftElement.dataset.rowId = node.id;
+			}
+			if (pooledRow.rightElement) {
+				pooledRow.rightElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
+				pooledRow.rightElement.style.height = `${rowHeight}px`;
+				pooledRow.rightElement.dataset.rowIndex = String(r);
+				pooledRow.rightElement.dataset.rowId = node.id;
+			}
 
 			// Handle row class names including pinning and selection states
 			let rowClassName = 'og-row';
@@ -319,6 +374,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				rowClassName += ' og-row-selected';
 			}
 			pooledRow.element.className = rowClassName;
+			if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
+			if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
 
 			// Recycle individual cells inside this row
 			this.recycleRowCells(pooledRow, node, r, newColRange.startIdx, newColRange.endIdx, columns);
@@ -388,21 +445,25 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			if (!cell) {
 				cell = this.cellPool.acquire();
 				pooledRow.cells[c] = cell;
-				pooledRow.element.appendChild(cell);
 			}
 
-			// Position cell absolutely using hardware transform
 			let cellLeft = this.engine.geometry.colLefts[c];
 			const cellWidth = this.engine.geometry.colWidths[c];
 
+			let targetRowEl = pooledRow.element;
+
 			if (c < pinLeftColumns) {
-				cellLeft = cellLeft + scrollLeft;
+				targetRowEl = pooledRow.leftElement!;
 			} else if (c >= colCount - pinRightColumns) {
-				let widthToRight = 0;
-				for (let i = c + 1; i < colCount; i++) {
-					widthToRight += this.engine.geometry.colWidths[i];
-				}
-				cellLeft = scrollLeft + viewportWidth - widthToRight - cellWidth;
+				const firstRightPinColLeft = this.engine.geometry.colLefts[colCount - pinRightColumns];
+				cellLeft = cellLeft - firstRightPinColLeft;
+				targetRowEl = pooledRow.rightElement!;
+			} else {
+				// Normal cells do not need scrollLeft subtracted anymore due to CSS grid
+			}
+
+			if (cell.parentNode !== targetRowEl) {
+				targetRowEl.appendChild(cell);
 			}
 
 			cell.style.transform = `translate3d(${cellLeft}px, 0, 0)`;
@@ -525,14 +586,13 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		pooledRow.cells = [];
 
 		// Detach row elements and recycle
-		if (pooledRow.element.parentNode === this.centerLayer) {
-			try {
-				pooledRow.element.remove();
-			} catch (e) {
-				// Safe unmount boundary catch
-			}
-		}
+		if (pooledRow.element.parentNode) pooledRow.element.remove();
+		if (pooledRow.leftElement && pooledRow.leftElement.parentNode) pooledRow.leftElement.remove();
+		if (pooledRow.rightElement && pooledRow.rightElement.parentNode) pooledRow.rightElement.remove();
+
 		this.rowPool.release(pooledRow.element);
+		if (pooledRow.leftElement) this.rowPool.release(pooledRow.leftElement);
+		if (pooledRow.rightElement) this.rowPool.release(pooledRow.rightElement);
 		this.activeRows.delete(rowIndex);
 	}
 
@@ -550,10 +610,12 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	 * Renders the grid column headers.
 	 */
 	private paintHeaders(): void {
-		if (!this.headerLayer) return;
+		if (!this.headerLayer || !this.headerLeftLayer || !this.headerRightLayer) return;
 
 		// Clear header DOM nodes
 		this.headerLayer.textContent = '';
+		this.headerLeftLayer.textContent = '';
+		this.headerRightLayer.textContent = '';
 
 		const columns = this.engine.stateManager.getState().columns;
 		const colCount = columns.length;
@@ -576,17 +638,18 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			let cellLeft = this.engine.geometry.colLefts[c];
 			const cellWidth = this.engine.geometry.colWidths[c];
 
+			let targetLayer = this.headerLayer;
+
 			if (c < pinLeftColumns) {
 				className += ' og-header-cell-pinned-left';
+				targetLayer = this.headerLeftLayer;
 			} else if (c >= colCount - pinRightColumns) {
 				className += ' og-header-cell-pinned-right';
-				let widthToRight = 0;
-				for (let i = c + 1; i < colCount; i++) {
-					widthToRight += this.engine.geometry.colWidths[i];
-				}
-				cellLeft = viewportWidth - widthToRight - cellWidth;
+				const firstRightPinColLeft = this.engine.geometry.colLefts[colCount - pinRightColumns];
+				cellLeft = cellLeft - firstRightPinColLeft;
+				targetLayer = this.headerRightLayer;
 			} else {
-				cellLeft = cellLeft - scrollLeft;
+				// No manual scrollLeft subtraction needed due to native CSS Grid scrolling!
 			}
 
 			headerCell.className = className;
@@ -643,7 +706,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			});
 
 			headerCell.appendChild(resizeHandle);
-			this.headerLayer!.appendChild(headerCell);
+			targetLayer!.appendChild(headerCell);
 		};
 
 		// 1. Render pinned left headers
@@ -785,21 +848,35 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		if (typeof document === 'undefined') return;
 
 		const css = `
+      :root, .og-grid-container {
+        --og-font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+        --og-bg-color: #0d0f12;
+        --og-text-color: #e2e8f0;
+        --og-border-color: #1e293b;
+        --og-header-bg: #090a0f;
+        --og-header-text: #94a3b8;
+        --og-row-hover-bg: #161b22;
+        --og-cell-border: rgba(30, 41, 59, 0.5);
+        --og-selection-border: rgba(59, 130, 246, 0.6);
+        --og-selection-bg: rgba(59, 130, 246, 0.04);
+        --og-focus-ring: #3b82f6;
+      }
+
       .og-grid-container {
         position: relative;
         overflow: hidden;
         contain: strict;
-        font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
-        background-color: #0d0f12;
-        color: #e2e8f0;
-        border: 1px solid #1e293b;
+        font-family: var(--og-font-family);
+        background-color: var(--og-bg-color);
+        color: var(--og-text-color);
+        border: 1px solid var(--og-border-color);
         border-radius: 8px;
         box-sizing: border-box;
       }
 
       .og-scroll-viewport {
         position: absolute;
-        top: 40px; /* Header space */
+        top: 0;
         left: 0;
         right: 0;
         bottom: 0;
@@ -807,49 +884,83 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
         contain: strict;
         will-change: transform;
         z-index: 10;
+        display: grid;
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr;
       }
 
       .og-scroll-spacer {
-        position: absolute;
-        top: 0;
-        left: 0;
+        grid-area: 1 / 1 / 2 / 2;
         pointer-events: none;
-      }
-
-      .og-layer {
-        position: absolute;
-        top: 0;
-        left: 0;
-        contain: layout style paint;
-        pointer-events: none;
-        will-change: transform;
       }
 
       .og-layer-center {
+        grid-area: 1 / 1 / 2 / 2;
         pointer-events: auto;
-        top: 0;
-        left: 0;
         z-index: 10;
+        margin-top: 40px;
+      }
+
+      .og-layer-left {
+        grid-area: 1 / 1 / 2 / 2;
+        position: sticky;
+        left: 0;
+        z-index: 15;
+        pointer-events: auto;
+        margin-top: 40px;
+      }
+
+      .og-layer-right {
+        grid-area: 1 / 1 / 2 / 2;
+        position: sticky;
+        right: 0;
+        justify-self: end;
+        z-index: 15;
+        pointer-events: auto;
+        margin-top: 40px;
       }
 
       .og-layer-header {
+        grid-area: 1 / 1 / 2 / 2;
+        position: sticky;
         top: 0;
-        left: 0;
-        width: 100%;
         height: 40px;
         z-index: 30;
         pointer-events: auto;
-        border-bottom: 2px solid #1e293b;
-        background-color: #090a0f;
+        border-bottom: 2px solid var(--og-border-color);
+        background-color: var(--og-header-bg);
+      }
+
+      .og-layer-header-left {
+        grid-area: 1 / 1 / 2 / 2;
+        position: sticky;
+        top: 0;
+        left: 0;
+        height: 40px;
+        z-index: 35;
+        pointer-events: auto;
+        border-bottom: 2px solid var(--og-border-color);
+        background-color: var(--og-header-bg);
+      }
+
+      .og-layer-header-right {
+        grid-area: 1 / 1 / 2 / 2;
+        position: sticky;
+        top: 0;
+        right: 0;
+        justify-self: end;
+        height: 40px;
+        z-index: 35;
+        pointer-events: auto;
+        border-bottom: 2px solid var(--og-border-color);
+        background-color: var(--og-header-bg);
       }
 
       .og-layer-overlay {
-        top: 40px;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        grid-area: 1 / 1 / 2 / 2;
         z-index: 40;
         pointer-events: none;
+        margin-top: 40px;
       }
 
       .og-row {
@@ -857,18 +968,30 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
         left: 0;
         width: 100%;
         contain: layout style;
-        border-bottom: 1px solid #1e293b;
-        background-color: #0d0f12;
+        border-bottom: 1px solid var(--og-border-color);
+        background-color: var(--og-bg-color);
         box-sizing: border-box;
         transition: background-color 0.15s ease;
       }
 
       .og-row:hover {
-        background-color: #161b22;
+        background-color: var(--og-row-hover-bg);
       }
 
       .og-row-selected {
-        background-color: rgba(59, 130, 246, 0.08) !important;
+        background-color: var(--og-selection-bg) !important;
+      }
+
+      .og-row-pinned-top {
+        background-color: var(--og-header-bg);
+        z-index: 25;
+        border-bottom: 2px solid var(--og-border-color) !important;
+      }
+
+      .og-row-pinned-bottom {
+        background-color: var(--og-header-bg);
+        z-index: 25;
+        border-top: 2px solid var(--og-border-color) !important;
       }
 
       .og-cell {
@@ -883,11 +1006,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        border-right: 1px solid rgba(30, 41, 59, 0.5);
+        border-right: 1px solid var(--og-cell-border);
       }
 
       .og-cell-focused {
-        outline: 2px solid #3b82f6;
+        outline: 2px solid var(--og-focus-ring);
         outline-offset: -2px;
         z-index: 20;
       }
@@ -903,53 +1026,17 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
         font-size: 13px;
         letter-spacing: 0.05em;
         text-transform: uppercase;
-        color: #94a3b8;
-        border-right: 1px solid #1e293b;
+        color: var(--og-header-text);
+        border-right: 1px solid var(--og-border-color);
         box-sizing: border-box;
       }
 
       .og-selection-border {
         position: absolute;
-        border: 2px dashed rgba(59, 130, 246, 0.6);
-        background-color: rgba(59, 130, 246, 0.04);
+        border: 2px dashed var(--og-selection-border);
+        background-color: var(--og-selection-bg);
         box-sizing: border-box;
         pointer-events: none;
-      }
-
-      .og-cell-pinned-left {
-        background-color: #0d0f12;
-        z-index: 15;
-        border-right: 2px solid #1e293b !important;
-      }
-
-      .og-cell-pinned-right {
-        background-color: #0d0f12;
-        z-index: 15;
-        border-left: 2px solid #1e293b !important;
-      }
-
-      .og-row-pinned-top {
-        background-color: #090a0f;
-        z-index: 25;
-        border-bottom: 2px solid #1e293b !important;
-      }
-
-      .og-row-pinned-bottom {
-        background-color: #090a0f;
-        z-index: 25;
-        border-top: 2px solid #1e293b !important;
-      }
-
-      .og-header-cell-pinned-left {
-        background-color: #090a0f;
-        z-index: 35;
-        border-right: 2px solid #1e293b !important;
-      }
-
-      .og-header-cell-pinned-right {
-        background-color: #090a0f;
-        z-index: 35;
-        border-left: 2px solid #1e293b !important;
       }
 
       .og-header-resize-handle {
@@ -964,7 +1051,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
       }
 
       .og-header-resize-handle:hover {
-        background-color: #3b82f6;
+        background-color: var(--og-focus-ring);
       }
     `;
 

@@ -99,6 +99,8 @@ export class DOMPool<T extends HTMLElement> {
  */
 export interface PooledRow {
 	element: HTMLDivElement;
+	leftElement?: HTMLDivElement;
+	rightElement?: HTMLDivElement;
 	cells: (HTMLDivElement | null)[]; // Indexed by column index
 	boundRowIndex: number;
 	boundRowId: string;

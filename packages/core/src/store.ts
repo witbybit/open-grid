@@ -52,9 +52,6 @@ export type GridEventListener<T = unknown> = (event: GridEvent<T>) => void;
 export class RowNode<TRowData = any> {
 	public id!: string;
 	public data!: TRowData;
-	public rowIndex: number = -1; // Current visible index position
-	public rowTop: number = 0; // Computed absolute vertical pixel coordinate
-	public rowHeight: number = 40; // Explicit height tracker
 	public selected: boolean = false;
 	public expanded: boolean = false;
 
