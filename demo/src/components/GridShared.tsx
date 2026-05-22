@@ -316,7 +316,7 @@ export function GridView({
 	editTrigger = 'doubleClick',
 	arrowKeyNavigationEdit = false,
 }: GridViewProps) {
-	const store = useGridStore<any>();
+	const store = useGridStore<PerformanceRow>();
 
 	useEffect(() => {
 		store.setState({

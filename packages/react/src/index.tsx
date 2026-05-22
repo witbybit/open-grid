@@ -1,21 +1,6 @@
 import React, { createContext, useContext, useMemo, useSyncExternalStore, useRef, useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-	GridStore,
-	GridState,
-	GridNavigationController,
-	GridNavigationOptions,
-	GridApi,
-	CellState,
-	GridCellPointer,
-	ColumnDef,
-	CellEditorProps,
-	CellRendererProps,
-	ServerRowModelController,
-	ViewportRange,
-	RenderEngine,
-	InternalGridApi,
-} from '@open-grid/core';
+import { GridStore, GridState, GridNavigationController, GridNavigationOptions, GridApi, RenderEngine } from '@open-grid/core';
 
 // Create Grid Context
 const GridContext = createContext<GridStore<unknown> | null>(null);
@@ -216,14 +201,7 @@ export function PortalCell({ rowId, colField, value, col, node, isEditing, isLoa
 					/>
 				)
 			) : CustomRenderer && rowData ? (
-				<CustomRenderer
-					value={value}
-					computedValue={value}
-					row={rowData}
-					rowId={rowId}
-					colField={colField}
-					api={api}
-				/>
+				<CustomRenderer value={value} computedValue={value} row={rowData} rowId={rowId} colField={colField} api={api} />
 			) : null}
 		</div>
 	);
@@ -250,7 +228,15 @@ export function PortalManager({ portals, store }: PortalManagerProps) {
 			{Array.from(portals.values()).map((p) => {
 				return createPortal(
 					<GridProvider store={store} key={p.cellKey}>
-						<PortalCell rowId={p.node.id} colField={p.col.field} value={p.value} col={p.col} node={p.node} isEditing={p.isEditing} isLoading={p.isLoading} />
+						<PortalCell
+							rowId={p.node.id}
+							colField={p.col.field}
+							value={p.value}
+							col={p.col}
+							node={p.node}
+							isEditing={p.isEditing}
+							isLoading={p.isLoading}
+						/>
 					</GridProvider>,
 					p.container
 				);
@@ -301,25 +287,28 @@ function OpenGridInner<TRowData = unknown>({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const renderEngineRef = useRef<RenderEngine | null>(null);
 
-	const mountPortal = useCallback((cellKey: string, container: HTMLElement, value: unknown, node: any, col: any, isEditing: boolean, isLoading: boolean) => {
-		setPortals((prev) => {
-			const existing = prev.get(cellKey);
-			if (
-				existing &&
-				existing.container === container &&
-				existing.value === value &&
-				existing.node === node &&
-				existing.col === col &&
-				existing.isEditing === isEditing &&
-				existing.isLoading === isLoading
-			) {
-				return prev;
-			}
-			const next = new Map(prev);
-			next.set(cellKey, { cellKey, container, value, node, col, isEditing, isLoading });
-			return next;
-		});
-	}, []);
+	const mountPortal = useCallback(
+		(cellKey: string, container: HTMLElement, value: unknown, node: any, col: any, isEditing: boolean, isLoading: boolean) => {
+			setPortals((prev) => {
+				const existing = prev.get(cellKey);
+				if (
+					existing &&
+					existing.container === container &&
+					existing.value === value &&
+					existing.node === node &&
+					existing.col === col &&
+					existing.isEditing === isEditing &&
+					existing.isLoading === isLoading
+				) {
+					return prev;
+				}
+				const next = new Map(prev);
+				next.set(cellKey, { cellKey, container, value, node, col, isEditing, isLoading });
+				return next;
+			});
+		},
+		[]
+	);
 
 	const unmountPortal = useCallback((cellKey: string) => {
 		setPortals((prev) => {
@@ -487,10 +476,7 @@ function OpenGridInner<TRowData = unknown>({
 	}, [handleMouseDown, handleMouseOver, handleClick, handleDoubleClick]);
 
 	return (
-		<div
-			ref={containerRef}
-			style={{ width: '100%', height: '100%', position: 'relative' }}
-		>
+		<div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
 			<PortalManager portals={portals} store={store} />
 		</div>
 	);
