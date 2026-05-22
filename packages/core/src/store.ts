@@ -19,10 +19,15 @@ export interface GridCellPointer {
 	colField: string;
 }
 
-export interface GridFeature<TRowData = unknown> {
+export interface GridPlugin<TRowData = unknown> {
 	readonly name: string;
-	init(api: GridApi<TRowData>): void;
-	destroy?(): void;
+	onInit?(api: InternalGridApi<TRowData>): void;
+	onMount?(): void;
+	onDestroy?(): void;
+	onCommand?(command: any): void;
+	onViewportChange?(range: ViewportRange): void;
+	onBeforeRender?(): void;
+	onAfterRender?(): void;
 	getApiMethods?(): Record<string, Function>;
 }
 
@@ -87,7 +92,7 @@ export interface CellRendererProps<TRowData = unknown> {
 	row: TRowData;
 	rowId: string;
 	colField: string;
-	api: GridApi<TRowData>;
+	api: InternalGridApi<TRowData>;
 }
 
 export interface CellEditorProps<TRowData = unknown> {
@@ -99,7 +104,7 @@ export interface CellEditorProps<TRowData = unknown> {
 	 * Use this for text inputs where user is still typing.
 	 */
 	onChange: (value: unknown) => void;
-	api: GridApi<TRowData>;
+	api: InternalGridApi<TRowData>;
 	/**
 	 * Commit the value and exit edit mode.
 	 * If no value is provided, commits the current value from onChange.
@@ -219,6 +224,9 @@ export type GridStateUpdater<TRowData = unknown> = Partial<GridState<TRowData>> 
 
 export type Listener<TRowData = unknown> = (state: GridState<TRowData>) => void;
 
+/**
+ * Public, pristine API intended for application developers.
+ */
 export interface GridApi<TRowData = unknown> {
 	getState(): GridState<TRowData>;
 	setState(updater: GridStateUpdater<TRowData>): void;
@@ -238,22 +246,11 @@ export interface GridApi<TRowData = unknown> {
 	stopEditing(cancel?: boolean): void;
 	startTransaction(): void;
 	endTransaction(): void;
-	registerRowModel(rowModel: RowModel<TRowData>): void;
-	getRowModel(): RowModel<TRowData> | null;
-	registerFeature(feature: GridFeature<TRowData>): void;
-	getFeature<T = unknown>(name: string): T | null;
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
-	triggerCellNotifications(rowId: string): void;
 	getColumnIndex(colField: string): number;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
-	viewportController: ViewportController;
-	batch(callback: () => void): void;
-	batchedUpdates: boolean;
-	registerCellSubscription(sub: CellSubscription): void;
-	unregisterCellSubscription(sub: CellSubscription): void;
-	updateCellSubscription(sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void;
-	flushCellUpdatesSync(): void;
+	getPlugin<T = unknown>(name: string): T | null;
 	undo(): void;
 	redo(): void;
 	canUndo(): boolean;
@@ -261,7 +258,24 @@ export interface GridApi<TRowData = unknown> {
 	destroy(): void;
 }
 
-export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
+/**
+ * Internal API intended for the rendering engine, plugins, and custom framework adapters.
+ */
+export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
+	registerRowModel(rowModel: RowModel<TRowData>): void;
+	getRowModel(): RowModel<TRowData> | null;
+	registerPlugin(plugin: GridPlugin<TRowData>): void;
+	triggerCellNotifications(rowId: string): void;
+	viewportController: ViewportController;
+	batch(callback: () => void): void;
+	batchedUpdates: boolean;
+	registerCellSubscription(sub: CellSubscription): void;
+	unregisterCellSubscription(sub: CellSubscription): void;
+	updateCellSubscription(sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void;
+	flushCellUpdatesSync(): void;
+}
+
+export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> {
 	public columnController: ColumnController<TRowData>;
 	public rowController: RowController<TRowData>;
 	public focusController: FocusController;
@@ -271,7 +285,7 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	public dagEngine: DagEngine;
 	public engine: GridEngine<TRowData>;
 
-	private features = new Map<string, GridFeature<TRowData>>();
+	private plugins = new Map<string, GridPlugin<TRowData>>();
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
 		this.engine = new GridEngine<TRowData>({
@@ -305,6 +319,34 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 				this.focusController.setFocusedCell(null, null);
 			}
 			this.selectionController.setSelectedRange(state.selectedRange, state.selectedRangeBounds);
+		});
+
+		// Notify plugins of viewport shifts
+		this.engine.stateManager.subscribeToKey('visibleRowRange', () => {
+			const range = this.state.visibleRowRange;
+			this.plugins.forEach((plugin) => {
+				if (plugin.onViewportChange) plugin.onViewportChange(range);
+			});
+		});
+
+		// Notify plugins of commands
+		this.engine.commandBus.registerGlobalHandler((command) => {
+			this.plugins.forEach((plugin) => {
+				if (plugin.onCommand) plugin.onCommand(command);
+			});
+		});
+
+		// Notify plugins of render phases
+		this.engine.eventBus.addEventListener('beforeRender', () => {
+			this.plugins.forEach((plugin) => {
+				if (plugin.onBeforeRender) plugin.onBeforeRender();
+			});
+		});
+		
+		this.engine.eventBus.addEventListener('afterRender', () => {
+			this.plugins.forEach((plugin) => {
+				if (plugin.onAfterRender) plugin.onAfterRender();
+			});
 		});
 
 		// Set initial controller copies of focus & selection
@@ -505,31 +547,34 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 		this.engine.flushCellUpdatesSync();
 	};
 
-	public registerFeature = (feature: GridFeature<TRowData>): void => {
-		if (this.features.has(feature.name)) {
-			const existing = this.features.get(feature.name);
-			if (existing?.destroy) {
+	public registerPlugin = (plugin: GridPlugin<TRowData>): void => {
+		if (this.plugins.has(plugin.name)) {
+			const existing = this.plugins.get(plugin.name);
+			if (existing?.onDestroy) {
 				try {
-					existing.destroy();
+					existing.onDestroy();
 				} catch (e) {
 					console.error(e);
 				}
 			}
 		}
-		this.features.set(feature.name, feature);
-		(this as unknown as Record<string, unknown>)[feature.name] = feature;
-		feature.init(this);
+		this.plugins.set(plugin.name, plugin);
+		(this as unknown as Record<string, unknown>)[plugin.name] = plugin;
+		
+		if (plugin.onInit) {
+			plugin.onInit(this);
+		}
 
-		if (feature.getApiMethods) {
-			const methods = feature.getApiMethods();
+		if (plugin.getApiMethods) {
+			const methods = plugin.getApiMethods();
 			for (const [methodName, fn] of Object.entries(methods)) {
-				(this as unknown as Record<string, unknown>)[methodName] = fn.bind(feature);
+				(this as unknown as Record<string, unknown>)[methodName] = fn.bind(plugin);
 			}
 		}
 	};
 
-	public getFeature = <T = unknown>(name: string): T | null => {
-		return (this.features.get(name) as unknown as T) || null;
+	public getPlugin = <T = unknown>(name: string): T | null => {
+		return (this.plugins.get(name) as unknown as T) || null;
 	};
 
 	public undo = (): void => {
@@ -549,16 +594,16 @@ export class GridStore<TRowData = unknown> implements GridApi<TRowData> {
 	};
 
 	public destroy = (): void => {
-		this.features.forEach((feature) => {
-			if (feature.destroy) {
+		this.plugins.forEach((plugin) => {
+			if (plugin.onDestroy) {
 				try {
-					feature.destroy();
+					plugin.onDestroy();
 				} catch (e) {
 					console.error(e);
 				}
 			}
 		});
-		this.features.clear();
+		this.plugins.clear();
 
 		this.engine.destroy();
 		this.scheduler.flushAllSync();

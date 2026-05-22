@@ -106,7 +106,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		render(
 			<GridProvider store={store}>
-				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} />
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={false} isLoading={false} />
 			</GridProvider>
 		);
 
@@ -135,7 +135,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		render(
 			<GridProvider store={store}>
-				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} />
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
 
@@ -186,7 +186,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		render(
 			<GridProvider store={store}>
-				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} />
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
 

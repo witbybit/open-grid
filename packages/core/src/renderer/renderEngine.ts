@@ -1,5 +1,6 @@
 import { DOMPool, PooledRow } from './domPool.js';
 import { ScrollEngine } from './scrollEngine.js';
+import type { IGridRenderer } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RowNode, ColumnDef } from '../store.js';
 import type { ViewportRange } from '../viewportController.js';
@@ -9,7 +10,7 @@ import type { ViewportRange } from '../viewportController.js';
  * Coordinates z-index viewport layering, absolute hardware GPU-promoted transforms,
  * and high-performance row/cell recycling.
  */
-export class RenderEngine<TRowData = any> {
+export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private engine: GridEngine<TRowData>;
 	private rowPool!: DOMPool<HTMLDivElement>;
 	private cellPool!: DOMPool<HTMLDivElement>;
@@ -36,7 +37,7 @@ export class RenderEngine<TRowData = any> {
 	private currentColRange: ViewportRange = { startIdx: -1, endIdx: -1 };
 
 	// Micro-bridge for React custom renderers/editors
-	public onMountReactPortal?: (cellKey: string, container: HTMLElement, value: unknown, node: RowNode, col: ColumnDef) => void;
+	public onMountReactPortal?: (cellKey: string, container: HTMLElement, value: unknown, node: RowNode, col: ColumnDef, isEditing: boolean, isLoading: boolean) => void;
 	public onUnmountReactPortal?: (cellKey: string) => void;
 
 	constructor(engine: GridEngine<TRowData>) {
@@ -139,6 +140,7 @@ export class RenderEngine<TRowData = any> {
 	 * Performs scroll-driven viewport shifts and schedules updates.
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number): void => {
+		this.engine.eventBus.dispatchEvent('beforeRender', null);
 		// 1. Update the coordinate values in ViewportModel (O(1))
 		this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
 
@@ -150,6 +152,8 @@ export class RenderEngine<TRowData = any> {
 
 		// 4. Update overlay selections
 		this.paintOverlay();
+
+		this.engine.eventBus.dispatchEvent('afterRender', null);
 	};
 
 	/**
@@ -176,6 +180,7 @@ export class RenderEngine<TRowData = any> {
 	 * Completely rebuilds grid structures, spacers, and forces recycling refresh.
 	 */
 	public fullPaint(): void {
+		this.engine.eventBus.dispatchEvent('beforeRender', null);
 		const rowModel = this.engine.getRowModel();
 		const rowCount = rowModel ? rowModel.getRowCount() : 0;
 		const state = this.engine.stateManager.getState();
@@ -204,6 +209,8 @@ export class RenderEngine<TRowData = any> {
 
 		// 4. Draw selection overlay and focus indicators
 		this.paintOverlay();
+
+		this.engine.eventBus.dispatchEvent('afterRender', null);
 	}
 
 	/**
@@ -447,7 +454,8 @@ export class RenderEngine<TRowData = any> {
 				// Set content empty so custom React portal doesn't clash with stale text
 				cell.textContent = '';
 				if (this.onMountReactPortal) {
-					this.onMountReactPortal(cellKey, cell, cellValue, node, col);
+					const isLoading = this.engine.data.isRowLoading(node.id);
+					this.onMountReactPortal(cellKey, cell, cellValue, node, col, isEditing, isLoading);
 				}
 			} else {
 				if (this.onUnmountReactPortal) {

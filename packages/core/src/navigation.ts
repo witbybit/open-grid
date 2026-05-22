@@ -1,4 +1,4 @@
-import { GridStore, GridCellPointer, GridFeature, GridApi } from './store.js';
+import { GridStore, GridCellPointer, GridPlugin, InternalGridApi } from './store.js';
 
 export interface GridNavigationOptions {
 	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
@@ -6,7 +6,7 @@ export interface GridNavigationOptions {
 	arrowKeyNavigationEdit?: boolean; // default: false
 }
 
-export class GridNavigationController<TRowData = unknown> implements GridFeature<TRowData> {
+export class GridNavigationController<TRowData = unknown> implements GridPlugin<TRowData> {
 	readonly name = 'navigation';
 	private store!: GridStore<TRowData>;
 	private isSelecting = false;
@@ -18,7 +18,7 @@ export class GridNavigationController<TRowData = unknown> implements GridFeature
 		this.options = options;
 	}
 
-	public init(api: GridApi<TRowData>): void {
+	public onInit(api: InternalGridApi<TRowData>): void {
 		this.store = api as GridStore<TRowData>;
 
 		// Bind store event listener to invoke options callback when edits are committed

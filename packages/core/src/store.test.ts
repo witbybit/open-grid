@@ -172,14 +172,14 @@ describe('GridStore generic row-store functionality', () => {
 
 		const customFeature = {
 			name: 'customService',
-			init: initSpy,
-			destroy: destroySpy,
+			onInit: initSpy,
+			onDestroy: destroySpy,
 			getApiMethods: () => ({
 				customApiCall: (arg: string) => `Handled: ${arg}`,
 			}),
 		};
 
-		store.registerFeature(customFeature);
+		store.registerPlugin(customFeature);
 
 		// 1. Check feature is initialized
 		expect(initSpy).toHaveBeenCalledWith(store);

@@ -31,4 +31,5 @@ export * from './models/EditModel.js';
 // Phase 4 Render Engine Foundation Exports
 export * from './renderer/domPool.js';
 export * from './renderer/scrollEngine.js';
+export * from './renderer/IGridRenderer.js';
 export * from './renderer/renderEngine.js';

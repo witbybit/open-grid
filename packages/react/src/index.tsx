@@ -14,6 +14,7 @@ import {
 	ServerRowModelController,
 	ViewportRange,
 	RenderEngine,
+	InternalGridApi,
 } from '@open-grid/core';
 
 // Create Grid Context
@@ -88,7 +89,7 @@ export function useGridNavigationController<TRowData = unknown>(options: GridNav
 				return optionsRef.current.arrowKeyNavigationEdit;
 			},
 		});
-		store.registerFeature(nav);
+		store.registerPlugin(nav);
 		return nav;
 	}, [store]);
 
@@ -103,15 +104,15 @@ export interface PortalCellProps {
 	value: unknown;
 	col: any;
 	node: any;
+	isEditing: boolean;
+	isLoading: boolean;
 }
 
 /**
  * Clean React Portal cell adapter that mounts only custom renderers & custom editors.
  */
-export function PortalCell({ rowId, colField, value, col, node }: PortalCellProps) {
+export function PortalCell({ rowId, colField, value, col, node, isEditing, isLoading }: PortalCellProps) {
 	const api = useGridApi();
-	const isEditing = useGridSelector((s) => s.activeEdit?.rowId === rowId && s.activeEdit?.colField === colField);
-	const isLoading = api.isRowLoading(rowId);
 
 	const [localValue, setLocalValue] = useState<unknown>(value);
 
@@ -170,17 +171,7 @@ export function PortalCell({ rowId, colField, value, col, node }: PortalCellProp
 		);
 	}
 
-	const rowData = (() => {
-		const rowModel = api.getRowModel();
-		if (!rowModel) return null;
-		if (rowModel.getRowNodeById) {
-			const node = rowModel.getRowNodeById(rowId);
-			return node ? node.data : null;
-		}
-		const idx = rowModel.getRowIndexById(rowId);
-		if (idx === -1) return null;
-		return rowModel.getRow(idx);
-	})();
+	const rowData = node?.data;
 
 	const CustomEditor = col?.cellEditor;
 	const CustomRenderer = col?.cellRenderer;
@@ -227,7 +218,7 @@ export function PortalCell({ rowId, colField, value, col, node }: PortalCellProp
 			) : CustomRenderer && rowData ? (
 				<CustomRenderer
 					value={value}
-					computedValue={api.getCellState(rowId, colField).computedValue}
+					computedValue={value}
 					row={rowData}
 					rowId={rowId}
 					colField={colField}
@@ -244,6 +235,8 @@ export interface PortalData {
 	value: unknown;
 	node: any;
 	col: any;
+	isEditing: boolean;
+	isLoading: boolean;
 }
 
 export interface PortalManagerProps {
@@ -257,7 +250,7 @@ export function PortalManager({ portals, store }: PortalManagerProps) {
 			{Array.from(portals.values()).map((p) => {
 				return createPortal(
 					<GridProvider store={store} key={p.cellKey}>
-						<PortalCell rowId={p.node.id} colField={p.col.field} value={p.value} col={p.col} node={p.node} />
+						<PortalCell rowId={p.node.id} colField={p.col.field} value={p.value} col={p.col} node={p.node} isEditing={p.isEditing} isLoading={p.isLoading} />
 					</GridProvider>,
 					p.container
 				);
@@ -308,10 +301,10 @@ function OpenGridInner<TRowData = unknown>({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const renderEngineRef = useRef<RenderEngine | null>(null);
 
-	const mountPortal = useCallback((cellKey: string, container: HTMLElement, value: unknown, node: any, col: any) => {
+	const mountPortal = useCallback((cellKey: string, container: HTMLElement, value: unknown, node: any, col: any, isEditing: boolean, isLoading: boolean) => {
 		setPortals((prev) => {
 			const next = new Map(prev);
-			next.set(cellKey, { cellKey, container, value, node, col });
+			next.set(cellKey, { cellKey, container, value, node, col, isEditing, isLoading });
 			return next;
 		});
 	}, []);
