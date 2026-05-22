@@ -118,29 +118,18 @@ export interface CustomShowcaseRow {
 
 export function generatePerformanceRows(count: number, prefix: 'R' | 'SR'): PerformanceRow[] {
 	const statuses: PerformanceRow['status'][] = ['Active', 'Pending', 'Inactive'];
-	const products = [
-		'Laser Keyboard',
-		'Wireless Mouse',
-		'Mechanical Keycap',
-		'Sleek Stand',
-		'Ergonomic Desk',
-		'Premium Webcam',
-		'Neon Controller',
-		'Haptic Earphone',
-		'VR Headset',
-		'Smart Mug',
-		'RGB Cable',
-		'Cozy Blanket',
-	];
+	const tickers = ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'GOOGL', 'META', 'NFLX', 'AMD', 'INTC', 'PYPL', 'CRM'];
 
 	return Array.from({ length: count }, (_, index) => {
-		const price = prefix === 'R' ? Math.floor(Math.random() * 200) + 15 : ((index * 17) % 150) + 10;
-		const quantity = prefix === 'R' ? Math.floor(Math.random() * 10) + 1 : (index % 5) + 1;
+		const ticker = tickers[index % tickers.length];
+		const type = index % 2 === 0 ? 'CALL' : 'PUT';
+		const strike = prefix === 'R' ? Math.floor(Math.random() * 200) + 50 : ((index * 17) % 150) + 70;
+		const vol = prefix === 'R' ? Math.floor(Math.random() * 60) + 15 : ((index * 11) % 50) + 25;
 		return {
-			id: `${prefix}-${100000 + index}`,
-			name: products[index % products.length],
-			price: price.toString(),
-			quantity: quantity.toString(),
+			id: `${ticker}-${type}-${strike}-${1000 + index}`,
+			name: ticker,
+			price: strike.toString(),
+			quantity: vol.toString(),
 			status: statuses[index % statuses.length],
 		};
 	});
@@ -291,6 +280,64 @@ export const PriceBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 	return (
 		<span className='font-mono font-bold text-slate-200 text-xs px-2 py-0.5 rounded bg-slate-900 border border-slate-800 leading-none'>
 			${priceVal.toFixed(2)}
+		</span>
+	);
+};
+
+export const GreeksRenderer = ({ value }: CellRendererProps<any>) => {
+	const valNum = parseFloat(String(value)) || 0;
+	const isPositive = valNum >= 0;
+	const colorClass = isPositive ? 'text-emerald-400 text-glow-emerald font-extrabold' : 'text-rose-400 text-glow-rose font-extrabold';
+	const sign = isPositive ? '+' : '';
+	return (
+		<span className={`font-mono text-xs leading-none ${colorClass}`}>
+			{sign}{valNum.toFixed(4)}
+		</span>
+	);
+};
+
+export const RiskBadgeRenderer = ({ value }: CellRendererProps<any>) => {
+	const valStr = String(value).toUpperCase();
+	let colorClass = 'bg-slate-500/10 border-slate-700/50 text-slate-400';
+	if (valStr === 'CRITICAL' || valStr === 'HIGH RISK') {
+		colorClass = 'bg-rose-950/45 border-rose-500/35 text-rose-400 text-glow-rose font-black animate-pulse';
+	} else if (valStr === 'HIGH' || valStr === 'MEDIUM RISK') {
+		colorClass = 'bg-amber-950/40 border-amber-500/30 text-amber-400 text-glow-amber font-extrabold';
+	} else if (valStr === 'MEDIUM' || valStr === 'LOW RISK') {
+		colorClass = 'bg-indigo-950/30 border-indigo-500/25 text-indigo-400 font-bold';
+	} else if (valStr === 'LOW' || valStr === 'NO RISK') {
+		colorClass = 'bg-emerald-950/30 border-emerald-500/25 text-emerald-400 font-medium';
+	}
+	return (
+		<span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border leading-none inline-block ${colorClass}`}>
+			{valStr}
+		</span>
+	);
+};
+
+export const ServiceBadgeRenderer = ({ value }: CellRendererProps<any>) => {
+	const valStr = String(value);
+	let borderStyle = 'border-l-indigo-500 text-indigo-300 bg-indigo-950/10';
+	if (valStr === 'Auth') borderStyle = 'border-l-purple-500 text-purple-300 bg-purple-950/10';
+	else if (valStr === 'Billing') borderStyle = 'border-l-emerald-500 text-emerald-300 bg-emerald-950/10';
+	else if (valStr === 'Database') borderStyle = 'border-l-amber-500 text-amber-300 bg-amber-950/10';
+	else if (valStr === 'Cache') borderStyle = 'border-l-cyan-500 text-cyan-300 bg-cyan-950/10';
+	
+	return (
+		<span className={`px-2 py-0.5 rounded border border-slate-900 border-l-2 text-[10px] font-bold leading-none inline-block ${borderStyle}`}>
+			{valStr}
+		</span>
+	);
+};
+
+export const LatencyRenderer = ({ value }: CellRendererProps<any>) => {
+	const lat = parseFloat(String(value)) || 0;
+	let colorClass = 'text-emerald-400';
+	if (lat > 500) colorClass = 'text-rose-400 text-glow-rose font-bold';
+	else if (lat > 150) colorClass = 'text-amber-400 font-semibold';
+	return (
+		<span className={`font-mono text-xs ${colorClass}`}>
+			{lat} ms
 		</span>
 	);
 };

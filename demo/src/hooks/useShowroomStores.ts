@@ -23,6 +23,10 @@ import {
 	StatusBadgeRenderer,
 	StatusDropdownEditor,
 	LatencyProfiler,
+	GreeksRenderer,
+	RiskBadgeRenderer,
+	ServiceBadgeRenderer,
+	LatencyRenderer,
 } from '../components/GridShared';
 
 export interface DashboardStockRow {
@@ -41,30 +45,77 @@ interface UseShowroomStoresProps {
 
 export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroomStoresProps) {
 	// --------------------------------------------------------------------------
-	// A. PAGE 1: CLIENT PERFORMANCE CALCULATION PLAYGROUND (10k Rows)
+	// A. PAGE 1: CLIENT PERFORMANCE CALCULATION PLAYGROUND (Option Greeks stress-test)
 	// --------------------------------------------------------------------------
 	const clientColumns = useMemo<ColumnDef<PerformanceRow>[]>(() => {
 		const cols: ColumnDef<PerformanceRow>[] = [
-			{ field: 'id', header: 'Row ID', width: 80 },
-			{ field: 'name', header: 'Product Name', width: 170 },
-			{ field: 'price', header: 'Price ($)', width: 110 },
-			{ field: 'quantity', header: 'Quantity', width: 90 },
+			{ field: 'id', header: 'Option ID', width: 180 },
+			{ field: 'name', header: 'Underlying', width: 100 },
+			{ field: 'price', header: 'Strike ($)', width: 100 },
+			{ field: 'quantity', header: 'Implied Vol %', width: 110 },
 			{
-				field: 'subtotal',
-				header: 'Subtotal ($)',
-				width: 130,
+				field: 'delta',
+				header: 'Delta Δ',
+				width: 90,
+				cellRenderer: GreeksRenderer,
 				valueGetter: ({ row }) => {
-					const price = parseFloat(row.price) || 0;
-					const qty = parseFloat(row.quantity) || 0;
-					return (price * qty).toFixed(2);
+					const vol = parseFloat(row.quantity) || 20;
+					const strike = parseFloat(row.price) || 100;
+					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
+					const delta = 0.5 + 0.5 * Math.tanh(d1);
+					return delta.toFixed(4);
+				},
+			},
+			{
+				field: 'gamma',
+				header: 'Gamma Γ',
+				width: 95,
+				cellRenderer: GreeksRenderer,
+				valueGetter: ({ row }) => {
+					const vol = parseFloat(row.quantity) || 20;
+					const strike = parseFloat(row.price) || 100;
+					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
+					const gamma = Math.exp((-d1 * d1) / 2) / (100 * (vol / 100) * Math.sqrt(2 * Math.PI));
+					return gamma.toFixed(5);
+				},
+			},
+			{
+				field: 'vega',
+				header: 'Vega ν',
+				width: 90,
+				cellRenderer: GreeksRenderer,
+				valueGetter: ({ row }) => {
+					const vol = parseFloat(row.quantity) || 20;
+					const strike = parseFloat(row.price) || 100;
+					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
+					const vega = 100 * Math.exp((-d1 * d1) / 2) / Math.sqrt(2 * Math.PI);
+					return (vega / 100).toFixed(4);
+				},
+			},
+			{
+				field: 'theta',
+				header: 'Theta θ',
+				width: 90,
+				cellRenderer: GreeksRenderer,
+				valueGetter: ({ row }) => {
+					const vol = parseFloat(row.quantity) || 20;
+					const strike = parseFloat(row.price) || 100;
+					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
+					const theta = - (100 * (vol / 100) * Math.exp((-d1 * d1) / 2)) / (2 * Math.sqrt(2 * Math.PI)) - 0.05 * strike * Math.exp(-0.05) * (0.5 + 0.5 * Math.tanh(d1));
+					return (theta / 365).toFixed(4);
 				},
 			},
 			{
 				field: 'status',
-				header: 'Status',
+				header: 'Risk Rating',
 				width: 110,
 				cellEditor: StatusDropdownEditor,
-				cellRenderer: StatusBadgeRenderer,
+				cellRenderer: RiskBadgeRenderer,
+				valueGetter: ({ row }) => {
+					if (row.status === 'Active') return 'LOW';
+					if (row.status === 'Pending') return 'MEDIUM';
+					return 'HIGH';
+				},
 			},
 		];
 		if (massiveColumns) {
@@ -136,18 +187,44 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, [perfController]);
 
 	// --------------------------------------------------------------------------
-	// B. PAGE 2: INFINITE SERVER CHUNKS SCROLL (100k Rows)
+	// B. PAGE 2: INFINITE SERVER CHUNKS SCROLL (Global Audit & Logging Ledger)
 	// --------------------------------------------------------------------------
-	const serverColumns = useMemo<ColumnDef<PerformanceRow>[]>(() => clientColumns, [clientColumns]);
+	const serverColumns = useMemo<ColumnDef<any>[]>(() => {
+		return [
+			{ field: 'id', header: 'Trace ID', width: 130 },
+			{ field: 'timestamp', header: 'Timestamp', width: 220 },
+			{ field: 'service', header: 'Microservice', width: 140, cellRenderer: ServiceBadgeRenderer },
+			{ field: 'severity', header: 'Severity', width: 120, cellRenderer: RiskBadgeRenderer },
+			{ field: 'latencyMs', header: 'Latency', width: 110, cellRenderer: LatencyRenderer },
+			{ field: 'ipAddress', header: 'Origin IP', width: 140 },
+		];
+	}, []);
 
 	const serverStore = useMemo(() => {
-		return new GridStore<PerformanceRow>({
+		return new GridStore<any>({
 			rowHeights: {},
 			columnWidths: serverColumns.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
 		});
 	}, [serverColumns]);
 
-	const serverRows = useMemo(() => generatePerformanceRows(100000, 'SR'), []);
+	const serverRows = useMemo(() => {
+		const services = ['Auth', 'Billing', 'Database', 'Cache', 'API Gateway', 'Shipping'];
+		const severities = ['DEBUG', 'INFO', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
+		return Array.from({ length: 100000 }, (_, index) => {
+			const lat = index % 8 === 0 
+				? Math.floor(Math.random() * 900) + 350 
+				: Math.floor(Math.random() * 85) + 15;
+			const date = new Date(Date.now() - index * 60000).toISOString();
+			return {
+				id: `TR-${100000 + index}`,
+				timestamp: date,
+				service: services[index % services.length],
+				severity: severities[index % severities.length],
+				latencyMs: lat.toString(),
+				ipAddress: `192.168.1.${(index * 7) % 255}`,
+			};
+		});
+	}, []);
 
 	const mockDatasource = useMemo<IGridDatasource>(() => {
 		return {
@@ -163,13 +240,20 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 
 				const statusFilter = filterModel?.status as FilterModelItem | undefined;
 				if (statusFilter?.filter) {
-					rows = rows.filter((row) => row.status === statusFilter.filter);
+					const f = statusFilter.filter;
+					if (f === 'Active') {
+						rows = rows.filter((row) => row.severity === 'CRITICAL' || row.severity === 'ERROR');
+					} else if (f === 'Pending') {
+						rows = rows.filter((row) => row.severity === 'WARNING');
+					} else if (f === 'Inactive') {
+						rows = rows.filter((row) => row.severity === 'INFO' || row.severity === 'DEBUG');
+					}
 				}
 
 				if (sortModel?.length) {
 					rows = [...rows].sort((a, b) => {
 						for (const item of sortModel) {
-							const field = item.colId as keyof PerformanceRow;
+							const field = item.colId as keyof any;
 							const left = a[field];
 							const right = b[field];
 							const leftNumber = Number(left);
@@ -204,7 +288,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, [serverRows, serverStore]);
 
 	const serverController = useMemo(() => {
-		return new ServerRowModelController<PerformanceRow>(serverStore, {
+		return new ServerRowModelController<any>(serverStore, {
 			datasource: mockDatasource,
 			blockSize: 100,
 			columns: serverColumns,
@@ -212,17 +296,26 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, [serverStore, mockDatasource, serverColumns]);
 
 	// --------------------------------------------------------------------------
-	// C. PAGE 3: SPREADSHEET RANGE MULTI-SELECT WORKSPACE
+	// C. PAGE 3: SPREADSHEET RANGE MULTI-SELECT WORKSPACE (Quantitative Financial Sheet)
 	// --------------------------------------------------------------------------
 	const spreadsheetColumns = useMemo<ColumnDef<SpreadsheetRow>[]>(
 		() => [
-			{ field: 'id', header: 'Cell ID', width: 80 },
-			{ field: 'A', header: 'Column A', width: 110 },
-			{ field: 'B', header: 'Column B', width: 110 },
-			{ field: 'C', header: 'Column C', width: 110 },
-			{ field: 'D', header: 'Column D', width: 110 },
-			{ field: 'E', header: 'Column E', width: 110 },
-			{ field: 'F', header: 'Column F', width: 110 },
+			{ 
+				field: 'id', 
+				header: 'Fiscal Period', 
+				width: 130,
+				valueGetter: ({ row, rowIndex }) => {
+					const year = 2026 + Math.floor(rowIndex / 4);
+					const quarter = `Q${(rowIndex % 4) + 1}`;
+					return `${year} ${quarter}`;
+				}
+			},
+			{ field: 'A', header: 'Revenue ($M)', width: 120 },
+			{ field: 'B', header: 'OpEx ($M)', width: 120 },
+			{ field: 'C', header: 'Net Income ($M)', width: 140 },
+			{ field: 'D', header: 'CAGR (%)', width: 110 },
+			{ field: 'E', header: 'Interest Rate (%)', width: 140 },
+			{ field: 'F', header: 'Discount Factor', width: 140 },
 		],
 		[]
 	);
@@ -235,14 +328,28 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, [spreadsheetColumns]);
 
 	const spreadsheetRows = useMemo(() => {
-		const rows = generateSpreadsheetRows(500);
+		const rows = Array.from({ length: 500 }, (_, index) => {
+			const rowId = `S-${1000 + index}`;
+			const rev = (120 + index * 4.5).toFixed(1);
+			const opex = (75 + index * 1.8).toFixed(1);
+			return {
+				id: rowId,
+				A: rev,
+				B: opex,
+				C: '',
+				D: '5.5',
+				E: '4.25',
+				F: '',
+			};
+		});
+
+		// Seed initial reactive cash flow formulas for first 15 periods
 		for (let i = 0; i < 15; i++) {
 			const rowId = `S-${1000 + i}`;
-			const row = rows.find((r) => r.id === rowId);
+			const row = rows[i];
 			if (row) {
-				row.C = `=SUM([${rowId}:A],[${rowId}:B])`;
-				row.D = `=[${rowId}:C]*2`;
-				row.E = `=[${rowId}:D]+10`;
+				row.C = `=SUM([${rowId}:A],-[${rowId}:B])`; // Net income = Rev - OpEx
+				row.F = `=[${rowId}:C]*0.8`; // Simulated Discount factor
 			}
 		}
 		return rows;
@@ -345,35 +452,35 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	);
 
 	// --------------------------------------------------------------------------
-	// D. PAGE 4: ADVANCED CUSTOM EDITORS & RENDERERS SHOWCASE (50 Rows)
+	// D. PAGE 4: ADVANCED CUSTOM EDITORS & RENDERERS SHOWCASE (Asset Control Desk)
 	// --------------------------------------------------------------------------
 	const customColumns = useMemo<ColumnDef<CustomShowcaseRow>[]>(
 		() => [
-			{ field: 'id', header: 'Product ID', width: 80 },
-			{ field: 'name', header: 'Premium Product', width: 170 },
+			{ field: 'id', header: 'Asset ID', width: 100 },
+			{ field: 'name', header: 'Premium Asset', width: 180 },
 			{
 				field: 'price',
-				header: 'Unit Cost ($)',
-				width: 120,
+				header: 'Acquisition Cost ($)',
+				width: 150,
 				cellRenderer: PriceBadgeRenderer,
 			},
 			{
 				field: 'rating',
-				header: 'Satisfaction Rating',
+				header: 'Client Rating',
 				width: 160,
 				cellRenderer: StarRatingRenderer,
 			},
 			{
 				field: 'progress',
-				header: 'Fulfillment progress',
-				width: 160,
+				header: 'Deployment Status',
+				width: 170,
 				cellRenderer: ProgressBarRenderer,
 				cellEditor: ProgressSliderEditor,
 			},
 			{
 				field: 'status',
-				header: 'Current Status',
-				width: 120,
+				header: 'Operational Status',
+				width: 140,
 				cellRenderer: StatusBadgeRenderer,
 				cellEditor: StatusDropdownEditor,
 			},
@@ -416,26 +523,34 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	// --------------------------------------------------------------------------
 	const layoutColumnsFull = useMemo<ColumnDef<PerformanceRow>[]>(
 		() => [
-			{ field: 'id', header: 'Row ID', width: 80 },
-			{ field: 'name', header: 'Product Name', width: 160 },
-			{ field: 'price', header: 'Price ($)', width: 110 },
-			{ field: 'quantity', header: 'Quantity', width: 90 },
+			{ field: 'id', header: 'Option ID', width: 180 },
+			{ field: 'name', header: 'Underlying', width: 100 },
+			{ field: 'price', header: 'Strike ($)', width: 100 },
+			{ field: 'quantity', header: 'Implied Vol %', width: 110 },
 			{
 				field: 'subtotal',
-				header: 'Subtotal ($)',
-				width: 130,
+				header: 'Delta Δ',
+				width: 100,
+				cellRenderer: GreeksRenderer,
 				valueGetter: ({ row }) => {
-					const price = parseFloat(row.price) || 0;
-					const qty = parseFloat(row.quantity) || 0;
-					return (price * qty).toFixed(2);
+					const vol = parseFloat(row.quantity) || 20;
+					const strike = parseFloat(row.price) || 100;
+					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
+					const delta = 0.5 + 0.5 * Math.tanh(d1);
+					return delta.toFixed(4);
 				},
 			},
 			{
 				field: 'status',
-				header: 'Status',
-				width: 110,
+				header: 'Risk Profile',
+				width: 120,
 				cellEditor: StatusDropdownEditor,
-				cellRenderer: StatusBadgeRenderer,
+				cellRenderer: RiskBadgeRenderer,
+				valueGetter: ({ row }) => {
+					if (row.status === 'Active') return 'LOW';
+					if (row.status === 'Pending') return 'MEDIUM';
+					return 'HIGH';
+				},
 			},
 		],
 		[]
@@ -485,20 +600,25 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	);
 
 	// --------------------------------------------------------------------------
-	// F. PAGE 6: HEADLESS SKINS & THEMES PLAYGROUND (50 Rows)
+	// F. PAGE 6: HEADLESS SKINS & THEMES PLAYGROUND (CSS Themes Studio)
 	// --------------------------------------------------------------------------
 	const skinsColumns = useMemo<ColumnDef<PerformanceRow>[]>(() => {
 		return [
-			{ field: 'id', header: 'Skin Row ID', width: 90 },
-			{ field: 'name', header: 'Design Token', width: 170 },
-			{ field: 'price', header: 'Cost Basis ($)', width: 110 },
-			{ field: 'quantity', header: 'Allocated Vol', width: 100 },
+			{ field: 'id', header: 'Token ID', width: 150 },
+			{ field: 'name', header: 'Token Key', width: 160 },
+			{ field: 'price', header: 'Raw Value ($)', width: 130, cellRenderer: PriceBadgeRenderer },
+			{ field: 'quantity', header: 'Allocated Scale', width: 130 },
 			{
 				field: 'status',
-				header: 'Aesthetic Status',
+				header: 'Luxe Status',
 				width: 130,
 				cellEditor: StatusDropdownEditor,
-				cellRenderer: StatusBadgeRenderer,
+				cellRenderer: RiskBadgeRenderer,
+				valueGetter: ({ row }) => {
+					if (row.status === 'Active') return 'LOW';
+					if (row.status === 'Pending') return 'MEDIUM';
+					return 'HIGH';
+				},
 			},
 		];
 	}, []);

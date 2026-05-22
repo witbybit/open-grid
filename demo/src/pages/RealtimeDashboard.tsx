@@ -3,7 +3,7 @@ import { GridStore, ClientRowModelController } from '@open-grid/core';
 import { GridProvider } from '@open-grid/react';
 import { DashboardStockRow } from '../hooks/useShowroomStores';
 import { GridView } from '../components/GridShared';
-import { TrendingUp, BarChart3, ListFilter, Activity, RefreshCw } from 'lucide-react';
+import { TrendingUp, BarChart3, ListFilter, Activity, RefreshCw, Layers, CheckCircle2 } from 'lucide-react';
 
 interface RealtimeDashboardProps {
 	store: GridStore<DashboardStockRow>;
@@ -34,7 +34,7 @@ export default function RealtimeDashboard({
 	const [tickers, setTickers] = useState<string[]>([]);
 
 	// Real-time Event Logger state
-	const [eventLogs, setEventLogs] = useState<Array<{ time: string; msg: string }>>([]);
+	const [eventLogs, setEventLogs] = useState<Array<{ time: string; msg: string; type: string }>>([]);
 
 	// Hook into grid events
 	useEffect(() => {
@@ -107,9 +107,9 @@ export default function RealtimeDashboard({
 			}
 		};
 
-		const logEvent = (name: string, details: string) => {
+		const logEvent = (name: string, details: string, type = 'info') => {
 			const time = new Date().toLocaleTimeString().split(' ')[0];
-			setEventLogs((prev) => [{ time, msg: `[${name}] ${details}` }, ...prev].slice(0, 10));
+			setEventLogs((prev) => [{ time, msg: `[${name}] ${details}`, type }, ...prev].slice(0, 10));
 		};
 
 		// Initial load
@@ -118,16 +118,16 @@ export default function RealtimeDashboard({
 		// Event subscriptions
 		const unsubSelect = store.addEventListener('selectionChanged', (e) => {
 			updateStatsAndChart();
-			logEvent('selectionChanged', `Start: ${e.payload.start.rowId}:${e.payload.start.colField}`);
+			logEvent('selectionChanged', `Selected range details updated.`, 'selection');
 		});
 
 		const unsubValue = store.addEventListener('cellValueChanged', (e) => {
 			updateStatsAndChart();
-			logEvent('cellValueChanged', `${e.payload.rowId}:${e.payload.colField} => ${e.payload.value}`);
+			logEvent('cellValueChanged', `${e.payload.rowId}:${e.payload.colField} => ${e.payload.value}`, 'edit');
 		});
 
 		const unsubFocus = store.addEventListener('focusChanged', (e) => {
-			logEvent('focusChanged', `Cell focus: ${e.payload.rowId}:${e.payload.colField}`);
+			logEvent('focusChanged', `Cell focus: ${e.payload.rowId}:${e.payload.colField}`, 'focus');
 		});
 
 		return () => {
@@ -203,18 +203,20 @@ export default function RealtimeDashboard({
 		<div className='flex flex-col xl:flex-row h-full w-full gap-5 overflow-hidden'>
 			{/* Left Column: Grid Panel */}
 			<div className='flex-1 flex flex-col gap-4 min-h-0 min-w-0'>
-				<div className='bg-slate-900/10 border border-slate-900 rounded-xl p-3 flex items-center justify-between gap-4 shrink-0'>
+				<div className='bg-slate-900/10 border border-slate-900 rounded-xl p-3 flex items-center justify-between gap-4 shrink-0 relative overflow-hidden'>
+					<div className='absolute right-0 top-0 translate-x-8 -translate-y-8 w-20 h-20 bg-emerald-500/5 rounded-full blur-xl pointer-events-none' />
 					<div className='flex items-center gap-2'>
 						<span className='w-2 h-2 rounded-full bg-emerald-500 animate-ping' />
-						<span className='text-[10px] text-slate-400 font-extrabold uppercase tracking-wider'>
-							Real-Time Market Grid
+						<span className='text-[10px] text-slate-400 font-extrabold uppercase tracking-wider flex items-center gap-1.5'>
+							<Activity className='w-3.5 h-3.5 text-emerald-400' />
+							Real-Time Option Greeks & Market Feeds
 						</span>
 					</div>
 					<button
 						onClick={triggerVolatility}
-						className='flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 font-bold text-[10px] text-white border border-emerald-500/20 shadow-md transition-all cursor-pointer'
+						className='flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 font-bold text-[10px] text-white border border-emerald-500/20 shadow-lg hover:shadow-emerald-900/20 transition-all cursor-pointer'
 					>
-						<RefreshCw className='w-3 h-3' />
+						<RefreshCw className='w-3 h-3 animate-spin-slow' />
 						Trigger Market Volatility
 					</button>
 				</div>
@@ -237,10 +239,11 @@ export default function RealtimeDashboard({
 			{/* Right Column: Plugins & Analytics Cards */}
 			<div className='w-full xl:w-80 flex flex-col gap-4 shrink-0 overflow-y-auto max-h-full xl:max-h-none pr-1.5'>
 				{/* 1. SELECTION ANALYTICS PLUGIN */}
-				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card'>
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3.5 glass-card relative overflow-hidden'>
+					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-purple-600/5 rounded-full blur-2xl pointer-events-none' />
 					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 						<BarChart3 className='w-4 h-4 text-purple-400' />
-						Selection Stats Plugin
+						Selection Stats Desk
 					</h3>
 
 					{stats.count === 0 ? (
@@ -248,35 +251,44 @@ export default function RealtimeDashboard({
 							Drag a range of cells (prices, changes, volumes) to calculate real-time statistics!
 						</div>
 					) : (
-						<div className='grid grid-cols-2 gap-2.5'>
-							<div className='p-2 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col'>
-								<span className='text-[8px] text-slate-500 font-bold uppercase'>Range Sum</span>
-								<span className='text-sm font-extrabold text-purple-400 mt-0.5'>
+						<div className='grid grid-cols-2 gap-2 mt-1'>
+							{/* KPI Card 1: Sum */}
+							<div className='p-2.5 bg-slate-950 border border-slate-850 hover:border-purple-500/50 rounded-lg flex flex-col transition-all duration-300 group shadow-md'>
+								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-purple-400 transition-colors'>Range Sum</span>
+								<span className='text-xs font-extrabold text-purple-400 text-glow-purple mt-1'>
 									{stats.sum.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
 								</span>
 							</div>
-							<div className='p-2 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col'>
-								<span className='text-[8px] text-slate-500 font-bold uppercase'>Average</span>
-								<span className='text-sm font-extrabold text-indigo-400 mt-0.5'>
+
+							{/* KPI Card 2: Avg */}
+							<div className='p-2.5 bg-slate-950 border border-slate-850 hover:border-indigo-500/50 rounded-lg flex flex-col transition-all duration-300 group shadow-md'>
+								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-indigo-400 transition-colors'>Average</span>
+								<span className='text-xs font-extrabold text-indigo-400 text-glow-indigo mt-1'>
 									{stats.avg.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
 								</span>
 							</div>
-							<div className='p-2 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col'>
-								<span className='text-[8px] text-slate-500 font-bold uppercase'>Min Value</span>
-								<span className='text-sm font-extrabold text-emerald-400 mt-0.5'>
+
+							{/* KPI Card 3: Min */}
+							<div className='p-2.5 bg-slate-950 border border-slate-850 hover:border-emerald-500/50 rounded-lg flex flex-col transition-all duration-300 group shadow-md'>
+								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-emerald-400 transition-colors'>Min Value</span>
+								<span className='text-xs font-extrabold text-emerald-400 text-glow-emerald mt-1'>
 									{stats.min.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
 								</span>
 							</div>
-							<div className='p-2 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col'>
-								<span className='text-[8px] text-slate-500 font-bold uppercase'>Max Value</span>
-								<span className='text-sm font-extrabold text-pink-400 mt-0.5'>
+
+							{/* KPI Card 4: Max */}
+							<div className='p-2.5 bg-slate-950 border border-slate-850 hover:border-pink-500/50 rounded-lg flex flex-col transition-all duration-300 group shadow-md'>
+								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-pink-400 transition-colors'>Max Value</span>
+								<span className='text-xs font-extrabold text-pink-400 text-glow-pink mt-1'>
 									{stats.max.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
 								</span>
 							</div>
-							<div className='col-span-2 p-2 bg-slate-950/80 border border-slate-900 rounded-lg flex items-center justify-between'>
-								<span className='text-[8px] text-slate-500 font-bold uppercase'>Highlighted Count</span>
-								<span className='text-xs font-mono font-bold text-slate-300'>
-									{stats.count} cells selected
+
+							{/* Count */}
+							<div className='col-span-2 p-2.5 bg-slate-950/80 border border-slate-900 hover:border-slate-800 rounded-lg flex items-center justify-between transition-all shadow-inner mt-0.5'>
+								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider'>Highlighted Capacity</span>
+								<span className='text-[10px] font-mono font-bold text-slate-350'>
+									{stats.count} cells active
 								</span>
 							</div>
 						</div>
@@ -284,10 +296,11 @@ export default function RealtimeDashboard({
 				</div>
 
 				{/* 2. REAL-TIME SVG AREA CHART PLUGIN */}
-				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card'>
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3.5 glass-card relative overflow-hidden'>
+					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-emerald-600/5 rounded-full blur-2xl pointer-events-none' />
 					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 						<TrendingUp className='w-4 h-4 text-emerald-400' />
-						Market price distribution
+						Market Price Distribution
 					</h3>
 
 					{prices.length === 0 ? (
@@ -295,26 +308,36 @@ export default function RealtimeDashboard({
 							Awaiting price metrics...
 						</div>
 					) : (
-						<div className='flex flex-col gap-2 bg-slate-950/90 border border-slate-900 rounded-lg p-2.5'>
-							{/* Beautiful SVG Area Chart */}
+						<div className='flex flex-col gap-2 bg-slate-950/90 border border-slate-900 rounded-lg p-2.5 shadow-inner'>
+							{/* Beautiful Glowing SVG Area Chart */}
 							<svg viewBox='0 0 500 110' className='w-full h-24 overflow-visible'>
 								<defs>
+									{/* Gradient area */}
 									<linearGradient id='areaGrad' x1='0' y1='0' x2='0' y2='1'>
-										<stop offset='0%' stopColor='#10b981' stopOpacity='0.3' />
-										<stop offset='100%' stopColor='#10b981' stopOpacity='0.0' />
+										<stop offset='0%' stopColor='#10b981' stopOpacity='0.35' />
+										<stop offset='50%' stopColor='#6366f1' stopOpacity='0.1' />
+										<stop offset='100%' stopColor='#6366f1' stopOpacity='0.0' />
 									</linearGradient>
+									{/* Stroke glow */}
+									<filter id="svgGlow" x="-20%" y="-20%" width="140%" height="140%">
+										<feGaussianBlur stdDeviation="3.5" result="blur" />
+										<feMerge>
+											<feMergeNode in="blur" />
+											<feMergeNode in="SourceGraphic" />
+										</feMerge>
+									</filter>
 								</defs>
 
 								{/* Grid Lines */}
-								<line x1='10' y1='10' x2='490' y2='10' stroke='#334155' strokeWidth='0.5' strokeDasharray='2,2' />
-								<line x1='10' y1='55' x2='490' y2='55' stroke='#334155' strokeWidth='0.5' strokeDasharray='2,2' />
-								<line x1='10' y1='100' x2='490' y2='100' stroke='#334155' strokeWidth='0.5' strokeDasharray='2,2' />
+								<line x1='10' y1='10' x2='490' y2='10' stroke='#1e293b' strokeWidth='0.5' strokeDasharray='2,2' />
+								<line x1='10' y1='55' x2='490' y2='55' stroke='#1e293b' strokeWidth='0.5' strokeDasharray='2,2' />
+								<line x1='10' y1='100' x2='490' y2='100' stroke='#1e293b' strokeWidth='0.5' strokeDasharray='2,2' />
 
 								{/* Filled Area */}
 								<path d={svgAreaPath} fill='url(#areaGrad)' className='transition-all duration-300 ease-out' />
 
-								{/* Line Path */}
-								<path d={svgPath} fill='none' stroke='#10b981' strokeWidth='2' className='transition-all duration-300 ease-out' />
+								{/* Line Path with Glow */}
+								<path d={svgPath} fill='none' stroke='#10b981' strokeWidth='2' filter="url(#svgGlow)" className='transition-all duration-300 ease-out' />
 
 								{/* Interactive Nodes */}
 								{prices.map((price, idx) => {
@@ -328,15 +351,15 @@ export default function RealtimeDashboard({
 											key={idx}
 											cx={x}
 											cy={y}
-											r='3.5'
-											className='fill-slate-950 stroke-emerald-400 stroke-2 hover:r-5 cursor-help transition-all duration-300'
+											r='4'
+											className='fill-slate-950 stroke-emerald-400 stroke-2 hover:r-6 cursor-help transition-all duration-300'
 										>
 											<title>{tickers[idx]}: ${price.toFixed(2)}</title>
 										</circle>
 									);
 								})}
 							</svg>
-							<div className='flex justify-between text-[8px] text-slate-500 font-extrabold uppercase mt-1'>
+							<div className='flex justify-between text-[8px] text-slate-500 font-extrabold uppercase mt-1 tracking-wider'>
 								<span>{tickers[0]}</span>
 								<span>Assets Portfolio Profile</span>
 								<span>{tickers[tickers.length - 1]}</span>
@@ -345,25 +368,37 @@ export default function RealtimeDashboard({
 					)}
 				</div>
 
-				{/* 3. CORE PLUGIN LOGGER */}
-				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card'>
+				{/* 3. CORE PLUGIN LOGGER (SLEEK CARDS) */}
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3.5 glass-card relative overflow-hidden'>
+					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-purple-600/5 rounded-full blur-2xl pointer-events-none' />
 					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 						<Activity className='w-4 h-4 text-purple-400' />
 						Active Core Events Logger
 					</h3>
 
-					<div className='flex flex-col gap-1.5 max-h-40 overflow-y-auto font-mono text-[8px] text-purple-300 leading-snug'>
+					<div className='flex flex-col gap-2 max-h-40 overflow-y-auto font-mono text-[9px] leading-snug'>
 						{eventLogs.length === 0 ? (
-							<div className='text-slate-600 italic p-2 bg-slate-950/60 border border-slate-900 rounded-lg'>
+							<div className='text-slate-600 italic p-3 bg-slate-950/60 border border-slate-900 rounded-lg text-center'>
 								Interact with the grid (select ranges, edit prices, navigate cells) to see real-time listener events!
 							</div>
 						) : (
-							eventLogs.map((log, i) => (
-								<div key={i} className='p-1.5 bg-slate-950/70 border border-slate-900 rounded flex gap-1.5 justify-between items-start'>
-									<span className='text-slate-500 shrink-0'>{log.time}</span>
-									<span className='break-all flex-1'>{log.msg}</span>
-								</div>
-							))
+							eventLogs.map((log, i) => {
+								const cardColor = 
+									log.type === 'edit' 
+										? 'border-emerald-500/20 bg-emerald-950/5 text-emerald-400' 
+										: log.type === 'selection' 
+										? 'border-purple-500/20 bg-purple-950/5 text-purple-400' 
+										: 'border-slate-850 bg-slate-950/50 text-slate-350';
+								return (
+									<div 
+										key={i} 
+										className={`p-2 border rounded-lg flex items-start gap-2.5 transition-all shadow-sm ${cardColor}`}
+									>
+										<span className='text-[8px] text-slate-500 font-bold shrink-0 mt-0.5'>{log.time}</span>
+										<span className='break-all flex-1 font-semibold leading-normal'>{log.msg}</span>
+									</div>
+								);
+							})
 						)}
 					</div>
 				</div>

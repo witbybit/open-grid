@@ -47,29 +47,29 @@ export default function ShowroomTitleBanner({
 				</span>
 				<div>
 					<h2 className='text-sm font-extrabold text-slate-200 leading-tight uppercase tracking-wider flex items-center gap-2'>
-						{activePage === 'perf' && 'Performance Calculations Playground'}
-						{activePage === 'server' && 'Remote Infinite Scroll Engine'}
-						{activePage === 'ranges' && 'Spreadsheet Multi-Range Workspace'}
-						{activePage === 'editors' && 'Advanced Custom Editors & Renderers'}
-						{activePage === 'layout' && 'Dynamic Layout Visibility & Resizing'}
-						{activePage === 'skins' && 'Headless Skins & Themes Playground'}
-						{activePage === 'dashboard' && 'Real-time Event-Driven Analytics Dashboard'}
+						{activePage === 'perf' && 'Financial Risk & Option Greeks stress-test engine'}
+						{activePage === 'server' && 'Global Audit & Transaction Logging Ledger'}
+						{activePage === 'ranges' && 'Quantitative Financial Planning & Sheet Workbench'}
+						{activePage === 'editors' && 'Enterprise Inventory, Pricing & Asset Control Desk'}
+						{activePage === 'layout' && 'Dynamic Workspace Layout & Column Manager'}
+						{activePage === 'skins' && 'Headless Design System & CSS Themes Studio'}
+						{activePage === 'dashboard' && 'Executive Portfolio & SVG Market Analytics Streamer'}
 					</h2>
 					<p className='text-[10px] text-slate-400 leading-tight mt-0.5'>
 						{activePage === 'perf' &&
-							'Run high-speed reactive calculations on a 10,000-row list. Proof that sibling components bypass evaluations.'}
+							'Perform high-frequency option risk simulations with O(1) Greek recalculations across 10,000 open options.'}
 						{activePage === 'server' &&
-							'Dynamically query a 100,000-row remote server with chunked pagination. Scroll down to trigger loaders.'}
+							'Monitor virtualized distributed trace logging streams with full severity levels and latency filters across 100,000 logs.'}
 						{activePage === 'ranges' &&
-							'Perform advanced batch actions like addition and sum Tooltips over click-and-drag grid selection bounds.'}
+							'Conduct professional multi-range spreadsheet forecasts, compound ratios, and CAGR growth calculations.'}
 						{activePage === 'editors' &&
-							'Click interactive Gold star ratings and drag the double-click progress range slider to test premium cell components.'}
+							'Govern physical premium assets, star reviews, pricing tiers, and translucent fulfillment sliders.'}
 						{activePage === 'layout' &&
-							'Toggle column checkboxes and normal/compact spacing buttons to see live grid layouts render under sub-millisecond loads.'}
+							'Construct active grid spacing, compact densities, and custom workspace blueprints under sub-millisecond updates.'}
 						{activePage === 'skins' &&
-							'Toggle between preset aesthetic styles to verify extreme grid layout design flexibility.'}
+							'Toggle styling templates or compile a live CSS stylesheet to showcase total grid layout presentation freedom.'}
 						{activePage === 'dashboard' &&
-							'View real-time stock portfolio metrics, live updated sparklines, and selection value aggregates.'}
+							'Assess real-time stock portfolios, flowing color-gradient sparklines, and selection telemetry graphs.'}
 					</p>
 				</div>
 			</div>
@@ -79,10 +79,10 @@ export default function ShowroomTitleBanner({
 				{activePage === 'perf' && (
 					<button
 						onClick={runBulkCalculationTest}
-						className='flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 font-bold text-[10px] text-white border border-purple-500/20 shadow-md shadow-purple-600/10 transition-all font-sans'
+						className='flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 font-bold text-[10px] text-white border border-purple-500/20 shadow-md shadow-purple-600/10 transition-all font-sans cursor-pointer'
 					>
 						<Play className='w-3 h-3' />
-						Simulate 1,000 Live Updates
+						Run Greeks Stress Simulation
 					</button>
 				)}
 
