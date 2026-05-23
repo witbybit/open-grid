@@ -417,3 +417,91 @@ export function GridView({
 		</div>
 	);
 }
+
+export const GanttStatusBadgeRenderer = ({ value }: CellRendererProps<any>) => {
+	const valStr = String(value);
+	const colorClass =
+		valStr === 'Done'
+			? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+			: valStr === 'In Progress'
+				? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400'
+				: valStr === 'Pending'
+					? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+					: 'bg-rose-500/10 border-rose-500/20 text-rose-400'; // Blocked
+	return (
+		<span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border leading-none inline-block ${colorClass}`}>
+			{valStr}
+		</span>
+	);
+};
+
+export const GanttStatusDropdownEditor = ({ value, onCommit }: CellEditorProps<any>) => {
+	return (
+		<select
+			autoFocus
+			value={value as string}
+			onChange={(e) => onCommit(e.target.value)}
+			onMouseDown={(e) => e.stopPropagation()}
+			onDoubleClick={(e) => e.stopPropagation()}
+			className='absolute inset-0 w-full h-full px-3 text-xs bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-semibold cursor-pointer'
+		>
+			<option value='Done'>Done</option>
+			<option value='In Progress'>In Progress</option>
+			<option value='Pending'>Pending</option>
+			<option value='Blocked'>Blocked</option>
+		</select>
+	);
+};
+
+export const GanttTimelineRenderer = ({ row }: CellRendererProps<any>) => {
+	const sprintDay = Math.min(30, Math.max(1, Number(row.sprintDay) || 1));
+	const durationDays = Math.min(30, Math.max(1, Number(row.durationDays) || 1));
+	const progress = Math.min(100, Math.max(0, Number(row.progress) || 0));
+	const status = row.status || 'Pending';
+
+	// Map status to visual HSL colors matching our beautiful neon palettes
+	const barColor =
+		status === 'Done'
+			? 'bg-emerald-500'
+			: status === 'In Progress'
+				? 'bg-indigo-500'
+				: status === 'Pending'
+					? 'bg-amber-500'
+					: 'bg-rose-500'; // Blocked
+
+	// We represent a 30-day mini-grid timeline using CSS grid
+	const startPercent = ((sprintDay - 1) / 30) * 100;
+	const widthPercent = (durationDays / 30) * 100;
+
+	return (
+		<div className='relative w-full h-full flex items-center pr-4 select-none'>
+			{/* Grid lines backdrop */}
+			<div className='absolute inset-y-2 left-0 right-4 border border-slate-900 rounded bg-slate-950/40 flex justify-between pointer-events-none opacity-30'>
+				{Array.from({ length: 5 }).map((_, i) => (
+					<div key={i} className='h-full border-r border-slate-800' />
+				))}
+			</div>
+
+			{/* Timeline Scheduling Bar */}
+			<div
+				className='absolute h-4 rounded-md border border-slate-800/20 shadow-lg overflow-hidden flex flex-col justify-end'
+				style={{
+					left: `calc(${startPercent}% * 0.9 + 2px)`,
+					width: `calc(${widthPercent}% * 0.9)`,
+					minWidth: '15px'
+				}}
+			>
+				{/* The colored background matching status */}
+				<div className={`absolute inset-0 ${barColor} opacity-20`} />
+				
+				{/* The inner progress indicator bar */}
+				<div className={`h-full ${barColor} transition-all duration-300`} style={{ width: `${progress}%` }} />
+				
+				{/* Inner text showing percentage */}
+				<span className='absolute inset-0 flex items-center justify-center text-[7px] font-extrabold text-white font-mono leading-none tracking-tighter drop-shadow-sm select-none'>
+					{progress}%
+				</span>
+			</div>
+		</div>
+	);
+};

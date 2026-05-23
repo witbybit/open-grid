@@ -27,6 +27,9 @@ import {
 	RiskBadgeRenderer,
 	ServiceBadgeRenderer,
 	LatencyRenderer,
+	GanttStatusBadgeRenderer,
+	GanttStatusDropdownEditor,
+	GanttTimelineRenderer,
 } from '../components/GridShared';
 
 export interface DashboardStockRow {
@@ -717,6 +720,108 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		[dashboardController]
 	);
 
+	// --------------------------------------------------------------------------
+	// H. PAGE 8: GANTT SCHEDULE & PROJECT WORKSPACE (Gantt & Project Scheduling Arena)
+	// --------------------------------------------------------------------------
+	const ganttColumns = useMemo<ColumnDef<any>[]>(() => {
+		return [
+			{ field: 'id', header: 'Task ID', width: 90 },
+			{ field: 'name', header: 'Task Description', width: 170 },
+			{ field: 'owner', header: 'Owner', width: 110 },
+			{ field: 'sprintDay', header: 'Sprint Start', width: 100 },
+			{ field: 'durationDays', header: 'Duration (Days)', width: 120 },
+			{ field: 'progress', header: 'Progress (%)', width: 110 },
+			{
+				field: 'status',
+				header: 'Status',
+				width: 120,
+				cellRenderer: GanttStatusBadgeRenderer,
+				cellEditor: GanttStatusDropdownEditor,
+			},
+			{
+				field: 'timeline',
+				header: 'Gantt Sprint Timeline (30 Days)',
+				width: 280,
+				cellRenderer: GanttTimelineRenderer,
+			},
+		];
+	}, []);
+
+	const ganttStore = useMemo(() => {
+		return new GridStore<any>({
+			rowHeights: {},
+			columnWidths: ganttColumns.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
+		});
+	}, [ganttColumns]);
+
+	const ganttRows = useMemo(() => {
+		const tasks = [
+			'Project Blueprint Mapping',
+			'User Persona Def & Scoping',
+			'Visual Branding & Palette Setup',
+			'Database Schema Architecture',
+			'API Endpoints Design',
+			'Auth Token Core Integration',
+			'DOM Recycle Engine Refactoring',
+			'Layout Render Optimization',
+			'Drag-to-Fill Anchor Handle',
+			'Extrapolation Mathematics',
+			'Reference Shifter Compiler',
+			'Theme Customizer Style Slots',
+			'Dynamic Component Integration',
+			'A/B Performance Benchmarking',
+			'Executive Showroom Playroom',
+			'Type-safety & ESM Packaging',
+			'Production Bundler Testing',
+		];
+		const owners = ['Rishi', 'Alice', 'Sarah', 'Bob'];
+		
+		return Array.from({ length: 30 }, (_, index) => {
+			const taskName = tasks[index % tasks.length];
+			const owner = owners[index % owners.length];
+			const status = index < 6 ? 'Done' : index < 12 ? 'In Progress' : index % 7 === 0 ? 'Blocked' : 'Pending';
+			const progress = status === 'Done' ? 100 : status === 'In Progress' ? Math.floor(Math.random() * 60) + 20 : 0;
+			const duration = Math.floor(Math.random() * 5) + 2;
+			const startDay = index === 0 ? 1 : Math.max(1, index * 2 - 1);
+
+			return {
+				id: `T-${1000 + index}`,
+				name: taskName,
+				owner,
+				sprintDay: startDay,
+				durationDays: duration,
+				progress,
+				status,
+			};
+		});
+	}, []);
+
+	const ganttController = useMemo(() => {
+		return new ClientRowModelController<any>(ganttStore, {
+			rows: ganttRows,
+			columns: ganttColumns,
+		});
+	}, [ganttStore, ganttRows, ganttColumns]);
+
+	const handleGanttCellValueChanged = useCallback(
+		(rowId: string, colField: string, val: unknown) => {
+			ganttController.updateRows((rows) =>
+				rows.map((row) => {
+					if (row.id === rowId) {
+						let updated = { ...row, [colField]: val as any };
+						if (colField === 'status') {
+							if (val === 'Done') updated.progress = 100;
+							else if (val === 'Pending') updated.progress = 0;
+						}
+						return updated;
+					}
+					return row;
+				})
+			);
+		},
+		[ganttController]
+	);
+
 	return {
 		// A. Perf Calculations Playground
 		perfStore,
@@ -761,5 +866,11 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		dashboardController,
 		dashboardRows,
 		handleDashboardCellValueChanged,
+
+		// H. Gantt Workspace
+		ganttStore,
+		ganttController,
+		ganttRows,
+		handleGanttCellValueChanged,
 	};
 }

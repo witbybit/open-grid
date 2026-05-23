@@ -36,6 +36,53 @@ export default function RealtimeDashboard({
 	// Real-time Event Logger state
 	const [eventLogs, setEventLogs] = useState<Array<{ time: string; msg: string; type: string }>>([]);
 
+	// Dynamic styleSlots for live-updating dashboard cells & rows
+	useEffect(() => {
+		store.setState({
+			styleSlots: {
+				rowClass: (row) => {
+					const r = row as DashboardStockRow;
+					if (!r) return '';
+					let base = 'transition-all duration-200 border-l-2 ';
+					const changeVal = parseFloat(r.change) || 0;
+					if (changeVal > 0) {
+						return base + 'border-emerald-500/60 bg-emerald-950/5 hover:bg-emerald-900/10 text-emerald-100/90';
+					} else if (changeVal < 0) {
+						return base + 'border-rose-500/60 bg-rose-950/5 hover:bg-rose-900/10 text-rose-100/90';
+					}
+					return base + 'border-slate-800 bg-slate-900/5 hover:bg-slate-800/10';
+				},
+				cellClass: (col, row) => {
+					const r = row as DashboardStockRow;
+					if (!r) return '';
+					if (col.field === 'change') {
+						const changeVal = parseFloat(r.change) || 0;
+						if (changeVal > 0) {
+							return 'text-emerald-400 font-extrabold font-mono';
+						} else if (changeVal < 0) {
+							return 'text-rose-400 font-extrabold font-mono';
+						}
+					}
+					if (col.field === 'price') {
+						return 'font-mono font-bold text-slate-200';
+					}
+					if (col.field === 'risk') {
+						if (r.risk === 'High') return 'text-rose-450 font-bold';
+						if (r.risk === 'Medium') return 'text-amber-450 font-bold';
+						return 'text-emerald-450 font-bold';
+					}
+					return '';
+				},
+				headerCellClass: (col) => {
+					if (col.field === 'change') {
+						return 'bg-emerald-950/10 text-emerald-400 font-extrabold border-b border-emerald-900/20';
+					}
+					return 'font-semibold text-slate-400';
+				}
+			}
+		});
+	}, [store]);
+
 	// Hook into grid events
 	useEffect(() => {
 		const updateStatsAndChart = () => {

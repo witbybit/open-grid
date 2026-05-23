@@ -14,11 +14,12 @@ import CustomEditorRenderer from './pages/CustomEditorRenderer';
 import DynamicLayout from './pages/DynamicLayout';
 import HeadlessSkinsPlayground from './pages/HeadlessSkinsPlayground';
 import RealtimeDashboard from './pages/RealtimeDashboard';
+import GanttSchedulingWorkspace from './pages/GanttSchedulingWorkspace';
 import { useShowroomStores } from './hooks/useShowroomStores';
 
 export default function App() {
 	// Active Page Routing State via URL Hash Routing
-	const [activePage, setActivePage] = useState<'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard'>('perf');
+	const [activePage, setActivePage] = useState<'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt'>('perf');
 
 	// Collapsible Sidebars State
 	const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
@@ -32,7 +33,7 @@ export default function App() {
 	useEffect(() => {
 		const handleHashChange = () => {
 			const hash = window.location.hash.slice(1);
-			if (['perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard'].includes(hash)) {
+			if (['perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard', 'gantt'].includes(hash)) {
 				setActivePage(hash as any);
 			}
 		};
@@ -102,6 +103,9 @@ export default function App() {
 		dashboardStore,
 		dashboardController,
 		handleDashboardCellValueChanged,
+		ganttStore,
+		ganttController,
+		handleGanttCellValueChanged,
 	} = stores;
 
 	const toggleColumnVisibility = (field: string) => {
@@ -132,10 +136,12 @@ export default function App() {
 				return skinsStore;
 			case 'dashboard':
 				return dashboardStore;
+			case 'gantt':
+				return ganttStore;
 			default:
 				return perfStore;
 		}
-	}, [activePage, perfStore, serverStore, spreadsheetStore, customStore, layoutStore, skinsStore, dashboardStore]);
+	}, [activePage, perfStore, serverStore, spreadsheetStore, customStore, layoutStore, skinsStore, dashboardStore, ganttStore]);
 
 	// Apply filter and sort models to the active store when they change
 	const sortModel = useMemo<SortModel>(() => [{ colId: sortField, sort: sortDirection }], [sortField, sortDirection]);
@@ -285,6 +291,18 @@ export default function App() {
 								onCellValueChanged={handleDashboardCellValueChanged}
 							/>
 						)}
+
+						{activePage === 'gantt' && (
+							<GanttSchedulingWorkspace
+								store={ganttStore}
+								controller={ganttController}
+								editTrigger={editTrigger}
+								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
+								onCellValueChanged={handleGanttCellValueChanged}
+								pinLeftColumns={pinLeftColumns}
+								pinRightColumns={pinRightColumns}
+							/>
+						)}
 					</div>
 				</div>
 
@@ -315,6 +333,7 @@ export default function App() {
 					customController={customController}
 					skinsController={skinsController}
 					dashboardController={dashboardController}
+					ganttController={ganttController}
 				/>
 			</div>
 		</div>

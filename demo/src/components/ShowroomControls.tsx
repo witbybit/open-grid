@@ -240,13 +240,14 @@ export function AccessibilityPanel({
 // 4. Developer Reset Panel
 // ============================================================================
 interface DeveloperPanelProps {
-	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard';
+	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
 	perfController: any;
 	serverController: any;
 	spreadsheetController: any;
 	customController: any;
 	skinsController: any;
 	dashboardController: any;
+	ganttController: any;
 }
 
 export function DeveloperPanel({
@@ -257,6 +258,7 @@ export function DeveloperPanel({
 	customController,
 	skinsController,
 	dashboardController,
+	ganttController,
 }: DeveloperPanelProps) {
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
@@ -384,6 +386,30 @@ export function DeveloperPanel({
 					</button>
 					<div className='p-2 bg-slate-950 border border-slate-900 rounded text-[10px] text-slate-400 leading-relaxed'>
 						<strong>Theme Morphing</strong>: Toggle design skins in the main view pane. Style classes are injected into a scoped style block dynamically!
+					</div>
+				</div>
+			) : activePage === 'gantt' ? (
+				<div className='flex flex-col gap-2.5'>
+					<button
+						onClick={() => {
+							const start = performance.now();
+							ganttController.updateRows((rows: any[]) =>
+								rows.map((row) => ({
+									...row,
+									progress: 0,
+									status: 'Pending',
+								}))
+							);
+							const duration = performance.now() - start;
+							LatencyProfiler.record(duration);
+						}}
+						className='flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-slate-850 hover:bg-slate-850/80 text-slate-200 border border-slate-800 hover:text-white text-[10px] font-bold transition-all font-sans'
+					>
+						<RefreshCw className='w-3 h-3' />
+						Reset Task Progress
+					</button>
+					<div className='p-2 bg-slate-950 border border-slate-900 rounded text-[10px] text-slate-400 leading-relaxed'>
+						<strong>Gantt & styleSlots</strong>: Rows are dynamically colored in O(1) time using our brand new style slots system when the task status shifts!
 					</div>
 				</div>
 			) : (

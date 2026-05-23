@@ -16,7 +16,7 @@ interface ShowroomRightSidebarProps {
 	setPinLeftColumns: (n: number) => void;
 	pinRightColumns: number;
 	setPinRightColumns: (n: number) => void;
-	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard';
+	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
 	massiveColumns: boolean;
 	setMassiveColumns: (b: boolean) => void;
 	sortField: string;
@@ -35,6 +35,7 @@ interface ShowroomRightSidebarProps {
 	customController: any;
 	skinsController: any;
 	dashboardController: any;
+	ganttController: any;
 }
 
 export default function ShowroomRightSidebar({
@@ -63,6 +64,7 @@ export default function ShowroomRightSidebar({
 	customController,
 	skinsController,
 	dashboardController,
+	ganttController,
 }: ShowroomRightSidebarProps) {
 	return (
 		<div
@@ -113,6 +115,7 @@ export default function ShowroomRightSidebar({
 				customController={customController}
 				skinsController={skinsController}
 				dashboardController={dashboardController}
+				ganttController={ganttController}
 			/>
 
 			{/* Keyboard Shortcuts guide */}

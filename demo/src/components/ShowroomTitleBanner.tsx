@@ -1,4 +1,3 @@
-import React from 'react';
 import {
 	Cpu,
 	Database,
@@ -10,11 +9,12 @@ import {
 	Play,
 	PanelRightOpen,
 	PanelRightClose,
+	Calendar,
 } from 'lucide-react';
 import { LatencyProfiler } from './GridShared';
 
 interface ShowroomTitleBannerProps {
-	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard';
+	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
 	runBulkCalculationTest: () => void;
 	applySpreadsheetRangeAction: (action: 'fill' | 'clear' | 'addPercent' | 'sum') => void;
 	compactLayout: 'compact' | 'normal' | 'spacious';
@@ -44,6 +44,7 @@ export default function ShowroomTitleBanner({
 					{activePage === 'layout' && <Layout className='w-4.5 h-4.5' />}
 					{activePage === 'skins' && <Paintbrush className='w-4.5 h-4.5' />}
 					{activePage === 'dashboard' && <TrendingUp className='w-4.5 h-4.5' />}
+					{activePage === 'gantt' && <Calendar className='w-4.5 h-4.5' />}
 				</span>
 				<div>
 					<h2 className='text-sm font-extrabold text-slate-200 leading-tight uppercase tracking-wider flex items-center gap-2'>
@@ -54,6 +55,7 @@ export default function ShowroomTitleBanner({
 						{activePage === 'layout' && 'Dynamic Workspace Layout & Column Manager'}
 						{activePage === 'skins' && 'Headless Design System & CSS Themes Studio'}
 						{activePage === 'dashboard' && 'Executive Portfolio & SVG Market Analytics Streamer'}
+						{activePage === 'gantt' && 'Quantitative Gantt Scheduling & Task Optimizer Arena'}
 					</h2>
 					<p className='text-[10px] text-slate-400 leading-tight mt-0.5'>
 						{activePage === 'perf' &&
@@ -70,6 +72,8 @@ export default function ShowroomTitleBanner({
 							'Toggle styling templates or compile a live CSS stylesheet to showcase total grid layout presentation freedom.'}
 						{activePage === 'dashboard' &&
 							'Assess real-time stock portfolios, flowing color-gradient sparklines, and selection telemetry graphs.'}
+						{activePage === 'gantt' &&
+							'Track, extrapolate, and align multi-day team sprints utilizing dynamic styling slots and drag-to-fill date progressions.'}
 					</p>
 				</div>
 			</div>
