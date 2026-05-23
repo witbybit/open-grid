@@ -3,7 +3,8 @@ import { ScrollEngine } from './scrollEngine.js';
 import { createCellKey } from '../ids.js';
 import type { IGridRenderer } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { RowNode, type ColumnDef } from '../store.js';
+import { RowNode, type ColumnDef, type GridCellRange } from '../store.js';
+import { CORE_STYLES } from './styles.js';
 import type { ViewportRange } from '../viewportController.js';
 
 /**
@@ -41,6 +42,17 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	// Track current ranges to prevent redundant renders
 	private currentRowRange: ViewportRange = { startIdx: -1, endIdx: -1 };
 	private currentColRange: ViewportRange = { startIdx: -1, endIdx: -1 };
+
+	// Drag-to-fill tracking variables
+	private isFilling = false;
+	private fillStartRow = -1;
+	private fillEndRow = -1;
+	private fillStartCol = -1;
+	private fillEndCol = -1;
+	private fillDragStartX = 0;
+	private fillDragStartY = 0;
+	private fillPreviewBorder: HTMLDivElement | null = null;
+	private currentFillPreview: { minRow: number; maxRow: number; minCol: number; maxCol: number; direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null } | null = null;
 
 	// Micro-bridge for React custom renderers/editors
 	public onMountReactPortal?: (
@@ -401,6 +413,16 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			if (this.engine.data.isRowLoading(node.id)) {
 				rowClassName += ' og-row-loading';
 			}
+			if (state.styleSlots?.rowClass && node.data) {
+				try {
+					const customRowClass = state.styleSlots.rowClass(node.data);
+					if (customRowClass) {
+						rowClassName += ' ' + customRowClass;
+					}
+				} catch (e) {
+					console.error('RenderEngine: Error in rowClass styleSlot', e);
+				}
+			}
 			pooledRow.element.className = rowClassName;
 			if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
 			if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
@@ -531,6 +553,16 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			}
 			if (isLoading) {
 				cellClassName += ' og-cell-loading';
+			}
+			if (state.styleSlots?.cellClass && node.data) {
+				try {
+					const customCellClass = state.styleSlots.cellClass(col, node.data);
+					if (customCellClass) {
+						cellClassName += ' ' + customCellClass;
+					}
+				} catch (e) {
+					console.error('RenderEngine: Error in cellClass styleSlot', e);
+				}
 			}
 			cell.className = cellClassName;
 
@@ -710,6 +742,18 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				targetLayer = this.headerRightLayer;
 			} else {
 				// No manual scrollLeft subtraction needed due to native CSS Grid scrolling!
+			}
+
+			const state = this.engine.stateManager.getState();
+			if (state.styleSlots?.headerCellClass) {
+				try {
+					const customHeaderClass = state.styleSlots.headerCellClass(col);
+					if (customHeaderClass) {
+						className += ' ' + customHeaderClass;
+					}
+				} catch (e) {
+					console.error('RenderEngine: Error in headerCellClass styleSlot', e);
+				}
 			}
 
 			headerCell.className = className;
@@ -915,6 +959,16 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		selectionBorder.style.width = `${width}px`;
 		selectionBorder.style.height = `${height}px`;
 
+		// Draw Selection Fill Handle
+		const fillHandle = document.createElement('div');
+		fillHandle.className = 'og-selection-fill-handle';
+		fillHandle.addEventListener('mousedown', (e: MouseEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.startFillDrag(e, minRow, maxRow, minCol, maxCol);
+		});
+		selectionBorder.appendChild(fillHandle);
+
 		this.overlayLayer.appendChild(selectionBorder);
 	}
 
@@ -946,304 +1000,264 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		return el;
 	}
 
+	private startFillDrag(e: MouseEvent, minRow: number, maxRow: number, minCol: number, maxCol: number): void {
+		if (this.isFilling) return;
+		this.isFilling = true;
+
+		this.fillStartRow = minRow;
+		this.fillEndRow = maxRow;
+		this.fillStartCol = minCol;
+		this.fillEndCol = maxCol;
+
+		this.fillDragStartX = e.clientX;
+		this.fillDragStartY = e.clientY;
+
+		// Create fill preview element
+		this.fillPreviewBorder = document.createElement('div');
+		this.fillPreviewBorder.className = 'og-fill-preview-border';
+		if (this.overlayLayer) {
+			this.overlayLayer.appendChild(this.fillPreviewBorder);
+		}
+
+		this.currentFillPreview = null;
+
+		window.addEventListener('mousemove', this.onFillDragMove);
+		window.addEventListener('mouseup', this.onFillDragMouseUp);
+	}
+
+	private onFillDragMove = (e: MouseEvent): void => {
+		if (!this.isFilling || !this.scrollViewport || !this.fillPreviewBorder) return;
+
+		// Calculate mouse coordinates relative to scroll viewport
+		const scrollRect = this.scrollViewport.getBoundingClientRect();
+		const mouseX = e.clientX - scrollRect.left + this.scrollViewport.scrollLeft;
+		const mouseY = e.clientY - scrollRect.top + this.scrollViewport.scrollTop - 40; // 40px margin header
+
+		// Get current coordinate indices under pointer
+		const currRow = this.engine.geometry.getRowIndexAtOffset(mouseY);
+		const currCol = this.engine.geometry.getColIndexAtOffset(mouseX);
+
+		// Determine dominant drag direction: vertical or horizontal
+		const deltaX = Math.abs(e.clientX - this.fillDragStartX);
+		const deltaY = Math.abs(e.clientY - this.fillDragStartY);
+
+		const isVertical = deltaY > deltaX;
+
+		let direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null = null;
+		let minRowPreview = -1;
+		let maxRowPreview = -1;
+		let minColPreview = -1;
+		let maxColPreview = -1;
+
+		if (isVertical) {
+			if (currRow > this.fillEndRow) {
+				direction = 'DOWN';
+				minRowPreview = this.fillEndRow + 1;
+				maxRowPreview = currRow;
+				minColPreview = this.fillStartCol;
+				maxColPreview = this.fillEndCol;
+			} else if (currRow < this.fillStartRow) {
+				direction = 'UP';
+				minRowPreview = currRow;
+				maxRowPreview = this.fillStartRow - 1;
+				minColPreview = this.fillStartCol;
+				maxColPreview = this.fillEndCol;
+			}
+		} else {
+			if (currCol > this.fillEndCol) {
+				direction = 'RIGHT';
+				minRowPreview = this.fillStartRow;
+				maxRowPreview = this.fillEndRow;
+				minColPreview = this.fillEndCol + 1;
+				maxColPreview = currCol;
+			} else if (currCol < this.fillStartCol) {
+				direction = 'LEFT';
+				minRowPreview = this.fillStartRow;
+				maxRowPreview = this.fillEndRow;
+				minColPreview = currCol;
+				maxColPreview = this.fillStartCol - 1;
+			}
+		}
+
+		if (direction && minRowPreview <= maxRowPreview && minColPreview <= maxColPreview) {
+			this.currentFillPreview = {
+				minRow: minRowPreview,
+				maxRow: maxRowPreview,
+				minCol: minColPreview,
+				maxCol: maxColPreview,
+				direction,
+			};
+
+			// Draw and reposition the preview border absolutely
+			const state = this.engine.stateManager.getState();
+			const rowCount = this.engine.getRowModel() ? this.engine.getRowModel()!.getRowCount() : 0;
+			const colCount = state.columns.length;
+
+			const pinLeftColumns = this.engine.viewport.pinLeftColumns;
+			const pinRightColumns = this.engine.viewport.pinRightColumns;
+			const pinTopRows = this.engine.viewport.pinTopRows;
+			const pinBottomRows = this.engine.viewport.pinBottomRows;
+			const scrollTop = this.engine.viewport.scrollTop;
+			const scrollLeft = this.engine.viewport.scrollLeft;
+			const viewportHeight = this.engine.viewport.viewportHeight;
+			const viewportWidth = this.engine.viewport.viewportWidth;
+
+			let pinnedLeftWidth = 0;
+			for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
+				pinnedLeftWidth += this.engine.geometry.colWidths[i] || 0;
+			}
+			let pinnedRightWidth = 0;
+			for (let i = 0; i < pinRightColumns && i < colCount; i++) {
+				pinnedRightWidth += this.engine.geometry.colWidths[colCount - 1 - i] || 0;
+			}
+			let pinnedTopHeight = 0;
+			for (let i = 0; i < pinTopRows && i < rowCount; i++) {
+				pinnedTopHeight += this.engine.geometry.rowHeights[i] || 0;
+			}
+			let pinnedBottomHeight = 0;
+			for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
+				pinnedBottomHeight += this.engine.geometry.rowHeights[rowCount - 1 - i] || 0;
+			}
+
+			const getClampedX = (c: number): { left: number; right: number } => {
+				const cellLeft = this.engine.geometry.colLefts[c] || 0;
+				const cellWidth = this.engine.geometry.colWidths[c] || 0;
+
+				if (c < pinLeftColumns) {
+					return { left: cellLeft, right: cellLeft + cellWidth };
+				} else if (c >= colCount - pinRightColumns) {
+					const firstRightPinColIdx = colCount - pinRightColumns;
+					const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
+					const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
+					return { left, right: left + cellWidth };
+				} else {
+					const unclippedLeft = cellLeft - scrollLeft;
+					const unclippedRight = unclippedLeft + cellWidth;
+					const left = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedLeft));
+					const right = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedRight));
+					return { left, right };
+				}
+			};
+
+			const getClampedY = (r: number): { top: number; bottom: number } => {
+				const rowTop = this.engine.geometry.rowTops[r] || 0;
+				const rowHeight = this.engine.geometry.rowHeights[r] || 0;
+
+				if (r < pinTopRows) {
+					return { top: rowTop, bottom: rowTop + rowHeight };
+				} else if (r >= rowCount - pinBottomRows) {
+					let heightToBottom = 0;
+					for (let i = r + 1; i < rowCount; i++) {
+						heightToBottom += this.engine.geometry.rowHeights[i] || 0;
+					}
+					const top = viewportHeight - 40 - heightToBottom - rowHeight;
+					return { top, bottom: top + rowHeight };
+				} else {
+					const unclippedTop = rowTop - scrollTop;
+					const unclippedBottom = unclippedTop + rowHeight;
+					const top = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedTop));
+					const bottom = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedBottom));
+					return { top, bottom };
+				}
+			};
+
+			const xRangeMin = getClampedX(minColPreview);
+			const xRangeMax = getClampedX(maxColPreview);
+			const yRangeMin = getClampedY(minRowPreview);
+			const yRangeMax = getClampedY(maxRowPreview);
+
+			const pLeft = xRangeMin.left;
+			const pRight = xRangeMax.right;
+			const pTop = yRangeMin.top;
+			const pBottom = yRangeMax.bottom;
+
+			const pWidth = pRight - pLeft;
+			const pHeight = pBottom - pTop;
+
+			if (pWidth > 0 && pHeight > 0) {
+				this.fillPreviewBorder.style.display = 'block';
+				this.fillPreviewBorder.style.transform = `translate3d(${pLeft}px, ${pTop}px, 0)`;
+				this.fillPreviewBorder.style.width = `${pWidth}px`;
+				this.fillPreviewBorder.style.height = `${pHeight}px`;
+			} else {
+				this.fillPreviewBorder.style.display = 'none';
+			}
+		} else {
+			this.currentFillPreview = null;
+			this.fillPreviewBorder.style.display = 'none';
+		}
+	};
+
+	private onFillDragMouseUp = (e: MouseEvent): void => {
+		window.removeEventListener('mousemove', this.onFillDragMove);
+		window.removeEventListener('mouseup', this.onFillDragMouseUp);
+
+		if (!this.isFilling) return;
+		this.isFilling = false;
+
+		if (this.fillPreviewBorder) {
+			this.fillPreviewBorder.remove();
+			this.fillPreviewBorder = null;
+		}
+
+		if (this.currentFillPreview) {
+			const { minRow, maxRow, minCol, maxCol, direction } = this.currentFillPreview;
+			this.extrapolateAndFillRange(minRow, maxRow, minCol, maxCol, direction!);
+		}
+
+		this.currentFillPreview = null;
+	};
+
+	private extrapolateAndFillRange(
+		minRowTarget: number,
+		maxRowTarget: number,
+		minColTarget: number,
+		maxColTarget: number,
+		direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT'
+	): void {
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return;
+
+		const state = this.engine.stateManager.getState();
+		const columns = state.columns;
+
+		const startRowNode = rowModel.getRowNode(this.fillStartRow);
+		const endRowNode = rowModel.getRowNode(this.fillEndRow);
+		const startCol = columns[this.fillStartCol];
+		const endCol = columns[this.fillEndCol];
+
+		const targetStartRowNode = rowModel.getRowNode(minRowTarget);
+		const targetEndRowNode = rowModel.getRowNode(maxRowTarget);
+		const targetStartCol = columns[minColTarget];
+		const targetEndCol = columns[maxColTarget];
+
+		if (!startRowNode || !endRowNode || !startCol || !endCol ||
+			!targetStartRowNode || !targetEndRowNode || !targetStartCol || !targetEndCol) {
+			return;
+		}
+
+		const source: GridCellRange = {
+			start: { rowId: startRowNode.id, colField: startCol.field },
+			end: { rowId: endRowNode.id, colField: endCol.field }
+		};
+
+		const target: GridCellRange = {
+			start: { rowId: targetStartRowNode.id, colField: targetStartCol.field },
+			end: { rowId: targetEndRowNode.id, colField: targetEndCol.field }
+		};
+
+		this.engine.fillRange(source, target);
+		this.schedulePaint();
+	}
+
 	/**
 	 * Dynamic CSS injector supporting grid structure and aesthetics.
 	 */
 	private injectStyles(): void {
 		if (typeof document === 'undefined') return;
 
-		const css = `
-      :root, .og-grid-container {
-        --og-font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
-        --og-bg-color: #0d0f12;
-        --og-text-color: #e2e8f0;
-        --og-border-color: #1e293b;
-        --og-header-bg: #090a0f;
-        --og-header-text: #94a3b8;
-        --og-row-hover-bg: #161b22;
-        --og-cell-border: rgba(30, 41, 59, 0.5);
-        --og-selection-border: rgba(59, 130, 246, 0.6);
-        --og-selection-bg: rgba(59, 130, 246, 0.04);
-        --og-focus-ring: #3b82f6;
-
-        /* Premium Skeleton CSS Variables */
-        --og-skeleton-start: #1e293b;
-        --og-skeleton-mid: #334155;
-        --og-skeleton-end: #1e293b;
-        --og-skeleton-width: 75%;
-        --og-skeleton-height: 14px;
-        --og-skeleton-border-radius: 4px;
-        --og-skeleton-animation-duration: 1.5s;
-      }
-
-      @keyframes og-shimmer {
-        0% {
-          background-position: -200% 0;
-        }
-        100% {
-          background-position: 200% 0;
-        }
-      }
-
-      .og-cell-loading-skeleton {
-        width: var(--og-skeleton-width);
-        height: var(--og-skeleton-height);
-        border-radius: var(--og-skeleton-border-radius);
-        background: linear-gradient(90deg, 
-          var(--og-skeleton-start) 25%, 
-          var(--og-skeleton-mid) 50%, 
-          var(--og-skeleton-end) 75%
-        );
-        background-size: 200% 100%;
-        animation: og-shimmer var(--og-skeleton-animation-duration) infinite linear;
-      }
-
-      .og-row-loading {
-        pointer-events: none;
-      }
-
-      .og-grid-container {
-        position: relative;
-        overflow: hidden;
-        contain: strict;
-        font-family: var(--og-font-family);
-        background-color: var(--og-bg-color);
-        color: var(--og-text-color);
-        border: 1px solid var(--og-border-color);
-        border-radius: 8px;
-        box-sizing: border-box;
-      }
-
-      .og-scroll-viewport {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        overflow: auto;
-        contain: strict;
-        will-change: transform;
-        z-index: 10;
-        display: grid;
-        grid-template-columns: 1fr;
-        grid-template-rows: 1fr;
-      }
-
-      .og-scroll-spacer {
-        grid-area: 1 / 1 / 2 / 2;
-        pointer-events: none;
-      }
-
-      .og-layer-center {
-        grid-area: 1 / 1 / 2 / 2;
-        pointer-events: auto;
-        z-index: 10;
-        margin-top: 40px;
-      }
-
-      .og-layer-left {
-        grid-area: 1 / 1 / 2 / 2;
-        position: sticky;
-        left: 0;
-        z-index: 15;
-        pointer-events: auto;
-        margin-top: 40px;
-      }
-
-      .og-layer-right {
-        grid-area: 1 / 1 / 2 / 2;
-        position: sticky;
-        right: 0;
-        justify-self: end;
-        z-index: 15;
-        pointer-events: auto;
-        margin-top: 40px;
-      }
-
-      .og-layer-header {
-        grid-area: 1 / 1 / 2 / 2;
-        position: sticky;
-        top: 0;
-        height: 40px;
-        z-index: 30;
-        pointer-events: auto;
-        border-bottom: 2px solid var(--og-border-color);
-        background-color: var(--og-header-bg);
-      }
-
-      .og-layer-header-left {
-        grid-area: 1 / 1 / 2 / 2;
-        position: sticky;
-        top: 0;
-        left: 0;
-        height: 40px;
-        z-index: 35;
-        pointer-events: auto;
-        border-bottom: 2px solid var(--og-border-color);
-        background-color: var(--og-header-bg);
-      }
-
-      .og-layer-header-right {
-        grid-area: 1 / 1 / 2 / 2;
-        position: sticky;
-        top: 0;
-        right: 0;
-        justify-self: end;
-        height: 40px;
-        z-index: 35;
-        pointer-events: auto;
-        border-bottom: 2px solid var(--og-border-color);
-        background-color: var(--og-header-bg);
-      }
-
-      .og-layer-overlay {
-        position: absolute;
-        top: 40px;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 40;
-        pointer-events: none;
-        overflow: hidden;
-      }
-
-      .og-row {
-        position: absolute;
-        left: 0;
-        width: 100%;
-        contain: layout style;
-        border-bottom: 1px solid var(--og-border-color);
-        background-color: var(--og-bg-color);
-        box-sizing: border-box;
-        transition: background-color 0.15s ease;
-      }
-
-      .og-row:hover {
-        background-color: var(--og-row-hover-bg);
-      }
-
-      .og-row-selected {
-        background-color: var(--og-selection-bg) !important;
-      }
-
-      .og-row-pinned-top {
-        background-color: var(--og-header-bg);
-        z-index: 25;
-        border-bottom: 2px solid var(--og-border-color) !important;
-      }
-
-      .og-row-pinned-bottom {
-        background-color: var(--og-header-bg);
-        z-index: 25;
-        border-top: 2px solid var(--og-border-color) !important;
-      }
-
-      .og-cell {
-        position: absolute;
-        top: 0;
-        height: 100%;
-        contain: layout style;
-        box-sizing: border-box;
-        padding: 0 12px;
-        display: flex;
-        align-items: center;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        border-right: 1px solid var(--og-cell-border);
-      }
-
-      .og-cell-focused {
-        outline: 2px solid var(--og-focus-ring);
-        outline-offset: -2px;
-        background-color: var(--og-selection-bg);
-        z-index: 20;
-      }
-
-      .og-header-cell {
-        position: absolute;
-        top: 0;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        padding: 0 12px;
-        font-weight: 600;
-        font-size: 13px;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--og-header-text);
-        border-right: 1px solid var(--og-border-color);
-        box-sizing: border-box;
-      }
-
-      .og-selection-border {
-        position: absolute;
-        border: 2px dashed var(--og-selection-border);
-        background-color: var(--og-selection-bg);
-        box-sizing: border-box;
-        pointer-events: none;
-      }
-
-      .og-header-resize-handle {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 6px;
-        height: 100%;
-        cursor: col-resize;
-        z-index: 10;
-        transition: background-color 0.15s ease;
-      }
-
-      .og-header-resize-handle:hover {
-        background-color: var(--og-focus-ring);
-      }
-
-      /* Premium Glassmorphic Context Menu styles */
-      .og-context-menu {
-        position: fixed;
-        z-index: 1000;
-        background: rgba(15, 23, 42, 0.88);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 8px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-        padding: 6px 0;
-        min-width: 190px;
-        font-family: var(--og-font-family), inherit;
-        color: #f1f5f9;
-        opacity: 0;
-        transform: scale(0.95);
-        transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-        pointer-events: none;
-      }
-      .og-context-menu.og-visible {
-        opacity: 1;
-        transform: scale(1);
-        pointer-events: auto;
-      }
-      .og-context-menu-item {
-        display: flex;
-        align-items: center;
-        padding: 8px 14px;
-        font-size: 13px;
-        cursor: pointer;
-        transition: background-color 0.12s ease, color 0.12s ease;
-      }
-      .og-context-menu-item:hover {
-        background-color: var(--og-focus-ring, #3b82f6);
-        color: #ffffff;
-      }
-      .og-context-menu-divider {
-        height: 1px;
-        background-color: rgba(255, 255, 255, 0.08);
-        margin: 4px 0;
-      }
-    `;
-
 		this.styleTag = document.createElement('style');
-		this.styleTag.textContent = css;
+		this.styleTag.textContent = CORE_STYLES;
 		document.head.appendChild(this.styleTag);
 	}
 }

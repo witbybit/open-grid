@@ -1,4 +1,4 @@
-import type { ColumnDef, GridCellPointer, GridCellRange } from '../store.js';
+import type { ColumnDef, GridCellPointer, GridCellRange, GridStyleSlots } from '../store.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
@@ -15,4 +15,5 @@ export interface GridEngineConfig<TRowData = unknown> {
 	activeEdit?: GridCellPointer | null;
 	plugins?: any[];
 	loadingSkeletonCount?: number;
+	styleSlots?: GridStyleSlots<TRowData>;
 }

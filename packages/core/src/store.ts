@@ -190,6 +190,12 @@ export interface ColumnDef<TRowData = unknown> {
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
 }
 
+export interface GridStyleSlots<TRowData = any> {
+	rowClass?: (row: TRowData) => string;
+	cellClass?: (col: ColumnDef<TRowData>, row: TRowData) => string;
+	headerCellClass?: (col: ColumnDef<TRowData>) => string;
+}
+
 export interface GridState<TRowData = unknown> {
 	getRowId?: (row: TRowData) => string;
 	columns: ColumnDef<TRowData>[];
@@ -219,6 +225,8 @@ export interface GridState<TRowData = unknown> {
 	// 2D Recycled Viewport Range states
 	visibleRowRange: ViewportRange;
 	visibleColRange: ViewportRange;
+
+	styleSlots?: GridStyleSlots<TRowData>;
 }
 
 export interface GridCellRangeBounds {
@@ -263,6 +271,7 @@ export interface GridApi<TRowData = unknown> {
 	redo(): void;
 	canUndo(): boolean;
 	canRedo(): boolean;
+	fillRange(source: GridCellRange, target: GridCellRange): void;
 	destroy(): void;
 }
 
@@ -600,6 +609,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public canRedo = (): boolean => {
 		return this.engine.commandHistory.canRedo();
+	};
+
+	public fillRange = (source: GridCellRange, target: GridCellRange): void => {
+		this.engine.fillRange(source, target);
 	};
 
 	public destroy = (): void => {

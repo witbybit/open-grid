@@ -28,6 +28,10 @@ export function createCellKey(rowId: GridId, colField: string): string {
 	return `${normalizeGridId(rowId)}:${colField}`;
 }
 
+export function createFormulaRefKey(rowId: GridId, colField: string): string {
+	return `[${normalizeGridId(rowId)}:${colField}]`;
+}
+
 export function createCellCoordKey(row: number, col: number): string {
 	return `${row},${col}`;
 }
