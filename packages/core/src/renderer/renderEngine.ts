@@ -343,7 +343,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 					element: rowEl,
 					leftElement: leftEl,
 					rightElement: rightEl,
-					cells: [],
+					cells: new Map(),
 					boundRowIndex: r,
 					boundRowId: node.id,
 					isDirty: false,
@@ -450,8 +450,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		const viewportWidth = this.engine.viewport.viewportWidth;
 
 		// 1. Release cells out-of-column bounds
-		for (let c = 0; c < pooledRow.cells.length; c++) {
-			const cell = pooledRow.cells[c];
+		for (const [c, cell] of pooledRow.cells.entries()) {
 			if (cell) {
 				const isPinnedLeft = c < pinLeftColumns;
 				const isPinnedRight = c >= colCount - pinRightColumns;
@@ -468,11 +467,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			const col = columns[c];
 			if (!col) return;
 
-			let cell = pooledRow.cells[c];
+			let cell = pooledRow.cells.get(c);
 
 			if (!cell) {
 				cell = this.cellPool.acquire();
-				pooledRow.cells[c] = cell;
+				pooledRow.cells.set(c, cell);
 			}
 
 			let cellLeft = this.engine.geometry.colLefts[c];
@@ -607,7 +606,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	 * Release and return a cell element to the DOMPool.
 	 */
 	private releaseCell(pooledRow: PooledRow, colIdx: number): void {
-		const cell = pooledRow.cells[colIdx];
+		const cell = pooledRow.cells.get(colIdx);
 		if (cell) {
 			if (cell.dataset.cellKey) {
 				if (this.onUnmountReactPortal) {
@@ -632,7 +631,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				}
 			}
 			this.cellPool.release(cell);
-			pooledRow.cells[colIdx] = null;
+			pooledRow.cells.delete(colIdx);
 		}
 	}
 
@@ -641,10 +640,10 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	 */
 	private releaseRow(rowIndex: number, pooledRow: PooledRow): void {
 		// Release all cell DOMs inside row
-		for (let c = 0; c < pooledRow.cells.length; c++) {
+		for (const c of pooledRow.cells.keys()) {
 			this.releaseCell(pooledRow, c);
 		}
-		pooledRow.cells = [];
+		pooledRow.cells.clear();
 
 		// Detach row elements and recycle
 		if (pooledRow.element.parentNode) pooledRow.element.remove();

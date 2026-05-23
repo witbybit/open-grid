@@ -101,7 +101,7 @@ export interface PooledRow {
 	element: HTMLDivElement;
 	leftElement?: HTMLDivElement;
 	rightElement?: HTMLDivElement;
-	cells: (HTMLDivElement | null)[]; // Indexed by column index
+	cells: Map<number, HTMLDivElement>; // Map of active cells by column index
 	boundRowIndex: number;
 	boundRowId: string;
 	isDirty: boolean;
