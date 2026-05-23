@@ -198,4 +198,4 @@ Once active, navigate your browser to the local URL (default is `http://localhos
 ## 👑 Author & Creator
 
 **Rishikesh Kumar**  
-Lead Architect of Grid Engine
+Lead Architect of Open Grid
