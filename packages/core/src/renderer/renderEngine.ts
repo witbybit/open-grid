@@ -53,6 +53,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private fillDragStartY = 0;
 	private fillPreviewBorder: HTMLDivElement | null = null;
 	private currentFillPreview: { minRow: number; maxRow: number; minCol: number; maxCol: number; direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null } | null = null;
+	private fillDragDirectionLock: 'VERTICAL' | 'HORIZONTAL' | null = null;
 
 	// Micro-bridge for React custom renderers/editors
 	public onMountReactPortal?: (
@@ -970,6 +971,12 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		selectionBorder.appendChild(fillHandle);
 
 		this.overlayLayer.appendChild(selectionBorder);
+
+		// Re-append the fill preview border if actively dragging so it doesn't get cleared by textContent = ''
+		if (this.isFilling && this.fillPreviewBorder && this.overlayLayer) {
+			this.overlayLayer.appendChild(this.fillPreviewBorder);
+			this.updateFillPreview();
+		}
 	}
 
 	/**
@@ -1011,6 +1018,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		this.fillDragStartX = e.clientX;
 		this.fillDragStartY = e.clientY;
+		this.fillDragDirectionLock = null; // Reset direction lock
 
 		// Create fill preview element
 		this.fillPreviewBorder = document.createElement('div');
@@ -1023,25 +1031,70 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		window.addEventListener('mousemove', this.onFillDragMove);
 		window.addEventListener('mouseup', this.onFillDragMouseUp);
+		window.addEventListener('blur', this.onFillDragMouseUp);
+		document.addEventListener('mouseleave', this.onFillDragMouseUp);
 	}
 
 	private onFillDragMove = (e: MouseEvent): void => {
-		if (!this.isFilling || !this.scrollViewport || !this.fillPreviewBorder) return;
+		try {
+			if (!this.isFilling || !this.scrollViewport || !this.fillPreviewBorder) return;
 
-		// Calculate mouse coordinates relative to scroll viewport
-		const scrollRect = this.scrollViewport.getBoundingClientRect();
-		const mouseX = e.clientX - scrollRect.left + this.scrollViewport.scrollLeft;
-		const mouseY = e.clientY - scrollRect.top + this.scrollViewport.scrollTop - 40; // 40px margin header
+			// Calculate mouse coordinates relative to scroll viewport
+			const scrollRect = this.scrollViewport.getBoundingClientRect();
+			const mouseX = e.clientX - scrollRect.left + this.scrollViewport.scrollLeft;
+			const mouseY = e.clientY - scrollRect.top + this.scrollViewport.scrollTop - 40; // 40px margin header
 
-		// Get current coordinate indices under pointer
-		const currRow = this.engine.geometry.getRowIndexAtOffset(mouseY);
-		const currCol = this.engine.geometry.getColIndexAtOffset(mouseX);
+			// Get current coordinate indices under pointer
+			const currRow = this.engine.geometry.getRowIndexAtOffset(mouseY);
+			const currCol = this.engine.geometry.getColIndexAtOffset(mouseX);
 
-		// Determine dominant drag direction: vertical or horizontal
-		const deltaX = Math.abs(e.clientX - this.fillDragStartX);
-		const deltaY = Math.abs(e.clientY - this.fillDragStartY);
+			if (this.fillDragDirectionLock === null) {
+				const rowDiff = currRow > this.fillEndRow ? currRow - this.fillEndRow : currRow < this.fillStartRow ? this.fillStartRow - currRow : 0;
+				const colDiff = currCol > this.fillEndCol ? currCol - this.fillEndCol : currCol < this.fillStartCol ? this.fillStartCol - currCol : 0;
 
-		const isVertical = deltaY > deltaX;
+				if (rowDiff > 0 || colDiff > 0) {
+					this.fillDragDirectionLock = rowDiff >= colDiff ? 'VERTICAL' : 'HORIZONTAL';
+				} else {
+					// Still inside original selection bounds, clear preview and return
+					this.currentFillPreview = null;
+					this.updateFillPreview();
+					return;
+				}
+			}
+
+		// Auto-scroll when dragging near viewport edges
+		const edgeThreshold = 35; // 35px from edge
+		let scrollSpeedX = 0;
+		let scrollSpeedY = 0;
+
+		if (e.clientY > scrollRect.bottom - edgeThreshold) {
+			scrollSpeedY = 15;
+		} else if (e.clientY < scrollRect.top + edgeThreshold) {
+			scrollSpeedY = -15;
+		}
+
+		if (e.clientX > scrollRect.right - edgeThreshold) {
+			scrollSpeedX = 15;
+		} else if (e.clientX < scrollRect.left + edgeThreshold) {
+			scrollSpeedX = -15;
+		}
+
+		let scrolled = false;
+		if (scrollSpeedY !== 0) {
+			this.scrollViewport.scrollTop = Math.max(0, Math.min(this.scrollViewport.scrollHeight - this.scrollViewport.clientHeight, this.scrollViewport.scrollTop + scrollSpeedY));
+			scrolled = true;
+		}
+
+		if (scrollSpeedX !== 0) {
+			this.scrollViewport.scrollLeft = Math.max(0, Math.min(this.scrollViewport.scrollWidth - this.scrollViewport.clientWidth, this.scrollViewport.scrollLeft + scrollSpeedX));
+			scrolled = true;
+		}
+
+		if (scrolled) {
+			this.scrollEngine.scrollTo(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
+		}
+
+		const isVertical = this.fillDragDirectionLock === 'VERTICAL';
 
 		let direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null = null;
 		let minRowPreview = -1;
@@ -1087,113 +1140,133 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				maxCol: maxColPreview,
 				direction,
 			};
-
-			// Draw and reposition the preview border absolutely
-			const state = this.engine.stateManager.getState();
-			const rowCount = this.engine.getRowModel() ? this.engine.getRowModel()!.getRowCount() : 0;
-			const colCount = state.columns.length;
-
-			const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-			const pinRightColumns = this.engine.viewport.pinRightColumns;
-			const pinTopRows = this.engine.viewport.pinTopRows;
-			const pinBottomRows = this.engine.viewport.pinBottomRows;
-			const scrollTop = this.engine.viewport.scrollTop;
-			const scrollLeft = this.engine.viewport.scrollLeft;
-			const viewportHeight = this.engine.viewport.viewportHeight;
-			const viewportWidth = this.engine.viewport.viewportWidth;
-
-			let pinnedLeftWidth = 0;
-			for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
-				pinnedLeftWidth += this.engine.geometry.colWidths[i] || 0;
-			}
-			let pinnedRightWidth = 0;
-			for (let i = 0; i < pinRightColumns && i < colCount; i++) {
-				pinnedRightWidth += this.engine.geometry.colWidths[colCount - 1 - i] || 0;
-			}
-			let pinnedTopHeight = 0;
-			for (let i = 0; i < pinTopRows && i < rowCount; i++) {
-				pinnedTopHeight += this.engine.geometry.rowHeights[i] || 0;
-			}
-			let pinnedBottomHeight = 0;
-			for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
-				pinnedBottomHeight += this.engine.geometry.rowHeights[rowCount - 1 - i] || 0;
-			}
-
-			const getClampedX = (c: number): { left: number; right: number } => {
-				const cellLeft = this.engine.geometry.colLefts[c] || 0;
-				const cellWidth = this.engine.geometry.colWidths[c] || 0;
-
-				if (c < pinLeftColumns) {
-					return { left: cellLeft, right: cellLeft + cellWidth };
-				} else if (c >= colCount - pinRightColumns) {
-					const firstRightPinColIdx = colCount - pinRightColumns;
-					const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
-					const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
-					return { left, right: left + cellWidth };
-				} else {
-					const unclippedLeft = cellLeft - scrollLeft;
-					const unclippedRight = unclippedLeft + cellWidth;
-					const left = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedLeft));
-					const right = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedRight));
-					return { left, right };
-				}
-			};
-
-			const getClampedY = (r: number): { top: number; bottom: number } => {
-				const rowTop = this.engine.geometry.rowTops[r] || 0;
-				const rowHeight = this.engine.geometry.rowHeights[r] || 0;
-
-				if (r < pinTopRows) {
-					return { top: rowTop, bottom: rowTop + rowHeight };
-				} else if (r >= rowCount - pinBottomRows) {
-					let heightToBottom = 0;
-					for (let i = r + 1; i < rowCount; i++) {
-						heightToBottom += this.engine.geometry.rowHeights[i] || 0;
-					}
-					const top = viewportHeight - 40 - heightToBottom - rowHeight;
-					return { top, bottom: top + rowHeight };
-				} else {
-					const unclippedTop = rowTop - scrollTop;
-					const unclippedBottom = unclippedTop + rowHeight;
-					const top = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedTop));
-					const bottom = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedBottom));
-					return { top, bottom };
-				}
-			};
-
-			const xRangeMin = getClampedX(minColPreview);
-			const xRangeMax = getClampedX(maxColPreview);
-			const yRangeMin = getClampedY(minRowPreview);
-			const yRangeMax = getClampedY(maxRowPreview);
-
-			const pLeft = xRangeMin.left;
-			const pRight = xRangeMax.right;
-			const pTop = yRangeMin.top;
-			const pBottom = yRangeMax.bottom;
-
-			const pWidth = pRight - pLeft;
-			const pHeight = pBottom - pTop;
-
-			if (pWidth > 0 && pHeight > 0) {
-				this.fillPreviewBorder.style.display = 'block';
-				this.fillPreviewBorder.style.transform = `translate3d(${pLeft}px, ${pTop}px, 0)`;
-				this.fillPreviewBorder.style.width = `${pWidth}px`;
-				this.fillPreviewBorder.style.height = `${pHeight}px`;
-			} else {
-				this.fillPreviewBorder.style.display = 'none';
-			}
 		} else {
 			this.currentFillPreview = null;
+		}
+
+		this.updateFillPreview();
+		} catch (err) {
+			console.error('RenderEngine: Error in onFillDragMove', err);
+			this.onFillDragMouseUp();
+		}
+	};
+
+	private updateFillPreview(): void {
+		if (!this.fillPreviewBorder || !this.overlayLayer) return;
+
+		if (!this.isFilling || !this.currentFillPreview) {
+			this.fillPreviewBorder.style.display = 'none';
+			return;
+		}
+
+		const { minRow, maxRow, minCol, maxCol } = this.currentFillPreview;
+
+		const state = this.engine.stateManager.getState();
+		const rowModel = this.engine.getRowModel();
+		const rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const columns = state.columns;
+		const colCount = columns.length;
+
+		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
+		const pinRightColumns = this.engine.viewport.pinRightColumns;
+		const pinTopRows = this.engine.viewport.pinTopRows;
+		const pinBottomRows = this.engine.viewport.pinBottomRows;
+		const scrollTop = this.engine.viewport.scrollTop;
+		const scrollLeft = this.engine.viewport.scrollLeft;
+		const viewportHeight = this.engine.viewport.viewportHeight;
+		const viewportWidth = this.engine.viewport.viewportWidth;
+
+		let pinnedLeftWidth = 0;
+		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
+			pinnedLeftWidth += this.engine.geometry.colWidths[i] || 0;
+		}
+		let pinnedRightWidth = 0;
+		for (let i = 0; i < pinRightColumns && i < colCount; i++) {
+			pinnedRightWidth += this.engine.geometry.colWidths[colCount - 1 - i] || 0;
+		}
+		let pinnedTopHeight = 0;
+		for (let i = 0; i < pinTopRows && i < rowCount; i++) {
+			pinnedTopHeight += this.engine.geometry.rowHeights[i] || 0;
+		}
+		let pinnedBottomHeight = 0;
+		for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
+			pinnedBottomHeight += this.engine.geometry.rowHeights[rowCount - 1 - i] || 0;
+		}
+
+		const getClampedX = (c: number): { left: number; right: number } => {
+			const cellLeft = this.engine.geometry.colLefts[c] || 0;
+			const cellWidth = this.engine.geometry.colWidths[c] || 0;
+
+			if (c < pinLeftColumns) {
+				return { left: cellLeft, right: cellLeft + cellWidth };
+			} else if (c >= colCount - pinRightColumns) {
+				const firstRightPinColIdx = colCount - pinRightColumns;
+				const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
+				const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
+				return { left, right: left + cellWidth };
+			} else {
+				const unclippedLeft = cellLeft - scrollLeft;
+				const unclippedRight = unclippedLeft + cellWidth;
+				const left = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedLeft));
+				const right = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedRight));
+				return { left, right };
+			}
+		};
+
+		const getClampedY = (r: number): { top: number; bottom: number } => {
+			const rowTop = this.engine.geometry.rowTops[r] || 0;
+			const rowHeight = this.engine.geometry.rowHeights[r] || 0;
+
+			if (r < pinTopRows) {
+				return { top: rowTop, bottom: rowTop + rowHeight };
+			} else if (r >= rowCount - pinBottomRows) {
+				let heightToBottom = 0;
+				for (let i = r + 1; i < rowCount; i++) {
+					heightToBottom += this.engine.geometry.rowHeights[i] || 0;
+				}
+				const top = viewportHeight - 40 - heightToBottom - rowHeight;
+				return { top, bottom: top + rowHeight };
+			} else {
+				const unclippedTop = rowTop - scrollTop;
+				const unclippedBottom = unclippedTop + rowHeight;
+				const top = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedTop));
+				const bottom = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedBottom));
+				return { top, bottom };
+			}
+		};
+
+		const xRangeMin = getClampedX(minCol);
+		const xRangeMax = getClampedX(maxCol);
+		const yRangeMin = getClampedY(minRow);
+		const yRangeMax = getClampedY(maxRow);
+
+		const pLeft = xRangeMin.left;
+		const pRight = xRangeMax.right;
+		const pTop = yRangeMin.top;
+		const pBottom = yRangeMax.bottom;
+
+		const pWidth = pRight - pLeft;
+		const pHeight = pBottom - pTop;
+
+		if (pWidth > 0 && pHeight > 0) {
+			this.fillPreviewBorder.style.display = 'block';
+			this.fillPreviewBorder.style.transform = `translate3d(${pLeft}px, ${pTop}px, 0)`;
+			this.fillPreviewBorder.style.width = `${pWidth}px`;
+			this.fillPreviewBorder.style.height = `${pHeight}px`;
+		} else {
 			this.fillPreviewBorder.style.display = 'none';
 		}
 	};
 
-	private onFillDragMouseUp = (e: MouseEvent): void => {
+	private onFillDragMouseUp = (e?: Event): void => {
 		window.removeEventListener('mousemove', this.onFillDragMove);
 		window.removeEventListener('mouseup', this.onFillDragMouseUp);
+		window.removeEventListener('blur', this.onFillDragMouseUp);
+		document.removeEventListener('mouseleave', this.onFillDragMouseUp);
 
 		if (!this.isFilling) return;
 		this.isFilling = false;
+		this.fillDragDirectionLock = null; // Reset lock on mouse release
 
 		if (this.fillPreviewBorder) {
 			this.fillPreviewBorder.remove();
@@ -1201,8 +1274,12 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 
 		if (this.currentFillPreview) {
-			const { minRow, maxRow, minCol, maxCol, direction } = this.currentFillPreview;
-			this.extrapolateAndFillRange(minRow, maxRow, minCol, maxCol, direction!);
+			try {
+				const { minRow, maxRow, minCol, maxCol, direction } = this.currentFillPreview;
+				this.extrapolateAndFillRange(minRow, maxRow, minCol, maxCol, direction!);
+			} catch (err) {
+				console.error('RenderEngine: Error during extrapolateAndFillRange', err);
+			}
 		}
 
 		this.currentFillPreview = null;
