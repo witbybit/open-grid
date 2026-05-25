@@ -264,8 +264,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			const id = this.store.getRowId(row);
 			let node = this.nodeMap.get(id);
 			if (node) {
-				node.data = row;
-				node.clearValueCache();
+				node.setData(row);
 			} else {
 				node = new RowNode<TData>(id, row);
 			}
@@ -274,6 +273,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		});
 
 		this.nodeMap = nextNodeMap;
+		this.store.dagEngine.clearAll();
 		this.refresh();
 	}
 
@@ -317,8 +317,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				}
 
 				if (changedFields.size > 0) {
-					node.data = nextRow;
-					node.clearValueCache();
+					node.setData(nextRow);
 					changedNodes.push(node);
 					changedFieldsByRow.set(node.id, changedFields);
 				}
@@ -423,20 +422,20 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return this.nodeMap.get(rowId) ?? null;
 	};
 
-	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
+	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
 		const node = this.getRowNodeById(rowId);
-		if (!node) return;
+		if (!node) return false;
 
 		const col = this.store.getColumnDef(colField);
 		const updatedRow = { ...node.data };
 		if (col?.valueSetter) {
-			col.valueSetter(updatedRow, value);
+			if (!col.valueSetter(updatedRow, value)) return false;
 		} else {
 			setValueByPath(updatedRow, colField, value);
 		}
 
-		node.data = updatedRow;
-		node.clearValueCache();
+		node.setData(updatedRow);
+		return true;
 	};
 
 	public refresh(): void {

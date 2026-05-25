@@ -5,14 +5,9 @@ export * from './rowModel.js';
 export * from './ids.js';
 export * from './scheduler.js';
 export * from './viewportGeometry.js';
-export * from './columnController.js';
-export * from './rowController.js';
-export * from './focusController.js';
-export * from './selectionController.js';
 export * from './viewportController.js';
 export * from './calculations/dagEngine.js';
 
-// Modern v2 Kernel Architecture Exports
 export * from './engine/GridEngine.js';
 export * from './engine/GridEngineConfig.js';
 export * from './state/StateManager.js';
@@ -28,11 +23,9 @@ export * from './models/FocusModel.js';
 export * from './models/SelectionModel.js';
 export * from './models/EditModel.js';
 
-// Phase 4 Render Engine Foundation Exports
 export * from './renderer/domPool.js';
 export * from './renderer/scrollEngine.js';
 export * from './renderer/IGridRenderer.js';
 export * from './renderer/renderEngine.js';
 
-// Phase 5 Plugins Exports
 export * from './contextMenu.js';

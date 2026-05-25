@@ -1,9 +1,5 @@
 import type { FilterModel, SortModel } from './rowModel.js';
 import { PriorityLane, TransactionScheduler } from './scheduler.js';
-import { ColumnController } from './columnController.js';
-import { RowController } from './rowController.js';
-import { FocusController } from './focusController.js';
-import { SelectionController } from './selectionController.js';
 import { ViewportController, ViewportRange } from './viewportController.js';
 import { DagEngine } from './calculations/dagEngine.js';
 import { GridEngine } from './engine/GridEngine.js';
@@ -61,6 +57,13 @@ export class RowNode<TRowData = any> {
 	constructor(id: string, data: TRowData) {
 		this.id = id;
 		this.data = data;
+	}
+
+	public setData(data: TRowData): void {
+		if (this.data !== data) {
+			this.data = data;
+			this.clearValueCache();
+		}
 	}
 
 	public getCellValue(colField: string, compiledGetter: (data: TRowData) => any): any {
@@ -175,7 +178,7 @@ export interface RowModel<TRowData = unknown> {
 	getRowCount(): number;
 	getRowIndexById(rowId: string): number;
 	getRowNodeById?(rowId: string): RowNode<TRowData> | null;
-	setCellValue?(rowId: string, colField: string, value: unknown): void;
+	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
 	loadVisibleBlocks?(visibleRowIndices: number[]): void;
 }
 
@@ -293,10 +296,6 @@ export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
 }
 
 export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> {
-	public columnController: ColumnController<TRowData>;
-	public rowController: RowController<TRowData>;
-	public focusController: FocusController;
-	public selectionController: SelectionController;
 	public scheduler: TransactionScheduler;
 	public viewportController: ViewportController;
 	public dagEngine: DagEngine;
@@ -320,24 +319,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			loadingSkeletonCount: initialState.loadingSkeletonCount,
 		});
 
-		// Initialize specialized controller layers with the core engine
-		this.columnController = new ColumnController<TRowData>(this.state.defaultColWidth, this.engine);
-		this.rowController = new RowController<TRowData>(this.state.defaultRowHeight, this.engine);
-		this.focusController = new FocusController();
-		this.selectionController = new SelectionController();
 		this.scheduler = new TransactionScheduler();
 		this.viewportController = new ViewportController(this.engine);
 		this.dagEngine = this.engine.dagEngine;
-
-		// Keep legacy controllers updated when GridEngine updates them
-		this.engine.stateManager.subscribe((state) => {
-			if (state.focusedCell) {
-				this.focusController.setFocusedCell(state.focusedCell.rowId, state.focusedCell.colField);
-			} else {
-				this.focusController.setFocusedCell(null, null);
-			}
-			this.selectionController.setSelectedRange(state.selectedRange, state.selectedRangeBounds);
-		});
 
 		// Notify plugins of viewport shifts
 		this.engine.stateManager.subscribeToKey('visibleRowRange', () => {
@@ -367,13 +351,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			});
 		});
 
-		// Set initial controller copies of focus & selection
-		if (this.state.focusedCell) {
-			this.focusController.setFocusedCell(this.state.focusedCell.rowId, this.state.focusedCell.colField);
-		}
-		if (this.state.selectedRange) {
-			this.selectionController.setSelectedRange(this.state.selectedRange, this.state.selectedRangeBounds);
-		}
 	}
 
 	private get state(): GridState<TRowData> {

@@ -351,7 +351,7 @@ function OpenGridInner<TRowData = unknown>({
 			if (!entries || entries.length === 0) return;
 			const { width, height } = entries[0].contentRect;
 			if (store.viewportController.setViewportSize(width, height)) {
-				store.viewportController.updateVisibleRanges(store);
+				store.viewportController.updateVisibleRanges();
 				renderEngine.schedulePaint();
 			}
 		});

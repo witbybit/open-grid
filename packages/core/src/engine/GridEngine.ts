@@ -195,7 +195,8 @@ export class GridEngine<TRowData = unknown> {
 
 			if (oldValue === value) return;
 
-			this.data.setCellValue(rowId, colField, value);
+			const applied = this.data.setCellValue(rowId, colField, value);
+			if (!applied) return;
 
 			if (undoable) {
 				this.commandHistory.add({

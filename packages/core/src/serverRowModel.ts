@@ -133,20 +133,20 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		return this.nodeMap.get(rowId) ?? null;
 	};
 
-	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
+	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
 		const node = this.getRowNodeById(rowId);
-		if (!node) return;
+		if (!node) return false;
 
 		const col = this.store.getColumnDef(colField);
 		const updatedRow = { ...node.data };
 		if (col?.valueSetter) {
-			col.valueSetter(updatedRow, value);
+			if (!col.valueSetter(updatedRow, value)) return false;
 		} else {
 			setValueByPath(updatedRow, colField, value);
 		}
 
-		node.data = updatedRow;
-		node.clearValueCache();
+		node.setData(updatedRow);
+		return true;
 	};
 
 	private fetchBlock = async (blockIndex: number): Promise<void> => {
@@ -206,8 +206,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 					const id = this.store.getRowId(typedRow);
 					let node = this.nodeMap.get(id);
 					if (node) {
-						node.data = typedRow;
-						node.clearValueCache();
+						node.setData(typedRow);
 					} else {
 						node = new RowNode<TData>(id, typedRow);
 					}
@@ -226,6 +225,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 					this.activeNodes.push(null);
 				}
 			}
+
+			this.store.dagEngine.clearAll();
 
 			// Layout geometry will be updated by GridEngine using GeometryModel
 			const hasActiveFetches = Object.keys(this.loadingBlocks).length > 0;
@@ -250,6 +251,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.nodeMap.clear();
 		this.rowIdMap.clear();
 		this.loadingNodeMap.clear();
+		this.store.dagEngine.clearAll();
 		this.store.setState({
 			loading: true,
 			dataVersion: this.store.getState().dataVersion + 1,

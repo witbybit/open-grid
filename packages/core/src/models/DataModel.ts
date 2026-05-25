@@ -1,4 +1,4 @@
-import { RowNode, compilePathGetter, setValueByPath, getValueByPath, type ColumnDef, type RowModel } from '../store.js';
+import { RowNode, compilePathGetter, type ColumnDef } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 
 export class DataModel<TRowData = unknown> {
@@ -96,9 +96,17 @@ export class DataModel<TRowData = unknown> {
 		return rawVal;
 	};
 
-	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
+	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
 		const oldValue = this.getCellValue(rowId, colField);
-		if (oldValue === value) return;
+		if (oldValue === value) return false;
+
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel?.setCellValue) {
+			return false;
+		}
+
+		const hadFormula = this.engine.dagEngine.hasFormula(rowId, colField);
+		const previousFormula = this.engine.dagEngine.getFormula(rowId, colField);
 
 		if (typeof value === 'string' && value.startsWith('=')) {
 			this.engine.dagEngine.registerFormula(rowId, colField, value);
@@ -106,9 +114,14 @@ export class DataModel<TRowData = unknown> {
 			this.engine.dagEngine.clearFormula(rowId, colField);
 		}
 
-		const rowModel = this.engine.getRowModel();
-		if (rowModel?.setCellValue) {
-			rowModel.setCellValue(rowId, colField, value);
+		const applied = rowModel.setCellValue(rowId, colField, value);
+		if (!applied) {
+			if (hadFormula && previousFormula !== undefined) {
+				this.engine.dagEngine.registerFormula(rowId, colField, previousFormula);
+			} else {
+				this.engine.dagEngine.clearFormula(rowId, colField);
+			}
+			return false;
 		}
 
 		// Invalidate this cell and all its dependents in the DAG engine
@@ -162,5 +175,6 @@ export class DataModel<TRowData = unknown> {
 			oldValue,
 			newValue: value,
 		});
+		return true;
 	};
 }

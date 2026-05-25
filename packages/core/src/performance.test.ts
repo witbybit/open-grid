@@ -55,7 +55,7 @@ describe('Performance Benchmarks', () => {
 
 			for (const scrollTop of scrollPositions) {
 				store.viewportController.setScrollPosition(scrollTop, 0, performance.now());
-				store.viewportController.updateVisibleRanges(store);
+				store.viewportController.updateVisibleRanges();
 			}
 
 			const duration = performance.now() - start;
@@ -102,7 +102,7 @@ describe('Performance Benchmarks', () => {
 			for (let i = 0; i < 1000; i++) {
 				const scrollTop = Math.floor(Math.random() * 3000000);
 				store.viewportController.setScrollPosition(scrollTop, 0, performance.now());
-				store.viewportController.getVisibleRowRange(store.rowController);
+				store.viewportController.getVisibleRowRange();
 			}
 
 			const duration = performance.now() - start;

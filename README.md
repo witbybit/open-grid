@@ -1,6 +1,6 @@
 # 🚀 Headless High-Performance Data Grid & Spreadsheet Engine
 
-Open Grid is a lightweight, framework-agnostic, and highly modular headless grid engine built specifically for high-performance virtualized spreadsheets. By decoupling rendering from state management using a focused pub-sub core, the engine achieves sub-millisecond cell updates, handles **100,000+ rows at 60+ FPS**, and avoids global React re-renders.
+Open Grid is a lightweight, framework-agnostic headless grid engine for high-performance virtualized spreadsheets. The core keeps rendering optional, centralizes state in `GridEngine`, and uses targeted subscriptions so React adapters can update individual cells without forcing global grid re-renders.
 
 ---
 
@@ -10,26 +10,26 @@ To bypass the React virtual DOM rendering bottleneck (which slows down standard 
 
 ```mermaid
 graph TD
-    A[GridStore / Pub-Sub Database] --> B[RowNode Tree]
+    A[GridStore / GridEngine] --> B[RowNode Tree]
     B --> C[Viewport Range Calculator]
     C --> D[Visible Row Nodes slice]
 
-    A --> E[GridNavigationController / Keyboard State Machine]
+    A --> E[Keyboard Navigation]
     A --> F[Dynamic Formulas & Accessors]
 
     A --> G[Framework Adapters]
     G --> H[@open-grid/react bindings]
 
     H --> I[Isolated Cell-Level Subscribers]
-    I --> J[O(1) Cell paint via targeted cell:value listener]
+    I --> J[Targeted Cell Paint]
 ```
 
 ### Core Architecture Highlights
 
-1. **Stateful RowNode Tree**: Decouples raw record arrays from layout metadata (like vertical coordinates, selected/expanded states, and explicit heights). Allows grid operations to run at pure $O(1)$ complexity.
+1. **Stateful RowNode Tree**: Decouples raw record arrays from layout metadata like vertical coordinates, selected/expanded states, and explicit heights.
 2. **Cellular Value Cache**: Prevents redundant `valueGetter` calculations or path split operations on scrolling by caching cell computations directly on individual `RowNode` structures.
 3. **Pre-Compiled Path Getters**: Compiles column accessors into optimized functional selectors upon schema registration, eliminating runtime string manipulations and garbage collection pressures.
-4. **Targeted Micro-Subscriptions**: Cell components subscribe strictly to their specific coordinate keys (e.g. `cell:value:${rowId}:${colField}`). Value edits trigger _only_ the affected cell component, keeping performance extremely clean.
+4. **Targeted Micro-Subscriptions**: Cell components subscribe to their specific coordinate keys. Value edits notify the edited cell, formula dependents, and dynamic same-row value getter cells.
 5. **Dynamic Listener Garbage Collection**: Subscription listeners are active only for elements currently in the scroll viewport. Scrolling elements out of the viewport automatically unmounts them, dereferencing their subscriptions to prevent memory leaks.
 6. **Unified Programmatic API (`GridApi`)**: Exposes an absolute control handle which is injected into custom components, headers, and editors to programmatically control coordinates, edit states, selections, and transactions.
 
@@ -42,7 +42,7 @@ Open Grid comes equipped with an extensive suite of built-in features designed f
 *   **High-Performance Virtualization**: Virtualizes both rows and columns dynamically, yielding standard 60 FPS performance even for massive datasets with 100k+ rows and 1,000+ columns.
 *   **Sticky Lanes (Pinning)**: Sticky pinning for left/right columns and top/bottom rows with floating headers and scroll boundaries.
 *   **Excel-like Selections & Drag-to-Fill**: Features interactive multi-range cell selection and a dynamic Excel-like purple dashed border drag-to-fill handle with real-time selection telemetry (Sum, Count, Average).
-*   **Reactive Formula DAG Engine**: Excel-style reactive cell equations (e.g., `=SUM([S-1001:A],-[S-1001:B])`) with dynamic dependency invalidation and O(1) cached evaluations.
+*   **Reactive Formula DAG Engine**: Scoped spreadsheet-style formulas using `[rowId:columnField]` references, arithmetic operators, and `SUM`, `AVERAGE`, `MIN`, and `MAX`, with dependency invalidation and cached lazy evaluation.
 *   **Command History (Undo / Redo)**: Seamless core state journaling enabling unlimited undo/redo capability across cell mutations and updates.
 *   **Flexible Row Models**: In-memory `ClientRowModel` (ideal for instant manipulation) vs. asynchronous chunk-paginated `ServerRowModel` with built-in loading shimmer/skeleton state trackers.
 *   **Dynamic Custom CSS Styling Slots**: Custom styling hooks (`rowClass`, `cellClass`, `headerCellClass`) that allow granular styling control on cell-by-cell or row-by-row bases.
@@ -288,7 +288,7 @@ export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorPr
 
 ## 📊 Spreadsheet Formulas & Calculations
 
-Open Grid contains a built-in reactive formula calculation DAG engine. You can pass formula expressions starting with `=` as cell values, and the engine automatically builds cell dependency graphs to keep computed nodes updated with O(1) efficiency.
+Open Grid contains a scoped reactive formula calculation DAG engine. You can pass formula expressions starting with `=` as cell values, and the engine builds dependency graphs so affected computed nodes are invalidated when source cells change.
 
 ### Writing Formulas
 
@@ -304,13 +304,15 @@ api.setCellValue('S-1001', 'F', '=[S-1001:C]*0.8');
 
 Whenever `S-1001:A` or `S-1001:B` changes, the calculated output for `C` and `F` is invalidated and recalculated in topological order instantaneously.
 
+Formula support is intentionally narrow: it handles explicit `[rowId:columnField]` references, numeric arithmetic, parentheses, string fallback values, and `SUM`, `AVERAGE`, `MIN`, and `MAX`. It does not currently implement A1 notation, cross-sheet references, ranges like `A1:A10`, date functions, lookup functions, or Excel-compatible coercion semantics.
+
 ---
 
 ## 🛠️ Scripts & Local Developer Guides
 
 ### 1. Running Unit Tests
 
-Open Grid features a robust Vitest test suite that covers transactions, formulas, and virtualization geometry:
+Open Grid uses Vitest for core correctness tests around transactions, formulas, row models, and virtualization geometry. The performance tests exercise engine hot paths in Node/jsdom; use browser profiling for real paint, layout, and compositor measurements.
 
 ```bash
 pnpm run test

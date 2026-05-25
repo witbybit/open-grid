@@ -70,6 +70,15 @@ export class DagEngine {
 		return this.formulas.get(this.getCellKey(rowId, colField));
 	}
 
+	public clearAll(): void {
+		this.dependents.clear();
+		this.dependencies.clear();
+		this.cache.clear();
+		this.formulas.clear();
+		this.dirty.clear();
+		this.isEvaluating.clear();
+	}
+
 	/**
 	 * Resolve and evaluate a cell value. If it's a formula, evaluate it lazily and use cache.
 	 * If it is a raw value, return it directly.
