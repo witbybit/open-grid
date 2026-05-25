@@ -21,7 +21,7 @@ class MockResizeObserver {
 	unobserve = vi.fn();
 	disconnect = vi.fn();
 }
-globalThis.ResizeObserver = MockResizeObserver as any;
+globalThis.ResizeObserver = MockResizeObserver;
 
 interface TestRow {
 	id: string;
@@ -53,12 +53,16 @@ const ApiSurfaceInspector = () => {
 	const api = useGridApi<TestRow>();
 	return (
 		<div>
-		<span data-testid='api-frozen'>{Object.isFrozen(api) ? 'yes' : 'no'}</span>
-		<span data-testid='api-engine'>{'engine' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
-		<span data-testid='api-register-row-model'>{'registerRowModel' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
-		<button data-testid='move-column' onClick={() => api.moveColumn('name', 0)}>Move</button>
-		<button data-testid='disable-reorder' onClick={() => api.setColumnReorderEnabled(false)}>Disable</button>
-	</div>
+			<span data-testid='api-frozen'>{Object.isFrozen(api) ? 'yes' : 'no'}</span>
+			<span data-testid='api-engine'>{'engine' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
+			<span data-testid='api-register-row-model'>{'registerRowModel' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
+			<button data-testid='move-column' onClick={() => api.moveColumn('name', 0)}>
+				Move
+			</button>
+			<button data-testid='disable-reorder' onClick={() => api.setColumnReorderEnabled(false)}>
+				Disable
+			</button>
+		</div>
 	);
 };
 

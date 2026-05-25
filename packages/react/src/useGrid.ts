@@ -26,7 +26,7 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): R
 			columns,
 			getRowId,
 			...initialState,
-		} as any);
+		});
 	}, [columns, getRowId, initialState]);
 
 	const api = useMemo(() => createGridApiFacade(store), [store]);
@@ -43,7 +43,7 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): R
 	}, [store, rows, columns]);
 
 	useEffect(() => {
-		store.setState({ columns } as any);
+		store.setState({ columns });
 	}, [store, columns]);
 
 	return { store, api };
@@ -59,7 +59,7 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): R
 			columns,
 			getRowId,
 			...initialState,
-		} as any);
+		});
 	}, [columns, getRowId, initialState]);
 
 	const api = useMemo(() => createGridApiFacade(store), [store]);
@@ -78,7 +78,7 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): R
 	}, [store, datasource, blockSize, columns, getRowId]);
 
 	useEffect(() => {
-		store.setState({ columns } as any);
+		store.setState({ columns });
 	}, [store, columns]);
 
 	return { store, api };
