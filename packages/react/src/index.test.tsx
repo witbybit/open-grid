@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, act, within } from '@testing-library/react';
+import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
 import { GridStore, ClientRowModelController } from '@open-grid/core';
 import {
 	GridProvider,
@@ -414,6 +414,49 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const openGridDiv = container.firstElementChild as HTMLElement;
 		expect(openGridDiv).toBeDefined();
 		expect(openGridDiv.style.position).toBe('relative');
+
+		unmount();
+		controller.dispose();
+	});
+
+	it('should keep custom renderer portals mounted when renderer columns are reordered', async () => {
+		const store = new GridStore<{ id: string; severity: string; service: string }>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 80 },
+				{
+					field: 'severity',
+					header: 'Severity',
+					width: 120,
+					cellRenderer: ({ value }) => <span data-testid='severity-renderer'>{String(value)}</span>,
+				},
+				{
+					field: 'service',
+					header: 'Service',
+					width: 120,
+					cellRenderer: ({ value }) => <span data-testid='service-renderer'>{String(value)}</span>,
+				},
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: '1', severity: 'CRITICAL', service: 'Auth' }],
+			columns: store.getState().columns,
+		});
+		const grid = createTestGrid(store);
+
+		const { unmount } = render(<OpenGrid grid={grid} enableNavigation={false} />);
+
+		await screen.findByText('CRITICAL');
+		await screen.findByText('Auth');
+
+		act(() => {
+			grid.api.moveColumn('severity', 2);
+		});
+
+		await waitFor(() => {
+			expect(screen.getByText('CRITICAL')).toBeDefined();
+			expect(screen.getByText('Auth')).toBeDefined();
+		});
 
 		unmount();
 		controller.dispose();

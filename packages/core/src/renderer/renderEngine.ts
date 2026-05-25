@@ -76,7 +76,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		isEditing: boolean,
 		isLoading: boolean
 	) => void;
-	public onUnmountReactPortal?: (cellKey: string) => void;
+	public onUnmountReactPortal?: (cellKey: string, container?: HTMLElement) => void;
 
 	constructor(engine: GridEngine<TRowData>) {
 		this.engine = engine;
@@ -247,6 +247,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	 */
 	public fullPaint(): void {
 		this.engine.eventBus.dispatchEvent('beforeRender', null);
+		this.syncViewportScrollFromDom();
+
 		const rowModel = this.engine.getRowModel();
 		const rowCount = rowModel ? rowModel.getRowCount() : 0;
 		const state = this.engine.stateManager.getState();
@@ -292,6 +294,12 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		this.paintOverlay();
 
 		this.engine.eventBus.dispatchEvent('afterRender', null);
+	}
+
+	private syncViewportScrollFromDom(): void {
+		if (!this.scrollViewport) return;
+
+		this.engine.viewport.setScrollPosition(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
 	}
 
 	/**
@@ -593,7 +601,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			if ((col.cellRenderer || isEditing) && !isLoading) {
 				if (cell.dataset.cellKey !== cellKey) {
 					if (cell.dataset.cellKey && this.onUnmountReactPortal) {
-						this.onUnmountReactPortal(cell.dataset.cellKey);
+						this.onUnmountReactPortal(cell.dataset.cellKey, cell);
 					}
 					// Set content empty so custom React portal doesn't clash with stale text
 					cell.textContent = '';
@@ -605,7 +613,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			} else {
 				if (cell.dataset.cellKey) {
 					if (this.onUnmountReactPortal) {
-						this.onUnmountReactPortal(cell.dataset.cellKey);
+						this.onUnmountReactPortal(cell.dataset.cellKey, cell);
 					}
 					delete cell.dataset.cellKey;
 				}
@@ -659,7 +667,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		if (cell) {
 			if (cell.dataset.cellKey) {
 				if (this.onUnmountReactPortal) {
-					this.onUnmountReactPortal(cell.dataset.cellKey);
+					this.onUnmountReactPortal(cell.dataset.cellKey, cell);
 				}
 				delete cell.dataset.cellKey;
 			} else {

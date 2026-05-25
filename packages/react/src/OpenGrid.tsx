@@ -246,9 +246,10 @@ function OpenGridInner<TRowData = unknown>({
 		[]
 	);
 
-	const unmountPortal = useCallback((cellKey: string) => {
+	const unmountPortal = useCallback((cellKey: string, container?: HTMLElement) => {
 		setPortals((prev) => {
-			if (!prev.has(cellKey)) return prev;
+			const existing = prev.get(cellKey);
+			if (!existing || (container && existing.container !== container)) return prev;
 			const next = new Map(prev);
 			next.delete(cellKey);
 			return next;
