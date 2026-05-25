@@ -5,6 +5,9 @@ import { ClientRowModelController } from './rowModel.js';
 interface TestRow {
 	id: string;
 	name: string;
+	user?: {
+		name: string;
+	};
 }
 
 describe('ClientRowModelController', () => {
@@ -47,5 +50,25 @@ describe('ClientRowModelController', () => {
 		controller.setCellValue('1', 'name', 'Alicia');
 		const node = controller.getRowNodeById('1');
 		expect(node?.data.name).toBe('Alicia');
+	});
+
+	it('should refresh sorting when a nested column path changes through its parent object', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'user.name', header: 'User' }],
+			sortModel: [{ colId: 'user.name', sort: 'asc' }],
+		});
+
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', name: 'One', user: { name: 'Alice' } },
+				{ id: '2', name: 'Two', user: { name: 'Bob' } },
+			],
+			columns: store.getState().columns,
+		});
+
+		controller.updateRows((rows) => rows.map((row) => (row.id === '2' ? { ...row, user: { name: 'Aaron' } } : row)));
+
+		expect(controller.getRowNode(0)?.id).toBe('2');
 	});
 });

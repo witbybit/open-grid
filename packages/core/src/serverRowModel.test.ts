@@ -203,4 +203,33 @@ describe('ServerRowModelController', () => {
 		expect(stateSpy).toHaveBeenCalled();
 		expect(store.getState().dataVersion).toBe(initialDataVersion + 1);
 	});
+
+	it('should ignore an in-flight response after dispose', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let resolveRows!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		const mockDatasource: IGridDatasource = {
+			getRows: vi.fn().mockImplementation(() => {
+				return new Promise((resolve) => {
+					resolveRows = resolve as typeof resolveRows;
+				});
+			}),
+		};
+
+		const controller = new ServerRowModelController<TestRow>(store, {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		controller.dispose();
+		resolveRows({ rows: [{ id: '1', name: 'Late Alice' }], totalCount: 1 });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getRowCount()).toBe(0);
+		expect(controller.getRowIndexById('1')).toBe(-1);
+	});
 });

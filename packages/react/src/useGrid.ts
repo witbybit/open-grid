@@ -1,8 +1,8 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ClientRowModelController, ServerRowModelController, GridStore, type GridApi } from '@open-grid/core';
 
-import type { ClientGridOptions, ServerGridOptions } from './types';
-import { createGridApiFacade } from './gridApiFacade';
+import type { ClientGridOptions, ServerGridOptions } from './types.js';
+import { createGridApiFacade } from './gridApiFacade.js';
 
 export interface ReactGridInstance<TRowData> {
 	store: GridStore<TRowData>;
@@ -19,32 +19,46 @@ function buildColumnWidths<TRowData>(columns: Array<{ field: string; width?: num
 export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): ReactGridInstance<TRowData> {
 	const { rows, columns, getRowId, initialState } = options;
 
-	const store = useMemo(() => {
+	const initialConfigRef = useRef({ columns, getRowId, initialState });
+	const [store] = useState(() => {
+		const initialConfig = initialConfigRef.current;
 		return new GridStore<TRowData>({
 			rowHeights: {},
-			columnWidths: buildColumnWidths(columns),
-			columns,
-			getRowId,
-			...initialState,
+			columnWidths: buildColumnWidths(initialConfig.columns),
+			columns: initialConfig.columns,
+			getRowId: initialConfig.getRowId,
+			...initialConfig.initialState,
 		});
-	}, [columns, getRowId, initialState]);
+	});
 
 	const api = useMemo(() => createGridApiFacade(store), [store]);
+	const controllerRef = useRef<ClientRowModelController<TRowData> | null>(null);
+	const didMountRowsRef = useRef(false);
 
 	useEffect(() => {
 		const controller = new ClientRowModelController<TRowData>(store, {
 			rows,
 			columns,
 		});
+		controllerRef.current = controller;
 
 		return () => {
+			controllerRef.current = null;
 			controller.dispose?.();
 		};
-	}, [store, rows, columns]);
+	}, [store]);
 
 	useEffect(() => {
 		store.setState({ columns });
 	}, [store, columns]);
+
+	useEffect(() => {
+		if (!didMountRowsRef.current) {
+			didMountRowsRef.current = true;
+			return;
+		}
+		controllerRef.current?.setRows(rows);
+	}, [rows]);
 
 	return { store, api };
 }
@@ -52,15 +66,17 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): R
 export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): ReactGridInstance<TRowData> {
 	const { datasource, columns, blockSize = 100, getRowId, initialState } = options;
 
-	const store = useMemo(() => {
+	const initialConfigRef = useRef({ columns, getRowId, initialState });
+	const [store] = useState(() => {
+		const initialConfig = initialConfigRef.current;
 		return new GridStore<TRowData>({
 			rowHeights: {},
-			columnWidths: buildColumnWidths(columns),
-			columns,
-			getRowId,
-			...initialState,
+			columnWidths: buildColumnWidths(initialConfig.columns),
+			columns: initialConfig.columns,
+			getRowId: initialConfig.getRowId,
+			...initialConfig.initialState,
 		});
-	}, [columns, getRowId, initialState]);
+	});
 
 	const api = useMemo(() => createGridApiFacade(store), [store]);
 
@@ -75,7 +91,7 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): R
 		return () => {
 			controller.dispose?.();
 		};
-	}, [store, datasource, blockSize, columns, getRowId]);
+	}, [store, datasource, blockSize, getRowId]);
 
 	useEffect(() => {
 		store.setState({ columns });

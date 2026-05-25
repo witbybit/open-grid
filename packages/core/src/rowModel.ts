@@ -1,5 +1,5 @@
 import { GridStore, ColumnDef, RowModel, RowNode, getValueByPath, setValueByPath, compilePathGetter } from './store.js';
-import { createCellKey } from './ids.js';
+import { createCellKey, getFieldRoot } from './ids.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -122,6 +122,10 @@ function matchesPreparedFilter(value: unknown, pf: PreparedFilter<any>): boolean
 		default:
 			return textValue.includes(pf.textFilter);
 	}
+}
+
+function fieldsAffectColumn(fields: Set<string>, columnField: string): boolean {
+	return fields.has(columnField) || fields.has(getFieldRoot(columnField));
 }
 
 export function applyClientSortAndFilter<TData>(
@@ -358,7 +362,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (state.sortModel && state.sortModel.length > 0) {
 			for (const sortItem of state.sortModel) {
 				for (const [_, fields] of changedFieldsByRow) {
-					if (fields.has(sortItem.colId)) {
+					if (fieldsAffectColumn(fields, sortItem.colId)) {
 						needsFullRefresh = true;
 						break;
 					}
@@ -370,7 +374,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (!needsFullRefresh && state.filterModel && Object.keys(state.filterModel).length > 0) {
 			for (const filterColId of Object.keys(state.filterModel)) {
 				for (const [_, fields] of changedFieldsByRow) {
-					if (fields.has(filterColId)) {
+					if (fieldsAffectColumn(fields, filterColId)) {
 						needsFullRefresh = true;
 						break;
 					}

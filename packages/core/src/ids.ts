@@ -47,3 +47,8 @@ export function getRowId<TData = unknown>(row: TData, index: number, getUserRowI
 export function getColumnId(column: ColumnLike | undefined, index: number): string {
 	return normalizeGridId(column?.id ?? column?.field ?? column?.header ?? createColumnId(index));
 }
+
+export function getFieldRoot(field: string): string {
+	const dotIndex = field.indexOf('.');
+	return dotIndex === -1 ? field : field.slice(0, dotIndex);
+}

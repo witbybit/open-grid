@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GridStore } from '@open-grid/core';
 import { createPortal } from 'react-dom';
-import { GridProvider, useGridApi } from './OpenGrid';
+import { GridProvider, useGridApi } from './OpenGrid.js';
 
 export interface PortalCellProps {
 	rowId: string;

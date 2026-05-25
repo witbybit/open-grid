@@ -13,6 +13,7 @@ import {
 	useGridStore,
 	useGridApi,
 	useGridSelector,
+	useClientGrid,
 } from './index.js';
 
 // Mock ResizeObserver for jsdom environment
@@ -327,5 +328,26 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		unmount();
 		controller.dispose();
+	});
+
+	it('should keep useClientGrid store stable when callers pass inline columns', () => {
+		const stores: Array<GridStore<TestRow>> = [];
+
+		const HookHarness = ({ label }: { label: string }) => {
+			const grid = useClientGrid<TestRow>({
+				rows: [{ id: '1', name: label }],
+				columns: [{ field: 'name', header: 'Name', width: 100 }],
+			});
+			stores.push(grid.store);
+			return <span data-testid='store-count'>{stores.length}</span>;
+		};
+
+		const { rerender, unmount } = render(<HookHarness label='Product A' />);
+		rerender(<HookHarness label='Product B' />);
+
+		expect(stores.length).toBeGreaterThanOrEqual(2);
+		expect(stores[0]).toBe(stores[stores.length - 1]);
+
+		unmount();
 	});
 });

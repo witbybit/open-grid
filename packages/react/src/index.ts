@@ -1,6 +1,6 @@
-export { OpenGrid, GridProvider, useGridApi, useGridSelector, useGridKeySelector, useGridNavigationController, useGridStore } from './OpenGrid';
-export { PortalCell, PortalManager } from './GridPortal';
-export { useClientGrid, useServerGrid, type ReactGridInstance } from './useGrid';
+export { OpenGrid, GridProvider, useGridApi, useGridSelector, useGridKeySelector, useGridNavigationController, useGridStore } from './OpenGrid.js';
+export { PortalCell, PortalManager } from './GridPortal.js';
+export { useClientGrid, useServerGrid, type ReactGridInstance } from './useGrid.js';
 
 export type {
 	ColumnDef,
@@ -16,4 +16,4 @@ export type {
 	ServerGridOptions,
 	GridStore,
 	FilterModelItem,
-} from './types';
+} from './types.js';

@@ -226,7 +226,7 @@ export class GridEngine<TRowData = unknown> {
 
 		this.commandBus.registerHandler('SET_CELL_VALUE', (payload: { rowId: string; colField: string; value: unknown; undoable?: boolean }) => {
 			const { rowId, colField, value, undoable = true } = payload;
-			const oldValue = this.data.getCellValue(rowId, colField);
+			const oldValue = this.data.getRawCellValue(rowId, colField);
 
 			if (oldValue === value) return;
 

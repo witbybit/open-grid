@@ -9,8 +9,8 @@ import {
 	RenderEngine,
 } from '@open-grid/core';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { PortalData, PortalManager } from './GridPortal';
-import { createGridApiFacade } from './gridApiFacade';
+import { PortalData, PortalManager } from './GridPortal.js';
+import { createGridApiFacade } from './gridApiFacade.js';
 
 export const GridStoreContext = createContext<GridStore<unknown> | null>(null);
 const GridApiContext = createContext<GridApi<unknown> | null>(null);

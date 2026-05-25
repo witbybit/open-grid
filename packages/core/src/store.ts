@@ -335,6 +335,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			filterModel: initialState.filterModel || null,
 			getRowId: initialState.getRowId,
 			loadingSkeletonCount: initialState.loadingSkeletonCount,
+			styleSlots: initialState.styleSlots,
 		});
 
 		this.scheduler = new TransactionScheduler();

@@ -35,6 +35,16 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('should preserve initial style slots in grid state', () => {
+		const rowClass = (row: TestRow) => (row.price > 10 ? 'expensive' : 'standard');
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+			styleSlots: { rowClass },
+		});
+
+		expect(store.getState().styleSlots?.rowClass).toBe(rowClass);
+	});
+
 	it('should notify targeted key-subscribers only when that specific key is mutated', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 150 }],
@@ -122,6 +132,29 @@ describe('GridStore generic row-store functionality', () => {
 		store.setCellValue('1', 'price', 90);
 		const val2 = store.getCellValue('1', 'price_display');
 		expect(val2).toBe('$90.00');
+
+		controller.dispose();
+	});
+
+	it('should allow replacing a formula with its computed literal value', () => {
+		const store = new GridStore<{ id: string; a: number; b: string | number }>({
+			columns: [
+				{ field: 'a', header: 'A' },
+				{ field: 'b', header: 'B' },
+			],
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: '1', a: 5, b: '=[1:a]*2' }],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getCellValue('1', 'b')).toBe(10);
+
+		store.setCellValue('1', 'b', 10);
+
+		expect(store.getCellState('1', 'b').value).toBe(10);
+		expect(store.getCellValue('1', 'b')).toBe(10);
+		expect(store.dagEngine.hasFormula('1', 'b')).toBe(false);
 
 		controller.dispose();
 	});

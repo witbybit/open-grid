@@ -97,7 +97,8 @@ export class DataModel<TRowData = unknown> {
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
 		const oldValue = this.getCellValue(rowId, colField);
-		if (oldValue === value) return false;
+		const oldRawValue = this.getRawCellValue(rowId, colField);
+		if (oldRawValue === value) return false;
 
 		const rowModel = this.engine.getRowModel();
 		if (!rowModel?.setCellValue) {

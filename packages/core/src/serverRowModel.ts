@@ -28,6 +28,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	private loadingNodeMap = new Map<number, RowNode<TData>>();
 	private loadingBlocks: Record<number, boolean> = {};
 	private unsubscribers: Array<() => void> = [];
+	private disposed = false;
+	private requestGeneration = 0;
 
 	constructor(store: GridStore<TData>, options: ServerRowModelOptions<TData>) {
 		this.store = store;
@@ -52,6 +54,9 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	}
 
 	public dispose(): void {
+		this.disposed = true;
+		this.requestGeneration++;
+		this.loadingBlocks = {};
 		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
 		this.unsubscribers = [];
 	}
@@ -150,10 +155,12 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	};
 
 	private fetchBlock = async (blockIndex: number): Promise<void> => {
+		if (this.disposed) return;
 		// Prevent duplicate calls
 		if (this.loadingBlocks[blockIndex]) return;
 
 		this.loadingBlocks[blockIndex] = true;
+		const generation = this.requestGeneration;
 		const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
 		// Set initial mount loading state and schedule immediate repaint only if fetching block 0
@@ -179,6 +186,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				sortModel: requestSortModel,
 				filterModel: requestFilterModel,
 			});
+
+			if (this.disposed || generation !== this.requestGeneration) {
+				return;
+			}
 
 			// If parameters changed since the request was initiated, discard this result
 			const curr = this.store.getState();
@@ -245,6 +256,9 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				durationMs: requestFinishedAt - requestStartedAt,
 			});
 		} catch (error) {
+			if (this.disposed || generation !== this.requestGeneration) {
+				return;
+			}
 			console.error(`GridEngine: Failed to fetch row block ${blockIndex}`, error);
 			delete this.loadingBlocks[blockIndex];
 			const hasActiveFetches = Object.keys(this.loadingBlocks).length > 0;
@@ -256,6 +270,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	};
 
 	public purgeCache = (): void => {
+		if (this.disposed) return;
+		this.requestGeneration++;
 		this.loadingBlocks = {};
 		this.activeNodes = [];
 		this.nodeMap.clear();
