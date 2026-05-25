@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { GridStore } from '@open-grid/core';
+import { ColumnDef, GridStore, RowNode } from '@open-grid/core';
 import { createPortal } from 'react-dom';
 import { GridProvider, useGridApi } from './OpenGrid.js';
+import type { ReactNode } from 'react';
 
-export interface PortalCellProps {
+export interface PortalCellProps<TRowData = unknown> {
 	rowId: string;
 	colField: string;
 	value: unknown;
-	col: any;
-	node: any;
+	col: ColumnDef<TRowData>;
+	node: RowNode<TRowData>;
 	isEditing: boolean;
 	isLoading: boolean;
 }
@@ -16,8 +17,8 @@ export interface PortalCellProps {
 /**
  * Clean React Portal cell adapter that mounts only custom renderers & custom editors.
  */
-export function PortalCell({ rowId, colField, value, col, node, isEditing, isLoading }: PortalCellProps) {
-	const api = useGridApi();
+export function PortalCell<TRowData = unknown>({ rowId, colField, value, col, node, isEditing, isLoading }: PortalCellProps<TRowData>) {
+	const api = useGridApi<TRowData>();
 
 	const [localValue, setLocalValue] = useState<unknown>(value);
 
@@ -40,15 +41,14 @@ export function PortalCell({ rowId, colField, value, col, node, isEditing, isLoa
 			if (event.payload.rowId === rowId && event.payload.colField === colField) {
 				if (event.payload.cancel) {
 					isCancelledRef.current = true;
+				} else if (isEditing && !isCommittedRef.current) {
+					isCommittedRef.current = true;
+					api.setCellValue(rowId, colField, localValueRef.current);
 				}
 			}
 		});
 		return () => {
 			unsubscribe();
-			if (isEditing && !isCancelledRef.current && !isCommittedRef.current) {
-				isCommittedRef.current = true;
-				api.setCellValue(rowId, colField, localValueRef.current);
-			}
 		};
 	}, [isEditing, api, rowId, colField]);
 
@@ -78,29 +78,29 @@ export function PortalCell({ rowId, colField, value, col, node, isEditing, isLoa
 
 	const rowData = node?.data;
 
-	const CustomEditor = col?.cellEditor;
-	const CustomRenderer = col?.cellRenderer;
+	const CustomEditor = col?.cellEditor as ((props: Record<string, unknown>) => ReactNode) | undefined;
+	const CustomRenderer = col?.cellRenderer as ((props: Record<string, unknown>) => ReactNode) | undefined;
 
 	return (
 		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
 			{isEditing ? (
 				CustomEditor ? (
-					<CustomEditor
-						rowId={rowId}
-						colField={colField}
-						value={localValue}
-						onChange={(val: any) => {
+					CustomEditor({
+						rowId,
+						colField,
+						value: localValue,
+						onChange: (val: unknown) => {
 							setLocalValue(val);
 							localValueRef.current = val;
-						}}
-						api={api}
-						onCommit={handleCommit}
-						onCancel={handleCancel}
-					/>
+						},
+						api,
+						onCommit: handleCommit,
+						onCancel: handleCancel,
+					})
 				) : (
 					<input
 						autoFocus
-						className='absolute inset-0 w-full h-full px-3 text-sm bg-slate-900 text-white border-2 border-purple-500 outline-none z-20'
+						className='og-cell-editor'
 						value={typeof localValue === 'string' || typeof localValue === 'number' ? String(localValue) : ''}
 						onChange={(e) => {
 							setLocalValue(e.target.value);
@@ -121,34 +121,34 @@ export function PortalCell({ rowId, colField, value, col, node, isEditing, isLoa
 					/>
 				)
 			) : CustomRenderer && rowData ? (
-				<CustomRenderer value={value} computedValue={value} row={rowData} rowId={rowId} colField={colField} api={api} />
+				CustomRenderer({ value, computedValue: value, row: rowData, rowId, colField, api })
 			) : null}
 		</div>
 	);
 }
 
-export interface PortalData {
+export interface PortalData<TRowData = unknown> {
 	cellKey: string;
 	container: HTMLElement;
 	value: unknown;
-	node: any;
-	col: any;
+	node: RowNode<TRowData>;
+	col: ColumnDef<TRowData>;
 	isEditing: boolean;
 	isLoading: boolean;
 }
 
-export interface PortalManagerProps {
-	portals: Map<string, PortalData>;
-	store: GridStore<any>;
+export interface PortalManagerProps<TRowData = unknown> {
+	portals: Map<string, PortalData<TRowData>>;
+	store: GridStore<TRowData>;
 }
 
-export function PortalManager({ portals, store }: PortalManagerProps) {
+export function PortalManager<TRowData = unknown>({ portals, store }: PortalManagerProps<TRowData>) {
 	return (
 		<>
 			{Array.from(portals.values()).map((p) => {
 				return createPortal(
 					<GridProvider store={store} key={p.cellKey}>
-						<PortalCell
+						<PortalCell<TRowData>
 							rowId={p.node.id}
 							colField={p.col.field}
 							value={p.value}

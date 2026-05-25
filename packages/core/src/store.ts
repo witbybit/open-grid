@@ -287,6 +287,7 @@ export interface GridApi<TRowData = unknown> {
 	getColumnIndex(colField: string): number;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
 	getPlugin<T = unknown>(name: string): T | null;
+	unregisterPlugin(name: string): void;
 	undo(): void;
 	redo(): void;
 	canUndo(): boolean;
@@ -319,6 +320,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public engine: GridEngine<TRowData>;
 
 	private plugins = new Map<string, GridPlugin<TRowData>>();
+	private pluginApiMethods = new Map<string, string[]>();
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
 		this.engine = new GridEngine<TRowData>({
@@ -607,14 +609,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public registerPlugin = (plugin: GridPlugin<TRowData>): void => {
 		if (this.plugins.has(plugin.name)) {
-			const existing = this.plugins.get(plugin.name);
-			if (existing?.onDestroy) {
-				try {
-					existing.onDestroy();
-				} catch (e) {
-					console.error(e);
-				}
-			}
+			this.unregisterPlugin(plugin.name);
 		}
 		this.plugins.set(plugin.name, plugin);
 		(this as unknown as Record<string, unknown>)[plugin.name] = plugin;
@@ -625,9 +620,36 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 		if (plugin.getApiMethods) {
 			const methods = plugin.getApiMethods();
+			const methodNames: string[] = [];
 			for (const [methodName, fn] of Object.entries(methods)) {
 				(this as unknown as Record<string, unknown>)[methodName] = fn.bind(plugin);
+				methodNames.push(methodName);
 			}
+			this.pluginApiMethods.set(plugin.name, methodNames);
+		}
+	};
+
+	public unregisterPlugin = (name: string): void => {
+		const plugin = this.plugins.get(name);
+		if (!plugin) return;
+
+		if (plugin.onDestroy) {
+			try {
+				plugin.onDestroy();
+			} catch (e) {
+				console.error(e);
+			}
+		}
+
+		this.plugins.delete(name);
+		delete (this as unknown as Record<string, unknown>)[name];
+
+		const methodNames = this.pluginApiMethods.get(name);
+		if (methodNames) {
+			for (const methodName of methodNames) {
+				delete (this as unknown as Record<string, unknown>)[methodName];
+			}
+			this.pluginApiMethods.delete(name);
 		}
 	};
 

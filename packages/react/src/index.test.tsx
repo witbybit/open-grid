@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { GridStore, ClientRowModelController } from '@open-grid/core';
 import {
 	GridProvider,
@@ -144,7 +144,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			columns: store.getState().columns,
 		});
 
-		const colDef = store.getColumnDef('name');
+		const colDef = store.getColumnDef('name')!;
 		const node = store.getRowModel()!.getRowNode(0)!;
 
 		render(
@@ -166,7 +166,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			columns: store.getState().columns,
 		});
 
-		const colDef = store.getColumnDef('name');
+		const colDef = store.getColumnDef('name')!;
 		const node = store.getRowModel()!.getRowNode(0)!;
 
 		// Set active edit state
@@ -189,6 +189,73 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		// Commit edit by blurring
 		fireEvent.change(input, { target: { value: 'Product B' } });
 		fireEvent.blur(input);
+
+		expect(store.getCellValue('1', 'name')).toBe('Product B');
+		controller.dispose();
+	});
+
+	it('should not commit an in-progress edit just because the portal unmounts', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: store.getState().columns,
+		});
+
+		const colDef = store.getColumnDef('name')!;
+		const node = store.getRowModel()!.getRowNode(0)!;
+
+		act(() => {
+			store.setState({
+				activeEdit: { rowId: '1', colField: 'name' },
+			});
+		});
+
+		const rendered = render(
+			<GridProvider store={store}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
+			</GridProvider>
+		);
+
+		const input = within(rendered.container).getByRole('textbox') as HTMLInputElement;
+		fireEvent.change(input, { target: { value: 'Product B' } });
+		rendered.unmount();
+
+		expect(store.getCellValue('1', 'name')).toBe('Product A');
+		controller.dispose();
+	});
+
+	it('should commit an in-progress edit when editStopped is dispatched without cancellation', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: store.getState().columns,
+		});
+
+		const colDef = store.getColumnDef('name')!;
+		const node = store.getRowModel()!.getRowNode(0)!;
+
+		act(() => {
+			store.setState({
+				activeEdit: { rowId: '1', colField: 'name' },
+			});
+		});
+
+		const rendered = render(
+			<GridProvider store={store}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
+			</GridProvider>
+		);
+
+		const input = within(rendered.container).getByRole('textbox') as HTMLInputElement;
+		fireEvent.change(input, { target: { value: 'Product B' } });
+
+		act(() => {
+			store.stopEditing(false);
+		});
 
 		expect(store.getCellValue('1', 'name')).toBe('Product B');
 		controller.dispose();
@@ -217,7 +284,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			columns: store.getState().columns,
 		});
 
-		const colDef = store.getColumnDef('name');
+		const colDef = store.getColumnDef('name')!;
 		const node = store.getRowModel()!.getRowNode(0)!;
 
 		// Set active edit state
@@ -328,6 +395,50 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		unmount();
 		controller.dispose();
+	});
+
+	it('should not register navigation when navigation is disabled', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: store.getState().columns,
+		});
+
+		const { unmount } = render(<OpenGrid store={store} enableNavigation={false} />);
+
+		expect(store.getPlugin('navigation')).toBeNull();
+
+		unmount();
+		controller.dispose();
+	});
+
+	it('should use selector equality to avoid rerenders for equivalent selected values', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const renderSpy = vi.fn();
+
+		const EqualityInspector = () => {
+			const selected = useGridSelector((state) => ({ version: state.dataVersion }), (left, right) => left.version === right.version);
+			renderSpy(selected);
+			return <span data-testid='selector-version'>{selected.version}</span>;
+		};
+
+		render(
+			<GridProvider store={store}>
+				<EqualityInspector />
+			</GridProvider>
+		);
+
+		expect(renderSpy).toHaveBeenCalledTimes(1);
+
+		act(() => {
+			store.setFocusedCell('1', 'name');
+		});
+
+		expect(renderSpy).toHaveBeenCalledTimes(1);
 	});
 
 	it('should keep useClientGrid store stable when callers pass inline columns', () => {

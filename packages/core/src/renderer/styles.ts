@@ -210,6 +210,21 @@ export const CORE_STYLES = `
     z-index: 20;
   }
 
+  .og-cell-editor {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 0 12px;
+    border: 2px solid var(--og-focus-ring);
+    outline: none;
+    background: var(--og-bg);
+    color: var(--og-text);
+    font: inherit;
+  }
+
   .og-header-cell {
     position: absolute;
     top: 0;

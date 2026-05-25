@@ -1,5 +1,7 @@
 import {
 	GridApi,
+	GridCellPointer,
+	ColumnDef,
 	GridContextMenuOptions,
 	GridContextMenuPlugin,
 	GridNavigationController,
@@ -7,6 +9,7 @@ import {
 	GridState,
 	GridStore,
 	RenderEngine,
+	RowNode,
 } from '@open-grid/core';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PortalData, PortalManager } from './GridPortal.js';
@@ -48,13 +51,34 @@ export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
 /**
  * Custom selector hook utilizing useSyncExternalStore for targeted re-renders.
  */
-export function useGridSelector<T, TRowData = unknown>(selector: (state: GridState<TRowData>) => T): T {
+export function useGridSelector<T, TRowData = unknown>(
+	selector: (state: GridState<TRowData>) => T,
+	isEqual?: (left: T, right: T) => boolean
+): T {
+	return useGridSelectorWithEquality(selector, isEqual);
+}
+
+export function useGridSelectorWithEquality<T, TRowData = unknown>(
+	selector: (state: GridState<TRowData>) => T,
+	isEqual: (left: T, right: T) => boolean = Object.is
+): T {
 	const store = useGridStore<TRowData>();
 
 	const selectorRef = useRef(selector);
 	selectorRef.current = selector;
+	const isEqualRef = useRef(isEqual);
+	isEqualRef.current = isEqual;
+	const snapshotRef = useRef<{ hasValue: boolean; value: T }>({ hasValue: false, value: undefined as T });
 
-	const getSnapshot = useCallback(() => selectorRef.current(store.getState()), [store]);
+	const getSnapshot = useCallback(() => {
+		const next = selectorRef.current(store.getState());
+		const previous = snapshotRef.current;
+		if (previous.hasValue && isEqualRef.current(previous.value, next)) {
+			return previous.value;
+		}
+		snapshotRef.current = { hasValue: true, value: next };
+		return next;
+	}, [store]);
 
 	return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
 }
@@ -62,15 +86,38 @@ export function useGridSelector<T, TRowData = unknown>(selector: (state: GridSta
 /**
  * Targeted selector for individual keys to achieve optimal performance.
  */
-export function useGridKeySelector<T, TRowData = unknown>(key: string, selector: (state: GridState<TRowData>) => T): T {
+export function useGridKeySelector<T, TRowData = unknown>(
+	key: string,
+	selector: (state: GridState<TRowData>) => T,
+	isEqual?: (left: T, right: T) => boolean
+): T {
+	return useGridKeySelectorWithEquality(key, selector, isEqual);
+}
+
+export function useGridKeySelectorWithEquality<T, TRowData = unknown>(
+	key: string,
+	selector: (state: GridState<TRowData>) => T,
+	isEqual: (left: T, right: T) => boolean = Object.is
+): T {
 	const store = useGridStore<TRowData>();
 
 	const selectorRef = useRef(selector);
 	selectorRef.current = selector;
+	const isEqualRef = useRef(isEqual);
+	isEqualRef.current = isEqual;
+	const snapshotRef = useRef<{ hasValue: boolean; value: T }>({ hasValue: false, value: undefined as T });
 
 	const subscribe = useCallback((onStoreChange: () => void) => store.subscribeToKey(key, onStoreChange), [store, key]);
 
-	const getSnapshot = useCallback(() => selectorRef.current(store.getState()), [store]);
+	const getSnapshot = useCallback(() => {
+		const next = selectorRef.current(store.getState());
+		const previous = snapshotRef.current;
+		if (previous.hasValue && isEqualRef.current(previous.value, next)) {
+			return previous.value;
+		}
+		snapshotRef.current = { hasValue: true, value: next };
+		return next;
+	}, [store]);
 
 	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
@@ -78,12 +125,17 @@ export function useGridKeySelector<T, TRowData = unknown>(key: string, selector:
 /**
  * Controller integration hook mapping standard interaction event handlers.
  */
-export function useGridNavigationController<TRowData = unknown>(options: GridNavigationOptions = {}) {
+export function useGridNavigationController<TRowData = unknown>(options: GridNavigationOptions = {}, enabled = true) {
 	const store = useGridStore<TRowData>();
 	const optionsRef = useRef(options);
 	optionsRef.current = options;
+	const [controller, setController] = useState<GridNavigationController<TRowData> | null>(null);
 
-	const controller = useMemo(() => {
+	useEffect(() => {
+		if (!enabled) {
+			setController(null);
+			return;
+		}
 		const nav = new GridNavigationController<TRowData>({
 			onCellValueChanged: (rowId, colField, val) => optionsRef.current.onCellValueChanged?.(rowId, colField, val),
 			get editTrigger() {
@@ -94,10 +146,14 @@ export function useGridNavigationController<TRowData = unknown>(options: GridNav
 			},
 		});
 		store.registerPlugin(nav);
-		return nav;
-	}, [store]);
+		setController(nav);
 
-	useEffect(() => () => controller.dispose(), [controller]);
+		return () => {
+			nav.dispose();
+			store.unregisterPlugin(nav.name);
+			setController(null);
+		};
+	}, [store, enabled]);
 
 	return controller;
 }
@@ -146,13 +202,21 @@ function OpenGridInner<TRowData = unknown>({
 	contextMenuOptions,
 	navigationOptions = {},
 }: OpenGridProps<TRowData> & { store: GridStore<TRowData> }) {
-	const [portals, setPortals] = useState<Map<string, PortalData>>(new Map());
+	const [portals, setPortals] = useState<Map<string, PortalData<TRowData>>>(new Map());
 	const containerRef = useRef<HTMLDivElement>(null);
 	const renderEngineRef = useRef<RenderEngine | null>(null);
 	const isGridActiveRef = useRef(false);
 
 	const mountPortal = useCallback(
-		(cellKey: string, container: HTMLElement, value: unknown, node: any, col: any, isEditing: boolean, isLoading: boolean) => {
+		(
+			cellKey: string,
+			container: HTMLElement,
+			value: unknown,
+			node: RowNode<unknown>,
+			col: ColumnDef<unknown>,
+			isEditing: boolean,
+			isLoading: boolean
+		) => {
 			setPortals((prev) => {
 				const existing = prev.get(cellKey);
 				if (
@@ -167,7 +231,15 @@ function OpenGridInner<TRowData = unknown>({
 					return prev;
 				}
 				const next = new Map(prev);
-				next.set(cellKey, { cellKey, container, value, node, col, isEditing, isLoading });
+				next.set(cellKey, {
+					cellKey,
+					container,
+					value,
+					node: node as RowNode<TRowData>,
+					col: col as ColumnDef<TRowData>,
+					isEditing,
+					isLoading,
+				});
 				return next;
 			});
 		},
@@ -231,26 +303,30 @@ function OpenGridInner<TRowData = unknown>({
 	}, [store, mountPortal, unmountPortal]);
 
 	// Context Menu plugin controller
-	const contextMenu = useMemo(() => {
-		if (!enableContextMenu) return null;
+	const [contextMenu, setContextMenu] = useState<GridContextMenuPlugin<TRowData> | null>(null);
+	const contextMenuOptionsRef = useRef(contextMenuOptions);
+	contextMenuOptionsRef.current = contextMenuOptions;
+
+	useEffect(() => {
+		if (!enableContextMenu) {
+			setContextMenu(null);
+			return;
+		}
 		const plugin = new GridContextMenuPlugin<TRowData>(contextMenuOptions);
 		store.registerPlugin(plugin);
-		return plugin;
+		setContextMenu(plugin);
+
+		return () => {
+			store.unregisterPlugin(plugin.name);
+			setContextMenu(null);
+		};
 	}, [store, enableContextMenu]);
 
 	useEffect(() => {
-		if (contextMenu && contextMenuOptions) {
-			contextMenu.setOptions(contextMenuOptions);
+		if (contextMenu && contextMenuOptionsRef.current) {
+			contextMenu.setOptions(contextMenuOptionsRef.current);
 		}
 	}, [contextMenu, contextMenuOptions]);
-
-	useEffect(() => {
-		return () => {
-			if (contextMenu) {
-				contextMenu.onDestroy();
-			}
-		};
-	}, [contextMenu]);
 
 	// Navigation controller
 	const navigation = useGridNavigationController<TRowData>({
@@ -259,7 +335,7 @@ function OpenGridInner<TRowData = unknown>({
 		},
 		editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
 		arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
-	});
+	}, enableNavigation);
 
 	useEffect(() => {
 		if (!enableNavigation) return;
@@ -267,7 +343,7 @@ function OpenGridInner<TRowData = unknown>({
 			const activeEl = document.activeElement;
 			const container = containerRef.current;
 			const isInside = !!container && (container.contains(activeEl) || isGridActiveRef.current);
-			if (isInside) {
+			if (isInside && navigation) {
 				navigation.handleKeyDown(e);
 			}
 		};
@@ -276,102 +352,101 @@ function OpenGridInner<TRowData = unknown>({
 			isGridActiveRef.current = !!container && container.contains(e.target as Node);
 		};
 		window.addEventListener('keydown', handleGlobalKeyDown);
-		window.addEventListener('mouseup', navigation.handleMouseUp);
+		if (navigation) window.addEventListener('mouseup', navigation.handleMouseUp);
 		document.addEventListener('mousedown', handlePointerDown, true);
 		return () => {
 			window.removeEventListener('keydown', handleGlobalKeyDown);
-			window.removeEventListener('mouseup', navigation.handleMouseUp);
+			if (navigation) window.removeEventListener('mouseup', navigation.handleMouseUp);
 			document.removeEventListener('mousedown', handlePointerDown, true);
 		};
 	}, [navigation, enableNavigation]);
 
+	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
+		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
+		if (!cellEl) return null;
+		const colField = cellEl.dataset.colField;
+		const rowEl = cellEl.closest('.og-row') as HTMLElement;
+		const rowId = rowEl?.dataset.rowId;
+		if (!colField || !rowId) return null;
+		return { cellEl, pointer: { rowId, colField } };
+	}, []);
+
 	const handleMouseDown = useCallback(
 		(e: MouseEvent) => {
-			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-			if (!cellEl) return;
-			const colField = cellEl.dataset.colField;
-			const rowEl = cellEl.closest('.og-row') as HTMLElement;
-			const rowId = rowEl?.dataset.rowId;
-			if (!colField || !rowId) return;
+			if (!navigation) return;
+			const target = getCellPointerFromEvent(e);
+			if (!target) return;
+			const { cellEl, pointer } = target;
 
 			isGridActiveRef.current = true;
 			const state = store.getState();
-			const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === colField;
+			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
 			cellEl.focus();
-			navigation.handleMouseDown(rowId, colField, e);
+			navigation.handleMouseDown(pointer.rowId, pointer.colField, e);
 		},
-		[store, navigation]
+		[store, navigation, getCellPointerFromEvent]
 	);
 
 	const handleMouseOver = useCallback(
 		(e: MouseEvent) => {
-			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-			if (!cellEl) return;
-			const colField = cellEl.dataset.colField;
-			const rowEl = cellEl.closest('.og-row') as HTMLElement;
-			const rowId = rowEl?.dataset.rowId;
-			if (!colField || !rowId) return;
+			if (!navigation) return;
+			const target = getCellPointerFromEvent(e);
+			if (!target) return;
+			const { cellEl, pointer } = target;
 
 			if (e.relatedTarget && cellEl.contains(e.relatedTarget as Node)) return;
 
-			navigation.handleMouseEnter(rowId, colField);
+			navigation.handleMouseEnter(pointer.rowId, pointer.colField);
 		},
-		[navigation]
+		[navigation, getCellPointerFromEvent]
 	);
 
 	const handleClick = useCallback(
 		(e: MouseEvent) => {
-			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-			if (!cellEl) return;
-			const colField = cellEl.dataset.colField;
-			const rowEl = cellEl.closest('.og-row') as HTMLElement;
-			const rowId = rowEl?.dataset.rowId;
-			if (!colField || !rowId) return;
+			if (!navigation) return;
+			const target = getCellPointerFromEvent(e);
+			if (!target) return;
+			const { pointer } = target;
 
 			const state = store.getState();
-			const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === colField;
+			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
-			navigation.handleClick(rowId, colField, e);
+			navigation.handleClick(pointer.rowId, pointer.colField, e);
 		},
-		[store, navigation]
+		[store, navigation, getCellPointerFromEvent]
 	);
 
 	const handleDoubleClick = useCallback(
 		(e: MouseEvent) => {
-			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-			if (!cellEl) return;
-			const colField = cellEl.dataset.colField;
-			const rowEl = cellEl.closest('.og-row') as HTMLElement;
-			const rowId = rowEl?.dataset.rowId;
-			if (!colField || !rowId) return;
+			if (!navigation) return;
+			const target = getCellPointerFromEvent(e);
+			if (!target) return;
+			const { pointer } = target;
 
 			const state = store.getState();
-			const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === colField;
+			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
-			navigation.setCellEditing(rowId, colField, true);
+			navigation.setCellEditing(pointer.rowId, pointer.colField, true);
 		},
-		[store, navigation]
+		[store, navigation, getCellPointerFromEvent]
 	);
 
 	const handleContextMenu = useCallback(
 		(e: MouseEvent) => {
 			if (!enableContextMenu || !contextMenu) return;
 
-			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-			if (!cellEl) return;
-			const colField = cellEl.dataset.colField;
-			const rowEl = cellEl.closest('.og-row') as HTMLElement;
-			const rowId = rowEl?.dataset.rowId;
-			if (!colField || !rowId) return;
+			const target = getCellPointerFromEvent(e);
+			if (!target) return;
+			const { pointer } = target;
 
 			e.preventDefault();
-			contextMenu.show(rowId, colField, e.clientX, e.clientY);
+			contextMenu.show(pointer.rowId, pointer.colField, e.clientX, e.clientY);
 		},
-		[enableContextMenu, contextMenu]
+		[enableContextMenu, contextMenu, getCellPointerFromEvent]
 	);
 
 	useEffect(() => {

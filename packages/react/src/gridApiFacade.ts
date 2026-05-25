@@ -59,6 +59,7 @@ export function createGridApiFacade<TRowData>(store: GridStore<TRowData>): GridA
 		getColumnDef: (colField: string) => store.getColumnDef(colField),
 
 		getPlugin: <T = unknown>(name: string) => store.getPlugin<T>(name),
+		unregisterPlugin: (name: string) => store.unregisterPlugin(name),
 
 		undo: () => store.undo(),
 		redo: () => store.redo(),
