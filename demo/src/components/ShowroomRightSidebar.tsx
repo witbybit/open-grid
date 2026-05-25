@@ -4,6 +4,7 @@ import { StateInspector, LiveEventLogPanel } from './RightSidebar';
 import {
 	ViewportPanel,
 	SortFilterPanel,
+	ColumnOrderPanel,
 	AccessibilityPanel,
 	DeveloperPanel,
 	KeyboardShortcutsPanel,
@@ -96,6 +97,9 @@ export default function ShowroomRightSidebar({
 				sortDirection={sortDirection}
 				setSortDirection={setSortDirection}
 			/>
+
+			{/* Column reorder controls */}
+			<ColumnOrderPanel activeStore={activeStore} />
 
 			{/* Grid Accessibility panel */}
 			<AccessibilityPanel

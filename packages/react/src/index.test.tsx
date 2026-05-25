@@ -53,10 +53,12 @@ const ApiSurfaceInspector = () => {
 	const api = useGridApi<TestRow>();
 	return (
 		<div>
-			<span data-testid='api-frozen'>{Object.isFrozen(api) ? 'yes' : 'no'}</span>
-			<span data-testid='api-engine'>{'engine' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
-			<span data-testid='api-register-row-model'>{'registerRowModel' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
-		</div>
+		<span data-testid='api-frozen'>{Object.isFrozen(api) ? 'yes' : 'no'}</span>
+		<span data-testid='api-engine'>{'engine' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
+		<span data-testid='api-register-row-model'>{'registerRowModel' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
+		<button data-testid='move-column' onClick={() => api.moveColumn('name', 0)}>Move</button>
+		<button data-testid='disable-reorder' onClick={() => api.setColumnReorderEnabled(false)}>Disable</button>
+	</div>
 	);
 };
 
@@ -98,7 +100,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 	it('should expose a frozen public API facade instead of the mutable store internals', () => {
 		const store = new GridStore<TestRow>({
-			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 100 },
+			],
 		});
 
 		render(
@@ -110,6 +115,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(screen.getByTestId('api-frozen').textContent).toBe('yes');
 		expect(screen.getByTestId('api-engine').textContent).toBe('no');
 		expect(screen.getByTestId('api-register-row-model').textContent).toBe('no');
+
+		fireEvent.click(screen.getByTestId('move-column'));
+		expect(store.getState().columns.map((column) => column.field)).toEqual(['name', 'id']);
+
+		fireEvent.click(screen.getByTestId('disable-reorder'));
+		expect(store.getState().enableColumnReorder).toBe(false);
 	});
 
 	it('should render custom cell renderer via PortalCell', () => {

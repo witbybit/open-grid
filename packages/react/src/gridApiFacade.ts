@@ -34,6 +34,9 @@ export function createGridApiFacade<TRowData>(store: GridStore<TRowData>): GridA
 		setSelectedRange: (start: GridCellPointer | null, end: GridCellPointer | null) => store.setSelectedRange(start, end),
 
 		setColumnWidth: (colField: string, width: number) => store.setColumnWidth(colField, width),
+		moveColumn: (colField: string, toIndex: number) => store.moveColumn(colField, toIndex),
+		setColumnOrder: (colFields: string[]) => store.setColumnOrder(colFields),
+		setColumnReorderEnabled: (enabled: boolean) => store.setColumnReorderEnabled(enabled),
 
 		setRowHeight: (rowId: string, height: number) => store.setRowHeight(rowId, height),
 

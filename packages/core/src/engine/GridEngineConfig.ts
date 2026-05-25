@@ -8,6 +8,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	columnWidths?: Record<string, number>;
 	defaultRowHeight?: number;
 	defaultColWidth?: number;
+	enableColumnReorder?: boolean;
 	focusedCell?: GridCellPointer | null;
 	selectedRange?: GridCellRange | null;
 	sortModel?: SortModel | null;

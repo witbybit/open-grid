@@ -218,6 +218,55 @@ describe('GridStore generic row-store functionality', () => {
 			payload: { colField: 'name', width: 250 },
 		});
 	});
+
+	it('should support column reordering through the public store API', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+
+		const reorderListener = vi.fn();
+		store.addEventListener('columnOrderChanged', reorderListener);
+
+		store.moveColumn('price', 0);
+
+		expect(store.getState().columns.map((column) => column.field)).toEqual(['price', 'id', 'name']);
+		expect(store.getColumnIndex('price')).toBe(0);
+		expect(reorderListener).toHaveBeenCalledWith({
+			type: 'columnOrderChanged',
+			payload: {
+				columns: store.getState().columns,
+				columnFields: ['price', 'id', 'name'],
+			},
+		});
+
+		store.setColumnOrder(['name', 'price']);
+
+		expect(store.getState().columns.map((column) => column.field)).toEqual(['name', 'price', 'id']);
+		expect(store.getColumnIndex('id')).toBe(2);
+	});
+
+	it('should toggle column reorder state through the public store API', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		const toggleListener = vi.fn();
+		store.addEventListener('columnReorderToggled', toggleListener);
+
+		expect(store.getState().enableColumnReorder).toBe(true);
+
+		store.setColumnReorderEnabled(false);
+
+		expect(store.getState().enableColumnReorder).toBe(false);
+		expect(toggleListener).toHaveBeenCalledWith({
+			type: 'columnReorderToggled',
+			payload: { enabled: false },
+		});
+	});
 });
 
 describe('ClientRowModelController sorting and filtering', () => {

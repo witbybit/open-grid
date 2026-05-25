@@ -108,6 +108,7 @@ export interface OpenGridProps<TRowData = unknown> {
 	pinRightColumns?: number;
 	pinTopRows?: number;
 	pinBottomRows?: number;
+	enableColumnReorder?: boolean;
 	enableNavigation?: boolean;
 	enableContextMenu?: boolean;
 	contextMenuOptions?: GridContextMenuOptions<TRowData>;
@@ -139,6 +140,7 @@ function OpenGridInner<TRowData = unknown>({
 	pinRightColumns = 0,
 	pinTopRows = 0,
 	pinBottomRows = 0,
+	enableColumnReorder,
 	enableNavigation = true,
 	enableContextMenu = true,
 	contextMenuOptions,
@@ -188,6 +190,12 @@ function OpenGridInner<TRowData = unknown>({
 		store.viewportController.pinTopRows = pinTopRows;
 		store.viewportController.pinBottomRows = pinBottomRows;
 	}, [store, pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
+
+	useEffect(() => {
+		if (enableColumnReorder !== undefined) {
+			store.setColumnReorderEnabled(enableColumnReorder);
+		}
+	}, [store, enableColumnReorder]);
 
 	useEffect(() => {
 		const container = containerRef.current;

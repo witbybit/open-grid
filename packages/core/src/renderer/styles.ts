@@ -224,6 +224,28 @@ export const CORE_STYLES = `
     color: var(--og-header-text);
     border-right: 1px solid var(--og-border-color);
     box-sizing: border-box;
+    user-select: none;
+  }
+
+  .og-header-cell-movable {
+    cursor: grab;
+  }
+
+  .og-header-cell-dragging {
+    cursor: grabbing;
+    opacity: 0.62;
+    background-color: color-mix(in srgb, var(--og-focus-ring) 12%, var(--og-header-bg));
+  }
+
+  .og-column-drop-indicator {
+    position: absolute;
+    top: 0;
+    width: 3px;
+    background-color: var(--og-focus-ring);
+    border-radius: 999px;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25), 0 0 12px var(--og-focus-ring);
+    pointer-events: none;
+    z-index: 60;
   }
 
   .og-selection-border {

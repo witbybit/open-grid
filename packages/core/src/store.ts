@@ -190,6 +190,7 @@ export interface ColumnDef<TRowData = unknown> {
 	field: string;
 	header: string;
 	width?: number;
+	movable?: boolean;
 	loading?: boolean;
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
 	valueSetter?: (row: TRowData, value: unknown) => boolean;
@@ -216,6 +217,7 @@ export interface GridState<TRowData = unknown> {
 	columnWidths: Record<string, number>; // colField -> width in px
 	defaultRowHeight: number;
 	defaultColWidth: number;
+	enableColumnReorder: boolean;
 
 	// Active edit state registers
 	activeEdit: GridCellPointer | null;
@@ -269,6 +271,9 @@ export interface GridApi<TRowData = unknown> {
 	setFocusedCell(rowId: string | null, colField: string | null): void;
 	setSelectedRange(start: GridCellPointer | null, end: GridCellPointer | null): void;
 	setColumnWidth(colField: string, width: number): void;
+	moveColumn(colField: string, toIndex: number): void;
+	setColumnOrder(colFields: string[]): void;
+	setColumnReorderEnabled(enabled: boolean): void;
 	setRowHeight(rowId: string, height: number): void;
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
@@ -324,6 +329,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			columnWidths: initialState.columnWidths || {},
 			defaultRowHeight: initialState.defaultRowHeight || 40,
 			defaultColWidth: initialState.defaultColWidth || 100,
+			enableColumnReorder: initialState.enableColumnReorder ?? true,
 			activeEdit: initialState.activeEdit || null,
 			sortModel: initialState.sortModel || null,
 			filterModel: initialState.filterModel || null,
@@ -435,6 +441,27 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.commandBus.dispatch({
 			type: 'SET_COLUMN_WIDTH',
 			payload: { colField, width },
+		});
+	};
+
+	public moveColumn = (colField: string, toIndex: number): void => {
+		this.engine.commandBus.dispatch({
+			type: 'MOVE_COLUMN',
+			payload: { colField, toIndex },
+		});
+	};
+
+	public setColumnOrder = (colFields: string[]): void => {
+		this.engine.commandBus.dispatch({
+			type: 'SET_COLUMN_ORDER',
+			payload: { colFields },
+		});
+	};
+
+	public setColumnReorderEnabled = (enabled: boolean): void => {
+		this.engine.commandBus.dispatch({
+			type: 'SET_COLUMN_REORDER_ENABLED',
+			payload: { enabled },
 		});
 	};
 

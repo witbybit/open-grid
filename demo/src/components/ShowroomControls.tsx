@@ -8,6 +8,9 @@ import {
 	Layers,
 	HelpCircle,
 	RefreshCw,
+	GripVertical,
+	MoveLeft,
+	MoveRight,
 } from 'lucide-react';
 import type { GridStore, ReactGridInstance } from '@open-grid/react';
 import { LatencyProfiler } from './GridShared';
@@ -182,7 +185,95 @@ export function SortFilterPanel({
 }
 
 // ============================================================================
-// 3. Grid Accessibility Panel
+// 3. Column Order Panel
+// ============================================================================
+interface ColumnOrderPanelProps {
+	activeStore: GridStore<any>;
+}
+
+export function ColumnOrderPanel({ activeStore }: ColumnOrderPanelProps) {
+	const [state, setState] = React.useState(() => activeStore.getState());
+	const [selectedField, setSelectedField] = React.useState(() => activeStore.getState().columns[0]?.field ?? '');
+
+	React.useEffect(() => {
+		setState(activeStore.getState());
+		setSelectedField(activeStore.getState().columns[0]?.field ?? '');
+		return activeStore.subscribe((nextState) => {
+			setState(nextState);
+			setSelectedField((currentField) =>
+				nextState.columns.some((column) => column.field === currentField) ? currentField : nextState.columns[0]?.field ?? ''
+			);
+		});
+	}, [activeStore]);
+
+	const columns = state.columns || [];
+	const selectedIndex = columns.findIndex((column) => column.field === selectedField);
+	const selectedColumn = selectedIndex >= 0 ? columns[selectedIndex] : null;
+	const canMoveSelected = state.enableColumnReorder && selectedColumn?.movable !== false;
+
+	const moveSelected = (delta: -1 | 1) => {
+		if (!canMoveSelected || !selectedColumn) return;
+		activeStore.moveColumn(selectedColumn.field, selectedIndex + delta);
+	};
+
+	return (
+		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
+			<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+				<GripVertical className='w-4 h-4 text-sky-400' />
+				Column Order
+			</h3>
+
+			<label className='flex items-center gap-2 p-2 rounded-lg bg-slate-950/60 border border-slate-900 hover:border-slate-850 cursor-pointer select-none transition-all'>
+				<input
+					type='checkbox'
+					checked={state.enableColumnReorder}
+					onChange={(e) => activeStore.setColumnReorderEnabled(e.target.checked)}
+					className='rounded border-slate-800 text-purple-600 focus:ring-purple-500/20 w-3 h-3 bg-slate-950 cursor-pointer'
+				/>
+				<div className='flex flex-col'>
+					<span className='text-[11px] font-bold text-slate-200 leading-tight'>Header Drag Reorder</span>
+					<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>Global API toggle for draggable headers</span>
+				</div>
+			</label>
+
+			<div className='grid grid-cols-[1fr_auto_auto] gap-2 items-end'>
+				<label className='flex flex-col gap-1 min-w-0'>
+					<span className='text-[9px] text-slate-500 font-bold uppercase tracking-wider'>Move Column</span>
+					<select
+						value={selectedField}
+						onChange={(e) => setSelectedField(e.target.value)}
+						className='w-full bg-slate-950 border border-slate-850 rounded-lg px-2 py-1.5 text-[10px] text-slate-200 outline-none focus:border-purple-500 transition-all font-bold cursor-pointer'
+					>
+						{columns.map((column) => (
+							<option key={column.field} value={column.field}>
+								{column.header}
+							</option>
+						))}
+					</select>
+				</label>
+				<button
+					onClick={() => moveSelected(-1)}
+					disabled={!canMoveSelected || selectedIndex <= 0}
+					className='h-8 w-8 inline-flex items-center justify-center rounded-lg bg-slate-950 border border-slate-850 text-slate-300 hover:text-white hover:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all'
+					title='Move selected column left'
+				>
+					<MoveLeft className='w-3.5 h-3.5' />
+				</button>
+				<button
+					onClick={() => moveSelected(1)}
+					disabled={!canMoveSelected || selectedIndex < 0 || selectedIndex >= columns.length - 1}
+					className='h-8 w-8 inline-flex items-center justify-center rounded-lg bg-slate-950 border border-slate-850 text-slate-300 hover:text-white hover:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all'
+					title='Move selected column right'
+				>
+					<MoveRight className='w-3.5 h-3.5' />
+				</button>
+			</div>
+		</div>
+	);
+}
+
+// ============================================================================
+// 4. Grid Accessibility Panel
 // ============================================================================
 interface AccessibilityPanelProps {
 	editTrigger: 'singleClick' | 'doubleClick';
@@ -237,7 +328,7 @@ export function AccessibilityPanel({
 }
 
 // ============================================================================
-// 4. Developer Reset Panel
+// 5. Developer Reset Panel
 // ============================================================================
 interface DeveloperPanelProps {
 	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
@@ -447,7 +538,7 @@ export function DeveloperPanel({
 }
 
 // ============================================================================
-// 5. Keyboard Shortcuts Guide
+// 6. Keyboard Shortcuts Guide
 // ============================================================================
 export function KeyboardShortcutsPanel() {
 	return (

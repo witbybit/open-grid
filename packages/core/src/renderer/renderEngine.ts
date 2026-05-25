@@ -56,6 +56,15 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private currentFillPreview: { minRow: number; maxRow: number; minCol: number; maxCol: number; direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null } | null = null;
 	private fillDragDirectionLock: 'VERTICAL' | 'HORIZONTAL' | null = null;
 
+	// Column reorder tracking variables
+	private isColumnReordering = false;
+	private columnDragStartX = 0;
+	private columnDragStartY = 0;
+	private columnDragFromIndex = -1;
+	private columnDragField: string | null = null;
+	private columnDropInsertionIndex = -1;
+	private columnDropIndicator: HTMLDivElement | null = null;
+
 	// Micro-bridge for React custom renderers/editors
 	public onMountReactPortal?: (
 		cellKey: string,
@@ -171,6 +180,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 
 		this.scrollEngine.unbind();
+		this.cleanupColumnReorderDrag();
 
 		// Release all active rows and cells
 		this.clearActiveRows();
@@ -763,6 +773,12 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 					console.error('RenderEngine: Error in headerCellClass styleSlot', e);
 				}
 			}
+			if (state.enableColumnReorder && col.movable !== false) {
+				className += ' og-header-cell-movable';
+			}
+			if (this.isColumnReordering && this.columnDragField === col.field) {
+				className += ' og-header-cell-dragging';
+			}
 
 			headerCell.className = className;
 			headerCell.style.transform = `translate3d(${cellLeft}px, 0, 0)`;
@@ -809,6 +825,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 	private createHeaderCellElement(): HTMLDivElement {
 		const headerCell = document.createElement('div');
+		headerCell.addEventListener('mousedown', this.onHeaderCellMouseDown);
 
 		const textSpan = document.createElement('span');
 		textSpan.style.overflow = 'hidden';
@@ -867,6 +884,118 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		window.addEventListener('mousemove', onMouseMove);
 		window.addEventListener('mouseup', onMouseUp);
 	};
+
+	private onHeaderCellMouseDown = (e: MouseEvent): void => {
+		if (e.button !== 0 || (e.target as HTMLElement).closest('.og-header-resize-handle')) return;
+
+		const state = this.engine.stateManager.getState();
+		if (!state.enableColumnReorder) return;
+
+		const headerCell = e.currentTarget as HTMLElement;
+		const colField = headerCell.dataset.colField;
+		const colIndex = Number(headerCell.dataset.colIndex);
+		const column = colField ? state.columns[colIndex] : null;
+		if (!colField || !Number.isFinite(colIndex) || column?.movable === false) return;
+
+		this.columnDragStartX = e.clientX;
+		this.columnDragStartY = e.clientY;
+		this.columnDragFromIndex = colIndex;
+		this.columnDragField = colField;
+		this.columnDropInsertionIndex = colIndex;
+
+		window.addEventListener('mousemove', this.onHeaderColumnDragMove);
+		window.addEventListener('mouseup', this.onHeaderColumnDragMouseUp);
+		window.addEventListener('blur', this.onHeaderColumnDragMouseUp);
+	};
+
+	private onHeaderColumnDragMove = (e: MouseEvent): void => {
+		const dragDistance = Math.max(Math.abs(e.clientX - this.columnDragStartX), Math.abs(e.clientY - this.columnDragStartY));
+		if (!this.isColumnReordering) {
+			if (dragDistance < 4) return;
+			this.isColumnReordering = true;
+			this.ensureColumnDropIndicator();
+			this.schedulePaint();
+		}
+
+		e.preventDefault();
+		this.updateColumnDropTarget(e);
+	};
+
+	private onHeaderColumnDragMouseUp = (): void => {
+		const wasReordering = this.isColumnReordering;
+		const fromIndex = this.columnDragFromIndex;
+		const insertionIndex = this.columnDropInsertionIndex;
+		const colField = this.columnDragField;
+
+		this.cleanupColumnReorderDrag();
+
+		if (!wasReordering || !colField || fromIndex < 0 || insertionIndex < 0) {
+			this.schedulePaint();
+			return;
+		}
+
+		const state = this.engine.stateManager.getState();
+		const toIndex = Math.max(0, Math.min(state.columns.length - 1, insertionIndex > fromIndex ? insertionIndex - 1 : insertionIndex));
+		if (toIndex !== fromIndex) {
+			this.engine.commandBus.dispatch({
+				type: 'MOVE_COLUMN',
+				payload: { colField, toIndex },
+			});
+		} else {
+			this.schedulePaint();
+		}
+	};
+
+	private cleanupColumnReorderDrag(): void {
+		window.removeEventListener('mousemove', this.onHeaderColumnDragMove);
+		window.removeEventListener('mouseup', this.onHeaderColumnDragMouseUp);
+		window.removeEventListener('blur', this.onHeaderColumnDragMouseUp);
+
+		this.isColumnReordering = false;
+		this.columnDragFromIndex = -1;
+		this.columnDragField = null;
+		this.columnDropInsertionIndex = -1;
+		this.removeColumnDropIndicator();
+	}
+
+	private ensureColumnDropIndicator(): void {
+		if (this.columnDropIndicator || !this.overlayLayer) return;
+
+		this.columnDropIndicator = document.createElement('div');
+		this.columnDropIndicator.className = 'og-column-drop-indicator';
+		this.overlayLayer.appendChild(this.columnDropIndicator);
+	}
+
+	private removeColumnDropIndicator(): void {
+		this.columnDropIndicator?.remove();
+		this.columnDropIndicator = null;
+	}
+
+	private updateColumnDropTarget(e: MouseEvent): void {
+		if (!this.scrollViewport || !this.columnDropIndicator) return;
+
+		const state = this.engine.stateManager.getState();
+		if (state.columns.length === 0) return;
+
+		const scrollRect = this.scrollViewport.getBoundingClientRect();
+		const contentX = e.clientX - scrollRect.left + this.scrollViewport.scrollLeft;
+		const targetCol = Math.max(0, Math.min(state.columns.length - 1, this.engine.geometry.getColIndexAtOffset(contentX)));
+		const targetLeft = this.engine.geometry.colLefts[targetCol] || 0;
+		const targetWidth = this.engine.geometry.colWidths[targetCol] || state.defaultColWidth;
+		const insertAfterTarget = contentX > targetLeft + targetWidth / 2;
+		const insertionIndex = Math.max(0, Math.min(state.columns.length, targetCol + (insertAfterTarget ? 1 : 0)));
+
+		this.columnDropInsertionIndex = insertionIndex;
+
+		const indicatorContentLeft = insertionIndex >= state.columns.length
+			? this.engine.geometry.getTotalWidth(state.defaultColWidth)
+			: this.engine.geometry.colLefts[insertionIndex] || 0;
+		const indicatorViewportLeft = indicatorContentLeft - this.scrollViewport.scrollLeft;
+
+		this.columnDropIndicator.style.display = 'block';
+		this.columnDropIndicator.style.transform = `translate3d(${indicatorViewportLeft}px, 0, 0)`;
+		this.columnDropIndicator.style.height = `${Math.max(0, this.engine.viewport.viewportHeight - 40)}px`;
+	}
 
 	/**
 	 * Computes selection overlays & active focus coordinates off-screen.

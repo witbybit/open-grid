@@ -66,6 +66,7 @@ export class GridEngine<TRowData = unknown> {
 			columnWidths: config.columnWidths || {},
 			defaultRowHeight: config.defaultRowHeight || 40,
 			defaultColWidth: config.defaultColWidth || 100,
+			enableColumnReorder: config.enableColumnReorder ?? true,
 			activeEdit: config.activeEdit || null,
 			sortModel: config.sortModel || null,
 			filterModel: config.filterModel || null,
@@ -136,6 +137,40 @@ export class GridEngine<TRowData = unknown> {
 					this.setColumnWidth(colField, newWidth);
 				},
 			});
+		});
+
+		this.commandBus.registerHandler('MOVE_COLUMN', (payload: { colField: string; toIndex: number }) => {
+			const state = this.stateManager.getState();
+			const fromIndex = state.columns.findIndex((column) => column.field === payload.colField);
+			if (fromIndex === -1) return;
+
+			if (!Number.isFinite(payload.toIndex)) return;
+			const toIndex = Math.max(0, Math.min(state.columns.length - 1, Math.trunc(payload.toIndex)));
+			if (fromIndex === toIndex) return;
+
+			this.setColumnOrder(this.moveColumnInList(state.columns, fromIndex, toIndex));
+		});
+
+		this.commandBus.registerHandler('SET_COLUMN_ORDER', (payload: { colFields: string[] }) => {
+			const state = this.stateManager.getState();
+			const orderedFields = payload.colFields.filter((field, index, fields) => fields.indexOf(field) === index);
+			const columnByField = new Map(state.columns.map((column) => [column.field, column]));
+			const nextColumns = orderedFields
+				.map((field) => columnByField.get(field))
+				.filter((column): column is ColumnDef<TRowData> => !!column);
+
+			for (const column of state.columns) {
+				if (!orderedFields.includes(column.field)) {
+					nextColumns.push(column);
+				}
+			}
+
+			this.setColumnOrder(nextColumns);
+		});
+
+		this.commandBus.registerHandler('SET_COLUMN_REORDER_ENABLED', (payload: { enabled: boolean }) => {
+			this.stateManager.setState({ enableColumnReorder: payload.enabled });
+			this.eventBus.dispatchEvent('columnReorderToggled', { enabled: payload.enabled });
 		});
 
 		this.commandBus.registerHandler('SET_ROW_HEIGHT', (payload: { rowId: string; height: number }) => {
@@ -415,6 +450,27 @@ export class GridEngine<TRowData = unknown> {
 			width,
 		});
 	};
+
+	public setColumnOrder(columns: ColumnDef<TRowData>[]): void {
+		const prevFields = this.stateManager.getState().columns.map((column) => column.field);
+		const nextFields = columns.map((column) => column.field);
+		if (prevFields.length === nextFields.length && prevFields.every((field, index) => field === nextFields[index])) {
+			return;
+		}
+
+		this.stateManager.setState({ columns });
+		this.eventBus.dispatchEvent('columnOrderChanged', {
+			columns,
+			columnFields: nextFields,
+		});
+	}
+
+	private moveColumnInList(columns: ColumnDef<TRowData>[], fromIndex: number, toIndex: number): ColumnDef<TRowData>[] {
+		const nextColumns = [...columns];
+		const [column] = nextColumns.splice(fromIndex, 1);
+		nextColumns.splice(toIndex, 0, column);
+		return nextColumns;
+	}
 
 	public setRowHeight = (rowId: string, height: number): void => {
 		this.stateManager.setState((state) => ({
