@@ -154,6 +154,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		if (this.loadingBlocks[blockIndex]) return;
 
 		this.loadingBlocks[blockIndex] = true;
+		const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
 		// Set initial mount loading state and schedule immediate repaint only if fetching block 0
 		if (blockIndex === 0) {
@@ -233,6 +234,15 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			this.store.setState({
 				loading: hasActiveFetches,
 				dataVersion: curr.dataVersion + 1,
+			});
+
+			const requestFinishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+			this.store.dispatchEvent('serverBlockLoaded', {
+				blockIndex,
+				loadedBlockStart: startRow,
+				loadedBlockEnd: startRow + response.rows.length - 1,
+				totalRecords: response.totalCount ?? this.activeNodes.length,
+				durationMs: requestFinishedAt - requestStartedAt,
 			});
 		} catch (error) {
 			console.error(`GridEngine: Failed to fetch row block ${blockIndex}`, error);

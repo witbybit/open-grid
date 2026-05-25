@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { GridProvider, ReactGridInstance } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Terminal, Server, Activity, ShieldAlert, Cpu, Network, Clock } from 'lucide-react';
@@ -10,6 +10,13 @@ interface InfiniteServerScrollProps {
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 }
+
+type SeverityStats = {
+	totalLoaded: number;
+	criticalError: number;
+	warning: number;
+	infoDebug: number;
+};
 
 export default function InfiniteServerScroll({
 	grid,
@@ -26,10 +33,49 @@ export default function InfiniteServerScroll({
 	});
 
 	const [latencyHistory, setLatencyHistory] = useState<number[]>([45, 80, 55, 120, 95, 60, 110, 85]);
+	const [severityStats, setSeverityStats] = useState<SeverityStats>({
+		totalLoaded: 0,
+		criticalError: 0,
+		warning: 0,
+		infoDebug: 0,
+	});
+
+	const refreshSeverityStats = useCallback(() => {
+		const totalRows = grid.api.getRowCount();
+		let totalLoaded = 0;
+		let criticalError = 0;
+		let warning = 0;
+		let infoDebug = 0;
+
+		for (let rowIndex = 0; rowIndex < totalRows; rowIndex++) {
+			const row = grid.api.getRow(rowIndex) as { severity?: string } | null;
+			if (!row) continue;
+
+			totalLoaded++;
+			const severity = String(row.severity ?? '').toUpperCase();
+
+			if (severity === 'CRITICAL' || severity === 'ERROR') {
+				criticalError++;
+			} else if (severity === 'WARNING') {
+				warning++;
+			} else if (severity === 'INFO' || severity === 'DEBUG') {
+				infoDebug++;
+			}
+		}
+
+		setSeverityStats({ totalLoaded, criticalError, warning, infoDebug });
+	}, [grid.api]);
 
 	useEffect(() => {
-		const handleBlockLoaded = (event: any) => {
-			const { loadedBlockStart, loadedBlockEnd, totalRecords, durationMs } = event.detail || {};
+		const handleBlockLoaded = (event: {
+			payload: {
+				loadedBlockStart?: number;
+				loadedBlockEnd?: number;
+				totalRecords?: number;
+				durationMs?: number;
+			};
+		}) => {
+			const { loadedBlockStart, loadedBlockEnd, totalRecords, durationMs } = event.payload || {};
 			setBlockStats({
 				loadedBlockStart: loadedBlockStart ?? 0,
 				loadedBlockEnd: loadedBlockEnd ?? 0,
@@ -40,11 +86,37 @@ export default function InfiniteServerScroll({
 			if (durationMs !== undefined) {
 				setLatencyHistory((prev) => [...prev.slice(-9), Math.round(durationMs)]);
 			}
+
+			refreshSeverityStats();
 		};
 
-		const unsub = grid.api.addEventListener('serverBlockLoaded' as any, handleBlockLoaded);
-		return () => unsub();
-	}, [grid.api]);
+		const clearSeverityStats = () => {
+			setSeverityStats({ totalLoaded: 0, criticalError: 0, warning: 0, infoDebug: 0 });
+		};
+
+		refreshSeverityStats();
+		const unsubBlockLoaded = grid.api.addEventListener('serverBlockLoaded', handleBlockLoaded);
+		const unsubCellValueChanged = grid.api.addEventListener('cellValueChanged', refreshSeverityStats);
+		const unsubSortChanged = grid.api.addEventListener('sortChanged', clearSeverityStats);
+		const unsubFilterChanged = grid.api.addEventListener('filterChanged', clearSeverityStats);
+		return () => {
+			unsubBlockLoaded();
+			unsubCellValueChanged();
+			unsubSortChanged();
+			unsubFilterChanged();
+		};
+	}, [grid.api, refreshSeverityStats]);
+
+	const severityDistribution = useMemo(() => {
+		const total = severityStats.totalLoaded;
+		const toPercent = (value: number) => (total > 0 ? (value / total) * 100 : 0);
+
+		return {
+			criticalErrorPercent: toPercent(severityStats.criticalError),
+			warningPercent: toPercent(severityStats.warning),
+			infoDebugPercent: toPercent(severityStats.infoDebug),
+		};
+	}, [severityStats]);
 
 	// Visual sparkline coordinates
 	const svgPoints = useMemo(() => {
@@ -130,33 +202,44 @@ export default function InfiniteServerScroll({
 					</div>
 
 					<div className='border-t border-slate-900/60 pt-3 mt-1 flex flex-col gap-2.5'>
-						<span className='text-[8px] text-slate-500 uppercase tracking-wider font-extrabold'>Severity Distribution</span>
+						<div className='flex items-center justify-between gap-2'>
+							<span className='text-[8px] text-slate-500 uppercase tracking-wider font-extrabold'>Severity Distribution</span>
+							<span className='text-[8px] text-slate-500 uppercase tracking-wider font-mono'>
+								{severityStats.totalLoaded.toLocaleString()} loaded
+							</span>
+						</div>
 						<div className='flex flex-col gap-2'>
 							{/* Critical / Error */}
 							<div className='flex items-center justify-between text-[9px] font-mono'>
 								<span className='text-rose-400 font-extrabold'>CRITICAL / ERROR</span>
-								<span className='text-slate-400'>~33.3%</span>
+								<span className='text-slate-400'>
+									{severityDistribution.criticalErrorPercent.toFixed(1)}% ({severityStats.criticalError})
+								</span>
 							</div>
 							<div className='w-full bg-slate-950 border border-slate-900 rounded-full h-1.5 overflow-hidden'>
-								<div className='h-full bg-rose-500 rounded-full' style={{ width: '33.3%' }} />
+								<div className='h-full bg-rose-500 rounded-full' style={{ width: `${severityDistribution.criticalErrorPercent}%` }} />
 							</div>
 
 							{/* Warning */}
 							<div className='flex items-center justify-between text-[9px] font-mono'>
 								<span className='text-amber-400 font-extrabold'>WARNING</span>
-								<span className='text-slate-400'>~16.7%</span>
+								<span className='text-slate-400'>
+									{severityDistribution.warningPercent.toFixed(1)}% ({severityStats.warning})
+								</span>
 							</div>
 							<div className='w-full bg-slate-950 border border-slate-900 rounded-full h-1.5 overflow-hidden'>
-								<div className='h-full bg-amber-500 rounded-full' style={{ width: '16.7%' }} />
+								<div className='h-full bg-amber-500 rounded-full' style={{ width: `${severityDistribution.warningPercent}%` }} />
 							</div>
 
 							{/* Info / Debug */}
 							<div className='flex items-center justify-between text-[9px] font-mono'>
 								<span className='text-emerald-400 font-extrabold'>INFO / DEBUG</span>
-								<span className='text-slate-400'>~50.0%</span>
+								<span className='text-slate-400'>
+									{severityDistribution.infoDebugPercent.toFixed(1)}% ({severityStats.infoDebug})
+								</span>
 							</div>
 							<div className='w-full bg-slate-950 border border-slate-900 rounded-full h-1.5 overflow-hidden'>
-								<div className='h-full bg-emerald-500 rounded-full' style={{ width: '50%' }} />
+								<div className='h-full bg-emerald-500 rounded-full' style={{ width: `${severityDistribution.infoDebugPercent}%` }} />
 							</div>
 						</div>
 					</div>
