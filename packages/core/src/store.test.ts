@@ -601,6 +601,36 @@ describe('GridStore Scoped Batch Transactions and Properties', () => {
 
 		controller.dispose();
 	});
+
+	it('should bound selection cell notifications to the visible viewport', () => {
+		const columns = Array.from({ length: 50 }, (_, i) => ({ field: `c${i}`, header: `C${i}` }));
+		const rows = Array.from({ length: 500 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}`, price: i }));
+		const store = new GridStore<any>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+		});
+		const controller = new ClientRowModelController<any>(store, {
+			rows,
+			columns,
+		});
+
+		store.viewportController.setViewportSize(300, 160);
+		store.viewportController.setScrollPosition(0, 0);
+		store.viewportController.updateVisibleRanges();
+
+		const visibleListener = vi.fn();
+		const offscreenListener = vi.fn();
+		store.registerCellSubscription({ rowId: 'r0', colField: 'c0', onStoreChange: visibleListener });
+		store.registerCellSubscription({ rowId: 'r400', colField: 'c40', onStoreChange: offscreenListener });
+
+		store.setSelectedRange({ rowId: 'r0', colField: 'c0' }, { rowId: 'r499', colField: 'c49' });
+
+		expect(visibleListener).toHaveBeenCalledTimes(1);
+		expect(offscreenListener).toHaveBeenCalledTimes(0);
+
+		controller.dispose();
+	});
 });
 
 describe('GridStore Command Bus and Undo/Redo functionality', () => {

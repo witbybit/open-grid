@@ -1,21 +1,76 @@
 import React, { createContext, useContext, useMemo, useSyncExternalStore, useRef, useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { GridStore, GridState, GridNavigationController, GridNavigationOptions, GridApi, RenderEngine, GridContextMenuPlugin, GridContextMenuOptions } from '@open-grid/core';
+import {
+	GridStore,
+	GridState,
+	GridNavigationController,
+	GridNavigationOptions,
+	GridApi,
+	RenderEngine,
+	GridContextMenuPlugin,
+	GridContextMenuOptions,
+	type GridStateUpdater,
+	type GridEventListener,
+	type Listener,
+	type GridCellPointer,
+	type GridCellRange,
+	type SortModel,
+	type FilterModel,
+} from '@open-grid/core';
 
-// Create Grid Context
-const GridContext = createContext<GridStore<unknown> | null>(null);
+const GridStoreContext = createContext<GridStore<unknown> | null>(null);
+const GridApiContext = createContext<GridApi<unknown> | null>(null);
 
 export interface GridProviderProps<TRowData = unknown> {
 	store: GridStore<TRowData>;
 	children: React.ReactNode;
 }
 
+function createGridApiFacade<TRowData>(store: GridStore<TRowData>): GridApi<TRowData> {
+	return Object.freeze({
+		getState: () => store.getState(),
+		setState: (updater: GridStateUpdater<TRowData>) => store.setState(updater),
+		getRowId: (row: TRowData) => store.getRowId(row),
+		isRowLoading: (rowId: string) => store.isRowLoading(rowId),
+		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
+		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
+		getCellState: (rowId: string, colField: string) => store.getCellState(rowId, colField),
+		setFocusedCell: (rowId: string | null, colField: string | null) => store.setFocusedCell(rowId, colField),
+		setSelectedRange: (start: GridCellPointer | null, end: GridCellPointer | null) => store.setSelectedRange(start, end),
+		setColumnWidth: (colField: string, width: number) => store.setColumnWidth(colField, width),
+		setRowHeight: (rowId: string, height: number) => store.setRowHeight(rowId, height),
+		setSortModel: (sortModel: SortModel | null) => store.setSortModel(sortModel),
+		setFilterModel: (filterModel: FilterModel | null) => store.setFilterModel(filterModel),
+		addEventListener: <T = unknown,>(type: string, callback: GridEventListener<T>) => store.addEventListener(type, callback),
+		dispatchEvent: <T = unknown,>(type: string, payload: T) => store.dispatchEvent(type, payload),
+		stopEditing: (cancel?: boolean) => store.stopEditing(cancel),
+		startTransaction: () => store.startTransaction(),
+		endTransaction: () => store.endTransaction(),
+		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
+		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
+		getColumnIndex: (colField: string) => store.getColumnIndex(colField),
+		getColumnDef: (colField: string) => store.getColumnDef(colField),
+		getPlugin: <T = unknown,>(name: string) => store.getPlugin<T>(name),
+		undo: () => store.undo(),
+		redo: () => store.redo(),
+		canUndo: () => store.canUndo(),
+		canRedo: () => store.canRedo(),
+		fillRange: (source: GridCellRange, target: GridCellRange) => store.fillRange(source, target),
+		destroy: () => store.destroy(),
+	});
+}
+
 export function GridProvider<TRowData = unknown>({ store, children }: GridProviderProps<TRowData>) {
-	return <GridContext.Provider value={store as unknown as GridStore<unknown>}>{children}</GridContext.Provider>;
+	const api = useMemo(() => createGridApiFacade(store), [store]);
+	return (
+		<GridStoreContext.Provider value={store as unknown as GridStore<unknown>}>
+			<GridApiContext.Provider value={api as unknown as GridApi<unknown>}>{children}</GridApiContext.Provider>
+		</GridStoreContext.Provider>
+	);
 }
 
 export function useGridStore<TRowData = unknown>(): GridStore<TRowData> {
-	const context = useContext(GridContext);
+	const context = useContext(GridStoreContext);
 	if (!context) {
 		throw new Error('useGridStore must be used within a GridProvider');
 	}
@@ -23,7 +78,11 @@ export function useGridStore<TRowData = unknown>(): GridStore<TRowData> {
 }
 
 export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
-	return useGridStore<TRowData>();
+	const context = useContext(GridApiContext);
+	if (!context) {
+		throw new Error('useGridApi must be used within a GridProvider');
+	}
+	return context as unknown as GridApi<TRowData>;
 }
 
 /**
@@ -151,7 +210,7 @@ export function PortalCell({ rowId, colField, value, col, node, isEditing, isLoa
 	if (isLoading) {
 		return (
 			<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', padding: '0 12px' }}>
-				<div className="og-cell-loading-skeleton" style={{ height: '16px', width: '80%', borderRadius: '4px' }} />
+				<div className='og-cell-loading-skeleton' style={{ height: '16px', width: '80%', borderRadius: '4px' }} />
 			</div>
 		);
 	}
@@ -262,7 +321,7 @@ export interface OpenGridProps<TRowData = unknown> {
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
-	const contextStore = useContext(GridContext);
+	const contextStore = useContext(GridStoreContext);
 	const store = props.store || (contextStore as unknown as GridStore<TRowData>);
 
 	if (!store) {
@@ -290,6 +349,7 @@ function OpenGridInner<TRowData = unknown>({
 	const [portals, setPortals] = useState<Map<string, PortalData>>(new Map());
 	const containerRef = useRef<HTMLDivElement>(null);
 	const renderEngineRef = useRef<RenderEngine | null>(null);
+	const isGridActiveRef = useRef(false);
 
 	const mountPortal = useCallback(
 		(cellKey: string, container: HTMLElement, value: unknown, node: any, col: any, isEditing: boolean, isLoading: boolean) => {
@@ -400,16 +460,22 @@ function OpenGridInner<TRowData = unknown>({
 		const handleGlobalKeyDown = (e: KeyboardEvent) => {
 			const activeEl = document.activeElement;
 			const container = containerRef.current;
-			const isInside = container?.contains(activeEl) || activeEl === document.body;
+			const isInside = !!container && (container.contains(activeEl) || isGridActiveRef.current);
 			if (isInside) {
 				navigation.handleKeyDown(e);
 			}
 		};
+		const handlePointerDown = (e: MouseEvent) => {
+			const container = containerRef.current;
+			isGridActiveRef.current = !!container && container.contains(e.target as Node);
+		};
 		window.addEventListener('keydown', handleGlobalKeyDown);
 		window.addEventListener('mouseup', navigation.handleMouseUp);
+		document.addEventListener('mousedown', handlePointerDown, true);
 		return () => {
 			window.removeEventListener('keydown', handleGlobalKeyDown);
 			window.removeEventListener('mouseup', navigation.handleMouseUp);
+			document.removeEventListener('mousedown', handlePointerDown, true);
 		};
 	}, [navigation, enableNavigation]);
 
@@ -422,6 +488,7 @@ function OpenGridInner<TRowData = unknown>({
 			const rowId = rowEl?.dataset.rowId;
 			if (!colField || !rowId) return;
 
+			isGridActiveRef.current = true;
 			const state = store.getState();
 			const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === colField;
 			if (isEditing) return;
@@ -521,7 +588,7 @@ function OpenGridInner<TRowData = unknown>({
 	}, [handleMouseDown, handleMouseOver, handleClick, handleDoubleClick, handleContextMenu]);
 
 	return (
-		<div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+		<div ref={containerRef} tabIndex={-1} style={{ width: '100%', height: '100%', position: 'relative' }}>
 			<PortalManager portals={portals} store={store} />
 		</div>
 	);

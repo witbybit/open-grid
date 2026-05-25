@@ -35,6 +35,15 @@ export class StateManager<TRowData = unknown> {
 		this.notifyChanges(prevState, affectedKeys);
 	};
 
+	public setDerivedState(updater: GridStateUpdater<TRowData>, prevStateForListeners: GridState<TRowData>): string[] {
+		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
+		const affectedKeys = Object.keys(nextState);
+		if (affectedKeys.length === 0) return [];
+
+		this.state = { ...this.state, ...nextState };
+		return affectedKeys.filter((key) => prevStateForListeners[key as keyof GridState<TRowData>] !== this.state[key as keyof GridState<TRowData>]);
+	}
+
 	public startTransaction = (): void => {
 		if (!this.isBatching) {
 			this.preTransactionState = this.state;

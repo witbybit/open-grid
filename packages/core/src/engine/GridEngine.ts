@@ -432,7 +432,7 @@ export class GridEngine<TRowData = unknown> {
 
 	// State-to-coordinate change mapping bridge callback
 	private handleStateChanges = (prevState: GridState<TRowData>, updatedKeys: string[]): void => {
-		const currState = this.stateManager.getState();
+		let currState = this.stateManager.getState();
 		const updatedSet = new Set(updatedKeys);
 
 		// Synchronize sub-models
@@ -448,11 +448,19 @@ export class GridEngine<TRowData = unknown> {
 		}
 
 		if (updatedSet.has('selectedRange') || updatedSet.has('columns') || updatedSet.has('dataVersion')) {
-			currState.selectedRangeBounds = this.selection.calculateRangeBounds(
+			const selectedRangeBounds = this.selection.calculateRangeBounds(
 				currState.selectedRange,
 				(id) => (this.rowModel ? this.rowModel.getRowIndexById(id) : -1),
 				(field) => this.columns.getColumnIndex(field)
 			);
+			if (currState.selectedRangeBounds !== selectedRangeBounds) {
+				for (const key of this.stateManager.setDerivedState({ selectedRangeBounds }, prevState)) {
+					updatedSet.add(key);
+					updatedKeys.push(key);
+					this.stateManager.triggerKeyChange(key, prevState);
+				}
+				currState = this.stateManager.getState();
+			}
 		}
 
 		if (updatedSet.has('focusedCell')) {
@@ -488,11 +496,12 @@ export class GridEngine<TRowData = unknown> {
 				currState.visibleColRange.endIdx !== nextColRange.endIdx;
 
 			if (rowRangeChanged || colRangeChanged) {
-				currState.visibleRowRange = nextRowRange;
-				currState.visibleColRange = nextColRange;
-				updatedKeys.push('visibleRowRange', 'visibleColRange');
-				this.stateManager.triggerKeyChange('visibleRowRange', prevState);
-				this.stateManager.triggerKeyChange('visibleColRange', prevState);
+				for (const key of this.stateManager.setDerivedState({ visibleRowRange: nextRowRange, visibleColRange: nextColRange }, prevState)) {
+					updatedSet.add(key);
+					updatedKeys.push(key);
+					this.stateManager.triggerKeyChange(key, prevState);
+				}
+				currState = this.stateManager.getState();
 			}
 		}
 
@@ -508,16 +517,16 @@ export class GridEngine<TRowData = unknown> {
 		}
 
 		if (updatedSet.has('selectedRange')) {
-			const dirty = this.selection.getDirtyCoordinates(prevState.selectedRangeBounds, currState.selectedRangeBounds);
-			if (dirty.length > 0 && this.rowModel) {
-				for (let i = 0; i < dirty.length; i++) {
-					const { rowIdx, colIdx } = dirty[i];
-					const row = this.rowModel.getRow(rowIdx);
+			const rowModel = this.rowModel;
+			if (rowModel) {
+				const viewport = this.getSelectionNotificationViewport();
+				this.selection.forEachDirtyCoordinateInViewport(prevState.selectedRangeBounds, currState.selectedRangeBounds, viewport, (rowIdx, colIdx) => {
+					const row = rowModel.getRow(rowIdx);
 					const col = currState.columns[colIdx];
 					if (row && col) {
 						this.notifyCellChange(this.data.getRowId(row), col.field);
 					}
-				}
+				});
 			}
 		}
 
@@ -568,6 +577,32 @@ export class GridEngine<TRowData = unknown> {
 		}
 	};
 
+	private getSelectionNotificationViewport(): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
+		const state = this.stateManager.getState();
+		const rowCount = this.rowModel ? this.rowModel.getRowCount() : 0;
+		const colCount = state.columns.length;
+
+		if (rowCount === 0 || colCount === 0) {
+			return { minRow: 1, maxRow: 0, minCol: 1, maxCol: 0 };
+		}
+
+		const rowStart = Math.max(0, Math.min(state.visibleRowRange.startIdx, rowCount - 1));
+		const rowEnd = Math.max(rowStart, Math.min(state.visibleRowRange.endIdx, rowCount - 1));
+		const colStart = Math.max(0, Math.min(state.visibleColRange.startIdx, colCount - 1));
+		const colEnd = Math.max(colStart, Math.min(state.visibleColRange.endIdx, colCount - 1));
+		const topEnd = this.viewport.pinTopRows > 0 ? Math.min(rowCount - 1, this.viewport.pinTopRows - 1) : rowStart;
+		const bottomStart = this.viewport.pinBottomRows > 0 ? Math.max(0, rowCount - this.viewport.pinBottomRows) : rowEnd;
+		const leftEnd = this.viewport.pinLeftColumns > 0 ? Math.min(colCount - 1, this.viewport.pinLeftColumns - 1) : colStart;
+		const rightStart = this.viewport.pinRightColumns > 0 ? Math.max(0, colCount - this.viewport.pinRightColumns) : colEnd;
+
+		return {
+			minRow: Math.min(rowStart, topEnd, bottomStart),
+			maxRow: Math.max(rowEnd, topEnd, bottomStart),
+			minCol: Math.min(colStart, leftEnd, rightStart),
+			maxCol: Math.max(colEnd, leftEnd, rightStart),
+		};
+	}
+
 	public undo(): void {
 		this.commandHistory.undo();
 	}
@@ -583,243 +618,68 @@ export class GridEngine<TRowData = unknown> {
 		const state = this.stateManager.getState();
 		const columns = state.columns;
 
-		const startRowIdx = rowModel.getRowIndexById(source.start.rowId);
-		const endRowIdx = rowModel.getRowIndexById(source.end.rowId);
-		const startColIdx = this.columns.getColumnIndex(source.start.colField);
-		const endColIdx = this.columns.getColumnIndex(source.end.colField);
-
-		const fillStartRow = Math.min(startRowIdx, endRowIdx);
-		const fillEndRow = Math.max(startRowIdx, endRowIdx);
-		const fillStartCol = Math.min(startColIdx, endColIdx);
-		const fillEndCol = Math.max(startColIdx, endColIdx);
-
-		const tStartRowIdx = rowModel.getRowIndexById(target.start.rowId);
-		const tEndRowIdx = rowModel.getRowIndexById(target.end.rowId);
-		const tStartColIdx = this.columns.getColumnIndex(target.start.colField);
-		const tEndColIdx = this.columns.getColumnIndex(target.end.colField);
-
-		const minRowTarget = Math.min(tStartRowIdx, tEndRowIdx);
-		const maxRowTarget = Math.max(tStartRowIdx, tEndRowIdx);
-		const minColTarget = Math.min(tStartColIdx, tEndColIdx);
-		const maxColTarget = Math.max(tStartColIdx, tEndColIdx);
+		const sourceBounds = this.resolveRangeBounds(source);
+		const targetBounds = this.resolveRangeBounds(target);
+		if (!sourceBounds || !targetBounds) return;
 
 		let direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' = 'DOWN';
-		if (minRowTarget > fillEndRow) direction = 'DOWN';
-		else if (maxRowTarget < fillStartRow) direction = 'UP';
-		else if (minColTarget > fillEndCol) direction = 'RIGHT';
-		else if (maxColTarget < fillStartCol) direction = 'LEFT';
+		if (targetBounds.minRow > sourceBounds.maxRow) direction = 'DOWN';
+		else if (targetBounds.maxRow < sourceBounds.minRow) direction = 'UP';
+		else if (targetBounds.minCol > sourceBounds.maxCol) direction = 'RIGHT';
+		else if (targetBounds.maxCol < sourceBounds.minCol) direction = 'LEFT';
 
 		const oldValueRecord: { rowId: string; colField: string; value: any; hasFormula: boolean; formula?: string }[] = [];
 		const newValueRecord: { rowId: string; colField: string; value: any; hasFormula: boolean; formula?: string }[] = [];
 
 		this.batch(() => {
 			if (direction === 'DOWN' || direction === 'UP') {
-				for (let c = minColTarget; c <= maxColTarget; c++) {
+				const fillRows = this.buildOrderedIndexes(targetBounds.minRow, targetBounds.maxRow, direction === 'UP');
+				for (let c = targetBounds.minCol; c <= targetBounds.maxCol; c++) {
 					const col = columns[c];
 					if (!col) continue;
 
-					const sourceValues: { value: any; hasFormula: boolean; formula?: string }[] = [];
-					for (let r = fillStartRow; r <= fillEndRow; r++) {
+					const sourceValues: Array<{ value: any; hasFormula: boolean; formula?: string }> = [];
+					for (let r = sourceBounds.minRow; r <= sourceBounds.maxRow; r++) {
 						const node = rowModel.getRowNode(r);
-						if (node) {
-							const hasF = this.dagEngine.hasFormula(node.id, col.field);
-							sourceValues.push({
-								value: this.data.getCellValue(node.id, col.field),
-								hasFormula: hasF,
-								formula: hasF ? this.dagEngine.getFormula(node.id, col.field) : undefined,
-							});
-						}
+						if (node) sourceValues.push(this.captureCell(node.id, col.field));
 					}
 
 					if (sourceValues.length === 0) continue;
 
-					const allNumeric = sourceValues.every(s => !s.hasFormula && !Number.isNaN(parseFloat(String(s.value))) && s.value !== '');
-					let step = 0;
-					let baseNum = 0;
-					const numbers = sourceValues.map(s => parseFloat(String(s.value)));
-
-					if (allNumeric && numbers.length > 0) {
-						if (numbers.length === 1) {
-							step = 0;
-							baseNum = numbers[0];
-						} else {
-							let diffSum = 0;
-							for (let i = 0; i < numbers.length - 1; i++) {
-								diffSum += numbers[i + 1] - numbers[i];
-							}
-							step = diffSum / (numbers.length - 1);
-							baseNum = numbers[numbers.length - 1];
-						}
-					}
-
-					const fillRows = [];
-					if (direction === 'DOWN') {
-						for (let r = minRowTarget; r <= maxRowTarget; r++) fillRows.push(r);
-					} else {
-						for (let r = maxRowTarget; r >= minRowTarget; r--) fillRows.push(r);
-					}
-
+					const series = this.analyzeFillSeries(sourceValues);
 					fillRows.forEach((r, idx) => {
 						const node = rowModel.getRowNode(r);
 						if (!node) return;
 
-						const oldHasF = this.dagEngine.hasFormula(node.id, col.field);
-						oldValueRecord.push({
-							rowId: node.id,
-							colField: col.field,
-							value: this.data.getCellValue(node.id, col.field),
-							hasFormula: oldHasF,
-							formula: oldHasF ? this.dagEngine.getFormula(node.id, col.field) : undefined,
-						});
-
-						const srcIdx = idx % sourceValues.length;
-						const srcItem = sourceValues[srcIdx];
-
-						if (srcItem.hasFormula && srcItem.formula) {
-							const deltaRow = r - (direction === 'DOWN' ? fillEndRow : fillStartRow);
-							const shiftedFormula = this.shiftFormulaReferences(srcItem.formula, deltaRow, 0, rowModel, columns);
-							
-							this.data.setCellValue(node.id, col.field, shiftedFormula);
-							newValueRecord.push({
-								rowId: node.id,
-								colField: col.field,
-								value: undefined,
-								hasFormula: true,
-								formula: shiftedFormula,
-							});
-						} else if (allNumeric) {
-							let finalVal;
-							if (numbers.length === 1) {
-								finalVal = baseNum;
-							} else {
-								finalVal = baseNum + step * (idx + 1);
-							}
-							const formattedVal = Number.isInteger(finalVal) ? finalVal : parseFloat(finalVal.toFixed(4));
-							
-							this.dagEngine.clearFormula(node.id, col.field);
-							this.data.setCellValue(node.id, col.field, formattedVal);
-							newValueRecord.push({
-								rowId: node.id,
-								colField: col.field,
-								value: formattedVal,
-								hasFormula: false,
-							});
-						} else {
-							this.dagEngine.clearFormula(node.id, col.field);
-							this.data.setCellValue(node.id, col.field, srcItem.value);
-							newValueRecord.push({
-								rowId: node.id,
-								colField: col.field,
-								value: srcItem.value,
-								hasFormula: false,
-							});
-						}
+						const srcItem = sourceValues[idx % sourceValues.length];
+						const deltaRow = r - (direction === 'DOWN' ? sourceBounds.maxRow : sourceBounds.minRow);
+						this.applyFillValue(node.id, col.field, idx, srcItem, series, deltaRow, 0, rowModel, columns, oldValueRecord, newValueRecord);
 					});
 				}
 			}
 
 			if (direction === 'RIGHT' || direction === 'LEFT') {
-				for (let r = minRowTarget; r <= maxRowTarget; r++) {
+				const fillCols = this.buildOrderedIndexes(targetBounds.minCol, targetBounds.maxCol, direction === 'LEFT');
+				for (let r = targetBounds.minRow; r <= targetBounds.maxRow; r++) {
 					const node = rowModel.getRowNode(r);
 					if (!node) continue;
 
-					const sourceValues: { value: any; hasFormula: boolean; formula?: string; colField: string }[] = [];
-					for (let c = fillStartCol; c <= fillEndCol; c++) {
+					const sourceValues: Array<{ value: any; hasFormula: boolean; formula?: string }> = [];
+					for (let c = sourceBounds.minCol; c <= sourceBounds.maxCol; c++) {
 						const col = columns[c];
-						if (col) {
-							const hasF = this.dagEngine.hasFormula(node.id, col.field);
-							sourceValues.push({
-								value: this.data.getCellValue(node.id, col.field),
-								hasFormula: hasF,
-								formula: hasF ? this.dagEngine.getFormula(node.id, col.field) : undefined,
-								colField: col.field,
-							});
-						}
+						if (col) sourceValues.push(this.captureCell(node.id, col.field));
 					}
 
 					if (sourceValues.length === 0) continue;
 
-					const allNumeric = sourceValues.every(s => !s.hasFormula && !Number.isNaN(parseFloat(String(s.value))) && s.value !== '');
-					let step = 0;
-					let baseNum = 0;
-					const numbers = sourceValues.map(s => parseFloat(String(s.value)));
-
-					if (allNumeric && numbers.length > 0) {
-						if (numbers.length === 1) {
-							step = 0;
-							baseNum = numbers[0];
-						} else {
-							let diffSum = 0;
-							for (let i = 0; i < numbers.length - 1; i++) {
-								diffSum += numbers[i + 1] - numbers[i];
-							}
-							step = diffSum / (numbers.length - 1);
-							baseNum = numbers[numbers.length - 1];
-						}
-					}
-
-					const fillCols = [];
-					if (direction === 'RIGHT') {
-						for (let c = minColTarget; c <= maxColTarget; c++) fillCols.push(c);
-					} else {
-						for (let c = maxColTarget; c >= minColTarget; c--) fillCols.push(c);
-					}
-
+					const series = this.analyzeFillSeries(sourceValues);
 					fillCols.forEach((c, idx) => {
 						const col = columns[c];
 						if (!col) return;
 
-						const oldHasF = this.dagEngine.hasFormula(node.id, col.field);
-						oldValueRecord.push({
-							rowId: node.id,
-							colField: col.field,
-							value: this.data.getCellValue(node.id, col.field),
-							hasFormula: oldHasF,
-							formula: oldHasF ? this.dagEngine.getFormula(node.id, col.field) : undefined,
-						});
-
-						const srcIdx = idx % sourceValues.length;
-						const srcItem = sourceValues[srcIdx];
-
-						if (srcItem.hasFormula && srcItem.formula) {
-							const deltaCol = c - (direction === 'RIGHT' ? fillEndCol : fillStartCol);
-							const shiftedFormula = this.shiftFormulaReferences(srcItem.formula, 0, deltaCol, rowModel, columns);
-							
-							this.data.setCellValue(node.id, col.field, shiftedFormula);
-							newValueRecord.push({
-								rowId: node.id,
-								colField: col.field,
-								value: undefined,
-								hasFormula: true,
-								formula: shiftedFormula,
-							});
-						} else if (allNumeric) {
-							let finalVal;
-							if (numbers.length === 1) {
-								finalVal = baseNum;
-							} else {
-								finalVal = baseNum + step * (idx + 1);
-							}
-							const formattedVal = Number.isInteger(finalVal) ? finalVal : parseFloat(finalVal.toFixed(4));
-							
-							this.dagEngine.clearFormula(node.id, col.field);
-							this.data.setCellValue(node.id, col.field, formattedVal);
-							newValueRecord.push({
-								rowId: node.id,
-								colField: col.field,
-								value: formattedVal,
-								hasFormula: false,
-							});
-						} else {
-							this.dagEngine.clearFormula(node.id, col.field);
-							this.data.setCellValue(node.id, col.field, srcItem.value);
-							newValueRecord.push({
-								rowId: node.id,
-								colField: col.field,
-								value: srcItem.value,
-								hasFormula: false,
-							});
-						}
+						const srcItem = sourceValues[idx % sourceValues.length];
+						const deltaCol = c - (direction === 'RIGHT' ? sourceBounds.maxCol : sourceBounds.minCol);
+						this.applyFillValue(node.id, col.field, idx, srcItem, series, 0, deltaCol, rowModel, columns, oldValueRecord, newValueRecord);
 					});
 				}
 			}
@@ -853,6 +713,96 @@ export class GridEngine<TRowData = unknown> {
 				},
 			});
 		}
+	}
+
+	private resolveRangeBounds(range: GridCellRange): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null {
+		const rowModel = this.getRowModel();
+		if (!rowModel) return null;
+
+		const startRowIdx = rowModel.getRowIndexById(range.start.rowId);
+		const endRowIdx = rowModel.getRowIndexById(range.end.rowId);
+		const startColIdx = this.columns.getColumnIndex(range.start.colField);
+		const endColIdx = this.columns.getColumnIndex(range.end.colField);
+
+		if (startRowIdx < 0 || endRowIdx < 0 || startColIdx < 0 || endColIdx < 0) return null;
+
+		return {
+			minRow: Math.min(startRowIdx, endRowIdx),
+			maxRow: Math.max(startRowIdx, endRowIdx),
+			minCol: Math.min(startColIdx, endColIdx),
+			maxCol: Math.max(startColIdx, endColIdx),
+		};
+	}
+
+	private buildOrderedIndexes(start: number, end: number, reverse: boolean): number[] {
+		const indexes: number[] = [];
+		if (reverse) {
+			for (let i = end; i >= start; i--) indexes.push(i);
+		} else {
+			for (let i = start; i <= end; i++) indexes.push(i);
+		}
+		return indexes;
+	}
+
+	private captureCell(rowId: string, colField: string): { value: any; hasFormula: boolean; formula?: string } {
+		const hasFormula = this.dagEngine.hasFormula(rowId, colField);
+		return {
+			value: this.data.getCellValue(rowId, colField),
+			hasFormula,
+			formula: hasFormula ? this.dagEngine.getFormula(rowId, colField) : undefined,
+		};
+	}
+
+	private analyzeFillSeries(sourceValues: Array<{ value: any; hasFormula: boolean }>): { allNumeric: boolean; baseNum: number; step: number } {
+		const allNumeric = sourceValues.every((s) => !s.hasFormula && !Number.isNaN(parseFloat(String(s.value))) && s.value !== '');
+		if (!allNumeric || sourceValues.length === 0) return { allNumeric: false, baseNum: 0, step: 0 };
+
+		const numbers = sourceValues.map((s) => parseFloat(String(s.value)));
+		if (numbers.length === 1) return { allNumeric: true, baseNum: numbers[0], step: 0 };
+
+		let diffSum = 0;
+		for (let i = 0; i < numbers.length - 1; i++) {
+			diffSum += numbers[i + 1] - numbers[i];
+		}
+		return { allNumeric: true, baseNum: numbers[numbers.length - 1], step: diffSum / (numbers.length - 1) };
+	}
+
+	private applyFillValue(
+		rowId: string,
+		colField: string,
+		index: number,
+		source: { value: any; hasFormula: boolean; formula?: string },
+		series: { allNumeric: boolean; baseNum: number; step: number },
+		deltaRow: number,
+		deltaCol: number,
+		rowModel: RowModel<TRowData>,
+		columns: ColumnDef<TRowData>[],
+		oldValueRecord: { rowId: string; colField: string; value: any; hasFormula: boolean; formula?: string }[],
+		newValueRecord: { rowId: string; colField: string; value: any; hasFormula: boolean; formula?: string }[]
+	): void {
+		const oldValue = this.captureCell(rowId, colField);
+		let nextValue = source.value;
+		let nextFormula: string | undefined;
+
+		if (source.hasFormula && source.formula) {
+			nextFormula = this.shiftFormulaReferences(source.formula, deltaRow, deltaCol, rowModel, columns);
+			nextValue = nextFormula;
+		} else if (series.allNumeric) {
+			const finalVal = series.step === 0 ? series.baseNum : series.baseNum + series.step * (index + 1);
+			nextValue = Number.isInteger(finalVal) ? finalVal : parseFloat(finalVal.toFixed(4));
+		}
+
+		const applied = this.data.setCellValue(rowId, colField, nextValue);
+		if (!applied) return;
+
+		oldValueRecord.push({ rowId, colField, ...oldValue });
+		newValueRecord.push({
+			rowId,
+			colField,
+			value: nextFormula ? undefined : nextValue,
+			hasFormula: !!nextFormula,
+			formula: nextFormula,
+		});
 	}
 
 	private shiftFormulaReferences(

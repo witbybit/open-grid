@@ -45,40 +45,39 @@ export class DataModel<TRowData = unknown> {
 		}
 	}
 
-	public getCellValue = (rowId: string, colField: string): unknown => {
+	public getRawCellValue = (rowId: string, colField: string): unknown => {
 		if (this.isRowLoading(rowId)) {
 			return '';
 		}
 
-		const getRawValue = (rId: string, cField: string): any => {
-			const rowModel = this.engine.getRowModel();
-			if (!rowModel) return '';
-			const col = this.engine.columns.getColumnDef(cField);
-			if (!col) return '';
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return '';
+		const col = this.engine.columns.getColumnDef(colField);
+		if (!col) return '';
 
-			const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rId) : null;
-			if (!node) {
-				const idx = rowModel.getRowIndexById(rId);
-				if (idx === -1) return '';
-				const row = rowModel.getRow(idx);
-				if (!row) return '';
-				if (col.valueGetter) {
-					const dummyNode = new RowNode<TRowData>(rId, row);
-					return col.valueGetter({ node: dummyNode, row, colField: cField });
-				}
-				const getter = this.compiledGetters.get(cField) || compilePathGetter(cField);
-				return getter(row);
-			}
-
+		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
+		if (!node) {
+			const idx = rowModel.getRowIndexById(rowId);
+			if (idx === -1) return '';
+			const row = rowModel.getRow(idx);
+			if (!row) return '';
 			if (col.valueGetter) {
-				return col.valueGetter({ node, row: node.data, colField: cField });
+				const dummyNode = new RowNode<TRowData>(rowId, row);
+				return col.valueGetter({ node: dummyNode, row, colField });
 			}
-			const getter = this.compiledGetters.get(cField) || compilePathGetter(cField);
-			return node.getCellValue(cField, getter);
-		};
+			const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
+			return getter(row);
+		}
 
-		// Check if the raw value itself is a formula starting with '='
-		const rawVal = getRawValue(rowId, colField);
+		if (col.valueGetter) {
+			return col.valueGetter({ node, row: node.data, colField });
+		}
+		const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
+		return node.getCellValue(colField, getter);
+	};
+
+	public getCellValue = (rowId: string, colField: string): unknown => {
+		const rawVal = this.getRawCellValue(rowId, colField);
 		if (typeof rawVal === 'string' && rawVal.startsWith('=')) {
 			if (!this.engine.dagEngine.hasFormula(rowId, colField) || this.engine.dagEngine.getFormula(rowId, colField) !== rawVal) {
 				this.engine.dagEngine.registerFormula(rowId, colField, rawVal);
@@ -90,7 +89,7 @@ export class DataModel<TRowData = unknown> {
 		}
 
 		if (this.engine.dagEngine.hasFormula(rowId, colField)) {
-			return this.engine.dagEngine.getCellValue(rowId, colField, getRawValue);
+			return this.engine.dagEngine.getCellValue(rowId, colField, (rId, cField) => this.getRawCellValue(rId, cField));
 		}
 
 		return rawVal;

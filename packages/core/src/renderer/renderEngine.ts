@@ -35,6 +35,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 	// Active tracking maps
 	private activeRows = new Map<number, PooledRow>(); // rowIndex -> PooledRow
+	private headerCells = new Map<number, HTMLDivElement>();
 	private unsubscribeStore: (() => void) | null = null;
 	private unsubscribeCellValueChanged: (() => void) | null = null;
 	private pendingPaint = false;
@@ -173,6 +174,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		// Release all active rows and cells
 		this.clearActiveRows();
+		this.clearHeaderCells();
 
 		if (this.rowPool) this.rowPool.clear();
 		if (this.cellPool) this.cellPool.clear();
@@ -367,6 +369,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				if (this.centerLayer) this.centerLayer.appendChild(rowEl);
 				if (this.leftLayer) this.leftLayer.appendChild(leftEl);
 				if (this.rightLayer) this.rightLayer.appendChild(rightEl);
+			} else if (pooledRow.boundRowId !== node.id) {
+				for (const c of Array.from(pooledRow.cells.keys())) {
+					this.releaseCell(pooledRow, c);
+				}
+				pooledRow.boundRowId = node.id;
 			}
 
 			// Reposition row via fast translate3d transform promote
@@ -376,11 +383,9 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			if (r < pinTopRows) {
 				rowTop = rowTop + scrollTop;
 			} else if (r >= rowCount - pinBottomRows) {
-				let heightToBottom = 0;
-				for (let i = r + 1; i < rowCount; i++) {
-					heightToBottom += this.engine.geometry.rowHeights[i];
-				}
-				rowTop = scrollTop + viewportHeight - heightToBottom - rowHeight;
+				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
+				const bottomOffset = totalHeight - this.engine.geometry.rowTops[r];
+				rowTop = scrollTop + viewportHeight - bottomOffset;
 			}
 
 			pooledRow.element.style.transform = `translate3d(0, ${rowTop}px, 0)`;
@@ -705,27 +710,29 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private paintHeaders(): void {
 		if (!this.headerLayer || !this.headerLeftLayer || !this.headerRightLayer) return;
 
-		// Clear header DOM nodes
-		this.headerLayer.textContent = '';
-		this.headerLeftLayer.textContent = '';
-		this.headerRightLayer.textContent = '';
-
 		const columns = this.engine.stateManager.getState().columns;
 		const colCount = columns.length;
-		if (colCount === 0) return;
+		if (colCount === 0) {
+			this.clearHeaderCells();
+			return;
+		}
 
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportWidth = this.engine.viewport.viewportWidth;
 
 		const newColRange = this.engine.viewport.getVisibleColumnRange(colCount);
+		const rendered = new Set<number>();
 
 		const renderHeaderCell = (c: number) => {
 			const col = columns[c];
 			if (!col) return;
 
-			const headerCell = document.createElement('div');
+			let headerCell = this.headerCells.get(c);
+			if (!headerCell) {
+				headerCell = this.createHeaderCellElement();
+				this.headerCells.set(c, headerCell);
+			}
+			rendered.add(c);
 
 			let className = 'og-header-cell';
 			let cellLeft = this.engine.geometry.colLefts[c];
@@ -761,57 +768,16 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			headerCell.style.transform = `translate3d(${cellLeft}px, 0, 0)`;
 			headerCell.style.width = `${cellWidth}px`;
 
-			// Use span or inner container so text does not overlap the resize handle
-			const textSpan = document.createElement('span');
-			textSpan.textContent = col.header || col.field;
-			textSpan.style.overflow = 'hidden';
-			textSpan.style.textOverflow = 'ellipsis';
-			textSpan.style.whiteSpace = 'nowrap';
-			textSpan.style.flex = '1';
-			headerCell.appendChild(textSpan);
+			const textSpan = headerCell.firstElementChild as HTMLSpanElement | null;
+			if (textSpan && textSpan.textContent !== (col.header || col.field)) {
+				textSpan.textContent = col.header || col.field;
+			}
 
 			headerCell.dataset.colField = col.field;
-
-			// Premium resize handle
-			const resizeHandle = document.createElement('div');
-			resizeHandle.className = 'og-header-resize-handle';
-
-			resizeHandle.addEventListener('mousedown', (e: MouseEvent) => {
-				e.preventDefault();
-				e.stopPropagation();
-
-				const startX = e.clientX;
-				const startWidth = this.engine.geometry.getColWidth(c, this.engine.stateManager.getState().defaultColWidth);
-				let currentWidth = startWidth;
-
-				const onMouseMove = (moveEvent: MouseEvent) => {
-					const deltaX = moveEvent.clientX - startX;
-					currentWidth = Math.max(30, startWidth + deltaX);
-
-					// Drag real-time update inside geometry
-					this.engine.setColumnWidth(col.field, currentWidth);
-				};
-
-				const onMouseUp = () => {
-					window.removeEventListener('mousemove', onMouseMove);
-					window.removeEventListener('mouseup', onMouseUp);
-
-					// Dispatch columnResized action to record in history
-					this.engine.commandBus.dispatch({
-						type: 'SET_COLUMN_WIDTH',
-						payload: {
-							colField: col.field,
-							width: currentWidth,
-						},
-					});
-				};
-
-				window.addEventListener('mousemove', onMouseMove);
-				window.addEventListener('mouseup', onMouseUp);
-			});
-
-			headerCell.appendChild(resizeHandle);
-			targetLayer!.appendChild(headerCell);
+			headerCell.dataset.colIndex = String(c);
+			if (headerCell.parentNode !== targetLayer) {
+				targetLayer!.appendChild(headerCell);
+			}
 		};
 
 		// 1. Render pinned left headers
@@ -832,7 +798,75 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				renderHeaderCell(c);
 			}
 		}
+
+		for (const [colIdx, cell] of this.headerCells.entries()) {
+			if (!rendered.has(colIdx) || colIdx >= colCount) {
+				cell.remove();
+				this.headerCells.delete(colIdx);
+			}
+		}
 	}
+
+	private createHeaderCellElement(): HTMLDivElement {
+		const headerCell = document.createElement('div');
+
+		const textSpan = document.createElement('span');
+		textSpan.style.overflow = 'hidden';
+		textSpan.style.textOverflow = 'ellipsis';
+		textSpan.style.whiteSpace = 'nowrap';
+		textSpan.style.flex = '1';
+		headerCell.appendChild(textSpan);
+
+		const resizeHandle = document.createElement('div');
+		resizeHandle.className = 'og-header-resize-handle';
+		resizeHandle.addEventListener('mousedown', this.onHeaderResizeMouseDown);
+		headerCell.appendChild(resizeHandle);
+
+		return headerCell;
+	}
+
+	private clearHeaderCells(): void {
+		for (const cell of this.headerCells.values()) {
+			cell.remove();
+		}
+		this.headerCells.clear();
+	}
+
+	private onHeaderResizeMouseDown = (e: MouseEvent): void => {
+		e.preventDefault();
+		e.stopPropagation();
+
+		const headerCell = (e.currentTarget as HTMLElement).closest('.og-header-cell') as HTMLElement | null;
+		const colField = headerCell?.dataset.colField;
+		const colIndex = Number(headerCell?.dataset.colIndex);
+		if (!colField || !Number.isFinite(colIndex)) return;
+
+		const startX = e.clientX;
+		const startWidth = this.engine.geometry.getColWidth(colIndex, this.engine.stateManager.getState().defaultColWidth);
+		let currentWidth = startWidth;
+
+		const onMouseMove = (moveEvent: MouseEvent) => {
+			const deltaX = moveEvent.clientX - startX;
+			currentWidth = Math.max(30, startWidth + deltaX);
+			this.engine.setColumnWidth(colField, currentWidth);
+		};
+
+		const onMouseUp = () => {
+			window.removeEventListener('mousemove', onMouseMove);
+			window.removeEventListener('mouseup', onMouseUp);
+
+			this.engine.commandBus.dispatch({
+				type: 'SET_COLUMN_WIDTH',
+				payload: {
+					colField,
+					width: currentWidth,
+				},
+			});
+		};
+
+		window.addEventListener('mousemove', onMouseMove);
+		window.addEventListener('mouseup', onMouseUp);
+	};
 
 	/**
 	 * Computes selection overlays & active focus coordinates off-screen.
@@ -921,11 +955,9 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			if (r < pinTopRows) {
 				return { top: rowTop, bottom: rowTop + rowHeight };
 			} else if (r >= rowCount - pinBottomRows) {
-				let heightToBottom = 0;
-				for (let i = r + 1; i < rowCount; i++) {
-					heightToBottom += this.engine.geometry.rowHeights[i] || 0;
-				}
-				const top = viewportHeight - 40 - heightToBottom - rowHeight;
+				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
+				const bottomOffset = totalHeight - rowTop;
+				const top = viewportHeight - 40 - bottomOffset;
 				return { top, bottom: top + rowHeight };
 			} else {
 				const unclippedTop = rowTop - scrollTop;
@@ -1220,11 +1252,9 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			if (r < pinTopRows) {
 				return { top: rowTop, bottom: rowTop + rowHeight };
 			} else if (r >= rowCount - pinBottomRows) {
-				let heightToBottom = 0;
-				for (let i = r + 1; i < rowCount; i++) {
-					heightToBottom += this.engine.geometry.rowHeights[i] || 0;
-				}
-				const top = viewportHeight - 40 - heightToBottom - rowHeight;
+				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
+				const bottomOffset = totalHeight - rowTop;
+				const top = viewportHeight - 40 - bottomOffset;
 				return { top, bottom: top + rowHeight };
 			} else {
 				const unclippedTop = rowTop - scrollTop;

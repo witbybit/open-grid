@@ -49,6 +49,17 @@ const NavigationControllerOwner = ({ onCellValueChanged }: { onCellValueChanged:
 	return null;
 };
 
+const ApiSurfaceInspector = () => {
+	const api = useGridApi<TestRow>();
+	return (
+		<div>
+			<span data-testid='api-frozen'>{Object.isFrozen(api) ? 'yes' : 'no'}</span>
+			<span data-testid='api-engine'>{'engine' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
+			<span data-testid='api-register-row-model'>{'registerRowModel' in (api as unknown as Record<string, unknown>) ? 'yes' : 'no'}</span>
+		</div>
+	);
+};
+
 describe('React Adapter (v2 API and Architecture)', () => {
 	it('should provide context and support selector hooks', () => {
 		const store = new GridStore<TestRow>({
@@ -83,6 +94,22 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(screen.getByTestId('data-version').textContent).toBe('3');
 
 		controller.dispose();
+	});
+
+	it('should expose a frozen public API facade instead of the mutable store internals', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		render(
+			<GridProvider store={store}>
+				<ApiSurfaceInspector />
+			</GridProvider>
+		);
+
+		expect(screen.getByTestId('api-frozen').textContent).toBe('yes');
+		expect(screen.getByTestId('api-engine').textContent).toBe('no');
+		expect(screen.getByTestId('api-register-row-model').textContent).toBe('no');
 	});
 
 	it('should render custom cell renderer via PortalCell', () => {

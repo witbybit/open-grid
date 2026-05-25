@@ -98,4 +98,31 @@ export class SelectionModel {
 
 		return dirty;
 	}
+
+	public forEachDirtyCoordinateInViewport(
+		oldBounds: GridCellRangeBounds | null,
+		newBounds: GridCellRangeBounds | null,
+		viewport: GridCellRangeBounds,
+		visit: (rowIdx: number, colIdx: number) => void
+	): void {
+		if (!oldBounds && !newBounds) return;
+
+		const minRow = Math.max(viewport.minRow, Math.min(oldBounds?.minRow ?? newBounds!.minRow, newBounds?.minRow ?? oldBounds!.minRow));
+		const maxRow = Math.min(viewport.maxRow, Math.max(oldBounds?.maxRow ?? newBounds!.maxRow, newBounds?.maxRow ?? oldBounds!.maxRow));
+		const minCol = Math.max(viewport.minCol, Math.min(oldBounds?.minCol ?? newBounds!.minCol, newBounds?.minCol ?? oldBounds!.minCol));
+		const maxCol = Math.min(viewport.maxCol, Math.max(oldBounds?.maxCol ?? newBounds!.maxCol, newBounds?.maxCol ?? oldBounds!.maxCol));
+
+		if (minRow > maxRow || minCol > maxCol) return;
+
+		for (let r = minRow; r <= maxRow; r++) {
+			for (let c = minCol; c <= maxCol; c++) {
+				const inOld = !!oldBounds && r >= oldBounds.minRow && r <= oldBounds.maxRow && c >= oldBounds.minCol && c <= oldBounds.maxCol;
+				const inNew = !!newBounds && r >= newBounds.minRow && r <= newBounds.maxRow && c >= newBounds.minCol && c <= newBounds.maxCol;
+
+				if (inOld !== inNew) {
+					visit(r, c);
+				}
+			}
+		}
+	}
 }

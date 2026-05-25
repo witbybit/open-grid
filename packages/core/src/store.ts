@@ -396,20 +396,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		if (this.engine.dagEngine.hasFormula(rowId, colField)) {
 			value = this.engine.dagEngine.getFormula(rowId, colField);
 		} else {
-			const rowModel = this.getRowModel();
-			if (rowModel) {
-				const idx = rowModel.getRowIndexById(rowId);
-				if (idx !== -1) {
-					const row = rowModel.getRow(idx);
-					if (row) {
-						const col = this.getColumnDef(colField);
-						if (col && !col.valueGetter) {
-							const getter = this.engine.data['compiledGetters'].get(colField) || compilePathGetter(colField);
-							value = getter(row);
-						}
-					}
-				}
-			}
+			value = this.engine.data.getRawCellValue(rowId, colField);
 		}
 
 		return {
