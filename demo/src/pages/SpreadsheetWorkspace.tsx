@@ -23,7 +23,7 @@ function SpreadsheetWorkspaceInner({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: SpreadsheetWorkspaceProps) {
-	const store = grid.store;
+	const api = grid.api;
 	const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
 	const selectedRange = useGridKeySelector('selectedRange', (state) => state.selectedRange);
 
@@ -33,12 +33,12 @@ function SpreadsheetWorkspaceInner({
 	// Sync formula bar text with focused cell value
 	useEffect(() => {
 		if (focusedCell && !isEditingRef.current) {
-			const cellValue = store.getCellValue(focusedCell.rowId, focusedCell.colField) ?? '';
+			const cellValue = api.getCellValue(focusedCell.rowId, focusedCell.colField) ?? '';
 			setFormulaText(String(cellValue));
 		} else if (!focusedCell) {
 			setFormulaText('');
 		}
-	}, [focusedCell, store]);
+	}, [focusedCell, api]);
 
 	// Listen to cell value changes to keep formula bar in sync if active cell changes externally
 	useEffect(() => {
@@ -50,9 +50,9 @@ function SpreadsheetWorkspaceInner({
 				}
 			}
 		};
-		const unsub = store.addEventListener('cellValueChanged' as any, handleCellChanged);
+		const unsub = api.addEventListener('cellValueChanged' as any, handleCellChanged);
 		return () => unsub();
-	}, [store, focusedCell]);
+	}, [api, focusedCell]);
 
 	const handleCommitFormula = () => {
 		if (focusedCell) {
@@ -78,7 +78,7 @@ function SpreadsheetWorkspaceInner({
 		if (!selectedRange) return { count: 0, sum: 0, avg: 0 };
 		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
 		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
-		const state = store.getState();
+		const state = api.getState();
 		const startColIdx = state.columns.findIndex((c) => c.field === selectedRange.start.colField);
 		const endColIdx = state.columns.findIndex((c) => c.field === selectedRange.end.colField);
 
@@ -100,7 +100,7 @@ function SpreadsheetWorkspaceInner({
 				for (let c = minCol; c <= maxCol; c++) {
 					const field = state.columns[c].field;
 					if (field === 'id') continue;
-					const val = parseFloat(String(store.getCellValue(node.id, field))) || 0;
+					const val = parseFloat(String(api.getCellValue(node.id, field))) || 0;
 					sum += val;
 					count++;
 				}
@@ -112,7 +112,7 @@ function SpreadsheetWorkspaceInner({
 			sum,
 			avg: count > 0 ? sum / count : 0,
 		};
-	}, [selectedRange, store]);
+	}, [selectedRange, api]);
 
 	// Apply CAGR variables or Compound outcomes to selected cells
 	const handleApplyCompoundToSelection = () => {
@@ -123,7 +123,7 @@ function SpreadsheetWorkspaceInner({
 
 		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
 		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
-		const state = store.getState();
+		const state = api.getState();
 		const startColIdx = state.columns.findIndex((c) => c.field === selectedRange.start.colField);
 		const endColIdx = state.columns.findIndex((c) => c.field === selectedRange.end.colField);
 
@@ -198,13 +198,13 @@ function SpreadsheetWorkspaceInner({
 								if (e.key === 'Escape') {
 									isEditingRef.current = false;
 									if (focusedCell) {
-										setFormulaText(String(store.getCellValue(focusedCell.rowId, focusedCell.colField) ?? ''));
+										setFormulaText(String(api.getCellValue(focusedCell.rowId, focusedCell.colField) ?? ''));
 									}
 								}
 							}}
 							onBlur={handleCommitFormula}
 						/>
-						{focusedCell && formulaText !== String(store.getCellValue(focusedCell.rowId, focusedCell.colField) ?? '') && (
+						{focusedCell && formulaText !== String(api.getCellValue(focusedCell.rowId, focusedCell.colField) ?? '') && (
 							<button
 								onClick={handleCommitFormula}
 								className='px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wider text-indigo-400 border border-indigo-500/30 hover:border-indigo-500 hover:text-white rounded bg-indigo-950/20 hover:bg-indigo-900/30 transition-all shrink-0'
@@ -260,7 +260,7 @@ function SpreadsheetWorkspaceInner({
 					<div className='border-t border-slate-900/60 pt-3 mt-1 flex flex-col gap-2'>
 						<div className='flex gap-2'>
 							<button
-								onClick={() => store.dispatchEvent('sum' as any, null)} // Handled by useShowroomStores wrapper action
+								onClick={() => api.dispatchEvent('sum' as any, null)} // Handled by useShowroomStores wrapper action
 								className='flex-1 py-1.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-300 border border-slate-800 hover:border-slate-700 bg-slate-950 hover:bg-slate-900 rounded transition-all flex items-center justify-center gap-1.5'
 							>
 								Range Sum
@@ -278,10 +278,10 @@ function SpreadsheetWorkspaceInner({
 							<button
 								onClick={() => {
 									const action = 'addPercent';
-									const state = store.getState();
+									const state = api.getState();
 									const range = state.selectedRange;
 									if (range) {
-										// Trigger store logic directly via props
+										// Trigger api logic directly via props
 										{
 											const startIdx = grid.api.getRowIndexById(range.start.rowId) ?? -1;
 											const endIdx = grid.api.getRowIndexById(range.end.rowId) ?? -1;
@@ -324,7 +324,7 @@ function SpreadsheetWorkspaceInner({
 							</button>
 							<button
 								onClick={() => {
-									const state = store.getState();
+									const state = api.getState();
 									const range = state.selectedRange;
 									if (range) {
 										{

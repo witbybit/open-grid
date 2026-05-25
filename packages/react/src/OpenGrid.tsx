@@ -201,7 +201,7 @@ function OpenGridInner<TRowData = unknown>({
 	contextMenuOptions,
 	navigationOptions = {},
 }: OpenGridProps<TRowData> & { grid: GridInstance<TRowData> }) {
-	const { api, store } = grid;
+	const { store } = grid;
 	const [portals, setPortals] = useState<Map<string, PortalData<TRowData>>>(new Map());
 	const containerRef = useRef<HTMLDivElement>(null);
 	const renderEngineRef = useRef<RenderEngine | null>(null);

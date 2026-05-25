@@ -32,7 +32,7 @@ export default function CalculationsArena({
 
 	// Register premium style slots for Option Greeks & Risk
 	useEffect(() => {
-		grid.store.setState({
+		grid.api.setState({
 			styleSlots: {
 				rowClass: (row) => {
 					const r = row as PerformanceRow;
@@ -72,7 +72,7 @@ export default function CalculationsArena({
 				},
 			},
 		});
-	}, [grid.store]);
+	}, [grid.api]);
 
 	useEffect(() => {
 		const calculateTelemetry = () => {
@@ -126,7 +126,7 @@ export default function CalculationsArena({
 		// Subscribe to changes in the active grid values
 		const unsubValue = grid.api.addEventListener('cellValueChanged', calculateTelemetry);
 		return () => unsubValue();
-	}, [grid.store]);
+	}, [grid.api]);
 
 	// Visual stress metrics
 	const stressScore = useMemo(() => {

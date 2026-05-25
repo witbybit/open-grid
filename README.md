@@ -10,7 +10,7 @@ To bypass the React virtual DOM rendering bottleneck (which slows down standard 
 
 ```mermaid
 graph TD
-    A[GridStore / GridEngine] --> B[RowNode Tree]
+    A[GridApi] --> B[RowNode Tree]
     B --> C[Viewport Range Calculator]
     C --> D[Visible Row Nodes slice]
 
@@ -66,7 +66,7 @@ Here is how to quickly spin up a basic virtualized grid using React:
 
 ```tsx
 import React, { useMemo } from 'react';
-import { GridStore, ClientRowModelController, ColumnDef } from '@open-grid/core';
+import { useClient, ColumnDef } from '@open-grid/core';
 import { GridProvider, OpenGrid } from '@open-grid/react';
 
 // 1. Define your data structure
