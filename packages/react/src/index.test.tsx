@@ -10,11 +10,11 @@ import {
 	OpenGrid,
 	useGridNavigationController,
 	useGridKeySelector,
-	useGridStore,
 	useGridApi,
 	useGridSelector,
 	useClientGrid,
 } from './index.js';
+import { createGridApiFacade } from './gridApiFacade.js';
 
 // Mock ResizeObserver for jsdom environment
 class MockResizeObserver {
@@ -29,10 +29,19 @@ interface TestRow {
 	name: string;
 }
 
+function createTestGrid<TRowData>(store: GridStore<TRowData>) {
+	return {
+		store,
+		api: createGridApiFacade(store),
+	};
+}
+
 const SelectorInspector = () => {
 	const focused = useGridSelector((s) => s.focusedCell);
 	const dataVersion = useGridKeySelector('dataVersion', (s) => s.dataVersion);
-	const store = useGridStore<TestRow>();
+	const store = new GridStore<TestRow>({
+		columns: [{ field: 'name', header: 'Name', width: 100 }],
+	});
 	const api = useGridApi<TestRow>();
 
 	return (
@@ -77,8 +86,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			columns: store.getState().columns,
 		});
 
+		const grid = createTestGrid(store);
+
 		render(
-			<GridProvider store={store}>
+			<GridProvider grid={grid}>
 				<SelectorInspector />
 			</GridProvider>
 		);
@@ -110,9 +121,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 				{ field: 'name', header: 'Name', width: 100 },
 			],
 		});
+		const grid = createTestGrid(store);
 
 		render(
-			<GridProvider store={store}>
+			<GridProvider grid={grid}>
 				<ApiSurfaceInspector />
 			</GridProvider>
 		);
@@ -143,12 +155,13 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
+		const grid = createTestGrid(store);
 
 		const colDef = store.getColumnDef('name')!;
 		const node = store.getRowModel()!.getRowNode(0)!;
 
 		render(
-			<GridProvider store={store}>
+			<GridProvider grid={grid}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={false} isLoading={false} />
 			</GridProvider>
 		);
@@ -165,6 +178,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
+		const grid = createTestGrid(store);
 
 		const colDef = store.getColumnDef('name')!;
 		const node = store.getRowModel()!.getRowNode(0)!;
@@ -177,7 +191,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		render(
-			<GridProvider store={store}>
+			<GridProvider grid={grid}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
@@ -202,6 +216,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
+		const grid = createTestGrid(store);
 
 		const colDef = store.getColumnDef('name')!;
 		const node = store.getRowModel()!.getRowNode(0)!;
@@ -213,7 +228,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const rendered = render(
-			<GridProvider store={store}>
+			<GridProvider grid={grid}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
@@ -234,6 +249,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
+		const grid = createTestGrid(store);
 
 		const colDef = store.getColumnDef('name')!;
 		const node = store.getRowModel()!.getRowNode(0)!;
@@ -245,7 +261,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const rendered = render(
-			<GridProvider store={store}>
+			<GridProvider grid={grid}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
@@ -284,6 +300,8 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			columns: store.getState().columns,
 		});
 
+		const grid = createTestGrid(store);
+
 		const colDef = store.getColumnDef('name')!;
 		const node = store.getRowModel()!.getRowNode(0)!;
 
@@ -295,7 +313,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		render(
-			<GridProvider store={store}>
+			<GridProvider grid={grid}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
@@ -327,6 +345,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
+		const grid = createTestGrid(store);
 
 		const container = document.createElement('div');
 		document.body.appendChild(container);
@@ -343,7 +362,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			col: colDef,
 		});
 
-		render(<PortalManager portals={portals} store={store} />);
+		render(<PortalManager portals={portals} grid={grid} />);
 
 		expect(screen.getByTestId('portal-content').textContent).toBe('Product A');
 
@@ -359,10 +378,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			rows: [{ id: '1', name: 'Cell Content' }],
 			columns: store.getState().columns,
 		});
+		const grid = createTestGrid(store);
+
 		const onCellValueChanged = vi.fn();
 
 		const { unmount } = render(
-			<GridProvider store={store}>
+			<GridProvider grid={grid}>
 				<NavigationControllerOwner onCellValueChanged={onCellValueChanged} />
 			</GridProvider>
 		);
@@ -385,8 +406,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
+		const grid = createTestGrid(store);
 
-		const { container, unmount } = render(<OpenGrid store={store} pinLeftColumns={1} enableNavigation={true} />);
+		const { container, unmount } = render(<OpenGrid grid={grid} pinLeftColumns={1} enableNavigation={true} />);
 
 		// Verify that a div element with relative position has been rendered inside OpenGrid
 		const openGridDiv = container.firstElementChild as HTMLElement;
@@ -405,8 +427,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
+		const grid = createTestGrid(store);
 
-		const { unmount } = render(<OpenGrid store={store} enableNavigation={false} />);
+		const { unmount } = render(<OpenGrid grid={grid} enableNavigation={false} />);
 
 		expect(store.getPlugin('navigation')).toBeNull();
 
@@ -418,16 +441,21 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
+		const grid = createTestGrid(store);
+
 		const renderSpy = vi.fn();
 
 		const EqualityInspector = () => {
-			const selected = useGridSelector((state) => ({ version: state.dataVersion }), (left, right) => left.version === right.version);
+			const selected = useGridSelector(
+				(state) => ({ version: state.dataVersion }),
+				(left, right) => left.version === right.version
+			);
 			renderSpy(selected);
 			return <span data-testid='selector-version'>{selected.version}</span>;
 		};
 
 		render(
-			<GridProvider store={store}>
+			<GridProvider grid={grid}>
 				<EqualityInspector />
 			</GridProvider>
 		);

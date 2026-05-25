@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { GridProvider, ReactGridInstance } from '@open-grid/react';
+import { GridProvider, useServerGrid } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Terminal, Server, Activity, ShieldAlert, Cpu, Network, Clock } from 'lucide-react';
 
+type ServerGrid = ReturnType<typeof useServerGrid<any>>;
 interface InfiniteServerScrollProps {
-	grid: ReactGridInstance<any>;
+	grid: ServerGrid;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	pinLeftColumns?: number;
@@ -151,9 +152,9 @@ export default function InfiniteServerScroll({
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<GridProvider store={grid.store}>
+					<GridProvider grid={grid}>
 						<GridView
-							store={grid.store}
+							api={grid.api}
 							pinLeftColumns={pinLeftColumns}
 							pinRightColumns={pinRightColumns}
 							onCellValueChanged={() => {}}
@@ -194,9 +195,7 @@ export default function InfiniteServerScroll({
 							</div>
 							<div className='bg-slate-950/60 border border-slate-900 rounded-lg p-2.5 flex flex-col gap-0.5'>
 								<span className='text-[8px] text-slate-500 uppercase tracking-wider font-extrabold'>Total Capacity</span>
-								<span className='font-mono text-xs font-bold text-slate-200'>
-									{blockStats.totalRecords.toLocaleString()}
-								</span>
+								<span className='font-mono text-xs font-bold text-slate-200'>{blockStats.totalRecords.toLocaleString()}</span>
 							</div>
 						</div>
 					</div>
@@ -270,23 +269,16 @@ export default function InfiniteServerScroll({
 									</linearGradient>
 								</defs>
 								{/* Area fill */}
-								<path
-									d={`M 0,40 L ${svgPoints} L 100,40 Z`}
-									fill='url(#latencyGrad)'
-								/>
+								<path d={`M 0,40 L ${svgPoints} L 100,40 Z`} fill='url(#latencyGrad)' />
 								{/* Line */}
-								<polyline
-									fill='none'
-									stroke='#10b981'
-									strokeWidth='1.5'
-									points={svgPoints}
-								/>
+								<polyline fill='none' stroke='#10b981' strokeWidth='1.5' points={svgPoints} />
 							</svg>
 						</div>
 					</div>
 
 					<p className='text-[9px] text-slate-500 leading-relaxed font-medium mt-1'>
-						The server-side model fetches logs dynamically in chunks of 100 on-demand, caching blocks to optimize memory and network throughput.
+						The server-side model fetches logs dynamically in chunks of 100 on-demand, caching blocks to optimize memory and network
+						throughput.
 					</p>
 				</div>
 			</div>

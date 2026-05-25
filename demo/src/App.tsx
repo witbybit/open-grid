@@ -112,28 +112,28 @@ export default function App() {
 	// Active Grid Store Selector Helper
 	// --------------------------------------------------------------------------
 
-	const activeStore = useMemo(() => {
+	const activeGrid = useMemo(() => {
 		switch (activePage) {
 			case 'perf':
-				return perfGrid.store;
+				return perfGrid;
 			case 'server':
-				return serverGrid.store;
+				return serverGrid;
 			case 'ranges':
-				return spreadsheetGrid.store;
+				return spreadsheetGrid;
 			case 'editors':
-				return customGrid.store;
+				return customGrid;
 			case 'layout':
-				return layoutGrid.store;
+				return layoutGrid;
 			case 'skins':
-				return skinsGrid.store;
+				return skinsGrid;
 			case 'dashboard':
-				return dashboardGrid.store;
+				return dashboardGrid;
 			case 'gantt':
-				return ganttGrid.store;
+				return ganttGrid;
 			default:
-				return perfGrid.store;
+				return perfGrid;
 		}
-	}, [activePage, perfGrid.store, serverGrid.store, spreadsheetGrid.store, customGrid.store, layoutGrid.store, skinsGrid.store, dashboardGrid.store, ganttGrid.store]);
+	}, [activePage, perfGrid, serverGrid, spreadsheetGrid, customGrid, layoutGrid, skinsGrid, dashboardGrid, ganttGrid]);
 
 	// Apply filter and sort models to the active store when they change
 	const sortModel = useMemo<SortModel>(() => [{ colId: sortField, sort: sortDirection }], [sortField, sortDirection]);
@@ -143,12 +143,12 @@ export default function App() {
 	);
 
 	useEffect(() => {
-		activeStore.setSortModel(sortModel);
-	}, [activeStore, sortModel]);
+		activeGrid.api.setSortModel(sortModel);
+	}, [activeGrid.api, sortModel]);
 
 	useEffect(() => {
-		activeStore.setFilterModel(filterModel);
-	}, [activeStore, filterModel]);
+		activeGrid.api.setFilterModel(filterModel);
+	}, [activeGrid.api, filterModel]);
 
 	return (
 		<div className='flex flex-col h-full w-full bg-slate-950 text-slate-100 p-6 box-border overflow-hidden select-none font-sans'>
@@ -293,7 +293,7 @@ export default function App() {
 				{/* COLUMN C: PRESERVED RIGHT-SIDE CONTROLS SIDEBAR */}
 				<ShowroomRightSidebar
 					rightSidebarCollapsed={rightSidebarCollapsed}
-					activeStore={activeStore}
+					activeGrid={activeGrid}
 					pinLeftColumns={pinLeftColumns}
 					setPinLeftColumns={setPinLeftColumns}
 					pinRightColumns={pinRightColumns}
@@ -311,14 +311,6 @@ export default function App() {
 					setEditTrigger={setEditTrigger}
 					arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 					setArrowKeyNavigationEdit={setArrowKeyNavigationEdit}
-					perfGrid={perfGrid}
-					serverGrid={serverGrid}
-					spreadsheetGrid={spreadsheetGrid}
-					customGrid={customGrid}
-					layoutGrid={layoutGrid}
-					skinsGrid={skinsGrid}
-					dashboardGrid={dashboardGrid}
-					ganttGrid={ganttGrid}
 				/>
 			</div>
 		</div>

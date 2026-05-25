@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { GridProvider, ReactGridInstance, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Sparkles, Clock, Users, Zap, RefreshCw, Layers, CheckSquare, TrendingUp } from 'lucide-react';
 
@@ -13,8 +13,10 @@ export interface GanttRow {
 	status: 'Done' | 'In Progress' | 'Pending' | 'Blocked';
 }
 
+type ClientGrid = ReturnType<typeof useClientGrid<GanttRow>>;
+
 interface GanttSchedulingWorkspaceProps {
-	grid: ReactGridInstance<GanttRow>;
+	grid: ClientGrid;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -178,7 +180,7 @@ function GanttSchedulingWorkspaceInner({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						store={grid.store}
+						api={grid.api}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						onCellValueChanged={onCellValueChanged}
@@ -295,7 +297,7 @@ function GanttSchedulingWorkspaceInner({
 
 export default function GanttSchedulingWorkspace(props: GanttSchedulingWorkspaceProps) {
 	return (
-		<GridProvider store={props.grid.store}>
+		<GridProvider grid={props.grid}>
 			<GanttSchedulingWorkspaceInner {...props} />
 		</GridProvider>
 	);

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridProvider, ReactGridInstance, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
 import { CustomShowcaseRow, GridView } from '../components/GridShared';
 import { ShieldCheck, BarChart3, Star, AlertTriangle, Play, RefreshCw, Gauge } from 'lucide-react';
 
+type ClientGrid = ReturnType<typeof useClientGrid<CustomShowcaseRow>>;
+
 interface CustomEditorRendererProps {
-	grid: ReactGridInstance<CustomShowcaseRow>;
+	grid: ClientGrid;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -171,7 +173,7 @@ function CustomEditorRendererInner({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						store={grid.store}
+						api={grid.api}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						onCellValueChanged={onCellValueChanged}
@@ -321,7 +323,7 @@ function CustomEditorRendererInner({
 
 export default function CustomEditorRenderer({ grid, ...props }: CustomEditorRendererProps) {
 	return (
-		<GridProvider store={grid.store}>
+		<GridProvider grid={grid}>
 			<CustomEditorRendererInner grid={grid} {...props} />
 		</GridProvider>
 	);

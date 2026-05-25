@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridProvider, ReactGridInstance } from '@open-grid/react';
+import { GridProvider, useClientGrid } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Activity, ShieldAlert, BadgePercent, TrendingUp, Layers } from 'lucide-react';
 
+type ClientGrid = ReturnType<typeof useClientGrid<PerformanceRow>>;
 interface CalculationsArenaProps {
-	grid: ReactGridInstance<PerformanceRow>;
+	grid: ClientGrid;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -149,9 +150,9 @@ export default function CalculationsArena({
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<GridProvider store={grid.store}>
+					<GridProvider grid={grid}>
 						<GridView
-							store={grid.store}
+							api={grid.api}
 							pinLeftColumns={pinLeftColumns}
 							pinRightColumns={pinRightColumns}
 							onCellValueChanged={onCellValueChanged}

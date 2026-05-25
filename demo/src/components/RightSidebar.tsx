@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GridProvider, useGridKeySelector, type GridStore } from '@open-grid/react';
+import { GridApi, GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
 import { TableProperties, Terminal } from 'lucide-react';
 
 // ============================================================================
@@ -36,9 +36,10 @@ const StateInspectorContent = () => {
 // StateInspector (Exported Wrapper to safely provide Provider context)
 // ============================================================================
 
-export const StateInspector = React.memo(({ store }: { store: GridStore<any> }) => {
+type ClientGrid = ReturnType<typeof useClientGrid<any>>;
+export const StateInspector = React.memo(({ grid }: { grid: ClientGrid }) => {
 	return (
-		<GridProvider store={store}>
+		<GridProvider grid={grid}>
 			<StateInspectorContent />
 		</GridProvider>
 	);
@@ -51,10 +52,10 @@ StateInspector.displayName = 'StateInspector';
 // ============================================================================
 
 interface LiveEventLogPanelProps {
-	store: GridStore<any>;
+	api: GridApi<any>;
 }
 
-export const LiveEventLogPanel = React.memo(({ store }: LiveEventLogPanelProps) => {
+export const LiveEventLogPanel = React.memo(({ api }: LiveEventLogPanelProps) => {
 	const [eventLogs, setEventLogs] = useState<string[]>([]);
 
 	useEffect(() => {
@@ -68,27 +69,27 @@ export const LiveEventLogPanel = React.memo(({ store }: LiveEventLogPanelProps) 
 			setEventLogs((prev) => [msg, ...prev].slice(0, 4));
 		};
 
-		const unsubValue = store.addEventListener('cellValueChanged', (e) => {
+		const unsubValue = api.addEventListener('cellValueChanged', (e) => {
 			addLog(formatLog('cellValueChanged', e.payload));
 		});
 
-		const unsubResize = store.addEventListener('columnResized', (e) => {
+		const unsubResize = api.addEventListener('columnResized', (e) => {
 			addLog(formatLog('columnResized', e.payload));
 		});
 
-		const unsubFocus = store.addEventListener('focusChanged', (e) => {
+		const unsubFocus = api.addEventListener('focusChanged', (e) => {
 			addLog(formatLog('focusChanged', e.payload));
 		});
 
-		const unsubSelect = store.addEventListener('selectionChanged', (e) => {
+		const unsubSelect = api.addEventListener('selectionChanged', (e) => {
 			addLog(formatLog('selectionChanged', e.payload));
 		});
 
-		const unsubSort = store.addEventListener('sortChanged', (e) => {
+		const unsubSort = api.addEventListener('sortChanged', (e) => {
 			addLog(formatLog('sortChanged', e.payload));
 		});
 
-		const unsubFilter = store.addEventListener('filterChanged', (e) => {
+		const unsubFilter = api.addEventListener('filterChanged', (e) => {
 			addLog(formatLog('filterChanged', e.payload));
 		});
 
@@ -100,7 +101,7 @@ export const LiveEventLogPanel = React.memo(({ store }: LiveEventLogPanelProps) 
 			unsubSort();
 			unsubFilter();
 		};
-	}, [store]);
+	}, [api]);
 
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0 glass-card'>

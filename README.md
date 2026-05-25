@@ -39,14 +39,14 @@ graph TD
 
 Open Grid comes equipped with an extensive suite of built-in features designed for advanced spreadsheet development:
 
-*   **High-Performance Virtualization**: Virtualizes both rows and columns dynamically, yielding standard 60 FPS performance even for massive datasets with 100k+ rows and 1,000+ columns.
-*   **Sticky Lanes (Pinning)**: Sticky pinning for left/right columns and top/bottom rows with floating headers and scroll boundaries.
-*   **Excel-like Selections & Drag-to-Fill**: Features interactive multi-range cell selection and a dynamic Excel-like purple dashed border drag-to-fill handle with real-time selection telemetry (Sum, Count, Average).
-*   **Reactive Formula DAG Engine**: Scoped spreadsheet-style formulas using `[rowId:columnField]` references, arithmetic operators, and `SUM`, `AVERAGE`, `MIN`, and `MAX`, with dependency invalidation and cached lazy evaluation.
-*   **Command History (Undo / Redo)**: Seamless core state journaling enabling unlimited undo/redo capability across cell mutations and updates.
-*   **Flexible Row Models**: In-memory `ClientRowModel` (ideal for instant manipulation) vs. asynchronous chunk-paginated `ServerRowModel` with built-in loading shimmer/skeleton state trackers.
-*   **Dynamic Custom CSS Styling Slots**: Custom styling hooks (`rowClass`, `cellClass`, `headerCellClass`) that allow granular styling control on cell-by-cell or row-by-row bases.
-*   **Premium Glassmorphism Context Menu**: A customizable, visually stunning context menu plugin offering instant spreadsheet control desks.
+- **High-Performance Virtualization**: Virtualizes both rows and columns dynamically, yielding standard 60 FPS performance even for massive datasets with 100k+ rows and 1,000+ columns.
+- **Sticky Lanes (Pinning)**: Sticky pinning for left/right columns and top/bottom rows with floating headers and scroll boundaries.
+- **Excel-like Selections & Drag-to-Fill**: Features interactive multi-range cell selection and a dynamic Excel-like purple dashed border drag-to-fill handle with real-time selection telemetry (Sum, Count, Average).
+- **Reactive Formula DAG Engine**: Scoped spreadsheet-style formulas using `[rowId:columnField]` references, arithmetic operators, and `SUM`, `AVERAGE`, `MIN`, and `MAX`, with dependency invalidation and cached lazy evaluation.
+- **Command History (Undo / Redo)**: Seamless core state journaling enabling unlimited undo/redo capability across cell mutations and updates.
+- **Flexible Row Models**: In-memory `ClientRowModel` (ideal for instant manipulation) vs. asynchronous chunk-paginated `ServerRowModel` with built-in loading shimmer/skeleton state trackers.
+- **Dynamic Custom CSS Styling Slots**: Custom styling hooks (`rowClass`, `cellClass`, `headerCellClass`) that allow granular styling control on cell-by-cell or row-by-row bases.
+- **Premium Glassmorphism Context Menu**: A customizable, visually stunning context menu plugin offering instant spreadsheet control desks.
 
 ---
 
@@ -71,61 +71,67 @@ import { GridProvider, OpenGrid } from '@open-grid/react';
 
 // 1. Define your data structure
 interface BookRow {
-  id: string;
-  title: string;
-  author: string;
-  price: number;
+	id: string;
+	title: string;
+	author: string;
+	price: number;
 }
 
 export default function BookInventoryGrid() {
-  // 2. Set up column definitions
-  const columns = useMemo<ColumnDef<BookRow>[]>(() => [
-    { field: 'id', header: 'Asset ID', width: 100 },
-    { field: 'title', header: 'Book Title', width: 250 },
-    { field: 'author', header: 'Author', width: 180 },
-    { 
-      field: 'price', 
-      header: 'Price', 
-      width: 120,
-      valueGetter: ({ row }) => `$${row.price.toFixed(2)}`
-    }
-  ], []);
+	// 2. Set up column definitions
+	const columns = useMemo<ColumnDef<BookRow>[]>(
+		() => [
+			{ field: 'id', header: 'Asset ID', width: 100 },
+			{ field: 'title', header: 'Book Title', width: 250 },
+			{ field: 'author', header: 'Author', width: 180 },
+			{
+				field: 'price',
+				header: 'Price',
+				width: 120,
+				valueGetter: ({ row }) => `$${row.price.toFixed(2)}`,
+			},
+		],
+		[]
+	);
 
-  // 3. Define initial row records
-  const initialRows = useMemo<BookRow[]>(() => [
-    { id: 'B-101', title: 'The Pragmatic Programmer', author: 'Andy Hunt', price: 49.99 },
-    { id: 'B-102', title: 'Clean Code', author: 'Robert C. Martin', price: 42.50 },
-    { id: 'B-103', title: 'Designing Data-Intensive Applications', author: 'Martin Kleppmann', price: 54.95 }
-  ], []);
+	// 3. Define initial row records
+	const initialRows = useMemo<BookRow[]>(
+		() => [
+			{ id: 'B-101', title: 'The Pragmatic Programmer', author: 'Andy Hunt', price: 49.99 },
+			{ id: 'B-102', title: 'Clean Code', author: 'Robert C. Martin', price: 42.5 },
+			{ id: 'B-103', title: 'Designing Data-Intensive Applications', author: 'Martin Kleppmann', price: 54.95 },
+		],
+		[]
+	);
 
-  // 4. Create the core GridStore (state container)
-  const store = useMemo(() => {
-    return new GridStore<BookRow>({
-      defaultColWidth: 120,
-      defaultRowHeight: 38,
-      getRowId: (row) => row.id
-    });
-  }, []);
+	// 4. Create the core GridStore (state container)
+	const store = useMemo(() => {
+		return new GridStore<BookRow>({
+			defaultColWidth: 120,
+			defaultRowHeight: 38,
+			getRowId: (row) => row.id,
+		});
+	}, []);
 
-  // 5. Initialize the ClientRowModelController to manage in-memory records
-  const controller = useMemo(() => {
-    return new ClientRowModelController<BookRow>(store, {
-      rows: initialRows,
-      columns
-    });
-  }, [store, initialRows, columns]);
+	// 5. Initialize the ClientRowModelController to manage in-memory records
+	const controller = useMemo(() => {
+		return new ClientRowModelController<BookRow>(store, {
+			rows: initialRows,
+			columns,
+		});
+	}, [store, initialRows, columns]);
 
-  // 6. Wrap your component in a GridProvider and render the OpenGrid component
-  return (
-    <div style={{ width: '100%', height: '500px' }}>
-      <GridProvider store={store}>
-        <OpenGrid 
-          pinLeftColumns={1} // Keep ID column sticky
-          enableNavigation={true} // Enable keyboard movement
-        />
-      </GridProvider>
-    </div>
-  );
+	// 6. Wrap your component in a GridProvider and render the OpenGrid component
+	return (
+		<div style={{ width: '100%', height: '500px' }}>
+			<GridProvider grid={grid}>
+				<OpenGrid
+					pinLeftColumns={1} // Keep ID column sticky
+					enableNavigation={true} // Enable keyboard movement
+				/>
+			</GridProvider>
+		</div>
+	);
 }
 ```
 
@@ -133,25 +139,25 @@ export default function BookInventoryGrid() {
 
 ## 🛠️ Public API Reference (`GridApi`)
 
-The central `GridStore` implements the standard `GridApi` interface. This handle can be retrieved anywhere within a custom component or in your component tree using `useGridApi()` or `useGridStore()`.
+The central `GridStore` implements the standard `GridApi` interface. This handle can be retrieved anywhere within a custom component or in your component tree using `useGridApi()`.
 
 ### Core API Methods
 
-| Method | Type Signature | Description |
-| :--- | :--- | :--- |
-| **`getState`** | `() => GridState` | Retrieves the entire synchronous state snapshot. |
-| **`setState`** | `(updater: GridStateUpdater) => void` | Updates specific keys in state, triggering selective listeners. |
-| **`getCellValue`** | `(rowId: string, colField: string) => unknown` | Retrieves the calculated cell value from the value cache. |
-| **`setCellValue`** | `(rowId: string, colField: string, val: any) => void` | Mutates a cell value, registering a new history event. |
-| **`getCellState`** | `(rowId: string, colField: string) => CellState` | Retrieves the local value, computed value, and active edit state. |
-| **`setFocusedCell`** | `(rowId: string \| null, colField: string \| null) => void` | Sets active cell focus and triggers `focusChanged` event. |
-| **`setSelectedRange`** | `(start: Pointer \| null, end: Pointer \| null) => void` | Highlights a selection range bounding box. |
-| **`setColumnWidth`** | `(colField: string, width: number) => void` | Dynamically resizes a column's layout boundary. |
-| **`subscribeToKey`** | `(key: string, listener: Listener) => () => void` | Micro-subscribes selectively to a single key coordinate. |
-| **`addEventListener`** | `(type: string, cb: GridEventListener) => () => void` | Registers grid-wide action hooks (e.g. `cellValueChanged`). |
-| **`undo` / `redo`** | `() => void` | Journeys backward or forward through the cell changes transaction stack. |
-| **`fillRange`** | `(src: CellRange, target: CellRange) => void` | Extrapolates cell ranges using Excel-like series drag fills. |
-| **`batch`** | `(callback: () => void) => void` | Groups multiple transactions together, skipping intermediate paints. |
+| Method                 | Type Signature                                              | Description                                                              |
+| :--------------------- | :---------------------------------------------------------- | :----------------------------------------------------------------------- |
+| **`getState`**         | `() => GridState`                                           | Retrieves the entire synchronous state snapshot.                         |
+| **`setState`**         | `(updater: GridStateUpdater) => void`                       | Updates specific keys in state, triggering selective listeners.          |
+| **`getCellValue`**     | `(rowId: string, colField: string) => unknown`              | Retrieves the calculated cell value from the value cache.                |
+| **`setCellValue`**     | `(rowId: string, colField: string, val: any) => void`       | Mutates a cell value, registering a new history event.                   |
+| **`getCellState`**     | `(rowId: string, colField: string) => CellState`            | Retrieves the local value, computed value, and active edit state.        |
+| **`setFocusedCell`**   | `(rowId: string \| null, colField: string \| null) => void` | Sets active cell focus and triggers `focusChanged` event.                |
+| **`setSelectedRange`** | `(start: Pointer \| null, end: Pointer \| null) => void`    | Highlights a selection range bounding box.                               |
+| **`setColumnWidth`**   | `(colField: string, width: number) => void`                 | Dynamically resizes a column's layout boundary.                          |
+| **`subscribeToKey`**   | `(key: string, listener: Listener) => () => void`           | Micro-subscribes selectively to a single key coordinate.                 |
+| **`addEventListener`** | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).              |
+| **`undo` / `redo`**    | `() => void`                                                | Journeys backward or forward through the cell changes transaction stack. |
+| **`fillRange`**        | `(src: CellRange, target: CellRange) => void`               | Extrapolates cell ranges using Excel-like series drag fills.             |
+| **`batch`**            | `(callback: () => void) => void`                            | Groups multiple transactions together, skipping intermediate paints.     |
 
 ---
 
@@ -166,9 +172,9 @@ const api = useGridApi();
 
 // Grouping multiple edits ensures only a single render update executes!
 api.batch(() => {
-  api.setCellValue('S-1001', 'revenue', '150000');
-  api.setCellValue('S-1001', 'opex', '80000');
-  api.setFocusedCell('S-1001', 'revenue');
+	api.setCellValue('S-1001', 'revenue', '150000');
+	api.setCellValue('S-1001', 'opex', '80000');
+	api.setFocusedCell('S-1001', 'revenue');
 });
 ```
 
@@ -178,19 +184,19 @@ Provide standard callback predicates to apply tailored conditional classes:
 
 ```tsx
 const store = new GridStore<any>({
-  styleSlots: {
-    // Custom row classes (e.g., strike warning)
-    rowClass: (row) => {
-      return row.status === 'Inactive' ? 'bg-slate-900/50 opacity-60' : '';
-    },
-    // Tailored cell styling based on values
-    cellClass: (col, row) => {
-      if (col.field === 'price' && parseFloat(row.price) > 500) {
-        return 'text-rose-400 font-extrabold text-glow-rose bg-rose-950/10';
-      }
-      return '';
-    }
-  }
+	styleSlots: {
+		// Custom row classes (e.g., strike warning)
+		rowClass: (row) => {
+			return row.status === 'Inactive' ? 'bg-slate-900/50 opacity-60' : '';
+		},
+		// Tailored cell styling based on values
+		cellClass: (col, row) => {
+			if (col.field === 'price' && parseFloat(row.price) > 500) {
+				return 'text-rose-400 font-extrabold text-glow-rose bg-rose-950/10';
+			}
+			return '';
+		},
+	},
 });
 ```
 
@@ -203,8 +209,8 @@ const api = useGridApi();
 
 // Subscribes strictly to coordinate changes for S-1002 in column 'A'
 const unsub = api.subscribeToKey('cell:value:S-1002:A', (state) => {
-  const latestValue = api.getCellValue('S-1002', 'A');
-  console.log('Instant cell update received:', latestValue);
+	const latestValue = api.getCellValue('S-1002', 'A');
+	console.log('Instant cell update received:', latestValue);
 });
 
 // Call when dismantling listeners
@@ -226,32 +232,32 @@ import React from 'react';
 import { CellRendererProps } from '@open-grid/core';
 
 export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRendererProps<any>) => {
-  const rating = Number(value) || 0;
+	const rating = Number(value) || 0;
 
-  const handleStarClick = (starIndex: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    
-    // Mutate the cell store directly upon user clicks
-    api.setCellValue(rowId, colField, starIndex.toString());
-  };
+	const handleStarClick = (starIndex: number, e: React.MouseEvent) => {
+		e.stopPropagation();
+		e.preventDefault();
 
-  return (
-    <div className="flex items-center gap-1 select-none cursor-pointer">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button key={star} onClick={(e) => handleStarClick(star, e)}>
-          <svg
-            className={`w-4 h-4 ${star <= rating ? 'text-amber-400 fill-amber-400' : 'text-slate-650'}`}
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
-            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-          </svg>
-        </button>
-      ))}
-    </div>
-  );
+		// Mutate the cell store directly upon user clicks
+		api.setCellValue(rowId, colField, starIndex.toString());
+	};
+
+	return (
+		<div className='flex items-center gap-1 select-none cursor-pointer'>
+			{[1, 2, 3, 4, 5].map((star) => (
+				<button key={star} onClick={(e) => handleStarClick(star, e)}>
+					<svg
+						className={`w-4 h-4 ${star <= rating ? 'text-amber-400 fill-amber-400' : 'text-slate-650'}`}
+						xmlns='http://www.w3.org/2000/svg'
+						viewBox='0 0 24 24'
+						fill='currentColor'
+					>
+						<path d='M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z' />
+					</svg>
+				</button>
+			))}
+		</div>
+	);
 };
 ```
 
@@ -264,23 +270,23 @@ import React from 'react';
 import { CellEditorProps } from '@open-grid/core';
 
 export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorProps<any>) => {
-  return (
-    <select
-      autoFocus
-      value={value as string}
-      onChange={(e) => onCommit(e.target.value)} // Commit value and close edit mode
-      onMouseDown={(e) => e.stopPropagation()} // Prevent focus shifting
-      onDoubleClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onCancel(); // Cancel editing transaction
-      }}
-      className="absolute inset-0 w-full h-full px-3 text-xs bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-semibold cursor-pointer"
-    >
-      <option value="Active">Active</option>
-      <option value="Pending">Pending</option>
-      <option value="Inactive">Inactive</option>
-    </select>
-  );
+	return (
+		<select
+			autoFocus
+			value={value as string}
+			onChange={(e) => onCommit(e.target.value)} // Commit value and close edit mode
+			onMouseDown={(e) => e.stopPropagation()} // Prevent focus shifting
+			onDoubleClick={(e) => e.stopPropagation()}
+			onKeyDown={(e) => {
+				if (e.key === 'Escape') onCancel(); // Cancel editing transaction
+			}}
+			className='absolute inset-0 w-full h-full px-3 text-xs bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-semibold cursor-pointer'
+		>
+			<option value='Active'>Active</option>
+			<option value='Pending'>Pending</option>
+			<option value='Inactive'>Inactive</option>
+		</select>
+	);
 };
 ```
 

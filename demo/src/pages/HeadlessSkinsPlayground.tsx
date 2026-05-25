@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { GridProvider, ReactGridInstance } from '@open-grid/react';
+import { GridProvider, useClientGrid } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Palette, Sparkles, Terminal, ShieldAlert, Code, Copy, Check } from 'lucide-react';
 
+type ClientGrid = ReturnType<typeof useClientGrid<PerformanceRow>>;
+
 interface HeadlessSkinsPlaygroundProps {
-	grid: ReactGridInstance<PerformanceRow>;
+	grid: ClientGrid;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -378,9 +380,9 @@ export default function HeadlessSkinsPlayground({ grid, editTrigger, arrowKeyNav
 						<div className='absolute inset-0 w-full h-full pointer-events-none z-30 bg-scanlines opacity-10 border border-emerald-950/20' />
 					)}
 
-					<GridProvider store={grid.store}>
+					<GridProvider grid={grid}>
 						<GridView
-							store={grid.store}
+							api={grid.api}
 							pinLeftColumns={1}
 							pinRightColumns={1}
 							onCellValueChanged={onCellValueChanged}

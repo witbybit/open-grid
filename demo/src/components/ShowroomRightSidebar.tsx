@@ -1,18 +1,11 @@
 import React from 'react';
-import type { GridStore, ReactGridInstance } from '@open-grid/react';
+import type { GridInstance } from '@open-grid/react';
 import { StateInspector, LiveEventLogPanel } from './RightSidebar';
-import {
-	ViewportPanel,
-	SortFilterPanel,
-	ColumnOrderPanel,
-	AccessibilityPanel,
-	DeveloperPanel,
-	KeyboardShortcutsPanel,
-} from './ShowroomControls';
+import { ViewportPanel, SortFilterPanel, ColumnOrderPanel, AccessibilityPanel, DeveloperPanel, KeyboardShortcutsPanel } from './ShowroomControls';
 
 interface ShowroomRightSidebarProps {
 	rightSidebarCollapsed: boolean;
-	activeStore: GridStore<any>;
+	activeGrid: GridInstance<any>;
 	pinLeftColumns: number;
 	setPinLeftColumns: (n: number) => void;
 	pinRightColumns: number;
@@ -30,19 +23,11 @@ interface ShowroomRightSidebarProps {
 	setEditTrigger: (t: 'singleClick' | 'doubleClick') => void;
 	arrowKeyNavigationEdit: boolean;
 	setArrowKeyNavigationEdit: (b: boolean) => void;
-	perfGrid: ReactGridInstance<any>;
-	serverGrid: ReactGridInstance<any>;
-	spreadsheetGrid: ReactGridInstance<any>;
-	customGrid: ReactGridInstance<any>;
-	layoutGrid: ReactGridInstance<any>;
-	skinsGrid: ReactGridInstance<any>;
-	dashboardGrid: ReactGridInstance<any>;
-	ganttGrid: ReactGridInstance<any>;
 }
 
 export default function ShowroomRightSidebar({
 	rightSidebarCollapsed,
-	activeStore,
+	activeGrid,
 	pinLeftColumns,
 	setPinLeftColumns,
 	pinRightColumns,
@@ -60,21 +45,13 @@ export default function ShowroomRightSidebar({
 	setEditTrigger,
 	arrowKeyNavigationEdit,
 	setArrowKeyNavigationEdit,
-	perfGrid,
-	serverGrid,
-	spreadsheetGrid,
-	customGrid,
-	layoutGrid,
-	skinsGrid,
-	dashboardGrid,
-	ganttGrid,
 }: ShowroomRightSidebarProps) {
 	return (
 		<div
 			className={`${rightSidebarCollapsed ? 'w-0 p-0 border-0 overflow-hidden' : 'w-72 p-4 border border-slate-900/50'} shrink-0 flex flex-col gap-4 overflow-y-auto pl-1 glass-panel rounded-xl transition-all duration-300 ease-in-out`}
 		>
 			{/* Coordinate Inspector */}
-			<StateInspector store={activeStore} />
+			<StateInspector grid={activeGrid} />
 
 			{/* Viewport Settings Panel */}
 			<ViewportPanel
@@ -89,7 +66,7 @@ export default function ShowroomRightSidebar({
 
 			{/* Sorting and Filtering controls */}
 			<SortFilterPanel
-				activeStore={activeStore}
+				activeApi={activeGrid.api}
 				sortField={sortField}
 				setSortField={setSortField}
 				statusFilter={statusFilter}
@@ -99,7 +76,7 @@ export default function ShowroomRightSidebar({
 			/>
 
 			{/* Column reorder controls */}
-			<ColumnOrderPanel activeStore={activeStore} />
+			<ColumnOrderPanel activeApi={activeGrid.api} />
 
 			{/* Grid Accessibility panel */}
 			<AccessibilityPanel
@@ -110,20 +87,10 @@ export default function ShowroomRightSidebar({
 			/>
 
 			{/* Live core event log panel */}
-			<LiveEventLogPanel store={activeStore} />
+			<LiveEventLogPanel api={activeGrid.api} />
 
 			{/* Developer Panel */}
-			<DeveloperPanel
-				activePage={activePage}
-				perfGrid={perfGrid}
-				serverGrid={serverGrid}
-				spreadsheetGrid={spreadsheetGrid}
-				customGrid={customGrid}
-				layoutGrid={layoutGrid}
-				skinsGrid={skinsGrid}
-				dashboardGrid={dashboardGrid}
-				ganttGrid={ganttGrid}
-			/>
+			<DeveloperPanel activePage={activePage} activeGrid={activeGrid} />
 
 			{/* Keyboard Shortcuts guide */}
 			<KeyboardShortcutsPanel />

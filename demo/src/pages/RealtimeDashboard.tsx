@@ -1,22 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridProvider, ReactGridInstance } from '@open-grid/react';
+import { GridProvider, useClientGrid } from '@open-grid/react';
 import { DashboardStockRow } from '../hooks/useShowroomStores';
 import { GridView } from '../components/GridShared';
 import { TrendingUp, BarChart3, ListFilter, Activity, RefreshCw, Layers, CheckCircle2 } from 'lucide-react';
 
+type ClientGrid = ReturnType<typeof useClientGrid<DashboardStockRow>>;
 interface RealtimeDashboardProps {
-	grid: ReactGridInstance<DashboardStockRow>;
+	grid: ClientGrid;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
 }
 
-export default function RealtimeDashboard({
-	grid,
-	editTrigger,
-	arrowKeyNavigationEdit,
-	onCellValueChanged,
-}: RealtimeDashboardProps) {
+export default function RealtimeDashboard({ grid, editTrigger, arrowKeyNavigationEdit, onCellValueChanged }: RealtimeDashboardProps) {
 	// Selection stats state
 	const [stats, setStats] = useState({
 		sum: 0,
@@ -75,8 +71,8 @@ export default function RealtimeDashboard({
 						return 'bg-emerald-950/10 text-emerald-400 font-extrabold border-b border-emerald-900/20';
 					}
 					return 'font-semibold text-slate-400';
-				}
-			}
+				},
+			},
 		});
 	}, [grid.api]);
 
@@ -215,7 +211,7 @@ export default function RealtimeDashboard({
 		});
 
 		const startX = padding;
-		const endX = padding + (prices.length - 1) / (prices.length - 1) * (width - padding * 2);
+		const endX = padding + ((prices.length - 1) / (prices.length - 1)) * (width - padding * 2);
 		const bottomY = height - padding;
 
 		return `M ${startX},${bottomY} L ${points.join(' L ')} L ${endX},${bottomY} Z`;
@@ -264,9 +260,9 @@ export default function RealtimeDashboard({
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<GridProvider store={grid.store}>
+					<GridProvider grid={grid}>
 						<GridView
-							store={grid.store}
+							api={grid.api}
 							pinLeftColumns={1}
 							pinRightColumns={1}
 							onCellValueChanged={onCellValueChanged}
@@ -295,7 +291,9 @@ export default function RealtimeDashboard({
 						<div className='grid grid-cols-2 gap-2 mt-1'>
 							{/* KPI Card 1: Sum */}
 							<div className='p-2.5 bg-slate-950 border border-slate-850 hover:border-purple-500/50 rounded-lg flex flex-col transition-all duration-300 group shadow-md'>
-								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-purple-400 transition-colors'>Range Sum</span>
+								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-purple-400 transition-colors'>
+									Range Sum
+								</span>
 								<span className='text-xs font-extrabold text-purple-400 text-glow-purple mt-1'>
 									{stats.sum.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
 								</span>
@@ -303,7 +301,9 @@ export default function RealtimeDashboard({
 
 							{/* KPI Card 2: Avg */}
 							<div className='p-2.5 bg-slate-950 border border-slate-850 hover:border-indigo-500/50 rounded-lg flex flex-col transition-all duration-300 group shadow-md'>
-								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-indigo-400 transition-colors'>Average</span>
+								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-indigo-400 transition-colors'>
+									Average
+								</span>
 								<span className='text-xs font-extrabold text-indigo-400 text-glow-indigo mt-1'>
 									{stats.avg.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
 								</span>
@@ -311,7 +311,9 @@ export default function RealtimeDashboard({
 
 							{/* KPI Card 3: Min */}
 							<div className='p-2.5 bg-slate-950 border border-slate-850 hover:border-emerald-500/50 rounded-lg flex flex-col transition-all duration-300 group shadow-md'>
-								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-emerald-400 transition-colors'>Min Value</span>
+								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-emerald-400 transition-colors'>
+									Min Value
+								</span>
 								<span className='text-xs font-extrabold text-emerald-400 text-glow-emerald mt-1'>
 									{stats.min.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
 								</span>
@@ -319,7 +321,9 @@ export default function RealtimeDashboard({
 
 							{/* KPI Card 4: Max */}
 							<div className='p-2.5 bg-slate-950 border border-slate-850 hover:border-pink-500/50 rounded-lg flex flex-col transition-all duration-300 group shadow-md'>
-								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-pink-400 transition-colors'>Max Value</span>
+								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-pink-400 transition-colors'>
+									Max Value
+								</span>
 								<span className='text-xs font-extrabold text-pink-400 text-glow-pink mt-1'>
 									{stats.max.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
 								</span>
@@ -328,9 +332,7 @@ export default function RealtimeDashboard({
 							{/* Count */}
 							<div className='col-span-2 p-2.5 bg-slate-950/80 border border-slate-900 hover:border-slate-800 rounded-lg flex items-center justify-between transition-all shadow-inner mt-0.5'>
 								<span className='text-[8px] text-slate-500 font-bold uppercase tracking-wider'>Highlighted Capacity</span>
-								<span className='text-[10px] font-mono font-bold text-slate-350'>
-									{stats.count} cells active
-								</span>
+								<span className='text-[10px] font-mono font-bold text-slate-350'>{stats.count} cells active</span>
 							</div>
 						</div>
 					)}
@@ -360,11 +362,11 @@ export default function RealtimeDashboard({
 										<stop offset='100%' stopColor='#6366f1' stopOpacity='0.0' />
 									</linearGradient>
 									{/* Stroke glow */}
-									<filter id="svgGlow" x="-20%" y="-20%" width="140%" height="140%">
-										<feGaussianBlur stdDeviation="3.5" result="blur" />
+									<filter id='svgGlow' x='-20%' y='-20%' width='140%' height='140%'>
+										<feGaussianBlur stdDeviation='3.5' result='blur' />
 										<feMerge>
-											<feMergeNode in="blur" />
-											<feMergeNode in="SourceGraphic" />
+											<feMergeNode in='blur' />
+											<feMergeNode in='SourceGraphic' />
 										</feMerge>
 									</filter>
 								</defs>
@@ -378,7 +380,14 @@ export default function RealtimeDashboard({
 								<path d={svgAreaPath} fill='url(#areaGrad)' className='transition-all duration-300 ease-out' />
 
 								{/* Line Path with Glow */}
-								<path d={svgPath} fill='none' stroke='#10b981' strokeWidth='2' filter="url(#svgGlow)" className='transition-all duration-300 ease-out' />
+								<path
+									d={svgPath}
+									fill='none'
+									stroke='#10b981'
+									strokeWidth='2'
+									filter='url(#svgGlow)'
+									className='transition-all duration-300 ease-out'
+								/>
 
 								{/* Interactive Nodes */}
 								{prices.map((price, idx) => {
@@ -395,7 +404,9 @@ export default function RealtimeDashboard({
 											r='4'
 											className='fill-slate-950 stroke-emerald-400 stroke-2 hover:r-6 cursor-help transition-all duration-300'
 										>
-											<title>{tickers[idx]}: ${price.toFixed(2)}</title>
+											<title>
+												{tickers[idx]}: ${price.toFixed(2)}
+											</title>
 										</circle>
 									);
 								})}
@@ -424,17 +435,14 @@ export default function RealtimeDashboard({
 							</div>
 						) : (
 							eventLogs.map((log, i) => {
-								const cardColor = 
-									log.type === 'edit' 
-										? 'border-emerald-500/20 bg-emerald-950/5 text-emerald-400' 
-										: log.type === 'selection' 
-										? 'border-purple-500/20 bg-purple-950/5 text-purple-400' 
-										: 'border-slate-850 bg-slate-950/50 text-slate-350';
+								const cardColor =
+									log.type === 'edit'
+										? 'border-emerald-500/20 bg-emerald-950/5 text-emerald-400'
+										: log.type === 'selection'
+											? 'border-purple-500/20 bg-purple-950/5 text-purple-400'
+											: 'border-slate-850 bg-slate-950/50 text-slate-350';
 								return (
-									<div 
-										key={i} 
-										className={`p-2 border rounded-lg flex items-start gap-2.5 transition-all shadow-sm ${cardColor}`}
-									>
+									<div key={i} className={`p-2 border rounded-lg flex items-start gap-2.5 transition-all shadow-sm ${cardColor}`}>
 										<span className='text-[8px] text-slate-500 font-bold shrink-0 mt-0.5'>{log.time}</span>
 										<span className='break-all flex-1 font-semibold leading-normal'>{log.msg}</span>
 									</div>

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useGridStore, OpenGrid, CellRendererProps, CellEditorProps, GridStore } from '@open-grid/react';
+import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, useGridApi } from '@open-grid/react';
 
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
@@ -327,7 +327,7 @@ export const LatencyRenderer = ({ value }: CellRendererProps<any>) => {
 // ============================================================================
 
 export interface GridViewProps {
-	store?: GridStore<any>;
+	api?: GridApi<any>;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 	pinTopRows?: number;
@@ -341,7 +341,7 @@ export interface GridViewProps {
 }
 
 export function GridView({
-	store,
+	api,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 	pinTopRows = 0,
@@ -354,24 +354,24 @@ export function GridView({
 	className = '',
 }: GridViewProps) {
 	// Resolve activeStore using either prop or React context hook, handling errors gracefully
-	let activeStore: GridStore<any>;
+	let activeApi: GridApi<any>;
 	try {
-		const contextStore = useGridStore<any>();
-		activeStore = store || contextStore;
+		const contextApi = useGridApi<any>();
+		activeApi = api || contextApi;
 	} catch (e) {
-		if (store) {
-			activeStore = store;
+		if (api) {
+			activeApi = api;
 		} else {
 			throw e;
 		}
 	}
 
 	useEffect(() => {
-		activeStore.setState({
+		activeApi.setState({
 			rowHeights: rowHeights ?? {},
 			defaultRowHeight: defaultHeight ?? 38,
 		});
-	}, [activeStore, rowHeights, defaultHeight]);
+	}, [activeApi, rowHeights, defaultHeight]);
 
 	return (
 		<div className={`w-full h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative ${className}`}>

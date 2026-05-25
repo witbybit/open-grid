@@ -7,10 +7,9 @@ export {
 	useGridKeySelector,
 	useGridKeySelectorWithEquality,
 	useGridNavigationController,
-	useGridStore,
 } from './OpenGrid.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
-export { useClientGrid, useServerGrid, type ReactGridInstance } from './useGrid.js';
+export { useClientGrid, useServerGrid, type GridInstance } from './useGrid.js';
 
 export type {
 	ColumnDef,
@@ -24,6 +23,5 @@ export type {
 	GridStateUpdater,
 	ClientGridOptions,
 	ServerGridOptions,
-	GridStore,
 	FilterModelItem,
 } from './types.js';

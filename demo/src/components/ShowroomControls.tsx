@@ -1,18 +1,6 @@
 import React from 'react';
-import {
-	Zap,
-	Filter,
-	ArrowDownAZ,
-	ArrowUpAZ,
-	Keyboard,
-	Layers,
-	HelpCircle,
-	RefreshCw,
-	GripVertical,
-	MoveLeft,
-	MoveRight,
-} from 'lucide-react';
-import type { GridStore, ReactGridInstance } from '@open-grid/react';
+import { Zap, Filter, ArrowDownAZ, ArrowUpAZ, Keyboard, Layers, HelpCircle, RefreshCw, GripVertical, MoveLeft, MoveRight } from 'lucide-react';
+import type { GridApi, GridInstance } from '@open-grid/react';
 import { LatencyProfiler } from './GridShared';
 
 // ============================================================================
@@ -83,9 +71,7 @@ export function ViewportPanel({
 						/>
 						<div className='flex flex-col'>
 							<span className='text-[11px] font-bold text-slate-200 leading-tight'>1,000+ Column Scale</span>
-							<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>
-								Enable 1,000 extra dynamically-evaluated columns
-							</span>
+							<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>Enable 1,000 extra dynamically-evaluated columns</span>
 						</div>
 					</label>
 				)}
@@ -98,7 +84,7 @@ export function ViewportPanel({
 // 2. Sort & Filter Panel
 // ============================================================================
 interface SortFilterPanelProps {
-	activeStore: GridStore<any>;
+	activeApi: GridApi<any>;
 	sortField: string;
 	setSortField: (val: string) => void;
 	statusFilter: 'All' | 'Active' | 'Pending' | 'Inactive';
@@ -108,7 +94,7 @@ interface SortFilterPanelProps {
 }
 
 export function SortFilterPanel({
-	activeStore,
+	activeApi,
 	sortField,
 	setSortField,
 	statusFilter,
@@ -116,7 +102,7 @@ export function SortFilterPanel({
 	sortDirection,
 	setSortDirection,
 }: SortFilterPanelProps) {
-	const cols = activeStore.getState().columns || [];
+	const cols = activeApi.getState().columns || [];
 
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
@@ -188,23 +174,23 @@ export function SortFilterPanel({
 // 3. Column Order Panel
 // ============================================================================
 interface ColumnOrderPanelProps {
-	activeStore: GridStore<any>;
+	activeApi: GridApi<any>;
 }
 
-export function ColumnOrderPanel({ activeStore }: ColumnOrderPanelProps) {
-	const [state, setState] = React.useState(() => activeStore.getState());
-	const [selectedField, setSelectedField] = React.useState(() => activeStore.getState().columns[0]?.field ?? '');
+export function ColumnOrderPanel({ activeApi }: ColumnOrderPanelProps) {
+	const [state, setState] = React.useState(() => activeApi.getState());
+	const [selectedField, setSelectedField] = React.useState(() => activeApi.getState().columns[0]?.field ?? '');
 
 	React.useEffect(() => {
-		setState(activeStore.getState());
-		setSelectedField(activeStore.getState().columns[0]?.field ?? '');
-		return activeStore.subscribe((nextState) => {
+		setState(activeApi.getState());
+		setSelectedField(activeApi.getState().columns[0]?.field ?? '');
+		return activeApi.subscribe((nextState) => {
 			setState(nextState);
 			setSelectedField((currentField) =>
-				nextState.columns.some((column) => column.field === currentField) ? currentField : nextState.columns[0]?.field ?? ''
+				nextState.columns.some((column) => column.field === currentField) ? currentField : (nextState.columns[0]?.field ?? '')
 			);
 		});
-	}, [activeStore]);
+	}, [activeApi]);
 
 	const columns = state.columns || [];
 	const selectedIndex = columns.findIndex((column) => column.field === selectedField);
@@ -213,7 +199,7 @@ export function ColumnOrderPanel({ activeStore }: ColumnOrderPanelProps) {
 
 	const moveSelected = (delta: -1 | 1) => {
 		if (!canMoveSelected || !selectedColumn) return;
-		activeStore.moveColumn(selectedColumn.field, selectedIndex + delta);
+		activeApi.moveColumn(selectedColumn.field, selectedIndex + delta);
 	};
 
 	return (
@@ -227,7 +213,7 @@ export function ColumnOrderPanel({ activeStore }: ColumnOrderPanelProps) {
 				<input
 					type='checkbox'
 					checked={state.enableColumnReorder}
-					onChange={(e) => activeStore.setColumnReorderEnabled(e.target.checked)}
+					onChange={(e) => activeApi.setColumnReorderEnabled(e.target.checked)}
 					className='rounded border-slate-800 text-purple-600 focus:ring-purple-500/20 w-3 h-3 bg-slate-950 cursor-pointer'
 				/>
 				<div className='flex flex-col'>
@@ -282,12 +268,7 @@ interface AccessibilityPanelProps {
 	setArrowKeyNavigationEdit: (val: boolean) => void;
 }
 
-export function AccessibilityPanel({
-	editTrigger,
-	setEditTrigger,
-	arrowKeyNavigationEdit,
-	setArrowKeyNavigationEdit,
-}: AccessibilityPanelProps) {
+export function AccessibilityPanel({ editTrigger, setEditTrigger, arrowKeyNavigationEdit, setArrowKeyNavigationEdit }: AccessibilityPanelProps) {
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
 			<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
@@ -317,9 +298,7 @@ export function AccessibilityPanel({
 					/>
 					<div className='flex flex-col'>
 						<span className='text-[11px] font-bold text-slate-200 leading-tight'>Arrow Key Auto-Edit</span>
-						<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>
-							Auto-open cell in edit state when navigating
-						</span>
+						<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>Auto-open cell in edit state when navigating</span>
 					</div>
 				</label>
 			</div>
@@ -332,27 +311,10 @@ export function AccessibilityPanel({
 // ============================================================================
 interface DeveloperPanelProps {
 	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
-	perfGrid: ReactGridInstance<any>;
-	serverGrid: ReactGridInstance<any>;
-	spreadsheetGrid: ReactGridInstance<any>;
-	customGrid: ReactGridInstance<any>;
-	layoutGrid: ReactGridInstance<any>;
-	skinsGrid: ReactGridInstance<any>;
-	dashboardGrid: ReactGridInstance<any>;
-	ganttGrid: ReactGridInstance<any>;
+	activeGrid: GridInstance<any>;
 }
 
-export function DeveloperPanel({
-	activePage,
-	perfGrid,
-	serverGrid,
-	spreadsheetGrid,
-	customGrid,
-	layoutGrid,
-	skinsGrid,
-	dashboardGrid,
-	ganttGrid,
-}: DeveloperPanelProps) {
+export function DeveloperPanel({ activePage, activeGrid }: DeveloperPanelProps) {
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
 			<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
@@ -365,7 +327,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							const targetGrid = activePage === 'perf' ? perfGrid : layoutGrid;
+							const targetGrid = activeGrid;
 							targetGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
@@ -382,7 +344,8 @@ export function DeveloperPanel({
 						Reset Prices to Zero
 					</button>
 					<div className='p-2 bg-slate-950 border border-slate-900 rounded text-[10px] text-slate-400 leading-relaxed'>
-						<strong>Calculations Side-Effect</strong>: Changing Status to <strong>Inactive</strong> programmatically sets Price and Quantity to 0 for that row!
+						<strong>Calculations Side-Effect</strong>: Changing Status to <strong>Inactive</strong> programmatically sets Price and
+						Quantity to 0 for that row!
 					</div>
 				</div>
 			) : activePage === 'server' ? (
@@ -390,7 +353,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							serverGrid.api.purgeCache();
+							activeGrid.api.purgeCache();
 							const duration = performance.now() - start;
 							LatencyProfiler.record(duration);
 						}}
@@ -400,7 +363,8 @@ export function DeveloperPanel({
 						Purge Server Block Cache
 					</button>
 					<div className='p-2 bg-slate-950 border border-slate-900 rounded text-[10px] text-slate-400 leading-relaxed'>
-						<strong>Infinite Server Blocks</strong>: Data is paginated in chunks of 100 with simulated network lag. Purging empties cache to force reloading.
+						<strong>Infinite Server Blocks</strong>: Data is paginated in chunks of 100 with simulated network lag. Purging empties cache
+						to force reloading.
 					</div>
 				</div>
 			) : activePage === 'ranges' ? (
@@ -408,7 +372,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							spreadsheetGrid.api.updateRows((rows: any[]) =>
+							activeGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									A: '0',
@@ -436,7 +400,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							customGrid.api.updateRows((rows: any[]) =>
+							activeGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									price: '50',
@@ -453,7 +417,8 @@ export function DeveloperPanel({
 						Max-Out All Metrics
 					</button>
 					<div className='p-2 bg-slate-950 border border-slate-900 rounded text-[10px] text-slate-400 leading-relaxed'>
-						<strong>Interactive Star Ratings</strong>: Simply click any of the rating star cells directly in the grid view to update them in O(1) duration!
+						<strong>Interactive Star Ratings</strong>: Simply click any of the rating star cells directly in the grid view to update them
+						in O(1) duration!
 					</div>
 				</div>
 			) : activePage === 'skins' ? (
@@ -461,7 +426,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							skinsGrid.api.updateRows((rows: any[]) =>
+							activeGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									price: '100',
@@ -478,7 +443,8 @@ export function DeveloperPanel({
 						Reset Skin Quantities
 					</button>
 					<div className='p-2 bg-slate-950 border border-slate-900 rounded text-[10px] text-slate-400 leading-relaxed'>
-						<strong>Theme Morphing</strong>: Toggle design skins in the main view pane. Style classes are injected into a scoped style block dynamically!
+						<strong>Theme Morphing</strong>: Toggle design skins in the main view pane. Style classes are injected into a scoped style
+						block dynamically!
 					</div>
 				</div>
 			) : activePage === 'gantt' ? (
@@ -486,7 +452,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							ganttGrid.api.updateRows((rows: any[]) =>
+							activeGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									progress: 0,
@@ -502,7 +468,8 @@ export function DeveloperPanel({
 						Reset Task Progress
 					</button>
 					<div className='p-2 bg-slate-950 border border-slate-900 rounded text-[10px] text-slate-400 leading-relaxed'>
-						<strong>Gantt & styleSlots</strong>: Rows are dynamically colored in O(1) time using our brand new style slots system when the task status shifts!
+						<strong>Gantt & styleSlots</strong>: Rows are dynamically colored in O(1) time using our brand new style slots system when the
+						task status shifts!
 					</div>
 				</div>
 			) : (
@@ -510,7 +477,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							dashboardGrid.api.updateRows((rows: any[]) =>
+							activeGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => {
 									if (row.id === 'AAPL') return { ...row, price: '175.50', change: '+1.2' };
 									if (row.id === 'MSFT') return { ...row, price: '420.20', change: '+0.8' };
@@ -529,7 +496,8 @@ export function DeveloperPanel({
 						Reset Stock Prices
 					</button>
 					<div className='p-2 bg-slate-950 border border-slate-900 rounded text-[10px] text-slate-400 leading-relaxed'>
-						<strong>Analytics Streamer</strong>: Edits to company prices automatically re-render the SVG area chart and recalculate math instantly!
+						<strong>Analytics Streamer</strong>: Edits to company prices automatically re-render the SVG area chart and recalculate math
+						instantly!
 					</div>
 				</div>
 			)}

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridProvider, ReactGridInstance, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
-import { Layout, Maximize2, Layers, Cpu, Compass, Sliders, CheckCircle2 } from 'lucide-react';
+import { Layout, Maximize2, Cpu, Compass, CheckCircle2 } from 'lucide-react';
 
+type DynamicLayoutGrid = ReturnType<typeof useClientGrid<PerformanceRow>>;
 interface DynamicLayoutProps {
-	grid: ReactGridInstance<PerformanceRow>;
+	grid: DynamicLayoutGrid;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	rowHeightsMap: Record<string, number>;
@@ -24,6 +25,7 @@ function DynamicLayoutInner({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: DynamicLayoutProps) {
+	const api = grid.api;
 	const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
 	const columns = useGridKeySelector('columns', (state) => state.columns);
 
@@ -37,15 +39,15 @@ function DynamicLayoutInner({
 				scrollLeft: scrollLeft ?? 0,
 			});
 		};
-		const unsub = grid.api.addEventListener('gridScrolled' as any, handleScroll);
+		const unsub = api.addEventListener('gridScrolled' as any, handleScroll);
 		return () => unsub();
-	}, [grid.api]);
+	}, [api]);
 
 	// Sizing parameters
 	const layoutStats = useMemo(() => {
 		const colsCount = columns.length;
 		const rowHeight = rowHeightsMap[compactLayout];
-		const totalRows = grid.api.getRowCount();
+		const totalRows = api.getRowCount();
 		// Simulate memory load: ~1.2KB per visible grid node
 		const estimatedMemoryKb = (totalRows * colsCount * 1.2).toFixed(1);
 
@@ -55,7 +57,7 @@ function DynamicLayoutInner({
 			totalRows,
 			estimatedMemoryKb,
 		};
-	}, [columns, compactLayout, rowHeightsMap, grid.api]);
+	}, [columns, compactLayout, rowHeightsMap, api]);
 
 	return (
 		<div className='flex flex-col xl:flex-row h-full w-full gap-5 overflow-hidden'>
@@ -77,7 +79,7 @@ function DynamicLayoutInner({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						store={grid.store}
+						api={api}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						rowHeights={{}}
@@ -202,7 +204,7 @@ function DynamicLayoutInner({
 
 export default function DynamicLayout({ grid, ...props }: DynamicLayoutProps) {
 	return (
-		<GridProvider store={grid.store}>
+		<GridProvider grid={grid}>
 			<DynamicLayoutInner grid={grid} {...props} />
 		</GridProvider>
 	);

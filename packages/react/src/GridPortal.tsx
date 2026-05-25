@@ -3,6 +3,7 @@ import { ColumnDef, GridStore, RowNode } from '@open-grid/core';
 import { createPortal } from 'react-dom';
 import { GridProvider, useGridApi } from './OpenGrid.js';
 import type { ReactNode } from 'react';
+import { GridInstance } from './useGrid.js';
 
 export interface PortalCellProps<TRowData = unknown> {
 	rowId: string;
@@ -139,15 +140,15 @@ export interface PortalData<TRowData = unknown> {
 
 export interface PortalManagerProps<TRowData = unknown> {
 	portals: Map<string, PortalData<TRowData>>;
-	store: GridStore<TRowData>;
+	grid: GridInstance<TRowData>;
 }
 
-export function PortalManager<TRowData = unknown>({ portals, store }: PortalManagerProps<TRowData>) {
+export function PortalManager<TRowData = unknown>({ portals, grid }: PortalManagerProps<TRowData>) {
 	return (
 		<>
 			{Array.from(portals.values()).map((p) => {
 				return createPortal(
-					<GridProvider store={store} key={p.cellKey}>
+					<GridProvider grid={grid} key={p.cellKey}>
 						<PortalCell<TRowData>
 							rowId={p.node.id}
 							colField={p.col.field}

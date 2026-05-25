@@ -4,7 +4,7 @@ import { ClientRowModelController, ServerRowModelController, GridStore, type Gri
 import type { ClientGridOptions, ServerGridOptions } from './types.js';
 import { createGridApiFacade } from './gridApiFacade.js';
 
-export interface ReactGridInstance<TRowData> {
+export interface GridInstance<TRowData> {
 	store: GridStore<TRowData>;
 	api: GridApi<TRowData>;
 }
@@ -16,7 +16,7 @@ function buildColumnWidths<TRowData>(columns: Array<{ field: string; width?: num
 	}, {});
 }
 
-export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): ReactGridInstance<TRowData> {
+export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridInstance<TRowData> {
 	const { rows, columns, getRowId, initialState } = options;
 
 	const initialConfigRef = useRef({ columns, getRowId, initialState });
@@ -63,7 +63,7 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): R
 	return { store, api };
 }
 
-export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): ReactGridInstance<TRowData> {
+export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): GridInstance<TRowData> {
 	const { datasource, columns, blockSize = 100, getRowId, initialState } = options;
 
 	const initialConfigRef = useRef({ columns, getRowId, initialState });

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { GridProvider, ReactGridInstance, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
 import { SpreadsheetRow, GridView } from '../components/GridShared';
 import { Calculator, Sparkles, TrendingUp, Layers, BookOpen, Sigma, RefreshCw } from 'lucide-react';
 
+type ClientGrid = ReturnType<typeof useClientGrid<SpreadsheetRow>>;
+
 interface SpreadsheetWorkspaceProps {
-	grid: ReactGridInstance<SpreadsheetRow>;
+	grid: ClientGrid;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -164,7 +166,7 @@ function SpreadsheetWorkspaceInner({
 				{/* Professional Formula Bar */}
 				<div className='bg-slate-950/80 border border-slate-900 rounded-xl p-2.5 flex items-center gap-3 shrink-0 shadow-lg relative overflow-hidden'>
 					<div className='absolute right-0 top-0 translate-x-8 -translate-y-8 w-20 h-20 bg-indigo-500/5 rounded-full blur-xl pointer-events-none' />
-					
+
 					{/* Active Cell Address Indicator */}
 					<div className='bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-slate-400 font-mono text-[10px] font-bold tracking-wider shrink-0 flex items-center gap-1.5 min-w-[100px] justify-center'>
 						<span className='w-1.5 h-1.5 rounded-full bg-indigo-500' />
@@ -173,7 +175,8 @@ function SpreadsheetWorkspaceInner({
 
 					{/* Fx Symbol Badge */}
 					<div className='text-xs font-mono font-extrabold italic text-slate-500 border-r border-slate-900 pr-3 select-none flex items-center gap-1 shrink-0'>
-						<span>f</span><span>x</span>
+						<span>f</span>
+						<span>x</span>
 					</div>
 
 					{/* Formula / Value Text Input */}
@@ -181,7 +184,9 @@ function SpreadsheetWorkspaceInner({
 						<input
 							type='text'
 							className='w-full bg-slate-900/50 hover:bg-slate-900/80 focus:bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-indigo-500 rounded px-3 py-1 text-slate-200 font-mono text-xs outline-none transition-all duration-200'
-							placeholder={focusedCell ? 'Enter value, equation, or formula, e.g. =SUM([S-1001:A],-[S-1001:B])' : 'Select a cell to enter values'}
+							placeholder={
+								focusedCell ? 'Enter value, equation, or formula, e.g. =SUM([S-1001:A],-[S-1001:B])' : 'Select a cell to enter values'
+							}
 							disabled={!focusedCell}
 							value={formulaText}
 							onChange={(e) => {
@@ -200,7 +205,7 @@ function SpreadsheetWorkspaceInner({
 							onBlur={handleCommitFormula}
 						/>
 						{focusedCell && formulaText !== String(store.getCellValue(focusedCell.rowId, focusedCell.colField) ?? '') && (
-							<button 
+							<button
 								onClick={handleCommitFormula}
 								className='px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wider text-indigo-400 border border-indigo-500/30 hover:border-indigo-500 hover:text-white rounded bg-indigo-950/20 hover:bg-indigo-900/30 transition-all shrink-0'
 							>
@@ -213,7 +218,7 @@ function SpreadsheetWorkspaceInner({
 				{/* Grid Container */}
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						store={store}
+						api={grid.api}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						onCellValueChanged={onCellValueChanged}
@@ -247,9 +252,7 @@ function SpreadsheetWorkspaceInner({
 						</div>
 						<div className='bg-slate-950/60 border border-slate-900 rounded-lg p-2 flex flex-col items-center text-center'>
 							<span className='text-[8px] text-slate-500 uppercase tracking-wider font-extrabold'>Average</span>
-							<span className='font-mono text-[11px] font-bold text-indigo-400 text-glow-indigo'>
-								{rangeTelemetry.avg.toFixed(1)}
-							</span>
+							<span className='font-mono text-[11px] font-bold text-indigo-400 text-glow-indigo'>{rangeTelemetry.avg.toFixed(1)}</span>
 						</div>
 					</div>
 
@@ -414,9 +417,7 @@ function SpreadsheetWorkspaceInner({
 						<div className='bg-slate-950/60 border border-slate-900 rounded-lg p-2.5 flex items-center justify-between mt-1'>
 							<div className='flex flex-col'>
 								<span className='text-[8px] text-slate-500 uppercase tracking-wider font-extrabold'>Future Yield (10 periods)</span>
-								<span className='font-mono text-xs font-bold text-slate-200'>
-									${calculatedCompound.toFixed(2)}
-								</span>
+								<span className='font-mono text-xs font-bold text-slate-200'>${calculatedCompound.toFixed(2)}</span>
 							</div>
 							<Sparkles className='w-5 h-5 text-emerald-400 animate-pulse' />
 						</div>
@@ -463,9 +464,7 @@ function SpreadsheetWorkspaceInner({
 						<div className='bg-slate-950/60 border border-slate-900 rounded-lg p-2.5 flex items-center justify-between'>
 							<div className='flex flex-col'>
 								<span className='text-[8px] text-slate-500 uppercase tracking-wider font-extrabold'>Required CAGR (5 periods)</span>
-								<span className='font-mono text-xs font-bold text-purple-400 text-glow-purple'>
-									{calculatedCagr.toFixed(2)}%
-								</span>
+								<span className='font-mono text-xs font-bold text-purple-400 text-glow-purple'>{calculatedCagr.toFixed(2)}%</span>
 							</div>
 							<BookOpen className='w-5 h-5 text-purple-400' />
 						</div>
@@ -479,7 +478,7 @@ function SpreadsheetWorkspaceInner({
 // Main exported wrapper to provide GridProvider context
 export default function SpreadsheetWorkspace({ grid, ...props }: SpreadsheetWorkspaceProps) {
 	return (
-		<GridProvider store={grid.store}>
+		<GridProvider grid={grid}>
 			<SpreadsheetWorkspaceInner grid={grid} {...props} />
 		</GridProvider>
 	);
