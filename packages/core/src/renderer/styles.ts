@@ -263,6 +263,30 @@ export const CORE_STYLES = `
     z-index: 60;
   }
 
+  .og-column-drag-ghost {
+    position: fixed;
+    top: 0;
+    left: 0;
+    max-width: min(260px, calc(100vw - 24px));
+    padding: 7px 11px;
+    border: 1px solid color-mix(in srgb, var(--og-focus-ring) 52%, rgba(255, 255, 255, 0.24));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--og-header-bg) 88%, var(--og-focus-ring));
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+    color: var(--og-header-text);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    line-height: 1.1;
+    overflow: hidden;
+    pointer-events: none;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    user-select: none;
+    white-space: nowrap;
+    z-index: 2147483647;
+  }
+
   .og-selection-border {
     position: absolute;
     border: 2px dashed var(--og-selection-border);

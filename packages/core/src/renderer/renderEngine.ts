@@ -64,6 +64,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private columnDragField: string | null = null;
 	private columnDropInsertionIndex = -1;
 	private columnDropIndicator: HTMLDivElement | null = null;
+	private columnDragGhost: HTMLDivElement | null = null;
 
 	// Micro-bridge for React custom renderers/editors
 	public onMountReactPortal?: (
@@ -914,10 +915,12 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			if (dragDistance < 4) return;
 			this.isColumnReordering = true;
 			this.ensureColumnDropIndicator();
+			this.ensureColumnDragGhost();
 			this.schedulePaint();
 		}
 
 		e.preventDefault();
+		this.updateColumnDragGhost(e);
 		this.updateColumnDropTarget(e);
 	};
 
@@ -956,6 +959,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		this.columnDragField = null;
 		this.columnDropInsertionIndex = -1;
 		this.removeColumnDropIndicator();
+		this.removeColumnDragGhost();
 	}
 
 	private ensureColumnDropIndicator(): void {
@@ -969,6 +973,36 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private removeColumnDropIndicator(): void {
 		this.columnDropIndicator?.remove();
 		this.columnDropIndicator = null;
+	}
+
+	private ensureColumnDragGhost(): void {
+		if (this.columnDragGhost) return;
+
+		const state = this.engine.stateManager.getState();
+		const draggedColumn = state.columns.find((col) => col.field === this.columnDragField);
+		const label = draggedColumn?.header || draggedColumn?.field || '';
+
+		this.columnDragGhost = document.createElement('div');
+		this.columnDragGhost.className = 'og-column-drag-ghost';
+		this.columnDragGhost.textContent = label;
+		document.body.appendChild(this.columnDragGhost);
+	}
+
+	private updateColumnDragGhost(e: MouseEvent): void {
+		if (!this.columnDragGhost) return;
+
+		this.columnDragGhost.style.transform = `translate3d(${e.clientX + 12}px, ${e.clientY + 12}px, 0)`;
+	}
+
+	private removeColumnDragGhost(): void {
+		this.columnDragGhost?.remove();
+		this.columnDragGhost = null;
+	}
+
+	private reattachColumnReorderOverlays(): void {
+		if (this.isColumnReordering && this.columnDropIndicator && this.overlayLayer && this.columnDropIndicator.parentNode !== this.overlayLayer) {
+			this.overlayLayer.appendChild(this.columnDropIndicator);
+		}
 	}
 
 	private updateColumnDropTarget(e: MouseEvent): void {
@@ -1005,6 +1039,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		// Clear overlay layer
 		this.overlayLayer.textContent = '';
+		this.reattachColumnReorderOverlays();
 
 		const state = this.engine.stateManager.getState();
 		const bounds = state.selectedRangeBounds;
