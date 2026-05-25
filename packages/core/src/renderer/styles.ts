@@ -203,6 +203,14 @@ export const CORE_STYLES = `
     border-right: 1px solid var(--og-cell-border);
   }
 
+  .og-cell-portal-host {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+
   .og-cell-focused {
     outline: 2px solid var(--og-focus-ring);
     outline-offset: -2px;

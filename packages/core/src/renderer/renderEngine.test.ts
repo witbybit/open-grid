@@ -57,4 +57,52 @@ describe('RenderEngine', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('releases out-of-range cells when columns shrink with right pinning enabled', () => {
+		const wideColumns = [
+			{ field: 'risk', header: 'Risk', width: 120 },
+			{ field: 'filler', header: 'Filler', width: 120 },
+			{ field: 'col_999', header: 'Col 999', width: 120 },
+		];
+		const store = new GridStore<{ id: string; risk: string; filler: string; col_999: string }>({
+			columns: wideColumns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-1', risk: 'LOW', filler: 'Filler', col_999: 'Val 999' }],
+			columns: wideColumns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine);
+		store.viewportController.pinRightColumns = 1;
+		renderer.mount(container);
+
+		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).not.toBeNull();
+
+		store.setState({ columns: [{ field: 'risk', header: 'Risk', width: 120 }] });
+		renderer.fullPaint();
+
+		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).toBeNull();
+		expect(container.querySelector('.og-cell[data-col-field="risk"]')?.textContent).toBe('LOW');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
 });

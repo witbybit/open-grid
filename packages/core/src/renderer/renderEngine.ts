@@ -76,7 +76,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		isEditing: boolean,
 		isLoading: boolean
 	) => void;
-	public onUnmountReactPortal?: (cellKey: string, container?: HTMLElement) => void;
+	public onUnmountReactPortal?: (cellKey: string, container?: HTMLElement, flushSync?: boolean) => void;
 
 	constructor(engine: GridEngine<TRowData>) {
 		this.engine = engine;
@@ -499,6 +499,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		// 1. Release cells out-of-column bounds
 		for (const [c, cell] of pooledRow.cells.entries()) {
 			if (cell) {
+				if (c >= colCount) {
+					this.releaseCell(pooledRow, c);
+					continue;
+				}
+
 				const isPinnedLeft = c < pinLeftColumns;
 				const isPinnedRight = c >= colCount - pinRightColumns;
 				const isScrollable = c >= startCol && c <= endCol;
@@ -599,21 +604,23 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously)
 			if ((col.cellRenderer || isEditing) && !isLoading) {
+				const previousPortalHost = this.getCellPortalHost(cell);
 				if (cell.dataset.cellKey !== cellKey) {
 					if (cell.dataset.cellKey && this.onUnmountReactPortal) {
-						this.onUnmountReactPortal(cell.dataset.cellKey, cell);
+						this.onUnmountReactPortal(cell.dataset.cellKey, previousPortalHost ?? cell, true);
 					}
 					// Set content empty so custom React portal doesn't clash with stale text
 					cell.textContent = '';
 					cell.dataset.cellKey = cellKey;
 				}
+				const portalHost = this.ensureCellPortalHost(cell);
 				if (this.onMountReactPortal) {
-					this.onMountReactPortal(cellKey, cell, cellValue, node, col, isEditing, isLoading);
+					this.onMountReactPortal(cellKey, portalHost, cellValue, node, col, isEditing, isLoading);
 				}
 			} else {
 				if (cell.dataset.cellKey) {
 					if (this.onUnmountReactPortal) {
-						this.onUnmountReactPortal(cell.dataset.cellKey, cell);
+						this.onUnmountReactPortal(cell.dataset.cellKey, this.getCellPortalHost(cell) ?? cell, true);
 					}
 					delete cell.dataset.cellKey;
 				}
@@ -659,6 +666,34 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 	}
 
+	private getCellPortalHost(cell: HTMLDivElement): HTMLDivElement | null {
+		for (let i = 0; i < cell.children.length; i++) {
+			const child = cell.children[i];
+			if (child instanceof HTMLDivElement && child.classList.contains('og-cell-portal-host')) {
+				return child;
+			}
+		}
+		return null;
+	}
+
+	private ensureCellPortalHost(cell: HTMLDivElement): HTMLDivElement {
+		let portalHost = this.getCellPortalHost(cell);
+		if (!portalHost) {
+			cell.textContent = '';
+			portalHost = document.createElement('div');
+			portalHost.className = 'og-cell-portal-host';
+			cell.appendChild(portalHost);
+			return portalHost;
+		}
+
+		for (const child of Array.from(cell.childNodes)) {
+			if (child !== portalHost) {
+				child.remove();
+			}
+		}
+		return portalHost;
+	}
+
 	/**
 	 * Release and return a cell element to the DOMPool.
 	 */
@@ -667,7 +702,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		if (cell) {
 			if (cell.dataset.cellKey) {
 				if (this.onUnmountReactPortal) {
-					this.onUnmountReactPortal(cell.dataset.cellKey, cell);
+					this.onUnmountReactPortal(cell.dataset.cellKey, this.getCellPortalHost(cell) ?? cell, true);
 				}
 				delete cell.dataset.cellKey;
 			} else {

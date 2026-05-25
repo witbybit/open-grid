@@ -462,6 +462,49 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		controller.dispose();
 	});
 
+	it('should not mix stale native text with custom renderer content after column topology changes', async () => {
+		const customColumns = [
+			{
+				field: 'risk',
+				header: 'Risk',
+				width: 120,
+				cellRenderer: ({ value }: { value: unknown }) => <span data-testid='risk-renderer'>Risk {String(value)}</span>,
+			},
+		];
+		const nativeColumns = [{ field: 'col_999', header: 'Col 999', width: 120 }];
+		const store = new GridStore<{ id: string; risk: string; col_999: string }>({
+			columns: customColumns,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: '1', risk: 'LOW', col_999: 'Val 999' }],
+			columns: customColumns,
+		});
+		const grid = createTestGrid(store);
+
+		const { unmount } = render(<OpenGrid grid={grid} enableNavigation={false} />);
+
+		await screen.findByText('Risk LOW');
+
+		act(() => {
+			store.setState({ columns: nativeColumns });
+		});
+
+		await screen.findByText('Val 999');
+
+		act(() => {
+			store.setState({ columns: customColumns });
+		});
+
+		await waitFor(() => {
+			expect(screen.getByTestId('risk-renderer').textContent).toBe('Risk LOW');
+			expect(screen.queryByText('Val 999')).toBeNull();
+		});
+
+		unmount();
+		controller.dispose();
+	});
+
 	it('should not register navigation when navigation is disabled', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
