@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
-import { ClientRowModelController, ColumnDef, GridStore, ServerRowModelController, CellEditorProps, CellRendererProps } from '@open-grid/core';
-import { useGridStore, OpenGrid } from '@open-grid/react';
+import { useGridStore, OpenGrid, CellRendererProps, CellEditorProps, GridStore } from '@open-grid/react';
 
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
@@ -131,20 +130,6 @@ export function generatePerformanceRows(count: number, prefix: 'R' | 'SR'): Perf
 			price: strike.toString(),
 			quantity: vol.toString(),
 			status: statuses[index % statuses.length],
-		};
-	});
-}
-
-export function generateSpreadsheetRows(count: number): SpreadsheetRow[] {
-	return Array.from({ length: count }, (_, index) => {
-		return {
-			id: `S-${1000 + index}`,
-			A: (10 + (index % 7) * 5).toString(),
-			B: (index * 3).toString(),
-			C: ((index * 2) % 15).toString(),
-			D: '100',
-			E: (Math.random() * 50).toFixed(0),
-			F: '25',
 		};
 	});
 }
@@ -291,7 +276,8 @@ export const GreeksRenderer = ({ value }: CellRendererProps<any>) => {
 	const sign = isPositive ? '+' : '';
 	return (
 		<span className={`font-mono text-xs leading-none ${colorClass}`}>
-			{sign}{valNum.toFixed(4)}
+			{sign}
+			{valNum.toFixed(4)}
 		</span>
 	);
 };
@@ -309,9 +295,7 @@ export const RiskBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 		colorClass = 'bg-emerald-950/30 border-emerald-500/25 text-emerald-400 font-medium';
 	}
 	return (
-		<span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border leading-none inline-block ${colorClass}`}>
-			{valStr}
-		</span>
+		<span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border leading-none inline-block ${colorClass}`}>{valStr}</span>
 	);
 };
 
@@ -322,7 +306,7 @@ export const ServiceBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 	else if (valStr === 'Billing') borderStyle = 'border-l-emerald-500 text-emerald-300 bg-emerald-950/10';
 	else if (valStr === 'Database') borderStyle = 'border-l-amber-500 text-amber-300 bg-amber-950/10';
 	else if (valStr === 'Cache') borderStyle = 'border-l-cyan-500 text-cyan-300 bg-cyan-950/10';
-	
+
 	return (
 		<span className={`px-2 py-0.5 rounded border border-slate-900 border-l-2 text-[10px] font-bold leading-none inline-block ${borderStyle}`}>
 			{valStr}
@@ -335,11 +319,7 @@ export const LatencyRenderer = ({ value }: CellRendererProps<any>) => {
 	let colorClass = 'text-emerald-400';
 	if (lat > 500) colorClass = 'text-rose-400 text-glow-rose font-bold';
 	else if (lat > 150) colorClass = 'text-amber-400 font-semibold';
-	return (
-		<span className={`font-mono text-xs ${colorClass}`}>
-			{lat} ms
-		</span>
-	);
+	return <span className={`font-mono text-xs ${colorClass}`}>{lat} ms</span>;
 };
 
 // ============================================================================
@@ -355,8 +335,6 @@ export interface GridViewProps {
 	rowHeights?: Record<string, number>;
 	defaultHeight?: number;
 	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
-	clientController?: ClientRowModelController<any>;
-	serverController?: ServerRowModelController<any>;
 	editTrigger?: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit?: boolean;
 	className?: string;
@@ -461,13 +439,7 @@ export const GanttTimelineRenderer = ({ row }: CellRendererProps<any>) => {
 
 	// Map status to visual HSL colors matching our beautiful neon palettes
 	const barColor =
-		status === 'Done'
-			? 'bg-emerald-500'
-			: status === 'In Progress'
-				? 'bg-indigo-500'
-				: status === 'Pending'
-					? 'bg-amber-500'
-					: 'bg-rose-500'; // Blocked
+		status === 'Done' ? 'bg-emerald-500' : status === 'In Progress' ? 'bg-indigo-500' : status === 'Pending' ? 'bg-amber-500' : 'bg-rose-500'; // Blocked
 
 	// We represent a 30-day mini-grid timeline using CSS grid
 	const startPercent = ((sprintDay - 1) / 30) * 100;
@@ -488,15 +460,15 @@ export const GanttTimelineRenderer = ({ row }: CellRendererProps<any>) => {
 				style={{
 					left: `calc(${startPercent}% * 0.9 + 2px)`,
 					width: `calc(${widthPercent}% * 0.9)`,
-					minWidth: '15px'
+					minWidth: '15px',
 				}}
 			>
 				{/* The colored background matching status */}
 				<div className={`absolute inset-0 ${barColor} opacity-20`} />
-				
+
 				{/* The inner progress indicator bar */}
 				<div className={`h-full ${barColor} transition-all duration-300`} style={{ width: `${progress}%` }} />
-				
+
 				{/* Inner text showing percentage */}
 				<span className='absolute inset-0 flex items-center justify-center text-[7px] font-extrabold text-white font-mono leading-none tracking-tighter drop-shadow-sm select-none'>
 					{progress}%

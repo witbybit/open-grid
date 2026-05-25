@@ -1,21 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridStore, ClientRowModelController } from '@open-grid/core';
-import { GridProvider } from '@open-grid/react';
+import { GridProvider, ReactGridInstance } from '@open-grid/react';
 import { DashboardStockRow } from '../hooks/useShowroomStores';
 import { GridView } from '../components/GridShared';
 import { TrendingUp, BarChart3, ListFilter, Activity, RefreshCw, Layers, CheckCircle2 } from 'lucide-react';
 
 interface RealtimeDashboardProps {
-	store: GridStore<DashboardStockRow>;
-	controller: ClientRowModelController<DashboardStockRow>;
+	grid: ReactGridInstance<DashboardStockRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
 }
 
 export default function RealtimeDashboard({
-	store,
-	controller,
+	grid,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	onCellValueChanged,
@@ -38,7 +35,7 @@ export default function RealtimeDashboard({
 
 	// Dynamic styleSlots for live-updating dashboard cells & rows
 	useEffect(() => {
-		store.setState({
+		grid.api.setState({
 			styleSlots: {
 				rowClass: (row) => {
 					const r = row as DashboardStockRow;
@@ -81,20 +78,18 @@ export default function RealtimeDashboard({
 				}
 			}
 		});
-	}, [store]);
+	}, [grid.api]);
 
 	// Hook into grid events
 	useEffect(() => {
 		const updateStatsAndChart = () => {
-			const state = store.getState();
-			const rowModel = store.getRowModel();
-			if (!rowModel) return;
+			const state = grid.api.getState();
 
 			// A. Recalculate selection math
 			const range = state.selectedRange;
 			if (range) {
-				const startIdx = rowModel.getRowIndexById(range.start.rowId);
-				const endIdx = rowModel.getRowIndexById(range.end.rowId);
+				const startIdx = grid.api.getRowIndexById(range.start.rowId) ?? -1;
+				const endIdx = grid.api.getRowIndexById(range.end.rowId) ?? -1;
 				const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 				const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 
@@ -107,14 +102,14 @@ export default function RealtimeDashboard({
 					const cols = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
 					const rowIds: string[] = [];
 					for (let i = minRow; i <= maxRow; i++) {
-						const node = rowModel.getRowNode ? rowModel.getRowNode(i) : null;
+						const node = grid.api.getRowNode(i);
 						if (node) rowIds.push(node.id);
 					}
 
 					let numericValues: number[] = [];
 					for (const rowId of rowIds) {
 						for (const col of cols) {
-							const cellVal = store.getCellValue(rowId, col);
+							const cellVal = grid.api.getCellValue(rowId, col);
 							if (cellVal !== undefined) {
 								const num = parseFloat(String(cellVal));
 								if (!Number.isNaN(num)) {
@@ -140,10 +135,10 @@ export default function RealtimeDashboard({
 			}
 
 			// B. Extract prices for live SVG Sparkline chart
-			const count = controller.getRowCount();
+			const count = grid.api.getRowCount();
 			const currentRows: DashboardStockRow[] = [];
 			for (let i = 0; i < count; i++) {
-				const r = controller.getRow(i);
+				const r = grid.api.getRow(i);
 				if (r) currentRows.push(r);
 			}
 			if (currentRows.length > 0) {
@@ -163,17 +158,17 @@ export default function RealtimeDashboard({
 		updateStatsAndChart();
 
 		// Event subscriptions
-		const unsubSelect = store.addEventListener('selectionChanged', (e) => {
+		const unsubSelect = grid.api.addEventListener('selectionChanged', (e) => {
 			updateStatsAndChart();
 			logEvent('selectionChanged', `Selected range details updated.`, 'selection');
 		});
 
-		const unsubValue = store.addEventListener('cellValueChanged', (e) => {
+		const unsubValue = grid.api.addEventListener<{ rowId: string; colField: string; value: unknown }>('cellValueChanged', (e) => {
 			updateStatsAndChart();
 			logEvent('cellValueChanged', `${e.payload.rowId}:${e.payload.colField} => ${e.payload.value}`, 'edit');
 		});
 
-		const unsubFocus = store.addEventListener('focusChanged', (e) => {
+		const unsubFocus = grid.api.addEventListener<{ rowId: string; colField: string }>('focusChanged', (e) => {
 			logEvent('focusChanged', `Cell focus: ${e.payload.rowId}:${e.payload.colField}`, 'focus');
 		});
 
@@ -182,7 +177,7 @@ export default function RealtimeDashboard({
 			unsubValue();
 			unsubFocus();
 		};
-	}, [store, controller]);
+	}, [grid.api]);
 
 	// Math to generate SVG path from price array
 	const svgPath = useMemo(() => {
@@ -228,7 +223,7 @@ export default function RealtimeDashboard({
 
 	// Simulate bulk stock volatility
 	const triggerVolatility = () => {
-		controller.updateRows((rows) =>
+		grid.api.updateRows((rows) =>
 			rows.map((row) => {
 				const priceNum = parseFloat(row.price) || 0;
 				const volatility = (Math.random() - 0.5) * 5; // up to 2.5% volatility
@@ -269,13 +264,12 @@ export default function RealtimeDashboard({
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<GridProvider store={store}>
+					<GridProvider store={grid.store}>
 						<GridView
-							store={store}
+							store={grid.store}
 							pinLeftColumns={1}
 							pinRightColumns={1}
 							onCellValueChanged={onCellValueChanged}
-							clientController={controller}
 							editTrigger={editTrigger}
 							arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 						/>

@@ -29,9 +29,6 @@ importers:
 
   demo:
     dependencies:
-      '@open-grid/core':
-        specifier: workspace:*
-        version: link:../packages/core
       '@open-grid/react':
         specifier: workspace:*
         version: link:../packages/react

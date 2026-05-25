@@ -1,23 +1,7 @@
-import React, { useState, useMemo } from 'react';
-import { GridStore, ClientRowModelController } from '@open-grid/core';
-import { GridProvider, useGridKeySelector } from '@open-grid/react';
-import {
-	GridView,
-	GanttStatusBadgeRenderer,
-	GanttStatusDropdownEditor,
-	GanttTimelineRenderer
-} from '../components/GridShared';
-import {
-	Calendar,
-	Sparkles,
-	Clock,
-	Users,
-	Zap,
-	RefreshCw,
-	Layers,
-	CheckSquare,
-	TrendingUp
-} from 'lucide-react';
+import React, { useMemo } from 'react';
+import { GridProvider, ReactGridInstance, useGridKeySelector } from '@open-grid/react';
+import { GridView } from '../components/GridShared';
+import { Sparkles, Clock, Users, Zap, RefreshCw, Layers, CheckSquare, TrendingUp } from 'lucide-react';
 
 export interface GanttRow {
 	id: string;
@@ -30,8 +14,7 @@ export interface GanttRow {
 }
 
 interface GanttSchedulingWorkspaceProps {
-	store: GridStore<GanttRow>;
-	controller: ClientRowModelController<GanttRow>;
+	grid: ReactGridInstance<GanttRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -40,8 +23,7 @@ interface GanttSchedulingWorkspaceProps {
 }
 
 function GanttSchedulingWorkspaceInner({
-	store,
-	controller,
+	grid,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	onCellValueChanged,
@@ -53,12 +35,12 @@ function GanttSchedulingWorkspaceInner({
 	// Custom Developer Style Slots Configs (The Dynamic CSS Theme Overrides!)
 	React.useEffect(() => {
 		// Hook the dynamic customizer classes directly into our core style slots!
-		store.setState({
+		grid.api.setState({
 			styleSlots: {
 				rowClass: (row) => {
 					const rowData = row as GanttRow;
 					if (!rowData) return '';
-					
+
 					// Core structural layouts alternate, but Blocked and Done rows get custom aesthetic glow borders!
 					let base = 'transition-all duration-200 border-l-2 ';
 					if (rowData.status === 'Blocked') {
@@ -89,24 +71,21 @@ function GanttSchedulingWorkspaceInner({
 						return 'bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 text-indigo-300 font-bold border-b border-indigo-900/30';
 					}
 					return 'font-semibold text-slate-400';
-				}
-			}
+				},
+			},
 		});
-	}, [store]);
+	}, [grid.api]);
 
 	// Quantitative team analytics calculations
 	const stats = useMemo(() => {
-		const rowModel = store.getRowModel();
-		if (!rowModel) return { total: 0, done: 0, progressAvg: 0, blocked: 0, totalDuration: 0 };
-		
-		const rowsCount = rowModel.getRowCount();
+		const rowsCount = grid.api.getRowCount();
 		let doneCount = 0;
 		let blockedCount = 0;
 		let progressSum = 0;
 		let durationSum = 0;
 
 		for (let i = 0; i < rowsCount; i++) {
-			const node = rowModel.getRowNode(i);
+			const node = grid.api.getRowNode(i);
 			if (node) {
 				const r = node.data as GanttRow;
 				if (r.status === 'Done') doneCount++;
@@ -123,25 +102,31 @@ function GanttSchedulingWorkspaceInner({
 			progressAvg: rowsCount > 0 ? progressSum / rowsCount : 0,
 			totalDuration: durationSum,
 		};
-	}, [store, selectedRange]);
+	}, [grid.api, selectedRange]);
 
-	// Auto-solve resource scheduling conflicts (Shifts overlap days)
 	const handleAutoSolveConflicts = () => {
 		const start = performance.now();
-		controller.updateRows((rows) => {
-			let currentDay = 1;
-			return rows.map((row) => {
-				const duration = Number(row.durationDays) || 2;
-				const updated = {
-					...row,
-					sprintDay: currentDay,
-				};
-				// Serial scheduling sequencing
-				currentDay += duration;
-				return updated;
-			});
-		});
+		const count = grid.api.getRowCount();
+
+		let currentDay = 1;
+
+		grid.api.startTransaction();
+
+		for (let i = 0; i < count; i++) {
+			const row = grid.api.getRow(i);
+			if (!row) continue;
+
+			const duration = Number(row.durationDays) || 2;
+
+			grid.api.setCellValue(row.id, 'sprintDay', currentDay);
+
+			currentDay += duration;
+		}
+
+		grid.api.endTransaction();
+
 		const durationMs = performance.now() - start;
+
 		alert(`Sprint Scheduling Overlaps Auto-Resolved! (Shifted coordinate dates sequentially in ${durationMs.toFixed(2)}ms)`);
 	};
 
@@ -151,33 +136,26 @@ function GanttSchedulingWorkspaceInner({
 			alert('Please select a range of cells using drag selection first.');
 			return;
 		}
-		const rowModel = store.getRowModel();
-		if (!rowModel) return;
 
-		const startIdx = rowModel.getRowIndexById(selectedRange.start.rowId);
-		const endIdx = rowModel.getRowIndexById(selectedRange.end.rowId);
-		
+		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? 0;
+		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? 0;
+
+		if (startIdx === -1 || endIdx === -1) return;
+
 		const minRow = Math.min(startIdx, endIdx);
 		const maxRow = Math.max(startIdx, endIdx);
 
-		const targetIds: string[] = [];
+		grid.api.startTransaction();
+
 		for (let i = minRow; i <= maxRow; i++) {
-			const node = rowModel.getRowNode(i);
-			if (node) targetIds.push(node.id);
+			const node = grid.api.getRowNode(i);
+			if (!node) continue;
+
+			grid.api.setCellValue(node.id, 'progress', 100);
+			grid.api.setCellValue(node.id, 'status', 'Done');
 		}
 
-		controller.updateRows((rows) => {
-			return rows.map((row) => {
-				if (targetIds.includes(row.id)) {
-					return {
-						...row,
-						progress: 100,
-						status: 'Done',
-					};
-				}
-				return row;
-			});
-		});
+		grid.api.endTransaction();
 	};
 
 	return (
@@ -186,13 +164,11 @@ function GanttSchedulingWorkspaceInner({
 			<div className='flex-1 flex flex-col gap-4 min-h-0 min-w-0'>
 				<div className='bg-slate-950/80 border border-slate-900 rounded-xl p-3 flex items-center justify-between shrink-0 shadow-lg relative overflow-hidden'>
 					<div className='absolute right-0 top-0 translate-x-8 -translate-y-8 w-20 h-20 bg-indigo-500/5 rounded-full blur-xl pointer-events-none' />
-					
+
 					{/* Active Drag-to-Fill telemetry */}
 					<div className='flex items-center gap-2'>
 						<span className='w-2 h-2 rounded-full bg-indigo-500 animate-pulse' />
-						<span className='text-[10px] text-slate-400 font-extrabold uppercase tracking-wider'>
-							Gantt Scheduling Arena
-						</span>
+						<span className='text-[10px] text-slate-400 font-extrabold uppercase tracking-wider'>Gantt Scheduling Arena</span>
 					</div>
 
 					<div className='text-slate-400 font-medium text-[10px] bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 font-mono flex items-center gap-1 shrink-0'>
@@ -202,11 +178,10 @@ function GanttSchedulingWorkspaceInner({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						store={store}
+						store={grid.store}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						onCellValueChanged={onCellValueChanged}
-						clientController={controller}
 						editTrigger={editTrigger}
 						arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 					/>
@@ -218,7 +193,7 @@ function GanttSchedulingWorkspaceInner({
 				{/* KPI Cards Container */}
 				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-4 glass-card relative overflow-hidden'>
 					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-indigo-600/5 rounded-full blur-2xl pointer-events-none' />
-					
+
 					<h3 className='text-[10px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5'>
 						<Clock className='w-4 h-4 text-indigo-400' />
 						Sprint Project Analytics
@@ -261,7 +236,7 @@ function GanttSchedulingWorkspaceInner({
 							<TrendingUp className='w-3.5 h-3.5 text-indigo-400' />
 							Sprint Completion Rate
 						</span>
-						
+
 						<svg className='w-24 h-24 transform -rotate-90' viewBox='0 0 100 100'>
 							<circle cx='50' cy='50' r='40' stroke='#1e293b' strokeWidth='8' fill='transparent' />
 							<circle
@@ -320,7 +295,7 @@ function GanttSchedulingWorkspaceInner({
 
 export default function GanttSchedulingWorkspace(props: GanttSchedulingWorkspaceProps) {
 	return (
-		<GridProvider store={props.store}>
+		<GridProvider store={props.grid.store}>
 			<GanttSchedulingWorkspaceInner {...props} />
 		</GridProvider>
 	);

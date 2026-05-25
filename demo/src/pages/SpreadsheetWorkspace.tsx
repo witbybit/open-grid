@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { GridStore, ClientRowModelController } from '@open-grid/core';
-import { GridProvider, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, ReactGridInstance, useGridKeySelector } from '@open-grid/react';
 import { SpreadsheetRow, GridView } from '../components/GridShared';
 import { Calculator, Sparkles, TrendingUp, Layers, BookOpen, Sigma, RefreshCw } from 'lucide-react';
 
 interface SpreadsheetWorkspaceProps {
-	store: GridStore<SpreadsheetRow>;
-	controller: ClientRowModelController<SpreadsheetRow>;
+	grid: ReactGridInstance<SpreadsheetRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -16,14 +14,14 @@ interface SpreadsheetWorkspaceProps {
 
 // Inner component that can safely use useGridKeySelector
 function SpreadsheetWorkspaceInner({
-	store,
-	controller,
+	grid,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	onCellValueChanged,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: SpreadsheetWorkspaceProps) {
+	const store = grid.store;
 	const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
 	const selectedRange = useGridKeySelector('selectedRange', (state) => state.selectedRange);
 
@@ -76,11 +74,8 @@ function SpreadsheetWorkspaceInner({
 	// Compute selection range telemetry
 	const rangeTelemetry = useMemo(() => {
 		if (!selectedRange) return { count: 0, sum: 0, avg: 0 };
-		const rowModel = store.getRowModel();
-		if (!rowModel) return { count: 0, sum: 0, avg: 0 };
-
-		const startIdx = rowModel.getRowIndexById(selectedRange.start.rowId);
-		const endIdx = rowModel.getRowIndexById(selectedRange.end.rowId);
+		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
+		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		const state = store.getState();
 		const startColIdx = state.columns.findIndex((c) => c.field === selectedRange.start.colField);
 		const endColIdx = state.columns.findIndex((c) => c.field === selectedRange.end.colField);
@@ -98,7 +93,7 @@ function SpreadsheetWorkspaceInner({
 		let sum = 0;
 
 		for (let r = minRow; r <= maxRow; r++) {
-			const node = rowModel.getRowNode ? rowModel.getRowNode(r) : null;
+			const node = grid.api.getRowNode(r);
 			if (node) {
 				for (let c = minCol; c <= maxCol; c++) {
 					const field = state.columns[c].field;
@@ -124,11 +119,8 @@ function SpreadsheetWorkspaceInner({
 			return;
 		}
 
-		const rowModel = store.getRowModel();
-		if (!rowModel) return;
-
-		const startIdx = rowModel.getRowIndexById(selectedRange.start.rowId);
-		const endIdx = rowModel.getRowIndexById(selectedRange.end.rowId);
+		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
+		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		const state = store.getState();
 		const startColIdx = state.columns.findIndex((c) => c.field === selectedRange.start.colField);
 		const endColIdx = state.columns.findIndex((c) => c.field === selectedRange.end.colField);
@@ -143,11 +135,11 @@ function SpreadsheetWorkspaceInner({
 		const cols = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
 		const rowIds: string[] = [];
 		for (let i = minRow; i <= maxRow; i++) {
-			const node = rowModel.getRowNode ? rowModel.getRowNode(i) : null;
+			const node = grid.api.getRowNode(i);
 			if (node) rowIds.push(node.id);
 		}
 
-		controller.updateRows((rows) => {
+		grid.api.updateRows((rows) => {
 			return rows.map((row) => {
 				if (rowIds.includes(row.id)) {
 					const updated = { ...row };
@@ -225,7 +217,6 @@ function SpreadsheetWorkspaceInner({
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						onCellValueChanged={onCellValueChanged}
-						clientController={controller}
 						editTrigger={editTrigger}
 						arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 					/>
@@ -266,13 +257,13 @@ function SpreadsheetWorkspaceInner({
 					<div className='border-t border-slate-900/60 pt-3 mt-1 flex flex-col gap-2'>
 						<div className='flex gap-2'>
 							<button
-								onClick={() => store.dispatchEvent('sum' as any)} // Handled by useShowroomStores wrapper action
+								onClick={() => store.dispatchEvent('sum' as any, null)} // Handled by useShowroomStores wrapper action
 								className='flex-1 py-1.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-300 border border-slate-800 hover:border-slate-700 bg-slate-950 hover:bg-slate-900 rounded transition-all flex items-center justify-center gap-1.5'
 							>
 								Range Sum
 							</button>
 							<button
-								onClick={() => controller.updateRows((rows) => rows)} // Force calculation refresh
+								onClick={() => grid.api.updateRows((rows) => rows)} // Force calculation refresh
 								className='px-2.5 py-1.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-400 border border-slate-800 hover:border-slate-750 bg-slate-950 hover:bg-slate-900 rounded transition-all flex items-center justify-center'
 								title='Recalculate Formulas'
 							>
@@ -288,10 +279,9 @@ function SpreadsheetWorkspaceInner({
 									const range = state.selectedRange;
 									if (range) {
 										// Trigger store logic directly via props
-										const rowModel = store.getRowModel();
-										if (rowModel) {
-											const startIdx = rowModel.getRowIndexById(range.start.rowId);
-											const endIdx = rowModel.getRowIndexById(range.end.rowId);
+										{
+											const startIdx = grid.api.getRowIndexById(range.start.rowId) ?? -1;
+											const endIdx = grid.api.getRowIndexById(range.end.rowId) ?? -1;
 											const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 											const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 											if (startIdx !== -1 && endIdx !== -1 && startColIdx !== -1 && endColIdx !== -1) {
@@ -302,10 +292,10 @@ function SpreadsheetWorkspaceInner({
 												const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
 												const rowIds: string[] = [];
 												for (let i = minRow; i <= maxRow; i++) {
-													const node = rowModel.getRowNode ? rowModel.getRowNode(i) : null;
+													const node = grid.api.getRowNode(i);
 													if (node) rowIds.push(node.id);
 												}
-												controller.updateRows((rows) => {
+												grid.api.updateRows((rows) => {
 													return rows.map((row) => {
 														if (rowIds.includes(row.id)) {
 															let nextRow = { ...row };
@@ -334,10 +324,9 @@ function SpreadsheetWorkspaceInner({
 									const state = store.getState();
 									const range = state.selectedRange;
 									if (range) {
-										const rowModel = store.getRowModel();
-										if (rowModel) {
-											const startIdx = rowModel.getRowIndexById(range.start.rowId);
-											const endIdx = rowModel.getRowIndexById(range.end.rowId);
+										{
+											const startIdx = grid.api.getRowIndexById(range.start.rowId) ?? -1;
+											const endIdx = grid.api.getRowIndexById(range.end.rowId) ?? -1;
 											const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 											const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 											if (startIdx !== -1 && endIdx !== -1 && startColIdx !== -1 && endColIdx !== -1) {
@@ -348,10 +337,10 @@ function SpreadsheetWorkspaceInner({
 												const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
 												const rowIds: string[] = [];
 												for (let i = minRow; i <= maxRow; i++) {
-													const node = rowModel.getRowNode ? rowModel.getRowNode(i) : null;
+													const node = grid.api.getRowNode(i);
 													if (node) rowIds.push(node.id);
 												}
-												controller.updateRows((rows) => {
+												grid.api.updateRows((rows) => {
 													return rows.map((row) => {
 														if (rowIds.includes(row.id)) {
 															let nextRow = { ...row };
@@ -488,10 +477,10 @@ function SpreadsheetWorkspaceInner({
 }
 
 // Main exported wrapper to provide GridProvider context
-export default function SpreadsheetWorkspace({ store, ...props }: SpreadsheetWorkspaceProps) {
+export default function SpreadsheetWorkspace({ grid, ...props }: SpreadsheetWorkspaceProps) {
 	return (
-		<GridProvider store={store}>
-			<SpreadsheetWorkspaceInner store={store} {...props} />
+		<GridProvider store={grid.store}>
+			<SpreadsheetWorkspaceInner grid={grid} {...props} />
 		</GridProvider>
 	);
 }

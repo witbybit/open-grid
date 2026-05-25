@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridStore, ClientRowModelController } from '@open-grid/core';
-import { GridProvider } from '@open-grid/react';
+import { GridProvider, ReactGridInstance } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Activity, ShieldAlert, BadgePercent, TrendingUp, Layers } from 'lucide-react';
 
 interface CalculationsArenaProps {
-	store: GridStore<PerformanceRow>;
-	controller: ClientRowModelController<PerformanceRow>;
+	grid: ReactGridInstance<PerformanceRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -15,8 +13,7 @@ interface CalculationsArenaProps {
 }
 
 export default function CalculationsArena({
-	store,
-	controller,
+	grid,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	onCellValueChanged,
@@ -34,7 +31,7 @@ export default function CalculationsArena({
 
 	// Register premium style slots for Option Greeks & Risk
 	useEffect(() => {
-		store.setState({
+		grid.store.setState({
 			styleSlots: {
 				rowClass: (row) => {
 					const r = row as PerformanceRow;
@@ -71,14 +68,14 @@ export default function CalculationsArena({
 						return 'text-purple-350 font-extrabold bg-purple-950/10 border-b border-purple-900/20';
 					}
 					return 'font-semibold text-slate-400';
-				}
-			}
+				},
+			},
 		});
-	}, [store]);
+	}, [grid.store]);
 
 	useEffect(() => {
 		const calculateTelemetry = () => {
-			const count = controller.getRowCount();
+			const count = grid.api.getRowCount();
 			let volSum = 0;
 			let deltaSum = 0;
 			let maxG = 0;
@@ -86,7 +83,7 @@ export default function CalculationsArena({
 			let highRisk = 0;
 
 			for (let i = 0; i < count; i++) {
-				const r = controller.getRow(i);
+				const r = grid.api.getRow(i);
 				if (r) {
 					const vol = parseFloat(r.quantity) || 0;
 					volSum += vol;
@@ -102,10 +99,11 @@ export default function CalculationsArena({
 					if (gamma > maxG) maxG = gamma;
 
 					// Compute Vega
-					const vega = 100 * Math.exp((-d1 * d1) / 2) / Math.sqrt(2 * Math.PI);
-					vegaSum += (vega / 100);
+					const vega = (100 * Math.exp((-d1 * d1) / 2)) / Math.sqrt(2 * Math.PI);
+					vegaSum += vega / 100;
 
-					if (r.status === 'Inactive') { // Represents 'HIGH' risk in our valueGetter
+					if (r.status === 'Inactive') {
+						// Represents 'HIGH' risk in our valueGetter
 						highRisk++;
 					}
 				}
@@ -125,9 +123,9 @@ export default function CalculationsArena({
 		calculateTelemetry();
 
 		// Subscribe to changes in the active grid values
-		const unsubValue = store.addEventListener('cellValueChanged', calculateTelemetry);
+		const unsubValue = grid.api.addEventListener('cellValueChanged', calculateTelemetry);
 		return () => unsubValue();
-	}, [store, controller]);
+	}, [grid.store]);
 
 	// Visual stress metrics
 	const stressScore = useMemo(() => {
@@ -143,9 +141,7 @@ export default function CalculationsArena({
 					<div className='absolute right-0 top-0 translate-x-8 -translate-y-8 w-20 h-20 bg-emerald-500/5 rounded-full blur-xl pointer-events-none' />
 					<div className='flex items-center gap-2'>
 						<span className='w-2 h-2 rounded-full bg-purple-500 animate-ping' />
-						<span className='text-[10px] text-slate-400 font-extrabold uppercase tracking-wider'>
-							Real-Time Option Risk Grid
-						</span>
+						<span className='text-[10px] text-slate-400 font-extrabold uppercase tracking-wider'>Real-Time Option Risk Grid</span>
 					</div>
 					<div className='text-[9px] text-slate-500 font-bold uppercase tracking-widest font-mono bg-slate-950/60 border border-slate-900 px-2 py-0.5 rounded'>
 						O(1) Greeks Recalculator
@@ -153,13 +149,12 @@ export default function CalculationsArena({
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<GridProvider store={store}>
+					<GridProvider store={grid.store}>
 						<GridView
-							store={store}
+							store={grid.store}
 							pinLeftColumns={pinLeftColumns}
 							pinRightColumns={pinRightColumns}
 							onCellValueChanged={onCellValueChanged}
-							clientController={controller}
 							editTrigger={editTrigger}
 							arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 						/>
@@ -202,7 +197,7 @@ export default function CalculationsArena({
 							<span className={stressScore > 50 ? 'text-rose-400' : 'text-emerald-400'}>{stressScore}% LOAD</span>
 						</div>
 						<div className='w-full bg-slate-950 border border-slate-900 rounded-full h-2 overflow-hidden relative'>
-							<div 
+							<div
 								className={`h-full rounded-full transition-all duration-500 ${stressScore > 60 ? 'bg-rose-500' : stressScore > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`}
 								style={{ width: `${stressScore}%` }}
 							/>

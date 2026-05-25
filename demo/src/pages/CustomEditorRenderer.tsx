@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridStore, ClientRowModelController } from '@open-grid/core';
-import { GridProvider, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, ReactGridInstance, useGridKeySelector } from '@open-grid/react';
 import { CustomShowcaseRow, GridView } from '../components/GridShared';
 import { ShieldCheck, BarChart3, Star, AlertTriangle, Play, RefreshCw, Gauge } from 'lucide-react';
 
 interface CustomEditorRendererProps {
-	store: GridStore<CustomShowcaseRow>;
-	controller: ClientRowModelController<CustomShowcaseRow>;
+	grid: ReactGridInstance<CustomShowcaseRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -15,8 +13,7 @@ interface CustomEditorRendererProps {
 }
 
 function CustomEditorRendererInner({
-	store,
-	controller,
+	grid,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	onCellValueChanged,
@@ -36,7 +33,7 @@ function CustomEditorRendererInner({
 	});
 
 	const calculateTelemetry = () => {
-		const count = controller.getRowCount();
+		const count = grid.api.getRowCount();
 		let valSum = 0;
 		let ratingSum = 0;
 		let ratingCount = 0;
@@ -46,7 +43,7 @@ function CustomEditorRendererInner({
 		let inactive = 0;
 
 		for (let i = 0; i < count; i++) {
-			const r = controller.getRow(i);
+			const r = grid.api.getRow(i);
 			if (r) {
 				const priceNum = parseFloat(String(r.price).replace(/[^0-9.-]+/g, '')) || 0;
 				valSum += priceNum;
@@ -81,9 +78,9 @@ function CustomEditorRendererInner({
 
 	useEffect(() => {
 		calculateTelemetry();
-		const unsub = store.addEventListener('cellValueChanged', calculateTelemetry);
+		const unsub = grid.api.addEventListener('cellValueChanged', calculateTelemetry);
 		return () => unsub();
-	}, [store, controller]);
+	}, [grid.api]);
 
 	// Set selected asset row statuses to 'Active'
 	const handleBatchActivate = () => {
@@ -92,29 +89,25 @@ function CustomEditorRendererInner({
 			return;
 		}
 
-		const rowModel = store.getRowModel();
-		if (!rowModel) return;
-
-		const startIdx = rowModel.getRowIndexById(selectedRange.start.rowId);
-		const endIdx = rowModel.getRowIndexById(selectedRange.end.rowId);
+		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
+		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		if (startIdx === -1 || endIdx === -1) return;
 
 		const minRow = Math.min(startIdx, endIdx);
 		const maxRow = Math.max(startIdx, endIdx);
 		const rowIds: string[] = [];
 		for (let i = minRow; i <= maxRow; i++) {
-			const node = rowModel.getRowNode ? rowModel.getRowNode(i) : null;
+			const node = grid.api.getRowNode(i);
 			if (node) rowIds.push(node.id);
 		}
 
-		controller.updateRows((rows) => {
-			return rows.map((row) => {
-				if (rowIds.includes(row.id)) {
-					return { ...row, status: 'Active' };
-				}
-				return row;
-			});
-		});
+		grid.api.startTransaction();
+
+		for (const rowId of rowIds) {
+			grid.api.setCellValue(rowId, 'status', 'Active');
+		}
+
+		grid.api.endTransaction();
 		calculateTelemetry();
 	};
 
@@ -125,31 +118,36 @@ function CustomEditorRendererInner({
 			return;
 		}
 
-		const rowModel = store.getRowModel();
-		if (!rowModel) return;
-
-		const startIdx = rowModel.getRowIndexById(selectedRange.start.rowId);
-		const endIdx = rowModel.getRowIndexById(selectedRange.end.rowId);
+		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
+		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		if (startIdx === -1 || endIdx === -1) return;
 
 		const minRow = Math.min(startIdx, endIdx);
 		const maxRow = Math.max(startIdx, endIdx);
 		const rowIds: string[] = [];
 		for (let i = minRow; i <= maxRow; i++) {
-			const node = rowModel.getRowNode ? rowModel.getRowNode(i) : null;
+			const node = grid.api.getRowNode(i);
 			if (node) rowIds.push(node.id);
 		}
 
-		controller.updateRows((rows) => {
-			return rows.map((row) => {
-				if (rowIds.includes(row.id)) {
-					const curProg = parseFloat(String(row.progress)) || 0;
-					const nextProg = Math.min(100, curProg + 10);
-					return { ...row, progress: nextProg.toString() };
-				}
-				return row;
-			});
-		});
+		grid.api.startTransaction();
+
+		for (const rowId of rowIds) {
+			const rowIndex = grid.api.getRowIndexById(rowId) ?? -1;
+
+			if (rowIndex === -1) continue;
+
+			const row = grid.api.getRow(rowIndex);
+
+			if (!row) continue;
+
+			const curProg = parseFloat(String(row.progress)) || 0;
+			const nextProg = Math.min(100, curProg + 10);
+
+			grid.api.setCellValue(rowId, 'progress', nextProg.toString());
+		}
+
+		grid.api.endTransaction();
 		calculateTelemetry();
 	};
 
@@ -173,11 +171,10 @@ function CustomEditorRendererInner({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						store={store}
+						store={grid.store}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						onCellValueChanged={onCellValueChanged}
-						clientController={controller}
 						editTrigger={editTrigger}
 						arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 					/>
@@ -217,14 +214,21 @@ function CustomEditorRendererInner({
 					<div className='border-t border-slate-900/60 pt-3 mt-1 flex flex-col gap-2'>
 						<div className='flex items-center justify-between text-[9px] font-bold text-slate-500 uppercase tracking-wider'>
 							<span>Low Deployment Alerts</span>
-							<span className={telemetry.lowDeploymentAlerts > 0 ? 'text-rose-400 font-extrabold text-glow-rose animate-pulse' : 'text-slate-500'}>
+							<span
+								className={
+									telemetry.lowDeploymentAlerts > 0 ? 'text-rose-400 font-extrabold text-glow-rose animate-pulse' : 'text-slate-500'
+								}
+							>
 								{telemetry.lowDeploymentAlerts} CRITICAL
 							</span>
 						</div>
 						{telemetry.lowDeploymentAlerts > 0 && (
 							<div className='flex items-center gap-1.5 bg-rose-950/20 border border-rose-950/60 p-2 rounded text-[9px] text-rose-400 font-medium leading-relaxed'>
 								<AlertTriangle className='w-3.5 h-3.5 text-rose-400 shrink-0' />
-								<span>Attention: {telemetry.lowDeploymentAlerts} assets are currently below 30% deployment. Adjust their progress slider!</span>
+								<span>
+									Attention: {telemetry.lowDeploymentAlerts} assets are currently below 30% deployment. Adjust their progress
+									slider!
+								</span>
 							</div>
 						)}
 					</div>
@@ -246,8 +250,8 @@ function CustomEditorRendererInner({
 								<span>{telemetry.activeCount} assets</span>
 							</div>
 							<div className='w-full bg-slate-950 border border-slate-900 h-2 rounded-full overflow-hidden'>
-								<div 
-									className='h-full bg-emerald-500 rounded-full transition-all duration-500' 
+								<div
+									className='h-full bg-emerald-500 rounded-full transition-all duration-500'
 									style={{ width: `${(telemetry.activeCount / (telemetry.totalAssets || 1)) * 100}%` }}
 								/>
 							</div>
@@ -260,8 +264,8 @@ function CustomEditorRendererInner({
 								<span>{telemetry.pendingCount} assets</span>
 							</div>
 							<div className='w-full bg-slate-950 border border-slate-900 h-2 rounded-full overflow-hidden'>
-								<div 
-									className='h-full bg-amber-500 rounded-full transition-all duration-500' 
+								<div
+									className='h-full bg-amber-500 rounded-full transition-all duration-500'
 									style={{ width: `${(telemetry.pendingCount / (telemetry.totalAssets || 1)) * 100}%` }}
 								/>
 							</div>
@@ -274,8 +278,8 @@ function CustomEditorRendererInner({
 								<span>{telemetry.inactiveCount} assets</span>
 							</div>
 							<div className='w-full bg-slate-950 border border-slate-900 h-2 rounded-full overflow-hidden'>
-								<div 
-									className='h-full bg-rose-500 rounded-full transition-all duration-500' 
+								<div
+									className='h-full bg-rose-500 rounded-full transition-all duration-500'
 									style={{ width: `${(telemetry.inactiveCount / (telemetry.totalAssets || 1)) * 100}%` }}
 								/>
 							</div>
@@ -315,10 +319,10 @@ function CustomEditorRendererInner({
 	);
 }
 
-export default function CustomEditorRenderer({ store, ...props }: CustomEditorRendererProps) {
+export default function CustomEditorRenderer({ grid, ...props }: CustomEditorRendererProps) {
 	return (
-		<GridProvider store={store}>
-			<CustomEditorRendererInner store={store} {...props} />
+		<GridProvider store={grid.store}>
+			<CustomEditorRendererInner grid={grid} {...props} />
 		</GridProvider>
 	);
 }

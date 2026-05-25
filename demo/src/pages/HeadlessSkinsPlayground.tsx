@@ -1,12 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { GridStore, ClientRowModelController } from '@open-grid/core';
-import { GridProvider } from '@open-grid/react';
+import { GridProvider, ReactGridInstance } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Palette, Sparkles, Terminal, ShieldAlert, Code, Copy, Check } from 'lucide-react';
 
 interface HeadlessSkinsPlaygroundProps {
-	store: GridStore<PerformanceRow>;
-	controller: ClientRowModelController<PerformanceRow>;
+	grid: ReactGridInstance<PerformanceRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -14,20 +12,15 @@ interface HeadlessSkinsPlaygroundProps {
 
 type SkinTheme = 'cyberpunk' | 'glassmorphic' | 'obsidian' | 'retro' | 'slate';
 
-export default function HeadlessSkinsPlayground({
-	store,
-	controller,
-	editTrigger,
-	arrowKeyNavigationEdit,
-	onCellValueChanged,
-}: HeadlessSkinsPlaygroundProps) {
+export default function HeadlessSkinsPlayground({ grid, editTrigger, arrowKeyNavigationEdit, onCellValueChanged }: HeadlessSkinsPlaygroundProps) {
 	const [activeTheme, setActiveTheme] = useState<SkinTheme>('slate');
 	const [copied, setCopied] = useState(false);
 
 	const themesInfo = {
 		slate: {
 			title: 'Enterprise Slate Grey',
-			description: 'Professional high-contrast obsidian base, sleek slate-grey headers, bold indigo accents, and vibrant emerald focus indicator highlights.',
+			description:
+				'Professional high-contrast obsidian base, sleek slate-grey headers, bold indigo accents, and vibrant emerald focus indicator highlights.',
 			class: 'skins-slate',
 		},
 		cyberpunk: {
@@ -343,9 +336,7 @@ export default function HeadlessSkinsPlayground({
 							<h3 className='text-sm font-extrabold text-slate-200 uppercase tracking-wider flex items-center gap-2'>
 								{themesInfo[activeTheme].title}
 							</h3>
-							<p className='text-[10px] text-slate-400 mt-0.5 leading-tight max-w-md'>
-								{themesInfo[activeTheme].description}
-							</p>
+							<p className='text-[10px] text-slate-400 mt-0.5 leading-tight max-w-md'>{themesInfo[activeTheme].description}</p>
 						</div>
 					</div>
 
@@ -387,13 +378,12 @@ export default function HeadlessSkinsPlayground({
 						<div className='absolute inset-0 w-full h-full pointer-events-none z-30 bg-scanlines opacity-10 border border-emerald-950/20' />
 					)}
 
-					<GridProvider store={store}>
+					<GridProvider store={grid.store}>
 						<GridView
-							store={store}
+							store={grid.store}
 							pinLeftColumns={1}
 							pinRightColumns={1}
 							onCellValueChanged={onCellValueChanged}
-							clientController={controller}
 							editTrigger={editTrigger}
 							arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 							className='!border-0 !rounded-none !bg-transparent !shadow-none'
@@ -405,7 +395,8 @@ export default function HeadlessSkinsPlayground({
 				<div className='p-3 bg-slate-900/10 border border-slate-900 rounded-xl flex items-start gap-2.5 shrink-0'>
 					<ShieldAlert className='w-4 h-4 text-purple-400 mt-0.5 shrink-0' />
 					<p className='text-[9px] text-slate-400 leading-normal font-medium'>
-						<strong>Headless Architecture:</strong> None of these styles are hardcoded into the layout engine. By providing clean, predictable DOM naming conventions, styling is completely decoupled and easily managed via custom themes.
+						<strong>Headless Architecture:</strong> None of these styles are hardcoded into the layout engine. By providing clean,
+						predictable DOM naming conventions, styling is completely decoupled and easily managed via custom themes.
 					</p>
 				</div>
 			</div>
@@ -414,7 +405,7 @@ export default function HeadlessSkinsPlayground({
 			<div className='w-full xl:w-80 flex flex-col gap-4 shrink-0 overflow-y-auto max-h-full xl:max-h-none pr-1.5'>
 				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3.5 glass-card relative overflow-hidden h-full min-h-0'>
 					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-purple-600/5 rounded-full blur-2xl pointer-events-none' />
-					
+
 					<div className='flex justify-between items-center shrink-0'>
 						<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 							<Code className='w-4 h-4 text-purple-400' />
@@ -439,7 +430,8 @@ export default function HeadlessSkinsPlayground({
 					</div>
 
 					<p className='text-[9px] text-slate-500 leading-relaxed font-medium mt-1 shrink-0'>
-						Copy this generated theme and drop it directly into your global stylesheet. The semantic classes map instantly to your grid viewport.
+						Copy this generated theme and drop it directly into your global stylesheet. The semantic classes map instantly to your grid
+						viewport.
 					</p>
 				</div>
 			</div>

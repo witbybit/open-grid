@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FilterModel, SortModel } from '@open-grid/core';
 import { Layout } from 'lucide-react';
 
 import ShowroomHeader from './components/ShowroomHeader';
@@ -16,6 +15,7 @@ import HeadlessSkinsPlayground from './pages/HeadlessSkinsPlayground';
 import RealtimeDashboard from './pages/RealtimeDashboard';
 import GanttSchedulingWorkspace from './pages/GanttSchedulingWorkspace';
 import { useShowroomStores } from './hooks/useShowroomStores';
+import type { FilterModel, SortModel } from '@open-grid/react';
 
 export default function App() {
 	// Active Page Routing State via URL Hash Routing
@@ -80,32 +80,24 @@ export default function App() {
 	const stores = useShowroomStores({ massiveColumns, visibleColumns });
 
 	const {
-		perfStore,
-		perfController,
 		runBulkCalculationTest,
 		handlePerfCellValueChanged,
-		serverStore,
-		serverController,
-		spreadsheetStore,
-		spreadsheetController,
 		applySpreadsheetRangeAction,
 		handleSpreadsheetCellValueChanged,
-		customStore,
-		customController,
 		handleCustomCellValueChanged,
-		layoutStore,
-		layoutController,
 		handleLayoutCellValueChanged,
 		layoutColumnsFull,
-		skinsStore,
-		skinsController,
 		handleSkinsCellValueChanged,
-		dashboardStore,
-		dashboardController,
 		handleDashboardCellValueChanged,
-		ganttStore,
-		ganttController,
 		handleGanttCellValueChanged,
+		perfGrid,
+		serverGrid,
+		spreadsheetGrid,
+		customGrid,
+		layoutGrid,
+		skinsGrid,
+		dashboardGrid,
+		ganttGrid,
 	} = stores;
 
 	const toggleColumnVisibility = (field: string) => {
@@ -123,25 +115,25 @@ export default function App() {
 	const activeStore = useMemo(() => {
 		switch (activePage) {
 			case 'perf':
-				return perfStore;
+				return perfGrid.store;
 			case 'server':
-				return serverStore;
+				return serverGrid.store;
 			case 'ranges':
-				return spreadsheetStore;
+				return spreadsheetGrid.store;
 			case 'editors':
-				return customStore;
+				return customGrid.store;
 			case 'layout':
-				return layoutStore;
+				return layoutGrid.store;
 			case 'skins':
-				return skinsStore;
+				return skinsGrid.store;
 			case 'dashboard':
-				return dashboardStore;
+				return dashboardGrid.store;
 			case 'gantt':
-				return ganttStore;
+				return ganttGrid.store;
 			default:
-				return perfStore;
+				return perfGrid.store;
 		}
-	}, [activePage, perfStore, serverStore, spreadsheetStore, customStore, layoutStore, skinsStore, dashboardStore, ganttStore]);
+	}, [activePage, perfGrid.store, serverGrid.store, spreadsheetGrid.store, customGrid.store, layoutGrid.store, skinsGrid.store, dashboardGrid.store, ganttGrid.store]);
 
 	// Apply filter and sort models to the active store when they change
 	const sortModel = useMemo<SortModel>(() => [{ colId: sortField, sort: sortDirection }], [sortField, sortDirection]);
@@ -213,8 +205,7 @@ export default function App() {
 					<div className='flex-1 min-h-0 flex flex-col'>
 						{activePage === 'perf' && (
 							<CalculationsArena
-								store={perfStore}
-								controller={perfController}
+								grid={perfGrid}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handlePerfCellValueChanged}
@@ -225,8 +216,7 @@ export default function App() {
 
 						{activePage === 'server' && (
 							<InfiniteServerScroll
-								store={serverStore}
-								controller={serverController}
+								grid={serverGrid}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								pinLeftColumns={pinLeftColumns}
@@ -236,8 +226,7 @@ export default function App() {
 
 						{activePage === 'ranges' && (
 							<SpreadsheetWorkspace
-								store={spreadsheetStore}
-								controller={spreadsheetController}
+								grid={spreadsheetGrid}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleSpreadsheetCellValueChanged}
@@ -248,8 +237,7 @@ export default function App() {
 
 						{activePage === 'editors' && (
 							<CustomEditorRenderer
-								store={customStore}
-								controller={customController}
+								grid={customGrid}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleCustomCellValueChanged}
@@ -260,8 +248,7 @@ export default function App() {
 
 						{activePage === 'layout' && (
 							<DynamicLayout
-								store={layoutStore}
-								controller={layoutController}
+								grid={layoutGrid}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								rowHeightsMap={rowHeightsMap}
@@ -274,8 +261,7 @@ export default function App() {
 
 						{activePage === 'skins' && (
 							<HeadlessSkinsPlayground
-								store={skinsStore}
-								controller={skinsController}
+								grid={skinsGrid}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleSkinsCellValueChanged}
@@ -284,8 +270,7 @@ export default function App() {
 
 						{activePage === 'dashboard' && (
 							<RealtimeDashboard
-								store={dashboardStore}
-								controller={dashboardController}
+								grid={dashboardGrid}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleDashboardCellValueChanged}
@@ -294,8 +279,7 @@ export default function App() {
 
 						{activePage === 'gantt' && (
 							<GanttSchedulingWorkspace
-								store={ganttStore}
-								controller={ganttController}
+								grid={ganttGrid}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleGanttCellValueChanged}
@@ -327,13 +311,14 @@ export default function App() {
 					setEditTrigger={setEditTrigger}
 					arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 					setArrowKeyNavigationEdit={setArrowKeyNavigationEdit}
-					perfController={perfController}
-					serverController={serverController}
-					spreadsheetController={spreadsheetController}
-					customController={customController}
-					skinsController={skinsController}
-					dashboardController={dashboardController}
-					ganttController={ganttController}
+					perfGrid={perfGrid}
+					serverGrid={serverGrid}
+					spreadsheetGrid={spreadsheetGrid}
+					customGrid={customGrid}
+					layoutGrid={layoutGrid}
+					skinsGrid={skinsGrid}
+					dashboardGrid={dashboardGrid}
+					ganttGrid={ganttGrid}
 				/>
 			</div>
 		</div>

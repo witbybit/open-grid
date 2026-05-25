@@ -9,7 +9,7 @@ import {
 	HelpCircle,
 	RefreshCw,
 } from 'lucide-react';
-import { GridStore } from '@open-grid/core';
+import type { GridStore, ReactGridInstance } from '@open-grid/react';
 import { LatencyProfiler } from './GridShared';
 
 // ============================================================================
@@ -241,24 +241,26 @@ export function AccessibilityPanel({
 // ============================================================================
 interface DeveloperPanelProps {
 	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
-	perfController: any;
-	serverController: any;
-	spreadsheetController: any;
-	customController: any;
-	skinsController: any;
-	dashboardController: any;
-	ganttController: any;
+	perfGrid: ReactGridInstance<any>;
+	serverGrid: ReactGridInstance<any>;
+	spreadsheetGrid: ReactGridInstance<any>;
+	customGrid: ReactGridInstance<any>;
+	layoutGrid: ReactGridInstance<any>;
+	skinsGrid: ReactGridInstance<any>;
+	dashboardGrid: ReactGridInstance<any>;
+	ganttGrid: ReactGridInstance<any>;
 }
 
 export function DeveloperPanel({
 	activePage,
-	perfController,
-	serverController,
-	spreadsheetController,
-	customController,
-	skinsController,
-	dashboardController,
-	ganttController,
+	perfGrid,
+	serverGrid,
+	spreadsheetGrid,
+	customGrid,
+	layoutGrid,
+	skinsGrid,
+	dashboardGrid,
+	ganttGrid,
 }: DeveloperPanelProps) {
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
@@ -272,8 +274,8 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							const targetController = activePage === 'perf' ? perfController : skinsController;
-							perfController.updateRows((rows: any[]) =>
+							const targetGrid = activePage === 'perf' ? perfGrid : layoutGrid;
+							targetGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									price: '0',
@@ -297,7 +299,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							serverController.purgeCache();
+							serverGrid.api.purgeCache();
 							const duration = performance.now() - start;
 							LatencyProfiler.record(duration);
 						}}
@@ -315,7 +317,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							spreadsheetController.updateRows((rows: any[]) =>
+							spreadsheetGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									A: '0',
@@ -343,7 +345,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							customController.updateRows((rows: any[]) =>
+							customGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									price: '50',
@@ -368,7 +370,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							skinsController.updateRows((rows: any[]) =>
+							skinsGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									price: '100',
@@ -393,7 +395,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							ganttController.updateRows((rows: any[]) =>
+							ganttGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									progress: 0,
@@ -417,7 +419,7 @@ export function DeveloperPanel({
 					<button
 						onClick={() => {
 							const start = performance.now();
-							dashboardController.updateRows((rows: any[]) =>
+							dashboardGrid.api.updateRows((rows: any[]) =>
 								rows.map((row) => {
 									if (row.id === 'AAPL') return { ...row, price: '175.50', change: '+1.2' };
 									if (row.id === 'MSFT') return { ...row, price: '420.20', change: '+0.8' };

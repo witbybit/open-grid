@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridStore, ServerRowModelController } from '@open-grid/core';
-import { GridProvider } from '@open-grid/react';
+import { GridProvider, ReactGridInstance } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Terminal, Server, Activity, ShieldAlert, Cpu, Network, Clock } from 'lucide-react';
 
 interface InfiniteServerScrollProps {
-	store: GridStore<any>;
-	controller: ServerRowModelController<any>;
+	grid: ReactGridInstance<any>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	pinLeftColumns?: number;
@@ -14,8 +12,7 @@ interface InfiniteServerScrollProps {
 }
 
 export default function InfiniteServerScroll({
-	store,
-	controller,
+	grid,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	pinLeftColumns = 0,
@@ -45,9 +42,9 @@ export default function InfiniteServerScroll({
 			}
 		};
 
-		const unsub = store.addEventListener('serverBlockLoaded' as any, handleBlockLoaded);
+		const unsub = grid.api.addEventListener('serverBlockLoaded' as any, handleBlockLoaded);
 		return () => unsub();
-	}, [store]);
+	}, [grid.api]);
 
 	// Visual sparkline coordinates
 	const svgPoints = useMemo(() => {
@@ -82,13 +79,12 @@ export default function InfiniteServerScroll({
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<GridProvider store={store}>
+					<GridProvider store={grid.store}>
 						<GridView
-							store={store}
+							store={grid.store}
 							pinLeftColumns={pinLeftColumns}
 							pinRightColumns={pinRightColumns}
 							onCellValueChanged={() => {}}
-							serverController={controller}
 							editTrigger={editTrigger}
 							arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 						/>

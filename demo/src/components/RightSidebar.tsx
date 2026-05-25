@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GridStore } from '@open-grid/core';
-import { GridProvider, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, useGridKeySelector, type GridStore } from '@open-grid/react';
 import { TableProperties, Terminal } from 'lucide-react';
 
 // ============================================================================

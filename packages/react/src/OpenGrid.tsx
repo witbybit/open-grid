@@ -1,63 +1,23 @@
-import React, { createContext, useContext, useMemo, useSyncExternalStore, useRef, useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
-	GridStore,
-	GridState,
+	GridApi,
+	GridContextMenuOptions,
+	GridContextMenuPlugin,
 	GridNavigationController,
 	GridNavigationOptions,
-	GridApi,
+	GridState,
+	GridStore,
 	RenderEngine,
-	GridContextMenuPlugin,
-	GridContextMenuOptions,
-	type GridStateUpdater,
-	type GridEventListener,
-	type Listener,
-	type GridCellPointer,
-	type GridCellRange,
-	type SortModel,
-	type FilterModel,
 } from '@open-grid/core';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { PortalData, PortalManager } from './GridPortal';
+import { createGridApiFacade } from './gridApiFacade';
 
-const GridStoreContext = createContext<GridStore<unknown> | null>(null);
+export const GridStoreContext = createContext<GridStore<unknown> | null>(null);
 const GridApiContext = createContext<GridApi<unknown> | null>(null);
 
 export interface GridProviderProps<TRowData = unknown> {
 	store: GridStore<TRowData>;
 	children: React.ReactNode;
-}
-
-function createGridApiFacade<TRowData>(store: GridStore<TRowData>): GridApi<TRowData> {
-	return Object.freeze({
-		getState: () => store.getState(),
-		setState: (updater: GridStateUpdater<TRowData>) => store.setState(updater),
-		getRowId: (row: TRowData) => store.getRowId(row),
-		isRowLoading: (rowId: string) => store.isRowLoading(rowId),
-		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
-		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
-		getCellState: (rowId: string, colField: string) => store.getCellState(rowId, colField),
-		setFocusedCell: (rowId: string | null, colField: string | null) => store.setFocusedCell(rowId, colField),
-		setSelectedRange: (start: GridCellPointer | null, end: GridCellPointer | null) => store.setSelectedRange(start, end),
-		setColumnWidth: (colField: string, width: number) => store.setColumnWidth(colField, width),
-		setRowHeight: (rowId: string, height: number) => store.setRowHeight(rowId, height),
-		setSortModel: (sortModel: SortModel | null) => store.setSortModel(sortModel),
-		setFilterModel: (filterModel: FilterModel | null) => store.setFilterModel(filterModel),
-		addEventListener: <T = unknown,>(type: string, callback: GridEventListener<T>) => store.addEventListener(type, callback),
-		dispatchEvent: <T = unknown,>(type: string, payload: T) => store.dispatchEvent(type, payload),
-		stopEditing: (cancel?: boolean) => store.stopEditing(cancel),
-		startTransaction: () => store.startTransaction(),
-		endTransaction: () => store.endTransaction(),
-		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
-		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
-		getColumnIndex: (colField: string) => store.getColumnIndex(colField),
-		getColumnDef: (colField: string) => store.getColumnDef(colField),
-		getPlugin: <T = unknown,>(name: string) => store.getPlugin<T>(name),
-		undo: () => store.undo(),
-		redo: () => store.redo(),
-		canUndo: () => store.canUndo(),
-		canRedo: () => store.canRedo(),
-		fillRange: (source: GridCellRange, target: GridCellRange) => store.fillRange(source, target),
-		destroy: () => store.destroy(),
-	});
 }
 
 export function GridProvider<TRowData = unknown>({ store, children }: GridProviderProps<TRowData>) {
@@ -140,168 +100,6 @@ export function useGridNavigationController<TRowData = unknown>(options: GridNav
 	useEffect(() => () => controller.dispose(), [controller]);
 
 	return controller;
-}
-
-export interface PortalCellProps {
-	rowId: string;
-	colField: string;
-	value: unknown;
-	col: any;
-	node: any;
-	isEditing: boolean;
-	isLoading: boolean;
-}
-
-/**
- * Clean React Portal cell adapter that mounts only custom renderers & custom editors.
- */
-export function PortalCell({ rowId, colField, value, col, node, isEditing, isLoading }: PortalCellProps) {
-	const api = useGridApi();
-
-	const [localValue, setLocalValue] = useState<unknown>(value);
-
-	const localValueRef = useRef(localValue);
-	localValueRef.current = localValue;
-
-	const isCancelledRef = useRef(false);
-	const isCommittedRef = useRef(!isEditing);
-
-	useEffect(() => {
-		if (isEditing) {
-			isCancelledRef.current = false;
-			isCommittedRef.current = false;
-			setLocalValue(value);
-		}
-	}, [isEditing, value]);
-
-	useEffect(() => {
-		const unsubscribe = api.addEventListener<{ rowId: string; colField: string; cancel: boolean }>('editStopped', (event) => {
-			if (event.payload.rowId === rowId && event.payload.colField === colField) {
-				if (event.payload.cancel) {
-					isCancelledRef.current = true;
-				}
-			}
-		});
-		return () => {
-			unsubscribe();
-			if (isEditing && !isCancelledRef.current && !isCommittedRef.current) {
-				isCommittedRef.current = true;
-				api.setCellValue(rowId, colField, localValueRef.current);
-			}
-		};
-	}, [isEditing, api, rowId, colField]);
-
-	const handleCommit = useCallback(
-		(finalValue?: unknown) => {
-			isCommittedRef.current = true;
-			const isEvent = finalValue && typeof finalValue === 'object' && ('nativeEvent' in finalValue || 'target' in finalValue);
-			const valToCommit = finalValue !== undefined && !isEvent ? finalValue : localValueRef.current;
-			api.setCellValue(rowId, colField, valToCommit);
-			api.stopEditing();
-		},
-		[api, rowId, colField]
-	);
-
-	const handleCancel = useCallback(() => {
-		isCancelledRef.current = true;
-		api.stopEditing(true);
-	}, [api]);
-
-	if (isLoading) {
-		return (
-			<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', padding: '0 12px' }}>
-				<div className='og-cell-loading-skeleton' style={{ height: '16px', width: '80%', borderRadius: '4px' }} />
-			</div>
-		);
-	}
-
-	const rowData = node?.data;
-
-	const CustomEditor = col?.cellEditor;
-	const CustomRenderer = col?.cellRenderer;
-
-	return (
-		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
-			{isEditing ? (
-				CustomEditor ? (
-					<CustomEditor
-						rowId={rowId}
-						colField={colField}
-						value={localValue}
-						onChange={(val: any) => {
-							setLocalValue(val);
-							localValueRef.current = val;
-						}}
-						api={api}
-						onCommit={handleCommit}
-						onCancel={handleCancel}
-					/>
-				) : (
-					<input
-						autoFocus
-						className='absolute inset-0 w-full h-full px-3 text-sm bg-slate-900 text-white border-2 border-purple-500 outline-none z-20'
-						value={typeof localValue === 'string' || typeof localValue === 'number' ? String(localValue) : ''}
-						onChange={(e) => {
-							setLocalValue(e.target.value);
-							localValueRef.current = e.target.value;
-						}}
-						onMouseDown={(e) => e.stopPropagation()}
-						onDoubleClick={(e) => e.stopPropagation()}
-						onBlur={() => handleCommit()}
-						onKeyDown={(e) => {
-							if (e.key === 'Enter') {
-								e.stopPropagation();
-								handleCommit();
-							} else if (e.key === 'Escape') {
-								e.stopPropagation();
-								handleCancel();
-							}
-						}}
-					/>
-				)
-			) : CustomRenderer && rowData ? (
-				<CustomRenderer value={value} computedValue={value} row={rowData} rowId={rowId} colField={colField} api={api} />
-			) : null}
-		</div>
-	);
-}
-
-export interface PortalData {
-	cellKey: string;
-	container: HTMLElement;
-	value: unknown;
-	node: any;
-	col: any;
-	isEditing: boolean;
-	isLoading: boolean;
-}
-
-export interface PortalManagerProps {
-	portals: Map<string, PortalData>;
-	store: GridStore<any>;
-}
-
-export function PortalManager({ portals, store }: PortalManagerProps) {
-	return (
-		<>
-			{Array.from(portals.values()).map((p) => {
-				return createPortal(
-					<GridProvider store={store} key={p.cellKey}>
-						<PortalCell
-							rowId={p.node.id}
-							colField={p.col.field}
-							value={p.value}
-							col={p.col}
-							node={p.node}
-							isEditing={p.isEditing}
-							isLoading={p.isLoading}
-						/>
-					</GridProvider>,
-					p.container
-				);
-			})}
-		</>
-	);
 }
 
 export interface OpenGridProps<TRowData = unknown> {

@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridStore, ClientRowModelController } from '@open-grid/core';
-import { GridProvider, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, ReactGridInstance, useGridKeySelector } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Layout, Maximize2, Layers, Cpu, Compass, Sliders, CheckCircle2 } from 'lucide-react';
 
 interface DynamicLayoutProps {
-	store: GridStore<PerformanceRow>;
-	controller: ClientRowModelController<PerformanceRow>;
+	grid: ReactGridInstance<PerformanceRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	rowHeightsMap: Record<string, number>;
@@ -17,8 +15,7 @@ interface DynamicLayoutProps {
 }
 
 function DynamicLayoutInner({
-	store,
-	controller,
+	grid,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	rowHeightsMap,
@@ -40,25 +37,25 @@ function DynamicLayoutInner({
 				scrollLeft: scrollLeft ?? 0,
 			});
 		};
-		const unsub = store.addEventListener('gridScrolled' as any, handleScroll);
+		const unsub = grid.api.addEventListener('gridScrolled' as any, handleScroll);
 		return () => unsub();
-	}, [store]);
+	}, [grid.api]);
 
 	// Sizing parameters
 	const layoutStats = useMemo(() => {
 		const colsCount = columns.length;
 		const rowHeight = rowHeightsMap[compactLayout];
-		const totalRows = controller.getRowCount();
+		const totalRows = grid.api.getRowCount();
 		// Simulate memory load: ~1.2KB per visible grid node
 		const estimatedMemoryKb = (totalRows * colsCount * 1.2).toFixed(1);
-		
+
 		return {
 			colsCount,
 			rowHeight,
 			totalRows,
 			estimatedMemoryKb,
 		};
-	}, [columns, compactLayout, rowHeightsMap, controller]);
+	}, [columns, compactLayout, rowHeightsMap, grid.api]);
 
 	return (
 		<div className='flex flex-col xl:flex-row h-full w-full gap-5 overflow-hidden'>
@@ -80,13 +77,12 @@ function DynamicLayoutInner({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						store={store}
+						store={grid.store}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						rowHeights={{}}
 						defaultHeight={rowHeightsMap[compactLayout]}
 						onCellValueChanged={onCellValueChanged}
-						clientController={controller}
 						editTrigger={editTrigger}
 						arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 					/>
@@ -183,11 +179,15 @@ function DynamicLayoutInner({
 					<div className='flex flex-col gap-2 mt-1'>
 						<div className='flex items-start gap-2 text-[10px] font-medium text-slate-400 leading-relaxed'>
 							<CheckCircle2 className='w-4 h-4 text-emerald-400 shrink-0 mt-0.5' />
-							<span><strong>DOM Virtualization</strong> active. Reusing nodes on scroll to render thousands of rows smoothly.</span>
+							<span>
+								<strong>DOM Virtualization</strong> active. Reusing nodes on scroll to render thousands of rows smoothly.
+							</span>
 						</div>
 						<div className='flex items-start gap-2 text-[10px] font-medium text-slate-400 leading-relaxed'>
 							<CheckCircle2 className='w-4 h-4 text-emerald-400 shrink-0 mt-0.5' />
-							<span><strong>Passive event listeners</strong> used to ensure buttery 60fps kinetic scrolling.</span>
+							<span>
+								<strong>Passive event listeners</strong> used to ensure buttery 60fps kinetic scrolling.
+							</span>
 						</div>
 					</div>
 
@@ -200,10 +200,10 @@ function DynamicLayoutInner({
 	);
 }
 
-export default function DynamicLayout({ store, ...props }: DynamicLayoutProps) {
+export default function DynamicLayout({ grid, ...props }: DynamicLayoutProps) {
 	return (
-		<GridProvider store={store}>
-			<DynamicLayoutInner store={store} {...props} />
+		<GridProvider store={grid.store}>
+			<DynamicLayoutInner grid={grid} {...props} />
 		</GridProvider>
 	);
 }

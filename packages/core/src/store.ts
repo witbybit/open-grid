@@ -178,6 +178,10 @@ export interface RowModel<TRowData = unknown> {
 	getRowCount(): number;
 	getRowIndexById(rowId: string): number;
 	getRowNodeById?(rowId: string): RowNode<TRowData> | null;
+	setRows?(rows: TRowData[]): void;
+	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
+	refresh?(): void;
+	purgeCache?(): void;
 	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
 	loadVisibleBlocks?(visibleRowIndices: number[]): void;
 }
@@ -251,6 +255,14 @@ export interface GridApi<TRowData = unknown> {
 	setState(updater: GridStateUpdater<TRowData>): void;
 	getRowId(row: TRowData): string;
 	isRowLoading(rowId: string): boolean;
+	getRowCount(): number;
+	getRow(index: number): TRowData | null;
+	getRowNode(index: number): RowNode<TRowData> | null;
+	getRowIndexById(rowId: string): number | null;
+	setRows(rows: TRowData[]): void;
+	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
+	refreshRows(): void;
+	purgeCache(): void;
 	getCellValue(rowId: string, colField: string): unknown;
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 	getCellState(rowId: string, colField: string): CellState;
@@ -344,13 +356,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				if (plugin.onBeforeRender) plugin.onBeforeRender();
 			});
 		});
-		
+
 		this.engine.eventBus.addEventListener('afterRender', () => {
 			this.plugins.forEach((plugin) => {
 				if (plugin.onAfterRender) plugin.onAfterRender();
 			});
 		});
-
 	}
 
 	private get state(): GridState<TRowData> {
@@ -479,6 +490,43 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.getRowModel();
 	};
 
+	public getRowCount = (): number => {
+		return this.getRowModel()?.getRowCount() ?? 0;
+	};
+
+	public getRow = (index: number): TRowData | null => {
+		return this.getRowModel()?.getRow(index) ?? null;
+	};
+
+	public getRowNode = (index: number): RowNode<TRowData> | null => {
+		return this.getRowModel()?.getRowNode(index) ?? null;
+	};
+
+	public getRowIndexById = (rowId: string): number | null => {
+		return this.getRowModel()?.getRowIndexById(rowId) ?? null;
+	};
+
+	public setRows = (rows: TRowData[]): void => {
+		this.getRowModel()?.setRows?.(rows);
+	};
+
+	public updateRows = (updater: (rows: TRowData[]) => TRowData[]): void => {
+		this.getRowModel()?.updateRows?.(updater);
+	};
+
+	public refreshRows = (): void => {
+		const rowModel = this.getRowModel();
+		if (rowModel?.refresh) {
+			rowModel.refresh();
+		} else {
+			rowModel?.purgeCache?.();
+		}
+	};
+
+	public purgeCache = (): void => {
+		this.getRowModel()?.purgeCache?.();
+	};
+
 	public subscribe = (listener: Listener<TRowData>): (() => void) => {
 		return this.engine.stateManager.subscribe(listener);
 	};
@@ -542,7 +590,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		}
 		this.plugins.set(plugin.name, plugin);
 		(this as unknown as Record<string, unknown>)[plugin.name] = plugin;
-		
+
 		if (plugin.onInit) {
 			plugin.onInit(this);
 		}

@@ -1,17 +1,6 @@
-import { useMemo, useCallback, useEffect } from 'react';
-import {
-	ClientRowModelController,
-	ServerRowModelController,
-	ColumnDef,
-	GridStore,
-	IGridDatasource,
-	FilterModel,
-	SortModel,
-	FilterModelItem,
-} from '@open-grid/core';
+import { useMemo, useCallback } from 'react';
 import {
 	generatePerformanceRows,
-	generateSpreadsheetRows,
 	generateCustomShowcaseRows,
 	PerformanceRow,
 	SpreadsheetRow,
@@ -31,6 +20,15 @@ import {
 	GanttStatusDropdownEditor,
 	GanttTimelineRenderer,
 } from '../components/GridShared';
+import {
+	useClientGrid,
+	useServerGrid,
+	type ColumnDef,
+	type GridDatasource,
+	type FilterModel,
+	type SortModel,
+	type FilterModelItem,
+} from '@open-grid/react';
 
 export interface DashboardStockRow {
 	id: string;
@@ -44,6 +42,39 @@ export interface DashboardStockRow {
 interface UseShowroomStoresProps {
 	massiveColumns: boolean;
 	visibleColumns: Record<string, boolean>;
+}
+
+type ServerAuditRow = {
+	id: string;
+	timestamp: string;
+	service: string;
+	severity: string;
+	latencyMs: string;
+	ipAddress: string;
+};
+
+type GanttRow = {
+	id: string;
+	name: string;
+	owner: string;
+	sprintDay: number;
+	durationDays: number;
+	progress: number;
+	status: 'Done' | 'In Progress' | 'Pending' | 'Blocked';
+};
+
+function setInactiveRiskSideEffects(
+	api: { setCellValue: (rowId: string, colField: string, value: unknown) => void },
+	rowId: string,
+	colField: string,
+	value: unknown
+) {
+	api.setCellValue(rowId, colField, value);
+
+	if (colField === 'status' && value === 'Inactive') {
+		api.setCellValue(rowId, 'price', '0');
+		api.setCellValue(rowId, 'quantity', '0');
+	}
 }
 
 export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroomStoresProps) {
@@ -91,7 +122,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					const vol = parseFloat(row.quantity) || 20;
 					const strike = parseFloat(row.price) || 100;
 					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
-					const vega = 100 * Math.exp((-d1 * d1) / 2) / Math.sqrt(2 * Math.PI);
+					const vega = (100 * Math.exp((-d1 * d1) / 2)) / Math.sqrt(2 * Math.PI);
 					return (vega / 100).toFixed(4);
 				},
 			},
@@ -104,7 +135,9 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					const vol = parseFloat(row.quantity) || 20;
 					const strike = parseFloat(row.price) || 100;
 					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
-					const theta = - (100 * (vol / 100) * Math.exp((-d1 * d1) / 2)) / (2 * Math.sqrt(2 * Math.PI)) - 0.05 * strike * Math.exp(-0.05) * (0.5 + 0.5 * Math.tanh(d1));
+					const theta =
+						-(100 * (vol / 100) * Math.exp((-d1 * d1) / 2)) / (2 * Math.sqrt(2 * Math.PI)) -
+						0.05 * strike * Math.exp(-0.05) * (0.5 + 0.5 * Math.tanh(d1));
 					return (theta / 365).toFixed(4);
 				},
 			},
@@ -121,78 +154,55 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				},
 			},
 		];
+
 		if (massiveColumns) {
 			for (let i = 0; i < 1000; i++) {
 				cols.push({
 					field: `col_${i}`,
 					header: `Col ${i}`,
 					width: 100,
-					valueGetter: ({ row }) => {
-						return (row as any)[`col_${i}`] ?? `Val ${i}`;
-					},
+					valueGetter: ({ row }) => (row as any)[`col_${i}`] ?? `Val ${i}`,
 				});
 			}
 		}
+
 		return cols;
 	}, [massiveColumns]);
 
-	const perfStore = useMemo(() => {
-		return new GridStore<PerformanceRow>({
-			rowHeights: {},
-			columnWidths: clientColumns.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
-		});
-	}, [clientColumns]);
-
 	const perfRows = useMemo(() => generatePerformanceRows(10000, 'R'), []);
-
-	const perfController = useMemo(() => {
-		return new ClientRowModelController<PerformanceRow>(perfStore, {
-			rows: perfRows,
-			columns: clientColumns,
-		});
-	}, [perfStore, perfRows, clientColumns]);
+	const perfGrid = useClientGrid<PerformanceRow>({ rows: perfRows, columns: clientColumns });
 
 	const handlePerfCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			perfController.updateRows((rows) =>
-				rows.map((row) => {
-					if (row.id === rowId) {
-						let updated = { ...row, [colField]: val as any };
-						if (colField === 'status' && val === 'Inactive') {
-							updated.price = '0';
-							updated.quantity = '0';
-						}
-						return updated;
-					}
-					return row;
-				})
-			);
+			setInactiveRiskSideEffects(perfGrid.api, rowId, colField, val);
 		},
-		[perfController]
+		[perfGrid.api]
 	);
 
 	const runBulkCalculationTest = useCallback(() => {
 		const start = performance.now();
-		perfController.updateRows((rows) => {
-			return rows.map((row, index) => {
-				if (index % 10 === 0) {
-					return {
-						...row,
-						price: (Math.floor(Math.random() * 150) + 10).toString(),
-						quantity: (Math.floor(Math.random() * 5) + 1).toString(),
-					};
-				}
-				return row;
-			});
-		});
+		const count = perfGrid.api.getRowCount();
+
+		perfGrid.api.startTransaction();
+		for (let i = 0; i < count; i++) {
+			if (i % 10 !== 0) continue;
+
+			const row = perfGrid.api.getRow(i);
+			if (!row) continue;
+
+			perfGrid.api.setCellValue(row.id, 'price', (Math.floor(Math.random() * 150) + 10).toString());
+			perfGrid.api.setCellValue(row.id, 'quantity', (Math.floor(Math.random() * 5) + 1).toString());
+		}
+		perfGrid.api.endTransaction();
+
 		const duration = performance.now() - start;
 		LatencyProfiler.record(duration);
-	}, [perfController]);
+	}, [perfGrid.api]);
 
 	// --------------------------------------------------------------------------
 	// B. PAGE 2: INFINITE SERVER CHUNKS SCROLL (Global Audit & Logging Ledger)
 	// --------------------------------------------------------------------------
-	const serverColumns = useMemo<ColumnDef<any>[]>(() => {
+	const serverColumns = useMemo<ColumnDef<ServerAuditRow>[]>(() => {
 		return [
 			{ field: 'id', header: 'Trace ID', width: 130 },
 			{ field: 'timestamp', header: 'Timestamp', width: 220 },
@@ -203,20 +213,11 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		];
 	}, []);
 
-	const serverStore = useMemo(() => {
-		return new GridStore<any>({
-			rowHeights: {},
-			columnWidths: serverColumns.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
-		});
-	}, [serverColumns]);
-
-	const serverRows = useMemo(() => {
+	const serverRows = useMemo<ServerAuditRow[]>(() => {
 		const services = ['Auth', 'Billing', 'Database', 'Cache', 'API Gateway', 'Shipping'];
 		const severities = ['DEBUG', 'INFO', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
 		return Array.from({ length: 100000 }, (_, index) => {
-			const lat = index % 8 === 0 
-				? Math.floor(Math.random() * 900) + 350 
-				: Math.floor(Math.random() * 85) + 15;
+			const lat = index % 8 === 0 ? Math.floor(Math.random() * 900) + 350 : Math.floor(Math.random() * 85) + 15;
 			const date = new Date(Date.now() - index * 60000).toISOString();
 			return {
 				id: `TR-${100000 + index}`,
@@ -229,11 +230,10 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		});
 	}, []);
 
-	const mockDatasource = useMemo<IGridDatasource>(() => {
+	const mockDatasource = useMemo<GridDatasource>(() => {
 		return {
 			getRows: async (params) => {
 				const start = performance.now();
-				// Simulated server response lag
 				await new Promise((resolve) => setTimeout(resolve, 3000));
 
 				const filterModel = params.filterModel as FilterModel | undefined;
@@ -256,7 +256,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				if (sortModel?.length) {
 					rows = [...rows].sort((a, b) => {
 						for (const item of sortModel) {
-							const field = item.colId as keyof any;
+							const field = item.colId as keyof ServerAuditRow;
 							const left = a[field];
 							const right = b[field];
 							const leftNumber = Number(left);
@@ -275,43 +275,32 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				const duration = performance.now() - start;
 				LatencyProfiler.record(duration);
 
-				serverStore.dispatchEvent('serverBlockLoaded', {
-					loadedBlockStart: params.startRow,
-					loadedBlockEnd: params.endRow,
-					totalRecords: rows.length,
-					durationMs: duration,
-				});
-
 				return {
 					rows: resultRows,
 					totalCount: rows.length,
 				};
 			},
 		};
-	}, [serverRows, serverStore]);
+	}, [serverRows]);
 
-	const serverController = useMemo(() => {
-		return new ServerRowModelController<any>(serverStore, {
-			datasource: mockDatasource,
-			blockSize: 100,
-			columns: serverColumns,
-		});
-	}, [serverStore, mockDatasource, serverColumns]);
+	const serverGrid = useServerGrid<ServerAuditRow>({ datasource: mockDatasource, blockSize: 100, columns: serverColumns });
 
 	// --------------------------------------------------------------------------
 	// C. PAGE 3: SPREADSHEET RANGE MULTI-SELECT WORKSPACE (Quantitative Financial Sheet)
 	// --------------------------------------------------------------------------
 	const spreadsheetColumns = useMemo<ColumnDef<SpreadsheetRow>[]>(
 		() => [
-			{ 
-				field: 'id', 
-				header: 'Fiscal Period', 
+			{
+				field: 'id',
+				header: 'Fiscal Period',
 				width: 130,
-				valueGetter: ({ row, rowIndex }) => {
+				valueGetter: ({ node }) => {
+					const index = Number(node.id.replace('S-', '')) - 1000;
+					const rowIndex = Number.isFinite(index) ? index : 0;
 					const year = 2026 + Math.floor(rowIndex / 4);
 					const quarter = `Q${(rowIndex % 4) + 1}`;
 					return `${year} ${quarter}`;
-				}
+				},
 			},
 			{ field: 'A', header: 'Revenue ($M)', width: 120 },
 			{ field: 'B', header: 'OpEx ($M)', width: 120 },
@@ -322,13 +311,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		],
 		[]
 	);
-
-	const spreadsheetStore = useMemo(() => {
-		return new GridStore<SpreadsheetRow>({
-			rowHeights: {},
-			columnWidths: spreadsheetColumns.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
-		});
-	}, [spreadsheetColumns]);
 
 	const spreadsheetRows = useMemo(() => {
 		const rows = Array.from({ length: 500 }, (_, index) => {
@@ -346,53 +328,38 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 			};
 		});
 
-		// Seed initial reactive cash flow formulas for first 15 periods
 		for (let i = 0; i < 15; i++) {
 			const rowId = `S-${1000 + i}`;
 			const row = rows[i];
 			if (row) {
-				row.C = `=SUM([${rowId}:A],-[${rowId}:B])`; // Net income = Rev - OpEx
-				row.F = `=[${rowId}:C]*0.8`; // Simulated Discount factor
+				row.C = `=SUM([${rowId}:A],-[${rowId}:B])`;
+				row.F = `=[${rowId}:C]*0.8`;
 			}
 		}
+
 		return rows;
 	}, []);
 
-	const spreadsheetController = useMemo(() => {
-		return new ClientRowModelController<SpreadsheetRow>(spreadsheetStore, {
-			rows: spreadsheetRows,
-			columns: spreadsheetColumns,
-		});
-	}, [spreadsheetStore, spreadsheetRows, spreadsheetColumns]);
+	const spreadsheetGrid = useClientGrid<SpreadsheetRow>({ rows: spreadsheetRows, columns: spreadsheetColumns });
 
 	const handleSpreadsheetCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			spreadsheetController.updateRows((rows) =>
-				rows.map((row) => {
-					if (row.id === rowId) {
-						return { ...row, [colField]: val as string };
-					}
-					return row;
-				})
-			);
+			spreadsheetGrid.api.setCellValue(rowId, colField, val as string);
 		},
-		[spreadsheetController]
+		[spreadsheetGrid.api]
 	);
 
 	const applySpreadsheetRangeAction = useCallback(
 		(action: 'fill' | 'clear' | 'addPercent' | 'sum') => {
-			const state = spreadsheetStore.getState();
+			const state = spreadsheetGrid.api.getState();
 			const range = state.selectedRange;
 			if (!range) {
 				alert('Please select a range of cells first using click-and-drag or Shift+Arrows.');
 				return;
 			}
 
-			const rowModel = spreadsheetStore.getRowModel();
-			if (!rowModel) return;
-
-			const startIdx = rowModel.getRowIndexById(range.start.rowId);
-			const endIdx = rowModel.getRowIndexById(range.end.rowId);
+			const startIdx = spreadsheetGrid.api.getRowIndexById(range.start.rowId) ?? 0;
+			const endIdx = spreadsheetGrid.api.getRowIndexById(range.end.rowId) ?? 0;
 			const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 			const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 
@@ -406,7 +373,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 			const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
 			const rowIdsToModify: string[] = [];
 			for (let i = minRow; i <= maxRow; i++) {
-				const node = rowModel.getRowNode ? rowModel.getRowNode(i) : null;
+				const node = spreadsheetGrid.api.getRowNode(i);
 				if (node) rowIdsToModify.push(node.id);
 			}
 
@@ -417,7 +384,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				for (const rowId of rowIdsToModify) {
 					for (const colField of colsToModify) {
 						if (colField === 'id') continue;
-						const val = parseFloat(String(spreadsheetStore.getCellValue(rowId, colField))) || 0;
+						const val = parseFloat(String(spreadsheetGrid.api.getCellValue(rowId, colField))) || 0;
 						totalSum += val;
 					}
 				}
@@ -427,31 +394,27 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				return;
 			}
 
-			spreadsheetController.updateRows((rows) => {
-				return rows.map((row) => {
-					if (rowIdsToModify.includes(row.id)) {
-						let nextRow = { ...row };
-						for (const colField of colsToModify) {
-							if (colField === 'id') continue;
-							if (action === 'fill') {
-								(nextRow as any)[colField] = '100';
-							} else if (action === 'clear') {
-								(nextRow as any)[colField] = '';
-							} else if (action === 'addPercent') {
-								const valNum = parseFloat((row as any)[colField]) || 0;
-								(nextRow as any)[colField] = (valNum * 1.1).toFixed(0);
-							}
-						}
-						return nextRow;
+			spreadsheetGrid.api.startTransaction();
+			for (const rowId of rowIdsToModify) {
+				for (const colField of colsToModify) {
+					if (colField === 'id') continue;
+
+					if (action === 'fill') {
+						spreadsheetGrid.api.setCellValue(rowId, colField, '100');
+					} else if (action === 'clear') {
+						spreadsheetGrid.api.setCellValue(rowId, colField, '');
+					} else if (action === 'addPercent') {
+						const valNum = parseFloat(String(spreadsheetGrid.api.getCellValue(rowId, colField))) || 0;
+						spreadsheetGrid.api.setCellValue(rowId, colField, (valNum * 1.1).toFixed(0));
 					}
-					return row;
-				});
-			});
+				}
+			}
+			spreadsheetGrid.api.endTransaction();
 
 			const duration = performance.now() - startTime;
 			LatencyProfiler.record(duration);
 		},
-		[spreadsheetStore, spreadsheetController]
+		[spreadsheetGrid.api]
 	);
 
 	// --------------------------------------------------------------------------
@@ -461,64 +424,22 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		() => [
 			{ field: 'id', header: 'Asset ID', width: 100 },
 			{ field: 'name', header: 'Premium Asset', width: 180 },
-			{
-				field: 'price',
-				header: 'Acquisition Cost ($)',
-				width: 150,
-				cellRenderer: PriceBadgeRenderer,
-			},
-			{
-				field: 'rating',
-				header: 'Client Rating',
-				width: 160,
-				cellRenderer: StarRatingRenderer,
-			},
-			{
-				field: 'progress',
-				header: 'Deployment Status',
-				width: 170,
-				cellRenderer: ProgressBarRenderer,
-				cellEditor: ProgressSliderEditor,
-			},
-			{
-				field: 'status',
-				header: 'Operational Status',
-				width: 140,
-				cellRenderer: StatusBadgeRenderer,
-				cellEditor: StatusDropdownEditor,
-			},
+			{ field: 'price', header: 'Acquisition Cost ($)', width: 150, cellRenderer: PriceBadgeRenderer },
+			{ field: 'rating', header: 'Client Rating', width: 160, cellRenderer: StarRatingRenderer },
+			{ field: 'progress', header: 'Deployment Status', width: 170, cellRenderer: ProgressBarRenderer, cellEditor: ProgressSliderEditor },
+			{ field: 'status', header: 'Operational Status', width: 140, cellRenderer: StatusBadgeRenderer, cellEditor: StatusDropdownEditor },
 		],
 		[]
 	);
 
-	const customStore = useMemo(() => {
-		return new GridStore<CustomShowcaseRow>({
-			rowHeights: {},
-			columnWidths: customColumns.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
-		});
-	}, [customColumns]);
-
 	const customRows = useMemo(() => generateCustomShowcaseRows(50), []);
-
-	const customController = useMemo(() => {
-		return new ClientRowModelController<CustomShowcaseRow>(customStore, {
-			rows: customRows,
-			columns: customColumns,
-		});
-	}, [customStore, customRows, customColumns]);
+	const customGrid = useClientGrid<CustomShowcaseRow>({ rows: customRows, columns: customColumns });
 
 	const handleCustomCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			customController.updateRows((rows) =>
-				rows.map((row) => {
-					if (row.id === rowId) {
-						return { ...row, [colField]: val as string };
-					}
-					return row;
-				})
-			);
+			customGrid.api.setCellValue(rowId, colField, val as string);
 		},
-		[customController]
+		[customGrid.api]
 	);
 
 	// --------------------------------------------------------------------------
@@ -563,43 +484,14 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		return layoutColumnsFull.filter((col) => visibleColumns[col.field]);
 	}, [layoutColumnsFull, visibleColumns]);
 
-	const layoutStore = useMemo(() => {
-		return new GridStore<PerformanceRow>({
-			rowHeights: {},
-			columnWidths: layoutColumnsFull.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
-		});
-	}, [layoutColumnsFull]);
-
 	const layoutRows = useMemo(() => generatePerformanceRows(100, 'R'), []);
-
-	const layoutController = useMemo(() => {
-		return new ClientRowModelController<PerformanceRow>(layoutStore, {
-			rows: layoutRows,
-			columns: layoutColumns,
-		});
-	}, [layoutStore, layoutRows, layoutColumns]);
-
-	useEffect(() => {
-		layoutStore.setState({ columns: layoutColumns });
-	}, [layoutStore, layoutColumns]);
+	const layoutGrid = useClientGrid<PerformanceRow>({ rows: layoutRows, columns: layoutColumns });
 
 	const handleLayoutCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			layoutController.updateRows((rows) =>
-				rows.map((row) => {
-					if (row.id === rowId) {
-						let updated = { ...row, [colField]: val as any };
-						if (colField === 'status' && val === 'Inactive') {
-							updated.price = '0';
-							updated.quantity = '0';
-						}
-						return updated;
-					}
-					return row;
-				})
-			);
+			setInactiveRiskSideEffects(layoutGrid.api, rowId, colField, val);
 		},
-		[layoutController]
+		[layoutGrid.api]
 	);
 
 	// --------------------------------------------------------------------------
@@ -626,39 +518,14 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		];
 	}, []);
 
-	const skinsStore = useMemo(() => {
-		return new GridStore<PerformanceRow>({
-			rowHeights: {},
-			columnWidths: skinsColumns.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
-		});
-	}, [skinsColumns]);
-
-	const skinsRows = useMemo(() => generatePerformanceRows(50, 'S'), []);
-
-	const skinsController = useMemo(() => {
-		return new ClientRowModelController<PerformanceRow>(skinsStore, {
-			rows: skinsRows,
-			columns: skinsColumns,
-		});
-	}, [skinsStore, skinsRows, skinsColumns]);
+	const skinsRows = useMemo(() => generatePerformanceRows(50, 'SR'), []);
+	const skinsGrid = useClientGrid<PerformanceRow>({ rows: skinsRows, columns: skinsColumns });
 
 	const handleSkinsCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			skinsController.updateRows((rows) =>
-				rows.map((row) => {
-					if (row.id === rowId) {
-						let updated = { ...row, [colField]: val as any };
-						if (colField === 'status' && val === 'Inactive') {
-							updated.price = '0';
-							updated.quantity = '0';
-						}
-						return updated;
-					}
-					return row;
-				})
-			);
+			setInactiveRiskSideEffects(skinsGrid.api, rowId, colField, val);
 		},
-		[skinsController]
+		[skinsGrid.api]
 	);
 
 	// --------------------------------------------------------------------------
@@ -676,13 +543,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		[]
 	);
 
-	const dashboardStore = useMemo(() => {
-		return new GridStore<DashboardStockRow>({
-			rowHeights: {},
-			columnWidths: dashboardColumns.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
-		});
-	}, [dashboardColumns]);
-
 	const dashboardRows = useMemo<DashboardStockRow[]>(
 		() => [
 			{ id: 'AAPL', name: 'Apple Inc.', price: '175.50', change: '+1.2', volume: '52.4', risk: 'Low' },
@@ -699,31 +559,19 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		[]
 	);
 
-	const dashboardController = useMemo(() => {
-		return new ClientRowModelController<DashboardStockRow>(dashboardStore, {
-			rows: dashboardRows,
-			columns: dashboardColumns,
-		});
-	}, [dashboardStore, dashboardRows, dashboardColumns]);
+	const dashboardGrid = useClientGrid<DashboardStockRow>({ rows: dashboardRows, columns: dashboardColumns });
 
 	const handleDashboardCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			dashboardController.updateRows((rows) =>
-				rows.map((row) => {
-					if (row.id === rowId) {
-						return { ...row, [colField]: val as string };
-					}
-					return row;
-				})
-			);
+			dashboardGrid.api.setCellValue(rowId, colField, val as string);
 		},
-		[dashboardController]
+		[dashboardGrid.api]
 	);
 
 	// --------------------------------------------------------------------------
 	// H. PAGE 8: GANTT SCHEDULE & PROJECT WORKSPACE (Gantt & Project Scheduling Arena)
 	// --------------------------------------------------------------------------
-	const ganttColumns = useMemo<ColumnDef<any>[]>(() => {
+	const ganttColumns = useMemo<ColumnDef<GanttRow>[]>(() => {
 		return [
 			{ field: 'id', header: 'Task ID', width: 90 },
 			{ field: 'name', header: 'Task Description', width: 170 },
@@ -731,30 +579,12 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 			{ field: 'sprintDay', header: 'Sprint Start', width: 100 },
 			{ field: 'durationDays', header: 'Duration (Days)', width: 120 },
 			{ field: 'progress', header: 'Progress (%)', width: 110 },
-			{
-				field: 'status',
-				header: 'Status',
-				width: 120,
-				cellRenderer: GanttStatusBadgeRenderer,
-				cellEditor: GanttStatusDropdownEditor,
-			},
-			{
-				field: 'timeline',
-				header: 'Gantt Sprint Timeline (30 Days)',
-				width: 280,
-				cellRenderer: GanttTimelineRenderer,
-			},
+			{ field: 'status', header: 'Status', width: 120, cellRenderer: GanttStatusBadgeRenderer, cellEditor: GanttStatusDropdownEditor },
+			{ field: 'timeline', header: 'Gantt Sprint Timeline (30 Days)', width: 280, cellRenderer: GanttTimelineRenderer },
 		];
 	}, []);
 
-	const ganttStore = useMemo(() => {
-		return new GridStore<any>({
-			rowHeights: {},
-			columnWidths: ganttColumns.reduce((acc, col) => ({ ...acc, [col.field]: col.width }), {}),
-		});
-	}, [ganttColumns]);
-
-	const ganttRows = useMemo(() => {
+	const ganttRows = useMemo<GanttRow[]>(() => {
 		const tasks = [
 			'Project Blueprint Mapping',
 			'User Persona Def & Scoping',
@@ -775,11 +605,11 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 			'Production Bundler Testing',
 		];
 		const owners = ['Rishi', 'Alice', 'Sarah', 'Bob'];
-		
+
 		return Array.from({ length: 30 }, (_, index) => {
 			const taskName = tasks[index % tasks.length];
 			const owner = owners[index % owners.length];
-			const status = index < 6 ? 'Done' : index < 12 ? 'In Progress' : index % 7 === 0 ? 'Blocked' : 'Pending';
+			const status: GanttRow['status'] = index < 6 ? 'Done' : index < 12 ? 'In Progress' : index % 7 === 0 ? 'Blocked' : 'Pending';
 			const progress = status === 'Done' ? 100 : status === 'In Progress' ? Math.floor(Math.random() * 60) + 20 : 0;
 			const duration = Math.floor(Math.random() * 5) + 2;
 			const startDay = index === 0 ? 1 : Math.max(1, index * 2 - 1);
@@ -796,80 +626,60 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		});
 	}, []);
 
-	const ganttController = useMemo(() => {
-		return new ClientRowModelController<any>(ganttStore, {
-			rows: ganttRows,
-			columns: ganttColumns,
-		});
-	}, [ganttStore, ganttRows, ganttColumns]);
+	const ganttGrid = useClientGrid<GanttRow>({ rows: ganttRows, columns: ganttColumns });
 
 	const handleGanttCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			ganttController.updateRows((rows) =>
-				rows.map((row) => {
-					if (row.id === rowId) {
-						let updated = { ...row, [colField]: val as any };
-						if (colField === 'status') {
-							if (val === 'Done') updated.progress = 100;
-							else if (val === 'Pending') updated.progress = 0;
-						}
-						return updated;
-					}
-					return row;
-				})
-			);
+			ganttGrid.api.setCellValue(rowId, colField, val);
+
+			if (colField === 'status') {
+				if (val === 'Done') ganttGrid.api.setCellValue(rowId, 'progress', 100);
+				else if (val === 'Pending') ganttGrid.api.setCellValue(rowId, 'progress', 0);
+			}
 		},
-		[ganttController]
+		[ganttGrid.api]
 	);
 
 	return {
 		// A. Perf Calculations Playground
-		perfStore,
-		perfController,
+		perfGrid,
 		perfRows,
 		handlePerfCellValueChanged,
 		runBulkCalculationTest,
 
 		// B. Infinite Server Scroll
-		serverStore,
-		serverController,
+		serverGrid,
 		serverRows,
 
 		// C. Spreadsheet selection
-		spreadsheetStore,
-		spreadsheetController,
+		spreadsheetGrid,
 		spreadsheetRows,
 		handleSpreadsheetCellValueChanged,
 		applySpreadsheetRangeAction,
 
 		// D. Custom editors
-		customStore,
-		customController,
+		customGrid,
 		customRows,
 		handleCustomCellValueChanged,
 
 		// E. Dynamic layouts
-		layoutStore,
-		layoutController,
+		layoutGrid,
 		layoutRows,
 		handleLayoutCellValueChanged,
 		layoutColumnsFull,
 
 		// F. Headless skins
-		skinsStore,
-		skinsController,
+		skinsGrid,
 		skinsRows,
 		handleSkinsCellValueChanged,
 
 		// G. Analytics dashboard
-		dashboardStore,
-		dashboardController,
+		dashboardGrid,
 		dashboardRows,
 		handleDashboardCellValueChanged,
 
 		// H. Gantt Workspace
-		ganttStore,
-		ganttController,
+		ganttGrid,
 		ganttRows,
 		handleGanttCellValueChanged,
 	};

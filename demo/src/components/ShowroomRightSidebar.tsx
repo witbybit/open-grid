@@ -1,5 +1,5 @@
 import React from 'react';
-import { GridStore } from '@open-grid/core';
+import type { GridStore, ReactGridInstance } from '@open-grid/react';
 import { StateInspector, LiveEventLogPanel } from './RightSidebar';
 import {
 	ViewportPanel,
@@ -29,13 +29,14 @@ interface ShowroomRightSidebarProps {
 	setEditTrigger: (t: 'singleClick' | 'doubleClick') => void;
 	arrowKeyNavigationEdit: boolean;
 	setArrowKeyNavigationEdit: (b: boolean) => void;
-	perfController: any;
-	serverController: any;
-	spreadsheetController: any;
-	customController: any;
-	skinsController: any;
-	dashboardController: any;
-	ganttController: any;
+	perfGrid: ReactGridInstance<any>;
+	serverGrid: ReactGridInstance<any>;
+	spreadsheetGrid: ReactGridInstance<any>;
+	customGrid: ReactGridInstance<any>;
+	layoutGrid: ReactGridInstance<any>;
+	skinsGrid: ReactGridInstance<any>;
+	dashboardGrid: ReactGridInstance<any>;
+	ganttGrid: ReactGridInstance<any>;
 }
 
 export default function ShowroomRightSidebar({
@@ -58,13 +59,14 @@ export default function ShowroomRightSidebar({
 	setEditTrigger,
 	arrowKeyNavigationEdit,
 	setArrowKeyNavigationEdit,
-	perfController,
-	serverController,
-	spreadsheetController,
-	customController,
-	skinsController,
-	dashboardController,
-	ganttController,
+	perfGrid,
+	serverGrid,
+	spreadsheetGrid,
+	customGrid,
+	layoutGrid,
+	skinsGrid,
+	dashboardGrid,
+	ganttGrid,
 }: ShowroomRightSidebarProps) {
 	return (
 		<div
@@ -109,13 +111,14 @@ export default function ShowroomRightSidebar({
 			{/* Developer Panel */}
 			<DeveloperPanel
 				activePage={activePage}
-				perfController={perfController}
-				serverController={serverController}
-				spreadsheetController={spreadsheetController}
-				customController={customController}
-				skinsController={skinsController}
-				dashboardController={dashboardController}
-				ganttController={ganttController}
+				perfGrid={perfGrid}
+				serverGrid={serverGrid}
+				spreadsheetGrid={spreadsheetGrid}
+				customGrid={customGrid}
+				layoutGrid={layoutGrid}
+				skinsGrid={skinsGrid}
+				dashboardGrid={dashboardGrid}
+				ganttGrid={ganttGrid}
 			/>
 
 			{/* Keyboard Shortcuts guide */}
