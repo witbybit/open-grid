@@ -39,6 +39,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private unsubscribeStore: (() => void) | null = null;
 	private unsubscribeCellValueChanged: (() => void) | null = null;
 	private pendingPaint = false;
+	private hoveredRowIndex: number | null = null;
 
 	// Drag-to-fill tracking variables
 	private isFilling = false;
@@ -137,6 +138,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		// Bind scroll events to scroll engine
 		this.scrollEngine.bind(this.scrollViewport, this.onScroll);
+		this.scrollViewport.addEventListener('mouseover', this.onRowMouseOver);
+		this.scrollViewport.addEventListener('mouseleave', this.onRowMouseLeave);
 
 		// Pre-warm DOM recycling pools
 		const rect = container.getBoundingClientRect();
@@ -178,6 +181,10 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 
 		this.scrollEngine.unbind();
+		if (this.scrollViewport) {
+			this.scrollViewport.removeEventListener('mouseover', this.onRowMouseOver);
+			this.scrollViewport.removeEventListener('mouseleave', this.onRowMouseLeave);
+		}
 		this.cleanupColumnReorderDrag();
 
 		// Release all active rows and cells
@@ -429,6 +436,9 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				rowClassName += ' og-row-pinned-top';
 			} else if (r >= rowCount - pinBottomRows) {
 				rowClassName += ' og-row-pinned-bottom';
+			}
+			if (this.hoveredRowIndex === r) {
+				rowClassName += ' og-row-hovered';
 			}
 			if (isSelectedRow || isFocusedRow || node.selected) {
 				rowClassName += ' og-row-selected';
@@ -1251,6 +1261,45 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 
 		return { left: xRangeMin.left, top: yRangeMin.top, width, height };
+	}
+
+	private onRowMouseOver = (event: MouseEvent): void => {
+		const rowEl = (event.target as HTMLElement).closest('.og-row') as HTMLElement | null;
+		const rowIndexText = rowEl?.dataset.rowIndex;
+		if (rowIndexText === undefined) {
+			this.setHoveredRowIndex(null);
+			return;
+		}
+
+		const rowIndex = Number(rowIndexText);
+		this.setHoveredRowIndex(Number.isFinite(rowIndex) ? rowIndex : null);
+	};
+
+	private onRowMouseLeave = (): void => {
+		this.setHoveredRowIndex(null);
+	};
+
+	private setHoveredRowIndex(rowIndex: number | null): void {
+		if (this.hoveredRowIndex === rowIndex) return;
+
+		if (this.hoveredRowIndex !== null) {
+			this.setPooledRowHoverClass(this.hoveredRowIndex, false);
+		}
+
+		this.hoveredRowIndex = rowIndex;
+
+		if (rowIndex !== null) {
+			this.setPooledRowHoverClass(rowIndex, true);
+		}
+	}
+
+	private setPooledRowHoverClass(rowIndex: number, hovered: boolean): void {
+		const pooledRow = this.activeRows.get(rowIndex);
+		if (!pooledRow) return;
+
+		pooledRow.element.classList.toggle('og-row-hovered', hovered);
+		pooledRow.leftElement?.classList.toggle('og-row-hovered', hovered);
+		pooledRow.rightElement?.classList.toggle('og-row-hovered', hovered);
 	}
 
 	private ensureSelectionBorder(): HTMLDivElement {

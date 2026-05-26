@@ -168,7 +168,8 @@ export const CORE_STYLES = `
     transition: background-color 0.15s ease;
   }
 
-  .og-row:hover {
+  .og-row:hover,
+  .og-row-hovered {
     background-color: var(--og-row-hover-bg);
   }
 
