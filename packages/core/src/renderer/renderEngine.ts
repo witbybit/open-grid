@@ -5,7 +5,6 @@ import type { IGridRenderer } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { RowNode, type ColumnDef, type GridCellRange } from '../store.js';
 import { CORE_STYLES } from './styles.js';
-import type { ViewportRange } from '../viewportController.js';
 
 /**
  * RenderEngine — The framework-agnostic core DOM owner.
@@ -32,7 +31,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private headerRightLayer: HTMLDivElement | null = null;
 	private overlayLayer: HTMLDivElement | null = null;
 	private selectionBorder: HTMLDivElement | null = null;
-	private selectionFillHandle: HTMLDivElement | null = null;
 	private styleTag: HTMLStyleElement | null = null;
 
 	// Active tracking maps
@@ -41,10 +39,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private unsubscribeStore: (() => void) | null = null;
 	private unsubscribeCellValueChanged: (() => void) | null = null;
 	private pendingPaint = false;
-
-	// Track current ranges to prevent redundant renders
-	private currentRowRange: ViewportRange = { startIdx: -1, endIdx: -1 };
-	private currentColRange: ViewportRange = { startIdx: -1, endIdx: -1 };
 
 	// Drag-to-fill tracking variables
 	private isFilling = false;
@@ -199,7 +193,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 
 		this.selectionBorder = null;
-		this.selectionFillHandle = null;
 		this.selectionDragBounds = null;
 
 		if (this.container) {
@@ -379,9 +372,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 					leftElement: leftEl,
 					rightElement: rightEl,
 					cells: new Map(),
-					boundRowIndex: r,
 					boundRowId: node.id,
-					isDirty: false,
 				};
 				this.activeRows.set(r, pooledRow);
 
@@ -475,9 +466,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				renderRow(r);
 			}
 		}
-
-		this.currentRowRange = newRowRange;
-		this.currentColRange = newColRange;
 	}
 
 	/**
@@ -1107,93 +1095,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			return;
 		}
 
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const pinTopRows = this.engine.viewport.pinTopRows;
-		const pinBottomRows = this.engine.viewport.pinBottomRows;
-		const scrollTop = this.engine.viewport.scrollTop;
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportHeight = this.engine.viewport.viewportHeight;
-		const viewportWidth = this.engine.viewport.viewportWidth;
-
-		// 1. Calculate pinned column widths for clamping
-		let pinnedLeftWidth = 0;
-		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
-			pinnedLeftWidth += this.engine.geometry.colWidths[i] || 0;
-		}
-
-		let pinnedRightWidth = 0;
-		for (let i = 0; i < pinRightColumns && i < colCount; i++) {
-			pinnedRightWidth += this.engine.geometry.colWidths[colCount - 1 - i] || 0;
-		}
-
-		// 2. Calculate pinned row heights for clamping
-		let pinnedTopHeight = 0;
-		for (let i = 0; i < pinTopRows && i < rowCount; i++) {
-			pinnedTopHeight += this.engine.geometry.rowHeights[i] || 0;
-		}
-
-		let pinnedBottomHeight = 0;
-		for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
-			pinnedBottomHeight += this.engine.geometry.rowHeights[rowCount - 1 - i] || 0;
-		}
-
-		// Helper to get clamped X coordinate range for a column
-		const getClampedX = (c: number): { left: number; right: number } => {
-			const cellLeft = this.engine.geometry.colLefts[c] || 0;
-			const cellWidth = this.engine.geometry.colWidths[c] || 0;
-
-			if (c < pinLeftColumns) {
-				return { left: cellLeft, right: cellLeft + cellWidth };
-			} else if (c >= colCount - pinRightColumns) {
-				const firstRightPinColIdx = colCount - pinRightColumns;
-				const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
-				const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
-				return { left, right: left + cellWidth };
-			} else {
-				const unclippedLeft = cellLeft - scrollLeft;
-				const unclippedRight = unclippedLeft + cellWidth;
-				const left = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedLeft));
-				const right = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedRight));
-				return { left, right };
-			}
-		};
-
-		// Helper to get clamped Y coordinate range for a row
-		const getClampedY = (r: number): { top: number; bottom: number } => {
-			const rowTop = this.engine.geometry.rowTops[r] || 0;
-			const rowHeight = this.engine.geometry.rowHeights[r] || 0;
-
-			if (r < pinTopRows) {
-				return { top: rowTop, bottom: rowTop + rowHeight };
-			} else if (r >= rowCount - pinBottomRows) {
-				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
-				const bottomOffset = totalHeight - rowTop;
-				const top = viewportHeight - 40 - bottomOffset;
-				return { top, bottom: top + rowHeight };
-			} else {
-				const unclippedTop = rowTop - scrollTop;
-				const unclippedBottom = unclippedTop + rowHeight;
-				const top = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedTop));
-				const bottom = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedBottom));
-				return { top, bottom };
-			}
-		};
-
-		const xRangeMin = getClampedX(minCol);
-		const xRangeMax = getClampedX(maxCol);
-		const yRangeMin = getClampedY(minRow);
-		const yRangeMax = getClampedY(maxRow);
-
-		const selectionLeft = xRangeMin.left;
-		const selectionRight = xRangeMax.right;
-		const selectionTop = yRangeMin.top;
-		const selectionBottom = yRangeMax.bottom;
-
-		const width = selectionRight - selectionLeft;
-		const height = selectionBottom - selectionTop;
-
-		if (width <= 0 || height <= 0) {
+		const box = this.getClampedOverlayBox(minRow, maxRow, minCol, maxCol);
+		if (!box) {
 			this.hideSelectionOverlay();
 			return;
 		}
@@ -1202,9 +1105,9 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		this.selectionDragBounds = { minRow, maxRow, minCol, maxCol };
 
 		// Position selection border overlay absolute
-		selectionBorder.style.transform = `translate3d(${selectionLeft}px, ${selectionTop}px, 0)`;
-		selectionBorder.style.width = `${width}px`;
-		selectionBorder.style.height = `${height}px`;
+		selectionBorder.style.transform = `translate3d(${box.left}px, ${box.top}px, 0)`;
+		selectionBorder.style.width = `${box.width}px`;
+		selectionBorder.style.height = `${box.height}px`;
 		selectionBorder.style.display = 'block';
 
 		if (selectionBorder.parentNode !== this.overlayLayer) {
@@ -1218,15 +1121,115 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 	}
 
+	private getClampedOverlayBox(
+		minRow: number,
+		maxRow: number,
+		minCol: number,
+		maxCol: number
+	): { left: number; top: number; width: number; height: number } | null {
+		const state = this.engine.stateManager.getState();
+		const rowModel = this.engine.getRowModel();
+		const rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const colCount = state.columns.length;
+
+		if (rowCount === 0 || colCount === 0 || minRow < 0 || minCol < 0 || maxRow >= rowCount || maxCol >= colCount) {
+			return null;
+		}
+
+		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
+		const pinRightColumns = this.engine.viewport.pinRightColumns;
+		const pinTopRows = this.engine.viewport.pinTopRows;
+		const pinBottomRows = this.engine.viewport.pinBottomRows;
+		const scrollTop = this.engine.viewport.scrollTop;
+		const scrollLeft = this.engine.viewport.scrollLeft;
+		const viewportHeight = this.engine.viewport.viewportHeight;
+		const viewportWidth = this.engine.viewport.viewportWidth;
+
+		let pinnedLeftWidth = 0;
+		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
+			pinnedLeftWidth += this.engine.geometry.colWidths[i] || 0;
+		}
+
+		let pinnedRightWidth = 0;
+		for (let i = 0; i < pinRightColumns && i < colCount; i++) {
+			pinnedRightWidth += this.engine.geometry.colWidths[colCount - 1 - i] || 0;
+		}
+
+		let pinnedTopHeight = 0;
+		for (let i = 0; i < pinTopRows && i < rowCount; i++) {
+			pinnedTopHeight += this.engine.geometry.rowHeights[i] || 0;
+		}
+
+		let pinnedBottomHeight = 0;
+		for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
+			pinnedBottomHeight += this.engine.geometry.rowHeights[rowCount - 1 - i] || 0;
+		}
+
+		const getClampedX = (c: number): { left: number; right: number } => {
+			const cellLeft = this.engine.geometry.colLefts[c] || 0;
+			const cellWidth = this.engine.geometry.colWidths[c] || 0;
+
+			if (c < pinLeftColumns) {
+				return { left: cellLeft, right: cellLeft + cellWidth };
+			}
+			if (c >= colCount - pinRightColumns) {
+				const firstRightPinColIdx = colCount - pinRightColumns;
+				const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
+				const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
+				return { left, right: left + cellWidth };
+			}
+
+			const unclippedLeft = cellLeft - scrollLeft;
+			const unclippedRight = unclippedLeft + cellWidth;
+			const left = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedLeft));
+			const right = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedRight));
+			return { left, right };
+		};
+
+		const getClampedY = (r: number): { top: number; bottom: number } => {
+			const rowTop = this.engine.geometry.rowTops[r] || 0;
+			const rowHeight = this.engine.geometry.rowHeights[r] || 0;
+
+			if (r < pinTopRows) {
+				return { top: rowTop, bottom: rowTop + rowHeight };
+			}
+			if (r >= rowCount - pinBottomRows) {
+				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
+				const bottomOffset = totalHeight - rowTop;
+				const top = viewportHeight - 40 - bottomOffset;
+				return { top, bottom: top + rowHeight };
+			}
+
+			const unclippedTop = rowTop - scrollTop;
+			const unclippedBottom = unclippedTop + rowHeight;
+			const top = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedTop));
+			const bottom = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedBottom));
+			return { top, bottom };
+		};
+
+		const xRangeMin = getClampedX(minCol);
+		const xRangeMax = getClampedX(maxCol);
+		const yRangeMin = getClampedY(minRow);
+		const yRangeMax = getClampedY(maxRow);
+		const width = xRangeMax.right - xRangeMin.left;
+		const height = yRangeMax.bottom - yRangeMin.top;
+
+		if (width <= 0 || height <= 0) {
+			return null;
+		}
+
+		return { left: xRangeMin.left, top: yRangeMin.top, width, height };
+	}
+
 	private ensureSelectionBorder(): HTMLDivElement {
 		if (!this.selectionBorder) {
 			this.selectionBorder = document.createElement('div');
 			this.selectionBorder.className = 'og-selection-border';
 
-			this.selectionFillHandle = document.createElement('div');
-			this.selectionFillHandle.className = 'og-selection-fill-handle';
-			this.selectionFillHandle.addEventListener('mousedown', this.onSelectionFillHandleMouseDown);
-			this.selectionBorder.appendChild(this.selectionFillHandle);
+			const fillHandle = document.createElement('div');
+			fillHandle.className = 'og-selection-fill-handle';
+			fillHandle.addEventListener('mousedown', this.onSelectionFillHandleMouseDown);
+			this.selectionBorder.appendChild(fillHandle);
 		}
 
 		return this.selectionBorder;
@@ -1428,97 +1431,12 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 
 		const { minRow, maxRow, minCol, maxCol } = this.currentFillPreview;
-
-		const state = this.engine.stateManager.getState();
-		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getRowCount() : 0;
-		const columns = state.columns;
-		const colCount = columns.length;
-
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const pinTopRows = this.engine.viewport.pinTopRows;
-		const pinBottomRows = this.engine.viewport.pinBottomRows;
-		const scrollTop = this.engine.viewport.scrollTop;
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportHeight = this.engine.viewport.viewportHeight;
-		const viewportWidth = this.engine.viewport.viewportWidth;
-
-		let pinnedLeftWidth = 0;
-		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
-			pinnedLeftWidth += this.engine.geometry.colWidths[i] || 0;
-		}
-		let pinnedRightWidth = 0;
-		for (let i = 0; i < pinRightColumns && i < colCount; i++) {
-			pinnedRightWidth += this.engine.geometry.colWidths[colCount - 1 - i] || 0;
-		}
-		let pinnedTopHeight = 0;
-		for (let i = 0; i < pinTopRows && i < rowCount; i++) {
-			pinnedTopHeight += this.engine.geometry.rowHeights[i] || 0;
-		}
-		let pinnedBottomHeight = 0;
-		for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
-			pinnedBottomHeight += this.engine.geometry.rowHeights[rowCount - 1 - i] || 0;
-		}
-
-		const getClampedX = (c: number): { left: number; right: number } => {
-			const cellLeft = this.engine.geometry.colLefts[c] || 0;
-			const cellWidth = this.engine.geometry.colWidths[c] || 0;
-
-			if (c < pinLeftColumns) {
-				return { left: cellLeft, right: cellLeft + cellWidth };
-			} else if (c >= colCount - pinRightColumns) {
-				const firstRightPinColIdx = colCount - pinRightColumns;
-				const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
-				const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
-				return { left, right: left + cellWidth };
-			} else {
-				const unclippedLeft = cellLeft - scrollLeft;
-				const unclippedRight = unclippedLeft + cellWidth;
-				const left = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedLeft));
-				const right = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedRight));
-				return { left, right };
-			}
-		};
-
-		const getClampedY = (r: number): { top: number; bottom: number } => {
-			const rowTop = this.engine.geometry.rowTops[r] || 0;
-			const rowHeight = this.engine.geometry.rowHeights[r] || 0;
-
-			if (r < pinTopRows) {
-				return { top: rowTop, bottom: rowTop + rowHeight };
-			} else if (r >= rowCount - pinBottomRows) {
-				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
-				const bottomOffset = totalHeight - rowTop;
-				const top = viewportHeight - 40 - bottomOffset;
-				return { top, bottom: top + rowHeight };
-			} else {
-				const unclippedTop = rowTop - scrollTop;
-				const unclippedBottom = unclippedTop + rowHeight;
-				const top = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedTop));
-				const bottom = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedBottom));
-				return { top, bottom };
-			}
-		};
-
-		const xRangeMin = getClampedX(minCol);
-		const xRangeMax = getClampedX(maxCol);
-		const yRangeMin = getClampedY(minRow);
-		const yRangeMax = getClampedY(maxRow);
-
-		const pLeft = xRangeMin.left;
-		const pRight = xRangeMax.right;
-		const pTop = yRangeMin.top;
-		const pBottom = yRangeMax.bottom;
-
-		const pWidth = pRight - pLeft;
-		const pHeight = pBottom - pTop;
-
-		if (pWidth > 0 && pHeight > 0) {
+		const box = this.getClampedOverlayBox(minRow, maxRow, minCol, maxCol);
+		if (box) {
 			this.fillPreviewBorder.style.display = 'block';
-			this.fillPreviewBorder.style.transform = `translate3d(${pLeft}px, ${pTop}px, 0)`;
-			this.fillPreviewBorder.style.width = `${pWidth}px`;
-			this.fillPreviewBorder.style.height = `${pHeight}px`;
+			this.fillPreviewBorder.style.transform = `translate3d(${box.left}px, ${box.top}px, 0)`;
+			this.fillPreviewBorder.style.width = `${box.width}px`;
+			this.fillPreviewBorder.style.height = `${box.height}px`;
 		} else {
 			this.fillPreviewBorder.style.display = 'none';
 		}

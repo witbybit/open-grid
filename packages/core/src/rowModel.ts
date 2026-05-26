@@ -1,4 +1,4 @@
-import { GridStore, ColumnDef, RowModel, RowNode, getValueByPath, setValueByPath, compilePathGetter } from './store.js';
+import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter } from './store.js';
 import { createCellKey, getFieldRoot } from './ids.js';
 
 export type SortDirection = 'asc' | 'desc';
@@ -52,36 +52,6 @@ function compareValues(a: unknown, b: unknown): number {
 	if (aStr < bStr) return -1;
 	if (aStr > bStr) return 1;
 	return 0;
-}
-
-function matchesFilter(value: unknown, item: FilterModelItem | unknown): boolean {
-	const { operator, filter } = getFilterItemValue(item);
-	if (filter == null || filter === '') return true;
-
-	const textValue = String(value ?? '').toLowerCase();
-	const textFilter = String(filter).toLowerCase();
-	const numericValue = Number(value);
-	const numericFilter = Number(filter);
-
-	switch (operator) {
-		case 'equals':
-			return textValue === textFilter;
-		case 'startsWith':
-			return textValue.startsWith(textFilter);
-		case 'endsWith':
-			return textValue.endsWith(textFilter);
-		case 'gt':
-			return numericValue > numericFilter;
-		case 'gte':
-			return numericValue >= numericFilter;
-		case 'lt':
-			return numericValue < numericFilter;
-		case 'lte':
-			return numericValue <= numericFilter;
-		case 'contains':
-		default:
-			return textValue.includes(textFilter);
-	}
 }
 
 export function getColumnValue<TData>(node: RowNode<TData>, column: ColumnDef<TData> | undefined): unknown {

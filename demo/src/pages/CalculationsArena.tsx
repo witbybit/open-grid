@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { GridProvider, useClientGrid } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
-import { Activity, ShieldAlert, BadgePercent, TrendingUp, Layers } from 'lucide-react';
+import { Activity, ShieldAlert, BadgePercent } from 'lucide-react';
 
 type ClientGrid = ReturnType<typeof useClientGrid<PerformanceRow>>;
 interface CalculationsArenaProps {

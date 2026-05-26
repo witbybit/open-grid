@@ -1,8 +1,4 @@
-import type { GridEngine } from '../engine/GridEngine.js';
-
 export class GeometryModel {
-	private engine!: GridEngine<any>;
-
 	// Row Geometry arrays
 	public rowTops = new Float64Array(0);
 	public rowHeights = new Float64Array(0);
@@ -15,16 +11,7 @@ export class GeometryModel {
 	private colCapacity = 0;
 	private colCount = 0;
 
-	// Cached Totals
-	private totalHeight = 0;
-	private totalWidth = 0;
-
-	// Segmented geometry config for SSRM scale-ups
-	private rowSegmentChunkSize = 1000;
-	private rowSegmentOffsets: number[] = [];
-
-	public init(engine: GridEngine<any>): void {
-		this.engine = engine;
+	public init(): void {
 	}
 
 	public updateColumns(widths: number[], defaultColWidth: number): void {
@@ -43,7 +30,6 @@ export class GeometryModel {
 			this.colLefts[i] = left;
 			left += w;
 		}
-		this.totalWidth = left;
 	}
 
 	public updateRows(heights: number[], defaultRowHeight: number): void {
@@ -61,19 +47,6 @@ export class GeometryModel {
 			this.rowHeights[i] = h;
 			this.rowTops[i] = top;
 			top += h;
-		}
-		this.totalHeight = top;
-
-		// Initialize row segment chunk metadata
-		this.rebuildRowSegments();
-	}
-
-	private rebuildRowSegments(): void {
-		const chunkCount = Math.ceil(this.rowCount / this.rowSegmentChunkSize);
-		this.rowSegmentOffsets = new Array(chunkCount);
-		for (let c = 0; c < chunkCount; c++) {
-			const startIdx = c * this.rowSegmentChunkSize;
-			this.rowSegmentOffsets[c] = this.rowTops[startIdx];
 		}
 	}
 

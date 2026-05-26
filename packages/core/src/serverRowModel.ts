@@ -1,4 +1,4 @@
-import { GridStore, ColumnDef, RowModel, RowNode, getValueByPath, setValueByPath } from './store.js';
+import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath } from './store.js';
 
 export interface GetRowsParams {
 	startRow: number;

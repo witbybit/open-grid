@@ -86,10 +86,10 @@ export class GridEngine<TRowData = unknown> {
 		this.data.init(this);
 		this.columns.init(this);
 		this.viewport.init(this);
-		this.geometry.init(this);
-		this.focus.init(this);
-		this.selection.init(this);
-		this.edit.init(this);
+		this.geometry.init();
+		this.focus.init();
+		this.selection.init();
+		this.edit.init();
 
 		// Wire up core commands
 		this.setupCommandHandlers();

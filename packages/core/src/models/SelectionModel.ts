@@ -1,13 +1,10 @@
 import type { GridCellRange, GridCellRangeBounds, GridCellPointer } from '../store.js';
-import type { GridEngine } from '../engine/GridEngine.js';
 
 export class SelectionModel {
-	private engine!: GridEngine<any>;
 	private selectedRange: GridCellRange | null = null;
 	private selectedRangeBounds: GridCellRangeBounds | null = null;
 
-	public init(engine: GridEngine<any>): void {
-		this.engine = engine;
+	public init(): void {
 	}
 
 	public getSelectedRange(): GridCellRange | null {

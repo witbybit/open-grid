@@ -16,8 +16,6 @@ export class ViewportModel {
 	public pinBottomRows = 0;
 
 	// Scroll velocity tracking
-	private lastScrollTop = 0;
-	private lastScrollLeft = 0;
 	private lastTimestamp = 0;
 	private velocityY = 0; // px/ms
 	private velocityX = 0; // px/ms
@@ -53,8 +51,6 @@ export class ViewportModel {
 			this.velocityX = 0;
 		}
 
-		this.lastScrollTop = this.scrollTop;
-		this.lastScrollLeft = this.scrollLeft;
 		this.scrollTop = scrollTop;
 		this.scrollLeft = scrollLeft;
 		this.lastTimestamp = timestamp;

@@ -1,12 +1,9 @@
 import type { GridCellPointer } from '../store.js';
-import type { GridEngine } from '../engine/GridEngine.js';
 
 export class FocusModel {
-	private engine!: GridEngine<any>;
 	private focusedCell: GridCellPointer | null = null;
 
-	public init(engine: GridEngine<any>): void {
-		this.engine = engine;
+	public init(): void {
 	}
 
 	public getFocusedCell(): GridCellPointer | null {
