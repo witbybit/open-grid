@@ -183,7 +183,7 @@ export interface RowModel<TRowData = unknown> {
 	refresh?(): void;
 	purgeCache?(): void;
 	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
-	loadVisibleBlocks?(visibleRowIndices: number[]): void;
+	loadVisibleBlocks?(startRow: number, endRow: number): void;
 }
 
 export interface ColumnDef<TRowData = unknown> {

@@ -153,14 +153,19 @@ export class GridEngine<TRowData = unknown> {
 
 		this.commandBus.registerHandler('SET_COLUMN_ORDER', (payload: { colFields: string[] }) => {
 			const state = this.stateManager.getState();
-			const orderedFields = payload.colFields.filter((field, index, fields) => fields.indexOf(field) === index);
+			const orderedFieldSet = new Set<string>();
+			const orderedFields = payload.colFields.filter((field) => {
+				if (orderedFieldSet.has(field)) return false;
+				orderedFieldSet.add(field);
+				return true;
+			});
 			const columnByField = new Map(state.columns.map((column) => [column.field, column]));
 			const nextColumns = orderedFields
 				.map((field) => columnByField.get(field))
 				.filter((column): column is ColumnDef<TRowData> => !!column);
 
 			for (const column of state.columns) {
-				if (!orderedFields.includes(column.field)) {
+				if (!orderedFieldSet.has(column.field)) {
 					nextColumns.push(column);
 				}
 			}
@@ -885,7 +890,7 @@ export class GridEngine<TRowData = unknown> {
 			}
 
 			if (deltaCol !== 0) {
-				const colIdx = columns.findIndex(c => c.field === refColField);
+				const colIdx = this.columns.getColumnIndex(refColField);
 				if (colIdx !== -1) {
 					const newColIdx = colIdx + deltaCol;
 					const newCol = columns[newColIdx];

@@ -104,8 +104,8 @@ describe('ServerRowModelController', () => {
 
 		const getRowsSpy = vi.spyOn(mockDatasource, 'getRows');
 
-		// Call loadVisibleBlocks with indices in block 0
-		controller.loadVisibleBlocks([20, 30, 40]);
+		// Call loadVisibleBlocks with a visible range in block 0
+		controller.loadVisibleBlocks(20, 40);
 
 		// Waiting for the async predictive fetch
 		await new Promise((resolve) => setTimeout(resolve, 0));
@@ -189,7 +189,7 @@ describe('ServerRowModelController', () => {
 		const stateSpy = vi.spyOn(store, 'setState');
 
 		// Trigger fetch block 1 (subsequent block)
-		controller.loadVisibleBlocks([60]);
+		controller.loadVisibleBlocks(60, 60);
 
 		// The setState should not have been called synchronously during the fetch start for block index 1
 		// Since setState wasn't called synchronously, dataVersion should still be the same

@@ -31,6 +31,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private headerLeftLayer: HTMLDivElement | null = null;
 	private headerRightLayer: HTMLDivElement | null = null;
 	private overlayLayer: HTMLDivElement | null = null;
+	private selectionBorder: HTMLDivElement | null = null;
+	private selectionFillHandle: HTMLDivElement | null = null;
 	private styleTag: HTMLStyleElement | null = null;
 
 	// Active tracking maps
@@ -55,6 +57,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private fillPreviewBorder: HTMLDivElement | null = null;
 	private currentFillPreview: { minRow: number; maxRow: number; minCol: number; maxCol: number; direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null } | null = null;
 	private fillDragDirectionLock: 'VERTICAL' | 'HORIZONTAL' | null = null;
+	private selectionDragBounds: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
 
 	// Column reorder tracking variables
 	private isColumnReordering = false;
@@ -195,6 +198,10 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			this.styleTag = null;
 		}
 
+		this.selectionBorder = null;
+		this.selectionFillHandle = null;
+		this.selectionDragBounds = null;
+
 		if (this.container) {
 			this.container.classList.remove('og-grid-container');
 			this.container.textContent = '';
@@ -324,9 +331,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		const pinTopRows = this.engine.viewport.pinTopRows;
 		const pinBottomRows = this.engine.viewport.pinBottomRows;
 		const scrollTop = this.engine.viewport.scrollTop;
-		const scrollLeft = this.engine.viewport.scrollLeft;
 		const viewportHeight = this.engine.viewport.viewportHeight;
-		const viewportWidth = this.engine.viewport.viewportWidth;
 
 		// Calculate current visible row and column indexes using viewport models
 		const newRowRange = this.engine.viewport.getVisibleRowRange(rowCount);
@@ -334,11 +339,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		// If server row model is registered, trigger loading visible blocks
 		if (rowModel && typeof rowModel.loadVisibleBlocks === 'function') {
-			const visibleRowIndices = [];
-			for (let i = newRowRange.startIdx; i <= newRowRange.endIdx; i++) {
-				visibleRowIndices.push(i);
-			}
-			rowModel.loadVisibleBlocks(visibleRowIndices);
+			rowModel.loadVisibleBlocks(newRowRange.startIdx, newRowRange.endIdx);
 		}
 
 		const startRow = newRowRange.startIdx;
@@ -1080,14 +1081,15 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	private paintOverlay(): void {
 		if (!this.overlayLayer) return;
 
-		// Clear overlay layer
-		this.overlayLayer.textContent = '';
 		this.reattachColumnReorderOverlays();
 
 		const state = this.engine.stateManager.getState();
 		const bounds = state.selectedRangeBounds;
 
-		if (!bounds || !this.engine.getRowModel()) return;
+		if (!bounds || !this.engine.getRowModel()) {
+			this.hideSelectionOverlay();
+			return;
+		}
 
 		const rowModel = this.engine.getRowModel()!;
 		const rowCount = rowModel.getRowCount();
@@ -1100,7 +1102,10 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		const minCol = Math.max(0, bounds.minCol);
 		const maxCol = Math.min(colCount - 1, bounds.maxCol);
 
-		if (minRow > maxRow || minCol > maxCol) return;
+		if (minRow > maxRow || minCol > maxCol) {
+			this.hideSelectionOverlay();
+			return;
+		}
 
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
@@ -1188,28 +1193,23 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		const width = selectionRight - selectionLeft;
 		const height = selectionBottom - selectionTop;
 
-		if (width <= 0 || height <= 0) return;
+		if (width <= 0 || height <= 0) {
+			this.hideSelectionOverlay();
+			return;
+		}
 
-		// Selection border element
-		const selectionBorder = document.createElement('div');
-		selectionBorder.className = 'og-selection-border';
+		const selectionBorder = this.ensureSelectionBorder();
+		this.selectionDragBounds = { minRow, maxRow, minCol, maxCol };
 
 		// Position selection border overlay absolute
 		selectionBorder.style.transform = `translate3d(${selectionLeft}px, ${selectionTop}px, 0)`;
 		selectionBorder.style.width = `${width}px`;
 		selectionBorder.style.height = `${height}px`;
+		selectionBorder.style.display = 'block';
 
-		// Draw Selection Fill Handle
-		const fillHandle = document.createElement('div');
-		fillHandle.className = 'og-selection-fill-handle';
-		fillHandle.addEventListener('mousedown', (e: MouseEvent) => {
-			e.preventDefault();
-			e.stopPropagation();
-			this.startFillDrag(e, minRow, maxRow, minCol, maxCol);
-		});
-		selectionBorder.appendChild(fillHandle);
-
-		this.overlayLayer.appendChild(selectionBorder);
+		if (selectionBorder.parentNode !== this.overlayLayer) {
+			this.overlayLayer.appendChild(selectionBorder);
+		}
 
 		// Re-append the fill preview border if actively dragging so it doesn't get cleared by textContent = ''
 		if (this.isFilling && this.fillPreviewBorder && this.overlayLayer) {
@@ -1217,6 +1217,35 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			this.updateFillPreview();
 		}
 	}
+
+	private ensureSelectionBorder(): HTMLDivElement {
+		if (!this.selectionBorder) {
+			this.selectionBorder = document.createElement('div');
+			this.selectionBorder.className = 'og-selection-border';
+
+			this.selectionFillHandle = document.createElement('div');
+			this.selectionFillHandle.className = 'og-selection-fill-handle';
+			this.selectionFillHandle.addEventListener('mousedown', this.onSelectionFillHandleMouseDown);
+			this.selectionBorder.appendChild(this.selectionFillHandle);
+		}
+
+		return this.selectionBorder;
+	}
+
+	private hideSelectionOverlay(): void {
+		this.selectionDragBounds = null;
+		if (this.selectionBorder) {
+			this.selectionBorder.style.display = 'none';
+		}
+	}
+
+	private onSelectionFillHandleMouseDown = (e: MouseEvent): void => {
+		if (!this.selectionDragBounds) return;
+		e.preventDefault();
+		e.stopPropagation();
+		const { minRow, maxRow, minCol, maxCol } = this.selectionDragBounds;
+		this.startFillDrag(e, minRow, maxRow, minCol, maxCol);
+	};
 
 	/**
 	 * Factory function for building a row element wrapper.

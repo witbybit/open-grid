@@ -27,6 +27,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	private rowIdMap = new Map<string, number>();
 	private loadingNodeMap = new Map<number, RowNode<TData>>();
 	private loadingBlocks: Record<number, boolean> = {};
+	private loadingBlockCount = 0;
 	private unsubscribers: Array<() => void> = [];
 	private disposed = false;
 	private requestGeneration = 0;
@@ -57,6 +58,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.disposed = true;
 		this.requestGeneration++;
 		this.loadingBlocks = {};
+		this.loadingBlockCount = 0;
 		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
 		this.unsubscribers = [];
 	}
@@ -83,36 +85,37 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		return null;
 	};
 
-	public loadVisibleBlocks = (visibleRowIndices: number[]): void => {
+	public loadVisibleBlocks = (startRow: number, endRow: number): void => {
+		if (startRow > endRow) return;
+
+		const minRow = Math.max(0, startRow);
+		const maxRow = Math.min(Math.max(0, endRow), Math.max(0, this.getRowCount() - 1));
+		if (minRow > maxRow) return;
+
 		const visibleBlocks = new Set<number>();
-		visibleRowIndices.forEach((idx) => {
-			visibleBlocks.add(Math.floor(idx / this.blockSize));
-		});
+		const minBlock = Math.floor(minRow / this.blockSize);
+		const maxBlock = Math.floor(maxRow / this.blockSize);
+		for (let blockIdx = minBlock; blockIdx <= maxBlock; blockIdx++) {
+			visibleBlocks.add(blockIdx);
+		}
 
 		// Dynamic predictive pre-fetching based on scrolling velocity
-		if (visibleRowIndices.length > 0) {
-			const velocity = this.store.engine.viewport.getVelocity();
-			const vy = velocity.vy; // px/ms
+		const velocity = this.store.engine.viewport.getVelocity();
+		const vy = velocity.vy; // px/ms
+		const totalBlocks = Math.ceil(this.getRowCount() / this.blockSize);
 
-			const minRow = Math.min(...visibleRowIndices);
-			const maxRow = Math.max(...visibleRowIndices);
-			const minBlock = Math.floor(minRow / this.blockSize);
-			const maxBlock = Math.floor(maxRow / this.blockSize);
-			const totalBlocks = Math.ceil(this.getRowCount() / this.blockSize);
-
-			if (vy > 0.1) {
-				// Scrolling down: proactively pre-fetch next 1 or 2 blocks
-				const ahead1 = maxBlock + 1;
-				const ahead2 = maxBlock + 2;
-				if (ahead1 < totalBlocks) visibleBlocks.add(ahead1);
-				if (ahead2 < totalBlocks) visibleBlocks.add(ahead2);
-			} else if (vy < -0.1) {
-				// Scrolling up: proactively pre-fetch previous 1 or 2 blocks
-				const ahead1 = minBlock - 1;
-				const ahead2 = minBlock - 2;
-				if (ahead1 >= 0) visibleBlocks.add(ahead1);
-				if (ahead2 >= 0) visibleBlocks.add(ahead2);
-			}
+		if (vy > 0.1) {
+			// Scrolling down: proactively pre-fetch next 1 or 2 blocks
+			const ahead1 = maxBlock + 1;
+			const ahead2 = maxBlock + 2;
+			if (ahead1 < totalBlocks) visibleBlocks.add(ahead1);
+			if (ahead2 < totalBlocks) visibleBlocks.add(ahead2);
+		} else if (vy < -0.1) {
+			// Scrolling up: proactively pre-fetch previous 1 or 2 blocks
+			const ahead1 = minBlock - 1;
+			const ahead2 = minBlock - 2;
+			if (ahead1 >= 0) visibleBlocks.add(ahead1);
+			if (ahead2 >= 0) visibleBlocks.add(ahead2);
 		}
 
 		visibleBlocks.forEach((blockIdx) => {
@@ -160,6 +163,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		if (this.loadingBlocks[blockIndex]) return;
 
 		this.loadingBlocks[blockIndex] = true;
+		this.loadingBlockCount++;
 		const generation = this.requestGeneration;
 		const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
@@ -198,16 +202,17 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			delete this.loadingBlocks[blockIndex];
 
 			if (currentSignature !== requestSignature) {
-				const hasActiveFetches = Object.keys(this.loadingBlocks).length > 0;
+				this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
+				const hasActiveFetches = this.loadingBlockCount > 0;
 				this.store.setState({
 					loading: hasActiveFetches,
 				});
 				return;
 			}
 
-			// Fill with sparse nulls up to startRow if array is not large enough
-			while (this.activeNodes.length < startRow) {
-				this.activeNodes.push(null);
+			// Grow sparsely without pushing one placeholder per missing row.
+			if (this.activeNodes.length < startRow) {
+				this.activeNodes.length = startRow;
 			}
 
 			// Patch loaded rows into the array and index map
@@ -233,15 +238,16 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 			// If total count returned, ensure array size matches
 			if (typeof response.totalCount === 'number') {
-				while (this.activeNodes.length < response.totalCount) {
-					this.activeNodes.push(null);
+				if (this.activeNodes.length < response.totalCount) {
+					this.activeNodes.length = response.totalCount;
 				}
 			}
 
 			this.store.dagEngine.clearAll();
 
 			// Layout geometry will be updated by GridEngine using GeometryModel
-			const hasActiveFetches = Object.keys(this.loadingBlocks).length > 0;
+			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
+			const hasActiveFetches = this.loadingBlockCount > 0;
 			this.store.setState({
 				loading: hasActiveFetches,
 				dataVersion: curr.dataVersion + 1,
@@ -261,7 +267,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			}
 			console.error(`GridEngine: Failed to fetch row block ${blockIndex}`, error);
 			delete this.loadingBlocks[blockIndex];
-			const hasActiveFetches = Object.keys(this.loadingBlocks).length > 0;
+			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
+			const hasActiveFetches = this.loadingBlockCount > 0;
 			this.store.setState({
 				loading: hasActiveFetches,
 				dataVersion: this.store.getState().dataVersion + 1,
@@ -273,6 +280,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		if (this.disposed) return;
 		this.requestGeneration++;
 		this.loadingBlocks = {};
+		this.loadingBlockCount = 0;
 		this.activeNodes = [];
 		this.nodeMap.clear();
 		this.rowIdMap.clear();

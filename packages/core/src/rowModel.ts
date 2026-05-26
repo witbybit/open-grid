@@ -292,6 +292,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		const changedNodes: RowNode<TData>[] = [];
 		const changedFieldsByRow = new Map<string, Set<string>>();
+		const changedValuesByRow = new Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>();
 
 		for (let i = 0; i < this.allNodes.length; i++) {
 			const node = this.allNodes[i];
@@ -310,13 +311,17 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			if (prevRow !== nextRow) {
 				// Find which fields actually changed
 				const changedFields = new Set<string>();
+				const changedValues = new Map<string, { oldValue: unknown; newValue: unknown }>();
 				const prevKeys = Object.keys(prevRow as object);
 				const nextKeys = Object.keys(nextRow as object);
 				const allKeys = new Set([...prevKeys, ...nextKeys]);
 
 				for (const key of allKeys) {
-					if ((prevRow as any)[key] !== (nextRow as any)[key]) {
+					const oldValue = (prevRow as any)[key];
+					const newValue = (nextRow as any)[key];
+					if (oldValue !== newValue) {
 						changedFields.add(key);
+						changedValues.set(key, { oldValue, newValue });
 					}
 				}
 
@@ -324,6 +329,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 					node.setData(nextRow);
 					changedNodes.push(node);
 					changedFieldsByRow.set(node.id, changedFields);
+					changedValuesByRow.set(node.id, changedValues);
 				}
 			}
 		}
@@ -386,21 +392,39 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (needsFullRefresh) {
 			this.refresh();
 		} else {
-			// No sorting or filtering is affected! Notify coordinates for changed rows and their formula dependents
-			this.store.startTransaction();
+			// No sorting or filtering is affected. Notify only changed cells, valueGetter cells, and formula dependents.
+			const notifyKeys = new Set<string>(allInvalidatedKeys);
 			for (const node of changedNodes) {
+				const changedFields = changedFieldsByRow.get(node.id);
+				if (changedFields) {
+					for (const field of changedFields) {
+						notifyKeys.add(createCellKey(node.id, field));
+					}
+				}
 				for (const col of state.columns) {
-					this.store.engine.notifyCellChange(node.id, col.field);
+					if (col.valueGetter) {
+						notifyKeys.add(createCellKey(node.id, col.field));
+					}
 				}
 			}
-			for (const key of allInvalidatedKeys) {
+
+			for (const key of notifyKeys) {
 				const colonIdx = key.indexOf(':');
 				const rId = colonIdx === -1 ? key : key.substring(0, colonIdx);
 				const cField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
 				this.store.engine.notifyCellChange(rId, cField);
 			}
-			this.store.endTransaction();
-			this.store.setState({ dataVersion: state.dataVersion + 1 });
+
+			for (const [rowId, values] of changedValuesByRow) {
+				for (const [colField, change] of values) {
+					this.store.dispatchEvent('cellValueChanged', {
+						rowId,
+						colField,
+						oldValue: change.oldValue,
+						newValue: change.newValue,
+					});
+				}
+			}
 		}
 	}
 
