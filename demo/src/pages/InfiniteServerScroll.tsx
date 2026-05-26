@@ -3,9 +3,9 @@ import { GridProvider, useServerGrid } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Terminal, Server, Activity, ShieldAlert, Cpu, Network, Clock } from 'lucide-react';
 
-type ServerGrid = ReturnType<typeof useServerGrid<any>>;
+type ServerApi = ReturnType<typeof useServerGrid<any>>;
 interface InfiniteServerScrollProps {
-	grid: ServerGrid;
+	api: ServerApi;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	pinLeftColumns?: number;
@@ -20,7 +20,7 @@ type SeverityStats = {
 };
 
 export default function InfiniteServerScroll({
-	grid,
+	api,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	pinLeftColumns = 0,
@@ -42,14 +42,14 @@ export default function InfiniteServerScroll({
 	});
 
 	const refreshSeverityStats = useCallback(() => {
-		const totalRows = grid.api.getRowCount();
+		const totalRows = api.getRowCount();
 		let totalLoaded = 0;
 		let criticalError = 0;
 		let warning = 0;
 		let infoDebug = 0;
 
 		for (let rowIndex = 0; rowIndex < totalRows; rowIndex++) {
-			const row = grid.api.getRow(rowIndex) as { severity?: string } | null;
+			const row = api.getRow(rowIndex) as { severity?: string } | null;
 			if (!row) continue;
 
 			totalLoaded++;
@@ -65,7 +65,7 @@ export default function InfiniteServerScroll({
 		}
 
 		setSeverityStats({ totalLoaded, criticalError, warning, infoDebug });
-	}, [grid.api]);
+	}, [api]);
 
 	useEffect(() => {
 		const handleBlockLoaded = (event: {
@@ -96,17 +96,17 @@ export default function InfiniteServerScroll({
 		};
 
 		refreshSeverityStats();
-		const unsubBlockLoaded = grid.api.addEventListener('serverBlockLoaded', handleBlockLoaded);
-		const unsubCellValueChanged = grid.api.addEventListener('cellValueChanged', refreshSeverityStats);
-		const unsubSortChanged = grid.api.addEventListener('sortChanged', clearSeverityStats);
-		const unsubFilterChanged = grid.api.addEventListener('filterChanged', clearSeverityStats);
+		const unsubBlockLoaded = api.addEventListener('serverBlockLoaded', handleBlockLoaded);
+		const unsubCellValueChanged = api.addEventListener('cellValueChanged', refreshSeverityStats);
+		const unsubSortChanged = api.addEventListener('sortChanged', clearSeverityStats);
+		const unsubFilterChanged = api.addEventListener('filterChanged', clearSeverityStats);
 		return () => {
 			unsubBlockLoaded();
 			unsubCellValueChanged();
 			unsubSortChanged();
 			unsubFilterChanged();
 		};
-	}, [grid.api, refreshSeverityStats]);
+	}, [api, refreshSeverityStats]);
 
 	const severityDistribution = useMemo(() => {
 		const total = severityStats.totalLoaded;
@@ -152,9 +152,9 @@ export default function InfiniteServerScroll({
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<GridProvider grid={grid}>
+					<GridProvider api={api}>
 						<GridView
-							api={grid.api}
+							api={api}
 							pinLeftColumns={pinLeftColumns}
 							pinRightColumns={pinRightColumns}
 							onCellValueChanged={() => {}}

@@ -170,34 +170,34 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, [massiveColumns]);
 
 	const perfRows = useMemo(() => generatePerformanceRows(10000, 'R'), []);
-	const perfGrid = useClientGrid<PerformanceRow>({ rows: perfRows, columns: clientColumns });
+	const perfApi = useClientGrid<PerformanceRow>({ rows: perfRows, columns: clientColumns });
 
 	const handlePerfCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			setInactiveRiskSideEffects(perfGrid.api, rowId, colField, val);
+			setInactiveRiskSideEffects(perfApi, rowId, colField, val);
 		},
-		[perfGrid.api]
+		[perfApi]
 	);
 
 	const runBulkCalculationTest = useCallback(() => {
 		const start = performance.now();
-		const count = perfGrid.api.getRowCount();
+		const count = perfApi.getRowCount();
 
-		perfGrid.api.startTransaction();
+		perfApi.startTransaction();
 		for (let i = 0; i < count; i++) {
 			if (i % 10 !== 0) continue;
 
-			const row = perfGrid.api.getRow(i);
+			const row = perfApi.getRow(i);
 			if (!row) continue;
 
-			perfGrid.api.setCellValue(row.id, 'price', (Math.floor(Math.random() * 150) + 10).toString());
-			perfGrid.api.setCellValue(row.id, 'quantity', (Math.floor(Math.random() * 5) + 1).toString());
+			perfApi.setCellValue(row.id, 'price', (Math.floor(Math.random() * 150) + 10).toString());
+			perfApi.setCellValue(row.id, 'quantity', (Math.floor(Math.random() * 5) + 1).toString());
 		}
-		perfGrid.api.endTransaction();
+		perfApi.endTransaction();
 
 		const duration = performance.now() - start;
 		LatencyProfiler.record(duration);
-	}, [perfGrid.api]);
+	}, [perfApi]);
 
 	// --------------------------------------------------------------------------
 	// B. PAGE 2: INFINITE SERVER CHUNKS SCROLL (Global Audit & Logging Ledger)
@@ -283,7 +283,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		};
 	}, [serverRows]);
 
-	const serverGrid = useServerGrid<ServerAuditRow>({ datasource: mockDatasource, blockSize: 100, columns: serverColumns });
+	const serverApi = useServerGrid<ServerAuditRow>({ datasource: mockDatasource, blockSize: 100, columns: serverColumns });
 
 	// --------------------------------------------------------------------------
 	// C. PAGE 3: SPREADSHEET RANGE MULTI-SELECT WORKSPACE (Quantitative Financial Sheet)
@@ -340,26 +340,26 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		return rows;
 	}, []);
 
-	const spreadsheetGrid = useClientGrid<SpreadsheetRow>({ rows: spreadsheetRows, columns: spreadsheetColumns });
+	const spreadsheetApi = useClientGrid<SpreadsheetRow>({ rows: spreadsheetRows, columns: spreadsheetColumns });
 
 	const handleSpreadsheetCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			spreadsheetGrid.api.setCellValue(rowId, colField, val as string);
+			spreadsheetApi.setCellValue(rowId, colField, val as string);
 		},
-		[spreadsheetGrid.api]
+		[spreadsheetApi]
 	);
 
 	const applySpreadsheetRangeAction = useCallback(
 		(action: 'fill' | 'clear' | 'addPercent' | 'sum') => {
-			const state = spreadsheetGrid.api.getState();
+			const state = spreadsheetApi.getState();
 			const range = state.selectedRange;
 			if (!range) {
 				alert('Please select a range of cells first using click-and-drag or Shift+Arrows.');
 				return;
 			}
 
-			const startIdx = spreadsheetGrid.api.getRowIndexById(range.start.rowId) ?? 0;
-			const endIdx = spreadsheetGrid.api.getRowIndexById(range.end.rowId) ?? 0;
+			const startIdx = spreadsheetApi.getRowIndexById(range.start.rowId) ?? 0;
+			const endIdx = spreadsheetApi.getRowIndexById(range.end.rowId) ?? 0;
 			const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 			const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 
@@ -373,7 +373,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 			const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
 			const rowIdsToModify: string[] = [];
 			for (let i = minRow; i <= maxRow; i++) {
-				const node = spreadsheetGrid.api.getRowNode(i);
+				const node = spreadsheetApi.getRowNode(i);
 				if (node) rowIdsToModify.push(node.id);
 			}
 
@@ -384,7 +384,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				for (const rowId of rowIdsToModify) {
 					for (const colField of colsToModify) {
 						if (colField === 'id') continue;
-						const val = parseFloat(String(spreadsheetGrid.api.getCellValue(rowId, colField))) || 0;
+						const val = parseFloat(String(spreadsheetApi.getCellValue(rowId, colField))) || 0;
 						totalSum += val;
 					}
 				}
@@ -394,27 +394,27 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				return;
 			}
 
-			spreadsheetGrid.api.startTransaction();
+			spreadsheetApi.startTransaction();
 			for (const rowId of rowIdsToModify) {
 				for (const colField of colsToModify) {
 					if (colField === 'id') continue;
 
 					if (action === 'fill') {
-						spreadsheetGrid.api.setCellValue(rowId, colField, '100');
+						spreadsheetApi.setCellValue(rowId, colField, '100');
 					} else if (action === 'clear') {
-						spreadsheetGrid.api.setCellValue(rowId, colField, '');
+						spreadsheetApi.setCellValue(rowId, colField, '');
 					} else if (action === 'addPercent') {
-						const valNum = parseFloat(String(spreadsheetGrid.api.getCellValue(rowId, colField))) || 0;
-						spreadsheetGrid.api.setCellValue(rowId, colField, (valNum * 1.1).toFixed(0));
+						const valNum = parseFloat(String(spreadsheetApi.getCellValue(rowId, colField))) || 0;
+						spreadsheetApi.setCellValue(rowId, colField, (valNum * 1.1).toFixed(0));
 					}
 				}
 			}
-			spreadsheetGrid.api.endTransaction();
+			spreadsheetApi.endTransaction();
 
 			const duration = performance.now() - startTime;
 			LatencyProfiler.record(duration);
 		},
-		[spreadsheetGrid.api]
+		[spreadsheetApi]
 	);
 
 	// --------------------------------------------------------------------------
@@ -433,13 +433,13 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	);
 
 	const customRows = useMemo(() => generateCustomShowcaseRows(50), []);
-	const customGrid = useClientGrid<CustomShowcaseRow>({ rows: customRows, columns: customColumns });
+	const customApi = useClientGrid<CustomShowcaseRow>({ rows: customRows, columns: customColumns });
 
 	const handleCustomCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			customGrid.api.setCellValue(rowId, colField, val as string);
+			customApi.setCellValue(rowId, colField, val as string);
 		},
-		[customGrid.api]
+		[customApi]
 	);
 
 	// --------------------------------------------------------------------------
@@ -485,13 +485,13 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, [layoutColumnsFull, visibleColumns]);
 
 	const layoutRows = useMemo(() => generatePerformanceRows(100, 'R'), []);
-	const layoutGrid = useClientGrid<PerformanceRow>({ rows: layoutRows, columns: layoutColumns });
+	const layoutApi = useClientGrid<PerformanceRow>({ rows: layoutRows, columns: layoutColumns });
 
 	const handleLayoutCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			setInactiveRiskSideEffects(layoutGrid.api, rowId, colField, val);
+			setInactiveRiskSideEffects(layoutApi, rowId, colField, val);
 		},
-		[layoutGrid.api]
+		[layoutApi]
 	);
 
 	// --------------------------------------------------------------------------
@@ -519,13 +519,13 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, []);
 
 	const skinsRows = useMemo(() => generatePerformanceRows(50, 'SR'), []);
-	const skinsGrid = useClientGrid<PerformanceRow>({ rows: skinsRows, columns: skinsColumns });
+	const skinsApi = useClientGrid<PerformanceRow>({ rows: skinsRows, columns: skinsColumns });
 
 	const handleSkinsCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			setInactiveRiskSideEffects(skinsGrid.api, rowId, colField, val);
+			setInactiveRiskSideEffects(skinsApi, rowId, colField, val);
 		},
-		[skinsGrid.api]
+		[skinsApi]
 	);
 
 	// --------------------------------------------------------------------------
@@ -559,13 +559,13 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		[]
 	);
 
-	const dashboardGrid = useClientGrid<DashboardStockRow>({ rows: dashboardRows, columns: dashboardColumns });
+	const dashboardApi = useClientGrid<DashboardStockRow>({ rows: dashboardRows, columns: dashboardColumns });
 
 	const handleDashboardCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			dashboardGrid.api.setCellValue(rowId, colField, val as string);
+			dashboardApi.setCellValue(rowId, colField, val as string);
 		},
-		[dashboardGrid.api]
+		[dashboardApi]
 	);
 
 	// --------------------------------------------------------------------------
@@ -626,60 +626,60 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		});
 	}, []);
 
-	const ganttGrid = useClientGrid<GanttRow>({ rows: ganttRows, columns: ganttColumns });
+	const ganttApi = useClientGrid<GanttRow>({ rows: ganttRows, columns: ganttColumns });
 
 	const handleGanttCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			ganttGrid.api.setCellValue(rowId, colField, val);
+			ganttApi.setCellValue(rowId, colField, val);
 
 			if (colField === 'status') {
-				if (val === 'Done') ganttGrid.api.setCellValue(rowId, 'progress', 100);
-				else if (val === 'Pending') ganttGrid.api.setCellValue(rowId, 'progress', 0);
+				if (val === 'Done') ganttApi.setCellValue(rowId, 'progress', 100);
+				else if (val === 'Pending') ganttApi.setCellValue(rowId, 'progress', 0);
 			}
 		},
-		[ganttGrid.api]
+		[ganttApi]
 	);
 
 	return {
 		// A. Perf Calculations Playground
-		perfGrid,
+		perfApi,
 		perfRows,
 		handlePerfCellValueChanged,
 		runBulkCalculationTest,
 
 		// B. Infinite Server Scroll
-		serverGrid,
+		serverApi,
 		serverRows,
 
 		// C. Spreadsheet selection
-		spreadsheetGrid,
+		spreadsheetApi,
 		spreadsheetRows,
 		handleSpreadsheetCellValueChanged,
 		applySpreadsheetRangeAction,
 
 		// D. Custom editors
-		customGrid,
+		customApi,
 		customRows,
 		handleCustomCellValueChanged,
 
 		// E. Dynamic layouts
-		layoutGrid,
+		layoutApi,
 		layoutRows,
 		handleLayoutCellValueChanged,
 		layoutColumnsFull,
 
 		// F. Headless skins
-		skinsGrid,
+		skinsApi,
 		skinsRows,
 		handleSkinsCellValueChanged,
 
 		// G. Analytics dashboard
-		dashboardGrid,
+		dashboardApi,
 		dashboardRows,
 		handleDashboardCellValueChanged,
 
 		// H. Gantt Workspace
-		ganttGrid,
+		ganttApi,
 		ganttRows,
 		handleGanttCellValueChanged,
 	};

@@ -4,11 +4,6 @@ import { ClientRowModelController, ServerRowModelController, GridStore, type Gri
 import type { ClientGridOptions, ServerGridOptions } from './types.js';
 import { createGridApiFacade } from './gridApiFacade.js';
 
-export interface GridInstance<TRowData> {
-	store: GridStore<TRowData>;
-	api: GridApi<TRowData>;
-}
-
 function buildColumnWidths<TRowData>(columns: Array<{ field: string; width?: number }>) {
 	return columns.reduce<Record<string, number>>((acc, col) => {
 		if (col.width != null) acc[col.field] = col.width;
@@ -16,7 +11,7 @@ function buildColumnWidths<TRowData>(columns: Array<{ field: string; width?: num
 	}, {});
 }
 
-export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridInstance<TRowData> {
+export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridApi<TRowData> {
 	const { rows, columns, getRowId, initialState } = options;
 
 	const initialConfigRef = useRef({ columns, getRowId, initialState });
@@ -60,10 +55,10 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 		controllerRef.current?.setRows(rows);
 	}, [rows]);
 
-	return { store, api };
+	return api;
 }
 
-export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): GridInstance<TRowData> {
+export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): GridApi<TRowData> {
 	const { datasource, columns, blockSize = 100, getRowId, initialState } = options;
 
 	const initialConfigRef = useRef({ columns, getRowId, initialState });
@@ -97,5 +92,5 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): G
 		store.setState({ columns });
 	}, [store, columns]);
 
-	return { store, api };
+	return api;
 }

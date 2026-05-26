@@ -10,35 +10,37 @@ import {
 	GridState,
 	RenderEngine,
 	RowNode,
+	GridStore,
 } from '@open-grid/core';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { PortalData, PortalManager } from './GridPortal.js';
-import { GridInstance } from './useGrid.js';
+import { getStoreFromApi } from './gridApiFacade.js';
 
-const GridInstanceContext = createContext<GridInstance<unknown> | null>(null);
 const GridApiContext = createContext<GridApi<unknown> | null>(null);
+const GridStoreContext = createContext<GridStore<unknown> | null>(null);
 
 export interface GridProviderProps<TRowData = unknown> {
-	grid: GridInstance<TRowData>;
+	api: GridApi<TRowData>;
 	children: React.ReactNode;
 }
 
-export function GridProvider<TRowData = unknown>({ grid, children }: GridProviderProps<TRowData>) {
+export function GridProvider<TRowData = unknown>({ api, children }: GridProviderProps<TRowData>) {
+	const store = getStoreFromApi(api);
 	return (
-		<GridInstanceContext.Provider value={grid as unknown as GridInstance<unknown>}>
-			<GridApiContext.Provider value={grid.api as unknown as GridApi<unknown>}>{children}</GridApiContext.Provider>
-		</GridInstanceContext.Provider>
+		<GridStoreContext.Provider value={store as GridStore<unknown>}>
+			<GridApiContext.Provider value={api as unknown as GridApi<unknown>}>{children}</GridApiContext.Provider>
+		</GridStoreContext.Provider>
 	);
 }
 
-export function useGridInstance<TRowData = unknown>(): GridInstance<TRowData> {
-	const context = useContext(GridInstanceContext);
+function useGridStore<TRowData = unknown>(): GridStore<TRowData> {
+	const context = useContext(GridStoreContext);
 
 	if (!context) {
-		throw new Error('useGridInstance must be used within a GridProvider');
+		throw new Error('useGridStore must be used within a GridProvider');
 	}
 
-	return context as unknown as GridInstance<TRowData>;
+	return context as unknown as GridStore<TRowData>;
 }
 
 export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
@@ -126,7 +128,7 @@ export function useGridKeySelectorWithEquality<T, TRowData = unknown>(
  * Controller integration hook mapping standard interaction event handlers.
  */
 export function useGridNavigationController<TRowData = unknown>(options: GridNavigationOptions = {}, enabled = true) {
-	const { store } = useGridInstance<TRowData>();
+	const store = useGridStore<TRowData>();
 	const optionsRef = useRef(options);
 	optionsRef.current = options;
 	const [controller, setController] = useState<GridNavigationController<TRowData> | null>(null);
@@ -159,7 +161,7 @@ export function useGridNavigationController<TRowData = unknown>(options: GridNav
 }
 
 export interface OpenGridProps<TRowData = unknown> {
-	grid?: GridInstance<TRowData>;
+	api?: GridApi<TRowData>;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 	pinTopRows?: number;
@@ -177,22 +179,22 @@ export interface OpenGridProps<TRowData = unknown> {
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
-	const contextGrid = useContext(GridInstanceContext);
-	const grid = props.grid ?? (contextGrid as GridInstance<TRowData> | null);
+	const contextApi = useContext(GridApiContext);
+	const api = props.api ?? (contextApi as GridApi<TRowData> | null);
 
-	if (!grid) {
-		throw new Error('OpenGrid must be provided a store either via props or GridProvider context.');
+	if (!api) {
+		throw new Error('OpenGrid must be provided an api either via props or GridProvider context.');
 	}
 
 	return (
-		<GridProvider grid={grid}>
-			<OpenGridInner {...props} grid={grid} />
+		<GridProvider api={api}>
+			<OpenGridInner {...props} api={api} />
 		</GridProvider>
 	);
 }
 
 function OpenGridInner<TRowData = unknown>({
-	grid,
+	api,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 	pinTopRows = 0,
@@ -203,8 +205,8 @@ function OpenGridInner<TRowData = unknown>({
 	contextMenuOptions,
 	onCellClick,
 	navigationOptions = {},
-}: OpenGridProps<TRowData> & { grid: GridInstance<TRowData> }) {
-	const { store } = grid;
+}: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
+	const store = useGridStore<TRowData>();
 	const [portals, setPortals] = useState<Map<string, PortalData<TRowData>>>(new Map());
 	const containerRef = useRef<HTMLDivElement>(null);
 	const renderEngineRef = useRef<RenderEngine | null>(null);
@@ -391,11 +393,11 @@ function OpenGridInner<TRowData = unknown>({
 				colIndex: access.colIndex,
 				column: access.column,
 				value: access.value,
-				api: grid.api,
+				api,
 				event,
 			};
 		},
-		[grid.api, store]
+		[api, store]
 	);
 
 	const handleMouseDown = useCallback(
@@ -504,7 +506,7 @@ function OpenGridInner<TRowData = unknown>({
 
 	return (
 		<div ref={containerRef} tabIndex={-1} style={{ width: '100%', height: '100%', position: 'relative' }}>
-			<PortalManager portals={portals} grid={grid} />
+			<PortalManager portals={portals} api={api} />
 		</div>
 	);
 }

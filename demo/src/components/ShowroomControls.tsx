@@ -1,6 +1,6 @@
 import React from 'react';
 import { Zap, Filter, ArrowDownAZ, ArrowUpAZ, Keyboard, Layers, HelpCircle, RefreshCw, GripVertical, MoveLeft, MoveRight } from 'lucide-react';
-import type { GridApi, GridInstance } from '@open-grid/react';
+import type { GridApi } from '@open-grid/react';
 import { LatencyProfiler } from './GridShared';
 
 // ============================================================================
@@ -311,10 +311,10 @@ export function AccessibilityPanel({ editTrigger, setEditTrigger, arrowKeyNaviga
 // ============================================================================
 interface DeveloperPanelProps {
 	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
-	activeGrid: GridInstance<any>;
+	activeApi: GridApi<any>;
 }
 
-export function DeveloperPanel({ activePage, activeGrid }: DeveloperPanelProps) {
+export function DeveloperPanel({ activePage, activeApi }: DeveloperPanelProps) {
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
 			<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
@@ -327,8 +327,7 @@ export function DeveloperPanel({ activePage, activeGrid }: DeveloperPanelProps) 
 					<button
 						onClick={() => {
 							const start = performance.now();
-							const targetGrid = activeGrid;
-							targetGrid.api.updateRows((rows: any[]) =>
+							activeApi.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									price: '0',
@@ -353,7 +352,7 @@ export function DeveloperPanel({ activePage, activeGrid }: DeveloperPanelProps) 
 					<button
 						onClick={() => {
 							const start = performance.now();
-							activeGrid.api.purgeCache();
+							activeApi.purgeCache();
 							const duration = performance.now() - start;
 							LatencyProfiler.record(duration);
 						}}
@@ -372,7 +371,7 @@ export function DeveloperPanel({ activePage, activeGrid }: DeveloperPanelProps) 
 					<button
 						onClick={() => {
 							const start = performance.now();
-							activeGrid.api.updateRows((rows: any[]) =>
+							activeApi.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									A: '0',
@@ -400,7 +399,7 @@ export function DeveloperPanel({ activePage, activeGrid }: DeveloperPanelProps) 
 					<button
 						onClick={() => {
 							const start = performance.now();
-							activeGrid.api.updateRows((rows: any[]) =>
+							activeApi.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									price: '50',
@@ -426,7 +425,7 @@ export function DeveloperPanel({ activePage, activeGrid }: DeveloperPanelProps) 
 					<button
 						onClick={() => {
 							const start = performance.now();
-							activeGrid.api.updateRows((rows: any[]) =>
+							activeApi.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									price: '100',
@@ -452,7 +451,7 @@ export function DeveloperPanel({ activePage, activeGrid }: DeveloperPanelProps) 
 					<button
 						onClick={() => {
 							const start = performance.now();
-							activeGrid.api.updateRows((rows: any[]) =>
+							activeApi.updateRows((rows: any[]) =>
 								rows.map((row) => ({
 									...row,
 									progress: 0,
@@ -477,7 +476,7 @@ export function DeveloperPanel({ activePage, activeGrid }: DeveloperPanelProps) 
 					<button
 						onClick={() => {
 							const start = performance.now();
-							activeGrid.api.updateRows((rows: any[]) =>
+							activeApi.updateRows((rows: any[]) =>
 								rows.map((row) => {
 									if (row.id === 'AAPL') return { ...row, price: '175.50', change: '+1.2' };
 									if (row.id === 'MSFT') return { ...row, price: '420.20', change: '+0.8' };

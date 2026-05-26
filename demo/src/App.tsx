@@ -90,14 +90,14 @@ export default function App() {
 		handleSkinsCellValueChanged,
 		handleDashboardCellValueChanged,
 		handleGanttCellValueChanged,
-		perfGrid,
-		serverGrid,
-		spreadsheetGrid,
-		customGrid,
-		layoutGrid,
-		skinsGrid,
-		dashboardGrid,
-		ganttGrid,
+		perfApi,
+		serverApi,
+		spreadsheetApi,
+		customApi,
+		layoutApi,
+		skinsApi,
+		dashboardApi,
+		ganttApi,
 	} = stores;
 
 	const toggleColumnVisibility = (field: string) => {
@@ -112,28 +112,28 @@ export default function App() {
 	// Active Grid Store Selector Helper
 	// --------------------------------------------------------------------------
 
-	const activeGrid = useMemo(() => {
+	const activeApi = useMemo(() => {
 		switch (activePage) {
 			case 'perf':
-				return perfGrid;
+				return perfApi;
 			case 'server':
-				return serverGrid;
+				return serverApi;
 			case 'ranges':
-				return spreadsheetGrid;
+				return spreadsheetApi;
 			case 'editors':
-				return customGrid;
+				return customApi;
 			case 'layout':
-				return layoutGrid;
+				return layoutApi;
 			case 'skins':
-				return skinsGrid;
+				return skinsApi;
 			case 'dashboard':
-				return dashboardGrid;
+				return dashboardApi;
 			case 'gantt':
-				return ganttGrid;
+				return ganttApi;
 			default:
-				return perfGrid;
+				return perfApi;
 		}
-	}, [activePage, perfGrid, serverGrid, spreadsheetGrid, customGrid, layoutGrid, skinsGrid, dashboardGrid, ganttGrid]);
+	}, [activePage, perfApi, serverApi, spreadsheetApi, customApi, layoutApi, skinsApi, dashboardApi, ganttApi]);
 
 	// Apply filter and sort models to the active store when they change
 	const sortModel = useMemo<SortModel>(() => [{ colId: sortField, sort: sortDirection }], [sortField, sortDirection]);
@@ -143,12 +143,12 @@ export default function App() {
 	);
 
 	useEffect(() => {
-		activeGrid.api.setSortModel(sortModel);
-	}, [activeGrid.api, sortModel]);
+		activeApi.setSortModel(sortModel);
+	}, [activeApi, sortModel]);
 
 	useEffect(() => {
-		activeGrid.api.setFilterModel(filterModel);
-	}, [activeGrid.api, filterModel]);
+		activeApi.setFilterModel(filterModel);
+	}, [activeApi, filterModel]);
 
 	return (
 		<div className='flex flex-col h-full w-full bg-slate-950 text-slate-100 p-6 box-border overflow-hidden select-none font-sans'>
@@ -205,7 +205,7 @@ export default function App() {
 					<div className='flex-1 min-h-0 flex flex-col'>
 						{activePage === 'perf' && (
 							<CalculationsArena
-								grid={perfGrid}
+								api={perfApi}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handlePerfCellValueChanged}
@@ -216,7 +216,7 @@ export default function App() {
 
 						{activePage === 'server' && (
 							<InfiniteServerScroll
-								grid={serverGrid}
+								api={serverApi}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								pinLeftColumns={pinLeftColumns}
@@ -226,7 +226,7 @@ export default function App() {
 
 						{activePage === 'ranges' && (
 							<SpreadsheetWorkspace
-								grid={spreadsheetGrid}
+								api={spreadsheetApi}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleSpreadsheetCellValueChanged}
@@ -237,7 +237,7 @@ export default function App() {
 
 						{activePage === 'editors' && (
 							<CustomEditorRenderer
-								grid={customGrid}
+								api={customApi}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleCustomCellValueChanged}
@@ -248,7 +248,7 @@ export default function App() {
 
 						{activePage === 'layout' && (
 							<DynamicLayout
-								grid={layoutGrid}
+								api={layoutApi}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								rowHeightsMap={rowHeightsMap}
@@ -261,7 +261,7 @@ export default function App() {
 
 						{activePage === 'skins' && (
 							<HeadlessSkinsPlayground
-								grid={skinsGrid}
+								api={skinsApi}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleSkinsCellValueChanged}
@@ -270,7 +270,7 @@ export default function App() {
 
 						{activePage === 'dashboard' && (
 							<RealtimeDashboard
-								grid={dashboardGrid}
+								api={dashboardApi}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleDashboardCellValueChanged}
@@ -279,7 +279,7 @@ export default function App() {
 
 						{activePage === 'gantt' && (
 							<GanttSchedulingWorkspace
-								grid={ganttGrid}
+								api={ganttApi}
 								editTrigger={editTrigger}
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								onCellValueChanged={handleGanttCellValueChanged}
@@ -293,7 +293,7 @@ export default function App() {
 				{/* COLUMN C: PRESERVED RIGHT-SIDE CONTROLS SIDEBAR */}
 				<ShowroomRightSidebar
 					rightSidebarCollapsed={rightSidebarCollapsed}
-					activeGrid={activeGrid}
+					activeApi={activeApi}
 					pinLeftColumns={pinLeftColumns}
 					setPinLeftColumns={setPinLeftColumns}
 					pinRightColumns={pinRightColumns}

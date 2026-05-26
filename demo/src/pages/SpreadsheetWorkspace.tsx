@@ -3,10 +3,10 @@ import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/reac
 import { SpreadsheetRow, GridView } from '../components/GridShared';
 import { Calculator, Sparkles, TrendingUp, Layers, BookOpen, Sigma, RefreshCw } from 'lucide-react';
 
-type ClientGrid = ReturnType<typeof useClientGrid<SpreadsheetRow>>;
+type ClientApi = ReturnType<typeof useClientGrid<SpreadsheetRow>>;
 
 interface SpreadsheetWorkspaceProps {
-	grid: ClientGrid;
+	api: ClientApi;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -16,15 +16,14 @@ interface SpreadsheetWorkspaceProps {
 
 // Inner component that can safely use useGridKeySelector
 function SpreadsheetWorkspaceInner({
-	grid,
+	api,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	onCellValueChanged,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: SpreadsheetWorkspaceProps) {
-	const api = grid.api;
-	const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
+		const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
 	const selectedRange = useGridKeySelector('selectedRange', (state) => state.selectedRange);
 
 	const [formulaText, setFormulaText] = useState('');
@@ -76,8 +75,8 @@ function SpreadsheetWorkspaceInner({
 	// Compute selection range telemetry
 	const rangeTelemetry = useMemo(() => {
 		if (!selectedRange) return { count: 0, sum: 0, avg: 0 };
-		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
-		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
+		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? -1;
+		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		const state = api.getState();
 		const startColIdx = state.columns.findIndex((c) => c.field === selectedRange.start.colField);
 		const endColIdx = state.columns.findIndex((c) => c.field === selectedRange.end.colField);
@@ -95,7 +94,7 @@ function SpreadsheetWorkspaceInner({
 		let sum = 0;
 
 		for (let r = minRow; r <= maxRow; r++) {
-			const node = grid.api.getRowNode(r);
+			const node = api.getRowNode(r);
 			if (node) {
 				for (let c = minCol; c <= maxCol; c++) {
 					const field = state.columns[c].field;
@@ -121,8 +120,8 @@ function SpreadsheetWorkspaceInner({
 			return;
 		}
 
-		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
-		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
+		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? -1;
+		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		const state = api.getState();
 		const startColIdx = state.columns.findIndex((c) => c.field === selectedRange.start.colField);
 		const endColIdx = state.columns.findIndex((c) => c.field === selectedRange.end.colField);
@@ -137,11 +136,11 @@ function SpreadsheetWorkspaceInner({
 		const cols = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
 		const rowIds: string[] = [];
 		for (let i = minRow; i <= maxRow; i++) {
-			const node = grid.api.getRowNode(i);
+			const node = api.getRowNode(i);
 			if (node) rowIds.push(node.id);
 		}
 
-		grid.api.updateRows((rows) => {
+		api.updateRows((rows) => {
 			return rows.map((row) => {
 				if (rowIds.includes(row.id)) {
 					const updated = { ...row };
@@ -218,7 +217,7 @@ function SpreadsheetWorkspaceInner({
 				{/* Grid Container */}
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						api={grid.api}
+						api={api}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						onCellValueChanged={onCellValueChanged}
@@ -266,7 +265,7 @@ function SpreadsheetWorkspaceInner({
 								Range Sum
 							</button>
 							<button
-								onClick={() => grid.api.updateRows((rows) => rows)} // Force calculation refresh
+								onClick={() => api.updateRows((rows) => rows)} // Force calculation refresh
 								className='px-2.5 py-1.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-400 border border-slate-800 hover:border-slate-750 bg-slate-950 hover:bg-slate-900 rounded transition-all flex items-center justify-center'
 								title='Recalculate Formulas'
 							>
@@ -283,8 +282,8 @@ function SpreadsheetWorkspaceInner({
 									if (range) {
 										// Trigger api logic directly via props
 										{
-											const startIdx = grid.api.getRowIndexById(range.start.rowId) ?? -1;
-											const endIdx = grid.api.getRowIndexById(range.end.rowId) ?? -1;
+											const startIdx = api.getRowIndexById(range.start.rowId) ?? -1;
+											const endIdx = api.getRowIndexById(range.end.rowId) ?? -1;
 											const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 											const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 											if (startIdx !== -1 && endIdx !== -1 && startColIdx !== -1 && endColIdx !== -1) {
@@ -295,10 +294,10 @@ function SpreadsheetWorkspaceInner({
 												const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
 												const rowIds: string[] = [];
 												for (let i = minRow; i <= maxRow; i++) {
-													const node = grid.api.getRowNode(i);
+													const node = api.getRowNode(i);
 													if (node) rowIds.push(node.id);
 												}
-												grid.api.updateRows((rows) => {
+												api.updateRows((rows) => {
 													return rows.map((row) => {
 														if (rowIds.includes(row.id)) {
 															let nextRow = { ...row };
@@ -328,8 +327,8 @@ function SpreadsheetWorkspaceInner({
 									const range = state.selectedRange;
 									if (range) {
 										{
-											const startIdx = grid.api.getRowIndexById(range.start.rowId) ?? -1;
-											const endIdx = grid.api.getRowIndexById(range.end.rowId) ?? -1;
+											const startIdx = api.getRowIndexById(range.start.rowId) ?? -1;
+											const endIdx = api.getRowIndexById(range.end.rowId) ?? -1;
 											const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 											const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 											if (startIdx !== -1 && endIdx !== -1 && startColIdx !== -1 && endColIdx !== -1) {
@@ -340,10 +339,10 @@ function SpreadsheetWorkspaceInner({
 												const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
 												const rowIds: string[] = [];
 												for (let i = minRow; i <= maxRow; i++) {
-													const node = grid.api.getRowNode(i);
+													const node = api.getRowNode(i);
 													if (node) rowIds.push(node.id);
 												}
-												grid.api.updateRows((rows) => {
+												api.updateRows((rows) => {
 													return rows.map((row) => {
 														if (rowIds.includes(row.id)) {
 															let nextRow = { ...row };
@@ -476,10 +475,10 @@ function SpreadsheetWorkspaceInner({
 }
 
 // Main exported wrapper to provide GridProvider context
-export default function SpreadsheetWorkspace({ grid, ...props }: SpreadsheetWorkspaceProps) {
+export default function SpreadsheetWorkspace({ api, ...props }: SpreadsheetWorkspaceProps) {
 	return (
-		<GridProvider grid={grid}>
-			<SpreadsheetWorkspaceInner grid={grid} {...props} />
+		<GridProvider api={api}>
+			<SpreadsheetWorkspaceInner api={api} {...props} />
 		</GridProvider>
 	);
 }

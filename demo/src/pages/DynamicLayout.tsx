@@ -3,9 +3,9 @@ import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/reac
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Layout, Maximize2, Cpu, Compass, CheckCircle2 } from 'lucide-react';
 
-type DynamicLayoutGrid = ReturnType<typeof useClientGrid<PerformanceRow>>;
+type DynamiclayoutApi = ReturnType<typeof useClientGrid<PerformanceRow>>;
 interface DynamicLayoutProps {
-	grid: DynamicLayoutGrid;
+	api: DynamiclayoutApi;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	rowHeightsMap: Record<string, number>;
@@ -16,7 +16,7 @@ interface DynamicLayoutProps {
 }
 
 function DynamicLayoutInner({
-	grid,
+	api,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	rowHeightsMap,
@@ -25,8 +25,7 @@ function DynamicLayoutInner({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: DynamicLayoutProps) {
-	const api = grid.api;
-	const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
+		const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
 	const columns = useGridKeySelector('columns', (state) => state.columns);
 
 	const [scrollPosition, setScrollPosition] = useState({ scrollTop: 0, scrollLeft: 0 });
@@ -202,10 +201,10 @@ function DynamicLayoutInner({
 	);
 }
 
-export default function DynamicLayout({ grid, ...props }: DynamicLayoutProps) {
+export default function DynamicLayout({ api, ...props }: DynamicLayoutProps) {
 	return (
-		<GridProvider grid={grid}>
-			<DynamicLayoutInner grid={grid} {...props} />
+		<GridProvider api={api}>
+			<DynamicLayoutInner api={api} {...props} />
 		</GridProvider>
 	);
 }

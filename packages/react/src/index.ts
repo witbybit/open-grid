@@ -9,7 +9,7 @@ export {
 	useGridNavigationController,
 } from './OpenGrid.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
-export { useClientGrid, useServerGrid, type GridInstance } from './useGrid.js';
+export { useClientGrid, useServerGrid } from './useGrid.js';
 
 export type {
 	ColumnDef,

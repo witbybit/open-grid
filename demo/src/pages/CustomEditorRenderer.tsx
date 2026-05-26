@@ -3,10 +3,10 @@ import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/reac
 import { CustomShowcaseRow, GridView } from '../components/GridShared';
 import { ShieldCheck, BarChart3, Star, AlertTriangle, Play, RefreshCw, Gauge } from 'lucide-react';
 
-type ClientGrid = ReturnType<typeof useClientGrid<CustomShowcaseRow>>;
+type ClientApi = ReturnType<typeof useClientGrid<CustomShowcaseRow>>;
 
 interface CustomEditorRendererProps {
-	grid: ClientGrid;
+	api: ClientApi;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -15,7 +15,7 @@ interface CustomEditorRendererProps {
 }
 
 function CustomEditorRendererInner({
-	grid,
+	api,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	onCellValueChanged,
@@ -35,7 +35,7 @@ function CustomEditorRendererInner({
 	});
 
 	const calculateTelemetry = () => {
-		const count = grid.api.getRowCount();
+		const count = api.getRowCount();
 		let valSum = 0;
 		let ratingSum = 0;
 		let ratingCount = 0;
@@ -45,7 +45,7 @@ function CustomEditorRendererInner({
 		let inactive = 0;
 
 		for (let i = 0; i < count; i++) {
-			const r = grid.api.getRow(i);
+			const r = api.getRow(i);
 			if (r) {
 				const priceNum = parseFloat(String(r.price).replace(/[^0-9.-]+/g, '')) || 0;
 				valSum += priceNum;
@@ -80,9 +80,9 @@ function CustomEditorRendererInner({
 
 	useEffect(() => {
 		calculateTelemetry();
-		const unsub = grid.api.addEventListener('cellValueChanged', calculateTelemetry);
+		const unsub = api.addEventListener('cellValueChanged', calculateTelemetry);
 		return () => unsub();
-	}, [grid.api]);
+	}, [api]);
 
 	// Set selected asset row statuses to 'Active'
 	const handleBatchActivate = () => {
@@ -91,25 +91,25 @@ function CustomEditorRendererInner({
 			return;
 		}
 
-		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
-		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
+		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? -1;
+		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		if (startIdx === -1 || endIdx === -1) return;
 
 		const minRow = Math.min(startIdx, endIdx);
 		const maxRow = Math.max(startIdx, endIdx);
 		const rowIds: string[] = [];
 		for (let i = minRow; i <= maxRow; i++) {
-			const node = grid.api.getRowNode(i);
+			const node = api.getRowNode(i);
 			if (node) rowIds.push(node.id);
 		}
 
-		grid.api.startTransaction();
+		api.startTransaction();
 
 		for (const rowId of rowIds) {
-			grid.api.setCellValue(rowId, 'status', 'Active');
+			api.setCellValue(rowId, 'status', 'Active');
 		}
 
-		grid.api.endTransaction();
+		api.endTransaction();
 		calculateTelemetry();
 	};
 
@@ -120,36 +120,36 @@ function CustomEditorRendererInner({
 			return;
 		}
 
-		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? -1;
-		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? -1;
+		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? -1;
+		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		if (startIdx === -1 || endIdx === -1) return;
 
 		const minRow = Math.min(startIdx, endIdx);
 		const maxRow = Math.max(startIdx, endIdx);
 		const rowIds: string[] = [];
 		for (let i = minRow; i <= maxRow; i++) {
-			const node = grid.api.getRowNode(i);
+			const node = api.getRowNode(i);
 			if (node) rowIds.push(node.id);
 		}
 
-		grid.api.startTransaction();
+		api.startTransaction();
 
 		for (const rowId of rowIds) {
-			const rowIndex = grid.api.getRowIndexById(rowId) ?? -1;
+			const rowIndex = api.getRowIndexById(rowId) ?? -1;
 
 			if (rowIndex === -1) continue;
 
-			const row = grid.api.getRow(rowIndex);
+			const row = api.getRow(rowIndex);
 
 			if (!row) continue;
 
 			const curProg = parseFloat(String(row.progress)) || 0;
 			const nextProg = Math.min(100, curProg + 10);
 
-			grid.api.setCellValue(rowId, 'progress', nextProg.toString());
+			api.setCellValue(rowId, 'progress', nextProg.toString());
 		}
 
-		grid.api.endTransaction();
+		api.endTransaction();
 		calculateTelemetry();
 	};
 
@@ -173,7 +173,7 @@ function CustomEditorRendererInner({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						api={grid.api}
+						api={api}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						onCellValueChanged={onCellValueChanged}
@@ -321,10 +321,10 @@ function CustomEditorRendererInner({
 	);
 }
 
-export default function CustomEditorRenderer({ grid, ...props }: CustomEditorRendererProps) {
+export default function CustomEditorRenderer({ api, ...props }: CustomEditorRendererProps) {
 	return (
-		<GridProvider grid={grid}>
-			<CustomEditorRendererInner grid={grid} {...props} />
+		<GridProvider api={api}>
+			<CustomEditorRendererInner api={api} {...props} />
 		</GridProvider>
 	);
 }

@@ -89,7 +89,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const grid = createTestGrid(store);
 
 		render(
-			<GridProvider grid={grid}>
+			<GridProvider api={grid.api}>
 				<SelectorInspector />
 			</GridProvider>
 		);
@@ -124,7 +124,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const grid = createTestGrid(store);
 
 		render(
-			<GridProvider grid={grid}>
+			<GridProvider api={grid.api}>
 				<ApiSurfaceInspector />
 			</GridProvider>
 		);
@@ -161,7 +161,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const node = store.getRowModel()!.getRowNode(0)!;
 
 		render(
-			<GridProvider grid={grid}>
+			<GridProvider api={grid.api}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={false} isLoading={false} />
 			</GridProvider>
 		);
@@ -191,7 +191,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		render(
-			<GridProvider grid={grid}>
+			<GridProvider api={grid.api}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
@@ -228,7 +228,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const rendered = render(
-			<GridProvider grid={grid}>
+			<GridProvider api={grid.api}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
@@ -261,7 +261,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const rendered = render(
-			<GridProvider grid={grid}>
+			<GridProvider api={grid.api}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
@@ -313,7 +313,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		render(
-			<GridProvider grid={grid}>
+			<GridProvider api={grid.api}>
 				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
 			</GridProvider>
 		);
@@ -362,7 +362,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			col: colDef,
 		});
 
-		render(<PortalManager portals={portals} grid={grid} />);
+		render(<PortalManager portals={portals} api={grid.api} />);
 
 		expect(screen.getByTestId('portal-content').textContent).toBe('Product A');
 
@@ -383,7 +383,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const onCellValueChanged = vi.fn();
 
 		const { unmount } = render(
-			<GridProvider grid={grid}>
+			<GridProvider api={grid.api}>
 				<NavigationControllerOwner onCellValueChanged={onCellValueChanged} />
 			</GridProvider>
 		);
@@ -408,7 +408,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 		const grid = createTestGrid(store);
 
-		const { container, unmount } = render(<OpenGrid grid={grid} pinLeftColumns={1} enableNavigation={true} />);
+		const { container, unmount } = render(<OpenGrid api={grid.api} pinLeftColumns={1} enableNavigation={true} />);
 
 		// Verify that a div element with relative position has been rendered inside OpenGrid
 		const openGridDiv = container.firstElementChild as HTMLElement;
@@ -444,7 +444,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 		const grid = createTestGrid(store);
 
-		const { unmount } = render(<OpenGrid grid={grid} enableNavigation={false} />);
+		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
 
 		await screen.findByText('CRITICAL');
 		await screen.findByText('Auth');
@@ -475,7 +475,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const eventListener = vi.fn();
 		const unsubscribe = store.addEventListener('cellClicked', eventListener);
 
-		const { container, unmount } = render(<OpenGrid grid={grid} enableNavigation={false} onCellClick={onCellClick} />);
+		const { container, unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} onCellClick={onCellClick} />);
 
 		await waitFor(() => {
 			expect(container.querySelector('.og-cell[data-col-field="name"]')).not.toBeNull();
@@ -526,7 +526,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 		const grid = createTestGrid(store);
 
-		const { unmount } = render(<OpenGrid grid={grid} enableNavigation={false} />);
+		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
 
 		await screen.findByText('Risk LOW');
 
@@ -559,7 +559,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 		const grid = createTestGrid(store);
 
-		const { unmount } = render(<OpenGrid grid={grid} enableNavigation={false} />);
+		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
 
 		expect(store.getPlugin('navigation')).toBeNull();
 
@@ -585,7 +585,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		};
 
 		render(
-			<GridProvider grid={grid}>
+			<GridProvider api={grid.api}>
 				<EqualityInspector />
 			</GridProvider>
 		);
@@ -599,23 +599,23 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(renderSpy).toHaveBeenCalledTimes(1);
 	});
 
-	it('should keep useClientGrid store stable when callers pass inline columns', () => {
-		const stores: Array<GridStore<TestRow>> = [];
+	it('should keep useClientGrid api stable when callers pass inline columns', () => {
+		const apis: Array<ReturnType<typeof useClientGrid<TestRow>>> = [];
 
 		const HookHarness = ({ label }: { label: string }) => {
-			const grid = useClientGrid<TestRow>({
+			const api = useClientGrid<TestRow>({
 				rows: [{ id: '1', name: label }],
 				columns: [{ field: 'name', header: 'Name', width: 100 }],
 			});
-			stores.push(grid.store);
-			return <span data-testid='store-count'>{stores.length}</span>;
+			apis.push(api);
+			return <span data-testid='api-count'>{apis.length}</span>;
 		};
 
 		const { rerender, unmount } = render(<HookHarness label='Product A' />);
 		rerender(<HookHarness label='Product B' />);
 
-		expect(stores.length).toBeGreaterThanOrEqual(2);
-		expect(stores[0]).toBe(stores[stores.length - 1]);
+		expect(apis.length).toBeGreaterThanOrEqual(2);
+		expect(apis[0]).toBe(apis[apis.length - 1]);
 
 		unmount();
 	});

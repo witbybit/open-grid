@@ -1,11 +1,11 @@
 import React from 'react';
-import type { GridInstance } from '@open-grid/react';
+import type { GridApi } from '@open-grid/react';
 import { StateInspector, LiveEventLogPanel } from './RightSidebar';
 import { ViewportPanel, SortFilterPanel, ColumnOrderPanel, AccessibilityPanel, DeveloperPanel, KeyboardShortcutsPanel } from './ShowroomControls';
 
 interface ShowroomRightSidebarProps {
 	rightSidebarCollapsed: boolean;
-	activeGrid: GridInstance<any>;
+	activeApi: GridApi<any>;
 	pinLeftColumns: number;
 	setPinLeftColumns: (n: number) => void;
 	pinRightColumns: number;
@@ -27,7 +27,7 @@ interface ShowroomRightSidebarProps {
 
 export default function ShowroomRightSidebar({
 	rightSidebarCollapsed,
-	activeGrid,
+	activeApi,
 	pinLeftColumns,
 	setPinLeftColumns,
 	pinRightColumns,
@@ -51,7 +51,7 @@ export default function ShowroomRightSidebar({
 			className={`${rightSidebarCollapsed ? 'w-0 p-0 border-0 overflow-hidden' : 'w-72 p-4 border border-slate-900/50'} shrink-0 flex flex-col gap-4 overflow-y-auto pl-1 glass-panel rounded-xl transition-all duration-300 ease-in-out`}
 		>
 			{/* Coordinate Inspector */}
-			<StateInspector grid={activeGrid} />
+			<StateInspector api={activeApi} />
 
 			{/* Viewport Settings Panel */}
 			<ViewportPanel
@@ -66,7 +66,7 @@ export default function ShowroomRightSidebar({
 
 			{/* Sorting and Filtering controls */}
 			<SortFilterPanel
-				activeApi={activeGrid.api}
+				activeApi={activeApi}
 				sortField={sortField}
 				setSortField={setSortField}
 				statusFilter={statusFilter}
@@ -76,7 +76,7 @@ export default function ShowroomRightSidebar({
 			/>
 
 			{/* Column reorder controls */}
-			<ColumnOrderPanel activeApi={activeGrid.api} />
+			<ColumnOrderPanel activeApi={activeApi} />
 
 			{/* Grid Accessibility panel */}
 			<AccessibilityPanel
@@ -87,10 +87,10 @@ export default function ShowroomRightSidebar({
 			/>
 
 			{/* Live core event log panel */}
-			<LiveEventLogPanel api={activeGrid.api} />
+			<LiveEventLogPanel api={activeApi} />
 
 			{/* Developer Panel */}
-			<DeveloperPanel activePage={activePage} activeGrid={activeGrid} />
+			<DeveloperPanel activePage={activePage} activeApi={activeApi} />
 
 			{/* Keyboard Shortcuts guide */}
 			<KeyboardShortcutsPanel />

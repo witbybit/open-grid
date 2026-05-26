@@ -11,8 +11,10 @@ import type {
 	FilterModel,
 } from '@open-grid/core';
 
+const apiStoreMap = new WeakMap<GridApi<unknown>, GridStore<unknown>>();
+
 export function createGridApiFacade<TRowData>(store: GridStore<TRowData>): GridApi<TRowData> {
-	return Object.freeze({
+	const api = Object.freeze({
 		getState: () => store.getState(),
 		setState: (updater: GridStateUpdater<TRowData>) => store.setState(updater),
 
@@ -75,4 +77,14 @@ export function createGridApiFacade<TRowData>(store: GridStore<TRowData>): GridA
 
 		destroy: () => store.destroy(),
 	});
+	apiStoreMap.set(api as GridApi<unknown>, store as GridStore<unknown>);
+	return api;
+}
+
+export function getStoreFromApi<TRowData>(api: GridApi<TRowData>): GridStore<TRowData> {
+	const store = apiStoreMap.get(api as GridApi<unknown>);
+	if (!store) {
+		throw new Error('OpenGrid received a GridApi that was not created by useClientGrid/useServerGrid.');
+	}
+	return store as GridStore<TRowData>;
 }

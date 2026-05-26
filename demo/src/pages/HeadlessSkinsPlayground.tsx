@@ -3,10 +3,10 @@ import { GridProvider, useClientGrid } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Palette, Sparkles, Terminal, ShieldAlert, Code, Copy, Check } from 'lucide-react';
 
-type ClientGrid = ReturnType<typeof useClientGrid<PerformanceRow>>;
+type ClientApi = ReturnType<typeof useClientGrid<PerformanceRow>>;
 
 interface HeadlessSkinsPlaygroundProps {
-	grid: ClientGrid;
+	api: ClientApi;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -14,7 +14,7 @@ interface HeadlessSkinsPlaygroundProps {
 
 type SkinTheme = 'cyberpunk' | 'glassmorphic' | 'obsidian' | 'retro' | 'slate';
 
-export default function HeadlessSkinsPlayground({ grid, editTrigger, arrowKeyNavigationEdit, onCellValueChanged }: HeadlessSkinsPlaygroundProps) {
+export default function HeadlessSkinsPlayground({ api, editTrigger, arrowKeyNavigationEdit, onCellValueChanged }: HeadlessSkinsPlaygroundProps) {
 	const [activeTheme, setActiveTheme] = useState<SkinTheme>('slate');
 	const [copied, setCopied] = useState(false);
 
@@ -380,9 +380,9 @@ export default function HeadlessSkinsPlayground({ grid, editTrigger, arrowKeyNav
 						<div className='absolute inset-0 w-full h-full pointer-events-none z-30 bg-scanlines opacity-10 border border-emerald-950/20' />
 					)}
 
-					<GridProvider grid={grid}>
+					<GridProvider api={api}>
 						<GridView
-							api={grid.api}
+							api={api}
 							pinLeftColumns={1}
 							pinRightColumns={1}
 							onCellValueChanged={onCellValueChanged}

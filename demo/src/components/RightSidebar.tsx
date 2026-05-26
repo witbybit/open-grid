@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GridApi, GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
+import { GridApi, GridProvider, useGridKeySelector } from '@open-grid/react';
 import { TableProperties, Terminal } from 'lucide-react';
 
 // ============================================================================
@@ -36,10 +36,9 @@ const StateInspectorContent = () => {
 // StateInspector (Exported Wrapper to safely provide Provider context)
 // ============================================================================
 
-type ClientGrid = ReturnType<typeof useClientGrid<any>>;
-export const StateInspector = React.memo(({ grid }: { grid: ClientGrid }) => {
+export const StateInspector = React.memo(({ api }: { api: GridApi<any> }) => {
 	return (
-		<GridProvider grid={grid}>
+		<GridProvider api={api}>
 			<StateInspectorContent />
 		</GridProvider>
 	);

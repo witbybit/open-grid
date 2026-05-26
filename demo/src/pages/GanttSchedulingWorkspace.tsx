@@ -13,10 +13,10 @@ export interface GanttRow {
 	status: 'Done' | 'In Progress' | 'Pending' | 'Blocked';
 }
 
-type ClientGrid = ReturnType<typeof useClientGrid<GanttRow>>;
+type ClientApi = ReturnType<typeof useClientGrid<GanttRow>>;
 
 interface GanttSchedulingWorkspaceProps {
-	grid: ClientGrid;
+	api: ClientApi;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -25,7 +25,7 @@ interface GanttSchedulingWorkspaceProps {
 }
 
 function GanttSchedulingWorkspaceInner({
-	grid,
+	api,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	onCellValueChanged,
@@ -37,7 +37,7 @@ function GanttSchedulingWorkspaceInner({
 	// Custom Developer Style Slots Configs (The Dynamic CSS Theme Overrides!)
 	React.useEffect(() => {
 		// Hook the dynamic customizer classes directly into our core style slots!
-		grid.api.setState({
+		api.setState({
 			styleSlots: {
 				rowClass: (row) => {
 					const rowData = row as GanttRow;
@@ -76,18 +76,18 @@ function GanttSchedulingWorkspaceInner({
 				},
 			},
 		});
-	}, [grid.api]);
+	}, [api]);
 
 	// Quantitative team analytics calculations
 	const stats = useMemo(() => {
-		const rowsCount = grid.api.getRowCount();
+		const rowsCount = api.getRowCount();
 		let doneCount = 0;
 		let blockedCount = 0;
 		let progressSum = 0;
 		let durationSum = 0;
 
 		for (let i = 0; i < rowsCount; i++) {
-			const node = grid.api.getRowNode(i);
+			const node = api.getRowNode(i);
 			if (node) {
 				const r = node.data as GanttRow;
 				if (r.status === 'Done') doneCount++;
@@ -104,28 +104,28 @@ function GanttSchedulingWorkspaceInner({
 			progressAvg: rowsCount > 0 ? progressSum / rowsCount : 0,
 			totalDuration: durationSum,
 		};
-	}, [grid.api, selectedRange]);
+	}, [api, selectedRange]);
 
 	const handleAutoSolveConflicts = () => {
 		const start = performance.now();
-		const count = grid.api.getRowCount();
+		const count = api.getRowCount();
 
 		let currentDay = 1;
 
-		grid.api.startTransaction();
+		api.startTransaction();
 
 		for (let i = 0; i < count; i++) {
-			const row = grid.api.getRow(i);
+			const row = api.getRow(i);
 			if (!row) continue;
 
 			const duration = Number(row.durationDays) || 2;
 
-			grid.api.setCellValue(row.id, 'sprintDay', currentDay);
+			api.setCellValue(row.id, 'sprintDay', currentDay);
 
 			currentDay += duration;
 		}
 
-		grid.api.endTransaction();
+		api.endTransaction();
 
 		const durationMs = performance.now() - start;
 
@@ -139,25 +139,25 @@ function GanttSchedulingWorkspaceInner({
 			return;
 		}
 
-		const startIdx = grid.api.getRowIndexById(selectedRange.start.rowId) ?? 0;
-		const endIdx = grid.api.getRowIndexById(selectedRange.end.rowId) ?? 0;
+		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? 0;
+		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? 0;
 
 		if (startIdx === -1 || endIdx === -1) return;
 
 		const minRow = Math.min(startIdx, endIdx);
 		const maxRow = Math.max(startIdx, endIdx);
 
-		grid.api.startTransaction();
+		api.startTransaction();
 
 		for (let i = minRow; i <= maxRow; i++) {
-			const node = grid.api.getRowNode(i);
+			const node = api.getRowNode(i);
 			if (!node) continue;
 
-			grid.api.setCellValue(node.id, 'progress', 100);
-			grid.api.setCellValue(node.id, 'status', 'Done');
+			api.setCellValue(node.id, 'progress', 100);
+			api.setCellValue(node.id, 'status', 'Done');
 		}
 
-		grid.api.endTransaction();
+		api.endTransaction();
 	};
 
 	return (
@@ -180,7 +180,7 @@ function GanttSchedulingWorkspaceInner({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<GridView
-						api={grid.api}
+						api={api}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						onCellValueChanged={onCellValueChanged}
@@ -297,7 +297,7 @@ function GanttSchedulingWorkspaceInner({
 
 export default function GanttSchedulingWorkspace(props: GanttSchedulingWorkspaceProps) {
 	return (
-		<GridProvider grid={props.grid}>
+		<GridProvider api={props.api}>
 			<GanttSchedulingWorkspaceInner {...props} />
 		</GridProvider>
 	);

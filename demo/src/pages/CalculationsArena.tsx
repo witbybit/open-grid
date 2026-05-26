@@ -3,9 +3,9 @@ import { GridProvider, useClientGrid } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Activity, ShieldAlert, BadgePercent } from 'lucide-react';
 
-type ClientGrid = ReturnType<typeof useClientGrid<PerformanceRow>>;
+type ClientApi = ReturnType<typeof useClientGrid<PerformanceRow>>;
 interface CalculationsArenaProps {
-	grid: ClientGrid;
+	api: ClientApi;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
@@ -14,7 +14,7 @@ interface CalculationsArenaProps {
 }
 
 export default function CalculationsArena({
-	grid,
+	api,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	onCellValueChanged,
@@ -32,7 +32,7 @@ export default function CalculationsArena({
 
 	// Register premium style slots for Option Greeks & Risk
 	useEffect(() => {
-		grid.api.setState({
+		api.setState({
 			styleSlots: {
 				rowClass: (row) => {
 					const r = row as PerformanceRow;
@@ -72,11 +72,11 @@ export default function CalculationsArena({
 				},
 			},
 		});
-	}, [grid.api]);
+	}, [api]);
 
 	useEffect(() => {
 		const calculateTelemetry = () => {
-			const count = grid.api.getRowCount();
+			const count = api.getRowCount();
 			let volSum = 0;
 			let deltaSum = 0;
 			let maxG = 0;
@@ -84,7 +84,7 @@ export default function CalculationsArena({
 			let highRisk = 0;
 
 			for (let i = 0; i < count; i++) {
-				const r = grid.api.getRow(i);
+				const r = api.getRow(i);
 				if (r) {
 					const vol = parseFloat(r.quantity) || 0;
 					volSum += vol;
@@ -124,9 +124,9 @@ export default function CalculationsArena({
 		calculateTelemetry();
 
 		// Subscribe to changes in the active grid values
-		const unsubValue = grid.api.addEventListener('cellValueChanged', calculateTelemetry);
+		const unsubValue = api.addEventListener('cellValueChanged', calculateTelemetry);
 		return () => unsubValue();
-	}, [grid.api]);
+	}, [api]);
 
 	// Visual stress metrics
 	const stressScore = useMemo(() => {
@@ -150,9 +150,9 @@ export default function CalculationsArena({
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<GridProvider grid={grid}>
+					<GridProvider api={api}>
 						<GridView
-							api={grid.api}
+							api={api}
 							pinLeftColumns={pinLeftColumns}
 							pinRightColumns={pinRightColumns}
 							onCellValueChanged={onCellValueChanged}
