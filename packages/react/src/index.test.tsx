@@ -2,7 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
-import { GridStore, ClientRowModelController } from '@open-grid/core';
+import { GridStore, ClientRowModelController } from '@open-grid/core/internal';
 import {
 	GridProvider,
 	PortalCell,

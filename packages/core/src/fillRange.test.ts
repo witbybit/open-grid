@@ -2,15 +2,23 @@ import { describe, it, expect } from 'vitest';
 import { GridStore } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 
-describe('GridStore fillRange Sequence Extrapolation and Reference Shifting', () => {
+type FillRangeRow = {
+	id: string;
+	value?: number;
+	text?: string;
+	val?: number;
+	formula?: string;
+};
+
+describe('Spreadsheet fill range sequence extrapolation and reference shifting', () => {
 	it('should extrapolate arithmetic numeric sequences vertically', () => {
-		const store = new GridStore<any>({
+		const store = new GridStore<FillRangeRow>({
 			columns: [
 				{ field: 'id', header: 'ID', width: 50 },
 				{ field: 'value', header: 'Value', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<any>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store, {
 			rows: [
 				{ id: 'r1', value: 10 },
 				{ id: 'r2', value: 20 },
@@ -22,7 +30,7 @@ describe('GridStore fillRange Sequence Extrapolation and Reference Shifting', ()
 
 		// Source range is r1:value to r2:value (values 10, 20)
 		// Target range is r3:value to r4:value
-		store.fillRange(
+		store.engine.fillRange(
 			{
 				start: { rowId: 'r1', colField: 'value' },
 				end: { rowId: 'r2', colField: 'value' },
@@ -40,13 +48,13 @@ describe('GridStore fillRange Sequence Extrapolation and Reference Shifting', ()
 	});
 
 	it('should repeat cyclical text sequences vertically', () => {
-		const store = new GridStore<any>({
+		const store = new GridStore<FillRangeRow>({
 			columns: [
 				{ field: 'id', header: 'ID', width: 50 },
 				{ field: 'text', header: 'Text', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<any>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store, {
 			rows: [
 				{ id: 'r1', text: 'A' },
 				{ id: 'r2', text: 'B' },
@@ -57,7 +65,7 @@ describe('GridStore fillRange Sequence Extrapolation and Reference Shifting', ()
 			columns: store.getState().columns,
 		});
 
-		store.fillRange(
+		store.engine.fillRange(
 			{
 				start: { rowId: 'r1', colField: 'text' },
 				end: { rowId: 'r2', colField: 'text' },
@@ -76,14 +84,14 @@ describe('GridStore fillRange Sequence Extrapolation and Reference Shifting', ()
 	});
 
 	it('should shift formula references relatively during vertical fill', () => {
-		const store = new GridStore<any>({
+		const store = new GridStore<FillRangeRow>({
 			columns: [
 				{ field: 'id', header: 'ID', width: 50 },
 				{ field: 'val', header: 'Val', width: 100 },
 				{ field: 'formula', header: 'Formula', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<any>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store, {
 			rows: [
 				{ id: 'r1', val: 5, formula: '' },
 				{ id: 'r2', val: 10, formula: '' },
@@ -97,7 +105,7 @@ describe('GridStore fillRange Sequence Extrapolation and Reference Shifting', ()
 		store.setCellValue('r1', 'formula', '=[r1:val]*2');
 
 		// Fill from r1:formula to r2:formula .. r4:formula
-		store.fillRange(
+		store.engine.fillRange(
 			{
 				start: { rowId: 'r1', colField: 'formula' },
 				end: { rowId: 'r1', colField: 'formula' },
@@ -122,13 +130,13 @@ describe('GridStore fillRange Sequence Extrapolation and Reference Shifting', ()
 	});
 
 	it('should support undo and redo operations on programmatic range filling', () => {
-		const store = new GridStore<any>({
+		const store = new GridStore<FillRangeRow>({
 			columns: [
 				{ field: 'id', header: 'ID', width: 50 },
 				{ field: 'val', header: 'Val', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<any>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store, {
 			rows: [
 				{ id: 'r1', val: 10 },
 				{ id: 'r2', val: 20 },
@@ -137,7 +145,7 @@ describe('GridStore fillRange Sequence Extrapolation and Reference Shifting', ()
 			columns: store.getState().columns,
 		});
 
-		store.fillRange(
+		store.engine.fillRange(
 			{
 				start: { rowId: 'r1', colField: 'val' },
 				end: { rowId: 'r2', colField: 'val' },

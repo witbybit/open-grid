@@ -1,7 +1,5 @@
 import type { GridState, GridStateUpdater, Listener, RowModel, CellSubscription, GridEventListener, ColumnDef, GridCellRange, GridCellPointer, GridSelectionSource } from '../store.js';
 import { StateManager } from '../state/StateManager.js';
-import { createFormulaRefKey } from '../ids.js';
-import { CommandBus } from '../commands/CommandBus.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
 import { EventBus } from '../events/EventBus.js';
 import { DataModel } from '../models/DataModel.js';
@@ -12,6 +10,7 @@ import { SelectionModel } from '../models/SelectionModel.js';
 import { EditModel } from '../models/EditModel.js';
 import { CellAccessModel } from '../models/CellAccess.js';
 import { DagEngine } from '../calculations/dagEngine.js';
+import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 
@@ -19,23 +18,23 @@ export class GridEngine<TRowData = unknown> {
 	// Models
 	public readonly data: DataModel<TRowData>;
 	public readonly columns: ColumnModel<TRowData>;
-	public readonly viewport: ViewportModel;
+	public readonly viewport: ViewportModel<TRowData>;
 	public readonly geometry: GeometryModel;
 	public readonly selection: SelectionModel;
 	public readonly edit: EditModel;
 	public readonly cellAccess: CellAccessModel<TRowData>;
-	public readonly dagEngine: DagEngine;
 
 	// Infrastructure
 	public readonly stateManager: StateManager<TRowData>;
-	public readonly commandBus: CommandBus;
 	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus;
+	private readonly formulas: DagEngine;
+	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 
 	// Row Model registered internally
 	private rowModel: RowModel<TRowData> | null = null;
 
-	// DMSR: Dynamic Multiplexed Subscription Registry
+	// Cell subscriptions are keyed by visible row id and column field.
 	public readonly cellSubscriptions = new Map<string, Set<CellSubscription>>();
 	public readonly colSubscriptions = new Map<string, Set<CellSubscription>>();
 	public readonly cellUpdateBatch = new Set<string>();
@@ -43,15 +42,15 @@ export class GridEngine<TRowData = unknown> {
 	private _batchedUpdates = true;
 
 	constructor(config: GridEngineConfig<TRowData>) {
-		this.commandBus = new CommandBus();
 		this.commandHistory = new CommandHistory();
 		this.eventBus = new EventBus();
-		this.dagEngine = new DagEngine();
+		this.formulas = new DagEngine();
+		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
 		// Construct sub-models
 		this.data = new DataModel<TRowData>();
 		this.columns = new ColumnModel<TRowData>();
-		this.viewport = new ViewportModel();
+		this.viewport = new ViewportModel<TRowData>();
 		this.geometry = new GeometryModel();
 		this.selection = new SelectionModel();
 		this.edit = new EditModel();
@@ -91,187 +90,145 @@ export class GridEngine<TRowData = unknown> {
 		this.edit.init();
 		this.cellAccess.init(this);
 
-		// Wire up core commands
-		this.setupCommandHandlers();
-
 		// Setup columns if they are passed in config
 		if (config.columns) {
 			this.columns.updateColumns(config.columns, config.columnWidths || {}, config.defaultColWidth);
 		}
 	}
 
-	private setupCommandHandlers(): void {
-		this.commandBus.registerHandler(
-			'SET_DATA',
-			(payload: { columns?: ColumnDef<TRowData>[]; defaultColWidth?: number; defaultRowHeight?: number }) => {
-				this.stateManager.setState((state) => ({
-					...state,
-					...payload,
-				}));
-				this.commandHistory.clear();
+	public setData(payload: { columns?: ColumnDef<TRowData>[]; defaultColWidth?: number; defaultRowHeight?: number }): void {
+		this.stateManager.setState((state) => ({
+			...state,
+			...payload,
+		}));
+		this.commandHistory.clear();
+	}
+
+	public selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'api'): void {
+		this.applySelectionRange(start, end, source);
+	}
+
+	public resizeColumn(colField: string, width: number, undoable = true): void {
+		const oldWidth = this.stateManager.getState().columnWidths[colField] ?? this.stateManager.getState().defaultColWidth;
+		if (oldWidth === width) return;
+
+		this.applyColumnWidth(colField, width);
+
+		if (undoable) {
+			this.commandHistory.add({
+				undo: () => this.applyColumnWidth(colField, oldWidth),
+				redo: () => this.applyColumnWidth(colField, width),
+			});
+		}
+	}
+
+	public moveColumn(colField: string, toIndex: number): void {
+		const state = this.stateManager.getState();
+		const fromIndex = state.columns.findIndex((column) => column.field === colField);
+		if (fromIndex === -1 || !Number.isFinite(toIndex)) return;
+
+		const boundedToIndex = Math.max(0, Math.min(state.columns.length - 1, Math.trunc(toIndex)));
+		if (fromIndex === boundedToIndex) return;
+
+		this.applyColumnOrder(this.moveColumnInList(state.columns, fromIndex, boundedToIndex));
+	}
+
+	public setColumnOrderByFields(colFields: string[]): void {
+		const state = this.stateManager.getState();
+		const orderedFieldSet = new Set<string>();
+		const orderedFields = colFields.filter((field) => {
+			if (orderedFieldSet.has(field)) return false;
+			orderedFieldSet.add(field);
+			return true;
+		});
+		const columnByField = new Map(state.columns.map((column) => [column.field, column]));
+		const nextColumns = orderedFields
+			.map((field) => columnByField.get(field))
+			.filter((column): column is ColumnDef<TRowData> => !!column);
+
+		for (const column of state.columns) {
+			if (!orderedFieldSet.has(column.field)) {
+				nextColumns.push(column);
 			}
-		);
+		}
 
-		this.commandBus.registerHandler('SELECT_CELL', (payload: { start: GridCellPointer | null; end: GridCellPointer | null; source?: GridSelectionSource }) => {
-			this.applySelectionRange(payload.start, payload.end, payload.source ?? 'api');
-		});
+		this.applyColumnOrder(nextColumns);
+	}
 
-		this.commandBus.registerHandler('SET_COLUMN_WIDTH', (payload: { colField: string; width: number }) => {
-			const colField = payload.colField;
-			const newWidth = payload.width;
-			const oldWidth = this.stateManager.getState().columnWidths[colField] ?? this.stateManager.getState().defaultColWidth;
+	public setColumnReorderEnabled(enabled: boolean): void {
+		this.stateManager.setState({ enableColumnReorder: enabled });
+		this.eventBus.dispatchEvent('columnReorderToggled', { enabled });
+	}
 
-			if (oldWidth === newWidth) return;
+	public resizeRow(rowId: string, height: number, undoable = true): void {
+		const oldHeight = this.stateManager.getState().rowHeights[rowId] ?? this.stateManager.getState().defaultRowHeight;
+		if (oldHeight === height) return;
 
-			this.setColumnWidth(colField, newWidth);
+		this.applyRowHeight(rowId, height);
 
+		if (undoable) {
 			this.commandHistory.add({
-				undo: () => {
-					this.setColumnWidth(colField, oldWidth);
-				},
-				redo: () => {
-					this.setColumnWidth(colField, newWidth);
-				},
+				undo: () => this.applyRowHeight(rowId, oldHeight),
+				redo: () => this.applyRowHeight(rowId, height),
 			});
-		});
+		}
+	}
 
-		this.commandBus.registerHandler('MOVE_COLUMN', (payload: { colField: string; toIndex: number }) => {
-			const state = this.stateManager.getState();
-			const fromIndex = state.columns.findIndex((column) => column.field === payload.colField);
-			if (fromIndex === -1) return;
+	public setSortModel(sortModel: SortModel | null, undoable = true): void {
+		const oldSort = this.stateManager.getState().sortModel;
+		this.stateManager.setState({ sortModel });
 
-			if (!Number.isFinite(payload.toIndex)) return;
-			const toIndex = Math.max(0, Math.min(state.columns.length - 1, Math.trunc(payload.toIndex)));
-			if (fromIndex === toIndex) return;
-
-			this.setColumnOrder(this.moveColumnInList(state.columns, fromIndex, toIndex));
-		});
-
-		this.commandBus.registerHandler('SET_COLUMN_ORDER', (payload: { colFields: string[] }) => {
-			const state = this.stateManager.getState();
-			const orderedFieldSet = new Set<string>();
-			const orderedFields = payload.colFields.filter((field) => {
-				if (orderedFieldSet.has(field)) return false;
-				orderedFieldSet.add(field);
-				return true;
-			});
-			const columnByField = new Map(state.columns.map((column) => [column.field, column]));
-			const nextColumns = orderedFields
-				.map((field) => columnByField.get(field))
-				.filter((column): column is ColumnDef<TRowData> => !!column);
-
-			for (const column of state.columns) {
-				if (!orderedFieldSet.has(column.field)) {
-					nextColumns.push(column);
-				}
-			}
-
-			this.setColumnOrder(nextColumns);
-		});
-
-		this.commandBus.registerHandler('SET_COLUMN_REORDER_ENABLED', (payload: { enabled: boolean }) => {
-			this.stateManager.setState({ enableColumnReorder: payload.enabled });
-			this.eventBus.dispatchEvent('columnReorderToggled', { enabled: payload.enabled });
-		});
-
-		this.commandBus.registerHandler('SET_ROW_HEIGHT', (payload: { rowId: string; height: number }) => {
-			const rowId = payload.rowId;
-			const newHeight = payload.height;
-			const oldHeight = this.stateManager.getState().rowHeights[rowId] ?? this.stateManager.getState().defaultRowHeight;
-
-			if (oldHeight === newHeight) return;
-
-			this.setRowHeight(rowId, newHeight);
-
+		if (undoable) {
 			this.commandHistory.add({
-				undo: () => {
-					this.setRowHeight(rowId, oldHeight);
-				},
-				redo: () => {
-					this.setRowHeight(rowId, newHeight);
-				},
+				undo: () => this.stateManager.setState({ sortModel: oldSort }),
+				redo: () => this.stateManager.setState({ sortModel }),
 			});
-		});
+		}
+	}
 
-		this.commandBus.registerHandler('SET_SORT_MODEL', (payload: { sortModel: SortModel | null }) => {
-			const newSort = payload.sortModel;
-			const oldSort = this.stateManager.getState().sortModel;
+	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
+		const oldFilter = this.stateManager.getState().filterModel;
+		this.stateManager.setState({ filterModel });
 
-			this.stateManager.setState({ sortModel: newSort });
-
+		if (undoable) {
 			this.commandHistory.add({
-				undo: () => {
-					this.stateManager.setState({ sortModel: oldSort });
-				},
-				redo: () => {
-					this.stateManager.setState({ sortModel: newSort });
-				},
+				undo: () => this.stateManager.setState({ filterModel: oldFilter }),
+				redo: () => this.stateManager.setState({ filterModel }),
 			});
-		});
+		}
+	}
 
-		this.commandBus.registerHandler('SET_FILTER_MODEL', (payload: { filterModel: FilterModel | null }) => {
-			const newFilter = payload.filterModel;
-			const oldFilter = this.stateManager.getState().filterModel;
+	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
+		const oldValue = this.data.getRawCellValue(rowId, colField);
+		if (oldValue === value) return;
 
-			this.stateManager.setState({ filterModel: newFilter });
+		const applied = this.data.setCellValue(rowId, colField, value);
+		if (!applied) return;
 
+		if (undoable) {
 			this.commandHistory.add({
-				undo: () => {
-					this.stateManager.setState({ filterModel: oldFilter });
-				},
-				redo: () => {
-					this.stateManager.setState({ filterModel: newFilter });
-				},
+				undo: () => this.setCellValue(rowId, colField, oldValue, false),
+				redo: () => this.setCellValue(rowId, colField, value, false),
 			});
+		}
+	}
+
+	public startEdit(rowId: string, colField: string): void {
+		this.stateManager.setState({
+			activeEdit: { rowId, colField },
 		});
+		this.notifyCellChange(rowId, colField);
+		this.eventBus.dispatchEvent('editStarted', { rowId, colField });
+	}
 
-		this.commandBus.registerHandler('SET_CELL_VALUE', (payload: { rowId: string; colField: string; value: unknown; undoable?: boolean }) => {
-			const { rowId, colField, value, undoable = true } = payload;
-			const oldValue = this.data.getRawCellValue(rowId, colField);
+	public stopEdit(cancel = false): void {
+		const activeEdit = this.stateManager.getState().activeEdit;
+		if (!activeEdit) return;
 
-			if (oldValue === value) return;
-
-			const applied = this.data.setCellValue(rowId, colField, value);
-			if (!applied) return;
-
-			if (undoable) {
-				this.commandHistory.add({
-					undo: () => {
-						this.commandBus.dispatch({
-							type: 'SET_CELL_VALUE',
-							payload: { rowId, colField, value: oldValue, undoable: false },
-						});
-					},
-					redo: () => {
-						this.commandBus.dispatch({
-							type: 'SET_CELL_VALUE',
-							payload: { rowId, colField, value, undoable: false },
-						});
-					},
-				});
-			}
-		});
-
-		this.commandBus.registerHandler('START_EDIT', (payload: { rowId: string; colField: string }) => {
-			const { rowId, colField } = payload;
-			this.stateManager.setState({
-				activeEdit: { rowId, colField },
-			});
-			this.notifyCellChange(rowId, colField);
-			this.eventBus.dispatchEvent('editStarted', { rowId, colField });
-		});
-
-		this.commandBus.registerHandler('STOP_EDIT', (payload: { cancel?: boolean }) => {
-			const activeEdit = this.stateManager.getState().activeEdit;
-			if (!activeEdit) return;
-
-			const { rowId, colField } = activeEdit;
-			const cancel = !!payload.cancel;
-
-			this.stateManager.setState({ activeEdit: null });
-			this.notifyCellChange(rowId, colField);
-			this.eventBus.dispatchEvent('editStopped', { rowId, colField, cancel });
-		});
+		const { rowId, colField } = activeEdit;
+		this.stateManager.setState({ activeEdit: null });
+		this.notifyCellChange(rowId, colField);
+		this.eventBus.dispatchEvent('editStopped', { rowId, colField, cancel });
 	}
 
 	public registerRowModel(rowModel: RowModel<TRowData>): void {
@@ -284,6 +241,34 @@ export class GridEngine<TRowData = unknown> {
 
 	public getRowModel(): RowModel<TRowData> | null {
 		return this.rowModel;
+	}
+
+	public clearFormulas(): void {
+		this.formulas.clearAll();
+	}
+
+	public hasFormula(rowId: string, colField: string): boolean {
+		return this.formulas.hasFormula(rowId, colField);
+	}
+
+	public getFormula(rowId: string, colField: string): string | undefined {
+		return this.formulas.getFormula(rowId, colField);
+	}
+
+	public syncFormulaForCell(rowId: string, colField: string, value: unknown): void {
+		if (typeof value === 'string' && value.startsWith('=')) {
+			this.formulas.registerFormula(rowId, colField, value);
+			return;
+		}
+		this.formulas.clearFormula(rowId, colField);
+	}
+
+	public evaluateFormulaCell(rowId: string, colField: string, getRawValue: (rId: string, cField: string) => unknown): unknown {
+		return this.formulas.getCellValue(rowId, colField, getRawValue);
+	}
+
+	public invalidateFormulaCell(rowId: string, colField: string): string[] {
+		return this.formulas.invalidateCell(rowId, colField);
 	}
 
 	private getRowHeightsList(rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number): number[] {
@@ -357,7 +342,7 @@ export class GridEngine<TRowData = unknown> {
 				try {
 					sub.onStoreChange();
 				} catch (e) {
-					console.error(`GridEngine: Error in DMSR coordinate notification`, e);
+					console.error(`GridEngine: Error in cell subscription notification`, e);
 				}
 			});
 		}
@@ -441,7 +426,7 @@ export class GridEngine<TRowData = unknown> {
 		});
 	};
 
-	public setColumnWidth = (colField: string, width: number): void => {
+	private applyColumnWidth = (colField: string, width: number): void => {
 		this.stateManager.setState((state) => ({
 			columnWidths: {
 				...state.columnWidths,
@@ -455,7 +440,7 @@ export class GridEngine<TRowData = unknown> {
 		});
 	};
 
-	public setColumnOrder(columns: ColumnDef<TRowData>[]): void {
+	private applyColumnOrder(columns: ColumnDef<TRowData>[]): void {
 		const prevFields = this.stateManager.getState().columns.map((column) => column.field);
 		const nextFields = columns.map((column) => column.field);
 		if (prevFields.length === nextFields.length && prevFields.every((field, index) => field === nextFields[index])) {
@@ -476,7 +461,7 @@ export class GridEngine<TRowData = unknown> {
 		return nextColumns;
 	}
 
-	public setRowHeight = (rowId: string, height: number): void => {
+	private applyRowHeight = (rowId: string, height: number): void => {
 		this.stateManager.setState((state) => ({
 			rowHeights: {
 				...state.rowHeights,
@@ -622,7 +607,7 @@ export class GridEngine<TRowData = unknown> {
 							try {
 								sub.onStoreChange();
 							} catch (e) {
-								console.error(`GridEngine: Error in DMSR column notification`, e);
+								console.error(`GridEngine: Error in column subscription notification`, e);
 							}
 						});
 					}
@@ -636,7 +621,7 @@ export class GridEngine<TRowData = unknown> {
 					try {
 						sub.onStoreChange();
 					} catch (e) {
-						console.error(`GridEngine: Error in DMSR dataVersion notification`, e);
+						console.error(`GridEngine: Error in data refresh subscription notification`, e);
 					}
 				});
 			});
@@ -707,235 +692,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public fillRange(source: GridCellRange, target: GridCellRange): void {
-		const rowModel = this.getRowModel();
-		if (!rowModel) return;
-
-		const state = this.stateManager.getState();
-		const columns = state.columns;
-
-		const sourceBounds = this.resolveRangeBounds(source);
-		const targetBounds = this.resolveRangeBounds(target);
-		if (!sourceBounds || !targetBounds) return;
-
-		let direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' = 'DOWN';
-		if (targetBounds.minRow > sourceBounds.maxRow) direction = 'DOWN';
-		else if (targetBounds.maxRow < sourceBounds.minRow) direction = 'UP';
-		else if (targetBounds.minCol > sourceBounds.maxCol) direction = 'RIGHT';
-		else if (targetBounds.maxCol < sourceBounds.minCol) direction = 'LEFT';
-
-		const oldValueRecord: { rowId: string; colField: string; value: any; hasFormula: boolean; formula?: string }[] = [];
-		const newValueRecord: { rowId: string; colField: string; value: any; hasFormula: boolean; formula?: string }[] = [];
-
-		this.batch(() => {
-			if (direction === 'DOWN' || direction === 'UP') {
-				const fillRows = this.buildOrderedIndexes(targetBounds.minRow, targetBounds.maxRow, direction === 'UP');
-				for (let c = targetBounds.minCol; c <= targetBounds.maxCol; c++) {
-					const col = columns[c];
-					if (!col) continue;
-
-					const sourceValues: Array<{ value: any; hasFormula: boolean; formula?: string }> = [];
-					for (let r = sourceBounds.minRow; r <= sourceBounds.maxRow; r++) {
-						const node = rowModel.getRowNode(r);
-						if (node) sourceValues.push(this.captureCell(node.id, col.field));
-					}
-
-					if (sourceValues.length === 0) continue;
-
-					const series = this.analyzeFillSeries(sourceValues);
-					fillRows.forEach((r, idx) => {
-						const node = rowModel.getRowNode(r);
-						if (!node) return;
-
-						const srcItem = sourceValues[idx % sourceValues.length];
-						const deltaRow = r - (direction === 'DOWN' ? sourceBounds.maxRow : sourceBounds.minRow);
-						this.applyFillValue(node.id, col.field, idx, srcItem, series, deltaRow, 0, rowModel, columns, oldValueRecord, newValueRecord);
-					});
-				}
-			}
-
-			if (direction === 'RIGHT' || direction === 'LEFT') {
-				const fillCols = this.buildOrderedIndexes(targetBounds.minCol, targetBounds.maxCol, direction === 'LEFT');
-				for (let r = targetBounds.minRow; r <= targetBounds.maxRow; r++) {
-					const node = rowModel.getRowNode(r);
-					if (!node) continue;
-
-					const sourceValues: Array<{ value: any; hasFormula: boolean; formula?: string }> = [];
-					for (let c = sourceBounds.minCol; c <= sourceBounds.maxCol; c++) {
-						const col = columns[c];
-						if (col) sourceValues.push(this.captureCell(node.id, col.field));
-					}
-
-					if (sourceValues.length === 0) continue;
-
-					const series = this.analyzeFillSeries(sourceValues);
-					fillCols.forEach((c, idx) => {
-						const col = columns[c];
-						if (!col) return;
-
-						const srcItem = sourceValues[idx % sourceValues.length];
-						const deltaCol = c - (direction === 'RIGHT' ? sourceBounds.maxCol : sourceBounds.minCol);
-						this.applyFillValue(node.id, col.field, idx, srcItem, series, 0, deltaCol, rowModel, columns, oldValueRecord, newValueRecord);
-					});
-				}
-			}
-		});
-
-		if (newValueRecord.length > 0) {
-			this.commandHistory.add({
-				undo: () => {
-					this.batch(() => {
-						for (const item of oldValueRecord) {
-							if (item.hasFormula && item.formula) {
-								this.data.setCellValue(item.rowId, item.colField, item.formula);
-							} else {
-								this.dagEngine.clearFormula(item.rowId, item.colField);
-								this.data.setCellValue(item.rowId, item.colField, item.value);
-							}
-						}
-					});
-				},
-				redo: () => {
-					this.batch(() => {
-						for (const item of newValueRecord) {
-							if (item.hasFormula && item.formula) {
-								this.data.setCellValue(item.rowId, item.colField, item.formula);
-							} else {
-								this.dagEngine.clearFormula(item.rowId, item.colField);
-								this.data.setCellValue(item.rowId, item.colField, item.value);
-							}
-						}
-					});
-				},
-			});
-		}
-	}
-
-	private resolveRangeBounds(range: GridCellRange): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null {
-		const rowModel = this.getRowModel();
-		if (!rowModel) return null;
-
-		const startRowIdx = rowModel.getRowIndexById(range.start.rowId);
-		const endRowIdx = rowModel.getRowIndexById(range.end.rowId);
-		const startColIdx = this.columns.getColumnIndex(range.start.colField);
-		const endColIdx = this.columns.getColumnIndex(range.end.colField);
-
-		if (startRowIdx < 0 || endRowIdx < 0 || startColIdx < 0 || endColIdx < 0) return null;
-
-		return {
-			minRow: Math.min(startRowIdx, endRowIdx),
-			maxRow: Math.max(startRowIdx, endRowIdx),
-			minCol: Math.min(startColIdx, endColIdx),
-			maxCol: Math.max(startColIdx, endColIdx),
-		};
-	}
-
-	private buildOrderedIndexes(start: number, end: number, reverse: boolean): number[] {
-		const indexes: number[] = [];
-		if (reverse) {
-			for (let i = end; i >= start; i--) indexes.push(i);
-		} else {
-			for (let i = start; i <= end; i++) indexes.push(i);
-		}
-		return indexes;
-	}
-
-	private captureCell(rowId: string, colField: string): { value: any; hasFormula: boolean; formula?: string } {
-		const hasFormula = this.dagEngine.hasFormula(rowId, colField);
-		return {
-			value: this.data.getCellValue(rowId, colField),
-			hasFormula,
-			formula: hasFormula ? this.dagEngine.getFormula(rowId, colField) : undefined,
-		};
-	}
-
-	private analyzeFillSeries(sourceValues: Array<{ value: any; hasFormula: boolean }>): { allNumeric: boolean; baseNum: number; step: number } {
-		const allNumeric = sourceValues.every((s) => !s.hasFormula && !Number.isNaN(parseFloat(String(s.value))) && s.value !== '');
-		if (!allNumeric || sourceValues.length === 0) return { allNumeric: false, baseNum: 0, step: 0 };
-
-		const numbers = sourceValues.map((s) => parseFloat(String(s.value)));
-		if (numbers.length === 1) return { allNumeric: true, baseNum: numbers[0], step: 0 };
-
-		let diffSum = 0;
-		for (let i = 0; i < numbers.length - 1; i++) {
-			diffSum += numbers[i + 1] - numbers[i];
-		}
-		return { allNumeric: true, baseNum: numbers[numbers.length - 1], step: diffSum / (numbers.length - 1) };
-	}
-
-	private applyFillValue(
-		rowId: string,
-		colField: string,
-		index: number,
-		source: { value: any; hasFormula: boolean; formula?: string },
-		series: { allNumeric: boolean; baseNum: number; step: number },
-		deltaRow: number,
-		deltaCol: number,
-		rowModel: RowModel<TRowData>,
-		columns: ColumnDef<TRowData>[],
-		oldValueRecord: { rowId: string; colField: string; value: any; hasFormula: boolean; formula?: string }[],
-		newValueRecord: { rowId: string; colField: string; value: any; hasFormula: boolean; formula?: string }[]
-	): void {
-		const oldValue = this.captureCell(rowId, colField);
-		let nextValue = source.value;
-		let nextFormula: string | undefined;
-
-		if (source.hasFormula && source.formula) {
-			nextFormula = this.shiftFormulaReferences(source.formula, deltaRow, deltaCol, rowModel, columns);
-			nextValue = nextFormula;
-		} else if (series.allNumeric) {
-			const finalVal = series.step === 0 ? series.baseNum : series.baseNum + series.step * (index + 1);
-			nextValue = Number.isInteger(finalVal) ? finalVal : parseFloat(finalVal.toFixed(4));
-		}
-
-		const applied = this.data.setCellValue(rowId, colField, nextValue);
-		if (!applied) return;
-
-		oldValueRecord.push({ rowId, colField, ...oldValue });
-		newValueRecord.push({
-			rowId,
-			colField,
-			value: nextFormula ? undefined : nextValue,
-			hasFormula: !!nextFormula,
-			formula: nextFormula,
-		});
-	}
-
-	private shiftFormulaReferences(
-		formula: string,
-		deltaRow: number,
-		deltaCol: number,
-		rowModel: any,
-		columns: ColumnDef<any>[]
-	): string {
-		const regex = /\[([^\]:]+):([^\]:]+)\]/g;
-		return formula.replace(regex, (match, refRowId, refColField) => {
-			let newRowId = refRowId;
-			let newColField = refColField;
-
-			if (deltaRow !== 0 && rowModel) {
-				const rowIdx = rowModel.getRowIndexById(refRowId);
-				if (rowIdx !== -1) {
-					const newRowIdx = rowIdx + deltaRow;
-					const newRowNode = rowModel.getRowNode(newRowIdx);
-					if (newRowNode) {
-						newRowId = newRowNode.id;
-					}
-				}
-			}
-
-			if (deltaCol !== 0) {
-				const colIdx = this.columns.getColumnIndex(refColField);
-				if (colIdx !== -1) {
-					const newColIdx = colIdx + deltaCol;
-					const newCol = columns[newColIdx];
-					if (newCol) {
-						newColField = newCol.field;
-					}
-				}
-			}
-
-			return createFormulaRefKey(newRowId, newColField);
-		});
+		this.spreadsheetFill.fillRange(source, target);
 	}
 
 	public destroy(): void {
@@ -943,7 +700,6 @@ export class GridEngine<TRowData = unknown> {
 		this.colSubscriptions.clear();
 		this.cellUpdateBatch.clear();
 		this.eventBus.clear();
-		this.commandBus.clear();
 		this.stateManager.destroy();
 	}
 }

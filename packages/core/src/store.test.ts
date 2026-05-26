@@ -266,7 +266,7 @@ describe('GridStore generic row-store functionality', () => {
 
 		expect(store.getCellState('1', 'b').value).toBe(10);
 		expect(store.getCellValue('1', 'b')).toBe(10);
-		expect(store.dagEngine.hasFormula('1', 'b')).toBe(false);
+		expect(store.engine.hasFormula('1', 'b')).toBe(false);
 
 		controller.dispose();
 	});
@@ -309,7 +309,7 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
-	it('should support plug-and-play feature registration and API injection', () => {
+	it('should support explicit feature registration without mutating the store API', () => {
 		const store = new GridStore<TestRow>();
 
 		const initSpy = vi.fn();
@@ -319,29 +319,17 @@ describe('GridStore generic row-store functionality', () => {
 			name: 'customService',
 			onInit: initSpy,
 			onDestroy: destroySpy,
-			getApiMethods: () => ({
-				customApiCall: (arg: string) => `Handled: ${arg}`,
-			}),
+			customApiCall: (arg: string) => `Handled: ${arg}`,
 		};
 
 		store.registerPlugin(customFeature);
 
-		// 1. Check feature is initialized
 		expect(initSpy).toHaveBeenCalledWith(store);
+		expect(store.getPlugin<typeof customFeature>('customService')).toBe(customFeature);
+		expect((store as unknown as Record<string, unknown>).customService).toBeUndefined();
+		expect((store as unknown as Record<string, unknown>).customApiCall).toBeUndefined();
+		expect(customFeature.customApiCall('test')).toBe('Handled: test');
 
-		interface CustomStore {
-			customService: unknown;
-			customApiCall: (arg: string) => string;
-		}
-
-		// 2. Check property binding (AG Grid style)
-		expect((store as unknown as CustomStore).customService).toBe(customFeature);
-
-		// 3. Check dynamic API method injection
-		expect(typeof (store as unknown as CustomStore).customApiCall).toBe('function');
-		expect((store as unknown as CustomStore).customApiCall('test')).toBe('Handled: test');
-
-		// 4. Check clean destruction
 		store.destroy();
 		expect(destroySpy).toHaveBeenCalled();
 	});
@@ -518,7 +506,7 @@ describe('ServerRowModelController paginated lazily populated row-patching', () 
 	});
 });
 
-describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions', () => {
+describe('RowNode path getters and state batching', () => {
 	it('should support RowNode properties and cellular caching', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
@@ -563,7 +551,7 @@ describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions'
 		controller.dispose();
 	});
 
-	it('should support batch transactions in GridStore', () => {
+	it('should defer state notifications during internal state transactions', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name' }],
 		});
@@ -575,7 +563,7 @@ describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions'
 		const listener = vi.fn();
 		store.subscribe(listener);
 
-		store.startTransaction();
+		store.engine.stateManager.startTransaction();
 		store.selectCell({ rowId: '1', colField: 'name' });
 		store.setState({ defaultRowHeight: 50 });
 		store.setState({ defaultColWidth: 120 });
@@ -587,7 +575,7 @@ describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions'
 		expect(store.getState().defaultColWidth).toBe(120);
 
 		// End transaction
-		store.endTransaction();
+		store.engine.stateManager.endTransaction();
 		// Listeners notified exactly once at the end!
 		expect(listener).toHaveBeenCalledTimes(1);
 
@@ -596,26 +584,6 @@ describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions'
 });
 
 describe('Phase 2 Engine Scalability Subsystems', () => {
-	it('should correctly schedule tasks across Interactive, Render, and Stream Priority Lanes', async () => {
-		const { TransactionScheduler, PriorityLane } = await import('./scheduler.js');
-		const scheduler = new TransactionScheduler();
-
-		const tracking: string[] = [];
-
-		scheduler.schedule(PriorityLane.Stream, () => tracking.push('stream-1'));
-		scheduler.schedule(PriorityLane.Render, () => tracking.push('render-1'));
-		scheduler.schedule(PriorityLane.Interactive, () => tracking.push('interactive-1'));
-
-		// Interactive lane must execute synchronously and immediately
-		expect(tracking).toContain('interactive-1');
-		expect(tracking).not.toContain('render-1');
-		expect(tracking).not.toContain('stream-1');
-
-		// Sync flush of other lanes
-		scheduler.flushAllSync();
-		expect(tracking).toEqual(['interactive-1', 'render-1', 'stream-1']);
-	});
-
 	it('should cache cumulative geometry and map offsets using binary search in O(log N) time', async () => {
 		const { ViewportGeometry } = await import('./viewportGeometry.js');
 		const geometry = new ViewportGeometry();
@@ -672,8 +640,8 @@ describe('Phase 2 Engine Scalability Subsystems', () => {
 	});
 });
 
-describe('GridStore Scoped Batch Transactions and Properties', () => {
-	it('should support scoped batch transactions and execute them exactly once', () => {
+describe('GridStore scoped batching and dirty cell fanout', () => {
+	it('should support scoped batches and execute them exactly once', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'name', header: 'Name' },
@@ -799,19 +767,20 @@ describe('GridStore Scoped Batch Transactions and Properties', () => {
 	it('should bound selection cell notifications to the visible viewport', () => {
 		const columns = Array.from({ length: 50 }, (_, i) => ({ field: `c${i}`, header: `C${i}` }));
 		const rows = Array.from({ length: 500 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}`, price: i }));
-		const store = new GridStore<any>({
+		type WideRow = { id: string; name: string; price: number; [key: string]: string | number };
+		const store = new GridStore<WideRow>({
 			columns,
 			defaultRowHeight: 40,
 			defaultColWidth: 100,
 		});
-		const controller = new ClientRowModelController<any>(store, {
+		const controller = new ClientRowModelController<WideRow>(store, {
 			rows,
 			columns,
 		});
 
-		store.viewportController.setViewportSize(300, 160);
-		store.viewportController.setScrollPosition(0, 0);
-		store.viewportController.updateVisibleRanges();
+		store.setViewportSize(300, 160);
+		store.setScrollPosition(0, 0);
+		store.updateVisibleRanges();
 
 		const visibleListener = vi.fn();
 		const offscreenListener = vi.fn();
@@ -827,7 +796,7 @@ describe('GridStore Scoped Batch Transactions and Properties', () => {
 	});
 });
 
-describe('GridStore Command Bus and Undo/Redo functionality', () => {
+describe('GridStore undo and redo functionality', () => {
 	it('should support undo and redo for cell value modifications', () => {
 		const store = new GridStore<TestRow>({
 			columns: [

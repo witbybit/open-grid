@@ -1,8 +1,8 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { ViewportRange } from '../viewportController.js';
 
-export class ViewportModel {
-	private engine!: GridEngine<any>;
+export class ViewportModel<TRowData = unknown> {
+	private engine!: GridEngine<TRowData>;
 
 	public scrollTop = 0;
 	public scrollLeft = 0;
@@ -24,7 +24,7 @@ export class ViewportModel {
 	private baseOverscanRows = 12;
 	private baseOverscanCols = 8;
 
-	public init(engine: GridEngine<any>): void {
+	public init(engine: GridEngine<TRowData>): void {
 		this.engine = engine;
 	}
 

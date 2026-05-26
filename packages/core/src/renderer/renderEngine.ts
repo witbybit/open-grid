@@ -7,11 +7,9 @@ import { RowNode, type ColumnDef, type GridCellRange } from '../store.js';
 import { CORE_STYLES } from './styles.js';
 
 /**
- * RenderEngine — The framework-agnostic core DOM owner.
- * Coordinates z-index viewport layering, absolute hardware GPU-promoted transforms,
- * and high-performance row/cell recycling.
+ * Owns the grid DOM, row/cell recycling, and rAF paint batching.
  */
-export class RenderEngine<TRowData = any> implements IGridRenderer {
+export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData> {
 	private engine: GridEngine<TRowData>;
 	private rowPool!: DOMPool<HTMLDivElement>;
 	private cellPool!: DOMPool<HTMLDivElement>;
@@ -73,8 +71,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		cellKey: string,
 		container: HTMLElement,
 		value: unknown,
-		node: RowNode,
-		col: ColumnDef,
+		node: RowNode<TRowData>,
+		col: ColumnDef<TRowData>,
 		isEditing: boolean,
 		isLoading: boolean
 	) => void;
@@ -105,7 +103,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		this.scrollSpacer = document.createElement('div');
 		this.scrollSpacer.className = 'og-scroll-spacer';
 
-		// Create GPU composite layers
+		// Create scrollable layers for center, pinned columns, and headers.
 		this.centerLayer = document.createElement('div');
 		this.centerLayer.className = 'og-layer-center';
 
@@ -202,7 +200,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	 * Performs scroll-driven viewport shifts and schedules updates.
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number): void => {
-		this.engine.eventBus.dispatchEvent('beforeRender', null);
 		// 1. Update the coordinate values in ViewportModel (O(1))
 		this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
 
@@ -214,8 +211,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		// 4. Update overlay selections
 		this.paintOverlay();
-
-		this.engine.eventBus.dispatchEvent('afterRender', null);
 	};
 
 	private bindInvalidationSources(): void {
@@ -294,7 +289,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			return;
 		}
 
-		this.engine.eventBus.dispatchEvent('beforeRender', null);
 		this.syncViewportScrollFromDom();
 
 		if (this.dirtyRows.size > 0 || this.dirtyCells.size > 0) {
@@ -313,14 +307,12 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		this.pendingOverlayPaint = false;
 		this.dirtyCells.clear();
 		this.dirtyRows.clear();
-		this.engine.eventBus.dispatchEvent('afterRender', null);
 	}
 
 	/**
 	 * Completely rebuilds grid structures, spacers, and forces recycling refresh.
 	 */
 	public fullPaint(): void {
-		this.engine.eventBus.dispatchEvent('beforeRender', null);
 		this.syncViewportScrollFromDom();
 
 		const rowModel = this.engine.getRowModel();
@@ -366,8 +358,6 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 
 		// 4. Draw selection overlay and focus indicators
 		this.paintOverlay();
-
-		this.engine.eventBus.dispatchEvent('afterRender', null);
 	}
 
 	private syncViewportScrollFromDom(): void {
@@ -429,7 +419,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		const renderRow = (r: number) => {
 			let node = rowModel ? rowModel.getRowNode(r) : null;
 			if (!node && state.loading) {
-				node = new RowNode(`__loading_${r}`, null as any);
+				node = new RowNode<TRowData>(`__loading_${r}`, null as TRowData);
 			}
 			if (!node) return;
 
@@ -461,7 +451,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				pooledRow.boundRowId = node.id;
 			}
 
-			// Reposition row via fast translate3d transform promote
+			// Reposition row using transforms to avoid layout-bound top/left updates.
 			let rowTop = this.engine.geometry.rowTops[r];
 			const rowHeight = this.engine.geometry.rowHeights[r];
 
@@ -546,7 +536,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 	}
 
-	private updateRowClassName(pooledRow: PooledRow, node: RowNode, rowIndex: number, state = this.engine.stateManager.getState()): void {
+	private updateRowClassName(pooledRow: PooledRow, node: RowNode<TRowData>, rowIndex: number, state = this.engine.stateManager.getState()): void {
 		const rowModel = this.engine.getRowModel();
 		const rowCount = rowModel ? rowModel.getRowCount() : 0;
 		const pinTopRows = this.engine.viewport.pinTopRows;
@@ -604,11 +594,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	 */
 	private recycleRowCells(
 		pooledRow: PooledRow,
-		node: RowNode,
+		node: RowNode<TRowData>,
 		rowIndex: number,
 		startCol: number,
 		endCol: number,
-		columns: ColumnDef<any>[],
+		columns: ColumnDef<TRowData>[],
 		releaseOutOfRange = true
 	): void {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
@@ -1062,20 +1052,14 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		const onMouseMove = (moveEvent: MouseEvent) => {
 			const deltaX = moveEvent.clientX - startX;
 			currentWidth = Math.max(30, startWidth + deltaX);
-			this.engine.setColumnWidth(colField, currentWidth);
+			this.engine.resizeColumn(colField, currentWidth, false);
 		};
 
 		const onMouseUp = () => {
 			window.removeEventListener('mousemove', onMouseMove);
 			window.removeEventListener('mouseup', onMouseUp);
 
-			this.engine.commandBus.dispatch({
-				type: 'SET_COLUMN_WIDTH',
-				payload: {
-					colField,
-					width: currentWidth,
-				},
-			});
+			this.schedulePaint();
 		};
 
 		window.addEventListener('mousemove', onMouseMove);
@@ -1136,10 +1120,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		const state = this.engine.stateManager.getState();
 		const toIndex = Math.max(0, Math.min(state.columns.length - 1, insertionIndex > fromIndex ? insertionIndex - 1 : insertionIndex));
 		if (toIndex !== fromIndex) {
-			this.engine.commandBus.dispatch({
-				type: 'MOVE_COLUMN',
-				payload: { colField, toIndex },
-			});
+			this.engine.moveColumn(colField, toIndex);
 		} else {
 			this.schedulePaint();
 		}
@@ -1715,7 +1696,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	}
 
 	/**
-	 * Dynamic CSS injector supporting grid structure and aesthetics.
+	 * Injects the structural styles required by the DOM renderer.
 	 */
 	private injectStyles(): void {
 		if (typeof document === 'undefined') return;

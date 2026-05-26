@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GridStore } from './store.js';
+import { GridStore, type GridCellPointer } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
-import { GridContextMenuPlugin } from './contextMenu.js';
+import { GridContextMenuPlugin, type ContextMenuParams } from './contextMenu.js';
 
 interface TestRow {
 	id: string;
@@ -9,108 +10,23 @@ interface TestRow {
 	price: number;
 }
 
+type ContextMenuTestPlugin = {
+	copySelectedRange(params: ContextMenuParams<TestRow>): void;
+	clearSelection(params: ContextMenuParams<TestRow>): void;
+	add100ToSelection(params: ContextMenuParams<TestRow>): void;
+	apply10PercentIncrease(params: ContextMenuParams<TestRow>): void;
+	activePointer: GridCellPointer | null;
+	renderMenu(clientX: number, clientY: number): void;
+	menuElement: HTMLDivElement | null;
+};
+
 describe('GridContextMenuPlugin', () => {
 	let store: GridStore<TestRow>;
 	let rowController: ClientRowModelController<TestRow>;
 	let plugin: GridContextMenuPlugin<TestRow>;
+	let testPlugin: ContextMenuTestPlugin;
 
 	beforeEach(() => {
-		// Mock browser globals for safe running during tests
-		if (typeof window === 'undefined') {
-			globalThis.window = {
-				innerWidth: 1024,
-				innerHeight: 768,
-				addEventListener: () => {},
-				removeEventListener: () => {},
-			} as any;
-		}
-
-		if (typeof document === 'undefined') {
-			const createMockElement = (tagName: string) => {
-				const children: any[] = [];
-				const listeners: Record<string, Function[]> = {};
-				const el = {
-					tagName: tagName.toUpperCase(),
-					style: {},
-					classList: {
-						classes: new Set<string>(),
-						add(cls: string) { this.classes.add(cls); },
-						remove(cls: string) { this.classes.delete(cls); },
-						contains(cls: string) { return this.classes.has(cls); },
-					},
-					get className() {
-						return Array.from(this.classList.classes).join(' ');
-					},
-					set className(val: string) {
-						this.classList.classes.clear();
-						val.split(' ').forEach(cls => {
-							if (cls.trim()) this.classList.classes.add(cls.trim());
-						});
-					},
-					children,
-					appendChild(child: any) {
-						child.parentNode = el;
-						children.push(child);
-						return child;
-					},
-					remove() {
-						if (el.parentNode && el.parentNode.children) {
-							const idx = el.parentNode.children.indexOf(el);
-							if (idx !== -1) el.parentNode.children.splice(idx, 1);
-						}
-					},
-					addEventListener(event: string, cb: Function) {
-						if (!listeners[event]) listeners[event] = [];
-						listeners[event].push(cb);
-					},
-					removeEventListener(event: string, cb: Function) {
-						if (listeners[event]) {
-							const idx = listeners[event].indexOf(cb);
-							if (idx !== -1) listeners[event].splice(idx, 1);
-						}
-					},
-					click() {
-						if (listeners['click']) {
-							listeners['click'].forEach(cb => cb({ stopPropagation: () => {} }));
-						}
-					},
-					get textContent() {
-						return el._textContent || '';
-					},
-					set textContent(val: string) {
-						el._textContent = val;
-					},
-					_textContent: '',
-					parentNode: null as any,
-					querySelectorAll(selector: string) {
-						if (selector.startsWith('.')) {
-							const cls = selector.substring(1);
-							const matches: any[] = [];
-							const traverse = (node: any) => {
-								if (node.classList && node.classList.contains(cls)) {
-									matches.push(node);
-								}
-								if (node.children) {
-									node.children.forEach(traverse);
-								}
-							};
-							traverse(el);
-							return matches;
-						}
-						return [];
-					}
-				};
-				return el;
-			};
-
-			globalThis.document = {
-				createElement: (tagName: string) => createMockElement(tagName),
-				body: createMockElement('body'),
-				addEventListener: () => {},
-				removeEventListener: () => {},
-			} as any;
-		}
-
 		// Mock navigator clipboard
 		Object.defineProperty(globalThis, 'navigator', {
 			value: {
@@ -141,6 +57,7 @@ describe('GridContextMenuPlugin', () => {
 
 		plugin = new GridContextMenuPlugin<TestRow>();
 		store.registerPlugin(plugin);
+		testPlugin = plugin as unknown as ContextMenuTestPlugin;
 	});
 
 	afterEach(() => {
@@ -148,12 +65,11 @@ describe('GridContextMenuPlugin', () => {
 		plugin.onDestroy();
 	});
 
-	it('should register successfully and expose API methods', () => {
+	it('should register successfully without injecting API methods', () => {
 		const contextMenuPlugin = store.getPlugin<GridContextMenuPlugin<TestRow>>('contextMenu');
 		expect(contextMenuPlugin).not.toBeNull();
-		
-		expect((store as any).showContextMenu).toBeDefined();
-		expect((store as any).hideContextMenu).toBeDefined();
+		expect((store as unknown as Record<string, unknown>).showContextMenu).toBeUndefined();
+		expect((store as unknown as Record<string, unknown>).hideContextMenu).toBeUndefined();
 	});
 
 	it('should focus and select cell on right click if not already selected', () => {
@@ -193,7 +109,7 @@ describe('GridContextMenuPlugin', () => {
 		};
 
 		// Call internal copy selected range directly or simulate it
-		(plugin as any).copySelectedRange(params);
+		testPlugin.copySelectedRange(params);
 
 		expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
 			'Product A\t100\nProduct B\t200'
@@ -211,7 +127,7 @@ describe('GridContextMenuPlugin', () => {
 			selection: state.selection,
 		};
 
-		(plugin as any).clearSelection(params);
+		testPlugin.clearSelection(params);
 
 		expect(store.getCellValue('r1', 'name')).toBe('');
 		expect(store.getCellValue('r1', 'price')).toBe('');
@@ -230,7 +146,7 @@ describe('GridContextMenuPlugin', () => {
 			selection: state.selection,
 		};
 
-		(plugin as any).add100ToSelection(params);
+		testPlugin.add100ToSelection(params);
 
 		// Price columns are numerical, should increment
 		expect(store.getCellValue('r1', 'price')).toBe(200);
@@ -252,7 +168,7 @@ describe('GridContextMenuPlugin', () => {
 			selection: state.selection,
 		};
 
-		(plugin as any).apply10PercentIncrease(params);
+		testPlugin.apply10PercentIncrease(params);
 
 		// Price columns are numerical, should multiply by 1.1
 		expect(store.getCellValue('r1', 'price')).toBe(110);
@@ -267,10 +183,10 @@ describe('GridContextMenuPlugin', () => {
 		plugin.setOptions({
 			excludeDefaults: ['copy', 'add100'],
 		});
-		(plugin as any).activePointer = { rowId: 'r1', colField: 'name' };
-		(plugin as any).renderMenu(100, 100);
+		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
+		testPlugin.renderMenu(100, 100);
 
-		const menuEl = (plugin as any).menuElement as HTMLDivElement;
+		const menuEl = testPlugin.menuElement as HTMLDivElement;
 		expect(menuEl).toBeDefined();
 		const items = Array.from(menuEl.querySelectorAll('.og-context-menu-item'));
 		const texts = items.map(el => el.textContent);
@@ -291,10 +207,10 @@ describe('GridContextMenuPlugin', () => {
 
 		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
-		(plugin as any).activePointer = { rowId: 'r1', colField: 'name' };
-		(plugin as any).renderMenu(100, 100);
+		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
+		testPlugin.renderMenu(100, 100);
 
-		const menuEl = (plugin as any).menuElement as HTMLDivElement;
+		const menuEl = testPlugin.menuElement as HTMLDivElement;
 		const customItemEl = Array.from(menuEl.querySelectorAll('.og-context-menu-item'))
 			.find(el => el.textContent === 'My Custom Action') as HTMLDivElement;
 

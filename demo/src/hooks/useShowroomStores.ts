@@ -185,7 +185,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		const start = performance.now();
 		const count = perfApi.getRowCount();
 
-		perfApi.startTransaction();
 		for (let i = 0; i < count; i++) {
 			if (i % 10 !== 0) continue;
 
@@ -195,7 +194,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 			perfApi.setCellValue(row.id, 'price', (Math.floor(Math.random() * 150) + 10).toString());
 			perfApi.setCellValue(row.id, 'quantity', (Math.floor(Math.random() * 5) + 1).toString());
 		}
-		perfApi.endTransaction();
 
 		const duration = performance.now() - start;
 		LatencyProfiler.record(duration);
@@ -396,7 +394,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				return;
 			}
 
-			spreadsheetApi.startTransaction();
 			for (const rowId of rowIdsToModify) {
 				for (const colField of colsToModify) {
 					if (colField === 'id') continue;
@@ -411,7 +408,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					}
 				}
 			}
-			spreadsheetApi.endTransaction();
 
 			const duration = performance.now() - startTime;
 			LatencyProfiler.record(duration);

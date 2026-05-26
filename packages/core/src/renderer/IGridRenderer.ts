@@ -1,11 +1,9 @@
 import type { ColumnDef, RowNode } from '../store.js';
 
 /**
- * Protocol that any physical grid renderer must implement.
- * This abstracts DOM operations out of the core engine,
- * enabling Canvas/WebGL renderer swap-outs in the future.
+ * Contract for the component that owns physical grid rendering.
  */
-export interface IGridRenderer {
+export interface IGridRenderer<TRowData = unknown> {
 	/**
 	 * Mounts the physical representation of the grid into a host container.
 	 */
@@ -29,10 +27,18 @@ export interface IGridRenderer {
 	/**
 	 * Optional hook for frameworks (like React) to mount custom portaled cells.
 	 */
-	onMountReactPortal?: (cellKey: string, container: HTMLElement, value: unknown, node: RowNode, col: ColumnDef, isEditing: boolean, isLoading: boolean) => void;
+	onMountReactPortal?: (
+		cellKey: string,
+		container: HTMLElement,
+		value: unknown,
+		node: RowNode<TRowData>,
+		col: ColumnDef<TRowData>,
+		isEditing: boolean,
+		isLoading: boolean
+	) => void;
 
 	/**
 	 * Optional hook for frameworks (like React) to unmount custom portaled cells.
 	 */
-	onUnmountReactPortal?: (cellKey: string) => void;
+	onUnmountReactPortal?: (cellKey: string, container?: HTMLElement, flushSync?: boolean) => void;
 }

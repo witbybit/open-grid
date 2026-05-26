@@ -69,7 +69,7 @@ interface PreparedFilter<TData> {
 	numericFilter: number;
 }
 
-function matchesPreparedFilter(value: unknown, pf: PreparedFilter<any>): boolean {
+function matchesPreparedFilter<TData>(value: unknown, pf: PreparedFilter<TData>): boolean {
 	const textValue = String(value ?? '').toLowerCase();
 	const numericValue = Number(value);
 
@@ -247,7 +247,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		});
 
 		this.nodeMap = nextNodeMap;
-		this.store.dagEngine.clearAll();
+		this.store.engine.clearFormulas();
 		this.refresh();
 	}
 
@@ -287,8 +287,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				const allKeys = new Set([...prevKeys, ...nextKeys]);
 
 				for (const key of allKeys) {
-					const oldValue = (prevRow as any)[key];
-					const newValue = (nextRow as any)[key];
+					const oldValue = (prevRow as Record<string, unknown>)[key];
+					const newValue = (nextRow as Record<string, unknown>)[key];
 					if (oldValue !== newValue) {
 						changedFields.add(key);
 						changedValues.set(key, { oldValue, newValue });
@@ -306,25 +306,20 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		if (changedNodes.length === 0) return;
 
-		// Invalidate changed cells in the DAG calculation engine and gather affected dependent keys
+		// Invalidate changed cells and gather affected formula dependents.
 		const allInvalidatedKeys = new Set<string>();
 		for (const [rowId, fields] of changedFieldsByRow) {
 			for (const field of fields) {
 				const cellKey = createCellKey(rowId, field);
 				allInvalidatedKeys.add(cellKey);
 
-				// Update DAG engine formula registration
 				const node = this.nodeMap.get(rowId);
 				if (node) {
-					const nextVal = (node.data as any)[field];
-					if (typeof nextVal === 'string' && nextVal.startsWith('=')) {
-						this.store.dagEngine.registerFormula(rowId, field, nextVal);
-					} else {
-						this.store.dagEngine.clearFormula(rowId, field);
-					}
+					const nextVal = (node.data as Record<string, unknown>)[field];
+					this.store.engine.syncFormulaForCell(rowId, field, nextVal);
 				}
 
-				const invalidated = this.store.dagEngine.invalidateCell(rowId, field);
+				const invalidated = this.store.engine.invalidateFormulaCell(rowId, field);
 				for (const k of invalidated) {
 					allInvalidatedKeys.add(k);
 				}

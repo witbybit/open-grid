@@ -34,7 +34,7 @@ export class ViewportGeometry {
 
 	/**
 	 * Locates the index corresponding to a pixel offset in cumulative positions (Float64Array).
-	 * Utilizes high-performance binary search to execute in O(log N) time complexity.
+	 * Uses binary search over cumulative positions.
 	 */
 	public getIndexAtOffset(offset: number, cumulativePositions: Float64Array): number {
 		const len = cumulativePositions.length;

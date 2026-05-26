@@ -91,7 +91,7 @@ export class GeometryModel {
 	}
 
 	/**
-	 * Perform high-performance division-free binary search coordinate mappings in O(log N)
+	 * Maps pixel offsets to row and column indexes with binary search.
 	 */
 	public getRowIndexAtOffset(offset: number): number {
 		const len = this.rowCount;

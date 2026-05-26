@@ -5,8 +5,8 @@ export interface ViewportRange {
 	endIdx: number;
 }
 
-export class ViewportController {
-	constructor(private readonly engine: GridEngine<any>) {}
+export class ViewportController<TRowData = unknown> {
+	constructor(private readonly engine: GridEngine<TRowData>) {}
 
 	public get scrollTop(): number {
 		return this.engine.viewport.scrollTop;

@@ -77,7 +77,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		if (rowIndex >= 0 && rowIndex < this.getRowCount()) {
 			let loadingNode = this.loadingNodeMap.get(rowIndex);
 			if (!loadingNode) {
-				loadingNode = new RowNode<TData>(`__loading_${rowIndex}`, null as any);
+				loadingNode = new RowNode<TData>(`__loading_${rowIndex}`, null as TData);
 				this.loadingNodeMap.set(rowIndex, loadingNode);
 			}
 			return loadingNode;
@@ -243,7 +243,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				}
 			}
 
-			this.store.dagEngine.clearAll();
+			this.store.engine.clearFormulas();
 
 			// Layout geometry will be updated by GridEngine using GeometryModel
 			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
@@ -285,7 +285,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.nodeMap.clear();
 		this.rowIdMap.clear();
 		this.loadingNodeMap.clear();
-		this.store.dagEngine.clearAll();
+		this.store.engine.clearFormulas();
 		this.store.setState({
 			loading: true,
 			dataVersion: this.store.getState().dataVersion + 1,

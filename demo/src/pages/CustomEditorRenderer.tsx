@@ -103,13 +103,10 @@ function CustomEditorRendererInner({
 			if (node) rowIds.push(node.id);
 		}
 
-		api.startTransaction();
-
 		for (const rowId of rowIds) {
 			api.setCellValue(rowId, 'status', 'Active');
 		}
 
-		api.endTransaction();
 		calculateTelemetry();
 	};
 
@@ -132,8 +129,6 @@ function CustomEditorRendererInner({
 			if (node) rowIds.push(node.id);
 		}
 
-		api.startTransaction();
-
 		for (const rowId of rowIds) {
 			const rowIndex = api.getRowIndexById(rowId) ?? -1;
 
@@ -149,7 +144,6 @@ function CustomEditorRendererInner({
 			api.setCellValue(rowId, 'progress', nextProg.toString());
 		}
 
-		api.endTransaction();
 		calculateTelemetry();
 	};
 

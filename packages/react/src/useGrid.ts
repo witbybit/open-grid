@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ClientRowModelController, ServerRowModelController, GridStore, type GridApi } from '@open-grid/core';
+import type { GridApi } from '@open-grid/core';
+import { ClientRowModelController, ServerRowModelController, GridStore } from '@open-grid/core/internal';
 
 import type { ClientGridOptions, ServerGridOptions } from './types.js';
 import { createGridApiFacade } from './gridApiFacade.js';

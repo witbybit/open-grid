@@ -1,17 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import { ScrollEngine } from './scrollEngine.js';
+import { GridEngine } from '../engine/GridEngine.js';
 
 describe('ScrollEngine', () => {
 	it('should capture passive scroll events and compute velocities', () => {
-		const mockViewport = {
-			setScrollPosition: vi.fn(),
-		};
-		const mockEngine = {
-			viewport: mockViewport,
-		} as any;
-
-		const scrollEngine = new ScrollEngine(mockEngine);
+		const engine = new GridEngine({ columns: [] });
+		const scrollEngine = new ScrollEngine(engine);
 		const container = document.createElement('div');
 		container.style.width = '100px';
 		container.style.height = '100px';
@@ -61,8 +56,8 @@ describe('ScrollEngine', () => {
 	});
 
 	it('should scroll programmatically and reset tracking counters', () => {
-		const mockEngine = {} as any;
-		const scrollEngine = new ScrollEngine(mockEngine);
+		const engine = new GridEngine({ columns: [] });
+		const scrollEngine = new ScrollEngine(engine);
 		const container = document.createElement('div');
 
 		scrollEngine.bind(container, vi.fn());

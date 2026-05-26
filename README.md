@@ -31,7 +31,7 @@ graph TD
 3. **Pre-Compiled Path Getters**: Compiles column accessors into optimized functional selectors upon schema registration, eliminating runtime string manipulations and garbage collection pressures.
 4. **Targeted Micro-Subscriptions**: Cell components subscribe to their specific coordinate keys. Value edits notify the edited cell, formula dependents, and dynamic same-row value getter cells.
 5. **Dynamic Listener Garbage Collection**: Subscription listeners are active only for elements currently in the scroll viewport. Scrolling elements out of the viewport automatically unmounts them, dereferencing their subscriptions to prevent memory leaks.
-6. **Unified Programmatic API (`GridApi`)**: Exposes an absolute control handle which is injected into custom components, headers, and editors to programmatically control coordinates, edit states, selections, and transactions.
+6. **Small Programmatic API (`GridApi`)**: Exposes obvious row, cell, selection, sort, and filter operations while keeping stores, render scheduling, and plugin internals behind the adapter boundary.
 
 ---
 
@@ -42,7 +42,7 @@ Open Grid comes equipped with an extensive suite of built-in features designed f
 - **High-Performance Virtualization**: Virtualizes both rows and columns dynamically, yielding standard 60 FPS performance even for massive datasets with 100k+ rows and 1,000+ columns.
 - **Sticky Lanes (Pinning)**: Sticky pinning for left/right columns and top/bottom rows with floating headers and scroll boundaries.
 - **Excel-like Selections & Drag-to-Fill**: Features interactive multi-range cell selection and a dynamic Excel-like purple dashed border drag-to-fill handle with real-time selection telemetry (Sum, Count, Average).
-- **Reactive Formula DAG Engine**: Scoped spreadsheet-style formulas using `[rowId:columnField]` references, arithmetic operators, and `SUM`, `AVERAGE`, `MIN`, and `MAX`, with dependency invalidation and cached lazy evaluation.
+- **Scoped Formulas**: Optional spreadsheet-style formulas using `[rowId:columnField]` references, arithmetic operators, and `SUM`, `AVERAGE`, `MIN`, and `MAX`, with dependency invalidation and cached lazy evaluation.
 - **Command History (Undo / Redo)**: Seamless core state journaling enabling unlimited undo/redo capability across cell mutations and updates.
 - **Flexible Row Models**: In-memory `ClientRowModel` (ideal for instant manipulation) vs. asynchronous chunk-paginated `ServerRowModel` with built-in loading shimmer/skeleton state trackers.
 - **Dynamic Custom CSS Styling Slots**: Custom styling hooks (`rowClass`, `cellClass`, `headerCellClass`) that allow granular styling control on cell-by-cell or row-by-row bases.
@@ -66,8 +66,7 @@ Here is how to quickly spin up a basic virtualized grid using React:
 
 ```tsx
 import React, { useMemo } from 'react';
-import { useClient, ColumnDef } from '@open-grid/core';
-import { GridProvider, OpenGrid } from '@open-grid/react';
+import { GridProvider, OpenGrid, useClientGrid, type ColumnDef } from '@open-grid/react';
 
 // 1. Define your data structure
 interface BookRow {
@@ -104,27 +103,21 @@ export default function BookInventoryGrid() {
 		[]
 	);
 
-	// 4. Create the core GridStore (state container)
-	const store = useMemo(() => {
-		return new GridStore<BookRow>({
+	// 4. Create the public GridApi handle
+	const api = useClientGrid<BookRow>({
+		rows: initialRows,
+		columns,
+		getRowId: (row) => row.id,
+		initialState: {
 			defaultColWidth: 120,
 			defaultRowHeight: 38,
-			getRowId: (row) => row.id,
-		});
-	}, []);
+		},
+	});
 
-	// 5. Initialize the ClientRowModelController to manage in-memory records
-	const controller = useMemo(() => {
-		return new ClientRowModelController<BookRow>(store, {
-			rows: initialRows,
-			columns,
-		});
-	}, [store, initialRows, columns]);
-
-	// 6. Wrap your component in a GridProvider and render the OpenGrid component
+	// 5. Wrap your component in a GridProvider and render the OpenGrid component
 	return (
 		<div style={{ width: '100%', height: '500px' }}>
-			<GridProvider grid={grid}>
+			<GridProvider api={api}>
 				<OpenGrid
 					pinLeftColumns={1} // Keep ID column sticky
 					enableNavigation={true} // Enable keyboard movement
@@ -139,7 +132,7 @@ export default function BookInventoryGrid() {
 
 ## 🛠️ Public API Reference (`GridApi`)
 
-The central `GridStore` implements the standard `GridApi` interface. This handle can be retrieved anywhere within a custom component or in your component tree using `useGridApi()`.
+Application code works through the standard `GridApi` interface. In React, this handle can be retrieved inside custom components or in your component tree using `useGridApi()`.
 
 ### Core API Methods
 
@@ -148,34 +141,29 @@ The central `GridStore` implements the standard `GridApi` interface. This handle
 | **`getState`**         | `() => GridState`                                           | Retrieves the entire synchronous state snapshot.                         |
 | **`setState`**         | `(updater: GridStateUpdater) => void`                       | Updates specific keys in state, triggering selective listeners.          |
 | **`getCellValue`**     | `(rowId: string, colField: string) => unknown`              | Retrieves the calculated cell value from the value cache.                |
-| **`setCellValue`**     | `(rowId: string, colField: string, val: any) => void`       | Mutates a cell value, registering a new history event.                   |
+| **`setCellValue`**     | `(rowId: string, colField: string, value: unknown) => void` | Mutates a cell value, registering a new history event.                   |
 | **`getCellState`**     | `(rowId: string, colField: string) => CellState`            | Retrieves the local value, computed value, and active edit state.        |
-| **`setFocusedCell`**   | `(rowId: string \| null, colField: string \| null) => void` | Sets active cell focus and triggers `focusChanged` event.                |
-| **`setSelectedRange`** | `(start: Pointer \| null, end: Pointer \| null) => void`    | Highlights a selection range bounding box.                               |
+| **`selectCell`**       | `(pointer: GridCellPointer \| null) => void`                | Sets active cell focus and triggers `focusChanged` event.                |
+| **`selectRange`**      | `(start: Pointer \| null, end: Pointer \| null) => void`    | Highlights a selection range bounding box.                               |
 | **`setColumnWidth`**   | `(colField: string, width: number) => void`                 | Dynamically resizes a column's layout boundary.                          |
 | **`subscribeToKey`**   | `(key: string, listener: Listener) => () => void`           | Micro-subscribes selectively to a single key coordinate.                 |
 | **`addEventListener`** | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).              |
-| **`undo` / `redo`**    | `() => void`                                                | Journeys backward or forward through the cell changes transaction stack. |
-| **`fillRange`**        | `(src: CellRange, target: CellRange) => void`               | Extrapolates cell ranges using Excel-like series drag fills.             |
-| **`batch`**            | `(callback: () => void) => void`                            | Groups multiple transactions together, skipping intermediate paints.     |
+| **`undo` / `redo`**    | `() => void`                                                | Moves backward or forward through undoable grid edits.                   |
 
 ---
 
 ## 💡 Real-world API Examples
 
-### 1. Batch Transactions (Sub-Millisecond Multi-Cell Edits)
+### 1. Multi-Cell Edits
 
-Use `api.batch` or `api.startTransaction` to update multiple records inside a single repaint tick:
+Use ordinary API calls for multiple cell edits. The engine batches cell invalidation and repaint internally:
 
 ```typescript
 const api = useGridApi();
 
-// Grouping multiple edits ensures only a single render update executes!
-api.batch(() => {
-	api.setCellValue('S-1001', 'revenue', '150000');
-	api.setCellValue('S-1001', 'opex', '80000');
-	api.setFocusedCell('S-1001', 'revenue');
-});
+api.setCellValue('S-1001', 'revenue', '150000');
+api.setCellValue('S-1001', 'opex', '80000');
+api.selectCell({ rowId: 'S-1001', colField: 'revenue' });
 ```
 
 ### 2. State-Driven Custom Styles (`styleSlots`)
@@ -183,18 +171,20 @@ api.batch(() => {
 Provide standard callback predicates to apply tailored conditional classes:
 
 ```tsx
-const store = new GridStore<any>({
-	styleSlots: {
-		// Custom row classes (e.g., strike warning)
-		rowClass: (row) => {
-			return row.status === 'Inactive' ? 'bg-slate-900/50 opacity-60' : '';
-		},
-		// Tailored cell styling based on values
-		cellClass: (col, row) => {
-			if (col.field === 'price' && parseFloat(row.price) > 500) {
-				return 'text-rose-400 font-extrabold text-glow-rose bg-rose-950/10';
-			}
-			return '';
+const api = useClientGrid<ProductRow>({
+	rows,
+	columns,
+	initialState: {
+		styleSlots: {
+			rowClass: (row) => {
+				return row.status === 'Inactive' ? 'bg-slate-900/50 opacity-60' : '';
+			},
+			cellClass: (col, row) => {
+				if (col.field === 'price' && Number(row.price) > 500) {
+					return 'text-rose-400 font-extrabold text-glow-rose bg-rose-950/10';
+				}
+				return '';
+			},
 		},
 	},
 });
@@ -229,9 +219,9 @@ Renderers are used for gorgeous visual presentation:
 
 ```tsx
 import React from 'react';
-import { CellRendererProps } from '@open-grid/core';
+import type { CellRendererProps } from '@open-grid/react';
 
-export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRendererProps<any>) => {
+export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRendererProps<ProductRow>) => {
 	const rating = Number(value) || 0;
 
 	const handleStarClick = (starIndex: number, e: React.MouseEvent) => {
@@ -263,13 +253,13 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 
 ### 2. Custom Cell Editor (Operational Status Dropdown)
 
-Editors handle active cell text-entry or dropdown events, offering granular hooks to commit or cancel transactions:
+Editors handle active cell text-entry or dropdown events, offering hooks to commit or cancel edits:
 
 ```tsx
 import React from 'react';
-import { CellEditorProps } from '@open-grid/core';
+import type { CellEditorProps } from '@open-grid/react';
 
-export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorProps<any>) => {
+export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorProps<ProductRow>) => {
 	return (
 		<select
 			autoFocus
@@ -278,7 +268,7 @@ export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorPr
 			onMouseDown={(e) => e.stopPropagation()} // Prevent focus shifting
 			onDoubleClick={(e) => e.stopPropagation()}
 			onKeyDown={(e) => {
-				if (e.key === 'Escape') onCancel(); // Cancel editing transaction
+				if (e.key === 'Escape') onCancel(); // Cancel editing
 			}}
 			className='absolute inset-0 w-full h-full px-3 text-xs bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-semibold cursor-pointer'
 		>
@@ -294,7 +284,7 @@ export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorPr
 
 ## 📊 Spreadsheet Formulas & Calculations
 
-Open Grid contains a scoped reactive formula calculation DAG engine. You can pass formula expressions starting with `=` as cell values, and the engine builds dependency graphs so affected computed nodes are invalidated when source cells change.
+Open Grid supports scoped formulas as an optional spreadsheet behavior. You can pass formula expressions starting with `=` as cell values, and the engine invalidates affected computed cells when source cells change.
 
 ### Writing Formulas
 
@@ -308,7 +298,7 @@ api.setCellValue('S-1001', 'C', '=SUM([S-1001:A],-[S-1001:B])');
 api.setCellValue('S-1001', 'F', '=[S-1001:C]*0.8');
 ```
 
-Whenever `S-1001:A` or `S-1001:B` changes, the calculated output for `C` and `F` is invalidated and recalculated in topological order instantaneously.
+Whenever `S-1001:A` or `S-1001:B` changes, the calculated output for `C` and `F` is invalidated and recalculated lazily on access.
 
 Formula support is intentionally narrow: it handles explicit `[rowId:columnField]` references, numeric arithmetic, parentheses, string fallback values, and `SUM`, `AVERAGE`, `MIN`, and `MAX`. It does not currently implement A1 notation, cross-sheet references, ranges like `A1:A10`, date functions, lookup functions, or Excel-compatible coercion semantics.
 
@@ -318,7 +308,7 @@ Formula support is intentionally narrow: it handles explicit `[rowId:columnField
 
 ### 1. Running Unit Tests
 
-Open Grid uses Vitest for core correctness tests around transactions, formulas, row models, and virtualization geometry. The performance tests exercise engine hot paths in Node/jsdom; use browser profiling for real paint, layout, and compositor measurements.
+Open Grid uses Vitest for core correctness tests around formulas, row models, invalidation, and virtualization geometry. The performance tests exercise engine hot paths in Node/jsdom; use browser profiling for real paint, layout, and compositor measurements.
 
 ```bash
 pnpm run test

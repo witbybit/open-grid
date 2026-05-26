@@ -1,7 +1,7 @@
 export class DagEngine {
 	private dependents = new Map<string, Set<string>>(); // dependencyKey -> Set of dependentKeys
 	private dependencies = new Map<string, Set<string>>(); // dependentKey -> Set of dependencyKeys
-	private cache = new Map<string, any>(); // cellKey -> computedValue
+	private cache = new Map<string, unknown>(); // cellKey -> computedValue
 	private formulas = new Map<string, string>(); // cellKey -> formulaString
 	private dirty = new Set<string>(); // Set of dirty cellKeys
 	private isEvaluating = new Set<string>(); // Reentrancy protection tracker
@@ -83,7 +83,7 @@ export class DagEngine {
 	 * Resolve and evaluate a cell value. If it's a formula, evaluate it lazily and use cache.
 	 * If it is a raw value, return it directly.
 	 */
-	public getCellValue(rowId: string, colField: string, getRawValue: (rId: string, cField: string) => any): any {
+	public getCellValue(rowId: string, colField: string, getRawValue: (rId: string, cField: string) => unknown): unknown {
 		const key = this.getCellKey(rowId, colField);
 		const formula = this.formulas.get(key);
 
@@ -200,7 +200,7 @@ export class DagEngine {
 	/**
 	 * Evaluates formula strings by resolving cell references and parsing the expression safely.
 	 */
-	private evaluateFormula(formula: string, getRawValue: (rId: string, cField: string) => any): any {
+	private evaluateFormula(formula: string, getRawValue: (rId: string, cField: string) => unknown): unknown {
 		// Strip leading '=' if present
 		let expr = formula.trim();
 		if (expr.startsWith('=')) {
@@ -270,7 +270,7 @@ export class DagEngine {
 				const argsString = updated.substring(openParenIdx + 1, closeParenIdx);
 				const args = argsString.split(',').map((arg) => {
 					const evaluatedArg = this.evaluateFunctions(arg.trim());
-					return this.parseArithmetic(evaluatedArg);
+					return Number(this.parseArithmetic(evaluatedArg)) || 0;
 				});
 
 				let result: number = 0;
@@ -296,7 +296,7 @@ export class DagEngine {
 	 * Safe mathematical expression evaluator that supports +, -, *, /, parenthesis, and numbers.
 	 * Utilizes a Shunting-yard tokenizer and evaluation engine.
 	 */
-	private parseArithmetic(expr: string): any {
+	private parseArithmetic(expr: string): string | number {
 		const cleanExpr = expr.trim();
 		if (cleanExpr === '') return 0;
 

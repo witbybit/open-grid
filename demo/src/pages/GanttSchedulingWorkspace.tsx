@@ -112,8 +112,6 @@ function GanttSchedulingWorkspaceInner({
 
 		let currentDay = 1;
 
-		api.startTransaction();
-
 		for (let i = 0; i < count; i++) {
 			const row = api.getRow(i);
 			if (!row) continue;
@@ -124,8 +122,6 @@ function GanttSchedulingWorkspaceInner({
 
 			currentDay += duration;
 		}
-
-		api.endTransaction();
 
 		const durationMs = performance.now() - start;
 
@@ -147,8 +143,6 @@ function GanttSchedulingWorkspaceInner({
 		const minRow = Math.min(startIdx, endIdx);
 		const maxRow = Math.max(startIdx, endIdx);
 
-		api.startTransaction();
-
 		for (let i = minRow; i <= maxRow; i++) {
 			const node = api.getRowNode(i);
 			if (!node) continue;
@@ -156,8 +150,6 @@ function GanttSchedulingWorkspaceInner({
 			api.setCellValue(node.id, 'progress', 100);
 			api.setCellValue(node.id, 'status', 'Done');
 		}
-
-		api.endTransaction();
 	};
 
 	return (

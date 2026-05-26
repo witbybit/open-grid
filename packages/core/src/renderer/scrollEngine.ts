@@ -9,7 +9,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
  * - High-resolution timing used for velocity calculations
  * - Zero allocations on scroll event hot path
  */
-export class ScrollEngine<TRowData = any> {
+export class ScrollEngine<TRowData = unknown> {
 	private engine: GridEngine<TRowData>;
 	private scrollContainer: HTMLElement | null = null;
 	private onScrollCallback: ((scrollTop: number, scrollLeft: number) => void) | null = null;

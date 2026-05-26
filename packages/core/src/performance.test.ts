@@ -10,6 +10,12 @@ interface PerfTestRow {
 	status: string;
 }
 
+type PerformanceWithMemory = Performance & {
+	memory?: {
+		usedJSHeapSize: number;
+	};
+};
+
 describe('Performance Benchmarks', () => {
 	describe('Scroll Performance', () => {
 		it('should handle 100k row scroll with viewport updates under 16ms (60 FPS)', () => {
@@ -41,7 +47,7 @@ describe('Performance Benchmarks', () => {
 			});
 
 			// Simulate viewport size
-			store.viewportController.setViewportSize(1200, 800);
+			store.setViewportSize(1200, 800);
 
 			// Measure scroll performance
 			const iterations = 100;
@@ -54,8 +60,8 @@ describe('Performance Benchmarks', () => {
 			const start = performance.now();
 
 			for (const scrollTop of scrollPositions) {
-				store.viewportController.setScrollPosition(scrollTop, 0, performance.now());
-				store.viewportController.updateVisibleRanges();
+				store.setScrollPosition(scrollTop, 0, performance.now());
+				store.updateVisibleRanges();
 			}
 
 			const duration = performance.now() - start;
@@ -94,15 +100,15 @@ describe('Performance Benchmarks', () => {
 				columns: store.getState().columns,
 			});
 
-			store.viewportController.setViewportSize(1200, 800);
+			store.setViewportSize(1200, 800);
 
 			// Measure range calculation performance
 			const start = performance.now();
 
 			for (let i = 0; i < 1000; i++) {
 				const scrollTop = Math.floor(Math.random() * 3000000);
-				store.viewportController.setScrollPosition(scrollTop, 0, performance.now());
-				store.viewportController.getVisibleRowRange();
+				store.setScrollPosition(scrollTop, 0, performance.now());
+				store.getVisibleRowRange();
 			}
 
 			const duration = performance.now() - start;
@@ -283,14 +289,15 @@ describe('Performance Benchmarks', () => {
 				});
 			}
 
-			const memBefore = (performance as any).memory?.usedJSHeapSize || 0;
+			const perf = performance as PerformanceWithMemory;
+			const memBefore = perf.memory?.usedJSHeapSize || 0;
 
 			const controller = new ClientRowModelController<PerfTestRow>(store, {
 				rows,
 				columns: store.getState().columns,
 			});
 
-			const memAfter = (performance as any).memory?.usedJSHeapSize || 0;
+			const memAfter = perf.memory?.usedJSHeapSize || 0;
 			const memUsedMB = (memAfter - memBefore) / 1024 / 1024;
 
 			if (memUsedMB > 0) {

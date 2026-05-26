@@ -3,15 +3,17 @@ import {
 	GridCellClickParams,
 	GridCellPointer,
 	ColumnDef,
+	GridState,
+	RowNode,
+} from '@open-grid/core';
+import {
 	GridContextMenuOptions,
 	GridContextMenuPlugin,
 	GridNavigationController,
 	GridNavigationOptions,
-	GridState,
 	RenderEngine,
-	RowNode,
 	GridStore,
-} from '@open-grid/core';
+} from '@open-grid/core/internal';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { PortalData, PortalManager } from './GridPortal.js';
 import { getStoreFromApi } from './gridApiFacade.js';
@@ -211,7 +213,7 @@ function OpenGridInner<TRowData = unknown>({
 	const portalFlushScheduledRef = useRef(false);
 	const [, setPortalVersion] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);
-	const renderEngineRef = useRef<RenderEngine | null>(null);
+	const renderEngineRef = useRef<RenderEngine<TRowData> | null>(null);
 	const isGridActiveRef = useRef(false);
 
 	const schedulePortalFlush = useCallback(() => {
@@ -228,8 +230,8 @@ function OpenGridInner<TRowData = unknown>({
 			cellKey: string,
 			container: HTMLElement,
 			value: unknown,
-			node: RowNode<unknown>,
-			col: ColumnDef<unknown>,
+			node: RowNode<TRowData>,
+			col: ColumnDef<TRowData>,
 			isEditing: boolean,
 			isLoading: boolean
 		) => {
@@ -249,8 +251,8 @@ function OpenGridInner<TRowData = unknown>({
 				cellKey,
 				container,
 				value,
-				node: node as RowNode<TRowData>,
-				col: col as ColumnDef<TRowData>,
+				node,
+				col,
 				isEditing,
 				isLoading,
 			});
@@ -266,12 +268,13 @@ function OpenGridInner<TRowData = unknown>({
 		schedulePortalFlush();
 	}, [schedulePortalFlush]);
 
-	// Sync pin configuration with ViewportController
 	useEffect(() => {
-		store.viewportController.pinLeftColumns = pinLeftColumns;
-		store.viewportController.pinRightColumns = pinRightColumns;
-		store.viewportController.pinTopRows = pinTopRows;
-		store.viewportController.pinBottomRows = pinBottomRows;
+		store.setViewportPins({
+			left: pinLeftColumns,
+			right: pinRightColumns,
+			top: pinTopRows,
+			bottom: pinBottomRows,
+		});
 	}, [store, pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
 
 	useEffect(() => {
@@ -299,8 +302,8 @@ function OpenGridInner<TRowData = unknown>({
 		const observer = new ResizeObserver((entries) => {
 			if (!entries || entries.length === 0) return;
 			const { width, height } = entries[0].contentRect;
-			if (store.viewportController.setViewportSize(width, height)) {
-				store.viewportController.updateVisibleRanges();
+			if (store.setViewportSize(width, height)) {
+				store.updateVisibleRanges();
 				renderEngine.schedulePaint();
 			}
 		});

@@ -9,7 +9,6 @@ import type {
 	GridCellClickParams,
 	GridState,
 	GridStateUpdater,
-	GridStore,
 	FilterModelItem,
 } from '@open-grid/core';
 
@@ -24,7 +23,6 @@ export type {
 	GridApi,
 	GridCellClickParams,
 	GridState,
-	GridStore,
 	GridStateUpdater,
 };
 

@@ -4,7 +4,7 @@ import { DagEngine } from './dagEngine.js';
 describe('DagEngine Formula calculations', () => {
 	it('should resolve direct references and evaluate basic arithmetic', () => {
 		const engine = new DagEngine();
-		const storeValues: Record<string, any> = {
+		const storeValues: Record<string, unknown> = {
 			'R1:price': 40,
 		};
 		const getRawValue = (rId: string, cField: string) => storeValues[`${rId}:${cField}`];
@@ -18,7 +18,7 @@ describe('DagEngine Formula calculations', () => {
 
 	it('should evaluate formulas lazily and preserve cache on subsequent calls', () => {
 		const engine = new DagEngine();
-		const storeValues: Record<string, any> = {
+		const storeValues: Record<string, unknown> = {
 			'R1:value': 10,
 		};
 		const getRawValueSpy = vi.fn((rId: string, cField: string) => storeValues[`${rId}:${cField}`]);
@@ -38,7 +38,7 @@ describe('DagEngine Formula calculations', () => {
 
 	it('should recursively evaluate multi-depth dependency hierarchies', () => {
 		const engine = new DagEngine();
-		const storeValues: Record<string, any> = {
+		const storeValues: Record<string, unknown> = {
 			'A1:value': 5,
 		};
 		const getRawValue = (rId: string, cField: string) => storeValues[`${rId}:${cField}`];
@@ -53,7 +53,7 @@ describe('DagEngine Formula calculations', () => {
 
 	it('should recursively propagate dirty state when dependency sources are updated', () => {
 		const engine = new DagEngine();
-		const storeValues: Record<string, any> = {
+		const storeValues: Record<string, unknown> = {
 			'A1:value': 5,
 		};
 		const getRawValue = (rId: string, cField: string) => storeValues[`${rId}:${cField}`];
@@ -87,7 +87,7 @@ describe('DagEngine Formula calculations', () => {
 
 	it('should evaluate common spreadsheet functions like SUM, AVERAGE, MIN, and MAX', () => {
 		const engine = new DagEngine();
-		const storeValues: Record<string, any> = {
+		const storeValues: Record<string, unknown> = {
 			'R1:val': 10,
 			'R2:val': 20,
 			'R3:val': 30,

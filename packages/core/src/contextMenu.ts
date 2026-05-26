@@ -18,6 +18,8 @@ export interface GridContextMenuOptions<TRowData = unknown> {
 	customItems?: Array<GridContextMenuItem<TRowData>>;
 }
 
+type DefaultContextMenuItemId = NonNullable<GridContextMenuOptions['excludeDefaults']>[number];
+
 export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRowData> {
 	readonly name = 'contextMenu';
 	private store!: GridStore<TRowData>;
@@ -35,13 +37,6 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 	public onInit(api: InternalGridApi<TRowData>): void {
 		this.store = api as GridStore<TRowData>;
-	}
-
-	public getApiMethods(): Record<string, Function> {
-		return {
-			showContextMenu: this.show.bind(this),
-			hideContextMenu: this.hide.bind(this),
-		};
 	}
 
 	public show(rowId: string, colField: string, clientX: number, clientY: number): void {
@@ -117,7 +112,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			selection: state.selection,
 		};
 
-		const defaultItems: Array<{ id: string; label?: string; isDivider?: boolean; action?: (params: ContextMenuParams<TRowData>) => void }> = [
+		const defaultItems: Array<{ id: DefaultContextMenuItemId; label?: string; isDivider?: boolean; action?: (params: ContextMenuParams<TRowData>) => void }> = [
 			{ id: 'copy', label: 'Copy Selected Range', action: (p) => this.copySelectedRange(p) },
 			{ id: 'clear', label: 'Clear Selection', action: (p) => this.clearSelection(p) },
 			{ id: 'divider', isDivider: true },
@@ -126,7 +121,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		];
 
 		const exclude = this.options.excludeDefaults || [];
-		const activeDefaults = defaultItems.filter(item => !exclude.includes(item.id as any));
+		const activeDefaults = defaultItems.filter((item) => !exclude.includes(item.id));
 		const custom = this.options.customItems || [];
 
 		const items = [...activeDefaults, ...custom];

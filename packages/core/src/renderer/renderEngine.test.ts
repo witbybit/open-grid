@@ -90,7 +90,7 @@ describe('RenderEngine', () => {
 		document.body.appendChild(container);
 
 		const renderer = new RenderEngine(store.engine);
-		store.viewportController.pinRightColumns = 1;
+		store.setViewportPins({ right: 1 });
 		renderer.mount(container);
 
 		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).not.toBeNull();

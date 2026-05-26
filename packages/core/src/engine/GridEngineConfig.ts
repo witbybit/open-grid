@@ -13,7 +13,6 @@ export interface GridEngineConfig<TRowData = unknown> {
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
 	activeEdit?: GridCellPointer | null;
-	plugins?: any[];
 	loadingSkeletonCount?: number;
 	styleSlots?: GridStyleSlots<TRowData>;
 }

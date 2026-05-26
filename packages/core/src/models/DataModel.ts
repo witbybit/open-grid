@@ -3,9 +3,9 @@ import type { GridEngine } from '../engine/GridEngine.js';
 
 export class DataModel<TRowData = unknown> {
 	private engine!: GridEngine<TRowData>;
-	private autoRowIdMap = new WeakMap<any, string>();
+	private autoRowIdMap = new WeakMap<object, string>();
 	private autoRowIdCounter = 0;
-	private compiledGetters = new Map<string, (data: TRowData) => any>();
+	private compiledGetters = new Map<string, (data: TRowData) => unknown>();
 	private valueGetterCache = new Map<string, Map<string, unknown>>();
 
 	public init(engine: GridEngine<TRowData>): void {
@@ -18,9 +18,9 @@ export class DataModel<TRowData = unknown> {
 			return state.getRowId(row);
 		}
 		if (typeof row === 'object' && row !== null) {
-			const anyRow = row as any;
-			if (anyRow.id !== undefined && anyRow.id !== null) {
-				return String(anyRow.id);
+			const rowRecord = row as Record<string, unknown>;
+			if (rowRecord.id !== undefined && rowRecord.id !== null) {
+				return String(rowRecord.id);
 			}
 			let id = this.autoRowIdMap.get(row);
 			if (id === undefined) {
@@ -141,17 +141,17 @@ export class DataModel<TRowData = unknown> {
 	public getCellValue = (rowId: string, colField: string): unknown => {
 		const rawVal = this.getRawCellValue(rowId, colField);
 		if (typeof rawVal === 'string' && rawVal.startsWith('=')) {
-			if (!this.engine.dagEngine.hasFormula(rowId, colField) || this.engine.dagEngine.getFormula(rowId, colField) !== rawVal) {
-				this.engine.dagEngine.registerFormula(rowId, colField, rawVal);
+			if (!this.engine.hasFormula(rowId, colField) || this.engine.getFormula(rowId, colField) !== rawVal) {
+				this.engine.syncFormulaForCell(rowId, colField, rawVal);
 			}
 		} else {
-			if (this.engine.dagEngine.hasFormula(rowId, colField)) {
-				this.engine.dagEngine.clearFormula(rowId, colField);
+			if (this.engine.hasFormula(rowId, colField)) {
+				this.engine.syncFormulaForCell(rowId, colField, rawVal);
 			}
 		}
 
-		if (this.engine.dagEngine.hasFormula(rowId, colField)) {
-			return this.engine.dagEngine.getCellValue(rowId, colField, (rId, cField) => this.getRawCellValue(rId, cField));
+		if (this.engine.hasFormula(rowId, colField)) {
+			return this.engine.evaluateFormulaCell(rowId, colField, (rId, cField) => this.getRawCellValue(rId, cField));
 		}
 
 		return rawVal;
@@ -167,27 +167,23 @@ export class DataModel<TRowData = unknown> {
 			return false;
 		}
 
-		const hadFormula = this.engine.dagEngine.hasFormula(rowId, colField);
-		const previousFormula = this.engine.dagEngine.getFormula(rowId, colField);
+		const hadFormula = this.engine.hasFormula(rowId, colField);
+		const previousFormula = this.engine.getFormula(rowId, colField);
 
-		if (typeof value === 'string' && value.startsWith('=')) {
-			this.engine.dagEngine.registerFormula(rowId, colField, value);
-		} else {
-			this.engine.dagEngine.clearFormula(rowId, colField);
-		}
+		this.engine.syncFormulaForCell(rowId, colField, value);
 
 		const applied = rowModel.setCellValue(rowId, colField, value);
 		if (!applied) {
 			if (hadFormula && previousFormula !== undefined) {
-				this.engine.dagEngine.registerFormula(rowId, colField, previousFormula);
+				this.engine.syncFormulaForCell(rowId, colField, previousFormula);
 			} else {
-				this.engine.dagEngine.clearFormula(rowId, colField);
+				this.engine.syncFormulaForCell(rowId, colField, undefined);
 			}
 			return false;
 		}
 
-		// Invalidate this cell and all its dependents in the DAG engine
-		const invalidatedKeys = this.engine.dagEngine.invalidateCell(rowId, colField);
+		// Invalidate this cell and any formula dependents.
+		const invalidatedKeys = this.engine.invalidateFormulaCell(rowId, colField);
 
 		// Also invalidate explicitly declared dynamic valueGetter dependents on this same row.
 		// Uses the column reverse index so wide grids pay O(actual dependents), not O(total columns).

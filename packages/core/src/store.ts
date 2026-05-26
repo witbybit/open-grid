@@ -1,7 +1,5 @@
 import type { FilterModel, SortModel } from './rowModel.js';
-import { PriorityLane, TransactionScheduler } from './scheduler.js';
-import { ViewportController, ViewportRange } from './viewportController.js';
-import { DagEngine } from './calculations/dagEngine.js';
+import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
 
 export interface CellSubscription {
@@ -35,11 +33,7 @@ export interface GridPlugin<TRowData = unknown> {
 	onInit?(api: InternalGridApi<TRowData>): void;
 	onMount?(): void;
 	onDestroy?(): void;
-	onCommand?(command: any): void;
 	onViewportChange?(range: ViewportRange): void;
-	onBeforeRender?(): void;
-	onAfterRender?(): void;
-	getApiMethods?(): Record<string, Function>;
 }
 
 export interface GridCellRange {
@@ -92,14 +86,14 @@ export interface GridEvent<T = unknown> {
 
 export type GridEventListener<T = unknown> = (event: GridEvent<T>) => void;
 
-export class RowNode<TRowData = any> {
+export class RowNode<TRowData = unknown> {
 	public id!: string;
 	public data!: TRowData;
 	public selected: boolean = false;
 	public expanded: boolean = false;
 
-	// Tracks current structural UI cell data states to prevent recalculations
-	private cellValueCache = new Map<string, any>();
+	// Caches computed cell values for this row until the row data changes.
+	private cellValueCache = new Map<string, unknown>();
 
 	constructor(id: string, data: TRowData) {
 		this.id = id;
@@ -113,7 +107,7 @@ export class RowNode<TRowData = any> {
 		}
 	}
 
-	public getCellValue(colField: string, compiledGetter: (data: TRowData) => any): any {
+	public getCellValue(colField: string, compiledGetter: (data: TRowData) => unknown): unknown {
 		if (this.cellValueCache.has(colField)) {
 			return this.cellValueCache.get(colField);
 		}
@@ -195,22 +189,22 @@ export function setValueByPath(obj: unknown, path: string, value: unknown): bool
 	return true;
 }
 
-const pathGetterCache = new Map<string, (data: any) => any>();
+const pathGetterCache = new Map<string, (data: unknown) => unknown>();
 
-export function compilePathGetter(path: string): (data: any) => any {
+export function compilePathGetter(path: string): (data: unknown) => unknown {
 	if (!path) return () => undefined;
 	if (pathGetterCache.has(path)) return pathGetterCache.get(path)!;
 
-	let getter: (data: any) => any;
+	let getter: (data: unknown) => unknown;
 	if (!path.includes('.')) {
-		getter = (data: any) => (data ? data[path] : undefined);
+		getter = (data: unknown) => (data && typeof data === 'object' ? (data as Record<string, unknown>)[path] : undefined);
 	} else {
 		const parts = path.split('.');
-		getter = (data: any) => {
-			let curr = data;
+		getter = (data: unknown) => {
+			let curr: unknown = data;
 			for (let i = 0; i < parts.length; i++) {
-				if (curr === null || curr === undefined) return undefined;
-				curr = curr[parts[i]];
+				if (curr === null || curr === undefined || typeof curr !== 'object') return undefined;
+				curr = (curr as Record<string, unknown>)[parts[i]];
 			}
 			return curr;
 		};
@@ -246,7 +240,7 @@ export interface ColumnDef<TRowData = unknown> {
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
 }
 
-export interface GridRowClassParams<TRowData = any> {
+export interface GridRowClassParams<TRowData = unknown> {
 	row: TRowData;
 	rowId: string;
 	rowIndex: number;
@@ -256,7 +250,7 @@ export interface GridRowClassParams<TRowData = any> {
 	selection: GridSelectionState;
 }
 
-export interface GridCellClassParams<TRowData = any> {
+export interface GridCellClassParams<TRowData = unknown> {
 	row: TRowData;
 	rowId: string;
 	rowIndex: number;
@@ -274,7 +268,7 @@ export interface GridCellClassParams<TRowData = any> {
 	selection: GridSelectionState;
 }
 
-export interface GridStyleSlots<TRowData = any> {
+export interface GridStyleSlots<TRowData = unknown> {
 	rowClass?: (row: TRowData, params: GridRowClassParams<TRowData>) => string;
 	cellClass?: (col: ColumnDef<TRowData>, row: TRowData, params: GridCellClassParams<TRowData>) => string;
 	headerCellClass?: (col: ColumnDef<TRowData>) => string;
@@ -356,21 +350,16 @@ export interface GridApi<TRowData = unknown> {
 	addEventListener<T = unknown>(type: string, callback: GridEventListener<T>): () => void;
 	dispatchEvent<T = unknown>(type: string, payload: T): void;
 	stopEditing(cancel?: boolean): void;
-	startTransaction(): void;
-	endTransaction(): void;
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
 	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
-	getPlugin<T = unknown>(name: string): T | null;
-	unregisterPlugin(name: string): void;
 	undo(): void;
 	redo(): void;
 	canUndo(): boolean;
 	canRedo(): boolean;
-	fillRange(source: GridCellRange, target: GridCellRange): void;
 	destroy(): void;
 }
 
@@ -381,8 +370,9 @@ export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
 	registerRowModel(rowModel: RowModel<TRowData>): void;
 	getRowModel(): RowModel<TRowData> | null;
 	registerPlugin(plugin: GridPlugin<TRowData>): void;
+	getPlugin<T = unknown>(name: string): T | null;
+	unregisterPlugin(name: string): void;
 	triggerCellNotifications(rowId: string): void;
-	viewportController: ViewportController;
 	batch(callback: () => void): void;
 	batchedUpdates: boolean;
 	registerCellSubscription(sub: CellSubscription): void;
@@ -392,13 +382,10 @@ export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
 }
 
 export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> {
-	public scheduler: TransactionScheduler;
-	public viewportController: ViewportController;
-	public dagEngine: DagEngine;
 	public engine: GridEngine<TRowData>;
 
+	private readonly viewportController: ViewportController<TRowData>;
 	private plugins = new Map<string, GridPlugin<TRowData>>();
-	private pluginApiMethods = new Map<string, string[]>();
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
 		this.engine = new GridEngine<TRowData>({
@@ -417,35 +404,13 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			styleSlots: initialState.styleSlots,
 		});
 
-		this.scheduler = new TransactionScheduler();
-		this.viewportController = new ViewportController(this.engine);
-		this.dagEngine = this.engine.dagEngine;
+		this.viewportController = new ViewportController<TRowData>(this.engine);
 
 		// Notify plugins of viewport shifts
 		this.engine.stateManager.subscribeToKey('visibleRowRange', () => {
 			const range = this.state.visibleRowRange;
 			this.plugins.forEach((plugin) => {
 				if (plugin.onViewportChange) plugin.onViewportChange(range);
-			});
-		});
-
-		// Notify plugins of commands
-		this.engine.commandBus.registerGlobalHandler((command) => {
-			this.plugins.forEach((plugin) => {
-				if (plugin.onCommand) plugin.onCommand(command);
-			});
-		});
-
-		// Notify plugins of render phases
-		this.engine.eventBus.addEventListener('beforeRender', () => {
-			this.plugins.forEach((plugin) => {
-				if (plugin.onBeforeRender) plugin.onBeforeRender();
-			});
-		});
-
-		this.engine.eventBus.addEventListener('afterRender', () => {
-			this.plugins.forEach((plugin) => {
-				if (plugin.onAfterRender) plugin.onAfterRender();
 			});
 		});
 	}
@@ -479,10 +444,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SET_CELL_VALUE',
-			payload: { rowId, colField, value, undoable: true },
-		});
+		this.engine.setCellValue(rowId, colField, value);
 	};
 
 	public getCellState = (rowId: string, colField: string): CellState => {
@@ -490,8 +452,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		const isEditing = this.state.activeEdit?.rowId === rowId && this.state.activeEdit?.colField === colField;
 
 		let value = computedValue;
-		if (this.engine.dagEngine.hasFormula(rowId, colField)) {
-			value = this.engine.dagEngine.getFormula(rowId, colField);
+		if (this.engine.hasFormula(rowId, colField)) {
+			value = this.engine.getFormula(rowId, colField);
 		} else {
 			value = this.engine.data.getRawCellValue(rowId, colField);
 		}
@@ -504,74 +466,44 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public selectCell = (pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SELECT_CELL',
-			payload: { start: pointer, end: pointer, source },
-		});
+		this.engine.selectRange(pointer, pointer, source);
 	};
 
 	public selectRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SELECT_CELL',
-			payload: { start, end, source },
-		});
+		this.engine.selectRange(start, end, source);
 	};
 
 	public extendSelection = (end: GridCellPointer, source: GridSelectionSource = 'api'): void => {
 		const state = this.getState();
-		this.engine.commandBus.dispatch({
-			type: 'SELECT_CELL',
-			payload: { start: state.selection.anchor ?? state.selection.focus ?? end, end, source },
-		});
+		this.engine.selectRange(state.selection.anchor ?? state.selection.focus ?? end, end, source);
 	};
 
 	public setColumnWidth = (colField: string, width: number): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SET_COLUMN_WIDTH',
-			payload: { colField, width },
-		});
+		this.engine.resizeColumn(colField, width);
 	};
 
 	public moveColumn = (colField: string, toIndex: number): void => {
-		this.engine.commandBus.dispatch({
-			type: 'MOVE_COLUMN',
-			payload: { colField, toIndex },
-		});
+		this.engine.moveColumn(colField, toIndex);
 	};
 
 	public setColumnOrder = (colFields: string[]): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SET_COLUMN_ORDER',
-			payload: { colFields },
-		});
+		this.engine.setColumnOrderByFields(colFields);
 	};
 
 	public setColumnReorderEnabled = (enabled: boolean): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SET_COLUMN_REORDER_ENABLED',
-			payload: { enabled },
-		});
+		this.engine.setColumnReorderEnabled(enabled);
 	};
 
 	public setRowHeight = (rowId: string, height: number): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SET_ROW_HEIGHT',
-			payload: { rowId, height },
-		});
+		this.engine.resizeRow(rowId, height);
 	};
 
 	public setSortModel = (sortModel: SortModel | null): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SET_SORT_MODEL',
-			payload: { sortModel },
-		});
+		this.engine.setSortModel(sortModel);
 	};
 
 	public setFilterModel = (filterModel: FilterModel | null): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SET_FILTER_MODEL',
-			payload: { filterModel },
-		});
+		this.engine.setFilterModel(filterModel);
 	};
 
 	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {
@@ -583,18 +515,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public stopEditing = (cancel: boolean = false): void => {
-		this.engine.commandBus.dispatch({
-			type: 'STOP_EDIT',
-			payload: { cancel },
-		});
-	};
-
-	public startTransaction = (): void => {
-		this.engine.stateManager.startTransaction();
-	};
-
-	public endTransaction = (): void => {
-		this.engine.stateManager.endTransaction();
+		this.engine.stopEdit(cancel);
 	};
 
 	public registerRowModel = (rowModel: RowModel<TRowData>): void => {
@@ -640,6 +561,37 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public purgeCache = (): void => {
 		this.getRowModel()?.purgeCache?.();
+	};
+
+	public setViewportPins = (pins: { left?: number; right?: number; top?: number; bottom?: number }): void => {
+		if (pins.left !== undefined) this.viewportController.pinLeftColumns = pins.left;
+		if (pins.right !== undefined) this.viewportController.pinRightColumns = pins.right;
+		if (pins.top !== undefined) this.viewportController.pinTopRows = pins.top;
+		if (pins.bottom !== undefined) this.viewportController.pinBottomRows = pins.bottom;
+	};
+
+	public setViewportSize = (width: number, height: number): boolean => {
+		return this.viewportController.setViewportSize(width, height);
+	};
+
+	public setScrollPosition = (scrollTop: number, scrollLeft: number, timestamp?: number): boolean => {
+		return this.viewportController.setScrollPosition(scrollTop, scrollLeft, timestamp);
+	};
+
+	public getScrollVelocity = (): { vx: number; vy: number } => {
+		return this.viewportController.getVelocity();
+	};
+
+	public getVisibleRowRange = (): ViewportRange => {
+		return this.viewportController.getVisibleRowRange();
+	};
+
+	public getVisibleColumnRange = (): ViewportRange => {
+		return this.viewportController.getVisibleColumnRange();
+	};
+
+	public updateVisibleRanges = (): boolean => {
+		return this.viewportController.updateVisibleRanges();
 	};
 
 	public subscribe = (listener: Listener<TRowData>): (() => void) => {
@@ -705,20 +657,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			this.unregisterPlugin(plugin.name);
 		}
 		this.plugins.set(plugin.name, plugin);
-		(this as unknown as Record<string, unknown>)[plugin.name] = plugin;
 
 		if (plugin.onInit) {
 			plugin.onInit(this);
-		}
-
-		if (plugin.getApiMethods) {
-			const methods = plugin.getApiMethods();
-			const methodNames: string[] = [];
-			for (const [methodName, fn] of Object.entries(methods)) {
-				(this as unknown as Record<string, unknown>)[methodName] = fn.bind(plugin);
-				methodNames.push(methodName);
-			}
-			this.pluginApiMethods.set(plugin.name, methodNames);
 		}
 	};
 
@@ -735,15 +676,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		}
 
 		this.plugins.delete(name);
-		delete (this as unknown as Record<string, unknown>)[name];
-
-		const methodNames = this.pluginApiMethods.get(name);
-		if (methodNames) {
-			for (const methodName of methodNames) {
-				delete (this as unknown as Record<string, unknown>)[methodName];
-			}
-			this.pluginApiMethods.delete(name);
-		}
 	};
 
 	public getPlugin = <T = unknown>(name: string): T | null => {
@@ -766,10 +698,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.commandHistory.canRedo();
 	};
 
-	public fillRange = (source: GridCellRange, target: GridCellRange): void => {
-		this.engine.fillRange(source, target);
-	};
-
 	public destroy = (): void => {
 		this.plugins.forEach((plugin) => {
 			if (plugin.onDestroy) {
@@ -783,6 +711,5 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.plugins.clear();
 
 		this.engine.destroy();
-		this.scheduler.flushAllSync();
 	};
 }
