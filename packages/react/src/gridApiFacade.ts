@@ -32,10 +32,8 @@ export function createGridApiFacade<TRowData>(store: GridStore<TRowData>): GridA
 		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
 		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
 		getCellState: (rowId: string, colField: string) => store.getCellState(rowId, colField),
-		setFocusedCell: (rowId: string | null, colField: string | null) => store.setFocusedCell(rowId, colField),
-
-		setSelectedRange: (start: GridCellPointer | null, end: GridCellPointer | null) => store.setSelectedRange(start, end),
 		selectCell: (pointer: GridCellPointer | null, source?: GridSelectionSource) => store.selectCell(pointer, source),
+		selectRange: (start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource) => store.selectRange(start, end, source),
 		extendSelection: (end: GridCellPointer, source?: GridSelectionSource) => store.extendSelection(end, source),
 
 		setColumnWidth: (colField: string, width: number) => store.setColumnWidth(colField, width),

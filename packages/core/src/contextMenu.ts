@@ -1,11 +1,10 @@
-import { GridStore, GridCellPointer, GridPlugin, InternalGridApi, GridCellRange, GridCellRangeBounds } from './store.js';
+import { GridStore, GridCellPointer, GridPlugin, InternalGridApi, GridSelectionState } from './store.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
 	colField: string;
 	store: GridStore<TRowData>;
-	selectedRange: GridCellRange | null;
-	selectedRangeBounds: GridCellRangeBounds | null;
+	selection: GridSelectionState;
 }
 
 export interface GridContextMenuItem<TRowData = unknown> {
@@ -48,12 +47,12 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	public show(rowId: string, colField: string, clientX: number, clientY: number): void {
 		const state = this.store.getState();
 		let inSelection = false;
-		if (state.selectedRangeBounds) {
+		if (state.selection.bounds) {
 			const rowModel = this.store.getRowModel();
 			if (rowModel) {
 				const clickedRowIdx = rowModel.getRowIndexById(rowId);
 				const clickedColIdx = state.columns.findIndex(c => c.field === colField);
-				const bounds = state.selectedRangeBounds;
+				const bounds = state.selection.bounds;
 				if (
 					clickedRowIdx >= bounds.minRow &&
 					clickedRowIdx <= bounds.maxRow &&
@@ -66,13 +65,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		}
 
 		if (!inSelection) {
-			this.store.setState({
-				focusedCell: { rowId, colField },
-				selectedRange: {
-					start: { rowId, colField },
-					end: { rowId, colField },
-				},
-			});
+			this.store.selectCell({ rowId, colField }, 'pointer');
 		}
 
 		this.activePointer = { rowId, colField };
@@ -121,8 +114,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			rowId,
 			colField,
 			store: this.store,
-			selectedRange: state.selectedRange,
-			selectedRangeBounds: state.selectedRangeBounds,
+			selection: state.selection,
 		};
 
 		const defaultItems: Array<{ id: string; label?: string; isDivider?: boolean; action?: (params: ContextMenuParams<TRowData>) => void }> = [
@@ -191,7 +183,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	private copySelectedRange(params: ContextMenuParams<TRowData>): void {
-		const bounds = params.selectedRangeBounds;
+		const bounds = params.selection.bounds;
 		const rowModel = this.store.getRowModel();
 		if (!bounds || !rowModel) return;
 
@@ -233,7 +225,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	private clearSelection(params: ContextMenuParams<TRowData>): void {
-		const bounds = params.selectedRangeBounds;
+		const bounds = params.selection.bounds;
 		const rowModel = this.store.getRowModel();
 		if (!bounds || !rowModel) return;
 
@@ -252,7 +244,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	private add100ToSelection(params: ContextMenuParams<TRowData>): void {
-		const bounds = params.selectedRangeBounds;
+		const bounds = params.selection.bounds;
 		const rowModel = this.store.getRowModel();
 		if (!bounds || !rowModel) return;
 
@@ -275,7 +267,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	private apply10PercentIncrease(params: ContextMenuParams<TRowData>): void {
-		const bounds = params.selectedRangeBounds;
+		const bounds = params.selection.bounds;
 		const rowModel = this.store.getRowModel();
 		if (!bounds || !rowModel) return;
 

@@ -92,6 +92,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Delta Δ',
 				width: 90,
 				cellRenderer: GreeksRenderer,
+				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
 					const strike = parseFloat(row.price) || 100;
@@ -105,6 +106,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Gamma Γ',
 				width: 95,
 				cellRenderer: GreeksRenderer,
+				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
 					const strike = parseFloat(row.price) || 100;
@@ -118,6 +120,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Vega ν',
 				width: 90,
 				cellRenderer: GreeksRenderer,
+				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
 					const strike = parseFloat(row.price) || 100;
@@ -131,6 +134,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Theta θ',
 				width: 90,
 				cellRenderer: GreeksRenderer,
+				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
 					const strike = parseFloat(row.price) || 100;
@@ -352,7 +356,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	const applySpreadsheetRangeAction = useCallback(
 		(action: 'fill' | 'clear' | 'addPercent' | 'sum') => {
 			const state = spreadsheetApi.getState();
-			const range = state.selectedRange;
+			const range = state.selection.range;
 			if (!range) {
 				alert('Please select a range of cells first using click-and-drag or Shift+Arrows.');
 				return;
@@ -456,6 +460,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Delta Δ',
 				width: 100,
 				cellRenderer: GreeksRenderer,
+				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
 					const strike = parseFloat(row.price) || 100;

@@ -425,11 +425,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			}
 
 			// Handle row class names including pinning and selection states
-			const isFocusedRow = state.focusedCell?.rowId === node.id;
+			const isFocusedRow = state.selection.focus?.rowId === node.id;
 			const isSelectedRow =
-				!!state.selectedRangeBounds &&
-				r >= state.selectedRangeBounds.minRow &&
-				r <= state.selectedRangeBounds.maxRow;
+				!!state.selection.bounds &&
+				r >= state.selection.bounds.minRow &&
+				r <= state.selection.bounds.maxRow;
 			const isLoadingRow = this.engine.data.isRowLoading(node.id);
 			let rowClassName = 'og-row';
 			if (r < pinTopRows) {
@@ -586,8 +586,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 						(this.container &&
 							this.container.contains(activeEl) &&
 							activeEl !== cell &&
-							activeEl.tagName !== 'INPUT' &&
-							activeEl.tagName !== 'TEXTAREA'))
+							!cell.contains(activeEl) &&
+							!this.isEditorInteractiveElement(activeEl)))
 				) {
 					cell.focus();
 				}
@@ -736,6 +736,10 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			}
 		}
 		return portalHost;
+	}
+
+	private isEditorInteractiveElement(element: Element): boolean {
+		return element.matches('input, textarea, select, button, [contenteditable="true"], [role="textbox"], [role="combobox"], [role="listbox"]');
 	}
 
 	/**
@@ -1127,7 +1131,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		this.reattachColumnReorderOverlays();
 
 		const state = this.engine.stateManager.getState();
-		const bounds = state.selectedRangeBounds;
+		const bounds = state.selection.bounds;
 
 		if (!bounds || !this.engine.getRowModel()) {
 			this.hideSelectionOverlay();

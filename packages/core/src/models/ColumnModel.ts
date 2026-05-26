@@ -5,6 +5,7 @@ import { IndexMapper } from './IndexMapper.js';
 export class ColumnModel<TRowData = unknown> {
 	private engine!: GridEngine<TRowData>;
 	private columnMap = new Map<string, ColumnDef<TRowData>>();
+	private valueGetterDependents = new Map<string, string[]>();
 	private indexMapper = new IndexMapper<string>();
 	private defaultColWidth = 100;
 
@@ -17,6 +18,7 @@ export class ColumnModel<TRowData = unknown> {
 			this.defaultColWidth = defaultColWidth;
 		}
 		this.columnMap.clear();
+		this.valueGetterDependents.clear();
 		this.indexMapper.setIds(columns.map((column) => column.field));
 
 		const widths: number[] = [];
@@ -25,6 +27,16 @@ export class ColumnModel<TRowData = unknown> {
 			const col = columns[i];
 			if (col.field) {
 				this.columnMap.set(col.field, col);
+				if (col.valueGetter && col.valueGetterDependencies) {
+					for (const dependency of col.valueGetterDependencies) {
+						const dependents = this.valueGetterDependents.get(dependency);
+						if (dependents) {
+							dependents.push(col.field);
+						} else {
+							this.valueGetterDependents.set(dependency, [col.field]);
+						}
+					}
+				}
 
 				const customWidth = columnWidths[col.field] ?? col.width;
 				widths.push(customWidth !== undefined ? customWidth : this.defaultColWidth);
@@ -55,6 +67,10 @@ export class ColumnModel<TRowData = unknown> {
 
 	public getColumnDef(colField: string): ColumnDef<TRowData> | undefined {
 		return this.columnMap.get(colField);
+	}
+
+	public getValueGetterDependents(changedField: string): string[] {
+		return this.valueGetterDependents.get(changedField) ?? [];
 	}
 
 	public getColLeft(colIdx: number): number {

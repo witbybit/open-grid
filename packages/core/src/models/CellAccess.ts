@@ -33,8 +33,8 @@ export class CellAccessModel<TRowData = unknown> {
 		const value = this.engine.data.getCellValue(rowId, column.field);
 		const rawValue = this.engine.data.getRawCellValue(rowId, column.field);
 		const state = this.engine.stateManager.getState();
-		const focusedCell = state.focusedCell;
-		const selectedBounds = state.selectedRangeBounds;
+		const focusedCell = state.selection.focus;
+		const selectedBounds = state.selection.bounds;
 		const isFocused = focusedCell?.rowId === rowId && focusedCell?.colField === column.field;
 		const isRowFocused = focusedCell?.rowId === rowId;
 		const isSelected =

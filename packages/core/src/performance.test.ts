@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { GridStore } from './store.js';
+import { describe, it, expect, vi } from 'vitest';
+import { GridStore, type ColumnDef, type ValueGetterParams } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 
 interface PerfTestRow {
@@ -118,6 +118,56 @@ describe('Performance Benchmarks', () => {
 	});
 
 	describe('Cell Update Performance', () => {
+		it('should not fan out single-cell updates across unrelated valueGetter columns in wide grids', () => {
+			const columns: ColumnDef<PerfTestRow>[] = [
+				{ field: 'id', header: 'ID', width: 80 },
+				{ field: 'status', header: 'Status', width: 100 },
+				{
+					field: 'derived_status',
+					header: 'Derived Status',
+					width: 120,
+					valueGetterDependencies: ['status'],
+					valueGetter: (params: ValueGetterParams<PerfTestRow>) => params.row.status.toUpperCase(),
+				},
+				...Array.from({ length: 2000 }, (_, i) => ({
+					field: `col_${i}`,
+					header: `Col ${i}`,
+					width: 100,
+					valueGetter: (params: ValueGetterParams<PerfTestRow>) => (params.row as PerfTestRow & Record<string, unknown>)[`col_${i}`] ?? `Val ${i}`,
+				})),
+			];
+			const store = new GridStore<PerfTestRow>({
+				columns,
+			});
+			const rows: PerfTestRow[] = Array.from({ length: 10000 }, (_, i) => ({
+				id: `row-${i}`,
+				name: `Product ${i}`,
+				price: 100,
+				quantity: 10,
+				status: 'Active',
+			}));
+			const controller = new ClientRowModelController<PerfTestRow>(store, {
+				rows,
+				columns,
+			});
+
+			const unrelatedListener = vi.fn();
+			const dependentListener = vi.fn();
+			store.registerCellSubscription({ rowId: 'row-5000', colField: 'col_1999', onStoreChange: unrelatedListener });
+			store.registerCellSubscription({ rowId: 'row-5000', colField: 'derived_status', onStoreChange: dependentListener });
+
+			const start = performance.now();
+			store.setCellValue('row-5000', 'status', 'Inactive');
+			store.flushCellUpdatesSync();
+			const duration = performance.now() - start;
+
+			expect(unrelatedListener).not.toHaveBeenCalled();
+			expect(dependentListener).toHaveBeenCalledTimes(1);
+			expect(duration).toBeLessThan(5);
+
+			controller.dispose();
+		});
+
 		it('should handle 1000 cell updates under 50ms with batching', () => {
 			const store = new GridStore<PerfTestRow>({
 				columns: [
@@ -329,7 +379,7 @@ describe('Performance Benchmarks', () => {
 
 			for (let i = 0; i < 100; i++) {
 				const start = performance.now();
-				store.setSelectedRange({ rowId: 'row-100', colField: 'id' }, { rowId: 'row-500', colField: 'price' });
+				store.selectRange({ rowId: 'row-100', colField: 'id' }, { rowId: 'row-500', colField: 'price' });
 				const duration = performance.now() - start;
 				durations.push(duration);
 			}

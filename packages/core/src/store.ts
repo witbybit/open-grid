@@ -240,6 +240,7 @@ export interface ColumnDef<TRowData = unknown> {
 	movable?: boolean;
 	loading?: boolean;
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
+	valueGetterDependencies?: string[];
 	valueSetter?: (row: TRowData, value: unknown) => boolean;
 	cellRenderer?: (props: CellRendererProps<TRowData>) => unknown;
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
@@ -287,8 +288,6 @@ export interface GridState<TRowData = unknown> {
 	loading?: boolean;
 	loadingSkeletonCount?: number;
 
-	focusedCell: GridCellPointer | null;
-	selectedRange: GridCellRange | null;
 	selection: GridSelectionState;
 
 	rowHeights: Record<string, number>; // rowId -> height in px
@@ -306,8 +305,6 @@ export interface GridState<TRowData = unknown> {
 
 	// React cache invalidator
 	dataVersion: number;
-
-	selectedRangeBounds: GridCellRangeBounds | null;
 
 	// 2D Recycled Viewport Range states
 	visibleRowRange: ViewportRange;
@@ -346,9 +343,8 @@ export interface GridApi<TRowData = unknown> {
 	getCellValue(rowId: string, colField: string): unknown;
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 	getCellState(rowId: string, colField: string): CellState;
-	setFocusedCell(rowId: string | null, colField: string | null): void;
-	setSelectedRange(start: GridCellPointer | null, end: GridCellPointer | null): void;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
+	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
 	setColumnWidth(colField: string, width: number): void;
 	moveColumn(colField: string, toIndex: number): void;
@@ -407,8 +403,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
 		this.engine = new GridEngine<TRowData>({
 			columns: initialState.columns || [],
-			focusedCell: initialState.focusedCell || null,
-			selectedRange: initialState.selectedRange || null,
+			selection: initialState.selection,
 			rowHeights: initialState.rowHeights || {},
 			columnWidths: initialState.columnWidths || {},
 			defaultRowHeight: initialState.defaultRowHeight || 40,
@@ -508,20 +503,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		};
 	};
 
-	public setFocusedCell = (rowId: string | null, colField: string | null): void => {
-		this.engine.commandBus.dispatch({
-			type: 'FOCUS_CELL',
-			payload: { rowId, colField },
-		});
-	};
-
-	public setSelectedRange = (start: GridCellPointer | null, end: GridCellPointer | null): void => {
-		this.engine.commandBus.dispatch({
-			type: 'SELECT_CELL',
-			payload: { start, end, source: 'api' },
-		});
-	};
-
 	public selectCell = (pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
 		this.engine.commandBus.dispatch({
 			type: 'SELECT_CELL',
@@ -529,11 +510,18 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		});
 	};
 
+	public selectRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
+		this.engine.commandBus.dispatch({
+			type: 'SELECT_CELL',
+			payload: { start, end, source },
+		});
+	};
+
 	public extendSelection = (end: GridCellPointer, source: GridSelectionSource = 'api'): void => {
 		const state = this.getState();
 		this.engine.commandBus.dispatch({
 			type: 'SELECT_CELL',
-			payload: { start: state.selection.anchor ?? state.focusedCell ?? end, end, source },
+			payload: { start: state.selection.anchor ?? state.selection.focus ?? end, end, source },
 		});
 	};
 

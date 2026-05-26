@@ -21,7 +21,6 @@ export * from './models/IndexMapper.js';
 export * from './models/CellAccess.js';
 export * from './models/ViewportModel.js';
 export * from './models/GeometryModel.js';
-export * from './models/FocusModel.js';
 export * from './models/SelectionModel.js';
 export * from './models/EditModel.js';
 

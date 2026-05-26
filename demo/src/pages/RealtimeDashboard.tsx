@@ -82,7 +82,7 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 			const state = api.getState();
 
 			// A. Recalculate selection math
-			const range = state.selectedRange;
+			const range = state.selection.range;
 			if (range) {
 				const startIdx = api.getRowIndexById(range.start.rowId) ?? -1;
 				const endIdx = api.getRowIndexById(range.end.rowId) ?? -1;
@@ -164,8 +164,9 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 			logEvent('cellValueChanged', `${e.payload.rowId}:${e.payload.colField} => ${e.payload.value}`, 'edit');
 		});
 
-		const unsubFocus = api.addEventListener<{ rowId: string; colField: string }>('focusChanged', (e) => {
-			logEvent('focusChanged', `Cell focus: ${e.payload.rowId}:${e.payload.colField}`, 'focus');
+		const unsubFocus = api.addEventListener<{ focus: { rowId: string; colField: string } | null }>('focusChanged', (e) => {
+			const focus = e.payload.focus;
+			logEvent('focusChanged', focus ? `Cell focus: ${focus.rowId}:${focus.colField}` : 'Cell focus cleared', 'focus');
 		});
 
 		return () => {

@@ -7,8 +7,8 @@ import { TableProperties, Terminal } from 'lucide-react';
 // ============================================================================
 
 const StateInspectorContent = () => {
-	const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
-	const selectedRange = useGridKeySelector('selectedRange', (state) => state.selectedRange);
+	const focusedCell = useGridKeySelector('selection', (state) => state.selection.focus);
+	const selectedRange = useGridKeySelector('selection', (state) => state.selection.range);
 
 	const focusText = focusedCell ? `Row ID: ${focusedCell.rowId}, Col Field: ${focusedCell.colField}` : 'None';
 	const rangeText = selectedRange

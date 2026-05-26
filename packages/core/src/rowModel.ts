@@ -362,18 +362,19 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (needsFullRefresh) {
 			this.refresh();
 		} else {
-			// No sorting or filtering is affected. Notify only changed cells, valueGetter cells, and formula dependents.
+			// No sorting or filtering is affected. Notify only changed cells, formula dependents,
+			// and explicitly declared valueGetter dependents.
 			const notifyKeys = new Set<string>(allInvalidatedKeys);
 			for (const node of changedNodes) {
 				const changedFields = changedFieldsByRow.get(node.id);
 				if (changedFields) {
 					for (const field of changedFields) {
 						notifyKeys.add(createCellKey(node.id, field));
-					}
-				}
-				for (const col of state.columns) {
-					if (col.valueGetter) {
-						notifyKeys.add(createCellKey(node.id, col.field));
+						for (const dependentField of this.store.engine.columns.getValueGetterDependents(field)) {
+							if (dependentField !== field) {
+								notifyKeys.add(createCellKey(node.id, dependentField));
+							}
+						}
 					}
 				}
 			}

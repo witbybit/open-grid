@@ -12,23 +12,25 @@ export class SelectionModel {
 	public init(): void {
 	}
 
-	public getSelectedRange(): GridCellRange | null {
-		return this.state.range;
-	}
-
-	public getSelectedRangeBounds(): GridCellRangeBounds | null {
-		return this.state.bounds;
-	}
-
 	public getState(): GridSelectionState {
 		return this.state;
 	}
 
 	public setSelection(selection: Partial<GridSelectionState>): GridSelectionState {
-		this.state = {
+		const next = {
 			...this.state,
 			...selection,
 		};
+		if (
+			next.focus === this.state.focus &&
+			next.anchor === this.state.anchor &&
+			next.range === this.state.range &&
+			next.bounds === this.state.bounds &&
+			next.source === this.state.source
+		) {
+			return this.state;
+		}
+		this.state = next;
 		return this.state;
 	}
 

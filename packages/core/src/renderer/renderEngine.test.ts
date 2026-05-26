@@ -142,13 +142,7 @@ describe('RenderEngine', () => {
 		const renderer = new RenderEngine(store.engine);
 		renderer.mount(container);
 
-		store.setState({
-			focusedCell: { rowId: 'row-2', colField: 'name' },
-			selectedRange: {
-				start: { rowId: 'row-2', colField: 'name' },
-				end: { rowId: 'row-2', colField: 'name' },
-			},
-		});
+		store.selectCell({ rowId: 'row-2', colField: 'name' });
 		renderer.fullPaint();
 
 		const selectedRow = container.querySelector('.og-row[data-row-id="row-2"]') as HTMLElement;
@@ -164,6 +158,63 @@ describe('RenderEngine', () => {
 				isSelected: true,
 			})
 		);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('does not steal focus from custom editor descendants during focused cell paints', () => {
+		const columns = [{ field: 'status', header: 'Status', width: 120, cellEditor: () => null }];
+		const store = new GridStore<{ id: string; status: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-1', status: 'Active' }],
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine);
+		renderer.onMountReactPortal = (_cellKey, portalHost) => {
+			if (!portalHost.querySelector('[data-custom-editor-root]')) {
+				const customEditorRoot = document.createElement('div');
+				customEditorRoot.dataset.customEditorRoot = 'true';
+				customEditorRoot.tabIndex = 0;
+				portalHost.appendChild(customEditorRoot);
+			}
+		};
+		renderer.mount(container);
+
+		store.selectCell({ rowId: 'row-1', colField: 'status' });
+		store.setState({ activeEdit: { rowId: 'row-1', colField: 'status' } });
+		renderer.fullPaint();
+
+		const cell = container.querySelector('.og-cell[data-col-field="status"]') as HTMLDivElement;
+		const customEditorRoot = cell.querySelector('[data-custom-editor-root]') as HTMLDivElement;
+		customEditorRoot.focus();
+		const focusSpy = vi.spyOn(cell, 'focus');
+
+		renderer.fullPaint();
+
+		expect(focusSpy).not.toHaveBeenCalled();
+		expect(document.activeElement).toBe(customEditorRoot);
 
 		renderer.unmount();
 		controller.dispose();

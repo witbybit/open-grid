@@ -85,18 +85,34 @@ export function PortalCell<TRowData = unknown>({ rowId, colField, value, col, no
 		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
 			{isEditing ? (
 				CustomEditor ? (
-					CustomEditor({
-						rowId,
-						colField,
-						value: localValue,
-						onChange: (val: unknown) => {
-							setLocalValue(val);
-							localValueRef.current = val;
-						},
-						api,
-						onCommit: handleCommit,
-						onCancel: handleCancel,
-					})
+					<div
+						style={{ width: '100%', height: '100%' }}
+						onMouseDown={(e) => e.stopPropagation()}
+						onDoubleClick={(e) => e.stopPropagation()}
+						onKeyDown={(e) => {
+							if (e.defaultPrevented) return;
+							if (e.key === 'Enter') {
+								e.stopPropagation();
+								handleCommit();
+							} else if (e.key === 'Escape') {
+								e.stopPropagation();
+								handleCancel();
+							}
+						}}
+					>
+						{CustomEditor({
+							rowId,
+							colField,
+							value: localValue,
+							onChange: (val: unknown) => {
+								setLocalValue(val);
+								localValueRef.current = val;
+							},
+							api,
+							onCommit: handleCommit,
+							onCancel: handleCancel,
+						})}
+					</div>
 				) : (
 					<input
 						autoFocus

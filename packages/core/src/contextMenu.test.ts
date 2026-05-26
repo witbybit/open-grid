@@ -160,8 +160,8 @@ describe('GridContextMenuPlugin', () => {
 		plugin.show('r2', 'name', 100, 100);
 
 		const state = store.getState();
-		expect(state.focusedCell).toEqual({ rowId: 'r2', colField: 'name' });
-		expect(state.selectedRange).toEqual({
+		expect(state.selection.focus).toEqual({ rowId: 'r2', colField: 'name' });
+		expect(state.selection.range).toEqual({
 			start: { rowId: 'r2', colField: 'name' },
 			end: { rowId: 'r2', colField: 'name' },
 		});
@@ -169,38 +169,27 @@ describe('GridContextMenuPlugin', () => {
 
 	it('should maintain existing multi-cell selection when right-clicking within it', () => {
 		// Programmatically set multi-cell selection: r1:name to r2:price
-		store.setState({
-			selectedRange: {
-				start: { rowId: 'r1', colField: 'name' },
-				end: { rowId: 'r2', colField: 'price' },
-			},
-		});
+		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
 		// Right click on r2:name which is inside the bounds
 		plugin.show('r2', 'name', 100, 100);
 
 		const state = store.getState();
-		expect(state.selectedRange).toEqual({
+		expect(state.selection.range).toEqual({
 			start: { rowId: 'r1', colField: 'name' },
 			end: { rowId: 'r2', colField: 'price' },
 		});
 	});
 
 	it('should copy selected range to clipboard in Excel-compatible TSV format', () => {
-		store.setState({
-			selectedRange: {
-				start: { rowId: 'r1', colField: 'name' },
-				end: { rowId: 'r2', colField: 'price' },
-			},
-		});
+		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
 		const state = store.getState();
 		const params = {
 			rowId: 'r1',
 			colField: 'name',
 			store,
-			selectedRange: state.selectedRange,
-			selectedRangeBounds: state.selectedRangeBounds,
+			selection: state.selection,
 		};
 
 		// Call internal copy selected range directly or simulate it
@@ -212,20 +201,14 @@ describe('GridContextMenuPlugin', () => {
 	});
 
 	it('should clear selection values atomically', () => {
-		store.setState({
-			selectedRange: {
-				start: { rowId: 'r1', colField: 'name' },
-				end: { rowId: 'r2', colField: 'price' },
-			},
-		});
+		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
 		const state = store.getState();
 		const params = {
 			rowId: 'r1',
 			colField: 'name',
 			store,
-			selectedRange: state.selectedRange,
-			selectedRangeBounds: state.selectedRangeBounds,
+			selection: state.selection,
 		};
 
 		(plugin as any).clearSelection(params);
@@ -237,20 +220,14 @@ describe('GridContextMenuPlugin', () => {
 	});
 
 	it('should add 100 to selection numerical values atomically', () => {
-		store.setState({
-			selectedRange: {
-				start: { rowId: 'r1', colField: 'name' },
-				end: { rowId: 'r2', colField: 'price' },
-			},
-		});
+		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
 		const state = store.getState();
 		const params = {
 			rowId: 'r1',
 			colField: 'name',
 			store,
-			selectedRange: state.selectedRange,
-			selectedRangeBounds: state.selectedRangeBounds,
+			selection: state.selection,
 		};
 
 		(plugin as any).add100ToSelection(params);
@@ -265,20 +242,14 @@ describe('GridContextMenuPlugin', () => {
 	});
 
 	it('should apply 10% increase to selection numerical values atomically', () => {
-		store.setState({
-			selectedRange: {
-				start: { rowId: 'r1', colField: 'name' },
-				end: { rowId: 'r2', colField: 'price' },
-			},
-		});
+		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
 		const state = store.getState();
 		const params = {
 			rowId: 'r1',
 			colField: 'name',
 			store,
-			selectedRange: state.selectedRange,
-			selectedRangeBounds: state.selectedRangeBounds,
+			selection: state.selection,
 		};
 
 		(plugin as any).apply10PercentIncrease(params);
@@ -318,12 +289,7 @@ describe('GridContextMenuPlugin', () => {
 			]
 		});
 
-		store.setState({
-			selectedRange: {
-				start: { rowId: 'r1', colField: 'name' },
-				end: { rowId: 'r2', colField: 'price' },
-			},
-		});
+		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
 		(plugin as any).activePointer = { rowId: 'r1', colField: 'name' };
 		(plugin as any).renderMenu(100, 100);
@@ -340,11 +306,11 @@ describe('GridContextMenuPlugin', () => {
 		expect(params.rowId).toBe('r1');
 		expect(params.colField).toBe('name');
 		expect(params.store).toBe(store);
-		expect(params.selectedRange).toEqual({
+		expect(params.selection.range).toEqual({
 			start: { rowId: 'r1', colField: 'name' },
 			end: { rowId: 'r2', colField: 'price' },
 		});
-		expect(params.selectedRangeBounds).toEqual({
+		expect(params.selection.bounds).toEqual({
 			minRow: 0,
 			maxRow: 1,
 			minCol: 1,

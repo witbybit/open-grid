@@ -22,7 +22,7 @@ function CustomEditorRendererInner({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: CustomEditorRendererProps) {
-	const selectedRange = useGridKeySelector('selectedRange', (state) => state.selectedRange);
+	const selectedRange = useGridKeySelector('selection', (state) => state.selection.range);
 
 	const [telemetry, setTelemetry] = useState({
 		totalAssets: 0,

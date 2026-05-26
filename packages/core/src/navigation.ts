@@ -73,7 +73,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		const rowModel = this.store.getRowModel();
 		if (!rowModel) return;
 		const state = this.store.getState();
-		const active = state.focusedCell;
+		const active = state.selection.focus;
 		if (!active) return;
 
 		const coords = this.getCoordsFromPointer(active);
@@ -288,7 +288,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		if (event.button !== 0) return;
 
 		const state = this.store.getState();
-		const prevFocus = state.focusedCell;
+		const prevFocus = state.selection.focus;
 		const trigger = this.options.editTrigger ?? 'doubleClick';
 
 		// Handle singleClick edit trigger
@@ -329,7 +329,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		if (trigger !== 'singleClick') return;
 
 		const state = this.store.getState();
-		const range = state.selectedRange;
+		const range = state.selection.range;
 		// Only enter editing if the selection is a single cell (not a multi-cell range drag)
 		const isSingleCell = !range || (range.start.rowId === range.end.rowId && range.start.colField === range.end.colField);
 

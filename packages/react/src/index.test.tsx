@@ -37,7 +37,7 @@ function createTestGrid<TRowData>(store: GridStore<TRowData>) {
 }
 
 const SelectorInspector = () => {
-	const focused = useGridSelector((s) => s.focusedCell);
+	const focused = useGridSelector((s) => s.selection.focus);
 	const dataVersion = useGridKeySelector('dataVersion', (s) => s.dataVersion);
 	const store = new GridStore<TestRow>({
 		columns: [{ field: 'name', header: 'Name', width: 100 }],
@@ -101,7 +101,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		// Focus cell and verify selector updates
 		act(() => {
-			store.setFocusedCell('1', 'name');
+			store.selectCell({ rowId: '1', colField: 'name' });
 		});
 		expect(screen.getByTestId('focused-cell').textContent).toBe('1:name');
 
@@ -327,6 +327,53 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		fireEvent.blur(input);
 
 		expect(store.getCellValue('1', 'name')).toBe('Product B');
+		controller.dispose();
+	});
+
+	it('should commit custom cell editors immediately on Enter from the portal shell', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellEditor: ({ value, onChange }) => (
+						<div data-testid='custom-editor-root' tabIndex={0}>
+							<input data-testid='custom-editor-input' value={String(value)} onChange={(e) => onChange(e.target.value)} />
+						</div>
+					),
+				},
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: store.getState().columns,
+		});
+
+		const grid = createTestGrid(store);
+		const colDef = store.getColumnDef('name')!;
+		const node = store.getRowModel()!.getRowNode(0)!;
+
+		act(() => {
+			store.setState({
+				activeEdit: { rowId: '1', colField: 'name' },
+			});
+		});
+
+		render(
+			<GridProvider api={grid.api}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
+			</GridProvider>
+		);
+
+		const input = screen.getByTestId('custom-editor-input') as HTMLInputElement;
+
+		fireEvent.change(input, { target: { value: 'Product B' } });
+		fireEvent.keyDown(input, { key: 'Enter' });
+
+		expect(store.getCellValue('1', 'name')).toBe('Product B');
+		expect(store.getState().activeEdit).toBeNull();
+
 		controller.dispose();
 	});
 
@@ -593,7 +640,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(renderSpy).toHaveBeenCalledTimes(1);
 
 		act(() => {
-			store.setFocusedCell('1', 'name');
+			store.selectCell({ rowId: '1', colField: 'name' });
 		});
 
 		expect(renderSpy).toHaveBeenCalledTimes(1);

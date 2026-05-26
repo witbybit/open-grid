@@ -127,15 +127,12 @@ export class DataModel<TRowData = unknown> {
 		// Invalidate this cell and all its dependents in the DAG engine
 		const invalidatedKeys = this.engine.dagEngine.invalidateCell(rowId, colField);
 
-		// Also invalidate any dynamic valueGetter columns on this same row
-		const state = this.engine.stateManager.getState();
-		for (let i = 0; i < state.columns.length; i++) {
-			const col = state.columns[i];
-			if (col.valueGetter) {
-				const key = `${rowId}:${col.field}`;
-				if (!invalidatedKeys.includes(key)) {
-					invalidatedKeys.push(key);
-				}
+		// Also invalidate explicitly declared dynamic valueGetter dependents on this same row.
+		// Uses the column reverse index so wide grids pay O(actual dependents), not O(total columns).
+		for (const dependentField of this.engine.columns.getValueGetterDependents(colField)) {
+			if (dependentField !== colField) {
+				const key = `${rowId}:${dependentField}`;
+				if (!invalidatedKeys.includes(key)) invalidatedKeys.push(key);
 			}
 		}
 

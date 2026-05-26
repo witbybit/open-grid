@@ -1,4 +1,4 @@
-import type { ColumnDef, GridCellPointer, GridCellRange, GridStyleSlots } from '../store.js';
+import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleSlots } from '../store.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
@@ -9,8 +9,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	defaultRowHeight?: number;
 	defaultColWidth?: number;
 	enableColumnReorder?: boolean;
-	focusedCell?: GridCellPointer | null;
-	selectedRange?: GridCellRange | null;
+	selection?: GridSelectionState;
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
 	activeEdit?: GridCellPointer | null;

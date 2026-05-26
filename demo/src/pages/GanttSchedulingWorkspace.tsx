@@ -32,7 +32,7 @@ function GanttSchedulingWorkspaceInner({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: GanttSchedulingWorkspaceProps) {
-	const selectedRange = useGridKeySelector('selectedRange', (state) => state.selectedRange);
+	const selectedRange = useGridKeySelector('selection', (state) => state.selection.range);
 
 	// Custom Developer Style Slots Configs (The Dynamic CSS Theme Overrides!)
 	React.useEffect(() => {

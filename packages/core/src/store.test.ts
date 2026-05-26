@@ -29,8 +29,8 @@ describe('GridStore generic row-store functionality', () => {
 
 		expect(rowModel.getRowCount()).toBe(2);
 		expect(state.columns).toHaveLength(2);
-		expect(state.focusedCell).toBeNull();
-		expect(state.selectedRange).toBeNull();
+		expect(state.selection.focus).toBeNull();
+		expect(state.selection.range).toBeNull();
 
 		controller.dispose();
 	});
@@ -58,10 +58,10 @@ describe('GridStore generic row-store functionality', () => {
 		const focusListener = vi.fn();
 
 		store.registerCellSubscription({ rowId: '1', colField: 'name', onStoreChange: cellValueListener });
-		store.subscribeToKey('focusedCell', focusListener);
+		store.subscribeToKey('selection', focusListener);
 
 		// Act 1: Set focused cell
-		store.setState({ focusedCell: { rowId: '1', colField: 'name' } });
+		store.selectCell({ rowId: '1', colField: 'name' });
 
 		expect(focusListener).toHaveBeenCalledTimes(1);
 		expect(cellValueListener).toHaveBeenCalledTimes(1);
@@ -76,7 +76,7 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
-	it('should precompute selection range bounds reactively inside selectedRangeBounds', () => {
+	it('should precompute selection range bounds reactively inside selection state', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'id', header: 'ID', width: 50 },
@@ -91,12 +91,12 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 
-		expect(store.getState().selectedRangeBounds).toBeNull();
+		expect(store.getState().selection.bounds).toBeNull();
 
 		// Act 1: Select range from row 1, col 'id' to row 2, col 'name'
-		store.setSelectedRange({ rowId: '1', colField: 'id' }, { rowId: '2', colField: 'name' });
+		store.selectRange({ rowId: '1', colField: 'id' }, { rowId: '2', colField: 'name' });
 
-		const bounds = store.getState().selectedRangeBounds;
+		const bounds = store.getState().selection.bounds;
 		expect(bounds).not.toBeNull();
 		expect(bounds?.minRow).toBe(0);
 		expect(bounds?.maxRow).toBe(1);
@@ -152,8 +152,7 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 
-		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
-		store.extendSelection({ rowId: '2', colField: 'price' }, 'keyboard');
+		store.selectRange({ rowId: '1', colField: 'name' }, { rowId: '2', colField: 'price' }, 'keyboard');
 
 		expect(store.getState().selection).toMatchObject({
 			focus: { rowId: '2', colField: 'price' },
@@ -507,13 +506,13 @@ describe('RowNode, Path Getter Pre-Compilation, Caching, and Batch Transactions'
 		store.subscribe(listener);
 
 		store.startTransaction();
-		store.setState({ focusedCell: { rowId: '1', colField: 'name' } });
+		store.selectCell({ rowId: '1', colField: 'name' });
 		store.setState({ defaultRowHeight: 50 });
 		store.setState({ defaultColWidth: 120 });
 
 		// Listeners must not be notified during a transaction
 		expect(listener).toHaveBeenCalledTimes(0);
-		expect(store.getState().focusedCell?.rowId).toBe('1');
+		expect(store.getState().selection.focus?.rowId).toBe('1');
 		expect(store.getState().defaultRowHeight).toBe(50);
 		expect(store.getState().defaultColWidth).toBe(120);
 
@@ -589,7 +588,7 @@ describe('Phase 2 Engine Scalability Subsystems', () => {
 		store.registerCellSubscription({ rowId: 'row-b', colField: 'name', onStoreChange: focusListener });
 
 		// Act 1: Focus row-b:name
-		store.setFocusedCell('row-b', 'name');
+		store.selectCell({ rowId: 'row-b', colField: 'name' });
 		expect(focusListener).toHaveBeenCalledTimes(1);
 		expect(valueListener).toHaveBeenCalledTimes(0);
 
@@ -749,7 +748,7 @@ describe('GridStore Scoped Batch Transactions and Properties', () => {
 		store.registerCellSubscription({ rowId: 'r0', colField: 'c0', onStoreChange: visibleListener });
 		store.registerCellSubscription({ rowId: 'r400', colField: 'c40', onStoreChange: offscreenListener });
 
-		store.setSelectedRange({ rowId: 'r0', colField: 'c0' }, { rowId: 'r499', colField: 'c49' });
+		store.selectRange({ rowId: 'r0', colField: 'c0' }, { rowId: 'r499', colField: 'c49' });
 
 		expect(visibleListener).toHaveBeenCalledTimes(1);
 		expect(offscreenListener).toHaveBeenCalledTimes(0);

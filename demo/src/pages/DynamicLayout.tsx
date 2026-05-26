@@ -25,7 +25,7 @@ function DynamicLayoutInner({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: DynamicLayoutProps) {
-		const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
+		const focusedCell = useGridKeySelector('selection', (state) => state.selection.focus);
 	const columns = useGridKeySelector('columns', (state) => state.columns);
 
 	const [scrollPosition, setScrollPosition] = useState({ scrollTop: 0, scrollLeft: 0 });

@@ -23,8 +23,8 @@ function SpreadsheetWorkspaceInner({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: SpreadsheetWorkspaceProps) {
-		const focusedCell = useGridKeySelector('focusedCell', (state) => state.focusedCell);
-	const selectedRange = useGridKeySelector('selectedRange', (state) => state.selectedRange);
+		const focusedCell = useGridKeySelector('selection', (state) => state.selection.focus);
+	const selectedRange = useGridKeySelector('selection', (state) => state.selection.range);
 
 	const [formulaText, setFormulaText] = useState('');
 	const isEditingRef = useRef(false);
@@ -278,7 +278,7 @@ function SpreadsheetWorkspaceInner({
 								onClick={() => {
 									const action = 'addPercent';
 									const state = api.getState();
-									const range = state.selectedRange;
+									const range = state.selection.range;
 									if (range) {
 										// Trigger api logic directly via props
 										{
@@ -324,7 +324,7 @@ function SpreadsheetWorkspaceInner({
 							<button
 								onClick={() => {
 									const state = api.getState();
-									const range = state.selectedRange;
+									const range = state.selection.range;
 									if (range) {
 										{
 											const startIdx = api.getRowIndexById(range.start.rowId) ?? -1;
