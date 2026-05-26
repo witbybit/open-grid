@@ -220,4 +220,51 @@ describe('RenderEngine', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('repaints dirty cells without scheduling a full viewport paint', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-1', name: 'Before' }],
+			columns: store.getState().columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine);
+		renderer.mount(container);
+		const fullPaintSpy = vi.spyOn(renderer, 'fullPaint');
+
+		store.setCellValue('row-1', 'name', 'After');
+		store.flushCellUpdatesSync();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(fullPaintSpy).not.toHaveBeenCalled();
+		expect(container.querySelector('.og-cell[data-col-field="name"]')?.textContent).toBe('After');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
 });

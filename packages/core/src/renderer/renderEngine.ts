@@ -36,9 +36,13 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	// Active tracking maps
 	private activeRows = new Map<number, PooledRow>(); // rowIndex -> PooledRow
 	private headerCells = new Map<number, HTMLDivElement>();
-	private unsubscribeStore: (() => void) | null = null;
-	private unsubscribeCellValueChanged: (() => void) | null = null;
+	private unsubscribers: Array<() => void> = [];
 	private pendingPaint = false;
+	private pendingFullPaint = false;
+	private pendingHeaderPaint = false;
+	private pendingOverlayPaint = false;
+	private dirtyCells = new Map<string, { rowId: string; colField: string }>();
+	private dirtyRows = new Set<string>();
 	private hoveredRowIndex: number | null = null;
 
 	// Drag-to-fill tracking variables
@@ -152,15 +156,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		// Set viewport dimensions in model
 		this.engine.viewport.setViewportSize(rect.width || 800, rect.height || 500);
 
-		// Subscribe to StateManager to trigger repaints when geometry or selections change
-		this.unsubscribeStore = this.engine.stateManager.subscribe(() => {
-			this.schedulePaint();
-		});
-
-		// Subscribe to cell value change events to trigger repaints immediately
-		this.unsubscribeCellValueChanged = this.engine.eventBus.addEventListener('cellValueChanged', () => {
-			this.schedulePaint();
-		});
+		this.bindInvalidationSources();
 
 		// Run first layout calculation and repaint
 		this.fullPaint();
@@ -170,15 +166,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 	 * Unmount and clean up all DOM resources and subscriptions.
 	 */
 	public unmount(): void {
-		if (this.unsubscribeStore) {
-			this.unsubscribeStore();
-			this.unsubscribeStore = null;
-		}
-
-		if (this.unsubscribeCellValueChanged) {
-			this.unsubscribeCellValueChanged();
-			this.unsubscribeCellValueChanged = null;
-		}
+		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
+		this.unsubscribers = [];
 
 		this.scrollEngine.unbind();
 		if (this.scrollViewport) {
@@ -229,24 +218,102 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		this.engine.eventBus.dispatchEvent('afterRender', null);
 	};
 
+	private bindInvalidationSources(): void {
+		const scheduleFull = () => this.scheduleFullPaint();
+		const scheduleHeaders = () => this.scheduleHeaderPaint();
+		const scheduleOverlay = () => this.scheduleOverlayPaint();
+
+		for (const key of ['columns', 'columnWidths', 'rowHeights', 'defaultRowHeight', 'defaultColWidth', 'dataVersion', 'loading', 'visibleRowRange', 'visibleColRange']) {
+			this.unsubscribers.push(this.engine.stateManager.subscribeToKey(key, scheduleFull));
+		}
+
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('enableColumnReorder', scheduleHeaders));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('selection', scheduleOverlay));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', scheduleOverlay));
+		this.unsubscribers.push(
+			this.engine.eventBus.addEventListener<{ rowId: string; colField: string }>('cellInvalidated', (event) => {
+				this.queueCellPaint(event.payload.rowId, event.payload.colField);
+			})
+		);
+	}
+
 	/**
 	 * Schedules a paint task in the next animation frame, preventing synchronous re-entrancy.
 	 */
 	public schedulePaint(): void {
+		this.scheduleFullPaint();
+	}
+
+	private scheduleFullPaint(): void {
+		this.pendingFullPaint = true;
+		this.scheduleRenderFlush();
+	}
+
+	private scheduleHeaderPaint(): void {
+		this.pendingHeaderPaint = true;
+		this.scheduleRenderFlush();
+	}
+
+	private scheduleOverlayPaint(): void {
+		this.pendingOverlayPaint = true;
+		this.scheduleRenderFlush();
+	}
+
+	private queueCellPaint(rowId: string, colField: string): void {
+		const key = createCellKey(rowId, colField);
+		this.dirtyCells.set(key, { rowId, colField });
+		this.dirtyRows.add(rowId);
+		this.scheduleRenderFlush();
+	}
+
+	private scheduleRenderFlush(): void {
 		if (this.pendingPaint) return;
 		this.pendingPaint = true;
 
 		if (typeof requestAnimationFrame !== 'undefined') {
 			requestAnimationFrame(() => {
 				this.pendingPaint = false;
-				this.fullPaint();
+				this.flushPaint();
 			});
 		} else {
 			queueMicrotask(() => {
 				this.pendingPaint = false;
-				this.fullPaint();
+				this.flushPaint();
 			});
 		}
+	}
+
+	private flushPaint(): void {
+		if (this.pendingFullPaint) {
+			this.pendingFullPaint = false;
+			this.pendingHeaderPaint = false;
+			this.pendingOverlayPaint = false;
+			this.dirtyCells.clear();
+			this.dirtyRows.clear();
+			this.fullPaint();
+			return;
+		}
+
+		this.engine.eventBus.dispatchEvent('beforeRender', null);
+		this.syncViewportScrollFromDom();
+
+		if (this.dirtyRows.size > 0 || this.dirtyCells.size > 0) {
+			this.repaintDirtyRowsAndCells();
+		}
+
+		if (this.pendingHeaderPaint) {
+			this.paintHeaders();
+		}
+
+		if (this.pendingOverlayPaint || this.dirtyCells.size > 0 || this.dirtyRows.size > 0) {
+			this.paintOverlay();
+		}
+
+		this.pendingHeaderPaint = false;
+		this.pendingOverlayPaint = false;
+		this.dirtyCells.clear();
+		this.dirtyRows.clear();
+		this.engine.eventBus.dispatchEvent('afterRender', null);
 	}
 
 	/**
@@ -424,52 +491,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				pooledRow.rightElement.dataset.rowId = node.id;
 			}
 
-			// Handle row class names including pinning and selection states
-			const isFocusedRow = state.selection.focus?.rowId === node.id;
-			const isSelectedRow =
-				!!state.selection.bounds &&
-				r >= state.selection.bounds.minRow &&
-				r <= state.selection.bounds.maxRow;
-			const isLoadingRow = this.engine.data.isRowLoading(node.id);
-			let rowClassName = 'og-row';
-			if (r < pinTopRows) {
-				rowClassName += ' og-row-pinned-top';
-			} else if (r >= rowCount - pinBottomRows) {
-				rowClassName += ' og-row-pinned-bottom';
-			}
-			if (this.hoveredRowIndex === r) {
-				rowClassName += ' og-row-hovered';
-			}
-			if (isSelectedRow || isFocusedRow || node.selected) {
-				rowClassName += ' og-row-selected';
-			}
-			if (isFocusedRow) {
-				rowClassName += ' og-row-focused';
-			}
-			if (isLoadingRow) {
-				rowClassName += ' og-row-loading';
-			}
-			if (state.styleSlots?.rowClass && node.data) {
-				try {
-					const customRowClass = state.styleSlots.rowClass(node.data, {
-						row: node.data,
-						rowId: node.id,
-						rowIndex: r,
-						isFocused: isFocusedRow,
-						isSelected: isSelectedRow || isFocusedRow || node.selected,
-						isLoading: isLoadingRow,
-						selection: state.selection,
-					});
-					if (customRowClass) {
-						rowClassName += ' ' + customRowClass;
-					}
-				} catch (e) {
-					console.error('RenderEngine: Error in rowClass styleSlot', e);
-				}
-			}
-			pooledRow.element.className = rowClassName;
-			if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
-			if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
+			this.updateRowClassName(pooledRow, node, r, state);
 
 			// Recycle individual cells inside this row
 			this.recycleRowCells(pooledRow, node, r, newColRange.startIdx, newColRange.endIdx, columns);
@@ -495,6 +517,88 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		}
 	}
 
+	private repaintDirtyRowsAndCells(): void {
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return;
+
+		const state = this.engine.stateManager.getState();
+		const columns = state.columns;
+
+		for (const rowId of this.dirtyRows) {
+			const rowIndex = rowModel.getRowIndexById(rowId);
+			const pooledRow = rowIndex >= 0 ? this.activeRows.get(rowIndex) : undefined;
+			const node = rowIndex >= 0 ? rowModel.getRowNode(rowIndex) : null;
+			if (pooledRow && node) {
+				this.updateRowClassName(pooledRow, node, rowIndex, state);
+			}
+		}
+
+		for (const { rowId, colField } of this.dirtyCells.values()) {
+			const rowIndex = rowModel.getRowIndexById(rowId);
+			const colIndex = this.engine.columns.getColumnIndex(colField);
+			if (rowIndex < 0 || colIndex < 0) continue;
+
+			const pooledRow = this.activeRows.get(rowIndex);
+			const node = rowModel.getRowNode(rowIndex);
+			if (!pooledRow || !node || !pooledRow.cells.has(colIndex)) continue;
+
+			this.recycleRowCells(pooledRow, node, rowIndex, colIndex, colIndex, columns, false);
+		}
+	}
+
+	private updateRowClassName(pooledRow: PooledRow, node: RowNode, rowIndex: number, state = this.engine.stateManager.getState()): void {
+		const rowModel = this.engine.getRowModel();
+		const rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const pinTopRows = this.engine.viewport.pinTopRows;
+		const pinBottomRows = this.engine.viewport.pinBottomRows;
+
+		const isFocusedRow = state.selection.focus?.rowId === node.id;
+		const isSelectedRow =
+			!!state.selection.bounds &&
+			rowIndex >= state.selection.bounds.minRow &&
+			rowIndex <= state.selection.bounds.maxRow;
+		const isLoadingRow = this.engine.data.isRowLoading(node.id);
+		let rowClassName = 'og-row';
+		if (rowIndex < pinTopRows) {
+			rowClassName += ' og-row-pinned-top';
+		} else if (rowIndex >= rowCount - pinBottomRows) {
+			rowClassName += ' og-row-pinned-bottom';
+		}
+		if (this.hoveredRowIndex === rowIndex) {
+			rowClassName += ' og-row-hovered';
+		}
+		if (isSelectedRow || isFocusedRow || node.selected) {
+			rowClassName += ' og-row-selected';
+		}
+		if (isFocusedRow) {
+			rowClassName += ' og-row-focused';
+		}
+		if (isLoadingRow) {
+			rowClassName += ' og-row-loading';
+		}
+		if (state.styleSlots?.rowClass && node.data) {
+			try {
+				const customRowClass = state.styleSlots.rowClass(node.data, {
+					row: node.data,
+					rowId: node.id,
+					rowIndex,
+					isFocused: isFocusedRow,
+					isSelected: isSelectedRow || isFocusedRow || node.selected,
+					isLoading: isLoadingRow,
+					selection: state.selection,
+				});
+				if (customRowClass) {
+					rowClassName += ' ' + customRowClass;
+				}
+			} catch (e) {
+				console.error('RenderEngine: Error in rowClass styleSlot', e);
+			}
+		}
+		pooledRow.element.className = rowClassName;
+		if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
+		if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
+	}
+
 	/**
 	 * Recycles cells horizontally inside an active row.
 	 */
@@ -504,28 +608,29 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 		rowIndex: number,
 		startCol: number,
 		endCol: number,
-		columns: ColumnDef<any>[]
+		columns: ColumnDef<any>[],
+		releaseOutOfRange = true
 	): void {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const colCount = columns.length;
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportWidth = this.engine.viewport.viewportWidth;
 
 		// 1. Release cells out-of-column bounds
-		for (const [c, cell] of pooledRow.cells.entries()) {
-			if (cell) {
-				if (c >= colCount) {
-					this.releaseCell(pooledRow, c);
-					continue;
-				}
+		if (releaseOutOfRange) {
+			for (const [c, cell] of pooledRow.cells.entries()) {
+				if (cell) {
+					if (c >= colCount) {
+						this.releaseCell(pooledRow, c);
+						continue;
+					}
 
-				const isPinnedLeft = c < pinLeftColumns;
-				const isPinnedRight = c >= colCount - pinRightColumns;
-				const isScrollable = c >= startCol && c <= endCol;
+					const isPinnedLeft = c < pinLeftColumns;
+					const isPinnedRight = c >= colCount - pinRightColumns;
+					const isScrollable = c >= startCol && c <= endCol;
 
-				if (!isPinnedLeft && !isPinnedRight && !isScrollable) {
-					this.releaseCell(pooledRow, c);
+					if (!isPinnedLeft && !isPinnedRight && !isScrollable) {
+						this.releaseCell(pooledRow, c);
+					}
 				}
 			}
 		}

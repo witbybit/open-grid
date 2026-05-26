@@ -136,6 +136,44 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('should cache declared valueGetter results and invalidate only dependencies', () => {
+		let getterCalls = 0;
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'price', header: 'Price', width: 100 },
+				{
+					field: 'price_display',
+					header: 'Price Tag',
+					width: 100,
+					valueGetterDependencies: ['price'],
+					valueGetter: ({ row }) => {
+						getterCalls++;
+						return `$${row.price}.00`;
+					},
+				},
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Keyboard', price: 45 }],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getCellValue('1', 'price_display')).toBe('$45.00');
+		expect(store.getCellValue('1', 'price_display')).toBe('$45.00');
+		expect(getterCalls).toBe(1);
+
+		store.setCellValue('1', 'name', 'Mouse');
+		expect(store.getCellValue('1', 'price_display')).toBe('$45.00');
+		expect(getterCalls).toBe(1);
+
+		store.setCellValue('1', 'price', 90);
+		expect(store.getCellValue('1', 'price_display')).toBe('$90.00');
+		expect(getterCalls).toBe(2);
+
+		controller.dispose();
+	});
+
 	it('should no-op repeated edits to valueGetter columns using the stored source value', () => {
 		type StatusRow = TestRow & { status: string };
 		const store = new GridStore<StatusRow>({

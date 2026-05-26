@@ -349,6 +349,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public notifyCellChange(rowId: string, colField: string): void {
+		this.data.clearValueGetterCache(rowId, colField);
 		const cellKey = `${rowId}:${colField}`;
 		const cellSubs = this.cellSubscriptions.get(cellKey);
 		if (cellSubs) {
@@ -360,6 +361,7 @@ export class GridEngine<TRowData = unknown> {
 				}
 			});
 		}
+		this.eventBus.dispatchEvent('cellInvalidated', { rowId, colField });
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
@@ -496,6 +498,10 @@ export class GridEngine<TRowData = unknown> {
 		// Synchronize sub-models
 		if (updatedSet.has('columns') || updatedSet.has('columnWidths') || updatedSet.has('defaultColWidth')) {
 			this.columns.updateColumns(currState.columns, currState.columnWidths, currState.defaultColWidth);
+		}
+
+		if (updatedSet.has('dataVersion')) {
+			this.data.clearValueGetterCache();
 		}
 
 		if (this.rowModel && (updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('dataVersion') || updatedSet.has('loading'))) {

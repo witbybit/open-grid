@@ -6,6 +6,7 @@ export class DataModel<TRowData = unknown> {
 	private autoRowIdMap = new WeakMap<any, string>();
 	private autoRowIdCounter = 0;
 	private compiledGetters = new Map<string, (data: TRowData) => any>();
+	private valueGetterCache = new Map<string, Map<string, unknown>>();
 
 	public init(engine: GridEngine<TRowData>): void {
 		this.engine = engine;
@@ -37,12 +38,52 @@ export class DataModel<TRowData = unknown> {
 
 	public updateCompiledGetters(columns: ColumnDef<TRowData>[]): void {
 		this.compiledGetters.clear();
+		this.clearValueGetterCache();
 		for (let i = 0; i < columns.length; i++) {
 			const col = columns[i];
 			if (col.field) {
 				this.compiledGetters.set(col.field, compilePathGetter(col.field));
 			}
 		}
+	}
+
+	public clearValueGetterCache(rowId?: string, colField?: string): void {
+		if (!rowId) {
+			this.valueGetterCache.clear();
+			return;
+		}
+
+		const rowCache = this.valueGetterCache.get(rowId);
+		if (!rowCache) return;
+
+		if (colField) {
+			rowCache.delete(colField);
+			if (rowCache.size === 0) {
+				this.valueGetterCache.delete(rowId);
+			}
+			return;
+		}
+
+		this.valueGetterCache.delete(rowId);
+	}
+
+	private getValueGetterValue(rowId: string, colField: string, col: ColumnDef<TRowData>, node: RowNode<TRowData>): unknown {
+		if (!col.valueGetterDependencies) {
+			return col.valueGetter!({ node, row: node.data, colField });
+		}
+
+		let rowCache = this.valueGetterCache.get(rowId);
+		if (!rowCache) {
+			rowCache = new Map<string, unknown>();
+			this.valueGetterCache.set(rowId, rowCache);
+		}
+		if (rowCache.has(colField)) {
+			return rowCache.get(colField);
+		}
+
+		const value = col.valueGetter!({ node, row: node.data, colField });
+		rowCache.set(colField, value);
+		return value;
 	}
 
 	public getRawCellValue = (rowId: string, colField: string): unknown => {
@@ -63,14 +104,14 @@ export class DataModel<TRowData = unknown> {
 			if (!row) return '';
 			if (col.valueGetter) {
 				const dummyNode = new RowNode<TRowData>(rowId, row);
-				return col.valueGetter({ node: dummyNode, row, colField });
+				return this.getValueGetterValue(rowId, colField, col, dummyNode);
 			}
 			const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
 			return getter(row);
 		}
 
 		if (col.valueGetter) {
-			return col.valueGetter({ node, row: node.data, colField });
+			return this.getValueGetterValue(rowId, colField, col, node);
 		}
 		const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
 		return node.getCellValue(colField, getter);
@@ -155,6 +196,13 @@ export class DataModel<TRowData = unknown> {
 				const key = `${rowId}:${dependentField}`;
 				if (!invalidatedKeys.includes(key)) invalidatedKeys.push(key);
 			}
+		}
+
+		for (const key of invalidatedKeys) {
+			const colonIdx = key.indexOf(':');
+			const rId = colonIdx === -1 ? key : key.substring(0, colonIdx);
+			const cField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
+			this.clearValueGetterCache(rId, cField);
 		}
 
 		if (this.engine.batchedUpdates) {

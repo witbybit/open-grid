@@ -207,10 +207,21 @@ function OpenGridInner<TRowData = unknown>({
 	navigationOptions = {},
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const store = useGridStore<TRowData>();
-	const [portals, setPortals] = useState<Map<string, PortalData<TRowData>>>(new Map());
+	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
+	const portalFlushScheduledRef = useRef(false);
+	const [, setPortalVersion] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const renderEngineRef = useRef<RenderEngine | null>(null);
 	const isGridActiveRef = useRef(false);
+
+	const schedulePortalFlush = useCallback(() => {
+		if (portalFlushScheduledRef.current) return;
+		portalFlushScheduledRef.current = true;
+		queueMicrotask(() => {
+			portalFlushScheduledRef.current = false;
+			setPortalVersion((version) => version + 1);
+		});
+	}, []);
 
 	const mountPortal = useCallback(
 		(
@@ -222,44 +233,38 @@ function OpenGridInner<TRowData = unknown>({
 			isEditing: boolean,
 			isLoading: boolean
 		) => {
-			setPortals((prev) => {
-				const existing = prev.get(cellKey);
-				if (
-					existing &&
-					existing.container === container &&
-					existing.value === value &&
-					existing.node === node &&
-					existing.col === col &&
-					existing.isEditing === isEditing &&
-					existing.isLoading === isLoading
-				) {
-					return prev;
-				}
-				const next = new Map(prev);
-				next.set(cellKey, {
-					cellKey,
-					container,
-					value,
-					node: node as RowNode<TRowData>,
-					col: col as ColumnDef<TRowData>,
-					isEditing,
-					isLoading,
-				});
-				return next;
+			const existing = portalsRef.current.get(cellKey);
+			if (
+				existing &&
+				existing.container === container &&
+				existing.value === value &&
+				existing.node === node &&
+				existing.col === col &&
+				existing.isEditing === isEditing &&
+				existing.isLoading === isLoading
+			) {
+				return;
+			}
+			portalsRef.current.set(cellKey, {
+				cellKey,
+				container,
+				value,
+				node: node as RowNode<TRowData>,
+				col: col as ColumnDef<TRowData>,
+				isEditing,
+				isLoading,
 			});
+			schedulePortalFlush();
 		},
-		[]
+		[schedulePortalFlush]
 	);
 
 	const unmountPortal = useCallback((cellKey: string, container?: HTMLElement) => {
-		setPortals((prev) => {
-			const existing = prev.get(cellKey);
-			if (!existing || (container && existing.container !== container)) return prev;
-			const next = new Map(prev);
-			next.delete(cellKey);
-			return next;
-		});
-	}, []);
+		const existing = portalsRef.current.get(cellKey);
+		if (!existing || (container && existing.container !== container)) return;
+		portalsRef.current.delete(cellKey);
+		schedulePortalFlush();
+	}, [schedulePortalFlush]);
 
 	// Sync pin configuration with ViewportController
 	useEffect(() => {
@@ -305,6 +310,8 @@ function OpenGridInner<TRowData = unknown>({
 			observer.disconnect();
 			renderEngine.unmount();
 			renderEngineRef.current = null;
+			portalsRef.current.clear();
+			setPortalVersion((version) => version + 1);
 		};
 	}, [store, mountPortal, unmountPortal]);
 
@@ -506,7 +513,7 @@ function OpenGridInner<TRowData = unknown>({
 
 	return (
 		<div ref={containerRef} tabIndex={-1} style={{ width: '100%', height: '100%', position: 'relative' }}>
-			<PortalManager portals={portals} api={api} />
+			<PortalManager portals={portalsRef.current} api={api} />
 		</div>
 	);
 }
