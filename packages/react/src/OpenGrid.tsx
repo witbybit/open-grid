@@ -5,6 +5,8 @@ import {
 	ColumnDef,
 	GridState,
 	RowNode,
+	getEngineFromApi,
+	getInternalApiFromApi,
 } from '@open-grid/core';
 import {
 	GridContextMenuOptions,
@@ -12,14 +14,11 @@ import {
 	GridNavigationController,
 	GridNavigationOptions,
 	RenderEngine,
-	GridStore,
 } from '@open-grid/core/internal';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { PortalData, PortalManager } from './GridPortal.js';
-import { getStoreFromApi } from './gridApiFacade.js';
 
 const GridApiContext = createContext<GridApi<unknown> | null>(null);
-const GridStoreContext = createContext<GridStore<unknown> | null>(null);
 
 export interface GridProviderProps<TRowData = unknown> {
 	api: GridApi<TRowData>;
@@ -27,22 +26,7 @@ export interface GridProviderProps<TRowData = unknown> {
 }
 
 export function GridProvider<TRowData = unknown>({ api, children }: GridProviderProps<TRowData>) {
-	const store = getStoreFromApi(api);
-	return (
-		<GridStoreContext.Provider value={store as GridStore<unknown>}>
-			<GridApiContext.Provider value={api as unknown as GridApi<unknown>}>{children}</GridApiContext.Provider>
-		</GridStoreContext.Provider>
-	);
-}
-
-function useGridStore<TRowData = unknown>(): GridStore<TRowData> {
-	const context = useContext(GridStoreContext);
-
-	if (!context) {
-		throw new Error('useGridStore must be used within a GridProvider');
-	}
-
-	return context as unknown as GridStore<TRowData>;
+	return <GridApiContext.Provider value={api as unknown as GridApi<unknown>}>{children}</GridApiContext.Provider>;
 }
 
 export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
@@ -130,7 +114,8 @@ export function useGridKeySelectorWithEquality<T, TRowData = unknown>(
  * Controller integration hook mapping standard interaction event handlers.
  */
 export function useGridNavigationController<TRowData = unknown>(options: GridNavigationOptions = {}, enabled = true) {
-	const store = useGridStore<TRowData>();
+	const api = useGridApi<TRowData>();
+	const internalApi = getInternalApiFromApi(api);
 	const optionsRef = useRef(options);
 	optionsRef.current = options;
 	const [controller, setController] = useState<GridNavigationController<TRowData> | null>(null);
@@ -149,15 +134,15 @@ export function useGridNavigationController<TRowData = unknown>(options: GridNav
 				return optionsRef.current.arrowKeyNavigationEdit;
 			},
 		});
-		store.registerPlugin(nav);
+		internalApi.registerPlugin(nav);
 		setController(nav);
 
 		return () => {
 			nav.dispose();
-			store.unregisterPlugin(nav.name);
+			internalApi.unregisterPlugin(nav.name);
 			setController(null);
 		};
-	}, [store, enabled]);
+	}, [internalApi, enabled]);
 
 	return controller;
 }
@@ -208,7 +193,8 @@ function OpenGridInner<TRowData = unknown>({
 	onCellClick,
 	navigationOptions = {},
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
-	const store = useGridStore<TRowData>();
+	const engine = getEngineFromApi(api);
+	const internalApi = getInternalApiFromApi(api);
 	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
 	const portalFlushScheduledRef = useRef(false);
 	const [, setPortalVersion] = useState(0);
@@ -261,34 +247,37 @@ function OpenGridInner<TRowData = unknown>({
 		[schedulePortalFlush]
 	);
 
-	const unmountPortal = useCallback((cellKey: string, container?: HTMLElement) => {
-		const existing = portalsRef.current.get(cellKey);
-		if (!existing || (container && existing.container !== container)) return;
-		portalsRef.current.delete(cellKey);
-		schedulePortalFlush();
-	}, [schedulePortalFlush]);
+	const unmountPortal = useCallback(
+		(cellKey: string, container?: HTMLElement) => {
+			const existing = portalsRef.current.get(cellKey);
+			if (!existing || (container && existing.container !== container)) return;
+			portalsRef.current.delete(cellKey);
+			schedulePortalFlush();
+		},
+		[schedulePortalFlush]
+	);
 
 	useEffect(() => {
-		store.setViewportPins({
+		internalApi.setViewportPins({
 			left: pinLeftColumns,
 			right: pinRightColumns,
 			top: pinTopRows,
 			bottom: pinBottomRows,
 		});
-	}, [store, pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
+	}, [internalApi, pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
 
 	useEffect(() => {
 		if (enableColumnReorder !== undefined) {
-			store.setColumnReorderEnabled(enableColumnReorder);
+			api.setColumnReorderEnabled(enableColumnReorder);
 		}
-	}, [store, enableColumnReorder]);
+	}, [api, enableColumnReorder]);
 
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
 
 		// Create and mount RenderEngine
-		const renderEngine = new RenderEngine(store.engine);
+		const renderEngine = new RenderEngine(engine);
 		renderEngineRef.current = renderEngine;
 
 		// Bind portal callbacks
@@ -302,8 +291,8 @@ function OpenGridInner<TRowData = unknown>({
 		const observer = new ResizeObserver((entries) => {
 			if (!entries || entries.length === 0) return;
 			const { width, height } = entries[0].contentRect;
-			if (store.setViewportSize(width, height)) {
-				store.updateVisibleRanges();
+			if (internalApi.setViewportSize(width, height)) {
+				internalApi.updateVisibleRanges();
 				renderEngine.schedulePaint();
 			}
 		});
@@ -316,7 +305,7 @@ function OpenGridInner<TRowData = unknown>({
 			portalsRef.current.clear();
 			setPortalVersion((version) => version + 1);
 		};
-	}, [store, mountPortal, unmountPortal]);
+	}, [engine, internalApi, mountPortal, unmountPortal]);
 
 	// Context Menu plugin controller
 	const [contextMenu, setContextMenu] = useState<GridContextMenuPlugin<TRowData> | null>(null);
@@ -329,14 +318,14 @@ function OpenGridInner<TRowData = unknown>({
 			return;
 		}
 		const plugin = new GridContextMenuPlugin<TRowData>(contextMenuOptions);
-		store.registerPlugin(plugin);
+		internalApi.registerPlugin(plugin);
 		setContextMenu(plugin);
 
 		return () => {
-			store.unregisterPlugin(plugin.name);
+			internalApi.unregisterPlugin(plugin.name);
 			setContextMenu(null);
 		};
-	}, [store, enableContextMenu]);
+	}, [internalApi, enableContextMenu]);
 
 	useEffect(() => {
 		if (contextMenu && contextMenuOptionsRef.current) {
@@ -392,7 +381,7 @@ function OpenGridInner<TRowData = unknown>({
 
 	const getCellClickParams = useCallback(
 		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {
-			const access = store.getCellAccess(pointer.rowId, pointer.colField);
+			const access = api.getCellAccess(pointer.rowId, pointer.colField);
 			if (!access) return null;
 			return {
 				rowId: access.rowId,
@@ -407,7 +396,7 @@ function OpenGridInner<TRowData = unknown>({
 				event,
 			};
 		},
-		[api, store]
+		[api]
 	);
 
 	const handleMouseDown = useCallback(
@@ -418,14 +407,14 @@ function OpenGridInner<TRowData = unknown>({
 			const { cellEl, pointer } = target;
 
 			isGridActiveRef.current = true;
-			const state = store.getState();
+			const state = api.getState();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
 			cellEl.focus();
 			navigation.handleMouseDown(pointer.rowId, pointer.colField, e);
 		},
-		[store, navigation, getCellPointerFromEvent]
+		[api, navigation, getCellPointerFromEvent]
 	);
 
 	const handleMouseOver = useCallback(
@@ -451,18 +440,18 @@ function OpenGridInner<TRowData = unknown>({
 			const clickParams = getCellClickParams(pointer, e);
 			if (clickParams) {
 				onCellClick?.(clickParams);
-				store.dispatchEvent('cellClicked', clickParams);
+				api.dispatchEvent('cellClicked', clickParams);
 			}
 
 			if (!navigation) return;
 
-			const state = store.getState();
+			const state = api.getState();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
 			navigation.handleClick(pointer.rowId, pointer.colField, e);
 		},
-		[store, navigation, getCellPointerFromEvent, getCellClickParams, onCellClick]
+		[api, navigation, getCellPointerFromEvent, getCellClickParams, onCellClick]
 	);
 
 	const handleDoubleClick = useCallback(
@@ -472,13 +461,13 @@ function OpenGridInner<TRowData = unknown>({
 			if (!target) return;
 			const { pointer } = target;
 
-			const state = store.getState();
+			const state = api.getState();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
 			navigation.setCellEditing(pointer.rowId, pointer.colField, true);
 		},
-		[store, navigation, getCellPointerFromEvent]
+		[api, navigation, getCellPointerFromEvent]
 	);
 
 	const handleContextMenu = useCallback(

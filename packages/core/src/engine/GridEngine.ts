@@ -1,4 +1,15 @@
-import type { GridState, GridStateUpdater, Listener, RowModel, CellSubscription, GridEventListener, ColumnDef, GridCellRange, GridCellPointer, GridSelectionSource } from '../store.js';
+import type {
+	GridState,
+	GridStateUpdater,
+	Listener,
+	RowModel,
+	CellSubscription,
+	GridEventListener,
+	ColumnDef,
+	GridCellRange,
+	GridCellPointer,
+	GridSelectionSource,
+} from '../store.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
 import { EventBus } from '../events/EventBus.js';
@@ -142,9 +153,7 @@ export class GridEngine<TRowData = unknown> {
 			return true;
 		});
 		const columnByField = new Map(state.columns.map((column) => [column.field, column]));
-		const nextColumns = orderedFields
-			.map((field) => columnByField.get(field))
-			.filter((column): column is ColumnDef<TRowData> => !!column);
+		const nextColumns = orderedFields.map((field) => columnByField.get(field)).filter((column): column is ColumnDef<TRowData> => !!column);
 
 		for (const column of state.columns) {
 			if (!orderedFieldSet.has(column.field)) {
@@ -426,6 +435,52 @@ export class GridEngine<TRowData = unknown> {
 		});
 	};
 
+	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {
+		const state = this.stateManager.getState();
+
+		const prevColumns = state.columns;
+		const prevWidths = state.columnWidths;
+
+		const nextWidths = columns.reduce<Record<string, number>>((acc, column) => {
+			const existingWidth = prevWidths[column.field];
+
+			if (existingWidth !== undefined) {
+				acc[column.field] = existingWidth;
+			} else if (column.width !== undefined) {
+				acc[column.field] = column.width;
+			}
+
+			return acc;
+		}, {});
+
+		this.stateManager.setState({
+			columns,
+			columnWidths: nextWidths,
+		});
+
+		this.eventBus.dispatchEvent('columnsChanged', {
+			columns,
+			columnFields: columns.map((column) => column.field),
+		});
+
+		if (undoable) {
+			this.commandHistory.add({
+				undo: () => {
+					this.stateManager.setState({
+						columns: prevColumns,
+						columnWidths: prevWidths,
+					});
+				},
+				redo: () => {
+					this.stateManager.setState({
+						columns,
+						columnWidths: nextWidths,
+					});
+				},
+			});
+		}
+	}
+
 	private applyColumnWidth = (colField: string, width: number): void => {
 		this.stateManager.setState((state) => ({
 			columnWidths: {
@@ -489,7 +544,10 @@ export class GridEngine<TRowData = unknown> {
 			this.data.clearValueGetterCache();
 		}
 
-		if (this.rowModel && (updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('dataVersion') || updatedSet.has('loading'))) {
+		if (
+			this.rowModel &&
+			(updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('dataVersion') || updatedSet.has('loading'))
+		) {
 			this.geometry.updateRows(
 				this.getRowHeightsList(this.rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight
@@ -502,9 +560,7 @@ export class GridEngine<TRowData = unknown> {
 				(id) => (this.rowModel ? this.rowModel.getRowIndexById(id) : -1),
 				(field) => this.columns.getColumnIndex(field)
 			);
-			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds)
-				? currState.selection.bounds
-				: rangeBounds;
+			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds) ? currState.selection.bounds : rangeBounds;
 			const selection = this.selection.setSelection({
 				...currState.selection,
 				bounds: nextBounds,
@@ -585,13 +641,18 @@ export class GridEngine<TRowData = unknown> {
 			const rowModel = this.rowModel;
 			if (rowModel) {
 				const viewport = this.getSelectionNotificationViewport();
-				this.selection.forEachDirtyCoordinateInViewport(prevState.selection.bounds, currState.selection.bounds, viewport, (rowIdx, colIdx) => {
-					const row = rowModel.getRow(rowIdx);
-					const col = currState.columns[colIdx];
-					if (row && col) {
-						notifyCellOnce(this.data.getRowId(row), col.field);
+				this.selection.forEachDirtyCoordinateInViewport(
+					prevState.selection.bounds,
+					currState.selection.bounds,
+					viewport,
+					(rowIdx, colIdx) => {
+						const row = rowModel.getRow(rowIdx);
+						const col = currState.columns[colIdx];
+						if (row && col) {
+							notifyCellOnce(this.data.getRowId(row), col.field);
+						}
 					}
-				});
+				);
 			}
 		}
 

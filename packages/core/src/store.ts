@@ -1,4 +1,5 @@
 import type { FilterModel, SortModel } from './rowModel.js';
+import type { IGridDatasource } from './serverRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
 
@@ -223,6 +224,7 @@ export interface RowModel<TRowData = unknown> {
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	refresh?(): void;
 	purgeCache?(): void;
+	setDatasource?(datasource: IGridDatasource, blockSize?: number): void;
 	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
 	loadVisibleBlocks?(startRow: number, endRow: number): void;
 }
@@ -334,12 +336,14 @@ export interface GridApi<TRowData = unknown> {
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
 	refreshRows(): void;
 	purgeCache(): void;
+	setServerDatasource(datasource: IGridDatasource, blockSize?: number): void;
 	getCellValue(rowId: string, colField: string): unknown;
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 	getCellState(rowId: string, colField: string): CellState;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
 	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
+	setColumns(columns: ColumnDef<TRowData>[]): void;
 	setColumnWidth(colField: string, width: number): void;
 	moveColumn(colField: string, toIndex: number): void;
 	setColumnOrder(colFields: string[]): void;
@@ -372,6 +376,9 @@ export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
 	registerPlugin(plugin: GridPlugin<TRowData>): void;
 	getPlugin<T = unknown>(name: string): T | null;
 	unregisterPlugin(name: string): void;
+	setViewportPins(pins: { left?: number; right?: number; top?: number; bottom?: number }): void;
+	setViewportSize(width: number, height: number): boolean;
+	updateVisibleRanges(): boolean;
 	triggerCellNotifications(rowId: string): void;
 	batch(callback: () => void): void;
 	batchedUpdates: boolean;
@@ -563,6 +570,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.getRowModel()?.purgeCache?.();
 	};
 
+	public setServerDatasource = (datasource: IGridDatasource, blockSize?: number): void => {
+		this.getRowModel()?.setDatasource?.(datasource, blockSize);
+	};
+
 	public setViewportPins = (pins: { left?: number; right?: number; top?: number; bottom?: number }): void => {
 		if (pins.left !== undefined) this.viewportController.pinLeftColumns = pins.left;
 		if (pins.right !== undefined) this.viewportController.pinRightColumns = pins.right;
@@ -606,6 +617,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		for (const col of this.state.columns) {
 			this.engine.notifyCellChange(rowId, col.field);
 		}
+	};
+
+	public setColumns = (columns: ColumnDef<TRowData>[]): void => {
+		this.engine.setColumns(columns);
 	};
 
 	public getColumnIndex = (colField: string): number => {

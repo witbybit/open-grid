@@ -2,6 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
+import { createApiFacade } from '@open-grid/core';
 import { GridStore, ClientRowModelController } from '@open-grid/core/internal';
 import {
 	GridProvider,
@@ -14,7 +15,6 @@ import {
 	useGridSelector,
 	useClientGrid,
 } from './index.js';
-import { createGridApiFacade } from './gridApiFacade.js';
 
 // Mock ResizeObserver for jsdom environment
 class MockResizeObserver {
@@ -32,7 +32,7 @@ interface TestRow {
 function createTestGrid<TRowData>(store: GridStore<TRowData>) {
 	return {
 		store,
-		api: createGridApiFacade(store),
+		api: createApiFacade(store, () => store.destroy()),
 	};
 }
 

@@ -232,4 +232,40 @@ describe('ServerRowModelController', () => {
 		expect(controller.getRowCount()).toBe(0);
 		expect(controller.getRowIndexById('1')).toBe(-1);
 	});
+
+	it('should switch datasource and block size when server options change', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const firstDatasource: IGridDatasource = {
+			getRows: vi.fn().mockResolvedValue({
+				rows: [{ id: '1', name: 'Alice' }],
+				totalCount: 1,
+			}),
+		};
+		const secondDatasource: IGridDatasource = {
+			getRows: vi.fn().mockResolvedValue({
+				rows: [{ id: '2', name: 'Bob' }],
+				totalCount: 1,
+			}),
+		};
+
+		const controller = new ServerRowModelController(store, {
+			datasource: firstDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getRowNode(0)?.data.name).toBe('Alice');
+
+		controller.setDatasource(secondDatasource, 25);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(secondDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 0, endRow: 25 }));
+		expect(controller.getRowIndexById('1')).toBe(-1);
+		expect(controller.getRowNode(0)?.data.name).toBe('Bob');
+	});
 });

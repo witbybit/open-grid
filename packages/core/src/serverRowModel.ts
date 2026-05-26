@@ -54,6 +54,12 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.fetchBlock(0);
 	}
 
+	public setDatasource(datasource: IGridDatasource, blockSize: number = this.blockSize): void {
+		this.datasource = datasource;
+		this.blockSize = blockSize;
+		this.purgeCache();
+	}
+
 	public dispose(): void {
 		this.disposed = true;
 		this.requestGeneration++;
