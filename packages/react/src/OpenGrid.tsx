@@ -1,5 +1,6 @@
 import {
 	GridApi,
+	GridCellClickParams,
 	GridCellPointer,
 	ColumnDef,
 	GridContextMenuOptions,
@@ -167,6 +168,7 @@ export interface OpenGridProps<TRowData = unknown> {
 	enableNavigation?: boolean;
 	enableContextMenu?: boolean;
 	contextMenuOptions?: GridContextMenuOptions<TRowData>;
+	onCellClick?: (params: GridCellClickParams<TRowData>) => void;
 	navigationOptions?: {
 		editTrigger?: 'singleClick' | 'doubleClick';
 		arrowKeyNavigationEdit?: boolean;
@@ -199,6 +201,7 @@ function OpenGridInner<TRowData = unknown>({
 	enableNavigation = true,
 	enableContextMenu = true,
 	contextMenuOptions,
+	onCellClick,
 	navigationOptions = {},
 }: OpenGridProps<TRowData> & { grid: GridInstance<TRowData> }) {
 	const { store } = grid;
@@ -375,6 +378,31 @@ function OpenGridInner<TRowData = unknown>({
 		return { cellEl, pointer: { rowId, colField } };
 	}, []);
 
+	const getCellClickParams = useCallback(
+		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {
+			const rowIndex = store.getRowIndexById(pointer.rowId) ?? -1;
+			const colIndex = store.getColumnIndex(pointer.colField);
+			const column = store.getColumnDef(pointer.colField);
+			if (!column) return null;
+
+			const row = rowIndex >= 0 ? store.getRow(rowIndex) : null;
+			const node = rowIndex >= 0 ? store.getRowNode(rowIndex) : null;
+			return {
+				rowId: pointer.rowId,
+				rowIndex,
+				row,
+				node,
+				colField: pointer.colField,
+				colIndex,
+				column,
+				value: store.getCellValue(pointer.rowId, pointer.colField),
+				api: grid.api,
+				event,
+			};
+		},
+		[grid.api, store]
+	);
+
 	const handleMouseDown = useCallback(
 		(e: MouseEvent) => {
 			if (!navigation) return;
@@ -409,10 +437,17 @@ function OpenGridInner<TRowData = unknown>({
 
 	const handleClick = useCallback(
 		(e: MouseEvent) => {
-			if (!navigation) return;
 			const target = getCellPointerFromEvent(e);
 			if (!target) return;
 			const { pointer } = target;
+
+			const clickParams = getCellClickParams(pointer, e);
+			if (clickParams) {
+				onCellClick?.(clickParams);
+				store.dispatchEvent('cellClicked', clickParams);
+			}
+
+			if (!navigation) return;
 
 			const state = store.getState();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
@@ -420,7 +455,7 @@ function OpenGridInner<TRowData = unknown>({
 
 			navigation.handleClick(pointer.rowId, pointer.colField, e);
 		},
-		[store, navigation, getCellPointerFromEvent]
+		[store, navigation, getCellPointerFromEvent, getCellClickParams, onCellClick]
 	);
 
 	const handleDoubleClick = useCallback(

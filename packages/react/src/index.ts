@@ -19,6 +19,7 @@ export type {
 	SortModel,
 	GridDatasource,
 	GridApi,
+	GridCellClickParams,
 	GridState,
 	GridStateUpdater,
 	ClientGridOptions,

@@ -105,4 +105,68 @@ describe('RenderEngine', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('marks focused and selected rows from navigation state and passes row class params', () => {
+		const rowClass = vi.fn((_row: { id: string; name: string }, params: { isSelected: boolean; isFocused: boolean }) =>
+			params.isFocused ? 'custom-focused-row' : params.isSelected ? 'custom-selected-row' : ''
+		);
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			styleSlots: { rowClass },
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: 'row-1', name: 'One' },
+				{ id: 'row-2', name: 'Two' },
+			],
+			columns: store.getState().columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine);
+		renderer.mount(container);
+
+		store.setState({
+			focusedCell: { rowId: 'row-2', colField: 'name' },
+			selectedRange: {
+				start: { rowId: 'row-2', colField: 'name' },
+				end: { rowId: 'row-2', colField: 'name' },
+			},
+		});
+		renderer.fullPaint();
+
+		const selectedRow = container.querySelector('.og-row[data-row-id="row-2"]') as HTMLElement;
+		expect(selectedRow.className).toContain('og-row-selected');
+		expect(selectedRow.className).toContain('og-row-focused');
+		expect(selectedRow.className).toContain('custom-focused-row');
+		expect(rowClass).toHaveBeenCalledWith(
+			{ id: 'row-2', name: 'Two' },
+			expect.objectContaining({
+				rowId: 'row-2',
+				rowIndex: 1,
+				isFocused: true,
+				isSelected: true,
+			})
+		);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
 });

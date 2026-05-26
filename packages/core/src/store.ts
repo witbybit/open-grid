@@ -32,6 +32,19 @@ export interface GridCellRange {
 	end: GridCellPointer;
 }
 
+export interface GridCellClickParams<TRowData = unknown> {
+	rowId: string;
+	rowIndex: number;
+	row: TRowData | null;
+	node: RowNode<TRowData> | null;
+	colField: string;
+	colIndex: number;
+	column: ColumnDef<TRowData>;
+	value: unknown;
+	api: GridApi<TRowData>;
+	event: MouseEvent;
+}
+
 export interface CellState {
 	value: unknown;
 	computedValue?: unknown;
@@ -198,9 +211,31 @@ export interface ColumnDef<TRowData = unknown> {
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
 }
 
+export interface GridRowClassParams<TRowData = any> {
+	row: TRowData;
+	rowId: string;
+	rowIndex: number;
+	isFocused: boolean;
+	isSelected: boolean;
+	isLoading: boolean;
+}
+
+export interface GridCellClassParams<TRowData = any> {
+	row: TRowData;
+	rowId: string;
+	rowIndex: number;
+	col: ColumnDef<TRowData>;
+	colField: string;
+	colIndex: number;
+	isFocused: boolean;
+	isRowFocused: boolean;
+	isRowSelected: boolean;
+	isLoading: boolean;
+}
+
 export interface GridStyleSlots<TRowData = any> {
-	rowClass?: (row: TRowData) => string;
-	cellClass?: (col: ColumnDef<TRowData>, row: TRowData) => string;
+	rowClass?: (row: TRowData, params: GridRowClassParams<TRowData>) => string;
+	cellClass?: (col: ColumnDef<TRowData>, row: TRowData, params: GridCellClassParams<TRowData>) => string;
 	headerCellClass?: (col: ColumnDef<TRowData>) => string;
 }
 

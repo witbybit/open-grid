@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, useGridApi } from '@open-grid/react';
+import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi } from '@open-grid/react';
 
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
@@ -353,6 +353,8 @@ export function GridView({
 	arrowKeyNavigationEdit = false,
 	className = '',
 }: GridViewProps) {
+	const [lastClick, setLastClick] = React.useState<GridCellClickParams<any> | null>(null);
+
 	// Resolve activeStore using either prop or React context hook, handling errors gracefully
 	let activeApi: GridApi<any>;
 	try {
@@ -374,13 +376,26 @@ export function GridView({
 	}, [activeApi, rowHeights, defaultHeight]);
 
 	return (
-		<div className={`w-full h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative ${className}`}>
+		<div className={`w-full h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative demo-grid-surface ${className}`}>
+			<div className='absolute top-2 right-2 z-50 pointer-events-none rounded-md border border-slate-700/70 bg-slate-950/85 px-2 py-1 text-[10px] font-mono text-slate-300 shadow-lg backdrop-blur'>
+				{lastClick ? (
+					<span>
+						<span className='text-cyan-300'>clicked</span> {lastClick.rowId}:{lastClick.colField} ={' '}
+						<span className='text-emerald-300'>{String(lastClick.value ?? '')}</span>
+					</span>
+				) : (
+					<span className='text-slate-500'>cell --</span>
+				)}
+			</div>
 			<OpenGrid
 				pinLeftColumns={pinLeftColumns}
 				pinRightColumns={pinRightColumns}
 				pinTopRows={pinTopRows}
 				pinBottomRows={pinBottomRows}
 				enableNavigation={true}
+				onCellClick={(params) => {
+					setLastClick(params);
+				}}
 				navigationOptions={{
 					editTrigger,
 					arrowKeyNavigationEdit,

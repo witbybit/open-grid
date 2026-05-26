@@ -418,21 +418,37 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			}
 
 			// Handle row class names including pinning and selection states
+			const isFocusedRow = state.focusedCell?.rowId === node.id;
+			const isSelectedRow =
+				!!state.selectedRangeBounds &&
+				r >= state.selectedRangeBounds.minRow &&
+				r <= state.selectedRangeBounds.maxRow;
+			const isLoadingRow = this.engine.data.isRowLoading(node.id);
 			let rowClassName = 'og-row';
 			if (r < pinTopRows) {
 				rowClassName += ' og-row-pinned-top';
 			} else if (r >= rowCount - pinBottomRows) {
 				rowClassName += ' og-row-pinned-bottom';
 			}
-			if (node.selected) {
+			if (isSelectedRow || isFocusedRow || node.selected) {
 				rowClassName += ' og-row-selected';
 			}
-			if (this.engine.data.isRowLoading(node.id)) {
+			if (isFocusedRow) {
+				rowClassName += ' og-row-focused';
+			}
+			if (isLoadingRow) {
 				rowClassName += ' og-row-loading';
 			}
 			if (state.styleSlots?.rowClass && node.data) {
 				try {
-					const customRowClass = state.styleSlots.rowClass(node.data);
+					const customRowClass = state.styleSlots.rowClass(node.data, {
+						row: node.data,
+						rowId: node.id,
+						rowIndex: r,
+						isFocused: isFocusedRow,
+						isSelected: isSelectedRow || isFocusedRow || node.selected,
+						isLoading: isLoadingRow,
+					});
 					if (customRowClass) {
 						rowClassName += ' ' + customRowClass;
 					}
@@ -542,6 +558,11 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			// Focus / Selection styles
 			const state = this.engine.stateManager.getState();
 			const isFocused = state.focusedCell?.rowId === node.id && state.focusedCell?.colField === col.field;
+			const isRowFocused = state.focusedCell?.rowId === node.id;
+			const isRowSelected =
+				!!state.selectedRangeBounds &&
+				rowIndex >= state.selectedRangeBounds.minRow &&
+				rowIndex <= state.selectedRangeBounds.maxRow;
 
 			const isLoading = this.engine.data.isRowLoading(node.id) || !!col.loading;
 
@@ -575,7 +596,18 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			}
 			if (state.styleSlots?.cellClass && node.data) {
 				try {
-					const customCellClass = state.styleSlots.cellClass(col, node.data);
+					const customCellClass = state.styleSlots.cellClass(col, node.data, {
+						row: node.data,
+						rowId: node.id,
+						rowIndex,
+						col,
+						colField: col.field,
+						colIndex: c,
+						isFocused,
+						isRowFocused,
+						isRowSelected: isRowSelected || isRowFocused || node.selected,
+						isLoading,
+					});
 					if (customCellClass) {
 						cellClassName += ' ' + customCellClass;
 					}

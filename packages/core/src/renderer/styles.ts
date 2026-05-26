@@ -176,6 +176,10 @@ export const CORE_STYLES = `
     background-color: var(--og-selection-bg) !important;
   }
 
+  .og-row-focused {
+    background-color: var(--og-selection-bg) !important;
+  }
+
   .og-row-pinned-top {
     background-color: var(--og-header-bg);
     z-index: 25;

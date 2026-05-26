@@ -462,6 +462,50 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		controller.dispose();
 	});
 
+	it('should expose precise cell click params and dispatch cellClicked event', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: store.getState().columns,
+		});
+		const grid = createTestGrid(store);
+		const onCellClick = vi.fn();
+		const eventListener = vi.fn();
+		const unsubscribe = store.addEventListener('cellClicked', eventListener);
+
+		const { container, unmount } = render(<OpenGrid grid={grid} enableNavigation={false} onCellClick={onCellClick} />);
+
+		await waitFor(() => {
+			expect(container.querySelector('.og-cell[data-col-field="name"]')).not.toBeNull();
+		});
+
+		fireEvent.click(container.querySelector('.og-cell[data-col-field="name"]')!);
+
+		expect(onCellClick).toHaveBeenCalledWith(
+			expect.objectContaining({
+				rowId: '1',
+				rowIndex: 0,
+				row: { id: '1', name: 'Product A' },
+				colField: 'name',
+				colIndex: 0,
+				value: 'Product A',
+				api: grid.api,
+			})
+		);
+		expect(eventListener).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: 'cellClicked',
+				payload: expect.objectContaining({ rowId: '1', colField: 'name' }),
+			})
+		);
+
+		unsubscribe();
+		unmount();
+		controller.dispose();
+	});
+
 	it('should not mix stale native text with custom renderer content after column topology changes', async () => {
 		const customColumns = [
 			{
