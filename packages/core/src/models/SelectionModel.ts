@@ -1,23 +1,66 @@
-import type { GridCellRange, GridCellRangeBounds, GridCellPointer } from '../store.js';
+import type { GridCellRange, GridCellRangeBounds, GridCellPointer, GridSelectionSource, GridSelectionState } from '../store.js';
 
 export class SelectionModel {
-	private selectedRange: GridCellRange | null = null;
-	private selectedRangeBounds: GridCellRangeBounds | null = null;
+	private state: GridSelectionState = {
+		focus: null,
+		anchor: null,
+		range: null,
+		bounds: null,
+		source: 'program',
+	};
 
 	public init(): void {
 	}
 
 	public getSelectedRange(): GridCellRange | null {
-		return this.selectedRange;
+		return this.state.range;
 	}
 
 	public getSelectedRangeBounds(): GridCellRangeBounds | null {
-		return this.selectedRangeBounds;
+		return this.state.bounds;
 	}
 
-	public setSelectedRange(range: GridCellRange | null, bounds: GridCellRangeBounds | null): void {
-		this.selectedRange = range;
-		this.selectedRangeBounds = bounds;
+	public getState(): GridSelectionState {
+		return this.state;
+	}
+
+	public setSelection(selection: Partial<GridSelectionState>): GridSelectionState {
+		this.state = {
+			...this.state,
+			...selection,
+		};
+		return this.state;
+	}
+
+	public createCellSelection(pointer: GridCellPointer | null, source: GridSelectionSource = 'program'): GridSelectionState {
+		return {
+			focus: pointer,
+			anchor: pointer,
+			range: pointer ? { start: pointer, end: pointer } : null,
+			bounds: null,
+			source,
+		};
+	}
+
+	public extendSelection(anchor: GridCellPointer | null, end: GridCellPointer, source: GridSelectionSource = 'program'): GridSelectionState {
+		const start = anchor ?? this.state.anchor ?? this.state.focus ?? end;
+		return {
+			focus: end,
+			anchor: start,
+			range: { start, end },
+			bounds: null,
+			source,
+		};
+	}
+
+	public isRowSelected(rowIndex: number): boolean {
+		const bounds = this.state.bounds;
+		return !!bounds && rowIndex >= bounds.minRow && rowIndex <= bounds.maxRow;
+	}
+
+	public isCellSelected(rowIndex: number, colIndex: number): boolean {
+		const bounds = this.state.bounds;
+		return !!bounds && rowIndex >= bounds.minRow && rowIndex <= bounds.maxRow && colIndex >= bounds.minCol && colIndex <= bounds.maxCol;
 	}
 
 	public calculateRangeBounds(

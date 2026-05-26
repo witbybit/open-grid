@@ -458,6 +458,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 						isFocused: isFocusedRow,
 						isSelected: isSelectedRow || isFocusedRow || node.selected,
 						isLoading: isLoadingRow,
+						selection: state.selection,
 					});
 					if (customRowClass) {
 						rowClassName += ' ' + customRowClass;
@@ -565,16 +566,8 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			cell.dataset.colField = col.field;
 			cell.dataset.rowIndex = String(rowIndex);
 
-			// Focus / Selection styles
 			const state = this.engine.stateManager.getState();
-			const isFocused = state.focusedCell?.rowId === node.id && state.focusedCell?.colField === col.field;
-			const isRowFocused = state.focusedCell?.rowId === node.id;
-			const isRowSelected =
-				!!state.selectedRangeBounds &&
-				rowIndex >= state.selectedRangeBounds.minRow &&
-				rowIndex <= state.selectedRangeBounds.maxRow;
-
-			const isLoading = this.engine.data.isRowLoading(node.id) || !!col.loading;
+			const access = this.engine.cellAccess.get(node.id, rowIndex, node, node.data, c, col);
 
 			// Handle classes including pinning, focus, and loading
 			let cellClassName = 'og-cell';
@@ -583,7 +576,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			} else if (c >= colCount - pinRightColumns) {
 				cellClassName += ' og-cell-pinned-right';
 			}
-			if (isFocused) {
+			if (access.isFocused) {
 				cellClassName += ' og-cell-focused';
 				cell.tabIndex = -1;
 				const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
@@ -601,7 +594,10 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 			} else {
 				cell.removeAttribute('tabindex');
 			}
-			if (isLoading) {
+			if (access.isSelected) {
+				cellClassName += ' og-cell-selected';
+			}
+			if (access.isLoading) {
 				cellClassName += ' og-cell-loading';
 			}
 			if (state.styleSlots?.cellClass && node.data) {
@@ -613,10 +609,15 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 						col,
 						colField: col.field,
 						colIndex: c,
-						isFocused,
-						isRowFocused,
-						isRowSelected: isRowSelected || isRowFocused || node.selected,
-						isLoading,
+						isFocused: access.isFocused,
+						isRowFocused: access.isRowFocused,
+						isRowSelected: access.isRowSelected || access.isRowFocused || node.selected,
+						isSelected: access.isSelected,
+						isEditing: access.isEditing,
+						value: access.value,
+						rawValue: access.rawValue,
+						isLoading: access.isLoading,
+						selection: state.selection,
 					});
 					if (customCellClass) {
 						cellClassName += ' ' + customCellClass;
@@ -626,15 +627,20 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				}
 			}
 			cell.className = cellClassName;
+			if (state.styleSlots?.beforeCellRender) {
+				try {
+					state.styleSlots.beforeCellRender(access, cell);
+				} catch (e) {
+					console.error('RenderEngine: Error in beforeCellRender styleSlot', e);
+				}
+			}
 
 			// Bind value
-			const cellValue = this.engine.data.getCellValue(node.id, col.field);
+			const cellValue = access.value;
 			const cellKey = createCellKey(node.id, col.field);
 
-			const isEditing = state.activeEdit?.rowId === node.id && state.activeEdit?.colField === col.field;
-
 			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously)
-			if ((col.cellRenderer || isEditing) && !isLoading) {
+			if ((col.cellRenderer || access.isEditing) && !access.isLoading) {
 				const previousPortalHost = this.getCellPortalHost(cell);
 				if (cell.dataset.cellKey !== cellKey) {
 					if (cell.dataset.cellKey && this.onUnmountReactPortal) {
@@ -646,7 +652,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 				}
 				const portalHost = this.ensureCellPortalHost(cell);
 				if (this.onMountReactPortal) {
-					this.onMountReactPortal(cellKey, portalHost, cellValue, node, col, isEditing, isLoading);
+					this.onMountReactPortal(cellKey, portalHost, cellValue, node, col, access.isEditing, access.isLoading);
 				}
 			} else {
 				if (cell.dataset.cellKey) {
@@ -655,7 +661,7 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 					}
 					delete cell.dataset.cellKey;
 				}
-				if (isLoading) {
+				if (access.isLoading) {
 					if (!cell.querySelector('.og-cell-loading-skeleton')) {
 						cell.textContent = '';
 						const skeleton = document.createElement('div');
@@ -673,6 +679,13 @@ export class RenderEngine<TRowData = any> implements IGridRenderer {
 					if (cell.textContent !== nextValText) {
 						cell.textContent = nextValText;
 					}
+				}
+			}
+			if (state.styleSlots?.afterCellRender) {
+				try {
+					state.styleSlots.afterCellRender(access, cell);
+				} catch (e) {
+					console.error('RenderEngine: Error in afterCellRender styleSlot', e);
 				}
 			}
 		};

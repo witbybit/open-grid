@@ -17,6 +17,8 @@ export * from './commands/CommandHistory.js';
 export * from './events/EventBus.js';
 export * from './models/DataModel.js';
 export * from './models/ColumnModel.js';
+export * from './models/IndexMapper.js';
+export * from './models/CellAccess.js';
 export * from './models/ViewportModel.js';
 export * from './models/GeometryModel.js';
 export * from './models/FocusModel.js';

@@ -134,7 +134,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 				case 'Escape':
 					event.preventDefault();
 					// Clear selections
-					this.store.setState({ selectedRange: null });
+					this.store.selectCell(null, 'keyboard');
 					return;
 				default:
 					// Any printable character starts typing immediately (Excel style!)
@@ -157,16 +157,11 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					const end = targetPointer;
 
 					this.rangeStart = start;
-					this.store.setState({
-						selectedRange: { start, end },
-					});
+					this.store.extendSelection(end, 'keyboard');
 				} else {
 					// Reset selection range and move focus
 					this.rangeStart = targetPointer;
-					this.store.setState({
-						focusedCell: targetPointer,
-						selectedRange: { start: targetPointer, end: targetPointer },
-					});
+					this.store.selectCell(targetPointer, 'keyboard');
 
 					// Opt-in: Auto-edit on arrow key navigation
 					if (this.options.arrowKeyNavigationEdit) {
@@ -185,10 +180,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					const target = this.getPointerFromCoords(upRow, col);
 					if (target) {
 						this.rangeStart = target;
-						this.store.setState({
-							focusedCell: target,
-							selectedRange: { start: target, end: target },
-						});
+						this.store.selectCell(target, 'keyboard');
 						if (this.options.arrowKeyNavigationEdit) {
 							if (target.rowId !== active.rowId || target.colField !== active.colField) {
 								this.setCellEditing(target.rowId, target.colField, true);
@@ -204,10 +196,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					const target = this.getPointerFromCoords(downRow, col);
 					if (target) {
 						this.rangeStart = target;
-						this.store.setState({
-							focusedCell: target,
-							selectedRange: { start: target, end: target },
-						});
+						this.store.selectCell(target, 'keyboard');
 						if (this.options.arrowKeyNavigationEdit) {
 							if (target.rowId !== active.rowId || target.colField !== active.colField) {
 								this.setCellEditing(target.rowId, target.colField, true);
@@ -224,10 +213,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 						const target = this.getPointerFromCoords(row, leftCol);
 						if (target) {
 							this.rangeStart = target;
-							this.store.setState({
-								focusedCell: target,
-								selectedRange: { start: target, end: target },
-							});
+							this.store.selectCell(target, 'keyboard');
 							if (target.rowId !== active.rowId || target.colField !== active.colField) {
 								this.setCellEditing(target.rowId, target.colField, true);
 							}
@@ -243,10 +229,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 						const target = this.getPointerFromCoords(row, rightCol);
 						if (target) {
 							this.rangeStart = target;
-							this.store.setState({
-								focusedCell: target,
-								selectedRange: { start: target, end: target },
-							});
+							this.store.selectCell(target, 'keyboard');
 							if (target.rowId !== active.rowId || target.colField !== active.colField) {
 								this.setCellEditing(target.rowId, target.colField, true);
 							}
@@ -262,10 +245,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					const target = this.getPointerFromCoords(nextRow, col);
 					if (target) {
 						this.rangeStart = target;
-						this.store.setState({
-							focusedCell: target,
-							selectedRange: { start: target, end: target },
-						});
+						this.store.selectCell(target, 'keyboard');
 						if (this.options.arrowKeyNavigationEdit) {
 							if (target.rowId !== active.rowId || target.colField !== active.colField) {
 								this.setCellEditing(target.rowId, target.colField, true);
@@ -282,10 +262,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					const target = this.getPointerFromCoords(row, nextCol);
 					if (target) {
 						this.rangeStart = target;
-						this.store.setState({
-							focusedCell: target,
-							selectedRange: { start: target, end: target },
-						});
+						this.store.selectCell(target, 'keyboard');
 						if (this.options.arrowKeyNavigationEdit) {
 							if (target.rowId !== active.rowId || target.colField !== active.colField) {
 								this.setCellEditing(target.rowId, target.colField, true);
@@ -325,10 +302,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			const pointer: GridCellPointer = { rowId, colField };
 			this.isSelecting = true;
 			this.rangeStart = pointer;
-			this.store.setState({
-				focusedCell: pointer,
-				selectedRange: { start: pointer, end: pointer },
-			});
+			this.store.selectCell(pointer, 'pointer');
 			return;
 		}
 
@@ -344,10 +318,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		this.isSelecting = true;
 		this.rangeStart = pointer;
 
-		this.store.setState({
-			focusedCell: pointer,
-			selectedRange: { start: pointer, end: pointer },
-		});
+		this.store.selectCell(pointer, 'pointer');
 	};
 
 	/**
@@ -373,12 +344,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	public handleMouseEnter = (rowId: string, colField: string): void => {
 		if (!this.isSelecting || !this.rangeStart) return;
 
-		this.store.setState({
-			selectedRange: {
-				start: this.rangeStart,
-				end: { rowId, colField },
-			},
-		});
+		this.store.extendSelection({ rowId, colField }, 'pointer');
 	};
 
 	/**

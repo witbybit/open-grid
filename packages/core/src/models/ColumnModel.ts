@@ -1,10 +1,11 @@
 import type { ColumnDef } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { IndexMapper } from './IndexMapper.js';
 
 export class ColumnModel<TRowData = unknown> {
 	private engine!: GridEngine<TRowData>;
-	private colIndexMap = new Map<string, number>();
 	private columnMap = new Map<string, ColumnDef<TRowData>>();
+	private indexMapper = new IndexMapper<string>();
 	private defaultColWidth = 100;
 
 	public init(engine: GridEngine<TRowData>): void {
@@ -15,15 +16,14 @@ export class ColumnModel<TRowData = unknown> {
 		if (defaultColWidth !== undefined) {
 			this.defaultColWidth = defaultColWidth;
 		}
-		this.colIndexMap.clear();
 		this.columnMap.clear();
+		this.indexMapper.setIds(columns.map((column) => column.field));
 
 		const widths: number[] = [];
 
 		for (let i = 0; i < columns.length; i++) {
 			const col = columns[i];
 			if (col.field) {
-				this.colIndexMap.set(col.field, i);
 				this.columnMap.set(col.field, col);
 
 				const customWidth = columnWidths[col.field] ?? col.width;
@@ -38,8 +38,19 @@ export class ColumnModel<TRowData = unknown> {
 	}
 
 	public getColumnIndex(colField: string): number {
-		const idx = this.colIndexMap.get(colField);
-		return idx !== undefined ? idx : -1;
+		return this.indexMapper.idToVisualIndex(colField);
+	}
+
+	public getColumnField(colIdx: number): string | null {
+		return this.indexMapper.visualIndexToId(colIdx);
+	}
+
+	public getPhysicalColumnIndex(colField: string): number {
+		return this.indexMapper.idToPhysicalIndex(colField);
+	}
+
+	public getIndexMapper(): IndexMapper<string> {
+		return this.indexMapper;
 	}
 
 	public getColumnDef(colField: string): ColumnDef<TRowData> | undefined {

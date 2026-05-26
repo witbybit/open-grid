@@ -1,4 +1,4 @@
-import type { GridState, GridStateUpdater, Listener, RowModel, CellSubscription, GridEventListener, ColumnDef, GridCellRange } from '../store.js';
+import type { GridState, GridStateUpdater, Listener, RowModel, CellSubscription, GridEventListener, ColumnDef, GridCellRange, GridCellPointer, GridSelectionSource } from '../store.js';
 import { StateManager } from '../state/StateManager.js';
 import { createFormulaRefKey } from '../ids.js';
 import { CommandBus } from '../commands/CommandBus.js';
@@ -11,6 +11,7 @@ import { GeometryModel } from '../models/GeometryModel.js';
 import { FocusModel } from '../models/FocusModel.js';
 import { SelectionModel } from '../models/SelectionModel.js';
 import { EditModel } from '../models/EditModel.js';
+import { CellAccessModel } from '../models/CellAccess.js';
 import { DagEngine } from '../calculations/dagEngine.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
@@ -24,6 +25,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly focus: FocusModel;
 	public readonly selection: SelectionModel;
 	public readonly edit: EditModel;
+	public readonly cellAccess: CellAccessModel<TRowData>;
 	public readonly dagEngine: DagEngine;
 
 	// Infrastructure
@@ -56,12 +58,22 @@ export class GridEngine<TRowData = unknown> {
 		this.focus = new FocusModel();
 		this.selection = new SelectionModel();
 		this.edit = new EditModel();
+		this.cellAccess = new CellAccessModel<TRowData>();
+
+		const initialSelection = this.selection.createCellSelection(config.focusedCell || null, 'program');
+		const initialRange = config.selectedRange || initialSelection.range;
 
 		// Set initial state
 		const initialState: GridState<TRowData> = {
 			columns: config.columns || [],
 			focusedCell: config.focusedCell || null,
-			selectedRange: config.selectedRange || null,
+			selectedRange: initialRange,
+			selection: {
+				...initialSelection,
+				range: initialRange,
+				anchor: initialRange?.start ?? initialSelection.anchor,
+				focus: config.focusedCell || initialRange?.end || null,
+			},
 			rowHeights: config.rowHeights || {},
 			columnWidths: config.columnWidths || {},
 			defaultRowHeight: config.defaultRowHeight || 40,
@@ -90,6 +102,7 @@ export class GridEngine<TRowData = unknown> {
 		this.focus.init();
 		this.selection.init();
 		this.edit.init();
+		this.cellAccess.init(this);
 
 		// Wire up core commands
 		this.setupCommandHandlers();
@@ -112,12 +125,12 @@ export class GridEngine<TRowData = unknown> {
 			}
 		);
 
-		this.commandBus.registerHandler('SELECT_CELL', (payload: { start: any; end: any }) => {
-			this.setSelectedRange(payload.start, payload.end);
+		this.commandBus.registerHandler('SELECT_CELL', (payload: { start: GridCellPointer | null; end: GridCellPointer | null; source?: GridSelectionSource }) => {
+			this.setSelectedRange(payload.start, payload.end, payload.source ?? 'api');
 		});
 
-		this.commandBus.registerHandler('FOCUS_CELL', (payload: { rowId: string | null; colField: string | null }) => {
-			this.setFocusedCell(payload.rowId, payload.colField);
+		this.commandBus.registerHandler('FOCUS_CELL', (payload: { rowId: string | null; colField: string | null; source?: GridSelectionSource }) => {
+			this.setFocusedCell(payload.rowId, payload.colField, payload.source ?? 'api');
 		});
 
 		this.commandBus.registerHandler('SET_COLUMN_WIDTH', (payload: { colField: string; width: number }) => {
@@ -430,15 +443,28 @@ export class GridEngine<TRowData = unknown> {
 		}
 	};
 
-	public setFocusedCell = (rowId: string | null, colField: string | null): void => {
+	public setFocusedCell = (rowId: string | null, colField: string | null, source: GridSelectionSource = 'program'): void => {
+		const pointer = rowId !== null && colField !== null ? { rowId, colField } : null;
+		const selection = this.selection.createCellSelection(pointer, source);
 		this.stateManager.setState({
-			focusedCell: rowId !== null && colField !== null ? { rowId, colField } : null,
+			focusedCell: pointer,
+			selectedRange: selection.range,
+			selection,
 		});
 	};
 
-	public setSelectedRange = (start: any | null, end: any | null): void => {
+	public setSelectedRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
+		const range = start !== null && end !== null ? { start, end } : null;
+		const selection = this.selection.setSelection({
+			focus: end,
+			anchor: start,
+			range,
+			source,
+		});
 		this.stateManager.setState({
-			selectedRange: start !== null && end !== null ? { start, end } : null,
+			focusedCell: end,
+			selectedRange: range,
+			selection,
 		});
 	};
 
@@ -514,8 +540,14 @@ export class GridEngine<TRowData = unknown> {
 				(id) => (this.rowModel ? this.rowModel.getRowIndexById(id) : -1),
 				(field) => this.columns.getColumnIndex(field)
 			);
-			if (currState.selectedRangeBounds !== selectedRangeBounds) {
-				for (const key of this.stateManager.setDerivedState({ selectedRangeBounds }, prevState)) {
+			const selection = this.selection.setSelection({
+				...currState.selection,
+				focus: currState.focusedCell,
+				range: currState.selectedRange,
+				bounds: selectedRangeBounds,
+			});
+			if (currState.selectedRangeBounds !== selectedRangeBounds || currState.selection !== selection) {
+				for (const key of this.stateManager.setDerivedState({ selectedRangeBounds, selection }, prevState)) {
 					updatedSet.add(key);
 					updatedKeys.push(key);
 					this.stateManager.triggerKeyChange(key, prevState);
@@ -524,13 +556,31 @@ export class GridEngine<TRowData = unknown> {
 			}
 		}
 
+		if (updatedSet.has('focusedCell') && !updatedSet.has('selection')) {
+			const selection = this.selection.setSelection({
+				...currState.selection,
+				focus: currState.focusedCell,
+			});
+			for (const key of this.stateManager.setDerivedState({ selection }, prevState)) {
+				updatedSet.add(key);
+				updatedKeys.push(key);
+				this.stateManager.triggerKeyChange(key, prevState);
+			}
+			currState = this.stateManager.getState();
+		}
+
 		if (updatedSet.has('focusedCell')) {
 			const cell = currState.focusedCell;
 			this.focus.setFocusedCell(cell ? cell.rowId : null, cell ? cell.colField : null);
 		}
 
 		if (updatedSet.has('selectedRange')) {
-			this.selection.setSelectedRange(currState.selectedRange, currState.selectedRangeBounds);
+			this.selection.setSelection({
+				...currState.selection,
+				focus: currState.focusedCell,
+				range: currState.selectedRange,
+				bounds: currState.selectedRangeBounds,
+			});
 		}
 
 		// Calculate visible ranges if relevant geometry/data properties changed
@@ -628,7 +678,7 @@ export class GridEngine<TRowData = unknown> {
 			this.eventBus.dispatchEvent('focusChanged', { focusedCell: currState.focusedCell });
 		}
 		if (updatedSet.has('selectedRange')) {
-			this.eventBus.dispatchEvent('selectionChanged', { selectedRange: currState.selectedRange });
+			this.eventBus.dispatchEvent('selectionChanged', { selectedRange: currState.selectedRange, selection: currState.selection });
 		}
 		if (updatedSet.has('sortModel')) {
 			this.eventBus.dispatchEvent('sortChanged', { sortModel: currState.sortModel });

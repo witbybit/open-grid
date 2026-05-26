@@ -136,6 +136,49 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('should expose selection state, cell access, and visual column mapping from one source of truth', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		store.extendSelection({ rowId: '2', colField: 'price' }, 'keyboard');
+
+		expect(store.getState().selection).toMatchObject({
+			focus: { rowId: '2', colField: 'price' },
+			anchor: { rowId: '1', colField: 'name' },
+			source: 'keyboard',
+			bounds: { minRow: 0, maxRow: 1, minCol: 1, maxCol: 2 },
+		});
+
+		const access = store.getCellAccess('2', 'price');
+		expect(access).toMatchObject({
+			rowId: '2',
+			rowIndex: 1,
+			colField: 'price',
+			colIndex: 2,
+			value: 20,
+			rawValue: 20,
+			isFocused: true,
+			isSelected: true,
+			isRowSelected: true,
+		});
+		expect(store.getColumnField(1)).toBe('name');
+
+		controller.dispose();
+	});
+
 	it('should allow replacing a formula with its computed literal value', () => {
 		const store = new GridStore<{ id: string; a: number; b: string | number }>({
 			columns: [

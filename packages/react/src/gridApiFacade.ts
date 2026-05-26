@@ -6,6 +6,7 @@ import type {
 	Listener,
 	GridCellPointer,
 	GridCellRange,
+	GridSelectionSource,
 	SortModel,
 	FilterModel,
 } from '@open-grid/core';
@@ -32,6 +33,8 @@ export function createGridApiFacade<TRowData>(store: GridStore<TRowData>): GridA
 		setFocusedCell: (rowId: string | null, colField: string | null) => store.setFocusedCell(rowId, colField),
 
 		setSelectedRange: (start: GridCellPointer | null, end: GridCellPointer | null) => store.setSelectedRange(start, end),
+		selectCell: (pointer: GridCellPointer | null, source?: GridSelectionSource) => store.selectCell(pointer, source),
+		extendSelection: (end: GridCellPointer, source?: GridSelectionSource) => store.extendSelection(end, source),
 
 		setColumnWidth: (colField: string, width: number) => store.setColumnWidth(colField, width),
 		moveColumn: (colField: string, toIndex: number) => store.moveColumn(colField, toIndex),
@@ -56,7 +59,9 @@ export function createGridApiFacade<TRowData>(store: GridStore<TRowData>): GridA
 		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
 
 		getColumnIndex: (colField: string) => store.getColumnIndex(colField),
+		getColumnField: (colIndex: number) => store.getColumnField(colIndex),
 		getColumnDef: (colField: string) => store.getColumnDef(colField),
+		getCellAccess: (rowId: string, colField: string) => store.getCellAccess(rowId, colField),
 
 		getPlugin: <T = unknown>(name: string) => store.getPlugin<T>(name),
 		unregisterPlugin: (name: string) => store.unregisterPlugin(name),

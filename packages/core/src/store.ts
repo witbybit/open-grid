@@ -15,6 +15,21 @@ export interface GridCellPointer {
 	colField: string;
 }
 
+export interface GridCellCoordinates {
+	rowIndex: number;
+	colIndex: number;
+}
+
+export type GridSelectionSource = 'api' | 'keyboard' | 'pointer' | 'fill' | 'program';
+
+export interface GridSelectionState {
+	focus: GridCellPointer | null;
+	anchor: GridCellPointer | null;
+	range: GridCellRange | null;
+	bounds: GridCellRangeBounds | null;
+	source: GridSelectionSource;
+}
+
 export interface GridPlugin<TRowData = unknown> {
 	readonly name: string;
 	onInit?(api: InternalGridApi<TRowData>): void;
@@ -43,6 +58,25 @@ export interface GridCellClickParams<TRowData = unknown> {
 	value: unknown;
 	api: GridApi<TRowData>;
 	event: MouseEvent;
+}
+
+export interface GridCellAccess<TRowData = unknown> {
+	rowId: string;
+	rowIndex: number;
+	row: TRowData | null;
+	node: RowNode<TRowData> | null;
+	colField: string;
+	colIndex: number;
+	column: ColumnDef<TRowData>;
+	value: unknown;
+	rawValue: unknown;
+	isFocused: boolean;
+	isRowFocused: boolean;
+	isSelected: boolean;
+	isRowSelected: boolean;
+	isEditing: boolean;
+	isLoading: boolean;
+	event?: Event;
 }
 
 export interface CellState {
@@ -218,6 +252,7 @@ export interface GridRowClassParams<TRowData = any> {
 	isFocused: boolean;
 	isSelected: boolean;
 	isLoading: boolean;
+	selection: GridSelectionState;
 }
 
 export interface GridCellClassParams<TRowData = any> {
@@ -230,13 +265,20 @@ export interface GridCellClassParams<TRowData = any> {
 	isFocused: boolean;
 	isRowFocused: boolean;
 	isRowSelected: boolean;
+	isSelected: boolean;
+	isEditing: boolean;
+	value: unknown;
+	rawValue: unknown;
 	isLoading: boolean;
+	selection: GridSelectionState;
 }
 
 export interface GridStyleSlots<TRowData = any> {
 	rowClass?: (row: TRowData, params: GridRowClassParams<TRowData>) => string;
 	cellClass?: (col: ColumnDef<TRowData>, row: TRowData, params: GridCellClassParams<TRowData>) => string;
 	headerCellClass?: (col: ColumnDef<TRowData>) => string;
+	beforeCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
+	afterCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
 }
 
 export interface GridState<TRowData = unknown> {
@@ -247,6 +289,7 @@ export interface GridState<TRowData = unknown> {
 
 	focusedCell: GridCellPointer | null;
 	selectedRange: GridCellRange | null;
+	selection: GridSelectionState;
 
 	rowHeights: Record<string, number>; // rowId -> height in px
 	columnWidths: Record<string, number>; // colField -> width in px
@@ -305,6 +348,8 @@ export interface GridApi<TRowData = unknown> {
 	getCellState(rowId: string, colField: string): CellState;
 	setFocusedCell(rowId: string | null, colField: string | null): void;
 	setSelectedRange(start: GridCellPointer | null, end: GridCellPointer | null): void;
+	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
+	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
 	setColumnWidth(colField: string, width: number): void;
 	moveColumn(colField: string, toIndex: number): void;
 	setColumnOrder(colFields: string[]): void;
@@ -320,7 +365,9 @@ export interface GridApi<TRowData = unknown> {
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
 	getColumnIndex(colField: string): number;
+	getColumnField(colIndex: number): string | null;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
+	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
 	getPlugin<T = unknown>(name: string): T | null;
 	unregisterPlugin(name: string): void;
 	undo(): void;
@@ -471,7 +518,22 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public setSelectedRange = (start: GridCellPointer | null, end: GridCellPointer | null): void => {
 		this.engine.commandBus.dispatch({
 			type: 'SELECT_CELL',
-			payload: { start, end },
+			payload: { start, end, source: 'api' },
+		});
+	};
+
+	public selectCell = (pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
+		this.engine.commandBus.dispatch({
+			type: 'SELECT_CELL',
+			payload: { start: pointer, end: pointer, source },
+		});
+	};
+
+	public extendSelection = (end: GridCellPointer, source: GridSelectionSource = 'api'): void => {
+		const state = this.getState();
+		this.engine.commandBus.dispatch({
+			type: 'SELECT_CELL',
+			payload: { start: state.selection.anchor ?? state.focusedCell ?? end, end, source },
 		});
 	};
 
@@ -610,8 +672,16 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.columns.getColumnIndex(colField);
 	};
 
+	public getColumnField = (colIndex: number): string | null => {
+		return this.engine.columns.getColumnField(colIndex);
+	};
+
 	public getColumnDef = (colField: string): ColumnDef<TRowData> | undefined => {
 		return this.engine.columns.getColumnDef(colField);
+	};
+
+	public getCellAccess = (rowId: string, colField: string): GridCellAccess<TRowData> | null => {
+		return this.engine.cellAccess.getByPointer(rowId, colField);
 	};
 
 	public registerCellSubscription = (sub: CellSubscription): void => {

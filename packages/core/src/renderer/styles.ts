@@ -223,6 +223,10 @@ export const CORE_STYLES = `
     z-index: 20;
   }
 
+  .og-cell-selected {
+    background-color: var(--og-selection-bg);
+  }
+
   .og-cell-editor {
     position: absolute;
     inset: 0;

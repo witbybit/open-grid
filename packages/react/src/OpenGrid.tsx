@@ -380,22 +380,17 @@ function OpenGridInner<TRowData = unknown>({
 
 	const getCellClickParams = useCallback(
 		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {
-			const rowIndex = store.getRowIndexById(pointer.rowId) ?? -1;
-			const colIndex = store.getColumnIndex(pointer.colField);
-			const column = store.getColumnDef(pointer.colField);
-			if (!column) return null;
-
-			const row = rowIndex >= 0 ? store.getRow(rowIndex) : null;
-			const node = rowIndex >= 0 ? store.getRowNode(rowIndex) : null;
+			const access = store.getCellAccess(pointer.rowId, pointer.colField);
+			if (!access) return null;
 			return {
-				rowId: pointer.rowId,
-				rowIndex,
-				row,
-				node,
-				colField: pointer.colField,
-				colIndex,
-				column,
-				value: store.getCellValue(pointer.rowId, pointer.colField),
+				rowId: access.rowId,
+				rowIndex: access.rowIndex,
+				row: access.row,
+				node: access.node,
+				colField: access.colField,
+				colIndex: access.colIndex,
+				column: access.column,
+				value: access.value,
 				api: grid.api,
 				event,
 			};
