@@ -136,6 +136,38 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('should no-op repeated edits to valueGetter columns using the stored source value', () => {
+		type StatusRow = TestRow & { status: string };
+		const store = new GridStore<StatusRow>({
+			columns: [
+				{
+					field: 'status',
+					header: 'Status',
+					valueGetter: ({ row }) => {
+						if (row.status === 'Inactive') return 'HIGH';
+						if (row.status === 'Pending') return 'MEDIUM';
+						return 'LOW';
+					},
+				},
+			],
+		});
+		const controller = new ClientRowModelController<StatusRow>(store, {
+			rows: [{ id: '1', name: 'Product A', price: 10, status: 'Active' }],
+			columns: store.getState().columns,
+		});
+		const listener = vi.fn();
+		store.addEventListener('cellValueChanged', listener);
+
+		store.setCellValue('1', 'status', 'Inactive');
+		store.setCellValue('1', 'status', 'Inactive');
+
+		expect(store.getCellValue('1', 'status')).toBe('HIGH');
+		expect(store.getRow(0)).toMatchObject({ status: 'Inactive' });
+		expect(listener).toHaveBeenCalledTimes(1);
+
+		controller.dispose();
+	});
+
 	it('should expose selection state, cell access, and visual column mapping from one source of truth', () => {
 		const store = new GridStore<TestRow>({
 			columns: [

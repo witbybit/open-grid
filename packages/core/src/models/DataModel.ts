@@ -76,6 +76,27 @@ export class DataModel<TRowData = unknown> {
 		return node.getCellValue(colField, getter);
 	};
 
+	private getStoredCellValue = (rowId: string, colField: string): unknown => {
+		if (this.isRowLoading(rowId)) {
+			return '';
+		}
+
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return '';
+		const col = this.engine.columns.getColumnDef(colField);
+		if (!col) return '';
+
+		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
+		const row = node?.data ?? (() => {
+			const idx = rowModel.getRowIndexById(rowId);
+			return idx === -1 ? null : rowModel.getRow(idx);
+		})();
+		if (!row) return '';
+
+		const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
+		return getter(row);
+	};
+
 	public getCellValue = (rowId: string, colField: string): unknown => {
 		const rawVal = this.getRawCellValue(rowId, colField);
 		if (typeof rawVal === 'string' && rawVal.startsWith('=')) {
@@ -97,8 +118,8 @@ export class DataModel<TRowData = unknown> {
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
 		const oldValue = this.getCellValue(rowId, colField);
-		const oldRawValue = this.getRawCellValue(rowId, colField);
-		if (oldRawValue === value) return false;
+		const oldStoredValue = this.getStoredCellValue(rowId, colField);
+		if (oldStoredValue === value) return false;
 
 		const rowModel = this.engine.getRowModel();
 		if (!rowModel?.setCellValue) {

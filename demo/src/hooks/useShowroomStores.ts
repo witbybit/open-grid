@@ -69,8 +69,6 @@ function setInactiveRiskSideEffects(
 	colField: string,
 	value: unknown
 ) {
-	api.setCellValue(rowId, colField, value);
-
 	if (colField === 'status' && value === 'Inactive') {
 		api.setCellValue(rowId, 'price', '0');
 		api.setCellValue(rowId, 'quantity', '0');
@@ -347,10 +345,10 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	const spreadsheetApi = useClientGrid<SpreadsheetRow>({ rows: spreadsheetRows, columns: spreadsheetColumns });
 
 	const handleSpreadsheetCellValueChanged = useCallback(
-		(rowId: string, colField: string, val: unknown) => {
-			spreadsheetApi.setCellValue(rowId, colField, val as string);
+		(_rowId: string, _colField: string, _val: unknown) => {
+			// Cell edits are already committed by the grid editor pipeline.
 		},
-		[spreadsheetApi]
+		[]
 	);
 
 	const applySpreadsheetRangeAction = useCallback(
@@ -440,10 +438,10 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	const customApi = useClientGrid<CustomShowcaseRow>({ rows: customRows, columns: customColumns });
 
 	const handleCustomCellValueChanged = useCallback(
-		(rowId: string, colField: string, val: unknown) => {
-			customApi.setCellValue(rowId, colField, val as string);
+		(_rowId: string, _colField: string, _val: unknown) => {
+			// Cell edits are already committed by the grid editor pipeline.
 		},
-		[customApi]
+		[]
 	);
 
 	// --------------------------------------------------------------------------
@@ -567,10 +565,10 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	const dashboardApi = useClientGrid<DashboardStockRow>({ rows: dashboardRows, columns: dashboardColumns });
 
 	const handleDashboardCellValueChanged = useCallback(
-		(rowId: string, colField: string, val: unknown) => {
-			dashboardApi.setCellValue(rowId, colField, val as string);
+		(_rowId: string, _colField: string, _val: unknown) => {
+			// Cell edits are already committed by the grid editor pipeline.
 		},
-		[dashboardApi]
+		[]
 	);
 
 	// --------------------------------------------------------------------------
@@ -635,8 +633,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 
 	const handleGanttCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
-			ganttApi.setCellValue(rowId, colField, val);
-
 			if (colField === 'status') {
 				if (val === 'Done') ganttApi.setCellValue(rowId, 'progress', 100);
 				else if (val === 'Pending') ganttApi.setCellValue(rowId, 'progress', 0);
