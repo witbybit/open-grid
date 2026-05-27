@@ -1,9 +1,11 @@
 import { DOMPool, PooledRow } from './domPool.js';
 import { ScrollEngine } from './scrollEngine.js';
+import { ColumnInteractionController } from './columnInteractionController.js';
+import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
 import type { GridCellContentMount, GridCellContentUnmount, IGridRenderer } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { RowNode, type ColumnDef, type GridCellRange } from '../store.js';
+import { RowNode, type ColumnDef } from '../store.js';
 import { CORE_STYLES } from './styles.js';
 
 /**
@@ -14,6 +16,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private rowPool!: DOMPool<HTMLDivElement>;
 	private cellPool!: DOMPool<HTMLDivElement>;
 	private scrollEngine: ScrollEngine<TRowData>;
+	private columnInteractions: ColumnInteractionController<TRowData>;
+	private fillDrag: FillDragController<TRowData>;
 
 	// Viewport DOM elements
 	private container: HTMLElement | null = null;
@@ -43,34 +47,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private dirtyRows = new Set<string>();
 	private hoveredRowIndex: number | null = null;
 
-	// Drag-to-fill tracking variables
-	private isFilling = false;
-	private fillStartRow = -1;
-	private fillEndRow = -1;
-	private fillStartCol = -1;
-	private fillEndCol = -1;
-	private fillDragStartX = 0;
-	private fillDragStartY = 0;
-	private fillPreviewBorder: HTMLDivElement | null = null;
-	private currentFillPreview: {
-		minRow: number;
-		maxRow: number;
-		minCol: number;
-		maxCol: number;
-		direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null;
-	} | null = null;
-	private fillDragDirectionLock: 'VERTICAL' | 'HORIZONTAL' | null = null;
 	private selectionDragBounds: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
-
-	// Column reorder tracking variables
-	private isColumnReordering = false;
-	private columnDragStartX = 0;
-	private columnDragStartY = 0;
-	private columnDragFromIndex = -1;
-	private columnDragField: string | null = null;
-	private columnDropInsertionIndex = -1;
-	private columnDropIndicator: HTMLDivElement | null = null;
-	private columnDragGhost: HTMLDivElement | null = null;
 
 	public onMountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
 	public onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
@@ -78,6 +55,20 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	constructor(engine: GridEngine<TRowData>) {
 		this.engine = engine;
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
+		this.columnInteractions = new ColumnInteractionController<TRowData>({
+			engine,
+			getOverlayLayer: () => this.overlayLayer,
+			getScrollViewport: () => this.scrollViewport,
+			schedulePaint: () => this.schedulePaint(),
+		});
+		this.fillDrag = new FillDragController<TRowData>({
+			engine,
+			getOverlayLayer: () => this.overlayLayer,
+			getScrollViewport: () => this.scrollViewport,
+			getOverlayBox: (minRow, maxRow, minCol, maxCol) => this.getClampedOverlayBox(minRow, maxRow, minCol, maxCol),
+			scrollTo: (scrollTop, scrollLeft) => this.scrollEngine.scrollTo(scrollTop, scrollLeft),
+			schedulePaint: () => this.schedulePaint(),
+		});
 	}
 
 	/**
@@ -169,7 +160,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.scrollViewport.removeEventListener('mouseover', this.onRowMouseOver);
 			this.scrollViewport.removeEventListener('mouseleave', this.onRowMouseLeave);
 		}
-		this.cleanupColumnReorderDrag();
+		this.columnInteractions.cleanup();
+		this.fillDrag.cleanup();
 
 		// Release all active rows and cells
 		this.clearActiveRows();
@@ -979,7 +971,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			if (state.enableColumnReorder && col.movable !== false) {
 				className += ' og-header-cell-movable';
 			}
-			if (this.isColumnReordering && this.columnDragField === col.field) {
+			if (this.columnInteractions.isDraggingColumn(col.field)) {
 				className += ' og-header-cell-dragging';
 			}
 
@@ -1028,7 +1020,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private createHeaderCellElement(): HTMLDivElement {
 		const headerCell = document.createElement('div');
-		headerCell.addEventListener('mousedown', this.onHeaderCellMouseDown);
+		headerCell.addEventListener('mousedown', this.columnInteractions.onHeaderCellMouseDown);
 
 		const textSpan = document.createElement('span');
 		textSpan.style.overflow = 'hidden';
@@ -1039,7 +1031,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		const resizeHandle = document.createElement('div');
 		resizeHandle.className = 'og-header-resize-handle';
-		resizeHandle.addEventListener('mousedown', this.onHeaderResizeMouseDown);
+		resizeHandle.addEventListener('mousedown', this.columnInteractions.onHeaderResizeMouseDown);
 		headerCell.appendChild(resizeHandle);
 
 		return headerCell;
@@ -1052,186 +1044,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.headerCells.clear();
 	}
 
-	private onHeaderResizeMouseDown = (e: MouseEvent): void => {
-		e.preventDefault();
-		e.stopPropagation();
-
-		const headerCell = (e.currentTarget as HTMLElement).closest('.og-header-cell') as HTMLElement | null;
-		const colField = headerCell?.dataset.colField;
-		const colIndex = Number(headerCell?.dataset.colIndex);
-		if (!colField || !Number.isFinite(colIndex)) return;
-
-		const startX = e.clientX;
-		const startWidth = this.engine.geometry.getColWidth(colIndex, this.engine.stateManager.getState().defaultColWidth);
-		let currentWidth = startWidth;
-
-		const onMouseMove = (moveEvent: MouseEvent) => {
-			const deltaX = moveEvent.clientX - startX;
-			currentWidth = Math.max(30, startWidth + deltaX);
-			this.engine.resizeColumn(colField, currentWidth, false);
-		};
-
-		const onMouseUp = () => {
-			window.removeEventListener('mousemove', onMouseMove);
-			window.removeEventListener('mouseup', onMouseUp);
-
-			this.schedulePaint();
-		};
-
-		window.addEventListener('mousemove', onMouseMove);
-		window.addEventListener('mouseup', onMouseUp);
-	};
-
-	private onHeaderCellMouseDown = (e: MouseEvent): void => {
-		if (e.button !== 0 || (e.target as HTMLElement).closest('.og-header-resize-handle')) return;
-
-		const state = this.engine.stateManager.getState();
-		if (!state.enableColumnReorder) return;
-
-		const headerCell = e.currentTarget as HTMLElement;
-		const colField = headerCell.dataset.colField;
-		const colIndex = Number(headerCell.dataset.colIndex);
-		const column = colField ? state.columns[colIndex] : null;
-		if (!colField || !Number.isFinite(colIndex) || column?.movable === false) return;
-
-		this.columnDragStartX = e.clientX;
-		this.columnDragStartY = e.clientY;
-		this.columnDragFromIndex = colIndex;
-		this.columnDragField = colField;
-		this.columnDropInsertionIndex = colIndex;
-
-		window.addEventListener('mousemove', this.onHeaderColumnDragMove);
-		window.addEventListener('mouseup', this.onHeaderColumnDragMouseUp);
-		window.addEventListener('blur', this.onHeaderColumnDragMouseUp);
-	};
-
-	private onHeaderColumnDragMove = (e: MouseEvent): void => {
-		const dragDistance = Math.max(Math.abs(e.clientX - this.columnDragStartX), Math.abs(e.clientY - this.columnDragStartY));
-		if (!this.isColumnReordering) {
-			if (dragDistance < 4) return;
-			this.isColumnReordering = true;
-			this.ensureColumnDropIndicator();
-			this.ensureColumnDragGhost();
-			this.schedulePaint();
-		}
-
-		e.preventDefault();
-		this.updateColumnDragGhost(e);
-		this.updateColumnDropTarget(e);
-	};
-
-	private onHeaderColumnDragMouseUp = (): void => {
-		const wasReordering = this.isColumnReordering;
-		const fromIndex = this.columnDragFromIndex;
-		const insertionIndex = this.columnDropInsertionIndex;
-		const colField = this.columnDragField;
-
-		this.cleanupColumnReorderDrag();
-
-		if (!wasReordering || !colField || fromIndex < 0 || insertionIndex < 0) {
-			this.schedulePaint();
-			return;
-		}
-
-		const state = this.engine.stateManager.getState();
-		const toIndex = Math.max(0, Math.min(state.columns.length - 1, insertionIndex > fromIndex ? insertionIndex - 1 : insertionIndex));
-		if (toIndex !== fromIndex) {
-			this.engine.moveColumn(colField, toIndex);
-		} else {
-			this.schedulePaint();
-		}
-	};
-
-	private cleanupColumnReorderDrag(): void {
-		window.removeEventListener('mousemove', this.onHeaderColumnDragMove);
-		window.removeEventListener('mouseup', this.onHeaderColumnDragMouseUp);
-		window.removeEventListener('blur', this.onHeaderColumnDragMouseUp);
-
-		this.isColumnReordering = false;
-		this.columnDragFromIndex = -1;
-		this.columnDragField = null;
-		this.columnDropInsertionIndex = -1;
-		this.removeColumnDropIndicator();
-		this.removeColumnDragGhost();
-	}
-
-	private ensureColumnDropIndicator(): void {
-		if (this.columnDropIndicator || !this.overlayLayer) return;
-
-		this.columnDropIndicator = document.createElement('div');
-		this.columnDropIndicator.className = 'og-column-drop-indicator';
-		this.overlayLayer.appendChild(this.columnDropIndicator);
-	}
-
-	private removeColumnDropIndicator(): void {
-		this.columnDropIndicator?.remove();
-		this.columnDropIndicator = null;
-	}
-
-	private ensureColumnDragGhost(): void {
-		if (this.columnDragGhost) return;
-
-		const state = this.engine.stateManager.getState();
-		const draggedColumn = state.columns.find((col) => col.field === this.columnDragField);
-		const label = draggedColumn?.header || draggedColumn?.field || '';
-
-		this.columnDragGhost = document.createElement('div');
-		this.columnDragGhost.className = 'og-column-drag-ghost';
-		this.columnDragGhost.textContent = label;
-		document.body.appendChild(this.columnDragGhost);
-	}
-
-	private updateColumnDragGhost(e: MouseEvent): void {
-		if (!this.columnDragGhost) return;
-
-		this.columnDragGhost.style.transform = `translate3d(${e.clientX + 12}px, ${e.clientY + 12}px, 0)`;
-	}
-
-	private removeColumnDragGhost(): void {
-		this.columnDragGhost?.remove();
-		this.columnDragGhost = null;
-	}
-
-	private reattachColumnReorderOverlays(): void {
-		if (this.isColumnReordering && this.columnDropIndicator && this.overlayLayer && this.columnDropIndicator.parentNode !== this.overlayLayer) {
-			this.overlayLayer.appendChild(this.columnDropIndicator);
-		}
-	}
-
-	private updateColumnDropTarget(e: MouseEvent): void {
-		if (!this.scrollViewport || !this.columnDropIndicator) return;
-
-		const state = this.engine.stateManager.getState();
-		if (state.columns.length === 0) return;
-
-		const scrollRect = this.scrollViewport.getBoundingClientRect();
-		const contentX = e.clientX - scrollRect.left + this.scrollViewport.scrollLeft;
-		const targetCol = Math.max(0, Math.min(state.columns.length - 1, this.engine.geometry.getColIndexAtOffset(contentX)));
-		const targetLeft = this.engine.geometry.colLefts[targetCol] || 0;
-		const targetWidth = this.engine.geometry.colWidths[targetCol] || state.defaultColWidth;
-		const insertAfterTarget = contentX > targetLeft + targetWidth / 2;
-		const insertionIndex = Math.max(0, Math.min(state.columns.length, targetCol + (insertAfterTarget ? 1 : 0)));
-
-		this.columnDropInsertionIndex = insertionIndex;
-
-		const indicatorContentLeft =
-			insertionIndex >= state.columns.length
-				? this.engine.geometry.getTotalWidth(state.defaultColWidth)
-				: this.engine.geometry.colLefts[insertionIndex] || 0;
-		const indicatorViewportLeft = indicatorContentLeft - this.scrollViewport.scrollLeft;
-
-		this.columnDropIndicator.style.display = 'block';
-		this.columnDropIndicator.style.transform = `translate3d(${indicatorViewportLeft}px, 0, 0)`;
-		this.columnDropIndicator.style.height = `${Math.max(0, this.engine.viewport.viewportHeight - 40)}px`;
-	}
-
 	/**
 	 * Computes selection overlays & active focus coordinates off-screen.
 	 */
 	private paintOverlay(): void {
 		if (!this.overlayLayer) return;
 
-		this.reattachColumnReorderOverlays();
+		this.columnInteractions.reattachOverlays();
 
 		const state = this.engine.stateManager.getState();
 		const bounds = state.selection.bounds;
@@ -1277,18 +1096,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		// Re-append the fill preview border if actively dragging so it doesn't get cleared by textContent = ''
-		if (this.isFilling && this.fillPreviewBorder && this.overlayLayer) {
-			this.overlayLayer.appendChild(this.fillPreviewBorder);
-			this.updateFillPreview();
-		}
+		this.fillDrag.reattachPreview();
 	}
 
-	private getClampedOverlayBox(
-		minRow: number,
-		maxRow: number,
-		minCol: number,
-		maxCol: number
-	): { left: number; top: number; width: number; height: number } | null {
+	private getClampedOverlayBox(minRow: number, maxRow: number, minCol: number, maxCol: number): OverlayBox | null {
 		const state = this.engine.stateManager.getState();
 		const rowModel = this.engine.getRowModel();
 		const rowCount = rowModel ? rowModel.getRowCount() : 0;
@@ -1448,7 +1259,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		e.preventDefault();
 		e.stopPropagation();
 		const { minRow, maxRow, minCol, maxCol } = this.selectionDragBounds;
-		this.startFillDrag(e, minRow, maxRow, minCol, maxCol);
+		this.fillDrag.start(e, minRow, maxRow, minCol, maxCol);
 	};
 
 	/**
@@ -1477,244 +1288,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		};
 
 		return el;
-	}
-
-	private startFillDrag(e: MouseEvent, minRow: number, maxRow: number, minCol: number, maxCol: number): void {
-		if (this.isFilling) return;
-		this.isFilling = true;
-
-		this.fillStartRow = minRow;
-		this.fillEndRow = maxRow;
-		this.fillStartCol = minCol;
-		this.fillEndCol = maxCol;
-
-		this.fillDragStartX = e.clientX;
-		this.fillDragStartY = e.clientY;
-		this.fillDragDirectionLock = null; // Reset direction lock
-
-		// Create fill preview element
-		this.fillPreviewBorder = document.createElement('div');
-		this.fillPreviewBorder.className = 'og-fill-preview-border';
-		if (this.overlayLayer) {
-			this.overlayLayer.appendChild(this.fillPreviewBorder);
-		}
-
-		this.currentFillPreview = null;
-
-		window.addEventListener('mousemove', this.onFillDragMove);
-		window.addEventListener('mouseup', this.onFillDragMouseUp);
-		window.addEventListener('blur', this.onFillDragMouseUp);
-		document.addEventListener('mouseleave', this.onFillDragMouseUp);
-	}
-
-	private onFillDragMove = (e: MouseEvent): void => {
-		try {
-			if (!this.isFilling || !this.scrollViewport || !this.fillPreviewBorder) return;
-
-			// Calculate mouse coordinates relative to scroll viewport
-			const scrollRect = this.scrollViewport.getBoundingClientRect();
-			const mouseX = e.clientX - scrollRect.left + this.scrollViewport.scrollLeft;
-			const mouseY = e.clientY - scrollRect.top + this.scrollViewport.scrollTop - 40; // 40px margin header
-
-			// Get current coordinate indices under pointer
-			const currRow = this.engine.geometry.getRowIndexAtOffset(mouseY);
-			const currCol = this.engine.geometry.getColIndexAtOffset(mouseX);
-
-			if (this.fillDragDirectionLock === null) {
-				const rowDiff = currRow > this.fillEndRow ? currRow - this.fillEndRow : currRow < this.fillStartRow ? this.fillStartRow - currRow : 0;
-				const colDiff = currCol > this.fillEndCol ? currCol - this.fillEndCol : currCol < this.fillStartCol ? this.fillStartCol - currCol : 0;
-
-				if (rowDiff > 0 || colDiff > 0) {
-					this.fillDragDirectionLock = rowDiff >= colDiff ? 'VERTICAL' : 'HORIZONTAL';
-				} else {
-					// Still inside original selection bounds, clear preview and return
-					this.currentFillPreview = null;
-					this.updateFillPreview();
-					return;
-				}
-			}
-
-			// Auto-scroll when dragging near viewport edges
-			const edgeThreshold = 35; // 35px from edge
-			let scrollSpeedX = 0;
-			let scrollSpeedY = 0;
-
-			if (e.clientY > scrollRect.bottom - edgeThreshold) {
-				scrollSpeedY = 15;
-			} else if (e.clientY < scrollRect.top + edgeThreshold) {
-				scrollSpeedY = -15;
-			}
-
-			if (e.clientX > scrollRect.right - edgeThreshold) {
-				scrollSpeedX = 15;
-			} else if (e.clientX < scrollRect.left + edgeThreshold) {
-				scrollSpeedX = -15;
-			}
-
-			let scrolled = false;
-			if (scrollSpeedY !== 0) {
-				this.scrollViewport.scrollTop = Math.max(
-					0,
-					Math.min(this.scrollViewport.scrollHeight - this.scrollViewport.clientHeight, this.scrollViewport.scrollTop + scrollSpeedY)
-				);
-				scrolled = true;
-			}
-
-			if (scrollSpeedX !== 0) {
-				this.scrollViewport.scrollLeft = Math.max(
-					0,
-					Math.min(this.scrollViewport.scrollWidth - this.scrollViewport.clientWidth, this.scrollViewport.scrollLeft + scrollSpeedX)
-				);
-				scrolled = true;
-			}
-
-			if (scrolled) {
-				this.scrollEngine.scrollTo(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
-			}
-
-			const isVertical = this.fillDragDirectionLock === 'VERTICAL';
-
-			let direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null = null;
-			let minRowPreview = -1;
-			let maxRowPreview = -1;
-			let minColPreview = -1;
-			let maxColPreview = -1;
-
-			if (isVertical) {
-				if (currRow > this.fillEndRow) {
-					direction = 'DOWN';
-					minRowPreview = this.fillEndRow + 1;
-					maxRowPreview = currRow;
-					minColPreview = this.fillStartCol;
-					maxColPreview = this.fillEndCol;
-				} else if (currRow < this.fillStartRow) {
-					direction = 'UP';
-					minRowPreview = currRow;
-					maxRowPreview = this.fillStartRow - 1;
-					minColPreview = this.fillStartCol;
-					maxColPreview = this.fillEndCol;
-				}
-			} else {
-				if (currCol > this.fillEndCol) {
-					direction = 'RIGHT';
-					minRowPreview = this.fillStartRow;
-					maxRowPreview = this.fillEndRow;
-					minColPreview = this.fillEndCol + 1;
-					maxColPreview = currCol;
-				} else if (currCol < this.fillStartCol) {
-					direction = 'LEFT';
-					minRowPreview = this.fillStartRow;
-					maxRowPreview = this.fillEndRow;
-					minColPreview = currCol;
-					maxColPreview = this.fillStartCol - 1;
-				}
-			}
-
-			if (direction && minRowPreview <= maxRowPreview && minColPreview <= maxColPreview) {
-				this.currentFillPreview = {
-					minRow: minRowPreview,
-					maxRow: maxRowPreview,
-					minCol: minColPreview,
-					maxCol: maxColPreview,
-					direction,
-				};
-			} else {
-				this.currentFillPreview = null;
-			}
-
-			this.updateFillPreview();
-		} catch (err) {
-			console.error('RenderEngine: Error in onFillDragMove', err);
-			this.onFillDragMouseUp();
-		}
-	};
-
-	private updateFillPreview(): void {
-		if (!this.fillPreviewBorder || !this.overlayLayer) return;
-
-		if (!this.isFilling || !this.currentFillPreview) {
-			this.fillPreviewBorder.style.display = 'none';
-			return;
-		}
-
-		const { minRow, maxRow, minCol, maxCol } = this.currentFillPreview;
-		const box = this.getClampedOverlayBox(minRow, maxRow, minCol, maxCol);
-		if (box) {
-			this.fillPreviewBorder.style.display = 'block';
-			this.fillPreviewBorder.style.transform = `translate3d(${box.left}px, ${box.top}px, 0)`;
-			this.fillPreviewBorder.style.width = `${box.width}px`;
-			this.fillPreviewBorder.style.height = `${box.height}px`;
-		} else {
-			this.fillPreviewBorder.style.display = 'none';
-		}
-	}
-
-	private onFillDragMouseUp = (e?: Event): void => {
-		window.removeEventListener('mousemove', this.onFillDragMove);
-		window.removeEventListener('mouseup', this.onFillDragMouseUp);
-		window.removeEventListener('blur', this.onFillDragMouseUp);
-		document.removeEventListener('mouseleave', this.onFillDragMouseUp);
-
-		if (!this.isFilling) return;
-		this.isFilling = false;
-		this.fillDragDirectionLock = null; // Reset lock on mouse release
-
-		if (this.fillPreviewBorder) {
-			this.fillPreviewBorder.remove();
-			this.fillPreviewBorder = null;
-		}
-
-		if (this.currentFillPreview) {
-			try {
-				const { minRow, maxRow, minCol, maxCol, direction } = this.currentFillPreview;
-				this.extrapolateAndFillRange(minRow, maxRow, minCol, maxCol, direction!);
-			} catch (err) {
-				console.error('RenderEngine: Error during extrapolateAndFillRange', err);
-			}
-		}
-
-		this.currentFillPreview = null;
-	};
-
-	private extrapolateAndFillRange(
-		minRowTarget: number,
-		maxRowTarget: number,
-		minColTarget: number,
-		maxColTarget: number,
-		direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT'
-	): void {
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) return;
-
-		const state = this.engine.stateManager.getState();
-		const columns = state.columns;
-
-		const startRowNode = rowModel.getRowNode(this.fillStartRow);
-		const endRowNode = rowModel.getRowNode(this.fillEndRow);
-		const startCol = columns[this.fillStartCol];
-		const endCol = columns[this.fillEndCol];
-
-		const targetStartRowNode = rowModel.getRowNode(minRowTarget);
-		const targetEndRowNode = rowModel.getRowNode(maxRowTarget);
-		const targetStartCol = columns[minColTarget];
-		const targetEndCol = columns[maxColTarget];
-
-		if (!startRowNode || !endRowNode || !startCol || !endCol || !targetStartRowNode || !targetEndRowNode || !targetStartCol || !targetEndCol) {
-			return;
-		}
-
-		const source: GridCellRange = {
-			start: { rowId: startRowNode.id, colField: startCol.field },
-			end: { rowId: endRowNode.id, colField: endCol.field },
-		};
-
-		const target: GridCellRange = {
-			start: { rowId: targetStartRowNode.id, colField: targetStartCol.field },
-			end: { rowId: targetEndRowNode.id, colField: targetEndCol.field },
-		};
-
-		this.engine.fillRange(source, target);
-		this.schedulePaint();
 	}
 
 	/**

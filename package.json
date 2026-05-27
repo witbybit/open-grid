@@ -3,6 +3,7 @@
 	"private": true,
 	"version": "1.0.0",
 	"description": "Headless high-performance spreadsheet and grid engine",
+	"packageManager": "pnpm@10.33.0",
 	"scripts": {
 		"build": "pnpm --filter \"@open-grid/*\" run build",
 		"test": "pnpm --filter \"@open-grid/*\" run test",
@@ -17,10 +18,5 @@
 		"typescript": "^5.4.5",
 		"typescript-eslint": "^7.10.0",
 		"vitest": "^1.6.0"
-	},
-	"pnpm": {
-		"onlyBuiltDependencies": [
-			"esbuild"
-		]
 	}
 }

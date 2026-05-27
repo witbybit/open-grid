@@ -17,6 +17,7 @@
 	},
 	"files": [
 		"dist",
+		"!dist/**/*.test.*",
 		"README.md",
 		"LICENSE"
 	],
