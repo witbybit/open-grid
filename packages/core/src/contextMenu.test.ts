@@ -104,16 +104,14 @@ describe('GridContextMenuPlugin', () => {
 		const params = {
 			rowId: 'r1',
 			colField: 'name',
-			store,
+			api: store,
 			selection: state.selection,
 		};
 
 		// Call internal copy selected range directly or simulate it
 		testPlugin.copySelectedRange(params);
 
-		expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-			'Product A\t100\nProduct B\t200'
-		);
+		expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Product A\t100\nProduct B\t200');
 	});
 
 	it('should clear selection values atomically', () => {
@@ -123,7 +121,7 @@ describe('GridContextMenuPlugin', () => {
 		const params = {
 			rowId: 'r1',
 			colField: 'name',
-			store,
+			api: store,
 			selection: state.selection,
 		};
 
@@ -142,7 +140,7 @@ describe('GridContextMenuPlugin', () => {
 		const params = {
 			rowId: 'r1',
 			colField: 'name',
-			store,
+			api: store,
 			selection: state.selection,
 		};
 
@@ -164,7 +162,7 @@ describe('GridContextMenuPlugin', () => {
 		const params = {
 			rowId: 'r1',
 			colField: 'name',
-			store,
+			api: store,
 			selection: state.selection,
 		};
 
@@ -189,7 +187,7 @@ describe('GridContextMenuPlugin', () => {
 		const menuEl = testPlugin.menuElement as HTMLDivElement;
 		expect(menuEl).toBeDefined();
 		const items = Array.from(menuEl.querySelectorAll('.og-context-menu-item'));
-		const texts = items.map(el => el.textContent);
+		const texts = items.map((el) => el.textContent);
 
 		expect(texts).not.toContain('Copy Selected Range');
 		expect(texts).not.toContain('Add 100 to Selection');
@@ -200,9 +198,7 @@ describe('GridContextMenuPlugin', () => {
 	it('should support custom items and pass rich parameters to action callbacks', () => {
 		const customAction = vi.fn();
 		plugin.setOptions({
-			customItems: [
-				{ label: 'My Custom Action', action: customAction }
-			]
+			customItems: [{ label: 'My Custom Action', action: customAction }],
 		});
 
 		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
@@ -211,8 +207,9 @@ describe('GridContextMenuPlugin', () => {
 		testPlugin.renderMenu(100, 100);
 
 		const menuEl = testPlugin.menuElement as HTMLDivElement;
-		const customItemEl = Array.from(menuEl.querySelectorAll('.og-context-menu-item'))
-			.find(el => el.textContent === 'My Custom Action') as HTMLDivElement;
+		const customItemEl = Array.from(menuEl.querySelectorAll('.og-context-menu-item')).find(
+			(el) => el.textContent === 'My Custom Action'
+		) as HTMLDivElement;
 
 		expect(customItemEl).toBeDefined();
 		customItemEl.click();
@@ -221,7 +218,7 @@ describe('GridContextMenuPlugin', () => {
 		const params = customAction.mock.calls[0][0];
 		expect(params.rowId).toBe('r1');
 		expect(params.colField).toBe('name');
-		expect(params.store).toBe(store);
+		expect(params.api).toBe(store);
 		expect(params.selection.range).toEqual({
 			start: { rowId: 'r1', colField: 'name' },
 			end: { rowId: 'r2', colField: 'price' },

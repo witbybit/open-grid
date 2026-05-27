@@ -192,7 +192,7 @@ describe('RenderEngine', () => {
 		document.body.appendChild(container);
 
 		const renderer = new RenderEngine(store.engine);
-		renderer.onMountReactPortal = (_cellKey, portalHost) => {
+		renderer.onMountCellContent = ({ container: portalHost }) => {
 			if (!portalHost.querySelector('[data-custom-editor-root]')) {
 				const customEditorRoot = document.createElement('div');
 				customEditorRoot.dataset.customEditorRoot = 'true';

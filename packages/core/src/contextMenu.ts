@@ -1,9 +1,9 @@
-import { GridStore, GridCellPointer, GridPlugin, InternalGridApi, GridSelectionState } from './store.js';
+import { GridStore, GridCellPointer, GridPlugin, GridApi, InternalGridApi, GridSelectionState } from './store.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
 	colField: string;
-	store: GridStore<TRowData>;
+	api: GridApi<TRowData>;
 	selection: GridSelectionState;
 }
 
@@ -46,7 +46,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			const rowModel = this.store.getRowModel();
 			if (rowModel) {
 				const clickedRowIdx = rowModel.getRowIndexById(rowId);
-				const clickedColIdx = state.columns.findIndex(c => c.field === colField);
+				const clickedColIdx = state.columns.findIndex((c) => c.field === colField);
 				const bounds = state.selection.bounds;
 				if (
 					clickedRowIdx >= bounds.minRow &&
@@ -108,11 +108,16 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const params: ContextMenuParams<TRowData> = {
 			rowId,
 			colField,
-			store: this.store,
+			api: this.store,
 			selection: state.selection,
 		};
 
-		const defaultItems: Array<{ id: DefaultContextMenuItemId; label?: string; isDivider?: boolean; action?: (params: ContextMenuParams<TRowData>) => void }> = [
+		const defaultItems: Array<{
+			id: DefaultContextMenuItemId;
+			label?: string;
+			isDivider?: boolean;
+			action?: (params: ContextMenuParams<TRowData>) => void;
+		}> = [
 			{ id: 'copy', label: 'Copy Selected Range', action: (p) => this.copySelectedRange(p) },
 			{ id: 'clear', label: 'Clear Selection', action: (p) => this.clearSelection(p) },
 			{ id: 'divider', isDivider: true },
@@ -126,7 +131,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		const items = [...activeDefaults, ...custom];
 
-		items.forEach(item => {
+		items.forEach((item) => {
 			if (item.isDivider) {
 				const divider = document.createElement('div');
 				divider.className = 'og-context-menu-divider';
@@ -189,7 +194,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			const rowId = this.store.getRowId(row);
 			const rowVals: string[] = [];
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-				const col = params.store.getState().columns[c];
+				const col = params.api.getState().columns[c];
 				if (!col) continue;
 				const val = this.store.getCellValue(rowId, col.field);
 				rowVals.push(val !== undefined && val !== null ? String(val) : '');
@@ -200,7 +205,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const tsvString = rows.join('\n');
 
 		if (navigator.clipboard && navigator.clipboard.writeText) {
-			navigator.clipboard.writeText(tsvString).catch(err => {
+			navigator.clipboard.writeText(tsvString).catch((err) => {
 				console.error('Failed to copy selected range: ', err);
 			});
 		} else {
@@ -230,7 +235,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				if (!row) continue;
 				const rowId = this.store.getRowId(row);
 				for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-					const col = params.store.getState().columns[c];
+					const col = params.api.getState().columns[c];
 					if (!col) continue;
 					this.store.setCellValue(rowId, col.field, '');
 				}
@@ -249,7 +254,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				if (!row) continue;
 				const rowId = this.store.getRowId(row);
 				for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-					const col = params.store.getState().columns[c];
+					const col = params.api.getState().columns[c];
 					if (!col) continue;
 					const val = this.store.getCellValue(rowId, col.field);
 					const num = Number(val);
@@ -272,7 +277,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				if (!row) continue;
 				const rowId = this.store.getRowId(row);
 				for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-					const col = params.store.getState().columns[c];
+					const col = params.api.getState().columns[c];
 					if (!col) continue;
 					const val = this.store.getCellValue(rowId, col.field);
 					const num = Number(val);

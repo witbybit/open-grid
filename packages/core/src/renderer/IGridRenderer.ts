@@ -1,5 +1,21 @@
 import type { ColumnDef, RowNode } from '../store.js';
 
+export interface GridCellContentMount<TRowData = unknown> {
+	cellKey: string;
+	container: HTMLElement;
+	value: unknown;
+	node: RowNode<TRowData>;
+	col: ColumnDef<TRowData>;
+	isEditing: boolean;
+	isLoading: boolean;
+}
+
+export interface GridCellContentUnmount {
+	cellKey: string;
+	container?: HTMLElement;
+	flushSync?: boolean;
+}
+
 /**
  * Contract for the component that owns physical grid rendering.
  */
@@ -25,20 +41,12 @@ export interface IGridRenderer<TRowData = unknown> {
 	fullPaint(): void;
 
 	/**
-	 * Optional hook for frameworks (like React) to mount custom portaled cells.
+	 * Optional hook for framework adapters to mount custom cell content.
 	 */
-	onMountReactPortal?: (
-		cellKey: string,
-		container: HTMLElement,
-		value: unknown,
-		node: RowNode<TRowData>,
-		col: ColumnDef<TRowData>,
-		isEditing: boolean,
-		isLoading: boolean
-	) => void;
+	onMountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
 
 	/**
-	 * Optional hook for frameworks (like React) to unmount custom portaled cells.
+	 * Optional hook for framework adapters to unmount custom cell content.
 	 */
-	onUnmountReactPortal?: (cellKey: string, container?: HTMLElement, flushSync?: boolean) => void;
+	onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useInsertionEffect, useMemo, useRef } from 'react';
 import { createClientGrid, createServerGrid, type GridApi } from '@open-grid/core';
 
 import type { ClientGridOptions, ServerGridOptions } from './types.js';
@@ -18,7 +18,7 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 		api.setRows(options.rows);
 	}, [api, options.rows]);
 
-	useEffect(() => {
+	useInsertionEffect(() => {
 		return () => {
 			api.destroy();
 		};
@@ -47,7 +47,7 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): G
 		api.setServerDatasource(options.datasource, options.blockSize);
 	}, [api, options.datasource, options.blockSize]);
 
-	useEffect(() => {
+	useInsertionEffect(() => {
 		return () => {
 			api.destroy();
 		};

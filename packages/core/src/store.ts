@@ -134,7 +134,7 @@ export interface CellRendererProps<TRowData = unknown> {
 	row: TRowData;
 	rowId: string;
 	colField: string;
-	api: InternalGridApi<TRowData>;
+	api: GridApi<TRowData>;
 }
 
 export interface CellEditorProps<TRowData = unknown> {
@@ -146,7 +146,7 @@ export interface CellEditorProps<TRowData = unknown> {
 	 * Use this for text inputs where user is still typing.
 	 */
 	onChange: (value: unknown) => void;
-	api: InternalGridApi<TRowData>;
+	api: GridApi<TRowData>;
 	/**
 	 * Commit the value and exit edit mode.
 	 * If no value is provided, commits the current value from onChange.

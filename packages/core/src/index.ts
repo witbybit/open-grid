@@ -28,4 +28,7 @@ export type {
 export type { FilterModel, FilterModelItem, SortModel } from './rowModel.js';
 export type { IGridDatasource } from './serverRowModel.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
-export { type InternalGridBridge, getEngineFromApi, getInternalApiFromApi } from './internalBridge.js';
+export { mountGridHost, type GridCellContentAdapter, type GridHost, type GridHostOptions } from './gridHost.js';
+export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
+export type { GridNavigationOptions } from './navigation.js';
+export type { GridCellContentMount, GridCellContentUnmount } from './renderer/IGridRenderer.js';

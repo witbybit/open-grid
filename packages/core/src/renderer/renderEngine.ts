@@ -1,7 +1,7 @@
 import { DOMPool, PooledRow } from './domPool.js';
 import { ScrollEngine } from './scrollEngine.js';
 import { createCellKey } from '../ids.js';
-import type { IGridRenderer } from './IGridRenderer.js';
+import type { GridCellContentMount, GridCellContentUnmount, IGridRenderer } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { RowNode, type ColumnDef, type GridCellRange } from '../store.js';
 import { CORE_STYLES } from './styles.js';
@@ -52,7 +52,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private fillDragStartX = 0;
 	private fillDragStartY = 0;
 	private fillPreviewBorder: HTMLDivElement | null = null;
-	private currentFillPreview: { minRow: number; maxRow: number; minCol: number; maxCol: number; direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null } | null = null;
+	private currentFillPreview: {
+		minRow: number;
+		maxRow: number;
+		minCol: number;
+		maxCol: number;
+		direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null;
+	} | null = null;
 	private fillDragDirectionLock: 'VERTICAL' | 'HORIZONTAL' | null = null;
 	private selectionDragBounds: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
 
@@ -66,17 +72,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private columnDropIndicator: HTMLDivElement | null = null;
 	private columnDragGhost: HTMLDivElement | null = null;
 
-	// Micro-bridge for React custom renderers/editors
-	public onMountReactPortal?: (
-		cellKey: string,
-		container: HTMLElement,
-		value: unknown,
-		node: RowNode<TRowData>,
-		col: ColumnDef<TRowData>,
-		isEditing: boolean,
-		isLoading: boolean
-	) => void;
-	public onUnmountReactPortal?: (cellKey: string, container?: HTMLElement, flushSync?: boolean) => void;
+	public onMountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
+	public onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
 
 	constructor(engine: GridEngine<TRowData>) {
 		this.engine = engine;
@@ -218,7 +215,17 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const scheduleHeaders = () => this.scheduleHeaderPaint();
 		const scheduleOverlay = () => this.scheduleOverlayPaint();
 
-		for (const key of ['columns', 'columnWidths', 'rowHeights', 'defaultRowHeight', 'defaultColWidth', 'dataVersion', 'loading', 'visibleRowRange', 'visibleColRange']) {
+		for (const key of [
+			'columns',
+			'columnWidths',
+			'rowHeights',
+			'defaultRowHeight',
+			'defaultColWidth',
+			'dataVersion',
+			'loading',
+			'visibleRowRange',
+			'visibleColRange',
+		]) {
 			this.unsubscribers.push(this.engine.stateManager.subscribeToKey(key, scheduleFull));
 		}
 
@@ -543,10 +550,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const pinBottomRows = this.engine.viewport.pinBottomRows;
 
 		const isFocusedRow = state.selection.focus?.rowId === node.id;
-		const isSelectedRow =
-			!!state.selection.bounds &&
-			rowIndex >= state.selection.bounds.minRow &&
-			rowIndex <= state.selection.bounds.maxRow;
+		const isSelectedRow = !!state.selection.bounds && rowIndex >= state.selection.bounds.minRow && rowIndex <= state.selection.bounds.maxRow;
 		const isLoadingRow = this.engine.data.isRowLoading(node.id);
 		let rowClassName = 'og-row';
 		if (rowIndex < pinTopRows) {
@@ -738,21 +742,33 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			if ((col.cellRenderer || access.isEditing) && !access.isLoading) {
 				const previousPortalHost = this.getCellPortalHost(cell);
 				if (cell.dataset.cellKey !== cellKey) {
-					if (cell.dataset.cellKey && this.onUnmountReactPortal) {
-						this.onUnmountReactPortal(cell.dataset.cellKey, previousPortalHost ?? cell, true);
+					if (cell.dataset.cellKey && this.onUnmountCellContent) {
+						this.onUnmountCellContent({ cellKey: cell.dataset.cellKey, container: previousPortalHost ?? cell, flushSync: true });
 					}
 					// Set content empty so custom React portal doesn't clash with stale text
 					cell.textContent = '';
 					cell.dataset.cellKey = cellKey;
 				}
 				const portalHost = this.ensureCellPortalHost(cell);
-				if (this.onMountReactPortal) {
-					this.onMountReactPortal(cellKey, portalHost, cellValue, node, col, access.isEditing, access.isLoading);
+				if (this.onMountCellContent) {
+					this.onMountCellContent({
+						cellKey,
+						container: portalHost,
+						value: cellValue,
+						node,
+						col,
+						isEditing: access.isEditing,
+						isLoading: access.isLoading,
+					});
 				}
 			} else {
 				if (cell.dataset.cellKey) {
-					if (this.onUnmountReactPortal) {
-						this.onUnmountReactPortal(cell.dataset.cellKey, this.getCellPortalHost(cell) ?? cell, true);
+					if (this.onUnmountCellContent) {
+						this.onUnmountCellContent({
+							cellKey: cell.dataset.cellKey,
+							container: this.getCellPortalHost(cell) ?? cell,
+							flushSync: true,
+						});
 					}
 					delete cell.dataset.cellKey;
 				}
@@ -844,16 +860,16 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const cell = pooledRow.cells.get(colIdx);
 		if (cell) {
 			if (cell.dataset.cellKey) {
-				if (this.onUnmountReactPortal) {
-					this.onUnmountReactPortal(cell.dataset.cellKey, this.getCellPortalHost(cell) ?? cell, true);
+				if (this.onUnmountCellContent) {
+					this.onUnmountCellContent({ cellKey: cell.dataset.cellKey, container: this.getCellPortalHost(cell) ?? cell, flushSync: true });
 				}
 				delete cell.dataset.cellKey;
 			} else {
-				// Trigger unmount React portal bridge if applicable
+				// Trigger unmount hook if a framework adapter owns this cell's content.
 				const col = this.engine.stateManager.getState().columns[colIdx];
-				if (col && this.onUnmountReactPortal) {
+				if (col && this.onUnmountCellContent) {
 					const cellKey = createCellKey(pooledRow.boundRowId, col.field);
-					this.onUnmountReactPortal(cellKey);
+					this.onUnmountCellContent({ cellKey });
 				}
 			}
 
@@ -1198,9 +1214,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.columnDropInsertionIndex = insertionIndex;
 
-		const indicatorContentLeft = insertionIndex >= state.columns.length
-			? this.engine.geometry.getTotalWidth(state.defaultColWidth)
-			: this.engine.geometry.colLefts[insertionIndex] || 0;
+		const indicatorContentLeft =
+			insertionIndex >= state.columns.length
+				? this.engine.geometry.getTotalWidth(state.defaultColWidth)
+				: this.engine.geometry.colLefts[insertionIndex] || 0;
 		const indicatorViewportLeft = indicatorContentLeft - this.scrollViewport.scrollLeft;
 
 		this.columnDropIndicator.style.display = 'block';
@@ -1517,89 +1534,95 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				}
 			}
 
-		// Auto-scroll when dragging near viewport edges
-		const edgeThreshold = 35; // 35px from edge
-		let scrollSpeedX = 0;
-		let scrollSpeedY = 0;
+			// Auto-scroll when dragging near viewport edges
+			const edgeThreshold = 35; // 35px from edge
+			let scrollSpeedX = 0;
+			let scrollSpeedY = 0;
 
-		if (e.clientY > scrollRect.bottom - edgeThreshold) {
-			scrollSpeedY = 15;
-		} else if (e.clientY < scrollRect.top + edgeThreshold) {
-			scrollSpeedY = -15;
-		}
-
-		if (e.clientX > scrollRect.right - edgeThreshold) {
-			scrollSpeedX = 15;
-		} else if (e.clientX < scrollRect.left + edgeThreshold) {
-			scrollSpeedX = -15;
-		}
-
-		let scrolled = false;
-		if (scrollSpeedY !== 0) {
-			this.scrollViewport.scrollTop = Math.max(0, Math.min(this.scrollViewport.scrollHeight - this.scrollViewport.clientHeight, this.scrollViewport.scrollTop + scrollSpeedY));
-			scrolled = true;
-		}
-
-		if (scrollSpeedX !== 0) {
-			this.scrollViewport.scrollLeft = Math.max(0, Math.min(this.scrollViewport.scrollWidth - this.scrollViewport.clientWidth, this.scrollViewport.scrollLeft + scrollSpeedX));
-			scrolled = true;
-		}
-
-		if (scrolled) {
-			this.scrollEngine.scrollTo(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
-		}
-
-		const isVertical = this.fillDragDirectionLock === 'VERTICAL';
-
-		let direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null = null;
-		let minRowPreview = -1;
-		let maxRowPreview = -1;
-		let minColPreview = -1;
-		let maxColPreview = -1;
-
-		if (isVertical) {
-			if (currRow > this.fillEndRow) {
-				direction = 'DOWN';
-				minRowPreview = this.fillEndRow + 1;
-				maxRowPreview = currRow;
-				minColPreview = this.fillStartCol;
-				maxColPreview = this.fillEndCol;
-			} else if (currRow < this.fillStartRow) {
-				direction = 'UP';
-				minRowPreview = currRow;
-				maxRowPreview = this.fillStartRow - 1;
-				minColPreview = this.fillStartCol;
-				maxColPreview = this.fillEndCol;
+			if (e.clientY > scrollRect.bottom - edgeThreshold) {
+				scrollSpeedY = 15;
+			} else if (e.clientY < scrollRect.top + edgeThreshold) {
+				scrollSpeedY = -15;
 			}
-		} else {
-			if (currCol > this.fillEndCol) {
-				direction = 'RIGHT';
-				minRowPreview = this.fillStartRow;
-				maxRowPreview = this.fillEndRow;
-				minColPreview = this.fillEndCol + 1;
-				maxColPreview = currCol;
-			} else if (currCol < this.fillStartCol) {
-				direction = 'LEFT';
-				minRowPreview = this.fillStartRow;
-				maxRowPreview = this.fillEndRow;
-				minColPreview = currCol;
-				maxColPreview = this.fillStartCol - 1;
+
+			if (e.clientX > scrollRect.right - edgeThreshold) {
+				scrollSpeedX = 15;
+			} else if (e.clientX < scrollRect.left + edgeThreshold) {
+				scrollSpeedX = -15;
 			}
-		}
 
-		if (direction && minRowPreview <= maxRowPreview && minColPreview <= maxColPreview) {
-			this.currentFillPreview = {
-				minRow: minRowPreview,
-				maxRow: maxRowPreview,
-				minCol: minColPreview,
-				maxCol: maxColPreview,
-				direction,
-			};
-		} else {
-			this.currentFillPreview = null;
-		}
+			let scrolled = false;
+			if (scrollSpeedY !== 0) {
+				this.scrollViewport.scrollTop = Math.max(
+					0,
+					Math.min(this.scrollViewport.scrollHeight - this.scrollViewport.clientHeight, this.scrollViewport.scrollTop + scrollSpeedY)
+				);
+				scrolled = true;
+			}
 
-		this.updateFillPreview();
+			if (scrollSpeedX !== 0) {
+				this.scrollViewport.scrollLeft = Math.max(
+					0,
+					Math.min(this.scrollViewport.scrollWidth - this.scrollViewport.clientWidth, this.scrollViewport.scrollLeft + scrollSpeedX)
+				);
+				scrolled = true;
+			}
+
+			if (scrolled) {
+				this.scrollEngine.scrollTo(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
+			}
+
+			const isVertical = this.fillDragDirectionLock === 'VERTICAL';
+
+			let direction: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' | null = null;
+			let minRowPreview = -1;
+			let maxRowPreview = -1;
+			let minColPreview = -1;
+			let maxColPreview = -1;
+
+			if (isVertical) {
+				if (currRow > this.fillEndRow) {
+					direction = 'DOWN';
+					minRowPreview = this.fillEndRow + 1;
+					maxRowPreview = currRow;
+					minColPreview = this.fillStartCol;
+					maxColPreview = this.fillEndCol;
+				} else if (currRow < this.fillStartRow) {
+					direction = 'UP';
+					minRowPreview = currRow;
+					maxRowPreview = this.fillStartRow - 1;
+					minColPreview = this.fillStartCol;
+					maxColPreview = this.fillEndCol;
+				}
+			} else {
+				if (currCol > this.fillEndCol) {
+					direction = 'RIGHT';
+					minRowPreview = this.fillStartRow;
+					maxRowPreview = this.fillEndRow;
+					minColPreview = this.fillEndCol + 1;
+					maxColPreview = currCol;
+				} else if (currCol < this.fillStartCol) {
+					direction = 'LEFT';
+					minRowPreview = this.fillStartRow;
+					maxRowPreview = this.fillEndRow;
+					minColPreview = currCol;
+					maxColPreview = this.fillStartCol - 1;
+				}
+			}
+
+			if (direction && minRowPreview <= maxRowPreview && minColPreview <= maxColPreview) {
+				this.currentFillPreview = {
+					minRow: minRowPreview,
+					maxRow: maxRowPreview,
+					minCol: minColPreview,
+					maxCol: maxColPreview,
+					direction,
+				};
+			} else {
+				this.currentFillPreview = null;
+			}
+
+			this.updateFillPreview();
 		} catch (err) {
 			console.error('RenderEngine: Error in onFillDragMove', err);
 			this.onFillDragMouseUp();
@@ -1624,7 +1647,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		} else {
 			this.fillPreviewBorder.style.display = 'none';
 		}
-	};
+	}
 
 	private onFillDragMouseUp = (e?: Event): void => {
 		window.removeEventListener('mousemove', this.onFillDragMove);
@@ -1676,19 +1699,18 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const targetStartCol = columns[minColTarget];
 		const targetEndCol = columns[maxColTarget];
 
-		if (!startRowNode || !endRowNode || !startCol || !endCol ||
-			!targetStartRowNode || !targetEndRowNode || !targetStartCol || !targetEndCol) {
+		if (!startRowNode || !endRowNode || !startCol || !endCol || !targetStartRowNode || !targetEndRowNode || !targetStartCol || !targetEndCol) {
 			return;
 		}
 
 		const source: GridCellRange = {
 			start: { rowId: startRowNode.id, colField: startCol.field },
-			end: { rowId: endRowNode.id, colField: endCol.field }
+			end: { rowId: endRowNode.id, colField: endCol.field },
 		};
 
 		const target: GridCellRange = {
 			start: { rowId: targetStartRowNode.id, colField: targetStartCol.field },
-			end: { rowId: targetEndRowNode.id, colField: targetEndCol.field }
+			end: { rowId: targetEndRowNode.id, colField: targetEndCol.field },
 		};
 
 		this.engine.fillRange(source, target);

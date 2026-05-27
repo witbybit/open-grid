@@ -1,4 +1,4 @@
-import { InternalGridBridge } from './internalBridge.js';
+import { ApiBridge } from './apiBridge.js';
 import { ClientRowModelController, type ClientRowModelOptions, type FilterModel, type SortModel } from './rowModel.js';
 import { ServerRowModelController, type IGridDatasource, type ServerRowModelOptions } from './serverRowModel.js';
 import {
@@ -29,7 +29,7 @@ function buildColumnWidths<TRowData>(columns: Array<ColumnDef<TRowData>>): Recor
 	}, {});
 }
 
-export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: () => void): GridApi<TRowData> & InternalGridBridge<TRowData> {
+export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: () => void): GridApi<TRowData> & ApiBridge<TRowData> {
 	const api = {
 		getState: () => store.getState(),
 		setState: (updater: GridStateUpdater<TRowData>) => store.setState(updater),
@@ -84,7 +84,7 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		},
 	});
 
-	return Object.freeze(api) as GridApi<TRowData> & InternalGridBridge<TRowData>;
+	return Object.freeze(api) as GridApi<TRowData> & ApiBridge<TRowData>;
 }
 
 export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridApi<TRowData> {

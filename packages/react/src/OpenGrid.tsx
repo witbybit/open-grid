@@ -5,16 +5,15 @@ import {
 	ColumnDef,
 	GridState,
 	RowNode,
-	getEngineFromApi,
-	getInternalApiFromApi,
-} from '@open-grid/core';
-import {
 	GridContextMenuOptions,
-	GridContextMenuPlugin,
-	GridNavigationController,
+	GridContextMenuHandle,
+	GridHost,
+	GridNavigationHandle,
 	GridNavigationOptions,
-	RenderEngine,
-} from '@open-grid/core/internal';
+	mountGridHost,
+	registerGridContextMenu,
+	registerGridNavigation,
+} from '@open-grid/core';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { PortalData, PortalManager } from './GridPortal.js';
 
@@ -115,17 +114,16 @@ export function useGridKeySelectorWithEquality<T, TRowData = unknown>(
  */
 export function useGridNavigationController<TRowData = unknown>(options: GridNavigationOptions = {}, enabled = true) {
 	const api = useGridApi<TRowData>();
-	const internalApi = getInternalApiFromApi(api);
 	const optionsRef = useRef(options);
 	optionsRef.current = options;
-	const [controller, setController] = useState<GridNavigationController<TRowData> | null>(null);
+	const [controller, setController] = useState<GridNavigationHandle | null>(null);
 
 	useEffect(() => {
 		if (!enabled) {
 			setController(null);
 			return;
 		}
-		const nav = new GridNavigationController<TRowData>({
+		const nav = registerGridNavigation<TRowData>(api, {
 			onCellValueChanged: (rowId, colField, val) => optionsRef.current.onCellValueChanged?.(rowId, colField, val),
 			get editTrigger() {
 				return optionsRef.current.editTrigger;
@@ -134,15 +132,13 @@ export function useGridNavigationController<TRowData = unknown>(options: GridNav
 				return optionsRef.current.arrowKeyNavigationEdit;
 			},
 		});
-		internalApi.registerPlugin(nav);
 		setController(nav);
 
 		return () => {
 			nav.dispose();
-			internalApi.unregisterPlugin(nav.name);
 			setController(null);
 		};
-	}, [internalApi, enabled]);
+	}, [api, enabled]);
 
 	return controller;
 }
@@ -193,13 +189,11 @@ function OpenGridInner<TRowData = unknown>({
 	onCellClick,
 	navigationOptions = {},
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
-	const engine = getEngineFromApi(api);
-	const internalApi = getInternalApiFromApi(api);
 	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
 	const portalFlushScheduledRef = useRef(false);
 	const [, setPortalVersion] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);
-	const renderEngineRef = useRef<RenderEngine<TRowData> | null>(null);
+	const hostRef = useRef<GridHost | null>(null);
 	const isGridActiveRef = useRef(false);
 
 	const schedulePortalFlush = useCallback(() => {
@@ -258,13 +252,13 @@ function OpenGridInner<TRowData = unknown>({
 	);
 
 	useEffect(() => {
-		internalApi.setViewportPins({
+		hostRef.current?.setViewportPins({
 			left: pinLeftColumns,
 			right: pinRightColumns,
 			top: pinTopRows,
 			bottom: pinBottomRows,
 		});
-	}, [internalApi, pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
+	}, [pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
 
 	useEffect(() => {
 		if (enableColumnReorder !== undefined) {
@@ -276,39 +270,34 @@ function OpenGridInner<TRowData = unknown>({
 		const container = containerRef.current;
 		if (!container) return;
 
-		// Create and mount RenderEngine
-		const renderEngine = new RenderEngine(engine);
-		renderEngineRef.current = renderEngine;
-
-		// Bind portal callbacks
-		renderEngine.onMountReactPortal = mountPortal;
-		renderEngine.onUnmountReactPortal = unmountPortal;
-
-		// Mount the engine
-		renderEngine.mount(container);
-
-		// Handle resize observer
-		const observer = new ResizeObserver((entries) => {
-			if (!entries || entries.length === 0) return;
-			const { width, height } = entries[0].contentRect;
-			if (internalApi.setViewportSize(width, height)) {
-				internalApi.updateVisibleRanges();
-				renderEngine.schedulePaint();
-			}
+		const host = mountGridHost(api, container, {
+			pins: {
+				left: pinLeftColumns,
+				right: pinRightColumns,
+				top: pinTopRows,
+				bottom: pinBottomRows,
+			},
+			cellContent: {
+				mountCellContent: (mount) => {
+					mountPortal(mount.cellKey, mount.container, mount.value, mount.node, mount.col, mount.isEditing, mount.isLoading);
+				},
+				unmountCellContent: (unmount) => {
+					unmountPortal(unmount.cellKey, unmount.container);
+				},
+			},
 		});
-		observer.observe(container);
+		hostRef.current = host;
 
 		return () => {
-			observer.disconnect();
-			renderEngine.unmount();
-			renderEngineRef.current = null;
+			host.destroy();
+			hostRef.current = null;
 			portalsRef.current.clear();
 			setPortalVersion((version) => version + 1);
 		};
-	}, [engine, internalApi, mountPortal, unmountPortal]);
+	}, [api, mountPortal, unmountPortal]);
 
 	// Context Menu plugin controller
-	const [contextMenu, setContextMenu] = useState<GridContextMenuPlugin<TRowData> | null>(null);
+	const [contextMenu, setContextMenu] = useState<GridContextMenuHandle<TRowData> | null>(null);
 	const contextMenuOptionsRef = useRef(contextMenuOptions);
 	contextMenuOptionsRef.current = contextMenuOptions;
 
@@ -317,15 +306,14 @@ function OpenGridInner<TRowData = unknown>({
 			setContextMenu(null);
 			return;
 		}
-		const plugin = new GridContextMenuPlugin<TRowData>(contextMenuOptions);
-		internalApi.registerPlugin(plugin);
+		const plugin = registerGridContextMenu<TRowData>(api, contextMenuOptions);
 		setContextMenu(plugin);
 
 		return () => {
-			internalApi.unregisterPlugin(plugin.name);
+			plugin.dispose();
 			setContextMenu(null);
 		};
-	}, [internalApi, enableContextMenu]);
+	}, [api, enableContextMenu]);
 
 	useEffect(() => {
 		if (contextMenu && contextMenuOptionsRef.current) {

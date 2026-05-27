@@ -2,8 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
-import { createApiFacade } from '@open-grid/core';
-import { GridStore, ClientRowModelController } from '@open-grid/core/internal';
+import { createClientGrid, type ClientGridOptions } from '@open-grid/core';
 import {
 	GridProvider,
 	PortalCell,
@@ -14,6 +13,7 @@ import {
 	useGridApi,
 	useGridSelector,
 	useClientGrid,
+	useServerGrid,
 } from './index.js';
 
 // Mock ResizeObserver for jsdom environment
@@ -29,26 +29,21 @@ interface TestRow {
 	name: string;
 }
 
-function createTestGrid<TRowData>(store: GridStore<TRowData>) {
+function createTestGrid<TRowData>(options: ClientGridOptions<TRowData>) {
 	return {
-		store,
-		api: createApiFacade(store, () => store.destroy()),
+		api: createClientGrid(options),
 	};
 }
 
 const SelectorInspector = () => {
 	const focused = useGridSelector((s) => s.selection.focus);
 	const dataVersion = useGridKeySelector('dataVersion', (s) => s.dataVersion);
-	const store = new GridStore<TestRow>({
-		columns: [{ field: 'name', header: 'Name', width: 100 }],
-	});
 	const api = useGridApi<TestRow>();
 
 	return (
 		<div>
 			<span data-testid='focused-cell'>{focused ? `${focused.rowId}:${focused.colField}` : 'none'}</span>
 			<span data-testid='data-version'>{dataVersion}</span>
-			<span data-testid='store-exists'>{store ? 'yes' : 'no'}</span>
 			<span data-testid='api-exists'>{api ? 'yes' : 'no'}</span>
 		</div>
 	);
@@ -78,15 +73,10 @@ const ApiSurfaceInspector = () => {
 
 describe('React Adapter (v2 API and Architecture)', () => {
 	it('should provide context and support selector hooks', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
-
-		const grid = createTestGrid(store);
 
 		render(
 			<GridProvider api={grid.api}>
@@ -94,34 +84,31 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			</GridProvider>
 		);
 
-		expect(screen.getByTestId('store-exists').textContent).toBe('yes');
 		expect(screen.getByTestId('api-exists').textContent).toBe('yes');
 		expect(screen.getByTestId('focused-cell').textContent).toBe('none');
-		expect(screen.getByTestId('data-version').textContent).toBe('2'); // starts at 1, +1 after ClientRowModelController refresh
+		expect(screen.getByTestId('data-version').textContent).toBe('2');
 
-		// Focus cell and verify selector updates
 		act(() => {
-			store.selectCell({ rowId: '1', colField: 'name' });
+			grid.api.selectCell({ rowId: '1', colField: 'name' });
 		});
 		expect(screen.getByTestId('focused-cell').textContent).toBe('1:name');
 
-		// Update rows and verify key selector updates
 		act(() => {
-			controller.setRows([{ id: '1', name: 'Product B' }]);
+			grid.api.setRows([{ id: '1', name: 'Product B' }]);
 		});
 		expect(screen.getByTestId('data-version').textContent).toBe('3');
 
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should expose a frozen public API facade instead of the mutable store internals', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [],
 			columns: [
 				{ field: 'id', header: 'ID', width: 50 },
 				{ field: 'name', header: 'Name', width: 100 },
 			],
 		});
-		const grid = createTestGrid(store);
 
 		render(
 			<GridProvider api={grid.api}>
@@ -134,14 +121,17 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(screen.getByTestId('api-register-row-model').textContent).toBe('no');
 
 		fireEvent.click(screen.getByTestId('move-column'));
-		expect(store.getState().columns.map((column) => column.field)).toEqual(['name', 'id']);
+		expect(grid.api.getState().columns.map((column) => column.field)).toEqual(['name', 'id']);
 
 		fireEvent.click(screen.getByTestId('disable-reorder'));
-		expect(store.getState().enableColumnReorder).toBe(false);
+		expect(grid.api.getState().enableColumnReorder).toBe(false);
+
+		grid.api.destroy();
 	});
 
 	it('should render custom cell renderer via PortalCell', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [
 				{
 					field: 'name',
@@ -151,14 +141,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 				},
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 
-		const colDef = store.getColumnDef('name')!;
-		const node = store.getRowModel()!.getRowNode(0)!;
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getRowNode(0)!;
 
 		render(
 			<GridProvider api={grid.api}>
@@ -167,25 +152,20 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		);
 
 		expect(screen.getByTestId('custom-renderer').textContent).toBe('Product A!!!');
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should render default text input when editing and no custom editor via PortalCell', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 
-		const colDef = store.getColumnDef('name')!;
-		const node = store.getRowModel()!.getRowNode(0)!;
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getRowNode(0)!;
 
-		// Set active edit state
 		act(() => {
-			store.setState({
+			grid.api.setState({
 				activeEdit: { rowId: '1', colField: 'name' },
 			});
 		});
@@ -200,29 +180,24 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(input).toBeDefined();
 		expect(input.value).toBe('Product A');
 
-		// Commit edit by blurring
 		fireEvent.change(input, { target: { value: 'Product B' } });
 		fireEvent.blur(input);
 
-		expect(store.getCellValue('1', 'name')).toBe('Product B');
-		controller.dispose();
+		expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+		grid.api.destroy();
 	});
 
 	it('should not commit an in-progress edit just because the portal unmounts', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 
-		const colDef = store.getColumnDef('name')!;
-		const node = store.getRowModel()!.getRowNode(0)!;
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getRowNode(0)!;
 
 		act(() => {
-			store.setState({
+			grid.api.setState({
 				activeEdit: { rowId: '1', colField: 'name' },
 			});
 		});
@@ -237,25 +212,21 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		fireEvent.change(input, { target: { value: 'Product B' } });
 		rendered.unmount();
 
-		expect(store.getCellValue('1', 'name')).toBe('Product A');
-		controller.dispose();
+		expect(grid.api.getCellValue('1', 'name')).toBe('Product A');
+		grid.api.destroy();
 	});
 
 	it('should commit an in-progress edit when editStopped is dispatched without cancellation', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 
-		const colDef = store.getColumnDef('name')!;
-		const node = store.getRowModel()!.getRowNode(0)!;
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getRowNode(0)!;
 
 		act(() => {
-			store.setState({
+			grid.api.setState({
 				activeEdit: { rowId: '1', colField: 'name' },
 			});
 		});
@@ -270,15 +241,16 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		fireEvent.change(input, { target: { value: 'Product B' } });
 
 		act(() => {
-			store.stopEditing(false);
+			grid.api.stopEditing(false);
 		});
 
-		expect(store.getCellValue('1', 'name')).toBe('Product B');
-		controller.dispose();
+		expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+		grid.api.destroy();
 	});
 
 	it('should render custom cell editor via PortalCell', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [
 				{
 					field: 'name',
@@ -295,19 +267,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 				},
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
 
-		const grid = createTestGrid(store);
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getRowNode(0)!;
 
-		const colDef = store.getColumnDef('name')!;
-		const node = store.getRowModel()!.getRowNode(0)!;
-
-		// Set active edit state
 		act(() => {
-			store.setState({
+			grid.api.setState({
 				activeEdit: { rowId: '1', colField: 'name' },
 			});
 		});
@@ -322,16 +287,16 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(input).toBeDefined();
 		expect(input.value).toBe('Product A');
 
-		// Commit edit
 		fireEvent.change(input, { target: { value: 'Product B' } });
 		fireEvent.blur(input);
 
-		expect(store.getCellValue('1', 'name')).toBe('Product B');
-		controller.dispose();
+		expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+		grid.api.destroy();
 	});
 
 	it('should commit custom cell editors immediately on Enter from the portal shell', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [
 				{
 					field: 'name',
@@ -345,17 +310,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 				},
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
 
-		const grid = createTestGrid(store);
-		const colDef = store.getColumnDef('name')!;
-		const node = store.getRowModel()!.getRowNode(0)!;
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getRowNode(0)!;
 
 		act(() => {
-			store.setState({
+			grid.api.setState({
 				activeEdit: { rowId: '1', colField: 'name' },
 			});
 		});
@@ -371,14 +331,15 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		fireEvent.change(input, { target: { value: 'Product B' } });
 		fireEvent.keyDown(input, { key: 'Enter' });
 
-		expect(store.getCellValue('1', 'name')).toBe('Product B');
-		expect(store.getState().activeEdit).toBeNull();
+		expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+		expect(grid.api.getState().activeEdit).toBeNull();
 
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should render portals inside PortalManager', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [
 				{
 					field: 'name',
@@ -388,17 +349,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 				},
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 
 		const container = document.createElement('div');
 		document.body.appendChild(container);
 
-		const colDef = store.getColumnDef('name');
-		const node = store.getRowModel()!.getRowNode(0)!;
+		const colDef = grid.api.getColumnDef('name');
+		const node = grid.api.getRowNode(0)!;
 
 		const portals = new Map();
 		portals.set('1:name', {
@@ -414,18 +370,14 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(screen.getByTestId('portal-content').textContent).toBe('Product A');
 
 		document.body.removeChild(container);
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should dispose navigation controller event listeners on unmount', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Cell Content' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Cell Content' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 
 		const onCellValueChanged = vi.fn();
 
@@ -438,22 +390,18 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		unmount();
 
 		act(() => {
-			store.setCellValue('1', 'name', 'After unmount');
+			grid.api.setCellValue('1', 'name', 'After unmount');
 		});
 
 		expect(onCellValueChanged).not.toHaveBeenCalled();
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should mount OpenGrid component and setup rendering container', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 
 		const { container, unmount } = render(<OpenGrid api={grid.api} pinLeftColumns={1} enableNavigation={true} />);
 
@@ -463,11 +411,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(openGridDiv.style.position).toBe('relative');
 
 		unmount();
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should keep custom renderer portals mounted when renderer columns are reordered', async () => {
-		const store = new GridStore<{ id: string; severity: string; service: string }>({
+		const grid = createTestGrid<{ id: string; severity: string; service: string }>({
+			rows: [{ id: '1', severity: 'CRITICAL', service: 'Auth' }],
 			columns: [
 				{ field: 'id', header: 'ID', width: 80 },
 				{
@@ -485,11 +434,6 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			],
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
-			rows: [{ id: '1', severity: 'CRITICAL', service: 'Auth' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 
 		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
 
@@ -506,21 +450,17 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		unmount();
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should expose precise cell click params and dispatch cellClicked event', async () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 		const onCellClick = vi.fn();
 		const eventListener = vi.fn();
-		const unsubscribe = store.addEventListener('cellClicked', eventListener);
+		const unsubscribe = grid.api.addEventListener('cellClicked', eventListener);
 
 		const { container, unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} onCellClick={onCellClick} />);
 
@@ -550,7 +490,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		unsubscribe();
 		unmount();
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should not mix stale native text with custom renderer content after column topology changes', async () => {
@@ -563,28 +503,24 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			},
 		];
 		const nativeColumns = [{ field: 'col_999', header: 'Col 999', width: 120 }];
-		const store = new GridStore<{ id: string; risk: string; col_999: string }>({
+		const grid = createTestGrid<{ id: string; risk: string; col_999: string }>({
+			rows: [{ id: '1', risk: 'LOW', col_999: 'Val 999' }],
 			columns: customColumns,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
-			rows: [{ id: '1', risk: 'LOW', col_999: 'Val 999' }],
-			columns: customColumns,
-		});
-		const grid = createTestGrid(store);
 
 		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
 
 		await screen.findByText('Risk LOW');
 
 		act(() => {
-			store.setState({ columns: nativeColumns });
+			grid.api.setColumns(nativeColumns);
 		});
 
 		await screen.findByText('Val 999');
 
 		act(() => {
-			store.setState({ columns: customColumns });
+			grid.api.setColumns(customColumns);
 		});
 
 		await waitFor(() => {
@@ -593,32 +529,29 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		unmount();
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should not register navigation when navigation is disabled', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: store.getState().columns,
-		});
-		const grid = createTestGrid(store);
 
-		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+		const { container, unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
 
-		expect(store.getPlugin('navigation')).toBeNull();
+		fireEvent.mouseDown(container.querySelector('.og-cell[data-col-field="name"]')!);
+		expect(grid.api.getState().selection.focus).toBeNull();
 
 		unmount();
-		controller.dispose();
+		grid.api.destroy();
 	});
 
 	it('should use selector equality to avoid rerenders for equivalent selected values', () => {
-		const store = new GridStore<TestRow>({
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const grid = createTestGrid(store);
 
 		const renderSpy = vi.fn();
 
@@ -640,10 +573,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(renderSpy).toHaveBeenCalledTimes(1);
 
 		act(() => {
-			store.selectCell({ rowId: '1', colField: 'name' });
+			grid.api.selectCell({ rowId: '1', colField: 'name' });
 		});
 
 		expect(renderSpy).toHaveBeenCalledTimes(1);
+		grid.api.destroy();
 	});
 
 	it('should keep useClientGrid api stable when callers pass inline columns', () => {
@@ -663,6 +597,39 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		expect(apis.length).toBeGreaterThanOrEqual(2);
 		expect(apis[0]).toBe(apis[apis.length - 1]);
+
+		unmount();
+	});
+
+	it('should keep hook-created server grids alive through React StrictMode effect replay', async () => {
+		const datasource = {
+			getRows: vi.fn(async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
+				rows: Array.from({ length: endRow - startRow }, (_, index) => ({
+					id: `${startRow + index}`,
+					name: `Server Row ${startRow + index}`,
+				})),
+				totalCount: 100,
+			})),
+		};
+
+		const StrictServerHarness = () => {
+			const api = useServerGrid<TestRow>({
+				datasource,
+				blockSize: 20,
+				columns: [{ field: 'name', header: 'Name', width: 140 }],
+			});
+
+			return <OpenGrid api={api} enableNavigation={false} />;
+		};
+
+		const { unmount } = render(
+			<React.StrictMode>
+				<StrictServerHarness />
+			</React.StrictMode>
+		);
+
+		await screen.findByText('Server Row 0');
+		expect(datasource.getRows).toHaveBeenCalled();
 
 		unmount();
 	});

@@ -33,7 +33,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		}
 	}
 
-	public destroy(): void {
+	public onDestroy(): void {
 		this.dispose();
 	}
 
