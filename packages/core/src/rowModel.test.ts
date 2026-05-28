@@ -11,7 +11,7 @@ interface TestRow {
 }
 
 describe('ClientRowModelController', () => {
-	it('should initialize and populate activeNodes correctly', () => {
+	it('should initialize and populate visualRows correctly', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
@@ -28,8 +28,14 @@ describe('ClientRowModelController', () => {
 		});
 
 		expect(controller.getRowCount()).toBe(2);
+		expect(controller.getVisualRowCount()).toBe(2);
 		expect(controller.getRowIndexById('1')).toBe(0);
+		expect(controller.getVisualRowIndexById('1')).toBe(0);
 		expect(controller.getRowIndexById('2')).toBe(1);
+
+		const visualRow1 = controller.getVisualRow(0);
+		expect(visualRow1?.kind).toBe('data');
+		expect(visualRow1?.id).toBe('1');
 
 		const node1 = controller.getRowNode(0);
 		expect(node1?.data.name).toBe('Alice');

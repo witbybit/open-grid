@@ -5,7 +5,7 @@ import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
 import type { GridCellContentMount, GridCellContentUnmount, IGridRenderer } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { RowNode, type ColumnDef } from '../store.js';
+import { RowNode, type ColumnDef, type VisualRow } from '../store.js';
 import { CORE_STYLES } from './styles.js';
 
 /**
@@ -315,7 +315,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.syncViewportScrollFromDom();
 
 		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const state = this.engine.stateManager.getState();
 		const colCount = state.columns.length;
 
@@ -370,7 +370,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 */
 	private recycleViewport(): void {
 		const rowModel = this.engine.getRowModel();
-		let rowCount = rowModel ? rowModel.getRowCount() : 0;
+		let rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const state = this.engine.stateManager.getState();
 		if (state.loading && rowCount === 0) {
 			rowCount = state.loadingSkeletonCount ?? 15;
@@ -416,11 +416,17 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const columns = state.columns;
 
 		const renderRow = (r: number) => {
-			let node = rowModel ? rowModel.getRowNode(r) : null;
-			if (!node && state.loading) {
-				node = new RowNode<TRowData>(`__loading_${r}`, null as TRowData);
+			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
+			if (!visualRow && state.loading) {
+				const node = new RowNode<TRowData>(`__loading_${r}`, null as TRowData);
+				visualRow = {
+					kind: 'data',
+					id: node.id,
+					node,
+					depth: 0,
+				};
 			}
-			if (!node) return;
+			if (!visualRow) return;
 
 			let pooledRow = this.activeRows.get(r);
 
@@ -435,7 +441,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					leftElement: leftEl,
 					rightElement: rightEl,
 					cells: new Map(),
-					boundRowId: node.id,
+					boundRowId: visualRow.id,
 				};
 				this.activeRows.set(r, pooledRow);
 
@@ -443,11 +449,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				if (this.centerLayer) this.centerLayer.appendChild(rowEl);
 				if (this.leftLayer) this.leftLayer.appendChild(leftEl);
 				if (this.rightLayer) this.rightLayer.appendChild(rightEl);
-			} else if (pooledRow.boundRowId !== node.id) {
+			} else if (pooledRow.boundRowId !== visualRow.id) {
 				for (const c of Array.from(pooledRow.cells.keys())) {
 					this.releaseCell(pooledRow, c);
 				}
-				pooledRow.boundRowId = node.id;
+				pooledRow.boundRowId = visualRow.id;
 			}
 
 			// Reposition row using transforms to avoid layout-bound top/left updates.
@@ -465,21 +471,30 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			pooledRow.element.style.transform = `translate3d(0, ${rowTop}px, 0)`;
 			pooledRow.element.style.height = `${rowHeight}px`;
 			pooledRow.element.dataset.rowIndex = String(r);
-			pooledRow.element.dataset.rowId = node.id;
+			pooledRow.element.dataset.rowId = visualRow.id;
 
 			if (pooledRow.leftElement) {
 				pooledRow.leftElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
 				pooledRow.leftElement.style.height = `${rowHeight}px`;
 				pooledRow.leftElement.dataset.rowIndex = String(r);
-				pooledRow.leftElement.dataset.rowId = node.id;
+				pooledRow.leftElement.dataset.rowId = visualRow.id;
 			}
 			if (pooledRow.rightElement) {
 				pooledRow.rightElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
 				pooledRow.rightElement.style.height = `${rowHeight}px`;
 				pooledRow.rightElement.dataset.rowIndex = String(r);
-				pooledRow.rightElement.dataset.rowId = node.id;
+				pooledRow.rightElement.dataset.rowId = visualRow.id;
 			}
 
+			if (visualRow.kind !== 'data') {
+				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
+				for (const c of Array.from(pooledRow.cells.keys())) {
+					this.releaseCell(pooledRow, c);
+				}
+				return;
+			}
+
+			const node = visualRow.node;
 			this.updateRowClassName(pooledRow, node, r, state);
 
 			// Recycle individual cells inside this row
@@ -514,30 +529,30 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const columns = state.columns;
 
 		for (const rowId of this.dirtyRows) {
-			const rowIndex = rowModel.getRowIndexById(rowId);
+			const rowIndex = rowModel.getVisualRowIndexById(rowId);
 			const pooledRow = rowIndex >= 0 ? this.activeRows.get(rowIndex) : undefined;
-			const node = rowIndex >= 0 ? rowModel.getRowNode(rowIndex) : null;
-			if (pooledRow && node) {
-				this.updateRowClassName(pooledRow, node, rowIndex, state);
+			const row = rowIndex >= 0 ? rowModel.getVisualRow(rowIndex) : null;
+			if (pooledRow && row?.kind === 'data') {
+				this.updateRowClassName(pooledRow, row.node, rowIndex, state);
 			}
 		}
 
 		for (const { rowId, colField } of this.dirtyCells.values()) {
-			const rowIndex = rowModel.getRowIndexById(rowId);
+			const rowIndex = rowModel.getVisualRowIndexById(rowId);
 			const colIndex = this.engine.columns.getColumnIndex(colField);
 			if (rowIndex < 0 || colIndex < 0) continue;
 
 			const pooledRow = this.activeRows.get(rowIndex);
-			const node = rowModel.getRowNode(rowIndex);
-			if (!pooledRow || !node || !pooledRow.cells.has(colIndex)) continue;
+			const row = rowModel.getVisualRow(rowIndex);
+			if (!pooledRow || row?.kind !== 'data' || !pooledRow.cells.has(colIndex)) continue;
 
-			this.recycleRowCells(pooledRow, node, rowIndex, colIndex, colIndex, columns, false);
+			this.recycleRowCells(pooledRow, row.node, rowIndex, colIndex, colIndex, columns, false);
 		}
 	}
 
 	private updateRowClassName(pooledRow: PooledRow, node: RowNode<TRowData>, rowIndex: number, state = this.engine.stateManager.getState()): void {
 		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const pinTopRows = this.engine.viewport.pinTopRows;
 		const pinBottomRows = this.engine.viewport.pinBottomRows;
 
@@ -580,6 +595,35 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				console.error('RenderEngine: Error in rowClass styleSlot', e);
 			}
 		}
+		pooledRow.element.className = rowClassName;
+		if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
+		if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
+	}
+
+	private updateVisualRowClassName(
+		pooledRow: PooledRow,
+		visualRow: Exclude<VisualRow<TRowData>, { kind: 'data' }>,
+		rowIndex: number,
+		state = this.engine.stateManager.getState()
+	): void {
+		const rowModel = this.engine.getRowModel();
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
+		const pinTopRows = this.engine.viewport.pinTopRows;
+		const pinBottomRows = this.engine.viewport.pinBottomRows;
+
+		let rowClassName = `og-row og-row-${visualRow.kind}`;
+		if (rowIndex < pinTopRows) {
+			rowClassName += ' og-row-pinned-top';
+		} else if (rowIndex >= rowCount - pinBottomRows) {
+			rowClassName += ' og-row-pinned-bottom';
+		}
+		if (this.hoveredRowIndex === rowIndex) {
+			rowClassName += ' og-row-hovered';
+		}
+		if (state.selection.focus?.rowId === visualRow.id) {
+			rowClassName += ' og-row-focused';
+		}
+
 		pooledRow.element.className = rowClassName;
 		if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
 		if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
@@ -1061,7 +1105,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		const rowModel = this.engine.getRowModel()!;
-		const rowCount = rowModel.getRowCount();
+		const rowCount = rowModel.getVisualRowCount();
 		const columns = state.columns;
 		const colCount = columns.length;
 
@@ -1102,7 +1146,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private getClampedOverlayBox(minRow: number, maxRow: number, minCol: number, maxCol: number): OverlayBox | null {
 		const state = this.engine.stateManager.getState();
 		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const colCount = state.columns.length;
 
 		if (rowCount === 0 || colCount === 0 || minRow < 0 || minCol < 0 || maxRow >= rowCount || maxCol >= colCount) {

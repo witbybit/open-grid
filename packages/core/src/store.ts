@@ -122,6 +122,34 @@ export class RowNode<TRowData = unknown> {
 	}
 }
 
+export type VisualRow<TRowData = unknown> =
+	| {
+			kind: 'data';
+			id: string;
+			node: RowNode<TRowData>;
+			depth: number;
+			height?: number;
+	  }
+	| {
+			kind: 'group';
+			id: string;
+			key: string;
+			field: string;
+			depth: number;
+			expanded: boolean;
+			childCount: number;
+			aggregate?: Record<string, unknown>;
+			height?: number;
+	  }
+	| {
+			kind: 'detail';
+			id: string;
+			parentId: string;
+			depth: number;
+			height: number;
+			render: unknown;
+	  };
+
 export interface ValueGetterParams<TRowData = unknown> {
 	node: RowNode<TRowData>;
 	row: TRowData;
@@ -215,11 +243,14 @@ export function compilePathGetter(path: string): (data: unknown) => unknown {
 }
 
 export interface RowModel<TRowData = unknown> {
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	getVisualRowCount(): number;
+	getVisualRowIndexById(id: string): number;
+	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRow(index: number): TRowData | null;
 	getRowNode(index: number): RowNode<TRowData> | null;
 	getRowCount(): number;
 	getRowIndexById(rowId: string): number;
-	getRowNodeById?(rowId: string): RowNode<TRowData> | null;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	refresh?(): void;

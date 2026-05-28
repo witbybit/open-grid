@@ -92,7 +92,7 @@ export class ViewportController<TRowData = unknown> {
 	 * incorporating top/bottom pinned offsets and predictive overscan.
 	 */
 	public getVisibleRowRange(): ViewportRange {
-		return this.engine.viewport.getVisibleRowRange(this.engine.getRowModel()?.getRowCount() ?? 0);
+		return this.engine.viewport.getVisibleRowRange(this.engine.getRowModel()?.getVisualRowCount() ?? 0);
 	}
 
 	/**

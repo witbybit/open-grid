@@ -1,4 +1,4 @@
-import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter } from './store.js';
+import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter, type VisualRow } from './store.js';
 import { createCellKey, getFieldRoot } from './ids.js';
 
 export type SortDirection = 'asc' | 'desc';
@@ -204,9 +204,9 @@ export function applyClientSortAndFilter<TData>(
 export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
 	private store: GridStore<TData>;
 	private allNodes: RowNode<TData>[] = [];
-	private activeNodes: RowNode<TData>[] = [];
+	private visualRows: Array<VisualRow<TData>> = [];
 	private nodeMap = new Map<string, RowNode<TData>>();
-	private rowIdMap = new Map<string, number>();
+	private visualRowIdMap = new Map<string, number>();
 	private unsubscribers: Array<() => void> = [];
 
 	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
@@ -394,22 +394,35 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 	}
 
+	public getVisualRow = (index: number): VisualRow<TData> | null => {
+		return this.visualRows[index] ?? null;
+	};
+
+	public getVisualRowCount = (): number => {
+		return this.visualRows.length;
+	};
+
+	public getVisualRowIndexById = (id: string): number => {
+		const idx = this.visualRowIdMap.get(id);
+		return idx !== undefined ? idx : -1;
+	};
+
 	public getRow = (index: number): TData | null => {
-		const node = this.activeNodes[index];
-		return node ? node.data : null;
+		const row = this.getVisualRow(index);
+		return row?.kind === 'data' ? row.node.data : null;
 	};
 
 	public getRowNode = (index: number): RowNode<TData> | null => {
-		return this.activeNodes[index] ?? null;
+		const row = this.getVisualRow(index);
+		return row?.kind === 'data' ? row.node : null;
 	};
 
 	public getRowCount = (): number => {
-		return this.activeNodes.length;
+		return this.getVisualRowCount();
 	};
 
 	public getRowIndexById = (rowId: string): number => {
-		const idx = this.rowIdMap.get(rowId);
-		return idx !== undefined ? idx : -1;
+		return this.getVisualRowIndexById(rowId);
 	};
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
@@ -436,14 +449,17 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		const state = this.store.getState();
 		const visible = applyClientSortAndFilter(this.allNodes, state.columns, state.sortModel, state.filterModel);
 
-		this.activeNodes = visible.map((v) => v.node);
+		this.visualRows = visible.map(({ node }) => ({
+			kind: 'data',
+			id: node.id,
+			node,
+			depth: 0,
+		}));
 
-		this.rowIdMap.clear();
+		this.visualRowIdMap.clear();
 
-		this.activeNodes.forEach((node, index) => {
-			if (node) {
-				this.rowIdMap.set(node.id, index);
-			}
+		this.visualRows.forEach((row, index) => {
+			this.visualRowIdMap.set(row.id, index);
 		});
 
 		this.store.setState({

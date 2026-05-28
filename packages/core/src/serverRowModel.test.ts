@@ -34,8 +34,14 @@ describe('ServerRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(controller.getRowCount()).toBe(100);
+		expect(controller.getVisualRowCount()).toBe(100);
 		expect(controller.getRowIndexById('1')).toBe(0);
+		expect(controller.getVisualRowIndexById('1')).toBe(0);
 		expect(controller.getRowIndexById('2')).toBe(1);
+
+		const visualRow1 = controller.getVisualRow(0);
+		expect(visualRow1?.kind).toBe('data');
+		expect(visualRow1?.id).toBe('1');
 
 		const node1 = controller.getRowNode(0);
 		expect(node1?.data.name).toBe('Alice');
@@ -70,6 +76,7 @@ describe('ServerRowModelController', () => {
 		expect(node).not.toBeNull();
 		expect(node?.id).toBe('__loading_80');
 		expect(store.isRowLoading(node!.id)).toBe(true);
+		expect(controller.getVisualRow(80)?.id).toBe('__loading_80');
 	});
 
 	it('should pre-fetch blocks ahead of time based on scroll velocity', async () => {
