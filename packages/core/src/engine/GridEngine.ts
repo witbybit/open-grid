@@ -76,6 +76,14 @@ export class GridEngine<TRowData = unknown> {
 			getRowId: config.getRowId,
 			loadingSkeletonCount: config.loadingSkeletonCount,
 			styleSlots: config.styleSlots,
+
+			// Tree / Grouping / Master-Detail State
+			groupBy: config.groupBy,
+			getParentId: config.getParentId,
+			masterDetailEnabled: config.masterDetailEnabled,
+			groupRowHeight: config.groupRowHeight,
+			detailRowHeight: config.detailRowHeight,
+			detailRenderer: config.detailRenderer,
 		};
 
 		// Construct StateManager with coordinate state update bridging

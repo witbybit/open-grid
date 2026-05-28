@@ -3,7 +3,7 @@ import { ScrollEngine } from './scrollEngine.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
-import type { GridCellContentMount, GridCellContentUnmount, IGridRenderer } from './IGridRenderer.js';
+import type { GridCellContentMount, GridCellContentUnmount, GridRowContentMount, GridRowContentUnmount, IGridRenderer } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { RowNode, type ColumnDef, type VisualRow } from '../store.js';
 import { CORE_STYLES } from './styles.js';
@@ -51,6 +51,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	public onMountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
 	public onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
+
+	public onMountRowContent?: (mount: GridRowContentMount<TRowData>) => void;
+	public onUnmountRowContent?: (unmount: GridRowContentUnmount) => void;
 
 	constructor(engine: GridEngine<TRowData>) {
 		this.engine = engine;
@@ -403,8 +406,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Phase 1: Releasing scrolled-out rows back to the recycling pool
 		for (const [rowIndex, pooledRow] of this.activeRows.entries()) {
-			const isPinnedTop = rowIndex < pinTopRows;
-			const isPinnedBottom = rowIndex >= rowCount - pinBottomRows;
+			const isPinnedTop = rowIndex < pinTopRows && rowIndex < rowCount;
+			const isPinnedBottom = rowIndex >= rowCount - pinBottomRows && rowIndex < rowCount;
 			const isScrollable = rowIndex >= startRow && rowIndex <= endRow;
 
 			if (!isPinnedTop && !isPinnedBottom && !isScrollable) {
@@ -450,6 +453,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				if (this.leftLayer) this.leftLayer.appendChild(leftEl);
 				if (this.rightLayer) this.rightLayer.appendChild(rightEl);
 			} else if (pooledRow.boundRowId !== visualRow.id) {
+				if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
+					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey });
+					delete pooledRow.element.dataset.rowKey;
+				}
 				for (const c of Array.from(pooledRow.cells.keys())) {
 					this.releaseCell(pooledRow, c);
 				}
@@ -491,10 +498,32 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				for (const c of Array.from(pooledRow.cells.keys())) {
 					this.releaseCell(pooledRow, c);
 				}
+				const rowKey = visualRow.id;
+				if (pooledRow.element.dataset.rowKey !== rowKey) {
+					if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
+						this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey });
+					}
+					pooledRow.element.textContent = '';
+					pooledRow.element.dataset.rowKey = rowKey;
+				}
+				if (this.onMountRowContent) {
+					this.onMountRowContent({
+						rowKey,
+						container: pooledRow.element,
+						visualRow,
+					});
+				}
 				return;
 			}
 
 			const node = visualRow.node;
+			if (pooledRow.element.dataset.rowKey) {
+				if (this.onUnmountRowContent) {
+					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey });
+				}
+				delete pooledRow.element.dataset.rowKey;
+				pooledRow.element.textContent = '';
+			}
 			this.updateRowClassName(pooledRow, node, r, state);
 
 			// Recycle individual cells inside this row
@@ -622,6 +651,26 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 		if (state.selection.focus?.rowId === visualRow.id) {
 			rowClassName += ' og-row-focused';
+		}
+
+		if (visualRow.kind === 'group' && state.styleSlots?.groupRowClass) {
+			try {
+				const customClass = state.styleSlots.groupRowClass(visualRow as any);
+				if (customClass) {
+					rowClassName += ' ' + customClass;
+				}
+			} catch (e) {
+				console.error('RenderEngine: Error in groupRowClass styleSlot', e);
+			}
+		} else if (visualRow.kind === 'detail' && state.styleSlots?.detailRowClass) {
+			try {
+				const customClass = state.styleSlots.detailRowClass(visualRow as any);
+				if (customClass) {
+					rowClassName += ' ' + customClass;
+				}
+			} catch (e) {
+				console.error('RenderEngine: Error in detailRowClass styleSlot', e);
+			}
 		}
 
 		pooledRow.element.className = rowClassName;
@@ -926,6 +975,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Release and return an entire row and all its cells to the pools.
 	 */
 	private releaseRow(rowIndex: number, pooledRow: PooledRow): void {
+		if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
+			this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey });
+			delete pooledRow.element.dataset.rowKey;
+		}
+
 		// Release all cell DOMs inside row
 		for (const c of pooledRow.cells.keys()) {
 			this.releaseCell(pooledRow, c);

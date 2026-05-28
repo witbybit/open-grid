@@ -1,5 +1,6 @@
 import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter, type VisualRow } from './store.js';
 import { createCellKey, getFieldRoot } from './ids.js';
+import { RowPipeline } from './rows/RowPipeline.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -208,6 +209,28 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	private nodeMap = new Map<string, RowNode<TData>>();
 	private visualRowIdMap = new Map<string, number>();
 	private unsubscribers: Array<() => void> = [];
+
+	private pipeline = new RowPipeline<TData>();
+	private expandedGroupIds = new Set<string>();
+	private expandedDetailRowIds = new Set<string>();
+
+	public toggleGroupExpanded = (groupId: string): void => {
+		if (this.expandedGroupIds.has(groupId)) {
+			this.expandedGroupIds.delete(groupId);
+		} else {
+			this.expandedGroupIds.add(groupId);
+		}
+		this.refresh();
+	};
+
+	public toggleDetailExpanded = (rowId: string): void => {
+		if (this.expandedDetailRowIds.has(rowId)) {
+			this.expandedDetailRowIds.delete(rowId);
+		} else {
+			this.expandedDetailRowIds.add(rowId);
+		}
+		this.refresh();
+	};
 
 	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
 		this.store = store;
@@ -447,20 +470,26 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	public refresh(): void {
 		const state = this.store.getState();
-		const visible = applyClientSortAndFilter(this.allNodes, state.columns, state.sortModel, state.filterModel);
-
-		this.visualRows = visible.map(({ node }) => ({
-			kind: 'data',
-			id: node.id,
-			node,
-			depth: 0,
-		}));
-
-		this.visualRowIdMap.clear();
-
-		this.visualRows.forEach((row, index) => {
-			this.visualRowIdMap.set(row.id, index);
+		
+		const { visualRows, visualRowIdMap } = this.pipeline.run({
+			nodes: this.allNodes,
+			columns: state.columns,
+			sortModel: state.sortModel,
+			filterModel: state.filterModel,
+			groupBy: state.groupBy,
+			getParentId: state.getParentId,
+			expandedGroupIds: this.expandedGroupIds,
+			expandedDetailRowIds: this.expandedDetailRowIds,
+			defaultRowHeight: state.defaultRowHeight,
+			rowHeightsRecord: state.rowHeights,
+			groupRowHeight: state.groupRowHeight,
+			detailRowHeight: state.detailRowHeight,
+			masterDetailEnabled: state.masterDetailEnabled,
+			detailRenderer: state.detailRenderer,
 		});
+
+		this.visualRows = visualRows;
+		this.visualRowIdMap = visualRowIdMap;
 
 		this.store.setState({
 			dataVersion: state.dataVersion + 1,

@@ -1,4 +1,4 @@
-import type { ColumnDef, RowNode } from '../store.js';
+import type { ColumnDef, RowNode, VisualRow } from '../store.js';
 
 export interface GridCellContentMount<TRowData = unknown> {
 	cellKey: string;
@@ -14,6 +14,16 @@ export interface GridCellContentUnmount {
 	cellKey: string;
 	container?: HTMLElement;
 	flushSync?: boolean;
+}
+
+export interface GridRowContentMount<TRowData = unknown> {
+	rowKey: string;
+	container: HTMLElement;
+	visualRow: VisualRow<TRowData>;
+}
+
+export interface GridRowContentUnmount {
+	rowKey: string;
 }
 
 /**
@@ -49,4 +59,15 @@ export interface IGridRenderer<TRowData = unknown> {
 	 * Optional hook for framework adapters to unmount custom cell content.
 	 */
 	onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
+
+	/**
+	 * Optional hook for framework adapters to mount custom row content.
+	 */
+	onMountRowContent?: (mount: GridRowContentMount<TRowData>) => void;
+
+	/**
+	 * Optional hook for framework adapters to unmount custom row content.
+	 */
+	onUnmountRowContent?: (unmount: GridRowContentUnmount) => void;
 }
+

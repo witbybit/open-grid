@@ -14,12 +14,14 @@ import DynamicLayout from './pages/DynamicLayout';
 import HeadlessSkinsPlayground from './pages/HeadlessSkinsPlayground';
 import RealtimeDashboard from './pages/RealtimeDashboard';
 import GanttSchedulingWorkspace from './pages/GanttSchedulingWorkspace';
+import NestedTablesGrouping from './pages/NestedTablesGrouping';
 import { useShowroomStores } from './hooks/useShowroomStores';
 import type { FilterModel, SortModel } from '@open-grid/react';
+import { GridPageType } from './components/GridShared';
 
 export default function App() {
 	// Active Page Routing State via URL Hash Routing
-	const [activePage, setActivePage] = useState<'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt'>('perf');
+	const [activePage, setActivePage] = useState<GridPageType>('perf');
 
 	// Collapsible Sidebars State
 	const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
@@ -33,7 +35,7 @@ export default function App() {
 	useEffect(() => {
 		const handleHashChange = () => {
 			const hash = window.location.hash.slice(1);
-			if (['perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard', 'gantt'].includes(hash)) {
+			if (['perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard', 'gantt', 'nested'].includes(hash)) {
 				setActivePage(hash as any);
 			}
 		};
@@ -287,6 +289,8 @@ export default function App() {
 								pinRightColumns={pinRightColumns}
 							/>
 						)}
+
+						{activePage === 'nested' && <NestedTablesGrouping />}
 					</div>
 				</div>
 

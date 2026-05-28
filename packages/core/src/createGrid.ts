@@ -64,6 +64,8 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		dispatchEvent: <T = unknown>(type: string, payload: T) => store.dispatchEvent(type, payload),
 		startEditing: (rowId: string, colField: string) => store.startEditing(rowId, colField),
 		stopEditing: (cancel?: boolean) => store.stopEditing(cancel),
+		toggleGroupExpanded: (groupId: string) => store.toggleGroupExpanded(groupId),
+		toggleDetailExpanded: (rowId: string) => store.toggleDetailExpanded(rowId),
 		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
 		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
 		getColumnIndex: (colField: string) => store.getColumnIndex(colField),

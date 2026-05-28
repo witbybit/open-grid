@@ -62,6 +62,23 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		return { rowIdx, colIdx };
 	}
 
+	private getNextDataRowIndex(currentIndex: number, direction: 'up' | 'down'): number {
+		const rowModel = this.store.getRowModel();
+		if (!rowModel) return -1;
+		const rowCount = rowModel.getVisualRowCount();
+		let step = direction === 'down' ? 1 : -1;
+		let idx = currentIndex + step;
+		while (idx >= 0 && idx < rowCount) {
+			const row = rowModel.getVisualRow(idx);
+			if (row && row.kind === 'data') {
+				return idx;
+			}
+			idx += step;
+		}
+		return -1;
+	}
+
+
 	/**
 	 * Handle standard keyboard movements and selection expansions.
 	 */
@@ -87,14 +104,22 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			let handled = false;
 
 			switch (event.key) {
-				case 'ArrowUp':
-					nextRow = Math.max(0, row - 1);
+				case 'ArrowUp': {
+					const prevDataRowIdx = this.getNextDataRowIndex(row, 'up');
+					if (prevDataRowIdx !== -1) {
+						nextRow = prevDataRowIdx;
+					}
 					handled = true;
 					break;
-				case 'ArrowDown':
-					nextRow = Math.min(maxRow, row + 1);
+				}
+				case 'ArrowDown': {
+					const nextDataRowIdx = this.getNextDataRowIndex(row, 'down');
+					if (nextDataRowIdx !== -1) {
+						nextRow = nextDataRowIdx;
+					}
 					handled = true;
 					break;
+				}
 				case 'ArrowLeft':
 					nextCol = Math.max(0, col - 1);
 					handled = true;
@@ -120,6 +145,38 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					nextCol = maxCol;
 					handled = true;
 					break;
+				case ' ': {
+					event.preventDefault();
+					const rowModel = this.store.getRowModel();
+					if (rowModel) {
+						const currentIdx = this.store.getRowIndexById(active.rowId);
+						if (currentIdx !== null && currentIdx !== -1) {
+							const currentVisualRow = rowModel.getVisualRow(currentIdx);
+							if (currentVisualRow) {
+								if (currentVisualRow.kind === 'group') {
+									this.store.toggleGroupExpanded(currentVisualRow.id);
+								} else if (currentVisualRow.kind === 'data') {
+									if (this.store.getState().masterDetailEnabled) {
+										this.store.toggleDetailExpanded(active.rowId);
+									} else {
+										let parentGroupRowId: string | null = null;
+										for (let i = currentIdx - 1; i >= 0; i--) {
+											const vr = rowModel.getVisualRow(i);
+											if (vr && vr.kind === 'group' && vr.depth < currentVisualRow.depth) {
+												parentGroupRowId = vr.id;
+												break;
+											}
+										}
+										if (parentGroupRowId) {
+											this.store.toggleGroupExpanded(parentGroupRowId);
+										}
+									}
+								}
+							}
+						}
+					}
+					return;
+				}
 				case 'Enter':
 					event.preventDefault();
 					// Enter edit mode
@@ -170,14 +227,16 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 				case 'ArrowUp': {
 					event.preventDefault();
 					this.commitEdit();
-					const upRow = Math.max(0, row - 1);
-					const target = this.getPointerFromCoords(upRow, col);
-					if (target) {
-						this.rangeStart = target;
-						this.store.selectCell(target, 'keyboard');
-						if (this.options.arrowKeyNavigationEdit) {
-							if (target.rowId !== active.rowId || target.colField !== active.colField) {
-								this.setCellEditing(target.rowId, target.colField, true);
+					const upRow = this.getNextDataRowIndex(row, 'up');
+					if (upRow !== -1) {
+						const target = this.getPointerFromCoords(upRow, col);
+						if (target) {
+							this.rangeStart = target;
+							this.store.selectCell(target, 'keyboard');
+							if (this.options.arrowKeyNavigationEdit) {
+								if (target.rowId !== active.rowId || target.colField !== active.colField) {
+									this.setCellEditing(target.rowId, target.colField, true);
+								}
 							}
 						}
 					}
@@ -186,14 +245,16 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 				case 'ArrowDown': {
 					event.preventDefault();
 					this.commitEdit();
-					const downRow = Math.min(maxRow, row + 1);
-					const target = this.getPointerFromCoords(downRow, col);
-					if (target) {
-						this.rangeStart = target;
-						this.store.selectCell(target, 'keyboard');
-						if (this.options.arrowKeyNavigationEdit) {
-							if (target.rowId !== active.rowId || target.colField !== active.colField) {
-								this.setCellEditing(target.rowId, target.colField, true);
+					const downRow = this.getNextDataRowIndex(row, 'down');
+					if (downRow !== -1) {
+						const target = this.getPointerFromCoords(downRow, col);
+						if (target) {
+							this.rangeStart = target;
+							this.store.selectCell(target, 'keyboard');
+							if (this.options.arrowKeyNavigationEdit) {
+								if (target.rowId !== active.rowId || target.colField !== active.colField) {
+									this.setCellEditing(target.rowId, target.colField, true);
+								}
 							}
 						}
 					}
@@ -235,14 +296,16 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					event.preventDefault();
 					// Commit and move down
 					this.commitEdit();
-					const nextRow = Math.min(maxRow, row + 1);
-					const target = this.getPointerFromCoords(nextRow, col);
-					if (target) {
-						this.rangeStart = target;
-						this.store.selectCell(target, 'keyboard');
-						if (this.options.arrowKeyNavigationEdit) {
-							if (target.rowId !== active.rowId || target.colField !== active.colField) {
-								this.setCellEditing(target.rowId, target.colField, true);
+					const nextRowIdx = this.getNextDataRowIndex(row, 'down');
+					if (nextRowIdx !== -1) {
+						const target = this.getPointerFromCoords(nextRowIdx, col);
+						if (target) {
+							this.rangeStart = target;
+							this.store.selectCell(target, 'keyboard');
+							if (this.options.arrowKeyNavigationEdit) {
+								if (target.rowId !== active.rowId || target.colField !== active.colField) {
+									this.setCellEditing(target.rowId, target.colField, true);
+								}
 							}
 						}
 					}

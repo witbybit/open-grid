@@ -153,12 +153,96 @@ export interface PortalData<TRowData = unknown> {
 	isLoading: boolean;
 }
 
-export interface PortalManagerProps<TRowData = unknown> {
-	portals: Map<string, PortalData<TRowData>>;
-	api: GridApi<TRowData>;
+export function DefaultGroupRowRenderer({ visualRow, api }: { visualRow: any; api: GridApi<any> }) {
+	const expanded = visualRow.expanded;
+	const depth = visualRow.depth;
+
+	const handleToggle = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		api.toggleGroupExpanded(visualRow.id);
+	};
+
+	return (
+		<div
+			className="og-group-row-content"
+			style={{
+				display: 'flex',
+				alignItems: 'center',
+				paddingLeft: `${depth * 20 + 8}px`,
+				height: '100%',
+				width: '100%',
+				userSelect: 'none',
+				cursor: 'pointer',
+				fontSize: '13px',
+				fontWeight: '600',
+				color: '#e2e8f0',
+			}}
+			onClick={handleToggle}
+		>
+			<span style={{ marginRight: '8px', transition: 'transform 0.15s ease', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block' }}>
+				▶
+			</span>
+			<span style={{ opacity: 0.6, marginRight: '6px', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.5px' }}>
+				{visualRow.field}:
+			</span>
+			<span>
+				{String(visualRow.key)}
+			</span>
+			<span
+				className="og-group-count"
+				style={{
+					marginLeft: '10px',
+					background: 'rgba(59, 130, 246, 0.2)',
+					border: '1px solid rgba(59, 130, 246, 0.4)',
+					color: '#60a5fa',
+					padding: '1px 6px',
+					borderRadius: '10px',
+					fontSize: '11px',
+				}}
+			>
+				{visualRow.childCount} items
+			</span>
+		</div>
+	);
 }
 
-export function PortalManager<TRowData = unknown>({ portals, api }: PortalManagerProps<TRowData>) {
+export function DefaultDetailRowRenderer({ visualRow, api }: { visualRow: any; api: GridApi<any> }) {
+	return (
+		<div
+			className="og-detail-row-content"
+			style={{
+				display: 'flex',
+				alignItems: 'center',
+				paddingLeft: '24px',
+				height: '100%',
+				width: '100%',
+				background: 'rgba(255, 255, 255, 0.02)',
+				borderBottom: '1px dashed rgba(255, 255, 255, 0.05)',
+				color: '#a0aec0',
+				fontSize: '12px',
+				fontStyle: 'italic',
+			}}
+		>
+			Nested detail view for parent row: {visualRow.parentId}
+		</div>
+	);
+}
+
+export interface PortalManagerProps<TRowData = unknown> {
+	portals: Map<string, PortalData<TRowData>>;
+	rowPortals?: Map<string, { rowKey: string; container: HTMLElement; visualRow: any }>;
+	api: GridApi<TRowData>;
+	groupRowRenderer?: (props: { visualRow: any; api: GridApi<TRowData> }) => React.ReactNode;
+	detailRowRenderer?: (props: { visualRow: any; api: GridApi<TRowData> }) => React.ReactNode;
+}
+
+export function PortalManager<TRowData = unknown>({
+	portals,
+	rowPortals = new Map(),
+	api,
+	groupRowRenderer,
+	detailRowRenderer,
+}: PortalManagerProps<TRowData>) {
 	return (
 		<>
 			{Array.from(portals.values()).map((p) => {
@@ -177,6 +261,26 @@ export function PortalManager<TRowData = unknown>({ portals, api }: PortalManage
 					p.container
 				);
 			})}
+			{Array.from(rowPortals.values()).map((rp) => {
+				const { rowKey, container, visualRow } = rp;
+				let content: React.ReactNode = null;
+				if (visualRow.kind === 'group') {
+					content = groupRowRenderer
+						? groupRowRenderer({ visualRow, api })
+						: <DefaultGroupRowRenderer visualRow={visualRow} api={api} />;
+				} else if (visualRow.kind === 'detail') {
+					content = detailRowRenderer
+						? detailRowRenderer({ visualRow, api })
+						: <DefaultDetailRowRenderer visualRow={visualRow} api={api} />;
+				}
+				return createPortal(
+					<GridProvider api={api} key={rowKey}>
+						{content}
+					</GridProvider>,
+					container
+				);
+			})}
 		</>
 	);
 }
+

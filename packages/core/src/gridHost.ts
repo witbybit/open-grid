@@ -1,11 +1,16 @@
 import { getEngineFromApi, getInternalApiFromApi } from './apiBridge.js';
 import { RenderEngine } from './renderer/renderEngine.js';
-import type { GridCellContentMount, GridCellContentUnmount } from './renderer/IGridRenderer.js';
+import type { GridCellContentMount, GridCellContentUnmount, GridRowContentMount, GridRowContentUnmount } from './renderer/IGridRenderer.js';
 import type { GridApi } from './store.js';
 
 export interface GridCellContentAdapter<TRowData = unknown> {
 	mountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
 	unmountCellContent?: (unmount: GridCellContentUnmount) => void;
+}
+
+export interface GridRowContentAdapter<TRowData = unknown> {
+	mountRowContent?: (mount: GridRowContentMount<TRowData>) => void;
+	unmountRowContent?: (unmount: GridRowContentUnmount) => void;
 }
 
 export interface GridHostOptions<TRowData = unknown> {
@@ -16,6 +21,7 @@ export interface GridHostOptions<TRowData = unknown> {
 		bottom?: number;
 	};
 	cellContent?: GridCellContentAdapter<TRowData>;
+	rowContent?: GridRowContentAdapter<TRowData>;
 }
 
 export interface GridHost {
@@ -31,6 +37,8 @@ export function mountGridHost<TRowData>(api: GridApi<TRowData>, container: HTMLE
 
 	renderEngine.onMountCellContent = options.cellContent?.mountCellContent;
 	renderEngine.onUnmountCellContent = options.cellContent?.unmountCellContent;
+	renderEngine.onMountRowContent = options.rowContent?.mountRowContent;
+	renderEngine.onUnmountRowContent = options.rowContent?.unmountRowContent;
 
 	if (options.pins) {
 		internalApi.setViewportPins(options.pins);

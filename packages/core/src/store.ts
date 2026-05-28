@@ -307,6 +307,8 @@ export interface GridStyleSlots<TRowData = unknown> {
 	headerCellClass?: (col: ColumnDef<TRowData>) => string;
 	beforeCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
 	afterCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
+	groupRowClass?: (visualRow: Extract<VisualRow<TRowData>, { kind: 'group' }>) => string;
+	detailRowClass?: (visualRow: Extract<VisualRow<TRowData>, { kind: 'detail' }>) => string;
 }
 
 export interface GridState<TRowData = unknown> {
@@ -329,6 +331,14 @@ export interface GridState<TRowData = unknown> {
 	// Sorting & Filtering State
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
+
+	// Tree / Grouping / Master-Detail State
+	groupBy?: string[];
+	getParentId?: (row: TRowData) => string | null | undefined;
+	masterDetailEnabled?: boolean;
+	groupRowHeight?: number;
+	detailRowHeight?: number;
+	detailRenderer?: unknown;
 
 	// React cache invalidator
 	dataVersion: number;
@@ -384,6 +394,8 @@ export interface GridApi<TRowData = unknown> {
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
 	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
+	toggleGroupExpanded(groupId: string): void;
+	toggleDetailExpanded(rowId: string): void;
 	addEventListener<T = unknown>(type: string, callback: GridEventListener<T>): () => void;
 	dispatchEvent<T = unknown>(type: string, payload: T): void;
 	startEditing(rowId: string, colField: string): void;
@@ -444,6 +456,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			getRowId: initialState.getRowId,
 			loadingSkeletonCount: initialState.loadingSkeletonCount,
 			styleSlots: initialState.styleSlots,
+			groupBy: initialState.groupBy,
+			getParentId: initialState.getParentId,
+			masterDetailEnabled: initialState.masterDetailEnabled,
+			groupRowHeight: initialState.groupRowHeight,
+			detailRowHeight: initialState.detailRowHeight,
+			detailRenderer: initialState.detailRenderer,
 		});
 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
@@ -550,6 +568,20 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setStyleSlots = (styleSlots: GridStyleSlots<TRowData> | undefined): void => {
 		this.engine.stateManager.setState({ styleSlots });
+	};
+
+	public toggleGroupExpanded = (groupId: string): void => {
+		const rowModel = this.getRowModel();
+		if (rowModel && (rowModel as any).toggleGroupExpanded) {
+			(rowModel as any).toggleGroupExpanded(groupId);
+		}
+	};
+
+	public toggleDetailExpanded = (rowId: string): void => {
+		const rowModel = this.getRowModel();
+		if (rowModel && (rowModel as any).toggleDetailExpanded) {
+			(rowModel as any).toggleDetailExpanded(rowId);
+		}
 	};
 
 	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {

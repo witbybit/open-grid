@@ -159,6 +159,8 @@ export interface OpenGridProps<TRowData = unknown> {
 		arrowKeyNavigationEdit?: boolean;
 		onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	};
+	groupRowRenderer?: (props: { visualRow: any; api: GridApi<TRowData> }) => React.ReactNode;
+	detailRowRenderer?: (props: { visualRow: any; api: GridApi<TRowData> }) => React.ReactNode;
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
@@ -188,8 +190,11 @@ function OpenGridInner<TRowData = unknown>({
 	contextMenuOptions,
 	onCellClick,
 	navigationOptions = {},
+	groupRowRenderer,
+	detailRowRenderer,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
+	const rowPortalsRef = useRef<Map<string, { rowKey: string; container: HTMLElement; visualRow: any }>>(new Map());
 	const portalFlushScheduledRef = useRef(false);
 	const [, setPortalVersion] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -216,17 +221,22 @@ function OpenGridInner<TRowData = unknown>({
 			isLoading: boolean
 		) => {
 			const existing = portalsRef.current.get(cellKey);
-			if (
-				existing &&
-				existing.container === container &&
-				existing.value === value &&
-				existing.node === node &&
-				existing.col === col &&
-				existing.isEditing === isEditing &&
-				existing.isLoading === isLoading
-			) {
+			if (existing && existing.container === container && existing.isEditing === isEditing && existing.isLoading === isLoading) {
 				return;
 			}
+
+			// Intercept and patch removeChild to safely prevent React unmounting crashes on recycled elements
+			if (container && !(container as any).__patchedRemoveChild) {
+				(container as any).__patchedRemoveChild = true;
+				const originalRemove = container.removeChild;
+				container.removeChild = function <T extends Node>(child: T): T {
+					if (child.parentNode === container) {
+						return originalRemove.call(this, child) as T;
+					}
+					return child;
+				};
+			}
+
 			portalsRef.current.set(cellKey, {
 				cellKey,
 				container,
@@ -246,6 +256,44 @@ function OpenGridInner<TRowData = unknown>({
 			const existing = portalsRef.current.get(cellKey);
 			if (!existing || (container && existing.container !== container)) return;
 			portalsRef.current.delete(cellKey);
+			schedulePortalFlush();
+		},
+		[schedulePortalFlush]
+	);
+
+	const mountRowPortal = useCallback(
+		(rowKey: string, container: HTMLElement, visualRow: any) => {
+			const existing = rowPortalsRef.current.get(rowKey);
+			if (existing && existing.container === container && existing.visualRow === visualRow) {
+				return;
+			}
+
+			// Intercept and patch removeChild to safely prevent React unmounting crashes on recycled elements
+			if (container && !(container as any).__patchedRemoveChild) {
+				(container as any).__patchedRemoveChild = true;
+				const originalRemove = container.removeChild;
+				container.removeChild = function <T extends Node>(child: T): T {
+					if (child.parentNode === container) {
+						return originalRemove.call(this, child) as T;
+					}
+					return child;
+				};
+			}
+
+			rowPortalsRef.current.set(rowKey, {
+				rowKey,
+				container,
+				visualRow,
+			});
+			schedulePortalFlush();
+		},
+		[schedulePortalFlush]
+	);
+
+	const unmountRowPortal = useCallback(
+		(rowKey: string) => {
+			if (!rowPortalsRef.current.has(rowKey)) return;
+			rowPortalsRef.current.delete(rowKey);
 			schedulePortalFlush();
 		},
 		[schedulePortalFlush]
@@ -285,6 +333,14 @@ function OpenGridInner<TRowData = unknown>({
 					unmountPortal(unmount.cellKey, unmount.container);
 				},
 			},
+			rowContent: {
+				mountRowContent: (mount) => {
+					mountRowPortal(mount.rowKey, mount.container, mount.visualRow);
+				},
+				unmountRowContent: (unmount) => {
+					unmountRowPortal(unmount.rowKey);
+				},
+			},
 		});
 		hostRef.current = host;
 
@@ -292,9 +348,10 @@ function OpenGridInner<TRowData = unknown>({
 			host.destroy();
 			hostRef.current = null;
 			portalsRef.current.clear();
+			rowPortalsRef.current.clear();
 			setPortalVersion((version) => version + 1);
 		};
-	}, [api, mountPortal, unmountPortal]);
+	}, [api, mountPortal, unmountPortal, mountRowPortal, unmountRowPortal]);
 
 	// Context Menu plugin controller
 	const [contextMenu, setContextMenu] = useState<GridContextMenuHandle<TRowData> | null>(null);
@@ -493,7 +550,13 @@ function OpenGridInner<TRowData = unknown>({
 
 	return (
 		<div ref={containerRef} tabIndex={-1} style={{ width: '100%', height: '100%', position: 'relative' }}>
-			<PortalManager portals={portalsRef.current} api={api} />
+			<PortalManager
+				portals={portalsRef.current}
+				rowPortals={rowPortalsRef.current}
+				api={api}
+				groupRowRenderer={groupRowRenderer}
+				detailRowRenderer={detailRowRenderer}
+			/>
 		</div>
 	);
 }

@@ -15,4 +15,12 @@ export interface GridEngineConfig<TRowData = unknown> {
 	activeEdit?: GridCellPointer | null;
 	loadingSkeletonCount?: number;
 	styleSlots?: GridStyleSlots<TRowData>;
+
+	// Tree / Grouping / Master-Detail State Configuration
+	groupBy?: string[];
+	getParentId?: (row: TRowData) => string | null | undefined;
+	masterDetailEnabled?: boolean;
+	groupRowHeight?: number;
+	detailRowHeight?: number;
+	detailRenderer?: unknown;
 }
