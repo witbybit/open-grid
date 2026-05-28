@@ -21,7 +21,6 @@ export type {
 	GridApi,
 	GridCellClickParams,
 	GridState,
-	GridStateUpdater,
 	ClientGridOptions,
 	ServerGridOptions,
 	FilterModelItem,

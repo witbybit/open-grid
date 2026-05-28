@@ -136,19 +136,18 @@ Application code works through the standard `GridApi` interface. In React, this 
 
 ### Core API Methods
 
-| Method                 | Type Signature                                              | Description                                                              |
-| :--------------------- | :---------------------------------------------------------- | :----------------------------------------------------------------------- |
-| **`getState`**         | `() => GridState`                                           | Retrieves the entire synchronous state snapshot.                         |
-| **`setState`**         | `(updater: GridStateUpdater) => void`                       | Updates specific keys in state, triggering selective listeners.          |
-| **`getCellValue`**     | `(rowId: string, colField: string) => unknown`              | Retrieves the calculated cell value from the value cache.                |
-| **`setCellValue`**     | `(rowId: string, colField: string, value: unknown) => void` | Mutates a cell value, registering a new history event.                   |
-| **`getCellState`**     | `(rowId: string, colField: string) => CellState`            | Retrieves the local value, computed value, and active edit state.        |
-| **`selectCell`**       | `(pointer: GridCellPointer \| null) => void`                | Sets active cell focus and triggers `focusChanged` event.                |
-| **`selectRange`**      | `(start: Pointer \| null, end: Pointer \| null) => void`    | Highlights a selection range bounding box.                               |
-| **`setColumnWidth`**   | `(colField: string, width: number) => void`                 | Dynamically resizes a column's layout boundary.                          |
-| **`subscribeToKey`**   | `(key: string, listener: Listener) => () => void`           | Micro-subscribes selectively to a single key coordinate.                 |
-| **`addEventListener`** | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).              |
-| **`undo` / `redo`**    | `() => void`                                                | Moves backward or forward through undoable grid edits.                   |
+| Method                 | Type Signature                                              | Description                                                       |
+| :--------------------- | :---------------------------------------------------------- | :---------------------------------------------------------------- |
+| **`getState`**         | `() => GridState`                                           | Retrieves the entire synchronous state snapshot.                  |
+| **`getCellValue`**     | `(rowId: string, colField: string) => unknown`              | Retrieves the calculated cell value from the value cache.         |
+| **`setCellValue`**     | `(rowId: string, colField: string, value: unknown) => void` | Mutates a cell value, registering a new history event.            |
+| **`getCellState`**     | `(rowId: string, colField: string) => CellState`            | Retrieves the local value, computed value, and active edit state. |
+| **`selectCell`**       | `(pointer: GridCellPointer \| null) => void`                | Sets active cell focus and triggers `focusChanged` event.         |
+| **`selectRange`**      | `(start: Pointer \| null, end: Pointer \| null) => void`    | Highlights a selection range bounding box.                        |
+| **`setColumnWidth`**   | `(colField: string, width: number) => void`                 | Dynamically resizes a column's layout boundary.                   |
+| **`subscribeToKey`**   | `(key: string, listener: Listener) => () => void`           | Micro-subscribes selectively to a single key coordinate.          |
+| **`addEventListener`** | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).       |
+| **`undo` / `redo`**    | `() => void`                                                | Moves backward or forward through undoable grid edits.            |
 
 ---
 

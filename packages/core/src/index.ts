@@ -18,7 +18,6 @@ export type {
 	GridSelectionSource,
 	GridSelectionState,
 	GridState,
-	GridStateUpdater,
 	GridStyleSlots,
 	Listener,
 	RowModel,

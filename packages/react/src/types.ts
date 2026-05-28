@@ -8,7 +8,6 @@ import type {
 	GridApi,
 	GridCellClickParams,
 	GridState,
-	GridStateUpdater,
 	FilterModelItem,
 } from '@open-grid/core';
 
@@ -23,7 +22,6 @@ export type {
 	GridApi,
 	GridCellClickParams,
 	GridState,
-	GridStateUpdater,
 };
 
 export interface ClientGridOptions<TRowData> {
