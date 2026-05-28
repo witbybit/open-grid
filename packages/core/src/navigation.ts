@@ -43,12 +43,11 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	}
 
 	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
-		const rowModel = this.store.getRowModel();
-		if (!rowModel) return null;
 		const state = this.store.getState();
-		const row = rowModel.getRow(rowIdx);
+		const row = this.store.getRow(rowIdx);
 		const col = state.columns[colIdx];
 		if (!row || !col) return null;
+
 		return {
 			rowId: this.store.getRowId(row),
 			colField: col.field,
@@ -57,10 +56,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 	private getCoordsFromPointer(pointer: GridCellPointer | null): { rowIdx: number; colIdx: number } | null {
 		if (!pointer) return null;
-		const rowModel = this.store.getRowModel();
-		if (!rowModel) return null;
-		const state = this.store.getState();
-		const rowIdx = rowModel.getRowIndexById(pointer.rowId);
+		const rowIdx = this.store.getRowIndexById(pointer.rowId) ?? -1;
 		const colIdx = this.store.getColumnIndex(pointer.colField);
 		if (rowIdx === -1 || colIdx === -1) return null;
 		return { rowIdx, colIdx };
@@ -70,8 +66,6 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	 * Handle standard keyboard movements and selection expansions.
 	 */
 	public handleKeyDown = (event: KeyboardEvent): void => {
-		const rowModel = this.store.getRowModel();
-		if (!rowModel) return;
 		const state = this.store.getState();
 		const active = state.selection.focus;
 		if (!active) return;
@@ -80,7 +74,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		if (!coords) return;
 
 		const { rowIdx: row, colIdx: col } = coords;
-		const maxRow = rowModel.getRowCount() - 1;
+		const maxRow = this.store.getRowCount() - 1;
 		const maxCol = state.columns.length - 1;
 
 		const cellState = this.store.getCellState(active.rowId, active.colField);
@@ -357,12 +351,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	// Helper Methods
 	public setCellEditing(rowId: string, colField: string, isEditing: boolean): void {
 		if (isEditing) {
-			this.store.setState({
-				activeEdit: {
-					rowId,
-					colField,
-				},
-			});
+			this.store.startEditing(rowId, colField);
 		} else {
 			this.store.stopEditing();
 		}
