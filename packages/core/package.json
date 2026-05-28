@@ -1,0 +1,39 @@
+{
+	"name": "@open-grid/core",
+	"version": "1.0.0",
+	"description": "Framework-agnostic high-performance spreadsheet and grid engine core",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./internal": {
+			"types": "./dist/internal.d.ts",
+			"import": "./dist/internal.js"
+		}
+	},
+	"files": [
+		"dist",
+		"!dist/**/*.test.*",
+		"README.md",
+		"LICENSE"
+	],
+	"sideEffects": false,
+	"scripts": {
+		"build": "tsc",
+		"watch": "tsc --watch",
+		"test": "vitest run"
+	},
+	"keywords": [
+		"headless",
+		"grid",
+		"spreadsheet",
+		"table",
+		"performance"
+	],
+	"author": "Rishikesh Kumar",
+	"license": "MIT"
+}
