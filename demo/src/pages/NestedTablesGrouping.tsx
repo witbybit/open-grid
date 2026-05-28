@@ -179,6 +179,88 @@ const DetailToggleRenderer = ({ rowId, api }: CellRendererProps<any>) => {
 };
 
 // ============================================================================
+// Standalone Detail Grid component (Clean, modular, and easy to extract/move to its own file!)
+// ============================================================================
+
+interface NestedOrderGridProps {
+	visualRow: any;
+	parentApi: any;
+}
+
+const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
+	const orderId = visualRow.parentId;
+	const items = orderItemsMap[orderId] || [];
+
+	const detailColumns = useMemo<ColumnDef<OrderItemRow>[]>(
+		() => [
+			{ field: 'id', header: 'Item ID', width: 100 },
+			{ field: 'itemName', header: 'Product Item Name', width: 260 },
+			{ field: 'price', header: 'Unit Price', width: 130, cellRenderer: PriceBadgeRenderer },
+			{ field: 'quantity', header: 'Qty', width: 100 },
+			{ field: 'subtotal', header: 'Total Value', width: 140, cellRenderer: PriceBadgeRenderer },
+		],
+		[]
+	);
+
+	// Initialize local child grid store hook
+	const detailApi = useClientGrid<OrderItemRow>({
+		rows: items,
+		columns: detailColumns,
+	});
+
+	// Trigger latency profiling on cell change
+	const handleChildCellValueChanged = (rowId: string, colField: string, val: unknown) => {
+		const start = performance.now();
+		if (colField === 'quantity') {
+			const q = parseInt(String(val)) || 0;
+			const rowNode = (detailApi as any).getRowNodeById(rowId);
+			if (rowNode) {
+				const p = rowNode.data.price;
+				detailApi.setCellValue(rowId, 'subtotal', q * p);
+
+				// Re-calculate parent grid totals!
+				setTimeout(() => {
+					let parentSum = 0;
+					for (let i = 0; i < detailApi.getRowCount(); i++) {
+						const item = detailApi.getRow(i);
+						if (item) parentSum += item.subtotal;
+					}
+					parentApi.setCellValue(orderId, 'totalAmount', parentSum);
+				}, 0);
+			}
+		}
+		LatencyProfiler.record(performance.now() - start);
+	};
+
+	return (
+		<div className='w-full h-full p-4 pl-12 bg-slate-950/90 border-b border-slate-900 flex flex-col gap-2 font-sans relative'>
+			<div className='absolute inset-y-0 left-6 w-0.5 bg-gradient-to-b from-purple-500/25 to-pink-500/25' />
+			<div className='flex items-center justify-between text-[10px] text-slate-400 font-extrabold uppercase tracking-widest leading-none'>
+				<div className='flex items-center gap-2'>
+					<PackageOpen className='w-4 h-4 text-purple-400' />
+					<span>Order Line Items ({orderId})</span>
+				</div>
+				<div className='flex items-center gap-1.5 text-purple-400'>
+					<Sparkles className='w-3.5 h-3.5 text-purple-400 animate-pulse' />
+					Nested Grid Portal mounted successfully
+				</div>
+			</div>
+			<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-950/70 shadow-inner'>
+				<GridProvider api={detailApi}>
+					<OpenGrid
+						enableNavigation={true}
+						navigationOptions={{
+							editTrigger: 'singleClick',
+							onCellValueChanged: handleChildCellValueChanged,
+						}}
+					/>
+				</GridProvider>
+			</div>
+		</div>
+	);
+};
+
+// ============================================================================
 // Page Component
 // ============================================================================
 
@@ -344,92 +426,12 @@ export default function NestedTablesGrouping() {
 		},
 	});
 
-	// Standard column definitions for the child grids!
-	const detailColumns = useMemo<ColumnDef<OrderItemRow>[]>(
-		() => [
-			{ field: 'id', header: 'Item ID', width: 100 },
-			{ field: 'itemName', header: 'Product Item Name', width: 260 },
-			{ field: 'price', header: 'Unit Price', width: 130, cellRenderer: PriceBadgeRenderer },
-			{ field: 'quantity', header: 'Qty', width: 100 },
-			{ field: 'subtotal', header: 'Total Value', width: 140, cellRenderer: PriceBadgeRenderer },
-		],
-		[]
-	);
-
-	// The custom detail portal renderer.
-	// This will render a FULLY NESTED OpenGrid showing the items in this order!
-	// It operates inside a custom sub-GridProvider context.
-	const NestedOrderGrid = useCallback(
-		({ visualRow, parentApi }: { visualRow: any; parentApi: any }) => {
-			const orderId = visualRow.parentId;
-			const items = orderItemsMap[orderId] || [];
-
-			// Initialize local child grid store hook
-			const detailApi = useClientGrid<OrderItemRow>({
-				rows: items,
-				columns: detailColumns,
-			});
-
-			// Trigger latency profiling on cell change
-			const handleChildCellValueChanged = (rowId: string, colField: string, val: unknown) => {
-				const start = performance.now();
-				if (colField === 'quantity') {
-					const q = parseInt(String(val)) || 0;
-					const rowNode = (detailApi as any).getRowNodeById(rowId);
-					if (rowNode) {
-						const p = rowNode.data.price;
-						detailApi.setCellValue(rowId, 'subtotal', q * p);
-
-						// Re-calculate parent grid totals!
-						setTimeout(() => {
-							let parentSum = 0;
-							for (let i = 0; i < detailApi.getRowCount(); i++) {
-								const item = detailApi.getRow(i);
-								if (item) parentSum += item.subtotal;
-							}
-							parentApi.setCellValue(orderId, 'totalAmount', parentSum);
-						}, 0);
-					}
-				}
-				LatencyProfiler.record(performance.now() - start);
-			};
-
-			return (
-				<div className='w-full h-full p-4 pl-12 bg-slate-950/90 border-b border-slate-900 flex flex-col gap-2 font-sans relative'>
-					<div className='absolute inset-y-0 left-6 w-0.5 bg-gradient-to-b from-purple-500/25 to-pink-500/25' />
-					<div className='flex items-center justify-between text-[10px] text-slate-400 font-extrabold uppercase tracking-widest leading-none'>
-						<div className='flex items-center gap-2'>
-							<PackageOpen className='w-4 h-4 text-purple-400' />
-							<span>Order Line Items ({orderId})</span>
-						</div>
-						<div className='flex items-center gap-1.5 text-purple-400'>
-							<Sparkles className='w-3.5 h-3.5 text-purple-400 animate-pulse' />
-							Nested Grid Portal mounted successfully
-						</div>
-					</div>
-					<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-950/70 shadow-inner'>
-						<GridProvider api={detailApi}>
-							<OpenGrid
-								enableNavigation={true}
-								navigationOptions={{
-									editTrigger: 'singleClick',
-									onCellValueChanged: handleChildCellValueChanged,
-								}}
-							/>
-						</GridProvider>
-					</div>
-				</div>
-			);
-		},
-		[detailColumns]
-	);
-
 	// Wrap the details renderer so that parentApi can be resolved and passed down!
 	const handleDetailRowRender = useCallback(
 		({ visualRow, api }: { visualRow: any; api: any }) => {
 			return <NestedOrderGrid visualRow={visualRow} parentApi={api} />;
 		},
-		[NestedOrderGrid]
+		[]
 	);
 
 	// Force refresh active grids when tab changes

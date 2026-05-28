@@ -303,8 +303,9 @@ function OpenGridInner<TRowData = unknown>({
 	);
 
 	const unmountRowPortal = useCallback(
-		(rowKey: string) => {
-			if (!rowPortalsRef.current.has(rowKey)) return;
+		(rowKey: string, container?: HTMLElement) => {
+			const existing = rowPortalsRef.current.get(rowKey);
+			if (!existing || (container && existing.container !== container)) return;
 			rowPortalsRef.current.delete(rowKey);
 			schedulePortalFlush();
 		},
@@ -350,7 +351,7 @@ function OpenGridInner<TRowData = unknown>({
 					mountRowPortal(mount.rowKey, mount.container, mount.visualRow);
 				},
 				unmountRowContent: (unmount) => {
-					unmountRowPortal(unmount.rowKey);
+					unmountRowPortal(unmount.rowKey, unmount.container);
 				},
 			},
 		});

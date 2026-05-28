@@ -24,6 +24,7 @@ export interface GridRowContentMount<TRowData = unknown> {
 
 export interface GridRowContentUnmount {
 	rowKey: string;
+	container?: HTMLElement;
 }
 
 /**

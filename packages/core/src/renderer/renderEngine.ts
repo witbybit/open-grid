@@ -454,7 +454,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				if (this.rightLayer) this.rightLayer.appendChild(rightEl);
 			} else if (pooledRow.boundRowId !== visualRow.id) {
 				if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
-					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey });
+					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 					delete pooledRow.element.dataset.rowKey;
 				}
 				for (const c of pooledRow.cells.keys()) {
@@ -501,7 +501,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				const rowKey = visualRow.id;
 				if (pooledRow.element.dataset.rowKey !== rowKey) {
 					if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
-						this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey });
+						this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 					}
 					pooledRow.element.textContent = '';
 					pooledRow.element.dataset.rowKey = rowKey;
@@ -519,7 +519,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			const node = visualRow.node;
 			if (pooledRow.element.dataset.rowKey) {
 				if (this.onUnmountRowContent) {
-					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey });
+					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 				}
 				delete pooledRow.element.dataset.rowKey;
 				pooledRow.element.textContent = '';
@@ -979,7 +979,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 */
 	private releaseRow(rowIndex: number, pooledRow: PooledRow): void {
 		if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
-			this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey });
+			this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 			delete pooledRow.element.dataset.rowKey;
 		}
 
