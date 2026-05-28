@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps } from '@open-grid/react';
+import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps, type GridApi, type VisualRow } from '@open-grid/react';
 import {
 	Layers,
 	FolderTree,
@@ -117,16 +117,26 @@ const orderItemsMap: Record<string, OrderItemRow[]> = {
 	'ORD-105': [{ id: 'ITM-07', itemName: 'Red Swingline Stapler (Special)', price: 75, quantity: 2, subtotal: 150 }],
 };
 
+const initialQuantities: Record<string, number> = {
+	'ITM-01': 1,
+	'ITM-02': 3,
+	'ITM-03': 2,
+	'ITM-04': 2,
+	'ITM-05': 5,
+	'ITM-06': 2,
+	'ITM-07': 2,
+};
+
 // ============================================================================
 // Custom Renderers
 // ============================================================================
 
-const SalaryRenderer = ({ value }: CellRendererProps<any>) => {
+const SalaryRenderer = ({ value }: CellRendererProps<EmployeeRow>) => {
 	const sal = parseFloat(String(value)) || 0;
 	return <span className='font-mono font-bold text-slate-200'>${sal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>;
 };
 
-const RatingStarsRenderer = ({ value }: CellRendererProps<any>) => {
+const RatingStarsRenderer = ({ value }: CellRendererProps<EmployeeRow>) => {
 	const stars = Math.min(5, Math.max(0, Number(value) || 0));
 	return (
 		<div className='flex items-center text-amber-400 select-none h-full'>
@@ -140,7 +150,7 @@ const RatingStarsRenderer = ({ value }: CellRendererProps<any>) => {
 };
 
 // Custom Tree node name renderer with indent and folder/file icon!
-const TreeNameRenderer = ({ value, row, rowId, api }: CellRendererProps<any>) => {
+const TreeNameRenderer = ({ value, row, rowId, api }: CellRendererProps<FileNodeRow>) => {
 	const visualIndex = api.getRowIndexById(rowId) ?? 0;
 	const visualRow = api.getVisualRow(visualIndex);
 	const depth = visualRow?.depth ?? 0;
@@ -160,7 +170,7 @@ const TreeNameRenderer = ({ value, row, rowId, api }: CellRendererProps<any>) =>
 };
 
 // Custom detail toggle button in the master grid!
-const DetailToggleRenderer = ({ rowId, api }: CellRendererProps<any>) => {
+const DetailToggleRenderer = ({ rowId, api }: CellRendererProps<OrderRow>) => {
 	const isExpanded = api.isDetailExpanded(rowId);
 
 	const handleToggle = (e: React.MouseEvent) => {
@@ -183,11 +193,12 @@ const DetailToggleRenderer = ({ rowId, api }: CellRendererProps<any>) => {
 // ============================================================================
 
 interface NestedOrderGridProps {
-	visualRow: any;
-	parentApi: any;
+	visualRow: VisualRow<OrderRow>;
+	parentApi: GridApi<OrderRow>;
 }
 
 const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
+	if (visualRow.kind !== 'detail') return null;
 	const orderId = visualRow.parentId;
 	const items = orderItemsMap[orderId] || [];
 
@@ -213,10 +224,19 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 		const start = performance.now();
 		if (colField === 'quantity') {
 			const q = parseInt(String(val)) || 0;
-			const rowNode = (detailApi as any).getRowNodeById(rowId);
+			const index = detailApi.getRowIndexById(rowId);
+			const rowNode = index !== null ? detailApi.getRowNode(index) : null;
 			if (rowNode) {
 				const p = rowNode.data.price;
-				detailApi.setCellValue(rowId, 'subtotal', q * p);
+				const newSubtotal = q * p;
+				detailApi.setCellValue(rowId, 'subtotal', newSubtotal);
+
+				// Mutate the original reference so the cross-grid aggregator reads the correct edited values!
+				const originalItem = items.find((itm) => itm.id === rowId);
+				if (originalItem) {
+					originalItem.quantity = q;
+					originalItem.subtotal = newSubtotal;
+				}
 
 				// Re-calculate parent grid totals!
 				setTimeout(() => {
@@ -268,6 +288,43 @@ export default function NestedTablesGrouping() {
 	const [activeTab, setActiveTab] = useState<'group' | 'tree' | 'detail'>('group');
 	const [gridVersion, setGridVersion] = useState(0);
 
+	const [telemetryResult, setTelemetryResult] = useState<{
+		totalOrders: number;
+		totalQuantity: number;
+		grandTotal: number;
+		highestItem: string;
+		highestPrice: number;
+		timestamp: string;
+	} | null>(null);
+
+	const handleCalculateTotals = () => {
+		let totalQuantity = 0;
+		let grandTotal = 0;
+		let highestItem = '—';
+		let highestPrice = 0;
+
+		for (const orderId of Object.keys(orderItemsMap)) {
+			const items = orderItemsMap[orderId] || [];
+			for (const item of items) {
+				totalQuantity += item.quantity;
+				grandTotal += item.subtotal;
+				if (item.price > highestPrice) {
+					highestPrice = item.price;
+					highestItem = item.itemName;
+				}
+			}
+		}
+
+		setTelemetryResult({
+			totalOrders: masterRows.length,
+			totalQuantity,
+			grandTotal,
+			highestItem,
+			highestPrice,
+			timestamp: new Date().toLocaleTimeString(),
+		});
+	};
+
 	// 1. Grouping Grid config
 	const groupingColumns = useMemo<ColumnDef<EmployeeRow>[]>(
 		() => [
@@ -296,7 +353,8 @@ export default function NestedTablesGrouping() {
 	});
 
 	// Custom Group row renderer
-	const handleGroupRowRender = useCallback(({ visualRow, api }: { visualRow: any; api: any }) => {
+	const handleGroupRowRender = useCallback(({ visualRow, api }: { visualRow: VisualRow<EmployeeRow>; api: GridApi<EmployeeRow> }) => {
+		if (visualRow.kind !== 'group') return null;
 		const expanded = visualRow.expanded;
 		const depth = visualRow.depth;
 
@@ -366,7 +424,8 @@ export default function NestedTablesGrouping() {
 	});
 
 	// Custom Tree node renderer (in parent-child tree, parent nodes map to group rows)
-	const handleTreeRowRender = useCallback(({ visualRow, api }: { visualRow: any; api: any }) => {
+	const handleTreeRowRender = useCallback(({ visualRow, api }: { visualRow: VisualRow<FileNodeRow>; api: GridApi<FileNodeRow> }) => {
+		if (visualRow.kind !== 'group') return null;
 		const expanded = visualRow.expanded;
 		const depth = visualRow.depth;
 
@@ -428,7 +487,7 @@ export default function NestedTablesGrouping() {
 
 	// Wrap the details renderer so that parentApi can be resolved and passed down!
 	const handleDetailRowRender = useCallback(
-		({ visualRow, api }: { visualRow: any; api: any }) => {
+		({ visualRow, api }: { visualRow: VisualRow<OrderRow>; api: GridApi<OrderRow> }) => {
 			return <NestedOrderGrid visualRow={visualRow} parentApi={api} />;
 		},
 		[]
@@ -610,7 +669,113 @@ export default function NestedTablesGrouping() {
 					)}
 				</div>
 
-				{/* 3. HARDWARE TELEMETRY PORTAL */}
+				{/* 3. NESTED GRIDS CALCULATOR LEDGER (Only in detail tab!) */}
+				{activeTab === 'detail' && (
+					<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 glass-card relative overflow-hidden shadow-lg border-purple-500/20'>
+						<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl pointer-events-none' />
+						<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+							<RefreshCw className='w-4 h-4 text-purple-400 font-bold shrink-0 animate-pulse' />
+							Cross-Grid Portfolio Ledger
+						</h3>
+
+						<button
+							onClick={handleCalculateTotals}
+							className='w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs shadow-md shadow-purple-600/20 active:scale-95 transition-transform duration-100 flex items-center justify-center gap-1.5 cursor-pointer'
+						>
+							<Sparkles className='w-3.5 h-3.5 animate-bounce' />
+							Calculate Sub-Grid Summary
+						</button>
+
+						{telemetryResult ? (
+							<div className='flex flex-col gap-2.5 mt-1 border-t border-slate-800/80 pt-2.5 animate-in fade-in slide-in-from-bottom-2 duration-300'>
+								<div className='grid grid-cols-2 gap-2 text-[10px] font-mono'>
+									<div className='p-2 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col'>
+										<span className='text-slate-500 text-[8px] uppercase font-sans font-extrabold'>Total Orders</span>
+										<span className='text-purple-400 text-sm font-extrabold mt-0.5'>{telemetryResult.totalOrders}</span>
+									</div>
+									<div className='p-2 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col'>
+										<span className='text-slate-500 text-[8px] uppercase font-sans font-extrabold'>Total Items</span>
+										<span className='text-pink-400 text-sm font-extrabold mt-0.5'>{telemetryResult.totalQuantity} qty</span>
+									</div>
+								</div>
+
+								<div className='p-2.5 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col font-mono text-left'>
+									<span className='text-slate-500 text-[8px] uppercase font-sans font-extrabold'>Grand Total Order Book</span>
+									<span className='text-emerald-400 text-base font-extrabold mt-0.5'>
+										${telemetryResult.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+									</span>
+								</div>
+
+								<div className='p-2.5 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col font-mono text-[9px] text-left leading-relaxed'>
+									<span className='text-slate-500 text-[8px] uppercase font-sans font-extrabold mb-1'>Highest Value Item</span>
+									<div className='flex justify-between items-start gap-1'>
+										<span className='text-slate-300 font-sans font-semibold break-words max-w-[140px]'>
+											{telemetryResult.highestItem}
+										</span>
+										<span className='text-amber-400 font-extrabold shrink-0'>
+											${telemetryResult.highestPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+										</span>
+									</div>
+								</div>
+
+								<div className='text-[8px] text-slate-500 text-center italic mt-0.5'>
+									Calculated at {telemetryResult.timestamp} from active sub-grid states!
+								</div>
+
+								{(() => {
+									const modifiedItems = [];
+									for (const orderId of Object.keys(orderItemsMap)) {
+										const items = orderItemsMap[orderId] || [];
+										for (const item of items) {
+											const initialQty = initialQuantities[item.id];
+											if (initialQty !== undefined && item.quantity !== initialQty) {
+												modifiedItems.push({
+													id: item.id,
+													orderId,
+													itemName: item.itemName,
+													oldQty: initialQty,
+													newQty: item.quantity,
+													subtotal: item.subtotal,
+													oldSubtotal: initialQty * item.price,
+												});
+											}
+										}
+									}
+
+									if (modifiedItems.length === 0) return null;
+
+									return (
+										<div className='mt-2.5 border-t border-slate-800/80 pt-2.5 flex flex-col gap-2'>
+											<span className='text-[8px] uppercase tracking-wider font-extrabold text-purple-400 text-left'>
+												Live Modifications Stream
+											</span>
+											<div className='flex flex-col gap-1.5 max-h-[140px] overflow-y-auto pr-1'>
+												{modifiedItems.map((item) => (
+													<div key={item.id} className='p-2 bg-purple-950/20 border border-purple-900/30 rounded-lg flex flex-col gap-1 text-[9px] font-mono text-left relative overflow-hidden'>
+														<div className='absolute right-1 top-1 text-[8px] bg-purple-900/50 text-purple-200 px-1 py-0.2 rounded border border-purple-800/30'>
+															{item.id}
+														</div>
+														<div className='text-slate-300 font-sans font-semibold pr-10 truncate'>{item.itemName}</div>
+														<div className='flex justify-between text-slate-400'>
+															<span>Qty: <span className='line-through text-slate-500'>{item.oldQty}</span> → <span className='text-pink-400 font-bold'>{item.newQty}</span></span>
+															<span>Val: <span className='line-through text-slate-500'>${item.oldSubtotal.toFixed(0)}</span> → <span className='text-emerald-400 font-bold'>${item.subtotal.toFixed(0)}</span></span>
+														</div>
+													</div>
+												))}
+											</div>
+										</div>
+									);
+								})()}
+							</div>
+						) : (
+							<div className='text-[10px] text-slate-500 italic p-3 bg-slate-950/40 border border-slate-900/60 rounded-lg text-center leading-normal'>
+								Edit any order item Qty inside the nested portals, then click calculate to run live aggregates across all grids!
+							</div>
+						)}
+					</div>
+				)}
+
+				{/* 4. HARDWARE TELEMETRY PORTAL */}
 				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden'>
 					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-rose-600/5 rounded-full blur-2xl pointer-events-none' />
 					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>

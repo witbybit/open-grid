@@ -655,7 +655,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		if (visualRow.kind === 'group' && state.styleSlots?.groupRowClass) {
 			try {
-				const customClass = state.styleSlots.groupRowClass(visualRow as any);
+				const customClass = state.styleSlots.groupRowClass(visualRow);
 				if (customClass) {
 					rowClassName += ' ' + customClass;
 				}
@@ -664,7 +664,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		} else if (visualRow.kind === 'detail' && state.styleSlots?.detailRowClass) {
 			try {
-				const customClass = state.styleSlots.detailRowClass(visualRow as any);
+				const customClass = state.styleSlots.detailRowClass(visualRow);
 				if (customClass) {
 					rowClassName += ' ' + customClass;
 				}

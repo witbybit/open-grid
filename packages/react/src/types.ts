@@ -9,6 +9,7 @@ import type {
 	GridCellClickParams,
 	GridState,
 	FilterModelItem,
+	VisualRow,
 } from '@open-grid/core';
 
 export type {
@@ -22,6 +23,7 @@ export type {
 	GridApi,
 	GridCellClickParams,
 	GridState,
+	VisualRow,
 };
 
 export interface ClientGridOptions<TRowData> {

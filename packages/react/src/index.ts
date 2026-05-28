@@ -24,4 +24,5 @@ export type {
 	ClientGridOptions,
 	ServerGridOptions,
 	FilterModelItem,
+	VisualRow,
 } from './types.js';

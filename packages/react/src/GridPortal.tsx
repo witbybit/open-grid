@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ColumnDef, GridApi, RowNode } from '@open-grid/core';
+import { ColumnDef, GridApi, RowNode, VisualRow } from '@open-grid/core';
 import { createPortal } from 'react-dom';
 import { GridProvider, useGridApi } from './OpenGrid.js';
 import type { ReactNode } from 'react';
@@ -153,7 +153,8 @@ export interface PortalData<TRowData = unknown> {
 	isLoading: boolean;
 }
 
-export function DefaultGroupRowRenderer({ visualRow, api }: { visualRow: any; api: GridApi<any> }) {
+export function DefaultGroupRowRenderer<TRowData = unknown>({ visualRow, api }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+	if (visualRow.kind !== 'group') return null;
 	const expanded = visualRow.expanded;
 	const depth = visualRow.depth;
 
@@ -184,7 +185,8 @@ export function DefaultGroupRowRenderer({ visualRow, api }: { visualRow: any; ap
 	);
 }
 
-export function DefaultDetailRowRenderer({ visualRow, api }: { visualRow: any; api: GridApi<any> }) {
+export function DefaultDetailRowRenderer<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+	if (visualRow.kind !== 'detail') return null;
 	return (
 		<div className="og-detail-row-content">
 			Nested detail view for parent row: {visualRow.parentId}
@@ -194,10 +196,10 @@ export function DefaultDetailRowRenderer({ visualRow, api }: { visualRow: any; a
 
 export interface PortalManagerProps<TRowData = unknown> {
 	portals: Map<string, PortalData<TRowData>>;
-	rowPortals?: Map<string, { rowKey: string; container: HTMLElement; visualRow: any }>;
+	rowPortals?: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>;
 	api: GridApi<TRowData>;
-	groupRowRenderer?: (props: { visualRow: any; api: GridApi<TRowData> }) => React.ReactNode;
-	detailRowRenderer?: (props: { visualRow: any; api: GridApi<TRowData> }) => React.ReactNode;
+	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 }
 
 export function PortalManager<TRowData = unknown>({

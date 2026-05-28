@@ -28,7 +28,7 @@ function groupRecursively<TData>(
 
 	// Partition nodes by the field value
 	for (const node of nodes) {
-		const val = node.data ? String((node.data as any)[field] ?? 'None') : 'None';
+		const val = node.data ? String((node.data as Record<string, unknown>)[field] ?? 'None') : 'None';
 		if (!groupsMap.has(val)) {
 			groupsMap.set(val, []);
 		}

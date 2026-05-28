@@ -13,6 +13,7 @@ import {
 	mountGridHost,
 	registerGridContextMenu,
 	registerGridNavigation,
+	VisualRow,
 } from '@open-grid/core';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { PortalData, PortalManager } from './GridPortal.js';
@@ -159,8 +160,8 @@ export interface OpenGridProps<TRowData = unknown> {
 		arrowKeyNavigationEdit?: boolean;
 		onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	};
-	groupRowRenderer?: (props: { visualRow: any; api: GridApi<TRowData> }) => React.ReactNode;
-	detailRowRenderer?: (props: { visualRow: any; api: GridApi<TRowData> }) => React.ReactNode;
+	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
@@ -194,7 +195,7 @@ function OpenGridInner<TRowData = unknown>({
 	detailRowRenderer,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
-	const rowPortalsRef = useRef<Map<string, { rowKey: string; container: HTMLElement; visualRow: any }>>(new Map());
+	const rowPortalsRef = useRef<Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>>(new Map());
 	const portalFlushScheduledRef = useRef(false);
 	const [, setPortalVersion] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -232,8 +233,11 @@ function OpenGridInner<TRowData = unknown>({
 			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
 			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
 			// rather than allowing it to crash the React tree.
-			if (container && !(container as any).__patchedRemoveChild) {
-				(container as any).__patchedRemoveChild = true;
+			interface PatchedHTMLElement extends HTMLElement {
+				__patchedRemoveChild?: boolean;
+			}
+			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
+				(container as PatchedHTMLElement).__patchedRemoveChild = true;
 				const originalRemove = container.removeChild;
 				container.removeChild = function <T extends Node>(child: T): T {
 					if (child.parentNode === container) {
@@ -268,7 +272,7 @@ function OpenGridInner<TRowData = unknown>({
 	);
 
 	const mountRowPortal = useCallback(
-		(rowKey: string, container: HTMLElement, visualRow: any) => {
+		(rowKey: string, container: HTMLElement, visualRow: VisualRow<TRowData>) => {
 			const existing = rowPortalsRef.current.get(rowKey);
 			if (existing && existing.container === container && existing.visualRow === visualRow) {
 				return;
@@ -281,8 +285,11 @@ function OpenGridInner<TRowData = unknown>({
 			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
 			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
 			// rather than allowing it to crash the React tree.
-			if (container && !(container as any).__patchedRemoveChild) {
-				(container as any).__patchedRemoveChild = true;
+			interface PatchedHTMLElement extends HTMLElement {
+				__patchedRemoveChild?: boolean;
+			}
+			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
+				(container as PatchedHTMLElement).__patchedRemoveChild = true;
 				const originalRemove = container.removeChild;
 				container.removeChild = function <T extends Node>(child: T): T {
 					if (child.parentNode === container) {

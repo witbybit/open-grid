@@ -1,7 +1,7 @@
 import { RowNode } from '../../store.js';
 import type { RowTreeNode } from './types.js';
 
-export interface AggregationDef<TData = any> {
+export interface AggregationDef<TData = unknown> {
 	field: string;
 	aggFunc: 'sum' | 'avg' | 'min' | 'max' | 'count' | ((nodes: RowNode<TData>[]) => unknown);
 }
@@ -55,7 +55,7 @@ function aggregateNodeRecursively<TData>(
 
 		// Extract numeric/valid values from descendants
 		const values = descendantLeafNodes
-			.map((n) => (n.data as any)?.[field])
+			.map((n) => (n.data as Record<string, unknown> | undefined)?.[field])
 			.filter((v) => typeof v === 'number' && !isNaN(v)) as number[];
 
 		if (values.length === 0) {
