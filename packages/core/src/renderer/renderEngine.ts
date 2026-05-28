@@ -457,7 +457,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey });
 					delete pooledRow.element.dataset.rowKey;
 				}
-				for (const c of Array.from(pooledRow.cells.keys())) {
+				for (const c of pooledRow.cells.keys()) {
 					this.releaseCell(pooledRow, c);
 				}
 				pooledRow.boundRowId = visualRow.id;
@@ -495,7 +495,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			if (visualRow.kind !== 'data') {
 				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
-				for (const c of Array.from(pooledRow.cells.keys())) {
+				for (const c of pooledRow.cells.keys()) {
 					this.releaseCell(pooledRow, c);
 				}
 				const rowKey = visualRow.id;
@@ -926,10 +926,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			return portalHost;
 		}
 
-		for (const child of Array.from(cell.childNodes)) {
+		let child = cell.firstChild;
+		while (child) {
+			const next = child.nextSibling;
 			if (child !== portalHost) {
 				child.remove();
 			}
+			child = next;
 		}
 		return portalHost;
 	}

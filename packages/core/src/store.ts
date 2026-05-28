@@ -251,6 +251,10 @@ export interface RowModel<TRowData = unknown> {
 	getRowNode(index: number): RowNode<TRowData> | null;
 	getRowCount(): number;
 	getRowIndexById(rowId: string): number;
+	toggleGroupExpanded?(groupId: string): void;
+	toggleDetailExpanded?(rowId: string): void;
+	isGroupExpanded?(groupId: string): boolean;
+	isDetailExpanded?(rowId: string): boolean;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	refresh?(): void;
@@ -396,6 +400,11 @@ export interface GridApi<TRowData = unknown> {
 	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
 	toggleGroupExpanded(groupId: string): void;
 	toggleDetailExpanded(rowId: string): void;
+	isGroupExpanded(groupId: string): boolean;
+	isDetailExpanded(rowId: string): boolean;
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	getVisualRowCount(): number;
+	getVisualRowIndexById(id: string): number | null;
 	addEventListener<T = unknown>(type: string, callback: GridEventListener<T>): () => void;
 	dispatchEvent<T = unknown>(type: string, payload: T): void;
 	startEditing(rowId: string, colField: string): void;
@@ -571,17 +580,31 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public toggleGroupExpanded = (groupId: string): void => {
-		const rowModel = this.getRowModel();
-		if (rowModel && (rowModel as any).toggleGroupExpanded) {
-			(rowModel as any).toggleGroupExpanded(groupId);
-		}
+		this.getRowModel()?.toggleGroupExpanded?.(groupId);
 	};
 
 	public toggleDetailExpanded = (rowId: string): void => {
-		const rowModel = this.getRowModel();
-		if (rowModel && (rowModel as any).toggleDetailExpanded) {
-			(rowModel as any).toggleDetailExpanded(rowId);
-		}
+		this.getRowModel()?.toggleDetailExpanded?.(rowId);
+	};
+
+	public isGroupExpanded = (groupId: string): boolean => {
+		return this.getRowModel()?.isGroupExpanded?.(groupId) ?? false;
+	};
+
+	public isDetailExpanded = (rowId: string): boolean => {
+		return this.getRowModel()?.isDetailExpanded?.(rowId) ?? false;
+	};
+
+	public getVisualRow = (index: number): VisualRow<TRowData> | null => {
+		return this.getRowModel()?.getVisualRow(index) ?? null;
+	};
+
+	public getVisualRowCount = (): number => {
+		return this.getRowModel()?.getVisualRowCount() ?? 0;
+	};
+
+	public getVisualRowIndexById = (id: string): number | null => {
+		return this.getRowModel()?.getVisualRowIndexById(id) ?? null;
 	};
 
 	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {

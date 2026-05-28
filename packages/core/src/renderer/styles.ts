@@ -24,6 +24,20 @@ export const CORE_STYLES = `
     --og-skeleton-height: 14px;
     --og-skeleton-border-radius: 4px;
     --og-skeleton-animation-duration: 1.5s;
+
+    /* Group & Detail Rows Styling */
+    --og-group-row-bg: rgba(15, 23, 42, 0.4);
+    --og-group-row-hover-bg: rgba(30, 41, 59, 0.6);
+    --og-group-row-text: #e2e8f0;
+    --og-group-row-font-size: 13px;
+    --og-group-row-font-weight: 600;
+    --og-group-badge-bg: rgba(59, 130, 246, 0.2);
+    --og-group-badge-border: rgba(59, 130, 246, 0.4);
+    --og-group-badge-text: #60a5fa;
+    --og-detail-row-bg: rgba(255, 255, 255, 0.02);
+    --og-detail-row-border: rgba(255, 255, 255, 0.05);
+    --og-detail-row-text: #a0aec0;
+    --og-detail-row-font-size: 12px;
   }
 
   @keyframes og-shimmer {
@@ -399,5 +413,65 @@ export const CORE_STYLES = `
     height: 1px;
     background-color: rgba(255, 255, 255, 0.08);
     margin: 4px 0;
+  }
+
+  /* Group and Detail Rows */
+  .og-group-row-content {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    user-select: none;
+    cursor: pointer;
+    background-color: var(--og-group-row-bg);
+    color: var(--og-group-row-text);
+    font-size: var(--og-group-row-font-size);
+    font-weight: var(--og-group-row-font-weight);
+    transition: background-color 0.15s ease;
+  }
+
+  .og-group-row-content:hover {
+    background-color: var(--og-group-row-hover-bg);
+  }
+
+  .og-group-row-toggle {
+    margin-right: 8px;
+    transition: transform 0.15s ease;
+    display: inline-block;
+  }
+
+  .og-group-row-toggle-expanded {
+    transform: rotate(90deg);
+  }
+
+  .og-group-row-label-prefix {
+    opacity: 0.6;
+    margin-right: 6px;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+
+  .og-group-count {
+    margin-left: 10px;
+    background: var(--og-group-badge-bg);
+    border: 1px solid var(--og-group-badge-border);
+    color: var(--og-group-badge-text);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+
+  .og-detail-row-content {
+    display: flex;
+    align-items: center;
+    padding-left: 24px;
+    height: 100%;
+    width: 100%;
+    background-color: var(--og-detail-row-bg);
+    border-bottom: 1px dashed var(--og-detail-row-border);
+    color: var(--og-detail-row-text);
+    font-size: var(--og-detail-row-font-size);
+    font-style: italic;
   }
 `;

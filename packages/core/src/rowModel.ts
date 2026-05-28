@@ -232,6 +232,14 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.refresh();
 	};
 
+	public isGroupExpanded = (groupId: string): boolean => {
+		return this.expandedGroupIds.has(groupId);
+	};
+
+	public isDetailExpanded = (rowId: string): boolean => {
+		return this.expandedDetailRowIds.has(rowId);
+	};
+
 	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
 		this.store = store;
 

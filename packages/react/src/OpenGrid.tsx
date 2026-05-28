@@ -225,7 +225,13 @@ function OpenGridInner<TRowData = unknown>({
 				return;
 			}
 
-			// Intercept and patch removeChild to safely prevent React unmounting crashes on recycled elements
+			// Workaround for React Portal unmount race conditions:
+			// The core engine recycles virtualized container elements synchronously (via textContent = '') to optimize performance.
+			// However, React DOM cleans up portal fiber structures asynchronously on unmount, which eventually invokes
+			// `container.removeChild(child)`. If the virtualization layer has already synchronously cleared the container,
+			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
+			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
+			// rather than allowing it to crash the React tree.
 			if (container && !(container as any).__patchedRemoveChild) {
 				(container as any).__patchedRemoveChild = true;
 				const originalRemove = container.removeChild;
@@ -268,7 +274,13 @@ function OpenGridInner<TRowData = unknown>({
 				return;
 			}
 
-			// Intercept and patch removeChild to safely prevent React unmounting crashes on recycled elements
+			// Workaround for React Portal unmount race conditions:
+			// The core engine recycles virtualized container elements synchronously (via textContent = '') to optimize performance.
+			// However, React DOM cleans up portal fiber structures asynchronously on unmount, which eventually invokes
+			// `container.removeChild(child)`. If the virtualization layer has already synchronously cleared the container,
+			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
+			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
+			// rather than allowing it to crash the React tree.
 			if (container && !(container as any).__patchedRemoveChild) {
 				(container as any).__patchedRemoveChild = true;
 				const originalRemove = container.removeChild;

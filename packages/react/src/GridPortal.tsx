@@ -165,41 +165,19 @@ export function DefaultGroupRowRenderer({ visualRow, api }: { visualRow: any; ap
 	return (
 		<div
 			className="og-group-row-content"
-			style={{
-				display: 'flex',
-				alignItems: 'center',
-				paddingLeft: `${depth * 20 + 8}px`,
-				height: '100%',
-				width: '100%',
-				userSelect: 'none',
-				cursor: 'pointer',
-				fontSize: '13px',
-				fontWeight: '600',
-				color: '#e2e8f0',
-			}}
+			style={{ paddingLeft: `${depth * 20 + 8}px` }}
 			onClick={handleToggle}
 		>
-			<span style={{ marginRight: '8px', transition: 'transform 0.15s ease', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block' }}>
+			<span className={`og-group-row-toggle ${expanded ? 'og-group-row-toggle-expanded' : ''}`}>
 				▶
 			</span>
-			<span style={{ opacity: 0.6, marginRight: '6px', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.5px' }}>
+			<span className="og-group-row-label-prefix">
 				{visualRow.field}:
 			</span>
 			<span>
 				{String(visualRow.key)}
 			</span>
-			<span
-				className="og-group-count"
-				style={{
-					marginLeft: '10px',
-					background: 'rgba(59, 130, 246, 0.2)',
-					border: '1px solid rgba(59, 130, 246, 0.4)',
-					color: '#60a5fa',
-					padding: '1px 6px',
-					borderRadius: '10px',
-					fontSize: '11px',
-				}}
-			>
+			<span className="og-group-count">
 				{visualRow.childCount} items
 			</span>
 		</div>
@@ -208,21 +186,7 @@ export function DefaultGroupRowRenderer({ visualRow, api }: { visualRow: any; ap
 
 export function DefaultDetailRowRenderer({ visualRow, api }: { visualRow: any; api: GridApi<any> }) {
 	return (
-		<div
-			className="og-detail-row-content"
-			style={{
-				display: 'flex',
-				alignItems: 'center',
-				paddingLeft: '24px',
-				height: '100%',
-				width: '100%',
-				background: 'rgba(255, 255, 255, 0.02)',
-				borderBottom: '1px dashed rgba(255, 255, 255, 0.05)',
-				color: '#a0aec0',
-				fontSize: '12px',
-				fontStyle: 'italic',
-			}}
-		>
+		<div className="og-detail-row-content">
 			Nested detail view for parent row: {visualRow.parentId}
 		</div>
 	);

@@ -1,6 +1,21 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps } from '@open-grid/react';
-import { Layers, FolderTree, ArrowDownWideNarrow, Folder, File, ChevronRight, ChevronDown, PackageOpen, CheckCircle, RefreshCw, Sparkles, User, Settings, ShieldAlert } from 'lucide-react';
+import {
+	Layers,
+	FolderTree,
+	ArrowDownWideNarrow,
+	Folder,
+	File,
+	ChevronRight,
+	ChevronDown,
+	PackageOpen,
+	CheckCircle,
+	RefreshCw,
+	Sparkles,
+	User,
+	Settings,
+	ShieldAlert,
+} from 'lucide-react';
 import { LatencyProfiler, StatusBadgeRenderer, PriceBadgeRenderer } from '../components/GridShared';
 
 // ============================================================================
@@ -66,12 +81,12 @@ const treeRows: FileNodeRow[] = [
 	{ id: 'store-tsx', name: 'store.ts', type: 'tsx', size: '24.5 KB', modifiedAt: '2 hours ago', parentId: 'core-src' },
 	{ id: 'rowmodel-tsx', name: 'rowModel.ts', type: 'tsx', size: '15.4 KB', modifiedAt: '1 day ago', parentId: 'core-src' },
 	{ id: 'packages-json', name: 'package.json', type: 'json', size: '1.8 KB', modifiedAt: '3 days ago', parentId: 'core' },
-	
+
 	{ id: 'react', name: 'react', type: 'folder', parentId: 'packages' },
 	{ id: 'react-src', name: 'src', type: 'folder', parentId: 'react' },
 	{ id: 'opengrid-tsx', name: 'OpenGrid.tsx', type: 'tsx', size: '17.1 KB', modifiedAt: '5 mins ago', parentId: 'react-src' },
 	{ id: 'gridportal-tsx', name: 'GridPortal.tsx', type: 'tsx', size: '8.4 KB', modifiedAt: '2 hours ago', parentId: 'react-src' },
-	
+
 	{ id: 'demo', name: 'demo', type: 'folder', parentId: 'root' },
 	{ id: 'demo-src', name: 'src', type: 'folder', parentId: 'demo' },
 	{ id: 'app-tsx', name: 'App.tsx', type: 'tsx', size: '11.2 KB', modifiedAt: 'Just now', parentId: 'demo-src' },
@@ -80,11 +95,11 @@ const treeRows: FileNodeRow[] = [
 ];
 
 const masterRows: OrderRow[] = [
-	{ id: 'ORD-101', customerName: 'Apex Capital', orderDate: '2026-05-28', totalAmount: 4950.00, status: 'Shipped' },
-	{ id: 'ORD-102', customerName: 'Cyberdyne Systems', orderDate: '2026-05-27', totalAmount: 12400.00, status: 'Pending' },
-	{ id: 'ORD-103', customerName: 'Umbrella Corp', orderDate: '2026-05-26', totalAmount: 3120.50, status: 'Shipped' },
-	{ id: 'ORD-104', customerName: 'Weyland-Yutani', orderDate: '2026-05-25', totalAmount: 18450.00, status: 'Cancelled' },
-	{ id: 'ORD-105', customerName: 'Initech Inc', orderDate: '2026-05-24', totalAmount: 150.00, status: 'Shipped' },
+	{ id: 'ORD-101', customerName: 'Apex Capital', orderDate: '2026-05-28', totalAmount: 4950.0, status: 'Shipped' },
+	{ id: 'ORD-102', customerName: 'Cyberdyne Systems', orderDate: '2026-05-27', totalAmount: 12400.0, status: 'Pending' },
+	{ id: 'ORD-103', customerName: 'Umbrella Corp', orderDate: '2026-05-26', totalAmount: 3120.5, status: 'Shipped' },
+	{ id: 'ORD-104', customerName: 'Weyland-Yutani', orderDate: '2026-05-25', totalAmount: 18450.0, status: 'Cancelled' },
+	{ id: 'ORD-105', customerName: 'Initech Inc', orderDate: '2026-05-24', totalAmount: 150.0, status: 'Shipped' },
 ];
 
 // Inner nested order items maps
@@ -93,19 +108,13 @@ const orderItemsMap: Record<string, OrderItemRow[]> = {
 		{ id: 'ITM-01', itemName: 'High-Freq Options Feed Sub', price: 2500, quantity: 1, subtotal: 2500 },
 		{ id: 'ITM-02', itemName: 'Ultra-Low Latency Port licenses', price: 816.66, quantity: 3, subtotal: 2450 },
 	],
-	'ORD-102': [
-		{ id: 'ITM-03', itemName: 'T-800 Neural Net CPU Module', price: 6200, quantity: 2, subtotal: 12400 },
-	],
-	'ORD-103': [
-		{ id: 'ITM-04', itemName: 'T-Virus Containment Capsule', price: 1560.25, quantity: 2, subtotal: 3120.50 },
-	],
+	'ORD-102': [{ id: 'ITM-03', itemName: 'T-800 Neural Net CPU Module', price: 6200, quantity: 2, subtotal: 12400 }],
+	'ORD-103': [{ id: 'ITM-04', itemName: 'T-Virus Containment Capsule', price: 1560.25, quantity: 2, subtotal: 3120.5 }],
 	'ORD-104': [
 		{ id: 'ITM-05', itemName: 'M41A Pulse Rifle Replica Pro', price: 2050, quantity: 5, subtotal: 10250 },
 		{ id: 'ITM-06', itemName: 'Power Loader Hydraulic Core', price: 4100, quantity: 2, subtotal: 8200 },
 	],
-	'ORD-105': [
-		{ id: 'ITM-07', itemName: 'Red Swingline Stapler (Special)', price: 75, quantity: 2, subtotal: 150 },
-	],
+	'ORD-105': [{ id: 'ITM-07', itemName: 'Red Swingline Stapler (Special)', price: 75, quantity: 2, subtotal: 150 }],
 };
 
 // ============================================================================
@@ -114,19 +123,15 @@ const orderItemsMap: Record<string, OrderItemRow[]> = {
 
 const SalaryRenderer = ({ value }: CellRendererProps<any>) => {
 	const sal = parseFloat(String(value)) || 0;
-	return (
-		<span className="font-mono font-bold text-slate-200">
-			${sal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-		</span>
-	);
+	return <span className='font-mono font-bold text-slate-200'>${sal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>;
 };
 
 const RatingStarsRenderer = ({ value }: CellRendererProps<any>) => {
 	const stars = Math.min(5, Math.max(0, Number(value) || 0));
 	return (
-		<div className="flex items-center text-amber-400 select-none h-full">
+		<div className='flex items-center text-amber-400 select-none h-full'>
 			{Array.from({ length: 5 }).map((_, i) => (
-				<span key={i} className="text-sm">
+				<span key={i} className='text-sm'>
 					{i < stars ? '★' : '☆'}
 				</span>
 			))}
@@ -137,10 +142,9 @@ const RatingStarsRenderer = ({ value }: CellRendererProps<any>) => {
 // Custom Tree node name renderer with indent and folder/file icon!
 const TreeNameRenderer = ({ value, row, rowId, api }: CellRendererProps<any>) => {
 	const visualIndex = api.getRowIndexById(rowId) ?? 0;
-	const internalApi = (api as any).__getInternalApi?.() ?? api;
-	const visualRow = internalApi.getVisualRow ? internalApi.getVisualRow(visualIndex) : null;
+	const visualRow = api.getVisualRow(visualIndex);
 	const depth = visualRow?.depth ?? 0;
-	
+
 	const isFolder = row.type === 'folder';
 	let Icon = File;
 	if (isFolder) {
@@ -148,10 +152,7 @@ const TreeNameRenderer = ({ value, row, rowId, api }: CellRendererProps<any>) =>
 	}
 
 	return (
-		<div 
-			className="flex items-center h-full select-none"
-			style={{ paddingLeft: `${depth * 20}px` }}
-		>
+		<div className='flex items-center h-full select-none' style={{ paddingLeft: `${depth * 20}px` }}>
 			<Icon className={`w-3.5 h-3.5 mr-2 shrink-0 ${isFolder ? 'text-amber-400' : 'text-slate-400'}`} />
 			<span className={`${isFolder ? 'font-semibold text-slate-200' : 'text-slate-300'}`}>{String(value)}</span>
 		</div>
@@ -160,7 +161,7 @@ const TreeNameRenderer = ({ value, row, rowId, api }: CellRendererProps<any>) =>
 
 // Custom detail toggle button in the master grid!
 const DetailToggleRenderer = ({ rowId, api }: CellRendererProps<any>) => {
-	const isExpanded = api.getRowIndexById(`detail:${rowId}`) !== -1 && api.getRowIndexById(`detail:${rowId}`) !== null;
+	const isExpanded = api.isDetailExpanded(rowId);
 
 	const handleToggle = (e: React.MouseEvent) => {
 		e.stopPropagation();
@@ -168,11 +169,11 @@ const DetailToggleRenderer = ({ rowId, api }: CellRendererProps<any>) => {
 	};
 
 	return (
-		<button 
+		<button
 			onClick={handleToggle}
-			className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+			className='w-5 h-5 flex items-center justify-center rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors'
 		>
-			{isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-purple-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
+			{isExpanded ? <ChevronDown className='w-3.5 h-3.5 text-purple-400' /> : <ChevronRight className='w-3.5 h-3.5 text-slate-400' />}
 		</button>
 	);
 };
@@ -186,14 +187,17 @@ export default function NestedTablesGrouping() {
 	const [gridVersion, setGridVersion] = useState(0);
 
 	// 1. Grouping Grid config
-	const groupingColumns = useMemo<ColumnDef<EmployeeRow>[]>(() => [
-		{ field: 'id', header: 'ID', width: 100 },
-		{ field: 'name', header: 'Full Name', width: 180 },
-		{ field: 'department', header: 'Department', width: 140 },
-		{ field: 'title', header: 'Job Title', width: 180 },
-		{ field: 'rating', header: 'Rating', width: 120, cellRenderer: RatingStarsRenderer },
-		{ field: 'salary', header: 'Salary', width: 140, cellRenderer: SalaryRenderer },
-	], []);
+	const groupingColumns = useMemo<ColumnDef<EmployeeRow>[]>(
+		() => [
+			{ field: 'id', header: 'ID', width: 100 },
+			{ field: 'name', header: 'Full Name', width: 180 },
+			{ field: 'department', header: 'Department', width: 140 },
+			{ field: 'title', header: 'Job Title', width: 180 },
+			{ field: 'rating', header: 'Rating', width: 120, cellRenderer: RatingStarsRenderer },
+			{ field: 'salary', header: 'Salary', width: 140, cellRenderer: SalaryRenderer },
+		],
+		[]
+	);
 
 	const groupApi = useClientGrid<EmployeeRow>({
 		rows: groupRows,
@@ -223,23 +227,19 @@ export default function NestedTablesGrouping() {
 
 		return (
 			<div
-				className="og-group-row-content flex items-center justify-between px-4 h-full w-full border-b border-slate-900 bg-slate-900/40 hover:bg-slate-900/60 cursor-pointer"
+				className='og-group-row-content flex items-center justify-between px-4 h-full w-full border-b border-slate-900 bg-slate-900/40 hover:bg-slate-900/60 cursor-pointer'
 				onClick={handleToggle}
 				style={{ paddingLeft: `${depth * 24 + 16}px` }}
 			>
-				<div className="flex items-center gap-2">
-					<span className="p-0.5 rounded hover:bg-slate-800 transition-colors">
-						{expanded ? (
-							<ChevronDown className="w-4 h-4 text-purple-400" />
-						) : (
-							<ChevronRight className="w-4 h-4 text-slate-400" />
-						)}
+				<div className='flex items-center gap-2'>
+					<span className='p-0.5 rounded hover:bg-slate-800 transition-colors'>
+						{expanded ? <ChevronDown className='w-4 h-4 text-purple-400' /> : <ChevronRight className='w-4 h-4 text-slate-400' />}
 					</span>
-					<Folder className="w-4 h-4 text-purple-400 shrink-0" />
-					<span className="text-[10px] text-slate-500 uppercase tracking-wider font-extrabold">{visualRow.field}:</span>
-					<span className="text-slate-200 text-xs font-bold">{String(visualRow.key)}</span>
+					<Folder className='w-4 h-4 text-purple-400 shrink-0' />
+					<span className='text-[10px] text-slate-500 uppercase tracking-wider font-extrabold'>{visualRow.field}:</span>
+					<span className='text-slate-200 text-xs font-bold'>{String(visualRow.key)}</span>
 				</div>
-				<span className="text-[9px] font-bold text-purple-400 bg-purple-950/40 border border-purple-900/50 px-2 py-0.5 rounded-full shadow-sm">
+				<span className='text-[9px] font-bold text-purple-400 bg-purple-950/40 border border-purple-900/50 px-2 py-0.5 rounded-full shadow-sm'>
 					{visualRow.childCount} employees
 				</span>
 			</div>
@@ -247,16 +247,27 @@ export default function NestedTablesGrouping() {
 	}, []);
 
 	// 2. Tree Data Grid config
-	const treeColumns = useMemo<ColumnDef<FileNodeRow>[]>(() => [
-		{ field: 'name', header: 'Node Path / Name', width: 260, cellRenderer: TreeNameRenderer },
-		{ field: 'type', header: 'File Type', width: 110, cellRenderer: ({ value }) => (
-			<span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wide">{String(value)}</span>
-		) },
-		{ field: 'size', header: 'Capacity Size', width: 120, cellRenderer: ({ value }) => (
-			<span className="font-mono text-slate-400 text-xs">{String(value ?? '—')}</span>
-		) },
-		{ field: 'modifiedAt', header: 'Last Edited', width: 140 },
-	], []);
+	const treeColumns = useMemo<ColumnDef<FileNodeRow>[]>(
+		() => [
+			{ field: 'name', header: 'Node Path / Name', width: 260, cellRenderer: TreeNameRenderer },
+			{
+				field: 'type',
+				header: 'File Type',
+				width: 110,
+				cellRenderer: ({ value }) => (
+					<span className='text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wide'>{String(value)}</span>
+				),
+			},
+			{
+				field: 'size',
+				header: 'Capacity Size',
+				width: 120,
+				cellRenderer: ({ value }) => <span className='font-mono text-slate-400 text-xs'>{String(value ?? '—')}</span>,
+			},
+			{ field: 'modifiedAt', header: 'Last Edited', width: 140 },
+		],
+		[]
+	);
 
 	const treeApi = useClientGrid<FileNodeRow>({
 		rows: treeRows,
@@ -280,7 +291,7 @@ export default function NestedTablesGrouping() {
 		// The key of the tree group is the node ID
 		const nodeId = visualRow.key;
 		// Find full row data in treeRows
-		const rowData = treeRows.find(r => r.id === nodeId);
+		const rowData = treeRows.find((r) => r.id === nodeId);
 		if (!rowData) return null;
 
 		const handleToggle = (e: React.MouseEvent) => {
@@ -292,40 +303,37 @@ export default function NestedTablesGrouping() {
 
 		return (
 			<div
-				className="og-tree-group-content flex items-center justify-between px-4 h-full w-full border-b border-slate-900 bg-slate-900/20 hover:bg-slate-900/40 cursor-pointer"
+				className='og-tree-group-content flex items-center justify-between px-4 h-full w-full border-b border-slate-900 bg-slate-900/20 hover:bg-slate-900/40 cursor-pointer'
 				onClick={handleToggle}
 				style={{ paddingLeft: `${depth * 20 + 16}px` }}
 			>
-				<div className="flex items-center gap-2">
-					<span className="p-0.5 rounded hover:bg-slate-800 transition-colors">
-						{expanded ? (
-							<ChevronDown className="w-4 h-4 text-amber-400" />
-						) : (
-							<ChevronRight className="w-4 h-4 text-slate-400" />
-						)}
+				<div className='flex items-center gap-2'>
+					<span className='p-0.5 rounded hover:bg-slate-800 transition-colors'>
+						{expanded ? <ChevronDown className='w-4 h-4 text-amber-400' /> : <ChevronRight className='w-4 h-4 text-slate-400' />}
 					</span>
-					<Folder className="w-4 h-4 text-amber-400 shrink-0" />
-					<span className="text-slate-200 text-xs font-semibold">{rowData.name}</span>
+					<Folder className='w-4 h-4 text-amber-400 shrink-0' />
+					<span className='text-slate-200 text-xs font-semibold'>{rowData.name}</span>
 				</div>
-				<div className="flex items-center gap-4 text-[10px] text-slate-500 font-mono font-bold">
+				<div className='flex items-center gap-4 text-[10px] text-slate-500 font-mono font-bold'>
 					<span>{rowData.modifiedAt}</span>
-					<span className="text-[9px] text-amber-500 bg-amber-950/20 border border-amber-900/30 px-1.5 py-0.5 rounded">
-						Folder
-					</span>
+					<span className='text-[9px] text-amber-500 bg-amber-950/20 border border-amber-900/30 px-1.5 py-0.5 rounded'>Folder</span>
 				</div>
 			</div>
 		);
 	}, []);
 
 	// 3. Master-Detail Grid Config
-	const masterColumns = useMemo<ColumnDef<OrderRow>[]>(() => [
-		{ field: 'toggle', header: '🔍', width: 45, cellRenderer: DetailToggleRenderer },
-		{ field: 'id', header: 'Order ID', width: 110 },
-		{ field: 'customerName', header: 'Client Corporation', width: 220 },
-		{ field: 'orderDate', header: 'Purchase Date', width: 150 },
-		{ field: 'totalAmount', header: 'Transaction Value', width: 160, cellRenderer: PriceBadgeRenderer },
-		{ field: 'status', header: 'Fulfillment Status', width: 140, cellRenderer: StatusBadgeRenderer },
-	], []);
+	const masterColumns = useMemo<ColumnDef<OrderRow>[]>(
+		() => [
+			{ field: 'toggle', header: '🔍', width: 45, cellRenderer: DetailToggleRenderer },
+			{ field: 'id', header: 'Order ID', width: 110 },
+			{ field: 'customerName', header: 'Client Corporation', width: 220 },
+			{ field: 'orderDate', header: 'Purchase Date', width: 150 },
+			{ field: 'totalAmount', header: 'Transaction Value', width: 160, cellRenderer: PriceBadgeRenderer },
+			{ field: 'status', header: 'Fulfillment Status', width: 140, cellRenderer: StatusBadgeRenderer },
+		],
+		[]
+	);
 
 	const masterApi = useClientGrid<OrderRow>({
 		rows: masterRows,
@@ -337,148 +345,150 @@ export default function NestedTablesGrouping() {
 	});
 
 	// Standard column definitions for the child grids!
-	const detailColumns = useMemo<ColumnDef<OrderItemRow>[]>(() => [
-		{ field: 'id', header: 'Item ID', width: 100 },
-		{ field: 'itemName', header: 'Product Item Name', width: 260 },
-		{ field: 'price', header: 'Unit Price', width: 130, cellRenderer: PriceBadgeRenderer },
-		{ field: 'quantity', header: 'Qty', width: 100 },
-		{ field: 'subtotal', header: 'Total Value', width: 140, cellRenderer: PriceBadgeRenderer },
-	], []);
+	const detailColumns = useMemo<ColumnDef<OrderItemRow>[]>(
+		() => [
+			{ field: 'id', header: 'Item ID', width: 100 },
+			{ field: 'itemName', header: 'Product Item Name', width: 260 },
+			{ field: 'price', header: 'Unit Price', width: 130, cellRenderer: PriceBadgeRenderer },
+			{ field: 'quantity', header: 'Qty', width: 100 },
+			{ field: 'subtotal', header: 'Total Value', width: 140, cellRenderer: PriceBadgeRenderer },
+		],
+		[]
+	);
 
 	// The custom detail portal renderer.
 	// This will render a FULLY NESTED OpenGrid showing the items in this order!
 	// It operates inside a custom sub-GridProvider context.
-	const NestedOrderGrid = useCallback(({ visualRow, parentApi }: { visualRow: any; parentApi: any }) => {
-		const orderId = visualRow.parentId;
-		const items = orderItemsMap[orderId] || [];
+	const NestedOrderGrid = useCallback(
+		({ visualRow, parentApi }: { visualRow: any; parentApi: any }) => {
+			const orderId = visualRow.parentId;
+			const items = orderItemsMap[orderId] || [];
 
-		// Initialize local child grid store hook
-		const detailApi = useClientGrid<OrderItemRow>({
-			rows: items,
-			columns: detailColumns,
-		});
+			// Initialize local child grid store hook
+			const detailApi = useClientGrid<OrderItemRow>({
+				rows: items,
+				columns: detailColumns,
+			});
 
-		// Trigger latency profiling on cell change
-		const handleChildCellValueChanged = (rowId: string, colField: string, val: unknown) => {
-			const start = performance.now();
-			if (colField === 'quantity') {
-				const q = parseInt(String(val)) || 0;
-				const rowNode = (detailApi as any).getRowNodeById(rowId);
-				if (rowNode) {
-					const p = rowNode.data.price;
-					detailApi.setCellValue(rowId, 'subtotal', q * p);
-					
-					// Re-calculate parent grid totals!
-					setTimeout(() => {
-						let parentSum = 0;
-						for (let i = 0; i < detailApi.getRowCount(); i++) {
-							const item = detailApi.getRow(i);
-							if (item) parentSum += item.subtotal;
-						}
-						parentApi.setCellValue(orderId, 'totalAmount', parentSum);
-					}, 0);
+			// Trigger latency profiling on cell change
+			const handleChildCellValueChanged = (rowId: string, colField: string, val: unknown) => {
+				const start = performance.now();
+				if (colField === 'quantity') {
+					const q = parseInt(String(val)) || 0;
+					const rowNode = (detailApi as any).getRowNodeById(rowId);
+					if (rowNode) {
+						const p = rowNode.data.price;
+						detailApi.setCellValue(rowId, 'subtotal', q * p);
+
+						// Re-calculate parent grid totals!
+						setTimeout(() => {
+							let parentSum = 0;
+							for (let i = 0; i < detailApi.getRowCount(); i++) {
+								const item = detailApi.getRow(i);
+								if (item) parentSum += item.subtotal;
+							}
+							parentApi.setCellValue(orderId, 'totalAmount', parentSum);
+						}, 0);
+					}
 				}
-			}
-			LatencyProfiler.record(performance.now() - start);
-		};
+				LatencyProfiler.record(performance.now() - start);
+			};
 
-		return (
-			<div className="w-full h-full p-4 pl-12 bg-slate-950/90 border-b border-slate-900 flex flex-col gap-2 font-sans relative">
-				<div className="absolute inset-y-0 left-6 w-0.5 bg-gradient-to-b from-purple-500/25 to-pink-500/25" />
-				<div className="flex items-center justify-between text-[10px] text-slate-400 font-extrabold uppercase tracking-widest leading-none">
-					<div className="flex items-center gap-2">
-						<PackageOpen className="w-4 h-4 text-purple-400" />
-						<span>Order Line Items ({orderId})</span>
+			return (
+				<div className='w-full h-full p-4 pl-12 bg-slate-950/90 border-b border-slate-900 flex flex-col gap-2 font-sans relative'>
+					<div className='absolute inset-y-0 left-6 w-0.5 bg-gradient-to-b from-purple-500/25 to-pink-500/25' />
+					<div className='flex items-center justify-between text-[10px] text-slate-400 font-extrabold uppercase tracking-widest leading-none'>
+						<div className='flex items-center gap-2'>
+							<PackageOpen className='w-4 h-4 text-purple-400' />
+							<span>Order Line Items ({orderId})</span>
+						</div>
+						<div className='flex items-center gap-1.5 text-purple-400'>
+							<Sparkles className='w-3.5 h-3.5 text-purple-400 animate-pulse' />
+							Nested Grid Portal mounted successfully
+						</div>
 					</div>
-					<div className="flex items-center gap-1.5 text-purple-400">
-						<Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-						Nested Grid Portal mounted successfully
+					<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-950/70 shadow-inner'>
+						<GridProvider api={detailApi}>
+							<OpenGrid
+								enableNavigation={true}
+								navigationOptions={{
+									editTrigger: 'singleClick',
+									onCellValueChanged: handleChildCellValueChanged,
+								}}
+							/>
+						</GridProvider>
 					</div>
 				</div>
-				<div className="flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-950/70 shadow-inner">
-					<GridProvider api={detailApi}>
-						<OpenGrid
-							enableNavigation={true}
-							navigationOptions={{
-								editTrigger: 'singleClick',
-								onCellValueChanged: handleChildCellValueChanged,
-							}}
-						/>
-					</GridProvider>
-				</div>
-			</div>
-		);
-	}, [detailColumns]);
+			);
+		},
+		[detailColumns]
+	);
 
 	// Wrap the details renderer so that parentApi can be resolved and passed down!
-	const handleDetailRowRender = useCallback(({ visualRow, api }: { visualRow: any; api: any }) => {
-		return <NestedOrderGrid visualRow={visualRow} parentApi={api} />;
-	}, [NestedOrderGrid]);
+	const handleDetailRowRender = useCallback(
+		({ visualRow, api }: { visualRow: any; api: any }) => {
+			return <NestedOrderGrid visualRow={visualRow} parentApi={api} />;
+		},
+		[NestedOrderGrid]
+	);
 
 	// Force refresh active grids when tab changes
 	const handleTabChange = (tab: 'group' | 'tree' | 'detail') => {
 		setActiveTab(tab);
-		setGridVersion(v => v + 1);
+		setGridVersion((v) => v + 1);
 	};
 
 	return (
-		<div className="flex flex-col xl:flex-row h-full w-full gap-5 overflow-hidden font-sans">
+		<div className='flex flex-col xl:flex-row h-full w-full gap-5 overflow-hidden font-sans'>
 			{/* Left Column: Grid Panel and Segmented Control */}
-			<div className="flex-1 flex flex-col gap-4 min-h-0 min-w-0">
-				
+			<div className='flex-1 flex flex-col gap-4 min-h-0 min-w-0'>
 				{/* Gorgeous Header Control bar with Tab Switchers */}
-				<div className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 flex flex-col md:flex-row items-center justify-between gap-4 shrink-0 relative overflow-hidden">
-					<div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-20 h-20 bg-purple-500/5 rounded-full blur-xl pointer-events-none" />
-					
+				<div className='bg-slate-900/10 border border-slate-900 rounded-xl p-3 flex flex-col md:flex-row items-center justify-between gap-4 shrink-0 relative overflow-hidden'>
+					<div className='absolute right-0 top-0 translate-x-8 -translate-y-8 w-20 h-20 bg-purple-500/5 rounded-full blur-xl pointer-events-none' />
+
 					{/* Tab Title */}
-					<div className="flex items-center gap-2">
-						<span className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
-						<span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-							<Layers className="w-4 h-4 text-purple-400" />
+					<div className='flex items-center gap-2'>
+						<span className='w-2 h-2 rounded-full bg-purple-500 animate-ping' />
+						<span className='text-[10px] text-slate-400 font-extrabold uppercase tracking-wider flex items-center gap-1.5'>
+							<Layers className='w-4 h-4 text-purple-400' />
 							Hierarchical & Relational Layout Desk (VisualRow Architecture)
 						</span>
 					</div>
 
 					{/* Tab Segmented Switcher */}
-					<div className="flex bg-slate-950 border border-slate-850 p-1 rounded-xl shadow-inner text-xs font-semibold gap-1">
+					<div className='flex bg-slate-950 border border-slate-850 p-1 rounded-xl shadow-inner text-xs font-semibold gap-1'>
 						<button
 							onClick={() => handleTabChange('group')}
 							className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-								activeTab === 'group' 
-									? 'bg-purple-600 text-white shadow shadow-purple-600/20' 
-									: 'text-slate-400 hover:text-slate-200'
+								activeTab === 'group' ? 'bg-purple-600 text-white shadow shadow-purple-600/20' : 'text-slate-400 hover:text-slate-200'
 							}`}
 						>
-							<Layers className="w-3.5 h-3.5" />
+							<Layers className='w-3.5 h-3.5' />
 							Row Grouping
 						</button>
 						<button
 							onClick={() => handleTabChange('tree')}
 							className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-								activeTab === 'tree' 
-									? 'bg-amber-600 text-white shadow shadow-amber-600/20' 
-									: 'text-slate-400 hover:text-slate-200'
+								activeTab === 'tree' ? 'bg-amber-600 text-white shadow shadow-amber-600/20' : 'text-slate-400 hover:text-slate-200'
 							}`}
 						>
-							<FolderTree className="w-3.5 h-3.5" />
+							<FolderTree className='w-3.5 h-3.5' />
 							Tree Hierarchy
 						</button>
 						<button
 							onClick={() => handleTabChange('detail')}
 							className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-								activeTab === 'detail' 
-									? 'bg-pink-600 text-white shadow shadow-pink-600/20' 
-									: 'text-slate-400 hover:text-slate-200'
+								activeTab === 'detail' ? 'bg-pink-600 text-white shadow shadow-pink-600/20' : 'text-slate-400 hover:text-slate-200'
 							}`}
 						>
-							<PackageOpen className="w-3.5 h-3.5" />
+							<PackageOpen className='w-3.5 h-3.5' />
 							Master-Detail Portal
 						</button>
 					</div>
 				</div>
 
 				{/* Active Grid Viewport Surface */}
-				<div className="flex-1 min-h-0 min-w-0 border border-slate-900 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative">
+				<div className='flex-1 min-h-0 min-w-0 border border-slate-900 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative'>
 					{activeTab === 'group' && (
 						<GridProvider api={groupApi} key={`group-${gridVersion}`}>
 							<OpenGrid
@@ -518,105 +528,106 @@ export default function NestedTablesGrouping() {
 			</div>
 
 			{/* Right Column: Architectural Telemetry Sidebar */}
-			<div className="w-full xl:w-80 flex flex-col gap-4 shrink-0 overflow-y-auto max-h-full xl:max-h-none pr-1.5 leading-normal">
-				
+			<div className='w-full xl:w-80 flex flex-col gap-4 shrink-0 overflow-y-auto max-h-full xl:max-h-none pr-1.5 leading-normal'>
 				{/* 1. CONCEPT & CAPABILITIES CARD */}
-				<div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3.5 glass-card relative overflow-hidden">
-					<div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-purple-600/5 rounded-full blur-2xl pointer-events-none" />
-					<h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-						<Sparkles className="w-4 h-4 text-purple-400" />
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3.5 glass-card relative overflow-hidden'>
+					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-purple-600/5 rounded-full blur-2xl pointer-events-none' />
+					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+						<Sparkles className='w-4 h-4 text-purple-400' />
 						VisualRow Architecture
 					</h3>
-					<div className="text-xs text-slate-300 flex flex-col gap-2.5">
+					<div className='text-xs text-slate-300 flex flex-col gap-2.5'>
 						<p>
-							Rather than treating every visible row strictly as a data-centric <span className="font-mono text-purple-400">RowNode</span>, the grid now operates on a pipeline-driven <span className="font-mono text-purple-400">VisualRow</span> discriminated union.
+							Rather than treating every visible row strictly as a data-centric{' '}
+							<span className='font-mono text-purple-400'>RowNode</span>, the grid now operates on a pipeline-driven{' '}
+							<span className='font-mono text-purple-400'>VisualRow</span> discriminated union.
 						</p>
-						<p>
-							This enables complex, dynamically structured render hierarchies without bloating or mutating the original dataset.
-						</p>
+						<p>This enables complex, dynamically structured render hierarchies without bloating or mutating the original dataset.</p>
 					</div>
 
-					<div className="border-t border-slate-900/60 pt-3 flex flex-col gap-2 text-[10px]">
-						<div className="flex items-center gap-2 text-slate-400">
-							<CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+					<div className='border-t border-slate-900/60 pt-3 flex flex-col gap-2 text-[10px]'>
+						<div className='flex items-center gap-2 text-slate-400'>
+							<CheckCircle className='w-4 h-4 text-emerald-400 shrink-0' />
 							<span>Zero data-row mutation on expansion</span>
 						</div>
-						<div className="flex items-center gap-2 text-slate-400">
-							<CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+						<div className='flex items-center gap-2 text-slate-400'>
+							<CheckCircle className='w-4 h-4 text-emerald-400 shrink-0' />
 							<span>Dynamic parent aggregate calculation</span>
 						</div>
-						<div className="flex items-center gap-2 text-slate-400">
-							<CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+						<div className='flex items-center gap-2 text-slate-400'>
+							<CheckCircle className='w-4 h-4 text-emerald-400 shrink-0' />
 							<span>Infinite nested components via portals</span>
 						</div>
 					</div>
 				</div>
 
 				{/* 2. SPECIFIC TAB EXPLANATION */}
-				<div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3.5 glass-card relative overflow-hidden">
-					<div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-indigo-600/5 rounded-full blur-2xl pointer-events-none" />
-					<h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-						<Settings className="w-4 h-4 text-indigo-400" />
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3.5 glass-card relative overflow-hidden'>
+					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-indigo-600/5 rounded-full blur-2xl pointer-events-none' />
+					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+						<Settings className='w-4 h-4 text-indigo-400' />
 						Layout Features
 					</h3>
 
 					{activeTab === 'group' && (
-						<div className="text-xs text-slate-300 flex flex-col gap-2 leading-relaxed">
-							<span className="text-[10px] font-extrabold text-purple-400 uppercase tracking-wide">📦 Row Grouping Mode</span>
+						<div className='text-xs text-slate-300 flex flex-col gap-2 leading-relaxed'>
+							<span className='text-[10px] font-extrabold text-purple-400 uppercase tracking-wide'>📦 Row Grouping Mode</span>
 							<p>
-								Groups employee data on the fly by their <span className="font-semibold text-slate-200">Department</span> column.
+								Groups employee data on the fly by their <span className='font-semibold text-slate-200'>Department</span> column.
 							</p>
 							<p>
-								Press <span className="font-mono bg-slate-950 border border-slate-800 px-1 py-0.5 rounded text-purple-300 text-[10px]">Space</span> when a cell is active to dynamically toggle the expansion state of its parent group!
+								Press{' '}
+								<span className='font-mono bg-slate-950 border border-slate-800 px-1 py-0.5 rounded text-purple-300 text-[10px]'>
+									Space
+								</span>{' '}
+								when a cell is active to dynamically toggle the expansion state of its parent group!
 							</p>
 						</div>
 					)}
 
 					{activeTab === 'tree' && (
-						<div className="text-xs text-slate-300 flex flex-col gap-2 leading-relaxed">
-							<span className="text-[10px] font-extrabold text-amber-500 uppercase tracking-wide">🌳 Tree Hierarchy Mode</span>
+						<div className='text-xs text-slate-300 flex flex-col gap-2 leading-relaxed'>
+							<span className='text-[10px] font-extrabold text-amber-500 uppercase tracking-wide'>🌳 Tree Hierarchy Mode</span>
+							<p>Uses a parent-child recursive tree structure to build directory files and folders.</p>
 							<p>
-								Uses a parent-child recursive tree structure to build directory files and folders.
-							</p>
-							<p>
-								Parent directory nodes map into folder nodes with customizable icons, custom visual indentation depths, and full keyboard navigation.
+								Parent directory nodes map into folder nodes with customizable icons, custom visual indentation depths, and full
+								keyboard navigation.
 							</p>
 						</div>
 					)}
 
 					{activeTab === 'detail' && (
-						<div className="text-xs text-slate-300 flex flex-col gap-2 leading-relaxed">
-							<span className="text-[10px] font-extrabold text-pink-400 uppercase tracking-wide">🔍 Master-Detail Mode</span>
+						<div className='text-xs text-slate-300 flex flex-col gap-2 leading-relaxed'>
+							<span className='text-[10px] font-extrabold text-pink-400 uppercase tracking-wide'>🔍 Master-Detail Mode</span>
+							<p>Renders completely separate **nested interactive &lt;OpenGrid&gt; grids** inside order detail portals!</p>
 							<p>
-								Renders completely separate **nested interactive &lt;OpenGrid&gt; grids** inside order detail portals!
-							</p>
-							<p>
-								Try editing the <span className="font-mono text-pink-300 text-[10px]">Qty</span> column in the nested grids. It updates subtotal values and dynamically propagates totals up to the parent ledger cells!
+								Try editing the <span className='font-mono text-pink-300 text-[10px]'>Qty</span> column in the nested grids. It
+								updates subtotal values and dynamically propagates totals up to the parent ledger cells!
 							</p>
 						</div>
 					)}
 				</div>
 
 				{/* 3. HARDWARE TELEMETRY PORTAL */}
-				<div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden">
-					<div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-rose-600/5 rounded-full blur-2xl pointer-events-none" />
-					<h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-						<ShieldAlert className="w-4 h-4 text-rose-400" />
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden'>
+					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-rose-600/5 rounded-full blur-2xl pointer-events-none' />
+					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+						<ShieldAlert className='w-4 h-4 text-rose-400' />
 						Portal Mounting Performance
 					</h3>
-					
-					<div className="flex items-center gap-2 mt-1">
-						<RefreshCw className="w-3.5 h-3.5 text-rose-400 animate-spin shrink-0" />
-						<div className="text-xs text-slate-400">
-							Active Portal Subsystems: <span className="font-mono text-slate-200 font-bold">Wired</span>
+
+					<div className='flex items-center gap-2 mt-1'>
+						<RefreshCw className='w-3.5 h-3.5 text-rose-400 animate-spin shrink-0' />
+						<div className='text-xs text-slate-400'>
+							Active Portal Subsystems: <span className='font-mono text-slate-200 font-bold'>Wired</span>
 						</div>
 					</div>
-					
-					<p className="text-[10px] text-slate-500 leading-normal mt-1">
-						Visual portal mounts are batch-flushed to avoid layout thrashing, ensuring smooth performance even with deep sub-grid recursion.
+
+					<p className='text-[10px] text-slate-500 leading-normal mt-1'>
+						Visual portal mounts are batch-flushed to avoid layout thrashing, ensuring smooth performance even with deep sub-grid
+						recursion.
 					</p>
 				</div>
-
 			</div>
 		</div>
 	);

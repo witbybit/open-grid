@@ -159,6 +159,9 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 	const rating = Number(value) || 0;
 
 	const handleStarClick = (starIndex: number, e: React.MouseEvent) => {
+		// Explicitly select and focus the cell first so clicking a star registers selection instantly!
+		api.selectCell({ rowId, colField }, 'pointer');
+
 		e.stopPropagation();
 		e.preventDefault();
 
@@ -171,10 +174,10 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 	return (
 		<div className='flex items-center gap-1 h-full select-none cursor-pointer'>
 			{[1, 2, 3, 4, 5].map((star) => (
-				<button
+				<span
 					key={star}
 					onClick={(e) => handleStarClick(star, e)}
-					className='p-0.5 hover:scale-125 transition-transform duration-100 outline-none'
+					className='p-0.5 hover:scale-125 transition-transform duration-100 outline-none cursor-pointer'
 				>
 					<svg
 						className={`w-4 h-4 ${star <= rating ? 'text-amber-400 fill-amber-400' : 'text-slate-600'}`}
@@ -187,7 +190,7 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 					>
 						<polygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' />
 					</svg>
-				</button>
+				</span>
 			))}
 		</div>
 	);
