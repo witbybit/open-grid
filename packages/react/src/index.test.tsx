@@ -165,9 +165,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const node = grid.api.getRowNode(0)!;
 
 		act(() => {
-			grid.api.setState({
-				activeEdit: { rowId: '1', colField: 'name' },
-			});
+			grid.api.startEditing('1', 'name');
 		});
 
 		render(
@@ -197,9 +195,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const node = grid.api.getRowNode(0)!;
 
 		act(() => {
-			grid.api.setState({
-				activeEdit: { rowId: '1', colField: 'name' },
-			});
+			grid.api.startEditing('1', 'name');
 		});
 
 		const rendered = render(
@@ -226,9 +222,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const node = grid.api.getRowNode(0)!;
 
 		act(() => {
-			grid.api.setState({
-				activeEdit: { rowId: '1', colField: 'name' },
-			});
+			grid.api.startEditing('1', 'name');
 		});
 
 		const rendered = render(
@@ -272,9 +266,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const node = grid.api.getRowNode(0)!;
 
 		act(() => {
-			grid.api.setState({
-				activeEdit: { rowId: '1', colField: 'name' },
-			});
+			grid.api.startEditing('1', 'name');
 		});
 
 		render(
@@ -315,9 +307,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const node = grid.api.getRowNode(0)!;
 
 		act(() => {
-			grid.api.setState({
-				activeEdit: { rowId: '1', colField: 'name' },
-			});
+			grid.api.startEditing('1', 'name');
 		});
 
 		render(

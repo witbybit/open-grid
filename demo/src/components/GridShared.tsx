@@ -369,14 +369,14 @@ export function GridView({
 	}
 
 	useEffect(() => {
-		activeApi.setState({
-			rowHeights: rowHeights ?? {},
-			defaultRowHeight: defaultHeight ?? 38,
-		});
+		activeApi.setRowHeights(rowHeights ?? {});
+		activeApi.setDefaultRowHeight(defaultHeight ?? 38);
 	}, [activeApi, rowHeights, defaultHeight]);
 
 	return (
-		<div className={`w-full h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative demo-grid-surface ${className}`}>
+		<div
+			className={`w-full h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative demo-grid-surface ${className}`}
+		>
 			<div className='absolute top-2 right-2 z-50 pointer-events-none rounded-md border border-slate-700/70 bg-slate-950/85 px-2 py-1 text-[10px] font-mono text-slate-300 shadow-lg backdrop-blur'>
 				{lastClick ? (
 					<span>

@@ -37,43 +37,41 @@ function GanttSchedulingWorkspaceInner({
 	// Custom Developer Style Slots Configs (The Dynamic CSS Theme Overrides!)
 	React.useEffect(() => {
 		// Hook the dynamic customizer classes directly into our core style slots!
-		api.setState({
-			styleSlots: {
-				rowClass: (row) => {
-					const rowData = row as GanttRow;
-					if (!rowData) return '';
+		api.setStyleSlots({
+			rowClass: (row) => {
+				const rowData = row as GanttRow;
+				if (!rowData) return '';
 
-					// Core structural layouts alternate, but Blocked and Done rows get custom aesthetic glow borders!
-					let base = 'transition-all duration-200 border-l-2 ';
-					if (rowData.status === 'Blocked') {
-						return base + 'border-rose-500/80 bg-rose-950/5 hover:bg-rose-900/10 text-rose-200/90';
-					}
-					if (rowData.status === 'Done') {
-						return base + 'border-emerald-500/80 bg-emerald-950/5 hover:bg-emerald-900/10 text-emerald-200/90';
-					}
-					if (rowData.status === 'In Progress') {
-						return base + 'border-indigo-500/50 bg-indigo-950/5 hover:bg-indigo-900/10';
-					}
-					return base + 'border-slate-800 bg-slate-900/5 hover:bg-slate-800/10';
-				},
-				cellClass: (col, row) => {
-					// Add dynamic glows on critical status metrics
-					const rowData = row as GanttRow;
-					if (!rowData) return '';
-					if (col.field === 'progress' && rowData.progress >= 90) {
-						return 'text-emerald-400 font-extrabold font-mono shadow-sm';
-					}
-					if (col.field === 'status' && rowData.status === 'Blocked') {
-						return 'animate-pulse text-rose-400 font-semibold';
-					}
-					return '';
-				},
-				headerCellClass: (col) => {
-					if (col.field === 'timeline') {
-						return 'bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 text-indigo-300 font-bold border-b border-indigo-900/30';
-					}
-					return 'font-semibold text-slate-400';
-				},
+				// Core structural layouts alternate, but Blocked and Done rows get custom aesthetic glow borders!
+				let base = 'transition-all duration-200 border-l-2 ';
+				if (rowData.status === 'Blocked') {
+					return base + 'border-rose-500/80 bg-rose-950/5 hover:bg-rose-900/10 text-rose-200/90';
+				}
+				if (rowData.status === 'Done') {
+					return base + 'border-emerald-500/80 bg-emerald-950/5 hover:bg-emerald-900/10 text-emerald-200/90';
+				}
+				if (rowData.status === 'In Progress') {
+					return base + 'border-indigo-500/50 bg-indigo-950/5 hover:bg-indigo-900/10';
+				}
+				return base + 'border-slate-800 bg-slate-900/5 hover:bg-slate-800/10';
+			},
+			cellClass: (col, row) => {
+				// Add dynamic glows on critical status metrics
+				const rowData = row as GanttRow;
+				if (!rowData) return '';
+				if (col.field === 'progress' && rowData.progress >= 90) {
+					return 'text-emerald-400 font-extrabold font-mono shadow-sm';
+				}
+				if (col.field === 'status' && rowData.status === 'Blocked') {
+					return 'animate-pulse text-rose-400 font-semibold';
+				}
+				return '';
+			},
+			headerCellClass: (col) => {
+				if (col.field === 'timeline') {
+					return 'bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 text-indigo-300 font-bold border-b border-indigo-900/30';
+				}
+				return 'font-semibold text-slate-400';
 			},
 		});
 	}, [api]);

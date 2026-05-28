@@ -325,7 +325,6 @@ export type Listener<TRowData = unknown> = (state: GridState<TRowData>) => void;
  */
 export interface GridApi<TRowData = unknown> {
 	getState(): GridState<TRowData>;
-	setState(updater: GridStateUpdater<TRowData>): void;
 	getRowId(row: TRowData): string;
 	isRowLoading(rowId: string): boolean;
 	getRowCount(): number;
@@ -335,6 +334,8 @@ export interface GridApi<TRowData = unknown> {
 	setRows(rows: TRowData[]): void;
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
 	refreshRows(): void;
+	setRowHeights: (rowHeights: Record<string, number> | undefined) => void;
+	setDefaultRowHeight: (defaultRowHeight?: number | undefined) => void;
 	purgeCache(): void;
 	setServerDatasource(datasource: IGridDatasource, blockSize?: number): void;
 	getCellValue(rowId: string, colField: string): unknown;
@@ -351,8 +352,10 @@ export interface GridApi<TRowData = unknown> {
 	setRowHeight(rowId: string, height: number): void;
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
+	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
 	addEventListener<T = unknown>(type: string, callback: GridEventListener<T>): () => void;
 	dispatchEvent<T = unknown>(type: string, payload: T): void;
+	startEditing(rowId: string, colField: string): void;
 	stopEditing(cancel?: boolean): void;
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
@@ -371,6 +374,7 @@ export interface GridApi<TRowData = unknown> {
  * Internal API intended for the rendering engine, plugins, and custom framework adapters.
  */
 export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
+	setState(updater: GridStateUpdater<TRowData>): void;
 	registerRowModel(rowModel: RowModel<TRowData>): void;
 	getRowModel(): RowModel<TRowData> | null;
 	registerPlugin(plugin: GridPlugin<TRowData>): void;
@@ -513,12 +517,20 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.setFilterModel(filterModel);
 	};
 
+	public setStyleSlots = (styleSlots: GridStyleSlots<TRowData> | undefined): void => {
+		this.engine.stateManager.setState({ styleSlots });
+	};
+
 	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {
 		return this.engine.eventBus.addEventListener(type, callback);
 	};
 
 	public dispatchEvent = <T = unknown>(type: string, payload: T): void => {
 		this.engine.eventBus.dispatchEvent(type, payload);
+	};
+
+	public startEditing = (rowId: string, colField: string): void => {
+		this.engine.startEdit(rowId, colField);
 	};
 
 	public stopEditing = (cancel: boolean = false): void => {
@@ -564,6 +576,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		} else {
 			rowModel?.purgeCache?.();
 		}
+	};
+
+	public setRowHeights = (rowHeights: Record<string, number> | undefined): void => {
+		this.engine.stateManager.setState({ rowHeights });
+	};
+
+	public setDefaultRowHeight = (defaultRowHeight?: number | undefined): void => {
+		this.engine.stateManager.setState({ defaultRowHeight });
 	};
 
 	public purgeCache = (): void => {

@@ -9,7 +9,6 @@ import {
 	type GridEventListener,
 	type GridSelectionSource,
 	type GridState,
-	type GridStateUpdater,
 	type Listener,
 } from './store.js';
 
@@ -32,7 +31,6 @@ function buildColumnWidths<TRowData>(columns: Array<ColumnDef<TRowData>>): Recor
 export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: () => void): GridApi<TRowData> & ApiBridge<TRowData> {
 	const api = {
 		getState: () => store.getState(),
-		setState: (updater: GridStateUpdater<TRowData>) => store.setState(updater),
 		getRowId: (row: TRowData) => store.getRowId(row),
 		isRowLoading: (rowId: string) => store.isRowLoading(rowId),
 		getRowCount: () => store.getRowCount(),
@@ -42,6 +40,8 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		setRows: (rows: TRowData[]) => store.setRows(rows),
 		updateRows: (updater: (rows: TRowData[]) => TRowData[]) => store.updateRows(updater),
 		refreshRows: () => store.refreshRows(),
+		setRowHeights: (rowHeights: Record<string, number> | undefined) => store.setRowHeights(rowHeights),
+		setDefaultRowHeight: (defaultRowHeight?: number | undefined) => store.setDefaultRowHeight(defaultRowHeight),
 		purgeCache: () => store.purgeCache(),
 		setServerDatasource: (datasource: IGridDatasource, blockSize?: number) => store.setServerDatasource(datasource, blockSize),
 		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
@@ -59,8 +59,10 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		setRowHeight: (rowId: string, height: number) => store.setRowHeight(rowId, height),
 		setSortModel: (sortModel: SortModel | null) => store.setSortModel(sortModel),
 		setFilterModel: (filterModel: FilterModel | null) => store.setFilterModel(filterModel),
+		setStyleSlots: (styleSlots: GridState<TRowData>['styleSlots']) => store.setStyleSlots(styleSlots),
 		addEventListener: <T = unknown>(type: string, callback: GridEventListener<T>) => store.addEventListener(type, callback),
 		dispatchEvent: <T = unknown>(type: string, payload: T) => store.dispatchEvent(type, payload),
+		startEditing: (rowId: string, colField: string) => store.startEditing(rowId, colField),
 		stopEditing: (cancel?: boolean) => store.stopEditing(cancel),
 		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
 		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
