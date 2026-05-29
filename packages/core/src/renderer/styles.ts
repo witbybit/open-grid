@@ -377,19 +377,19 @@ export const CORE_STYLES = `
   .og-context-menu {
     position: fixed;
     z-index: 1000;
-    background: rgba(15, 23, 42, 0.88);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    background: rgba(15, 23, 42, 0.93);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.6), 0 8px 16px -8px rgba(0, 0, 0, 0.6);
     padding: 6px 0;
-    min-width: 190px;
+    min-width: 200px;
     font-family: var(--og-font-family), inherit;
     color: #f1f5f9;
     opacity: 0;
-    transform: scale(0.95);
-    transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: scale(0.96);
+    transition: opacity 0.12s cubic-bezier(0.16, 1, 0.3, 1), transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
     pointer-events: none;
   }
   .og-context-menu.og-visible {
@@ -404,15 +404,41 @@ export const CORE_STYLES = `
     font-size: 13px;
     cursor: pointer;
     transition: background-color 0.12s ease, color 0.12s ease;
+    user-select: none;
   }
   .og-context-menu-item:hover {
     background-color: var(--og-focus-ring, #3b82f6);
     color: #ffffff;
   }
+  .og-context-menu-item.og-disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    color: #94a3b8;
+  }
+  .og-context-menu-item.og-disabled:hover {
+    background-color: transparent;
+    color: #94a3b8;
+  }
+  .og-context-menu-item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-right: 10px;
+    font-size: 14px;
+    flex-shrink: 0;
+    color: inherit;
+    opacity: 0.85;
+  }
+  .og-context-menu-item-label {
+    flex-grow: 1;
+    font-weight: 500;
+  }
   .og-context-menu-divider {
     height: 1px;
     background-color: rgba(255, 255, 255, 0.08);
-    margin: 4px 0;
+    margin: 5px 0;
   }
 
   /* Group and Detail Rows */

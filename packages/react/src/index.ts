@@ -25,3 +25,5 @@ export type {
 	FilterModelItem,
 	VisualRow,
 } from './types.js';
+
+export type { GridContextMenuOptions, GridContextMenuItem } from '@open-grid/core';

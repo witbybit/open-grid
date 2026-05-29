@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi } from '@open-grid/react';
+import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi, GridContextMenuOptions } from '@open-grid/react';
 
 export type GridPageType = 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt' | 'nested';
 // ============================================================================
@@ -341,6 +341,8 @@ export interface GridViewProps {
 	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	editTrigger?: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit?: boolean;
+	enableContextMenu?: boolean;
+	contextMenuOptions?: GridContextMenuOptions<any>;
 	className?: string;
 }
 
@@ -355,6 +357,8 @@ export function GridView({
 	onCellValueChanged = () => {},
 	editTrigger = 'doubleClick',
 	arrowKeyNavigationEdit = false,
+	enableContextMenu = true,
+	contextMenuOptions,
 	className = '',
 }: GridViewProps) {
 	const [lastClick, setLastClick] = React.useState<GridCellClickParams<any> | null>(null);
@@ -397,6 +401,8 @@ export function GridView({
 				pinTopRows={pinTopRows}
 				pinBottomRows={pinBottomRows}
 				enableNavigation={true}
+				enableContextMenu={enableContextMenu}
+				contextMenuOptions={contextMenuOptions}
 				onCellClick={(params) => {
 					setLastClick(params);
 				}}
