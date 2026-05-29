@@ -103,7 +103,15 @@ function OpenGridInner<TRowData = unknown>({
 			isLoading: boolean
 		) => {
 			const existing = portalsRef.current.get(cellKey);
-			if (existing && existing.container === container && existing.isEditing === isEditing && existing.isLoading === isLoading) {
+			if (
+				existing &&
+				existing.container === container &&
+				existing.isEditing === isEditing &&
+				existing.isLoading === isLoading &&
+				existing.value === value &&
+				existing.node === node &&
+				existing.col === col
+			) {
 				return;
 			}
 

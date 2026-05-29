@@ -623,4 +623,34 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		unmount();
 	});
+
+	it('should rerender custom cell renderer when cell value is programmatically updated', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellRenderer: ({ value }) => <span data-testid='custom-renderer-programmatic'>{String(value)}</span>,
+				},
+			],
+		});
+
+		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+
+		await screen.findByText('Product A');
+		expect(screen.getByTestId('custom-renderer-programmatic').textContent).toBe('Product A');
+
+		act(() => {
+			grid.api.setCellValue('1', 'name', 'Product Updated');
+		});
+
+		await waitFor(() => {
+			expect(screen.getByTestId('custom-renderer-programmatic').textContent).toBe('Product Updated');
+		});
+
+		unmount();
+		grid.api.destroy();
+	});
 });
