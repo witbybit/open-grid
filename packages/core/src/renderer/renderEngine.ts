@@ -3,9 +3,9 @@ import { ScrollEngine } from './scrollEngine.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
-import type { GridCellContentMount, GridCellContentUnmount, GridRowContentMount, GridRowContentUnmount, IGridRenderer } from './IGridRenderer.js';
+import type { GridCellContentMount, GridCellContentUnmount, GridRowContentMount, GridRowContentUnmount, IGridRenderer, GridHeaderMenuMount, GridHeaderMenuUnmount } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { RowNode, type ColumnDef, type VisualRow } from '../store.js';
+import { RowNode, type ColumnDef, type VisualRow, type GridApi, type InternalGridApi } from '../store.js';
 import { CORE_STYLES } from './styles.js';
 
 /**
@@ -39,6 +39,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private activeRows = new Map<number, PooledRow>(); // rowIndex -> PooledRow
 	private headerCells = new Map<number, HTMLDivElement>();
 	private unsubscribers: Array<() => void> = [];
+	private activeHeaderPopover: HTMLDivElement | null = null;
+	private activeHeaderPopoverElement: HTMLElement | null = null;
 	private pendingPaint = false;
 	private pendingFullPaint = false;
 	private pendingHeaderPaint = false;
@@ -55,8 +57,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public onMountRowContent?: (mount: GridRowContentMount<TRowData>) => void;
 	public onUnmountRowContent?: (unmount: GridRowContentUnmount) => void;
 
-	constructor(engine: GridEngine<TRowData>) {
+	public onMountHeaderMenu?: (mount: GridHeaderMenuMount<TRowData>) => void;
+	public onUnmountHeaderMenu?: (unmount: GridHeaderMenuUnmount) => void;
+
+	public readonly api?: InternalGridApi<TRowData>;
+
+	constructor(engine: GridEngine<TRowData>, api?: InternalGridApi<TRowData>) {
 		this.engine = engine;
+		this.api = api;
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
 		this.columnInteractions = new ColumnInteractionController<TRowData>({
 			engine,
@@ -155,6 +163,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Unmount and clean up all DOM resources and subscriptions.
 	 */
 	public unmount(): void {
+		this.hideHeaderMenu();
+
 		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
 		this.unsubscribers = [];
 
@@ -1085,6 +1095,20 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				textSpan.textContent = col.header || col.field;
 			}
 
+			const currentSort = state.sortModel?.find((s) => s.colId === col.field);
+			const sortIndicator = headerCell.querySelector('.og-header-sort-indicator') as HTMLDivElement | null;
+			if (sortIndicator) {
+				if (currentSort) {
+					sortIndicator.style.display = 'flex';
+					sortIndicator.innerHTML = currentSort.sort === 'asc'
+						? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`
+						: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>`;
+				} else {
+					sortIndicator.style.display = 'none';
+					sortIndicator.innerHTML = '';
+				}
+			}
+
 			headerCell.dataset.colField = col.field;
 			headerCell.dataset.colIndex = String(c);
 			if (headerCell.parentNode !== targetLayer) {
@@ -1130,12 +1154,297 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		textSpan.style.flex = '1';
 		headerCell.appendChild(textSpan);
 
+		const sortIndicator = document.createElement('div');
+		sortIndicator.className = 'og-header-sort-indicator';
+		headerCell.appendChild(sortIndicator);
+
+		const menuButton = document.createElement('div');
+		menuButton.className = 'og-header-menu-button';
+		menuButton.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="2.5"></circle><circle cx="12" cy="5" r="2.5"></circle><circle cx="12" cy="19" r="2.5"></circle></svg>`;
+		menuButton.addEventListener('mousedown', (e) => {
+			e.stopPropagation();
+		});
+		menuButton.addEventListener('click', (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+			const colField = headerCell.dataset.colField;
+			if (colField) {
+				this.showHeaderMenu(headerCell, colField);
+			}
+		});
+		headerCell.appendChild(menuButton);
+
 		const resizeHandle = document.createElement('div');
 		resizeHandle.className = 'og-header-resize-handle';
 		resizeHandle.addEventListener('mousedown', this.columnInteractions.onHeaderResizeMouseDown);
 		headerCell.appendChild(resizeHandle);
 
 		return headerCell;
+	}
+
+	private hideHeaderMenu = (): void => {
+		if (this.activeHeaderPopover) {
+			this.activeHeaderPopover.classList.remove('og-visible');
+			const el = this.activeHeaderPopover;
+			const colField = this.activeHeaderPopoverElement?.dataset.colField;
+			if (colField && this.onUnmountHeaderMenu) {
+				this.onUnmountHeaderMenu({ colField, container: el });
+			}
+			setTimeout(() => {
+				el.remove();
+			}, 120);
+			this.activeHeaderPopover = null;
+		}
+		this.activeHeaderPopoverElement = null;
+		document.removeEventListener('mousedown', this.handleOutsidePopoverClick);
+		window.removeEventListener('scroll', this.hideHeaderMenu, { capture: true });
+		window.removeEventListener('resize', this.hideHeaderMenu);
+	};
+
+	private handleOutsidePopoverClick = (e: MouseEvent): void => {
+		if (this.activeHeaderPopover && !this.activeHeaderPopover.contains(e.target as Node)) {
+			const clickedMenuBtn = (e.target as HTMLElement).closest('.og-header-menu-button');
+			if (clickedMenuBtn && clickedMenuBtn.closest('.og-header-cell') === this.activeHeaderPopoverElement) {
+				return;
+			}
+			this.hideHeaderMenu();
+		}
+	};
+
+	private showHeaderMenu(headerCell: HTMLElement, colField: string): void {
+		if (this.activeHeaderPopover && this.activeHeaderPopoverElement === headerCell) {
+			this.hideHeaderMenu();
+			return;
+		}
+		this.hideHeaderMenu();
+
+		const rect = headerCell.getBoundingClientRect();
+		const state = this.engine.stateManager.getState();
+		const column = state.columns.find((c) => c.field === colField);
+		if (!column) return;
+
+		const popover = document.createElement('div');
+		popover.className = 'og-header-popover';
+		this.activeHeaderPopover = popover;
+		this.activeHeaderPopoverElement = headerCell;
+
+		// Support custom React header popover component if registered
+		if (column.headerMenuComponent && this.onMountHeaderMenu) {
+			try {
+				this.onMountHeaderMenu({
+					colField,
+					column,
+					close: this.hideHeaderMenu,
+					container: popover,
+				});
+				document.body.appendChild(popover);
+				this.positionPopover(popover, rect);
+
+				document.addEventListener('mousedown', this.handleOutsidePopoverClick);
+				window.addEventListener('scroll', this.hideHeaderMenu, { capture: true, passive: true });
+				window.addEventListener('resize', this.hideHeaderMenu);
+				return;
+			} catch (err) {
+				console.error('RenderEngine: Error mounting custom React header menu', err);
+			}
+		}
+
+		// Support custom headerMenuRenderer if provided by the developer
+		if (column.headerMenuRenderer) {
+			try {
+				column.headerMenuRenderer({
+					colField,
+					column,
+					api: (this.api || this.engine.stateManager) as unknown as GridApi<TRowData>,
+					close: this.hideHeaderMenu,
+					container: popover,
+				});
+				document.body.appendChild(popover);
+				this.positionPopover(popover, rect);
+
+				document.addEventListener('mousedown', this.handleOutsidePopoverClick);
+				window.addEventListener('scroll', this.hideHeaderMenu, { capture: true, passive: true });
+				window.addEventListener('resize', this.hideHeaderMenu);
+				return;
+			} catch (err) {
+				console.error('RenderEngine: Error rendering custom header menu', err);
+			}
+		}
+
+		// Default Sort Options
+		const sortContainer = document.createElement('div');
+		sortContainer.className = 'og-popover-sort-section';
+
+		const currentSort = state.sortModel?.find((s) => s.colId === colField);
+
+		const sortAsc = document.createElement('div');
+		sortAsc.className = 'og-popover-item' + (currentSort?.sort === 'asc' ? ' og-active' : '');
+		sortAsc.innerHTML = `
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+			<span>Sort Ascending</span>
+		`;
+		sortAsc.addEventListener('click', () => {
+			this.engine.setSortModel([{ colId: colField, sort: 'asc' }]);
+			this.hideHeaderMenu();
+		});
+		sortContainer.appendChild(sortAsc);
+
+		const sortDesc = document.createElement('div');
+		sortDesc.className = 'og-popover-item' + (currentSort?.sort === 'desc' ? ' og-active' : '');
+		sortDesc.innerHTML = `
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7 7 7-7"/></svg>
+			<span>Sort Descending</span>
+		`;
+		sortDesc.addEventListener('click', () => {
+			this.engine.setSortModel([{ colId: colField, sort: 'desc' }]);
+			this.hideHeaderMenu();
+		});
+		sortContainer.appendChild(sortDesc);
+
+		if (currentSort) {
+			const clearSort = document.createElement('div');
+			clearSort.className = 'og-popover-item og-danger';
+			clearSort.innerHTML = `
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				<span>Clear Sorting</span>
+			`;
+			clearSort.addEventListener('click', () => {
+				this.engine.setSortModel(null);
+				this.hideHeaderMenu();
+			});
+			sortContainer.appendChild(clearSort);
+		}
+
+		popover.appendChild(sortContainer);
+
+		const divider = document.createElement('div');
+		divider.className = 'og-popover-divider';
+		popover.appendChild(divider);
+
+		// Default Filter Section
+		const filterContainer = document.createElement('div');
+		filterContainer.className = 'og-popover-filter-section';
+
+		const filterTitle = document.createElement('div');
+		filterTitle.className = 'og-popover-section-title';
+		filterTitle.textContent = 'Filter Column';
+		filterContainer.appendChild(filterTitle);
+
+		let currentOperator: string = 'contains';
+		let currentFilterVal: string = '';
+		if (state.filterModel && state.filterModel[colField] !== undefined) {
+			const filterObj = state.filterModel[colField];
+			if (filterObj && typeof filterObj === 'object' && 'filter' in filterObj) {
+				currentOperator = (filterObj as any).type ?? 'contains';
+				currentFilterVal = String((filterObj as any).filter ?? '');
+			} else {
+				currentFilterVal = String(filterObj ?? '');
+			}
+		}
+
+		const select = document.createElement('select');
+		select.className = 'og-popover-select';
+		const operators: { value: string; label: string }[] = [
+			{ value: 'contains', label: 'Contains' },
+			{ value: 'equals', label: 'Equals' },
+			{ value: 'startsWith', label: 'Starts with' },
+			{ value: 'endsWith', label: 'Ends with' },
+			{ value: 'gt', label: 'Greater than' },
+			{ value: 'gte', label: 'Greater or equal' },
+			{ value: 'lt', label: 'Less than' },
+			{ value: 'lte', label: 'Less or equal' },
+		];
+		operators.forEach((op) => {
+			const opt = document.createElement('option');
+			opt.value = op.value;
+			opt.textContent = op.label;
+			if (op.value === currentOperator) {
+				opt.selected = true;
+			}
+			select.appendChild(opt);
+		});
+		filterContainer.appendChild(select);
+
+		const input = document.createElement('input');
+		input.type = 'text';
+		input.className = 'og-popover-input';
+		input.placeholder = 'Filter value...';
+		input.value = currentFilterVal;
+		input.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				applyBtn.click();
+			}
+		});
+		filterContainer.appendChild(input);
+
+		const btnGroup = document.createElement('div');
+		btnGroup.className = 'og-popover-btn-group';
+
+		const clearBtn = document.createElement('button');
+		clearBtn.className = 'og-popover-btn og-btn-secondary';
+		clearBtn.textContent = 'Clear';
+		clearBtn.addEventListener('click', () => {
+			const nextFilterModel = { ...(state.filterModel || {}) };
+			delete nextFilterModel[colField];
+			this.engine.setFilterModel(Object.keys(nextFilterModel).length > 0 ? nextFilterModel : null);
+			this.hideHeaderMenu();
+		});
+		btnGroup.appendChild(clearBtn);
+
+		const applyBtn = document.createElement('button');
+		applyBtn.className = 'og-popover-btn og-btn-primary';
+		applyBtn.textContent = 'Apply';
+		applyBtn.addEventListener('click', () => {
+			const term = input.value.trim();
+			const nextFilterModel = { ...(state.filterModel || {}) };
+			if (term === '') {
+				delete nextFilterModel[colField];
+			} else {
+				nextFilterModel[colField] = {
+					type: select.value as any,
+					filter: term,
+				};
+			}
+			this.engine.setFilterModel(Object.keys(nextFilterModel).length > 0 ? nextFilterModel : null);
+			this.hideHeaderMenu();
+		});
+		btnGroup.appendChild(applyBtn);
+
+		filterContainer.appendChild(btnGroup);
+		popover.appendChild(filterContainer);
+
+		document.body.appendChild(popover);
+		this.positionPopover(popover, rect);
+
+		document.addEventListener('mousedown', this.handleOutsidePopoverClick);
+		window.addEventListener('scroll', this.hideHeaderMenu, { capture: true, passive: true });
+		window.addEventListener('resize', this.hideHeaderMenu);
+	}
+
+	private positionPopover(popover: HTMLDivElement, rect: DOMRect): void {
+		const popoverWidth = 220;
+		const popoverHeight = popover.offsetHeight || 215;
+
+		let left = rect.left;
+		let top = rect.bottom + 4;
+
+		if (left + popoverWidth > window.innerWidth) {
+			left = window.innerWidth - popoverWidth - 8;
+		}
+		if (top + popoverHeight > window.innerHeight) {
+			top = rect.top - popoverHeight - 4;
+		}
+
+		popover.style.left = `${left}px`;
+		popover.style.top = `${top}px`;
+
+		if (typeof requestAnimationFrame !== 'undefined') {
+			requestAnimationFrame(() => {
+				popover.classList.add('og-visible');
+			});
+		} else {
+			popover.classList.add('og-visible');
+		}
 	}
 
 	private clearHeaderCells(): void {

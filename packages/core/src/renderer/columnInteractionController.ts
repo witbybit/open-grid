@@ -58,7 +58,12 @@ export class ColumnInteractionController<TRowData = unknown> {
 	};
 
 	public onHeaderCellMouseDown = (e: MouseEvent): void => {
-		if (e.button !== 0 || (e.target as HTMLElement).closest('.og-header-resize-handle')) return;
+		if (
+			e.button !== 0 ||
+			(e.target as HTMLElement).closest('.og-header-resize-handle') ||
+			(e.target as HTMLElement).closest('.og-header-menu-button')
+		)
+			return;
 
 		const state = this.engine.stateManager.getState();
 		if (!state.enableColumnReorder) return;
@@ -118,7 +123,6 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.updateColumnDragGhost(e);
 		this.updateColumnDropTarget(e);
 	};
-
 	private onHeaderColumnDragMouseUp = (): void => {
 		const wasReordering = this.isColumnReordering;
 		const fromIndex = this.columnDragFromIndex;
@@ -126,6 +130,23 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const colField = this.columnDragField;
 
 		this.cleanup();
+
+		if (!wasReordering && colField) {
+			// Handle column header click sorting!
+			const state = this.engine.stateManager.getState();
+			const column = state.columns.find((c) => c.field === colField);
+			if (column && column.sortable !== false) {
+				const currentSort = state.sortModel?.find((s) => s.colId === colField);
+				if (!currentSort) {
+					this.engine.setSortModel([{ colId: colField, sort: 'asc' }]);
+				} else if (currentSort.sort === 'asc') {
+					this.engine.setSortModel([{ colId: colField, sort: 'desc' }]);
+				} else {
+					this.engine.setSortModel(null);
+				}
+			}
+			return;
+		}
 
 		if (!wasReordering || !colField || fromIndex < 0 || insertionIndex < 0) {
 			this.schedulePaint();

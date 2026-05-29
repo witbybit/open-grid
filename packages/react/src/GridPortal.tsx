@@ -182,6 +182,7 @@ export function DefaultDetailRowRenderer<TRowData = unknown>({ visualRow }: { vi
 export interface PortalManagerProps<TRowData = unknown> {
 	portals: Map<string, PortalData<TRowData>>;
 	rowPortals?: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>;
+	menuPortals?: Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>;
 	api: GridApi<TRowData>;
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
@@ -190,6 +191,7 @@ export interface PortalManagerProps<TRowData = unknown> {
 export function PortalManager<TRowData = unknown>({
 	portals,
 	rowPortals = new Map(),
+	menuPortals = new Map(),
 	api,
 	groupRowRenderer,
 	detailRowRenderer,
@@ -227,6 +229,22 @@ export function PortalManager<TRowData = unknown>({
 				return createPortal(
 					<GridProvider api={api} key={rowKey}>
 						{content}
+					</GridProvider>,
+					container
+				);
+			})}
+			{Array.from(menuPortals.values()).map((mp) => {
+				const { colField, container, column, close } = mp;
+				const CustomComponent = column.headerMenuComponent;
+				if (!CustomComponent) return null;
+				return createPortal(
+					<GridProvider api={api} key={`menu-${colField}`}>
+						<CustomComponent
+							colField={colField}
+							column={column}
+							api={api}
+							close={close}
+						/>
 					</GridProvider>,
 					container
 				);

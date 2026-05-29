@@ -70,5 +70,28 @@ export interface IGridRenderer<TRowData = unknown> {
 	 * Optional hook for framework adapters to unmount custom row content.
 	 */
 	onUnmountRowContent?: (unmount: GridRowContentUnmount) => void;
+
+	/**
+	 * Optional hook for framework adapters to mount custom header menu popovers.
+	 */
+	onMountHeaderMenu?: (mount: GridHeaderMenuMount<TRowData>) => void;
+
+	/**
+	 * Optional hook for framework adapters to unmount custom header menu popovers.
+	 */
+	onUnmountHeaderMenu?: (unmount: GridHeaderMenuUnmount) => void;
 }
+
+export interface GridHeaderMenuMount<TRowData = unknown> {
+	colField: string;
+	container: HTMLElement;
+	column: ColumnDef<TRowData>;
+	close: () => void;
+}
+
+export interface GridHeaderMenuUnmount {
+	colField: string;
+	container?: HTMLElement;
+}
+
 

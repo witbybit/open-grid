@@ -11,6 +11,7 @@ import {
 	ProgressSliderEditor,
 	StatusBadgeRenderer,
 	StatusDropdownEditor,
+	StatusHeaderFilter,
 	LatencyProfiler,
 	GreeksRenderer,
 	RiskBadgeRenderer,
@@ -425,7 +426,14 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 			{ field: 'price', header: 'Acquisition Cost ($)', width: 150, cellRenderer: PriceBadgeRenderer },
 			{ field: 'rating', header: 'Client Rating', width: 160, cellRenderer: StarRatingRenderer },
 			{ field: 'progress', header: 'Deployment Status', width: 170, cellRenderer: ProgressBarRenderer, cellEditor: ProgressSliderEditor },
-			{ field: 'status', header: 'Operational Status', width: 140, cellRenderer: StatusBadgeRenderer, cellEditor: StatusDropdownEditor },
+			{
+				field: 'status',
+				header: 'Operational Status',
+				width: 140,
+				cellRenderer: StatusBadgeRenderer,
+				cellEditor: StatusDropdownEditor,
+				headerMenuComponent: StatusHeaderFilter,
+			},
 		],
 		[]
 	);

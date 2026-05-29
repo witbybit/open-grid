@@ -10,6 +10,7 @@ import type {
 	GridState,
 	FilterModelItem,
 	VisualRow,
+	HeaderMenuRendererProps,
 } from '@open-grid/core';
 
 export type {
@@ -24,6 +25,7 @@ export type {
 	GridCellClickParams,
 	GridState,
 	VisualRow,
+	HeaderMenuRendererProps,
 };
 
 export interface ClientGridOptions<TRowData> {

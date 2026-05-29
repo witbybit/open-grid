@@ -19,6 +19,7 @@ export type {
 	GridSelectionState,
 	GridState,
 	GridStyleSlots,
+	HeaderMenuRendererProps,
 	Listener,
 	RowModel,
 	ValueGetterParams,

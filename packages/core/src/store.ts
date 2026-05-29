@@ -264,6 +264,14 @@ export interface RowModel<TRowData = unknown> {
 	loadVisibleBlocks?(startRow: number, endRow: number): void;
 }
 
+export interface HeaderMenuRendererProps<TRowData = unknown> {
+	colField: string;
+	column: ColumnDef<TRowData>;
+	api: GridApi<TRowData>;
+	close: () => void;
+	container: HTMLDivElement;
+}
+
 export interface ColumnDef<TRowData = unknown> {
 	field: string;
 	header: string;
@@ -275,6 +283,9 @@ export interface ColumnDef<TRowData = unknown> {
 	valueSetter?: (row: TRowData, value: unknown) => boolean;
 	cellRenderer?: (props: CellRendererProps<TRowData>) => unknown;
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
+	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;
+	headerMenuComponent?: any;
+	sortable?: boolean;
 }
 
 export interface GridRowClassParams<TRowData = unknown> {

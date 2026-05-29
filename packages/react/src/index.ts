@@ -26,4 +26,4 @@ export type {
 	VisualRow,
 } from './types.js';
 
-export type { GridContextMenuOptions, GridContextMenuItem } from '@open-grid/core';
+export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';

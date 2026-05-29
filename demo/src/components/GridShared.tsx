@@ -264,6 +264,90 @@ export const StatusDropdownEditor = ({ value, onCommit }: CellEditorProps<any>) 
 	);
 };
 
+export const StatusHeaderFilter = ({ colField, api, close }: { colField: string; api: GridApi<any>; close: () => void }) => {
+	const state = api.getState();
+	const activeFilter = state.filterModel?.[colField];
+	
+	let activeFilterVal = '';
+	if (activeFilter) {
+		if (typeof activeFilter === 'object' && 'filter' in activeFilter) {
+			activeFilterVal = String((activeFilter as any).filter ?? '');
+		} else {
+			activeFilterVal = String(activeFilter);
+		}
+	}
+
+	const [selectedValue, setSelectedValue] = React.useState(activeFilterVal);
+
+	const handleReset = () => {
+		const nextFilter = { ...(state.filterModel || {}) };
+		delete nextFilter[colField];
+		api.setFilterModel(Object.keys(nextFilter).length > 0 ? nextFilter : null);
+		close();
+	};
+
+	const handleApply = () => {
+		const nextFilter = { ...(state.filterModel || {}) };
+		if (selectedValue) {
+			nextFilter[colField] = {
+				type: 'equals',
+				filter: selectedValue,
+			};
+		} else {
+			delete nextFilter[colField];
+		}
+		api.setFilterModel(Object.keys(nextFilter).length > 0 ? nextFilter : null);
+		close();
+	};
+
+	return (
+		<div className='flex flex-col gap-2 p-1'>
+			<div className='text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1'>
+				Status Filter (React)
+			</div>
+			<div className='flex flex-col gap-2'>
+				{['Active', 'Pending', 'Inactive'].map((statusVal) => {
+					const badgeColor =
+						statusVal === 'Active'
+							? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+							: statusVal === 'Pending'
+								? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+								: 'bg-slate-500/10 border-slate-700/50 text-slate-400';
+					return (
+						<label key={statusVal} className='flex items-center gap-2 cursor-pointer text-xs text-slate-300 hover:text-white select-none'>
+							<input
+								type='radio'
+								name='react_status_filter'
+								value={statusVal}
+								checked={selectedValue === statusVal}
+								onChange={() => setSelectedValue(statusVal)}
+								className='cursor-pointer accent-indigo-500'
+							/>
+							<span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border leading-none inline-block ${badgeColor}`}>
+								{statusVal}
+							</span>
+						</label>
+					);
+				})}
+			</div>
+			<div className='flex justify-end gap-2 mt-3 pt-2 border-t border-slate-800'>
+				<button
+					onClick={handleReset}
+					className='px-2 py-1 text-[10px] font-semibold text-slate-300 hover:text-white rounded border border-slate-750 hover:border-slate-500 transition'
+				>
+					Reset
+				</button>
+				<button
+					onClick={handleApply}
+					className='px-2 py-1 text-[10px] font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded transition shadow-lg'
+				>
+					Apply
+				</button>
+			</div>
+		</div>
+	);
+};
+
 export const PriceBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 	const priceVal = parseFloat(String(value)) || 0;
 	return (

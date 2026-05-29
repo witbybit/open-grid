@@ -77,6 +77,7 @@ function OpenGridInner<TRowData = unknown>({
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
 	const rowPortalsRef = useRef<Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>>(new Map());
+	const menuPortalsRef = useRef<Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>>(new Map());
 	const portalFlushScheduledRef = useRef(false);
 	const [, setPortalVersion] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -208,6 +209,48 @@ function OpenGridInner<TRowData = unknown>({
 		[schedulePortalFlush]
 	);
 
+	const mountMenuPortal = useCallback(
+		(colField: string, container: HTMLElement, column: ColumnDef<TRowData>, close: () => void) => {
+			const existing = menuPortalsRef.current.get(colField);
+			if (existing && existing.container === container && existing.column === column) {
+				return;
+			}
+
+			interface PatchedHTMLElement extends HTMLElement {
+				__patchedRemoveChild?: boolean;
+			}
+			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
+				(container as PatchedHTMLElement).__patchedRemoveChild = true;
+				const originalRemove = container.removeChild;
+				container.removeChild = function <T extends Node>(child: T): T {
+					if (child.parentNode === container) {
+						return originalRemove.call(this, child) as T;
+					}
+					return child;
+				};
+			}
+
+			menuPortalsRef.current.set(colField, {
+				colField,
+				container,
+				column,
+				close,
+			});
+			schedulePortalFlush();
+		},
+		[schedulePortalFlush]
+	);
+
+	const unmountMenuPortal = useCallback(
+		(colField: string, container?: HTMLElement) => {
+			const existing = menuPortalsRef.current.get(colField);
+			if (!existing || (container && existing.container !== container)) return;
+			menuPortalsRef.current.delete(colField);
+			schedulePortalFlush();
+		},
+		[schedulePortalFlush]
+	);
+
 	useEffect(() => {
 		hostRef.current?.setViewportPins({
 			left: pinLeftColumns,
@@ -250,6 +293,14 @@ function OpenGridInner<TRowData = unknown>({
 					unmountRowPortal(unmount.rowKey, unmount.container);
 				},
 			},
+			headerMenu: {
+				mountHeaderMenu: (mount) => {
+					mountMenuPortal(mount.colField, mount.container, mount.column, mount.close);
+				},
+				unmountHeaderMenu: (unmount) => {
+					unmountMenuPortal(unmount.colField, unmount.container);
+				},
+			},
 		});
 		hostRef.current = host;
 
@@ -258,9 +309,10 @@ function OpenGridInner<TRowData = unknown>({
 			hostRef.current = null;
 			portalsRef.current.clear();
 			rowPortalsRef.current.clear();
+			menuPortalsRef.current.clear();
 			setPortalVersion((version) => version + 1);
 		};
-	}, [api, mountPortal, unmountPortal, mountRowPortal, unmountRowPortal]);
+	}, [api, mountPortal, unmountPortal, mountRowPortal, unmountRowPortal, mountMenuPortal, unmountMenuPortal]);
 
 	// Context Menu plugin controller
 	const [contextMenu, setContextMenu] = useState<GridContextMenuHandle<TRowData> | null>(null);
@@ -462,6 +514,7 @@ function OpenGridInner<TRowData = unknown>({
 			<PortalManager
 				portals={portalsRef.current}
 				rowPortals={rowPortalsRef.current}
+				menuPortals={menuPortalsRef.current}
 				api={api}
 				groupRowRenderer={groupRowRenderer}
 				detailRowRenderer={detailRowRenderer}
