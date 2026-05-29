@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ColumnDef, GridApi, RowNode, VisualRow } from '@open-grid/core';
 import { createPortal } from 'react-dom';
-import { GridProvider, useGridApi } from './OpenGrid.js';
+import { GridProvider } from './OpenGrid.js';
+import { useGridApi } from './hooks.js';
 import type { ReactNode } from 'react';
 
 export interface PortalCellProps<TRowData = unknown> {
@@ -164,34 +165,18 @@ export function DefaultGroupRowRenderer<TRowData = unknown>({ visualRow, api }: 
 	};
 
 	return (
-		<div
-			className="og-group-row-content"
-			style={{ paddingLeft: `${depth * 20 + 8}px` }}
-			onClick={handleToggle}
-		>
-			<span className={`og-group-row-toggle ${expanded ? 'og-group-row-toggle-expanded' : ''}`}>
-				▶
-			</span>
-			<span className="og-group-row-label-prefix">
-				{visualRow.field}:
-			</span>
-			<span>
-				{String(visualRow.key)}
-			</span>
-			<span className="og-group-count">
-				{visualRow.childCount} items
-			</span>
+		<div className='og-group-row-content' style={{ paddingLeft: `${depth * 20 + 8}px` }} onClick={handleToggle}>
+			<span className={`og-group-row-toggle ${expanded ? 'og-group-row-toggle-expanded' : ''}`}>▶</span>
+			<span className='og-group-row-label-prefix'>{visualRow.field}:</span>
+			<span>{String(visualRow.key)}</span>
+			<span className='og-group-count'>{visualRow.childCount} items</span>
 		</div>
 	);
 }
 
 export function DefaultDetailRowRenderer<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
 	if (visualRow.kind !== 'detail') return null;
-	return (
-		<div className="og-detail-row-content">
-			Nested detail view for parent row: {visualRow.parentId}
-		</div>
-	);
+	return <div className='og-detail-row-content'>Nested detail view for parent row: {visualRow.parentId}</div>;
 }
 
 export interface PortalManagerProps<TRowData = unknown> {
@@ -231,13 +216,13 @@ export function PortalManager<TRowData = unknown>({
 				const { rowKey, container, visualRow } = rp;
 				let content: React.ReactNode = null;
 				if (visualRow.kind === 'group') {
-					content = groupRowRenderer
-						? groupRowRenderer({ visualRow, api })
-						: <DefaultGroupRowRenderer visualRow={visualRow} api={api} />;
+					content = groupRowRenderer ? groupRowRenderer({ visualRow, api }) : <DefaultGroupRowRenderer visualRow={visualRow} api={api} />;
 				} else if (visualRow.kind === 'detail') {
-					content = detailRowRenderer
-						? detailRowRenderer({ visualRow, api })
-						: <DefaultDetailRowRenderer visualRow={visualRow} api={api} />;
+					content = detailRowRenderer ? (
+						detailRowRenderer({ visualRow, api })
+					) : (
+						<DefaultDetailRowRenderer visualRow={visualRow} api={api} />
+					);
 				}
 				return createPortal(
 					<GridProvider api={api} key={rowKey}>
@@ -249,4 +234,3 @@ export function PortalManager<TRowData = unknown>({
 		</>
 	);
 }
-

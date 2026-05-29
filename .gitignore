@@ -8,6 +8,7 @@ dist/
 build/
 .turbo/
 out/
+.vite
 
 # Log files
 npm-debug.log*
