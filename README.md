@@ -13,8 +13,8 @@ graph TD
     A[GridApi Facade] --> B[RowNode Tree]
     B --> C[RowPipeline stages]
 
-    subgraph RowPipeline Stages [RowPipeline stages]
-        C1[Client Sort & Filter] --> C2[groupStage / treeStage]
+    subgraph RowPipelineStages ["RowPipeline stages"]
+        C1["Client Sort & Filter"] --> C2["groupStage / treeStage"]
         C2 --> C3[sortTreeStage]
         C3 --> C4[aggregateStage]
         C4 --> C5[flattenStage]
@@ -27,10 +27,10 @@ graph TD
     A --> G[Scoped Formula Solver]
 
     A --> H[Framework Adapters]
-    H --> I[@open-grid/react bindings]
+    H --> I["@open-grid/react bindings"]
 
     I --> J[Isolated Cell-Level Subscribers]
-    J --> K[Targeted Cell Repaint]
+    J --> K[Targeted Cell Paint]
 ```
 
 ### Core Architecture Highlights
