@@ -117,6 +117,12 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	public loadVisibleBlocks = (startRow: number, endRow: number): void => {
 		if (startRow > endRow) return;
 
+		// If the user is flicking or dragging the scrollbar extremely fast, skip loading intermediate blocks.
+		// When the scrolling stops, the scroll-stop pipeline resets velocity to 0 and triggers the resting block load.
+		if (this.store.engine.viewport.isScrollingFast) {
+			return;
+		}
+
 		const minRow = Math.max(0, startRow);
 		const maxRow = Math.min(Math.max(0, endRow), Math.max(0, this.getRowCount() - 1));
 		if (minRow > maxRow) return;

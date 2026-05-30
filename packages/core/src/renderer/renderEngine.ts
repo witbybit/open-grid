@@ -203,10 +203,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Performs scroll-driven viewport shifts and schedules updates.
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number): void => {
-		// 1. Update the coordinate values in ViewportModel (O(1))
+		// 1. Update the coordinate values in ViewportModel (O(1)) synchronously
 		this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
 
-		// 2. Schedule rAF batched updates
+		// 2. Schedule throttled viewport layout and rendering in requestAnimationFrame
 		this.pendingScrollPaint = true;
 		this.scheduleRenderFlush();
 	};
@@ -837,8 +837,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			const cellValue = access.value;
 			const cellKey = createCellKey(node.id, col.field);
 
-			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously)
-			if ((col.cellRenderer || access.isEditing) && !access.isLoading) {
+			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously or scrolling extremely fast)
+			const isFastScrolling = this.engine.viewport.isScrollingFast;
+			if ((col.cellRenderer || access.isEditing) && !access.isLoading && !isFastScrolling) {
 				const previousPortalHost = this.getCellPortalHost(cell);
 				if (cell.dataset.cellKey !== cellKey) {
 					if (cell.dataset.cellKey && this.onUnmountCellContent) {

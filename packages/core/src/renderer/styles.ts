@@ -176,6 +176,7 @@ export const CORE_STYLES = `
     left: 0;
     width: 100%;
     contain: layout style;
+    will-change: transform;
     border-bottom: 1px solid var(--og-border-color);
     background-color: var(--og-bg-color);
     box-sizing: border-box;

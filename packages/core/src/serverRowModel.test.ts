@@ -105,9 +105,9 @@ describe('ServerRowModelController', () => {
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		// Set scrolling velocity downwards
-		store.engine.viewport.setScrollPosition(100, 0, performance.now() - 50);
-		store.engine.viewport.setScrollPosition(300, 0, performance.now()); // fast scrolling down
+		// Set scrolling velocity downwards (moderate velocity, vy = 1.0 px/ms)
+		store.engine.viewport.setScrollPosition(100, 0, performance.now() - 100);
+		store.engine.viewport.setScrollPosition(200, 0, performance.now()); // vy = 1.0 px/ms
 
 		const getRowsSpy = vi.spyOn(mockDatasource, 'getRows');
 
@@ -120,6 +120,48 @@ describe('ServerRowModelController', () => {
 		// Since we are scrolling down, block 1 (indices 100-199) and block 2 (indices 200-299) should be fetched ahead of time
 		expect(getRowsSpy).toHaveBeenCalledWith(expect.objectContaining({ startRow: 100, endRow: 200 }));
 		expect(getRowsSpy).toHaveBeenCalledWith(expect.objectContaining({ startRow: 200, endRow: 300 }));
+	});
+
+	it('should suppress pre-fetching blocks during extremely high scroll velocity', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const mockDatasource: IGridDatasource = {
+			getRows: vi.fn().mockImplementation((params) => {
+				return Promise.resolve({
+					rows: Array.from({ length: params.endRow - params.startRow }, (_, i) => ({
+						id: String(params.startRow + i),
+						name: `Row ${params.startRow + i}`,
+					})),
+					totalCount: 1000,
+				});
+			}),
+		};
+
+		const controller = new ServerRowModelController(store, {
+			datasource: mockDatasource,
+			blockSize: 100,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		// Set scrolling velocity downwards extremely fast (vy = 8.0 px/ms)
+		store.engine.viewport.setScrollPosition(100, 0, performance.now() - 50);
+		store.engine.viewport.setScrollPosition(500, 0, performance.now());
+
+		const getRowsSpy = vi.spyOn(mockDatasource, 'getRows');
+
+		// Call loadVisibleBlocks with a visible range
+		controller.loadVisibleBlocks(20, 40);
+
+		// Waiting for any potential async predictive fetch
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		// Since velocity is extremely high (> 1.5 px/ms), fetches should be suppressed to prevent network storm
+		expect(getRowsSpy).not.toHaveBeenCalled();
 	});
 
 	it('should transition loading state from true to false and respect loadingSkeletonCount', async () => {

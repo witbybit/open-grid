@@ -88,6 +88,20 @@ export class ViewportController<TRowData = unknown> {
 	}
 
 	/**
+	 * Evaluates if the viewport is currently scrolling fast.
+	 */
+	public get isScrollingFast(): boolean {
+		return this.engine.viewport.isScrollingFast;
+	}
+
+	/**
+	 * Resets viewport scroll velocity to zero.
+	 */
+	public resetVelocity(): void {
+		this.engine.viewport.resetVelocity();
+	}
+
+	/**
 	 * Returns the range of active scrollable row indices within the viewport,
 	 * incorporating top/bottom pinned offsets and predictive overscan.
 	 */
