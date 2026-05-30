@@ -1,10 +1,13 @@
 {
-	"name": "@open-grid/core",
+	"name": "@eregister/open-grid-core",
 	"version": "1.0.0",
 	"description": "Framework-agnostic high-performance spreadsheet and grid engine core",
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
+	"publishConfig": {
+		"access": "public"
+	},
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
