@@ -45,6 +45,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private pendingFullPaint = false;
 	private pendingHeaderPaint = false;
 	private pendingOverlayPaint = false;
+	private pendingScrollPaint = false;
 	private dirtyCells = new Map<string, { rowId: string; colField: string }>();
 	private dirtyRows = new Set<string>();
 	private hoveredRowIndex: number | null = null;
@@ -205,14 +206,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// 1. Update the coordinate values in ViewportModel (O(1))
 		this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
 
-		// 2. Recycle viewport elements
-		this.recycleViewport();
-
-		// 3. Draw and recycle headers
-		this.paintHeaders();
-
-		// 4. Update overlay selections
-		this.paintOverlay();
+		// 2. Schedule rAF batched updates
+		this.pendingScrollPaint = true;
+		this.scheduleRenderFlush();
 	};
 
 	private bindInvalidationSources(): void {
@@ -295,6 +291,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.pendingFullPaint = false;
 			this.pendingHeaderPaint = false;
 			this.pendingOverlayPaint = false;
+			this.pendingScrollPaint = false;
 			this.dirtyCells.clear();
 			this.dirtyRows.clear();
 			this.fullPaint();
@@ -303,16 +300,23 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.syncViewportScrollFromDom();
 
-		if (this.dirtyRows.size > 0 || this.dirtyCells.size > 0) {
-			this.repaintDirtyRowsAndCells();
-		}
-
-		if (this.pendingHeaderPaint) {
+		if (this.pendingScrollPaint) {
+			this.pendingScrollPaint = false;
+			this.recycleViewport();
 			this.paintHeaders();
-		}
-
-		if (this.pendingOverlayPaint || this.dirtyCells.size > 0 || this.dirtyRows.size > 0) {
 			this.paintOverlay();
+		} else {
+			if (this.dirtyRows.size > 0 || this.dirtyCells.size > 0) {
+				this.repaintDirtyRowsAndCells();
+			}
+
+			if (this.pendingHeaderPaint) {
+				this.paintHeaders();
+			}
+
+			if (this.pendingOverlayPaint || this.dirtyCells.size > 0 || this.dirtyRows.size > 0) {
+				this.paintOverlay();
+			}
 		}
 
 		this.pendingHeaderPaint = false;

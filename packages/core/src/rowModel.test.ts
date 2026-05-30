@@ -77,4 +77,33 @@ describe('ClientRowModelController', () => {
 
 		expect(controller.getRowNode(0)?.id).toBe('2');
 	});
+
+	it('should automatically refresh sorting and filtering when setCellValue is called', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+		});
+
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', name: 'Bob' },
+				{ id: '2', name: 'Charlie' },
+				{ id: '3', name: 'Alice' },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Initial sorted order: Alice (3), Bob (1), Charlie (2)
+		expect(controller.getRowNode(0)?.id).toBe('3'); // Alice
+		expect(controller.getRowNode(1)?.id).toBe('1'); // Bob
+		expect(controller.getRowNode(2)?.id).toBe('2'); // Charlie
+
+		// Edit Charlie to Aaron. The sort order should automatically update to Aaron (2), Alice (3), Bob (1)
+		controller.setCellValue('2', 'name', 'Aaron');
+
+		expect(controller.getRowNode(0)?.id).toBe('2'); // Aaron (formerly Charlie)
+		expect(controller.getRowNode(1)?.id).toBe('3'); // Alice
+		expect(controller.getRowNode(2)?.id).toBe('1'); // Bob
+	});
 });

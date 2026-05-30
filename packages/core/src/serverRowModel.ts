@@ -191,6 +191,21 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		node.setData(updatedRow);
+
+		// If the edited cell field is currently part of active sort or filter models,
+		// we must purge the cache and refetch from server to restore correct order/filters.
+		const state = this.store.getState();
+		let needsPurge = false;
+		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
+			needsPurge = true;
+		} else if (state.filterModel && state.filterModel[colField] !== undefined) {
+			needsPurge = true;
+		}
+
+		if (needsPurge) {
+			this.purgeCache();
+		}
+
 		return true;
 	};
 
@@ -218,7 +233,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		const state = this.store.getState();
 		const requestSortModel = state.sortModel;
 		const requestFilterModel = state.filterModel;
-		const requestSignature = JSON.stringify({ sortModel: requestSortModel, filterModel: requestFilterModel });
 
 		try {
 			const response = await this.datasource.getRows({
@@ -232,20 +246,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				return;
 			}
 
-			// If parameters changed since the request was initiated, discard this result
-			const curr = this.store.getState();
-			const currentSignature = JSON.stringify({ sortModel: curr.sortModel, filterModel: curr.filterModel });
-
 			delete this.loadingBlocks[blockIndex];
-
-			if (currentSignature !== requestSignature) {
-				this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
-				const hasActiveFetches = this.loadingBlockCount > 0;
-				this.store.setState({
-					loading: hasActiveFetches,
-				});
-				return;
-			}
 
 			// Grow sparsely without pushing one placeholder per missing row.
 			if (this.activeNodes.length < startRow) {
@@ -298,10 +299,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			// Layout geometry will be updated by GridEngine using GeometryModel
 			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
 			const hasActiveFetches = this.loadingBlockCount > 0;
-			this.store.setState({
+			this.store.setState((s) => ({
 				loading: hasActiveFetches,
-				dataVersion: curr.dataVersion + 1,
-			});
+				dataVersion: s.dataVersion + 1,
+			}));
 
 			const requestFinishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
 			this.store.dispatchEvent('serverBlockLoaded', {

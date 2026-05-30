@@ -473,6 +473,34 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		node.setData(updatedRow);
+
+		// If the edited cell field affects active sorting, filtering, grouping, or aggregates,
+		// we must re-run the pipeline to update the row positions, visibility, or computed aggregates.
+		const state = this.store.getState();
+		let needsRefresh = false;
+
+		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
+			needsRefresh = true;
+		} else if (state.filterModel && state.filterModel[colField] !== undefined) {
+			needsRefresh = true;
+		} else if (state.groupBy && state.groupBy.includes(colField)) {
+			needsRefresh = true;
+		} else if (state.columns.some((c) => c.field === colField && c.valueGetter)) {
+			needsRefresh = true;
+		} else {
+			// If grouping or custom row models (e.g. parentId tree) are active, any cell edit
+			// might affect group calculations, so we refresh to keep aggregations/hierarchies correct.
+			const hasGrouping = state.groupBy && state.groupBy.length > 0;
+			const hasTree = !!state.getParentId;
+			if (hasGrouping || hasTree) {
+				needsRefresh = true;
+			}
+		}
+
+		if (needsRefresh) {
+			this.refresh();
+		}
+
 		return true;
 	};
 
