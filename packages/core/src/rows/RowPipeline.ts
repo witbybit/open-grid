@@ -13,7 +13,7 @@ export interface RowPipelineInput<TData = unknown> {
 	columns: ColumnDef<TData>[];
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
-	
+
 	// Tree / Group / Detail configs
 	groupBy?: string[];
 	getParentId?: (data: TData) => string | null | undefined;
@@ -61,7 +61,7 @@ export class RowPipeline<TData = unknown> {
 
 		// 2. Build tree structure: either Grouping or Parent-Child Tree Data
 		let roots: RowTreeNode<TData>[];
-		
+
 		if (groupBy && groupBy.length > 0) {
 			roots = groupStage(filteredNodes, groupBy);
 		} else if (getParentId) {

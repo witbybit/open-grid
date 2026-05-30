@@ -343,12 +343,9 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 
 	const spreadsheetApi = useClientGrid<SpreadsheetRow>({ rows: spreadsheetRows, columns: spreadsheetColumns });
 
-	const handleSpreadsheetCellValueChanged = useCallback(
-		(_rowId: string, _colField: string, _val: unknown) => {
-			// Cell edits are already committed by the grid editor pipeline.
-		},
-		[]
-	);
+	const handleSpreadsheetCellValueChanged = useCallback((_rowId: string, _colField: string, _val: unknown) => {
+		// Cell edits are already committed by the grid editor pipeline.
+	}, []);
 
 	const applySpreadsheetRangeAction = useCallback(
 		(action: 'fill' | 'clear' | 'addPercent' | 'sum') => {
@@ -441,12 +438,9 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	const customRows = useMemo(() => generateCustomShowcaseRows(50), []);
 	const customApi = useClientGrid<CustomShowcaseRow>({ rows: customRows, columns: customColumns });
 
-	const handleCustomCellValueChanged = useCallback(
-		(_rowId: string, _colField: string, _val: unknown) => {
-			// Cell edits are already committed by the grid editor pipeline.
-		},
-		[]
-	);
+	const handleCustomCellValueChanged = useCallback((_rowId: string, _colField: string, _val: unknown) => {
+		// Cell edits are already committed by the grid editor pipeline.
+	}, []);
 
 	// --------------------------------------------------------------------------
 	// E. PAGE 5: DYNAMIC LAYOUT & VISIBILITY RESIZING (100 Rows)
@@ -568,12 +562,9 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 
 	const dashboardApi = useClientGrid<DashboardStockRow>({ rows: dashboardRows, columns: dashboardColumns });
 
-	const handleDashboardCellValueChanged = useCallback(
-		(_rowId: string, _colField: string, _val: unknown) => {
-			// Cell edits are already committed by the grid editor pipeline.
-		},
-		[]
-	);
+	const handleDashboardCellValueChanged = useCallback((_rowId: string, _colField: string, _val: unknown) => {
+		// Cell edits are already committed by the grid editor pipeline.
+	}, []);
 
 	// --------------------------------------------------------------------------
 	// H. PAGE 8: GANTT SCHEDULE & PROJECT WORKSPACE (Gantt & Project Scheduling Arena)

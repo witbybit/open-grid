@@ -1,52 +1,62 @@
 # 🚀 Headless High-Performance Data Grid & Spreadsheet Engine
 
-Open Grid is a lightweight, framework-agnostic headless grid engine for high-performance virtualized spreadsheets. The core keeps rendering optional, centralizes state in `GridEngine`, and uses targeted subscriptions so React adapters can update individual cells without forcing global grid re-renders.
+Open Grid is a lightweight, framework-agnostic, headless grid engine for high-performance virtualized spreadsheets and data grids. Built to handle massive datasets with complex layouts, Open Grid maintains an out-of-render state loop in a centralized engine while exposing granular micro-subscriptions. This allows React, Vue, or vanilla JS wrappers to paint individual cells and rows with surgical precision, entirely bypassing the framework rendering bottleneck.
 
 ---
 
 ## ⚡ Technical Architecture Overview
 
-To bypass the React virtual DOM rendering bottleneck (which slows down standard grids), the core operates on an **out-of-render state loop** driven by an object-oriented **Row Node Tree**:
+To bypass virtual DOM performance bottlenecks and eliminate layout thrashing during rapid scrolling, Open Grid decouples raw record arrays from visual presentation using a dynamic **Row Node Tree** and a discriminated union **VisualRow** pipeline:
 
 ```mermaid
 graph TD
-    A[GridApi] --> B[RowNode Tree]
-    B --> C[Viewport Range Calculator]
-    C --> D[Visible Row Nodes slice]
+    A[GridApi Facade] --> B[RowNode Tree]
+    B --> C[RowPipeline stages]
 
-    A --> E[Keyboard Navigation]
-    A --> F[Dynamic Formulas & Accessors]
+    subgraph RowPipeline Stages [RowPipeline stages]
+        C1[Client Sort & Filter] --> C2[groupStage / treeStage]
+        C2 --> C3[sortTreeStage]
+        C3 --> C4[aggregateStage]
+        C4 --> C5[flattenStage]
+    end
 
-    A --> G[Framework Adapters]
-    G --> H[@open-grid/react bindings]
+    C5 --> D[Viewport Recycler]
+    D --> E[Visible Row Nodes slice]
 
-    H --> I[Isolated Cell-Level Subscribers]
-    I --> J[Targeted Cell Paint]
+    A --> F[Keyboard Navigation Engine]
+    A --> G[Scoped Formula Solver]
+
+    A --> H[Framework Adapters]
+    H --> I[@open-grid/react bindings]
+
+    I --> J[Isolated Cell-Level Subscribers]
+    J --> K[Targeted Cell Repaint]
 ```
 
 ### Core Architecture Highlights
 
-1. **Stateful RowNode Tree**: Decouples raw record arrays from layout metadata like vertical coordinates, selected/expanded states, and explicit heights.
-2. **Cellular Value Cache**: Prevents redundant `valueGetter` calculations or path split operations on scrolling by caching cell computations directly on individual `RowNode` structures.
-3. **Pre-Compiled Path Getters**: Compiles column accessors into optimized functional selectors upon schema registration, eliminating runtime string manipulations and garbage collection pressures.
-4. **Targeted Micro-Subscriptions**: Cell components subscribe to their specific coordinate keys. Value edits notify the edited cell, formula dependents, and dynamic same-row value getter cells.
-5. **Dynamic Listener Garbage Collection**: Subscription listeners are active only for elements currently in the scroll viewport. Scrolling elements out of the viewport automatically unmounts them, dereferencing their subscriptions to prevent memory leaks.
-6. **Small Programmatic API (`GridApi`)**: Exposes obvious row, cell, selection, sort, and filter operations while keeping stores, render scheduling, and plugin internals behind the adapter boundary.
+1. **Stateful RowNode Tree**: Separates raw data records from layout metadata (such as coordinate mappings, dynamic vertical offsets, selection flags, and expansion states).
+2. **Discriminated VisualRow Model**: Rather than treating every row strictly as a data-centric `RowNode`, the layout engine outputs a flat, virtualized array of `VisualRow` nodes representing either data rows (`kind: 'data'`), grouping labels (`kind: 'group'`), or nested components (`kind: 'detail'`).
+3. **Cellular Value Cache**: Prevents redundant `valueGetter` executions and runtime path-splitting operations by caching computed cell values directly on individual `RowNode` structures until data is modified.
+4. **Pre-Compiled Path Getters**: Accessors (such as `user.profile.name`) are compiled into optimized, static functional selectors upon schema registration to avoid continuous garbage collection pressure.
+5. **Targeted Micro-Subscriptions**: Cell components subscribe strictly to their coordinates (e.g., `cell:value:row-101:price`). Edits only repaint the exact target cell, formula dependents, and conditional formatting listeners.
+6. **Active Viewport Subscription Garbage Collection**: Micro-subscriptions are bound dynamically. Scrolling cells out of the recycled DOM unmounts them, dereferencing their subscriptions to prevent memory leaks in long-running processes.
 
 ---
 
 ## 🔥 Key Developer Features
 
-Open Grid comes equipped with an extensive suite of built-in features designed for advanced spreadsheet development:
+Open Grid comes equipped with an extensive suite of built-in features designed for advanced spreadsheet and data dashboard development:
 
-- **High-Performance Virtualization**: Virtualizes both rows and columns dynamically, yielding standard 60 FPS performance even for massive datasets with 100k+ rows and 1,000+ columns.
-- **Sticky Lanes (Pinning)**: Sticky pinning for left/right columns and top/bottom rows with floating headers and scroll boundaries.
-- **Excel-like Selections & Drag-to-Fill**: Features interactive multi-range cell selection and a dynamic Excel-like purple dashed border drag-to-fill handle with real-time selection telemetry (Sum, Count, Average).
-- **Scoped Formulas**: Optional spreadsheet-style formulas using `[rowId:columnField]` references, arithmetic operators, and `SUM`, `AVERAGE`, `MIN`, and `MAX`, with dependency invalidation and cached lazy evaluation.
-- **Command History (Undo / Redo)**: Seamless core state journaling enabling unlimited undo/redo capability across cell mutations and updates.
-- **Flexible Row Models**: In-memory `ClientRowModel` (ideal for instant manipulation) vs. asynchronous chunk-paginated `ServerRowModel` with built-in loading shimmer/skeleton state trackers.
-- **Dynamic Custom CSS Styling Slots**: Custom styling hooks (`rowClass`, `cellClass`, `headerCellClass`) that allow granular styling control on cell-by-cell or row-by-row bases.
-- **Premium Glassmorphism Context Menu**: A customizable, visually stunning context menu plugin offering instant spreadsheet control desks.
+- **High-Performance Virtualization**: Virtualizes both rows and columns dynamically, yielding standard 60 FPS performance even for massive datasets with 100,000+ rows and 1,000+ columns.
+- **Sticky Lanes (Pinning)**: Floating stickiness for left/right columns and top/bottom rows with floating headers and scroll boundaries.
+- **Excel-like Selections & Drag-to-Fill**: Features interactive multi-range cell selection, arrow keyboard navigation, and an Excel-like purple dashed border drag-to-fill handle with real-time selection telemetry (Sum, Count, Average).
+- **Dynamic Multi-Level Row Grouping & Aggregations**: Group records recursively by column fields with automatic, bottom-up parent aggregate calculations (Sum, Average, Min, Max, Count, or custom reducers).
+- **Hierarchical Tree Hierarchy**: Support parent-child tree data structures (e.g., file directories) with custom node renderers and dynamic visual indentation depths.
+- **Interactive Master-Detail Layouts (Nested Grids)**: Render completely separate, fully interactive sub-grids inside parent detail portals, with live cross-grid state synchronization.
+- **Advanced Header Filters & Custom Menus**: Register custom React header popovers for custom filtering, multi-sort, and column settings.
+- **Scoped Formulas**: Optional spreadsheet-style formulas using `[rowId:columnField]` references, arithmetic operators, and functions with dependency invalidation.
+- **Command History (Undo / Redo)**: Seamless state journaling enabling unlimited undo/redo capability across cell mutations and updates.
 
 ---
 
@@ -54,10 +64,10 @@ Open Grid comes equipped with an extensive suite of built-in features designed f
 
 ### 1. Installation
 
-Install dependencies from the root directory using `pnpm`:
+Install Open Grid packages in your monorepo or project.
 
 ```bash
-pnpm install
+pnpm install @open-grid/core @open-grid/react
 ```
 
 ### 2. Basic Setup Example
@@ -68,7 +78,6 @@ Here is how to quickly spin up a basic virtualized grid using React:
 import React, { useMemo } from 'react';
 import { GridProvider, OpenGrid, useClientGrid, type ColumnDef } from '@open-grid/react';
 
-// 1. Define your data structure
 interface BookRow {
 	id: string;
 	title: string;
@@ -77,7 +86,7 @@ interface BookRow {
 }
 
 export default function BookInventoryGrid() {
-	// 2. Set up column definitions
+	// 1. Define your column definitions
 	const columns = useMemo<ColumnDef<BookRow>[]>(
 		() => [
 			{ field: 'id', header: 'Asset ID', width: 100 },
@@ -93,7 +102,7 @@ export default function BookInventoryGrid() {
 		[]
 	);
 
-	// 3. Define initial row records
+	// 2. Define initial row records
 	const initialRows = useMemo<BookRow[]>(
 		() => [
 			{ id: 'B-101', title: 'The Pragmatic Programmer', author: 'Andy Hunt', price: 49.99 },
@@ -103,7 +112,7 @@ export default function BookInventoryGrid() {
 		[]
 	);
 
-	// 4. Create the public GridApi handle
+	// 3. Create the public GridApi handle
 	const api = useClientGrid<BookRow>({
 		rows: initialRows,
 		columns,
@@ -114,13 +123,13 @@ export default function BookInventoryGrid() {
 		},
 	});
 
-	// 5. Wrap your component in a GridProvider and render the OpenGrid component
+	// 4. Wrap your component in a GridProvider and render the OpenGrid component
 	return (
 		<div style={{ width: '100%', height: '500px' }}>
 			<GridProvider api={api}>
 				<OpenGrid
-					pinLeftColumns={1} // Keep ID column sticky
-					enableNavigation={true} // Enable keyboard movement
+					pinLeftColumns={1} // Keep Asset ID column sticky
+					enableNavigation={true} // Enable arrow key keyboard movement
 				/>
 			</GridProvider>
 		</div>
@@ -130,44 +139,376 @@ export default function BookInventoryGrid() {
 
 ---
 
+## 🛠️ Advanced Features & Guides
+
+### 1. Row Grouping & Aggregations
+
+Row grouping organizes rows into an expandable folder-like structure based on identical column values. Aggregations allow you to compute summary metrics dynamically for these parent groups.
+
+#### Configuration
+
+To enable row grouping, pass the `groupBy` fields inside the `initialState` configuration. Define aggregates using the pipeline `aggDefs`.
+
+```tsx
+import React, { useMemo, useCallback } from 'react';
+import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type VisualRow, type GridApi } from '@open-grid/react';
+
+interface EmployeeRow {
+	id: string;
+	name: string;
+	department: string;
+	salary: number;
+}
+
+export function GroupedEmployeesGrid({ data }: { data: EmployeeRow[] }) {
+	const columns = useMemo<ColumnDef<EmployeeRow>[]>(
+		() => [
+			{ field: 'id', header: 'ID', width: 100 },
+			{ field: 'name', header: 'Full Name', width: 180 },
+			{ field: 'department', header: 'Department', width: 150 },
+			{ field: 'salary', header: 'Salary', width: 120 },
+		],
+		[]
+	);
+
+	const api = useClientGrid<EmployeeRow>({
+		rows: data,
+		columns,
+		initialState: {
+			groupBy: ['department'], // Group on-the-fly by department
+			groupRowHeight: 42,
+		},
+	});
+
+	// Custom group row renderer to display summary aggregates
+	const groupRowRenderer = useCallback(({ visualRow, api }: { visualRow: VisualRow<EmployeeRow>; api: GridApi<EmployeeRow> }) => {
+		if (visualRow.kind !== 'group') return null;
+
+		const expanded = visualRow.expanded;
+		const handleToggle = (e: React.MouseEvent) => {
+			e.stopPropagation();
+			api.toggleGroupExpanded(visualRow.id);
+		};
+
+		return (
+			<div
+				className='flex items-center justify-between px-4 h-full bg-slate-900 border-b border-slate-800 cursor-pointer'
+				onClick={handleToggle}
+				style={{ paddingLeft: `${visualRow.depth * 20 + 10}px` }}
+			>
+				<div className='flex items-center gap-2'>
+					<span>{expanded ? '▼' : '▶'}</span>
+					<span className='font-bold text-xs text-purple-400'>{visualRow.field.toUpperCase()}:</span>
+					<span className='text-white font-semibold text-xs'>{String(visualRow.key)}</span>
+				</div>
+				<span className='text-[10px] bg-purple-950 text-purple-300 border border-purple-800 px-2 py-0.5 rounded-full font-bold'>
+					{visualRow.childCount} employees
+				</span>
+			</div>
+		);
+	}, []);
+
+	return (
+		<div style={{ height: '500px' }}>
+			<GridProvider api={api}>
+				<OpenGrid groupRowRenderer={groupRowRenderer} />
+			</GridProvider>
+		</div>
+	);
+}
+```
+
+---
+
+### 2. Hierarchical Tree Data
+
+Hierarchical trees organize rows into nested structures based on a parent-child relationship (ideal for file system directories, organizational charts, or bill of materials).
+
+#### Configuration
+
+To configure tree data, specify the `getParentId` function inside `initialState`. To indent the tree columns, inspect the current `VisualRow`'s `depth` within a custom cell renderer.
+
+```tsx
+import React, { useMemo } from 'react';
+import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps } from '@open-grid/react';
+
+interface FileNode {
+	id: string;
+	name: string;
+	parentId?: string;
+	size?: string;
+}
+
+// Cell renderer that indents cell content based on tree depth
+const TreeNameRenderer = ({ value, rowId, api }: CellRendererProps<FileNode>) => {
+	const visualIndex = api.getRowIndexById(rowId) ?? 0;
+	const visualRow = api.getVisualRow(visualIndex);
+	const depth = visualRow?.depth ?? 0;
+
+	return (
+		<div className='flex items-center h-full select-none' style={{ paddingLeft: `${depth * 20}px` }}>
+			<span className='mr-2'>{visualRow?.kind === 'group' ? '📁' : '📄'}</span>
+			<span className='text-slate-200'>{String(value)}</span>
+		</div>
+	);
+};
+
+export function FileDirectoryGrid({ nodes }: { nodes: FileNode[] }) {
+	const columns = useMemo<ColumnDef<FileNode>[]>(
+		() => [
+			{ field: 'name', header: 'Node Path / Name', width: 300, cellRenderer: TreeNameRenderer },
+			{ field: 'size', header: 'Capacity Size', width: 120 },
+		],
+		[]
+	);
+
+	const api = useClientGrid<FileNode>({
+		rows: nodes,
+		columns,
+		initialState: {
+			getParentId: (row) => row.parentId, // Identifies hierarchical parents
+			groupRowHeight: 38,
+		},
+	});
+
+	return (
+		<div style={{ height: '400px' }}>
+			<GridProvider api={api}>
+				<OpenGrid />
+			</GridProvider>
+		</div>
+	);
+}
+```
+
+---
+
+### 3. Interactive Master-Detail Layouts (Nested Grids)
+
+Master-Detail row models render completely custom, expandable components or completely separate interactive sub-grids nested directly under their parent row container.
+
+#### Configuration
+
+Enable master-detail by setting `masterDetailEnabled: true` in your options, and configure detail view heights using `detailRowHeight`. Custom detail rows are rendered with the `detailRowRenderer` prop.
+
+```tsx
+import React, { useMemo, useCallback } from 'react';
+import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type VisualRow, type GridApi, type CellRendererProps } from '@open-grid/react';
+
+interface OrderRow {
+	id: string;
+	customerName: string;
+	totalAmount: number;
+}
+
+interface OrderItemRow {
+	id: string;
+	itemName: string;
+	price: number;
+	quantity: number;
+}
+
+// Master grid detail toggle column renderer
+const DetailToggleRenderer = ({ rowId, api }: CellRendererProps<OrderRow>) => {
+	const isExpanded = api.isDetailExpanded(rowId);
+	return (
+		<button onClick={() => api.toggleDetailExpanded(rowId)} className='w-5 h-5 font-mono text-purple-400'>
+			{isExpanded ? '▼' : '▶'}
+		</button>
+	);
+};
+
+// Separated component for the nested grid portal
+const NestedItemsGrid = ({ visualRow, parentApi }: { visualRow: VisualRow<OrderRow>; parentApi: GridApi<OrderRow> }) => {
+	if (visualRow.kind !== 'detail') return null;
+
+	const parentOrderId = visualRow.parentId;
+
+	// Mock sub-items associated with parent ID
+	const items: OrderItemRow[] = [
+		{ id: 'ITM-01', itemName: 'High-Freq Options Feed Sub', price: 2500, quantity: 1 },
+		{ id: 'ITM-02', itemName: 'Ultra-Low Latency Port licenses', price: 816.66, quantity: 3 },
+	];
+
+	const detailColumns = useMemo<ColumnDef<OrderItemRow>[]>(
+		() => [
+			{ field: 'id', header: 'Item ID', width: 100 },
+			{ field: 'itemName', header: 'Product Item Name', width: 250 },
+			{ field: 'price', header: 'Price', width: 100 },
+			{ field: 'quantity', header: 'Qty', width: 80 },
+		],
+		[]
+	);
+
+	const detailApi = useClientGrid<OrderItemRow>({
+		rows: items,
+		columns: detailColumns,
+	});
+
+	return (
+		<div className='w-full h-full p-4 pl-12 bg-slate-950/90 border-b border-slate-900 flex flex-col gap-2 relative'>
+			<div className='text-[10px] text-purple-400 uppercase tracking-widest font-extrabold'>Order Line Items (Parent ID: {parentOrderId})</div>
+			<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-900'>
+				<GridProvider api={detailApi}>
+					<OpenGrid enableNavigation={true} />
+				</GridProvider>
+			</div>
+		</div>
+	);
+};
+
+export function MasterOrdersGrid({ orders }: { orders: OrderRow[] }) {
+	const masterColumns = useMemo<ColumnDef<OrderRow>[]>(
+		() => [
+			{ field: 'toggle', header: '🔍', width: 45, cellRenderer: DetailToggleRenderer },
+			{ field: 'id', header: 'Order ID', width: 120 },
+			{ field: 'customerName', header: 'Corporation Client', width: 220 },
+			{ field: 'totalAmount', header: 'Value', width: 120 },
+		],
+		[]
+	);
+
+	const api = useClientGrid<OrderRow>({
+		rows: orders,
+		columns: masterColumns,
+		initialState: {
+			masterDetailEnabled: true,
+			detailRowHeight: 220, // Height in pixels allocated for nested component
+		},
+	});
+
+	const detailRowRenderer = useCallback(({ visualRow, api }: { visualRow: VisualRow<OrderRow>; api: GridApi<OrderRow> }) => {
+		return <NestedItemsGrid visualRow={visualRow} parentApi={api} />;
+	}, []);
+
+	return (
+		<div style={{ height: '600px' }}>
+			<GridProvider api={api}>
+				<OpenGrid detailRowRenderer={detailRowRenderer} />
+			</GridProvider>
+		</div>
+	);
+}
+```
+
+---
+
+### 4. Custom Column Header Filters
+
+Register fully custom header menu popovers (such as multi-select dropdown filters, date pickers, or custom sorts) using React popovers mounted via custom React Portals inside the column header cell.
+
+#### Configuration
+
+To bind a header popover, register your custom header filter component in `headerMenuComponent` inside the target column definition.
+
+```tsx
+import React, { useState } from 'react';
+import { useGridApi, type GridApi, type ColumnDef } from '@open-grid/react';
+
+interface CustomFilterProps {
+	colField: string;
+	api: GridApi<any>;
+	close: () => void;
+}
+
+export const StatusHeaderFilter = ({ colField, api, close }: CustomFilterProps) => {
+	const state = api.getState();
+	const activeFilter = state.filterModel?.[colField] as any;
+	const [selectedValue, setSelectedValue] = useState(activeFilter?.filter || '');
+
+	const handleApply = () => {
+		const nextFilter = { ...(state.filterModel || {}) };
+		if (selectedValue) {
+			nextFilter[colField] = {
+				type: 'equals',
+				filter: selectedValue,
+			};
+		} else {
+			delete nextFilter[colField];
+		}
+		api.setFilterModel(Object.keys(nextFilter).length > 0 ? nextFilter : null);
+		close(); // Closes the header filter popup
+	};
+
+	return (
+		<div className='flex flex-col gap-2 p-3 bg-slate-900 border border-slate-800 rounded-lg shadow-xl text-white'>
+			<span className='text-[10px] font-bold text-slate-400 uppercase'>Select Status</span>
+			<select
+				value={selectedValue}
+				onChange={(e) => setSelectedValue(e.target.value)}
+				className='bg-slate-950 border border-slate-850 p-1 rounded text-xs'
+			>
+				<option value=''>(All Statuses)</option>
+				<option value='Active'>Active</option>
+				<option value='Pending'>Pending</option>
+				<option value='Inactive'>Inactive</option>
+			</select>
+			<div className='flex justify-end gap-2 mt-2 pt-2 border-t border-slate-800'>
+				<button onClick={handleApply} className='bg-purple-600 text-white text-xs px-2.5 py-1 rounded'>
+					Apply Filter
+				</button>
+			</div>
+		</div>
+	);
+};
+
+// Inside ColumnDef registrations:
+// {
+//     field: 'status',
+//     header: 'Fulfillment Status',
+//     width: 140,
+//     headerMenuComponent: StatusHeaderFilter
+// }
+```
+
+---
+
 ## 🛠️ Public API Reference (`GridApi`)
 
-Application code works through the standard `GridApi` interface. In React, this handle can be retrieved inside custom components or in your component tree using `useGridApi()`.
+Application code coordinates with the spreadsheet engine through the standard `GridApi` interface. In React, this handle can be retrieved anywhere inside the tree using the `useGridApi()` hook.
 
 ### Core API Methods
 
-| Method                 | Type Signature                                              | Description                                                       |
-| :--------------------- | :---------------------------------------------------------- | :---------------------------------------------------------------- |
-| **`getState`**         | `() => GridState`                                           | Retrieves the entire synchronous state snapshot.                  |
-| **`getCellValue`**     | `(rowId: string, colField: string) => unknown`              | Retrieves the calculated cell value from the value cache.         |
-| **`setCellValue`**     | `(rowId: string, colField: string, value: unknown) => void` | Mutates a cell value, registering a new history event.            |
-| **`getCellState`**     | `(rowId: string, colField: string) => CellState`            | Retrieves the local value, computed value, and active edit state. |
-| **`selectCell`**       | `(pointer: GridCellPointer \| null) => void`                | Sets active cell focus and triggers `focusChanged` event.         |
-| **`selectRange`**      | `(start: Pointer \| null, end: Pointer \| null) => void`    | Highlights a selection range bounding box.                        |
-| **`setColumnWidth`**   | `(colField: string, width: number) => void`                 | Dynamically resizes a column's layout boundary.                   |
-| **`subscribeToKey`**   | `(key: string, listener: Listener) => () => void`           | Micro-subscribes selectively to a single key coordinate.          |
-| **`addEventListener`** | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).       |
-| **`undo` / `redo`**    | `() => void`                                                | Moves backward or forward through undoable grid edits.            |
+| Method                     | Type Signature                                              | Description                                                          |
+| :------------------------- | :---------------------------------------------------------- | :------------------------------------------------------------------- |
+| **`getState`**             | `() => GridState`                                           | Retrieves the entire synchronous state snapshot.                     |
+| **`getCellValue`**         | `(rowId: string, colField: string) => unknown`              | Retrieves the calculated cell value from the cellular cache.         |
+| **`setCellValue`**         | `(rowId: string, colField: string, value: unknown) => void` | Mutates a cell value and journals a new history event for undo/redo. |
+| **`getCellState`**         | `(rowId: string, colField: string) => CellState`            | Retrieves cell details (e.g. value, computedValue, isEditing).       |
+| **`selectCell`**           | `(pointer: GridCellPointer \| null) => void`                | Sets active cell focus and triggers `focusChanged` events.           |
+| **`selectRange`**          | `(start: Pointer \| null, end: Pointer \| null) => void`    | Highlight an Excel-like selection bounding box.                      |
+| **`setColumnWidth`**       | `(colField: string, width: number) => void`                 | Dynamically resizes a column's layout boundary in pixels.            |
+| **`setColumns`**           | `(columns: ColumnDef[]) => void`                            | Updates active grid schema and re-compiles path accessors.           |
+| **`setSortModel`**         | `(sortModel: SortModel \| null) => void`                    | Sets sorting schema (supports multi-column sort).                    |
+| **`setFilterModel`**       | `(filterModel: FilterModel \| null) => void`                | Sets filtering schema (supports custom operators per column).        |
+| **`toggleGroupExpanded`**  | `(groupId: string) => void`                                 | Toggles expanded/collapsed state of a grouped folder node.           |
+| **`toggleDetailExpanded`** | `(rowId: string) => void`                                   | Toggles expansion of nested detail grid portals.                     |
+| **`getVisualRow`**         | `(index: number) => VisualRow \| null`                      | Resolves visual layout state at a specific visible index.            |
+| **`subscribeToKey`**       | `(key: string, listener: Listener) => () => void`           | Subscribes selectively to updates for a specific coordinate key.     |
+| **`addEventListener`**     | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).          |
+| **`undo` / `redo`**        | `() => void`                                                | Traverse through state mutation journal history.                     |
 
 ---
 
 ## 💡 Real-world API Examples
 
-### 1. Multi-Cell Edits
+### 1. Multi-Cell Value Operations
 
-Use ordinary API calls for multiple cell edits. The engine batches cell invalidation and repaint internally:
+Perform multi-cell edits sequentially. The engine batched cell invalidations internally:
 
 ```typescript
 const api = useGridApi();
 
-api.setCellValue('S-1001', 'revenue', '150000');
-api.setCellValue('S-1001', 'opex', '80000');
-api.selectCell({ rowId: 'S-1001', colField: 'revenue' });
+api.batch(() => {
+	api.setCellValue('S-1001', 'revenue', 150000);
+	api.setCellValue('S-1001', 'opex', 80000);
+	api.selectCell({ rowId: 'S-1001', colField: 'revenue' });
+});
 ```
 
-### 2. State-Driven Custom Styles (`styleSlots`)
+### 2. State-Driven Conditional Styling (`styleSlots`)
 
-Provide standard callback predicates to apply tailored conditional classes:
+Provide conditional predicates to style rows or cells dynamically based on live business values:
 
 ```tsx
 const api = useClientGrid<ProductRow>({
@@ -175,12 +516,12 @@ const api = useClientGrid<ProductRow>({
 	columns,
 	initialState: {
 		styleSlots: {
-			rowClass: (row) => {
+			rowClass: (row, params) => {
 				return row.status === 'Inactive' ? 'bg-slate-900/50 opacity-60' : '';
 			},
-			cellClass: (col, row) => {
+			cellClass: (col, row, params) => {
 				if (col.field === 'price' && Number(row.price) > 500) {
-					return 'text-rose-400 font-extrabold text-glow-rose bg-rose-950/10';
+					return 'text-rose-400 font-extrabold bg-rose-950/10 border-rose-800/30';
 				}
 				return '';
 			},
@@ -191,7 +532,7 @@ const api = useClientGrid<ProductRow>({
 
 ### 3. Highly Granular Cell-Level Pub-Sub Subscriptions
 
-To listen to a specific cell value update without causing sibling cells to re-render:
+Subscribe directly to changes in a single cell without triggering global React rerenders on adjacent cells:
 
 ```typescript
 const api = useGridApi();
@@ -202,7 +543,7 @@ const unsub = api.subscribeToKey('cell:value:S-1002:A', (state) => {
 	console.log('Instant cell update received:', latestValue);
 });
 
-// Call when dismantling listeners
+// Call when dismantling listeners or unmounting custom cell components
 unsub();
 ```
 
@@ -210,11 +551,11 @@ unsub();
 
 ## 🎨 Creating Custom Cell Renderers & Editors
 
-Open Grid allows you to build completely customized interactive input editors and renderers by implementing simple React component adapters.
+Open Grid allows you to build highly customized visual presentation slots and complex editing dropdowns by creating React components.
 
 ### 1. Custom Cell Renderer (Interactive Star Ratings)
 
-Renderers are used for gorgeous visual presentation:
+Renderers are used for stunning presentation of passive values or simple interactive widgets:
 
 ```tsx
 import React from 'react';
@@ -232,12 +573,12 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 	};
 
 	return (
-		<div className='flex items-center gap-1 select-none cursor-pointer'>
+		<div className='flex items-center gap-1 select-none cursor-pointer h-full'>
 			{[1, 2, 3, 4, 5].map((star) => (
 				<button key={star} onClick={(e) => handleStarClick(star, e)}>
 					<svg
 						className={`w-4 h-4 ${star <= rating ? 'text-amber-400 fill-amber-400' : 'text-slate-650'}`}
-						xmlns='http://www.w3.org/2000/svg'
+						xmlns='http://www.w3.org/2050/svg'
 						viewBox='0 0 24 24'
 						fill='currentColor'
 					>
@@ -252,7 +593,7 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 
 ### 2. Custom Cell Editor (Operational Status Dropdown)
 
-Editors handle active cell text-entry or dropdown events, offering hooks to commit or cancel edits:
+Editors handle active inline cell editing (e.g. text-entry or status selection), offering hooks to commit or cancel operations.
 
 ```tsx
 import React from 'react';
@@ -264,12 +605,12 @@ export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorPr
 			autoFocus
 			value={value as string}
 			onChange={(e) => onCommit(e.target.value)} // Commit value and close edit mode
-			onMouseDown={(e) => e.stopPropagation()} // Prevent focus shifting
+			onMouseDown={(e) => e.stopPropagation()} // Prevent cell focus shifting
 			onDoubleClick={(e) => e.stopPropagation()}
 			onKeyDown={(e) => {
 				if (e.key === 'Escape') onCancel(); // Cancel editing
 			}}
-			className='absolute inset-0 w-full h-full px-3 text-xs bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-semibold cursor-pointer'
+			className='absolute inset-0 w-full h-full px-2 text-xs bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-semibold cursor-pointer'
 		>
 			<option value='Active'>Active</option>
 			<option value='Pending'>Pending</option>
@@ -283,7 +624,7 @@ export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorPr
 
 ## 📊 Spreadsheet Formulas & Calculations
 
-Open Grid supports scoped formulas as an optional spreadsheet behavior. You can pass formula expressions starting with `=` as cell values, and the engine invalidates affected computed cells when source cells change.
+Open Grid supports scoped spreadsheet formulas as an optional engine behavior. You can pass formula expressions starting with `=` as cell values, and the engine automatically recalculates computed values when source cells are edited.
 
 ### Writing Formulas
 
@@ -297,9 +638,10 @@ api.setCellValue('S-1001', 'C', '=SUM([S-1001:A],-[S-1001:B])');
 api.setCellValue('S-1001', 'F', '=[S-1001:C]*0.8');
 ```
 
-Whenever `S-1001:A` or `S-1001:B` changes, the calculated output for `C` and `F` is invalidated and recalculated lazily on access.
+Whenever `S-1001:A` or `S-1001:B` changes, the calculated output for `C` and `F` is marked invalid and recalculated lazily upon access.
 
-Formula support is intentionally narrow: it handles explicit `[rowId:columnField]` references, numeric arithmetic, parentheses, string fallback values, and `SUM`, `AVERAGE`, `MIN`, and `MAX`. It does not currently implement A1 notation, cross-sheet references, ranges like `A1:A10`, date functions, lookup functions, or Excel-compatible coercion semantics.
+> [!NOTE]
+> Formula support handles explicit `[rowId:columnField]` references, numeric arithmetic, parentheses, string fallback values, and operations like `SUM`, `AVERAGE`, `MIN`, and `MAX`.
 
 ---
 
@@ -307,7 +649,7 @@ Formula support is intentionally narrow: it handles explicit `[rowId:columnField
 
 ### 1. Running Unit Tests
 
-Open Grid uses Vitest for core correctness tests around formulas, row models, invalidation, and virtualization geometry. The performance tests exercise engine hot paths in Node/jsdom; use browser profiling for real paint, layout, and compositor measurements.
+Open Grid uses Vitest for core correctness tests around formulas, virtualization geometry, and row model sorting and grouping pipelines.
 
 ```bash
 pnpm run test
@@ -323,13 +665,13 @@ pnpm run build
 
 ### 3. Launching Vite Showroom Dashboard
 
-Start the high-fidelity showroom application:
+Start the local Vite high-fidelity showroom application:
 
 ```bash
 pnpm dev:demo
 ```
 
-Open your browser to `http://localhost:5173` to explore Calculations Arena (heavy simulation playground), Spreadsheet Workspace (ranges, formulas, and series drag handles), and Infinite Server Scroll (lazy loaded database server chunks).
+Open your browser to `http://localhost:5173` to explore the **Calculations Arena**, **Spreadsheet Workspace** (ranges, formulas, series drag handles), and **Hierarchical & Relational Layout Desk** (expandable row groups, directories, and nested sub-grids).
 
 ---
 
@@ -337,3 +679,9 @@ Open your browser to `http://localhost:5173` to explore Calculations Arena (heav
 
 **Rishikesh Kumar**  
 Lead Architect of Open Grid
+
+---
+
+## 📄 License
+
+Open Grid is licensed under the [MIT License](LICENSE).

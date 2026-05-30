@@ -6,10 +6,7 @@ export interface AggregationDef<TData = unknown> {
 	aggFunc: 'sum' | 'avg' | 'min' | 'max' | 'count' | ((nodes: RowNode<TData>[]) => unknown);
 }
 
-export function aggregateStage<TData>(
-	roots: RowTreeNode<TData>[],
-	aggDefs: AggregationDef<TData>[]
-): void {
+export function aggregateStage<TData>(roots: RowTreeNode<TData>[], aggDefs: AggregationDef<TData>[]): void {
 	if (aggDefs.length === 0) return;
 
 	for (const root of roots) {
@@ -17,10 +14,7 @@ export function aggregateStage<TData>(
 	}
 }
 
-function aggregateNodeRecursively<TData>(
-	node: RowTreeNode<TData>,
-	aggDefs: AggregationDef<TData>[]
-): RowNode<TData>[] {
+function aggregateNodeRecursively<TData>(node: RowTreeNode<TData>, aggDefs: AggregationDef<TData>[]): RowNode<TData>[] {
 	if (node.kind === 'leaf') {
 		return [node.node];
 	}

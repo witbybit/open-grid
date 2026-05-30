@@ -1,6 +1,13 @@
 import { getEngineFromApi, getInternalApiFromApi } from './apiBridge.js';
 import { RenderEngine } from './renderer/renderEngine.js';
-import type { GridCellContentMount, GridCellContentUnmount, GridRowContentMount, GridRowContentUnmount, GridHeaderMenuMount, GridHeaderMenuUnmount } from './renderer/IGridRenderer.js';
+import type {
+	GridCellContentMount,
+	GridCellContentUnmount,
+	GridRowContentMount,
+	GridRowContentUnmount,
+	GridHeaderMenuMount,
+	GridHeaderMenuUnmount,
+} from './renderer/IGridRenderer.js';
 import type { GridApi } from './store.js';
 
 export interface GridCellContentAdapter<TRowData = unknown> {

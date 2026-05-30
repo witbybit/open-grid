@@ -691,12 +691,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const groupRenderer = ({ visualRow }: any) => (
-			<span data-testid='custom-group'>{visualRow.field}:{visualRow.key} ({visualRow.childCount} items)</span>
+			<span data-testid='custom-group'>
+				{visualRow.field}:{visualRow.key} ({visualRow.childCount} items)
+			</span>
 		);
 
-		const detailRenderer = ({ visualRow }: any) => (
-			<span data-testid='custom-detail'>Details for {visualRow.parentId}</span>
-		);
+		const detailRenderer = ({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>;
 
 		render(
 			<PortalManager

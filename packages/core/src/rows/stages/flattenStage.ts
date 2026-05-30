@@ -12,29 +12,22 @@ export interface FlattenConfig {
 	detailRenderer?: unknown;
 }
 
-export function flattenStage<TData>(
-	roots: RowTreeNode<TData>[],
-	config: FlattenConfig
-): VisualRow<TData>[] {
+export function flattenStage<TData>(roots: RowTreeNode<TData>[], config: FlattenConfig): VisualRow<TData>[] {
 	const result: VisualRow<TData>[] = [];
-	
+
 	for (const root of roots) {
 		flattenNodeRecursively(root, config, result);
 	}
-	
+
 	return result;
 }
 
-function flattenNodeRecursively<TData>(
-	node: RowTreeNode<TData>,
-	config: FlattenConfig,
-	result: VisualRow<TData>[]
-): void {
+function flattenNodeRecursively<TData>(node: RowTreeNode<TData>, config: FlattenConfig, result: VisualRow<TData>[]): void {
 	if (node.kind === 'leaf') {
 		const rowId = node.node.id;
 		const explicitHeight = config.rowHeightsRecord[rowId];
 		const height = explicitHeight !== undefined ? explicitHeight : config.defaultRowHeight;
-		
+
 		result.push({
 			kind: 'data',
 			id: rowId,

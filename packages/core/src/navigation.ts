@@ -78,7 +78,6 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		return -1;
 	}
 
-
 	/**
 	 * Handle standard keyboard movements and selection expansions.
 	 */

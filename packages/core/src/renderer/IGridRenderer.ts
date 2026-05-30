@@ -93,5 +93,3 @@ export interface GridHeaderMenuUnmount {
 	colField: string;
 	container?: HTMLElement;
 }
-
-

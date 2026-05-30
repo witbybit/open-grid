@@ -83,15 +83,15 @@ describe('HeaderPopoverMenu', () => {
 			(el) => (el as HTMLElement).dataset.colField === 'name'
 		) as HTMLElement;
 		const menuBtn = nameCell.querySelector('.og-header-menu-button') as HTMLDivElement;
-		
+
 		// Open popover
 		menuBtn.click();
 		const popover = document.querySelector('.og-header-popover') as HTMLDivElement;
 		expect(popover).not.toBeNull();
 
 		// Click sort ascending
-		const sortAscBtn = Array.from(popover.querySelectorAll('.og-popover-item')).find(
-			(el) => el.textContent?.includes('Sort Ascending')
+		const sortAscBtn = Array.from(popover.querySelectorAll('.og-popover-item')).find((el) =>
+			el.textContent?.includes('Sort Ascending')
 		) as HTMLDivElement;
 		expect(sortAscBtn).not.toBeNull();
 		sortAscBtn.click();
@@ -104,10 +104,10 @@ describe('HeaderPopoverMenu', () => {
 		// Open popover again
 		menuBtn.click();
 		const nextPopover = document.querySelector('.og-header-popover') as HTMLDivElement;
-		
+
 		// Click sort descending
-		const sortDescBtn = Array.from(nextPopover.querySelectorAll('.og-popover-item')).find(
-			(el) => el.textContent?.includes('Sort Descending')
+		const sortDescBtn = Array.from(nextPopover.querySelectorAll('.og-popover-item')).find((el) =>
+			el.textContent?.includes('Sort Descending')
 		) as HTMLDivElement;
 		expect(sortDescBtn).not.toBeNull();
 		sortDescBtn.click();
@@ -127,12 +127,10 @@ describe('HeaderPopoverMenu', () => {
 		// Open popover
 		menuBtn.click();
 		const popover = document.querySelector('.og-header-popover') as HTMLDivElement;
-		
+
 		const select = popover.querySelector('.og-popover-select') as HTMLSelectElement;
 		const input = popover.querySelector('.og-popover-input') as HTMLInputElement;
-		const applyBtn = Array.from(popover.querySelectorAll('.og-popover-btn')).find(
-			(el) => el.textContent === 'Apply'
-		) as HTMLButtonElement;
+		const applyBtn = Array.from(popover.querySelectorAll('.og-popover-btn')).find((el) => el.textContent === 'Apply') as HTMLButtonElement;
 
 		expect(select).not.toBeNull();
 		expect(input).not.toBeNull();
@@ -157,9 +155,7 @@ describe('HeaderPopoverMenu', () => {
 		expect(nextInput.value).toBe('150');
 
 		// Click clear filter
-		const clearBtn = Array.from(nextPopover.querySelectorAll('.og-popover-btn')).find(
-			(el) => el.textContent === 'Clear'
-		) as HTMLButtonElement;
+		const clearBtn = Array.from(nextPopover.querySelectorAll('.og-popover-btn')).find((el) => el.textContent === 'Clear') as HTMLButtonElement;
 		expect(clearBtn).not.toBeNull();
 		clearBtn.click();
 

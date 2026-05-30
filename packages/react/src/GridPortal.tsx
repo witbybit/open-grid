@@ -239,12 +239,7 @@ export function PortalManager<TRowData = unknown>({
 				if (!CustomComponent) return null;
 				return createPortal(
 					<GridProvider api={api} key={`menu-${colField}`}>
-						<CustomComponent
-							colField={colField}
-							column={column}
-							api={api}
-							close={close}
-						/>
+						<CustomComponent colField={colField} column={column} api={api} close={close} />
 					</GridProvider>,
 					container
 				);

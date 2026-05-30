@@ -159,9 +159,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		];
 
 		const exclude = this.options.excludeDefaults || [];
-		const activeDefaults = this.options.disableDefaults
-			? []
-			: defaultItems.filter((item) => !item.id || !exclude.includes(item.id as any));
+		const activeDefaults = this.options.disableDefaults ? [] : defaultItems.filter((item) => !item.id || !exclude.includes(item.id as any));
 		const custom = this.options.customItems || [];
 
 		const items = [...activeDefaults, ...custom];
@@ -377,9 +375,6 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const firstRowId = params.api.getRowId(firstRow);
 		const lastRowId = params.api.getRowId(lastRow);
 
-		params.api.selectRange(
-			{ rowId: firstRowId, colField: columns[0].field },
-			{ rowId: lastRowId, colField: columns[columns.length - 1].field }
-		);
+		params.api.selectRange({ rowId: firstRowId, colField: columns[0].field }, { rowId: lastRowId, colField: columns[columns.length - 1].field });
 	}
 }

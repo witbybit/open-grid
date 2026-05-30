@@ -9,8 +9,7 @@ export class SelectionModel {
 		source: 'program',
 	};
 
-	public init(): void {
-	}
+	public init(): void {}
 
 	public getState(): GridSelectionState {
 		return this.state;

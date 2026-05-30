@@ -11,8 +11,7 @@ export class GeometryModel {
 	private colCapacity = 0;
 	private colCount = 0;
 
-	public init(): void {
-	}
+	public init(): void {}
 
 	public updateColumns(widths: number[], defaultColWidth: number): void {
 		const len = widths.length;

@@ -139,7 +139,8 @@ describe('Performance Benchmarks', () => {
 					field: `col_${i}`,
 					header: `Col ${i}`,
 					width: 100,
-					valueGetter: (params: ValueGetterParams<PerfTestRow>) => (params.row as PerfTestRow & Record<string, unknown>)[`col_${i}`] ?? `Val ${i}`,
+					valueGetter: (params: ValueGetterParams<PerfTestRow>) =>
+						(params.row as PerfTestRow & Record<string, unknown>)[`col_${i}`] ?? `Val ${i}`,
 				})),
 			];
 			const store = new GridStore<PerfTestRow>({

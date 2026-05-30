@@ -486,12 +486,9 @@ export default function NestedTablesGrouping() {
 	});
 
 	// Wrap the details renderer so that parentApi can be resolved and passed down!
-	const handleDetailRowRender = useCallback(
-		({ visualRow, api }: { visualRow: VisualRow<OrderRow>; api: GridApi<OrderRow> }) => {
-			return <NestedOrderGrid visualRow={visualRow} parentApi={api} />;
-		},
-		[]
-	);
+	const handleDetailRowRender = useCallback(({ visualRow, api }: { visualRow: VisualRow<OrderRow>; api: GridApi<OrderRow> }) => {
+		return <NestedOrderGrid visualRow={visualRow} parentApi={api} />;
+	}, []);
 
 	// Force refresh active grids when tab changes
 	const handleTabChange = (tab: 'group' | 'tree' | 'detail') => {
@@ -702,7 +699,8 @@ export default function NestedTablesGrouping() {
 								<div className='p-2.5 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col font-mono text-left'>
 									<span className='text-slate-500 text-[8px] uppercase font-sans font-extrabold'>Grand Total Order Book</span>
 									<span className='text-emerald-400 text-base font-extrabold mt-0.5'>
-										${telemetryResult.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+										$
+										{telemetryResult.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 									</span>
 								</div>
 
@@ -751,14 +749,24 @@ export default function NestedTablesGrouping() {
 											</span>
 											<div className='flex flex-col gap-1.5 max-h-[140px] overflow-y-auto pr-1'>
 												{modifiedItems.map((item) => (
-													<div key={item.id} className='p-2 bg-purple-950/20 border border-purple-900/30 rounded-lg flex flex-col gap-1 text-[9px] font-mono text-left relative overflow-hidden'>
+													<div
+														key={item.id}
+														className='p-2 bg-purple-950/20 border border-purple-900/30 rounded-lg flex flex-col gap-1 text-[9px] font-mono text-left relative overflow-hidden'
+													>
 														<div className='absolute right-1 top-1 text-[8px] bg-purple-900/50 text-purple-200 px-1 py-0.2 rounded border border-purple-800/30'>
 															{item.id}
 														</div>
 														<div className='text-slate-300 font-sans font-semibold pr-10 truncate'>{item.itemName}</div>
 														<div className='flex justify-between text-slate-400'>
-															<span>Qty: <span className='line-through text-slate-500'>{item.oldQty}</span> → <span className='text-pink-400 font-bold'>{item.newQty}</span></span>
-															<span>Val: <span className='line-through text-slate-500'>${item.oldSubtotal.toFixed(0)}</span> → <span className='text-emerald-400 font-bold'>${item.subtotal.toFixed(0)}</span></span>
+															<span>
+																Qty: <span className='line-through text-slate-500'>{item.oldQty}</span> →{' '}
+																<span className='text-pink-400 font-bold'>{item.newQty}</span>
+															</span>
+															<span>
+																Val:{' '}
+																<span className='line-through text-slate-500'>${item.oldSubtotal.toFixed(0)}</span> →{' '}
+																<span className='text-emerald-400 font-bold'>${item.subtotal.toFixed(0)}</span>
+															</span>
 														</div>
 													</div>
 												))}

@@ -3,7 +3,15 @@ import { ScrollEngine } from './scrollEngine.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
-import type { GridCellContentMount, GridCellContentUnmount, GridRowContentMount, GridRowContentUnmount, IGridRenderer, GridHeaderMenuMount, GridHeaderMenuUnmount } from './IGridRenderer.js';
+import type {
+	GridCellContentMount,
+	GridCellContentUnmount,
+	GridRowContentMount,
+	GridRowContentUnmount,
+	IGridRenderer,
+	GridHeaderMenuMount,
+	GridHeaderMenuUnmount,
+} from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { RowNode, type ColumnDef, type VisualRow, type GridApi, type InternalGridApi } from '../store.js';
 import { CORE_STYLES } from './styles.js';
@@ -1105,9 +1113,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			if (sortIndicator) {
 				if (currentSort) {
 					sortIndicator.style.display = 'flex';
-					sortIndicator.innerHTML = currentSort.sort === 'asc'
-						? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`
-						: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>`;
+					sortIndicator.innerHTML =
+						currentSort.sort === 'asc'
+							? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`
+							: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>`;
 				} else {
 					sortIndicator.style.display = 'none';
 					sortIndicator.innerHTML = '';

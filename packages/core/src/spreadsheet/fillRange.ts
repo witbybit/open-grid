@@ -233,7 +233,13 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		});
 	}
 
-	private shiftFormulaReferences(formula: string, deltaRow: number, deltaCol: number, rowModel: RowModel<TRowData>, columns: ColumnDef<TRowData>[]): string {
+	private shiftFormulaReferences(
+		formula: string,
+		deltaRow: number,
+		deltaCol: number,
+		rowModel: RowModel<TRowData>,
+		columns: ColumnDef<TRowData>[]
+	): string {
 		const regex = /\[([^\]:]+):([^\]:]+)\]/g;
 		return formula.replace(regex, (_match, refRowId, refColField) => {
 			let newRowId = refRowId;

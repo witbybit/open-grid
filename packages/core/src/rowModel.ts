@@ -506,7 +506,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	public refresh(): void {
 		const state = this.store.getState();
-		
+
 		const { visualRows, visualRowIdMap } = this.pipeline.run({
 			nodes: this.allNodes,
 			columns: state.columns,

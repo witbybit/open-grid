@@ -1,10 +1,7 @@
 import { RowNode } from '../../store.js';
 import type { RowTreeNode } from './types.js';
 
-export function treeStage<TData>(
-	nodes: RowNode<TData>[],
-	getParentId: (data: TData) => string | null | undefined
-): RowTreeNode<TData>[] {
+export function treeStage<TData>(nodes: RowNode<TData>[], getParentId: (data: TData) => string | null | undefined): RowTreeNode<TData>[] {
 	const nodeMap = new Map<string, RowTreeNode<TData>>();
 	const parentRelations = new Map<string, string[]>(); // parentId -> childIds
 	const roots: string[] = [];
@@ -54,7 +51,7 @@ export function treeStage<TData>(
 
 		// If it has children, it becomes a "group" node in the tree structure
 		const childTreeNodes = childIds.map((cId) => buildSubtree(cId, depth + 1));
-		
+
 		const leafCount = childTreeNodes.reduce((acc, child) => {
 			return acc + (child.kind === 'leaf' ? 1 : child.childCount);
 		}, 0);

@@ -267,7 +267,7 @@ export const StatusDropdownEditor = ({ value, onCommit }: CellEditorProps<any>) 
 export const StatusHeaderFilter = ({ colField, api, close }: { colField: string; api: GridApi<any>; close: () => void }) => {
 	const state = api.getState();
 	const activeFilter = state.filterModel?.[colField];
-	
+
 	let activeFilterVal = '';
 	if (activeFilter) {
 		if (typeof activeFilter === 'object' && 'filter' in activeFilter) {
@@ -302,9 +302,7 @@ export const StatusHeaderFilter = ({ colField, api, close }: { colField: string;
 
 	return (
 		<div className='flex flex-col gap-2 p-1'>
-			<div className='text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1'>
-				Status Filter (React)
-			</div>
+			<div className='text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1'>Status Filter (React)</div>
 			<div className='flex flex-col gap-2'>
 				{['Active', 'Pending', 'Inactive'].map((statusVal) => {
 					const badgeColor =
@@ -323,7 +321,9 @@ export const StatusHeaderFilter = ({ colField, api, close }: { colField: string;
 								onChange={() => setSelectedValue(statusVal)}
 								className='cursor-pointer accent-indigo-500'
 							/>
-							<span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border leading-none inline-block ${badgeColor}`}>
+							<span
+								className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border leading-none inline-block ${badgeColor}`}
+							>
 								{statusVal}
 							</span>
 						</label>

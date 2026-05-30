@@ -77,7 +77,9 @@ function OpenGridInner<TRowData = unknown>({
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
 	const rowPortalsRef = useRef<Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>>(new Map());
-	const menuPortalsRef = useRef<Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>>(new Map());
+	const menuPortalsRef = useRef<Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>>(
+		new Map()
+	);
 	const portalFlushScheduledRef = useRef(false);
 	const [, setPortalVersion] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);

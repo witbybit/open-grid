@@ -23,7 +23,7 @@ function SpreadsheetWorkspaceInner({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: SpreadsheetWorkspaceProps) {
-		const focusedCell = useGridKeySelector('selection', (state) => state.selection.focus);
+	const focusedCell = useGridKeySelector('selection', (state) => state.selection.focus);
 	const selectedRange = useGridKeySelector('selection', (state) => state.selection.range);
 
 	const [formulaText, setFormulaText] = useState('');

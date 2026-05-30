@@ -2,11 +2,7 @@ import type { RowTreeNode } from './types.js';
 import type { SortModel } from '../../rowModel.js';
 import { compilePathGetter, type ColumnDef, RowNode } from '../../store.js';
 
-export function sortTreeStage<TData>(
-	roots: RowTreeNode<TData>[],
-	sortModel: SortModel | null,
-	columns: ColumnDef<TData>[]
-): void {
+export function sortTreeStage<TData>(roots: RowTreeNode<TData>[], sortModel: SortModel | null, columns: ColumnDef<TData>[]): void {
 	if (!sortModel || sortModel.length === 0) return;
 
 	const columnById = new Map<string, ColumnDef<TData>>();
@@ -90,7 +86,7 @@ function sortChildren<TData>(
 			const bVal = String(b.key);
 			if (aVal < bVal) comp = -1;
 			else if (aVal > bVal) comp = 1;
-			
+
 			// Find the sort direction for the field of this group node, if any
 			const fieldSort = sortModel.find((s) => s.colId === a.field);
 			if (fieldSort && fieldSort.sort === 'desc') {
@@ -105,7 +101,7 @@ function sortChildren<TData>(
 				const sortItem = sortModel[i];
 				const aVal = precompiledSortGetters[i](a.node);
 				const bVal = precompiledSortGetters[i](b.node);
-				
+
 				const comparison = compareValues(aVal, bVal);
 				if (comparison !== 0) {
 					return sortItem.sort === 'desc' ? -comparison : comparison;
