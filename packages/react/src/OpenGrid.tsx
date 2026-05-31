@@ -76,6 +76,9 @@ function OpenGridInner<TRowData = unknown>({
 	detailRowRenderer,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
+	const portalIdSeqRef = useRef(0);
+	const cellKeyToPortalIdRef = useRef<Map<string, string>>(new Map());
+
 	const rowPortalsRef = useRef<Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>>(new Map());
 	const menuPortalsRef = useRef<Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>>(
 		new Map()
@@ -105,17 +108,29 @@ function OpenGridInner<TRowData = unknown>({
 			isEditing: boolean,
 			isLoading: boolean
 		) => {
-			const existing = portalsRef.current.get(cellKey);
-			if (
-				existing &&
-				existing.container === container &&
-				existing.isEditing === isEditing &&
-				existing.isLoading === isLoading &&
-				existing.value === value &&
-				existing.node === node &&
-				existing.col === col
-			) {
-				return;
+			let portalId = container.dataset.portalId;
+			if (!portalId) {
+				portalIdSeqRef.current++;
+				portalId = `p-${portalIdSeqRef.current}`;
+				container.dataset.portalId = portalId;
+			}
+
+			const existing = portalsRef.current.get(portalId);
+			if (existing) {
+				if (
+					existing.cellKey === cellKey &&
+					existing.container === container &&
+					existing.isEditing === isEditing &&
+					existing.isLoading === isLoading &&
+					existing.value === value &&
+					existing.node === node &&
+					existing.col === col
+				) {
+					return;
+				}
+				if (existing.cellKey !== cellKey) {
+					cellKeyToPortalIdRef.current.delete(existing.cellKey);
+				}
 			}
 
 			// Workaround for React Portal unmount race conditions:
@@ -139,7 +154,7 @@ function OpenGridInner<TRowData = unknown>({
 				};
 			}
 
-			portalsRef.current.set(cellKey, {
+			portalsRef.current.set(portalId, {
 				cellKey,
 				container,
 				value,
@@ -148,6 +163,7 @@ function OpenGridInner<TRowData = unknown>({
 				isEditing,
 				isLoading,
 			});
+			cellKeyToPortalIdRef.current.set(cellKey, portalId);
 			schedulePortalFlush();
 		},
 		[schedulePortalFlush]
@@ -155,9 +171,17 @@ function OpenGridInner<TRowData = unknown>({
 
 	const unmountPortal = useCallback(
 		(cellKey: string, container?: HTMLElement) => {
-			const existing = portalsRef.current.get(cellKey);
+			let portalId = container?.dataset.portalId;
+			if (!portalId) {
+				portalId = cellKeyToPortalIdRef.current.get(cellKey);
+			}
+			if (!portalId) return;
+
+			const existing = portalsRef.current.get(portalId);
 			if (!existing || (container && existing.container !== container)) return;
-			portalsRef.current.delete(cellKey);
+
+			portalsRef.current.delete(portalId);
+			cellKeyToPortalIdRef.current.delete(existing.cellKey);
 			schedulePortalFlush();
 		},
 		[schedulePortalFlush]
@@ -310,6 +334,7 @@ function OpenGridInner<TRowData = unknown>({
 			host.destroy();
 			hostRef.current = null;
 			portalsRef.current.clear();
+			cellKeyToPortalIdRef.current.clear();
 			rowPortalsRef.current.clear();
 			menuPortalsRef.current.clear();
 			setPortalVersion((version) => version + 1);

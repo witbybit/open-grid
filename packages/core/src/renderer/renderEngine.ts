@@ -58,6 +58,18 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private dirtyRows = new Set<string>();
 	private hoveredRowIndex: number | null = null;
 
+	// Off-screen row parking: rows are translated off-screen instead of detached,
+	// eliminating appendChild/remove layout invalidations during scroll.
+	private parkedRows: PooledRow[] = [];
+	private static readonly MAX_PARKED_ROWS = 100;
+
+	// Reverse lookup: rowId → active visual row index for O(1) dirty-cell routing
+	private boundRowIdToIndex = new Map<string, number>();
+
+	// Column range tracking for skip-unchanged-row optimisation
+	private lastPaintedColStart = -1;
+	private lastPaintedColEnd = -1;
+
 	private selectionDragBounds: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
 
 	public onMountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
@@ -187,6 +199,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Release all active rows and cells
 		this.clearActiveRows();
+		this.parkedRows.length = 0;
+		this.boundRowIdToIndex.clear();
 		this.clearHeaderCells();
 
 		if (this.rowPool) this.rowPool.clear();
@@ -375,7 +389,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		// 2. Recycle viewport
-		this.recycleViewport();
+		this.recycleViewport(true);
 
 		// 3. Draw headers
 		this.paintHeaders();
@@ -393,7 +407,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	/**
 	 * Perform row & cell level recycling, reusing DOM elements out of screen.
 	 */
-	private recycleViewport(): void {
+	private recycleViewport(forceAll = false): void {
 		const rowModel = this.engine.getRowModel();
 		let rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const state = this.engine.stateManager.getState();
@@ -426,7 +440,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const startRow = newRowRange.startIdx;
 		const endRow = newRowRange.endIdx;
 
-		// Phase 1: Releasing scrolled-out rows back to the recycling pool
+		// Track column range changes for skip optimisation
+		const colRangeChanged = this.lastPaintedColStart !== newColRange.startIdx || this.lastPaintedColEnd !== newColRange.endIdx;
+		this.lastPaintedColStart = newColRange.startIdx;
+		this.lastPaintedColEnd = newColRange.endIdx;
+
+		// Phase 1: Park scrolled-out rows off-screen (zero DOM detach)
 		for (const [rowIndex, pooledRow] of this.activeRows.entries()) {
 			const isPinnedTop = rowIndex < pinTopRows && rowIndex < rowCount;
 			const isPinnedBottom = rowIndex >= rowCount - pinBottomRows && rowIndex < rowCount;
@@ -454,35 +473,58 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			if (!visualRow) return;
 
 			let pooledRow = this.activeRows.get(r);
+			let isNewlyAcquired = false;
 
 			if (!pooledRow) {
-				// Acquire unused row divs from the pool
-				const rowEl = this.rowPool.acquire();
-				const leftEl = this.rowPool.acquire();
-				const rightEl = this.rowPool.acquire();
+				isNewlyAcquired = true;
+				if (this.parkedRows.length > 0) {
+					// Reuse a parked row — zero DOM mutations (already attached to layers)
+					pooledRow = this.parkedRows.pop()!;
+				} else {
+					// First-time creation — acquire from pool and attach to layers
+					const rowEl = this.rowPool.acquire();
+					const leftEl = this.rowPool.acquire();
+					const rightEl = this.rowPool.acquire();
 
-				pooledRow = {
-					element: rowEl,
-					leftElement: leftEl,
-					rightElement: rightEl,
-					cells: new Map(),
-					boundRowId: visualRow.id,
-				};
+					pooledRow = {
+						element: rowEl,
+						leftElement: leftEl,
+						rightElement: rightEl,
+						cells: new Map(),
+						boundRowId: '',
+					};
+
+					if (this.centerLayer) this.centerLayer.appendChild(rowEl);
+					if (this.leftLayer) this.leftLayer.appendChild(leftEl);
+					if (this.rightLayer) this.rightLayer.appendChild(rightEl);
+				}
+				pooledRow.boundRowId = visualRow.id;
 				this.activeRows.set(r, pooledRow);
-
-				// Append row divs to center layer
-				if (this.centerLayer) this.centerLayer.appendChild(rowEl);
-				if (this.leftLayer) this.leftLayer.appendChild(leftEl);
-				if (this.rightLayer) this.rightLayer.appendChild(rightEl);
+				this.boundRowIdToIndex.set(visualRow.id, r);
 			} else if (pooledRow.boundRowId !== visualRow.id) {
+				// Row exists but is bound to different data — update in-place
 				if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
 					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 					delete pooledRow.element.dataset.rowKey;
 				}
-				for (const c of pooledRow.cells.keys()) {
-					this.releaseCell(pooledRow, c);
+				// Only unmount cell portals — keep cell DOM elements attached for reuse
+				for (const [, cell] of pooledRow.cells.entries()) {
+					if (cell.dataset.cellKey) {
+						if (this.onUnmountCellContent) {
+							this.onUnmountCellContent({ cellKey: cell.dataset.cellKey, container: this.getCellPortalHost(cell) ?? cell, flushSync: true });
+						}
+						delete cell.dataset.cellKey;
+					}
 				}
+				this.boundRowIdToIndex.delete(pooledRow.boundRowId);
 				pooledRow.boundRowId = visualRow.id;
+				this.boundRowIdToIndex.set(visualRow.id, r);
+			} else {
+				// Same row, same data — skip if non-pinned and column range unchanged
+				const isPinnedRow = r < pinTopRows || r >= rowCount - pinBottomRows;
+				if (!forceAll && !isPinnedRow && !colRangeChanged) {
+					return;
+				}
 			}
 
 			// Reposition row using transforms to avoid layout-bound top/left updates.
@@ -580,7 +622,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const columns = state.columns;
 
 		for (const rowId of this.dirtyRows) {
-			const rowIndex = rowModel.getVisualRowIndexById(rowId);
+			// O(1) lookup via boundRowIdToIndex instead of scanning row model
+			const rowIndex = this.boundRowIdToIndex.get(rowId) ?? -1;
 			const pooledRow = rowIndex >= 0 ? this.activeRows.get(rowIndex) : undefined;
 			const row = rowIndex >= 0 ? rowModel.getVisualRow(rowIndex) : null;
 			if (pooledRow && row?.kind === 'data') {
@@ -589,7 +632,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		for (const { rowId, colField } of this.dirtyCells.values()) {
-			const rowIndex = rowModel.getVisualRowIndexById(rowId);
+			// O(1) lookup via boundRowIdToIndex instead of scanning row model
+			const rowIndex = this.boundRowIdToIndex.get(rowId) ?? -1;
 			const colIndex = this.engine.columns.getColumnIndex(colField);
 			if (rowIndex < 0 || colIndex < 0) continue;
 
@@ -998,7 +1042,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	/**
-	 * Release and return an entire row and all its cells to the pools.
+	 * Park a row off-screen instead of detaching it from the DOM.
+	 * The row element stays in its layer, translated to (-99999px) so it's invisible.
+	 * This eliminates remove()/appendChild() layout invalidations on scroll.
 	 */
 	private releaseRow(rowIndex: number, pooledRow: PooledRow): void {
 		if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
@@ -1012,14 +1058,26 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 		pooledRow.cells.clear();
 
-		// Detach row elements and recycle
-		if (pooledRow.element.parentNode) pooledRow.element.remove();
-		if (pooledRow.leftElement && pooledRow.leftElement.parentNode) pooledRow.leftElement.remove();
-		if (pooledRow.rightElement && pooledRow.rightElement.parentNode) pooledRow.rightElement.remove();
+		// Remove from reverse lookup
+		this.boundRowIdToIndex.delete(pooledRow.boundRowId);
+		pooledRow.boundRowId = '';
 
-		this.rowPool.release(pooledRow.element);
-		if (pooledRow.leftElement) this.rowPool.release(pooledRow.leftElement);
-		if (pooledRow.rightElement) this.rowPool.release(pooledRow.rightElement);
+		if (this.parkedRows.length < (this.constructor as typeof RenderEngine).MAX_PARKED_ROWS) {
+			// Park off-screen — keep attached to layer, just move out of viewport
+			pooledRow.element.style.transform = 'translate3d(0, -99999px, 0)';
+			if (pooledRow.leftElement) pooledRow.leftElement.style.transform = 'translate3d(0, -99999px, 0)';
+			if (pooledRow.rightElement) pooledRow.rightElement.style.transform = 'translate3d(0, -99999px, 0)';
+			this.parkedRows.push(pooledRow);
+		} else {
+			// Overflow: fall back to full detach to prevent unbounded memory
+			if (pooledRow.element.parentNode) pooledRow.element.remove();
+			if (pooledRow.leftElement && pooledRow.leftElement.parentNode) pooledRow.leftElement.remove();
+			if (pooledRow.rightElement && pooledRow.rightElement.parentNode) pooledRow.rightElement.remove();
+			this.rowPool.release(pooledRow.element);
+			if (pooledRow.leftElement) this.rowPool.release(pooledRow.leftElement);
+			if (pooledRow.rightElement) this.rowPool.release(pooledRow.rightElement);
+		}
+
 		this.activeRows.delete(rowIndex);
 	}
 
@@ -1031,6 +1089,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.releaseRow(rowIndex, pooledRow);
 		}
 		this.activeRows.clear();
+		this.boundRowIdToIndex.clear();
 	}
 
 	/**

@@ -199,8 +199,9 @@ export function PortalManager<TRowData = unknown>({
 	return (
 		<>
 			{Array.from(portals.values()).map((p) => {
+				const stableKey = p.container.dataset.portalId ?? p.cellKey;
 				return createPortal(
-					<GridProvider api={api} key={p.cellKey}>
+					<GridProvider api={api} key={stableKey}>
 						<PortalCell<TRowData>
 							rowId={p.node.id}
 							colField={p.col.field}
