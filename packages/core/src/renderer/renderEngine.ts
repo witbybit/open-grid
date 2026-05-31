@@ -539,22 +539,26 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				rowTop = scrollTop + viewportHeight - bottomOffset;
 			}
 
-			pooledRow.element.style.transform = `translate3d(0, ${rowTop}px, 0)`;
-			pooledRow.element.style.height = `${rowHeight}px`;
-			pooledRow.element.dataset.rowIndex = String(r);
-			pooledRow.element.dataset.rowId = visualRow.id;
+			const rowTransform = `translate3d(0, ${rowTop}px, 0)`;
+			const rowHeightStr = `${rowHeight}px`;
+			const rStr = String(r);
+
+			if (pooledRow.element.style.transform !== rowTransform) pooledRow.element.style.transform = rowTransform;
+			if (pooledRow.element.style.height !== rowHeightStr) pooledRow.element.style.height = rowHeightStr;
+			if (pooledRow.element.dataset.rowIndex !== rStr) pooledRow.element.dataset.rowIndex = rStr;
+			if (pooledRow.element.dataset.rowId !== visualRow.id) pooledRow.element.dataset.rowId = visualRow.id;
 
 			if (pooledRow.leftElement) {
-				pooledRow.leftElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
-				pooledRow.leftElement.style.height = `${rowHeight}px`;
-				pooledRow.leftElement.dataset.rowIndex = String(r);
-				pooledRow.leftElement.dataset.rowId = visualRow.id;
+				if (pooledRow.leftElement.style.transform !== rowTransform) pooledRow.leftElement.style.transform = rowTransform;
+				if (pooledRow.leftElement.style.height !== rowHeightStr) pooledRow.leftElement.style.height = rowHeightStr;
+				if (pooledRow.leftElement.dataset.rowIndex !== rStr) pooledRow.leftElement.dataset.rowIndex = rStr;
+				if (pooledRow.leftElement.dataset.rowId !== visualRow.id) pooledRow.leftElement.dataset.rowId = visualRow.id;
 			}
 			if (pooledRow.rightElement) {
-				pooledRow.rightElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
-				pooledRow.rightElement.style.height = `${rowHeight}px`;
-				pooledRow.rightElement.dataset.rowIndex = String(r);
-				pooledRow.rightElement.dataset.rowId = visualRow.id;
+				if (pooledRow.rightElement.style.transform !== rowTransform) pooledRow.rightElement.style.transform = rowTransform;
+				if (pooledRow.rightElement.style.height !== rowHeightStr) pooledRow.rightElement.style.height = rowHeightStr;
+				if (pooledRow.rightElement.dataset.rowIndex !== rStr) pooledRow.rightElement.dataset.rowIndex = rStr;
+				if (pooledRow.rightElement.dataset.rowId !== visualRow.id) pooledRow.rightElement.dataset.rowId = visualRow.id;
 			}
 
 			if (visualRow.kind !== 'data') {
@@ -811,10 +815,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				targetRowEl.appendChild(cell);
 			}
 
-			cell.style.transform = `translate3d(${cellLeft}px, 0, 0)`;
-			cell.style.width = `${cellWidth}px`;
-			cell.dataset.colField = col.field;
-			cell.dataset.rowIndex = String(rowIndex);
+			const cellTransform = `translate3d(${cellLeft}px, 0, 0)`;
+			const cellWidthStr = `${cellWidth}px`;
+			const rowIndexStr = String(rowIndex);
+
+			if (cell.style.transform !== cellTransform) cell.style.transform = cellTransform;
+			if (cell.style.width !== cellWidthStr) cell.style.width = cellWidthStr;
+			if (cell.dataset.colField !== col.field) cell.dataset.colField = col.field;
+			if (cell.dataset.rowIndex !== rowIndexStr) cell.dataset.rowIndex = rowIndexStr;
 
 			const state = this.engine.stateManager.getState();
 			const access = this.engine.cellAccess.get(node.id, rowIndex, node, node.data, c, col);
@@ -828,7 +836,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 			if (access.isFocused) {
 				cellClassName += ' og-cell-focused';
-				cell.tabIndex = -1;
+				if (cell.tabIndex !== -1) {
+					cell.tabIndex = -1;
+				}
 				const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
 				if (
 					activeEl &&
@@ -842,7 +852,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					cell.focus();
 				}
 			} else {
-				cell.removeAttribute('tabindex');
+				if (cell.hasAttribute('tabindex')) {
+					cell.removeAttribute('tabindex');
+				}
 			}
 			if (access.isSelected) {
 				cellClassName += ' og-cell-selected';
@@ -876,7 +888,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					console.error('RenderEngine: Error in cellClass styleSlot', e);
 				}
 			}
-			cell.className = cellClassName;
+			if (cell.className !== cellClassName) {
+				cell.className = cellClassName;
+			}
 			if (state.styleSlots?.beforeCellRender) {
 				try {
 					state.styleSlots.beforeCellRender(access, cell);
