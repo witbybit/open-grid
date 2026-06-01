@@ -15,8 +15,8 @@ export function aggregateStage<TData>(roots: RowTreeNode<TData>[], aggDefs: Aggr
 }
 
 function aggregateNodeRecursively<TData>(node: RowTreeNode<TData>, aggDefs: AggregationDef<TData>[]): RowNode<TData>[] {
-	if (node.kind === 'leaf') {
-		return [node.node];
+	if (!node.children || node.children.length === 0) {
+		return node.kind === 'leaf' ? [node.node] : [];
 	}
 
 	// 1. First, recursively aggregate children bottom-up
@@ -26,7 +26,9 @@ function aggregateNodeRecursively<TData>(node: RowTreeNode<TData>, aggDefs: Aggr
 		descendantLeafNodes.push(...childLeaves);
 	}
 
-	// 2. Perform aggregations for this group node
+	const selfLeaves = node.kind === 'leaf' ? [node.node] : [];
+
+	// 2. Perform aggregations for this group/parent node
 	const aggregateValues: Record<string, unknown> = {};
 
 	for (const def of aggDefs) {
@@ -75,5 +77,5 @@ function aggregateNodeRecursively<TData>(node: RowTreeNode<TData>, aggDefs: Aggr
 	}
 
 	node.aggregateValues = aggregateValues;
-	return descendantLeafNodes;
+	return [...selfLeaves, ...descendantLeafNodes];
 }

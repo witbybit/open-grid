@@ -33,3 +33,4 @@ export { mountGridHost, type GridCellContentAdapter, type GridHost, type GridHos
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
 export type { GridNavigationOptions } from './navigation.js';
 export type { GridCellContentMount, GridCellContentUnmount } from './renderer/IGridRenderer.js';
+export { formatVisualGroupId, formatVisualDetailId, formatVisualLoadingId, formatRawLoadingRowId, isRawLoadingRowId } from './ids.js';

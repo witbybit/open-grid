@@ -1,4 +1,5 @@
 import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, type VisualRow } from './store.js';
+import { formatVisualLoadingId, formatRawLoadingRowId, isRawLoadingRowId } from './ids.js';
 
 export interface GetRowsParams {
 	startRow: number;
@@ -77,15 +78,13 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 	public getRowNode = (rowIndex: number): RowNode<TData> | null => {
 		const row = this.getVisualRow(rowIndex);
-		const node = row?.kind === 'data' ? row.node : null;
-		if (node) {
-			return node;
+		if (row?.kind === 'data') {
+			return row.node;
 		}
-		// Synthesize a stable loading RowNode to display shimmers for unloaded blocks
-		if (rowIndex >= 0 && rowIndex < this.getRowCount()) {
+		if (row?.kind === 'loading') {
 			let loadingNode = this.loadingNodeMap.get(rowIndex);
 			if (!loadingNode) {
-				loadingNode = new RowNode<TData>(`__loading_${rowIndex}`, null as TData);
+				loadingNode = new RowNode<TData>(row.rowId, null as TData);
 				this.loadingNodeMap.set(rowIndex, loadingNode);
 			}
 			return loadingNode;
@@ -99,15 +98,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			return row;
 		}
 		if (rowIndex >= 0 && rowIndex < this.getVisualRowCount()) {
-			let loadingNode = this.loadingNodeMap.get(rowIndex);
-			if (!loadingNode) {
-				loadingNode = new RowNode<TData>(`__loading_${rowIndex}`, null as TData);
-				this.loadingNodeMap.set(rowIndex, loadingNode);
-			}
 			return {
-				kind: 'data',
-				id: loadingNode.id,
-				node: loadingNode,
+				kind: 'loading',
+				id: formatVisualLoadingId(rowIndex),
+				rowId: formatRawLoadingRowId(rowIndex),
 				depth: 0,
 			};
 		}
@@ -162,6 +156,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			}
 		});
 	};
+
+	public isRowLoading(rowId: string): boolean {
+		return isRawLoadingRowId(rowId);
+	}
 
 	public getRowCount = (): number => {
 		return this.getVisualRowCount();
@@ -279,6 +277,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 					this.visualRows[globalIdx] = {
 						kind: 'data',
 						id: node.id,
+						rowId: node.id,
 						node,
 						depth: 0,
 					};

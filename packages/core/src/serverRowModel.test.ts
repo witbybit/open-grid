@@ -76,7 +76,7 @@ describe('ServerRowModelController', () => {
 		expect(node).not.toBeNull();
 		expect(node?.id).toBe('__loading_80');
 		expect(store.isRowLoading(node!.id)).toBe(true);
-		expect(controller.getVisualRow(80)?.id).toBe('__loading_80');
+		expect(controller.getVisualRow(80)?.id).toBe('loading:80');
 	});
 
 	it('should pre-fetch blocks ahead of time based on scroll velocity', async () => {

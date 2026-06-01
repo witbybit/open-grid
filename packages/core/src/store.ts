@@ -126,9 +126,13 @@ export type VisualRow<TRowData = unknown> =
 	| {
 			kind: 'data';
 			id: string;
+			rowId: string;
 			node: RowNode<TRowData>;
 			depth: number;
 			height?: number;
+			hasChildren?: boolean;
+			expanded?: boolean;
+			childCount?: number;
 	  }
 	| {
 			kind: 'group';
@@ -143,11 +147,19 @@ export type VisualRow<TRowData = unknown> =
 	  }
 	| {
 			kind: 'detail';
-			id: string;
+			id: `detail:${string}`;
 			parentId: string;
+			rowId: string;
 			depth: number;
 			height: number;
 			render: unknown;
+	  }
+	| {
+			kind: 'loading';
+			id: `loading:${string}`;
+			rowId: string;
+			depth: number;
+			height?: number;
 	  };
 
 export interface ValueGetterParams<TRowData = unknown> {
@@ -355,6 +367,10 @@ export interface GridState<TRowData = unknown> {
 	detailRowHeight?: number;
 	detailRenderer?: unknown;
 
+	// Expansion state
+	expandedGroupIds?: Set<string> | Record<string, boolean>;
+	expandedDetailRowIds?: Set<string> | Record<string, boolean>;
+
 	// React cache invalidator
 	dataVersion: number;
 
@@ -416,6 +432,9 @@ export interface GridApi<TRowData = unknown> {
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	getVisualRowCount(): number;
 	getVisualRowIndexById(id: string): number | null;
+	getDataRowAtVisualIndex(index: number): TRowData | null;
+	getVisualIndexByRowId(rowId: string): number | null;
+	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	addEventListener<T = unknown>(type: string, callback: GridEventListener<T>): () => void;
 	dispatchEvent<T = unknown>(type: string, payload: T): void;
 	startEditing(rowId: string, colField: string): void;
@@ -591,19 +610,81 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public toggleGroupExpanded = (groupId: string): void => {
-		this.getRowModel()?.toggleGroupExpanded?.(groupId);
+		const state = this.getState();
+		const current = state.expandedGroupIds ?? new Set<string>();
+		let next: Set<string>;
+		if (current instanceof Set) {
+			next = new Set(current);
+			if (next.has(groupId)) {
+				next.delete(groupId);
+			} else {
+				next.add(groupId);
+			}
+		} else {
+			next = new Set<string>();
+			Object.keys(current).forEach((k) => {
+				if (current[k]) next.add(k);
+			});
+			if (next.has(groupId)) {
+				next.delete(groupId);
+			} else {
+				next.add(groupId);
+			}
+		}
+
+		this.setState({
+			expandedGroupIds: next,
+		});
+		this.getRowModel()?.refresh?.();
 	};
 
 	public toggleDetailExpanded = (rowId: string): void => {
-		this.getRowModel()?.toggleDetailExpanded?.(rowId);
+		const state = this.getState();
+		const current = state.expandedDetailRowIds ?? new Set<string>();
+		let next: Set<string>;
+		if (current instanceof Set) {
+			next = new Set(current);
+			if (next.has(rowId)) {
+				next.delete(rowId);
+			} else {
+				next.add(rowId);
+			}
+		} else {
+			next = new Set<string>();
+			Object.keys(current).forEach((k) => {
+				if (current[k]) next.add(k);
+			});
+			if (next.has(rowId)) {
+				next.delete(rowId);
+			} else {
+				next.add(rowId);
+			}
+		}
+
+		this.setState({
+			expandedDetailRowIds: next,
+		});
+		this.getRowModel()?.refresh?.();
 	};
 
 	public isGroupExpanded = (groupId: string): boolean => {
-		return this.getRowModel()?.isGroupExpanded?.(groupId) ?? false;
+		const state = this.getState();
+		const current = state.expandedGroupIds;
+		if (!current) return false;
+		if (current instanceof Set) {
+			return current.has(groupId);
+		}
+		return !!current[groupId];
 	};
 
 	public isDetailExpanded = (rowId: string): boolean => {
-		return this.getRowModel()?.isDetailExpanded?.(rowId) ?? false;
+		const state = this.getState();
+		const current = state.expandedDetailRowIds;
+		if (!current) return false;
+		if (current instanceof Set) {
+			return current.has(rowId);
+		}
+		return !!current[rowId];
 	};
 
 	public getVisualRow = (index: number): VisualRow<TRowData> | null => {
@@ -616,6 +697,19 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getVisualRowIndexById = (id: string): number | null => {
 		return this.getRowModel()?.getVisualRowIndexById(id) ?? null;
+	};
+
+	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
+		return this.getRowModel()?.getRow(index) ?? null;
+	};
+
+	public getVisualIndexByRowId = (rowId: string): number | null => {
+		const idx = this.getVisualRowIndexById(rowId);
+		return idx !== null && idx >= 0 ? idx : null;
+	};
+
+	public getRowNodeById = (rowId: string): RowNode<TRowData> | null => {
+		return this.getRowModel()?.getRowNodeById(rowId) ?? null;
 	};
 
 	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {

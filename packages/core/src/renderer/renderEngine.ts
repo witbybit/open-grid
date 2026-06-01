@@ -2,7 +2,7 @@ import { DOMPool, PooledRow } from './domPool.js';
 import { ScrollEngine } from './scrollEngine.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
-import { createCellKey } from '../ids.js';
+import { createCellKey, formatVisualLoadingId } from '../ids.js';
 import type {
 	GridCellContentMount,
 	GridCellContentUnmount,
@@ -13,13 +13,23 @@ import type {
 	GridHeaderMenuUnmount,
 } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { RowNode, type ColumnDef, type VisualRow, type GridApi, type InternalGridApi } from '../store.js';
+import {
+	RowNode,
+	type ColumnDef,
+	type VisualRow,
+	type GridApi,
+	type InternalGridApi,
+	type GridSelectionState,
+	type GridCellPointer,
+	type GridCellRangeBounds,
+} from '../store.js';
 import { CORE_STYLES } from './styles.js';
 
 /**
  * Owns the grid DOM, row/cell recycling, and rAF paint batching.
  */
 export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData> {
+	private static readonly HEADER_HEIGHT = 40;
 	private engine: GridEngine<TRowData>;
 	private rowPool!: DOMPool<HTMLDivElement>;
 	private cellPool!: DOMPool<HTMLDivElement>;
@@ -57,6 +67,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private dirtyCells = new Map<string, { rowId: string; colField: string }>();
 	private dirtyRows = new Set<string>();
 	private hoveredRowIndex: number | null = null;
+	private lastSelection: GridSelectionState | null = null;
+	private lastActiveEdit: GridCellPointer | null = null;
+	private rowsWithFastScrollFallback = new Set<string>();
 
 	// Off-screen row parking: rows are translated off-screen instead of detached,
 	// eliminating appendChild/remove layout invalidations during scroll.
@@ -176,6 +189,21 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.bindInvalidationSources();
 
+		const state = this.engine.stateManager.getState();
+		this.lastSelection = {
+			focus: state.selection.focus ? { ...state.selection.focus } : null,
+			anchor: state.selection.anchor ? { ...state.selection.anchor } : null,
+			range: state.selection.range
+				? {
+						start: { ...state.selection.range.start },
+						end: { ...state.selection.range.end },
+					}
+				: null,
+			bounds: state.selection.bounds ? { ...state.selection.bounds } : null,
+			source: state.selection.source,
+		};
+		this.lastActiveEdit = state.activeEdit ? { ...state.activeEdit } : null;
+
 		// Run first layout calculation and repaint
 		this.fullPaint();
 	}
@@ -213,6 +241,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.selectionBorder = null;
 		this.selectionDragBounds = null;
+		this.lastSelection = null;
+		this.lastActiveEdit = null;
 
 		if (this.container) {
 			this.container.classList.remove('og-grid-container');
@@ -253,13 +283,198 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('enableColumnReorder', scheduleHeaders));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('selection', scheduleOverlay));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', scheduleOverlay));
+		this.unsubscribers.push(
+			this.engine.stateManager.subscribeToKey('selection', (state) => {
+				this.handleSelectionChange(state.selection);
+				scheduleOverlay();
+
+				if (state.selection.source === 'keyboard' && state.selection.focus) {
+					const coords = this.getCoordsFromPointer(state.selection.focus);
+					if (coords) {
+						this.ensureFocusedCellViewport(coords.rowIndex, coords.colIndex);
+					}
+				}
+			})
+		);
+		this.unsubscribers.push(
+			this.engine.stateManager.subscribeToKey('activeEdit', (state) => {
+				this.handleActiveEditChange(state.activeEdit);
+				scheduleOverlay();
+			})
+		);
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener<{ rowId: string; colField: string }>('cellInvalidated', (event) => {
 				this.queueCellPaint(event.payload.rowId, event.payload.colField);
 			})
 		);
+	}
+
+	private handleSelectionChange(newSelection: GridSelectionState): void {
+		const state = this.engine.stateManager.getState();
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return;
+
+		const rowCount = rowModel.getVisualRowCount();
+		const colCount = state.columns.length;
+		const visibleRowRange = this.engine.viewport.getVisibleRowRange(rowCount);
+		const visibleColRange = this.engine.viewport.getVisibleColumnRange(colCount);
+
+		const queueBoundsPaint = (bounds: GridCellRangeBounds) => {
+			const startRow = Math.max(bounds.minRow, visibleRowRange.startIdx);
+			const endRow = Math.min(bounds.maxRow, visibleRowRange.endIdx);
+			const startCol = Math.max(bounds.minCol, visibleColRange.startIdx);
+			const endCol = Math.min(bounds.maxCol, visibleColRange.endIdx);
+
+			for (let r = startRow; r <= endRow; r++) {
+				const node = rowModel.getRowNode(r);
+				if (!node) continue;
+				for (let c = startCol; c <= endCol; c++) {
+					const col = state.columns[c];
+					if (!col) continue;
+					this.queueCellPaint(node.id, col.field);
+				}
+			}
+		};
+
+		// 1. Invalidate old focus cell
+		if (this.lastSelection?.focus) {
+			this.queueCellPaint(this.lastSelection.focus.rowId, this.lastSelection.focus.colField);
+		}
+
+		// 2. Invalidate new focus cell
+		if (newSelection.focus) {
+			this.queueCellPaint(newSelection.focus.rowId, newSelection.focus.colField);
+		}
+
+		// 3. Invalidate old bounds
+		if (this.lastSelection?.bounds) {
+			queueBoundsPaint(this.lastSelection.bounds);
+		}
+
+		// 4. Invalidate new bounds
+		if (newSelection.bounds) {
+			queueBoundsPaint(newSelection.bounds);
+		}
+
+		// Update lastSelection
+		this.lastSelection = {
+			focus: newSelection.focus ? { ...newSelection.focus } : null,
+			anchor: newSelection.anchor ? { ...newSelection.anchor } : null,
+			range: newSelection.range
+				? {
+						start: { ...newSelection.range.start },
+						end: { ...newSelection.range.end },
+					}
+				: null,
+			bounds: newSelection.bounds ? { ...newSelection.bounds } : null,
+			source: newSelection.source,
+		};
+	}
+
+	private handleActiveEditChange(newActiveEdit: GridCellPointer | null): void {
+		// 1. Invalidate old active edit cell
+		if (this.lastActiveEdit) {
+			this.queueCellPaint(this.lastActiveEdit.rowId, this.lastActiveEdit.colField);
+		}
+
+		// 2. Invalidate new active edit cell
+		if (newActiveEdit) {
+			this.queueCellPaint(newActiveEdit.rowId, newActiveEdit.colField);
+		}
+
+		// Update lastActiveEdit
+		this.lastActiveEdit = newActiveEdit ? { ...newActiveEdit } : null;
+	}
+
+	private getCoordsFromPointer(pointer: GridCellPointer | null): { rowIndex: number; colIndex: number } | null {
+		if (!pointer) return null;
+		const rowModel = this.engine.getRowModel();
+		const rowIndex = rowModel ? rowModel.getVisualRowIndexById(pointer.rowId) : -1;
+		const colIndex = this.engine.columns.getColumnIndex(pointer.colField);
+		if (rowIndex === -1 || colIndex === -1) return null;
+		return { rowIndex, colIndex };
+	}
+
+	private ensureFocusedCellViewport(rowIndex: number, colIndex: number): void {
+		if (!this.scrollViewport) return;
+
+		const rowModel = this.engine.getRowModel();
+		const state = this.engine.stateManager.getState();
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
+		const colCount = state.columns.length;
+		if (rowCount === 0 || colCount === 0) return;
+
+		const pinTopRows = this.engine.viewport.pinTopRows;
+		const pinBottomRows = this.engine.viewport.pinBottomRows;
+		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
+		const pinRightColumns = this.engine.viewport.pinRightColumns;
+
+		let nextScrollTop = this.engine.viewport.scrollTop;
+		if (rowIndex >= pinTopRows && rowIndex < rowCount - pinBottomRows) {
+			let pinnedTopHeight = 0;
+			for (let i = 0; i < pinTopRows && i < rowCount; i++) {
+				pinnedTopHeight += this.engine.geometry.rowHeights[i] ?? state.defaultRowHeight;
+			}
+
+			let pinnedBottomHeight = 0;
+			for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
+				const pinnedRowIndex = rowCount - 1 - i;
+				pinnedBottomHeight += this.engine.geometry.rowHeights[pinnedRowIndex] ?? state.defaultRowHeight;
+			}
+
+			const rowTop = this.engine.geometry.rowTops[rowIndex] ?? 0;
+			const rowHeight = this.engine.geometry.rowHeights[rowIndex] ?? state.defaultRowHeight;
+			const dataViewportHeight = Math.max(0, this.engine.viewport.viewportHeight - RenderEngine.HEADER_HEIGHT);
+			const visibleTop = nextScrollTop + pinnedTopHeight;
+			const visibleBottom = nextScrollTop + dataViewportHeight - pinnedBottomHeight;
+
+			if (rowTop < visibleTop) {
+				nextScrollTop = rowTop - pinnedTopHeight;
+			} else if (rowTop + rowHeight > visibleBottom) {
+				nextScrollTop = rowTop + rowHeight - dataViewportHeight + pinnedBottomHeight;
+			}
+		}
+
+		let nextScrollLeft = this.engine.viewport.scrollLeft;
+		if (colIndex >= pinLeftColumns && colIndex < colCount - pinRightColumns) {
+			let pinnedLeftWidth = 0;
+			for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
+				pinnedLeftWidth += this.engine.geometry.colWidths[i] ?? state.defaultColWidth;
+			}
+
+			let pinnedRightWidth = 0;
+			for (let i = 0; i < pinRightColumns && i < colCount; i++) {
+				const pinnedColIndex = colCount - 1 - i;
+				pinnedRightWidth += this.engine.geometry.colWidths[pinnedColIndex] ?? state.defaultColWidth;
+			}
+
+			const colLeft = this.engine.geometry.colLefts[colIndex] ?? 0;
+			const colWidth = this.engine.geometry.colWidths[colIndex] ?? state.defaultColWidth;
+			const visibleLeft = nextScrollLeft + pinnedLeftWidth;
+			const visibleRight = nextScrollLeft + this.engine.viewport.viewportWidth - pinnedRightWidth;
+
+			if (colLeft < visibleLeft) {
+				nextScrollLeft = colLeft - pinnedLeftWidth;
+			} else if (colLeft + colWidth > visibleRight) {
+				nextScrollLeft = colLeft + colWidth - this.engine.viewport.viewportWidth + pinnedRightWidth;
+			}
+		}
+
+		const maxScrollTop = Math.max(
+			0,
+			this.engine.geometry.getTotalHeight(state.defaultRowHeight) + RenderEngine.HEADER_HEIGHT - this.engine.viewport.viewportHeight
+		);
+		const maxScrollLeft = Math.max(0, this.engine.geometry.getTotalWidth(state.defaultColWidth) - this.engine.viewport.viewportWidth);
+		nextScrollTop = Math.max(0, Math.min(maxScrollTop, nextScrollTop));
+		nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, nextScrollLeft));
+
+		if (nextScrollTop === this.engine.viewport.scrollTop && nextScrollLeft === this.engine.viewport.scrollLeft) return;
+
+		this.scrollEngine.scrollTo(nextScrollTop, nextScrollLeft);
+		this.engine.viewport.setScrollPosition(nextScrollTop, nextScrollLeft);
+		this.engine.viewport.resetVelocity();
+		this.pendingScrollPaint = true;
+		this.scheduleRenderFlush();
 	}
 
 	/**
@@ -446,7 +661,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.lastPaintedColEnd = newColRange.endIdx;
 
 		// Phase 1: Park scrolled-out rows off-screen (zero DOM detach)
-		for (const [rowIndex, pooledRow] of this.activeRows.entries()) {
+		const activeRowEntries = Array.from(this.activeRows.entries());
+		for (const [rowIndex, pooledRow] of activeRowEntries) {
 			const isPinnedTop = rowIndex < pinTopRows && rowIndex < rowCount;
 			const isPinnedBottom = rowIndex >= rowCount - pinBottomRows && rowIndex < rowCount;
 			const isScrollable = rowIndex >= startRow && rowIndex <= endRow;
@@ -466,6 +682,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				visualRow = {
 					kind: 'data',
 					id: node.id,
+					rowId: node.id,
 					node,
 					depth: 0,
 				};
@@ -511,9 +728,17 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				for (const [, cell] of pooledRow.cells.entries()) {
 					if (cell.dataset.cellKey) {
 						if (this.onUnmountCellContent) {
-							this.onUnmountCellContent({ cellKey: cell.dataset.cellKey, container: this.getCellPortalHost(cell) ?? cell, flushSync: true });
+							this.onUnmountCellContent({
+								cellKey: cell.dataset.cellKey,
+								container: this.getCellPortalHost(cell) ?? cell,
+								flushSync: true,
+							});
 						}
 						delete cell.dataset.cellKey;
+					}
+					cell.className = 'og-cell';
+					if (cell.hasAttribute('tabindex')) {
+						cell.removeAttribute('tabindex');
 					}
 				}
 				this.boundRowIdToIndex.delete(pooledRow.boundRowId);
@@ -522,7 +747,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			} else {
 				// Same row, same data — skip if non-pinned and column range unchanged
 				const isPinnedRow = r < pinTopRows || r >= rowCount - pinBottomRows;
-				if (!forceAll && !isPinnedRow && !colRangeChanged) {
+				if (!forceAll && !isPinnedRow && !colRangeChanged && !this.rowsWithFastScrollFallback.has(visualRow.id)) {
 					return;
 				}
 			}
@@ -596,6 +821,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			// Recycle individual cells inside this row
 			this.recycleRowCells(pooledRow, node, r, newColRange.startIdx, newColRange.endIdx, columns);
+			if (!this.engine.viewport.isScrollingFast) {
+				this.rowsWithFastScrollFallback.delete(node.id);
+			}
 		};
 
 		// 1. Render pinned top rows
@@ -905,6 +1133,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously or scrolling extremely fast)
 			const isFastScrolling = this.engine.viewport.isScrollingFast;
+			if ((col.cellRenderer || access.isEditing) && !access.isLoading && isFastScrolling) {
+				this.rowsWithFastScrollFallback.add(node.id);
+			}
 			if ((col.cellRenderer || access.isEditing) && !access.isLoading && !isFastScrolling) {
 				const previousPortalHost = this.getCellPortalHost(cell);
 				if (cell.dataset.cellKey !== cellKey) {
@@ -1050,6 +1281,17 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					// Safe unmount boundary catch
 				}
 			}
+
+			// Clean cell state before returning to pool
+			cell.className = 'og-cell';
+			if (cell.hasAttribute('tabindex')) {
+				cell.removeAttribute('tabindex');
+			}
+			cell.textContent = '';
+			delete cell.dataset.colField;
+			delete cell.dataset.rowIndex;
+			delete cell.dataset.cellKey;
+
 			this.cellPool.release(cell);
 			pooledRow.cells.delete(colIdx);
 		}
@@ -1066,8 +1308,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			delete pooledRow.element.dataset.rowKey;
 		}
 
-		// Release all cell DOMs inside row
-		for (const c of pooledRow.cells.keys()) {
+		// Release all cell DOMs inside row safely by copying keys
+		const keys = Array.from(pooledRow.cells.keys());
+		for (const c of keys) {
 			this.releaseCell(pooledRow, c);
 		}
 		pooledRow.cells.clear();
@@ -1099,7 +1342,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Empties all active visible rows back into recycling.
 	 */
 	private clearActiveRows(): void {
-		for (const [rowIndex, pooledRow] of this.activeRows.entries()) {
+		const rowEntries = Array.from(this.activeRows.entries());
+		for (const [rowIndex, pooledRow] of rowEntries) {
 			this.releaseRow(rowIndex, pooledRow);
 		}
 		this.activeRows.clear();

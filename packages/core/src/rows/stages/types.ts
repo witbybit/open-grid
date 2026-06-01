@@ -6,6 +6,9 @@ export type RowTreeNode<TData = unknown> =
 			rowId: string;
 			node: RowNode<TData>;
 			depth: number;
+			children?: RowTreeNode<TData>[];
+			childCount?: number;
+			aggregateValues?: Record<string, unknown>;
 	  }
 	| {
 			kind: 'group';

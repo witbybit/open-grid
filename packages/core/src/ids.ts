@@ -52,3 +52,23 @@ export function getFieldRoot(field: string): string {
 	const dotIndex = field.indexOf('.');
 	return dotIndex === -1 ? field : field.slice(0, dotIndex);
 }
+
+export function formatVisualGroupId(field: string, key: string, parentGroupId?: string): string {
+	return parentGroupId ? `${parentGroupId}|${field}:${key}` : `group:${field}:${key}`;
+}
+
+export function formatVisualDetailId(rowId: string): `detail:${string}` {
+	return `detail:${rowId}`;
+}
+
+export function formatVisualLoadingId(index: number | string): `loading:${string}` {
+	return `loading:${index}`;
+}
+
+export function formatRawLoadingRowId(index: number | string): string {
+	return `__loading_${index}`;
+}
+
+export function isRawLoadingRowId(rowId: string): boolean {
+	return rowId.startsWith('__loading_');
+}

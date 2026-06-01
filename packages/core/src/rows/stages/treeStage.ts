@@ -1,12 +1,58 @@
 import { RowNode } from '../../store.js';
 import type { RowTreeNode } from './types.js';
 
+/**
+ * Preserves tree hierarchy by including all ancestor nodes of matching nodes under active filters.
+ */
+export function preserveTreeHierarchy<TData>(
+	filteredNodes: RowNode<TData>[],
+	allNodes: RowNode<TData>[],
+	getParentId: (data: TData) => string | null | undefined
+): RowNode<TData>[] {
+	const allNodesMap = new Map<string, RowNode<TData>>();
+	for (const node of allNodes) {
+		allNodesMap.set(node.id, node);
+	}
+
+	const includedSet = new Set<string>();
+	const result: RowNode<TData>[] = [];
+
+	// Traverse from matched nodes up to roots to add all ancestors
+	for (const node of filteredNodes) {
+		if (!includedSet.has(node.id)) {
+			includedSet.add(node.id);
+			result.push(node);
+		}
+
+		let curr = node;
+		while (curr) {
+			const pId = curr.data ? getParentId(curr.data) : null;
+			if (pId != null && pId !== '') {
+				const parentNode = allNodesMap.get(String(pId));
+				if (parentNode) {
+					if (!includedSet.has(parentNode.id)) {
+						includedSet.add(parentNode.id);
+						result.push(parentNode);
+					}
+					curr = parentNode;
+				} else {
+					break;
+				}
+			} else {
+				break;
+			}
+		}
+	}
+
+	return result;
+}
+
 export function treeStage<TData>(nodes: RowNode<TData>[], getParentId: (data: TData) => string | null | undefined): RowTreeNode<TData>[] {
 	const nodeMap = new Map<string, RowTreeNode<TData>>();
 	const parentRelations = new Map<string, string[]>(); // parentId -> childIds
 	const roots: string[] = [];
 
-	// Build raw leaf nodes and analyze hierarchy
+	// 1. Build initial flat leaf representation
 	for (const node of nodes) {
 		const leaf: RowTreeNode<TData> = {
 			kind: 'leaf',
@@ -28,18 +74,17 @@ export function treeStage<TData>(nodes: RowNode<TData>[], getParentId: (data: TD
 		}
 	}
 
-	// We might have nodes whose parent ID is not in our nodes list.
-	// They should also be treated as roots!
+	// 2. Treat children whose parent is missing from input list as roots
 	for (const [parentId, childIds] of parentRelations.entries()) {
 		if (!nodeMap.has(parentId)) {
 			roots.push(...childIds);
 		}
 	}
 
-	// Remove duplicates from roots
+	// Deduplicate roots
 	const uniqueRoots = Array.from(new Set(roots));
 
-	// Helper to build hierarchy recursively from root down
+	// 3. Build tree hierarchy recursively under the leaf nodes
 	const buildSubtree = (nodeId: string, depth: number): RowTreeNode<TData> => {
 		const current = nodeMap.get(nodeId)!;
 		const childIds = parentRelations.get(nodeId);
@@ -49,23 +94,18 @@ export function treeStage<TData>(nodes: RowNode<TData>[], getParentId: (data: TD
 			return current;
 		}
 
-		// If it has children, it becomes a "group" node in the tree structure
+		// Parents remain leaf nodes but have child tree nodes recursively attached
 		const childTreeNodes = childIds.map((cId) => buildSubtree(cId, depth + 1));
 
 		const leafCount = childTreeNodes.reduce((acc, child) => {
-			return acc + (child.kind === 'leaf' ? 1 : child.childCount);
+			return acc + (child.kind === 'leaf' ? 1 + (child.childCount ?? 0) : child.childCount);
 		}, 0);
 
-		return {
-			kind: 'group',
-			id: `tree:${nodeId}`,
-			field: 'tree',
-			key: nodeId,
-			depth,
-			children: childTreeNodes,
-			childCount: leafCount,
-			aggregateValues: {},
-		};
+		current.depth = depth;
+		current.children = childTreeNodes;
+		current.childCount = leafCount;
+		current.aggregateValues = {};
+		return current;
 	};
 
 	return uniqueRoots.map((rootId) => buildSubtree(rootId, 0));

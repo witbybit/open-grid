@@ -2,7 +2,7 @@ import { RowNode, type ColumnDef, type VisualRow } from '../store.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { applyClientSortAndFilter } from '../rowModel.js';
 import { groupStage } from './stages/groupStage.js';
-import { treeStage } from './stages/treeStage.js';
+import { treeStage, preserveTreeHierarchy } from './stages/treeStage.js';
 import { sortTreeStage } from './stages/sortTreeStage.js';
 import { aggregateStage, type AggregationDef } from './stages/aggregateStage.js';
 import { flattenStage } from './stages/flattenStage.js';
@@ -63,9 +63,10 @@ export class RowPipeline<TData = unknown> {
 		let roots: RowTreeNode<TData>[];
 
 		if (groupBy && groupBy.length > 0) {
-			roots = groupStage(filteredNodes, groupBy);
+			roots = groupStage(filteredNodes, groupBy, columns);
 		} else if (getParentId) {
-			roots = treeStage(filteredNodes, getParentId);
+			const treeNodesInput = preserveTreeHierarchy(filteredNodes, nodes, getParentId);
+			roots = treeStage(treeNodesInput, getParentId);
 		} else {
 			// Flat list of leaf nodes
 			roots = filteredNodes.map((node) => ({

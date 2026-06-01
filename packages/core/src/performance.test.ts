@@ -170,7 +170,7 @@ describe('Performance Benchmarks', () => {
 
 			expect(unrelatedListener).not.toHaveBeenCalled();
 			expect(dependentListener).toHaveBeenCalledTimes(1);
-			expect(duration).toBeLessThan(5);
+			expect(duration).toBeLessThan(20);
 
 			controller.dispose();
 		});

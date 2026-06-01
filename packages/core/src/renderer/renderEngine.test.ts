@@ -265,6 +265,352 @@ describe('RenderEngine', () => {
 
 		renderer.unmount();
 		controller.dispose();
+	});
+
+	it('queues cell paint invalidations on selection and activeEdit changes', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: 'row-1', name: 'Row 1' },
+				{ id: 'row-2', name: 'Row 2' },
+			],
+			columns: store.getState().columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const queueCellPaintSpy = vi.spyOn(renderer as any, 'queueCellPaint');
+
+		store.selectCell({ rowId: 'row-1', colField: 'name' });
+		store.flushCellUpdatesSync();
+		await Promise.resolve();
+
+		expect(queueCellPaintSpy).toHaveBeenCalledWith('row-1', 'name');
+
+		queueCellPaintSpy.mockClear();
+
+		store.setState({ activeEdit: { rowId: 'row-1', colField: 'name' } });
+		store.flushCellUpdatesSync();
+		await Promise.resolve();
+
+		expect(queueCellPaintSpy).toHaveBeenCalledWith('row-1', 'name');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('repaints fast-scroll native fallbacks once scrolling velocity settles', () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'status', header: 'Status', width: 120, cellRenderer: () => {} }];
+		const store = new GridStore<{ id: string; status: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, status: `Status-${i}` })),
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.onMountCellContent = ({ container: portalHost, value }) => {
+			if (!portalHost.querySelector('[data-rendered-status]')) {
+				const rendered = document.createElement('span');
+				rendered.dataset.renderedStatus = String(value);
+				rendered.textContent = `Rendered ${String(value)}`;
+				portalHost.appendChild(rendered);
+			}
+		};
+		renderer.mount(container);
+
+		const recycleViewport = (renderer as unknown as { recycleViewport(forceAll?: boolean): void }).recycleViewport.bind(renderer);
+		store.engine.viewport.setScrollPosition(1, 0, 1);
+		store.engine.viewport.setScrollPosition(1200, 0, 2);
+		recycleViewport(false);
+
+		const fallbackCell = container.querySelector('.og-cell[data-col-field="status"]') as HTMLDivElement;
+		expect(fallbackCell.querySelector('[data-rendered-status]')).toBeNull();
+		expect(fallbackCell.textContent).toContain('Status');
+
+		store.engine.viewport.resetVelocity();
+		recycleViewport(false);
+
+		expect(container.querySelector('[data-rendered-status]')).not.toBeNull();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('focuses the overscanned target cell during keyboard navigation so native browser scroll can reveal more rows', () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'name', header: 'Name', width: 120 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 40 }, (_, index) => ({
+				id: `row-${index}`,
+				name: `Row ${index}`,
+			})),
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const targetRowId = 'row-8';
+		const targetCellField = 'name';
+
+		document.body.focus();
+		store.selectCell({ rowId: targetRowId, colField: targetCellField }, 'keyboard');
+
+		const focusedCellElement = container.querySelector(`.og-row[data-row-id="${targetRowId}"] .og-cell[data-col-field="${targetCellField}"]`) as HTMLElement;
+
+		console.log('focusedCellElement:', focusedCellElement);
+		console.log('focusedCellElement outerHTML:', focusedCellElement.outerHTML);
+		console.log('document.activeElement:', document.activeElement);
+
+		expect(focusedCellElement).not.toBeNull();
+		expect(focusedCellElement.classList.contains('og-cell-focused')).toBe(true);
+		expect(store.engine.viewport.scrollTop).toBe(180);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps keyboard-focused cells out from under pinned columns during horizontal navigation', () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [
+			{ field: 'col-0', header: 'Col 0', width: 100 },
+			{ field: 'col-1', header: 'Col 1', width: 100 },
+			{ field: 'col-2', header: 'Col 2', width: 100 },
+			{ field: 'col-3', header: 'Col 3', width: 100 },
+			{ field: 'col-4', header: 'Col 4', width: 100 },
+		];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-1', name: 'Row 1' }],
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 300,
+			bottom: 220,
+			width: 300,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		store.engine.viewport.pinLeftColumns = 1;
+		store.engine.viewport.pinRightColumns = 1;
+		store.engine.viewport.setScrollPosition(0, 0);
+
+		store.selectCell({ rowId: 'row-1', colField: 'col-2' }, 'keyboard');
+
+		expect(store.engine.viewport.scrollLeft).toBe(100);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps dirty-cell routing aligned and focuses the correctly rebound element after flat row model updates', () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'name', header: 'Name', width: 120 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const initialRows = [
+			{ id: 'row-1', name: 'Row 1' },
+			{ id: 'row-2', name: 'Row 2' },
+			{ id: 'row-3', name: 'Row 3' },
+			{ id: 'row-4', name: 'Row 4' },
+		];
+		const controller = new ClientRowModelController(store, {
+			rows: initialRows,
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 300,
+			bottom: 160,
+			width: 300,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		controller.setRows([initialRows[0], initialRows[1], initialRows[3], initialRows[2], ...initialRows.slice(4)]);
+		renderer.fullPaint();
+
+		const reboundCell = container.querySelector('.og-row[data-row-id="row-3"] .og-cell[data-col-field="name"]') as HTMLDivElement;
+		const focusSpy = vi.spyOn(reboundCell, 'focus');
+
+		store.selectCell({ rowId: 'row-3', colField: 'name' }, 'keyboard');
+		renderer.fullPaint();
+
+		expect(focusSpy).toHaveBeenCalled();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('cleans cell focus classes and prevents visual highlights leak during row rebinding', () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'name', header: 'Name', width: 120 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const initialRows = [
+			{ id: 'row-1', name: 'Row 1' },
+			{ id: 'row-2', name: 'Row 2' },
+		];
+		const controller = new ClientRowModelController(store, {
+			rows: initialRows,
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 300,
+			bottom: 160,
+			width: 300,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		// Select row 2 cell to give it focus classes
+		store.selectCell({ rowId: 'row-2', colField: 'name' }, 'keyboard');
+		renderer.fullPaint();
+
+		const cell2 = container.querySelector('.og-row[data-row-id="row-2"] .og-cell[data-col-field="name"]') as HTMLDivElement;
+		expect(cell2.classList.contains('og-cell-focused')).toBe(true);
+
+		// Rebind row 2's index to row-3 (which is not focused)
+		controller.setRows([
+			{ id: 'row-1', name: 'Row 1' },
+			{ id: 'row-3', name: 'Row 3' },
+		]);
+		renderer.fullPaint();
+
+		// The cell element at row-3 (which reuse row 2's pooled DOM row) should not have focused classes
+		const cell3 = container.querySelector('.og-row[data-row-id="row-3"] .og-cell[data-col-field="name"]') as HTMLDivElement;
+		expect(cell3.classList.contains('og-cell-focused')).toBe(false);
+
+		renderer.unmount();
+		controller.dispose();
 		store.destroy();
 	});
 });
+

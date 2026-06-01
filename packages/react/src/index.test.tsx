@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, act, within, waitFor, cleanup } from '@testing-library/react';
+
+afterEach(() => {
+	cleanup();
+});
 import { createClientGrid, type ClientGridOptions } from '@open-grid/core';
 import {
 	GridProvider,
@@ -646,6 +650,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			grid.api.setCellValue('1', 'name', 'Product Updated');
 		});
 
+		await act(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		});
+
 		await waitFor(() => {
 			expect(screen.getByTestId('custom-renderer-programmatic').textContent).toBe('Product Updated');
 		});
@@ -714,5 +722,72 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		document.body.removeChild(containerGroup);
 		document.body.removeChild(containerDetail);
 		grid.api.destroy();
+	});
+
+	it('should isolate keydown and pointer events in nested grids', async () => {
+		const parentGrid = createTestGrid<{ id: string; name: string }>({
+			rows: [{ id: 'parent-row', name: 'Parent Row' }],
+			columns: [{ field: 'name', header: 'Parent Name', width: 100 }],
+			initialState: {
+				masterDetailEnabled: true,
+				detailRowHeight: 200,
+			},
+		});
+		const childGrid = createTestGrid<{ id: string; val: string }>({
+			rows: [
+				{ id: 'child-row-1', val: 'Child Val 1' },
+				{ id: 'child-row-2', val: 'Child Val 2' },
+			],
+			columns: [{ field: 'val', header: 'Child Value', width: 100 }],
+		});
+
+		const detailRenderer = () => (
+			<div data-testid='nested-container'>
+				<OpenGrid api={childGrid.api} enableNavigation={true} />
+			</div>
+		);
+
+		const { container, unmount } = render(
+			<div>
+				<OpenGrid api={parentGrid.api} enableNavigation={true} detailRowRenderer={detailRenderer} />
+			</div>
+		);
+
+		// Force expand detail row
+		act(() => {
+			parentGrid.api.toggleDetailExpanded('parent-row');
+		});
+
+		// Verify child grid rendered
+		await screen.findByText('Child Val 1');
+
+		const childCell = screen.getByText('Child Val 1').closest('.og-cell') as HTMLElement;
+		expect(childCell).not.toBeNull();
+
+		// Mousedown on child cell
+		fireEvent.mouseDown(childCell);
+		fireEvent.click(childCell);
+
+		// The child grid should focus/select the cell
+		expect(childGrid.api.getState().selection.focus?.rowId).toBe('child-row-1');
+
+		// The parent grid selection should remain untouched/null
+		expect(parentGrid.api.getState().selection.focus).toBeNull();
+
+		// Set focus to the child cell element
+		childCell.focus();
+
+		// Send ArrowDown keydown event to window
+		fireEvent.keyDown(window, { key: 'ArrowDown', code: 'ArrowDown' });
+
+		// Child grid should navigate focus to child-row-2
+		expect(childGrid.api.getState().selection.focus?.rowId).toBe('child-row-2');
+
+		// Parent grid should NOT navigate (focus remains null)
+		expect(parentGrid.api.getState().selection.focus).toBeNull();
+
+		unmount();
+		parentGrid.api.destroy();
+		childGrid.api.destroy();
 	});
 });

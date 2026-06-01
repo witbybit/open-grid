@@ -42,7 +42,7 @@ function sortTreeRecursively<TData>(
 	sortModel: SortModel,
 	precompiledSortGetters: ((node: RowNode<TData>) => unknown)[]
 ): void {
-	if (node.kind === 'leaf') return;
+	if (!node.children || node.children.length === 0) return;
 
 	sortChildren(node.children, sortModel, precompiledSortGetters);
 

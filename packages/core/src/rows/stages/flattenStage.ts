@@ -1,5 +1,6 @@
 import type { VisualRow } from '../../store.js';
 import type { RowTreeNode } from './types.js';
+import { formatVisualDetailId } from '../../ids.js';
 
 export interface FlattenConfig {
 	expandedGroupIds: Set<string>;
@@ -28,26 +29,41 @@ function flattenNodeRecursively<TData>(node: RowTreeNode<TData>, config: Flatten
 		const explicitHeight = config.rowHeightsRecord[rowId];
 		const height = explicitHeight !== undefined ? explicitHeight : config.defaultRowHeight;
 
+		const hasChildren = !!node.children && node.children.length > 0;
+		const isExpanded = hasChildren && config.expandedGroupIds.has(rowId);
+
 		result.push({
 			kind: 'data',
 			id: rowId,
+			rowId,
 			node: node.node,
 			depth: node.depth,
 			height,
+			hasChildren,
+			expanded: isExpanded,
+			childCount: node.childCount,
 		});
 
 		// If master detail is enabled and this data row's detail view is expanded, inject detail row!
 		if (config.masterDetailEnabled && config.expandedDetailRowIds.has(rowId)) {
-			const detailId = `detail:${rowId}`;
+			const detailId = formatVisualDetailId(rowId);
 			const dHeight = config.detailRowHeight || 200; // default detail height
 			result.push({
 				kind: 'detail',
 				id: detailId,
 				parentId: rowId,
+				rowId,
 				depth: node.depth + 1,
 				height: dHeight,
 				render: config.detailRenderer,
 			});
+		}
+
+		// Recursively flatten tree data children if expanded
+		if (hasChildren && isExpanded && node.children) {
+			for (const child of node.children) {
+				flattenNodeRecursively(child, config, result);
+			}
 		}
 		return;
 	}

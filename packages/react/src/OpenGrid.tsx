@@ -133,27 +133,6 @@ function OpenGridInner<TRowData = unknown>({
 				}
 			}
 
-			// Workaround for React Portal unmount race conditions:
-			// The core engine recycles virtualized container elements synchronously (via textContent = '') to optimize performance.
-			// However, React DOM cleans up portal fiber structures asynchronously on unmount, which eventually invokes
-			// `container.removeChild(child)`. If the virtualization layer has already synchronously cleared the container,
-			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
-			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
-			// rather than allowing it to crash the React tree.
-			interface PatchedHTMLElement extends HTMLElement {
-				__patchedRemoveChild?: boolean;
-			}
-			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
-				(container as PatchedHTMLElement).__patchedRemoveChild = true;
-				const originalRemove = container.removeChild;
-				container.removeChild = function <T extends Node>(child: T): T {
-					if (child.parentNode === container) {
-						return originalRemove.call(this, child) as T;
-					}
-					return child;
-				};
-			}
-
 			portalsRef.current.set(portalId, {
 				cellKey,
 				container,
@@ -194,27 +173,6 @@ function OpenGridInner<TRowData = unknown>({
 				return;
 			}
 
-			// Workaround for React Portal unmount race conditions:
-			// The core engine recycles virtualized container elements synchronously (via textContent = '') to optimize performance.
-			// However, React DOM cleans up portal fiber structures asynchronously on unmount, which eventually invokes
-			// `container.removeChild(child)`. If the virtualization layer has already synchronously cleared the container,
-			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
-			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
-			// rather than allowing it to crash the React tree.
-			interface PatchedHTMLElement extends HTMLElement {
-				__patchedRemoveChild?: boolean;
-			}
-			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
-				(container as PatchedHTMLElement).__patchedRemoveChild = true;
-				const originalRemove = container.removeChild;
-				container.removeChild = function <T extends Node>(child: T): T {
-					if (child.parentNode === container) {
-						return originalRemove.call(this, child) as T;
-					}
-					return child;
-				};
-			}
-
 			rowPortalsRef.current.set(rowKey, {
 				rowKey,
 				container,
@@ -240,20 +198,6 @@ function OpenGridInner<TRowData = unknown>({
 			const existing = menuPortalsRef.current.get(colField);
 			if (existing && existing.container === container && existing.column === column) {
 				return;
-			}
-
-			interface PatchedHTMLElement extends HTMLElement {
-				__patchedRemoveChild?: boolean;
-			}
-			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
-				(container as PatchedHTMLElement).__patchedRemoveChild = true;
-				const originalRemove = container.removeChild;
-				container.removeChild = function <T extends Node>(child: T): T {
-					if (child.parentNode === container) {
-						return originalRemove.call(this, child) as T;
-					}
-					return child;
-				};
 			}
 
 			menuPortalsRef.current.set(colField, {
@@ -383,14 +327,21 @@ function OpenGridInner<TRowData = unknown>({
 		const handleGlobalKeyDown = (e: KeyboardEvent) => {
 			const activeEl = document.activeElement;
 			const container = containerRef.current;
-			const isInside = !!container && (container.contains(activeEl) || isGridActiveRef.current);
+			if (!container) return;
+
+			const closestContainer = activeEl ? activeEl.closest('.og-grid-container') : null;
+			const isInside = closestContainer ? closestContainer === container : isGridActiveRef.current;
+
 			if (isInside && navigation) {
 				navigation.handleKeyDown(e);
 			}
 		};
 		const handlePointerDown = (e: MouseEvent) => {
 			const container = containerRef.current;
-			isGridActiveRef.current = !!container && container.contains(e.target as Node);
+			if (!container) return;
+			const targetEl = e.target as HTMLElement | null;
+			const closestContainer = targetEl ? targetEl.closest('.og-grid-container') : null;
+			isGridActiveRef.current = closestContainer === container;
 		};
 		window.addEventListener('keydown', handleGlobalKeyDown);
 		if (navigation) window.addEventListener('mouseup', navigation.handleMouseUp);
@@ -405,6 +356,7 @@ function OpenGridInner<TRowData = unknown>({
 	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
 		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
 		if (!cellEl) return null;
+		if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
 		const colField = cellEl.dataset.colField;
 		const rowEl = cellEl.closest('.og-row') as HTMLElement;
 		const rowId = rowEl?.dataset.rowId;
@@ -537,7 +489,7 @@ function OpenGridInner<TRowData = unknown>({
 	}, [handleMouseDown, handleMouseOver, handleClick, handleDoubleClick, handleContextMenu]);
 
 	return (
-		<div ref={containerRef} tabIndex={-1} style={{ width: '100%', height: '100%', position: 'relative' }}>
+		<div ref={containerRef} className='og-grid-container' tabIndex={-1} style={{ width: '100%', height: '100%', position: 'relative' }}>
 			<PortalManager
 				portals={portalsRef.current}
 				rowPortals={rowPortalsRef.current}

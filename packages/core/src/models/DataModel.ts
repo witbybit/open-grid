@@ -1,5 +1,6 @@
 import { RowNode, compilePathGetter, type ColumnDef } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { isRawLoadingRowId } from '../ids.js';
 
 export class DataModel<TRowData = unknown> {
 	private engine!: GridEngine<TRowData>;
@@ -33,7 +34,7 @@ export class DataModel<TRowData = unknown> {
 	};
 
 	public isRowLoading(rowId: string): boolean {
-		return rowId.startsWith('__loading_');
+		return isRawLoadingRowId(rowId);
 	}
 
 	public updateCompiledGetters(columns: ColumnDef<TRowData>[]): void {

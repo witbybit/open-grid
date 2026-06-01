@@ -10,7 +10,7 @@ export class CellAccessModel<TRowData = unknown> {
 
 	public getByPointer(rowId: string, colField: string, event?: Event): GridCellAccess<TRowData> | null {
 		const rowModel = this.engine.getRowModel();
-		const rowIndex = rowModel ? rowModel.getRowIndexById(rowId) : -1;
+		const rowIndex = rowModel ? rowModel.getVisualRowIndexById(rowId) : -1;
 		const colIndex = this.engine.columns.getColumnIndex(colField);
 		const column = this.engine.columns.getColumnDef(colField);
 
@@ -35,8 +35,8 @@ export class CellAccessModel<TRowData = unknown> {
 		const state = this.engine.stateManager.getState();
 		const focusedCell = state.selection.focus;
 		const selectedBounds = state.selection.bounds;
-		const isFocused = focusedCell?.rowId === rowId && focusedCell?.colField === column.field;
-		const isRowFocused = focusedCell?.rowId === rowId;
+		const isFocused = !!focusedCell && focusedCell.rowId === rowId && focusedCell.colField === column.field;
+		const isRowFocused = !!focusedCell && focusedCell.rowId === rowId;
 		const isSelected =
 			!!selectedBounds &&
 			rowIndex >= selectedBounds.minRow &&
@@ -44,7 +44,7 @@ export class CellAccessModel<TRowData = unknown> {
 			colIndex >= selectedBounds.minCol &&
 			colIndex <= selectedBounds.maxCol;
 		const isRowSelected = this.engine.selection.isRowSelected(rowIndex);
-		const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === column.field;
+		const isEditing = !!state.activeEdit && state.activeEdit.rowId === rowId && state.activeEdit.colField === column.field;
 		const isLoading = this.engine.data.isRowLoading(rowId) || !!column.loading;
 
 		return {

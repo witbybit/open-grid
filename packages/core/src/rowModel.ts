@@ -211,41 +211,32 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	private unsubscribers: Array<() => void> = [];
 
 	private pipeline = new RowPipeline<TData>();
-	private expandedGroupIds = new Set<string>();
-	private expandedDetailRowIds = new Set<string>();
 
 	public toggleGroupExpanded = (groupId: string): void => {
-		if (this.expandedGroupIds.has(groupId)) {
-			this.expandedGroupIds.delete(groupId);
-		} else {
-			this.expandedGroupIds.add(groupId);
-		}
-		this.refresh();
+		this.store.toggleGroupExpanded(groupId);
 	};
 
 	public toggleDetailExpanded = (rowId: string): void => {
-		if (this.expandedDetailRowIds.has(rowId)) {
-			this.expandedDetailRowIds.delete(rowId);
-		} else {
-			this.expandedDetailRowIds.add(rowId);
-		}
-		this.refresh();
+		this.store.toggleDetailExpanded(rowId);
 	};
 
 	public isGroupExpanded = (groupId: string): boolean => {
-		return this.expandedGroupIds.has(groupId);
+		return this.store.isGroupExpanded(groupId);
 	};
 
 	public isDetailExpanded = (rowId: string): boolean => {
-		return this.expandedDetailRowIds.has(rowId);
+		return this.store.isDetailExpanded(rowId);
 	};
 
 	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
 		this.store = store;
 
 		// Set base columns and config in store
+		const initialStoreState = this.store.getState();
 		this.store.setState({
 			columns: options.columns,
+			expandedGroupIds: initialStoreState.expandedGroupIds ?? new Set<string>(),
+			expandedDetailRowIds: initialStoreState.expandedDetailRowIds ?? new Set<string>(),
 		});
 
 		this.store.registerRowModel(this);
@@ -438,6 +429,10 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return idx !== undefined ? idx : -1;
 	};
 
+	public getRowIndexById = (rowId: string): number => {
+		return this.getVisualRowIndexById(rowId);
+	};
+
 	public getRow = (index: number): TData | null => {
 		const row = this.getVisualRow(index);
 		return row?.kind === 'data' ? row.node.data : null;
@@ -450,10 +445,6 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	public getRowCount = (): number => {
 		return this.getVisualRowCount();
-	};
-
-	public getRowIndexById = (rowId: string): number => {
-		return this.getVisualRowIndexById(rowId);
 	};
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
@@ -507,6 +498,32 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	public refresh(): void {
 		const state = this.store.getState();
 
+		// Safely extract Set from expandedGroupIds
+		let expandedGroupSet = new Set<string>();
+		if (state.expandedGroupIds) {
+			if (state.expandedGroupIds instanceof Set) {
+				expandedGroupSet = state.expandedGroupIds;
+			} else {
+				const record = state.expandedGroupIds as Record<string, boolean>;
+				Object.keys(record).forEach((k) => {
+					if (record[k]) expandedGroupSet.add(k);
+				});
+			}
+		}
+
+		// Safely extract Set from expandedDetailRowIds
+		let expandedDetailSet = new Set<string>();
+		if (state.expandedDetailRowIds) {
+			if (state.expandedDetailRowIds instanceof Set) {
+				expandedDetailSet = state.expandedDetailRowIds;
+			} else {
+				const record = state.expandedDetailRowIds as Record<string, boolean>;
+				Object.keys(record).forEach((k) => {
+					if (record[k]) expandedDetailSet.add(k);
+				});
+			}
+		}
+
 		const { visualRows, visualRowIdMap } = this.pipeline.run({
 			nodes: this.allNodes,
 			columns: state.columns,
@@ -514,8 +531,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			filterModel: state.filterModel,
 			groupBy: state.groupBy,
 			getParentId: state.getParentId,
-			expandedGroupIds: this.expandedGroupIds,
-			expandedDetailRowIds: this.expandedDetailRowIds,
+			expandedGroupIds: expandedGroupSet,
+			expandedDetailRowIds: expandedDetailSet,
 			defaultRowHeight: state.defaultRowHeight,
 			rowHeightsRecord: state.rowHeights,
 			groupRowHeight: state.groupRowHeight,
