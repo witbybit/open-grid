@@ -109,7 +109,8 @@ describe('ServerRowModelController', () => {
 		store.engine.viewport.setScrollPosition(100, 0, performance.now() - 100);
 		store.engine.viewport.setScrollPosition(200, 0, performance.now()); // vy = 1.0 px/ms
 
-		const getRowsSpy = vi.spyOn(mockDatasource, 'getRows');
+		// Clear mock history before loadVisibleBlocks so we only track calls made by loadVisibleBlocks
+		vi.mocked(mockDatasource.getRows).mockClear();
 
 		// Call loadVisibleBlocks with a visible range in block 0
 		controller.loadVisibleBlocks(20, 40);
@@ -118,8 +119,8 @@ describe('ServerRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		// Since we are scrolling down, block 1 (indices 100-199) and block 2 (indices 200-299) should be fetched ahead of time
-		expect(getRowsSpy).toHaveBeenCalledWith(expect.objectContaining({ startRow: 100, endRow: 200 }));
-		expect(getRowsSpy).toHaveBeenCalledWith(expect.objectContaining({ startRow: 200, endRow: 300 }));
+		expect(mockDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 100, endRow: 200 }));
+		expect(mockDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 200, endRow: 300 }));
 	});
 
 	it('should suppress pre-fetching blocks during extremely high scroll velocity', async () => {
@@ -152,7 +153,8 @@ describe('ServerRowModelController', () => {
 		store.engine.viewport.setScrollPosition(100, 0, performance.now() - 50);
 		store.engine.viewport.setScrollPosition(500, 0, performance.now());
 
-		const getRowsSpy = vi.spyOn(mockDatasource, 'getRows');
+		// Clear mock history before loadVisibleBlocks so we only track calls made by loadVisibleBlocks
+		vi.mocked(mockDatasource.getRows).mockClear();
 
 		// Call loadVisibleBlocks with a visible range
 		controller.loadVisibleBlocks(20, 40);
@@ -161,7 +163,7 @@ describe('ServerRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		// Since velocity is extremely high (> 1.5 px/ms), fetches should be suppressed to prevent network storm
-		expect(getRowsSpy).not.toHaveBeenCalled();
+		expect(mockDatasource.getRows).not.toHaveBeenCalled();
 	});
 
 	it('should transition loading state from true to false and respect loadingSkeletonCount', async () => {
