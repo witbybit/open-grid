@@ -643,10 +643,10 @@ export class GridEngine<TRowData = unknown> {
 					currState.selection.bounds,
 					viewport,
 					(rowIdx, colIdx) => {
-						const row = rowModel.getRow(rowIdx);
+						const visualRow = rowModel.getVisualRow(rowIdx);
 						const col = currState.columns[colIdx];
-						if (row && col) {
-							notifyCellOnce(this.data.getRowId(row), col.field);
+						if (visualRow && col) {
+							notifyCellOnce(visualRow.id, col.field);
 						}
 					}
 				);

@@ -1,4 +1,4 @@
-import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter, type VisualRow } from './store.js';
+import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter, type VisualRow, type RowRefreshReason, type RowModelRefreshResult } from './store.js';
 import { createCellKey, getFieldRoot } from './ids.js';
 import { RowPipeline } from './rows/RowPipeline.js';
 
@@ -438,26 +438,20 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return idx !== undefined ? idx : -1;
 	};
 
-	public getRow = (index: number): TData | null => {
-		const row = this.getVisualRow(index);
-		return row?.kind === 'data' ? row.node.data : null;
+	public getVisualIndexById = (visualRowId: string): number => {
+		return this.getVisualRowIndexById(visualRowId);
 	};
 
-	public getRowNode = (index: number): RowNode<TData> | null => {
-		const row = this.getVisualRow(index);
-		return row?.kind === 'data' ? row.node : null;
-	};
-
-	public getRowCount = (): number => {
-		return this.getVisualRowCount();
-	};
-
-	public getRowIndexById = (rowId: string): number => {
+	public getVisualIndexByRowId = (rowId: string): number => {
 		return this.getVisualRowIndexById(rowId);
 	};
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
 		return this.nodeMap.get(rowId) ?? null;
+	};
+
+	public getRawRowById = (rowId: string): TData | null => {
+		return this.nodeMap.get(rowId)?.data ?? null;
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
@@ -504,7 +498,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return true;
 	};
 
-	public refresh(): void {
+	public refresh(reason?: RowRefreshReason): RowModelRefreshResult {
 		const state = this.store.getState();
 
 		const { visualRows, visualRowIdMap } = this.pipeline.run({
@@ -524,11 +518,15 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			detailRenderer: state.detailRenderer,
 		});
 
+		const changed = visualRows.length !== this.visualRows.length || visualRows.some((row, idx) => row !== this.visualRows[idx]);
+
 		this.visualRows = visualRows;
 		this.visualRowIdMap = visualRowIdMap;
 
 		this.store.setState({
 			dataVersion: state.dataVersion + 1,
 		});
+
+		return { changed };
 	}
 }

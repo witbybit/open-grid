@@ -1,4 +1,4 @@
-import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, type VisualRow } from './store.js';
+import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, type VisualRow, type RowRefreshReason, type RowModelRefreshResult } from './store.js';
 
 export interface GetRowsParams {
 	startRow: number;
@@ -70,28 +70,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.unsubscribers = [];
 	}
 
-	public getRow = (rowIndex: number): TData | null => {
-		const row = this.getVisualRow(rowIndex);
-		return row?.kind === 'data' ? row.node.data : null;
-	};
-
-	public getRowNode = (rowIndex: number): RowNode<TData> | null => {
-		const row = this.getVisualRow(rowIndex);
-		const node = row?.kind === 'data' ? row.node : null;
-		if (node) {
-			return node;
-		}
-		// Synthesize a stable loading RowNode to display shimmers for unloaded blocks
-		if (rowIndex >= 0 && rowIndex < this.getRowCount()) {
-			let loadingNode = this.loadingNodeMap.get(rowIndex);
-			if (!loadingNode) {
-				loadingNode = new RowNode<TData>(`__loading_${rowIndex}`, null as TData);
-				this.loadingNodeMap.set(rowIndex, loadingNode);
-			}
-			return loadingNode;
-		}
-		return null;
-	};
 
 	public getVisualRow = (rowIndex: number): VisualRow<TData> | null => {
 		const row = this.visualRows[rowIndex];
@@ -124,7 +102,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		const minRow = Math.max(0, startRow);
-		const maxRow = Math.min(Math.max(0, endRow), Math.max(0, this.getRowCount() - 1));
+		const maxRow = Math.min(Math.max(0, endRow), Math.max(0, this.getVisualRowCount() - 1));
 		if (minRow > maxRow) return;
 
 		const visibleBlocks = new Set<number>();
@@ -137,7 +115,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		// Dynamic predictive pre-fetching based on scrolling velocity
 		const velocity = this.store.engine.viewport.getVelocity();
 		const vy = velocity.vy; // px/ms
-		const totalBlocks = Math.ceil(this.getRowCount() / this.blockSize);
+		const totalBlocks = Math.ceil(this.getVisualRowCount() / this.blockSize);
 
 		if (vy > 0.1) {
 			// Scrolling down: proactively pre-fetch next 1 or 2 blocks
@@ -163,13 +141,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		});
 	};
 
-	public getRowCount = (): number => {
-		return this.getVisualRowCount();
-	};
-
-	public getRowIndexById = (rowId: string): number => {
-		return this.getVisualRowIndexById(rowId);
-	};
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
 		return this.nodeMap.get(rowId) ?? null;
@@ -182,6 +153,18 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	public getVisualRowIndexById = (id: string): number => {
 		const idx = this.visualRowIdMap.get(id);
 		return idx !== undefined ? idx : -1;
+	};
+
+	public getVisualIndexById = (visualRowId: string): number => {
+		return this.getVisualRowIndexById(visualRowId);
+	};
+
+	public getVisualIndexByRowId = (rowId: string): number => {
+		return this.getVisualRowIndexById(rowId);
+	};
+
+	public getRawRowById = (rowId: string): TData | null => {
+		return this.nodeMap.get(rowId)?.data ?? null;
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
@@ -350,4 +333,9 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		});
 		this.fetchBlock(0);
 	};
+
+	public refresh(reason?: RowRefreshReason): RowModelRefreshResult {
+		this.purgeCache();
+		return { changed: true };
+	}
 }

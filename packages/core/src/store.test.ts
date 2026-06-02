@@ -27,7 +27,7 @@ describe('GridStore generic row-store functionality', () => {
 		const state = store.getState();
 		const rowModel = store.getRowModel()!;
 
-		expect(rowModel.getRowCount()).toBe(2);
+		expect(store.getRowCount()).toBe(2);
 		expect(state.columns).toHaveLength(2);
 		expect(state.selection.focus).toBeNull();
 		expect(state.selection.range).toBeNull();
@@ -420,22 +420,22 @@ describe('ClientRowModelController sorting and filtering', () => {
 		const rowModel = store.getRowModel()!;
 
 		// Check initial rows load
-		expect(rowModel.getRowCount()).toBe(3);
+		expect(store.getRowCount()).toBe(3);
 
 		// Apply sort by name Ascending
 		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
-		expect(rowModel.getRow(0)?.name).toBe('Apple');
-		expect(rowModel.getRow(1)?.name).toBe('Banana');
-		expect(rowModel.getRow(2)?.name).toBe('Cherry');
+		expect(store.getRow(0)?.name).toBe('Apple');
+		expect(store.getRow(1)?.name).toBe('Banana');
+		expect(store.getRow(2)?.name).toBe('Cherry');
 
 		// Apply sorting descending
 		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
-		expect(rowModel.getRow(0)?.name).toBe('Cherry');
+		expect(store.getRow(0)?.name).toBe('Cherry');
 
 		// Apply filter by name contains 'an'
 		store.setFilterModel({ name: { type: 'contains', filter: 'an' } });
-		expect(rowModel.getRowCount()).toBe(1);
-		expect(rowModel.getRow(0)?.name).toBe('Banana');
+		expect(store.getRowCount()).toBe(1);
+		expect(store.getRow(0)?.name).toBe('Banana');
 
 		controller.dispose();
 	});
@@ -454,9 +454,8 @@ describe('ClientRowModelController sorting and filtering', () => {
 			columns: store.getState().columns,
 		});
 
-		const rowModel = store.getRowModel()!;
 		const t0 = performance.now();
-		const idx = rowModel.getRowIndexById('999999');
+		const idx = store.getRowIndexById('999999');
 		const t1 = performance.now();
 
 		expect(idx).toBe(999999);
@@ -491,15 +490,15 @@ describe('ServerRowModelController paginated lazily populated row-patching', () 
 		});
 
 		// Access row at index 0, should return null initially and trigger fetching
-		const initial = controller.getRow(0);
+		const initial = store.getRow(0);
 		expect(initial).toBeNull();
 
 		// Wait for mock datasource promise to resolve and state to update
 		await vi.waitFor(() => {
-			return controller.getRow(0) !== null;
+			return store.getRow(0) !== null;
 		});
 
-		const loaded = controller.getRow(0);
+		const loaded = store.getRow(0);
 		expect(loaded?.name).toBe('Server A');
 
 		controller.dispose();
@@ -519,8 +518,7 @@ describe('RowNode path getters and state batching', () => {
 			columns: store.getState().columns,
 		});
 
-		const rowModel = store.getRowModel()!;
-		const node = rowModel.getRowNode!(0)!;
+		const node = store.getRowNode(0)!;
 
 		expect(node).toBeDefined();
 		expect(node.id).toBe('1');
@@ -925,8 +923,31 @@ describe('GridStore undo and redo functionality', () => {
 		while (store.canUndo()) {
 			store.undo();
 		}
-
 		// The width should be 105 because the oldest undoable action was setting it to 106 (which reverted to 105)
 		expect(store.getState().columnWidths['name']).toBe(105);
+	});
+
+	it('should support GridStore facade methods getVisualIndexById, getVisualIndexByRowId, getRowNodeById, and getRawRowById correctly', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getVisualIndexById('1')).toBe(0);
+		expect(store.getVisualIndexById('2')).toBe(1);
+		expect(store.getVisualIndexByRowId('1')).toBe(0);
+		expect(store.getVisualIndexByRowId('2')).toBe(1);
+		expect(store.getRowNodeById('1')?.data.name).toBe('Product A');
+		expect(store.getRawRowById('1')).toEqual({ id: '1', name: 'Product A', price: 10 });
+		expect(store.getRawRowById('non-existent')).toBeNull();
+
+		controller.dispose();
 	});
 });

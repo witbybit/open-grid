@@ -122,33 +122,70 @@ export class RowNode<TRowData = unknown> {
 	}
 }
 
+export interface DataVisualRow<T> {
+	kind: 'data';
+	id: string;
+	rowId?: string;
+	node: RowNode<T>;
+	depth: number;
+	height?: number;
+	selectable?: true;
+	editable?: true;
+}
+
+export interface GroupVisualRow<T> {
+	kind: 'group';
+	id: string;
+	groupId?: string;
+	field: string;
+	key: unknown;
+	depth: number;
+	expanded: boolean;
+	childCount: number;
+	leafCount?: number;
+	aggregate?: Record<string, unknown>;
+	aggregateValues?: Record<string, unknown>;
+	height?: number;
+	selectable?: boolean;
+	editable?: false;
+}
+
+export interface DetailVisualRow<T> {
+	kind: 'detail';
+	id: string;
+	parentId: string;
+	parentRowId?: string;
+	depth: number;
+	height: number;
+	render: unknown;
+	selectable?: false;
+	editable?: false;
+}
+
+export interface FooterVisualRow<T> {
+	kind: 'footer';
+	id: string;
+	parentGroupId: string;
+	depth: number;
+	aggregateValues?: Record<string, unknown>;
+	aggregate?: Record<string, unknown>;
+	height?: number;
+	editable?: false;
+}
+
+export interface LoadingVisualRow {
+	kind: 'loading';
+	id: string;
+	height?: number;
+	editable?: false;
+}
+
 export type VisualRow<TRowData = unknown> =
-	| {
-			kind: 'data';
-			id: string;
-			node: RowNode<TRowData>;
-			depth: number;
-			height?: number;
-	  }
-	| {
-			kind: 'group';
-			id: string;
-			key: string;
-			field: string;
-			depth: number;
-			expanded: boolean;
-			childCount: number;
-			aggregate?: Record<string, unknown>;
-			height?: number;
-	  }
-	| {
-			kind: 'detail';
-			id: string;
-			parentId: string;
-			depth: number;
-			height: number;
-			render: unknown;
-	  };
+	| DataVisualRow<TRowData>
+	| GroupVisualRow<TRowData>
+	| DetailVisualRow<TRowData>
+	| FooterVisualRow<TRowData>
+	| LoadingVisualRow;
 
 export interface ValueGetterParams<TRowData = unknown> {
 	node: RowNode<TRowData>;
@@ -242,22 +279,26 @@ export function compilePathGetter(path: string): (data: unknown) => unknown {
 	return getter;
 }
 
+export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit';
+export interface RowModelRefreshResult {
+	changed: boolean;
+}
+
 export interface RowModel<TRowData = unknown> {
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	getVisualRowCount(): number;
 	getVisualRowIndexById(id: string): number;
+	getVisualIndexById(visualRowId: string): number;
+	getVisualIndexByRowId(rowId: string): number;
 	getRowNodeById(rowId: string): RowNode<TRowData> | null;
-	getRow(index: number): TRowData | null;
-	getRowNode(index: number): RowNode<TRowData> | null;
-	getRowCount(): number;
-	getRowIndexById(rowId: string): number;
+	getRawRowById(rowId: string): TRowData | null;
 	toggleGroupExpanded?(groupId: string): void;
 	toggleDetailExpanded?(rowId: string): void;
 	isGroupExpanded?(groupId: string): boolean;
 	isDetailExpanded?(rowId: string): boolean;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
-	refresh?(): void;
+	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
 	purgeCache?(): void;
 	setDatasource?(datasource: IGridDatasource, blockSize?: number): void;
 	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
@@ -416,6 +457,10 @@ export interface GridApi<TRowData = unknown> {
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	getVisualRowCount(): number;
 	getVisualRowIndexById(id: string): number | null;
+	getVisualIndexById(visualRowId: string): number | null;
+	getVisualIndexByRowId(rowId: string): number | null;
+	getRowNodeById(rowId: string): RowNode<TRowData> | null;
+	getRawRowById(rowId: string): TRowData | null;
 	addEventListener<T = unknown>(type: string, callback: GridEventListener<T>): () => void;
 	dispatchEvent<T = unknown>(type: string, payload: T): void;
 	startEditing(rowId: string, colField: string): void;
@@ -618,6 +663,24 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.getRowModel()?.getVisualRowIndexById(id) ?? null;
 	};
 
+	public getVisualIndexById = (visualRowId: string): number | null => {
+		const idx = this.getRowModel()?.getVisualIndexById(visualRowId);
+		return idx !== undefined && idx >= 0 ? idx : null;
+	};
+
+	public getVisualIndexByRowId = (rowId: string): number | null => {
+		const idx = this.getRowModel()?.getVisualIndexByRowId(rowId);
+		return idx !== undefined && idx >= 0 ? idx : null;
+	};
+
+	public getRowNodeById = (rowId: string): RowNode<TRowData> | null => {
+		return this.getRowModel()?.getRowNodeById(rowId) ?? null;
+	};
+
+	public getRawRowById = (rowId: string): TRowData | null => {
+		return this.getRowModel()?.getRawRowById(rowId) ?? null;
+	};
+
 	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {
 		return this.engine.eventBus.addEventListener(type, callback);
 	};
@@ -643,19 +706,22 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getRowCount = (): number => {
-		return this.getRowModel()?.getRowCount() ?? 0;
+		return this.getVisualRowCount();
 	};
 
 	public getRow = (index: number): TRowData | null => {
-		return this.getRowModel()?.getRow(index) ?? null;
+		const vr = this.getVisualRow(index);
+		return vr?.kind === 'data' ? vr.node.data : null;
 	};
 
 	public getRowNode = (index: number): RowNode<TRowData> | null => {
-		return this.getRowModel()?.getRowNode(index) ?? null;
+		const vr = this.getVisualRow(index);
+		return vr?.kind === 'data' ? vr.node : null;
 	};
 
 	public getRowIndexById = (rowId: string): number | null => {
-		return this.getRowModel()?.getRowIndexById(rowId) ?? null;
+		const idx = this.getVisualRowIndexById(rowId);
+		return idx !== null && idx >= 0 ? idx : null;
 	};
 
 	public setRows = (rows: TRowData[]): void => {
@@ -667,12 +733,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public refreshRows = (): void => {
-		const rowModel = this.getRowModel();
-		if (rowModel?.refresh) {
-			rowModel.refresh();
-		} else {
-			rowModel?.purgeCache?.();
-		}
+		this.getRowModel()?.refresh();
 	};
 
 	public setRowHeights = (rowHeights: Record<string, number> | undefined): void => {

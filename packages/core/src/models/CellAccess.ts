@@ -10,14 +10,15 @@ export class CellAccessModel<TRowData = unknown> {
 
 	public getByPointer(rowId: string, colField: string, event?: Event): GridCellAccess<TRowData> | null {
 		const rowModel = this.engine.getRowModel();
-		const rowIndex = rowModel ? rowModel.getRowIndexById(rowId) : -1;
+		const rowIndex = rowModel ? rowModel.getVisualRowIndexById(rowId) : -1;
 		const colIndex = this.engine.columns.getColumnIndex(colField);
 		const column = this.engine.columns.getColumnDef(colField);
 
 		if (!column) return null;
 
-		const row = rowIndex >= 0 && rowModel ? rowModel.getRow(rowIndex) : null;
-		const node = rowIndex >= 0 && rowModel ? rowModel.getRowNode(rowIndex) : null;
+		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
+		const row = visualRow?.kind === 'data' ? visualRow.node.data : null;
+		const node = visualRow?.kind === 'data' ? visualRow.node : null;
 		return this.get(rowId, rowIndex, node, row, colIndex, column, event);
 	}
 

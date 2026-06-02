@@ -7,6 +7,11 @@ interface TestRow {
 	name: string;
 }
 
+function getRowNode<TData>(controller: ServerRowModelController<TData>, index: number) {
+	const vr = controller.getVisualRow(index);
+	return vr?.kind === 'data' ? vr.node : null;
+}
+
 describe('ServerRowModelController', () => {
 	it('should initialize and fetch initial block', async () => {
 		const store = new GridStore<TestRow>({
@@ -33,17 +38,15 @@ describe('ServerRowModelController', () => {
 		// wait for promise
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		expect(controller.getRowCount()).toBe(100);
 		expect(controller.getVisualRowCount()).toBe(100);
-		expect(controller.getRowIndexById('1')).toBe(0);
 		expect(controller.getVisualRowIndexById('1')).toBe(0);
-		expect(controller.getRowIndexById('2')).toBe(1);
+		expect(controller.getVisualRowIndexById('2')).toBe(1);
 
 		const visualRow1 = controller.getVisualRow(0);
 		expect(visualRow1?.kind).toBe('data');
 		expect(visualRow1?.id).toBe('1');
 
-		const node1 = controller.getRowNode(0);
+		const node1 = getRowNode(controller, 0);
 		expect(node1?.data.name).toBe('Alice');
 	});
 
@@ -72,7 +75,7 @@ describe('ServerRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		// index 80 is not loaded yet (since blockSize is 50, only block 0 has loaded)
-		const node = controller.getRowNode(80);
+		const node = getRowNode(controller, 80);
 		expect(node).not.toBeNull();
 		expect(node?.id).toBe('__loading_80');
 		expect(store.isRowLoading(node!.id)).toBe(true);
@@ -204,7 +207,7 @@ describe('ServerRowModelController', () => {
 
 		// Verify loading state is now false and rows are loaded
 		expect(store.getState().loading).toBe(false);
-		expect(controller.getRowCount()).toBe(100);
+		expect(controller.getVisualRowCount()).toBe(100);
 	});
 
 	it('should not synchronously set state and increment dataVersion when fetching subsequent blocks (blockIndex > 0)', async () => {
@@ -280,8 +283,8 @@ describe('ServerRowModelController', () => {
 		resolveRows({ rows: [{ id: '1', name: 'Late Alice' }], totalCount: 1 });
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		expect(controller.getRowCount()).toBe(0);
-		expect(controller.getRowIndexById('1')).toBe(-1);
+		expect(controller.getVisualRowCount()).toBe(0);
+		expect(controller.getVisualRowIndexById('1')).toBe(-1);
 	});
 
 	it('should switch datasource and block size when server options change', async () => {
@@ -310,13 +313,13 @@ describe('ServerRowModelController', () => {
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(controller.getRowNode(0)?.data.name).toBe('Alice');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice');
 
 		controller.setDatasource(secondDatasource, 25);
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(secondDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 0, endRow: 25 }));
-		expect(controller.getRowIndexById('1')).toBe(-1);
-		expect(controller.getRowNode(0)?.data.name).toBe('Bob');
+		expect(controller.getVisualRowIndexById('1')).toBe(-1);
+		expect(getRowNode(controller, 0)?.data.name).toBe('Bob');
 	});
 });

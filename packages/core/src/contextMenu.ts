@@ -53,7 +53,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		if (state.selection.bounds) {
 			const rowModel = this.store.getRowModel();
 			if (rowModel) {
-				const clickedRowIdx = rowModel.getRowIndexById(rowId);
+				const clickedRowIdx = rowModel.getVisualRowIndexById(rowId);
 				const clickedColIdx = state.columns.findIndex((c) => c.field === colField);
 				const bounds = state.selection.bounds;
 				if (
@@ -266,14 +266,13 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 	private copySelectedRange(params: ContextMenuParams<TRowData>): void {
 		const bounds = params.selection.bounds;
-		const rowModel = this.store.getRowModel();
-		if (!bounds || !rowModel) return;
+		if (!bounds) return;
 
 		const rows: string[] = [];
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const row = rowModel.getRow(r);
+			const row = params.api.getRow(r);
 			if (!row) continue;
-			const rowId = this.store.getRowId(row);
+			const rowId = params.api.getRowId(row);
 			const rowVals: string[] = [];
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 				const col = params.api.getState().columns[c];
@@ -313,8 +312,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 	private async pasteSelectedRange(params: ContextMenuParams<TRowData>): Promise<void> {
 		const bounds = params.selection.bounds;
-		const rowModel = this.store.getRowModel();
-		if (!bounds || !rowModel) return;
+		if (!bounds) return;
 
 		try {
 			const text = await navigator.clipboard.readText();
@@ -325,9 +323,9 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				for (let r = 0; r < lines.length; r++) {
 					const rowIndex = bounds.minRow + r;
 					if (rowIndex > bounds.maxRow) break;
-					const row = rowModel.getRow(rowIndex);
+					const row = params.api.getRow(rowIndex);
 					if (!row) continue;
-					const rowId = this.store.getRowId(row);
+					const rowId = params.api.getRowId(row);
 					const cells = lines[r].split('\t');
 					for (let c = 0; c < cells.length; c++) {
 						const colIndex = bounds.minCol + c;
@@ -345,14 +343,13 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 	private clearSelection(params: ContextMenuParams<TRowData>): void {
 		const bounds = params.selection.bounds;
-		const rowModel = this.store.getRowModel();
-		if (!bounds || !rowModel) return;
+		if (!bounds) return;
 
 		this.store.batch(() => {
 			for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-				const row = rowModel.getRow(r);
+				const row = params.api.getRow(r);
 				if (!row) continue;
-				const rowId = this.store.getRowId(row);
+				const rowId = params.api.getRowId(row);
 				for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 					const col = params.api.getState().columns[c];
 					if (!col) continue;

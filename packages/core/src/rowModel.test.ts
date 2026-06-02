@@ -10,6 +10,11 @@ interface TestRow {
 	};
 }
 
+function getRowNode<TData>(controller: ClientRowModelController<TData>, index: number) {
+	const vr = controller.getVisualRow(index);
+	return vr?.kind === 'data' ? vr.node : null;
+}
+
 describe('ClientRowModelController', () => {
 	it('should initialize and populate visualRows correctly', () => {
 		const store = new GridStore<TestRow>({
@@ -27,17 +32,15 @@ describe('ClientRowModelController', () => {
 			columns: store.getState().columns,
 		});
 
-		expect(controller.getRowCount()).toBe(2);
 		expect(controller.getVisualRowCount()).toBe(2);
-		expect(controller.getRowIndexById('1')).toBe(0);
 		expect(controller.getVisualRowIndexById('1')).toBe(0);
-		expect(controller.getRowIndexById('2')).toBe(1);
+		expect(controller.getVisualRowIndexById('2')).toBe(1);
 
 		const visualRow1 = controller.getVisualRow(0);
 		expect(visualRow1?.kind).toBe('data');
 		expect(visualRow1?.id).toBe('1');
 
-		const node1 = controller.getRowNode(0);
+		const node1 = getRowNode(controller, 0);
 		expect(node1?.data.name).toBe('Alice');
 	});
 
@@ -75,7 +78,7 @@ describe('ClientRowModelController', () => {
 
 		controller.updateRows((rows) => rows.map((row) => (row.id === '2' ? { ...row, user: { name: 'Aaron' } } : row)));
 
-		expect(controller.getRowNode(0)?.id).toBe('2');
+		expect(getRowNode(controller, 0)?.id).toBe('2');
 	});
 
 	it('should automatically refresh sorting and filtering when setCellValue is called', () => {
@@ -95,15 +98,40 @@ describe('ClientRowModelController', () => {
 		});
 
 		// Initial sorted order: Alice (3), Bob (1), Charlie (2)
-		expect(controller.getRowNode(0)?.id).toBe('3'); // Alice
-		expect(controller.getRowNode(1)?.id).toBe('1'); // Bob
-		expect(controller.getRowNode(2)?.id).toBe('2'); // Charlie
+		expect(getRowNode(controller, 0)?.id).toBe('3'); // Alice
+		expect(getRowNode(controller, 1)?.id).toBe('1'); // Bob
+		expect(getRowNode(controller, 2)?.id).toBe('2'); // Charlie
 
 		// Edit Charlie to Aaron. The sort order should automatically update to Aaron (2), Alice (3), Bob (1)
 		controller.setCellValue('2', 'name', 'Aaron');
 
-		expect(controller.getRowNode(0)?.id).toBe('2'); // Aaron (formerly Charlie)
-		expect(controller.getRowNode(1)?.id).toBe('3'); // Alice
-		expect(controller.getRowNode(2)?.id).toBe('1'); // Bob
+		expect(getRowNode(controller, 0)?.id).toBe('2'); // Aaron (formerly Charlie)
+		expect(getRowNode(controller, 1)?.id).toBe('3'); // Alice
+		expect(getRowNode(controller, 2)?.id).toBe('1'); // Bob
+	});
+
+	it('should support getVisualIndexById, getVisualIndexByRowId, and getRawRowById correctly', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const rows = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+		];
+
+		const controller = new ClientRowModelController(store, {
+			rows,
+			columns: store.getState().columns,
+		});
+
+		expect(controller.getVisualIndexById('1')).toBe(0);
+		expect(controller.getVisualIndexById('2')).toBe(1);
+		expect(controller.getVisualIndexByRowId('1')).toBe(0);
+		expect(controller.getVisualIndexByRowId('2')).toBe(1);
+		expect(controller.getRawRowById('1')).toEqual({ id: '1', name: 'Alice' });
+		expect(controller.getRawRowById('2')).toEqual({ id: '2', name: 'Bob' });
+		expect(controller.getRawRowById('non-existent')).toBeNull();
 	});
 });

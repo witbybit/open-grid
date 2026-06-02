@@ -98,9 +98,10 @@ export class DataModel<TRowData = unknown> {
 
 		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
 		if (!node) {
-			const idx = rowModel.getRowIndexById(rowId);
+			const idx = rowModel.getVisualRowIndexById(rowId);
 			if (idx === -1) return '';
-			const row = rowModel.getRow(idx);
+			const visualRow = rowModel.getVisualRow(idx);
+			const row = visualRow?.kind === 'data' ? visualRow.node.data : null;
 			if (!row) return '';
 			if (col.valueGetter) {
 				const dummyNode = new RowNode<TRowData>(rowId, row);
@@ -131,8 +132,10 @@ export class DataModel<TRowData = unknown> {
 		const row =
 			node?.data ??
 			(() => {
-				const idx = rowModel.getRowIndexById(rowId);
-				return idx === -1 ? null : rowModel.getRow(idx);
+				const idx = rowModel.getVisualRowIndexById(rowId);
+				if (idx === -1) return null;
+				const visualRow = rowModel.getVisualRow(idx);
+				return visualRow?.kind === 'data' ? visualRow.node.data : null;
 			})();
 		if (!row) return '';
 

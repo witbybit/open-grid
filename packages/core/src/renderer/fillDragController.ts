@@ -273,28 +273,28 @@ export class FillDragController<TRowData = unknown> {
 		const state = this.engine.stateManager.getState();
 		const columns = state.columns;
 
-		const startRowNode = rowModel.getRowNode(this.fillStartRow);
-		const endRowNode = rowModel.getRowNode(this.fillEndRow);
+		const startVisualRow = rowModel.getVisualRow(this.fillStartRow);
+		const endVisualRow = rowModel.getVisualRow(this.fillEndRow);
 		const startCol = columns[this.fillStartCol];
 		const endCol = columns[this.fillEndCol];
 
-		const targetStartRowNode = rowModel.getRowNode(minRowTarget);
-		const targetEndRowNode = rowModel.getRowNode(maxRowTarget);
+		const targetStartVisualRow = rowModel.getVisualRow(minRowTarget);
+		const targetEndVisualRow = rowModel.getVisualRow(maxRowTarget);
 		const targetStartCol = columns[minColTarget];
 		const targetEndCol = columns[maxColTarget];
 
-		if (!startRowNode || !endRowNode || !startCol || !endCol || !targetStartRowNode || !targetEndRowNode || !targetStartCol || !targetEndCol) {
+		if (!startVisualRow || !endVisualRow || !startCol || !endCol || !targetStartVisualRow || !targetEndVisualRow || !targetStartCol || !targetEndCol) {
 			return;
 		}
 
 		const source: GridCellRange = {
-			start: { rowId: startRowNode.id, colField: startCol.field },
-			end: { rowId: endRowNode.id, colField: endCol.field },
+			start: { rowId: startVisualRow.id, colField: startCol.field },
+			end: { rowId: endVisualRow.id, colField: endCol.field },
 		};
 
 		const target: GridCellRange = {
-			start: { rowId: targetStartRowNode.id, colField: targetStartCol.field },
-			end: { rowId: targetEndRowNode.id, colField: targetEndCol.field },
+			start: { rowId: targetStartVisualRow.id, colField: targetStartCol.field },
+			end: { rowId: targetEndVisualRow.id, colField: targetEndCol.field },
 		};
 
 		this.engine.fillRange(source, target);

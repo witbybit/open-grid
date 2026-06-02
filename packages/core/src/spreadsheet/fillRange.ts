@@ -78,20 +78,20 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 			const sourceValues: CapturedCell[] = [];
 			for (let r = sourceBounds.minRow; r <= sourceBounds.maxRow; r++) {
-				const node = rowModel.getRowNode(r);
-				if (node) sourceValues.push(this.captureCell(node.id, col.field));
+				const visualRow = rowModel.getVisualRow(r);
+				if (visualRow) sourceValues.push(this.captureCell(visualRow.id, col.field));
 			}
 
 			if (sourceValues.length === 0) continue;
 
 			const series = this.analyzeFillSeries(sourceValues);
 			fillRows.forEach((r, idx) => {
-				const node = rowModel.getRowNode(r);
-				if (!node) return;
+				const visualRow = rowModel.getVisualRow(r);
+				if (!visualRow) return;
 
 				const srcItem = sourceValues[idx % sourceValues.length];
 				const deltaRow = r - (direction === 'DOWN' ? sourceBounds.maxRow : sourceBounds.minRow);
-				this.applyFillValue(node.id, col.field, idx, srcItem, series, deltaRow, 0, rowModel, columns, oldValueRecord, newValueRecord);
+				this.applyFillValue(visualRow.id, col.field, idx, srcItem, series, deltaRow, 0, rowModel, columns, oldValueRecord, newValueRecord);
 			});
 		}
 	}
@@ -107,13 +107,13 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 	): void {
 		const fillCols = this.buildOrderedIndexes(targetBounds.minCol, targetBounds.maxCol, direction === 'LEFT');
 		for (let r = targetBounds.minRow; r <= targetBounds.maxRow; r++) {
-			const node = rowModel.getRowNode(r);
-			if (!node) continue;
+			const visualRow = rowModel.getVisualRow(r);
+			if (!visualRow) continue;
 
 			const sourceValues: CapturedCell[] = [];
 			for (let c = sourceBounds.minCol; c <= sourceBounds.maxCol; c++) {
 				const col = columns[c];
-				if (col) sourceValues.push(this.captureCell(node.id, col.field));
+				if (col) sourceValues.push(this.captureCell(visualRow.id, col.field));
 			}
 
 			if (sourceValues.length === 0) continue;
@@ -125,7 +125,7 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 				const srcItem = sourceValues[idx % sourceValues.length];
 				const deltaCol = c - (direction === 'RIGHT' ? sourceBounds.maxCol : sourceBounds.minCol);
-				this.applyFillValue(node.id, col.field, idx, srcItem, series, 0, deltaCol, rowModel, columns, oldValueRecord, newValueRecord);
+				this.applyFillValue(visualRow.id, col.field, idx, srcItem, series, 0, deltaCol, rowModel, columns, oldValueRecord, newValueRecord);
 			});
 		}
 	}
@@ -147,8 +147,8 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		const rowModel = this.engine.getRowModel();
 		if (!rowModel) return null;
 
-		const startRowIdx = rowModel.getRowIndexById(range.start.rowId);
-		const endRowIdx = rowModel.getRowIndexById(range.end.rowId);
+		const startRowIdx = rowModel.getVisualRowIndexById(range.start.rowId);
+		const endRowIdx = rowModel.getVisualRowIndexById(range.end.rowId);
 		const startColIdx = this.engine.columns.getColumnIndex(range.start.colField);
 		const endColIdx = this.engine.columns.getColumnIndex(range.end.colField);
 
@@ -246,12 +246,12 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 			let newColField = refColField;
 
 			if (deltaRow !== 0) {
-				const rowIdx = rowModel.getRowIndexById(refRowId);
+				const rowIdx = rowModel.getVisualRowIndexById(refRowId);
 				if (rowIdx !== -1) {
 					const newRowIdx = rowIdx + deltaRow;
-					const newRowNode = rowModel.getRowNode(newRowIdx);
-					if (newRowNode) {
-						newRowId = newRowNode.id;
+					const newVisualRow = rowModel.getVisualRow(newRowIdx);
+					if (newVisualRow) {
+						newRowId = newVisualRow.id;
 					}
 				}
 			}
