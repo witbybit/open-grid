@@ -13,13 +13,14 @@
 		}
 	},
 	"files": [
-		"dist",
-		"!dist/**/*.test.*",
+		"dist/**/*.js",
+		"dist/**/*.d.ts",
 		"README.md",
 		"LICENSE"
 	],
 	"sideEffects": false,
 	"scripts": {
+		"prebuild": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
 		"build": "tsc",
 		"watch": "tsc --watch",
 		"test": "vitest run"

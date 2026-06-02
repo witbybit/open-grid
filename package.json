@@ -5,7 +5,9 @@
 	"description": "Headless high-performance spreadsheet and grid engine",
 	"packageManager": "pnpm@10.33.0",
 	"scripts": {
-		"build": "pnpm --filter \"@open-grid/*\" run build",
+		"build": "pnpm run build:packages && pnpm run build:demo",
+		"build:packages": "pnpm --filter \"@open-grid/*\" run build",
+		"build:demo": "pnpm --filter \"demo-app\" run build",
 		"test": "pnpm --filter \"@open-grid/*\" run test",
 		"dev:demo": "pnpm --filter \"demo-app\" run dev",
 		"format": "prettier --write .",
