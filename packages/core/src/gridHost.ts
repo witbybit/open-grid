@@ -1,11 +1,28 @@
 import { getEngineFromApi, getInternalApiFromApi } from './apiBridge.js';
 import { RenderEngine } from './renderer/renderEngine.js';
-import type { GridCellContentMount, GridCellContentUnmount } from './renderer/IGridRenderer.js';
+import type {
+	GridCellContentMount,
+	GridCellContentUnmount,
+	GridRowContentMount,
+	GridRowContentUnmount,
+	GridHeaderMenuMount,
+	GridHeaderMenuUnmount,
+} from './renderer/IGridRenderer.js';
 import type { GridApi } from './store.js';
 
 export interface GridCellContentAdapter<TRowData = unknown> {
 	mountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
 	unmountCellContent?: (unmount: GridCellContentUnmount) => void;
+}
+
+export interface GridRowContentAdapter<TRowData = unknown> {
+	mountRowContent?: (mount: GridRowContentMount<TRowData>) => void;
+	unmountRowContent?: (unmount: GridRowContentUnmount) => void;
+}
+
+export interface GridHeaderMenuAdapter<TRowData = unknown> {
+	mountHeaderMenu?: (mount: GridHeaderMenuMount<TRowData>) => void;
+	unmountHeaderMenu?: (unmount: GridHeaderMenuUnmount) => void;
 }
 
 export interface GridHostOptions<TRowData = unknown> {
@@ -16,6 +33,8 @@ export interface GridHostOptions<TRowData = unknown> {
 		bottom?: number;
 	};
 	cellContent?: GridCellContentAdapter<TRowData>;
+	rowContent?: GridRowContentAdapter<TRowData>;
+	headerMenu?: GridHeaderMenuAdapter<TRowData>;
 }
 
 export interface GridHost {
@@ -27,10 +46,14 @@ export interface GridHost {
 export function mountGridHost<TRowData>(api: GridApi<TRowData>, container: HTMLElement, options: GridHostOptions<TRowData> = {}): GridHost {
 	const engine = getEngineFromApi(api);
 	const internalApi = getInternalApiFromApi(api);
-	const renderEngine = new RenderEngine(engine);
+	const renderEngine = new RenderEngine(engine, internalApi);
 
 	renderEngine.onMountCellContent = options.cellContent?.mountCellContent;
 	renderEngine.onUnmountCellContent = options.cellContent?.unmountCellContent;
+	renderEngine.onMountRowContent = options.rowContent?.mountRowContent;
+	renderEngine.onUnmountRowContent = options.rowContent?.unmountRowContent;
+	renderEngine.onMountHeaderMenu = options.headerMenu?.mountHeaderMenu;
+	renderEngine.onUnmountHeaderMenu = options.headerMenu?.unmountHeaderMenu;
 
 	if (options.pins) {
 		internalApi.setViewportPins(options.pins);

@@ -3,9 +3,17 @@ import { ScrollEngine } from './scrollEngine.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
-import type { GridCellContentMount, GridCellContentUnmount, IGridRenderer } from './IGridRenderer.js';
+import type {
+	GridCellContentMount,
+	GridCellContentUnmount,
+	GridRowContentMount,
+	GridRowContentUnmount,
+	IGridRenderer,
+	GridHeaderMenuMount,
+	GridHeaderMenuUnmount,
+} from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { RowNode, type ColumnDef } from '../store.js';
+import { RowNode, type ColumnDef, type VisualRow, type GridApi, type InternalGridApi } from '../store.js';
 import { CORE_STYLES } from './styles.js';
 
 /**
@@ -39,10 +47,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private activeRows = new Map<number, PooledRow>(); // rowIndex -> PooledRow
 	private headerCells = new Map<number, HTMLDivElement>();
 	private unsubscribers: Array<() => void> = [];
+	private activeHeaderPopover: HTMLDivElement | null = null;
+	private activeHeaderPopoverElement: HTMLElement | null = null;
 	private pendingPaint = false;
 	private pendingFullPaint = false;
 	private pendingHeaderPaint = false;
 	private pendingOverlayPaint = false;
+	private pendingScrollPaint = false;
 	private dirtyCells = new Map<string, { rowId: string; colField: string }>();
 	private dirtyRows = new Set<string>();
 	private hoveredRowIndex: number | null = null;
@@ -52,8 +63,17 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public onMountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
 	public onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
 
-	constructor(engine: GridEngine<TRowData>) {
+	public onMountRowContent?: (mount: GridRowContentMount<TRowData>) => void;
+	public onUnmountRowContent?: (unmount: GridRowContentUnmount) => void;
+
+	public onMountHeaderMenu?: (mount: GridHeaderMenuMount<TRowData>) => void;
+	public onUnmountHeaderMenu?: (unmount: GridHeaderMenuUnmount) => void;
+
+	public readonly api?: InternalGridApi<TRowData>;
+
+	constructor(engine: GridEngine<TRowData>, api?: InternalGridApi<TRowData>) {
 		this.engine = engine;
+		this.api = api;
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
 		this.columnInteractions = new ColumnInteractionController<TRowData>({
 			engine,
@@ -152,6 +172,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Unmount and clean up all DOM resources and subscriptions.
 	 */
 	public unmount(): void {
+		this.hideHeaderMenu();
+
 		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
 		this.unsubscribers = [];
 
@@ -189,17 +211,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Performs scroll-driven viewport shifts and schedules updates.
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number): void => {
-		// 1. Update the coordinate values in ViewportModel (O(1))
+		// 1. Update the coordinate values in ViewportModel (O(1)) synchronously
 		this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
 
-		// 2. Recycle viewport elements
-		this.recycleViewport();
-
-		// 3. Draw and recycle headers
-		this.paintHeaders();
-
-		// 4. Update overlay selections
-		this.paintOverlay();
+		// 2. Schedule throttled viewport layout and rendering in requestAnimationFrame
+		this.pendingScrollPaint = true;
+		this.scheduleRenderFlush();
 	};
 
 	private bindInvalidationSources(): void {
@@ -282,6 +299,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.pendingFullPaint = false;
 			this.pendingHeaderPaint = false;
 			this.pendingOverlayPaint = false;
+			this.pendingScrollPaint = false;
 			this.dirtyCells.clear();
 			this.dirtyRows.clear();
 			this.fullPaint();
@@ -290,16 +308,23 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.syncViewportScrollFromDom();
 
-		if (this.dirtyRows.size > 0 || this.dirtyCells.size > 0) {
-			this.repaintDirtyRowsAndCells();
-		}
-
-		if (this.pendingHeaderPaint) {
+		if (this.pendingScrollPaint) {
+			this.pendingScrollPaint = false;
+			this.recycleViewport();
 			this.paintHeaders();
-		}
-
-		if (this.pendingOverlayPaint || this.dirtyCells.size > 0 || this.dirtyRows.size > 0) {
 			this.paintOverlay();
+		} else {
+			if (this.dirtyRows.size > 0 || this.dirtyCells.size > 0) {
+				this.repaintDirtyRowsAndCells();
+			}
+
+			if (this.pendingHeaderPaint) {
+				this.paintHeaders();
+			}
+
+			if (this.pendingOverlayPaint || this.dirtyCells.size > 0 || this.dirtyRows.size > 0) {
+				this.paintOverlay();
+			}
 		}
 
 		this.pendingHeaderPaint = false;
@@ -315,7 +340,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.syncViewportScrollFromDom();
 
 		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const state = this.engine.stateManager.getState();
 		const colCount = state.columns.length;
 
@@ -370,7 +395,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 */
 	private recycleViewport(): void {
 		const rowModel = this.engine.getRowModel();
-		let rowCount = rowModel ? rowModel.getRowCount() : 0;
+		let rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const state = this.engine.stateManager.getState();
 		if (state.loading && rowCount === 0) {
 			rowCount = state.loadingSkeletonCount ?? 15;
@@ -403,8 +428,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Phase 1: Releasing scrolled-out rows back to the recycling pool
 		for (const [rowIndex, pooledRow] of this.activeRows.entries()) {
-			const isPinnedTop = rowIndex < pinTopRows;
-			const isPinnedBottom = rowIndex >= rowCount - pinBottomRows;
+			const isPinnedTop = rowIndex < pinTopRows && rowIndex < rowCount;
+			const isPinnedBottom = rowIndex >= rowCount - pinBottomRows && rowIndex < rowCount;
 			const isScrollable = rowIndex >= startRow && rowIndex <= endRow;
 
 			if (!isPinnedTop && !isPinnedBottom && !isScrollable) {
@@ -416,11 +441,17 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const columns = state.columns;
 
 		const renderRow = (r: number) => {
-			let node = rowModel ? rowModel.getRowNode(r) : null;
-			if (!node && state.loading) {
-				node = new RowNode<TRowData>(`__loading_${r}`, null as TRowData);
+			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
+			if (!visualRow && state.loading) {
+				const node = new RowNode<TRowData>(`__loading_${r}`, null as TRowData);
+				visualRow = {
+					kind: 'data',
+					id: node.id,
+					node,
+					depth: 0,
+				};
 			}
-			if (!node) return;
+			if (!visualRow) return;
 
 			let pooledRow = this.activeRows.get(r);
 
@@ -435,7 +466,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					leftElement: leftEl,
 					rightElement: rightEl,
 					cells: new Map(),
-					boundRowId: node.id,
+					boundRowId: visualRow.id,
 				};
 				this.activeRows.set(r, pooledRow);
 
@@ -443,11 +474,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				if (this.centerLayer) this.centerLayer.appendChild(rowEl);
 				if (this.leftLayer) this.leftLayer.appendChild(leftEl);
 				if (this.rightLayer) this.rightLayer.appendChild(rightEl);
-			} else if (pooledRow.boundRowId !== node.id) {
-				for (const c of Array.from(pooledRow.cells.keys())) {
+			} else if (pooledRow.boundRowId !== visualRow.id) {
+				if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
+					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
+					delete pooledRow.element.dataset.rowKey;
+				}
+				for (const c of pooledRow.cells.keys()) {
 					this.releaseCell(pooledRow, c);
 				}
-				pooledRow.boundRowId = node.id;
+				pooledRow.boundRowId = visualRow.id;
 			}
 
 			// Reposition row using transforms to avoid layout-bound top/left updates.
@@ -465,21 +500,52 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			pooledRow.element.style.transform = `translate3d(0, ${rowTop}px, 0)`;
 			pooledRow.element.style.height = `${rowHeight}px`;
 			pooledRow.element.dataset.rowIndex = String(r);
-			pooledRow.element.dataset.rowId = node.id;
+			pooledRow.element.dataset.rowId = visualRow.id;
 
 			if (pooledRow.leftElement) {
 				pooledRow.leftElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
 				pooledRow.leftElement.style.height = `${rowHeight}px`;
 				pooledRow.leftElement.dataset.rowIndex = String(r);
-				pooledRow.leftElement.dataset.rowId = node.id;
+				pooledRow.leftElement.dataset.rowId = visualRow.id;
 			}
 			if (pooledRow.rightElement) {
 				pooledRow.rightElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
 				pooledRow.rightElement.style.height = `${rowHeight}px`;
 				pooledRow.rightElement.dataset.rowIndex = String(r);
-				pooledRow.rightElement.dataset.rowId = node.id;
+				pooledRow.rightElement.dataset.rowId = visualRow.id;
 			}
 
+			if (visualRow.kind !== 'data') {
+				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
+				for (const c of pooledRow.cells.keys()) {
+					this.releaseCell(pooledRow, c);
+				}
+				const rowKey = visualRow.id;
+				if (pooledRow.element.dataset.rowKey !== rowKey) {
+					if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
+						this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
+					}
+					pooledRow.element.textContent = '';
+					pooledRow.element.dataset.rowKey = rowKey;
+				}
+				if (this.onMountRowContent) {
+					this.onMountRowContent({
+						rowKey,
+						container: pooledRow.element,
+						visualRow,
+					});
+				}
+				return;
+			}
+
+			const node = visualRow.node;
+			if (pooledRow.element.dataset.rowKey) {
+				if (this.onUnmountRowContent) {
+					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
+				}
+				delete pooledRow.element.dataset.rowKey;
+				pooledRow.element.textContent = '';
+			}
 			this.updateRowClassName(pooledRow, node, r, state);
 
 			// Recycle individual cells inside this row
@@ -514,30 +580,30 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const columns = state.columns;
 
 		for (const rowId of this.dirtyRows) {
-			const rowIndex = rowModel.getRowIndexById(rowId);
+			const rowIndex = rowModel.getVisualRowIndexById(rowId);
 			const pooledRow = rowIndex >= 0 ? this.activeRows.get(rowIndex) : undefined;
-			const node = rowIndex >= 0 ? rowModel.getRowNode(rowIndex) : null;
-			if (pooledRow && node) {
-				this.updateRowClassName(pooledRow, node, rowIndex, state);
+			const row = rowIndex >= 0 ? rowModel.getVisualRow(rowIndex) : null;
+			if (pooledRow && row?.kind === 'data') {
+				this.updateRowClassName(pooledRow, row.node, rowIndex, state);
 			}
 		}
 
 		for (const { rowId, colField } of this.dirtyCells.values()) {
-			const rowIndex = rowModel.getRowIndexById(rowId);
+			const rowIndex = rowModel.getVisualRowIndexById(rowId);
 			const colIndex = this.engine.columns.getColumnIndex(colField);
 			if (rowIndex < 0 || colIndex < 0) continue;
 
 			const pooledRow = this.activeRows.get(rowIndex);
-			const node = rowModel.getRowNode(rowIndex);
-			if (!pooledRow || !node || !pooledRow.cells.has(colIndex)) continue;
+			const row = rowModel.getVisualRow(rowIndex);
+			if (!pooledRow || row?.kind !== 'data' || !pooledRow.cells.has(colIndex)) continue;
 
-			this.recycleRowCells(pooledRow, node, rowIndex, colIndex, colIndex, columns, false);
+			this.recycleRowCells(pooledRow, row.node, rowIndex, colIndex, colIndex, columns, false);
 		}
 	}
 
 	private updateRowClassName(pooledRow: PooledRow, node: RowNode<TRowData>, rowIndex: number, state = this.engine.stateManager.getState()): void {
 		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const pinTopRows = this.engine.viewport.pinTopRows;
 		const pinBottomRows = this.engine.viewport.pinBottomRows;
 
@@ -580,6 +646,55 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				console.error('RenderEngine: Error in rowClass styleSlot', e);
 			}
 		}
+		pooledRow.element.className = rowClassName;
+		if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
+		if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
+	}
+
+	private updateVisualRowClassName(
+		pooledRow: PooledRow,
+		visualRow: Exclude<VisualRow<TRowData>, { kind: 'data' }>,
+		rowIndex: number,
+		state = this.engine.stateManager.getState()
+	): void {
+		const rowModel = this.engine.getRowModel();
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
+		const pinTopRows = this.engine.viewport.pinTopRows;
+		const pinBottomRows = this.engine.viewport.pinBottomRows;
+
+		let rowClassName = `og-row og-row-${visualRow.kind}`;
+		if (rowIndex < pinTopRows) {
+			rowClassName += ' og-row-pinned-top';
+		} else if (rowIndex >= rowCount - pinBottomRows) {
+			rowClassName += ' og-row-pinned-bottom';
+		}
+		if (this.hoveredRowIndex === rowIndex) {
+			rowClassName += ' og-row-hovered';
+		}
+		if (state.selection.focus?.rowId === visualRow.id) {
+			rowClassName += ' og-row-focused';
+		}
+
+		if (visualRow.kind === 'group' && state.styleSlots?.groupRowClass) {
+			try {
+				const customClass = state.styleSlots.groupRowClass(visualRow);
+				if (customClass) {
+					rowClassName += ' ' + customClass;
+				}
+			} catch (e) {
+				console.error('RenderEngine: Error in groupRowClass styleSlot', e);
+			}
+		} else if (visualRow.kind === 'detail' && state.styleSlots?.detailRowClass) {
+			try {
+				const customClass = state.styleSlots.detailRowClass(visualRow);
+				if (customClass) {
+					rowClassName += ' ' + customClass;
+				}
+			} catch (e) {
+				console.error('RenderEngine: Error in detailRowClass styleSlot', e);
+			}
+		}
+
 		pooledRow.element.className = rowClassName;
 		if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
 		if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
@@ -730,8 +845,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			const cellValue = access.value;
 			const cellKey = createCellKey(node.id, col.field);
 
-			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously)
-			if ((col.cellRenderer || access.isEditing) && !access.isLoading) {
+			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously or scrolling extremely fast)
+			const isFastScrolling = this.engine.viewport.isScrollingFast;
+			if ((col.cellRenderer || access.isEditing) && !access.isLoading && !isFastScrolling) {
 				const previousPortalHost = this.getCellPortalHost(cell);
 				if (cell.dataset.cellKey !== cellKey) {
 					if (cell.dataset.cellKey && this.onUnmountCellContent) {
@@ -833,10 +949,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			return portalHost;
 		}
 
-		for (const child of Array.from(cell.childNodes)) {
+		let child = cell.firstChild;
+		while (child) {
+			const next = child.nextSibling;
 			if (child !== portalHost) {
 				child.remove();
 			}
+			child = next;
 		}
 		return portalHost;
 	}
@@ -882,6 +1001,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Release and return an entire row and all its cells to the pools.
 	 */
 	private releaseRow(rowIndex: number, pooledRow: PooledRow): void {
+		if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
+			this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
+			delete pooledRow.element.dataset.rowKey;
+		}
+
 		// Release all cell DOMs inside row
 		for (const c of pooledRow.cells.keys()) {
 			this.releaseCell(pooledRow, c);
@@ -984,6 +1108,21 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				textSpan.textContent = col.header || col.field;
 			}
 
+			const currentSort = state.sortModel?.find((s) => s.colId === col.field);
+			const sortIndicator = headerCell.querySelector('.og-header-sort-indicator') as HTMLDivElement | null;
+			if (sortIndicator) {
+				if (currentSort) {
+					sortIndicator.style.display = 'flex';
+					sortIndicator.innerHTML =
+						currentSort.sort === 'asc'
+							? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`
+							: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>`;
+				} else {
+					sortIndicator.style.display = 'none';
+					sortIndicator.innerHTML = '';
+				}
+			}
+
 			headerCell.dataset.colField = col.field;
 			headerCell.dataset.colIndex = String(c);
 			if (headerCell.parentNode !== targetLayer) {
@@ -1029,12 +1168,297 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		textSpan.style.flex = '1';
 		headerCell.appendChild(textSpan);
 
+		const sortIndicator = document.createElement('div');
+		sortIndicator.className = 'og-header-sort-indicator';
+		headerCell.appendChild(sortIndicator);
+
+		const menuButton = document.createElement('div');
+		menuButton.className = 'og-header-menu-button';
+		menuButton.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="2.5"></circle><circle cx="12" cy="5" r="2.5"></circle><circle cx="12" cy="19" r="2.5"></circle></svg>`;
+		menuButton.addEventListener('mousedown', (e) => {
+			e.stopPropagation();
+		});
+		menuButton.addEventListener('click', (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+			const colField = headerCell.dataset.colField;
+			if (colField) {
+				this.showHeaderMenu(headerCell, colField);
+			}
+		});
+		headerCell.appendChild(menuButton);
+
 		const resizeHandle = document.createElement('div');
 		resizeHandle.className = 'og-header-resize-handle';
 		resizeHandle.addEventListener('mousedown', this.columnInteractions.onHeaderResizeMouseDown);
 		headerCell.appendChild(resizeHandle);
 
 		return headerCell;
+	}
+
+	private hideHeaderMenu = (): void => {
+		if (this.activeHeaderPopover) {
+			this.activeHeaderPopover.classList.remove('og-visible');
+			const el = this.activeHeaderPopover;
+			const colField = this.activeHeaderPopoverElement?.dataset.colField;
+			if (colField && this.onUnmountHeaderMenu) {
+				this.onUnmountHeaderMenu({ colField, container: el });
+			}
+			setTimeout(() => {
+				el.remove();
+			}, 120);
+			this.activeHeaderPopover = null;
+		}
+		this.activeHeaderPopoverElement = null;
+		document.removeEventListener('mousedown', this.handleOutsidePopoverClick);
+		window.removeEventListener('scroll', this.hideHeaderMenu, { capture: true });
+		window.removeEventListener('resize', this.hideHeaderMenu);
+	};
+
+	private handleOutsidePopoverClick = (e: MouseEvent): void => {
+		if (this.activeHeaderPopover && !this.activeHeaderPopover.contains(e.target as Node)) {
+			const clickedMenuBtn = (e.target as HTMLElement).closest('.og-header-menu-button');
+			if (clickedMenuBtn && clickedMenuBtn.closest('.og-header-cell') === this.activeHeaderPopoverElement) {
+				return;
+			}
+			this.hideHeaderMenu();
+		}
+	};
+
+	private showHeaderMenu(headerCell: HTMLElement, colField: string): void {
+		if (this.activeHeaderPopover && this.activeHeaderPopoverElement === headerCell) {
+			this.hideHeaderMenu();
+			return;
+		}
+		this.hideHeaderMenu();
+
+		const rect = headerCell.getBoundingClientRect();
+		const state = this.engine.stateManager.getState();
+		const column = state.columns.find((c) => c.field === colField);
+		if (!column) return;
+
+		const popover = document.createElement('div');
+		popover.className = 'og-header-popover';
+		this.activeHeaderPopover = popover;
+		this.activeHeaderPopoverElement = headerCell;
+
+		// Support custom React header popover component if registered
+		if (column.headerMenuComponent && this.onMountHeaderMenu) {
+			try {
+				this.onMountHeaderMenu({
+					colField,
+					column,
+					close: this.hideHeaderMenu,
+					container: popover,
+				});
+				document.body.appendChild(popover);
+				this.positionPopover(popover, rect);
+
+				document.addEventListener('mousedown', this.handleOutsidePopoverClick);
+				window.addEventListener('scroll', this.hideHeaderMenu, { capture: true, passive: true });
+				window.addEventListener('resize', this.hideHeaderMenu);
+				return;
+			} catch (err) {
+				console.error('RenderEngine: Error mounting custom React header menu', err);
+			}
+		}
+
+		// Support custom headerMenuRenderer if provided by the developer
+		if (column.headerMenuRenderer) {
+			try {
+				column.headerMenuRenderer({
+					colField,
+					column,
+					api: (this.api || this.engine.stateManager) as unknown as GridApi<TRowData>,
+					close: this.hideHeaderMenu,
+					container: popover,
+				});
+				document.body.appendChild(popover);
+				this.positionPopover(popover, rect);
+
+				document.addEventListener('mousedown', this.handleOutsidePopoverClick);
+				window.addEventListener('scroll', this.hideHeaderMenu, { capture: true, passive: true });
+				window.addEventListener('resize', this.hideHeaderMenu);
+				return;
+			} catch (err) {
+				console.error('RenderEngine: Error rendering custom header menu', err);
+			}
+		}
+
+		// Default Sort Options
+		const sortContainer = document.createElement('div');
+		sortContainer.className = 'og-popover-sort-section';
+
+		const currentSort = state.sortModel?.find((s) => s.colId === colField);
+
+		const sortAsc = document.createElement('div');
+		sortAsc.className = 'og-popover-item' + (currentSort?.sort === 'asc' ? ' og-active' : '');
+		sortAsc.innerHTML = `
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+			<span>Sort Ascending</span>
+		`;
+		sortAsc.addEventListener('click', () => {
+			this.engine.setSortModel([{ colId: colField, sort: 'asc' }]);
+			this.hideHeaderMenu();
+		});
+		sortContainer.appendChild(sortAsc);
+
+		const sortDesc = document.createElement('div');
+		sortDesc.className = 'og-popover-item' + (currentSort?.sort === 'desc' ? ' og-active' : '');
+		sortDesc.innerHTML = `
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7 7 7-7"/></svg>
+			<span>Sort Descending</span>
+		`;
+		sortDesc.addEventListener('click', () => {
+			this.engine.setSortModel([{ colId: colField, sort: 'desc' }]);
+			this.hideHeaderMenu();
+		});
+		sortContainer.appendChild(sortDesc);
+
+		if (currentSort) {
+			const clearSort = document.createElement('div');
+			clearSort.className = 'og-popover-item og-danger';
+			clearSort.innerHTML = `
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				<span>Clear Sorting</span>
+			`;
+			clearSort.addEventListener('click', () => {
+				this.engine.setSortModel(null);
+				this.hideHeaderMenu();
+			});
+			sortContainer.appendChild(clearSort);
+		}
+
+		popover.appendChild(sortContainer);
+
+		const divider = document.createElement('div');
+		divider.className = 'og-popover-divider';
+		popover.appendChild(divider);
+
+		// Default Filter Section
+		const filterContainer = document.createElement('div');
+		filterContainer.className = 'og-popover-filter-section';
+
+		const filterTitle = document.createElement('div');
+		filterTitle.className = 'og-popover-section-title';
+		filterTitle.textContent = 'Filter Column';
+		filterContainer.appendChild(filterTitle);
+
+		let currentOperator: string = 'contains';
+		let currentFilterVal: string = '';
+		if (state.filterModel && state.filterModel[colField] !== undefined) {
+			const filterObj = state.filterModel[colField];
+			if (filterObj && typeof filterObj === 'object' && 'filter' in filterObj) {
+				currentOperator = (filterObj as any).type ?? 'contains';
+				currentFilterVal = String((filterObj as any).filter ?? '');
+			} else {
+				currentFilterVal = String(filterObj ?? '');
+			}
+		}
+
+		const select = document.createElement('select');
+		select.className = 'og-popover-select';
+		const operators: { value: string; label: string }[] = [
+			{ value: 'contains', label: 'Contains' },
+			{ value: 'equals', label: 'Equals' },
+			{ value: 'startsWith', label: 'Starts with' },
+			{ value: 'endsWith', label: 'Ends with' },
+			{ value: 'gt', label: 'Greater than' },
+			{ value: 'gte', label: 'Greater or equal' },
+			{ value: 'lt', label: 'Less than' },
+			{ value: 'lte', label: 'Less or equal' },
+		];
+		operators.forEach((op) => {
+			const opt = document.createElement('option');
+			opt.value = op.value;
+			opt.textContent = op.label;
+			if (op.value === currentOperator) {
+				opt.selected = true;
+			}
+			select.appendChild(opt);
+		});
+		filterContainer.appendChild(select);
+
+		const input = document.createElement('input');
+		input.type = 'text';
+		input.className = 'og-popover-input';
+		input.placeholder = 'Filter value...';
+		input.value = currentFilterVal;
+		input.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				applyBtn.click();
+			}
+		});
+		filterContainer.appendChild(input);
+
+		const btnGroup = document.createElement('div');
+		btnGroup.className = 'og-popover-btn-group';
+
+		const clearBtn = document.createElement('button');
+		clearBtn.className = 'og-popover-btn og-btn-secondary';
+		clearBtn.textContent = 'Clear';
+		clearBtn.addEventListener('click', () => {
+			const nextFilterModel = { ...(state.filterModel || {}) };
+			delete nextFilterModel[colField];
+			this.engine.setFilterModel(Object.keys(nextFilterModel).length > 0 ? nextFilterModel : null);
+			this.hideHeaderMenu();
+		});
+		btnGroup.appendChild(clearBtn);
+
+		const applyBtn = document.createElement('button');
+		applyBtn.className = 'og-popover-btn og-btn-primary';
+		applyBtn.textContent = 'Apply';
+		applyBtn.addEventListener('click', () => {
+			const term = input.value.trim();
+			const nextFilterModel = { ...(state.filterModel || {}) };
+			if (term === '') {
+				delete nextFilterModel[colField];
+			} else {
+				nextFilterModel[colField] = {
+					type: select.value as any,
+					filter: term,
+				};
+			}
+			this.engine.setFilterModel(Object.keys(nextFilterModel).length > 0 ? nextFilterModel : null);
+			this.hideHeaderMenu();
+		});
+		btnGroup.appendChild(applyBtn);
+
+		filterContainer.appendChild(btnGroup);
+		popover.appendChild(filterContainer);
+
+		document.body.appendChild(popover);
+		this.positionPopover(popover, rect);
+
+		document.addEventListener('mousedown', this.handleOutsidePopoverClick);
+		window.addEventListener('scroll', this.hideHeaderMenu, { capture: true, passive: true });
+		window.addEventListener('resize', this.hideHeaderMenu);
+	}
+
+	private positionPopover(popover: HTMLDivElement, rect: DOMRect): void {
+		const popoverWidth = 220;
+		const popoverHeight = popover.offsetHeight || 215;
+
+		let left = rect.left;
+		let top = rect.bottom + 4;
+
+		if (left + popoverWidth > window.innerWidth) {
+			left = window.innerWidth - popoverWidth - 8;
+		}
+		if (top + popoverHeight > window.innerHeight) {
+			top = rect.top - popoverHeight - 4;
+		}
+
+		popover.style.left = `${left}px`;
+		popover.style.top = `${top}px`;
+
+		if (typeof requestAnimationFrame !== 'undefined') {
+			requestAnimationFrame(() => {
+				popover.classList.add('og-visible');
+			});
+		} else {
+			popover.classList.add('og-visible');
+		}
 	}
 
 	private clearHeaderCells(): void {
@@ -1061,7 +1485,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		const rowModel = this.engine.getRowModel()!;
-		const rowCount = rowModel.getRowCount();
+		const rowCount = rowModel.getVisualRowCount();
 		const columns = state.columns;
 		const colCount = columns.length;
 
@@ -1102,7 +1526,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private getClampedOverlayBox(minRow: number, maxRow: number, minCol: number, maxCol: number): OverlayBox | null {
 		const state = this.engine.stateManager.getState();
 		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getRowCount() : 0;
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const colCount = state.columns.length;
 
 		if (rowCount === 0 || colCount === 0 || minRow < 0 || minCol < 0 || maxRow >= rowCount || maxCol >= colCount) {

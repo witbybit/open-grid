@@ -11,10 +11,10 @@ import {
 	PanelRightClose,
 	Calendar,
 } from 'lucide-react';
-import { LatencyProfiler } from './GridShared';
+import { GridPageType, LatencyProfiler } from './GridShared';
 
 interface ShowroomTitleBannerProps {
-	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
+	activePage: GridPageType;
 	runBulkCalculationTest: () => void;
 	applySpreadsheetRangeAction: (action: 'fill' | 'clear' | 'addPercent' | 'sum') => void;
 	compactLayout: 'compact' | 'normal' | 'spacious';
@@ -56,6 +56,7 @@ export default function ShowroomTitleBanner({
 						{activePage === 'skins' && 'Headless Design System & CSS Themes Studio'}
 						{activePage === 'dashboard' && 'Executive Portfolio & SVG Market Analytics Streamer'}
 						{activePage === 'gantt' && 'Quantitative Gantt Scheduling & Task Optimizer Arena'}
+						{activePage === 'nested' && 'Nested and Group Grid Arena'}
 					</h2>
 					<p className='text-[10px] text-slate-400 leading-tight mt-0.5'>
 						{activePage === 'perf' &&
@@ -74,6 +75,7 @@ export default function ShowroomTitleBanner({
 							'Assess real-time stock portfolios, flowing color-gradient sparklines, and selection telemetry graphs.'}
 						{activePage === 'gantt' &&
 							'Track, extrapolate, and align multi-day team sprints utilizing dynamic styling slots and drag-to-fill date progressions.'}
+						{activePage === 'nested' && 'Examples of nested and grouped grids'}
 					</p>
 				</div>
 			</div>

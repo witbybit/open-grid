@@ -128,10 +128,12 @@ export class DataModel<TRowData = unknown> {
 		if (!col) return '';
 
 		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
-		const row = node?.data ?? (() => {
-			const idx = rowModel.getRowIndexById(rowId);
-			return idx === -1 ? null : rowModel.getRow(idx);
-		})();
+		const row =
+			node?.data ??
+			(() => {
+				const idx = rowModel.getRowIndexById(rowId);
+				return idx === -1 ? null : rowModel.getRow(idx);
+			})();
 		if (!row) return '';
 
 		const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);

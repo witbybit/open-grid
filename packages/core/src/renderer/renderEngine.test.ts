@@ -41,7 +41,7 @@ describe('RenderEngine', () => {
 		});
 		document.body.appendChild(container);
 
-		const renderer = new RenderEngine(store.engine);
+		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
@@ -89,7 +89,7 @@ describe('RenderEngine', () => {
 		});
 		document.body.appendChild(container);
 
-		const renderer = new RenderEngine(store.engine);
+		const renderer = new RenderEngine(store.engine, store);
 		store.setViewportPins({ right: 1 });
 		renderer.mount(container);
 
@@ -139,7 +139,7 @@ describe('RenderEngine', () => {
 		});
 		document.body.appendChild(container);
 
-		const renderer = new RenderEngine(store.engine);
+		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
 
 		store.selectCell({ rowId: 'row-2', colField: 'name' });
@@ -191,7 +191,7 @@ describe('RenderEngine', () => {
 		});
 		document.body.appendChild(container);
 
-		const renderer = new RenderEngine(store.engine);
+		const renderer = new RenderEngine(store.engine, store);
 		renderer.onMountCellContent = ({ container: portalHost }) => {
 			if (!portalHost.querySelector('[data-custom-editor-root]')) {
 				const customEditorRoot = document.createElement('div');
@@ -251,7 +251,7 @@ describe('RenderEngine', () => {
 		});
 		document.body.appendChild(container);
 
-		const renderer = new RenderEngine(store.engine);
+		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
 		const fullPaintSpy = vi.spyOn(renderer, 'fullPaint');
 

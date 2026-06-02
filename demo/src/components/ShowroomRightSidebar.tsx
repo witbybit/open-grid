@@ -2,6 +2,7 @@ import React from 'react';
 import type { GridApi } from '@open-grid/react';
 import { StateInspector, LiveEventLogPanel } from './RightSidebar';
 import { ViewportPanel, SortFilterPanel, ColumnOrderPanel, AccessibilityPanel, DeveloperPanel, KeyboardShortcutsPanel } from './ShowroomControls';
+import { GridPageType } from './GridShared';
 
 interface ShowroomRightSidebarProps {
 	rightSidebarCollapsed: boolean;
@@ -10,7 +11,7 @@ interface ShowroomRightSidebarProps {
 	setPinLeftColumns: (n: number) => void;
 	pinRightColumns: number;
 	setPinRightColumns: (n: number) => void;
-	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
+	activePage: GridPageType;
 	massiveColumns: boolean;
 	setMassiveColumns: (b: boolean) => void;
 	sortField: string;

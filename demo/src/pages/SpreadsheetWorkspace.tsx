@@ -23,11 +23,78 @@ function SpreadsheetWorkspaceInner({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: SpreadsheetWorkspaceProps) {
-		const focusedCell = useGridKeySelector('selection', (state) => state.selection.focus);
+	const focusedCell = useGridKeySelector('selection', (state) => state.selection.focus);
 	const selectedRange = useGridKeySelector('selection', (state) => state.selection.range);
 
 	const [formulaText, setFormulaText] = useState('');
 	const isEditingRef = useRef(false);
+
+	const [contextMenuEnabled, setContextMenuEnabled] = useState(true);
+
+	const customContextMenuOptions = useMemo(() => {
+		return {
+			customItems: [
+				{
+					id: 'add100',
+					label: 'Add 100 to Selection',
+					icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
+					action: (params: any) => {
+						const bounds = params.selection.bounds;
+						if (!bounds) return;
+
+						const columns = params.api.getState().columns;
+						const batchUpdate = params.api.batch ? (cb: () => void) => params.api.batch(cb) : (cb: () => void) => cb();
+						batchUpdate(() => {
+							for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+								const row = params.api.getRow(r);
+								if (!row) continue;
+								const rowId = params.api.getRowId(row);
+								for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+									const col = columns[c];
+									if (!col || col.field === 'id') continue;
+									const val = params.api.getCellValue(rowId, col.field);
+									const num = Number(val);
+									if (!isNaN(num) && val !== '' && val !== null && val !== undefined) {
+										params.api.setCellValue(rowId, col.field, num + 100);
+									}
+								}
+							}
+						});
+					},
+				},
+				{
+					id: 'increase10',
+					label: 'Apply 10% Increase',
+					icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>`,
+					action: (params: any) => {
+						const bounds = params.selection.bounds;
+						if (!bounds) return;
+
+						const columns = params.api.getState().columns;
+						const batchUpdate = params.api.batch ? (cb: () => void) => params.api.batch(cb) : (cb: () => void) => cb();
+						batchUpdate(() => {
+							for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+								const row = params.api.getRow(r);
+								if (!row) continue;
+								const rowId = params.api.getRowId(row);
+								for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+									const col = columns[c];
+									if (!col || col.field === 'id') continue;
+									const val = params.api.getCellValue(rowId, col.field);
+									const num = Number(val);
+									if (!isNaN(num) && val !== '' && val !== null && val !== undefined) {
+										const multiplied = num * 1.1;
+										const rounded = Math.round(multiplied * 1e10) / 1e10;
+										params.api.setCellValue(rowId, col.field, rounded);
+									}
+								}
+							}
+						});
+					},
+				},
+			],
+		};
+	}, []);
 
 	// Sync formula bar text with focused cell value
 	useEffect(() => {
@@ -223,6 +290,8 @@ function SpreadsheetWorkspaceInner({
 						onCellValueChanged={onCellValueChanged}
 						editTrigger={editTrigger}
 						arrowKeyNavigationEdit={arrowKeyNavigationEdit}
+						enableContextMenu={contextMenuEnabled}
+						contextMenuOptions={customContextMenuOptions}
 					/>
 				</div>
 			</div>
@@ -365,6 +434,17 @@ function SpreadsheetWorkspaceInner({
 							>
 								Clear Selection
 							</button>
+						</div>
+
+						{/* Dynamic Context Menu Toggle */}
+						<div className='border-t border-slate-900/60 pt-3 mt-1.5 flex items-center justify-between'>
+							<span className='text-[8px] font-extrabold uppercase text-slate-500'>Enable Context Menu</span>
+							<input
+								type='checkbox'
+								checked={contextMenuEnabled}
+								onChange={(e) => setContextMenuEnabled(e.target.checked)}
+								className='rounded border-slate-800 text-indigo-650 focus:ring-indigo-500/20 w-3.5 h-3.5 bg-slate-950 cursor-pointer accent-indigo-500'
+							/>
 						</div>
 					</div>
 				</div>

@@ -76,6 +76,14 @@ export class GridEngine<TRowData = unknown> {
 			getRowId: config.getRowId,
 			loadingSkeletonCount: config.loadingSkeletonCount,
 			styleSlots: config.styleSlots,
+
+			// Tree / Grouping / Master-Detail State
+			groupBy: config.groupBy,
+			getParentId: config.getParentId,
+			masterDetailEnabled: config.masterDetailEnabled,
+			groupRowHeight: config.groupRowHeight,
+			detailRowHeight: config.detailRowHeight,
+			detailRenderer: config.detailRenderer,
 		};
 
 		// Construct StateManager with coordinate state update bridging
@@ -270,16 +278,16 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	private getRowHeightsList(rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number): number[] {
-		let count = rowModel.getRowCount();
+		let count = rowModel.getVisualRowCount();
 		const state = this.stateManager.getState();
 		if (state.loading && count === 0) {
 			count = state.loadingSkeletonCount ?? 15;
 		}
 		const heights: number[] = [];
 		for (let i = 0; i < count; i++) {
-			const node = rowModel.getRowNode(i);
-			if (node) {
-				const explicitHeight = rowHeightsRecord[node.id];
+			const row = rowModel.getVisualRow(i);
+			if (row) {
+				const explicitHeight = row.height ?? rowHeightsRecord[row.id];
 				heights.push(explicitHeight !== undefined ? explicitHeight : defaultRowHeight);
 			} else {
 				heights.push(defaultRowHeight);
@@ -546,7 +554,7 @@ export class GridEngine<TRowData = unknown> {
 		if (updatedSet.has('selection') || updatedSet.has('columns') || updatedSet.has('dataVersion')) {
 			const rangeBounds = this.selection.calculateRangeBounds(
 				currState.selection.range,
-				(id) => (this.rowModel ? this.rowModel.getRowIndexById(id) : -1),
+				(id) => (this.rowModel ? this.rowModel.getVisualRowIndexById(id) : -1),
 				(field) => this.columns.getColumnIndex(field)
 			);
 			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds) ? currState.selection.bounds : rangeBounds;
@@ -582,7 +590,7 @@ export class GridEngine<TRowData = unknown> {
 			updatedSet.has('loading');
 
 		if (needsRangeUpdate) {
-			const nextRowRange = this.viewport.getVisibleRowRange(this.rowModel ? this.rowModel.getRowCount() : 0);
+			const nextRowRange = this.viewport.getVisibleRowRange(this.rowModel ? this.rowModel.getVisualRowCount() : 0);
 			const nextColRange = this.viewport.getVisibleColumnRange(currState.columns.length);
 
 			const rowRangeChanged =
@@ -709,7 +717,7 @@ export class GridEngine<TRowData = unknown> {
 
 	private getSelectionNotificationViewport(): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
 		const state = this.stateManager.getState();
-		const rowCount = this.rowModel ? this.rowModel.getRowCount() : 0;
+		const rowCount = this.rowModel ? this.rowModel.getVisualRowCount() : 0;
 		const colCount = state.columns.length;
 
 		if (rowCount === 0 || colCount === 0) {

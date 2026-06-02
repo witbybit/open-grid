@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ColumnDef, GridApi, RowNode } from '@open-grid/core';
+import { ColumnDef, GridApi, RowNode, VisualRow } from '@open-grid/core';
 import { createPortal } from 'react-dom';
-import { GridProvider, useGridApi } from './OpenGrid.js';
+import { GridProvider } from './OpenGrid.js';
+import { useGridApi } from './hooks.js';
 import type { ReactNode } from 'react';
 
 export interface PortalCellProps<TRowData = unknown> {
@@ -153,12 +154,48 @@ export interface PortalData<TRowData = unknown> {
 	isLoading: boolean;
 }
 
-export interface PortalManagerProps<TRowData = unknown> {
-	portals: Map<string, PortalData<TRowData>>;
-	api: GridApi<TRowData>;
+export function DefaultGroupRowRenderer<TRowData = unknown>({ visualRow, api }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+	if (visualRow.kind !== 'group') return null;
+	const expanded = visualRow.expanded;
+	const depth = visualRow.depth;
+
+	const handleToggle = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		api.toggleGroupExpanded(visualRow.id);
+	};
+
+	return (
+		<div className='og-group-row-content' style={{ paddingLeft: `${depth * 20 + 8}px` }} onClick={handleToggle}>
+			<span className={`og-group-row-toggle ${expanded ? 'og-group-row-toggle-expanded' : ''}`}>▶</span>
+			<span className='og-group-row-label-prefix'>{visualRow.field}:</span>
+			<span>{String(visualRow.key)}</span>
+			<span className='og-group-count'>{visualRow.childCount} items</span>
+		</div>
+	);
 }
 
-export function PortalManager<TRowData = unknown>({ portals, api }: PortalManagerProps<TRowData>) {
+export function DefaultDetailRowRenderer<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+	if (visualRow.kind !== 'detail') return null;
+	return <div className='og-detail-row-content'>Nested detail view for parent row: {visualRow.parentId}</div>;
+}
+
+export interface PortalManagerProps<TRowData = unknown> {
+	portals: Map<string, PortalData<TRowData>>;
+	rowPortals?: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>;
+	menuPortals?: Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>;
+	api: GridApi<TRowData>;
+	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+}
+
+export function PortalManager<TRowData = unknown>({
+	portals,
+	rowPortals = new Map(),
+	menuPortals = new Map(),
+	api,
+	groupRowRenderer,
+	detailRowRenderer,
+}: PortalManagerProps<TRowData>) {
 	return (
 		<>
 			{Array.from(portals.values()).map((p) => {
@@ -175,6 +212,36 @@ export function PortalManager<TRowData = unknown>({ portals, api }: PortalManage
 						/>
 					</GridProvider>,
 					p.container
+				);
+			})}
+			{Array.from(rowPortals.values()).map((rp) => {
+				const { rowKey, container, visualRow } = rp;
+				let content: React.ReactNode = null;
+				if (visualRow.kind === 'group') {
+					content = groupRowRenderer ? groupRowRenderer({ visualRow, api }) : <DefaultGroupRowRenderer visualRow={visualRow} api={api} />;
+				} else if (visualRow.kind === 'detail') {
+					content = detailRowRenderer ? (
+						detailRowRenderer({ visualRow, api })
+					) : (
+						<DefaultDetailRowRenderer visualRow={visualRow} api={api} />
+					);
+				}
+				return createPortal(
+					<GridProvider api={api} key={rowKey}>
+						{content}
+					</GridProvider>,
+					container
+				);
+			})}
+			{Array.from(menuPortals.values()).map((mp) => {
+				const { colField, container, column, close } = mp;
+				const CustomComponent = column.headerMenuComponent;
+				if (!CustomComponent) return null;
+				return createPortal(
+					<GridProvider api={api} key={`menu-${colField}`}>
+						<CustomComponent colField={colField} column={column} api={api} close={close} />
+					</GridProvider>,
+					container
 				);
 			})}
 		</>

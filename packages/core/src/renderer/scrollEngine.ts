@@ -14,6 +14,8 @@ export class ScrollEngine<TRowData = unknown> {
 	private scrollContainer: HTMLElement | null = null;
 	private onScrollCallback: ((scrollTop: number, scrollLeft: number) => void) | null = null;
 
+	private scrollEndTimer: any = null;
+
 	// High-resolution velocity tracking state
 	private lastScrollTop = 0;
 	private lastScrollLeft = 0;
@@ -41,14 +43,24 @@ export class ScrollEngine<TRowData = unknown> {
 
 		// Standard passive listener to avoid blocking main thread compositor scrolls
 		scrollContainer.addEventListener('scroll', this.handleScroll, { passive: true });
+
+		// Bind native scrollend event if supported by the browser
+		if (typeof window !== 'undefined' && ('onscrollend' in window || 'onscrollend' in HTMLElement.prototype)) {
+			scrollContainer.addEventListener('scrollend', this.handleScrollEnd);
+		}
 	}
 
 	/**
 	 * Unbind event listeners and release references.
 	 */
 	public unbind(): void {
+		if (this.scrollEndTimer) {
+			clearTimeout(this.scrollEndTimer);
+			this.scrollEndTimer = null;
+		}
 		if (this.scrollContainer) {
 			this.scrollContainer.removeEventListener('scroll', this.handleScroll);
+			this.scrollContainer.removeEventListener('scrollend', this.handleScrollEnd);
 			this.scrollContainer = null;
 		}
 		this.onScrollCallback = null;
@@ -77,8 +89,33 @@ export class ScrollEngine<TRowData = unknown> {
 		this.lastScrollLeft = scrollLeft;
 		this.lastTimestamp = now;
 
+		// Fallback scroll-stop detection for browsers without native 'scrollend'
+		if (typeof window !== 'undefined' && !('onscrollend' in window || 'onscrollend' in HTMLElement.prototype)) {
+			if (this.scrollEndTimer) {
+				clearTimeout(this.scrollEndTimer);
+			}
+			this.scrollEndTimer = setTimeout(this.handleScrollEnd, 50);
+		}
+
 		// Delegate callback (which will update ViewportModel and trigger transforms)
 		this.onScrollCallback(scrollTop, scrollLeft);
+	};
+
+	/**
+	 * Unified handler to cleanly reset velocity to rest (0) and flush the final static cell state.
+	 */
+	private handleScrollEnd = (): void => {
+		if (this.scrollEndTimer) {
+			clearTimeout(this.scrollEndTimer);
+			this.scrollEndTimer = null;
+		}
+		this.velocityY = 0;
+		this.velocityX = 0;
+		this.engine.viewport.resetVelocity();
+
+		if (this.onScrollCallback && this.scrollContainer) {
+			this.onScrollCallback(this.scrollContainer.scrollTop, this.scrollContainer.scrollLeft);
+		}
 	};
 
 	/**

@@ -1,4 +1,4 @@
-import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath } from './store.js';
+import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, type VisualRow } from './store.js';
 
 export interface GetRowsParams {
 	startRow: number;
@@ -23,8 +23,9 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	private datasource: IGridDatasource;
 	private blockSize: number;
 	private activeNodes: Array<RowNode<TData> | null> = [];
+	private visualRows: Array<VisualRow<TData> | null> = [];
 	private nodeMap = new Map<string, RowNode<TData>>();
-	private rowIdMap = new Map<string, number>();
+	private visualRowIdMap = new Map<string, number>();
 	private loadingNodeMap = new Map<number, RowNode<TData>>();
 	private loadingBlocks: Record<number, boolean> = {};
 	private loadingBlockCount = 0;
@@ -70,12 +71,13 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	}
 
 	public getRow = (rowIndex: number): TData | null => {
-		const node = this.activeNodes[rowIndex];
-		return node ? node.data : null;
+		const row = this.getVisualRow(rowIndex);
+		return row?.kind === 'data' ? row.node.data : null;
 	};
 
 	public getRowNode = (rowIndex: number): RowNode<TData> | null => {
-		const node = this.activeNodes[rowIndex];
+		const row = this.getVisualRow(rowIndex);
+		const node = row?.kind === 'data' ? row.node : null;
 		if (node) {
 			return node;
 		}
@@ -91,8 +93,35 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		return null;
 	};
 
+	public getVisualRow = (rowIndex: number): VisualRow<TData> | null => {
+		const row = this.visualRows[rowIndex];
+		if (row) {
+			return row;
+		}
+		if (rowIndex >= 0 && rowIndex < this.getVisualRowCount()) {
+			let loadingNode = this.loadingNodeMap.get(rowIndex);
+			if (!loadingNode) {
+				loadingNode = new RowNode<TData>(`__loading_${rowIndex}`, null as TData);
+				this.loadingNodeMap.set(rowIndex, loadingNode);
+			}
+			return {
+				kind: 'data',
+				id: loadingNode.id,
+				node: loadingNode,
+				depth: 0,
+			};
+		}
+		return null;
+	};
+
 	public loadVisibleBlocks = (startRow: number, endRow: number): void => {
 		if (startRow > endRow) return;
+
+		// If the user is flicking or dragging the scrollbar extremely fast, skip loading intermediate blocks.
+		// When the scrolling stops, the scroll-stop pipeline resets velocity to 0 and triggers the resting block load.
+		if (this.store.engine.viewport.isScrollingFast) {
+			return;
+		}
 
 		const minRow = Math.max(0, startRow);
 		const maxRow = Math.min(Math.max(0, endRow), Math.max(0, this.getRowCount() - 1));
@@ -135,16 +164,24 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	};
 
 	public getRowCount = (): number => {
-		return this.activeNodes.length;
+		return this.getVisualRowCount();
 	};
 
 	public getRowIndexById = (rowId: string): number => {
-		const idx = this.rowIdMap.get(rowId);
-		return idx !== undefined ? idx : -1;
+		return this.getVisualRowIndexById(rowId);
 	};
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
 		return this.nodeMap.get(rowId) ?? null;
+	};
+
+	public getVisualRowCount = (): number => {
+		return this.visualRows.length;
+	};
+
+	public getVisualRowIndexById = (id: string): number => {
+		const idx = this.visualRowIdMap.get(id);
+		return idx !== undefined ? idx : -1;
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
@@ -160,6 +197,21 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		node.setData(updatedRow);
+
+		// If the edited cell field is currently part of active sort or filter models,
+		// we must purge the cache and refetch from server to restore correct order/filters.
+		const state = this.store.getState();
+		let needsPurge = false;
+		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
+			needsPurge = true;
+		} else if (state.filterModel && state.filterModel[colField] !== undefined) {
+			needsPurge = true;
+		}
+
+		if (needsPurge) {
+			this.purgeCache();
+		}
+
 		return true;
 	};
 
@@ -187,7 +239,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		const state = this.store.getState();
 		const requestSortModel = state.sortModel;
 		const requestFilterModel = state.filterModel;
-		const requestSignature = JSON.stringify({ sortModel: requestSortModel, filterModel: requestFilterModel });
 
 		try {
 			const response = await this.datasource.getRows({
@@ -201,24 +252,14 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				return;
 			}
 
-			// If parameters changed since the request was initiated, discard this result
-			const curr = this.store.getState();
-			const currentSignature = JSON.stringify({ sortModel: curr.sortModel, filterModel: curr.filterModel });
-
 			delete this.loadingBlocks[blockIndex];
-
-			if (currentSignature !== requestSignature) {
-				this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
-				const hasActiveFetches = this.loadingBlockCount > 0;
-				this.store.setState({
-					loading: hasActiveFetches,
-				});
-				return;
-			}
 
 			// Grow sparsely without pushing one placeholder per missing row.
 			if (this.activeNodes.length < startRow) {
 				this.activeNodes.length = startRow;
+			}
+			if (this.visualRows.length < startRow) {
+				this.visualRows.length = startRow;
 			}
 
 			// Patch loaded rows into the array and index map
@@ -235,10 +276,17 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 					}
 
 					this.activeNodes[globalIdx] = node;
+					this.visualRows[globalIdx] = {
+						kind: 'data',
+						id: node.id,
+						node,
+						depth: 0,
+					};
 					this.nodeMap.set(id, node);
-					this.rowIdMap.set(id, globalIdx);
+					this.visualRowIdMap.set(id, globalIdx);
 				} else {
 					this.activeNodes[globalIdx] = null;
+					this.visualRows[globalIdx] = null;
 				}
 			});
 
@@ -247,6 +295,9 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				if (this.activeNodes.length < response.totalCount) {
 					this.activeNodes.length = response.totalCount;
 				}
+				if (this.visualRows.length < response.totalCount) {
+					this.visualRows.length = response.totalCount;
+				}
 			}
 
 			this.store.engine.clearFormulas();
@@ -254,10 +305,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			// Layout geometry will be updated by GridEngine using GeometryModel
 			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
 			const hasActiveFetches = this.loadingBlockCount > 0;
-			this.store.setState({
+			this.store.setState((s) => ({
 				loading: hasActiveFetches,
-				dataVersion: curr.dataVersion + 1,
-			});
+				dataVersion: s.dataVersion + 1,
+			}));
 
 			const requestFinishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
 			this.store.dispatchEvent('serverBlockLoaded', {
@@ -288,8 +339,9 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.loadingBlocks = {};
 		this.loadingBlockCount = 0;
 		this.activeNodes = [];
+		this.visualRows = [];
 		this.nodeMap.clear();
-		this.rowIdMap.clear();
+		this.visualRowIdMap.clear();
 		this.loadingNodeMap.clear();
 		this.store.engine.clearFormulas();
 		this.store.setState({

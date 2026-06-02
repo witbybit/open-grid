@@ -1,4 +1,4 @@
-import type { ColumnDef, RowNode } from '../store.js';
+import type { ColumnDef, RowNode, VisualRow } from '../store.js';
 
 export interface GridCellContentMount<TRowData = unknown> {
 	cellKey: string;
@@ -14,6 +14,17 @@ export interface GridCellContentUnmount {
 	cellKey: string;
 	container?: HTMLElement;
 	flushSync?: boolean;
+}
+
+export interface GridRowContentMount<TRowData = unknown> {
+	rowKey: string;
+	container: HTMLElement;
+	visualRow: VisualRow<TRowData>;
+}
+
+export interface GridRowContentUnmount {
+	rowKey: string;
+	container?: HTMLElement;
 }
 
 /**
@@ -49,4 +60,36 @@ export interface IGridRenderer<TRowData = unknown> {
 	 * Optional hook for framework adapters to unmount custom cell content.
 	 */
 	onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
+
+	/**
+	 * Optional hook for framework adapters to mount custom row content.
+	 */
+	onMountRowContent?: (mount: GridRowContentMount<TRowData>) => void;
+
+	/**
+	 * Optional hook for framework adapters to unmount custom row content.
+	 */
+	onUnmountRowContent?: (unmount: GridRowContentUnmount) => void;
+
+	/**
+	 * Optional hook for framework adapters to mount custom header menu popovers.
+	 */
+	onMountHeaderMenu?: (mount: GridHeaderMenuMount<TRowData>) => void;
+
+	/**
+	 * Optional hook for framework adapters to unmount custom header menu popovers.
+	 */
+	onUnmountHeaderMenu?: (unmount: GridHeaderMenuUnmount) => void;
+}
+
+export interface GridHeaderMenuMount<TRowData = unknown> {
+	colField: string;
+	container: HTMLElement;
+	column: ColumnDef<TRowData>;
+	close: () => void;
+}
+
+export interface GridHeaderMenuUnmount {
+	colField: string;
+	container?: HTMLElement;
 }

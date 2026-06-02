@@ -1,7 +1,7 @@
 import React from 'react';
 import { Zap, Filter, ArrowDownAZ, ArrowUpAZ, Keyboard, Layers, HelpCircle, RefreshCw, GripVertical, MoveLeft, MoveRight } from 'lucide-react';
 import type { GridApi } from '@open-grid/react';
-import { LatencyProfiler } from './GridShared';
+import { GridPageType, LatencyProfiler } from './GridShared';
 
 // ============================================================================
 // 1. Viewport & Layout Panel
@@ -310,7 +310,7 @@ export function AccessibilityPanel({ editTrigger, setEditTrigger, arrowKeyNaviga
 // 5. Developer Reset Panel
 // ============================================================================
 interface DeveloperPanelProps {
-	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
+	activePage: GridPageType;
 	activeApi: GridApi<any>;
 }
 
