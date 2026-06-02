@@ -168,4 +168,75 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 
 		controller.dispose();
 	});
+
+	it('should extrapolate arithmetic numeric sequences horizontally', () => {
+		const store = new GridStore<FillRangeRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'c1', header: 'C1', width: 100 },
+				{ field: 'c2', header: 'C2', width: 100 },
+				{ field: 'c3', header: 'C3', width: 100 },
+				{ field: 'c4', header: 'C4', width: 100 },
+			],
+		});
+		const controller = new ClientRowModelController<FillRangeRow>(store, {
+			rows: [{ id: 'r1', c1: 10, c2: 20, c3: 0, c4: 0 } as any],
+			columns: store.getState().columns,
+		});
+
+		store.engine.fillRange(
+			{
+				start: { rowId: 'r1', colField: 'c1' },
+				end: { rowId: 'r1', colField: 'c2' },
+			},
+			{
+				start: { rowId: 'r1', colField: 'c3' },
+				end: { rowId: 'r1', colField: 'c4' },
+			}
+		);
+
+		expect(store.getCellValue('r1', 'c3')).toBe(30);
+		expect(store.getCellValue('r1', 'c4')).toBe(40);
+
+		controller.dispose();
+	});
+
+	it('should shift formula references relatively during horizontal fill', () => {
+		const store = new GridStore<FillRangeRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'val1', header: 'Val1', width: 100 },
+				{ field: 'val2', header: 'Val2', width: 100 },
+				{ field: 'val3', header: 'Val3', width: 100 },
+				{ field: 'formula1', header: 'Formula1', width: 100 },
+				{ field: 'formula2', header: 'Formula2', width: 100 },
+				{ field: 'formula3', header: 'Formula3', width: 100 },
+			],
+		});
+		const controller = new ClientRowModelController<FillRangeRow>(store, {
+			rows: [{ id: 'r1', val1: 5, val2: 10, val3: 15, formula1: '', formula2: '', formula3: '' } as any],
+			columns: store.getState().columns,
+		});
+
+		store.setCellValue('r1', 'formula1', '=[r1:val1]*3');
+
+		store.engine.fillRange(
+			{
+				start: { rowId: 'r1', colField: 'formula1' },
+				end: { rowId: 'r1', colField: 'formula1' },
+			},
+			{
+				start: { rowId: 'r1', colField: 'formula2' },
+				end: { rowId: 'r1', colField: 'formula3' },
+			}
+		);
+
+		expect(store.getCellState('r1', 'formula2').value).toBe('=[r1:val2]*3');
+		expect(store.getCellState('r1', 'formula3').value).toBe('=[r1:val3]*3');
+
+		expect(store.getCellValue('r1', 'formula2')).toBe(30);
+		expect(store.getCellValue('r1', 'formula3')).toBe(45);
+
+		controller.dispose();
+	});
 });

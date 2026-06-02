@@ -1,9 +1,23 @@
 import React from 'react';
-import { Cpu, Database, FileSpreadsheet, Sliders, Layout, Paintbrush, TrendingUp, PanelLeftClose, PanelLeftOpen, Sparkles, Calendar } from 'lucide-react';
+import {
+	Cpu,
+	Database,
+	FileSpreadsheet,
+	Sliders,
+	Layout,
+	Paintbrush,
+	TrendingUp,
+	PanelLeftClose,
+	PanelLeftOpen,
+	Sparkles,
+	Calendar,
+	FolderTree,
+} from 'lucide-react';
 import { APP_VERSION } from '../utils';
+import { GridPageType } from './GridShared';
 
 interface ShowroomLeftSidebarProps {
-	activePage: 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt';
+	activePage: GridPageType;
 	leftSidebarCollapsed: boolean;
 	setLeftSidebarCollapsed: (collapsed: boolean) => void;
 }
@@ -57,6 +71,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Sprint Scheduling Arena',
 			subtitle: '30 Days Gantt • Style Slots',
 			icon: Calendar,
+		},
+		{
+			id: 'nested',
+			label: 'Hierarchical Desk',
+			subtitle: 'Tree • Group • Detail',
+			icon: FolderTree,
 		},
 	] as const;
 

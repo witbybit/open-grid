@@ -11,6 +11,7 @@ import {
 	ProgressSliderEditor,
 	StatusBadgeRenderer,
 	StatusDropdownEditor,
+	StatusHeaderFilter,
 	LatencyProfiler,
 	GreeksRenderer,
 	RiskBadgeRenderer,
@@ -342,12 +343,9 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 
 	const spreadsheetApi = useClientGrid<SpreadsheetRow>({ rows: spreadsheetRows, columns: spreadsheetColumns });
 
-	const handleSpreadsheetCellValueChanged = useCallback(
-		(_rowId: string, _colField: string, _val: unknown) => {
-			// Cell edits are already committed by the grid editor pipeline.
-		},
-		[]
-	);
+	const handleSpreadsheetCellValueChanged = useCallback((_rowId: string, _colField: string, _val: unknown) => {
+		// Cell edits are already committed by the grid editor pipeline.
+	}, []);
 
 	const applySpreadsheetRangeAction = useCallback(
 		(action: 'fill' | 'clear' | 'addPercent' | 'sum') => {
@@ -425,7 +423,14 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 			{ field: 'price', header: 'Acquisition Cost ($)', width: 150, cellRenderer: PriceBadgeRenderer },
 			{ field: 'rating', header: 'Client Rating', width: 160, cellRenderer: StarRatingRenderer },
 			{ field: 'progress', header: 'Deployment Status', width: 170, cellRenderer: ProgressBarRenderer, cellEditor: ProgressSliderEditor },
-			{ field: 'status', header: 'Operational Status', width: 140, cellRenderer: StatusBadgeRenderer, cellEditor: StatusDropdownEditor },
+			{
+				field: 'status',
+				header: 'Operational Status',
+				width: 140,
+				cellRenderer: StatusBadgeRenderer,
+				cellEditor: StatusDropdownEditor,
+				headerMenuComponent: StatusHeaderFilter,
+			},
 		],
 		[]
 	);
@@ -433,12 +438,9 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	const customRows = useMemo(() => generateCustomShowcaseRows(50), []);
 	const customApi = useClientGrid<CustomShowcaseRow>({ rows: customRows, columns: customColumns });
 
-	const handleCustomCellValueChanged = useCallback(
-		(_rowId: string, _colField: string, _val: unknown) => {
-			// Cell edits are already committed by the grid editor pipeline.
-		},
-		[]
-	);
+	const handleCustomCellValueChanged = useCallback((_rowId: string, _colField: string, _val: unknown) => {
+		// Cell edits are already committed by the grid editor pipeline.
+	}, []);
 
 	// --------------------------------------------------------------------------
 	// E. PAGE 5: DYNAMIC LAYOUT & VISIBILITY RESIZING (100 Rows)
@@ -560,12 +562,9 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 
 	const dashboardApi = useClientGrid<DashboardStockRow>({ rows: dashboardRows, columns: dashboardColumns });
 
-	const handleDashboardCellValueChanged = useCallback(
-		(_rowId: string, _colField: string, _val: unknown) => {
-			// Cell edits are already committed by the grid editor pipeline.
-		},
-		[]
-	);
+	const handleDashboardCellValueChanged = useCallback((_rowId: string, _colField: string, _val: unknown) => {
+		// Cell edits are already committed by the grid editor pipeline.
+	}, []);
 
 	// --------------------------------------------------------------------------
 	// H. PAGE 8: GANTT SCHEDULE & PROJECT WORKSPACE (Gantt & Project Scheduling Arena)

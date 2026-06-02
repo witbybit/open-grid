@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi } from '@open-grid/react';
+import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi, GridContextMenuOptions } from '@open-grid/react';
 
+export type GridPageType = 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt' | 'nested';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================
@@ -158,6 +159,9 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 	const rating = Number(value) || 0;
 
 	const handleStarClick = (starIndex: number, e: React.MouseEvent) => {
+		// Explicitly select and focus the cell first so clicking a star registers selection instantly!
+		api.selectCell({ rowId, colField }, 'pointer');
+
 		e.stopPropagation();
 		e.preventDefault();
 
@@ -170,10 +174,10 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 	return (
 		<div className='flex items-center gap-1 h-full select-none cursor-pointer'>
 			{[1, 2, 3, 4, 5].map((star) => (
-				<button
+				<span
 					key={star}
 					onClick={(e) => handleStarClick(star, e)}
-					className='p-0.5 hover:scale-125 transition-transform duration-100 outline-none'
+					className='p-0.5 hover:scale-125 transition-transform duration-100 outline-none cursor-pointer'
 				>
 					<svg
 						className={`w-4 h-4 ${star <= rating ? 'text-amber-400 fill-amber-400' : 'text-slate-600'}`}
@@ -186,7 +190,7 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 					>
 						<polygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' />
 					</svg>
-				</button>
+				</span>
 			))}
 		</div>
 	);
@@ -257,6 +261,90 @@ export const StatusDropdownEditor = ({ value, onCommit }: CellEditorProps<any>) 
 			<option value='Pending'>Pending</option>
 			<option value='Inactive'>Inactive</option>
 		</select>
+	);
+};
+
+export const StatusHeaderFilter = ({ colField, api, close }: { colField: string; api: GridApi<any>; close: () => void }) => {
+	const state = api.getState();
+	const activeFilter = state.filterModel?.[colField];
+
+	let activeFilterVal = '';
+	if (activeFilter) {
+		if (typeof activeFilter === 'object' && 'filter' in activeFilter) {
+			activeFilterVal = String((activeFilter as any).filter ?? '');
+		} else {
+			activeFilterVal = String(activeFilter);
+		}
+	}
+
+	const [selectedValue, setSelectedValue] = React.useState(activeFilterVal);
+
+	const handleReset = () => {
+		const nextFilter = { ...(state.filterModel || {}) };
+		delete nextFilter[colField];
+		api.setFilterModel(Object.keys(nextFilter).length > 0 ? nextFilter : null);
+		close();
+	};
+
+	const handleApply = () => {
+		const nextFilter = { ...(state.filterModel || {}) };
+		if (selectedValue) {
+			nextFilter[colField] = {
+				type: 'equals',
+				filter: selectedValue,
+			};
+		} else {
+			delete nextFilter[colField];
+		}
+		api.setFilterModel(Object.keys(nextFilter).length > 0 ? nextFilter : null);
+		close();
+	};
+
+	return (
+		<div className='flex flex-col gap-2 p-1'>
+			<div className='text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1'>Status Filter (React)</div>
+			<div className='flex flex-col gap-2'>
+				{['Active', 'Pending', 'Inactive'].map((statusVal) => {
+					const badgeColor =
+						statusVal === 'Active'
+							? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+							: statusVal === 'Pending'
+								? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+								: 'bg-slate-500/10 border-slate-700/50 text-slate-400';
+					return (
+						<label key={statusVal} className='flex items-center gap-2 cursor-pointer text-xs text-slate-300 hover:text-white select-none'>
+							<input
+								type='radio'
+								name='react_status_filter'
+								value={statusVal}
+								checked={selectedValue === statusVal}
+								onChange={() => setSelectedValue(statusVal)}
+								className='cursor-pointer accent-indigo-500'
+							/>
+							<span
+								className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border leading-none inline-block ${badgeColor}`}
+							>
+								{statusVal}
+							</span>
+						</label>
+					);
+				})}
+			</div>
+			<div className='flex justify-end gap-2 mt-3 pt-2 border-t border-slate-800'>
+				<button
+					onClick={handleReset}
+					className='px-2 py-1 text-[10px] font-semibold text-slate-300 hover:text-white rounded border border-slate-750 hover:border-slate-500 transition'
+				>
+					Reset
+				</button>
+				<button
+					onClick={handleApply}
+					className='px-2 py-1 text-[10px] font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded transition shadow-lg'
+				>
+					Apply
+				</button>
+			</div>
+		</div>
 	);
 };
 
@@ -337,6 +425,8 @@ export interface GridViewProps {
 	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	editTrigger?: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit?: boolean;
+	enableContextMenu?: boolean;
+	contextMenuOptions?: GridContextMenuOptions<any>;
 	className?: string;
 }
 
@@ -351,6 +441,8 @@ export function GridView({
 	onCellValueChanged = () => {},
 	editTrigger = 'doubleClick',
 	arrowKeyNavigationEdit = false,
+	enableContextMenu = true,
+	contextMenuOptions,
 	className = '',
 }: GridViewProps) {
 	const [lastClick, setLastClick] = React.useState<GridCellClickParams<any> | null>(null);
@@ -393,6 +485,8 @@ export function GridView({
 				pinTopRows={pinTopRows}
 				pinBottomRows={pinBottomRows}
 				enableNavigation={true}
+				enableContextMenu={enableContextMenu}
+				contextMenuOptions={contextMenuOptions}
 				onCellClick={(params) => {
 					setLastClick(params);
 				}}

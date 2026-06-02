@@ -122,6 +122,34 @@ export class RowNode<TRowData = unknown> {
 	}
 }
 
+export type VisualRow<TRowData = unknown> =
+	| {
+			kind: 'data';
+			id: string;
+			node: RowNode<TRowData>;
+			depth: number;
+			height?: number;
+	  }
+	| {
+			kind: 'group';
+			id: string;
+			key: string;
+			field: string;
+			depth: number;
+			expanded: boolean;
+			childCount: number;
+			aggregate?: Record<string, unknown>;
+			height?: number;
+	  }
+	| {
+			kind: 'detail';
+			id: string;
+			parentId: string;
+			depth: number;
+			height: number;
+			render: unknown;
+	  };
+
 export interface ValueGetterParams<TRowData = unknown> {
 	node: RowNode<TRowData>;
 	row: TRowData;
@@ -215,11 +243,18 @@ export function compilePathGetter(path: string): (data: unknown) => unknown {
 }
 
 export interface RowModel<TRowData = unknown> {
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	getVisualRowCount(): number;
+	getVisualRowIndexById(id: string): number;
+	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRow(index: number): TRowData | null;
 	getRowNode(index: number): RowNode<TRowData> | null;
 	getRowCount(): number;
 	getRowIndexById(rowId: string): number;
-	getRowNodeById?(rowId: string): RowNode<TRowData> | null;
+	toggleGroupExpanded?(groupId: string): void;
+	toggleDetailExpanded?(rowId: string): void;
+	isGroupExpanded?(groupId: string): boolean;
+	isDetailExpanded?(rowId: string): boolean;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	refresh?(): void;
@@ -227,6 +262,14 @@ export interface RowModel<TRowData = unknown> {
 	setDatasource?(datasource: IGridDatasource, blockSize?: number): void;
 	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
 	loadVisibleBlocks?(startRow: number, endRow: number): void;
+}
+
+export interface HeaderMenuRendererProps<TRowData = unknown> {
+	colField: string;
+	column: ColumnDef<TRowData>;
+	api: GridApi<TRowData>;
+	close: () => void;
+	container: HTMLDivElement;
 }
 
 export interface ColumnDef<TRowData = unknown> {
@@ -240,6 +283,9 @@ export interface ColumnDef<TRowData = unknown> {
 	valueSetter?: (row: TRowData, value: unknown) => boolean;
 	cellRenderer?: (props: CellRendererProps<TRowData>) => unknown;
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
+	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;
+	headerMenuComponent?: any;
+	sortable?: boolean;
 }
 
 export interface GridRowClassParams<TRowData = unknown> {
@@ -276,6 +322,8 @@ export interface GridStyleSlots<TRowData = unknown> {
 	headerCellClass?: (col: ColumnDef<TRowData>) => string;
 	beforeCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
 	afterCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
+	groupRowClass?: (visualRow: Extract<VisualRow<TRowData>, { kind: 'group' }>) => string;
+	detailRowClass?: (visualRow: Extract<VisualRow<TRowData>, { kind: 'detail' }>) => string;
 }
 
 export interface GridState<TRowData = unknown> {
@@ -298,6 +346,14 @@ export interface GridState<TRowData = unknown> {
 	// Sorting & Filtering State
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
+
+	// Tree / Grouping / Master-Detail State
+	groupBy?: string[];
+	getParentId?: (row: TRowData) => string | null | undefined;
+	masterDetailEnabled?: boolean;
+	groupRowHeight?: number;
+	detailRowHeight?: number;
+	detailRenderer?: unknown;
 
 	// React cache invalidator
 	dataVersion: number;
@@ -353,6 +409,13 @@ export interface GridApi<TRowData = unknown> {
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
 	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
+	toggleGroupExpanded(groupId: string): void;
+	toggleDetailExpanded(rowId: string): void;
+	isGroupExpanded(groupId: string): boolean;
+	isDetailExpanded(rowId: string): boolean;
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	getVisualRowCount(): number;
+	getVisualRowIndexById(id: string): number | null;
 	addEventListener<T = unknown>(type: string, callback: GridEventListener<T>): () => void;
 	dispatchEvent<T = unknown>(type: string, payload: T): void;
 	startEditing(rowId: string, colField: string): void;
@@ -413,6 +476,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			getRowId: initialState.getRowId,
 			loadingSkeletonCount: initialState.loadingSkeletonCount,
 			styleSlots: initialState.styleSlots,
+			groupBy: initialState.groupBy,
+			getParentId: initialState.getParentId,
+			masterDetailEnabled: initialState.masterDetailEnabled,
+			groupRowHeight: initialState.groupRowHeight,
+			detailRowHeight: initialState.detailRowHeight,
+			detailRenderer: initialState.detailRenderer,
 		});
 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
@@ -519,6 +588,34 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setStyleSlots = (styleSlots: GridStyleSlots<TRowData> | undefined): void => {
 		this.engine.stateManager.setState({ styleSlots });
+	};
+
+	public toggleGroupExpanded = (groupId: string): void => {
+		this.getRowModel()?.toggleGroupExpanded?.(groupId);
+	};
+
+	public toggleDetailExpanded = (rowId: string): void => {
+		this.getRowModel()?.toggleDetailExpanded?.(rowId);
+	};
+
+	public isGroupExpanded = (groupId: string): boolean => {
+		return this.getRowModel()?.isGroupExpanded?.(groupId) ?? false;
+	};
+
+	public isDetailExpanded = (rowId: string): boolean => {
+		return this.getRowModel()?.isDetailExpanded?.(rowId) ?? false;
+	};
+
+	public getVisualRow = (index: number): VisualRow<TRowData> | null => {
+		return this.getRowModel()?.getVisualRow(index) ?? null;
+	};
+
+	public getVisualRowCount = (): number => {
+		return this.getRowModel()?.getVisualRowCount() ?? 0;
+	};
+
+	public getVisualRowIndexById = (id: string): number | null => {
+		return this.getRowModel()?.getVisualRowIndexById(id) ?? null;
 	};
 
 	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {

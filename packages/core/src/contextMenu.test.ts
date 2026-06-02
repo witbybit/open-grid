@@ -13,8 +13,9 @@ interface TestRow {
 type ContextMenuTestPlugin = {
 	copySelectedRange(params: ContextMenuParams<TestRow>): void;
 	clearSelection(params: ContextMenuParams<TestRow>): void;
-	add100ToSelection(params: ContextMenuParams<TestRow>): void;
-	apply10PercentIncrease(params: ContextMenuParams<TestRow>): void;
+	cutSelectedRange(params: ContextMenuParams<TestRow>): void;
+	pasteSelectedRange(params: ContextMenuParams<TestRow>): Promise<void>;
+	selectAll(params: ContextMenuParams<TestRow>): void;
 	activePointer: GridCellPointer | null;
 	renderMenu(clientX: number, clientY: number): void;
 	menuElement: HTMLDivElement | null;
@@ -32,6 +33,7 @@ describe('GridContextMenuPlugin', () => {
 			value: {
 				clipboard: {
 					writeText: vi.fn().mockResolvedValue(undefined),
+					readText: vi.fn().mockResolvedValue(''),
 				},
 			},
 			configurable: true,
@@ -133,7 +135,7 @@ describe('GridContextMenuPlugin', () => {
 		expect(store.getCellValue('r2', 'price')).toBe('');
 	});
 
-	it('should add 100 to selection numerical values atomically', () => {
+	it('should cut selection values, copying them first then clearing them', () => {
 		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
 		const state = store.getState();
@@ -144,18 +146,23 @@ describe('GridContextMenuPlugin', () => {
 			selection: state.selection,
 		};
 
-		testPlugin.add100ToSelection(params);
+		testPlugin.cutSelectedRange(params);
 
-		// Price columns are numerical, should increment
-		expect(store.getCellValue('r1', 'price')).toBe(200);
-		expect(store.getCellValue('r2', 'price')).toBe(300);
-
-		// Name columns are strings, should not change
-		expect(store.getCellValue('r1', 'name')).toBe('Product A');
-		expect(store.getCellValue('r2', 'name')).toBe('Product B');
+		expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Product A\t100\nProduct B\t200');
+		expect(store.getCellValue('r1', 'name')).toBe('');
+		expect(store.getCellValue('r1', 'price')).toBe('');
 	});
 
-	it('should apply 10% increase to selection numerical values atomically', () => {
+	it('should paste clipboard tab-separated values into range', async () => {
+		Object.defineProperty(navigator, 'clipboard', {
+			value: {
+				readText: vi.fn().mockResolvedValue('Copied Name\t999\nAnother Name\t888'),
+				writeText: vi.fn(),
+			},
+			writable: true,
+			configurable: true,
+		});
+
 		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
 		const state = store.getState();
@@ -166,20 +173,41 @@ describe('GridContextMenuPlugin', () => {
 			selection: state.selection,
 		};
 
-		testPlugin.apply10PercentIncrease(params);
+		await testPlugin.pasteSelectedRange(params);
 
-		// Price columns are numerical, should multiply by 1.1
-		expect(store.getCellValue('r1', 'price')).toBe(110);
-		expect(store.getCellValue('r2', 'price')).toBe(220);
+		expect(store.getCellValue('r1', 'name')).toBe('Copied Name');
+		expect(store.getCellValue('r1', 'price')).toBe('999');
+		expect(store.getCellValue('r2', 'name')).toBe('Another Name');
+		expect(store.getCellValue('r2', 'price')).toBe('888');
+	});
 
-		// Name columns are strings, should not change
-		expect(store.getCellValue('r1', 'name')).toBe('Product A');
-		expect(store.getCellValue('r2', 'name')).toBe('Product B');
+	it('should select all cells in the grid', () => {
+		const state = store.getState();
+		const params = {
+			rowId: 'r1',
+			colField: 'name',
+			api: store,
+			selection: state.selection,
+		};
+
+		testPlugin.selectAll(params);
+
+		const updatedState = store.getState();
+		expect(updatedState.selection.range).toEqual({
+			start: { rowId: 'r1', colField: 'id' },
+			end: { rowId: 'r3', colField: 'price' },
+		});
+	});
+
+	it('should not show menu if disabled in options', () => {
+		plugin.setOptions({ disabled: true });
+		plugin.show('r1', 'name', 100, 100);
+		expect(testPlugin.menuElement).toBeNull();
 	});
 
 	it('should allow excluding default menu items', () => {
 		plugin.setOptions({
-			excludeDefaults: ['copy', 'add100'],
+			excludeDefaults: ['copy', 'clear'],
 		});
 		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
 		testPlugin.renderMenu(100, 100);
@@ -190,9 +218,36 @@ describe('GridContextMenuPlugin', () => {
 		const texts = items.map((el) => el.textContent);
 
 		expect(texts).not.toContain('Copy Selected Range');
-		expect(texts).not.toContain('Add 100 to Selection');
-		expect(texts).toContain('Clear Selection');
-		expect(texts).toContain('Apply 10% Increase');
+		expect(texts).not.toContain('Clear Selection');
+		expect(texts).toContain('Cut Selection');
+		expect(texts).toContain('Paste Clipboard');
+		expect(texts).toContain('Select All');
+	});
+
+	it('should support conditional disabled and hidden states', () => {
+		plugin.setOptions({
+			customItems: [
+				{ label: 'Disabled Item', disabled: true, action: vi.fn() },
+				{ label: 'Hidden Item', hidden: true, action: vi.fn() },
+				{ label: 'Fn Disabled Item', disabled: () => true, action: vi.fn() },
+				{ label: 'Fn Hidden Item', hidden: () => true, action: vi.fn() },
+			],
+		});
+
+		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
+		testPlugin.renderMenu(100, 100);
+
+		const menuEl = testPlugin.menuElement as HTMLDivElement;
+		const items = Array.from(menuEl.querySelectorAll('.og-context-menu-item'));
+		const texts = items.map((el) => el.textContent);
+
+		expect(texts).toContain('Disabled Item');
+		expect(texts).toContain('Fn Disabled Item');
+		expect(texts).not.toContain('Hidden Item');
+		expect(texts).not.toContain('Fn Hidden Item');
+
+		const disabledEl = items.find((el) => el.textContent === 'Disabled Item') as HTMLDivElement;
+		expect(disabledEl.classList.contains('og-disabled')).toBe(true);
 	});
 
 	it('should support custom items and pass rich parameters to action callbacks', () => {

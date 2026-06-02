@@ -1,5 +1,6 @@
-import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter } from './store.js';
+import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter, type VisualRow } from './store.js';
 import { createCellKey, getFieldRoot } from './ids.js';
+import { RowPipeline } from './rows/RowPipeline.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -204,10 +205,40 @@ export function applyClientSortAndFilter<TData>(
 export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
 	private store: GridStore<TData>;
 	private allNodes: RowNode<TData>[] = [];
-	private activeNodes: RowNode<TData>[] = [];
+	private visualRows: Array<VisualRow<TData>> = [];
 	private nodeMap = new Map<string, RowNode<TData>>();
-	private rowIdMap = new Map<string, number>();
+	private visualRowIdMap = new Map<string, number>();
 	private unsubscribers: Array<() => void> = [];
+
+	private pipeline = new RowPipeline<TData>();
+	private expandedGroupIds = new Set<string>();
+	private expandedDetailRowIds = new Set<string>();
+
+	public toggleGroupExpanded = (groupId: string): void => {
+		if (this.expandedGroupIds.has(groupId)) {
+			this.expandedGroupIds.delete(groupId);
+		} else {
+			this.expandedGroupIds.add(groupId);
+		}
+		this.refresh();
+	};
+
+	public toggleDetailExpanded = (rowId: string): void => {
+		if (this.expandedDetailRowIds.has(rowId)) {
+			this.expandedDetailRowIds.delete(rowId);
+		} else {
+			this.expandedDetailRowIds.add(rowId);
+		}
+		this.refresh();
+	};
+
+	public isGroupExpanded = (groupId: string): boolean => {
+		return this.expandedGroupIds.has(groupId);
+	};
+
+	public isDetailExpanded = (rowId: string): boolean => {
+		return this.expandedDetailRowIds.has(rowId);
+	};
 
 	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
 		this.store = store;
@@ -394,22 +425,35 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 	}
 
+	public getVisualRow = (index: number): VisualRow<TData> | null => {
+		return this.visualRows[index] ?? null;
+	};
+
+	public getVisualRowCount = (): number => {
+		return this.visualRows.length;
+	};
+
+	public getVisualRowIndexById = (id: string): number => {
+		const idx = this.visualRowIdMap.get(id);
+		return idx !== undefined ? idx : -1;
+	};
+
 	public getRow = (index: number): TData | null => {
-		const node = this.activeNodes[index];
-		return node ? node.data : null;
+		const row = this.getVisualRow(index);
+		return row?.kind === 'data' ? row.node.data : null;
 	};
 
 	public getRowNode = (index: number): RowNode<TData> | null => {
-		return this.activeNodes[index] ?? null;
+		const row = this.getVisualRow(index);
+		return row?.kind === 'data' ? row.node : null;
 	};
 
 	public getRowCount = (): number => {
-		return this.activeNodes.length;
+		return this.getVisualRowCount();
 	};
 
 	public getRowIndexById = (rowId: string): number => {
-		const idx = this.rowIdMap.get(rowId);
-		return idx !== undefined ? idx : -1;
+		return this.getVisualRowIndexById(rowId);
 	};
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
@@ -429,22 +473,59 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		node.setData(updatedRow);
+
+		// If the edited cell field affects active sorting, filtering, grouping, or aggregates,
+		// we must re-run the pipeline to update the row positions, visibility, or computed aggregates.
+		const state = this.store.getState();
+		let needsRefresh = false;
+
+		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
+			needsRefresh = true;
+		} else if (state.filterModel && state.filterModel[colField] !== undefined) {
+			needsRefresh = true;
+		} else if (state.groupBy && state.groupBy.includes(colField)) {
+			needsRefresh = true;
+		} else if (state.columns.some((c) => c.field === colField && c.valueGetter)) {
+			needsRefresh = true;
+		} else {
+			// If grouping or custom row models (e.g. parentId tree) are active, any cell edit
+			// might affect group calculations, so we refresh to keep aggregations/hierarchies correct.
+			const hasGrouping = state.groupBy && state.groupBy.length > 0;
+			const hasTree = !!state.getParentId;
+			if (hasGrouping || hasTree) {
+				needsRefresh = true;
+			}
+		}
+
+		if (needsRefresh) {
+			this.refresh();
+		}
+
 		return true;
 	};
 
 	public refresh(): void {
 		const state = this.store.getState();
-		const visible = applyClientSortAndFilter(this.allNodes, state.columns, state.sortModel, state.filterModel);
 
-		this.activeNodes = visible.map((v) => v.node);
-
-		this.rowIdMap.clear();
-
-		this.activeNodes.forEach((node, index) => {
-			if (node) {
-				this.rowIdMap.set(node.id, index);
-			}
+		const { visualRows, visualRowIdMap } = this.pipeline.run({
+			nodes: this.allNodes,
+			columns: state.columns,
+			sortModel: state.sortModel,
+			filterModel: state.filterModel,
+			groupBy: state.groupBy,
+			getParentId: state.getParentId,
+			expandedGroupIds: this.expandedGroupIds,
+			expandedDetailRowIds: this.expandedDetailRowIds,
+			defaultRowHeight: state.defaultRowHeight,
+			rowHeightsRecord: state.rowHeights,
+			groupRowHeight: state.groupRowHeight,
+			detailRowHeight: state.detailRowHeight,
+			masterDetailEnabled: state.masterDetailEnabled,
+			detailRenderer: state.detailRenderer,
 		});
+
+		this.visualRows = visualRows;
+		this.visualRowIdMap = visualRowIdMap;
 
 		this.store.setState({
 			dataVersion: state.dataVersion + 1,

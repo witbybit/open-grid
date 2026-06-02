@@ -11,7 +11,7 @@ interface TestRow {
 }
 
 describe('ClientRowModelController', () => {
-	it('should initialize and populate activeNodes correctly', () => {
+	it('should initialize and populate visualRows correctly', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
@@ -28,8 +28,14 @@ describe('ClientRowModelController', () => {
 		});
 
 		expect(controller.getRowCount()).toBe(2);
+		expect(controller.getVisualRowCount()).toBe(2);
 		expect(controller.getRowIndexById('1')).toBe(0);
+		expect(controller.getVisualRowIndexById('1')).toBe(0);
 		expect(controller.getRowIndexById('2')).toBe(1);
+
+		const visualRow1 = controller.getVisualRow(0);
+		expect(visualRow1?.kind).toBe('data');
+		expect(visualRow1?.id).toBe('1');
 
 		const node1 = controller.getRowNode(0);
 		expect(node1?.data.name).toBe('Alice');
@@ -70,5 +76,34 @@ describe('ClientRowModelController', () => {
 		controller.updateRows((rows) => rows.map((row) => (row.id === '2' ? { ...row, user: { name: 'Aaron' } } : row)));
 
 		expect(controller.getRowNode(0)?.id).toBe('2');
+	});
+
+	it('should automatically refresh sorting and filtering when setCellValue is called', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+		});
+
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', name: 'Bob' },
+				{ id: '2', name: 'Charlie' },
+				{ id: '3', name: 'Alice' },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Initial sorted order: Alice (3), Bob (1), Charlie (2)
+		expect(controller.getRowNode(0)?.id).toBe('3'); // Alice
+		expect(controller.getRowNode(1)?.id).toBe('1'); // Bob
+		expect(controller.getRowNode(2)?.id).toBe('2'); // Charlie
+
+		// Edit Charlie to Aaron. The sort order should automatically update to Aaron (2), Alice (3), Bob (1)
+		controller.setCellValue('2', 'name', 'Aaron');
+
+		expect(controller.getRowNode(0)?.id).toBe('2'); // Aaron (formerly Charlie)
+		expect(controller.getRowNode(1)?.id).toBe('3'); // Alice
+		expect(controller.getRowNode(2)?.id).toBe('1'); // Bob
 	});
 });

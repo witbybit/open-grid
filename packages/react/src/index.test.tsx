@@ -623,4 +623,96 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		unmount();
 	});
+
+	it('should rerender custom cell renderer when cell value is programmatically updated', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellRenderer: ({ value }) => <span data-testid='custom-renderer-programmatic'>{String(value)}</span>,
+				},
+			],
+		});
+
+		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+
+		await screen.findByText('Product A');
+		expect(screen.getByTestId('custom-renderer-programmatic').textContent).toBe('Product A');
+
+		act(() => {
+			grid.api.setCellValue('1', 'name', 'Product Updated');
+		});
+
+		await waitFor(() => {
+			expect(screen.getByTestId('custom-renderer-programmatic').textContent).toBe('Product Updated');
+		});
+
+		unmount();
+		grid.api.destroy();
+	});
+
+	it('should render custom group and detail row renderers inside PortalManager', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [],
+			columns: [],
+		});
+
+		const containerGroup = document.createElement('div');
+		const containerDetail = document.createElement('div');
+		document.body.appendChild(containerGroup);
+		document.body.appendChild(containerDetail);
+
+		const rowPortals = new Map();
+		rowPortals.set('group-1', {
+			rowKey: 'group-1',
+			container: containerGroup,
+			visualRow: {
+				kind: 'group',
+				id: 'group-1',
+				field: 'category',
+				key: 'Electronics',
+				expanded: true,
+				depth: 1,
+				childCount: 5,
+			},
+		});
+
+		rowPortals.set('detail-1', {
+			rowKey: 'detail-1',
+			container: containerDetail,
+			visualRow: {
+				kind: 'detail',
+				id: 'detail-1',
+				parentId: 'parent-1',
+			},
+		});
+
+		const groupRenderer = ({ visualRow }: any) => (
+			<span data-testid='custom-group'>
+				{visualRow.field}:{visualRow.key} ({visualRow.childCount} items)
+			</span>
+		);
+
+		const detailRenderer = ({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>;
+
+		render(
+			<PortalManager
+				portals={new Map()}
+				rowPortals={rowPortals}
+				api={grid.api}
+				groupRowRenderer={groupRenderer}
+				detailRowRenderer={detailRenderer}
+			/>
+		);
+
+		expect(screen.getByTestId('custom-group').textContent).toBe('category:Electronics (5 items)');
+		expect(screen.getByTestId('custom-detail').textContent).toBe('Details for parent-1');
+
+		document.body.removeChild(containerGroup);
+		document.body.removeChild(containerDetail);
+		grid.api.destroy();
+	});
 });

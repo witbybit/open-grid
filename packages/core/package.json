@@ -4,6 +4,7 @@
 	"description": "Framework-agnostic high-performance spreadsheet and grid engine core",
 	"type": "module",
 	"main": "./dist/index.js",
+	"module": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"publishConfig": {
 		"access": "public"

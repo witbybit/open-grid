@@ -19,9 +19,11 @@ export type {
 	GridSelectionState,
 	GridState,
 	GridStyleSlots,
+	HeaderMenuRendererProps,
 	Listener,
 	RowModel,
 	ValueGetterParams,
+	VisualRow,
 } from './store.js';
 
 export type { FilterModel, FilterModelItem, SortModel } from './rowModel.js';

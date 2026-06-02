@@ -20,6 +20,24 @@ export class ViewportModel<TRowData = unknown> {
 	private velocityY = 0; // px/ms
 	private velocityX = 0; // px/ms
 
+	// Centralized velocity threshold for high-performance optimizations (1.5 px/ms)
+	private readonly FAST_SCROLL_THRESHOLD = 5;
+
+	/**
+	 * Evaluates if the grid is currently scrolling faster than the fluid performance threshold.
+	 */
+	public get isScrollingFast(): boolean {
+		return Math.abs(this.velocityY) > this.FAST_SCROLL_THRESHOLD || Math.abs(this.velocityX) > this.FAST_SCROLL_THRESHOLD;
+	}
+
+	/**
+	 * Resets scroll velocity tracking back to rest (0).
+	 */
+	public resetVelocity(): void {
+		this.velocityY = 0;
+		this.velocityX = 0;
+	}
+
 	// Base overscan buffer counts
 	private baseOverscanRows = 12;
 	private baseOverscanCols = 8;
