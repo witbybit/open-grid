@@ -5,3 +5,4 @@ export * from './stages/sortTreeStage.js';
 export * from './stages/aggregateStage.js';
 export * from './stages/flattenStage.js';
 export * from './RowPipeline.js';
+export * from './RowDataStore.js';

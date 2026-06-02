@@ -26,7 +26,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	private visualRows: Array<VisualRow<TData> | null> = [];
 	private nodeMap = new Map<string, RowNode<TData>>();
 	private visualRowIdMap = new Map<string, number>();
-	private loadingNodeMap = new Map<number, RowNode<TData>>();
 	private loadingBlocks: Record<number, boolean> = {};
 	private loadingBlockCount = 0;
 	private unsubscribers: Array<() => void> = [];
@@ -77,16 +76,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			return row;
 		}
 		if (rowIndex >= 0 && rowIndex < this.getVisualRowCount()) {
-			let loadingNode = this.loadingNodeMap.get(rowIndex);
-			if (!loadingNode) {
-				loadingNode = new RowNode<TData>(`__loading_${rowIndex}`, null as TData);
-				this.loadingNodeMap.set(rowIndex, loadingNode);
-			}
 			return {
-				kind: 'data',
-				id: loadingNode.id,
-				node: loadingNode,
-				depth: 0,
+				kind: 'loading',
+				id: `__loading_${rowIndex}`,
+				editable: false,
 			};
 		}
 		return null;
@@ -325,7 +318,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.visualRows = [];
 		this.nodeMap.clear();
 		this.visualRowIdMap.clear();
-		this.loadingNodeMap.clear();
 		this.store.engine.clearFormulas();
 		this.store.setState({
 			loading: true,

@@ -90,8 +90,6 @@ export type GridEventListener<T = unknown> = (event: GridEvent<T>) => void;
 export class RowNode<TRowData = unknown> {
 	public id!: string;
 	public data!: TRowData;
-	public selected: boolean = false;
-	public expanded: boolean = false;
 
 	// Caches computed cell values for this row until the row data changes.
 	private cellValueCache = new Map<string, unknown>();
@@ -417,6 +415,31 @@ export type GridStateUpdater<TRowData = unknown> = Partial<GridState<TRowData>> 
 
 export type Listener<TRowData = unknown> = (state: GridState<TRowData>) => void;
 
+export interface GridRowsAccessor<TRowData = unknown> {
+	/** Iterate over all active data rows */
+	forEach(callback: (row: TRowData, index: number) => void): void;
+	/** Get all active data rows as an array */
+	getAll(): TRowData[];
+	/** Get currently selected data rows */
+	getSelected(): TRowData[];
+	/** Get currently selected row IDs */
+	getSelectedIds(): string[];
+	/** Get a data row by its ID */
+	getById(id: string): TRowData | null;
+	/** Get a row node by its ID */
+	getNodeById(id: string): RowNode<TRowData> | null;
+	/** Get the total number of data rows */
+	getCount(): number;
+	/** Get the visual representation of a row by its ID */
+	getVisualRowById(id: string): VisualRow<TRowData> | null;
+	/** Get helpers for rows within a specific cell/selection range */
+	inRange(range: GridCellRange): {
+		forEach(callback: (rowId: string, index: number) => void): void;
+		getIds(): string[];
+		getData(): TRowData[];
+	};
+}
+
 /**
  * Public, pristine API intended for application developers.
  */
@@ -424,10 +447,8 @@ export interface GridApi<TRowData = unknown> {
 	getState(): GridState<TRowData>;
 	getRowId(row: TRowData): string;
 	isRowLoading(rowId: string): boolean;
-	getRowCount(): number;
-	getRow(index: number): TRowData | null;
-	getRowNode(index: number): RowNode<TRowData> | null;
-	getRowIndexById(rowId: string): number | null;
+	getDataRowAtVisualIndex(index: number): TRowData | null;
+	getDataRowNodeAtVisualIndex(index: number): RowNode<TRowData> | null;
 	setRows(rows: TRowData[]): void;
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
 	refreshRows(): void;
@@ -461,6 +482,7 @@ export interface GridApi<TRowData = unknown> {
 	getVisualIndexByRowId(rowId: string): number | null;
 	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRawRowById(rowId: string): TRowData | null;
+	rows(): GridRowsAccessor<TRowData>;
 	addEventListener<T = unknown>(type: string, callback: GridEventListener<T>): () => void;
 	dispatchEvent<T = unknown>(type: string, payload: T): void;
 	startEditing(rowId: string, colField: string): void;
@@ -705,23 +727,132 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.getRowModel();
 	};
 
-	public getRowCount = (): number => {
-		return this.getVisualRowCount();
-	};
-
-	public getRow = (index: number): TRowData | null => {
+	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
 		const vr = this.getVisualRow(index);
 		return vr?.kind === 'data' ? vr.node.data : null;
 	};
 
-	public getRowNode = (index: number): RowNode<TRowData> | null => {
+	public getDataRowNodeAtVisualIndex = (index: number): RowNode<TRowData> | null => {
 		const vr = this.getVisualRow(index);
 		return vr?.kind === 'data' ? vr.node : null;
 	};
 
-	public getRowIndexById = (rowId: string): number | null => {
-		const idx = this.getVisualRowIndexById(rowId);
-		return idx !== null && idx >= 0 ? idx : null;
+	public rows = (): GridRowsAccessor<TRowData> => {
+		return {
+			forEach: (callback) => {
+				const count = this.getVisualRowCount();
+				let dataIndex = 0;
+				for (let i = 0; i < count; i++) {
+					const row = this.getDataRowAtVisualIndex(i);
+					if (row !== null) {
+						callback(row, dataIndex++);
+					}
+				}
+			},
+			getAll: () => {
+				const count = this.getVisualRowCount();
+				const rows: TRowData[] = [];
+				for (let i = 0; i < count; i++) {
+					const row = this.getDataRowAtVisualIndex(i);
+					if (row !== null) {
+						rows.push(row);
+					}
+				}
+				return rows;
+			},
+			getSelected: () => {
+				const bounds = this.state.selection.bounds;
+				if (!bounds) return [];
+				const rows: TRowData[] = [];
+				for (let i = bounds.minRow; i <= bounds.maxRow; i++) {
+					const row = this.getDataRowAtVisualIndex(i);
+					if (row !== null) {
+						rows.push(row);
+					}
+				}
+				return rows;
+			},
+			getSelectedIds: () => {
+				const bounds = this.state.selection.bounds;
+				if (!bounds) return [];
+				const ids: string[] = [];
+				for (let i = bounds.minRow; i <= bounds.maxRow; i++) {
+					const vr = this.getVisualRow(i);
+					if (vr) {
+						ids.push(vr.id);
+					}
+				}
+				return ids;
+			},
+			getById: (id) => {
+				return this.getRawRowById(id);
+			},
+			getNodeById: (id) => {
+				return this.getRowNodeById(id);
+			},
+			getCount: () => {
+				const count = this.getVisualRowCount();
+				let dataCount = 0;
+				for (let i = 0; i < count; i++) {
+					const vr = this.getVisualRow(i);
+					if (vr?.kind === 'data') {
+						dataCount++;
+					}
+				}
+				return dataCount;
+			},
+			getVisualRowById: (id) => {
+				const index = this.getVisualIndexByRowId(id);
+				if (index === null || index === -1) return null;
+				return this.getVisualRow(index);
+			},
+			inRange: (range) => {
+				const startIdx = this.getVisualIndexByRowId(range.start.rowId);
+				const endIdx = this.getVisualIndexByRowId(range.end.rowId);
+				const hasValidIndices = startIdx !== null && endIdx !== null && startIdx !== -1 && endIdx !== -1;
+
+				return {
+					forEach: (callback) => {
+						if (!hasValidIndices) return;
+						const minRow = Math.min(startIdx!, endIdx!);
+						const maxRow = Math.max(startIdx!, endIdx!);
+						let idx = 0;
+						for (let i = minRow; i <= maxRow; i++) {
+							const vr = this.getVisualRow(i);
+							if (vr) {
+								callback(vr.id, idx++);
+							}
+						}
+					},
+					getIds: () => {
+						if (!hasValidIndices) return [];
+						const minRow = Math.min(startIdx!, endIdx!);
+						const maxRow = Math.max(startIdx!, endIdx!);
+						const ids: string[] = [];
+						for (let i = minRow; i <= maxRow; i++) {
+							const vr = this.getVisualRow(i);
+							if (vr) {
+								ids.push(vr.id);
+							}
+						}
+						return ids;
+					},
+					getData: () => {
+						if (!hasValidIndices) return [];
+						const minRow = Math.min(startIdx!, endIdx!);
+						const maxRow = Math.max(startIdx!, endIdx!);
+						const data: TRowData[] = [];
+						for (let i = minRow; i <= maxRow; i++) {
+							const row = this.getDataRowAtVisualIndex(i);
+							if (row !== null) {
+								data.push(row);
+							}
+						}
+						return data;
+					},
+				};
+			},
+		};
 	};
 
 	public setRows = (rows: TRowData[]): void => {

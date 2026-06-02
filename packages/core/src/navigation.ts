@@ -44,19 +44,19 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
 		const state = this.store.getState();
-		const row = this.store.getRow(rowIdx);
+		const visualRow = this.store.getVisualRow(rowIdx);
 		const col = state.columns[colIdx];
-		if (!row || !col) return null;
+		if (!visualRow || !col) return null;
 
 		return {
-			rowId: this.store.getRowId(row),
+			rowId: visualRow.id,
 			colField: col.field,
 		};
 	}
 
 	private getCoordsFromPointer(pointer: GridCellPointer | null): { rowIdx: number; colIdx: number } | null {
 		if (!pointer) return null;
-		const rowIdx = this.store.getRowIndexById(pointer.rowId) ?? -1;
+		const rowIdx = this.store.getVisualRowIndexById(pointer.rowId) ?? -1;
 		const colIdx = this.store.getColumnIndex(pointer.colField);
 		if (rowIdx === -1 || colIdx === -1) return null;
 		return { rowIdx, colIdx };
@@ -90,7 +90,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		if (!coords) return;
 
 		const { rowIdx: row, colIdx: col } = coords;
-		const maxRow = this.store.getRowCount() - 1;
+		const maxRow = this.store.getVisualRowCount() - 1;
 		const maxCol = state.columns.length - 1;
 
 		const cellState = this.store.getCellState(active.rowId, active.colField);
@@ -148,7 +148,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					event.preventDefault();
 					const rowModel = this.store.getRowModel();
 					if (rowModel) {
-						const currentIdx = this.store.getRowIndexById(active.rowId);
+						const currentIdx = this.store.getVisualRowIndexById(active.rowId);
 						if (currentIdx !== null && currentIdx !== -1) {
 							const currentVisualRow = rowModel.getVisualRow(currentIdx);
 							if (currentVisualRow) {

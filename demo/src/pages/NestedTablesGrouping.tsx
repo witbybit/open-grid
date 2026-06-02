@@ -151,9 +151,8 @@ const RatingStarsRenderer = ({ value }: CellRendererProps<EmployeeRow>) => {
 
 // Custom Tree node name renderer with indent and folder/file icon!
 const TreeNameRenderer = ({ value, row, rowId, api }: CellRendererProps<FileNodeRow>) => {
-	const visualIndex = api.getRowIndexById(rowId) ?? 0;
-	const visualRow = api.getVisualRow(visualIndex);
-	const depth = visualRow?.depth ?? 0;
+	const visualRow = api.rows().getVisualRowById(rowId);
+	const depth = visualRow && 'depth' in visualRow ? visualRow.depth : 0;
 
 	const isFolder = row.type === 'folder';
 	let Icon = File;
@@ -224,10 +223,9 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 		const start = performance.now();
 		if (colField === 'quantity') {
 			const q = parseInt(String(val)) || 0;
-			const index = detailApi.getRowIndexById(rowId);
-			const rowNode = index !== null ? detailApi.getRowNode(index) : null;
-			if (rowNode) {
-				const p = rowNode.data.price;
+			const row = detailApi.getRawRowById(rowId);
+			if (row) {
+				const p = row.price;
 				const newSubtotal = q * p;
 				detailApi.setCellValue(rowId, 'subtotal', newSubtotal);
 
@@ -241,10 +239,9 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 				// Re-calculate parent grid totals!
 				setTimeout(() => {
 					let parentSum = 0;
-					for (let i = 0; i < detailApi.getRowCount(); i++) {
-						const item = detailApi.getRow(i);
-						if (item) parentSum += item.subtotal;
-					}
+					detailApi.rows().forEach((item) => {
+						parentSum += item.subtotal;
+					});
 					parentApi.setCellValue(orderId, 'totalAmount', parentSum);
 				}, 0);
 			}

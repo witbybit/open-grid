@@ -35,7 +35,7 @@ function CustomEditorRendererInner({
 	});
 
 	const calculateTelemetry = () => {
-		const count = api.getRowCount();
+		let total = 0;
 		let valSum = 0;
 		let ratingSum = 0;
 		let ratingCount = 0;
@@ -44,31 +44,29 @@ function CustomEditorRendererInner({
 		let pending = 0;
 		let inactive = 0;
 
-		for (let i = 0; i < count; i++) {
-			const r = api.getRow(i);
-			if (r) {
-				const priceNum = parseFloat(String(r.price).replace(/[^0-9.-]+/g, '')) || 0;
-				valSum += priceNum;
+		api.rows().forEach((r) => {
+			total++;
+			const priceNum = parseFloat(String(r.price).replace(/[^0-9.-]+/g, '')) || 0;
+			valSum += priceNum;
 
-				const ratingNum = parseFloat(String(r.rating)) || 0;
-				if (ratingNum > 0) {
-					ratingSum += ratingNum;
-					ratingCount++;
-				}
-
-				const progressNum = parseFloat(String(r.progress)) || 0;
-				if (progressNum < 30) {
-					lowDep++;
-				}
-
-				if (r.status === 'Active') active++;
-				else if (r.status === 'Pending') pending++;
-				else inactive++;
+			const ratingNum = parseFloat(String(r.rating)) || 0;
+			if (ratingNum > 0) {
+				ratingSum += ratingNum;
+				ratingCount++;
 			}
-		}
+
+			const progressNum = parseFloat(String(r.progress)) || 0;
+			if (progressNum < 30) {
+				lowDep++;
+			}
+
+			if (r.status === 'Active') active++;
+			else if (r.status === 'Pending') pending++;
+			else inactive++;
+		});
 
 		setTelemetry({
-			totalAssets: count,
+			totalAssets: total,
 			totalValuation: valSum,
 			avgRating: ratingCount > 0 ? ratingSum / ratingCount : 0,
 			lowDeploymentAlerts: lowDep,
@@ -91,18 +89,7 @@ function CustomEditorRendererInner({
 			return;
 		}
 
-		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? -1;
-		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? -1;
-		if (startIdx === -1 || endIdx === -1) return;
-
-		const minRow = Math.min(startIdx, endIdx);
-		const maxRow = Math.max(startIdx, endIdx);
-		const rowIds: string[] = [];
-		for (let i = minRow; i <= maxRow; i++) {
-			const node = api.getRowNode(i);
-			if (node) rowIds.push(node.id);
-		}
-
+		const rowIds = api.rows().inRange(selectedRange).getIds();
 		for (const rowId of rowIds) {
 			api.setCellValue(rowId, 'status', 'Active');
 		}
@@ -117,24 +104,9 @@ function CustomEditorRendererInner({
 			return;
 		}
 
-		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? -1;
-		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? -1;
-		if (startIdx === -1 || endIdx === -1) return;
-
-		const minRow = Math.min(startIdx, endIdx);
-		const maxRow = Math.max(startIdx, endIdx);
-		const rowIds: string[] = [];
-		for (let i = minRow; i <= maxRow; i++) {
-			const node = api.getRowNode(i);
-			if (node) rowIds.push(node.id);
-		}
-
+		const rowIds = api.rows().inRange(selectedRange).getIds();
 		for (const rowId of rowIds) {
-			const rowIndex = api.getRowIndexById(rowId) ?? -1;
-
-			if (rowIndex === -1) continue;
-
-			const row = api.getRow(rowIndex);
+			const row = api.rows().getById(rowId);
 
 			if (!row) continue;
 

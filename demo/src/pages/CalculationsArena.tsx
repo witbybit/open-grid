@@ -74,39 +74,37 @@ export default function CalculationsArena({
 
 	useEffect(() => {
 		const calculateTelemetry = () => {
-			const count = api.getRowCount();
 			let volSum = 0;
 			let deltaSum = 0;
 			let maxG = 0;
 			let vegaSum = 0;
 			let highRisk = 0;
+			let count = 0;
 
-			for (let i = 0; i < count; i++) {
-				const r = api.getRow(i);
-				if (r) {
-					const vol = parseFloat(r.quantity) || 0;
-					volSum += vol;
+			api.rows().forEach((r) => {
+				count++;
+				const vol = parseFloat(r.quantity) || 0;
+				volSum += vol;
 
-					// Compute Delta approximation inline for telemetry matching the valueGetter
-					const strike = parseFloat(r.price) || 100;
-					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
-					const delta = 0.5 + 0.5 * Math.tanh(d1);
-					deltaSum += delta;
+				// Compute Delta approximation inline for telemetry matching the valueGetter
+				const strike = parseFloat(r.price) || 100;
+				const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
+				const delta = 0.5 + 0.5 * Math.tanh(d1);
+				deltaSum += delta;
 
-					// Compute Gamma approximation
-					const gamma = Math.exp((-d1 * d1) / 2) / (100 * (vol / 100) * Math.sqrt(2 * Math.PI));
-					if (gamma > maxG) maxG = gamma;
+				// Compute Gamma approximation
+				const gamma = Math.exp((-d1 * d1) / 2) / (100 * (vol / 100) * Math.sqrt(2 * Math.PI));
+				if (gamma > maxG) maxG = gamma;
 
-					// Compute Vega
-					const vega = (100 * Math.exp((-d1 * d1) / 2)) / Math.sqrt(2 * Math.PI);
-					vegaSum += vega / 100;
+				// Compute Vega
+				const vega = (100 * Math.exp((-d1 * d1) / 2)) / Math.sqrt(2 * Math.PI);
+				vegaSum += vega / 100;
 
-					if (r.status === 'Inactive') {
-						// Represents 'HIGH' risk in our valueGetter
-						highRisk++;
-					}
+				if (r.status === 'Inactive') {
+					// Represents 'HIGH' risk in our valueGetter
+					highRisk++;
 				}
-			}
+			});
 
 			setTelemetry({
 				totalContracts: count,

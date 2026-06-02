@@ -82,23 +82,15 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 			// A. Recalculate selection math
 			const range = state.selection.range;
 			if (range) {
-				const startIdx = api.getRowIndexById(range.start.rowId) ?? -1;
-				const endIdx = api.getRowIndexById(range.end.rowId) ?? -1;
+				const rowIds = api.rows().inRange(range).getIds();
 				const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 				const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 
-				if (startIdx !== -1 && endIdx !== -1 && startColIdx !== -1 && endColIdx !== -1) {
-					const minRow = Math.min(startIdx, endIdx);
-					const maxRow = Math.max(startIdx, endIdx);
+				if (rowIds.length > 0 && startColIdx !== -1 && endColIdx !== -1) {
 					const minCol = Math.min(startColIdx, endColIdx);
 					const maxCol = Math.max(startColIdx, endColIdx);
 
 					const cols = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
-					const rowIds: string[] = [];
-					for (let i = minRow; i <= maxRow; i++) {
-						const node = api.getRowNode(i);
-						if (node) rowIds.push(node.id);
-					}
 
 					let numericValues: number[] = [];
 					for (const rowId of rowIds) {
@@ -129,12 +121,7 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 			}
 
 			// B. Extract prices for live SVG Sparkline chart
-			const count = api.getRowCount();
-			const currentRows: DashboardStockRow[] = [];
-			for (let i = 0; i < count; i++) {
-				const r = api.getRow(i);
-				if (r) currentRows.push(r);
-			}
+			const currentRows = api.rows().getAll();
 			if (currentRows.length > 0) {
 				const allPrices = currentRows.map((r) => parseFloat(String(r.price)) || 0);
 				const allTickers = currentRows.map((r) => r.id);

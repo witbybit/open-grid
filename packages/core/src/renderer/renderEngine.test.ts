@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientRowModelController } from '../rowModel.js';
-import { GridStore } from '../store.js';
+import { GridStore, type RowModel, type VisualRow, type RowModelRefreshResult } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
 
 describe('RenderEngine', () => {
@@ -265,6 +265,59 @@ describe('RenderEngine', () => {
 
 		renderer.unmount();
 		controller.dispose();
+		store.destroy();
+	});
+
+	it('renders loading visual rows as cell skeletons', () => {
+		const columns = [{ field: 'name', header: 'Name', width: 120 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const loadingRow: VisualRow<{ id: string; name: string }> = {
+			kind: 'loading',
+			id: '__loading_0',
+			editable: false,
+		};
+		const rowModel: RowModel<{ id: string; name: string }> = {
+			getVisualRow: (index) => (index === 0 ? loadingRow : null),
+			getVisualRowCount: () => 1,
+			getVisualRowIndexById: (id) => (id === loadingRow.id ? 0 : -1),
+			getVisualIndexById: (id) => (id === loadingRow.id ? 0 : -1),
+			getVisualIndexByRowId: (id) => (id === loadingRow.id ? 0 : -1),
+			getRowNodeById: () => null,
+			getRawRowById: () => null,
+			refresh: (): RowModelRefreshResult => ({ changed: false }),
+		};
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		store.registerRowModel(rowModel);
+		renderer.mount(container);
+
+		const row = container.querySelector('.og-row[data-row-id="__loading_0"]') as HTMLDivElement;
+		const cell = container.querySelector('.og-cell[data-col-field="name"]') as HTMLDivElement;
+
+		expect(row.className).toContain('og-row-loading');
+		expect(cell.className).toContain('og-cell-loading');
+		expect(cell.querySelector('.og-cell-loading-skeleton')).not.toBeNull();
+
+		renderer.unmount();
 		store.destroy();
 	});
 });

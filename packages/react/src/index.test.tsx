@@ -143,7 +143,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		render(
 			<GridProvider api={grid.api}>
@@ -162,7 +162,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -192,7 +192,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -219,7 +219,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -263,7 +263,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -304,7 +304,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -344,7 +344,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		document.body.appendChild(container);
 
 		const colDef = grid.api.getColumnDef('name');
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		const portals = new Map();
 		portals.set('1:name', {

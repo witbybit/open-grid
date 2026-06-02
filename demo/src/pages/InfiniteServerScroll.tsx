@@ -42,16 +42,12 @@ export default function InfiniteServerScroll({
 	});
 
 	const refreshSeverityStats = useCallback(() => {
-		const totalRows = api.getRowCount();
 		let totalLoaded = 0;
 		let criticalError = 0;
 		let warning = 0;
 		let infoDebug = 0;
 
-		for (let rowIndex = 0; rowIndex < totalRows; rowIndex++) {
-			const row = api.getRow(rowIndex) as { severity?: string } | null;
-			if (!row) continue;
-
+		api.rows().forEach((row: any) => {
 			totalLoaded++;
 			const severity = String(row.severity ?? '').toUpperCase();
 
@@ -62,7 +58,7 @@ export default function InfiniteServerScroll({
 			} else if (severity === 'INFO' || severity === 'DEBUG') {
 				infoDebug++;
 			}
-		}
+		});
 
 		setSeverityStats({ totalLoaded, criticalError, warning, infoDebug });
 	}, [api]);

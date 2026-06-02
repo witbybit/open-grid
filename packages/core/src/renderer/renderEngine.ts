@@ -515,6 +515,20 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				pooledRow.rightElement.dataset.rowId = visualRow.id;
 			}
 
+			if (visualRow.kind === 'loading') {
+				const node = new RowNode<TRowData>(visualRow.id, null as TRowData);
+				if (pooledRow.element.dataset.rowKey) {
+					if (this.onUnmountRowContent) {
+						this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
+					}
+					delete pooledRow.element.dataset.rowKey;
+					pooledRow.element.textContent = '';
+				}
+				this.updateRowClassName(pooledRow, node, r, state);
+				this.recycleRowCells(pooledRow, node, r, newColRange.startIdx, newColRange.endIdx, columns);
+				return;
+			}
+
 			if (visualRow.kind !== 'data') {
 				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
 				for (const c of pooledRow.cells.keys()) {
@@ -619,7 +633,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (this.hoveredRowIndex === rowIndex) {
 			rowClassName += ' og-row-hovered';
 		}
-		if (isSelectedRow || isFocusedRow || node.selected) {
+		if (isSelectedRow || isFocusedRow) {
 			rowClassName += ' og-row-selected';
 		}
 		if (isFocusedRow) {
@@ -635,7 +649,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					rowId: node.id,
 					rowIndex,
 					isFocused: isFocusedRow,
-					isSelected: isSelectedRow || isFocusedRow || node.selected,
+					isSelected: isSelectedRow || isFocusedRow,
 					isLoading: isLoadingRow,
 					selection: state.selection,
 				});
@@ -817,7 +831,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 						colIndex: c,
 						isFocused: access.isFocused,
 						isRowFocused: access.isRowFocused,
-						isRowSelected: access.isRowSelected || access.isRowFocused || node.selected,
+						isRowSelected: access.isRowSelected || access.isRowFocused,
 						isSelected: access.isSelected,
 						isEditing: access.isEditing,
 						value: access.value,

@@ -24,6 +24,11 @@ export type {
 	RowModel,
 	ValueGetterParams,
 	VisualRow,
+	DataVisualRow,
+	GroupVisualRow,
+	DetailVisualRow,
+	FooterVisualRow,
+	LoadingVisualRow,
 } from './store.js';
 
 export type { FilterModel, FilterModelItem, SortModel } from './rowModel.js';

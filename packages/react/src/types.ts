@@ -10,6 +10,11 @@ import type {
 	GridState,
 	FilterModelItem,
 	VisualRow,
+	DataVisualRow,
+	GroupVisualRow,
+	DetailVisualRow,
+	FooterVisualRow,
+	LoadingVisualRow,
 	HeaderMenuRendererProps,
 } from '@open-grid/core';
 
@@ -25,6 +30,11 @@ export type {
 	GridCellClickParams,
 	GridState,
 	VisualRow,
+	DataVisualRow,
+	GroupVisualRow,
+	DetailVisualRow,
+	FooterVisualRow,
+	LoadingVisualRow,
 	HeaderMenuRendererProps,
 };
 

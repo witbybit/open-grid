@@ -184,17 +184,13 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 
 	const runBulkCalculationTest = useCallback(() => {
 		const start = performance.now();
-		const count = perfApi.getRowCount();
 
-		for (let i = 0; i < count; i++) {
-			if (i % 10 !== 0) continue;
-
-			const row = perfApi.getRow(i);
-			if (!row) continue;
+		perfApi.rows().forEach((row, index) => {
+			if (index % 10 !== 0) return;
 
 			perfApi.setCellValue(row.id, 'price', (Math.floor(Math.random() * 150) + 10).toString());
 			perfApi.setCellValue(row.id, 'quantity', (Math.floor(Math.random() * 5) + 1).toString());
-		}
+		});
 
 		const duration = performance.now() - start;
 		LatencyProfiler.record(duration);
@@ -356,24 +352,18 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				return;
 			}
 
-			const startIdx = spreadsheetApi.getRowIndexById(range.start.rowId) ?? 0;
-			const endIdx = spreadsheetApi.getRowIndexById(range.end.rowId) ?? 0;
 			const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 			const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 
-			if (startIdx === -1 || endIdx === -1 || startColIdx === -1 || endColIdx === -1) return;
+			if (startColIdx === -1 || endColIdx === -1) return;
 
-			const minRow = Math.min(startIdx, endIdx);
-			const maxRow = Math.max(startIdx, endIdx);
+			const rowIdsToModify = spreadsheetApi.rows().inRange(range).getIds();
+			if (rowIdsToModify.length === 0) return;
+
 			const minCol = Math.min(startColIdx, endColIdx);
 			const maxCol = Math.max(startColIdx, endColIdx);
 
 			const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
-			const rowIdsToModify: string[] = [];
-			for (let i = minRow; i <= maxRow; i++) {
-				const node = spreadsheetApi.getRowNode(i);
-				if (node) rowIdsToModify.push(node.id);
-			}
 
 			const startTime = performance.now();
 

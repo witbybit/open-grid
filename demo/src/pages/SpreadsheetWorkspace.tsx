@@ -43,12 +43,10 @@ function SpreadsheetWorkspaceInner({
 						if (!bounds) return;
 
 						const columns = params.api.getState().columns;
+						const rowIds = params.api.rows().getSelectedIds();
 						const batchUpdate = params.api.batch ? (cb: () => void) => params.api.batch(cb) : (cb: () => void) => cb();
 						batchUpdate(() => {
-							for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-								const row = params.api.getRow(r);
-								if (!row) continue;
-								const rowId = params.api.getRowId(row);
+							for (const rowId of rowIds) {
 								for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 									const col = columns[c];
 									if (!col || col.field === 'id') continue;
@@ -71,12 +69,10 @@ function SpreadsheetWorkspaceInner({
 						if (!bounds) return;
 
 						const columns = params.api.getState().columns;
+						const rowIds = params.api.rows().getSelectedIds();
 						const batchUpdate = params.api.batch ? (cb: () => void) => params.api.batch(cb) : (cb: () => void) => cb();
 						batchUpdate(() => {
-							for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-								const row = params.api.getRow(r);
-								if (!row) continue;
-								const rowId = params.api.getRowId(row);
+							for (const rowId of rowIds) {
 								for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 									const col = columns[c];
 									if (!col || col.field === 'id') continue;
@@ -142,36 +138,31 @@ function SpreadsheetWorkspaceInner({
 	// Compute selection range telemetry
 	const rangeTelemetry = useMemo(() => {
 		if (!selectedRange) return { count: 0, sum: 0, avg: 0 };
-		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? -1;
-		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		const state = api.getState();
 		const startColIdx = state.columns.findIndex((c) => c.field === selectedRange.start.colField);
 		const endColIdx = state.columns.findIndex((c) => c.field === selectedRange.end.colField);
 
-		if (startIdx === -1 || endIdx === -1 || startColIdx === -1 || endColIdx === -1) {
+		if (startColIdx === -1 || endColIdx === -1) {
 			return { count: 0, sum: 0, avg: 0 };
 		}
 
-		const minRow = Math.min(startIdx, endIdx);
-		const maxRow = Math.max(startIdx, endIdx);
 		const minCol = Math.min(startColIdx, endColIdx);
 		const maxCol = Math.max(startColIdx, endColIdx);
 
 		let count = 0;
 		let sum = 0;
 
-		for (let r = minRow; r <= maxRow; r++) {
-			const node = api.getRowNode(r);
-			if (node) {
+		api.rows()
+			.inRange(selectedRange)
+			.forEach((rowId) => {
 				for (let c = minCol; c <= maxCol; c++) {
 					const field = state.columns[c].field;
 					if (field === 'id') continue;
-					const val = parseFloat(String(api.getCellValue(node.id, field))) || 0;
+					const val = parseFloat(String(api.getCellValue(rowId, field))) || 0;
 					sum += val;
 					count++;
 				}
-			}
-		}
+			});
 
 		return {
 			count,
@@ -187,25 +178,18 @@ function SpreadsheetWorkspaceInner({
 			return;
 		}
 
-		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? -1;
-		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? -1;
 		const state = api.getState();
 		const startColIdx = state.columns.findIndex((c) => c.field === selectedRange.start.colField);
 		const endColIdx = state.columns.findIndex((c) => c.field === selectedRange.end.colField);
 
-		if (startIdx === -1 || endIdx === -1 || startColIdx === -1 || endColIdx === -1) return;
+		if (startColIdx === -1 || endColIdx === -1) return;
 
-		const minRow = Math.min(startIdx, endIdx);
-		const maxRow = Math.max(startIdx, endIdx);
 		const minCol = Math.min(startColIdx, endColIdx);
 		const maxCol = Math.max(startColIdx, endColIdx);
 
 		const cols = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
-		const rowIds: string[] = [];
-		for (let i = minRow; i <= maxRow; i++) {
-			const node = api.getRowNode(i);
-			if (node) rowIds.push(node.id);
-		}
+		const rowIds = api.rows().inRange(selectedRange).getIds();
+		if (rowIds.length === 0) return;
 
 		api.updateRows((rows) => {
 			return rows.map((row) => {
@@ -349,38 +333,27 @@ function SpreadsheetWorkspaceInner({
 									const state = api.getState();
 									const range = state.selection.range;
 									if (range) {
-										// Trigger api logic directly via props
-										{
-											const startIdx = api.getRowIndexById(range.start.rowId) ?? -1;
-											const endIdx = api.getRowIndexById(range.end.rowId) ?? -1;
-											const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
-											const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
-											if (startIdx !== -1 && endIdx !== -1 && startColIdx !== -1 && endColIdx !== -1) {
-												const minRow = Math.min(startIdx, endIdx);
-												const maxRow = Math.max(startIdx, endIdx);
-												const minCol = Math.min(startColIdx, endColIdx);
-												const maxCol = Math.max(startColIdx, endColIdx);
-												const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
-												const rowIds: string[] = [];
-												for (let i = minRow; i <= maxRow; i++) {
-													const node = api.getRowNode(i);
-													if (node) rowIds.push(node.id);
-												}
-												api.updateRows((rows) => {
-													return rows.map((row) => {
-														if (rowIds.includes(row.id)) {
-															let nextRow = { ...row };
-															for (const colField of colsToModify) {
-																if (colField === 'id') continue;
-																const valNum = parseFloat((row as any)[colField]) || 0;
-																(nextRow as any)[colField] = (valNum * 1.1).toFixed(1);
-															}
-															return nextRow;
+										const rowIds = api.rows().inRange(range).getIds();
+										const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
+										const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
+										if (rowIds.length > 0 && startColIdx !== -1 && endColIdx !== -1) {
+											const minCol = Math.min(startColIdx, endColIdx);
+											const maxCol = Math.max(startColIdx, endColIdx);
+											const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
+											api.updateRows((rows) => {
+												return rows.map((row) => {
+													if (rowIds.includes(row.id)) {
+														let nextRow = { ...row };
+														for (const colField of colsToModify) {
+															if (colField === 'id') continue;
+															const valNum = parseFloat((row as any)[colField]) || 0;
+															(nextRow as any)[colField] = (valNum * 1.1).toFixed(1);
 														}
-														return row;
-													});
+														return nextRow;
+													}
+													return row;
 												});
-											}
+											});
 										}
 									} else {
 										alert('Please select a range of cells first.');
@@ -395,36 +368,26 @@ function SpreadsheetWorkspaceInner({
 									const state = api.getState();
 									const range = state.selection.range;
 									if (range) {
-										{
-											const startIdx = api.getRowIndexById(range.start.rowId) ?? -1;
-											const endIdx = api.getRowIndexById(range.end.rowId) ?? -1;
-											const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
-											const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
-											if (startIdx !== -1 && endIdx !== -1 && startColIdx !== -1 && endColIdx !== -1) {
-												const minRow = Math.min(startIdx, endIdx);
-												const maxRow = Math.max(startIdx, endIdx);
-												const minCol = Math.min(startColIdx, endColIdx);
-												const maxCol = Math.max(startColIdx, endColIdx);
-												const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
-												const rowIds: string[] = [];
-												for (let i = minRow; i <= maxRow; i++) {
-													const node = api.getRowNode(i);
-													if (node) rowIds.push(node.id);
-												}
-												api.updateRows((rows) => {
-													return rows.map((row) => {
-														if (rowIds.includes(row.id)) {
-															let nextRow = { ...row };
-															for (const colField of colsToModify) {
-																if (colField === 'id') continue;
-																(nextRow as any)[colField] = '';
-															}
-															return nextRow;
+										const rowIds = api.rows().inRange(range).getIds();
+										const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
+										const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
+										if (rowIds.length > 0 && startColIdx !== -1 && endColIdx !== -1) {
+											const minCol = Math.min(startColIdx, endColIdx);
+											const maxCol = Math.max(startColIdx, endColIdx);
+											const colsToModify = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
+											api.updateRows((rows) => {
+												return rows.map((row) => {
+													if (rowIds.includes(row.id)) {
+														let nextRow = { ...row };
+														for (const colField of colsToModify) {
+															if (colField === 'id') continue;
+															(nextRow as any)[colField] = '';
 														}
-														return row;
-													});
+														return nextRow;
+													}
+													return row;
 												});
-											}
+											});
 										}
 									} else {
 										alert('Please select a range of cells first.');

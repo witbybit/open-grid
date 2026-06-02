@@ -1,6 +1,7 @@
 import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter, type VisualRow, type RowRefreshReason, type RowModelRefreshResult } from './store.js';
 import { createCellKey, getFieldRoot } from './ids.js';
 import { RowPipeline } from './rows/RowPipeline.js';
+import { RowDataStore } from './rows/RowDataStore.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -204,9 +205,8 @@ export function applyClientSortAndFilter<TData>(
 
 export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
 	private store: GridStore<TData>;
-	private allNodes: RowNode<TData>[] = [];
+	private dataStore: RowDataStore<TData>;
 	private visualRows: Array<VisualRow<TData>> = [];
-	private nodeMap = new Map<string, RowNode<TData>>();
 	private visualRowIdMap = new Map<string, number>();
 	private unsubscribers: Array<() => void> = [];
 
@@ -242,6 +242,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
 		this.store = store;
+		this.dataStore = new RowDataStore<TData>((row) => this.store.getRowId(row));
 
 		// Set base columns and config in store
 		this.store.setState({
@@ -263,88 +264,30 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	}
 
 	public setRows(rows: TData[]): void {
-		const nextNodeMap = new Map<string, RowNode<TData>>();
-
-		this.allNodes = rows.map((row) => {
-			const id = this.store.getRowId(row);
-			let node = this.nodeMap.get(id);
-			if (node) {
-				node.setData(row);
-			} else {
-				node = new RowNode<TData>(id, row);
-			}
-			nextNodeMap.set(id, node);
-			return node;
-		});
-
-		this.nodeMap = nextNodeMap;
+		this.dataStore.setRows(rows);
 		this.store.engine.clearFormulas();
 		this.refresh();
 	}
 
 	public updateRows(updater: (rows: TData[]) => TData[]): void {
-		const currentRows = this.allNodes.map((n) => n.data);
-		const nextRows = updater(currentRows);
+		const result = this.dataStore.updateRows(updater);
 
-		if (nextRows.length !== this.allNodes.length) {
-			this.setRows(nextRows);
+		if (result.mismatch) {
+			const currentRows = this.dataStore.getAllNodes().map((n) => n.data);
+			this.setRows(updater(currentRows));
 			return;
 		}
 
-		const changedNodes: RowNode<TData>[] = [];
-		const changedFieldsByRow = new Map<string, Set<string>>();
-		const changedValuesByRow = new Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>();
-
-		for (let i = 0; i < this.allNodes.length; i++) {
-			const node = this.allNodes[i];
-			const nextRow = nextRows[i];
-			if (!nextRow) continue;
-
-			// Verify that the row ID is the same
-			const nextId = this.store.getRowId(nextRow);
-			if (node.id !== nextId) {
-				// Structural mismatch of row IDs, fallback to full setRows
-				this.setRows(nextRows);
-				return;
-			}
-
-			const prevRow = node.data;
-			if (prevRow !== nextRow) {
-				// Find which fields actually changed
-				const changedFields = new Set<string>();
-				const changedValues = new Map<string, { oldValue: unknown; newValue: unknown }>();
-				const prevKeys = Object.keys(prevRow as object);
-				const nextKeys = Object.keys(nextRow as object);
-				const allKeys = new Set([...prevKeys, ...nextKeys]);
-
-				for (const key of allKeys) {
-					const oldValue = (prevRow as Record<string, unknown>)[key];
-					const newValue = (nextRow as Record<string, unknown>)[key];
-					if (oldValue !== newValue) {
-						changedFields.add(key);
-						changedValues.set(key, { oldValue, newValue });
-					}
-				}
-
-				if (changedFields.size > 0) {
-					node.setData(nextRow);
-					changedNodes.push(node);
-					changedFieldsByRow.set(node.id, changedFields);
-					changedValuesByRow.set(node.id, changedValues);
-				}
-			}
-		}
-
-		if (changedNodes.length === 0) return;
+		if (result.changedNodes.length === 0) return;
 
 		// Invalidate changed cells and gather affected formula dependents.
 		const allInvalidatedKeys = new Set<string>();
-		for (const [rowId, fields] of changedFieldsByRow) {
+		for (const [rowId, fields] of result.changedFieldsByRow) {
 			for (const field of fields) {
 				const cellKey = createCellKey(rowId, field);
 				allInvalidatedKeys.add(cellKey);
 
-				const node = this.nodeMap.get(rowId);
+				const node = this.dataStore.getNode(rowId);
 				if (node) {
 					const nextVal = (node.data as Record<string, unknown>)[field];
 					this.store.engine.syncFormulaForCell(rowId, field, nextVal);
@@ -363,7 +306,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		if (state.sortModel && state.sortModel.length > 0) {
 			for (const sortItem of state.sortModel) {
-				for (const [_, fields] of changedFieldsByRow) {
+				for (const [_, fields] of result.changedFieldsByRow) {
 					if (fieldsAffectColumn(fields, sortItem.colId)) {
 						needsFullRefresh = true;
 						break;
@@ -375,7 +318,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		if (!needsFullRefresh && state.filterModel && Object.keys(state.filterModel).length > 0) {
 			for (const filterColId of Object.keys(state.filterModel)) {
-				for (const [_, fields] of changedFieldsByRow) {
+				for (const [_, fields] of result.changedFieldsByRow) {
 					if (fieldsAffectColumn(fields, filterColId)) {
 						needsFullRefresh = true;
 						break;
@@ -391,8 +334,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			// No sorting or filtering is affected. Notify only changed cells, formula dependents,
 			// and explicitly declared valueGetter dependents.
 			const notifyKeys = new Set<string>(allInvalidatedKeys);
-			for (const node of changedNodes) {
-				const changedFields = changedFieldsByRow.get(node.id);
+			for (const node of result.changedNodes) {
+				const changedFields = result.changedFieldsByRow.get(node.id);
 				if (changedFields) {
 					for (const field of changedFields) {
 						notifyKeys.add(createCellKey(node.id, field));
@@ -412,7 +355,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				this.store.engine.notifyCellChange(rId, cField);
 			}
 
-			for (const [rowId, values] of changedValuesByRow) {
+			for (const [rowId, values] of result.changedValuesByRow) {
 				for (const [colField, change] of values) {
 					this.store.dispatchEvent('cellValueChanged', {
 						rowId,
@@ -447,11 +390,11 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	};
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
-		return this.nodeMap.get(rowId) ?? null;
+		return this.dataStore.getNode(rowId);
 	};
 
 	public getRawRowById = (rowId: string): TData | null => {
-		return this.nodeMap.get(rowId)?.data ?? null;
+		return this.dataStore.getNode(rowId)?.data ?? null;
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
@@ -502,7 +445,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		const state = this.store.getState();
 
 		const { visualRows, visualRowIdMap } = this.pipeline.run({
-			nodes: this.allNodes,
+			nodes: this.dataStore.getAllNodes(),
 			columns: state.columns,
 			sortModel: state.sortModel,
 			filterModel: state.filterModel,

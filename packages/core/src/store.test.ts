@@ -27,7 +27,7 @@ describe('GridStore generic row-store functionality', () => {
 		const state = store.getState();
 		const rowModel = store.getRowModel()!;
 
-		expect(store.getRowCount()).toBe(2);
+		expect(store.getVisualRowCount()).toBe(2);
 		expect(state.columns).toHaveLength(2);
 		expect(state.selection.focus).toBeNull();
 		expect(state.selection.range).toBeNull();
@@ -200,7 +200,7 @@ describe('GridStore generic row-store functionality', () => {
 		store.setCellValue('1', 'status', 'Inactive');
 
 		expect(store.getCellValue('1', 'status')).toBe('HIGH');
-		expect(store.getRow(0)).toMatchObject({ status: 'Inactive' });
+		expect(store.getDataRowAtVisualIndex(0)).toMatchObject({ status: 'Inactive' });
 		expect(listener).toHaveBeenCalledTimes(1);
 
 		controller.dispose();
@@ -420,22 +420,22 @@ describe('ClientRowModelController sorting and filtering', () => {
 		const rowModel = store.getRowModel()!;
 
 		// Check initial rows load
-		expect(store.getRowCount()).toBe(3);
+		expect(store.getVisualRowCount()).toBe(3);
 
 		// Apply sort by name Ascending
 		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
-		expect(store.getRow(0)?.name).toBe('Apple');
-		expect(store.getRow(1)?.name).toBe('Banana');
-		expect(store.getRow(2)?.name).toBe('Cherry');
+		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Apple');
+		expect(store.getDataRowAtVisualIndex(1)?.name).toBe('Banana');
+		expect(store.getDataRowAtVisualIndex(2)?.name).toBe('Cherry');
 
 		// Apply sorting descending
 		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
-		expect(store.getRow(0)?.name).toBe('Cherry');
+		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Cherry');
 
 		// Apply filter by name contains 'an'
 		store.setFilterModel({ name: { type: 'contains', filter: 'an' } });
-		expect(store.getRowCount()).toBe(1);
-		expect(store.getRow(0)?.name).toBe('Banana');
+		expect(store.getVisualRowCount()).toBe(1);
+		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Banana');
 
 		controller.dispose();
 	});
@@ -455,7 +455,7 @@ describe('ClientRowModelController sorting and filtering', () => {
 		});
 
 		const t0 = performance.now();
-		const idx = store.getRowIndexById('999999');
+		const idx = store.getVisualIndexByRowId('999999');
 		const t1 = performance.now();
 
 		expect(idx).toBe(999999);
@@ -490,15 +490,15 @@ describe('ServerRowModelController paginated lazily populated row-patching', () 
 		});
 
 		// Access row at index 0, should return null initially and trigger fetching
-		const initial = store.getRow(0);
+		const initial = store.getDataRowAtVisualIndex(0);
 		expect(initial).toBeNull();
 
 		// Wait for mock datasource promise to resolve and state to update
 		await vi.waitFor(() => {
-			return store.getRow(0) !== null;
+			return store.getDataRowAtVisualIndex(0) !== null;
 		});
 
-		const loaded = store.getRow(0);
+		const loaded = store.getDataRowAtVisualIndex(0);
 		expect(loaded?.name).toBe('Server A');
 
 		controller.dispose();
@@ -518,7 +518,7 @@ describe('RowNode path getters and state batching', () => {
 			columns: store.getState().columns,
 		});
 
-		const node = store.getRowNode(0)!;
+		const node = store.getDataRowNodeAtVisualIndex(0)!;
 
 		expect(node).toBeDefined();
 		expect(node.id).toBe('1');
@@ -947,6 +947,52 @@ describe('GridStore undo and redo functionality', () => {
 		expect(store.getRowNodeById('1')?.data.name).toBe('Product A');
 		expect(store.getRawRowById('1')).toEqual({ id: '1', name: 'Product A', price: 10 });
 		expect(store.getRawRowById('non-existent')).toBeNull();
+
+		// Test the luxury row collection APIs
+		expect(store.rows().getAll()).toEqual([
+			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '2', name: 'Product B', price: 20 },
+		]);
+
+		const processed: any[] = [];
+		store.rows().forEach((row, index) => {
+			processed.push({ ...row, index });
+		});
+		expect(processed).toEqual([
+			{ id: '1', name: 'Product A', price: 10, index: 0 },
+			{ id: '2', name: 'Product B', price: 20, index: 1 },
+		]);
+
+		// Selection bounds test
+		expect(store.rows().getSelected()).toEqual([]);
+		expect(store.rows().getSelectedIds()).toEqual([]);
+
+		store.selectRange({ rowId: '1', colField: 'name' }, { rowId: '2', colField: 'name' });
+		expect(store.rows().getSelected()).toEqual([
+			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '2', name: 'Product B', price: 20 },
+		]);
+		expect(store.rows().getSelectedIds()).toEqual(['1', '2']);
+
+		// Getters & Count
+		expect(store.rows().getCount()).toBe(2);
+		expect(store.rows().getById('1')).toEqual({ id: '1', name: 'Product A', price: 10 });
+		expect(store.rows().getNodeById('2')?.data.name).toBe('Product B');
+		expect(store.rows().getVisualRowById('1')?.kind).toBe('data');
+
+		// Range testing
+		const range = { start: { rowId: '1', colField: 'name' }, end: { rowId: '2', colField: 'name' } };
+		expect(store.rows().inRange(range).getIds()).toEqual(['1', '2']);
+		expect(store.rows().inRange(range).getData()).toEqual([
+			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '2', name: 'Product B', price: 20 },
+		]);
+
+		const rangeProcessed: string[] = [];
+		store.rows().inRange(range).forEach((id, idx) => {
+			rangeProcessed.push(`${id}-${idx}`);
+		});
+		expect(rangeProcessed).toEqual(['1-0', '2-1']);
 
 		controller.dispose();
 	});

@@ -97,9 +97,9 @@ describe('HeaderPopoverMenu', () => {
 		sortAscBtn.click();
 
 		// Check rows are sorted by name asc (A, B, C)
-		expect(store.getRow(0)?.name).toBe('Product A');
-		expect(store.getRow(1)?.name).toBe('Product B');
-		expect(store.getRow(2)?.name).toBe('Product C');
+		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Product A');
+		expect(store.getDataRowAtVisualIndex(1)?.name).toBe('Product B');
+		expect(store.getDataRowAtVisualIndex(2)?.name).toBe('Product C');
 
 		// Open popover again
 		menuBtn.click();
@@ -113,9 +113,9 @@ describe('HeaderPopoverMenu', () => {
 		sortDescBtn.click();
 
 		// Check rows are sorted by name desc (C, B, A)
-		expect(store.getRow(0)?.name).toBe('Product C');
-		expect(store.getRow(1)?.name).toBe('Product B');
-		expect(store.getRow(2)?.name).toBe('Product A');
+		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Product C');
+		expect(store.getDataRowAtVisualIndex(1)?.name).toBe('Product B');
+		expect(store.getDataRowAtVisualIndex(2)?.name).toBe('Product A');
 	});
 
 	it('should apply and clear column filters', () => {
@@ -142,9 +142,9 @@ describe('HeaderPopoverMenu', () => {
 		applyBtn.click();
 
 		// Rows should be filtered: only C (300) and B (200) match
-		expect(store.getRowCount()).toBe(2);
-		expect(store.getRow(0)?.price).toBe(300);
-		expect(store.getRow(1)?.price).toBe(200);
+		expect(store.getVisualRowCount()).toBe(2);
+		expect(store.getDataRowAtVisualIndex(0)?.price).toBe(300);
+		expect(store.getDataRowAtVisualIndex(1)?.price).toBe(200);
 
 		// Open popover again and verify existing query is populated
 		menuBtn.click();
@@ -160,7 +160,7 @@ describe('HeaderPopoverMenu', () => {
 		clearBtn.click();
 
 		// Rows should be restored
-		expect(store.getRowCount()).toBe(3);
+		expect(store.getVisualRowCount()).toBe(3);
 	});
 
 	it('should support custom headerMenuRenderer in ColumnDef', () => {

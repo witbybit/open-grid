@@ -50,7 +50,7 @@ describe('ServerRowModelController', () => {
 		expect(node1?.data.name).toBe('Alice');
 	});
 
-	it('should return synthetic loading nodes for unloaded indices within row count', async () => {
+	it('should return loading visual row for unloaded indices within row count', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
@@ -75,11 +75,11 @@ describe('ServerRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		// index 80 is not loaded yet (since blockSize is 50, only block 0 has loaded)
-		const node = getRowNode(controller, 80);
-		expect(node).not.toBeNull();
-		expect(node?.id).toBe('__loading_80');
-		expect(store.isRowLoading(node!.id)).toBe(true);
-		expect(controller.getVisualRow(80)?.id).toBe('__loading_80');
+		const visualRow = controller.getVisualRow(80);
+		expect(visualRow).not.toBeNull();
+		expect(visualRow?.kind).toBe('loading');
+		expect(visualRow?.id).toBe('__loading_80');
+		expect(store.isRowLoading(visualRow!.id)).toBe(true);
 	});
 
 	it('should pre-fetch blocks ahead of time based on scroll velocity', async () => {

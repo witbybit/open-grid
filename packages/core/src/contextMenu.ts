@@ -270,9 +270,9 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		const rows: string[] = [];
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const row = params.api.getRow(r);
-			if (!row) continue;
-			const rowId = params.api.getRowId(row);
+			const visualRow = params.api.getVisualRow(r);
+			if (!visualRow) continue;
+			const rowId = visualRow.id;
 			const rowVals: string[] = [];
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 				const col = params.api.getState().columns[c];
@@ -323,9 +323,9 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				for (let r = 0; r < lines.length; r++) {
 					const rowIndex = bounds.minRow + r;
 					if (rowIndex > bounds.maxRow) break;
-					const row = params.api.getRow(rowIndex);
-					if (!row) continue;
-					const rowId = params.api.getRowId(row);
+					const visualRow = params.api.getVisualRow(rowIndex);
+					if (!visualRow) continue;
+					const rowId = visualRow.id;
 					const cells = lines[r].split('\t');
 					for (let c = 0; c < cells.length; c++) {
 						const colIndex = bounds.minCol + c;
@@ -347,9 +347,9 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		this.store.batch(() => {
 			for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-				const row = params.api.getRow(r);
-				if (!row) continue;
-				const rowId = params.api.getRowId(row);
+				const visualRow = params.api.getVisualRow(r);
+				if (!visualRow) continue;
+				const rowId = visualRow.id;
 				for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 					const col = params.api.getState().columns[c];
 					if (!col) continue;
@@ -362,15 +362,15 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	private selectAll(params: ContextMenuParams<TRowData>): void {
 		const state = params.api.getState();
 		const columns = state.columns;
-		const rowCount = params.api.getRowCount();
+		const rowCount = params.api.getVisualRowCount();
 		if (columns.length === 0 || rowCount === 0) return;
 
-		const firstRow = params.api.getRow(0);
-		const lastRow = params.api.getRow(rowCount - 1);
+		const firstRow = params.api.getVisualRow(0);
+		const lastRow = params.api.getVisualRow(rowCount - 1);
 		if (!firstRow || !lastRow) return;
 
-		const firstRowId = params.api.getRowId(firstRow);
-		const lastRowId = params.api.getRowId(lastRow);
+		const firstRowId = firstRow.id;
+		const lastRowId = lastRow.id;
 
 		params.api.selectRange({ rowId: firstRowId, colField: columns[0].field }, { rowId: lastRowId, colField: columns[columns.length - 1].field });
 	}
