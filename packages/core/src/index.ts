@@ -31,7 +31,22 @@ export type {
 	LoadingVisualRow,
 } from './store.js';
 
-export type { FilterModel, FilterModelItem, SortModel } from './rowModel.js';
+export {
+	isDataVisualRow,
+	isEditableVisualRow,
+	isFullWidthVisualRow,
+	isSelectableVisualRow,
+} from './store.js';
+export type { FilterModel, FilterModelItem, GroupDef, RowModelConfig, SortModel } from './rowModel.js';
+export {
+	parseVisualRowId,
+	toDataVisualRowId,
+	toDetailVisualRowId,
+	toFooterVisualRowId,
+	toGroupVisualRowId,
+	toLoadingVisualRowId,
+} from './rows/visualRowIds.js';
+export type { GroupPathItem } from './rows/visualRowIds.js';
 export type { IGridDatasource } from './serverRowModel.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
 export { mountGridHost, type GridCellContentAdapter, type GridHost, type GridHostOptions } from './gridHost.js';

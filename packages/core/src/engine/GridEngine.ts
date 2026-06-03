@@ -84,6 +84,8 @@ export class GridEngine<TRowData = unknown> {
 			groupRowHeight: config.groupRowHeight,
 			detailRowHeight: config.detailRowHeight,
 			detailRenderer: config.detailRenderer,
+			rowModelConfig: config.rowModelConfig,
+			expansion: config.expansion ?? { groups: {}, treeRows: {}, details: {} },
 		};
 
 		// Construct StateManager with coordinate state update bridging
@@ -554,7 +556,7 @@ export class GridEngine<TRowData = unknown> {
 		if (updatedSet.has('selection') || updatedSet.has('columns') || updatedSet.has('dataVersion')) {
 			const rangeBounds = this.selection.calculateRangeBounds(
 				currState.selection.range,
-				(id) => (this.rowModel ? this.rowModel.getVisualRowIndexById(id) : -1),
+				(id) => (this.rowModel ? this.rowModel.getVisualIndexByRowId(id) : -1),
 				(field) => this.columns.getColumnIndex(field)
 			);
 			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds) ? currState.selection.bounds : rangeBounds;
@@ -645,8 +647,8 @@ export class GridEngine<TRowData = unknown> {
 					(rowIdx, colIdx) => {
 						const visualRow = rowModel.getVisualRow(rowIdx);
 						const col = currState.columns[colIdx];
-						if (visualRow && col) {
-							notifyCellOnce(visualRow.id, col.field);
+						if (visualRow?.kind === 'data' && col) {
+							notifyCellOnce(visualRow.rowId, col.field);
 						}
 					}
 				);

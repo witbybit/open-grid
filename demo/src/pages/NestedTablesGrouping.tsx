@@ -155,13 +155,35 @@ const TreeNameRenderer = ({ value, row, rowId, api }: CellRendererProps<FileNode
 	const depth = visualRow && 'depth' in visualRow ? visualRow.depth : 0;
 
 	const isFolder = row.type === 'folder';
+	const isExpanded = api.isGroupExpanded(rowId);
 	let Icon = File;
 	if (isFolder) {
 		Icon = Folder;
 	}
 
+	const handleToggle = (e: React.MouseEvent) => {
+		if (!isFolder) return;
+		e.stopPropagation();
+		const start = performance.now();
+		api.toggleGroupExpanded(rowId);
+		LatencyProfiler.record(performance.now() - start);
+	};
+
 	return (
 		<div className='flex items-center h-full select-none' style={{ paddingLeft: `${depth * 20}px` }}>
+			<button
+				type='button'
+				onClick={handleToggle}
+				className='w-4 h-4 mr-1 flex items-center justify-center rounded hover:bg-slate-800 transition-colors'
+			>
+				{isFolder ? (
+					isExpanded ? (
+						<ChevronDown className='w-3.5 h-3.5 text-amber-400' />
+					) : (
+						<ChevronRight className='w-3.5 h-3.5 text-slate-400' />
+					)
+				) : null}
+			</button>
 			<Icon className={`w-3.5 h-3.5 mr-2 shrink-0 ${isFolder ? 'text-amber-400' : 'text-slate-400'}`} />
 			<span className={`${isFolder ? 'font-semibold text-slate-200' : 'text-slate-300'}`}>{String(value)}</span>
 		</div>
@@ -410,55 +432,28 @@ export default function NestedTablesGrouping() {
 		rows: treeRows,
 		columns: treeColumns,
 		initialState: {
-			getParentId: (row) => row.parentId,
-			groupRowHeight: 38,
+			rowModelConfig: {
+				type: 'client',
+				treeData: {
+					enabled: true,
+					getParentId: (row) => row.parentId,
+				},
+			},
+			expansion: {
+				groups: {},
+				treeRows: treeRows.reduce<Record<string, true>>((acc, row) => {
+					if (row.type === 'folder') acc[row.id] = true;
+					return acc;
+				}, {}),
+				details: {},
+			},
 			styleSlots: {
-				groupRowClass: (visualRow) => {
-					return 'border-l-[3px] border-amber-500 bg-amber-950/5';
+				rowClass: (row) => {
+					return row.type === 'folder' ? 'border-l-[3px] border-amber-500 bg-amber-950/5' : '';
 				},
 			},
 		},
 	});
-
-	// Custom Tree node renderer (in parent-child tree, parent nodes map to group rows)
-	const handleTreeRowRender = useCallback(({ visualRow, api }: { visualRow: VisualRow<FileNodeRow>; api: GridApi<FileNodeRow> }) => {
-		if (visualRow.kind !== 'group') return null;
-		const expanded = visualRow.expanded;
-		const depth = visualRow.depth;
-
-		// The key of the tree group is the node ID
-		const nodeId = visualRow.key;
-		// Find full row data in treeRows
-		const rowData = treeRows.find((r) => r.id === nodeId);
-		if (!rowData) return null;
-
-		const handleToggle = (e: React.MouseEvent) => {
-			e.stopPropagation();
-			const start = performance.now();
-			api.toggleGroupExpanded(visualRow.id);
-			LatencyProfiler.record(performance.now() - start);
-		};
-
-		return (
-			<div
-				className='og-tree-group-content flex items-center justify-between px-4 h-full w-full border-b border-slate-900 bg-slate-900/20 hover:bg-slate-900/40 cursor-pointer'
-				onClick={handleToggle}
-				style={{ paddingLeft: `${depth * 20 + 16}px` }}
-			>
-				<div className='flex items-center gap-2'>
-					<span className='p-0.5 rounded hover:bg-slate-800 transition-colors'>
-						{expanded ? <ChevronDown className='w-4 h-4 text-amber-400' /> : <ChevronRight className='w-4 h-4 text-slate-400' />}
-					</span>
-					<Folder className='w-4 h-4 text-amber-400 shrink-0' />
-					<span className='text-slate-200 text-xs font-semibold'>{rowData.name}</span>
-				</div>
-				<div className='flex items-center gap-4 text-[10px] text-slate-500 font-mono font-bold'>
-					<span>{rowData.modifiedAt}</span>
-					<span className='text-[9px] text-amber-500 bg-amber-950/20 border border-amber-900/30 px-1.5 py-0.5 rounded'>Folder</span>
-				</div>
-			</div>
-		);
-	}, []);
 
 	// 3. Master-Detail Grid Config
 	const masterColumns = useMemo<ColumnDef<OrderRow>[]>(
@@ -560,7 +555,6 @@ export default function NestedTablesGrouping() {
 						<GridProvider api={treeApi} key={`tree-${gridVersion}`}>
 							<OpenGrid
 								enableNavigation={true}
-								groupRowRenderer={handleTreeRowRender}
 								navigationOptions={{
 									editTrigger: 'doubleClick',
 								}}

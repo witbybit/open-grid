@@ -39,12 +39,13 @@ describe('ServerRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(controller.getVisualRowCount()).toBe(100);
-		expect(controller.getVisualRowIndexById('1')).toBe(0);
-		expect(controller.getVisualRowIndexById('2')).toBe(1);
+		expect(controller.getVisualRowIndexById('row:1')).toBe(0);
+		expect(controller.getVisualRowIndexById('row:2')).toBe(1);
+		expect(controller.getVisualIndexByRowId('1')).toBe(0);
 
 		const visualRow1 = controller.getVisualRow(0);
 		expect(visualRow1?.kind).toBe('data');
-		expect(visualRow1?.id).toBe('1');
+		expect(visualRow1?.id).toBe('row:1');
 
 		const node1 = getRowNode(controller, 0);
 		expect(node1?.data.name).toBe('Alice');
@@ -78,8 +79,10 @@ describe('ServerRowModelController', () => {
 		const visualRow = controller.getVisualRow(80);
 		expect(visualRow).not.toBeNull();
 		expect(visualRow?.kind).toBe('loading');
-		expect(visualRow?.id).toBe('__loading_80');
-		expect(store.isRowLoading(visualRow!.id)).toBe(true);
+		expect(visualRow?.id).toBe('loading:80');
+		expect(visualRow?.kind === 'loading' ? visualRow.rowIndex : undefined).toBe(80);
+		expect('node' in visualRow!).toBe(false);
+		expect(store.getRowNodeById(visualRow!.id)).toBeNull();
 	});
 
 	it('should pre-fetch blocks ahead of time based on scroll velocity', async () => {

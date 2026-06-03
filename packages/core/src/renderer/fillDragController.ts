@@ -283,18 +283,27 @@ export class FillDragController<TRowData = unknown> {
 		const targetStartCol = columns[minColTarget];
 		const targetEndCol = columns[maxColTarget];
 
-		if (!startVisualRow || !endVisualRow || !startCol || !endCol || !targetStartVisualRow || !targetEndVisualRow || !targetStartCol || !targetEndCol) {
+		if (
+			startVisualRow?.kind !== 'data' ||
+			endVisualRow?.kind !== 'data' ||
+			targetStartVisualRow?.kind !== 'data' ||
+			targetEndVisualRow?.kind !== 'data' ||
+			!startCol ||
+			!endCol ||
+			!targetStartCol ||
+			!targetEndCol
+		) {
 			return;
 		}
 
 		const source: GridCellRange = {
-			start: { rowId: startVisualRow.id, colField: startCol.field },
-			end: { rowId: endVisualRow.id, colField: endCol.field },
+			start: { rowId: startVisualRow.rowId, colField: startCol.field },
+			end: { rowId: endVisualRow.rowId, colField: endCol.field },
 		};
 
 		const target: GridCellRange = {
-			start: { rowId: targetStartVisualRow.id, colField: targetStartCol.field },
-			end: { rowId: targetEndVisualRow.id, colField: targetEndCol.field },
+			start: { rowId: targetStartVisualRow.rowId, colField: targetStartCol.field },
+			end: { rowId: targetEndVisualRow.rowId, colField: targetEndCol.field },
 		};
 
 		this.engine.fillRange(source, target);

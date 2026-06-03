@@ -23,4 +23,10 @@ export interface GridEngineConfig<TRowData = unknown> {
 	groupRowHeight?: number;
 	detailRowHeight?: number;
 	detailRenderer?: unknown;
+	rowModelConfig?: import('../rowModel.js').RowModelConfig<TRowData>;
+	expansion?: {
+		groups: Record<string, true>;
+		treeRows: Record<string, true>;
+		details: Record<string, true>;
+	};
 }

@@ -4,5 +4,7 @@ export * from './stages/treeStage.js';
 export * from './stages/sortTreeStage.js';
 export * from './stages/aggregateStage.js';
 export * from './stages/flattenStage.js';
+export * from './visualRowIds.js';
+export * from './pipelineContext.js';
 export * from './RowPipeline.js';
 export * from './RowDataStore.js';

@@ -1,53 +1,64 @@
 import { RowNode } from '../../store.js';
-import type { RowTreeNode } from './types.js';
+import type { GroupDef } from '../RowPipeline.js';
+import { toGroupVisualRowId, type GroupPathItem } from '../visualRowIds.js';
+import type { RowPipelineContext, RowTreeNode } from './types.js';
 
-export function groupStage<TData>(nodes: RowNode<TData>[], groupBy: string[]): RowTreeNode<TData>[] {
-	if (groupBy.length === 0) {
+export function groupStage<TData>(nodes: RowNode<TData>[], groupDefs: GroupDef<TData>[], context: RowPipelineContext<TData>): RowTreeNode<TData>[] {
+	if (groupDefs.length === 0) {
 		return nodes.map((node) => ({
-			kind: 'leaf',
+			kind: 'data',
 			rowId: node.id,
 			node,
 			depth: 0,
 		}));
 	}
 
-	return groupRecursively(nodes, groupBy, 0, '');
+	return groupRecursively(nodes, groupDefs, context, 0, []);
 }
 
-function groupRecursively<TData>(nodes: RowNode<TData>[], groupBy: string[], depth: number, parentGroupId: string): RowTreeNode<TData>[] {
-	const field = groupBy[depth];
+function groupRecursively<TData>(
+	nodes: RowNode<TData>[],
+	groupDefs: GroupDef<TData>[],
+	context: RowPipelineContext<TData>,
+	depth: number,
+	parentPath: GroupPathItem[]
+): RowTreeNode<TData>[] {
+	const groupDef = groupDefs[depth];
+	const field = groupDef.colId;
 	const groupsMap = new Map<string, RowNode<TData>[]>();
+	const groupKeys = new Map<string, { key: unknown; keyString: string }>();
 
-	// Partition nodes by the field value
 	for (const node of nodes) {
-		const val = node.data ? String((node.data as Record<string, unknown>)[field] ?? 'None') : 'None';
-		if (!groupsMap.has(val)) {
-			groupsMap.set(val, []);
+		const key = context.getGroupKey(node, groupDef);
+		if (!groupsMap.has(key.keyString)) {
+			groupsMap.set(key.keyString, []);
+			groupKeys.set(key.keyString, key);
 		}
-		groupsMap.get(val)!.push(node);
+		groupsMap.get(key.keyString)!.push(node);
 	}
 
 	const results: RowTreeNode<TData>[] = [];
 
-	for (const [key, groupNodes] of groupsMap.entries()) {
-		const groupId = parentGroupId ? `${parentGroupId}|${field}:${key}` : `group:${field}:${key}`;
-		const isLastLevel = depth === groupBy.length - 1;
+	for (const [keyString, groupNodes] of groupsMap.entries()) {
+		const key = groupKeys.get(keyString)?.key ?? keyString;
+		const path = [...parentPath, { field, key, keyString }];
+		const groupId = toGroupVisualRowId(path);
+		const isLastLevel = depth === groupDefs.length - 1;
 
 		let childNodes: RowTreeNode<TData>[];
 		if (isLastLevel) {
 			childNodes = groupNodes.map((node) => ({
-				kind: 'leaf',
+				kind: 'data',
 				rowId: node.id,
 				node,
 				depth: depth + 1,
 			}));
 		} else {
-			childNodes = groupRecursively(groupNodes, groupBy, depth + 1, groupId);
+			childNodes = groupRecursively(groupNodes, groupDefs, context, depth + 1, path);
 		}
 
-		// Calculate total leaf count under this group node
 		const leafCount = childNodes.reduce((acc, child) => {
-			return acc + (child.kind === 'leaf' ? 1 : child.childCount);
+			return acc + (child.kind === 'data' ? 1 : child.leafCount);
 		}, 0);
 
 		results.push({
@@ -55,9 +66,12 @@ function groupRecursively<TData>(nodes: RowNode<TData>[], groupBy: string[], dep
 			id: groupId,
 			field,
 			key,
+			keyString,
 			depth,
+			path,
 			children: childNodes,
 			childCount: leafCount,
+			leafCount,
 			aggregateValues: {},
 		});
 	}

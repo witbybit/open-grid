@@ -940,8 +940,9 @@ describe('GridStore undo and redo functionality', () => {
 			columns: store.getState().columns,
 		});
 
-		expect(store.getVisualIndexById('1')).toBe(0);
-		expect(store.getVisualIndexById('2')).toBe(1);
+		expect(store.getVisualIndexById('row:1')).toBe(0);
+		expect(store.getVisualIndexById('row:2')).toBe(1);
+		expect(store.getVisualIndexById('1')).toBeNull();
 		expect(store.getVisualIndexByRowId('1')).toBe(0);
 		expect(store.getVisualIndexByRowId('2')).toBe(1);
 		expect(store.getRowNodeById('1')?.data.name).toBe('Product A');

@@ -271,8 +271,8 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const rows: string[] = [];
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
 			const visualRow = params.api.getVisualRow(r);
-			if (!visualRow) continue;
-			const rowId = visualRow.id;
+			if (visualRow?.kind !== 'data') continue;
+			const rowId = visualRow.rowId;
 			const rowVals: string[] = [];
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 				const col = params.api.getState().columns[c];
@@ -324,8 +324,8 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 					const rowIndex = bounds.minRow + r;
 					if (rowIndex > bounds.maxRow) break;
 					const visualRow = params.api.getVisualRow(rowIndex);
-					if (!visualRow) continue;
-					const rowId = visualRow.id;
+					if (visualRow?.kind !== 'data') continue;
+					const rowId = visualRow.rowId;
 					const cells = lines[r].split('\t');
 					for (let c = 0; c < cells.length; c++) {
 						const colIndex = bounds.minCol + c;
@@ -348,8 +348,8 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		this.store.batch(() => {
 			for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
 				const visualRow = params.api.getVisualRow(r);
-				if (!visualRow) continue;
-				const rowId = visualRow.id;
+				if (visualRow?.kind !== 'data') continue;
+				const rowId = visualRow.rowId;
 				for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 					const col = params.api.getState().columns[c];
 					if (!col) continue;
@@ -367,10 +367,10 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		const firstRow = params.api.getVisualRow(0);
 		const lastRow = params.api.getVisualRow(rowCount - 1);
-		if (!firstRow || !lastRow) return;
+		if (firstRow?.kind !== 'data' || lastRow?.kind !== 'data') return;
 
-		const firstRowId = firstRow.id;
-		const lastRowId = lastRow.id;
+		const firstRowId = firstRow.rowId;
+		const lastRowId = lastRow.rowId;
 
 		params.api.selectRange({ rowId: firstRowId, colField: columns[0].field }, { rowId: lastRowId, colField: columns[columns.length - 1].field });
 	}

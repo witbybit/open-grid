@@ -10,7 +10,7 @@ export class CellAccessModel<TRowData = unknown> {
 
 	public getByPointer(rowId: string, colField: string, event?: Event): GridCellAccess<TRowData> | null {
 		const rowModel = this.engine.getRowModel();
-		const rowIndex = rowModel ? rowModel.getVisualRowIndexById(rowId) : -1;
+		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
 		const colIndex = this.engine.columns.getColumnIndex(colField);
 		const column = this.engine.columns.getColumnDef(colField);
 

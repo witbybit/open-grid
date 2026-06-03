@@ -1,31 +1,14 @@
 import type { RowTreeNode } from './types.js';
 import type { SortModel } from '../../rowModel.js';
-import { compilePathGetter, type ColumnDef, RowNode } from '../../store.js';
+import { type ColumnDef, RowNode } from '../../store.js';
+import { createRowPipelineContext } from '../pipelineContext.js';
 
 export function sortTreeStage<TData>(roots: RowTreeNode<TData>[], sortModel: SortModel | null, columns: ColumnDef<TData>[]): void {
 	if (!sortModel || sortModel.length === 0) return;
 
-	const columnById = new Map<string, ColumnDef<TData>>();
-	columns.forEach((col) => {
-		columnById.set(col.field, col);
-	});
-
+	const context = createRowPipelineContext(columns, { groups: new Set(), treeRows: new Set(), details: new Set() });
 	const precompiledSortGetters = sortModel.map((sortItem) => {
-		const column = columnById.get(sortItem.colId);
-		let getter: (node: RowNode<TData>) => unknown;
-		if (column) {
-			if (column.valueGetter) {
-				const colValGetter = column.valueGetter;
-				getter = (node: RowNode<TData>) => colValGetter({ node, row: node.data, colField: column.field });
-			} else {
-				const pathGetter = compilePathGetter(column.field);
-				getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
-			}
-		} else {
-			const pathGetter = compilePathGetter(sortItem.colId);
-			getter = (node: RowNode<TData>) => node.getCellValue(sortItem.colId, pathGetter);
-		}
-		return getter;
+		return (node: RowNode<TData>) => context.getValue(node, sortItem.colId);
 	});
 
 	// Sort roots
@@ -42,11 +25,13 @@ function sortTreeRecursively<TData>(
 	sortModel: SortModel,
 	precompiledSortGetters: ((node: RowNode<TData>) => unknown)[]
 ): void {
-	if (node.kind === 'leaf') return;
+	if (node.kind === 'data' && !node.children?.length) return;
 
-	sortChildren(node.children, sortModel, precompiledSortGetters);
+	if (node.children?.length) {
+		sortChildren(node.children, sortModel, precompiledSortGetters);
+	}
 
-	for (const child of node.children) {
+	for (const child of node.children ?? []) {
 		sortTreeRecursively(child, sortModel, precompiledSortGetters);
 	}
 }
@@ -82,8 +67,8 @@ function sortChildren<TData>(
 		// If both are group nodes, compare by key
 		if (a.kind === 'group' && b.kind === 'group') {
 			let comp = 0;
-			const aVal = String(a.key);
-			const bVal = String(b.key);
+			const aVal = a.keyString;
+			const bVal = b.keyString;
 			if (aVal < bVal) comp = -1;
 			else if (aVal > bVal) comp = 1;
 
@@ -96,7 +81,7 @@ function sortChildren<TData>(
 		}
 
 		// If both are leaf nodes, compare using standard sort model
-		if (a.kind === 'leaf' && b.kind === 'leaf') {
+		if (a.kind === 'data' && b.kind === 'data') {
 			for (let i = 0; i < sortModel.length; i++) {
 				const sortItem = sortModel[i];
 				const aVal = precompiledSortGetters[i](a.node);

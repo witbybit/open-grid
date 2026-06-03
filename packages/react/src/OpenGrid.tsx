@@ -382,10 +382,12 @@ function OpenGridInner<TRowData = unknown>({
 		if (!cellEl) return null;
 		const colField = cellEl.dataset.colField;
 		const rowEl = cellEl.closest('.og-row') as HTMLElement;
-		const rowId = rowEl?.dataset.rowId;
+		const rowIndex = Number(rowEl?.dataset.rowIndex);
+		const visualRow = Number.isFinite(rowIndex) ? api.getVisualRow(rowIndex) : null;
+		const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
 		if (!colField || !rowId) return null;
 		return { cellEl, pointer: { rowId, colField } };
-	}, []);
+	}, [api]);
 
 	const getCellClickParams = useCallback(
 		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {

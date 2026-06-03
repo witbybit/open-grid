@@ -47,16 +47,17 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		const visualRow = this.store.getVisualRow(rowIdx);
 		const col = state.columns[colIdx];
 		if (!visualRow || !col) return null;
+		if (visualRow.kind !== 'data') return null;
 
 		return {
-			rowId: visualRow.id,
+			rowId: visualRow.rowId,
 			colField: col.field,
 		};
 	}
 
 	private getCoordsFromPointer(pointer: GridCellPointer | null): { rowIdx: number; colIdx: number } | null {
 		if (!pointer) return null;
-		const rowIdx = this.store.getVisualRowIndexById(pointer.rowId) ?? -1;
+		const rowIdx = this.store.getVisualIndexByRowId(pointer.rowId) ?? -1;
 		const colIdx = this.store.getColumnIndex(pointer.colField);
 		if (rowIdx === -1 || colIdx === -1) return null;
 		return { rowIdx, colIdx };
@@ -148,7 +149,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					event.preventDefault();
 					const rowModel = this.store.getRowModel();
 					if (rowModel) {
-						const currentIdx = this.store.getVisualRowIndexById(active.rowId);
+						const currentIdx = this.store.getVisualIndexByRowId(active.rowId);
 						if (currentIdx !== null && currentIdx !== -1) {
 							const currentVisualRow = rowModel.getVisualRow(currentIdx);
 							if (currentVisualRow) {

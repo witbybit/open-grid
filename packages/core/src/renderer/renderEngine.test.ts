@@ -145,7 +145,7 @@ describe('RenderEngine', () => {
 		store.selectCell({ rowId: 'row-2', colField: 'name' });
 		renderer.fullPaint();
 
-		const selectedRow = container.querySelector('.og-row[data-row-id="row-2"]') as HTMLElement;
+		const selectedRow = container.querySelector('.og-row[data-row-id="row:row-2"]') as HTMLElement;
 		expect(selectedRow.className).toContain('og-row-selected');
 		expect(selectedRow.className).toContain('og-row-focused');
 		expect(selectedRow.className).toContain('custom-focused-row');
@@ -268,7 +268,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('renders loading visual rows as cell skeletons', () => {
+	it('renders loading visual rows as skeleton cells without fake data rows', () => {
 		const columns = [{ field: 'name', header: 'Name', width: 120 }];
 		const store = new GridStore<{ id: string; name: string }>({
 			columns,
@@ -278,7 +278,8 @@ describe('RenderEngine', () => {
 		});
 		const loadingRow: VisualRow<{ id: string; name: string }> = {
 			kind: 'loading',
-			id: '__loading_0',
+			id: 'loading:0',
+			rowIndex: 0,
 			editable: false,
 		};
 		const rowModel: RowModel<{ id: string; name: string }> = {
@@ -286,7 +287,7 @@ describe('RenderEngine', () => {
 			getVisualRowCount: () => 1,
 			getVisualRowIndexById: (id) => (id === loadingRow.id ? 0 : -1),
 			getVisualIndexById: (id) => (id === loadingRow.id ? 0 : -1),
-			getVisualIndexByRowId: (id) => (id === loadingRow.id ? 0 : -1),
+			getVisualIndexByRowId: () => -1,
 			getRowNodeById: () => null,
 			getRawRowById: () => null,
 			refresh: (): RowModelRefreshResult => ({ changed: false }),
@@ -310,7 +311,7 @@ describe('RenderEngine', () => {
 		store.registerRowModel(rowModel);
 		renderer.mount(container);
 
-		const row = container.querySelector('.og-row[data-row-id="__loading_0"]') as HTMLDivElement;
+		const row = container.querySelector('.og-row[data-row-id="loading:0"]') as HTMLDivElement;
 		const cell = container.querySelector('.og-cell[data-col-field="name"]') as HTMLDivElement;
 
 		expect(row.className).toContain('og-row-loading');

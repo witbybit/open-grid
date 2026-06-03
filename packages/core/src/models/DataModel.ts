@@ -98,7 +98,7 @@ export class DataModel<TRowData = unknown> {
 
 		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
 		if (!node) {
-			const idx = rowModel.getVisualRowIndexById(rowId);
+			const idx = rowModel.getVisualIndexByRowId(rowId);
 			if (idx === -1) return '';
 			const visualRow = rowModel.getVisualRow(idx);
 			const row = visualRow?.kind === 'data' ? visualRow.node.data : null;
@@ -132,7 +132,7 @@ export class DataModel<TRowData = unknown> {
 		const row =
 			node?.data ??
 			(() => {
-				const idx = rowModel.getVisualRowIndexById(rowId);
+				const idx = rowModel.getVisualIndexByRowId(rowId);
 				if (idx === -1) return null;
 				const visualRow = rowModel.getVisualRow(idx);
 				return visualRow?.kind === 'data' ? visualRow.node.data : null;

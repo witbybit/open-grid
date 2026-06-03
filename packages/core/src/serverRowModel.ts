@@ -1,4 +1,5 @@
 import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, type VisualRow, type RowRefreshReason, type RowModelRefreshResult } from './store.js';
+import { toDataVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
 
 export interface GetRowsParams {
 	startRow: number;
@@ -25,7 +26,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	private activeNodes: Array<RowNode<TData> | null> = [];
 	private visualRows: Array<VisualRow<TData> | null> = [];
 	private nodeMap = new Map<string, RowNode<TData>>();
-	private visualRowIdMap = new Map<string, number>();
+	private visualRowIdToIndex = new Map<string, number>();
+	private rowIdToVisualIndex = new Map<string, number>();
 	private loadingBlocks: Record<number, boolean> = {};
 	private loadingBlockCount = 0;
 	private unsubscribers: Array<() => void> = [];
@@ -78,7 +80,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		if (rowIndex >= 0 && rowIndex < this.getVisualRowCount()) {
 			return {
 				kind: 'loading',
-				id: `__loading_${rowIndex}`,
+				id: toLoadingVisualRowId(rowIndex),
+				rowIndex,
 				editable: false,
 			};
 		}
@@ -144,16 +147,18 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	};
 
 	public getVisualRowIndexById = (id: string): number => {
-		const idx = this.visualRowIdMap.get(id);
+		const idx = this.visualRowIdToIndex.get(id) ?? this.rowIdToVisualIndex.get(id);
 		return idx !== undefined ? idx : -1;
 	};
 
 	public getVisualIndexById = (visualRowId: string): number => {
-		return this.getVisualRowIndexById(visualRowId);
+		const idx = this.visualRowIdToIndex.get(visualRowId);
+		return idx !== undefined ? idx : -1;
 	};
 
 	public getVisualIndexByRowId = (rowId: string): number => {
-		return this.getVisualRowIndexById(rowId);
+		const idx = this.rowIdToVisualIndex.get(rowId);
+		return idx !== undefined ? idx : -1;
 	};
 
 	public getRawRowById = (rowId: string): TData | null => {
@@ -254,12 +259,14 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 					this.activeNodes[globalIdx] = node;
 					this.visualRows[globalIdx] = {
 						kind: 'data',
-						id: node.id,
+						id: toDataVisualRowId(node.id),
+						rowId: node.id,
 						node,
 						depth: 0,
 					};
 					this.nodeMap.set(id, node);
-					this.visualRowIdMap.set(id, globalIdx);
+					this.visualRowIdToIndex.set(toDataVisualRowId(id), globalIdx);
+					this.rowIdToVisualIndex.set(id, globalIdx);
 				} else {
 					this.activeNodes[globalIdx] = null;
 					this.visualRows[globalIdx] = null;
@@ -317,7 +324,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.activeNodes = [];
 		this.visualRows = [];
 		this.nodeMap.clear();
-		this.visualRowIdMap.clear();
+		this.visualRowIdToIndex.clear();
+		this.rowIdToVisualIndex.clear();
 		this.store.engine.clearFormulas();
 		this.store.setState({
 			loading: true,

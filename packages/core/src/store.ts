@@ -2,6 +2,7 @@ import type { FilterModel, SortModel } from './rowModel.js';
 import type { IGridDatasource } from './serverRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
+import type { GroupPathItem } from './rows/visualRowIds.js';
 
 export interface CellSubscription {
 	rowId: string;
@@ -123,7 +124,7 @@ export class RowNode<TRowData = unknown> {
 export interface DataVisualRow<T> {
 	kind: 'data';
 	id: string;
-	rowId?: string;
+	rowId: string;
 	node: RowNode<T>;
 	depth: number;
 	height?: number;
@@ -134,15 +135,17 @@ export interface DataVisualRow<T> {
 export interface GroupVisualRow<T> {
 	kind: 'group';
 	id: string;
-	groupId?: string;
+	groupId: string;
 	field: string;
 	key: unknown;
+	keyString: string;
+	path: GroupPathItem[];
 	depth: number;
 	expanded: boolean;
 	childCount: number;
-	leafCount?: number;
-	aggregate?: Record<string, unknown>;
+	leafCount: number;
 	aggregateValues?: Record<string, unknown>;
+	aggregate?: Record<string, unknown>;
 	height?: number;
 	selectable?: boolean;
 	editable?: false;
@@ -174,6 +177,7 @@ export interface FooterVisualRow<T> {
 export interface LoadingVisualRow {
 	kind: 'loading';
 	id: string;
+	rowIndex: number;
 	height?: number;
 	editable?: false;
 }
@@ -184,6 +188,24 @@ export type VisualRow<TRowData = unknown> =
 	| DetailVisualRow<TRowData>
 	| FooterVisualRow<TRowData>
 	| LoadingVisualRow;
+
+export function isDataVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): row is DataVisualRow<TRowData> {
+	return row?.kind === 'data';
+}
+
+export function isFullWidthVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
+	return row?.kind === 'detail' || row?.kind === 'loading';
+}
+
+export function isSelectableVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
+	if (row?.kind === 'data') return true;
+	if (row?.kind === 'group') return row.selectable !== false;
+	return false;
+}
+
+export function isEditableVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
+	return row?.kind === 'data';
+}
 
 export interface ValueGetterParams<TRowData = unknown> {
 	node: RowNode<TRowData>;
@@ -393,6 +415,12 @@ export interface GridState<TRowData = unknown> {
 	groupRowHeight?: number;
 	detailRowHeight?: number;
 	detailRenderer?: unknown;
+	rowModelConfig?: import('./rowModel.js').RowModelConfig<TRowData>;
+	expansion: {
+		groups: Record<string, true>;
+		treeRows: Record<string, true>;
+		details: Record<string, true>;
+	};
 
 	// React cache invalidator
 	dataVersion: number;
@@ -549,6 +577,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			groupRowHeight: initialState.groupRowHeight,
 			detailRowHeight: initialState.detailRowHeight,
 			detailRenderer: initialState.detailRenderer,
+			rowModelConfig: initialState.rowModelConfig,
+			expansion: initialState.expansion,
 		});
 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
@@ -778,8 +808,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				const ids: string[] = [];
 				for (let i = bounds.minRow; i <= bounds.maxRow; i++) {
 					const vr = this.getVisualRow(i);
-					if (vr) {
-						ids.push(vr.id);
+					if (vr?.kind === 'data') {
+						ids.push(vr.rowId);
 					}
 				}
 				return ids;
@@ -817,25 +847,25 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 						const minRow = Math.min(startIdx!, endIdx!);
 						const maxRow = Math.max(startIdx!, endIdx!);
 						let idx = 0;
-						for (let i = minRow; i <= maxRow; i++) {
-							const vr = this.getVisualRow(i);
-							if (vr) {
-								callback(vr.id, idx++);
-							}
+					for (let i = minRow; i <= maxRow; i++) {
+						const vr = this.getVisualRow(i);
+						if (vr?.kind === 'data') {
+							callback(vr.rowId, idx++);
 						}
-					},
+					}
+				},
 					getIds: () => {
 						if (!hasValidIndices) return [];
 						const minRow = Math.min(startIdx!, endIdx!);
 						const maxRow = Math.max(startIdx!, endIdx!);
 						const ids: string[] = [];
-						for (let i = minRow; i <= maxRow; i++) {
-							const vr = this.getVisualRow(i);
-							if (vr) {
-								ids.push(vr.id);
-							}
+					for (let i = minRow; i <= maxRow; i++) {
+						const vr = this.getVisualRow(i);
+						if (vr?.kind === 'data') {
+							ids.push(vr.rowId);
 						}
-						return ids;
+					}
+					return ids;
 					},
 					getData: () => {
 						if (!hasValidIndices) return [];

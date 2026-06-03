@@ -13,7 +13,7 @@ import type {
 	GridHeaderMenuUnmount,
 } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { RowNode, type ColumnDef, type VisualRow, type GridApi, type InternalGridApi } from '../store.js';
+import { type ColumnDef, type VisualRow, type GridApi, type InternalGridApi, type RowNode } from '../store.js';
 import { CORE_STYLES } from './styles.js';
 
 /**
@@ -443,12 +443,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const renderRow = (r: number) => {
 			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
 			if (!visualRow && state.loading) {
-				const node = new RowNode<TRowData>(`__loading_${r}`, null as TRowData);
 				visualRow = {
-					kind: 'data',
-					id: node.id,
-					node,
-					depth: 0,
+					kind: 'loading',
+					id: `loading:${r}`,
+					rowIndex: r,
 				};
 			}
 			if (!visualRow) return;
@@ -516,7 +514,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 
 			if (visualRow.kind === 'loading') {
-				const node = new RowNode<TRowData>(visualRow.id, null as TRowData);
 				if (pooledRow.element.dataset.rowKey) {
 					if (this.onUnmountRowContent) {
 						this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
@@ -524,8 +521,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					delete pooledRow.element.dataset.rowKey;
 					pooledRow.element.textContent = '';
 				}
-				this.updateRowClassName(pooledRow, node, r, state);
-				this.recycleRowCells(pooledRow, node, r, newColRange.startIdx, newColRange.endIdx, columns);
+				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
+				this.recycleLoadingRowCells(pooledRow, visualRow, r, newColRange.startIdx, newColRange.endIdx, columns);
 				return;
 			}
 
@@ -594,7 +591,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const columns = state.columns;
 
 		for (const rowId of this.dirtyRows) {
-			const rowIndex = rowModel.getVisualRowIndexById(rowId);
+			const rowIndex = rowModel.getVisualIndexByRowId(rowId);
 			const pooledRow = rowIndex >= 0 ? this.activeRows.get(rowIndex) : undefined;
 			const row = rowIndex >= 0 ? rowModel.getVisualRow(rowIndex) : null;
 			if (pooledRow && row?.kind === 'data') {
@@ -603,7 +600,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		for (const { rowId, colField } of this.dirtyCells.values()) {
-			const rowIndex = rowModel.getVisualRowIndexById(rowId);
+			const rowIndex = rowModel.getVisualIndexByRowId(rowId);
 			const colIndex = this.engine.columns.getColumnIndex(colField);
 			if (rowIndex < 0 || colIndex < 0) continue;
 
@@ -936,6 +933,98 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		// 5. Render right pinned cells
+		for (let c = colCount - pinRightColumns; c < colCount; c++) {
+			if (c >= 0) {
+				renderCell(c);
+			}
+		}
+	}
+
+	private recycleLoadingRowCells(
+		pooledRow: PooledRow,
+		_visualRow: Extract<VisualRow<TRowData>, { kind: 'loading' }>,
+		rowIndex: number,
+		startCol: number,
+		endCol: number,
+		columns: ColumnDef<TRowData>[],
+		releaseOutOfRange = true
+	): void {
+		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
+		const pinRightColumns = this.engine.viewport.pinRightColumns;
+		const colCount = columns.length;
+
+		if (releaseOutOfRange) {
+			for (const [c] of pooledRow.cells.entries()) {
+				if (c >= colCount) {
+					this.releaseCell(pooledRow, c);
+					continue;
+				}
+
+				const isPinnedLeft = c < pinLeftColumns;
+				const isPinnedRight = c >= colCount - pinRightColumns;
+				const isScrollable = c >= startCol && c <= endCol;
+				if (!isPinnedLeft && !isPinnedRight && !isScrollable) {
+					this.releaseCell(pooledRow, c);
+				}
+			}
+		}
+
+		const renderCell = (c: number) => {
+			const col = columns[c];
+			if (!col) return;
+
+			let cell = pooledRow.cells.get(c);
+			if (!cell) {
+				cell = this.cellPool.acquire();
+				pooledRow.cells.set(c, cell);
+			}
+
+			let cellLeft = this.engine.geometry.colLefts[c];
+			const cellWidth = this.engine.geometry.colWidths[c];
+			let targetRowEl = pooledRow.element;
+
+			if (c < pinLeftColumns) {
+				targetRowEl = pooledRow.leftElement!;
+			} else if (c >= colCount - pinRightColumns) {
+				const firstRightPinColLeft = this.engine.geometry.colLefts[colCount - pinRightColumns];
+				cellLeft = cellLeft - firstRightPinColLeft;
+				targetRowEl = pooledRow.rightElement!;
+			}
+
+			if (cell.parentNode !== targetRowEl) {
+				targetRowEl.appendChild(cell);
+			}
+
+			if (cell.dataset.cellKey && this.onUnmountCellContent) {
+				this.onUnmountCellContent({
+					cellKey: cell.dataset.cellKey,
+					container: this.getCellPortalHost(cell) ?? cell,
+					flushSync: true,
+				});
+				delete cell.dataset.cellKey;
+			}
+
+			cell.style.transform = `translate3d(${cellLeft}px, 0, 0)`;
+			cell.style.width = `${cellWidth}px`;
+			cell.dataset.colField = col.field;
+			cell.dataset.rowIndex = String(rowIndex);
+			cell.className = 'og-cell og-cell-loading';
+			if (!cell.querySelector('.og-cell-loading-skeleton')) {
+				cell.textContent = '';
+				const skeleton = document.createElement('div');
+				skeleton.className = 'og-cell-loading-skeleton';
+				cell.appendChild(skeleton);
+			}
+		};
+
+		for (let c = 0; c < pinLeftColumns; c++) {
+			renderCell(c);
+		}
+		for (let c = startCol; c <= endCol; c++) {
+			if (c >= pinLeftColumns && c < colCount - pinRightColumns) {
+				renderCell(c);
+			}
+		}
 		for (let c = colCount - pinRightColumns; c < colCount; c++) {
 			if (c >= 0) {
 				renderCell(c);
