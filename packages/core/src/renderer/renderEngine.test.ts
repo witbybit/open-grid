@@ -496,6 +496,8 @@ describe('RenderEngine', () => {
 		const afterViewport = renderer.getRenderStats();
 		expect(afterViewport.fullPaints).toBe(0);
 		expect(afterViewport.viewportPaints).toBe(1);
+		expect(afterViewport.headerPaints).toBe(afterOverlay.headerPaints);
+		expect(afterViewport.overlayPaints).toBe(afterOverlay.overlayPaints);
 
 		renderer.unmount();
 		controller.dispose();
@@ -553,6 +555,8 @@ describe('RenderEngine', () => {
 		expect(afterData.fullPaints - before.fullPaints).toBe(0);
 		expect(afterData.geometryRecomputes - before.geometryRecomputes).toBe(0);
 		expect(afterData.viewportPaints - before.viewportPaints).toBe(1);
+		expect(afterData.headerPaints - before.headerPaints).toBe(0);
+		expect(afterData.overlayPaints - before.overlayPaints).toBe(0);
 
 		store.setState({ visibleRowRange: { startIdx: 50, endIdx: 75 } });
 		await Promise.resolve();
@@ -560,6 +564,8 @@ describe('RenderEngine', () => {
 		const afterViewport = renderer.getRenderStats();
 		expect(afterViewport.fullPaints - afterData.fullPaints).toBe(0);
 		expect(afterViewport.viewportPaints - afterData.viewportPaints).toBe(1);
+		expect(afterViewport.headerPaints - afterData.headerPaints).toBe(0);
+		expect(afterViewport.overlayPaints - afterData.overlayPaints).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();

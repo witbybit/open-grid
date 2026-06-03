@@ -150,9 +150,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.viewportRenderer = new ViewportRenderer((frame) => {
 			this.syncViewportScrollFromDom();
 			this.recycleViewport();
-			this.paintHeaders();
-			this.paintOverlay();
-			this.fullWidthRowRenderer.sync(frame);
 		});
 		this.rowRenderer = new RowRenderer((frame) => this.repaintInvalidatedRowsAndCells(frame));
 		this.cellRenderer = new CellRenderer((frame) => this.repaintInvalidatedRowsAndCells(frame));
