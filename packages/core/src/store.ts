@@ -15,6 +15,21 @@ export interface GridCellPointer {
 	colField: string;
 }
 
+export interface CellPointer {
+	rowId: string;
+	colId: string;
+}
+
+export interface VisualRowPointer {
+	visualRowId: string;
+}
+
+export interface SelectionChangeResult {
+	invalidatedCells: GridCellPointer[];
+	invalidatedRows: string[];
+	overlayChanged: boolean;
+}
+
 export interface GridCellCoordinates {
 	rowIndex: number;
 	colIndex: number;
@@ -205,6 +220,18 @@ export function isSelectableVisualRow<TRowData>(row: VisualRow<TRowData> | null 
 
 export function isEditableVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
 	return row?.kind === 'data';
+}
+
+export function canEditCell<TRowData>(row: VisualRow<TRowData> | null | undefined, column: ColumnDef<TRowData> | null | undefined): boolean {
+	return row?.kind === 'data' && !!column;
+}
+
+export function canFocusVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
+	return !!row && row.kind !== 'loading';
+}
+
+export function isDataCellSelectable<TRowData>(row: VisualRow<TRowData> | null | undefined, column: ColumnDef<TRowData> | null | undefined): boolean {
+	return row?.kind === 'data' && !!column;
 }
 
 export interface ValueGetterParams<TRowData = unknown> {
@@ -517,6 +544,14 @@ export interface GridApi<TRowData = unknown> {
 	stopEditing(cancel?: boolean): void;
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
+	subscribeToViewport(listener: Listener<TRowData>): () => void;
+	subscribeToSelection(listener: Listener<TRowData>): () => void;
+	subscribeToFocusedCell(listener: Listener<TRowData>): () => void;
+	subscribeToEditingCell(listener: Listener<TRowData>): () => void;
+	subscribeToCell(rowId: string, colField: string, listener: () => void): () => void;
+	subscribeToRow(rowId: string, listener: Listener<TRowData>): () => void;
+	subscribeToColumn(colField: string, listener: Listener<TRowData>): () => void;
+	subscribeToHeaders(listener: Listener<TRowData>): () => void;
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
@@ -847,25 +882,25 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 						const minRow = Math.min(startIdx!, endIdx!);
 						const maxRow = Math.max(startIdx!, endIdx!);
 						let idx = 0;
-					for (let i = minRow; i <= maxRow; i++) {
-						const vr = this.getVisualRow(i);
-						if (vr?.kind === 'data') {
-							callback(vr.rowId, idx++);
+						for (let i = minRow; i <= maxRow; i++) {
+							const vr = this.getVisualRow(i);
+							if (vr?.kind === 'data') {
+								callback(vr.rowId, idx++);
+							}
 						}
-					}
-				},
+					},
 					getIds: () => {
 						if (!hasValidIndices) return [];
 						const minRow = Math.min(startIdx!, endIdx!);
 						const maxRow = Math.max(startIdx!, endIdx!);
 						const ids: string[] = [];
-					for (let i = minRow; i <= maxRow; i++) {
-						const vr = this.getVisualRow(i);
-						if (vr?.kind === 'data') {
-							ids.push(vr.rowId);
+						for (let i = minRow; i <= maxRow; i++) {
+							const vr = this.getVisualRow(i);
+							if (vr?.kind === 'data') {
+								ids.push(vr.rowId);
+							}
 						}
-					}
-					return ids;
+						return ids;
 					},
 					getData: () => {
 						if (!hasValidIndices) return [];
@@ -950,6 +985,70 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public subscribeToKey = (key: string, listener: Listener<TRowData>): (() => void) => {
 		return this.engine.stateManager.subscribeToKey(key, listener);
+	};
+
+	public subscribeToViewport = (listener: Listener<TRowData>): (() => void) => {
+		const unsubscribeRows = this.subscribeToKey('visibleRowRange', listener);
+		const unsubscribeCols = this.subscribeToKey('visibleColRange', listener);
+		return () => {
+			unsubscribeRows();
+			unsubscribeCols();
+		};
+	};
+
+	public subscribeToSelection = (listener: Listener<TRowData>): (() => void) => {
+		return this.subscribeToKey('selection', listener);
+	};
+
+	public subscribeToFocusedCell = (listener: Listener<TRowData>): (() => void) => {
+		return this.subscribeToKey('selection', listener);
+	};
+
+	public subscribeToEditingCell = (listener: Listener<TRowData>): (() => void) => {
+		return this.subscribeToKey('activeEdit', listener);
+	};
+
+	public subscribeToCell = (rowId: string, colField: string, listener: () => void): (() => void) => {
+		const sub: CellSubscription = { rowId, colField, onStoreChange: listener };
+		this.registerCellSubscription(sub);
+		return () => this.unregisterCellSubscription(sub);
+	};
+
+	public subscribeToRow = (rowId: string, listener: Listener<TRowData>): (() => void) => {
+		const unsubscribeData = this.subscribeToKey('dataVersion', listener);
+		const unsubscribeHeights = this.subscribeToKey('rowHeights', listener);
+		const unsubscribeEvent = this.addEventListener<{ rowId: string }>('rowResized', (event) => {
+			if (event.payload.rowId === rowId) listener(this.getState());
+		});
+		return () => {
+			unsubscribeData();
+			unsubscribeHeights();
+			unsubscribeEvent();
+		};
+	};
+
+	public subscribeToColumn = (colField: string, listener: Listener<TRowData>): (() => void) => {
+		const unsubscribeColumns = this.subscribeToKey('columns', listener);
+		const unsubscribeWidths = this.subscribeToKey('columnWidths', listener);
+		const unsubscribeEvent = this.addEventListener<{ colField: string }>('columnResized', (event) => {
+			if (event.payload.colField === colField) listener(this.getState());
+		});
+		return () => {
+			unsubscribeColumns();
+			unsubscribeWidths();
+			unsubscribeEvent();
+		};
+	};
+
+	public subscribeToHeaders = (listener: Listener<TRowData>): (() => void) => {
+		const unsubscribeColumns = this.subscribeToKey('columns', listener);
+		const unsubscribeWidths = this.subscribeToKey('columnWidths', listener);
+		const unsubscribeSort = this.subscribeToKey('sortModel', listener);
+		return () => {
+			unsubscribeColumns();
+			unsubscribeWidths();
+			unsubscribeSort();
+		};
 	};
 
 	public triggerCellNotifications = (rowId: string): void => {

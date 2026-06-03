@@ -3,6 +3,8 @@ import { ScrollEngine } from './scrollEngine.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
+import { GeometryController } from './geometryController.js';
+import type { InvalidationFrame } from './invalidationManager.js';
 import type {
 	GridCellContentMount,
 	GridCellContentUnmount,
@@ -12,6 +14,15 @@ import type {
 	GridHeaderMenuMount,
 	GridHeaderMenuUnmount,
 } from './IGridRenderer.js';
+import { RenderOrchestrator, type RenderStats } from './renderOrchestrator.js';
+import { RenderScheduler } from './renderScheduler.js';
+import { PortalMountManager } from './portalMountManager.js';
+import { ViewportRenderer } from './viewportRenderer.js';
+import { RowRenderer } from './rowRenderer.js';
+import { CellRenderer } from './cellRenderer.js';
+import { HeaderRenderer } from './headerRenderer.js';
+import { OverlayRenderer } from './overlayRenderer.js';
+import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { type ColumnDef, type VisualRow, type GridApi, type InternalGridApi, type RowNode } from '../store.js';
 import { CORE_STYLES } from './styles.js';
@@ -26,6 +37,16 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private scrollEngine: ScrollEngine<TRowData>;
 	private columnInteractions: ColumnInteractionController<TRowData>;
 	private fillDrag: FillDragController<TRowData>;
+	private scheduler: RenderScheduler;
+	private orchestrator: RenderOrchestrator;
+	private geometryController: GeometryController<TRowData>;
+	public readonly portalMountManager = new PortalMountManager<TRowData>();
+	private viewportRenderer: ViewportRenderer;
+	private rowRenderer: RowRenderer;
+	private cellRenderer: CellRenderer;
+	private headerRenderer: HeaderRenderer;
+	private overlayRenderer: OverlayRenderer;
+	private fullWidthRowRenderer: FullWidthRowRenderer;
 
 	// Viewport DOM elements
 	private container: HTMLElement | null = null;
@@ -49,32 +70,87 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private unsubscribers: Array<() => void> = [];
 	private activeHeaderPopover: HTMLDivElement | null = null;
 	private activeHeaderPopoverElement: HTMLElement | null = null;
-	private pendingPaint = false;
-	private pendingFullPaint = false;
-	private pendingHeaderPaint = false;
-	private pendingOverlayPaint = false;
-	private pendingScrollPaint = false;
-	private dirtyCells = new Map<string, { rowId: string; colField: string }>();
-	private dirtyRows = new Set<string>();
 	private hoveredRowIndex: number | null = null;
 
 	private selectionDragBounds: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
 
-	public onMountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
-	public onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
-
-	public onMountRowContent?: (mount: GridRowContentMount<TRowData>) => void;
-	public onUnmountRowContent?: (unmount: GridRowContentUnmount) => void;
-
-	public onMountHeaderMenu?: (mount: GridHeaderMenuMount<TRowData>) => void;
-	public onUnmountHeaderMenu?: (unmount: GridHeaderMenuUnmount) => void;
-
 	public readonly api?: InternalGridApi<TRowData>;
+
+	public get onMountCellContent(): ((mount: GridCellContentMount<TRowData>) => void) | undefined {
+		return this.portalMountManager.onMountCellContent;
+	}
+
+	public set onMountCellContent(callback: ((mount: GridCellContentMount<TRowData>) => void) | undefined) {
+		this.portalMountManager.onMountCellContent = callback;
+	}
+
+	public get onUnmountCellContent(): ((unmount: GridCellContentUnmount) => void) | undefined {
+		return this.portalMountManager.onUnmountCellContent;
+	}
+
+	public set onUnmountCellContent(callback: ((unmount: GridCellContentUnmount) => void) | undefined) {
+		this.portalMountManager.onUnmountCellContent = callback;
+	}
+
+	public get onMountRowContent(): ((mount: GridRowContentMount<TRowData>) => void) | undefined {
+		return this.portalMountManager.onMountRowContent;
+	}
+
+	public set onMountRowContent(callback: ((mount: GridRowContentMount<TRowData>) => void) | undefined) {
+		this.portalMountManager.onMountRowContent = callback;
+	}
+
+	public get onUnmountRowContent(): ((unmount: GridRowContentUnmount) => void) | undefined {
+		return this.portalMountManager.onUnmountRowContent;
+	}
+
+	public set onUnmountRowContent(callback: ((unmount: GridRowContentUnmount) => void) | undefined) {
+		this.portalMountManager.onUnmountRowContent = callback;
+	}
+
+	public get onMountHeaderMenu(): ((mount: GridHeaderMenuMount<TRowData>) => void) | undefined {
+		return this.portalMountManager.onMountHeaderMenu;
+	}
+
+	public set onMountHeaderMenu(callback: ((mount: GridHeaderMenuMount<TRowData>) => void) | undefined) {
+		this.portalMountManager.onMountHeaderMenu = callback;
+	}
+
+	public get onUnmountHeaderMenu(): ((unmount: GridHeaderMenuUnmount) => void) | undefined {
+		return this.portalMountManager.onUnmountHeaderMenu;
+	}
+
+	public set onUnmountHeaderMenu(callback: ((unmount: GridHeaderMenuUnmount) => void) | undefined) {
+		this.portalMountManager.onUnmountHeaderMenu = callback;
+	}
 
 	constructor(engine: GridEngine<TRowData>, api?: InternalGridApi<TRowData>) {
 		this.engine = engine;
 		this.api = api;
+		this.geometryController = new GeometryController(engine);
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
+		this.scheduler = new RenderScheduler(() => this.flushPaint());
+		this.viewportRenderer = new ViewportRenderer((frame) => {
+			this.syncViewportScrollFromDom();
+			this.recycleViewport();
+			this.paintHeaders();
+			this.paintOverlay();
+			this.fullWidthRowRenderer.sync(frame);
+		});
+		this.rowRenderer = new RowRenderer((frame) => this.repaintInvalidatedRowsAndCells(frame));
+		this.cellRenderer = new CellRenderer((frame) => this.repaintInvalidatedRowsAndCells(frame));
+		this.headerRenderer = new HeaderRenderer(() => this.paintHeaders());
+		this.overlayRenderer = new OverlayRenderer(() => this.paintOverlay());
+		this.fullWidthRowRenderer = new FullWidthRowRenderer(() => undefined);
+		this.orchestrator = new RenderOrchestrator({
+			recomputeGeometry: () => this.geometryController.recomputeIfNeeded(),
+			syncViewport: (frame) => this.viewportRenderer.sync(frame),
+			syncHeaders: (frame) => this.headerRenderer.sync(frame),
+			syncOverlay: (frame) => this.overlayRenderer.sync(frame),
+			syncRows: (frame) => this.rowRenderer.sync(frame),
+			syncCells: (frame) => this.cellRenderer.sync(frame),
+			fullPaint: () => this.fullPaint(),
+		});
 		this.columnInteractions = new ColumnInteractionController<TRowData>({
 			engine,
 			getOverlayLayer: () => this.overlayLayer,
@@ -165,6 +241,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.bindInvalidationSources();
 
 		// Run first layout calculation and repaint
+		this.engine.invalidation.consume();
 		this.fullPaint();
 	}
 
@@ -184,6 +261,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 		this.columnInteractions.cleanup();
 		this.fillDrag.cleanup();
+		this.scheduler.destroy();
+		this.portalMountManager.releaseAll();
 
 		// Release all active rows and cells
 		this.clearActiveRows();
@@ -214,36 +293,68 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// 1. Update the coordinate values in ViewportModel (O(1)) synchronously
 		this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
 
-		// 2. Schedule throttled viewport layout and rendering in requestAnimationFrame
-		this.pendingScrollPaint = true;
-		this.scheduleRenderFlush();
+		// 2. Schedule throttled viewport layout and rendering
+		this.engine.invalidation.invalidateViewport('scroll');
+		this.scheduler.requestFlush('scroll');
 	};
 
 	private bindInvalidationSources(): void {
-		const scheduleFull = () => this.scheduleFullPaint();
-		const scheduleHeaders = () => this.scheduleHeaderPaint();
-		const scheduleOverlay = () => this.scheduleOverlayPaint();
+		const invalidateFull = () => {
+			this.engine.invalidation.invalidateFull('state');
+			this.scheduler.requestFlush('state');
+		};
+		const invalidateHeaders = () => {
+			this.engine.invalidation.invalidateHeaders('headers');
+			this.scheduler.requestFlush('headers');
+		};
+		const invalidateOverlay = () => {
+			this.engine.invalidation.invalidateOverlay('overlay');
+			this.scheduler.requestFlush('overlay');
+		};
+		const invalidateGeometryFull = () => {
+			this.geometryController.invalidateAll();
+			this.engine.invalidation.invalidateGeometry('geometry');
+			this.engine.invalidation.invalidateViewport('geometry');
+			this.scheduler.requestFlush('geometry');
+		};
 
-		for (const key of [
-			'columns',
-			'columnWidths',
-			'rowHeights',
-			'defaultRowHeight',
-			'defaultColWidth',
-			'dataVersion',
-			'loading',
-			'visibleRowRange',
-			'visibleColRange',
-		]) {
-			this.unsubscribers.push(this.engine.stateManager.subscribeToKey(key, scheduleFull));
+		for (const key of ['defaultRowHeight', 'defaultColWidth', 'dataVersion', 'loading', 'visibleRowRange', 'visibleColRange']) {
+			this.unsubscribers.push(this.engine.stateManager.subscribeToKey(key, invalidateFull));
 		}
 
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('enableColumnReorder', scheduleHeaders));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('selection', scheduleOverlay));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', scheduleOverlay));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('columns', invalidateFull));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('columnWidths', invalidateGeometryFull));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('rowHeights', invalidateGeometryFull));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('enableColumnReorder', invalidateHeaders));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('selection', invalidateOverlay));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener<{ rowId: string; colField: string }>('cellInvalidated', (event) => {
-				this.queueCellPaint(event.payload.rowId, event.payload.colField);
+				this.engine.invalidation.invalidateCell(event.payload.rowId, event.payload.colField, 'cell');
+				this.engine.invalidation.invalidateRow(event.payload.rowId, 'cell');
+				this.scheduler.requestFlush('cell');
+			})
+		);
+		this.unsubscribers.push(
+			this.engine.eventBus.addEventListener<{ colField: string }>('columnResized', (event) => {
+				this.geometryController.invalidateColumns([event.payload.colField]);
+				this.engine.invalidation.invalidateGeometry('column resize');
+				this.engine.invalidation.invalidateColumn(event.payload.colField, 'column resize');
+				this.engine.invalidation.invalidateHeaders('column resize');
+				this.scheduler.requestFlush('column resize');
+			})
+		);
+		this.unsubscribers.push(
+			this.engine.eventBus.addEventListener<{ rowId: string }>('rowResized', (event) => {
+				this.geometryController.invalidateRows([event.payload.rowId]);
+				this.engine.invalidation.invalidateGeometry('row resize');
+				this.engine.invalidation.invalidateRow(event.payload.rowId, 'row resize');
+				this.scheduler.requestFlush('row resize');
+			})
+		);
+		this.unsubscribers.push(
+			this.engine.eventBus.addEventListener<{ reason: string }>('renderInvalidated', (event) => {
+				this.scheduler.requestFlush(event.payload.reason);
 			})
 		);
 	}
@@ -252,85 +363,20 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Schedules a paint task in the next animation frame, preventing synchronous re-entrancy.
 	 */
 	public schedulePaint(): void {
-		this.scheduleFullPaint();
-	}
-
-	private scheduleFullPaint(): void {
-		this.pendingFullPaint = true;
-		this.scheduleRenderFlush();
-	}
-
-	private scheduleHeaderPaint(): void {
-		this.pendingHeaderPaint = true;
-		this.scheduleRenderFlush();
-	}
-
-	private scheduleOverlayPaint(): void {
-		this.pendingOverlayPaint = true;
-		this.scheduleRenderFlush();
-	}
-
-	private queueCellPaint(rowId: string, colField: string): void {
-		const key = createCellKey(rowId, colField);
-		this.dirtyCells.set(key, { rowId, colField });
-		this.dirtyRows.add(rowId);
-		this.scheduleRenderFlush();
-	}
-
-	private scheduleRenderFlush(): void {
-		if (this.pendingPaint) return;
-		this.pendingPaint = true;
-
-		if (typeof requestAnimationFrame !== 'undefined') {
-			requestAnimationFrame(() => {
-				this.pendingPaint = false;
-				this.flushPaint();
-			});
-		} else {
-			queueMicrotask(() => {
-				this.pendingPaint = false;
-				this.flushPaint();
-			});
-		}
+		this.engine.invalidation.invalidateFull('api');
+		this.scheduler.requestFlush('api');
 	}
 
 	private flushPaint(): void {
-		if (this.pendingFullPaint) {
-			this.pendingFullPaint = false;
-			this.pendingHeaderPaint = false;
-			this.pendingOverlayPaint = false;
-			this.pendingScrollPaint = false;
-			this.dirtyCells.clear();
-			this.dirtyRows.clear();
-			this.fullPaint();
-			return;
-		}
+		this.orchestrator.flush(this.engine.invalidation.consume());
+	}
 
-		this.syncViewportScrollFromDom();
-
-		if (this.pendingScrollPaint) {
-			this.pendingScrollPaint = false;
-			this.recycleViewport();
-			this.paintHeaders();
-			this.paintOverlay();
-		} else {
-			if (this.dirtyRows.size > 0 || this.dirtyCells.size > 0) {
-				this.repaintDirtyRowsAndCells();
-			}
-
-			if (this.pendingHeaderPaint) {
-				this.paintHeaders();
-			}
-
-			if (this.pendingOverlayPaint || this.dirtyCells.size > 0 || this.dirtyRows.size > 0) {
-				this.paintOverlay();
-			}
-		}
-
-		this.pendingHeaderPaint = false;
-		this.pendingOverlayPaint = false;
-		this.dirtyCells.clear();
-		this.dirtyRows.clear();
+	public getRenderStats(): RenderStats {
+		const stats = this.orchestrator.getStats();
+		return {
+			...stats,
+			portalMounts: this.portalMountManager.getStats(),
+		};
 	}
 
 	/**
@@ -473,8 +519,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				if (this.leftLayer) this.leftLayer.appendChild(leftEl);
 				if (this.rightLayer) this.rightLayer.appendChild(rightEl);
 			} else if (pooledRow.boundRowId !== visualRow.id) {
-				if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
-					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
+				if (pooledRow.element.dataset.rowKey) {
+					this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 					delete pooledRow.element.dataset.rowKey;
 				}
 				for (const c of pooledRow.cells.keys()) {
@@ -515,9 +561,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			if (visualRow.kind === 'loading') {
 				if (pooledRow.element.dataset.rowKey) {
-					if (this.onUnmountRowContent) {
-						this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
-					}
+					this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 					delete pooledRow.element.dataset.rowKey;
 					pooledRow.element.textContent = '';
 				}
@@ -533,27 +577,23 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				}
 				const rowKey = visualRow.id;
 				if (pooledRow.element.dataset.rowKey !== rowKey) {
-					if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
-						this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
+					if (pooledRow.element.dataset.rowKey) {
+						this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 					}
 					pooledRow.element.textContent = '';
 					pooledRow.element.dataset.rowKey = rowKey;
 				}
-				if (this.onMountRowContent) {
-					this.onMountRowContent({
-						rowKey,
-						container: pooledRow.element,
-						visualRow,
-					});
-				}
+				this.portalMountManager.mountRow({
+					rowKey,
+					container: pooledRow.element,
+					visualRow,
+				});
 				return;
 			}
 
 			const node = visualRow.node;
 			if (pooledRow.element.dataset.rowKey) {
-				if (this.onUnmountRowContent) {
-					this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
-				}
+				this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 				delete pooledRow.element.dataset.rowKey;
 				pooledRow.element.textContent = '';
 			}
@@ -583,14 +623,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
-	private repaintDirtyRowsAndCells(): void {
+	private repaintInvalidatedRowsAndCells(frame: InvalidationFrame): void {
 		const rowModel = this.engine.getRowModel();
 		if (!rowModel) return;
 
 		const state = this.engine.stateManager.getState();
 		const columns = state.columns;
 
-		for (const rowId of this.dirtyRows) {
+		for (const rowId of frame.rows) {
 			const rowIndex = rowModel.getVisualIndexByRowId(rowId);
 			const pooledRow = rowIndex >= 0 ? this.activeRows.get(rowIndex) : undefined;
 			const row = rowIndex >= 0 ? rowModel.getVisualRow(rowIndex) : null;
@@ -599,7 +639,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		}
 
-		for (const { rowId, colField } of this.dirtyCells.values()) {
+		for (const key of frame.cells) {
+			const { rowId, colField } = this.parseCellKey(key);
 			const rowIndex = rowModel.getVisualIndexByRowId(rowId);
 			const colIndex = this.engine.columns.getColumnIndex(colField);
 			if (rowIndex < 0 || colIndex < 0) continue;
@@ -610,6 +651,22 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			this.recycleRowCells(pooledRow, row.node, rowIndex, colIndex, colIndex, columns, false);
 		}
+
+		for (const colField of frame.columns) {
+			const colIndex = this.engine.columns.getColumnIndex(colField);
+			if (colIndex < 0) continue;
+			for (const [rowIndex, pooledRow] of this.activeRows) {
+				const row = rowModel.getVisualRow(rowIndex);
+				if (row?.kind === 'data' && pooledRow.cells.has(colIndex)) {
+					this.recycleRowCells(pooledRow, row.node, rowIndex, colIndex, colIndex, columns, false);
+				}
+			}
+		}
+	}
+
+	private parseCellKey(key: string): { rowId: string; colField: string } {
+		const colonIdx = key.indexOf(':');
+		return colonIdx === -1 ? { rowId: key, colField: '' } : { rowId: key.substring(0, colonIdx), colField: key.substring(colonIdx + 1) };
 	}
 
 	private updateRowClassName(pooledRow: PooledRow, node: RowNode<TRowData>, rowIndex: number, state = this.engine.stateManager.getState()): void {
@@ -861,34 +918,34 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			if ((col.cellRenderer || access.isEditing) && !access.isLoading && !isFastScrolling) {
 				const previousPortalHost = this.getCellPortalHost(cell);
 				if (cell.dataset.cellKey !== cellKey) {
-					if (cell.dataset.cellKey && this.onUnmountCellContent) {
-						this.onUnmountCellContent({ cellKey: cell.dataset.cellKey, container: previousPortalHost ?? cell, flushSync: true });
+					if (cell.dataset.cellKey) {
+						this.portalMountManager.releaseCell({
+							cellKey: cell.dataset.cellKey,
+							container: previousPortalHost ?? cell,
+							flushSync: true,
+						});
 					}
 					// Set content empty so custom React portal doesn't clash with stale text
 					cell.textContent = '';
 					cell.dataset.cellKey = cellKey;
 				}
 				const portalHost = this.ensureCellPortalHost(cell);
-				if (this.onMountCellContent) {
-					this.onMountCellContent({
-						cellKey,
-						container: portalHost,
-						value: cellValue,
-						node,
-						col,
-						isEditing: access.isEditing,
-						isLoading: access.isLoading,
-					});
-				}
+				this.portalMountManager.mountCell({
+					cellKey,
+					container: portalHost,
+					value: cellValue,
+					node,
+					col,
+					isEditing: access.isEditing,
+					isLoading: access.isLoading,
+				});
 			} else {
 				if (cell.dataset.cellKey) {
-					if (this.onUnmountCellContent) {
-						this.onUnmountCellContent({
-							cellKey: cell.dataset.cellKey,
-							container: this.getCellPortalHost(cell) ?? cell,
-							flushSync: true,
-						});
-					}
+					this.portalMountManager.releaseCell({
+						cellKey: cell.dataset.cellKey,
+						container: this.getCellPortalHost(cell) ?? cell,
+						flushSync: true,
+					});
 					delete cell.dataset.cellKey;
 				}
 				if (access.isLoading) {
@@ -995,8 +1052,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				targetRowEl.appendChild(cell);
 			}
 
-			if (cell.dataset.cellKey && this.onUnmountCellContent) {
-				this.onUnmountCellContent({
+			if (cell.dataset.cellKey) {
+				this.portalMountManager.releaseCell({
 					cellKey: cell.dataset.cellKey,
 					container: this.getCellPortalHost(cell) ?? cell,
 					flushSync: true,
@@ -1074,16 +1131,18 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const cell = pooledRow.cells.get(colIdx);
 		if (cell) {
 			if (cell.dataset.cellKey) {
-				if (this.onUnmountCellContent) {
-					this.onUnmountCellContent({ cellKey: cell.dataset.cellKey, container: this.getCellPortalHost(cell) ?? cell, flushSync: true });
-				}
+				this.portalMountManager.releaseCell({
+					cellKey: cell.dataset.cellKey,
+					container: this.getCellPortalHost(cell) ?? cell,
+					flushSync: true,
+				});
 				delete cell.dataset.cellKey;
 			} else {
 				// Trigger unmount hook if a framework adapter owns this cell's content.
 				const col = this.engine.stateManager.getState().columns[colIdx];
-				if (col && this.onUnmountCellContent) {
+				if (col) {
 					const cellKey = createCellKey(pooledRow.boundRowId, col.field);
-					this.onUnmountCellContent({ cellKey });
+					this.portalMountManager.releaseCell({ cellKey });
 				}
 			}
 
@@ -1104,8 +1163,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Release and return an entire row and all its cells to the pools.
 	 */
 	private releaseRow(rowIndex: number, pooledRow: PooledRow): void {
-		if (pooledRow.element.dataset.rowKey && this.onUnmountRowContent) {
-			this.onUnmountRowContent({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
+		if (pooledRow.element.dataset.rowKey) {
+			this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 			delete pooledRow.element.dataset.rowKey;
 		}
 
@@ -1304,8 +1363,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.activeHeaderPopover.classList.remove('og-visible');
 			const el = this.activeHeaderPopover;
 			const colField = this.activeHeaderPopoverElement?.dataset.colField;
-			if (colField && this.onUnmountHeaderMenu) {
-				this.onUnmountHeaderMenu({ colField, container: el });
+			if (colField) {
+				this.portalMountManager.releaseHeaderMenu({ colField, container: el });
 			}
 			setTimeout(() => {
 				el.remove();
@@ -1346,9 +1405,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.activeHeaderPopoverElement = headerCell;
 
 		// Support custom React header popover component if registered
-		if (column.headerMenuComponent && this.onMountHeaderMenu) {
+		if (column.headerMenuComponent && this.portalMountManager.onMountHeaderMenu) {
 			try {
-				this.onMountHeaderMenu({
+				this.portalMountManager.mountHeaderMenu({
 					colField,
 					column,
 					close: this.hideHeaderMenu,
@@ -1804,16 +1863,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private createCellElement(): HTMLDivElement {
 		const el = document.createElement('div');
 		el.className = 'og-cell';
-
-		// Patch removeChild to handle React Portal unmounting gracefully when recycled
-		const originalRemoveChild = el.removeChild;
-		el.removeChild = function <T extends Node>(child: T): T {
-			if (child.parentNode === this) {
-				return originalRemoveChild.call(this, child) as T;
-			}
-			return child;
-		};
-
 		return el;
 	}
 

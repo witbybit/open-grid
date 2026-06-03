@@ -1,4 +1,13 @@
-import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, type VisualRow, type RowRefreshReason, type RowModelRefreshResult } from './store.js';
+import {
+	GridStore,
+	ColumnDef,
+	RowModel,
+	RowNode,
+	setValueByPath,
+	type VisualRow,
+	type RowRefreshReason,
+	type RowModelRefreshResult,
+} from './store.js';
 import { toDataVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
 
 export interface GetRowsParams {
@@ -71,7 +80,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.unsubscribers = [];
 	}
 
-
 	public getVisualRow = (rowIndex: number): VisualRow<TData> | null => {
 		const row = this.visualRows[rowIndex];
 		if (row) {
@@ -136,7 +144,6 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			}
 		});
 	};
-
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
 		return this.nodeMap.get(rowId) ?? null;

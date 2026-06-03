@@ -4,6 +4,7 @@ export type { ClientGridOptions, ServerGridOptions } from './createGrid.js';
 export { RowNode } from './store.js';
 export type {
 	CellEditorProps,
+	CellPointer,
 	CellRendererProps,
 	CellState,
 	ColumnDef,
@@ -22,8 +23,10 @@ export type {
 	HeaderMenuRendererProps,
 	Listener,
 	RowModel,
+	SelectionChangeResult,
 	ValueGetterParams,
 	VisualRow,
+	VisualRowPointer,
 	DataVisualRow,
 	GroupVisualRow,
 	DetailVisualRow,
@@ -32,11 +35,25 @@ export type {
 } from './store.js';
 
 export {
+	canEditCell,
+	canFocusVisualRow,
 	isDataVisualRow,
+	isDataCellSelectable,
 	isEditableVisualRow,
 	isFullWidthVisualRow,
 	isSelectableVisualRow,
 } from './store.js';
+export { GeometryController } from './renderer/geometryController.js';
+export { InvalidationManager, type InvalidationFrame } from './renderer/invalidationManager.js';
+export { PortalMountManager } from './renderer/portalMountManager.js';
+export { RenderOrchestrator, type RenderStats } from './renderer/renderOrchestrator.js';
+export { RenderScheduler } from './renderer/renderScheduler.js';
+export { CellRenderer } from './renderer/cellRenderer.js';
+export { FullWidthRowRenderer } from './renderer/fullWidthRowRenderer.js';
+export { HeaderRenderer } from './renderer/headerRenderer.js';
+export { OverlayRenderer } from './renderer/overlayRenderer.js';
+export { RowRenderer } from './renderer/rowRenderer.js';
+export { ViewportRenderer } from './renderer/viewportRenderer.js';
 export type { FilterModel, FilterModelItem, GroupDef, RowModelConfig, SortModel } from './rowModel.js';
 export {
 	parseVisualRowId,

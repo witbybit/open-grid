@@ -10,8 +10,51 @@ export class GeometryModel {
 	public colWidths = new Float64Array(0);
 	private colCapacity = 0;
 	private colCount = 0;
+	private allInvalid = false;
+	private invalidRows = new Set<string>();
+	private invalidColumns = new Set<string>();
 
 	public init(): void {}
+
+	public invalidateAll(): void {
+		this.allInvalid = true;
+	}
+
+	public invalidateRows(rowIds: string[]): void {
+		for (const rowId of rowIds) {
+			this.invalidRows.add(rowId);
+		}
+	}
+
+	public invalidateColumns(colIds: string[]): void {
+		for (const colId of colIds) {
+			this.invalidColumns.add(colId);
+		}
+	}
+
+	public updateRowHeight(rowId: string, height: number): void {
+		const rowIdx = Number(rowId);
+		if (Number.isInteger(rowIdx) && rowIdx >= 0 && rowIdx < this.rowCount) {
+			this.rowHeights[rowIdx] = height;
+		}
+		this.invalidateRows([rowId]);
+	}
+
+	public updateColumnWidth(colId: string, width: number): void {
+		const colIdx = Number(colId);
+		if (Number.isInteger(colIdx) && colIdx >= 0 && colIdx < this.colCount) {
+			this.colWidths[colIdx] = width;
+		}
+		this.invalidateColumns([colId]);
+	}
+
+	public recomputeIfNeeded(): boolean {
+		const changed = this.allInvalid || this.invalidRows.size > 0 || this.invalidColumns.size > 0;
+		this.allInvalid = false;
+		this.invalidRows.clear();
+		this.invalidColumns.clear();
+		return changed;
+	}
 
 	public updateColumns(widths: number[], defaultColWidth: number): void {
 		const len = widths.length;

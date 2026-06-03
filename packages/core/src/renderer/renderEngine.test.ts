@@ -321,4 +321,122 @@ describe('RenderEngine', () => {
 		renderer.unmount();
 		store.destroy();
 	});
+
+	it('records granular invalidation stats for cell edit and focus movement', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: 'row-1', name: 'One' },
+				{ id: 'row-2', name: 'Two' },
+			],
+			columns: store.getState().columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const before = renderer.getRenderStats();
+		store.setCellValue('row-1', 'name', 'After');
+		store.flushCellUpdatesSync();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const afterEdit = renderer.getRenderStats();
+		expect(afterEdit.fullPaints - before.fullPaints).toBe(0);
+		expect(afterEdit.cellPaints - before.cellPaints).toBe(1);
+
+		store.selectCell({ rowId: 'row-1', colField: 'name' });
+		await Promise.resolve();
+		await Promise.resolve();
+		const afterFirstFocus = renderer.getRenderStats();
+		store.selectCell({ rowId: 'row-2', colField: 'name' });
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const afterFocusMove = renderer.getRenderStats();
+		expect(afterFocusMove.fullPaints - afterFirstFocus.fullPaints).toBe(0);
+		expect(afterFocusMove.cellPaints - afterFirstFocus.cellPaints).toBe(2);
+		expect(afterFocusMove.overlayPaints).toBeGreaterThan(afterFirstFocus.overlayPaints);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('records geometry invalidation without forcing a full paint for row and column resizing', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-1', name: 'One' }],
+			columns: store.getState().columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const beforeColumn = renderer.getRenderStats();
+		store.setColumnWidth('name', 180);
+		await Promise.resolve();
+		await Promise.resolve();
+		const afterColumn = renderer.getRenderStats();
+		expect(afterColumn.fullPaints - beforeColumn.fullPaints).toBe(0);
+		expect(afterColumn.geometryRecomputes - beforeColumn.geometryRecomputes).toBe(1);
+		expect(afterColumn.headerPaints - beforeColumn.headerPaints).toBeGreaterThan(0);
+
+		store.setRowHeight('row:row-1', 52);
+		await Promise.resolve();
+		await Promise.resolve();
+		const afterRow = renderer.getRenderStats();
+		expect(afterRow.fullPaints - afterColumn.fullPaints).toBe(0);
+		expect(afterRow.geometryRecomputes - afterColumn.geometryRecomputes).toBe(1);
+		expect(afterRow.rowPaints - afterColumn.rowPaints).toBe(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
 });

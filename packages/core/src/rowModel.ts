@@ -1,4 +1,14 @@
-import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter, type VisualRow, type RowRefreshReason, type RowModelRefreshResult } from './store.js';
+import {
+	GridStore,
+	ColumnDef,
+	RowModel,
+	RowNode,
+	setValueByPath,
+	compilePathGetter,
+	type VisualRow,
+	type RowRefreshReason,
+	type RowModelRefreshResult,
+} from './store.js';
 import { createCellKey, getFieldRoot } from './ids.js';
 import { RowPipeline, type RowModelConfig } from './rows/RowPipeline.js';
 import { RowDataStore } from './rows/RowDataStore.js';

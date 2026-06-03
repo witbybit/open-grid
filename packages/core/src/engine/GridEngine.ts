@@ -1,4 +1,14 @@
-import type { GridState, RowModel, CellSubscription, ColumnDef, GridCellRange, GridCellPointer, GridSelectionSource } from '../store.js';
+import {
+	canEditCell,
+	isDataCellSelectable,
+	type GridState,
+	type RowModel,
+	type CellSubscription,
+	type ColumnDef,
+	type GridCellRange,
+	type GridCellPointer,
+	type GridSelectionSource,
+} from '../store.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
 import { EventBus } from '../events/EventBus.js';
@@ -13,6 +23,7 @@ import { DagEngine } from '../calculations/dagEngine.js';
 import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import { InvalidationManager } from '../renderer/invalidationManager.js';
 
 export class GridEngine<TRowData = unknown> {
 	// Models
@@ -28,6 +39,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly stateManager: StateManager<TRowData>;
 	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus;
+	public readonly invalidation: InvalidationManager;
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 
@@ -44,6 +56,7 @@ export class GridEngine<TRowData = unknown> {
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.commandHistory = new CommandHistory();
 		this.eventBus = new EventBus();
+		this.invalidation = new InvalidationManager();
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
@@ -111,6 +124,8 @@ export class GridEngine<TRowData = unknown> {
 			...state,
 			...payload,
 		}));
+		this.invalidation.invalidateFull('set data');
+		this.requestRender('set data');
 		this.commandHistory.clear();
 	}
 
@@ -165,7 +180,9 @@ export class GridEngine<TRowData = unknown> {
 
 	public setColumnReorderEnabled(enabled: boolean): void {
 		this.stateManager.setState({ enableColumnReorder: enabled });
+		this.invalidation.invalidateHeaders('column reorder toggle');
 		this.eventBus.dispatchEvent('columnReorderToggled', { enabled });
+		this.requestRender('column reorder toggle');
 	}
 
 	public resizeRow(rowId: string, height: number, undoable = true): void {
@@ -185,6 +202,9 @@ export class GridEngine<TRowData = unknown> {
 	public setSortModel(sortModel: SortModel | null, undoable = true): void {
 		const oldSort = this.stateManager.getState().sortModel;
 		this.stateManager.setState({ sortModel });
+		this.invalidation.invalidateHeaders('sort');
+		this.invalidation.invalidateFull('sort');
+		this.requestRender('sort');
 
 		if (undoable) {
 			this.commandHistory.add({
@@ -197,6 +217,8 @@ export class GridEngine<TRowData = unknown> {
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
 		const oldFilter = this.stateManager.getState().filterModel;
 		this.stateManager.setState({ filterModel });
+		this.invalidation.invalidateFull('filter');
+		this.requestRender('filter');
 
 		if (undoable) {
 			this.commandHistory.add({
@@ -222,11 +244,15 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public startEdit(rowId: string, colField: string): void {
+		if (!this.canEditCell(rowId, colField)) return;
 		this.stateManager.setState({
 			activeEdit: { rowId, colField },
 		});
+		this.invalidation.invalidateCell(rowId, colField, 'edit started');
+		this.invalidation.invalidateOverlay('edit started');
 		this.notifyCellChange(rowId, colField);
 		this.eventBus.dispatchEvent('editStarted', { rowId, colField });
+		this.requestRender('edit started');
 	}
 
 	public stopEdit(cancel = false): void {
@@ -235,8 +261,11 @@ export class GridEngine<TRowData = unknown> {
 
 		const { rowId, colField } = activeEdit;
 		this.stateManager.setState({ activeEdit: null });
+		this.invalidation.invalidateCell(rowId, colField, 'edit stopped');
+		this.invalidation.invalidateOverlay('edit stopped');
 		this.notifyCellChange(rowId, colField);
 		this.eventBus.dispatchEvent('editStopped', { rowId, colField, cancel });
+		this.requestRender('edit stopped');
 	}
 
 	public registerRowModel(rowModel: RowModel<TRowData>): void {
@@ -245,6 +274,9 @@ export class GridEngine<TRowData = unknown> {
 		const state = this.stateManager.getState();
 		this.geometry.updateRows(this.getRowHeightsList(rowModel, state.rowHeights, state.defaultRowHeight), state.defaultRowHeight);
 		this.stateManager.setState({ dataVersion: state.dataVersion + 1 });
+		this.invalidation.invalidateGeometry('row model registered');
+		this.invalidation.invalidateFull('row model registered');
+		this.requestRender('row model registered');
 	}
 
 	public getRowModel(): RowModel<TRowData> | null {
@@ -354,7 +386,12 @@ export class GridEngine<TRowData = unknown> {
 				}
 			});
 		}
-		this.eventBus.dispatchEvent('cellInvalidated', { rowId, colField });
+		const hasRenderConsumer = this.eventBus.hasListeners('cellInvalidated') || this.eventBus.hasListeners('renderInvalidated');
+		if (hasRenderConsumer) {
+			this.invalidation.invalidateCell(rowId, colField, 'cell');
+			this.invalidation.invalidateRow(rowId, 'cell');
+			this.eventBus.dispatchEvent('cellInvalidated', { rowId, colField });
+		}
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
@@ -422,6 +459,12 @@ export class GridEngine<TRowData = unknown> {
 	};
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
+		const validStart = this.isDataCellSelectable(start) ? start : null;
+		const validEnd = this.isDataCellSelectable(end) ? end : null;
+		if ((start || end) && (!validStart || !validEnd)) {
+			start = validStart;
+			end = validEnd;
+		}
 		const range = start !== null && end !== null ? { start, end } : null;
 		const selection = this.selection.setSelection({
 			focus: end,
@@ -433,6 +476,21 @@ export class GridEngine<TRowData = unknown> {
 			selection,
 		});
 	};
+
+	private canEditCell(rowId: string, colField: string): boolean {
+		const rowModel = this.getRowModel();
+		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
+		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
+		return canEditCell(visualRow, this.columns.getColumnDef(colField));
+	}
+
+	private isDataCellSelectable(pointer: GridCellPointer | null): pointer is GridCellPointer {
+		if (!pointer) return false;
+		const rowModel = this.getRowModel();
+		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(pointer.rowId) : -1;
+		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
+		return isDataCellSelectable(visualRow, this.columns.getColumnDef(pointer.colField));
+	}
 
 	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {
 		const state = this.stateManager.getState();
@@ -456,6 +514,8 @@ export class GridEngine<TRowData = unknown> {
 			columns,
 			columnWidths: nextWidths,
 		});
+		this.invalidation.invalidateFull('columns');
+		this.requestRender('columns');
 
 		this.eventBus.dispatchEvent('columnsChanged', {
 			columns,
@@ -487,11 +547,15 @@ export class GridEngine<TRowData = unknown> {
 				[colField]: width,
 			},
 		}));
+		this.invalidation.invalidateGeometry('column resize');
+		this.invalidation.invalidateColumn(colField, 'column resize');
+		this.invalidation.invalidateHeaders('column resize');
 
 		this.eventBus.dispatchEvent('columnResized', {
 			colField,
 			width,
 		});
+		this.requestRender('column resize');
 	};
 
 	private applyColumnOrder(columns: ColumnDef<TRowData>[]): void {
@@ -502,10 +566,12 @@ export class GridEngine<TRowData = unknown> {
 		}
 
 		this.stateManager.setState({ columns });
+		this.invalidation.invalidateFull('column order');
 		this.eventBus.dispatchEvent('columnOrderChanged', {
 			columns,
 			columnFields: nextFields,
 		});
+		this.requestRender('column order');
 	}
 
 	private moveColumnInList(columns: ColumnDef<TRowData>[], fromIndex: number, toIndex: number): ColumnDef<TRowData>[] {
@@ -522,11 +588,14 @@ export class GridEngine<TRowData = unknown> {
 				[rowId]: height,
 			},
 		}));
+		this.invalidation.invalidateGeometry('row resize');
+		this.invalidation.invalidateRow(rowId, 'row resize');
 
 		this.eventBus.dispatchEvent('rowResized', {
 			rowId,
 			height,
 		});
+		this.requestRender('row resize');
 	};
 
 	// State-to-coordinate change mapping bridge callback
@@ -579,6 +648,7 @@ export class GridEngine<TRowData = unknown> {
 
 		if (updatedSet.has('selection')) {
 			this.selection.setSelection(currState.selection);
+			this.invalidation.invalidateOverlay('selection');
 		}
 
 		// Calculate visible ranges if relevant geometry/data properties changed
@@ -629,6 +699,10 @@ export class GridEngine<TRowData = unknown> {
 		if (updatedSet.has('selection')) {
 			if (prevState.selection.focus) notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
 			if (currState.selection.focus) notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
+			if (prevState.selection.focus)
+				this.invalidation.invalidateCell(prevState.selection.focus.rowId, prevState.selection.focus.colField, 'focus');
+			if (currState.selection.focus)
+				this.invalidation.invalidateCell(currState.selection.focus.rowId, currState.selection.focus.colField, 'focus');
 		}
 
 		if (updatedSet.has('activeEdit')) {
@@ -649,6 +723,7 @@ export class GridEngine<TRowData = unknown> {
 						const col = currState.columns[colIdx];
 						if (visualRow?.kind === 'data' && col) {
 							notifyCellOnce(visualRow.rowId, col.field);
+							this.invalidation.invalidateCell(visualRow.rowId, col.field, 'selection');
 						}
 					}
 				);
@@ -692,7 +767,11 @@ export class GridEngine<TRowData = unknown> {
 			this.eventBus.dispatchEvent('focusChanged', { focus: currState.selection.focus, selection: currState.selection });
 		}
 		if (updatedSet.has('selection')) {
-			this.eventBus.dispatchEvent('selectionChanged', { selection: currState.selection });
+			this.eventBus.dispatchEvent('selectionChanged', {
+				selection: currState.selection,
+				result: this.selection.describeChange(prevState.selection, currState.selection, this.rowModel, currState.columns),
+			});
+			this.requestRender('selection');
 		}
 		if (updatedSet.has('sortModel')) {
 			this.eventBus.dispatchEvent('sortChanged', { sortModel: currState.sortModel });
@@ -701,6 +780,10 @@ export class GridEngine<TRowData = unknown> {
 			this.eventBus.dispatchEvent('filterChanged', { filterModel: currState.filterModel });
 		}
 	};
+
+	private requestRender(reason: string): void {
+		this.eventBus.dispatchEvent('renderInvalidated', { reason });
+	}
 
 	private areRangeBoundsEqual(
 		left: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null,

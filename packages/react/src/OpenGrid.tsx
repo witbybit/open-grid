@@ -12,6 +12,7 @@ import {
 	VisualRow,
 } from '@open-grid/core';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { PortalData, PortalManager } from './GridPortal.js';
 import { useGridNavigationController } from './hooks.js';
 
@@ -95,6 +96,21 @@ function OpenGridInner<TRowData = unknown>({
 		});
 	}, []);
 
+	const applyPortalMutation = useCallback(
+		(sync: boolean, mutate: () => void) => {
+			mutate();
+			if (sync) {
+				portalFlushScheduledRef.current = false;
+				flushSync(() => {
+					setPortalVersion((version) => version + 1);
+				});
+				return;
+			}
+			schedulePortalFlush();
+		},
+		[schedulePortalFlush]
+	);
+
 	const mountPortal = useCallback(
 		(
 			cellKey: string,
@@ -118,27 +134,6 @@ function OpenGridInner<TRowData = unknown>({
 				return;
 			}
 
-			// Workaround for React Portal unmount race conditions:
-			// The core engine recycles virtualized container elements synchronously (via textContent = '') to optimize performance.
-			// However, React DOM cleans up portal fiber structures asynchronously on unmount, which eventually invokes
-			// `container.removeChild(child)`. If the virtualization layer has already synchronously cleared the container,
-			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
-			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
-			// rather than allowing it to crash the React tree.
-			interface PatchedHTMLElement extends HTMLElement {
-				__patchedRemoveChild?: boolean;
-			}
-			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
-				(container as PatchedHTMLElement).__patchedRemoveChild = true;
-				const originalRemove = container.removeChild;
-				container.removeChild = function <T extends Node>(child: T): T {
-					if (child.parentNode === container) {
-						return originalRemove.call(this, child) as T;
-					}
-					return child;
-				};
-			}
-
 			portalsRef.current.set(cellKey, {
 				cellKey,
 				container,
@@ -154,13 +149,14 @@ function OpenGridInner<TRowData = unknown>({
 	);
 
 	const unmountPortal = useCallback(
-		(cellKey: string, container?: HTMLElement) => {
+		(cellKey: string, container?: HTMLElement, sync = false) => {
 			const existing = portalsRef.current.get(cellKey);
 			if (!existing || (container && existing.container !== container)) return;
-			portalsRef.current.delete(cellKey);
-			schedulePortalFlush();
+			applyPortalMutation(sync, () => {
+				portalsRef.current.delete(cellKey);
+			});
 		},
-		[schedulePortalFlush]
+		[applyPortalMutation]
 	);
 
 	const mountRowPortal = useCallback(
@@ -168,27 +164,6 @@ function OpenGridInner<TRowData = unknown>({
 			const existing = rowPortalsRef.current.get(rowKey);
 			if (existing && existing.container === container && existing.visualRow === visualRow) {
 				return;
-			}
-
-			// Workaround for React Portal unmount race conditions:
-			// The core engine recycles virtualized container elements synchronously (via textContent = '') to optimize performance.
-			// However, React DOM cleans up portal fiber structures asynchronously on unmount, which eventually invokes
-			// `container.removeChild(child)`. If the virtualization layer has already synchronously cleared the container,
-			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
-			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
-			// rather than allowing it to crash the React tree.
-			interface PatchedHTMLElement extends HTMLElement {
-				__patchedRemoveChild?: boolean;
-			}
-			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
-				(container as PatchedHTMLElement).__patchedRemoveChild = true;
-				const originalRemove = container.removeChild;
-				container.removeChild = function <T extends Node>(child: T): T {
-					if (child.parentNode === container) {
-						return originalRemove.call(this, child) as T;
-					}
-					return child;
-				};
 			}
 
 			rowPortalsRef.current.set(rowKey, {
@@ -205,10 +180,11 @@ function OpenGridInner<TRowData = unknown>({
 		(rowKey: string, container?: HTMLElement) => {
 			const existing = rowPortalsRef.current.get(rowKey);
 			if (!existing || (container && existing.container !== container)) return;
-			rowPortalsRef.current.delete(rowKey);
-			schedulePortalFlush();
+			applyPortalMutation(false, () => {
+				rowPortalsRef.current.delete(rowKey);
+			});
 		},
-		[schedulePortalFlush]
+		[applyPortalMutation]
 	);
 
 	const mountMenuPortal = useCallback(
@@ -216,20 +192,6 @@ function OpenGridInner<TRowData = unknown>({
 			const existing = menuPortalsRef.current.get(colField);
 			if (existing && existing.container === container && existing.column === column) {
 				return;
-			}
-
-			interface PatchedHTMLElement extends HTMLElement {
-				__patchedRemoveChild?: boolean;
-			}
-			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
-				(container as PatchedHTMLElement).__patchedRemoveChild = true;
-				const originalRemove = container.removeChild;
-				container.removeChild = function <T extends Node>(child: T): T {
-					if (child.parentNode === container) {
-						return originalRemove.call(this, child) as T;
-					}
-					return child;
-				};
 			}
 
 			menuPortalsRef.current.set(colField, {
@@ -247,10 +209,11 @@ function OpenGridInner<TRowData = unknown>({
 		(colField: string, container?: HTMLElement) => {
 			const existing = menuPortalsRef.current.get(colField);
 			if (!existing || (container && existing.container !== container)) return;
-			menuPortalsRef.current.delete(colField);
-			schedulePortalFlush();
+			applyPortalMutation(false, () => {
+				menuPortalsRef.current.delete(colField);
+			});
 		},
-		[schedulePortalFlush]
+		[applyPortalMutation]
 	);
 
 	useEffect(() => {
@@ -284,7 +247,7 @@ function OpenGridInner<TRowData = unknown>({
 					mountPortal(mount.cellKey, mount.container, mount.value, mount.node, mount.col, mount.isEditing, mount.isLoading);
 				},
 				unmountCellContent: (unmount) => {
-					unmountPortal(unmount.cellKey, unmount.container);
+					unmountPortal(unmount.cellKey, unmount.container, unmount.flushSync);
 				},
 			},
 			rowContent: {
@@ -380,18 +343,21 @@ function OpenGridInner<TRowData = unknown>({
 		};
 	}, [navigation, enableNavigation]);
 
-	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
-		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-		if (!cellEl) return null;
-		if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
-		const colField = cellEl.dataset.colField;
-		const rowEl = cellEl.closest('.og-row') as HTMLElement;
-		const rowIndex = Number(rowEl?.dataset.rowIndex);
-		const visualRow = Number.isFinite(rowIndex) ? api.getVisualRow(rowIndex) : null;
-		const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
-		if (!colField || !rowId) return null;
-		return { cellEl, pointer: { rowId, colField } };
-	}, [api]);
+	const getCellPointerFromEvent = useCallback(
+		(e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
+			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
+			if (!cellEl) return null;
+			if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
+			const colField = cellEl.dataset.colField;
+			const rowEl = cellEl.closest('.og-row') as HTMLElement;
+			const rowIndex = Number(rowEl?.dataset.rowIndex);
+			const visualRow = Number.isFinite(rowIndex) ? api.getVisualRow(rowIndex) : null;
+			const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
+			if (!colField || !rowId) return null;
+			return { cellEl, pointer: { rowId, colField } };
+		},
+		[api]
+	);
 
 	const getCellClickParams = useCallback(
 		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {

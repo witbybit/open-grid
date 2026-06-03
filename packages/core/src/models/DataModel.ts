@@ -163,7 +163,8 @@ export class DataModel<TRowData = unknown> {
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
-		const oldValue = this.getCellValue(rowId, colField);
+		const shouldEmitValueChanged = this.engine.eventBus.hasListeners('cellValueChanged');
+		const oldValue = shouldEmitValueChanged ? this.getCellValue(rowId, colField) : undefined;
 		const oldStoredValue = this.getStoredCellValue(rowId, colField);
 		if (oldStoredValue === value) return false;
 
@@ -235,13 +236,14 @@ export class DataModel<TRowData = unknown> {
 			}
 		}
 
-		// Trigger cellValueChanged event
-		this.engine.eventBus.dispatchEvent('cellValueChanged', {
-			rowId,
-			colField,
-			oldValue,
-			newValue: value,
-		});
+		if (shouldEmitValueChanged) {
+			this.engine.eventBus.dispatchEvent('cellValueChanged', {
+				rowId,
+				colField,
+				oldValue,
+				newValue: value,
+			});
+		}
 		return true;
 	};
 }

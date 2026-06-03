@@ -35,6 +35,98 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('should expose targeted subscriptions for viewport, selection, editing, cells, rows, columns, and headers', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const viewport = vi.fn();
+		const selection = vi.fn();
+		const editing = vi.fn();
+		const cell = vi.fn();
+		const row = vi.fn();
+		const column = vi.fn();
+		const headers = vi.fn();
+
+		const unsubscribers = [
+			store.subscribeToViewport(viewport),
+			store.subscribeToSelection(selection),
+			store.subscribeToEditingCell(editing),
+			store.subscribeToCell('1', 'name', cell),
+			store.subscribeToRow('1', row),
+			store.subscribeToColumn('name', column),
+			store.subscribeToHeaders(headers),
+		];
+
+		store.selectCell({ rowId: '1', colField: 'name' });
+		store.startEditing('1', 'name');
+		store.setCellValue('1', 'name', 'Product A+');
+		store.flushCellUpdatesSync();
+		store.setColumnWidth('name', 180);
+		store.setRowHeight('row:1', 60);
+		store.setViewportSize(20, 20);
+		store.updateVisibleRanges();
+
+		expect(selection).toHaveBeenCalled();
+		expect(editing).toHaveBeenCalled();
+		expect(cell).toHaveBeenCalled();
+		expect(row).toHaveBeenCalled();
+		expect(column).toHaveBeenCalled();
+		expect(headers).toHaveBeenCalled();
+		expect(viewport).toHaveBeenCalled();
+
+		unsubscribers.forEach((unsubscribe) => unsubscribe());
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('should expose precise selection change invalidation results', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const listener = vi.fn();
+		store.addEventListener('selectionChanged', listener);
+
+		store.selectCell({ rowId: '1', colField: 'name' });
+		store.selectCell({ rowId: '2', colField: 'name' });
+
+		expect(listener).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					result: expect.objectContaining({
+						invalidatedCells: [
+							{ rowId: '1', colField: 'name' },
+							{ rowId: '2', colField: 'name' },
+						],
+						invalidatedRows: ['1', '2'],
+						overlayChanged: true,
+					}),
+				}),
+			})
+		);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('should preserve initial style slots in grid state', () => {
 		const rowClass = (row: TestRow) => (row.price > 10 ? 'expensive' : 'standard');
 		const store = new GridStore<TestRow>({
@@ -990,9 +1082,12 @@ describe('GridStore undo and redo functionality', () => {
 		]);
 
 		const rangeProcessed: string[] = [];
-		store.rows().inRange(range).forEach((id, idx) => {
-			rangeProcessed.push(`${id}-${idx}`);
-		});
+		store
+			.rows()
+			.inRange(range)
+			.forEach((id, idx) => {
+				rangeProcessed.push(`${id}-${idx}`);
+			});
 		expect(rangeProcessed).toEqual(['1-0', '2-1']);
 
 		controller.dispose();

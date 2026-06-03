@@ -1,4 +1,13 @@
-import type { GridCellRange, GridCellRangeBounds, GridCellPointer, GridSelectionSource, GridSelectionState } from '../store.js';
+import type {
+	ColumnDef,
+	GridCellRange,
+	GridCellRangeBounds,
+	GridCellPointer,
+	GridSelectionSource,
+	GridSelectionState,
+	RowModel,
+	SelectionChangeResult,
+} from '../store.js';
 
 export class SelectionModel {
 	private state: GridSelectionState = {
@@ -165,5 +174,54 @@ export class SelectionModel {
 				}
 			}
 		}
+	}
+
+	public describeChange<TRowData>(
+		prevSelection: GridSelectionState,
+		nextSelection: GridSelectionState,
+		rowModel: RowModel<TRowData> | null,
+		columns: ColumnDef<TRowData>[]
+	): SelectionChangeResult {
+		const invalidatedCells: GridCellPointer[] = [];
+		const invalidatedRows: string[] = [];
+		const seenCells = new Set<string>();
+		const seenRows = new Set<string>();
+		const addCell = (cell: GridCellPointer | null) => {
+			if (!cell) return;
+			const key = `${cell.rowId}:${cell.colField}`;
+			if (seenCells.has(key)) return;
+			seenCells.add(key);
+			invalidatedCells.push(cell);
+		};
+		const addRow = (rowId: string | null | undefined) => {
+			if (!rowId || seenRows.has(rowId)) return;
+			seenRows.add(rowId);
+			invalidatedRows.push(rowId);
+		};
+
+		addCell(prevSelection.focus);
+		addCell(nextSelection.focus);
+		addRow(prevSelection.focus?.rowId);
+		addRow(nextSelection.focus?.rowId);
+
+		if (rowModel) {
+			const dirty = this.getDirtyCoordinates(prevSelection.bounds, nextSelection.bounds);
+			for (const { rowIdx, colIdx } of dirty) {
+				const visualRow = rowModel.getVisualRow(rowIdx);
+				const col = columns[colIdx];
+				if (visualRow?.kind === 'data' && col) {
+					addCell({ rowId: visualRow.rowId, colField: col.field });
+					addRow(visualRow.rowId);
+				} else if (visualRow) {
+					addRow(visualRow.id);
+				}
+			}
+		}
+
+		return {
+			invalidatedCells,
+			invalidatedRows,
+			overlayChanged: prevSelection.bounds !== nextSelection.bounds || prevSelection.focus !== nextSelection.focus,
+		};
 	}
 }
