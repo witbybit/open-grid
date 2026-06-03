@@ -15,6 +15,8 @@ export class DOMPool<T extends HTMLElement> {
 	private factory: () => T;
 	private holdingPen: DocumentFragment | null = null;
 	private totalCreated = 0;
+	private hotReleaseCount = 0;
+	private coldReleaseCount = 0;
 
 	constructor(factory: () => T, initialCapacity: number = 50) {
 		this.factory = factory;
@@ -53,7 +55,26 @@ export class DOMPool<T extends HTMLElement> {
 	 * Resets properties to avoid memory leaks or layout pollution.
 	 */
 	public release(node: T): void {
-		// Sanitize the node
+		this.releaseCold(node);
+	}
+
+	/**
+	 * Hot release is used during scroll recycling. It only detaches and stores
+	 * the node; the next bind overwrites the hot properties it needs.
+	 */
+	public releaseHot(node: T): void {
+		if (this.holdingPen) {
+			this.holdingPen.appendChild(node);
+		}
+		this.available.push(node);
+		this.hotReleaseCount++;
+	}
+
+	/**
+	 * Cold release is used for teardown and non-scroll cleanup where full DOM
+	 * sanitization is worth the cost.
+	 */
+	public releaseCold(node: T): void {
 		node.textContent = '';
 		node.className = '';
 
@@ -73,6 +94,7 @@ export class DOMPool<T extends HTMLElement> {
 		}
 
 		this.available.push(node);
+		this.coldReleaseCount++;
 	}
 
 	/** Current pool size (available nodes) */
@@ -83,6 +105,19 @@ export class DOMPool<T extends HTMLElement> {
 	/** Total nodes ever created */
 	public get totalCount(): number {
 		return this.totalCreated;
+	}
+
+	public get hotReleases(): number {
+		return this.hotReleaseCount;
+	}
+
+	public get coldReleases(): number {
+		return this.coldReleaseCount;
+	}
+
+	public resetStats(): void {
+		this.hotReleaseCount = 0;
+		this.coldReleaseCount = 0;
 	}
 
 	/** Clear the pool and release references */

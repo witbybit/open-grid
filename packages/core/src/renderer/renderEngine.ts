@@ -16,6 +16,7 @@ import type {
 } from './IGridRenderer.js';
 import { RenderOrchestrator, type RenderStats } from './renderOrchestrator.js';
 import { RenderScheduler } from './renderScheduler.js';
+import { ScrollFrameScheduler } from './scrollFrameScheduler.js';
 import { PortalMountManager } from './portalMountManager.js';
 import { ViewportRenderer } from './viewportRenderer.js';
 import { RowRenderer } from './rowRenderer.js';
@@ -38,6 +39,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private columnInteractions: ColumnInteractionController<TRowData>;
 	private fillDrag: FillDragController<TRowData>;
 	private scheduler: RenderScheduler;
+	private scrollScheduler: ScrollFrameScheduler;
 	private orchestrator: RenderOrchestrator;
 	private geometryController: GeometryController<TRowData>;
 	public readonly portalMountManager = new PortalMountManager<TRowData>();
@@ -71,6 +73,20 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private activeHeaderPopover: HTMLDivElement | null = null;
 	private activeHeaderPopoverElement: HTMLElement | null = null;
 	private hoveredRowIndex: number | null = null;
+	private isScrolling = false;
+	private scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
+	private overlayDirtyDuringScroll = false;
+	private isScrollFrameActive = false;
+	private currentScrollCellsPatched = 0;
+	private currentScrollRowsRecycled = 0;
+	private renderStats = {
+		scrollFrames: 0,
+		viewportRecycles: 0,
+		headerPaintsDuringScroll: 0,
+		overlayPaintsDuringScroll: 0,
+		cellsPatchedPerScrollFrame: [] as number[],
+		rowsRecycledPerScrollFrame: [] as number[],
+	};
 
 	private selectionDragBounds: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
 
@@ -130,6 +146,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.geometryController = new GeometryController(engine);
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
 		this.scheduler = new RenderScheduler(() => this.flushPaint());
+		this.scrollScheduler = new ScrollFrameScheduler(() => this.flushScrollFrame());
 		this.viewportRenderer = new ViewportRenderer((frame) => {
 			this.syncViewportScrollFromDom();
 			this.recycleViewport();
@@ -139,8 +156,16 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		});
 		this.rowRenderer = new RowRenderer((frame) => this.repaintInvalidatedRowsAndCells(frame));
 		this.cellRenderer = new CellRenderer((frame) => this.repaintInvalidatedRowsAndCells(frame));
-		this.headerRenderer = new HeaderRenderer(() => this.paintHeaders());
-		this.overlayRenderer = new OverlayRenderer(() => this.paintOverlay());
+		this.headerRenderer = new HeaderRenderer(
+			() => this.paintHeaders(),
+			() => undefined
+		);
+		this.overlayRenderer = new OverlayRenderer(
+			() => this.paintOverlay(),
+			() => {
+				if (this.hasVisibleSelectionOverlay()) this.overlayDirtyDuringScroll = true;
+			}
+		);
 		this.fullWidthRowRenderer = new FullWidthRowRenderer(() => undefined);
 		this.orchestrator = new RenderOrchestrator({
 			recomputeGeometry: () => this.geometryController.recomputeIfNeeded(),
@@ -155,7 +180,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			engine,
 			getOverlayLayer: () => this.overlayLayer,
 			getScrollViewport: () => this.scrollViewport,
-			schedulePaint: () => this.schedulePaint(),
+			schedulePaint: () => this.scheduleHeaderPaint('column interaction'),
 		});
 		this.fillDrag = new FillDragController<TRowData>({
 			engine,
@@ -163,7 +188,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			getScrollViewport: () => this.scrollViewport,
 			getOverlayBox: (minRow, maxRow, minCol, maxCol) => this.getClampedOverlayBox(minRow, maxRow, minCol, maxCol),
 			scrollTo: (scrollTop, scrollLeft) => this.scrollEngine.scrollTo(scrollTop, scrollLeft),
-			schedulePaint: () => this.schedulePaint(),
+			schedulePaint: () => this.scheduleOverlayPaint('fill drag'),
 		});
 	}
 
@@ -262,6 +287,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.columnInteractions.cleanup();
 		this.fillDrag.cleanup();
 		this.scheduler.destroy();
+		this.scrollScheduler.destroy();
+		this.clearScrollEndTimer();
 		this.portalMountManager.releaseAll();
 
 		// Release all active rows and cells
@@ -287,16 +314,60 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	/**
-	 * Performs scroll-driven viewport shifts and schedules updates.
+	 * Scroll hot path:
+	 * DOM scroll event -> ViewportModel scroll offsets -> direct rAF scheduler
+	 * -> viewport-only row/cell recycle and positioning -> deferred portal cleanup
+	 * after scroll idle. Headers, overlays, full paint, and sync portal flushes stay
+	 * out of this frame unless another explicit invalidation path requests them.
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number): void => {
-		// 1. Update the coordinate values in ViewportModel (O(1)) synchronously
 		this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
-
-		// 2. Schedule throttled viewport layout and rendering
-		this.engine.invalidation.invalidateViewport('scroll');
-		this.scheduler.requestFlush('scroll');
+		this.markScrolling();
+		this.scrollScheduler.requestFrame();
 	};
+
+	private markScrolling(): void {
+		this.isScrolling = true;
+		this.portalMountManager.setScrolling(true);
+		this.clearScrollEndTimer();
+		this.scrollEndTimer = setTimeout(() => this.finishScrolling(), 80);
+	}
+
+	private finishScrolling(): void {
+		this.clearScrollEndTimer();
+		this.isScrolling = false;
+		this.portalMountManager.setScrolling(false);
+		this.portalMountManager.flushDeferred(false);
+		if (this.overlayDirtyDuringScroll) {
+			this.overlayDirtyDuringScroll = false;
+			this.paintOverlay();
+		}
+	}
+
+	private clearScrollEndTimer(): void {
+		if (this.scrollEndTimer) {
+			clearTimeout(this.scrollEndTimer);
+			this.scrollEndTimer = null;
+		}
+	}
+
+	private flushScrollFrame(): void {
+		if (!this.scrollViewport) return;
+		this.isScrollFrameActive = true;
+		this.currentScrollCellsPatched = 0;
+		this.currentScrollRowsRecycled = 0;
+		this.renderStats.scrollFrames++;
+		try {
+			this.syncViewportScrollFromDom();
+			this.recycleViewport();
+			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
+			this.overlayRenderer.syncPosition();
+		} finally {
+			this.renderStats.cellsPatchedPerScrollFrame.push(this.currentScrollCellsPatched);
+			this.renderStats.rowsRecycledPerScrollFrame.push(this.currentScrollRowsRecycled);
+			this.isScrollFrameActive = false;
+		}
+	}
 
 	private bindInvalidationSources(): void {
 		const invalidateFull = () => {
@@ -381,8 +452,50 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Schedules a paint task in the next animation frame, preventing synchronous re-entrancy.
 	 */
 	public schedulePaint(): void {
-		this.engine.invalidation.invalidateFull('api');
-		this.scheduler.requestFlush('api');
+		this.scheduleFullPaint('api');
+	}
+
+	public scheduleFullPaint(reason = 'api'): void {
+		this.engine.invalidation.invalidateFull(reason);
+		this.scheduler.requestFlush(reason);
+	}
+
+	public scheduleViewportPaint(reason = 'viewport'): void {
+		this.engine.invalidation.invalidateViewport(reason);
+		this.scheduler.requestFlush(reason);
+	}
+
+	public scheduleHeaderPaint(reason = 'headers'): void {
+		this.engine.invalidation.invalidateHeaders(reason);
+		this.scheduler.requestFlush(reason);
+	}
+
+	public scheduleOverlayPaint(reason = 'overlay'): void {
+		this.engine.invalidation.invalidateOverlay(reason);
+		this.scheduler.requestFlush(reason);
+	}
+
+	public scheduleCellPaint(rowId: string, colId: string, reason = 'cell'): void {
+		this.engine.invalidation.invalidateCell(rowId, colId, reason);
+		this.scheduler.requestFlush(reason);
+	}
+
+	public scheduleRowPaint(rowId: string, reason = 'row'): void {
+		this.engine.invalidation.invalidateRow(rowId, reason);
+		this.scheduler.requestFlush(reason);
+	}
+
+	public scheduleColumnPaint(colId: string, reason = 'column'): void {
+		this.engine.invalidation.invalidateColumn(colId, reason);
+		this.scheduler.requestFlush(reason);
+	}
+
+	public scheduleGeometryPaint(reason = 'geometry'): void {
+		this.geometryController.invalidateAll();
+		this.engine.invalidation.invalidateGeometry(reason);
+		this.engine.invalidation.invalidateViewport(reason);
+		this.engine.invalidation.invalidateHeaders(reason);
+		this.scheduler.requestFlush(reason);
 	}
 
 	private flushPaint(): void {
@@ -396,10 +509,33 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	public getRenderStats(): RenderStats {
 		const stats = this.orchestrator.getStats();
+		const portalScrollStats = this.portalMountManager.getScrollStats();
 		return {
 			...stats,
+			scrollFrames: this.renderStats.scrollFrames,
+			viewportRecycles: this.renderStats.viewportRecycles,
+			headerPaintsDuringScroll: this.renderStats.headerPaintsDuringScroll,
+			overlayPaintsDuringScroll: this.renderStats.overlayPaintsDuringScroll,
+			...portalScrollStats,
+			hotDomReleases: (this.rowPool?.hotReleases ?? 0) + (this.cellPool?.hotReleases ?? 0),
+			coldDomReleases: (this.rowPool?.coldReleases ?? 0) + (this.cellPool?.coldReleases ?? 0),
+			cellsPatchedPerScrollFrame: this.renderStats.cellsPatchedPerScrollFrame.slice(),
+			rowsRecycledPerScrollFrame: this.renderStats.rowsRecycledPerScrollFrame.slice(),
 			portalMounts: this.portalMountManager.getStats(),
 		};
+	}
+
+	public resetRenderStats(): void {
+		this.orchestrator.resetStats();
+		this.portalMountManager.resetStats();
+		this.rowPool?.resetStats();
+		this.cellPool?.resetStats();
+		this.renderStats.scrollFrames = 0;
+		this.renderStats.viewportRecycles = 0;
+		this.renderStats.headerPaintsDuringScroll = 0;
+		this.renderStats.overlayPaintsDuringScroll = 0;
+		this.renderStats.cellsPatchedPerScrollFrame = [];
+		this.renderStats.rowsRecycledPerScrollFrame = [];
 	}
 
 	/**
@@ -472,6 +608,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Perform row & cell level recycling, reusing DOM elements out of screen.
 	 */
 	private recycleViewport(): void {
+		this.renderStats.viewportRecycles++;
 		const rowModel = this.engine.getRowModel();
 		let rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const state = this.engine.stateManager.getState();
@@ -512,6 +649,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			if (!isPinnedTop && !isPinnedBottom && !isScrollable) {
 				this.releaseRow(rowIndex, pooledRow);
+				if (this.isScrollFrameActive) this.currentScrollRowsRecycled++;
 			}
 		}
 
@@ -545,6 +683,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					boundRowId: visualRow.id,
 				};
 				this.activeRows.set(r, pooledRow);
+				if (this.isScrollFrameActive) this.currentScrollRowsRecycled++;
 
 				// Append row divs to center layer
 				if (this.centerLayer) this.centerLayer.appendChild(rowEl);
@@ -944,15 +1083,20 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			const cellKey = createCellKey(node.id, col.field);
 
 			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously or scrolling extremely fast)
-			const isFastScrolling = this.engine.viewport.isScrollingFast;
+			const isFastScrolling = this.engine.viewport.isScrollingFast || this.isScrollFrameActive;
 			if (isFastScrolling && cell.dataset.cellKey === cellKey) {
 				// Keep existing portal content mounted while the user is moving quickly.
 				// Churning portals during scroll costs more than temporarily stale custom content.
-			} else if ((col.cellRenderer || access.isEditing) && !access.isLoading && !isFastScrolling) {
+			} else if ((col.cellRenderer || access.isEditing) && !access.isLoading && isFastScrolling) {
+				const nextValText = cellValue != null ? String(cellValue) : '';
+				if (cell.textContent !== nextValText) {
+					cell.textContent = nextValText;
+				}
+			} else if ((col.cellRenderer || access.isEditing) && !access.isLoading) {
 				if (cell.dataset.cellKey !== cellKey) {
 					if (cell.dataset.cellKey) {
 						this.releaseCellPortal(cell);
-						this.portalMountManager.flushCellReleaseTransaction(true);
+						this.portalMountManager.flushCellReleaseTransaction(!this.isScrollFrameActive);
 					}
 					// Set content empty so custom React portal doesn't clash with stale text
 					cell.textContent = '';
@@ -1000,6 +1144,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					console.error('RenderEngine: Error in afterCellRender styleSlot', e);
 				}
 			}
+			if (this.isScrollFrameActive) this.currentScrollCellsPatched++;
 		};
 
 		// 3. Render left pinned cells
@@ -1095,6 +1240,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				skeleton.className = 'og-cell-loading-skeleton';
 				cell.appendChild(skeleton);
 			}
+			if (this.isScrollFrameActive) this.currentScrollCellsPatched++;
 		};
 
 		for (let c = 0; c < pinLeftColumns; c++) {
@@ -1170,7 +1316,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 
 			// Detach from ANY parent (center, left pinned, or right pinned row element)
-			this.portalMountManager.flushCellReleaseTransaction(true);
+			this.portalMountManager.flushCellReleaseTransaction(!this.isScrollFrameActive);
 			if (cell.parentNode) {
 				try {
 					cell.remove();
@@ -1178,7 +1324,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					// Safe unmount boundary catch
 				}
 			}
-			this.cellPool.release(cell);
+			if (this.isScrollFrameActive) {
+				this.cellPool.releaseHot(cell);
+			} else {
+				this.cellPool.releaseCold(cell);
+			}
 			pooledRow.cells.delete(colIdx);
 		}
 	}
@@ -1196,7 +1346,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				delete cell.dataset.cellKey;
 			}
 		}
-		this.portalMountManager.flushCellReleaseTransaction(true);
+		this.portalMountManager.flushCellReleaseTransaction(!this.isScrollFrameActive);
 
 		for (const colIdx of colIdxs) {
 			this.releaseCellInternal(pooledRow, colIdx, true);
@@ -1219,6 +1369,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (pooledRow.element.dataset.rowKey) {
 			this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 			delete pooledRow.element.dataset.rowKey;
+			pooledRow.element.textContent = '';
 		}
 
 		// Release all cell DOMs inside row
@@ -1229,9 +1380,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (pooledRow.leftElement && pooledRow.leftElement.parentNode) pooledRow.leftElement.remove();
 		if (pooledRow.rightElement && pooledRow.rightElement.parentNode) pooledRow.rightElement.remove();
 
-		this.rowPool.release(pooledRow.element);
-		if (pooledRow.leftElement) this.rowPool.release(pooledRow.leftElement);
-		if (pooledRow.rightElement) this.rowPool.release(pooledRow.rightElement);
+		if (this.isScrollFrameActive) {
+			this.rowPool.releaseHot(pooledRow.element);
+			if (pooledRow.leftElement) this.rowPool.releaseHot(pooledRow.leftElement);
+			if (pooledRow.rightElement) this.rowPool.releaseHot(pooledRow.rightElement);
+		} else {
+			this.rowPool.releaseCold(pooledRow.element);
+			if (pooledRow.leftElement) this.rowPool.releaseCold(pooledRow.leftElement);
+			if (pooledRow.rightElement) this.rowPool.releaseCold(pooledRow.rightElement);
+		}
 		this.activeRows.delete(rowIndex);
 	}
 
@@ -1249,6 +1406,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Renders the grid column headers.
 	 */
 	private paintHeaders(): void {
+		if (this.isScrolling) this.renderStats.headerPaintsDuringScroll++;
 		if (!this.headerLayer || !this.headerLeftLayer || !this.headerRightLayer) return;
 
 		const columns = this.engine.stateManager.getState().columns;
@@ -1684,6 +1842,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Computes selection overlays & active focus coordinates off-screen.
 	 */
 	private paintOverlay(): void {
+		if (this.isScrolling) this.renderStats.overlayPaintsDuringScroll++;
 		if (!this.overlayLayer) return;
 
 		this.columnInteractions.reattachOverlays();
@@ -1733,6 +1892,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Re-append the fill preview border if actively dragging so it doesn't get cleared by textContent = ''
 		this.fillDrag.reattachPreview();
+	}
+
+	private hasVisibleSelectionOverlay(): boolean {
+		const state = this.engine.stateManager.getState();
+		return !!state.selection.bounds && !!this.engine.getRowModel();
 	}
 
 	private getClampedOverlayBox(minRow: number, maxRow: number, minCol: number, maxCol: number): OverlayBox | null {

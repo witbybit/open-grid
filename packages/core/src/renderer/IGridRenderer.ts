@@ -50,6 +50,15 @@ export interface IGridRenderer<TRowData = unknown> {
 	 */
 	schedulePaint(): void;
 
+	scheduleFullPaint(reason?: string): void;
+	scheduleViewportPaint(reason?: string): void;
+	scheduleHeaderPaint(reason?: string): void;
+	scheduleOverlayPaint(reason?: string): void;
+	scheduleCellPaint(rowId: string, colId: string, reason?: string): void;
+	scheduleRowPaint(rowId: string, reason?: string): void;
+	scheduleColumnPaint(colId: string, reason?: string): void;
+	scheduleGeometryPaint(reason?: string): void;
+
 	/**
 	 * Requests a synchronous, immediate full paint of the grid viewport.
 	 */

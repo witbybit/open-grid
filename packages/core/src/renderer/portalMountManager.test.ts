@@ -80,4 +80,42 @@ describe('PortalMountManager', () => {
 		expect(releaseRow).toHaveBeenCalledTimes(1);
 		expect(releaseMenu).toHaveBeenCalledTimes(1);
 	});
+
+	it('defers row portal mounts and releases while scrolling', () => {
+		const manager = new PortalMountManager();
+		const mountRow = vi.fn();
+		const releaseRow = vi.fn();
+		manager.onMountRowContent = mountRow;
+		manager.onUnmountRowContent = releaseRow;
+
+		const firstContainer = document.createElement('div');
+		const secondContainer = document.createElement('div');
+
+		manager.setScrolling(true);
+		manager.mountRow({
+			rowKey: 'detail:1',
+			container: firstContainer,
+			visualRow: { kind: 'detail', id: 'detail:1', parentId: '1', depth: 0, height: 40, render: null },
+		});
+		manager.releaseRow({ rowKey: 'detail:1', container: firstContainer });
+		manager.mountRow({
+			rowKey: 'detail:2',
+			container: secondContainer,
+			visualRow: { kind: 'detail', id: 'detail:2', parentId: '2', depth: 0, height: 40, render: null },
+		});
+
+		expect(mountRow).not.toHaveBeenCalled();
+		expect(releaseRow).not.toHaveBeenCalled();
+		expect(manager.getScrollStats()).toMatchObject({
+			portalMountsDuringScroll: 2,
+			portalReleasesDuringScroll: 1,
+		});
+
+		manager.setScrolling(false);
+		manager.flushDeferred();
+
+		expect(releaseRow).not.toHaveBeenCalled();
+		expect(mountRow).toHaveBeenCalledTimes(1);
+		expect(mountRow.mock.calls[0][0].rowKey).toBe('detail:2');
+	});
 });

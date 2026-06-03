@@ -1,5 +1,6 @@
 import { getEngineFromApi, getInternalApiFromApi } from './apiBridge.js';
 import { RenderEngine } from './renderer/renderEngine.js';
+import type { RenderStats } from './renderer/renderOrchestrator.js';
 import type {
 	GridCellContentMount,
 	GridCellContentUnmount,
@@ -41,6 +42,13 @@ export interface GridHostOptions<TRowData = unknown> {
 export interface GridHost {
 	setViewportPins(pins: NonNullable<GridHostOptions['pins']>): void;
 	schedulePaint(): void;
+	scheduleFullPaint(reason?: string): void;
+	scheduleViewportPaint(reason?: string): void;
+	scheduleHeaderPaint(reason?: string): void;
+	scheduleOverlayPaint(reason?: string): void;
+	scheduleGeometryPaint(reason?: string): void;
+	getRenderStats(): RenderStats;
+	resetRenderStats(): void;
 	destroy(): void;
 }
 
@@ -68,7 +76,7 @@ export function mountGridHost<TRowData>(api: GridApi<TRowData>, container: HTMLE
 		const { width, height } = entries[0].contentRect;
 		if (internalApi.setViewportSize(width, height)) {
 			internalApi.updateVisibleRanges();
-			renderEngine.schedulePaint();
+			renderEngine.scheduleGeometryPaint('resize');
 		}
 	});
 	observer.observe(container);
@@ -77,10 +85,32 @@ export function mountGridHost<TRowData>(api: GridApi<TRowData>, container: HTMLE
 		setViewportPins(pins) {
 			internalApi.setViewportPins(pins);
 			internalApi.updateVisibleRanges();
-			renderEngine.schedulePaint();
+			renderEngine.scheduleViewportPaint('pins');
+			renderEngine.scheduleHeaderPaint('pins');
 		},
 		schedulePaint() {
 			renderEngine.schedulePaint();
+		},
+		scheduleFullPaint(reason) {
+			renderEngine.scheduleFullPaint(reason);
+		},
+		scheduleViewportPaint(reason) {
+			renderEngine.scheduleViewportPaint(reason);
+		},
+		scheduleHeaderPaint(reason) {
+			renderEngine.scheduleHeaderPaint(reason);
+		},
+		scheduleOverlayPaint(reason) {
+			renderEngine.scheduleOverlayPaint(reason);
+		},
+		scheduleGeometryPaint(reason) {
+			renderEngine.scheduleGeometryPaint(reason);
+		},
+		getRenderStats() {
+			return renderEngine.getRenderStats();
+		},
+		resetRenderStats() {
+			renderEngine.resetRenderStats();
 		},
 		destroy() {
 			observer.disconnect();

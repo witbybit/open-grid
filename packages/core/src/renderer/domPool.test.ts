@@ -67,6 +67,26 @@ describe('DOMPool', () => {
 		expect(node.dataset.colField).toBeUndefined();
 	});
 
+	it('hot releases without deep cleanup for scroll recycling', () => {
+		const factory = () => document.createElement('div');
+		const pool = new DOMPool(factory, 1);
+
+		const node = pool.acquire();
+		node.textContent = 'kept until bind';
+		node.className = 'og-cell custom';
+		node.style.transform = 'translate3d(10px, 0, 0)';
+		node.dataset.colField = 'name';
+
+		pool.releaseHot(node);
+
+		expect(pool.availableCount).toBe(1);
+		expect(pool.hotReleases).toBe(1);
+		expect(node.textContent).toBe('kept until bind');
+		expect(node.className).toBe('og-cell custom');
+		expect(node.style.transform).toBe('translate3d(10px, 0, 0)');
+		expect(node.dataset.colField).toBe('name');
+	});
+
 	it('should clear all nodes and references when clear is called', () => {
 		const factory = () => document.createElement('div');
 		const pool = new DOMPool(factory, 5);

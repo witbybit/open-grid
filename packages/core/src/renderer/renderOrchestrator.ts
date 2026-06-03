@@ -8,6 +8,17 @@ export interface RenderStats {
 	overlayPaints: number;
 	geometryRecomputes: number;
 	viewportPaints: number;
+	scrollFrames: number;
+	viewportRecycles: number;
+	headerPaintsDuringScroll: number;
+	overlayPaintsDuringScroll: number;
+	portalFlushesDuringScroll: number;
+	portalMountsDuringScroll: number;
+	portalReleasesDuringScroll: number;
+	hotDomReleases: number;
+	coldDomReleases: number;
+	cellsPatchedPerScrollFrame: number[];
+	rowsRecycledPerScrollFrame: number[];
 	lastInvalidationReasons: string[];
 	portalMounts?: { cells: number; rows: number; menus: number };
 }
@@ -32,6 +43,17 @@ export class RenderOrchestrator {
 		overlayPaints: 0,
 		geometryRecomputes: 0,
 		viewportPaints: 0,
+		scrollFrames: 0,
+		viewportRecycles: 0,
+		headerPaintsDuringScroll: 0,
+		overlayPaintsDuringScroll: 0,
+		portalFlushesDuringScroll: 0,
+		portalMountsDuringScroll: 0,
+		portalReleasesDuringScroll: 0,
+		hotDomReleases: 0,
+		coldDomReleases: 0,
+		cellsPatchedPerScrollFrame: [],
+		rowsRecycledPerScrollFrame: [],
 		lastInvalidationReasons: [],
 	};
 
@@ -82,7 +104,31 @@ export class RenderOrchestrator {
 	public getStats(): RenderStats {
 		return {
 			...this.stats,
+			cellsPatchedPerScrollFrame: this.stats.cellsPatchedPerScrollFrame.slice(),
+			rowsRecycledPerScrollFrame: this.stats.rowsRecycledPerScrollFrame.slice(),
 			lastInvalidationReasons: this.stats.lastInvalidationReasons.slice(),
 		};
+	}
+
+	public resetStats(): void {
+		this.stats.fullPaints = 0;
+		this.stats.rowPaints = 0;
+		this.stats.cellPaints = 0;
+		this.stats.headerPaints = 0;
+		this.stats.overlayPaints = 0;
+		this.stats.geometryRecomputes = 0;
+		this.stats.viewportPaints = 0;
+		this.stats.scrollFrames = 0;
+		this.stats.viewportRecycles = 0;
+		this.stats.headerPaintsDuringScroll = 0;
+		this.stats.overlayPaintsDuringScroll = 0;
+		this.stats.portalFlushesDuringScroll = 0;
+		this.stats.portalMountsDuringScroll = 0;
+		this.stats.portalReleasesDuringScroll = 0;
+		this.stats.hotDomReleases = 0;
+		this.stats.coldDomReleases = 0;
+		this.stats.cellsPatchedPerScrollFrame = [];
+		this.stats.rowsRecycledPerScrollFrame = [];
+		this.stats.lastInvalidationReasons = [];
 	}
 }

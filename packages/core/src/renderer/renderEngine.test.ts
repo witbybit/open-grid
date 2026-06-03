@@ -10,6 +10,8 @@ describe('RenderEngine', () => {
 	afterEach(() => {
 		document.body.textContent = '';
 		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.useRealTimers();
 	});
 
 	it('syncs state-driven paints from the real scroll viewport position', () => {
@@ -441,6 +443,65 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('supports explicit paint scheduling without falling back to full paint', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-1', name: 'One' }],
+			columns: store.getState().columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.resetRenderStats();
+
+		renderer.scheduleHeaderPaint('test header');
+		await Promise.resolve();
+		await Promise.resolve();
+		const afterHeader = renderer.getRenderStats();
+		expect(afterHeader.fullPaints).toBe(0);
+		expect(afterHeader.headerPaints).toBe(1);
+
+		renderer.scheduleOverlayPaint('test overlay');
+		await Promise.resolve();
+		await Promise.resolve();
+		const afterOverlay = renderer.getRenderStats();
+		expect(afterOverlay.fullPaints).toBe(0);
+		expect(afterOverlay.overlayPaints).toBe(1);
+
+		renderer.scheduleViewportPaint('test viewport');
+		await Promise.resolve();
+		await Promise.resolve();
+		const afterViewport = renderer.getRenderStats();
+		expect(afterViewport.fullPaints).toBe(0);
+		expect(afterViewport.viewportPaints).toBe(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('does not full paint or recompute geometry for server block data updates during viewport recycling', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
@@ -505,7 +566,171 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('batches portal unmount flushes when vertically recycling rows with custom renderers', async () => {
+	it('uses a viewport-only vertical scroll fast path', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [
+			{ field: 'a', header: 'A', width: 120 },
+			{ field: 'b', header: 'B', width: 120 },
+		];
+		const store = new GridStore<{ id: string; a: string; b: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 150 }, (_, index) => ({ id: `row-${index}`, a: `A${index}`, b: `B${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.resetRenderStats();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 2400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		const stats = renderer.getRenderStats();
+		expect(stats.scrollFrames).toBe(1);
+		expect(stats.viewportRecycles).toBe(1);
+		expect(stats.fullPaints).toBe(0);
+		expect(stats.headerPaintsDuringScroll).toBe(0);
+		expect(stats.overlayPaintsDuringScroll).toBe(0);
+		expect(stats.portalFlushesDuringScroll).toBe(0);
+		expect(stats.hotDomReleases).toBeGreaterThan(0);
+		expect(stats.rowsRecycledPerScrollFrame[0]).toBeGreaterThan(0);
+		expect(stats.cellsPatchedPerScrollFrame[0]).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('coalesces repeated scroll events into one scroll animation frame', () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callbacks.push(callback);
+			return callbacks.length;
+		});
+		const columns = [{ field: 'a', header: 'A', width: 120 }];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		callbacks.length = 0;
+		renderer.resetRenderStats();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		scrollViewport.scrollTop = 800;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		scrollViewport.scrollTop = 1200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		expect(callbacks).toHaveLength(1);
+		expect(renderer.getRenderStats().scrollFrames).toBe(0);
+		callbacks[0](0);
+		expect(renderer.getRenderStats().scrollFrames).toBe(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('does not rebuild headers on horizontal scroll', () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = Array.from({ length: 80 }, (_, index) => ({ field: `col_${index}`, header: `Col ${index}`, width: 100 }));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 20 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 520,
+			bottom: 180,
+			width: 520,
+			height: 180,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.resetRenderStats();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollLeft = 3000;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		const stats = renderer.getRenderStats();
+		expect(stats.scrollFrames).toBe(1);
+		expect(stats.fullPaints).toBe(0);
+		expect(stats.headerPaints).toBe(0);
+		expect(stats.headerPaintsDuringScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('defers portal unmounts when vertically recycling rows with custom renderers', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
 			return 1;
@@ -558,15 +783,138 @@ describe('RenderEngine', () => {
 		await Promise.resolve();
 
 		const unmountCount = (renderer.portalMountManager.onUnmountCellContent as ReturnType<typeof vi.fn>).mock.calls.length;
-		expect(unmountCount).toBeGreaterThan(3);
-		expect(flushPortalContent.mock.calls.length).toBeLessThan(unmountCount / columns.length + 2);
+		const stats = renderer.getRenderStats();
+		expect(unmountCount).toBe(0);
+		expect(flushPortalContent).not.toHaveBeenCalled();
+		expect(stats.portalReleasesDuringScroll).toBeGreaterThan(3);
+		expect(stats.portalFlushesDuringScroll).toBe(0);
+		expect(stats.portalMountsDuringScroll).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
 	});
 
-	it('batches portal unmount flushes when horizontally recycling many custom-renderer columns', async () => {
+	it('flushes deferred portal unmounts after scroll idle', async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [
+			{ field: 'a', header: 'A', width: 120, cellRenderer: () => null },
+			{ field: 'b', header: 'B', width: 120, cellRenderer: () => null },
+		];
+		const store = new GridStore<{ id: string; a: string; b: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}`, b: `B${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.portalMountManager.onMountCellContent = vi.fn();
+		renderer.portalMountManager.onUnmountCellContent = vi.fn();
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 2400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		expect(renderer.portalMountManager.onUnmountCellContent).not.toHaveBeenCalled();
+		vi.advanceTimersByTime(80);
+		expect(renderer.portalMountManager.onUnmountCellContent).toHaveBeenCalled();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('defers row portal work for detail rows during active scroll', () => {
+		vi.useFakeTimers();
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'name', header: 'Name', width: 180 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 180,
+			getRowId: (row) => row.id,
+			masterDetailEnabled: true,
+			detailRowHeight: 40,
+			expansion: {
+				groups: {},
+				treeRows: {},
+				details: Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`row-${index}`, true])),
+			},
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.portalMountManager.onMountRowContent = vi.fn();
+		renderer.portalMountManager.onUnmountRowContent = vi.fn();
+		renderer.mount(container);
+		renderer.resetRenderStats();
+		(renderer.portalMountManager.onMountRowContent as ReturnType<typeof vi.fn>).mockClear();
+		(renderer.portalMountManager.onUnmountRowContent as ReturnType<typeof vi.fn>).mockClear();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 1600;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		const stats = renderer.getRenderStats();
+		expect(stats.scrollFrames).toBe(1);
+		expect(stats.portalMountsDuringScroll + stats.portalReleasesDuringScroll).toBeGreaterThan(0);
+		expect(renderer.portalMountManager.onMountRowContent).not.toHaveBeenCalled();
+		expect(renderer.portalMountManager.onUnmountRowContent).not.toHaveBeenCalled();
+
+		vi.advanceTimersByTime(80);
+		expect(
+			(renderer.portalMountManager.onMountRowContent as ReturnType<typeof vi.fn>).mock.calls.length +
+				(renderer.portalMountManager.onUnmountRowContent as ReturnType<typeof vi.fn>).mock.calls.length
+		).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('defers portal unmounts when horizontally recycling many custom-renderer columns', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
 			return 1;
@@ -621,8 +969,12 @@ describe('RenderEngine', () => {
 		await Promise.resolve();
 
 		const unmountCount = (renderer.portalMountManager.onUnmountCellContent as ReturnType<typeof vi.fn>).mock.calls.length;
-		expect(unmountCount).toBeGreaterThan(10);
-		expect(flushPortalContent.mock.calls.length).toBeLessThan(unmountCount / 2);
+		const stats = renderer.getRenderStats();
+		expect(unmountCount).toBe(0);
+		expect(flushPortalContent).not.toHaveBeenCalled();
+		expect(stats.portalReleasesDuringScroll).toBeGreaterThan(10);
+		expect(stats.portalFlushesDuringScroll).toBe(0);
+		expect(stats.portalMountsDuringScroll).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();

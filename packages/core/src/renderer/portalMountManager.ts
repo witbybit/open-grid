@@ -21,9 +21,21 @@ export class PortalMountManager<TRowData = unknown> {
 	private mountedMenus = new Map<string, HTMLElement | undefined>();
 	private cellReleaseTransactionDepth = 0;
 	private pendingCellReleases = new Map<string, GridCellContentUnmount>();
+	private deferredCellReleases = new Map<string, GridCellContentUnmount>();
+	private deferredRowMounts = new Map<string, GridRowContentMount<TRowData>>();
+	private deferredRowReleases = new Map<string, GridRowContentUnmount>();
+	private scrolling = false;
+	private stats = {
+		flushesDuringScroll: 0,
+		mountsDuringScroll: 0,
+		releasesDuringScroll: 0,
+	};
 
 	public mountCell(mount: GridCellContentMount<TRowData>): void {
 		this.mountedCells.set(mount.cellKey, mount.container);
+		if (this.scrolling) {
+			this.stats.mountsDuringScroll++;
+		}
 		this.onMountCellContent?.(mount);
 	}
 
@@ -31,6 +43,11 @@ export class PortalMountManager<TRowData = unknown> {
 		const existingContainer = this.mountedCells.get(unmount.cellKey);
 		if (unmount.container && existingContainer && existingContainer !== unmount.container) return;
 		this.mountedCells.delete(unmount.cellKey);
+		if (this.scrolling) {
+			this.stats.releasesDuringScroll++;
+			this.deferredCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
+			return;
+		}
 		if (this.cellReleaseTransactionDepth > 0) {
 			this.pendingCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
 			return;
@@ -44,9 +61,18 @@ export class PortalMountManager<TRowData = unknown> {
 			const existingContainer = this.mountedCells.get(unmount.cellKey);
 			if (unmount.container && existingContainer && existingContainer !== unmount.container) continue;
 			this.mountedCells.delete(unmount.cellKey);
+			if (this.scrolling) {
+				this.stats.releasesDuringScroll++;
+				this.deferredCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
+				continue;
+			}
 			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
 		}
 		if (flushSync) {
+			if (this.scrolling) {
+				this.stats.flushesDuringScroll++;
+				return;
+			}
 			this.onFlushCellContent?.({ flushSync: true });
 		}
 	}
@@ -57,6 +83,17 @@ export class PortalMountManager<TRowData = unknown> {
 
 	public flushCellReleaseTransaction(flushSync = true): void {
 		if (this.pendingCellReleases.size === 0) return;
+		if (this.scrolling) {
+			for (const [cellKey, unmount] of this.pendingCellReleases) {
+				this.stats.releasesDuringScroll++;
+				this.deferredCellReleases.set(cellKey, { ...unmount, flushSync: false });
+			}
+			this.pendingCellReleases.clear();
+			if (flushSync) {
+				this.stats.flushesDuringScroll++;
+			}
+			return;
+		}
 		for (const unmount of this.pendingCellReleases.values()) {
 			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
 		}
@@ -74,8 +111,40 @@ export class PortalMountManager<TRowData = unknown> {
 		}
 	}
 
+	public setScrolling(scrolling: boolean): void {
+		this.scrolling = scrolling;
+	}
+
+	public flushDeferred(flushSync = false): void {
+		if (this.deferredCellReleases.size === 0 && this.deferredRowReleases.size === 0 && this.deferredRowMounts.size === 0) return;
+		const wasScrolling = this.scrolling;
+		this.scrolling = false;
+		for (const unmount of this.deferredCellReleases.values()) {
+			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
+		}
+		this.deferredCellReleases.clear();
+		for (const unmount of this.deferredRowReleases.values()) {
+			this.onUnmountRowContent?.(unmount);
+		}
+		this.deferredRowReleases.clear();
+		for (const mount of this.deferredRowMounts.values()) {
+			this.onMountRowContent?.(mount);
+		}
+		this.deferredRowMounts.clear();
+		if (flushSync) {
+			this.onFlushCellContent?.({ flushSync: true });
+		}
+		this.scrolling = wasScrolling;
+	}
+
 	public mountRow(mount: GridRowContentMount<TRowData>): void {
 		this.mountedRows.set(mount.rowKey, mount.container);
+		if (this.scrolling) {
+			this.stats.mountsDuringScroll++;
+			this.deferredRowReleases.delete(mount.rowKey);
+			this.deferredRowMounts.set(mount.rowKey, mount);
+			return;
+		}
 		this.onMountRowContent?.(mount);
 	}
 
@@ -83,6 +152,12 @@ export class PortalMountManager<TRowData = unknown> {
 		const existingContainer = this.mountedRows.get(unmount.rowKey);
 		if (unmount.container && existingContainer && existingContainer !== unmount.container) return;
 		this.mountedRows.delete(unmount.rowKey);
+		if (this.scrolling) {
+			this.stats.releasesDuringScroll++;
+			if (this.deferredRowMounts.delete(unmount.rowKey)) return;
+			this.deferredRowReleases.set(unmount.rowKey, unmount);
+			return;
+		}
 		this.onUnmountRowContent?.(unmount);
 	}
 
@@ -99,6 +174,10 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	public releaseAll(): void {
+		this.scrolling = false;
+		this.deferredCellReleases.clear();
+		this.deferredRowMounts.clear();
+		this.deferredRowReleases.clear();
 		for (const [cellKey, container] of this.mountedCells) {
 			this.onUnmountCellContent?.({ cellKey, container, flushSync: true });
 		}
@@ -119,5 +198,19 @@ export class PortalMountManager<TRowData = unknown> {
 			rows: this.mountedRows.size,
 			menus: this.mountedMenus.size,
 		};
+	}
+
+	public getScrollStats(): { portalFlushesDuringScroll: number; portalMountsDuringScroll: number; portalReleasesDuringScroll: number } {
+		return {
+			portalFlushesDuringScroll: this.stats.flushesDuringScroll,
+			portalMountsDuringScroll: this.stats.mountsDuringScroll,
+			portalReleasesDuringScroll: this.stats.releasesDuringScroll,
+		};
+	}
+
+	public resetStats(): void {
+		this.stats.flushesDuringScroll = 0;
+		this.stats.mountsDuringScroll = 0;
+		this.stats.releasesDuringScroll = 0;
 	}
 }
