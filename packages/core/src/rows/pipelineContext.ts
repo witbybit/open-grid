@@ -2,11 +2,7 @@ import { compilePathGetter, RowNode, type ColumnDef } from '../store.js';
 import type { GroupDef } from './RowPipeline.js';
 import type { RowPipelineContext, RowPipelineExpansion } from './stages/types.js';
 
-export function getCellValueForPipeline<TData>(
-	node: RowNode<TData>,
-	column: ColumnDef<TData> | undefined,
-	colId: string
-): unknown {
+export function getCellValueForPipeline<TData>(node: RowNode<TData>, column: ColumnDef<TData> | undefined, colId: string): unknown {
 	if (!column) {
 		const getter = compilePathGetter(colId);
 		return node.getCellValue(colId, getter);
@@ -18,10 +14,7 @@ export function getCellValueForPipeline<TData>(
 	return node.getCellValue(column.field, getter);
 }
 
-export function createRowPipelineContext<TData>(
-	columns: ColumnDef<TData>[],
-	expansion: RowPipelineExpansion
-): RowPipelineContext<TData> {
+export function createRowPipelineContext<TData>(columns: ColumnDef<TData>[], expansion: RowPipelineExpansion): RowPipelineContext<TData> {
 	const columnsById = new Map<string, ColumnDef<TData>>();
 	for (const column of columns) {
 		columnsById.set(column.field, column);

@@ -31,12 +31,7 @@ export type {
 	LoadingVisualRow,
 } from './store.js';
 
-export {
-	isDataVisualRow,
-	isEditableVisualRow,
-	isFullWidthVisualRow,
-	isSelectableVisualRow,
-} from './store.js';
+export { isDataVisualRow, isEditableVisualRow, isFullWidthVisualRow, isSelectableVisualRow } from './store.js';
 export type { FilterModel, FilterModelItem, GroupDef, RowModelConfig, SortModel } from './rowModel.js';
 export {
 	parseVisualRowId,

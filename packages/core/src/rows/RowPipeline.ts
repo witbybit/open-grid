@@ -163,20 +163,20 @@ export class RowPipeline<TData = unknown> {
 		}
 
 		visualRows ??= flattenStage(roots ?? [], {
-				expandedGroupIds: context.expansion.groups,
-				expandedTreeRowIds: context.expansion.treeRows,
-				expandedDetailRowIds: context.expansion.details,
-				defaultRowHeight,
-				rowHeightsRecord,
-				groupRowHeight,
-				detailRowHeight: detailConfig?.defaultDetailHeight ?? detailRowHeight,
-				getDetailHeight: detailConfig?.getDetailHeight ?? getDetailHeight,
-				masterDetailEnabled: detailConfig?.enabled ?? masterDetailEnabled,
-				detailRenderer,
-				defaultGroupsExpanded: groupingConfig?.defaultExpanded,
-				defaultTreeRowsExpanded: treeConfig?.defaultExpanded,
-				includeFooter: groupingConfig?.includeFooter,
-			});
+			expandedGroupIds: context.expansion.groups,
+			expandedTreeRowIds: context.expansion.treeRows,
+			expandedDetailRowIds: context.expansion.details,
+			defaultRowHeight,
+			rowHeightsRecord,
+			groupRowHeight,
+			detailRowHeight: detailConfig?.defaultDetailHeight ?? detailRowHeight,
+			getDetailHeight: detailConfig?.getDetailHeight ?? getDetailHeight,
+			masterDetailEnabled: detailConfig?.enabled ?? masterDetailEnabled,
+			detailRenderer,
+			defaultGroupsExpanded: groupingConfig?.defaultExpanded,
+			defaultTreeRowsExpanded: treeConfig?.defaultExpanded,
+			includeFooter: groupingConfig?.includeFooter,
+		});
 
 		const visualRowIdToIndex = new Map<string, number>();
 		const rowIdToVisualIndex = new Map<string, number>();
@@ -234,7 +234,14 @@ export class RowPipeline<TData = unknown> {
 		filterMode: 'strict' | 'includeAncestors' | 'includeDescendants'
 	): RowTreeNode<TData>[] {
 		if (!filterModel || Object.keys(filterModel).length === 0) return roots;
-		const matchingIds = new Set(applyClientSortAndFilter(roots.flatMap((root) => collectDataNodes(root)), columns, null, filterModel).map((w) => w.node.id));
+		const matchingIds = new Set(
+			applyClientSortAndFilter(
+				roots.flatMap((root) => collectDataNodes(root)),
+				columns,
+				null,
+				filterModel
+			).map((w) => w.node.id)
+		);
 		const includeNode = (node: RowTreeNode<TData>): RowTreeNode<TData> | null => {
 			if (node.kind !== 'data') return node;
 			const children = (node.children ?? []).map(includeNode).filter((child): child is RowTreeNode<TData> => !!child);

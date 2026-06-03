@@ -380,18 +380,21 @@ function OpenGridInner<TRowData = unknown>({
 		};
 	}, [navigation, enableNavigation]);
 
-	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
-		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-		if (!cellEl) return null;
-		if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
-		const colField = cellEl.dataset.colField;
-		const rowEl = cellEl.closest('.og-row') as HTMLElement;
-		const rowIndex = Number(rowEl?.dataset.rowIndex);
-		const visualRow = Number.isFinite(rowIndex) ? api.getVisualRow(rowIndex) : null;
-		const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
-		if (!colField || !rowId) return null;
-		return { cellEl, pointer: { rowId, colField } };
-	}, [api]);
+	const getCellPointerFromEvent = useCallback(
+		(e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
+			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
+			if (!cellEl) return null;
+			if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
+			const colField = cellEl.dataset.colField;
+			const rowEl = cellEl.closest('.og-row') as HTMLElement;
+			const rowIndex = Number(rowEl?.dataset.rowIndex);
+			const visualRow = Number.isFinite(rowIndex) ? api.getVisualRow(rowIndex) : null;
+			const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
+			if (!colField || !rowId) return null;
+			return { cellEl, pointer: { rowId, colField } };
+		},
+		[api]
+	);
 
 	const getCellClickParams = useCallback(
 		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {

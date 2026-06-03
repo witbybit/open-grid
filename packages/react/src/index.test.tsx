@@ -681,11 +681,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const { unmount } = render(
-			<OpenGrid
-				api={parentGrid.api}
-				enableNavigation
-				detailRowRenderer={() => <OpenGrid api={childGrid.api} enableNavigation />}
-			/>
+			<OpenGrid api={parentGrid.api} enableNavigation detailRowRenderer={() => <OpenGrid api={childGrid.api} enableNavigation />} />
 		);
 
 		act(() => {

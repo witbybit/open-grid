@@ -56,9 +56,7 @@ function aggregateNodeRecursively<TData>(
 			continue;
 		}
 
-		const values = descendantLeafNodes
-			.map((n) => context.getValue(n, field))
-			.filter((v) => typeof v === 'number' && !isNaN(v)) as number[];
+		const values = descendantLeafNodes.map((n) => context.getValue(n, field)).filter((v) => typeof v === 'number' && !isNaN(v)) as number[];
 
 		if (values.length === 0) {
 			aggregateValues[field] = undefined;

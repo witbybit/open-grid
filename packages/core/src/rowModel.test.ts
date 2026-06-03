@@ -189,9 +189,7 @@ describe('ClientRowModelController', () => {
 	it('builds first-class group rows', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
-			columns: [
-				{ field: 'category', header: 'Category' },
-			],
+			columns: [{ field: 'category', header: 'Category' }],
 			rowModelConfig: {
 				type: 'client',
 				grouping: { model: [{ colId: 'category' }], defaultExpanded: true },

@@ -990,9 +990,12 @@ describe('GridStore undo and redo functionality', () => {
 		]);
 
 		const rangeProcessed: string[] = [];
-		store.rows().inRange(range).forEach((id, idx) => {
-			rangeProcessed.push(`${id}-${idx}`);
-		});
+		store
+			.rows()
+			.inRange(range)
+			.forEach((id, idx) => {
+				rangeProcessed.push(`${id}-${idx}`);
+			});
 		expect(rangeProcessed).toEqual(['1-0', '2-1']);
 
 		controller.dispose();

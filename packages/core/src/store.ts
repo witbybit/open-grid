@@ -847,25 +847,25 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 						const minRow = Math.min(startIdx!, endIdx!);
 						const maxRow = Math.max(startIdx!, endIdx!);
 						let idx = 0;
-					for (let i = minRow; i <= maxRow; i++) {
-						const vr = this.getVisualRow(i);
-						if (vr?.kind === 'data') {
-							callback(vr.rowId, idx++);
+						for (let i = minRow; i <= maxRow; i++) {
+							const vr = this.getVisualRow(i);
+							if (vr?.kind === 'data') {
+								callback(vr.rowId, idx++);
+							}
 						}
-					}
-				},
+					},
 					getIds: () => {
 						if (!hasValidIndices) return [];
 						const minRow = Math.min(startIdx!, endIdx!);
 						const maxRow = Math.max(startIdx!, endIdx!);
 						const ids: string[] = [];
-					for (let i = minRow; i <= maxRow; i++) {
-						const vr = this.getVisualRow(i);
-						if (vr?.kind === 'data') {
-							ids.push(vr.rowId);
+						for (let i = minRow; i <= maxRow; i++) {
+							const vr = this.getVisualRow(i);
+							if (vr?.kind === 'data') {
+								ids.push(vr.rowId);
+							}
 						}
-					}
-					return ids;
+						return ids;
 					},
 					getData: () => {
 						if (!hasValidIndices) return [];
