@@ -654,6 +654,59 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should route arrow navigation only to the active nested detail grid', async () => {
+		const parentGrid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'p1', name: 'Parent A' },
+				{ id: 'p2', name: 'Parent B' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			initialState: {
+				rowModelConfig: {
+					type: 'client',
+					masterDetail: {
+						enabled: true,
+						expandedRowIds: { p1: true },
+						defaultDetailHeight: 120,
+					},
+				},
+			},
+		});
+		const childGrid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'c1', name: 'Child A' },
+				{ id: 'c2', name: 'Child B' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+		});
+
+		const { unmount } = render(
+			<OpenGrid
+				api={parentGrid.api}
+				enableNavigation
+				detailRowRenderer={() => <OpenGrid api={childGrid.api} enableNavigation />}
+			/>
+		);
+
+		act(() => {
+			parentGrid.api.selectCell({ rowId: 'p1', colField: 'name' });
+		});
+
+		const childCell = (await screen.findByText('Child A')).closest('.og-cell') as HTMLElement;
+		fireEvent.mouseDown(childCell);
+		fireEvent.click(childCell);
+		expect(childGrid.api.getState().selection.focus).toEqual({ rowId: 'c1', colField: 'name' });
+
+		fireEvent.keyDown(window, { key: 'ArrowDown' });
+
+		expect(parentGrid.api.getState().selection.focus).toEqual({ rowId: 'p1', colField: 'name' });
+		expect(childGrid.api.getState().selection.focus).toEqual({ rowId: 'c2', colField: 'name' });
+
+		unmount();
+		parentGrid.api.destroy();
+		childGrid.api.destroy();
+	});
+
 	it('should render custom group and detail row renderers inside PortalManager', () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [],

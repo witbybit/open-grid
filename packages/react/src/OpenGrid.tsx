@@ -355,17 +355,20 @@ function OpenGridInner<TRowData = unknown>({
 
 	useEffect(() => {
 		if (!enableNavigation) return;
+		const isWithinThisGrid = (target: EventTarget | null): boolean => {
+			const container = containerRef.current;
+			if (!container || !(target instanceof HTMLElement)) return false;
+			return target.closest('.og-grid-container') === container;
+		};
 		const handleGlobalKeyDown = (e: KeyboardEvent) => {
 			const activeEl = document.activeElement;
-			const container = containerRef.current;
-			const isInside = !!container && (container.contains(activeEl) || isGridActiveRef.current);
+			const isInside = isWithinThisGrid(activeEl) || isGridActiveRef.current;
 			if (isInside && navigation) {
 				navigation.handleKeyDown(e);
 			}
 		};
 		const handlePointerDown = (e: MouseEvent) => {
-			const container = containerRef.current;
-			isGridActiveRef.current = !!container && container.contains(e.target as Node);
+			isGridActiveRef.current = isWithinThisGrid(e.target);
 		};
 		window.addEventListener('keydown', handleGlobalKeyDown);
 		if (navigation) window.addEventListener('mouseup', navigation.handleMouseUp);
@@ -380,6 +383,7 @@ function OpenGridInner<TRowData = unknown>({
 	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
 		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
 		if (!cellEl) return null;
+		if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
 		const colField = cellEl.dataset.colField;
 		const rowEl = cellEl.closest('.og-row') as HTMLElement;
 		const rowIndex = Number(rowEl?.dataset.rowIndex);
