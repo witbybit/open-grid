@@ -472,7 +472,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			needsRefresh = true;
 		} else if (state.groupBy && state.groupBy.includes(colField)) {
 			needsRefresh = true;
-		} else if (state.columns.some((c) => c.field === colField && c.valueGetter)) {
+		} else if (this.store.engine.columns.hasValueGetter(colField)) {
 			needsRefresh = true;
 		} else {
 			// If grouping or custom row models (e.g. parentId tree) are active, any cell edit

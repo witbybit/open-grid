@@ -118,4 +118,82 @@ describe('PortalMountManager', () => {
 		expect(mountRow).toHaveBeenCalledTimes(1);
 		expect(mountRow.mock.calls[0][0].rowKey).toBe('detail:2');
 	});
+
+	it('defers cell portal mounts while scrolling and drops transient cells before flush', () => {
+		const manager = new PortalMountManager();
+		const mount = vi.fn();
+		const release = vi.fn();
+		const stableContainer = document.createElement('div');
+		const transientContainer = document.createElement('div');
+		manager.onMountCellContent = mount;
+		manager.onUnmountCellContent = release;
+
+		manager.setScrolling(true);
+		manager.mountCell({
+			cellKey: 'r1:name',
+			container: stableContainer,
+			value: 'A',
+			node: {} as never,
+			col: { field: 'name', header: 'Name' },
+			isEditing: false,
+			isLoading: false,
+		});
+		manager.mountCell({
+			cellKey: 'r2:name',
+			container: transientContainer,
+			value: 'B',
+			node: {} as never,
+			col: { field: 'name', header: 'Name' },
+			isEditing: false,
+			isLoading: false,
+		});
+		manager.releaseCell({ cellKey: 'r2:name', container: transientContainer });
+
+		expect(mount).not.toHaveBeenCalled();
+		expect(release).not.toHaveBeenCalled();
+		expect(manager.getScrollStats()).toMatchObject({
+			portalMountsDuringScroll: 2,
+			portalReleasesDuringScroll: 1,
+		});
+
+		manager.setScrolling(false);
+		manager.flushDeferred();
+
+		expect(release).not.toHaveBeenCalled();
+		expect(mount).toHaveBeenCalledTimes(1);
+		expect(mount.mock.calls[0][0].cellKey).toBe('r1:name');
+	});
+
+	it('suppresses synchronous cell portal flushes while scrolling', () => {
+		const manager = new PortalMountManager();
+		const release = vi.fn();
+		const flush = vi.fn();
+		const container = document.createElement('div');
+		manager.onUnmountCellContent = release;
+		manager.onFlushCellContent = flush;
+
+		manager.mountCell({
+			cellKey: 'r1:name',
+			container,
+			value: 'A',
+			node: {} as never,
+			col: { field: 'name', header: 'Name' },
+			isEditing: false,
+			isLoading: false,
+		});
+
+		manager.setScrolling(true);
+		manager.releaseCells([{ cellKey: 'r1:name', container }], true);
+
+		expect(release).not.toHaveBeenCalled();
+		expect(flush).not.toHaveBeenCalled();
+		expect(manager.getScrollStats().portalFlushesDuringScroll).toBe(0);
+
+		manager.setScrolling(false);
+		manager.flushDeferred(true);
+
+		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: false });
+		expect(flush).toHaveBeenCalledWith({ flushSync: true });
+		expect(manager.getScrollStats().portalFlushesDuringScroll).toBe(0);
+	});
 });

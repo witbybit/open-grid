@@ -76,6 +76,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private isScrolling = false;
 	private scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
 	private overlayDirtyDuringScroll = false;
+	private viewportDirtyAfterScroll = false;
 	private isScrollFrameActive = false;
 	private currentScrollCellsPatched = 0;
 	private currentScrollRowsRecycled = 0;
@@ -318,7 +319,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * out of this frame unless another explicit invalidation path requests them.
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number): void => {
-		this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
+		const changed = this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
+		if (!changed) return;
 		this.markScrolling();
 		this.scrollScheduler.requestFrame();
 	};
@@ -335,6 +337,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.isScrolling = false;
 		this.portalMountManager.setScrolling(false);
 		this.portalMountManager.flushDeferred(false);
+		if (this.viewportDirtyAfterScroll) {
+			this.viewportDirtyAfterScroll = false;
+			this.scheduleViewportPaint('scroll idle');
+		}
 		if (this.overlayDirtyDuringScroll) {
 			this.overlayDirtyDuringScroll = false;
 			this.paintOverlay();
@@ -415,26 +421,19 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('selection', invalidateOverlay));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));
 		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener<{ rowId: string; colField: string }>('cellInvalidated', (event) => {
-				this.engine.invalidation.invalidateCell(event.payload.rowId, event.payload.colField, 'cell');
-				this.engine.invalidation.invalidateRow(event.payload.rowId, 'cell');
+			this.engine.eventBus.addEventListener('cellInvalidated', () => {
 				this.scheduler.requestFlush('cell');
 			})
 		);
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener<{ colField: string }>('columnResized', (event) => {
 				this.geometryController.invalidateColumns([event.payload.colField]);
-				this.engine.invalidation.invalidateGeometry('column resize');
-				this.engine.invalidation.invalidateColumn(event.payload.colField, 'column resize');
-				this.engine.invalidation.invalidateHeaders('column resize');
 				this.scheduler.requestFlush('column resize');
 			})
 		);
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener<{ rowId: string }>('rowResized', (event) => {
 				this.geometryController.invalidateRows([event.payload.rowId]);
-				this.engine.invalidation.invalidateGeometry('row resize');
-				this.engine.invalidation.invalidateRow(event.payload.rowId, 'row resize');
 				this.scheduler.requestFlush('row resize');
 			})
 		);
@@ -740,18 +739,22 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
 				this.releaseAllCellsInRow(pooledRow);
 				const rowKey = visualRow.id;
+				let shouldMountRowPortal = false;
 				if (pooledRow.element.dataset.rowKey !== rowKey) {
 					if (pooledRow.element.dataset.rowKey) {
 						this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 					}
 					pooledRow.element.textContent = '';
 					pooledRow.element.dataset.rowKey = rowKey;
+					shouldMountRowPortal = true;
 				}
-				this.portalMountManager.mountRow({
-					rowKey,
-					container: pooledRow.element,
-					visualRow,
-				});
+				if (shouldMountRowPortal) {
+					this.portalMountManager.mountRow({
+						rowKey,
+						container: pooledRow.element,
+						visualRow,
+					});
+				}
 				return;
 			}
 
@@ -860,7 +863,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (isLoadingRow) {
 			rowClassName += ' og-row-loading';
 		}
-		if (state.styleSlots?.rowClass && node.data) {
+		const deferCustomRowStyling = this.isScrollFrameActive;
+		if (deferCustomRowStyling && state.styleSlots?.rowClass) {
+			this.viewportDirtyAfterScroll = true;
+		}
+		if (!deferCustomRowStyling && state.styleSlots?.rowClass && node.data) {
 			try {
 				const customRowClass = state.styleSlots.rowClass(node.data, {
 					row: node.data,
@@ -907,7 +914,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			rowClassName += ' og-row-focused';
 		}
 
-		if (visualRow.kind === 'group' && state.styleSlots?.groupRowClass) {
+		const deferCustomRowStyling = this.isScrollFrameActive;
+		if (
+			deferCustomRowStyling &&
+			((visualRow.kind === 'group' && state.styleSlots?.groupRowClass) || (visualRow.kind === 'detail' && state.styleSlots?.detailRowClass))
+		) {
+			this.viewportDirtyAfterScroll = true;
+		}
+
+		if (!deferCustomRowStyling && visualRow.kind === 'group' && state.styleSlots?.groupRowClass) {
 			try {
 				const customClass = state.styleSlots.groupRowClass(visualRow);
 				if (customClass) {
@@ -916,7 +931,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			} catch (e) {
 				console.error('RenderEngine: Error in groupRowClass styleSlot', e);
 			}
-		} else if (visualRow.kind === 'detail' && state.styleSlots?.detailRowClass) {
+		} else if (!deferCustomRowStyling && visualRow.kind === 'detail' && state.styleSlots?.detailRowClass) {
 			try {
 				const customClass = state.styleSlots.detailRowClass(visualRow);
 				if (customClass) {
@@ -1008,6 +1023,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			const state = this.engine.stateManager.getState();
 			const access = this.engine.cellAccess.get(node.id, rowIndex, node, node.data, c, col);
+			const deferCustomCellStyling = this.isScrollFrameActive;
+			if (deferCustomCellStyling && (state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender)) {
+				this.viewportDirtyAfterScroll = true;
+			}
 
 			// Handle classes including pinning, focus, and loading
 			let cellClassName = 'og-cell';
@@ -1040,7 +1059,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			if (access.isLoading) {
 				cellClassName += ' og-cell-loading';
 			}
-			if (state.styleSlots?.cellClass && node.data) {
+			if (!deferCustomCellStyling && state.styleSlots?.cellClass && node.data) {
 				try {
 					const customCellClass = state.styleSlots.cellClass(col, node.data, {
 						row: node.data,
@@ -1067,7 +1086,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				}
 			}
 			cell.className = cellClassName;
-			if (state.styleSlots?.beforeCellRender) {
+			if (!deferCustomCellStyling && state.styleSlots?.beforeCellRender) {
 				try {
 					state.styleSlots.beforeCellRender(access, cell);
 				} catch (e) {
@@ -1085,6 +1104,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				// Keep existing portal content mounted while the user is moving quickly.
 				// Churning portals during scroll costs more than temporarily stale custom content.
 			} else if ((col.cellRenderer || access.isEditing) && !access.isLoading && isFastScrolling) {
+				if (cell.dataset.cellKey !== cellKey) {
+					this.viewportDirtyAfterScroll = true;
+				}
 				const nextValText = cellValue != null ? String(cellValue) : '';
 				if (cell.textContent !== nextValText) {
 					cell.textContent = nextValText;
@@ -1115,7 +1137,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					delete cell.dataset.cellKey;
 				}
 				if (access.isLoading) {
-					if (!cell.querySelector('.og-cell-loading-skeleton')) {
+					if (this.isScrollFrameActive) {
+						this.viewportDirtyAfterScroll = true;
+					} else if (!cell.querySelector('.og-cell-loading-skeleton')) {
 						cell.textContent = '';
 						const skeleton = document.createElement('div');
 						skeleton.className = 'og-cell-loading-skeleton';
@@ -1123,9 +1147,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					}
 				} else {
 					// Clean up skeleton if transitioning from loading to loaded state
-					const skeletonEl = cell.querySelector('.og-cell-loading-skeleton');
-					if (skeletonEl) {
-						skeletonEl.remove();
+					if (this.isScrollFrameActive) {
+						this.viewportDirtyAfterScroll = true;
+					} else {
+						const skeletonEl = cell.querySelector('.og-cell-loading-skeleton');
+						if (skeletonEl) {
+							skeletonEl.remove();
+						}
 					}
 					// Fast path text mutation
 					const nextValText = cellValue != null ? String(cellValue) : '';
@@ -1134,7 +1162,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					}
 				}
 			}
-			if (state.styleSlots?.afterCellRender) {
+			if (!deferCustomCellStyling && state.styleSlots?.afterCellRender) {
 				try {
 					state.styleSlots.afterCellRender(access, cell);
 				} catch (e) {
@@ -1231,7 +1259,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			cell.dataset.colField = col.field;
 			cell.dataset.rowIndex = String(rowIndex);
 			cell.className = 'og-cell og-cell-loading';
-			if (!cell.querySelector('.og-cell-loading-skeleton')) {
+			if (this.isScrollFrameActive) {
+				this.viewportDirtyAfterScroll = true;
+			} else if (!cell.querySelector('.og-cell-loading-skeleton')) {
 				cell.textContent = '';
 				const skeleton = document.createElement('div');
 				skeleton.className = 'og-cell-loading-skeleton';

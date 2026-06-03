@@ -21,7 +21,9 @@ export class PortalMountManager<TRowData = unknown> {
 	private mountedMenus = new Map<string, HTMLElement | undefined>();
 	private cellReleaseTransactionDepth = 0;
 	private pendingCellReleases = new Map<string, GridCellContentUnmount>();
+	private deferredCellMounts = new Map<string, GridCellContentMount<TRowData>>();
 	private deferredCellReleases = new Map<string, GridCellContentUnmount>();
+	private deferredNewCellMounts = new Set<string>();
 	private deferredRowMounts = new Map<string, GridRowContentMount<TRowData>>();
 	private deferredRowReleases = new Map<string, GridRowContentUnmount>();
 	private scrolling = false;
@@ -32,9 +34,16 @@ export class PortalMountManager<TRowData = unknown> {
 	};
 
 	public mountCell(mount: GridCellContentMount<TRowData>): void {
+		const wasMounted = this.mountedCells.has(mount.cellKey);
 		this.mountedCells.set(mount.cellKey, mount.container);
 		if (this.scrolling) {
 			this.stats.mountsDuringScroll++;
+			this.deferredCellReleases.delete(mount.cellKey);
+			this.deferredCellMounts.set(mount.cellKey, mount);
+			if (!wasMounted) {
+				this.deferredNewCellMounts.add(mount.cellKey);
+			}
+			return;
 		}
 		this.onMountCellContent?.(mount);
 	}
@@ -45,6 +54,9 @@ export class PortalMountManager<TRowData = unknown> {
 		this.mountedCells.delete(unmount.cellKey);
 		if (this.scrolling) {
 			this.stats.releasesDuringScroll++;
+			const canceledDeferredMount = this.deferredCellMounts.delete(unmount.cellKey);
+			const wasNewDeferredMount = this.deferredNewCellMounts.delete(unmount.cellKey);
+			if (canceledDeferredMount && wasNewDeferredMount) return;
 			this.deferredCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
 			return;
 		}
@@ -63,6 +75,9 @@ export class PortalMountManager<TRowData = unknown> {
 			this.mountedCells.delete(unmount.cellKey);
 			if (this.scrolling) {
 				this.stats.releasesDuringScroll++;
+				const canceledDeferredMount = this.deferredCellMounts.delete(unmount.cellKey);
+				const wasNewDeferredMount = this.deferredNewCellMounts.delete(unmount.cellKey);
+				if (canceledDeferredMount && wasNewDeferredMount) continue;
 				this.deferredCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
 				continue;
 			}
@@ -70,7 +85,6 @@ export class PortalMountManager<TRowData = unknown> {
 		}
 		if (flushSync) {
 			if (this.scrolling) {
-				this.stats.flushesDuringScroll++;
 				return;
 			}
 			this.onFlushCellContent?.({ flushSync: true });
@@ -89,9 +103,6 @@ export class PortalMountManager<TRowData = unknown> {
 				this.deferredCellReleases.set(cellKey, { ...unmount, flushSync: false });
 			}
 			this.pendingCellReleases.clear();
-			if (flushSync) {
-				this.stats.flushesDuringScroll++;
-			}
 			return;
 		}
 		for (const unmount of this.pendingCellReleases.values()) {
@@ -116,13 +127,24 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	public flushDeferred(flushSync = false): void {
-		if (this.deferredCellReleases.size === 0 && this.deferredRowReleases.size === 0 && this.deferredRowMounts.size === 0) return;
+		if (
+			this.deferredCellReleases.size === 0 &&
+			this.deferredCellMounts.size === 0 &&
+			this.deferredRowReleases.size === 0 &&
+			this.deferredRowMounts.size === 0
+		)
+			return;
 		const wasScrolling = this.scrolling;
 		this.scrolling = false;
 		for (const unmount of this.deferredCellReleases.values()) {
 			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
 		}
 		this.deferredCellReleases.clear();
+		for (const mount of this.deferredCellMounts.values()) {
+			this.onMountCellContent?.(mount);
+		}
+		this.deferredCellMounts.clear();
+		this.deferredNewCellMounts.clear();
 		for (const unmount of this.deferredRowReleases.values()) {
 			this.onUnmountRowContent?.(unmount);
 		}
@@ -175,7 +197,9 @@ export class PortalMountManager<TRowData = unknown> {
 
 	public releaseAll(): void {
 		this.scrolling = false;
+		this.deferredCellMounts.clear();
 		this.deferredCellReleases.clear();
+		this.deferredNewCellMounts.clear();
 		this.deferredRowMounts.clear();
 		this.deferredRowReleases.clear();
 		for (const [cellKey, container] of this.mountedCells) {

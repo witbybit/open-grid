@@ -69,6 +69,10 @@ export class ColumnModel<TRowData = unknown> {
 		return this.columnMap.get(colField);
 	}
 
+	public hasValueGetter(colField: string): boolean {
+		return !!this.columnMap.get(colField)?.valueGetter;
+	}
+
 	public getValueGetterDependents(changedField: string): string[] {
 		return this.valueGetterDependents.get(changedField) ?? [];
 	}
