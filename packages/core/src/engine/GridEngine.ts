@@ -612,10 +612,8 @@ export class GridEngine<TRowData = unknown> {
 			this.data.clearValueGetterCache();
 		}
 
-		if (
-			this.rowModel &&
-			(updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('dataVersion') || updatedSet.has('loading'))
-		) {
+		const rowCountChanged = this.rowModel ? this.rowModel.getVisualRowCount() !== this.geometry.getRowCount() : false;
+		if (this.rowModel && (updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('loading') || rowCountChanged)) {
 			this.geometry.updateRows(
 				this.getRowHeightsList(this.rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight

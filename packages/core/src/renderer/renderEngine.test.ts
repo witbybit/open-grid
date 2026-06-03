@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type RowModel, type VisualRow, type RowModelRefreshResult } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
+import { ServerRowModelController } from '../serverRowModel.js';
 
 describe('RenderEngine', () => {
 	afterEach(() => {
@@ -434,6 +435,194 @@ describe('RenderEngine', () => {
 		expect(afterRow.fullPaints - afterColumn.fullPaints).toBe(0);
 		expect(afterRow.geometryRecomputes - afterColumn.geometryRecomputes).toBe(1);
 		expect(afterRow.rowPaints - afterColumn.rowPaints).toBe(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('does not full paint or recompute geometry for server block data updates during viewport recycling', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ServerRowModelController(store, {
+			columns: store.getState().columns,
+			blockSize: 50,
+			datasource: {
+				getRows: async ({ startRow, endRow }) => ({
+					rows: Array.from({ length: endRow - startRow }, (_, index) => ({
+						id: `row-${startRow + index}`,
+						name: `Row ${startRow + index}`,
+					})),
+					totalCount: 100000,
+				}),
+			},
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		await vi.waitFor(() => expect(store.getVisualRowCount()).toBe(100000));
+		renderer.fullPaint();
+		const before = renderer.getRenderStats();
+
+		store.setState((state) => ({ dataVersion: state.dataVersion + 1 }));
+		await Promise.resolve();
+		await Promise.resolve();
+		const afterData = renderer.getRenderStats();
+		expect(afterData.fullPaints - before.fullPaints).toBe(0);
+		expect(afterData.geometryRecomputes - before.geometryRecomputes).toBe(0);
+		expect(afterData.viewportPaints - before.viewportPaints).toBe(1);
+
+		store.setState({ visibleRowRange: { startIdx: 50, endIdx: 75 } });
+		await Promise.resolve();
+		await Promise.resolve();
+		const afterViewport = renderer.getRenderStats();
+		expect(afterViewport.fullPaints - afterData.fullPaints).toBe(0);
+		expect(afterViewport.viewportPaints - afterData.viewportPaints).toBe(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('batches portal unmount flushes when vertically recycling rows with custom renderers', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [
+			{ field: 'a', header: 'A', width: 120, cellRenderer: () => null },
+			{ field: 'b', header: 'B', width: 120, cellRenderer: () => null },
+			{ field: 'c', header: 'C', width: 120, cellRenderer: () => null },
+		];
+		const store = new GridStore<{ id: string; a: string; b: string; c: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 120 }, (_, index) => ({
+				id: `row-${index}`,
+				a: `A${index}`,
+				b: `B${index}`,
+				c: `C${index}`,
+			})),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		const flushPortalContent = vi.fn();
+		renderer.portalMountManager.onMountCellContent = vi.fn();
+		renderer.portalMountManager.onUnmountCellContent = vi.fn();
+		renderer.portalMountManager.onFlushCellContent = flushPortalContent;
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 2400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const unmountCount = (renderer.portalMountManager.onUnmountCellContent as ReturnType<typeof vi.fn>).mock.calls.length;
+		expect(unmountCount).toBeGreaterThan(3);
+		expect(flushPortalContent.mock.calls.length).toBeLessThan(unmountCount / columns.length + 2);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('batches portal unmount flushes when horizontally recycling many custom-renderer columns', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = Array.from({ length: 1000 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+			cellRenderer: () => null,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 12 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) {
+					row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				}
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 520,
+			bottom: 180,
+			width: 520,
+			height: 180,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		const flushPortalContent = vi.fn();
+		renderer.portalMountManager.onMountCellContent = vi.fn();
+		renderer.portalMountManager.onUnmountCellContent = vi.fn();
+		renderer.portalMountManager.onFlushCellContent = flushPortalContent;
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollLeft = 60000;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const unmountCount = (renderer.portalMountManager.onUnmountCellContent as ReturnType<typeof vi.fn>).mock.calls.length;
+		expect(unmountCount).toBeGreaterThan(10);
+		expect(flushPortalContent.mock.calls.length).toBeLessThan(unmountCount / 2);
 
 		renderer.unmount();
 		controller.dispose();

@@ -13,6 +13,7 @@ import type { GridApi } from './store.js';
 export interface GridCellContentAdapter<TRowData = unknown> {
 	mountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
 	unmountCellContent?: (unmount: GridCellContentUnmount) => void;
+	flushCellContent?: (flush: { flushSync?: boolean }) => void;
 }
 
 export interface GridRowContentAdapter<TRowData = unknown> {
@@ -50,6 +51,7 @@ export function mountGridHost<TRowData>(api: GridApi<TRowData>, container: HTMLE
 
 	renderEngine.onMountCellContent = options.cellContent?.mountCellContent;
 	renderEngine.onUnmountCellContent = options.cellContent?.unmountCellContent;
+	renderEngine.portalMountManager.onFlushCellContent = options.cellContent?.flushCellContent;
 	renderEngine.onMountRowContent = options.rowContent?.mountRowContent;
 	renderEngine.onUnmountRowContent = options.rowContent?.unmountRowContent;
 	renderEngine.onMountHeaderMenu = options.headerMenu?.mountHeaderMenu;

@@ -16,6 +16,10 @@ export interface GridCellContentUnmount {
 	flushSync?: boolean;
 }
 
+export interface GridCellContentFlush {
+	flushSync?: boolean;
+}
+
 export interface GridRowContentMount<TRowData = unknown> {
 	rowKey: string;
 	container: HTMLElement;

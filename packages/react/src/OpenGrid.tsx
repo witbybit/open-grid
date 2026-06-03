@@ -111,6 +111,17 @@ function OpenGridInner<TRowData = unknown>({
 		[schedulePortalFlush]
 	);
 
+	const flushPortalContent = useCallback((sync = false) => {
+		portalFlushScheduledRef.current = false;
+		if (sync) {
+			flushSync(() => {
+				setPortalVersion((version) => version + 1);
+			});
+			return;
+		}
+		setPortalVersion((version) => version + 1);
+	}, []);
+
 	const mountPortal = useCallback(
 		(
 			cellKey: string,
@@ -249,6 +260,9 @@ function OpenGridInner<TRowData = unknown>({
 				unmountCellContent: (unmount) => {
 					unmountPortal(unmount.cellKey, unmount.container, unmount.flushSync);
 				},
+				flushCellContent: (flush) => {
+					flushPortalContent(!!flush.flushSync);
+				},
 			},
 			rowContent: {
 				mountRowContent: (mount) => {
@@ -277,7 +291,7 @@ function OpenGridInner<TRowData = unknown>({
 			menuPortalsRef.current.clear();
 			setPortalVersion((version) => version + 1);
 		};
-	}, [api, mountPortal, unmountPortal, mountRowPortal, unmountRowPortal, mountMenuPortal, unmountMenuPortal]);
+	}, [api, mountPortal, unmountPortal, flushPortalContent, mountRowPortal, unmountRowPortal, mountMenuPortal, unmountMenuPortal]);
 
 	// Context Menu plugin controller
 	const [contextMenu, setContextMenu] = useState<GridContextMenuHandle<TRowData> | null>(null);

@@ -10,6 +10,7 @@ import type {
 export class PortalMountManager<TRowData = unknown> {
 	public onMountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
 	public onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
+	public onFlushCellContent?: (flush: { flushSync?: boolean }) => void;
 	public onMountRowContent?: (mount: GridRowContentMount<TRowData>) => void;
 	public onUnmountRowContent?: (unmount: GridRowContentUnmount) => void;
 	public onMountHeaderMenu?: (mount: GridHeaderMenuMount<TRowData>) => void;
@@ -18,6 +19,8 @@ export class PortalMountManager<TRowData = unknown> {
 	private mountedCells = new Map<string, HTMLElement | undefined>();
 	private mountedRows = new Map<string, HTMLElement | undefined>();
 	private mountedMenus = new Map<string, HTMLElement | undefined>();
+	private cellReleaseTransactionDepth = 0;
+	private pendingCellReleases = new Map<string, GridCellContentUnmount>();
 
 	public mountCell(mount: GridCellContentMount<TRowData>): void {
 		this.mountedCells.set(mount.cellKey, mount.container);
@@ -28,7 +31,47 @@ export class PortalMountManager<TRowData = unknown> {
 		const existingContainer = this.mountedCells.get(unmount.cellKey);
 		if (unmount.container && existingContainer && existingContainer !== unmount.container) return;
 		this.mountedCells.delete(unmount.cellKey);
+		if (this.cellReleaseTransactionDepth > 0) {
+			this.pendingCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
+			return;
+		}
 		this.onUnmountCellContent?.(unmount);
+	}
+
+	public releaseCells(unmounts: GridCellContentUnmount[], flushSync = false): void {
+		if (unmounts.length === 0) return;
+		for (const unmount of unmounts) {
+			const existingContainer = this.mountedCells.get(unmount.cellKey);
+			if (unmount.container && existingContainer && existingContainer !== unmount.container) continue;
+			this.mountedCells.delete(unmount.cellKey);
+			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
+		}
+		if (flushSync) {
+			this.onFlushCellContent?.({ flushSync: true });
+		}
+	}
+
+	public beginCellReleaseTransaction(): void {
+		this.cellReleaseTransactionDepth++;
+	}
+
+	public flushCellReleaseTransaction(flushSync = true): void {
+		if (this.pendingCellReleases.size === 0) return;
+		for (const unmount of this.pendingCellReleases.values()) {
+			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
+		}
+		this.pendingCellReleases.clear();
+		if (flushSync) {
+			this.onFlushCellContent?.({ flushSync: true });
+		}
+	}
+
+	public endCellReleaseTransaction(): void {
+		if (this.cellReleaseTransactionDepth === 0) return;
+		this.cellReleaseTransactionDepth--;
+		if (this.cellReleaseTransactionDepth === 0) {
+			this.flushCellReleaseTransaction(true);
+		}
 	}
 
 	public mountRow(mount: GridRowContentMount<TRowData>): void {

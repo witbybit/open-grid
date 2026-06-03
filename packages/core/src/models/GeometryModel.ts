@@ -112,6 +112,10 @@ export class GeometryModel {
 		return this.rowTops[lastIdx] + this.rowHeights[lastIdx];
 	}
 
+	public getRowCount(): number {
+		return this.rowCount;
+	}
+
 	public getColLeft(colIdx: number, defaultColWidth: number): number {
 		if (colIdx >= 0 && colIdx < this.colCount) {
 			return this.colLefts[colIdx];
@@ -130,6 +134,10 @@ export class GeometryModel {
 		if (this.colCount === 0) return 0;
 		const lastIdx = this.colCount - 1;
 		return this.colLefts[lastIdx] + this.colWidths[lastIdx];
+	}
+
+	public getColumnCount(): number {
+		return this.colCount;
 	}
 
 	/**

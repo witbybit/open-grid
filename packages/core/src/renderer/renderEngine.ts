@@ -149,7 +149,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			syncOverlay: (frame) => this.overlayRenderer.sync(frame),
 			syncRows: (frame) => this.rowRenderer.sync(frame),
 			syncCells: (frame) => this.cellRenderer.sync(frame),
-			fullPaint: () => this.fullPaint(),
+			fullPaint: () => this.fullPaintInternal(),
 		});
 		this.columnInteractions = new ColumnInteractionController<TRowData>({
 			engine,
@@ -311,6 +311,21 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.engine.invalidation.invalidateOverlay('overlay');
 			this.scheduler.requestFlush('overlay');
 		};
+		const invalidateViewport = () => {
+			this.engine.invalidation.invalidateViewport('viewport');
+			this.scheduler.requestFlush('viewport');
+		};
+		const invalidateData = () => {
+			this.engine.invalidation.invalidateViewport('data');
+			this.scheduler.requestFlush('data');
+		};
+		const invalidateDefaultColumnGeometry = () => {
+			this.geometryController.invalidateAll();
+			this.engine.invalidation.invalidateGeometry('columns');
+			this.engine.invalidation.invalidateViewport('columns');
+			this.engine.invalidation.invalidateHeaders('columns');
+			this.scheduler.requestFlush('columns');
+		};
 		const invalidateGeometryFull = () => {
 			this.geometryController.invalidateAll();
 			this.engine.invalidation.invalidateGeometry('geometry');
@@ -318,9 +333,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.scheduler.requestFlush('geometry');
 		};
 
-		for (const key of ['defaultRowHeight', 'defaultColWidth', 'dataVersion', 'loading', 'visibleRowRange', 'visibleColRange']) {
-			this.unsubscribers.push(this.engine.stateManager.subscribeToKey(key, invalidateFull));
-		}
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('defaultRowHeight', invalidateGeometryFull));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('defaultColWidth', invalidateDefaultColumnGeometry));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('dataVersion', invalidateData));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('loading', invalidateViewport));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleRowRange', invalidateViewport));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleColRange', invalidateViewport));
 
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('columns', invalidateFull));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('columnWidths', invalidateGeometryFull));
@@ -368,7 +386,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private flushPaint(): void {
-		this.orchestrator.flush(this.engine.invalidation.consume());
+		this.portalMountManager.beginCellReleaseTransaction();
+		try {
+			this.orchestrator.flush(this.engine.invalidation.consume());
+		} finally {
+			this.portalMountManager.endCellReleaseTransaction();
+		}
 	}
 
 	public getRenderStats(): RenderStats {
@@ -383,6 +406,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Completely rebuilds grid structures, spacers, and forces recycling refresh.
 	 */
 	public fullPaint(): void {
+		this.portalMountManager.beginCellReleaseTransaction();
+		try {
+			this.fullPaintInternal();
+		} finally {
+			this.portalMountManager.endCellReleaseTransaction();
+		}
+	}
+
+	private fullPaintInternal(): void {
 		this.syncViewportScrollFromDom();
 
 		const rowModel = this.engine.getRowModel();
@@ -523,9 +555,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
 					delete pooledRow.element.dataset.rowKey;
 				}
-				for (const c of pooledRow.cells.keys()) {
-					this.releaseCell(pooledRow, c);
-				}
+				this.releaseAllCellsInRow(pooledRow);
 				pooledRow.boundRowId = visualRow.id;
 			}
 
@@ -572,9 +602,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			if (visualRow.kind !== 'data') {
 				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
-				for (const c of pooledRow.cells.keys()) {
-					this.releaseCell(pooledRow, c);
-				}
+				this.releaseAllCellsInRow(pooledRow);
 				const rowKey = visualRow.id;
 				if (pooledRow.element.dataset.rowKey !== rowKey) {
 					if (pooledRow.element.dataset.rowKey) {
@@ -786,10 +814,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// 1. Release cells out-of-column bounds
 		if (releaseOutOfRange) {
+			const colsToRelease: number[] = [];
 			for (const [c, cell] of pooledRow.cells.entries()) {
 				if (cell) {
 					if (c >= colCount) {
-						this.releaseCell(pooledRow, c);
+						colsToRelease.push(c);
 						continue;
 					}
 
@@ -798,10 +827,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					const isScrollable = c >= startCol && c <= endCol;
 
 					if (!isPinnedLeft && !isPinnedRight && !isScrollable) {
-						this.releaseCell(pooledRow, c);
+						colsToRelease.push(c);
 					}
 				}
 			}
+			this.releaseCellsInColumns(pooledRow, colsToRelease);
 		}
 
 		// 2. Bind cells in visible range
@@ -915,15 +945,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously or scrolling extremely fast)
 			const isFastScrolling = this.engine.viewport.isScrollingFast;
-			if ((col.cellRenderer || access.isEditing) && !access.isLoading && !isFastScrolling) {
-				const previousPortalHost = this.getCellPortalHost(cell);
+			if (isFastScrolling && cell.dataset.cellKey === cellKey) {
+				// Keep existing portal content mounted while the user is moving quickly.
+				// Churning portals during scroll costs more than temporarily stale custom content.
+			} else if ((col.cellRenderer || access.isEditing) && !access.isLoading && !isFastScrolling) {
 				if (cell.dataset.cellKey !== cellKey) {
 					if (cell.dataset.cellKey) {
-						this.portalMountManager.releaseCell({
-							cellKey: cell.dataset.cellKey,
-							container: previousPortalHost ?? cell,
-							flushSync: true,
-						});
+						this.releaseCellPortal(cell);
+						this.portalMountManager.flushCellReleaseTransaction(true);
 					}
 					// Set content empty so custom React portal doesn't clash with stale text
 					cell.textContent = '';
@@ -941,11 +970,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				});
 			} else {
 				if (cell.dataset.cellKey) {
-					this.portalMountManager.releaseCell({
-						cellKey: cell.dataset.cellKey,
-						container: this.getCellPortalHost(cell) ?? cell,
-						flushSync: true,
-					});
+					this.releaseCellPortal(cell);
 					delete cell.dataset.cellKey;
 				}
 				if (access.isLoading) {
@@ -1011,9 +1036,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const colCount = columns.length;
 
 		if (releaseOutOfRange) {
+			const colsToRelease: number[] = [];
 			for (const [c] of pooledRow.cells.entries()) {
 				if (c >= colCount) {
-					this.releaseCell(pooledRow, c);
+					colsToRelease.push(c);
 					continue;
 				}
 
@@ -1021,9 +1047,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				const isPinnedRight = c >= colCount - pinRightColumns;
 				const isScrollable = c >= startCol && c <= endCol;
 				if (!isPinnedLeft && !isPinnedRight && !isScrollable) {
-					this.releaseCell(pooledRow, c);
+					colsToRelease.push(c);
 				}
 			}
+			this.releaseCellsInColumns(pooledRow, colsToRelease);
 		}
 
 		const renderCell = (c: number) => {
@@ -1053,11 +1080,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 
 			if (cell.dataset.cellKey) {
-				this.portalMountManager.releaseCell({
-					cellKey: cell.dataset.cellKey,
-					container: this.getCellPortalHost(cell) ?? cell,
-					flushSync: true,
-				});
+				this.releaseCellPortal(cell);
 				delete cell.dataset.cellKey;
 			}
 
@@ -1128,16 +1151,16 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Release and return a cell element to the DOMPool.
 	 */
 	private releaseCell(pooledRow: PooledRow, colIdx: number): void {
+		this.releaseCellInternal(pooledRow, colIdx, false);
+	}
+
+	private releaseCellInternal(pooledRow: PooledRow, colIdx: number, skipPortalRelease: boolean): void {
 		const cell = pooledRow.cells.get(colIdx);
 		if (cell) {
-			if (cell.dataset.cellKey) {
-				this.portalMountManager.releaseCell({
-					cellKey: cell.dataset.cellKey,
-					container: this.getCellPortalHost(cell) ?? cell,
-					flushSync: true,
-				});
+			if (!skipPortalRelease && cell.dataset.cellKey) {
+				this.releaseCellPortal(cell);
 				delete cell.dataset.cellKey;
-			} else {
+			} else if (!skipPortalRelease) {
 				// Trigger unmount hook if a framework adapter owns this cell's content.
 				const col = this.engine.stateManager.getState().columns[colIdx];
 				if (col) {
@@ -1147,6 +1170,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 
 			// Detach from ANY parent (center, left pinned, or right pinned row element)
+			this.portalMountManager.flushCellReleaseTransaction(true);
 			if (cell.parentNode) {
 				try {
 					cell.remove();
@@ -1159,6 +1183,35 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
+	private releaseAllCellsInRow(pooledRow: PooledRow): void {
+		this.releaseCellsInColumns(pooledRow, Array.from(pooledRow.cells.keys()));
+	}
+
+	private releaseCellsInColumns(pooledRow: PooledRow, colIdxs: number[]): void {
+		if (colIdxs.length === 0) return;
+		for (const colIdx of colIdxs) {
+			const cell = pooledRow.cells.get(colIdx);
+			if (cell?.dataset.cellKey) {
+				this.releaseCellPortal(cell);
+				delete cell.dataset.cellKey;
+			}
+		}
+		this.portalMountManager.flushCellReleaseTransaction(true);
+
+		for (const colIdx of colIdxs) {
+			this.releaseCellInternal(pooledRow, colIdx, true);
+		}
+	}
+
+	private releaseCellPortal(cell: HTMLDivElement): void {
+		if (!cell.dataset.cellKey) return;
+		this.portalMountManager.releaseCell({
+			cellKey: cell.dataset.cellKey,
+			container: this.getCellPortalHost(cell) ?? cell,
+			flushSync: true,
+		});
+	}
+
 	/**
 	 * Release and return an entire row and all its cells to the pools.
 	 */
@@ -1169,10 +1222,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		// Release all cell DOMs inside row
-		for (const c of pooledRow.cells.keys()) {
-			this.releaseCell(pooledRow, c);
-		}
-		pooledRow.cells.clear();
+		this.releaseAllCellsInRow(pooledRow);
 
 		// Detach row elements and recycle
 		if (pooledRow.element.parentNode) pooledRow.element.remove();
