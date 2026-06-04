@@ -1,6 +1,6 @@
 {
 	"name": "@eregister/open-grid-react",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "React bindings for the headless high-performance spreadsheet and grid engine core",
 	"type": "module",
 	"main": "./dist/index.js",
