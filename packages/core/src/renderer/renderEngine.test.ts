@@ -824,6 +824,10 @@ describe('RenderEngine', () => {
 		expect(stats.fullPaints).toBe(0);
 		expect(stats.headerPaints).toBe(0);
 		expect(stats.headerPaintsDuringScroll).toBe(0);
+		const visibleHeaderLabels = Array.from(container.querySelectorAll<HTMLDivElement>('.og-header-cell'))
+			.map((cell) => cell.textContent ?? '')
+			.filter(Boolean);
+		expect(visibleHeaderLabels).toContain('Col 30');
 
 		renderer.unmount();
 		controller.dispose();

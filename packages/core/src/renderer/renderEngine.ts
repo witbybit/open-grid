@@ -78,6 +78,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private overlayDirtyDuringScroll = false;
 	private viewportDirtyAfterScroll = false;
 	private isScrollFrameActive = false;
+	private lastHeaderScrollLeft = 0;
 	private currentScrollCellsPatched = 0;
 	private currentScrollRowsRecycled = 0;
 	private renderStats = {
@@ -363,6 +364,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		try {
 			this.syncViewportScrollFromDom();
 			this.recycleViewport();
+			if (this.engine.viewport.scrollLeft !== this.lastHeaderScrollLeft) {
+				this.syncVisibleHeaders();
+			}
 			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
 			this.overlayRenderer.syncPosition();
 		} finally {
@@ -962,6 +966,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const colCount = columns.length;
+		const state = this.engine.stateManager.getState();
 
 		// 1. Release cells out-of-column bounds
 		if (releaseOutOfRange) {
@@ -1016,12 +1021,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				targetRowEl.appendChild(cell);
 			}
 
-			cell.style.transform = `translate3d(${cellLeft}px, 0, 0)`;
-			cell.style.width = `${cellWidth}px`;
-			cell.dataset.colField = col.field;
-			cell.dataset.rowIndex = String(rowIndex);
+			const nextTransform = `translate3d(${cellLeft}px, 0, 0)`;
+			if (cell.style.transform !== nextTransform) cell.style.transform = nextTransform;
+			const nextWidth = `${cellWidth}px`;
+			if (cell.style.width !== nextWidth) cell.style.width = nextWidth;
+			if (cell.dataset.colField !== col.field) cell.dataset.colField = col.field;
+			const rowIndexText = String(rowIndex);
+			if (cell.dataset.rowIndex !== rowIndexText) cell.dataset.rowIndex = rowIndexText;
 
-			const state = this.engine.stateManager.getState();
 			const access = this.engine.cellAccess.get(node.id, rowIndex, node, node.data, c, col);
 			const deferCustomCellStyling = this.isScrollFrameActive;
 			if (deferCustomCellStyling && (state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender)) {
@@ -1051,7 +1058,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					cell.focus();
 				}
 			} else {
-				cell.removeAttribute('tabindex');
+				if (cell.hasAttribute('tabindex')) cell.removeAttribute('tabindex');
 			}
 			if (access.isSelected) {
 				cellClassName += ' og-cell-selected';
@@ -1085,7 +1092,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 					console.error('RenderEngine: Error in cellClass styleSlot', e);
 				}
 			}
-			cell.className = cellClassName;
+			if (cell.className !== cellClassName) cell.className = cellClassName;
 			if (!deferCustomCellStyling && state.styleSlots?.beforeCellRender) {
 				try {
 					state.styleSlots.beforeCellRender(access, cell);
@@ -1434,17 +1441,23 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 */
 	private paintHeaders(): void {
 		if (this.isScrolling) this.renderStats.headerPaintsDuringScroll++;
+		this.syncVisibleHeaders();
+	}
+
+	private syncVisibleHeaders(): void {
 		if (!this.headerLayer || !this.headerLeftLayer || !this.headerRightLayer) return;
 
 		const columns = this.engine.stateManager.getState().columns;
 		const colCount = columns.length;
 		if (colCount === 0) {
 			this.clearHeaderCells();
+			this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
 			return;
 		}
 
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
+		const state = this.engine.stateManager.getState();
 
 		const newColRange = this.engine.viewport.getVisibleColumnRange(colCount);
 		const rendered = new Set<number>();
@@ -1478,7 +1491,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				// No manual scrollLeft subtraction needed due to native CSS Grid scrolling!
 			}
 
-			const state = this.engine.stateManager.getState();
 			if (state.styleSlots?.headerCellClass) {
 				try {
 					const customHeaderClass = state.styleSlots.headerCellClass(col);
@@ -1496,9 +1508,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				className += ' og-header-cell-dragging';
 			}
 
-			headerCell.className = className;
-			headerCell.style.transform = `translate3d(${cellLeft}px, 0, 0)`;
-			headerCell.style.width = `${cellWidth}px`;
+			if (headerCell.className !== className) headerCell.className = className;
+			const nextTransform = `translate3d(${cellLeft}px, 0, 0)`;
+			if (headerCell.style.transform !== nextTransform) headerCell.style.transform = nextTransform;
+			const nextWidth = `${cellWidth}px`;
+			if (headerCell.style.width !== nextWidth) headerCell.style.width = nextWidth;
 
 			const textSpan = headerCell.firstElementChild as HTMLSpanElement | null;
 			if (textSpan && textSpan.textContent !== (col.header || col.field)) {
@@ -1520,8 +1534,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				}
 			}
 
-			headerCell.dataset.colField = col.field;
-			headerCell.dataset.colIndex = String(c);
+			if (headerCell.dataset.colField !== col.field) headerCell.dataset.colField = col.field;
+			const colIndexText = String(c);
+			if (headerCell.dataset.colIndex !== colIndexText) headerCell.dataset.colIndex = colIndexText;
 			if (headerCell.parentNode !== targetLayer) {
 				targetLayer!.appendChild(headerCell);
 			}
@@ -1552,6 +1567,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				this.headerCells.delete(colIdx);
 			}
 		}
+		this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
 	}
 
 	private createHeaderCellElement(): HTMLDivElement {
