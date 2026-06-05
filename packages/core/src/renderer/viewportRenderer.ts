@@ -23,16 +23,13 @@ export class ViewportRenderer<TRowData = unknown> {
 	public overlayLayer: HTMLDivElement | null = null;
 	private styleTag: HTMLStyleElement | null = null;
 
-	private onScrollCallback: ((scrollTop: number, scrollLeft: number) => void) | null = null;
-
 	constructor(engine: GridEngine<TRowData>, geometryController: GeometryController<TRowData>) {
 		this.engine = engine;
 		this.geometryController = geometryController;
 	}
 
-	public mount(container: HTMLElement, onScroll: (scrollTop: number, scrollLeft: number) => void): void {
+	public mount(container: HTMLElement): void {
 		this.container = container;
-		this.onScrollCallback = onScroll;
 
 		// Inject stylesheet for structural containment and z-index layering
 		this.injectStyles();
@@ -82,14 +79,9 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.scrollViewport.appendChild(this.headerRightLayer);
 		this.container.appendChild(this.scrollViewport);
 		this.container.appendChild(this.overlayLayer);
-
-		this.scrollViewport.addEventListener('scroll', this.handleScroll);
 	}
 
 	public unmount(): void {
-		if (this.scrollViewport) {
-			this.scrollViewport.removeEventListener('scroll', this.handleScroll);
-		}
 		if (this.container) {
 			this.container.classList.remove('og-grid-container');
 			this.container.textContent = '';
@@ -108,14 +100,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.headerRightLayer = null;
 		this.overlayLayer = null;
 		this.styleTag = null;
-		this.onScrollCallback = null;
 	}
-
-	private handleScroll = (): void => {
-		if (this.scrollViewport && this.onScrollCallback) {
-			this.onScrollCallback(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
-		}
-	};
 
 	public syncViewportScrollFromDom(): void {
 		if (!this.scrollViewport) return;

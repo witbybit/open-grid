@@ -75,6 +75,14 @@ export class DagEngine {
 		return this.formulas.get(this.getCellKey(rowId, colField));
 	}
 
+	public getCachedFormulaValue(rowId: string, colField: string): { hasCached: boolean; value: unknown } {
+		const key = this.getCellKey(rowId, colField);
+		if (this.cache.has(key) && !this.dirty.has(key)) {
+			return { hasCached: true, value: this.cache.get(key) };
+		}
+		return { hasCached: false, value: undefined };
+	}
+
 	public clearAll(): void {
 		this.dependents.clear();
 		this.dependencies.clear();

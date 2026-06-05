@@ -19,12 +19,13 @@ import { ScrollFrameScheduler } from './scrollFrameScheduler.js';
 import { PortalMountManager } from './portalMountManager.js';
 import { ViewportRenderer } from './viewportRenderer.js';
 import { RowRenderer } from './rowRenderer.js';
+import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { CellRenderer } from './cellRenderer.js';
 import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { type ColumnDef, type GridApi, type InternalGridApi } from '../store.js';
+import { type ColumnDef, type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -45,29 +46,25 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly viewportRenderer: ViewportRenderer<TRowData>;
 	public readonly rowRenderer: RowRenderer<TRowData>;
 	public readonly cellRenderer: CellRenderer;
-	private readonly headerRenderer: HeaderRenderer;
-	private readonly overlayRenderer: OverlayRenderer;
+	public readonly headerRenderer: HeaderRenderer<TRowData>;
+	public readonly overlayRenderer: OverlayRenderer<TRowData>;
 	private readonly fullWidthRowRenderer: FullWidthRowRenderer;
 
-	private selectionBorder: HTMLDivElement | null = null;
-	private selectionDragBounds: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
-
-	private headerCells = new Map<number, HTMLDivElement>();
 	private unsubscribers: Array<() => void> = [];
 	private activeHeaderPopover: HTMLDivElement | null = null;
 	private activeHeaderPopoverElement: HTMLElement | null = null;
 
 	private isScrolling = false;
 	private scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
-	private overlayDirtyDuringScroll = false;
 	private viewportDirtyAfterScroll = false;
 	private needsPostScrollPortalFlush = false;
 	private portalFlushScheduled = false;
 	private isScrollFrameActive = false;
+	private postScrollDecorationScheduled = false;
+	private postScrollDecorationTimer: number | null = null;
 	private lastHeaderScrollLeft = 0;
 
 	private lastStyleSlots: unknown = undefined;
-	private lastSelection: unknown = undefined;
 	private lastLoading: unknown = undefined;
 
 	private readonly portalFlushBudget = 50;
@@ -81,6 +78,18 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		overlayCheapSyncsDuringScroll: 0,
 		cellsPatchedPerScrollFrame: [] as number[],
 		rowsRecycledPerScrollFrame: [] as number[],
+
+		stateReadsDuringScroll: 0,
+		focusCallsDuringScroll: 0,
+		rootTextContentWritesOnPortalCells: 0,
+		cellAccessReadsDuringScroll: 0,
+		cellClassComputesDuringScroll: 0,
+		reusableCellsSkippedDuringScroll: 0,
+		styleHookCallsDuringScroll: 0,
+		portalFlushChunks: 0,
+		maxPortalOpsFlushedInOneChunk: 0,
+		postScrollDecorationChunks: 0,
+		maxCellsDecoratedInOneChunk: 0,
 	};
 
 	public get onMountCellContent(): ((mount: GridCellContentMount<TRowData>) => void) | undefined {
@@ -148,18 +157,21 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.cellRenderer,
 			this.viewportRenderer
 		);
+		this.rowRenderer.renderStats = this.renderStats;
 
-		this.headerRenderer = new HeaderRenderer(
-			() => this.paintHeaders(),
-			() => undefined,
-			() => this.syncVisibleHeaders()
+		this.headerRenderer = new HeaderRenderer<TRowData>(
+			engine,
+			() => this.columnInteractions,
+			(cell, colField) => this.showHeaderMenu(cell, colField)
 		);
-		this.overlayRenderer = new OverlayRenderer(
-			() => this.paintOverlay(),
-			() => {
-				if (this.hasVisibleSelectionOverlay()) this.overlayDirtyDuringScroll = true;
-			}
+		this.overlayRenderer = new OverlayRenderer<TRowData>(
+			engine,
+			this.viewportRenderer,
+			() => this.columnInteractions,
+			() => this.fillDrag
 		);
+		this.overlayRenderer.renderStats = this.renderStats;
+
 		this.fullWidthRowRenderer = new FullWidthRowRenderer(() => undefined);
 
 		this.orchestrator = new RenderOrchestrator({
@@ -187,7 +199,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			engine,
 			getOverlayLayer: () => this.viewportRenderer.overlayLayer,
 			getScrollViewport: () => this.viewportRenderer.scrollViewport,
-			getOverlayBox: (minRow, maxRow, minCol, maxCol) => this.getClampedOverlayBox(minRow, maxRow, minCol, maxCol),
+			getOverlayBox: (minRow, maxRow, minCol, maxCol) => this.overlayRenderer.getClampedOverlayBox(minRow, maxRow, minCol, maxCol),
 			scrollTo: (scrollTop, scrollLeft) => this.scrollEngine.scrollTo(scrollTop, scrollLeft),
 			schedulePaint: () => this.scheduleOverlayPaint('fill drag'),
 		});
@@ -197,13 +209,23 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Mount the rendering engine inside a host DOM container.
 	 */
 	public mount(container: HTMLElement): void {
-		this.viewportRenderer.mount(container, this.onScroll);
+		this.viewportRenderer.mount(container);
 
 		const scrollViewport = this.viewportRenderer.scrollViewport;
 		if (scrollViewport) {
 			scrollViewport.addEventListener('mouseover', this.onRowMouseOver);
 			scrollViewport.addEventListener('mouseleave', this.onRowMouseLeave);
+			this.scrollEngine.bind(scrollViewport, this.onScroll);
 		}
+
+		if (this.viewportRenderer.headerLayer && this.viewportRenderer.headerLeftLayer && this.viewportRenderer.headerRightLayer) {
+			this.headerRenderer.mount(
+				this.viewportRenderer.headerLayer,
+				this.viewportRenderer.headerLeftLayer,
+				this.viewportRenderer.headerRightLayer
+			);
+		}
+		this.overlayRenderer.mount();
 
 		// Pre-warm DOM recycling pools
 		const rect = container.getBoundingClientRect();
@@ -240,16 +262,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.scheduler.destroy();
 		this.scrollScheduler.destroy();
 		this.clearScrollEndTimer();
+		this.clearPostScrollDecorationTimer();
 		this.portalMountManager.releaseAll();
 
 		// Release all active rows and cells
 		this.rowRenderer.unmount();
-		this.clearHeaderCells();
+		this.headerRenderer.unmount();
+		this.overlayRenderer.unmount();
 
 		this.viewportRenderer.unmount();
-
-		this.selectionBorder = null;
-		this.selectionDragBounds = null;
 	}
 
 	/**
@@ -267,6 +288,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.rowRenderer.isScrolling = true;
 		this.portalMountManager.setScrolling(true);
 		this.clearScrollEndTimer();
+		this.clearPostScrollDecorationTimer();
 		this.scrollEndTimer = setTimeout(() => this.finishScrolling(), 80);
 	}
 
@@ -283,11 +305,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.restoreDeferredFocus();
 		if (this.viewportDirtyAfterScroll || this.rowRenderer.dirtyCellsAfterScroll.size > 0 || this.rowRenderer.dirtyRowsAfterScroll.size > 0) {
 			this.viewportDirtyAfterScroll = false;
-			this.rowRenderer.decorateDirtyCellsAfterScroll();
+			this.scheduleBudgetedDecoration();
 		}
-		if (this.overlayDirtyDuringScroll) {
-			this.overlayDirtyDuringScroll = false;
-			this.paintOverlay();
+		if (this.overlayRenderer.overlayDirtyDuringScroll) {
+			this.overlayRenderer.overlayDirtyDuringScroll = false;
+			this.overlayRenderer.repaintOverlay();
 		}
 	}
 
@@ -332,6 +354,48 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		});
 	}
 
+	private clearPostScrollDecorationTimer(): void {
+		if (this.postScrollDecorationTimer !== null) {
+			if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+				(window as any).cancelIdleCallback(this.postScrollDecorationTimer);
+			} else {
+				cancelAnimationFrame(this.postScrollDecorationTimer);
+			}
+			this.postScrollDecorationTimer = null;
+		}
+		this.postScrollDecorationScheduled = false;
+	}
+
+	private scheduleBudgetedDecoration(): void {
+		if (this.postScrollDecorationScheduled) return;
+		this.postScrollDecorationScheduled = true;
+
+		const schedule =
+			typeof window !== 'undefined' && 'requestIdleCallback' in window
+				? (callback: () => void) => (window as any).requestIdleCallback(callback)
+				: (callback: () => void) => requestAnimationFrame(() => callback());
+
+		this.postScrollDecorationTimer = schedule(() => {
+			this.postScrollDecorationTimer = null;
+			this.postScrollDecorationScheduled = false;
+
+			if (this.isScrolling) {
+				return;
+			}
+
+			this.renderStats.postScrollDecorationChunks++;
+			const result = this.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: 100 });
+
+			if (result.processed > this.renderStats.maxCellsDecoratedInOneChunk) {
+				this.renderStats.maxCellsDecoratedInOneChunk = result.processed;
+			}
+
+			if (result.remaining > 0) {
+				this.scheduleBudgetedDecoration();
+			}
+		});
+	}
+
 	private restoreDeferredFocus(): void {
 		const cell = this.rowRenderer.deferredFocusCell;
 		this.rowRenderer.deferredFocusCell = null;
@@ -347,17 +411,44 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.rowRenderer.currentScrollCellsPatched = 0;
 		this.rowRenderer.currentScrollRowsRecycled = 0;
 		this.renderStats.scrollFrames++;
+		const startStateReads = this.engine.stateManager.debugGetStateCount;
 		try {
 			this.viewportRenderer.syncViewportScrollFromDom();
-			this.recycleViewport(true);
+
+			const state = this.engine.stateManager.getState();
+			const displayedColumns = this.engine.columns.getDisplayedColumns();
+			const colCount = displayedColumns.length;
+			const visibleColRange = this.engine.viewport.getVisibleColumnRange(colCount);
+
+			const ctx: ScrollRenderContext<TRowData> = {
+				isScrolling: true,
+				stateVersion: 0,
+				dataVersion: state.dataVersion,
+				styleVersion: this.rowRenderer.styleVersion,
+				loadingVersion: this.rowRenderer.loadingVersion,
+				activeEdit: state.activeEdit,
+				customCellScrollMode: state.customCellScrollMode ?? 'skeleton',
+				hasStyleHooks: !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender),
+				hasCustomRenderers: displayedColumns.some((c) => !!c.cellRenderer),
+				displayedColumns,
+				visibleColRange,
+				focusedCell: state.selection.focus,
+				canUseCachedDisplayValues: true,
+			};
+
+			this.recycleViewport(true, ctx);
 			if (this.engine.viewport.scrollLeft !== this.lastHeaderScrollLeft) {
 				this.renderStats.headerRangeSyncsDuringScroll++;
-				this.headerRenderer.syncVisibleColumnRange();
+				this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
 			}
 			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
+			this.headerRenderer.syncVisibleColumnRange();
 			this.renderStats.overlayCheapSyncsDuringScroll++;
 			this.overlayRenderer.syncScrollPosition();
 		} finally {
+			const stateReadsInFrame = this.engine.stateManager.debugGetStateCount - startStateReads;
+			this.renderStats.stateReadsDuringScroll += stateReadsInFrame;
+
 			this.renderStats.cellsPatchedPerScrollFrame.push(this.rowRenderer.currentScrollCellsPatched);
 			this.renderStats.rowsRecycledPerScrollFrame.push(this.rowRenderer.currentScrollRowsRecycled);
 			this.isScrollFrameActive = false;
@@ -411,8 +502,22 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('columnWidths', invalidateGeometryFull));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('rowHeights', invalidateGeometryFull));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('enableColumnReorder', invalidateHeaders));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('selection', invalidateOverlay));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));
+		this.unsubscribers.push(
+			this.engine.eventBus.addEventListener<{ selection: any; result: SelectionChangeResult }>('selectionChanged', (event) => {
+				const { result } = event.payload;
+				for (const cell of result.invalidatedCells) {
+					this.engine.invalidation.invalidateCell(cell.rowId, cell.colField, 'selection');
+				}
+				for (const rowId of result.invalidatedRows) {
+					this.engine.invalidation.invalidateRow(rowId, 'selection');
+				}
+				if (result.overlayChanged) {
+					this.engine.invalidation.invalidateOverlay('selection');
+				}
+				this.scheduler.requestFlush('selection');
+			})
+		);
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener('cellInvalidated', () => {
 				this.scheduler.requestFlush('cell');
@@ -500,10 +605,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.lastStyleSlots = state.styleSlots;
 			this.rowRenderer.styleVersion++;
 		}
-		if (this.lastSelection !== state.selection) {
-			this.lastSelection = state.selection;
-			this.rowRenderer.selectionVersion++;
-		}
 		if (this.lastLoading !== state.loading) {
 			this.lastLoading = state.loading;
 			this.rowRenderer.loadingVersion++;
@@ -521,16 +622,16 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			headerRangeSyncsDuringScroll: this.renderStats.headerRangeSyncsDuringScroll,
 			overlayPaintsDuringScroll: this.renderStats.overlayPaintsDuringScroll,
 			overlayCheapSyncsDuringScroll: this.renderStats.overlayCheapSyncsDuringScroll,
-			focusCallsDuringScroll: 0,
-			rootTextContentWritesOnPortalCells: 0,
+			focusCallsDuringScroll: this.renderStats.focusCallsDuringScroll,
+			rootTextContentWritesOnPortalCells: this.renderStats.rootTextContentWritesOnPortalCells,
 			cellsBoundDuringScroll: this.rowRenderer.currentScrollCellsPatched,
-			cellsDecoratedAfterScroll: 0,
-			cellAccessReadsDuringScroll: 0,
-			cellClassComputesDuringScroll: 0,
+			cellsDecoratedAfterScroll: this.renderStats.postScrollDecorationChunks * 100,
+			cellAccessReadsDuringScroll: this.renderStats.cellAccessReadsDuringScroll,
+			cellClassComputesDuringScroll: this.renderStats.cellClassComputesDuringScroll,
 			dirtyCellsMarkedDuringScroll: this.rowRenderer.dirtyCellsMarkedDuringScroll,
 			postScrollDirtyCellsDecorated: this.rowRenderer.postScrollDirtyCellsDecorated,
-			reusableCellsSkippedDuringScroll: 0,
-			styleHookCallsDuringScroll: 0,
+			reusableCellsSkippedDuringScroll: this.renderStats.reusableCellsSkippedDuringScroll,
+			styleHookCallsDuringScroll: this.renderStats.styleHookCallsDuringScroll,
 			...portalScrollStats,
 			hotDomReleases: (this.rowRenderer.rowPool?.hotReleases ?? 0) + (this.rowRenderer.cellPool?.hotReleases ?? 0),
 			coldDomReleases: (this.rowRenderer.rowPool?.coldReleases ?? 0) + (this.rowRenderer.cellPool?.coldReleases ?? 0),
@@ -557,6 +658,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.renderStats.overlayCheapSyncsDuringScroll = 0;
 		this.renderStats.cellsPatchedPerScrollFrame = [];
 		this.renderStats.rowsRecycledPerScrollFrame = [];
+		this.renderStats.stateReadsDuringScroll = 0;
+		this.renderStats.focusCallsDuringScroll = 0;
+		this.renderStats.rootTextContentWritesOnPortalCells = 0;
+		this.renderStats.cellAccessReadsDuringScroll = 0;
+		this.renderStats.cellClassComputesDuringScroll = 0;
+		this.renderStats.reusableCellsSkippedDuringScroll = 0;
+		this.renderStats.styleHookCallsDuringScroll = 0;
+		this.renderStats.postScrollDecorationChunks = 0;
+		this.renderStats.maxCellsDecoratedInOneChunk = 0;
 	}
 
 	public fullPaint(): void {
@@ -568,9 +678,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
-	private recycleViewport(isScrollFrameActive: boolean): void {
+	private recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>): void {
 		this.renderStats.viewportRecycles++;
-		this.rowRenderer.recycleViewport(isScrollFrameActive);
+		this.rowRenderer.recycleViewport(isScrollFrameActive, ctx);
 	}
 
 	private fullPaintInternal(): void {
@@ -581,170 +691,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.viewportRenderer.syncSpacerAndLayers(state, colCount);
 		this.recycleViewport(false);
-		this.paintHeaders();
-		this.paintOverlay();
-	}
-
-	private paintHeaders(): void {
-		if (this.isScrolling) this.renderStats.headerPaintsDuringScroll++;
-		this.syncVisibleHeaders();
-	}
-
-	private syncVisibleHeaders(): void {
-		if (!this.viewportRenderer.headerLayer || !this.viewportRenderer.headerLeftLayer || !this.viewportRenderer.headerRightLayer) return;
-
-		const state = this.engine.stateManager.getState();
-		const columns = this.engine.columns.getDisplayedColumns();
-		const colCount = columns.length;
-		if (colCount === 0) {
-			this.clearHeaderCells();
-			this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
-			return;
-		}
-
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const newColRange = this.engine.viewport.getVisibleColumnRange(colCount);
-		const rendered = new Set<number>();
-
-		const renderHeaderCell = (c: number) => {
-			const col = columns[c];
-			if (!col) return;
-
-			let headerCell = this.headerCells.get(c);
-			if (!headerCell) {
-				headerCell = this.createHeaderCellElement();
-				this.headerCells.set(c, headerCell);
-			}
-			rendered.add(c);
-
-			let className = 'og-header-cell';
-			let cellLeft = this.engine.geometry.colLefts[c];
-			const cellWidth = this.engine.geometry.colWidths[c];
-
-			let targetLayer = this.viewportRenderer.headerLayer;
-
-			if (c < pinLeftColumns) {
-				className += ' og-header-cell-pinned-left';
-				targetLayer = this.viewportRenderer.headerLeftLayer;
-			} else if (c >= colCount - pinRightColumns) {
-				className += ' og-header-cell-pinned-right';
-				const firstRightPinColLeft = this.engine.geometry.colLefts[colCount - pinRightColumns];
-				cellLeft = cellLeft - firstRightPinColLeft;
-				targetLayer = this.viewportRenderer.headerRightLayer;
-			}
-
-			if (state.styleSlots?.headerCellClass) {
-				try {
-					const customHeaderClass = state.styleSlots.headerCellClass(col);
-					if (customHeaderClass) {
-						className += ' ' + customHeaderClass;
-					}
-				} catch (e) {
-					console.error('RenderEngine: Error in headerCellClass styleSlot', e);
-				}
-			}
-			if (state.enableColumnReorder && col.movable !== false) {
-				className += ' og-header-cell-movable';
-			}
-			if (this.columnInteractions.isDraggingColumn(col.field)) {
-				className += ' og-header-cell-dragging';
-			}
-
-			if (headerCell.className !== className) headerCell.className = className;
-			const nextTransform = `translate3d(${cellLeft}px, 0, 0)`;
-			if (headerCell.style.transform !== nextTransform) headerCell.style.transform = nextTransform;
-			const nextWidth = `${cellWidth}px`;
-			if (headerCell.style.width !== nextWidth) headerCell.style.width = nextWidth;
-
-			const textSpan = headerCell.firstElementChild as HTMLSpanElement | null;
-			if (textSpan && textSpan.textContent !== (col.header || col.field)) {
-				textSpan.textContent = col.header || col.field;
-			}
-
-			const currentSort = state.sortModel?.find((s) => s.colId === col.field);
-			const sortIndicator = headerCell.querySelector('.og-header-sort-indicator') as HTMLDivElement | null;
-			if (sortIndicator) {
-				if (currentSort) {
-					sortIndicator.style.display = 'flex';
-					sortIndicator.innerHTML =
-						currentSort.sort === 'asc'
-							? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`
-							: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>`;
-				} else {
-					sortIndicator.style.display = 'none';
-					sortIndicator.innerHTML = '';
-				}
-			}
-
-			if (headerCell.dataset.colField !== col.field) headerCell.dataset.colField = col.field;
-			const colIndexText = String(c);
-			if (headerCell.dataset.colIndex !== colIndexText) headerCell.dataset.colIndex = colIndexText;
-			if (headerCell.parentNode !== targetLayer) {
-				targetLayer!.appendChild(headerCell);
-			}
-		};
-
-		for (let c = 0; c < pinLeftColumns; c++) {
-			renderHeaderCell(c);
-		}
-		for (let c = newColRange.startIdx; c <= newColRange.endIdx; c++) {
-			if (c >= pinLeftColumns && c < colCount - pinRightColumns) {
-				renderHeaderCell(c);
-			}
-		}
-		for (let c = colCount - pinRightColumns; c < colCount; c++) {
-			if (c >= 0) {
-				renderHeaderCell(c);
-			}
-		}
-
-		for (const [colIdx, cell] of this.headerCells.entries()) {
-			if (!rendered.has(colIdx) || colIdx >= colCount) {
-				cell.remove();
-				this.headerCells.delete(colIdx);
-			}
-		}
 		this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
-	}
-
-	private createHeaderCellElement(): HTMLDivElement {
-		const headerCell = document.createElement('div');
-		headerCell.addEventListener('mousedown', this.columnInteractions.onHeaderCellMouseDown);
-
-		const textSpan = document.createElement('span');
-		textSpan.style.overflow = 'hidden';
-		textSpan.style.textOverflow = 'ellipsis';
-		textSpan.style.whiteSpace = 'nowrap';
-		textSpan.style.flex = '1';
-		headerCell.appendChild(textSpan);
-
-		const sortIndicator = document.createElement('div');
-		sortIndicator.className = 'og-header-sort-indicator';
-		headerCell.appendChild(sortIndicator);
-
-		const menuButton = document.createElement('div');
-		menuButton.className = 'og-header-menu-button';
-		menuButton.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="2.5"></circle><circle cx="12" cy="5" r="2.5"></circle><circle cx="12" cy="19" r="2.5"></circle></svg>`;
-		menuButton.addEventListener('mousedown', (e) => {
-			e.stopPropagation();
-		});
-		menuButton.addEventListener('click', (e) => {
-			e.stopPropagation();
-			e.preventDefault();
-			const colField = headerCell.dataset.colField;
-			if (colField) {
-				this.showHeaderMenu(headerCell, colField);
-			}
-		});
-		headerCell.appendChild(menuButton);
-
-		const resizeHandle = document.createElement('div');
-		resizeHandle.className = 'og-header-resize-handle';
-		resizeHandle.addEventListener('mousedown', this.columnInteractions.onHeaderResizeMouseDown);
-		headerCell.appendChild(resizeHandle);
-
-		return headerCell;
+		this.headerRenderer.repaintHeaders();
+		this.overlayRenderer.repaintOverlay();
 	}
 
 	private hideHeaderMenu = (): void => {
@@ -1008,162 +957,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
-	private clearHeaderCells(): void {
-		for (const cell of this.headerCells.values()) {
-			cell.remove();
-		}
-		this.headerCells.clear();
-	}
-
-	private paintOverlay(): void {
-		if (this.isScrolling) this.renderStats.overlayPaintsDuringScroll++;
-		if (!this.viewportRenderer.overlayLayer) return;
-
-		this.columnInteractions.reattachOverlays();
-
-		const state = this.engine.stateManager.getState();
-		const bounds = state.selection.bounds;
-
-		if (!bounds || !this.engine.getRowModel()) {
-			this.hideSelectionOverlay();
-			return;
-		}
-
-		const rowModel = this.engine.getRowModel()!;
-		const rowCount = rowModel.getVisualRowCount();
-		const colCount = this.engine.columns.getDisplayedColumnCount();
-
-		const minRow = Math.max(0, bounds.minRow);
-		const maxRow = Math.min(rowCount - 1, bounds.maxRow);
-		const minCol = Math.max(0, bounds.minCol);
-		const maxCol = Math.min(colCount - 1, bounds.maxCol);
-
-		if (minRow > maxRow || minCol > maxCol) {
-			this.hideSelectionOverlay();
-			return;
-		}
-
-		const box = this.getClampedOverlayBox(minRow, maxRow, minCol, maxCol);
-		if (!box) {
-			this.hideSelectionOverlay();
-			return;
-		}
-
-		const selectionBorder = this.ensureSelectionBorder();
-		this.selectionDragBounds = { minRow, maxRow, minCol, maxCol };
-
-		selectionBorder.style.transform = `translate3d(${box.left}px, ${box.top}px, 0)`;
-		selectionBorder.style.width = `${box.width}px`;
-		selectionBorder.style.height = `${box.height}px`;
-		selectionBorder.style.display = 'block';
-
-		if (selectionBorder.parentNode !== this.viewportRenderer.overlayLayer) {
-			this.viewportRenderer.overlayLayer.appendChild(selectionBorder);
-		}
-
-		this.fillDrag.reattachPreview();
-	}
-
-	private hasVisibleSelectionOverlay(): boolean {
-		const state = this.engine.stateManager.getState();
-		return !!state.selection.bounds && !!this.engine.getRowModel();
-	}
-
-	private getClampedOverlayBox(minRow: number, maxRow: number, minCol: number, maxCol: number): OverlayBox | null {
-		const state = this.engine.stateManager.getState();
-		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
-		const colCount = this.engine.columns.getDisplayedColumnCount();
-
-		if (rowCount === 0 || colCount === 0 || minRow < 0 || minCol < 0 || maxRow >= rowCount || maxCol >= colCount) {
-			return null;
-		}
-
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const pinTopRows = this.engine.viewport.pinTopRows;
-		const pinBottomRows = this.engine.viewport.pinBottomRows;
-		const scrollTop = this.engine.viewport.scrollTop;
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportHeight = this.engine.viewport.viewportHeight;
-		const viewportWidth = this.engine.viewport.viewportWidth;
-
-		let pinnedLeftWidth = 0;
-		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
-			pinnedLeftWidth += this.engine.geometry.colWidths[i] || 0;
-		}
-
-		let pinnedRightWidth = 0;
-		for (let i = 0; i < pinRightColumns && i < colCount; i++) {
-			pinnedRightWidth += this.engine.geometry.colWidths[colCount - 1 - i] || 0;
-		}
-
-		let pinnedTopHeight = 0;
-		for (let i = 0; i < pinTopRows && i < rowCount; i++) {
-			pinnedTopHeight += this.engine.geometry.rowHeights[i] || 0;
-		}
-
-		let pinnedBottomHeight = 0;
-		for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
-			pinnedBottomHeight += this.engine.geometry.rowHeights[rowCount - 1 - i] || 0;
-		}
-
-		const getClampedX = (c: number): { left: number; right: number } => {
-			const cellLeft = this.engine.geometry.colLefts[c] || 0;
-			const cellWidth = this.engine.geometry.colWidths[c] || 0;
-
-			if (c < pinLeftColumns) {
-				return { left: cellLeft, right: cellLeft + cellWidth };
-			}
-			if (c >= colCount - pinRightColumns) {
-				const firstRightPinColIdx = colCount - pinRightColumns;
-				const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
-				const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
-				return { left, right: left + cellWidth };
-			}
-
-			const unclippedLeft = cellLeft - scrollLeft;
-			const unclippedRight = unclippedLeft + cellWidth;
-			const left = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedLeft));
-			const right = Math.max(pinnedLeftWidth, Math.min(viewportWidth - pinnedRightWidth, unclippedRight));
-			return { left, right };
-		};
-
-		const getClampedY = (r: number): { top: number; bottom: number } => {
-			const rowTop = this.engine.geometry.rowTops[r] || 0;
-			const rowHeight = this.engine.geometry.rowHeights[r] || 0;
-
-			if (r < pinTopRows) {
-				return { top: rowTop, bottom: rowTop + rowHeight };
-			}
-			if (r >= rowCount - pinBottomRows) {
-				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
-				const bottomOffset = totalHeight - rowTop;
-				const top = viewportHeight - 40 - bottomOffset;
-				return { top, bottom: top + rowHeight };
-			}
-
-			const unclippedTop = rowTop - scrollTop;
-			const unclippedBottom = unclippedTop + rowHeight;
-			const top = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedTop));
-			const bottom = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedBottom));
-			return { top, bottom };
-		};
-
-		const xRangeMin = getClampedX(minCol);
-		const xRangeMax = getClampedX(maxCol);
-		const yRangeMin = getClampedY(minRow);
-		const yRangeMax = getClampedY(maxRow);
-		const width = xRangeMax.right - xRangeMin.left;
-		const height = yRangeMax.bottom - yRangeMin.top;
-
-		if (width <= 0 || height <= 0) {
-			return null;
-		}
-
-		return { left: xRangeMin.left, top: yRangeMin.top, width, height };
-	}
-
 	private onRowMouseOver = (event: MouseEvent): void => {
 		const rowEl = (event.target as HTMLElement).closest('.og-row') as HTMLElement | null;
 		const rowIndexText = rowEl?.dataset.rowIndex;
@@ -1202,33 +995,4 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		pooledRow.leftElement?.classList.toggle('og-row-hovered', hovered);
 		pooledRow.rightElement?.classList.toggle('og-row-hovered', hovered);
 	}
-
-	private ensureSelectionBorder(): HTMLDivElement {
-		if (!this.selectionBorder) {
-			this.selectionBorder = document.createElement('div');
-			this.selectionBorder.className = 'og-selection-border';
-
-			const fillHandle = document.createElement('div');
-			fillHandle.className = 'og-selection-fill-handle';
-			fillHandle.addEventListener('mousedown', this.onSelectionFillHandleMouseDown);
-			this.selectionBorder.appendChild(fillHandle);
-		}
-
-		return this.selectionBorder;
-	}
-
-	private hideSelectionOverlay(): void {
-		this.selectionDragBounds = null;
-		if (this.selectionBorder) {
-			this.selectionBorder.style.display = 'none';
-		}
-	}
-
-	private onSelectionFillHandleMouseDown = (e: MouseEvent): void => {
-		if (!this.selectionDragBounds) return;
-		e.preventDefault();
-		e.stopPropagation();
-		const { minRow, maxRow, minCol, maxCol } = this.selectionDragBounds;
-		this.fillDrag.start(e, minRow, maxRow, minCol, maxCol);
-	};
 }

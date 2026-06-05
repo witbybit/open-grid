@@ -24,8 +24,10 @@ export function createCellId(rowId: GridId, colId: GridId): string {
 	return `cell:${normalizeGridId(rowId)}:${normalizeGridId(colId)}`;
 }
 
+const CELL_KEY_SEPARATOR = '\u001F';
+
 export function createCellKey(rowId: GridId, colField: string): string {
-	return `${normalizeGridId(rowId)}:${colField}`;
+	return `${normalizeGridId(rowId)}${CELL_KEY_SEPARATOR}${colField}`;
 }
 
 export function createFormulaRefKey(rowId: GridId, colField: string): string {

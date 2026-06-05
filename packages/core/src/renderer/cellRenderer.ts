@@ -86,12 +86,12 @@ export class CellRenderer {
 	public ensureLoadingSkeleton(cell: HTMLElement): void {
 		cell.dataset.contentMode = 'loading';
 		const parts = this.ensureCellParts(cell);
-		if (!parts.skeleton || parts.skeleton.parentElement !== parts.content) {
+		if (parts.content.textContent !== '') {
 			parts.content.textContent = '';
-			const skeleton = document.createElement('div');
-			skeleton.className = 'og-cell-loading-skeleton';
-			parts.content.appendChild(skeleton);
-			parts.skeleton = skeleton;
+		}
+		if (parts.skeleton) {
+			parts.skeleton.remove();
+			parts.skeleton = null;
 		}
 	}
 

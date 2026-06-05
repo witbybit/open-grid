@@ -269,6 +269,21 @@ export const CORE_STYLES = `
     background: linear-gradient(90deg, rgba(148, 163, 184, 0.12), rgba(148, 163, 184, 0.22), rgba(148, 163, 184, 0.12));
   }
 
+  .og-cell[data-content-mode="loading"] > .og-cell-content::before {
+    content: '';
+    width: var(--og-skeleton-width);
+    height: var(--og-skeleton-height);
+    border-radius: var(--og-skeleton-border-radius);
+    background: linear-gradient(90deg, 
+      var(--og-skeleton-start) 25%, 
+      var(--og-skeleton-mid) 50%, 
+      var(--og-skeleton-end) 75%
+    );
+    background-size: 200% 100%;
+    animation: og-shimmer var(--og-skeleton-animation-duration) infinite linear;
+  }
+
+
   .og-cell-focused {
     outline: 2px solid var(--og-focus-ring);
     outline-offset: -2px;

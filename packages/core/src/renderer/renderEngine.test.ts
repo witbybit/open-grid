@@ -426,7 +426,8 @@ describe('RenderEngine', () => {
 
 		expect(row.className).toContain('og-row-loading');
 		expect(cell.className).toContain('og-cell-loading');
-		expect(cell.querySelector('.og-cell-loading-skeleton')).not.toBeNull();
+		expect(cell.dataset.contentMode).toBe('loading');
+		expect(cell.querySelector('.og-cell-loading-skeleton')).toBeNull();
 
 		renderer.unmount();
 		store.destroy();
@@ -1945,6 +1946,7 @@ describe('RenderEngine', () => {
 	});
 
 	it('renders valueGetter column values correctly during scroll', async () => {
+		vi.useFakeTimers();
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callbacks.push(callback);
@@ -1991,15 +1993,26 @@ describe('RenderEngine', () => {
 		expect(callbacks.length).toBe(1);
 		callbacks[0](0);
 
-		// Inspect the cells rendered at the scrolled position
+		// Inspect the cells rendered at the scrolled position - during scroll it shows loading placeholder
 		const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
 		expect(row10).not.toBeNull();
 		const computedCell = row10.querySelector('[data-col-field="computed"]') as HTMLDivElement;
 		expect(computedCell).not.toBeNull();
+		expect(computedCell.textContent).toBe('...');
+
+		// Advance timers to trigger scroll end
+		vi.advanceTimersByTime(100);
+
+		// Execute the post-scroll decoration chunk frame
+		expect(callbacks.length).toBe(2);
+		callbacks[1](0);
+
+		// Now it should be resolved to the computed value
 		expect(computedCell.textContent).toBe('Row 10!');
 
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
+		vi.useRealTimers();
 	});
 });

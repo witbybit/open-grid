@@ -324,6 +324,10 @@ export class GridEngine<TRowData = unknown> {
 		return this.formulas.invalidateCell(rowId, colField);
 	}
 
+	public getCachedFormulaValue(rowId: string, colField: string): { hasCached: boolean; value: unknown } {
+		return this.formulas.getCachedFormulaValue(rowId, colField);
+	}
+
 	private getRowHeightsList(rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number): number[] {
 		let count = rowModel.getVisualRowCount();
 		const state = this.stateManager.getState();

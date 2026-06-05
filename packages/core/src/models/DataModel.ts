@@ -143,6 +143,28 @@ export class DataModel<TRowData = unknown> {
 		return getter(row);
 	};
 
+	public getCachedDisplayValue(rowId: string, colField: string): { hasCached: boolean; value: unknown } {
+		if (this.isRowLoading(rowId)) {
+			return { hasCached: true, value: '' };
+		}
+
+		if (this.engine.hasFormula(rowId, colField)) {
+			return this.engine.getCachedFormulaValue(rowId, colField);
+		}
+
+		const col = this.engine.columns.getColumnDef(colField);
+		if (col?.valueGetter) {
+			const rowCache = this.valueGetterCache.get(rowId);
+			if (rowCache && rowCache.has(colField)) {
+				return { hasCached: true, value: rowCache.get(colField) };
+			}
+			return { hasCached: false, value: undefined };
+		}
+
+		const val = this.getRawCellValue(rowId, colField);
+		return { hasCached: true, value: val };
+	}
+
 	public getCellValue = (rowId: string, colField: string): unknown => {
 		const rawVal = this.getRawCellValue(rowId, colField);
 		if (typeof rawVal === 'string' && rawVal.startsWith('=')) {

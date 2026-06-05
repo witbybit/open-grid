@@ -15,7 +15,10 @@ export class StateManager<TRowData = unknown> {
 		this.onChangesCallback = onChanges;
 	}
 
+	public debugGetStateCount = 0;
+
 	public getState(): GridState<TRowData> {
+		this.debugGetStateCount++;
 		return this.state;
 	}
 
