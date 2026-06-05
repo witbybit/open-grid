@@ -64,6 +64,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private headerRenderer: HeaderRenderer;
 	private overlayRenderer: OverlayRenderer;
 	private fullWidthRowRenderer: FullWidthRowRenderer;
+	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 
 	// Viewport DOM elements
 	private container: HTMLElement | null = null;
@@ -861,11 +862,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 
 			if (visualRow.kind === 'loading') {
-				if (pooledRow.element.dataset.rowKey) {
-					this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
-					delete pooledRow.element.dataset.rowKey;
-					pooledRow.element.textContent = '';
-				}
+				this.releaseRowPortal(pooledRow);
 				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
 				this.recycleLoadingRowCells(pooledRow, visualRow, r, newColRange.startIdx, newColRange.endIdx, columns);
 				return;
@@ -875,31 +872,22 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
 				this.releaseAllCellsInRow(pooledRow);
 				const rowKey = visualRow.id;
-				let shouldMountRowPortal = false;
 				if (pooledRow.element.dataset.rowKey !== rowKey) {
-					if (pooledRow.element.dataset.rowKey) {
-						this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
-					}
-					pooledRow.element.textContent = '';
+					this.releaseRowPortal(pooledRow);
 					pooledRow.element.dataset.rowKey = rowKey;
-					shouldMountRowPortal = true;
 				}
-				if (shouldMountRowPortal) {
-					this.portalMountManager.mountRow({
-						rowKey,
-						container: pooledRow.element,
-						visualRow,
-					});
-				}
+				const rowPortalHost = this.ensureRowPortalHost(pooledRow.element);
+				rowPortalHost.hidden = false;
+				this.portalMountManager.mountRow({
+					rowKey,
+					container: rowPortalHost,
+					visualRow,
+				});
 				return;
 			}
 
 			const node = visualRow.node;
-			if (pooledRow.element.dataset.rowKey) {
-				this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
-				delete pooledRow.element.dataset.rowKey;
-				pooledRow.element.textContent = '';
-			}
+			this.releaseRowPortal(pooledRow);
 			this.updateRowClassName(pooledRow, node, r, state);
 
 			// Recycle individual cells inside this row
@@ -1125,7 +1113,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.markCellDirtyAfterScroll(cell);
 		} else if (rendererKind === 'custom' || rendererKind === 'editor') {
 			if (cell.dataset.cellKey !== cellKey) {
-				this.cellRenderer.setPrimitiveContent(cell, this.getCheapCellText(node, col), 'fallback');
+				const customCellScrollMode = state.customCellScrollMode ?? 'skeleton';
+				if (customCellScrollMode === 'preserve') {
+					this.cellRenderer.showPortalContent(cell);
+				} else if (customCellScrollMode === 'fallback') {
+					this.cellRenderer.setPrimitiveContent(cell, this.getCheapCellText(node, col), 'fallback');
+				} else {
+					this.cellRenderer.showPendingContent(cell);
+				}
 				this.markCellDirtyAfterScroll(cell);
 			}
 		} else {
@@ -1360,7 +1355,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			const cellKey = createCellKey(node.id, col.field);
 
 			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously or scrolling extremely fast)
-			const isFastScrolling = this.engine.viewport.isScrollingFast || this.isScrollFrameActive;
+			const isFastScrolling = this.isScrollFrameActive;
 			if (isFastScrolling && cell.dataset.cellKey === cellKey) {
 				// Keep existing portal content mounted while the user is moving quickly.
 				// Churning portals during scroll costs more than temporarily stale custom content.
@@ -1715,19 +1710,40 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.portalMountManager.releaseCell({
 			cellKey: cell.dataset.cellKey,
 			container: this.getCellPortalHost(cell) ?? cell,
-			flushSync: true,
+			flushSync: false,
 		});
+	}
+
+	private ensureRowPortalHost(row: HTMLElement): HTMLElement {
+		let host = this.rowPortalHosts.get(row);
+		if (!host) {
+			host = document.createElement('div');
+			host.className = 'og-row-portal-host';
+			host.hidden = true;
+			row.appendChild(host);
+			this.rowPortalHosts.set(row, host);
+		} else if (host.parentElement !== row) {
+			row.appendChild(host);
+		}
+		return host;
+	}
+
+	private releaseRowPortal(pooledRow: PooledRow): boolean {
+		const rowKey = pooledRow.element.dataset.rowKey;
+		if (!rowKey) return false;
+		const host = this.ensureRowPortalHost(pooledRow.element);
+		this.portalMountManager.releaseRow({ rowKey, container: host });
+		host.hidden = true;
+		host.remove();
+		delete pooledRow.element.dataset.rowKey;
+		return true;
 	}
 
 	/**
 	 * Release and return an entire row and all its cells to the pools.
 	 */
 	private releaseRow(rowIndex: number, pooledRow: PooledRow): void {
-		if (pooledRow.element.dataset.rowKey) {
-			this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
-			delete pooledRow.element.dataset.rowKey;
-			pooledRow.element.textContent = '';
-		}
+		const hadRowPortal = this.releaseRowPortal(pooledRow);
 
 		// Release all cell DOMs inside row
 		this.releaseAllCellsInRow(pooledRow);
@@ -1737,7 +1753,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (pooledRow.leftElement && pooledRow.leftElement.parentNode) pooledRow.leftElement.remove();
 		if (pooledRow.rightElement && pooledRow.rightElement.parentNode) pooledRow.rightElement.remove();
 
-		if (this.isScrollFrameActive) {
+		if (this.isScrollFrameActive || hadRowPortal) {
 			this.rowPool.releaseHot(pooledRow.element);
 			if (pooledRow.leftElement) this.rowPool.releaseHot(pooledRow.leftElement);
 			if (pooledRow.rightElement) this.rowPool.releaseHot(pooledRow.rightElement);

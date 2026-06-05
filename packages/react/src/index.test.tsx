@@ -854,4 +854,92 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		document.body.removeChild(container);
 		grid.api.destroy();
 	});
+
+	it('should update row portal content when the visual row changes for the same container', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [],
+			columns: [],
+		});
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const makeRowPortals = (expanded: boolean) =>
+			new Map([
+				[
+					'group-1',
+					{
+						rowKey: 'group-1',
+						container,
+						visualRow: {
+							kind: 'group',
+							id: 'group-1',
+							field: 'category',
+							key: 'Electronics',
+							expanded,
+							depth: 0,
+							childCount: expanded ? 5 : 2,
+						},
+					},
+				],
+			]);
+
+		const { rerender } = render(
+			<PortalManager
+				portals={new Map()}
+				rowPortals={makeRowPortals(false)}
+				api={grid.api}
+				groupRowRenderer={({ visualRow }: any) => (
+					<span data-testid='custom-group'>
+						{visualRow.expanded ? `expanded:${visualRow.childCount}` : `collapsed:${visualRow.childCount}`}
+					</span>
+				)}
+			/>
+		);
+
+		expect(screen.getByTestId('custom-group').textContent).toBe('collapsed:2');
+
+		rerender(
+			<PortalManager
+				portals={new Map()}
+				rowPortals={makeRowPortals(true)}
+				api={grid.api}
+				groupRowRenderer={({ visualRow }: any) => (
+					<span data-testid='custom-group'>
+						{visualRow.expanded ? `expanded:${visualRow.childCount}` : `collapsed:${visualRow.childCount}`}
+					</span>
+				)}
+			/>
+		);
+
+		expect(screen.getByTestId('custom-group').textContent).toBe('expanded:5');
+
+		document.body.removeChild(container);
+		grid.api.destroy();
+	});
+
+	it('should not flush portal updates synchronously during React cleanup', () => {
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellRenderer: ({ value }) => <span data-testid='portal-content'>{String(value)}</span>,
+				},
+			],
+		});
+
+		const { unmount } = render(
+			<React.StrictMode>
+				<OpenGrid api={grid.api} />
+			</React.StrictMode>
+		);
+
+		unmount();
+
+		expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining('flushSync was called from inside a lifecycle method'));
+		consoleError.mockRestore();
+		grid.api.destroy();
+	});
 });

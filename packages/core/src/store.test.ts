@@ -515,6 +515,41 @@ describe('GridStore generic row-store functionality', () => {
 		expect(store.getPinnedColumns()).toEqual({ left: 1, right: 2 });
 	});
 
+	it('should recompute detail row geometry when sorting moves expanded details', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			defaultRowHeight: 40,
+			masterDetailEnabled: true,
+			detailRowHeight: 220,
+			expansion: {
+				groups: {},
+				treeRows: {},
+				details: { '1': true },
+			},
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Apex', price: 10 },
+				{ id: '2', name: 'Beta', price: 20 },
+				{ id: '3', name: 'Cyberdyne', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(Array.from(store.engine.geometry.rowHeights)).toEqual([40, 220, 40, 40]);
+
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+
+		expect(store.getVisualRow(3)?.id).toBe('detail:1');
+		expect(Array.from(store.engine.geometry.rowHeights)).toEqual([40, 40, 40, 220]);
+
+		controller.dispose();
+	});
+
 	it('should toggle column reorder state through the public store API', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],

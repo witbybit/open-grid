@@ -119,6 +119,31 @@ describe('PortalMountManager', () => {
 		expect(mountRow.mock.calls[0][0].rowKey).toBe('detail:2');
 	});
 
+	it('updates row portal content when visual row props change without remounting stable rows', () => {
+		const manager = new PortalMountManager();
+		const mountRow = vi.fn();
+		manager.onMountRowContent = mountRow;
+		const container = document.createElement('div');
+		const collapsed = {
+			kind: 'group' as const,
+			id: 'group:dept:A',
+			field: 'dept',
+			key: 'A',
+			depth: 0,
+			expanded: false,
+			childCount: 2,
+			height: 40,
+		};
+		const expanded = { ...collapsed, expanded: true };
+
+		manager.mountRow({ rowKey: collapsed.id, container, visualRow: collapsed });
+		manager.mountRow({ rowKey: collapsed.id, container, visualRow: collapsed });
+		manager.mountRow({ rowKey: expanded.id, container, visualRow: expanded });
+
+		expect(mountRow).toHaveBeenCalledTimes(2);
+		expect(mountRow.mock.calls[1][0].visualRow).toBe(expanded);
+	});
+
 	it('defers cell portal mounts while scrolling and drops transient cells before flush', () => {
 		const manager = new PortalMountManager();
 		const mount = vi.fn();

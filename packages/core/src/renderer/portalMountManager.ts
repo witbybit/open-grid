@@ -6,6 +6,31 @@ import type {
 	GridRowContentMount,
 	GridRowContentUnmount,
 } from './IGridRenderer.js';
+import type { VisualRow } from '../store.js';
+
+function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
+	if (a === b) return true;
+	if (!a || !b) return false;
+	if (a.kind !== b.kind) return false;
+	if (a.id !== b.id) return false;
+
+	if (a.kind === 'group' && b.kind === 'group') {
+		return a.field === b.field && a.key === b.key && a.expanded === b.expanded && a.depth === b.depth && a.childCount === b.childCount;
+	}
+	if (a.kind === 'detail' && b.kind === 'detail') {
+		return a.parentId === b.parentId && a.parentRowId === b.parentRowId && a.height === b.height;
+	}
+	if (a.kind === 'loading' && b.kind === 'loading') {
+		return a.rowIndex === b.rowIndex;
+	}
+	if (a.kind === 'data' && b.kind === 'data') {
+		return a.rowId === b.rowId && a.node === b.node && a.depth === b.depth;
+	}
+	if (a.kind === 'footer' && b.kind === 'footer') {
+		return a.parentGroupId === b.parentGroupId && a.depth === b.depth;
+	}
+	return false;
+}
 
 export interface DeferredPortalFlushOptions {
 	maxItems?: number;
@@ -29,6 +54,7 @@ export class PortalMountManager<TRowData = unknown> {
 
 	private mountedCells = new Map<string, HTMLElement | undefined>();
 	private mountedRows = new Map<string, HTMLElement | undefined>();
+	private mountedRowVisualRows = new Map<string, GridRowContentMount<TRowData>['visualRow']>();
 	private mountedMenus = new Map<string, HTMLElement | undefined>();
 	private cellReleaseTransactionDepth = 0;
 	private pendingCellReleases = new Map<string, GridCellContentUnmount>();
@@ -196,7 +222,11 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	public mountRow(mount: GridRowContentMount<TRowData>): void {
+		const existingContainer = this.mountedRows.get(mount.rowKey);
+		const existingVisualRow = this.mountedRowVisualRows.get(mount.rowKey);
+		if (existingContainer === mount.container && isVisualRowEqual(existingVisualRow, mount.visualRow)) return;
 		this.mountedRows.set(mount.rowKey, mount.container);
+		this.mountedRowVisualRows.set(mount.rowKey, mount.visualRow);
 		if (this.scrolling) {
 			this.stats.mountsDuringScroll++;
 			this.stats.deferredDuringScroll++;
@@ -211,6 +241,7 @@ export class PortalMountManager<TRowData = unknown> {
 		const existingContainer = this.mountedRows.get(unmount.rowKey);
 		if (unmount.container && existingContainer && existingContainer !== unmount.container) return;
 		this.mountedRows.delete(unmount.rowKey);
+		this.mountedRowVisualRows.delete(unmount.rowKey);
 		if (this.scrolling) {
 			this.stats.releasesDuringScroll++;
 			this.stats.deferredDuringScroll++;
@@ -241,7 +272,7 @@ export class PortalMountManager<TRowData = unknown> {
 		this.deferredRowMounts.clear();
 		this.deferredRowReleases.clear();
 		for (const [cellKey, container] of this.mountedCells) {
-			this.onUnmountCellContent?.({ cellKey, container, flushSync: true });
+			this.onUnmountCellContent?.({ cellKey, container, flushSync: false });
 		}
 		for (const [rowKey, container] of this.mountedRows) {
 			this.onUnmountRowContent?.({ rowKey, container });
@@ -251,6 +282,7 @@ export class PortalMountManager<TRowData = unknown> {
 		}
 		this.mountedCells.clear();
 		this.mountedRows.clear();
+		this.mountedRowVisualRows.clear();
 		this.mountedMenus.clear();
 	}
 

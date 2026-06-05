@@ -82,16 +82,19 @@ function OpenGridInner<TRowData = unknown>({
 		new Map()
 	);
 	const portalFlushScheduledRef = useRef(false);
+	const mountedRef = useRef(true);
 	const [, setPortalVersion] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const hostRef = useRef<GridHost | null>(null);
 	const isGridActiveRef = useRef(false);
 
 	const schedulePortalFlush = useCallback(() => {
+		if (!mountedRef.current) return;
 		if (portalFlushScheduledRef.current) return;
 		portalFlushScheduledRef.current = true;
 		queueMicrotask(() => {
 			portalFlushScheduledRef.current = false;
+			if (!mountedRef.current) return;
 			setPortalVersion((version) => version + 1);
 		});
 	}, []);
@@ -99,6 +102,7 @@ function OpenGridInner<TRowData = unknown>({
 	const applyPortalMutation = useCallback(
 		(sync: boolean, mutate: () => void) => {
 			mutate();
+			if (!mountedRef.current) return;
 			if (sync) {
 				portalFlushScheduledRef.current = false;
 				flushSync(() => {
@@ -113,6 +117,7 @@ function OpenGridInner<TRowData = unknown>({
 
 	const flushPortalContent = useCallback((sync = false) => {
 		portalFlushScheduledRef.current = false;
+		if (!mountedRef.current) return;
 		if (sync) {
 			flushSync(() => {
 				setPortalVersion((version) => version + 1);
@@ -253,6 +258,7 @@ function OpenGridInner<TRowData = unknown>({
 	}, [api, enableColumnReorder]);
 
 	useEffect(() => {
+		mountedRef.current = true;
 		const container = containerRef.current;
 		if (!container) return;
 
@@ -294,12 +300,12 @@ function OpenGridInner<TRowData = unknown>({
 		hostRef.current = host;
 
 		return () => {
-			host.destroy();
+			mountedRef.current = false;
 			hostRef.current = null;
+			host.destroy();
 			portalsRef.current.clear();
 			rowPortalsRef.current.clear();
 			menuPortalsRef.current.clear();
-			setPortalVersion((version) => version + 1);
 		};
 	}, [api, mountPortal, unmountPortal, flushPortalContent, mountRowPortal, unmountRowPortal, mountMenuPortal, unmountMenuPortal]);
 

@@ -415,6 +415,8 @@ export interface GridStyleSlots<TRowData = unknown> {
 	detailRowClass?: (visualRow: Extract<VisualRow<TRowData>, { kind: 'detail' }>) => string;
 }
 
+export type CustomCellScrollMode = 'skeleton' | 'fallback' | 'preserve';
+
 export interface GridState<TRowData = unknown> {
 	getRowId?: (row: TRowData) => string;
 	columns: ColumnDef<TRowData>[];
@@ -458,6 +460,7 @@ export interface GridState<TRowData = unknown> {
 	visibleColRange: ViewportRange;
 
 	styleSlots?: GridStyleSlots<TRowData>;
+	customCellScrollMode?: CustomCellScrollMode;
 }
 
 export interface GridCellRangeBounds {
@@ -613,6 +616,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			getRowId: initialState.getRowId,
 			loadingSkeletonCount: initialState.loadingSkeletonCount,
 			styleSlots: initialState.styleSlots,
+			customCellScrollMode: initialState.customCellScrollMode,
 			groupBy: initialState.groupBy,
 			getParentId: initialState.getParentId,
 			masterDetailEnabled: initialState.masterDetailEnabled,

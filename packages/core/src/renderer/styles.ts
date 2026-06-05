@@ -188,6 +188,16 @@ export const CORE_STYLES = `
     background-color: var(--og-row-hover-bg);
   }
 
+  .og-row-portal-host {
+    width: 100%;
+    height: 100%;
+  }
+
+  .og-row-portal-host > * {
+    width: 100%;
+    height: 100%;
+  }
+
   .og-row-selected {
     background-color: var(--og-selection-bg) !important;
   }
@@ -246,8 +256,17 @@ export const CORE_STYLES = `
   .og-cell[data-content-mode="portal"] > .og-cell-content,
   .og-cell[data-content-mode="primitive"] > .og-cell-portal-host,
   .og-cell[data-content-mode="fallback"] > .og-cell-portal-host,
+  .og-cell[data-content-mode="pending"] > .og-cell-portal-host,
   .og-cell[data-content-mode="loading"] > .og-cell-portal-host {
     display: none;
+  }
+
+  .og-cell[data-content-mode="pending"] > .og-cell-content::before {
+    content: '';
+    width: min(72%, 120px);
+    height: 16px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0.12), rgba(148, 163, 184, 0.22), rgba(148, 163, 184, 0.12));
   }
 
   .og-cell-focused {

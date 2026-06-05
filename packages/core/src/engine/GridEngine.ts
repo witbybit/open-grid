@@ -89,6 +89,7 @@ export class GridEngine<TRowData = unknown> {
 			getRowId: config.getRowId,
 			loadingSkeletonCount: config.loadingSkeletonCount,
 			styleSlots: config.styleSlots,
+			customCellScrollMode: config.customCellScrollMode ?? 'skeleton',
 
 			// Tree / Grouping / Master-Detail State
 			groupBy: config.groupBy,
@@ -632,7 +633,14 @@ export class GridEngine<TRowData = unknown> {
 		}
 
 		const rowCountChanged = this.rowModel ? this.rowModel.getVisualRowCount() !== this.geometry.getRowCount() : false;
-		if (this.rowModel && (updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('loading') || rowCountChanged)) {
+		if (
+			this.rowModel &&
+			(updatedSet.has('rowHeights') ||
+				updatedSet.has('defaultRowHeight') ||
+				updatedSet.has('loading') ||
+				updatedSet.has('dataVersion') ||
+				rowCountChanged)
+		) {
 			this.geometry.updateRows(
 				this.getRowHeightsList(this.rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight

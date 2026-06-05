@@ -384,6 +384,7 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
+			customCellScrollMode: 'fallback',
 		});
 		const loadingRow: VisualRow<{ id: string; name: string }> = {
 			kind: 'loading',
@@ -953,6 +954,7 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
+			customCellScrollMode: 'fallback',
 		});
 		const controller = new ClientRowModelController(store, {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
@@ -1116,11 +1118,62 @@ describe('RenderEngine', () => {
 
 		expect(originalPortalChild.isConnected).toBe(true);
 		expect(originalPortalChild.closest('.og-cell-portal-host')).not.toBeNull();
-		const fallbackCell = Array.from(container.querySelectorAll<HTMLDivElement>('.og-cell')).find(
-			(cell) => cell.querySelector('.og-cell-content')?.textContent?.startsWith('Row ') && cell.querySelector('.og-cell-portal-host')
-		);
-		expect(fallbackCell).toBeDefined();
+		expect(container.querySelector('.og-cell-portal-host')).not.toBeNull();
 		expect(renderer.getRenderStats().rootTextContentWritesOnPortalCells).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('uses styled pending placeholders for recycled custom cells by default during scroll', () => {
+		vi.useFakeTimers();
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'name', header: 'Name', width: 120, cellRenderer: () => null }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.onMountCellContent = ({ cellKey, container: portalHost }) => {
+			const child = document.createElement('div');
+			child.dataset.portalChild = cellKey;
+			child.textContent = `portal:${cellKey}`;
+			portalHost.replaceChildren(child);
+		};
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 1600;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		const pendingCell = container.querySelector<HTMLDivElement>('.og-cell[data-content-mode="pending"]');
+		expect(pendingCell).not.toBeNull();
+		expect(pendingCell?.querySelector('.og-cell-content')?.textContent).toBe('');
+		expect(pendingCell?.querySelector('.og-cell-portal-host')).not.toBeNull();
 
 		renderer.unmount();
 		controller.dispose();
@@ -1474,6 +1527,72 @@ describe('RenderEngine', () => {
 			(renderer.portalMountManager.onMountRowContent as ReturnType<typeof vi.fn>).mock.calls.length +
 				(renderer.portalMountManager.onUnmountRowContent as ReturnType<typeof vi.fn>).mock.calls.length
 		).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('does not clear React-owned detail portal DOM before deferred unmount runs', () => {
+		vi.useFakeTimers();
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'name', header: 'Name', width: 180 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 180,
+			getRowId: (row) => row.id,
+			masterDetailEnabled: true,
+			detailRowHeight: 40,
+			expansion: {
+				groups: {},
+				treeRows: {},
+				details: { 'row-0': true },
+			},
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 30 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 120,
+			width: 500,
+			height: 120,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		let portalChild: HTMLDivElement | null = null;
+		renderer.portalMountManager.onMountRowContent = ({ container: portalHost }) => {
+			portalChild = document.createElement('div');
+			portalChild.dataset.detailPortalChild = 'true';
+			portalHost.appendChild(portalChild);
+		};
+		renderer.portalMountManager.onUnmountRowContent = ({ container: portalHost }) => {
+			if (portalChild) {
+				portalHost?.removeChild(portalChild);
+				portalChild = null;
+			}
+		};
+		renderer.mount(container);
+		expect(portalChild?.parentElement?.classList.contains('og-row-portal-host')).toBe(true);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 1200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		expect(() => vi.advanceTimersByTime(80)).not.toThrow();
+		expect(portalChild).toBeNull();
 
 		renderer.unmount();
 		controller.dispose();

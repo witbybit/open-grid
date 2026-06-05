@@ -75,6 +75,15 @@ export class CellRenderer {
 		cell.dataset.contentMode = 'portal';
 	}
 
+	public showPendingContent(cell: HTMLElement): void {
+		cell.dataset.contentMode = 'pending';
+		const parts = this.ensureCellParts(cell);
+		if (parts.content.textContent !== '') {
+			parts.content.textContent = '';
+			parts.skeleton = null;
+		}
+	}
+
 	public ensureLoadingSkeleton(cell: HTMLElement): void {
 		cell.dataset.contentMode = 'loading';
 		const parts = this.ensureCellParts(cell);
