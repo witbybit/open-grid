@@ -4,11 +4,13 @@ import type { GeometryController } from './geometryController.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { InvalidationFrame } from './invalidationManager.js';
-import type { ColumnDef, VisualRow, GridState, RowNode, GridCellPointer } from '../store.js';
+import { type CellRendererPhase, type ColumnDef, type VisualRow, type GridState, type RowNode, type GridCellPointer } from '../store.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import { createCellKey } from '../ids.js';
 import type { GridCellContentUnmount } from './IGridRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
+
+type ResolvedCellRendererScrollMode = 'skeleton' | 'fallback' | 'preserve';
 
 export interface CellSlotState {
 	rowId: string;
@@ -442,7 +444,8 @@ export class RowRenderer<TRowData = unknown> {
 		columns: ColumnDef<TRowData>[],
 		isScrollFrameActive: boolean,
 		releaseOutOfRange = true,
-		ctx?: ScrollRenderContext<TRowData>
+		ctx?: ScrollRenderContext<TRowData>,
+		phase: CellRendererPhase = 'initial'
 	): void {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
@@ -625,6 +628,8 @@ export class RowRenderer<TRowData = unknown> {
 					col,
 					isEditing: access.isEditing,
 					isLoading: access.isLoading,
+					phase: access.isEditing ? 'edit' : phase,
+					isScrolling: false,
 				});
 			} else {
 				if (cell.dataset.cellKey) {
@@ -930,10 +935,10 @@ export class RowRenderer<TRowData = unknown> {
 
 		if (rendererKind === 'portal') {
 			if (cell.dataset.cellKey !== cellKey) {
-				const customCellScrollMode = col.customCellScrollMode ?? ctx.customCellScrollMode;
-				if (customCellScrollMode === 'preserve') {
+				const rendererScrollMode = this.getCellRendererScrollMode(col);
+				if (rendererScrollMode === 'preserve') {
 					this.cellRenderer.showPortalContent(cell);
-				} else if (customCellScrollMode === 'fallback') {
+				} else if (rendererScrollMode === 'fallback') {
 					const cachedResult = this.engine.data.getCachedDisplayValue(node.id, col.field);
 					const fallbackText = cachedResult.hasCached ? (cachedResult.value == null ? '' : String(cachedResult.value)) : '...';
 					this.cellRenderer.setPrimitiveContent(cell, fallbackText, 'fallback');
@@ -976,6 +981,13 @@ export class RowRenderer<TRowData = unknown> {
 			previous.contentText === next.contentText &&
 			previous.className === next.className
 		);
+	}
+
+	private getCellRendererScrollMode(col: ColumnDef<TRowData>): ResolvedCellRendererScrollMode {
+		const scrollBehavior = col.cellRendererCapabilities?.scrollBehavior;
+		if (scrollBehavior === 'fallback') return 'fallback';
+		if (scrollBehavior === 'live' || scrollBehavior === 'defer') return 'preserve';
+		return 'skeleton';
 	}
 
 	private getRendererKind(
@@ -1182,7 +1194,7 @@ export class RowRenderer<TRowData = unknown> {
 			if (visualRow?.kind === 'data' && colIndex >= 0) {
 				const pooledRow = this.activeRows.get(rowIndex);
 				if (pooledRow && pooledRow.cells.get(colIndex) === cell) {
-					this.recycleRowCells(pooledRow, visualRow.node, rowIndex, colIndex, colIndex, columns, false, false);
+					this.recycleRowCells(pooledRow, visualRow.node, rowIndex, colIndex, colIndex, columns, false, false, undefined, 'scroll-idle');
 					this.postScrollDirtyCellsDecorated++;
 					processed++;
 				}

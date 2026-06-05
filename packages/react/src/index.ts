@@ -24,7 +24,8 @@ export type {
 	ServerGridOptions,
 	FilterModelItem,
 	VisualRow,
-	CustomCellScrollMode,
+	CellRendererCapabilities,
+	CellRendererPhase,
 } from './types.js';
 
 export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';

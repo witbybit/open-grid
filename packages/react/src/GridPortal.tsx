@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, memo } from 'react';
-import { ColumnDef, GridApi, RowNode, VisualRow } from '@open-grid/core';
+import { ColumnDef, GridApi, RowNode, VisualRow, type CellRendererPhase } from '@open-grid/core';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import { GridProvider } from './OpenGrid.js';
@@ -14,12 +14,24 @@ export interface PortalCellProps<TRowData = unknown> {
 	node: RowNode<TRowData>;
 	isEditing: boolean;
 	isLoading: boolean;
+	phase?: CellRendererPhase;
+	isScrolling?: boolean;
 }
 
 /**
  * Clean React Portal cell adapter that mounts only custom renderers & custom editors.
  */
-function PortalCellInner<TRowData = unknown>({ rowId, colField, value, col, node, isEditing, isLoading }: PortalCellProps<TRowData>) {
+function PortalCellInner<TRowData = unknown>({
+	rowId,
+	colField,
+	value,
+	col,
+	node,
+	isEditing,
+	isLoading,
+	phase,
+	isScrolling,
+}: PortalCellProps<TRowData>) {
 	const api = useGridApi<TRowData>();
 
 	const [localValue, setLocalValue] = useState<unknown>(value);
@@ -79,6 +91,14 @@ function PortalCellInner<TRowData = unknown>({ rowId, colField, value, col, node
 	}
 
 	const rowData = node?.data;
+	const gridState = api.getState();
+	const focusedCell = gridState.selection.focus;
+	const visualIndex = api.getVisualIndexByRowId(rowId);
+	const isSelected =
+		visualIndex !== null &&
+		!!gridState.selection.bounds &&
+		visualIndex >= gridState.selection.bounds.minRow &&
+		visualIndex <= gridState.selection.bounds.maxRow;
 
 	const CustomEditor = col?.cellEditor as ((props: Record<string, unknown>) => ReactNode) | undefined;
 	const CustomRenderer = col?.cellRenderer as ((props: Record<string, unknown>) => ReactNode) | undefined;
@@ -139,7 +159,20 @@ function PortalCellInner<TRowData = unknown>({ rowId, colField, value, col, node
 					/>
 				)
 			) : CustomRenderer && rowData ? (
-				CustomRenderer({ value, computedValue: value, row: rowData, rowId, colField, api })
+				CustomRenderer({
+					value,
+					computedValue: value,
+					row: rowData,
+					rowId,
+					colField,
+					colId: colField,
+					isScrolling: !!isScrolling,
+					phase: phase ?? 'initial',
+					isFocused: focusedCell?.rowId === rowId && focusedCell?.colField === colField,
+					isEditing,
+					isSelected,
+					api,
+				})
 			) : null}
 		</div>
 	);
@@ -155,6 +188,8 @@ export interface PortalData<TRowData = unknown> {
 	col: ColumnDef<TRowData>;
 	isEditing: boolean;
 	isLoading: boolean;
+	phase?: CellRendererPhase;
+	isScrolling?: boolean;
 }
 
 function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
@@ -248,7 +283,9 @@ export function createPortalStore<TRowData = unknown>() {
 			node: RowNode<TRowData>,
 			col: ColumnDef<TRowData>,
 			isEditing: boolean,
-			isLoading: boolean
+			isLoading: boolean,
+			phase?: CellRendererPhase,
+			isScrolling?: boolean
 		) {
 			const existing = portals.get(cellKey);
 			if (
@@ -256,6 +293,8 @@ export function createPortalStore<TRowData = unknown>() {
 				existing.container === container &&
 				existing.isEditing === isEditing &&
 				existing.isLoading === isLoading &&
+				existing.phase === phase &&
+				existing.isScrolling === isScrolling &&
 				existing.value === value &&
 				existing.node === node &&
 				existing.col === col
@@ -277,6 +316,8 @@ export function createPortalStore<TRowData = unknown>() {
 				col,
 				isEditing,
 				isLoading,
+				phase,
+				isScrolling,
 			});
 			notify();
 		},
@@ -412,6 +453,8 @@ export function PortalManager<TRowData = unknown>({
 							node={p.node}
 							isEditing={p.isEditing}
 							isLoading={p.isLoading}
+							phase={p.phase}
+							isScrolling={p.isScrolling}
 						/>
 					</GridProvider>,
 					p.container

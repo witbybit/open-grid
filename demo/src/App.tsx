@@ -16,7 +16,7 @@ import RealtimeDashboard from './pages/RealtimeDashboard';
 import GanttSchedulingWorkspace from './pages/GanttSchedulingWorkspace';
 import NestedTablesGrouping from './pages/NestedTablesGrouping';
 import { useShowroomStores } from './hooks/useShowroomStores';
-import type { FilterModel, SortModel, CustomCellScrollMode } from '@open-grid/react';
+import type { FilterModel, SortModel } from '@open-grid/react';
 import { GridPageType } from './components/GridShared';
 
 export default function App() {
@@ -54,9 +54,6 @@ export default function App() {
 	// Preserve Accessibility settings
 	const [editTrigger, setEditTrigger] = useState<'singleClick' | 'doubleClick'>('doubleClick');
 	const [arrowKeyNavigationEdit, setArrowKeyNavigationEdit] = useState<boolean>(false);
-
-	// Scroll mode settings
-	const [customCellScrollMode, setCustomCellScrollMode] = useState<CustomCellScrollMode>('skeleton');
 
 	// Sorting & Filtering variables
 	const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Pending' | 'Inactive'>('All');
@@ -216,7 +213,6 @@ export default function App() {
 								onCellValueChanged={handlePerfCellValueChanged}
 								pinLeftColumns={pinLeftColumns}
 								pinRightColumns={pinRightColumns}
-								customCellScrollMode={customCellScrollMode}
 							/>
 						)}
 
@@ -227,7 +223,6 @@ export default function App() {
 								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 								pinLeftColumns={pinLeftColumns}
 								pinRightColumns={pinRightColumns}
-								customCellScrollMode={customCellScrollMode}
 							/>
 						)}
 
@@ -320,8 +315,6 @@ export default function App() {
 					setEditTrigger={setEditTrigger}
 					arrowKeyNavigationEdit={arrowKeyNavigationEdit}
 					setArrowKeyNavigationEdit={setArrowKeyNavigationEdit}
-					customCellScrollMode={customCellScrollMode}
-					setCustomCellScrollMode={setCustomCellScrollMode}
 				/>
 			</div>
 		</div>

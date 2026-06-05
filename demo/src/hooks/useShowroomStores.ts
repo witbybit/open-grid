@@ -91,7 +91,12 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Delta Δ',
 				width: 90,
 				cellRenderer: GreeksRenderer,
-				customCellScrollMode: 'fallback',
+				cellRendererCapabilities: {
+					scrollBehavior: 'fallback',
+					estimatedCost: 'expensive',
+					recycle: 'preserve',
+					warmCache: true,
+				},
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
@@ -106,6 +111,12 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Gamma Γ',
 				width: 95,
 				cellRenderer: GreeksRenderer,
+				cellRendererCapabilities: {
+					scrollBehavior: 'fallback',
+					estimatedCost: 'expensive',
+					recycle: 'preserve',
+					warmCache: true,
+				},
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
@@ -120,7 +131,12 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Vega ν',
 				width: 90,
 				cellRenderer: GreeksRenderer,
-				customCellScrollMode: 'preserve',
+				cellRendererCapabilities: {
+					scrollBehavior: 'live',
+					estimatedCost: 'cheap',
+					recycle: 'preserve',
+					supportsRebind: false,
+				},
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
@@ -135,6 +151,12 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Theta θ',
 				width: 90,
 				cellRenderer: GreeksRenderer,
+				cellRendererCapabilities: {
+					scrollBehavior: 'fallback',
+					estimatedCost: 'expensive',
+					recycle: 'preserve',
+					warmCache: true,
+				},
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
@@ -152,7 +174,13 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				width: 110,
 				cellEditor: StatusDropdownEditor,
 				cellRenderer: RiskBadgeRenderer,
-				customCellScrollMode: 'preserve',
+				cellRendererCapabilities: {
+					scrollBehavior: 'defer',
+					estimatedCost: 'medium',
+					interactive: true,
+					recycle: 'preserve',
+					warmCache: true,
+				},
 				valueGetter: ({ row }) => {
 					if (row.status === 'Active') return 'LOW';
 					if (row.status === 'Pending') return 'MEDIUM';
@@ -206,9 +234,21 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		return [
 			{ field: 'id', header: 'Trace ID', width: 130 },
 			{ field: 'timestamp', header: 'Timestamp', width: 220 },
-			{ field: 'service', header: 'Microservice', width: 140, cellRenderer: ServiceBadgeRenderer, customCellScrollMode: 'preserve' },
-			{ field: 'severity', header: 'Severity', width: 120, cellRenderer: RiskBadgeRenderer },
-			{ field: 'latencyMs', header: 'Latency', width: 110, cellRenderer: LatencyRenderer, customCellScrollMode: 'skeleton' },
+			{
+				field: 'service',
+				header: 'Microservice',
+				width: 140,
+				cellRenderer: ServiceBadgeRenderer,
+				cellRendererCapabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'preserve' },
+			},
+			{
+				field: 'severity',
+				header: 'Severity',
+				width: 120,
+				cellRenderer: RiskBadgeRenderer,
+				cellRendererCapabilities: { scrollBehavior: 'fallback', estimatedCost: 'medium', interactive: false },
+			},
+			{ field: 'latencyMs', header: 'Latency', width: 110, cellRenderer: LatencyRenderer },
 			{ field: 'ipAddress', header: 'Origin IP', width: 140 },
 		];
 	}, []);

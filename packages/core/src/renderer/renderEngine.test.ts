@@ -384,7 +384,6 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			customCellScrollMode: 'fallback',
 		});
 		const loadingRow: VisualRow<{ id: string; name: string }> = {
 			kind: 'loading',
@@ -1010,7 +1009,6 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			customCellScrollMode: 'fallback',
 		});
 		const controller = new ClientRowModelController(store, {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
@@ -1336,6 +1334,8 @@ describe('RenderEngine', () => {
 		await Promise.resolve();
 		await Promise.resolve();
 		expect(renderer.portalMountManager.onMountCellContent).toHaveBeenCalled();
+		expect((renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mock.calls[0][0].phase).toBe('scroll-idle');
+		expect((renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mock.calls[0][0].isScrolling).toBe(false);
 		expect(renderer.getRenderStats().portalMountsDuringScroll).toBe(0);
 
 		renderer.unmount();
@@ -2071,7 +2071,7 @@ describe('RenderEngine', () => {
 		vi.useRealTimers();
 	});
 
-	it('column-level customCellScrollMode overrides grid-level setting during scroll', () => {
+	it('uses column renderer capabilities during scroll and skeletons uncategorized renderers', () => {
 		vi.useFakeTimers();
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -2079,23 +2079,29 @@ describe('RenderEngine', () => {
 			return callbacks.length;
 		});
 
-		// 1. Define columns:
-		// - 'col1' has a custom cellRenderer and NO column-level customCellScrollMode (should inherit grid-level)
-		// - 'col2' has a custom cellRenderer and column-level customCellScrollMode: 'preserve'
-		// - 'col3' has a custom cellRenderer and column-level customCellScrollMode: 'fallback'
 		const columns = [
 			{ field: 'col1', header: 'Col 1', width: 100, cellRenderer: () => 'Col1Rendered' },
-			{ field: 'col2', header: 'Col 2', width: 100, cellRenderer: () => 'Col2Rendered', customCellScrollMode: 'preserve' as const },
-			{ field: 'col3', header: 'Col 3', width: 100, cellRenderer: () => 'Col3Rendered', customCellScrollMode: 'fallback' as const },
+			{
+				field: 'col2',
+				header: 'Col 2',
+				width: 100,
+				cellRenderer: () => 'Col2Rendered',
+				cellRendererCapabilities: { scrollBehavior: 'live' as const },
+			},
+			{
+				field: 'col3',
+				header: 'Col 3',
+				width: 100,
+				cellRenderer: () => 'Col3Rendered',
+				cellRendererCapabilities: { scrollBehavior: 'fallback' as const },
+			},
 		];
 
-		// Grid-level scroll mode is 'skeleton'
 		const store = new GridStore<{ id: string; col1: string; col2: string; col3: string }>({
 			columns,
 			defaultRowHeight: 40,
 			defaultColWidth: 100,
 			getRowId: (row) => row.id,
-			customCellScrollMode: 'skeleton',
 		});
 
 		const controller = new ClientRowModelController(store, {
@@ -2127,7 +2133,6 @@ describe('RenderEngine', () => {
 		renderer.portalMountManager.onUnmountCellContent = vi.fn();
 		renderer.mount(container);
 
-		// Trigger scrolling frame - scroll down to bring row-40 (at top 1600px) into view
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
@@ -2135,7 +2140,6 @@ describe('RenderEngine', () => {
 		expect(callbacks.length).toBe(1);
 		callbacks[0](0);
 
-		// Row 40 (now in view) is checked:
 		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
 		expect(row40).not.toBeNull();
 
@@ -2143,14 +2147,94 @@ describe('RenderEngine', () => {
 		const cell2 = row40.querySelector('[data-col-field="col2"]') as HTMLDivElement;
 		const cell3 = row40.querySelector('[data-col-field="col3"]') as HTMLDivElement;
 
-		// - 'col1' inherited 'skeleton' -> content mode is 'pending'
 		expect(cell1.dataset.contentMode).toBe('pending');
-
-		// - 'col2' explicitly set 'preserve' -> content mode is 'portal'
 		expect(cell2.dataset.contentMode).toBe('portal');
-
-		// - 'col3' explicitly set 'fallback' -> content mode is 'fallback' (displays cached value)
 		expect(cell3.dataset.contentMode).toBe('fallback');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+		vi.useRealTimers();
+	});
+
+	it('cellRendererCapabilities choose safe scroll behavior when no scroll mode override is set', () => {
+		vi.useFakeTimers();
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callbacks.push(callback);
+			return callbacks.length;
+		});
+
+		const columns = [
+			{
+				field: 'live',
+				header: 'Live',
+				width: 100,
+				cellRenderer: () => 'LiveRendered',
+				cellRendererCapabilities: { scrollBehavior: 'live' as const, estimatedCost: 'cheap' as const },
+			},
+			{
+				field: 'defer',
+				header: 'Defer',
+				width: 100,
+				cellRenderer: () => 'DeferRendered',
+				cellRendererCapabilities: { scrollBehavior: 'defer' as const, interactive: true },
+			},
+			{
+				field: 'fallback',
+				header: 'Fallback',
+				width: 100,
+				cellRenderer: () => 'FallbackRendered',
+				cellRendererCapabilities: { scrollBehavior: 'fallback' as const, estimatedCost: 'expensive' as const },
+			},
+		];
+
+		const store = new GridStore<{ id: string; live: string; defer: string; fallback: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 100 }, (_, index) => ({
+				id: `row-${index}`,
+				live: `Live ${index}`,
+				defer: `Defer ${index}`,
+				fallback: `Fallback ${index}`,
+			})),
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 1600;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		expect(callbacks.length).toBe(1);
+		callbacks[0](0);
+
+		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
+		expect(row40).not.toBeNull();
+		expect((row40.querySelector('[data-col-field="live"]') as HTMLDivElement).dataset.contentMode).toBe('portal');
+		expect((row40.querySelector('[data-col-field="defer"]') as HTMLDivElement).dataset.contentMode).toBe('portal');
+		expect((row40.querySelector('[data-col-field="fallback"]') as HTMLDivElement).dataset.contentMode).toBe('fallback');
 
 		renderer.unmount();
 		controller.dispose();

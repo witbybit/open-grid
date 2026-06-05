@@ -240,12 +240,35 @@ export interface ValueGetterParams<TRowData = unknown> {
 	colField: string;
 }
 
+export type CellRendererPhase = 'initial' | 'scroll' | 'scroll-idle' | 'interaction' | 'edit' | 'destroy';
+
+export interface CellRendererCapabilities {
+	/**
+	 * Whether renderer content should stay live, defer updates, or show fallback while scrolling.
+	 */
+	scrollBehavior?: 'live' | 'defer' | 'fallback';
+	/**
+	 * Future lifecycle hint for renderer instance reuse.
+	 */
+	recycle?: 'rebind' | 'preserve' | 'destroy';
+	estimatedCost?: 'cheap' | 'medium' | 'expensive';
+	interactive?: boolean;
+	supportsRebind?: boolean;
+	warmCache?: boolean;
+}
+
 export interface CellRendererProps<TRowData = unknown> {
 	value: unknown;
 	computedValue: unknown;
 	row: TRowData;
 	rowId: string;
 	colField: string;
+	colId?: string;
+	isScrolling?: boolean;
+	phase?: CellRendererPhase;
+	isFocused?: boolean;
+	isEditing?: boolean;
+	isSelected?: boolean;
 	api: GridApi<TRowData>;
 }
 
@@ -371,11 +394,11 @@ export interface ColumnDef<TRowData = unknown> {
 	valueGetterDependencies?: string[];
 	valueSetter?: (row: TRowData, value: unknown) => boolean;
 	cellRenderer?: (props: CellRendererProps<TRowData>) => unknown;
+	cellRendererCapabilities?: CellRendererCapabilities;
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
 	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;
 	headerMenuComponent?: any;
 	sortable?: boolean;
-	customCellScrollMode?: CustomCellScrollMode;
 }
 
 export interface GridRowClassParams<TRowData = unknown> {
@@ -416,7 +439,16 @@ export interface GridStyleSlots<TRowData = unknown> {
 	detailRowClass?: (visualRow: Extract<VisualRow<TRowData>, { kind: 'detail' }>) => string;
 }
 
-export type CustomCellScrollMode = 'skeleton' | 'fallback' | 'preserve';
+export function getCellRendererCapabilities<TRowData>(col: ColumnDef<TRowData>): Required<CellRendererCapabilities> {
+	return {
+		scrollBehavior: col.cellRendererCapabilities?.scrollBehavior ?? 'fallback',
+		recycle: col.cellRendererCapabilities?.recycle ?? 'preserve',
+		estimatedCost: col.cellRendererCapabilities?.estimatedCost ?? 'medium',
+		interactive: col.cellRendererCapabilities?.interactive ?? false,
+		supportsRebind: col.cellRendererCapabilities?.supportsRebind ?? false,
+		warmCache: col.cellRendererCapabilities?.warmCache ?? true,
+	};
+}
 
 export interface GridState<TRowData = unknown> {
 	getRowId?: (row: TRowData) => string;
@@ -461,7 +493,6 @@ export interface GridState<TRowData = unknown> {
 	visibleColRange: ViewportRange;
 
 	styleSlots?: GridStyleSlots<TRowData>;
-	customCellScrollMode?: CustomCellScrollMode;
 }
 
 export interface GridCellRangeBounds {
@@ -536,7 +567,6 @@ export interface GridApi<TRowData = unknown> {
 	setRowHeight(rowId: string, height: number): void;
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
-	setCustomCellScrollMode(mode: CustomCellScrollMode): void;
 	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
 	toggleGroupExpanded(groupId: string): void;
 	toggleDetailExpanded(rowId: string): void;
@@ -619,7 +649,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			loading: initialState.loading,
 			loadingSkeletonCount: initialState.loadingSkeletonCount,
 			styleSlots: initialState.styleSlots,
-			customCellScrollMode: initialState.customCellScrollMode,
 			groupBy: initialState.groupBy,
 			getParentId: initialState.getParentId,
 			masterDetailEnabled: initialState.masterDetailEnabled,
@@ -773,10 +802,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setFilterModel = (filterModel: FilterModel | null): void => {
 		this.engine.setFilterModel(filterModel);
-	};
-
-	public setCustomCellScrollMode = (mode: CustomCellScrollMode): void => {
-		this.engine.stateManager.setState({ customCellScrollMode: mode });
 	};
 
 	public setStyleSlots = (styleSlots: GridStyleSlots<TRowData> | undefined): void => {

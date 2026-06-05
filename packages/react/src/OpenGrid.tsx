@@ -10,7 +10,6 @@ import {
 	mountGridHost,
 	registerGridContextMenu,
 	VisualRow,
-	CustomCellScrollMode,
 } from '@open-grid/core';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { flushSync } from 'react-dom';
@@ -45,7 +44,6 @@ export interface OpenGridProps<TRowData = unknown> {
 	};
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
-	customCellScrollMode?: CustomCellScrollMode;
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
@@ -77,7 +75,6 @@ function OpenGridInner<TRowData = unknown>({
 	navigationOptions = {},
 	groupRowRenderer,
 	detailRowRenderer,
-	customCellScrollMode,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -100,12 +97,6 @@ function OpenGridInner<TRowData = unknown>({
 	}, [api, enableColumnReorder]);
 
 	useEffect(() => {
-		if (customCellScrollMode !== undefined) {
-			api.setCustomCellScrollMode(customCellScrollMode);
-		}
-	}, [api, customCellScrollMode]);
-
-	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
 
@@ -118,7 +109,17 @@ function OpenGridInner<TRowData = unknown>({
 			},
 			cellContent: {
 				mountCellContent: (mount) => {
-					portalStore.mountCell(mount.cellKey, mount.container, mount.value, mount.node, mount.col, mount.isEditing, mount.isLoading);
+					portalStore.mountCell(
+						mount.cellKey,
+						mount.container,
+						mount.value,
+						mount.node,
+						mount.col,
+						mount.isEditing,
+						mount.isLoading,
+						mount.phase,
+						mount.isScrolling
+					);
 				},
 				unmountCellContent: (unmount) => {
 					portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync);

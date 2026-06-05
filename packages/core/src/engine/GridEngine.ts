@@ -90,7 +90,6 @@ export class GridEngine<TRowData = unknown> {
 			loading: config.loading,
 			loadingSkeletonCount: config.loadingSkeletonCount,
 			styleSlots: config.styleSlots,
-			customCellScrollMode: config.customCellScrollMode ?? 'skeleton',
 
 			// Tree / Grouping / Master-Detail State
 			groupBy: config.groupBy,

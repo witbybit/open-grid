@@ -9,7 +9,6 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	loadingVersion: number;
 
 	activeEdit: GridCellPointer | null;
-	customCellScrollMode: 'fallback' | 'defer' | 'mount' | 'preserve' | 'skeleton';
 
 	hasStyleHooks: boolean;
 	hasCustomRenderers: boolean;

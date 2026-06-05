@@ -1,6 +1,6 @@
 import React from 'react';
 import { Zap, Filter, ArrowDownAZ, ArrowUpAZ, Keyboard, Layers, HelpCircle, RefreshCw, GripVertical, MoveLeft, MoveRight } from 'lucide-react';
-import type { GridApi, CustomCellScrollMode } from '@open-grid/react';
+import type { GridApi } from '@open-grid/react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
 // ============================================================================
@@ -312,36 +312,15 @@ export function AccessibilityPanel({ editTrigger, setEditTrigger, arrowKeyNaviga
 interface DeveloperPanelProps {
 	activePage: GridPageType;
 	activeApi: GridApi<any>;
-	customCellScrollMode: CustomCellScrollMode;
-	setCustomCellScrollMode: (mode: CustomCellScrollMode) => void;
 }
 
-export function DeveloperPanel({ activePage, activeApi, customCellScrollMode, setCustomCellScrollMode }: DeveloperPanelProps) {
-	const handleScrollModeChange = (mode: CustomCellScrollMode) => {
-		setCustomCellScrollMode(mode);
-	};
-
+export function DeveloperPanel({ activePage, activeApi }: DeveloperPanelProps) {
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
 			<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 				<Layers className='w-4 h-4 text-purple-400' />
 				Developer Panel
 			</h3>
-
-			{(activePage === 'perf' || activePage === 'server') && (
-				<div className='flex flex-col gap-1 border-b border-slate-850 pb-3 mb-1'>
-					<label className='text-[9px] text-slate-500 font-bold uppercase tracking-wider'>Global Custom Scroll Mode</label>
-					<select
-						value={customCellScrollMode}
-						onChange={(e) => handleScrollModeChange(e.target.value as any)}
-						className='w-full bg-slate-950 border border-slate-850 rounded-lg px-2 py-1.5 text-[10px] text-slate-200 outline-none focus:border-purple-500 transition-all font-sans font-bold cursor-pointer'
-					>
-						<option value='skeleton'>Skeleton (Loading Shimmer)</option>
-						<option value='fallback'>Fallback (Cached Display Text)</option>
-						<option value='preserve'>Preserve (Mount Instantly)</option>
-					</select>
-				</div>
-			)}
 
 			{activePage === 'perf' || activePage === 'layout' ? (
 				<div className='flex flex-col gap-2.5'>

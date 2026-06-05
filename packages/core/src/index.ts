@@ -5,10 +5,11 @@ export { RowNode } from './store.js';
 export type {
 	CellEditorProps,
 	CellPointer,
+	CellRendererCapabilities,
+	CellRendererPhase,
 	CellRendererProps,
 	CellState,
 	ColumnDef,
-	CustomCellScrollMode,
 	GridApi,
 	GridCellAccess,
 	GridCellClickParams,
@@ -38,6 +39,7 @@ export type {
 export {
 	canEditCell,
 	canFocusVisualRow,
+	getCellRendererCapabilities,
 	isDataVisualRow,
 	isDataCellSelectable,
 	isEditableVisualRow,

@@ -155,6 +155,55 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should pass lifecycle metadata to custom cell renderers', () => {
+		const rendererProps: Record<string, unknown>[] = [];
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellRenderer: (props) => {
+						rendererProps.push(props as unknown as Record<string, unknown>);
+						return <span data-testid='custom-renderer-phase'>{String(props.phase)}</span>;
+					},
+				},
+			],
+		});
+
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+
+		render(
+			<GridProvider api={grid.api}>
+				<PortalCell
+					rowId='1'
+					colField='name'
+					value='Product A'
+					col={colDef}
+					node={node}
+					isEditing={false}
+					isLoading={false}
+					phase='scroll-idle'
+					isScrolling={false}
+				/>
+			</GridProvider>
+		);
+
+		expect(screen.getByTestId('custom-renderer-phase').textContent).toBe('scroll-idle');
+		expect(rendererProps[0]).toEqual(
+			expect.objectContaining({
+				colId: 'name',
+				phase: 'scroll-idle',
+				isScrolling: false,
+				isEditing: false,
+				isFocused: false,
+			})
+		);
+		grid.api.destroy();
+	});
+
 	it('should render default text input when editing and no custom editor via PortalCell', () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],

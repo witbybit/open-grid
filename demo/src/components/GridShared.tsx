@@ -1,14 +1,5 @@
 import React, { useEffect } from 'react';
-import {
-	OpenGrid,
-	CellRendererProps,
-	CellEditorProps,
-	GridApi,
-	GridCellClickParams,
-	useGridApi,
-	GridContextMenuOptions,
-	CustomCellScrollMode,
-} from '@open-grid/react';
+import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi, GridContextMenuOptions } from '@open-grid/react';
 
 export type GridPageType = 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt' | 'nested';
 // ============================================================================
@@ -366,20 +357,21 @@ export const PriceBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 	);
 };
 
-export const GreeksRenderer = ({ value }: CellRendererProps<any>) => {
+export const GreeksRenderer = ({ value, phase }: CellRendererProps<any>) => {
 	const valNum = parseFloat(String(value)) || 0;
 	const isPositive = valNum >= 0;
 	const colorClass = isPositive ? 'text-emerald-400 text-glow-emerald font-extrabold' : 'text-rose-400 text-glow-rose font-extrabold';
 	const sign = isPositive ? '+' : '';
+	const phaseClass = phase === 'scroll-idle' ? 'opacity-100' : 'opacity-90';
 	return (
-		<span className={`font-mono text-xs leading-none ${colorClass}`}>
+		<span className={`font-mono text-xs leading-none transition-opacity ${phaseClass} ${colorClass}`}>
 			{sign}
 			{valNum.toFixed(4)}
 		</span>
 	);
 };
 
-export const RiskBadgeRenderer = ({ value }: CellRendererProps<any>) => {
+export const RiskBadgeRenderer = ({ value, isFocused, isSelected }: CellRendererProps<any>) => {
 	const valStr = String(value).toUpperCase();
 	let colorClass = 'bg-slate-500/10 border-slate-700/50 text-slate-400';
 	if (valStr === 'CRITICAL' || valStr === 'HIGH RISK') {
@@ -391,8 +383,11 @@ export const RiskBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 	} else if (valStr === 'LOW' || valStr === 'NO RISK') {
 		colorClass = 'bg-emerald-950/30 border-emerald-500/25 text-emerald-400 font-medium';
 	}
+	const focusClass = isFocused || isSelected ? 'ring-1 ring-cyan-400/50' : '';
 	return (
-		<span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border leading-none inline-block ${colorClass}`}>{valStr}</span>
+		<span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border leading-none inline-block ${focusClass} ${colorClass}`}>
+			{valStr}
+		</span>
 	);
 };
 
@@ -437,7 +432,6 @@ export interface GridViewProps {
 	enableContextMenu?: boolean;
 	contextMenuOptions?: GridContextMenuOptions<any>;
 	className?: string;
-	customCellScrollMode?: CustomCellScrollMode;
 }
 
 export function GridView({
@@ -454,7 +448,6 @@ export function GridView({
 	enableContextMenu = true,
 	contextMenuOptions,
 	className = '',
-	customCellScrollMode,
 }: GridViewProps) {
 	const [lastClick, setLastClick] = React.useState<GridCellClickParams<any> | null>(null);
 
@@ -498,7 +491,6 @@ export function GridView({
 				enableNavigation={true}
 				enableContextMenu={enableContextMenu}
 				contextMenuOptions={contextMenuOptions}
-				customCellScrollMode={customCellScrollMode}
 				onCellClick={(params) => {
 					setLastClick(params);
 				}}

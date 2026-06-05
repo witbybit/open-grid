@@ -1,4 +1,4 @@
-import type { ColumnDef, CustomCellScrollMode, GridCellPointer, GridSelectionState, GridStyleSlots } from '../store.js';
+import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleSlots } from '../store.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
@@ -15,7 +15,6 @@ export interface GridEngineConfig<TRowData = unknown> {
 	activeEdit?: GridCellPointer | null;
 	loadingSkeletonCount?: number;
 	styleSlots?: GridStyleSlots<TRowData>;
-	customCellScrollMode?: CustomCellScrollMode;
 	loading?: boolean;
 
 	// Tree / Grouping / Master-Detail State Configuration

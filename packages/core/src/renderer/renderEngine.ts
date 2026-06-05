@@ -428,7 +428,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				styleVersion: this.rowRenderer.styleVersion,
 				loadingVersion: this.rowRenderer.loadingVersion,
 				activeEdit: state.activeEdit,
-				customCellScrollMode: state.customCellScrollMode ?? 'skeleton',
 				hasStyleHooks: !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender),
 				hasCustomRenderers: displayedColumns.some((c) => !!c.cellRenderer),
 				displayedColumns,

@@ -10,7 +10,6 @@ import {
 	type GridSelectionSource,
 	type GridState,
 	type Listener,
-	type CustomCellScrollMode,
 } from './store.js';
 
 export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowData> {
@@ -95,7 +94,6 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		getColumnField: (colIndex: number) => store.getColumnField(colIndex),
 		getColumnDef: (colField: string) => store.getColumnDef(colField),
 		getCellAccess: (rowId: string, colField: string) => store.getCellAccess(rowId, colField),
-		setCustomCellScrollMode: (mode: CustomCellScrollMode) => store.setCustomCellScrollMode(mode),
 		undo: () => store.undo(),
 		redo: () => store.redo(),
 		canUndo: () => store.canUndo(),

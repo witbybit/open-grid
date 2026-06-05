@@ -1,4 +1,4 @@
-import type { ColumnDef, RowNode, VisualRow } from '../store.js';
+import type { CellRendererPhase, ColumnDef, RowNode, VisualRow } from '../store.js';
 
 export interface GridCellContentMount<TRowData = unknown> {
 	cellKey: string;
@@ -8,6 +8,8 @@ export interface GridCellContentMount<TRowData = unknown> {
 	col: ColumnDef<TRowData>;
 	isEditing: boolean;
 	isLoading: boolean;
+	phase?: CellRendererPhase;
+	isScrolling?: boolean;
 }
 
 export interface GridCellContentUnmount {
