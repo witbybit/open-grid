@@ -5,6 +5,7 @@ import { IndexMapper } from './IndexMapper.js';
 export class ColumnModel<TRowData = unknown> {
 	private engine!: GridEngine<TRowData>;
 	private columnMap = new Map<string, ColumnDef<TRowData>>();
+	private displayedColumns: ColumnDef<TRowData>[] = [];
 	private valueGetterDependents = new Map<string, string[]>();
 	private indexMapper = new IndexMapper<string>();
 	private defaultColWidth = 100;
@@ -20,11 +21,11 @@ export class ColumnModel<TRowData = unknown> {
 		this.columnMap.clear();
 		this.valueGetterDependents.clear();
 		this.indexMapper.setIds(columns.map((column) => column.field));
+		for (const column of columns) {
+			this.indexMapper.setVisible(column.field, column.hide !== true);
+		}
 
-		const widths: number[] = [];
-
-		for (let i = 0; i < columns.length; i++) {
-			const col = columns[i];
+		for (const col of columns) {
 			if (col.field) {
 				this.columnMap.set(col.field, col);
 				if (col.valueGetter && col.valueGetterDependencies) {
@@ -37,13 +38,14 @@ export class ColumnModel<TRowData = unknown> {
 						}
 					}
 				}
-
-				const customWidth = columnWidths[col.field] ?? col.width;
-				widths.push(customWidth !== undefined ? customWidth : this.defaultColWidth);
-			} else {
-				widths.push(this.defaultColWidth);
 			}
 		}
+
+		const widths = this.getDisplayedColumns(columns).map((col) => {
+			const customWidth = columnWidths[col.field] ?? col.width;
+			return customWidth !== undefined ? customWidth : this.defaultColWidth;
+		});
+		this.displayedColumns = columns.filter((column) => column.hide !== true);
 
 		this.engine.geometry.updateColumns(widths, this.defaultColWidth);
 		this.engine.data.updateCompiledGetters(columns);
@@ -67,6 +69,19 @@ export class ColumnModel<TRowData = unknown> {
 
 	public getColumnDef(colField: string): ColumnDef<TRowData> | undefined {
 		return this.columnMap.get(colField);
+	}
+
+	public getDisplayedColumns(columns?: ColumnDef<TRowData>[]): ColumnDef<TRowData>[] {
+		if (!columns) return this.displayedColumns;
+		const columnByField = new Map(columns.map((column) => [column.field, column]));
+		return this.indexMapper
+			.getVisibleIds()
+			.map((field) => columnByField.get(field))
+			.filter((column): column is ColumnDef<TRowData> => !!column);
+	}
+
+	public getDisplayedColumnCount(): number {
+		return this.indexMapper.length;
 	}
 
 	public hasValueGetter(colField: string): boolean {

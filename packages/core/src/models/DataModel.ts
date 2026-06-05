@@ -1,4 +1,4 @@
-import { RowNode, compilePathGetter, type ColumnDef } from '../store.js';
+import { RowNode, compilePathGetter, type ColumnDef, type GridCellPointer } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 
 export class DataModel<TRowData = unknown> {
@@ -189,50 +189,63 @@ export class DataModel<TRowData = unknown> {
 		}
 
 		// Invalidate this cell and any formula dependents.
-		const invalidatedKeys = this.engine.invalidateFormulaCell(rowId, colField);
+		const invalidatedFormulaCells = this.engine.invalidateFormulaCell(rowId, colField);
+		const dependentFields = this.engine.columns.getValueGetterDependents(colField).filter((dependentField) => dependentField !== colField);
+
+		if (invalidatedFormulaCells.length <= 1 && dependentFields.length === 0) {
+			this.clearValueGetterCache(rowId, colField);
+			if (this.engine.batchedUpdates) {
+				this.engine.enqueueCellUpdate(rowId, colField);
+				this.scheduleBatchFlush();
+			} else {
+				this.engine.notifyCellChange(rowId, colField);
+			}
+			if (shouldEmitValueChanged) {
+				this.engine.eventBus.dispatchEvent('cellValueChanged', {
+					rowId,
+					colField,
+					oldValue,
+					newValue: value,
+				});
+			}
+			return true;
+		}
+
+		const invalidatedCells: GridCellPointer[] = [{ rowId, colField }];
+		const seenInvalidatedCells = new Set<string>([`${rowId}\u0000${colField}`]);
+		const addInvalidatedCell = (rId: string, cField: string) => {
+			const key = `${rId}\u0000${cField}`;
+			if (seenInvalidatedCells.has(key)) return;
+			seenInvalidatedCells.add(key);
+			invalidatedCells.push({ rowId: rId, colField: cField });
+		};
 
 		// Also invalidate explicitly declared dynamic valueGetter dependents on this same row.
 		// Uses the column reverse index so wide grids pay O(actual dependents), not O(total columns).
-		for (const dependentField of this.engine.columns.getValueGetterDependents(colField)) {
-			if (dependentField !== colField) {
-				const key = `${rowId}:${dependentField}`;
-				if (!invalidatedKeys.includes(key)) invalidatedKeys.push(key);
-			}
+		for (const dependentField of dependentFields) {
+			addInvalidatedCell(rowId, dependentField);
 		}
 
-		for (const key of invalidatedKeys) {
-			const colonIdx = key.indexOf(':');
-			const rId = colonIdx === -1 ? key : key.substring(0, colonIdx);
-			const cField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
-			this.clearValueGetterCache(rId, cField);
+		for (const cell of invalidatedFormulaCells) {
+			addInvalidatedCell(cell.rowId, cell.colField);
+		}
+
+		for (const cell of invalidatedCells) {
+			this.clearValueGetterCache(cell.rowId, cell.colField);
 		}
 
 		if (this.engine.batchedUpdates) {
 			// Batch cell notifications for better performance
-			for (const key of invalidatedKeys) {
-				this.engine.cellUpdateBatch.add(key);
+			for (const cell of invalidatedCells) {
+				this.engine.enqueueCellUpdate(cell.rowId, cell.colField);
 			}
 
 			// Schedule batched flush if not already scheduled
-			if (!this.engine.batchFlushScheduled) {
-				this.engine.batchFlushScheduled = true;
-				if (typeof requestAnimationFrame !== 'undefined') {
-					requestAnimationFrame(() => {
-						this.engine.flushCellUpdates();
-					});
-				} else {
-					Promise.resolve().then(() => {
-						this.engine.flushCellUpdates();
-					});
-				}
-			}
+			this.scheduleBatchFlush();
 		} else {
 			// Immediate mode: notify synchronously
-			for (const key of invalidatedKeys) {
-				const colonIdx = key.indexOf(':');
-				const rId = colonIdx === -1 ? key : key.substring(0, colonIdx);
-				const cField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
-				this.engine.notifyCellChange(rId, cField);
+			for (const cell of invalidatedCells) {
+				this.engine.notifyCellChange(cell.rowId, cell.colField);
 			}
 		}
 
@@ -246,4 +259,19 @@ export class DataModel<TRowData = unknown> {
 		}
 		return true;
 	};
+
+	private scheduleBatchFlush(): void {
+		if (!this.engine.batchFlushScheduled) {
+			this.engine.batchFlushScheduled = true;
+			if (typeof requestAnimationFrame !== 'undefined') {
+				requestAnimationFrame(() => {
+					this.engine.flushCellUpdates();
+				});
+			} else {
+				Promise.resolve().then(() => {
+					this.engine.flushCellUpdates();
+				});
+			}
+		}
+	}
 }

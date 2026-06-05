@@ -11,10 +11,25 @@ export interface RenderStats {
 	scrollFrames: number;
 	viewportRecycles: number;
 	headerPaintsDuringScroll: number;
+	headerRangeSyncsDuringScroll: number;
 	overlayPaintsDuringScroll: number;
+	overlayCheapSyncsDuringScroll: number;
 	portalFlushesDuringScroll: number;
+	portalDeferredDuringScroll: number;
 	portalMountsDuringScroll: number;
 	portalReleasesDuringScroll: number;
+	portalFlushChunks: number;
+	maxPortalOpsFlushedInOneChunk: number;
+	focusCallsDuringScroll: number;
+	rootTextContentWritesOnPortalCells: number;
+	cellsBoundDuringScroll: number;
+	cellsDecoratedAfterScroll: number;
+	cellAccessReadsDuringScroll: number;
+	cellClassComputesDuringScroll: number;
+	dirtyCellsMarkedDuringScroll: number;
+	postScrollDirtyCellsDecorated: number;
+	reusableCellsSkippedDuringScroll: number;
+	styleHookCallsDuringScroll: number;
 	hotDomReleases: number;
 	coldDomReleases: number;
 	cellsPatchedPerScrollFrame: number[];
@@ -46,10 +61,25 @@ export class RenderOrchestrator {
 		scrollFrames: 0,
 		viewportRecycles: 0,
 		headerPaintsDuringScroll: 0,
+		headerRangeSyncsDuringScroll: 0,
 		overlayPaintsDuringScroll: 0,
+		overlayCheapSyncsDuringScroll: 0,
 		portalFlushesDuringScroll: 0,
+		portalDeferredDuringScroll: 0,
 		portalMountsDuringScroll: 0,
 		portalReleasesDuringScroll: 0,
+		portalFlushChunks: 0,
+		maxPortalOpsFlushedInOneChunk: 0,
+		focusCallsDuringScroll: 0,
+		rootTextContentWritesOnPortalCells: 0,
+		cellsBoundDuringScroll: 0,
+		cellsDecoratedAfterScroll: 0,
+		cellAccessReadsDuringScroll: 0,
+		cellClassComputesDuringScroll: 0,
+		dirtyCellsMarkedDuringScroll: 0,
+		postScrollDirtyCellsDecorated: 0,
+		reusableCellsSkippedDuringScroll: 0,
+		styleHookCallsDuringScroll: 0,
 		hotDomReleases: 0,
 		coldDomReleases: 0,
 		cellsPatchedPerScrollFrame: [],
@@ -85,8 +115,9 @@ export class RenderOrchestrator {
 			this.targets.syncRows(frame);
 		}
 
-		if (frame.cells.size > 0 || frame.columns.size > 0) {
-			this.stats.cellPaints += frame.cells.size;
+		const cellCount = this.countCells(frame.cellsByRowId);
+		if (cellCount > 0 || frame.columns.size > 0) {
+			this.stats.cellPaints += cellCount;
 			this.targets.syncCells(frame);
 		}
 
@@ -95,10 +126,18 @@ export class RenderOrchestrator {
 			this.targets.syncHeaders(frame);
 		}
 
-		if (frame.overlay || frame.cells.size > 0 || frame.rows.size > 0) {
+		if (frame.overlay || cellCount > 0 || frame.rows.size > 0) {
 			this.stats.overlayPaints++;
 			this.targets.syncOverlay(frame);
 		}
+	}
+
+	private countCells(cellsByRowId: Map<string, Set<string>>): number {
+		let count = 0;
+		for (const colIds of cellsByRowId.values()) {
+			count += colIds.size;
+		}
+		return count;
 	}
 
 	public getStats(): RenderStats {
@@ -121,10 +160,25 @@ export class RenderOrchestrator {
 		this.stats.scrollFrames = 0;
 		this.stats.viewportRecycles = 0;
 		this.stats.headerPaintsDuringScroll = 0;
+		this.stats.headerRangeSyncsDuringScroll = 0;
 		this.stats.overlayPaintsDuringScroll = 0;
+		this.stats.overlayCheapSyncsDuringScroll = 0;
 		this.stats.portalFlushesDuringScroll = 0;
+		this.stats.portalDeferredDuringScroll = 0;
 		this.stats.portalMountsDuringScroll = 0;
 		this.stats.portalReleasesDuringScroll = 0;
+		this.stats.portalFlushChunks = 0;
+		this.stats.maxPortalOpsFlushedInOneChunk = 0;
+		this.stats.focusCallsDuringScroll = 0;
+		this.stats.rootTextContentWritesOnPortalCells = 0;
+		this.stats.cellsBoundDuringScroll = 0;
+		this.stats.cellsDecoratedAfterScroll = 0;
+		this.stats.cellAccessReadsDuringScroll = 0;
+		this.stats.cellClassComputesDuringScroll = 0;
+		this.stats.dirtyCellsMarkedDuringScroll = 0;
+		this.stats.postScrollDirtyCellsDecorated = 0;
+		this.stats.reusableCellsSkippedDuringScroll = 0;
+		this.stats.styleHookCallsDuringScroll = 0;
 		this.stats.hotDomReleases = 0;
 		this.stats.coldDomReleases = 0;
 		this.stats.cellsPatchedPerScrollFrame = [];

@@ -223,12 +223,31 @@ export const CORE_STYLES = `
     border-right: 1px solid var(--og-cell-border);
   }
 
+  .og-cell-content {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .og-cell-portal-host {
     width: 100%;
     height: 100%;
     min-width: 0;
     display: flex;
     align-items: center;
+    overflow: hidden;
+  }
+
+  .og-cell[data-content-mode="portal"] > .og-cell-content,
+  .og-cell[data-content-mode="primitive"] > .og-cell-portal-host,
+  .og-cell[data-content-mode="fallback"] > .og-cell-portal-host,
+  .og-cell[data-content-mode="loading"] > .og-cell-portal-host {
+    display: none;
   }
 
   .og-cell-focused {

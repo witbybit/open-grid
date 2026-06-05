@@ -474,6 +474,47 @@ describe('GridStore generic row-store functionality', () => {
 		expect(store.getColumnIndex('id')).toBe(2);
 	});
 
+	it('should move columns by displayed index without counting hidden columns', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'hidden', header: 'Hidden', width: 100, hide: true },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+
+		store.moveColumn('price', 1);
+
+		expect(store.getDisplayedColumns().map((column) => column.field)).toEqual(['id', 'price', 'name']);
+		expect(store.getColumnIndex('price')).toBe(1);
+		expect(store.getColumnIndex('hidden')).toBe(-1);
+	});
+
+	it('should expose displayed column controls through the public store API', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150, hide: true },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+
+		expect(store.getColumns().map((column) => column.field)).toEqual(['id', 'name', 'price']);
+		expect(store.getDisplayedColumns().map((column) => column.field)).toEqual(['id', 'price']);
+		expect(store.getColumnIndex('price')).toBe(1);
+		expect(store.getColumnIndex('name')).toBe(-1);
+
+		store.setColumnVisible('name', true);
+		expect(store.getDisplayedColumns().map((column) => column.field)).toEqual(['id', 'name', 'price']);
+
+		store.setColumnsVisible(['id', 'price'], false);
+		expect(store.getDisplayedColumns().map((column) => column.field)).toEqual(['name']);
+
+		store.setPinnedColumns({ left: 1, right: 2 });
+		expect(store.getPinnedColumns()).toEqual({ left: 1, right: 2 });
+	});
+
 	it('should toggle column reorder state through the public store API', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],

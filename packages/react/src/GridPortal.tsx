@@ -196,9 +196,11 @@ export function PortalManager<TRowData = unknown>({
 	groupRowRenderer,
 	detailRowRenderer,
 }: PortalManagerProps<TRowData>) {
+	const cellPortals = latestPortalsByContainer(portals);
+	const visualRowPortals = latestPortalsByContainer(rowPortals);
 	return (
 		<>
-			{Array.from(portals.values()).map((p) => {
+			{cellPortals.map((p) => {
 				return createPortal(
 					<GridProvider api={api} key={p.cellKey}>
 						<PortalCell<TRowData>
@@ -214,7 +216,7 @@ export function PortalManager<TRowData = unknown>({
 					p.container
 				);
 			})}
-			{Array.from(rowPortals.values()).map((rp) => {
+			{visualRowPortals.map((rp) => {
 				const { rowKey, container, visualRow } = rp;
 				let content: React.ReactNode = null;
 				if (visualRow.kind === 'group') {
@@ -246,4 +248,12 @@ export function PortalManager<TRowData = unknown>({
 			})}
 		</>
 	);
+}
+
+function latestPortalsByContainer<TPortal extends { container: HTMLElement }>(portals: Map<string, TPortal>): TPortal[] {
+	const byContainer = new Map<HTMLElement, TPortal>();
+	for (const portal of portals.values()) {
+		byContainer.set(portal.container, portal);
+	}
+	return Array.from(byContainer.values());
 }

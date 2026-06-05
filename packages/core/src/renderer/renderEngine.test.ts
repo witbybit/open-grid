@@ -109,6 +109,55 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('does not render hidden columns in headers or cells', () => {
+		const columns = [
+			{ field: 'id', header: 'ID', width: 80 },
+			{ field: 'name', header: 'Name', width: 120, hide: true },
+			{ field: 'price', header: 'Price', width: 120 },
+		];
+		const store = new GridStore<{ id: string; name: string; price: number }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-1', name: 'Hidden Name', price: 42 }],
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		expect(container.querySelector('.og-cell[data-col-field="name"]')).toBeNull();
+		expect(container.querySelector('.og-header-cell[data-col-field="name"]')).toBeNull();
+		expect(container.querySelector('.og-cell[data-col-field="price"]')?.textContent).toBe('42');
+
+		store.setColumnVisible('name', true);
+		renderer.fullPaint();
+
+		expect(container.querySelector('.og-cell[data-col-field="name"]')?.textContent).toBe('Hidden Name');
+		expect(container.querySelector('.og-header-cell[data-col-field="name"]')?.textContent).toContain('Name');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('marks focused and selected rows from navigation state and passes row class params', () => {
 		const rowClass = vi.fn((_row: { id: string; name: string }, params: { isSelected: boolean; isFocused: boolean }) =>
 			params.isFocused ? 'custom-focused-row' : params.isSelected ? 'custom-selected-row' : ''
@@ -265,6 +314,63 @@ describe('RenderEngine', () => {
 
 		expect(fullPaintSpy).not.toHaveBeenCalled();
 		expect(container.querySelector('.og-cell[data-col-field="name"]')?.textContent).toBe('After');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('repaints invalidated cells for row ids containing colons', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string; status: string }>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 120 },
+				{ field: 'status', header: 'Status', width: 120 },
+			],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: 'row:0', name: 'Before', status: 'Open' },
+				{ id: 'row:1', name: 'Other', status: 'Closed' },
+			],
+			columns: store.getState().columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.resetRenderStats();
+
+		store.setCellValue('row:0', 'name', 'After');
+		store.flushCellUpdatesSync();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const visibleNames = Array.from(container.querySelectorAll<HTMLDivElement>('.og-cell[data-col-field="name"]')).map((cell) => ({
+			rowId: (cell.closest('.og-row') as HTMLElement | null)?.dataset.rowId,
+			text: cell.textContent,
+		}));
+		expect(visibleNames).toContainEqual({ rowId: 'row:row%3A0', text: 'After' });
+		expect(visibleNames).toContainEqual({ rowId: 'row:row%3A1', text: 'Other' });
+		expect(renderer.getRenderStats().cellPaints).toBe(1);
 
 		renderer.unmount();
 		controller.dispose();
@@ -824,10 +930,70 @@ describe('RenderEngine', () => {
 		expect(stats.fullPaints).toBe(0);
 		expect(stats.headerPaints).toBe(0);
 		expect(stats.headerPaintsDuringScroll).toBe(0);
+		expect(stats.headerRangeSyncsDuringScroll).toBe(1);
 		const visibleHeaderLabels = Array.from(container.querySelectorAll<HTMLDivElement>('.og-header-cell'))
 			.map((cell) => cell.textContent ?? '')
 			.filter(Boolean);
 		expect(visibleHeaderLabels).toContain('Col 30');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('does not rebuild headers or call focus during vertical scroll frames', () => {
+		vi.useFakeTimers();
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'name', header: 'Name', width: 120 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		store.selectCell({ rowId: 'row-20', colField: 'name' });
+		const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		focusSpy.mockClear();
+		renderer.resetRenderStats();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 800;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		const statsDuringScroll = renderer.getRenderStats();
+		expect(statsDuringScroll.scrollFrames).toBe(1);
+		expect(statsDuringScroll.headerPaintsDuringScroll).toBe(0);
+		expect(statsDuringScroll.headerRangeSyncsDuringScroll).toBe(0);
+		expect(statsDuringScroll.overlayCheapSyncsDuringScroll).toBe(1);
+		expect(focusSpy).not.toHaveBeenCalled();
+		expect(statsDuringScroll.focusCallsDuringScroll).toBe(0);
+
+		vi.advanceTimersByTime(80);
+		expect(focusSpy).toHaveBeenCalledTimes(1);
+		expect(renderer.getRenderStats().focusCallsDuringScroll).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -890,9 +1056,71 @@ describe('RenderEngine', () => {
 		const stats = renderer.getRenderStats();
 		expect(unmountCount).toBe(0);
 		expect(flushPortalContent).not.toHaveBeenCalled();
-		expect(stats.portalReleasesDuringScroll).toBeGreaterThan(3);
+		expect(stats.portalReleasesDuringScroll).toBe(0);
 		expect(stats.portalFlushesDuringScroll).toBe(0);
 		expect(stats.portalMountsDuringScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps portal hosts intact when scroll fallback text updates custom cells', () => {
+		vi.useFakeTimers();
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'name', header: 'Name', width: 120, cellRenderer: () => null }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.onMountCellContent = ({ cellKey, container: portalHost }) => {
+			if (!portalHost.querySelector('[data-portal-child]')) {
+				const child = document.createElement('div');
+				child.dataset.portalChild = cellKey;
+				child.textContent = `portal:${cellKey}`;
+				portalHost.appendChild(child);
+			}
+		};
+		renderer.mount(container);
+		const originalPortalChild = container.querySelector('[data-portal-child]') as HTMLDivElement;
+		expect(originalPortalChild).not.toBeNull();
+		renderer.resetRenderStats();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 1600;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		expect(originalPortalChild.isConnected).toBe(true);
+		expect(originalPortalChild.closest('.og-cell-portal-host')).not.toBeNull();
+		const fallbackCell = Array.from(container.querySelectorAll<HTMLDivElement>('.og-cell')).find(
+			(cell) => cell.querySelector('.og-cell-content')?.textContent?.startsWith('Row ') && cell.querySelector('.og-cell-portal-host')
+		);
+		expect(fallbackCell).toBeDefined();
+		expect(renderer.getRenderStats().rootTextContentWritesOnPortalCells).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -1006,7 +1234,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('defers custom cell style slots until after scroll idle', async () => {
+	it('keeps custom cell classes during scroll and defers heavier cell hooks until idle', async () => {
 		vi.useFakeTimers();
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
@@ -1058,6 +1286,10 @@ describe('RenderEngine', () => {
 		expect(cellClass).not.toHaveBeenCalled();
 		expect(beforeCellRender).not.toHaveBeenCalled();
 		expect(afterCellRender).not.toHaveBeenCalled();
+		const statsDuringScroll = renderer.getRenderStats();
+		expect(statsDuringScroll.cellAccessReadsDuringScroll).toBe(0);
+		expect(statsDuringScroll.cellClassComputesDuringScroll).toBe(0);
+		expect(statsDuringScroll.dirtyCellsMarkedDuringScroll).toBeGreaterThan(0);
 
 		vi.advanceTimersByTime(80);
 		await Promise.resolve();
@@ -1066,13 +1298,14 @@ describe('RenderEngine', () => {
 		expect(cellClass).toHaveBeenCalled();
 		expect(beforeCellRender).toHaveBeenCalled();
 		expect(afterCellRender).toHaveBeenCalled();
+		expect(renderer.getRenderStats().postScrollDirtyCellsDecorated).toBeGreaterThan(0);
 
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
 	});
 
-	it('defers custom row style slots until after scroll idle', async () => {
+	it('keeps custom row classes during scroll', async () => {
 		vi.useFakeTimers();
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
@@ -1173,7 +1406,7 @@ describe('RenderEngine', () => {
 		await Promise.resolve();
 		await Promise.resolve();
 
-		expect(querySelectorSpy).toHaveBeenCalledWith('.og-cell-loading-skeleton');
+		expect(querySelectorSpy).not.toHaveBeenCalledWith('.og-cell-loading-skeleton');
 
 		renderer.unmount();
 		controller.dispose();
@@ -1247,7 +1480,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('defers custom detail row style slots until after scroll idle', async () => {
+	it('keeps custom detail row classes during scroll', async () => {
 		vi.useFakeTimers();
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
@@ -1294,12 +1527,6 @@ describe('RenderEngine', () => {
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
-
-		expect(detailRowClass).not.toHaveBeenCalled();
-
-		vi.advanceTimersByTime(80);
-		await Promise.resolve();
-		await Promise.resolve();
 
 		expect(detailRowClass).toHaveBeenCalled();
 
@@ -1426,7 +1653,7 @@ describe('RenderEngine', () => {
 		const stats = renderer.getRenderStats();
 		expect(unmountCount).toBe(0);
 		expect(flushPortalContent).not.toHaveBeenCalled();
-		expect(stats.portalReleasesDuringScroll).toBeGreaterThan(10);
+		expect(stats.portalReleasesDuringScroll).toBe(0);
 		expect(stats.portalFlushesDuringScroll).toBe(0);
 		expect(stats.portalMountsDuringScroll).toBe(0);
 

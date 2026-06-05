@@ -196,4 +196,43 @@ describe('PortalMountManager', () => {
 		expect(flush).toHaveBeenCalledWith({ flushSync: true });
 		expect(manager.getScrollStats().portalFlushesDuringScroll).toBe(0);
 	});
+
+	it('flushes deferred portal work in bounded chunks', () => {
+		const manager = new PortalMountManager();
+		const release = vi.fn();
+		manager.onUnmountCellContent = release;
+
+		for (let index = 0; index < 8; index++) {
+			manager.mountCell({
+				cellKey: `r${index}:name`,
+				container: document.createElement('div'),
+				value: `A${index}`,
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+		}
+		manager.setScrolling(true);
+		for (let index = 0; index < 8; index++) {
+			manager.releaseCell({ cellKey: `r${index}:name` });
+		}
+		manager.setScrolling(false);
+
+		const first = manager.flushDeferred({ maxItems: 3, reason: 'scroll-idle' });
+
+		expect(first.processed).toBe(3);
+		expect(first.remaining).toBe(5);
+		expect(release).toHaveBeenCalledTimes(3);
+		expect(manager.getScrollStats()).toMatchObject({
+			portalFlushChunks: 1,
+			maxPortalOpsFlushedInOneChunk: 3,
+		});
+
+		const second = manager.flushDeferred({ maxItems: 50, reason: 'scroll-idle' });
+		expect(second.processed).toBe(5);
+		expect(second.remaining).toBe(0);
+		expect(release).toHaveBeenCalledTimes(8);
+		expect(manager.getScrollStats().maxPortalOpsFlushedInOneChunk).toBe(5);
+	});
 });

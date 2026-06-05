@@ -10,4 +10,8 @@ export class ViewportRenderer {
 	public sync(frame: InvalidationFrame): void {
 		this.syncViewport(frame);
 	}
+
+	public recycleVisibleRange(frame: InvalidationFrame): void {
+		this.syncViewport(frame);
+	}
 }

@@ -363,6 +363,53 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should render only the latest cell portal for a recycled container', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: '1', name: 'Old' },
+				{ id: '2', name: 'New' },
+			],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellRenderer: ({ value }) => <span data-testid='portal-content'>{String(value)}</span>,
+				},
+			],
+		});
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const colDef = grid.api.getColumnDef('name');
+		const portals = new Map();
+		portals.set('1:name', {
+			cellKey: '1:name',
+			container,
+			value: 'Old',
+			node: grid.api.getRowNodeById('1')!,
+			col: colDef,
+			isEditing: false,
+			isLoading: false,
+		});
+		portals.set('2:name', {
+			cellKey: '2:name',
+			container,
+			value: 'New',
+			node: grid.api.getRowNodeById('2')!,
+			col: colDef,
+			isEditing: false,
+			isLoading: false,
+		});
+
+		render(<PortalManager portals={portals} api={grid.api} />);
+
+		expect(screen.getAllByTestId('portal-content')).toHaveLength(1);
+		expect(screen.getByTestId('portal-content').textContent).toBe('New');
+
+		document.body.removeChild(container);
+		grid.api.destroy();
+	});
+
 	it('should dispose navigation controller event listeners on unmount', () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Cell Content' }],
@@ -762,6 +809,49 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		document.body.removeChild(containerGroup);
 		document.body.removeChild(containerDetail);
+		grid.api.destroy();
+	});
+
+	it('should render only the latest row portal for a recycled detail container', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [],
+			columns: [],
+		});
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const rowPortals = new Map();
+		rowPortals.set('detail-old', {
+			rowKey: 'detail-old',
+			container,
+			visualRow: {
+				kind: 'detail',
+				id: 'detail-old',
+				parentId: 'old-parent',
+			},
+		});
+		rowPortals.set('detail-new', {
+			rowKey: 'detail-new',
+			container,
+			visualRow: {
+				kind: 'detail',
+				id: 'detail-new',
+				parentId: 'new-parent',
+			},
+		});
+
+		render(
+			<PortalManager
+				portals={new Map()}
+				rowPortals={rowPortals}
+				api={grid.api}
+				detailRowRenderer={({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>}
+			/>
+		);
+
+		expect(screen.getAllByTestId('custom-detail')).toHaveLength(1);
+		expect(screen.getByTestId('custom-detail').textContent).toBe('Details for new-parent');
+
+		document.body.removeChild(container);
 		grid.api.destroy();
 	});
 });

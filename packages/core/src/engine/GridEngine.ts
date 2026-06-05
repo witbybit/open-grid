@@ -19,7 +19,7 @@ import { GeometryModel } from '../models/GeometryModel.js';
 import { SelectionModel } from '../models/SelectionModel.js';
 import { EditModel } from '../models/EditModel.js';
 import { CellAccessModel } from '../models/CellAccess.js';
-import { DagEngine } from '../calculations/dagEngine.js';
+import { DagEngine, type FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
@@ -49,7 +49,7 @@ export class GridEngine<TRowData = unknown> {
 	// Cell subscriptions are keyed by visible row id and column field.
 	public readonly cellSubscriptions = new Map<string, Set<CellSubscription>>();
 	public readonly colSubscriptions = new Map<string, Set<CellSubscription>>();
-	public readonly cellUpdateBatch = new Set<string>();
+	public readonly cellUpdateBatch = new Map<string, Set<string>>();
 	public batchFlushScheduled = false;
 	private _batchedUpdates = true;
 
@@ -149,13 +149,16 @@ export class GridEngine<TRowData = unknown> {
 
 	public moveColumn(colField: string, toIndex: number): void {
 		const state = this.stateManager.getState();
-		const fromIndex = state.columns.findIndex((column) => column.field === colField);
+		const displayedColumns = this.columns.getDisplayedColumns();
+		const fromIndex = displayedColumns.findIndex((column) => column.field === colField);
 		if (fromIndex === -1 || !Number.isFinite(toIndex)) return;
 
-		const boundedToIndex = Math.max(0, Math.min(state.columns.length - 1, Math.trunc(toIndex)));
+		const boundedToIndex = Math.max(0, Math.min(displayedColumns.length - 1, Math.trunc(toIndex)));
 		if (fromIndex === boundedToIndex) return;
 
-		this.applyColumnOrder(this.moveColumnInList(state.columns, fromIndex, boundedToIndex));
+		const nextDisplayed = this.moveColumnInList(displayedColumns, fromIndex, boundedToIndex);
+		const hiddenColumns = state.columns.filter((column) => column.hide === true);
+		this.applyColumnOrder([...nextDisplayed, ...hiddenColumns]);
 	}
 
 	public setColumnOrderByFields(colFields: string[]): void {
@@ -183,6 +186,14 @@ export class GridEngine<TRowData = unknown> {
 		this.invalidation.invalidateHeaders('column reorder toggle');
 		this.eventBus.dispatchEvent('columnReorderToggled', { enabled });
 		this.requestRender('column reorder toggle');
+	}
+
+	public setStyleSlots(styleSlots: GridState<TRowData>['styleSlots']): void {
+		this.stateManager.setState({ styleSlots });
+		this.invalidation.invalidateViewport('style slots');
+		this.invalidation.invalidateHeaders('style slots');
+		this.invalidation.invalidateOverlay('style slots');
+		this.requestRender('style slots');
 	}
 
 	public resizeRow(rowId: string, height: number, undoable = true): void {
@@ -307,7 +318,7 @@ export class GridEngine<TRowData = unknown> {
 		return this.formulas.getCellValue(rowId, colField, getRawValue);
 	}
 
-	public invalidateFormulaCell(rowId: string, colField: string): string[] {
+	public invalidateFormulaCell(rowId: string, colField: string): FormulaCellCoordinate[] {
 		return this.formulas.invalidateCell(rowId, colField);
 	}
 
@@ -357,14 +368,22 @@ export class GridEngine<TRowData = unknown> {
 	};
 
 	public flushCellUpdates(): void {
-		this.cellUpdateBatch.forEach((key) => {
-			const colonIdx = key.indexOf(':');
-			const rowId = colonIdx === -1 ? key : key.substring(0, colonIdx);
-			const colField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
-			this.notifyCellChange(rowId, colField);
-		});
+		for (const [rowId, colFields] of this.cellUpdateBatch) {
+			for (const colField of colFields) {
+				this.notifyCellChange(rowId, colField);
+			}
+		}
 		this.cellUpdateBatch.clear();
 		this.batchFlushScheduled = false;
+	}
+
+	public enqueueCellUpdate(rowId: string, colField: string): void {
+		let fields = this.cellUpdateBatch.get(rowId);
+		if (!fields) {
+			fields = new Set<string>();
+			this.cellUpdateBatch.set(rowId, fields);
+		}
+		fields.add(colField);
 	}
 
 	public flushCellUpdatesSync(): void {
@@ -661,7 +680,7 @@ export class GridEngine<TRowData = unknown> {
 
 		if (needsRangeUpdate) {
 			const nextRowRange = this.viewport.getVisibleRowRange(this.rowModel ? this.rowModel.getVisualRowCount() : 0);
-			const nextColRange = this.viewport.getVisibleColumnRange(currState.columns.length);
+			const nextColRange = this.viewport.getVisibleColumnRange(this.columns.getDisplayedColumnCount());
 
 			const rowRangeChanged =
 				!currState.visibleRowRange ||
@@ -712,13 +731,14 @@ export class GridEngine<TRowData = unknown> {
 			const rowModel = this.rowModel;
 			if (rowModel) {
 				const viewport = this.getSelectionNotificationViewport();
+				const displayedColumns = this.columns.getDisplayedColumns();
 				this.selection.forEachDirtyCoordinateInViewport(
 					prevState.selection.bounds,
 					currState.selection.bounds,
 					viewport,
 					(rowIdx, colIdx) => {
 						const visualRow = rowModel.getVisualRow(rowIdx);
-						const col = currState.columns[colIdx];
+						const col = displayedColumns[colIdx];
 						if (visualRow?.kind === 'data' && col) {
 							notifyCellOnce(visualRow.rowId, col.field);
 							this.invalidation.invalidateCell(visualRow.rowId, col.field, 'selection');
@@ -801,7 +821,7 @@ export class GridEngine<TRowData = unknown> {
 	private getSelectionNotificationViewport(): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
 		const state = this.stateManager.getState();
 		const rowCount = this.rowModel ? this.rowModel.getVisualRowCount() : 0;
-		const colCount = state.columns.length;
+		const colCount = this.columns.getDisplayedColumnCount();
 
 		if (rowCount === 0 || colCount === 0) {
 			return { minRow: 1, maxRow: 0, minCol: 1, maxCol: 0 };

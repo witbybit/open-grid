@@ -7,6 +7,17 @@ import type {
 	GridRowContentUnmount,
 } from './IGridRenderer.js';
 
+export interface DeferredPortalFlushOptions {
+	maxItems?: number;
+	reason?: string;
+	flushSync?: boolean;
+}
+
+export interface DeferredPortalFlushResult {
+	processed: number;
+	remaining: number;
+}
+
 export class PortalMountManager<TRowData = unknown> {
 	public onMountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
 	public onUnmountCellContent?: (unmount: GridCellContentUnmount) => void;
@@ -31,6 +42,9 @@ export class PortalMountManager<TRowData = unknown> {
 		flushesDuringScroll: 0,
 		mountsDuringScroll: 0,
 		releasesDuringScroll: 0,
+		deferredDuringScroll: 0,
+		flushChunks: 0,
+		maxOpsFlushedInOneChunk: 0,
 	};
 
 	public mountCell(mount: GridCellContentMount<TRowData>): void {
@@ -38,6 +52,7 @@ export class PortalMountManager<TRowData = unknown> {
 		this.mountedCells.set(mount.cellKey, mount.container);
 		if (this.scrolling) {
 			this.stats.mountsDuringScroll++;
+			this.stats.deferredDuringScroll++;
 			this.deferredCellReleases.delete(mount.cellKey);
 			this.deferredCellMounts.set(mount.cellKey, mount);
 			if (!wasMounted) {
@@ -54,6 +69,7 @@ export class PortalMountManager<TRowData = unknown> {
 		this.mountedCells.delete(unmount.cellKey);
 		if (this.scrolling) {
 			this.stats.releasesDuringScroll++;
+			this.stats.deferredDuringScroll++;
 			const canceledDeferredMount = this.deferredCellMounts.delete(unmount.cellKey);
 			const wasNewDeferredMount = this.deferredNewCellMounts.delete(unmount.cellKey);
 			if (canceledDeferredMount && wasNewDeferredMount) return;
@@ -75,6 +91,7 @@ export class PortalMountManager<TRowData = unknown> {
 			this.mountedCells.delete(unmount.cellKey);
 			if (this.scrolling) {
 				this.stats.releasesDuringScroll++;
+				this.stats.deferredDuringScroll++;
 				const canceledDeferredMount = this.deferredCellMounts.delete(unmount.cellKey);
 				const wasNewDeferredMount = this.deferredNewCellMounts.delete(unmount.cellKey);
 				if (canceledDeferredMount && wasNewDeferredMount) continue;
@@ -100,6 +117,7 @@ export class PortalMountManager<TRowData = unknown> {
 		if (this.scrolling) {
 			for (const [cellKey, unmount] of this.pendingCellReleases) {
 				this.stats.releasesDuringScroll++;
+				this.stats.deferredDuringScroll++;
 				this.deferredCellReleases.set(cellKey, { ...unmount, flushSync: false });
 			}
 			this.pendingCellReleases.clear();
@@ -126,43 +144,62 @@ export class PortalMountManager<TRowData = unknown> {
 		this.scrolling = scrolling;
 	}
 
-	public flushDeferred(flushSync = false): void {
-		if (
-			this.deferredCellReleases.size === 0 &&
-			this.deferredCellMounts.size === 0 &&
-			this.deferredRowReleases.size === 0 &&
-			this.deferredRowMounts.size === 0
-		)
-			return;
+	public flushDeferred(options: DeferredPortalFlushOptions | boolean = {}): DeferredPortalFlushResult {
+		const normalized = typeof options === 'boolean' ? { flushSync: options } : options;
+		const maxItems = normalized.maxItems ?? Number.POSITIVE_INFINITY;
+		const flushSync = normalized.flushSync ?? false;
+		const pendingBefore = this.getDeferredCount();
+		if (pendingBefore === 0 || maxItems <= 0) {
+			return { processed: 0, remaining: pendingBefore };
+		}
+
 		const wasScrolling = this.scrolling;
 		this.scrolling = false;
-		for (const unmount of this.deferredCellReleases.values()) {
+		let processed = 0;
+
+		for (const [cellKey, unmount] of Array.from(this.deferredCellReleases)) {
+			if (processed >= maxItems) break;
 			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
+			this.deferredCellReleases.delete(cellKey);
+			processed++;
 		}
-		this.deferredCellReleases.clear();
-		for (const mount of this.deferredCellMounts.values()) {
+		for (const [cellKey, mount] of Array.from(this.deferredCellMounts)) {
+			if (processed >= maxItems) break;
 			this.onMountCellContent?.(mount);
+			this.deferredCellMounts.delete(cellKey);
+			this.deferredNewCellMounts.delete(cellKey);
+			processed++;
 		}
-		this.deferredCellMounts.clear();
-		this.deferredNewCellMounts.clear();
-		for (const unmount of this.deferredRowReleases.values()) {
+		for (const [rowKey, unmount] of Array.from(this.deferredRowReleases)) {
+			if (processed >= maxItems) break;
 			this.onUnmountRowContent?.(unmount);
+			this.deferredRowReleases.delete(rowKey);
+			processed++;
 		}
-		this.deferredRowReleases.clear();
-		for (const mount of this.deferredRowMounts.values()) {
+		for (const [rowKey, mount] of Array.from(this.deferredRowMounts)) {
+			if (processed >= maxItems) break;
 			this.onMountRowContent?.(mount);
+			this.deferredRowMounts.delete(rowKey);
+			processed++;
 		}
-		this.deferredRowMounts.clear();
-		if (flushSync) {
+
+		const remaining = this.getDeferredCount();
+		if (processed > 0) {
+			this.stats.flushChunks++;
+			this.stats.maxOpsFlushedInOneChunk = Math.max(this.stats.maxOpsFlushedInOneChunk, processed);
+		}
+		if (flushSync && remaining === 0) {
 			this.onFlushCellContent?.({ flushSync: true });
 		}
 		this.scrolling = wasScrolling;
+		return { processed, remaining };
 	}
 
 	public mountRow(mount: GridRowContentMount<TRowData>): void {
 		this.mountedRows.set(mount.rowKey, mount.container);
 		if (this.scrolling) {
 			this.stats.mountsDuringScroll++;
+			this.stats.deferredDuringScroll++;
 			this.deferredRowReleases.delete(mount.rowKey);
 			this.deferredRowMounts.set(mount.rowKey, mount);
 			return;
@@ -176,6 +213,7 @@ export class PortalMountManager<TRowData = unknown> {
 		this.mountedRows.delete(unmount.rowKey);
 		if (this.scrolling) {
 			this.stats.releasesDuringScroll++;
+			this.stats.deferredDuringScroll++;
 			if (this.deferredRowMounts.delete(unmount.rowKey)) return;
 			this.deferredRowReleases.set(unmount.rowKey, unmount);
 			return;
@@ -224,11 +262,25 @@ export class PortalMountManager<TRowData = unknown> {
 		};
 	}
 
-	public getScrollStats(): { portalFlushesDuringScroll: number; portalMountsDuringScroll: number; portalReleasesDuringScroll: number } {
+	public getDeferredCount(): number {
+		return this.deferredCellReleases.size + this.deferredCellMounts.size + this.deferredRowReleases.size + this.deferredRowMounts.size;
+	}
+
+	public getScrollStats(): {
+		portalFlushesDuringScroll: number;
+		portalDeferredDuringScroll: number;
+		portalMountsDuringScroll: number;
+		portalReleasesDuringScroll: number;
+		portalFlushChunks: number;
+		maxPortalOpsFlushedInOneChunk: number;
+	} {
 		return {
 			portalFlushesDuringScroll: this.stats.flushesDuringScroll,
+			portalDeferredDuringScroll: this.stats.deferredDuringScroll,
 			portalMountsDuringScroll: this.stats.mountsDuringScroll,
 			portalReleasesDuringScroll: this.stats.releasesDuringScroll,
+			portalFlushChunks: this.stats.flushChunks,
+			maxPortalOpsFlushedInOneChunk: this.stats.maxOpsFlushedInOneChunk,
 		};
 	}
 
@@ -236,5 +288,8 @@ export class PortalMountManager<TRowData = unknown> {
 		this.stats.flushesDuringScroll = 0;
 		this.stats.mountsDuringScroll = 0;
 		this.stats.releasesDuringScroll = 0;
+		this.stats.deferredDuringScroll = 0;
+		this.stats.flushChunks = 0;
+		this.stats.maxOpsFlushedInOneChunk = 0;
 	}
 }

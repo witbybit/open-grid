@@ -364,6 +364,7 @@ export interface ColumnDef<TRowData = unknown> {
 	field: string;
 	header: string;
 	width?: number;
+	hide?: boolean;
 	movable?: boolean;
 	loading?: boolean;
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
@@ -519,6 +520,12 @@ export interface GridApi<TRowData = unknown> {
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
 	setColumns(columns: ColumnDef<TRowData>[]): void;
 	setColumnWidth(colField: string, width: number): void;
+	setColumnVisible(colField: string, visible: boolean): void;
+	setColumnsVisible(colFields: string[], visible: boolean): void;
+	getColumns(): ColumnDef<TRowData>[];
+	getDisplayedColumns(): ColumnDef<TRowData>[];
+	setPinnedColumns(pins: { left?: number; right?: number }): void;
+	getPinnedColumns(): { left: number; right: number };
 	moveColumn(colField: string, toIndex: number): void;
 	setColumnOrder(colFields: string[]): void;
 	setColumnReorderEnabled(enabled: boolean): void;
@@ -694,6 +701,49 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.resizeColumn(colField, width);
 	};
 
+	public setColumnVisible = (colField: string, visible: boolean): void => {
+		const columns = this.state.columns;
+		const column = columns.find((candidate) => candidate.field === colField);
+		if (!column || column.hide === !visible) return;
+		this.engine.setColumns(
+			columns.map((candidate) => (candidate.field === colField ? { ...candidate, hide: !visible } : candidate)),
+			false
+		);
+	};
+
+	public setColumnsVisible = (colFields: string[], visible: boolean): void => {
+		const fieldSet = new Set(colFields);
+		if (fieldSet.size === 0) return;
+		let changed = false;
+		const columns = this.state.columns.map((column) => {
+			if (!fieldSet.has(column.field) || column.hide === !visible) return column;
+			changed = true;
+			return { ...column, hide: !visible };
+		});
+		if (changed) {
+			this.engine.setColumns(columns, false);
+		}
+	};
+
+	public getColumns = (): ColumnDef<TRowData>[] => {
+		return this.state.columns.slice();
+	};
+
+	public getDisplayedColumns = (): ColumnDef<TRowData>[] => {
+		return this.engine.columns.getDisplayedColumns().slice();
+	};
+
+	public setPinnedColumns = (pins: { left?: number; right?: number }): void => {
+		this.setViewportPins(pins);
+	};
+
+	public getPinnedColumns = (): { left: number; right: number } => {
+		return {
+			left: this.engine.viewport.pinLeftColumns,
+			right: this.engine.viewport.pinRightColumns,
+		};
+	};
+
 	public moveColumn = (colField: string, toIndex: number): void => {
 		this.engine.moveColumn(colField, toIndex);
 	};
@@ -719,7 +769,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setStyleSlots = (styleSlots: GridStyleSlots<TRowData> | undefined): void => {
-		this.engine.stateManager.setState({ styleSlots });
+		this.engine.setStyleSlots(styleSlots);
 	};
 
 	public toggleGroupExpanded = (groupId: string): void => {

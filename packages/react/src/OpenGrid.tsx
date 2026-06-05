@@ -145,6 +145,11 @@ function OpenGridInner<TRowData = unknown>({
 				return;
 			}
 
+			for (const [existingKey, existingPortal] of portalsRef.current) {
+				if (existingKey !== cellKey && existingPortal.container === container) {
+					portalsRef.current.delete(existingKey);
+				}
+			}
 			portalsRef.current.set(cellKey, {
 				cellKey,
 				container,
@@ -177,6 +182,11 @@ function OpenGridInner<TRowData = unknown>({
 				return;
 			}
 
+			for (const [existingKey, existingPortal] of rowPortalsRef.current) {
+				if (existingKey !== rowKey && existingPortal.container === container) {
+					rowPortalsRef.current.delete(existingKey);
+				}
+			}
 			rowPortalsRef.current.set(rowKey, {
 				rowKey,
 				container,

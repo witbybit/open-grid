@@ -9,7 +9,7 @@ import {
 	type RowRefreshReason,
 	type RowModelRefreshResult,
 } from './store.js';
-import { createCellKey, getFieldRoot } from './ids.js';
+import { getFieldRoot } from './ids.js';
 import { RowPipeline, type RowModelConfig } from './rows/RowPipeline.js';
 import { RowDataStore } from './rows/RowDataStore.js';
 
@@ -311,11 +311,18 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (result.changedNodes.length === 0) return;
 
 		// Invalidate changed cells and gather affected formula dependents.
-		const allInvalidatedKeys = new Set<string>();
+		const allInvalidatedCells = new Map<string, Set<string>>();
+		const addInvalidatedCell = (rowId: string, field: string) => {
+			let fields = allInvalidatedCells.get(rowId);
+			if (!fields) {
+				fields = new Set<string>();
+				allInvalidatedCells.set(rowId, fields);
+			}
+			fields.add(field);
+		};
 		for (const [rowId, fields] of result.changedFieldsByRow) {
 			for (const field of fields) {
-				const cellKey = createCellKey(rowId, field);
-				allInvalidatedKeys.add(cellKey);
+				addInvalidatedCell(rowId, field);
 
 				const node = this.dataStore.getNode(rowId);
 				if (node) {
@@ -324,8 +331,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				}
 
 				const invalidated = this.store.engine.invalidateFormulaCell(rowId, field);
-				for (const k of invalidated) {
-					allInvalidatedKeys.add(k);
+				for (const cell of invalidated) {
+					addInvalidatedCell(cell.rowId, cell.colField);
 				}
 			}
 		}
@@ -363,26 +370,36 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		} else {
 			// No sorting or filtering is affected. Notify only changed cells, formula dependents,
 			// and explicitly declared valueGetter dependents.
-			const notifyKeys = new Set<string>(allInvalidatedKeys);
+			const notifyCells = new Map<string, Set<string>>();
+			const addNotifyCell = (rowId: string, field: string) => {
+				let fields = notifyCells.get(rowId);
+				if (!fields) {
+					fields = new Set<string>();
+					notifyCells.set(rowId, fields);
+				}
+				fields.add(field);
+			};
+			for (const [rowId, fields] of allInvalidatedCells) {
+				for (const field of fields) addNotifyCell(rowId, field);
+			}
 			for (const node of result.changedNodes) {
 				const changedFields = result.changedFieldsByRow.get(node.id);
 				if (changedFields) {
 					for (const field of changedFields) {
-						notifyKeys.add(createCellKey(node.id, field));
+						addNotifyCell(node.id, field);
 						for (const dependentField of this.store.engine.columns.getValueGetterDependents(field)) {
 							if (dependentField !== field) {
-								notifyKeys.add(createCellKey(node.id, dependentField));
+								addNotifyCell(node.id, dependentField);
 							}
 						}
 					}
 				}
 			}
 
-			for (const key of notifyKeys) {
-				const colonIdx = key.indexOf(':');
-				const rId = colonIdx === -1 ? key : key.substring(0, colonIdx);
-				const cField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
-				this.store.engine.notifyCellChange(rId, cField);
+			for (const [rId, fields] of notifyCells) {
+				for (const cField of fields) {
+					this.store.engine.notifyCellChange(rId, cField);
+				}
 			}
 
 			for (const [rowId, values] of result.changedValuesByRow) {

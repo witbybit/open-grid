@@ -1,9 +1,8 @@
-import { createCellKey } from '../ids.js';
 import type { GridCellPointer } from '../store.js';
 
 export interface InvalidationFrame {
 	full: boolean;
-	cells: Set<string>;
+	cellsByRowId: Map<string, Set<string>>;
 	rows: Set<string>;
 	columns: Set<string>;
 	headers: boolean;
@@ -15,7 +14,7 @@ export interface InvalidationFrame {
 
 export class InvalidationManager {
 	private full = false;
-	private cells = new Set<string>();
+	private cellsByRowId = new Map<string, Set<string>>();
 	private rows = new Set<string>();
 	private columns = new Set<string>();
 	private headers = false;
@@ -31,7 +30,12 @@ export class InvalidationManager {
 
 	public invalidateCell(rowId: string, colId: string, reason?: string): void {
 		if (!this.full) {
-			this.cells.add(createCellKey(rowId, colId));
+			let cols = this.cellsByRowId.get(rowId);
+			if (!cols) {
+				cols = new Set<string>();
+				this.cellsByRowId.set(rowId, cols);
+			}
+			cols.add(colId);
 		}
 		this.addReason(reason);
 	}
@@ -91,7 +95,7 @@ export class InvalidationManager {
 	public consume(): InvalidationFrame {
 		const frame: InvalidationFrame = {
 			full: this.full,
-			cells: this.full ? new Set() : new Set(this.cells),
+			cellsByRowId: this.full ? new Map() : this.cloneCellsByRowId(),
 			rows: this.full ? new Set() : new Set(this.rows),
 			columns: this.full ? new Set() : new Set(this.columns),
 			headers: this.full ? false : this.headers,
@@ -104,6 +108,14 @@ export class InvalidationManager {
 		return frame;
 	}
 
+	private cloneCellsByRowId(): Map<string, Set<string>> {
+		const next = new Map<string, Set<string>>();
+		for (const [rowId, colIds] of this.cellsByRowId) {
+			next.set(rowId, new Set(colIds));
+		}
+		return next;
+	}
+
 	private addReason(reason?: string): void {
 		if (reason && !this.reasons.includes(reason)) {
 			this.reasons.push(reason);
@@ -112,7 +124,7 @@ export class InvalidationManager {
 
 	private reset(): void {
 		this.full = false;
-		this.cells.clear();
+		this.cellsByRowId.clear();
 		this.rows.clear();
 		this.columns.clear();
 		this.headers = false;

@@ -17,7 +17,11 @@ export class OverlayRenderer {
 		this.sync(frame);
 	}
 
-	public syncPosition(): void {
+	public syncScrollPosition(): void {
 		this.syncPositionCallback?.();
+	}
+
+	public syncPosition(): void {
+		this.syncScrollPosition();
 	}
 }
