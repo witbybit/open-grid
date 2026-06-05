@@ -10,7 +10,7 @@ import { createCellKey } from '../ids.js';
 import type { GridCellContentUnmount } from './IGridRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 
-type ResolvedCellRendererScrollMode = 'skeleton' | 'fallback' | 'preserve';
+type ResolvedCellRendererScrollMode = 'skeleton' | 'fallback' | 'preserve' | 'live';
 
 export interface CellSlotState {
 	rowId: string;
@@ -630,6 +630,8 @@ export class RowRenderer<TRowData = unknown> {
 					isLoading: access.isLoading,
 					phase: access.isEditing ? 'edit' : phase,
 					isScrolling: false,
+					isFocused: access.isFocused,
+					isSelected: access.isSelected,
 				});
 			} else {
 				if (cell.dataset.cellKey) {
@@ -936,7 +938,28 @@ export class RowRenderer<TRowData = unknown> {
 		if (rendererKind === 'portal') {
 			if (cell.dataset.cellKey !== cellKey) {
 				const rendererScrollMode = this.getCellRendererScrollMode(col);
-				if (rendererScrollMode === 'preserve') {
+				if (rendererScrollMode === 'live') {
+					if (cell.dataset.cellKey) {
+						this.releaseCellPortal(cell);
+					}
+					this.cellRenderer.clearPrimitiveContent(cell);
+					cell.dataset.cellKey = cellKey;
+					const portalHost = this.ensureCellPortalHost(cell);
+					this.cellRenderer.showPortalContent(cell);
+					this.portalMountManager.mountCellImmediately({
+						cellKey,
+						container: portalHost,
+						value: this.getScrollMountValue(node, col),
+						node,
+						col,
+						isEditing: false,
+						isLoading: false,
+						phase: 'scroll',
+						isScrolling: true,
+						isFocused: ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field,
+						isSelected: !!ctx.selectionBounds && rowIndex >= ctx.selectionBounds.minRow && rowIndex <= ctx.selectionBounds.maxRow,
+					});
+				} else if (rendererScrollMode === 'preserve') {
 					this.cellRenderer.showPortalContent(cell);
 				} else if (rendererScrollMode === 'fallback') {
 					const cachedResult = this.engine.data.getCachedDisplayValue(node.id, col.field);
@@ -986,8 +1009,15 @@ export class RowRenderer<TRowData = unknown> {
 	private getCellRendererScrollMode(col: ColumnDef<TRowData>): ResolvedCellRendererScrollMode {
 		const scrollBehavior = col.cellRendererCapabilities?.scrollBehavior;
 		if (scrollBehavior === 'fallback') return 'fallback';
-		if (scrollBehavior === 'live' || scrollBehavior === 'defer') return 'preserve';
+		if (scrollBehavior === 'live') return 'live';
+		if (scrollBehavior === 'defer') return 'preserve';
 		return 'skeleton';
+	}
+
+	private getScrollMountValue(node: RowNode<TRowData>, col: ColumnDef<TRowData>): unknown {
+		const cachedResult = this.engine.data.getCachedDisplayValue(node.id, col.field);
+		if (cachedResult.hasCached) return cachedResult.value;
+		return this.engine.data.getCellValue(node.id, col.field);
 	}
 
 	private getRendererKind(

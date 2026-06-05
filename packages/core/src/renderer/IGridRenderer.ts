@@ -10,6 +10,8 @@ export interface GridCellContentMount<TRowData = unknown> {
 	isLoading: boolean;
 	phase?: CellRendererPhase;
 	isScrolling?: boolean;
+	isFocused?: boolean;
+	isSelected?: boolean;
 }
 
 export interface GridCellContentUnmount {

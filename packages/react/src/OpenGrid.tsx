@@ -118,7 +118,9 @@ function OpenGridInner<TRowData = unknown>({
 						mount.isEditing,
 						mount.isLoading,
 						mount.phase,
-						mount.isScrolling
+						mount.isScrolling,
+						mount.isFocused,
+						mount.isSelected
 					);
 				},
 				unmountCellContent: (unmount) => {

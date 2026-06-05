@@ -433,6 +433,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				displayedColumns,
 				visibleColRange,
 				focusedCell: state.selection.focus,
+				selectionBounds: state.selection.bounds ?? undefined,
 				canUseCachedDisplayValues: true,
 			};
 

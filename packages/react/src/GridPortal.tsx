@@ -16,6 +16,8 @@ export interface PortalCellProps<TRowData = unknown> {
 	isLoading: boolean;
 	phase?: CellRendererPhase;
 	isScrolling?: boolean;
+	isFocused?: boolean;
+	isSelected?: boolean;
 }
 
 /**
@@ -31,6 +33,8 @@ function PortalCellInner<TRowData = unknown>({
 	isLoading,
 	phase,
 	isScrolling,
+	isFocused,
+	isSelected,
 }: PortalCellProps<TRowData>) {
 	const api = useGridApi<TRowData>();
 
@@ -91,14 +95,6 @@ function PortalCellInner<TRowData = unknown>({
 	}
 
 	const rowData = node?.data;
-	const gridState = api.getState();
-	const focusedCell = gridState.selection.focus;
-	const visualIndex = api.getVisualIndexByRowId(rowId);
-	const isSelected =
-		visualIndex !== null &&
-		!!gridState.selection.bounds &&
-		visualIndex >= gridState.selection.bounds.minRow &&
-		visualIndex <= gridState.selection.bounds.maxRow;
 
 	const CustomEditor = col?.cellEditor as ((props: Record<string, unknown>) => ReactNode) | undefined;
 	const CustomRenderer = col?.cellRenderer as ((props: Record<string, unknown>) => ReactNode) | undefined;
@@ -168,9 +164,9 @@ function PortalCellInner<TRowData = unknown>({
 					colId: colField,
 					isScrolling: !!isScrolling,
 					phase: phase ?? 'initial',
-					isFocused: focusedCell?.rowId === rowId && focusedCell?.colField === colField,
+					isFocused: !!isFocused,
 					isEditing,
-					isSelected,
+					isSelected: !!isSelected,
 					api,
 				})
 			) : null}
@@ -190,6 +186,8 @@ export interface PortalData<TRowData = unknown> {
 	isLoading: boolean;
 	phase?: CellRendererPhase;
 	isScrolling?: boolean;
+	isFocused?: boolean;
+	isSelected?: boolean;
 }
 
 function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
@@ -285,7 +283,9 @@ export function createPortalStore<TRowData = unknown>() {
 			isEditing: boolean,
 			isLoading: boolean,
 			phase?: CellRendererPhase,
-			isScrolling?: boolean
+			isScrolling?: boolean,
+			isFocused?: boolean,
+			isSelected?: boolean
 		) {
 			const existing = portals.get(cellKey);
 			if (
@@ -295,6 +295,8 @@ export function createPortalStore<TRowData = unknown>() {
 				existing.isLoading === isLoading &&
 				existing.phase === phase &&
 				existing.isScrolling === isScrolling &&
+				existing.isFocused === isFocused &&
+				existing.isSelected === isSelected &&
 				existing.value === value &&
 				existing.node === node &&
 				existing.col === col
@@ -318,6 +320,8 @@ export function createPortalStore<TRowData = unknown>() {
 				isLoading,
 				phase,
 				isScrolling,
+				isFocused,
+				isSelected,
 			});
 			notify();
 		},
@@ -455,6 +459,8 @@ export function PortalManager<TRowData = unknown>({
 							isLoading={p.isLoading}
 							phase={p.phase}
 							isScrolling={p.isScrolling}
+							isFocused={p.isFocused}
+							isSelected={p.isSelected}
 						/>
 					</GridProvider>,
 					p.container

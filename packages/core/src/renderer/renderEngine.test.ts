@@ -1272,6 +1272,7 @@ describe('RenderEngine', () => {
 		renderer.portalMountManager.onMountCellContent = vi.fn();
 		renderer.portalMountManager.onUnmountCellContent = vi.fn();
 		renderer.mount(container);
+		(renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mockClear();
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 2400;
@@ -2150,6 +2151,14 @@ describe('RenderEngine', () => {
 		expect(cell1.dataset.contentMode).toBe('pending');
 		expect(cell2.dataset.contentMode).toBe('portal');
 		expect(cell3.dataset.contentMode).toBe('fallback');
+		expect(renderer.portalMountManager.onMountCellContent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				node: expect.objectContaining({ id: 'row-40' }),
+				col: expect.objectContaining({ field: 'col2' }),
+				phase: 'scroll',
+				isScrolling: true,
+			})
+		);
 
 		renderer.unmount();
 		controller.dispose();
@@ -2221,7 +2230,9 @@ describe('RenderEngine', () => {
 		document.body.appendChild(container);
 
 		const renderer = new RenderEngine(store.engine, store);
+		renderer.portalMountManager.onMountCellContent = vi.fn();
 		renderer.mount(container);
+		(renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mockClear();
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1600;
@@ -2235,6 +2246,22 @@ describe('RenderEngine', () => {
 		expect((row40.querySelector('[data-col-field="live"]') as HTMLDivElement).dataset.contentMode).toBe('portal');
 		expect((row40.querySelector('[data-col-field="defer"]') as HTMLDivElement).dataset.contentMode).toBe('portal');
 		expect((row40.querySelector('[data-col-field="fallback"]') as HTMLDivElement).dataset.contentMode).toBe('fallback');
+		const scrollMounts = (renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
+		expect(scrollMounts).toContainEqual(
+			expect.objectContaining({
+				node: expect.objectContaining({ id: 'row-40' }),
+				col: expect.objectContaining({ field: 'live' }),
+				phase: 'scroll',
+				isScrolling: true,
+			})
+		);
+		expect(scrollMounts).not.toContainEqual(
+			expect.objectContaining({
+				node: expect.objectContaining({ id: 'row-40' }),
+				col: expect.objectContaining({ field: 'defer' }),
+				phase: 'scroll',
+			})
+		);
 
 		renderer.unmount();
 		controller.dispose();

@@ -89,6 +89,17 @@ export class PortalMountManager<TRowData = unknown> {
 		this.onMountCellContent?.(mount);
 	}
 
+	public mountCellImmediately(mount: GridCellContentMount<TRowData>): void {
+		this.mountedCells.set(mount.cellKey, mount.container);
+		this.deferredCellReleases.delete(mount.cellKey);
+		this.deferredCellMounts.delete(mount.cellKey);
+		this.deferredNewCellMounts.delete(mount.cellKey);
+		if (this.scrolling) {
+			this.stats.mountsDuringScroll++;
+		}
+		this.onMountCellContent?.(mount);
+	}
+
 	public releaseCell(unmount: GridCellContentUnmount): void {
 		const existingContainer = this.mountedCells.get(unmount.cellKey);
 		if (unmount.container && existingContainer && existingContainer !== unmount.container) return;
