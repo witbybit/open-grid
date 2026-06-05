@@ -1585,7 +1585,7 @@ describe('RenderEngine', () => {
 			}
 		};
 		renderer.mount(container);
-		expect(portalChild?.parentElement?.classList.contains('og-row-portal-host')).toBe(true);
+		expect((portalChild as any)?.parentElement?.classList.contains('og-row-portal-host')).toBe(true);
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1200;
@@ -1775,6 +1775,228 @@ describe('RenderEngine', () => {
 		expect(stats.portalReleasesDuringScroll).toBe(0);
 		expect(stats.portalFlushesDuringScroll).toBe(0);
 		expect(stats.portalMountsDuringScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('updates cell widths immediately on column resize', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'a', header: 'A', width: 120 }];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-0', a: 'A0' }],
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 200,
+			width: 500,
+			height: 200,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const cell = container.querySelector('.og-cell') as HTMLDivElement;
+		expect(cell.style.width).toBe('120px');
+
+		// Trigger column resize
+		store.setColumnWidth('a', 200);
+
+		// Wait for render scheduler frame
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(cell.style.width).toBe('200px');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('replaces loading skeletons with data rows immediately when loading state and dataVersion update', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'a', header: 'A', width: 120 }];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			loading: true,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [],
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 200,
+			width: 500,
+			height: 200,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		// Cell should be in loading mode initially
+		let cell = container.querySelector('.og-cell') as HTMLDivElement;
+		expect(cell.className).toContain('og-cell-loading');
+
+		// Transition loading to false and supply rows
+		store.setRows([{ id: 'row-0', a: 'A0' }]);
+		store.setState({ loading: false });
+
+		// Wait for render scheduler frame
+		await Promise.resolve();
+		await Promise.resolve();
+
+		cell = container.querySelector('.og-cell') as HTMLDivElement;
+		expect(cell.className).not.toContain('og-cell-loading');
+		expect(cell.querySelector('.og-cell-content')?.textContent).toBe('A0');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('mounts detail row portal immediately when master row is expanded', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [{ field: 'name', header: 'Name', width: 180 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 180,
+			getRowId: (row) => row.id,
+			masterDetailEnabled: true,
+			detailRowHeight: 40,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-0', name: 'Row 0' }],
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		const onMountRow = vi.fn(({ container: host }) => {
+			const detail = document.createElement('div');
+			detail.className = 'my-detail-content';
+			host.appendChild(detail);
+		});
+		renderer.portalMountManager.onMountRowContent = onMountRow;
+		renderer.mount(container);
+
+		expect(onMountRow).not.toHaveBeenCalled();
+
+		// Expand the row
+		store.toggleDetailExpanded('row-0');
+
+		// Wait for render scheduler frame
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(onMountRow).toHaveBeenCalledTimes(1);
+		expect(container.querySelector('.my-detail-content')).not.toBeNull();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('renders valueGetter column values correctly during scroll', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callbacks.push(callback);
+			return callbacks.length;
+		});
+		const columns = [
+			{ field: 'name', header: 'Name', width: 120 },
+			{ field: 'computed', header: 'Computed', width: 120, valueGetter: ({ row }) => `${row.name}!` },
+		];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 50 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		// Scroll to row 10
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		// Run the scroll animation frame
+		expect(callbacks.length).toBe(1);
+		callbacks[0](0);
+
+		// Inspect the cells rendered at the scrolled position
+		const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+		expect(row10).not.toBeNull();
+		const computedCell = row10.querySelector('[data-col-field="computed"]') as HTMLDivElement;
+		expect(computedCell).not.toBeNull();
+		expect(computedCell.textContent).toBe('Row 10!');
 
 		renderer.unmount();
 		controller.dispose();

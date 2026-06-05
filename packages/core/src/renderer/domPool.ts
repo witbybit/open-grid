@@ -13,7 +13,6 @@
 export class DOMPool<T extends HTMLElement> {
 	private available: T[] = [];
 	private factory: () => T;
-	private holdingPen: DocumentFragment | null = null;
 	private totalCreated = 0;
 	private hotReleaseCount = 0;
 	private coldReleaseCount = 0;
@@ -21,16 +20,9 @@ export class DOMPool<T extends HTMLElement> {
 	constructor(factory: () => T, initialCapacity: number = 50) {
 		this.factory = factory;
 
-		if (typeof document !== 'undefined') {
-			this.holdingPen = document.createDocumentFragment();
-		}
-
 		// Pre-warm the pool
 		for (let i = 0; i < initialCapacity; i++) {
 			const node = this.factory();
-			if (this.holdingPen) {
-				this.holdingPen.appendChild(node);
-			}
 			this.available.push(node);
 			this.totalCreated++;
 		}
@@ -63,9 +55,6 @@ export class DOMPool<T extends HTMLElement> {
 	 * the node; the next bind overwrites the hot properties it needs.
 	 */
 	public releaseHot(node: T): void {
-		if (this.holdingPen) {
-			this.holdingPen.appendChild(node);
-		}
 		this.available.push(node);
 		this.hotReleaseCount++;
 	}
@@ -86,11 +75,6 @@ export class DOMPool<T extends HTMLElement> {
 			for (const key in node.dataset) {
 				delete node.dataset[key];
 			}
-		}
-
-		// Move to holding pen to keep it detached off-DOM
-		if (this.holdingPen) {
-			this.holdingPen.appendChild(node);
 		}
 
 		this.available.push(node);
@@ -123,9 +107,6 @@ export class DOMPool<T extends HTMLElement> {
 	/** Clear the pool and release references */
 	public clear(): void {
 		this.available.length = 0;
-		if (this.holdingPen) {
-			this.holdingPen.textContent = '';
-		}
 	}
 }
 

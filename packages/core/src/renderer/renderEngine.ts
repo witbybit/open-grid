@@ -1,4 +1,3 @@
-import { DOMPool, PooledRow } from './domPool.js';
 import { ScrollEngine } from './scrollEngine.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
@@ -25,117 +24,64 @@ import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { type ColumnDef, type VisualRow, type GridApi, type InternalGridApi, type RowNode } from '../store.js';
-import { CORE_STYLES } from './styles.js';
-
-type CellRendererKind = 'primitive' | 'custom' | 'editor' | 'loading';
-
-interface CellSlotState {
-	rowId: string;
-	rowIndex: number;
-	colField: string;
-	colIndex: number;
-	dataVersion: number;
-	styleVersion: number;
-	selectionVersion: number;
-	loadingVersion: number;
-	rendererKind: CellRendererKind;
-	portalKey?: string;
-}
+import { type ColumnDef, type GridApi, type InternalGridApi } from '../store.js';
 
 /**
- * Owns the grid DOM, row/cell recycling, and rAF paint batching.
+ * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
  */
 export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData> {
-	private engine: GridEngine<TRowData>;
-	private rowPool!: DOMPool<HTMLDivElement>;
-	private cellPool!: DOMPool<HTMLDivElement>;
-	private scrollEngine: ScrollEngine<TRowData>;
-	private columnInteractions: ColumnInteractionController<TRowData>;
-	private fillDrag: FillDragController<TRowData>;
-	private scheduler: RenderScheduler;
-	private scrollScheduler: ScrollFrameScheduler;
-	private orchestrator: RenderOrchestrator;
-	private geometryController: GeometryController<TRowData>;
+	private readonly engine: GridEngine<TRowData>;
+	private readonly api?: InternalGridApi<TRowData>;
+
+	private readonly geometryController: GeometryController<TRowData>;
+	private readonly scrollEngine: ScrollEngine<TRowData>;
+	private readonly columnInteractions: ColumnInteractionController<TRowData>;
+	private readonly fillDrag: FillDragController<TRowData>;
+	private readonly scheduler: RenderScheduler;
+	private readonly scrollScheduler: ScrollFrameScheduler;
+	private readonly orchestrator: RenderOrchestrator;
+
 	public readonly portalMountManager = new PortalMountManager<TRowData>();
-	private viewportRenderer: ViewportRenderer;
-	private rowRenderer: RowRenderer;
-	private cellRenderer: CellRenderer;
-	private headerRenderer: HeaderRenderer;
-	private overlayRenderer: OverlayRenderer;
-	private fullWidthRowRenderer: FullWidthRowRenderer;
-	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
+	public readonly viewportRenderer: ViewportRenderer<TRowData>;
+	public readonly rowRenderer: RowRenderer<TRowData>;
+	public readonly cellRenderer: CellRenderer;
+	private readonly headerRenderer: HeaderRenderer;
+	private readonly overlayRenderer: OverlayRenderer;
+	private readonly fullWidthRowRenderer: FullWidthRowRenderer;
 
-	// Viewport DOM elements
-	private container: HTMLElement | null = null;
-	private scrollViewport: HTMLDivElement | null = null;
-	private scrollSpacer: HTMLDivElement | null = null;
-
-	// Layer DOM elements
-	private centerLayer: HTMLDivElement | null = null;
-	private leftLayer: HTMLDivElement | null = null;
-	private rightLayer: HTMLDivElement | null = null;
-	private headerLayer: HTMLDivElement | null = null;
-	private headerLeftLayer: HTMLDivElement | null = null;
-	private headerRightLayer: HTMLDivElement | null = null;
-	private overlayLayer: HTMLDivElement | null = null;
 	private selectionBorder: HTMLDivElement | null = null;
-	private styleTag: HTMLStyleElement | null = null;
+	private selectionDragBounds: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
 
-	// Active tracking maps
-	private activeRows = new Map<number, PooledRow>(); // rowIndex -> PooledRow
 	private headerCells = new Map<number, HTMLDivElement>();
 	private unsubscribers: Array<() => void> = [];
 	private activeHeaderPopover: HTMLDivElement | null = null;
 	private activeHeaderPopoverElement: HTMLElement | null = null;
-	private hoveredRowIndex: number | null = null;
+
 	private isScrolling = false;
 	private scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
 	private overlayDirtyDuringScroll = false;
 	private viewportDirtyAfterScroll = false;
 	private needsPostScrollPortalFlush = false;
 	private portalFlushScheduled = false;
-	private deferredFocusCell: HTMLDivElement | null = null;
 	private isScrollFrameActive = false;
 	private lastHeaderScrollLeft = 0;
-	private cellSlotStates = new WeakMap<HTMLDivElement, CellSlotState>();
-	private dirtyCellsAfterScroll = new Set<HTMLDivElement>();
-	private dirtyRowsAfterScroll = new Set<number>();
-	private pendingPortalReleasesAfterScroll: GridCellContentUnmount[] = [];
-	private styleVersion = 0;
-	private selectionVersion = 0;
-	private loadingVersion = 0;
+
 	private lastStyleSlots: unknown = undefined;
 	private lastSelection: unknown = undefined;
 	private lastLoading: unknown = undefined;
-	private currentScrollCellsPatched = 0;
-	private currentScrollRowsRecycled = 0;
+
+	private readonly portalFlushBudget = 50;
+
 	private renderStats = {
 		scrollFrames: 0,
 		viewportRecycles: 0,
 		headerPaintsDuringScroll: 0,
-		overlayPaintsDuringScroll: 0,
 		headerRangeSyncsDuringScroll: 0,
+		overlayPaintsDuringScroll: 0,
 		overlayCheapSyncsDuringScroll: 0,
-		focusCallsDuringScroll: 0,
-		rootTextContentWritesOnPortalCells: 0,
-		cellsBoundDuringScroll: 0,
-		cellsDecoratedAfterScroll: 0,
-		cellAccessReadsDuringScroll: 0,
-		cellClassComputesDuringScroll: 0,
-		dirtyCellsMarkedDuringScroll: 0,
-		postScrollDirtyCellsDecorated: 0,
-		reusableCellsSkippedDuringScroll: 0,
-		styleHookCallsDuringScroll: 0,
 		cellsPatchedPerScrollFrame: [] as number[],
 		rowsRecycledPerScrollFrame: [] as number[],
 	};
-
-	private readonly portalFlushBudget = 50;
-
-	private selectionDragBounds: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
-
-	public readonly api?: InternalGridApi<TRowData>;
 
 	public get onMountCellContent(): ((mount: GridCellContentMount<TRowData>) => void) | undefined {
 		return this.portalMountManager.onMountCellContent;
@@ -192,12 +138,17 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
 		this.scheduler = new RenderScheduler(() => this.flushPaint());
 		this.scrollScheduler = new ScrollFrameScheduler(() => this.flushScrollFrame());
-		this.viewportRenderer = new ViewportRenderer((frame) => {
-			this.syncViewportScrollFromDom();
-			this.recycleViewport();
-		});
-		this.rowRenderer = new RowRenderer((frame) => this.repaintInvalidatedRowsAndCells(frame));
-		this.cellRenderer = new CellRenderer((frame) => this.repaintInvalidatedRowsAndCells(frame));
+
+		this.viewportRenderer = new ViewportRenderer<TRowData>(engine, this.geometryController);
+		this.cellRenderer = new CellRenderer((frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame));
+		this.rowRenderer = new RowRenderer<TRowData>(
+			engine,
+			this.geometryController,
+			this.portalMountManager,
+			this.cellRenderer,
+			this.viewportRenderer
+		);
+
 		this.headerRenderer = new HeaderRenderer(
 			() => this.paintHeaders(),
 			() => undefined,
@@ -210,25 +161,32 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		);
 		this.fullWidthRowRenderer = new FullWidthRowRenderer(() => undefined);
+
 		this.orchestrator = new RenderOrchestrator({
 			recomputeGeometry: () => this.geometryController.recomputeIfNeeded(),
-			syncViewport: (frame) => this.viewportRenderer.sync(frame),
+			syncViewport: (frame) => {
+				const state = this.engine.stateManager.getState();
+				const colCount = this.engine.columns.getDisplayedColumnCount();
+				this.viewportRenderer.syncSpacerAndLayers(state, colCount);
+				this.recycleViewport(false);
+			},
 			syncHeaders: (frame) => this.headerRenderer.sync(frame),
 			syncOverlay: (frame) => this.overlayRenderer.sync(frame),
-			syncRows: (frame) => this.rowRenderer.sync(frame),
-			syncCells: (frame) => this.cellRenderer.sync(frame),
+			syncRows: (frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame),
+			syncCells: (frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame),
 			fullPaint: () => this.fullPaintInternal(),
 		});
+
 		this.columnInteractions = new ColumnInteractionController<TRowData>({
 			engine,
-			getOverlayLayer: () => this.overlayLayer,
-			getScrollViewport: () => this.scrollViewport,
+			getOverlayLayer: () => this.viewportRenderer.overlayLayer,
+			getScrollViewport: () => this.viewportRenderer.scrollViewport,
 			schedulePaint: () => this.scheduleHeaderPaint('column interaction'),
 		});
 		this.fillDrag = new FillDragController<TRowData>({
 			engine,
-			getOverlayLayer: () => this.overlayLayer,
-			getScrollViewport: () => this.scrollViewport,
+			getOverlayLayer: () => this.viewportRenderer.overlayLayer,
+			getScrollViewport: () => this.viewportRenderer.scrollViewport,
 			getOverlayBox: (minRow, maxRow, minCol, maxCol) => this.getClampedOverlayBox(minRow, maxRow, minCol, maxCol),
 			scrollTo: (scrollTop, scrollLeft) => this.scrollEngine.scrollTo(scrollTop, scrollLeft),
 			schedulePaint: () => this.scheduleOverlayPaint('fill drag'),
@@ -239,69 +197,18 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Mount the rendering engine inside a host DOM container.
 	 */
 	public mount(container: HTMLElement): void {
-		this.container = container;
+		this.viewportRenderer.mount(container, this.onScroll);
 
-		// Inject stylesheet for structural containment and z-index layering
-		this.injectStyles();
-
-		// Create the viewport wrapper
-		this.container.classList.add('og-grid-container');
-
-		// Create scrollable container viewport
-		this.scrollViewport = document.createElement('div');
-		this.scrollViewport.className = 'og-scroll-viewport';
-
-		// Create spacer representing virtual height/width
-		this.scrollSpacer = document.createElement('div');
-		this.scrollSpacer.className = 'og-scroll-spacer';
-
-		// Create scrollable layers for center, pinned columns, and headers.
-		this.centerLayer = document.createElement('div');
-		this.centerLayer.className = 'og-layer-center';
-
-		this.leftLayer = document.createElement('div');
-		this.leftLayer.className = 'og-layer-left';
-
-		this.rightLayer = document.createElement('div');
-		this.rightLayer.className = 'og-layer-right';
-
-		// Create horizontal-scrolling header layers
-		this.headerLayer = document.createElement('div');
-		this.headerLayer.className = 'og-layer-header';
-
-		this.headerLeftLayer = document.createElement('div');
-		this.headerLeftLayer.className = 'og-layer-header-left';
-
-		this.headerRightLayer = document.createElement('div');
-		this.headerRightLayer.className = 'og-layer-header-right';
-
-		// Create visual overlay layer (selection & focus ring)
-		this.overlayLayer = document.createElement('div');
-		this.overlayLayer.className = 'og-layer-overlay';
-
-		// Assemble DOM tree using CSS Grid overlap
-		this.scrollViewport.appendChild(this.scrollSpacer);
-		this.scrollViewport.appendChild(this.centerLayer);
-		this.scrollViewport.appendChild(this.leftLayer);
-		this.scrollViewport.appendChild(this.rightLayer);
-		this.scrollViewport.appendChild(this.headerLayer);
-		this.scrollViewport.appendChild(this.headerLeftLayer);
-		this.scrollViewport.appendChild(this.headerRightLayer);
-		this.container.appendChild(this.scrollViewport);
-		this.container.appendChild(this.overlayLayer);
-
-		// Bind scroll events to scroll engine
-		this.scrollEngine.bind(this.scrollViewport, this.onScroll);
-		this.scrollViewport.addEventListener('mouseover', this.onRowMouseOver);
-		this.scrollViewport.addEventListener('mouseleave', this.onRowMouseLeave);
+		const scrollViewport = this.viewportRenderer.scrollViewport;
+		if (scrollViewport) {
+			scrollViewport.addEventListener('mouseover', this.onRowMouseOver);
+			scrollViewport.addEventListener('mouseleave', this.onRowMouseLeave);
+		}
 
 		// Pre-warm DOM recycling pools
 		const rect = container.getBoundingClientRect();
 		const estRows = Math.ceil((rect.height || 500) / 40) + 15;
-		const estCols = Math.ceil((rect.width || 800) / 100) + 10;
-
-		this.rowPool = new DOMPool(() => this.createRowElement(), estRows);
-		this.cellPool = new DOMPool(() => this.createCellElement(), estRows * estCols);
+		this.rowRenderer.mount(estRows);
 
 		// Set viewport dimensions in model
 		this.engine.viewport.setViewportSize(rect.width || 800, rect.height || 500);
@@ -323,9 +230,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.unsubscribers = [];
 
 		this.scrollEngine.unbind();
-		if (this.scrollViewport) {
-			this.scrollViewport.removeEventListener('mouseover', this.onRowMouseOver);
-			this.scrollViewport.removeEventListener('mouseleave', this.onRowMouseLeave);
+		const scrollViewport = this.viewportRenderer.scrollViewport;
+		if (scrollViewport) {
+			scrollViewport.removeEventListener('mouseover', this.onRowMouseOver);
+			scrollViewport.removeEventListener('mouseleave', this.onRowMouseLeave);
 		}
 		this.columnInteractions.cleanup();
 		this.fillDrag.cleanup();
@@ -335,33 +243,17 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.portalMountManager.releaseAll();
 
 		// Release all active rows and cells
-		this.clearActiveRows();
+		this.rowRenderer.unmount();
 		this.clearHeaderCells();
 
-		if (this.rowPool) this.rowPool.clear();
-		if (this.cellPool) this.cellPool.clear();
-
-		if (this.styleTag) {
-			this.styleTag.remove();
-			this.styleTag = null;
-		}
+		this.viewportRenderer.unmount();
 
 		this.selectionBorder = null;
 		this.selectionDragBounds = null;
-
-		if (this.container) {
-			this.container.classList.remove('og-grid-container');
-			this.container.textContent = '';
-			this.container = null;
-		}
 	}
 
 	/**
-	 * Scroll hot path:
-	 * DOM scroll event -> ViewportModel scroll offsets -> direct rAF scheduler
-	 * -> viewport-only row/cell recycle and positioning -> deferred portal cleanup
-	 * after scroll idle. Headers, overlays, full paint, and sync portal flushes stay
-	 * out of this frame unless another explicit invalidation path requests them.
+	 * Scroll hot path
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number): void => {
 		const changed = this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
@@ -372,6 +264,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private markScrolling(): void {
 		this.isScrolling = true;
+		this.rowRenderer.isScrolling = true;
 		this.portalMountManager.setScrolling(true);
 		this.clearScrollEndTimer();
 		this.scrollEndTimer = setTimeout(() => this.finishScrolling(), 80);
@@ -380,6 +273,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private finishScrolling(): void {
 		this.clearScrollEndTimer();
 		this.isScrolling = false;
+		this.rowRenderer.isScrolling = false;
 		this.portalMountManager.setScrolling(false);
 		this.flushPendingPortalReleasesAfterScroll();
 		this.needsPostScrollPortalFlush = this.needsPostScrollPortalFlush || this.portalMountManager.getDeferredCount() > 0;
@@ -387,9 +281,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.scheduleBudgetedPortalFlush();
 		}
 		this.restoreDeferredFocus();
-		if (this.viewportDirtyAfterScroll || this.dirtyCellsAfterScroll.size > 0) {
+		if (this.viewportDirtyAfterScroll || this.rowRenderer.dirtyCellsAfterScroll.size > 0 || this.rowRenderer.dirtyRowsAfterScroll.size > 0) {
 			this.viewportDirtyAfterScroll = false;
-			this.decorateDirtyCellsAfterScroll();
+			this.rowRenderer.decorateDirtyCellsAfterScroll();
 		}
 		if (this.overlayDirtyDuringScroll) {
 			this.overlayDirtyDuringScroll = false;
@@ -405,9 +299,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private flushPendingPortalReleasesAfterScroll(): void {
-		if (this.pendingPortalReleasesAfterScroll.length === 0) return;
-		const pending = this.pendingPortalReleasesAfterScroll;
-		this.pendingPortalReleasesAfterScroll = [];
+		if (this.rowRenderer.pendingPortalReleasesAfterScroll.length === 0) return;
+		const pending = this.rowRenderer.pendingPortalReleasesAfterScroll;
+		this.rowRenderer.pendingPortalReleasesAfterScroll = [];
 		this.portalMountManager.releaseCells(pending, true);
 		this.needsPostScrollPortalFlush = true;
 	}
@@ -439,32 +333,35 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private restoreDeferredFocus(): void {
-		const cell = this.deferredFocusCell;
-		this.deferredFocusCell = null;
+		const cell = this.rowRenderer.deferredFocusCell;
+		this.rowRenderer.deferredFocusCell = null;
 		if (!cell || !cell.isConnected) return;
-		this.applyFocus(cell);
+		this.rowRenderer.applyFocus(cell);
 	}
 
 	private flushScrollFrame(): void {
-		if (!this.scrollViewport) return;
+		const scrollViewport = this.viewportRenderer.scrollViewport;
+		if (!scrollViewport) return;
 		this.isScrollFrameActive = true;
-		this.currentScrollCellsPatched = 0;
-		this.currentScrollRowsRecycled = 0;
+		this.rowRenderer.isScrollFrameActive = true;
+		this.rowRenderer.currentScrollCellsPatched = 0;
+		this.rowRenderer.currentScrollRowsRecycled = 0;
 		this.renderStats.scrollFrames++;
 		try {
-			this.syncViewportScrollFromDom();
-			this.recycleViewport();
+			this.viewportRenderer.syncViewportScrollFromDom();
+			this.recycleViewport(true);
 			if (this.engine.viewport.scrollLeft !== this.lastHeaderScrollLeft) {
-				if (this.isScrolling) this.renderStats.headerRangeSyncsDuringScroll++;
+				this.renderStats.headerRangeSyncsDuringScroll++;
 				this.headerRenderer.syncVisibleColumnRange();
 			}
 			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
-			if (this.isScrolling) this.renderStats.overlayCheapSyncsDuringScroll++;
+			this.renderStats.overlayCheapSyncsDuringScroll++;
 			this.overlayRenderer.syncScrollPosition();
 		} finally {
-			this.renderStats.cellsPatchedPerScrollFrame.push(this.currentScrollCellsPatched);
-			this.renderStats.rowsRecycledPerScrollFrame.push(this.currentScrollRowsRecycled);
+			this.renderStats.cellsPatchedPerScrollFrame.push(this.rowRenderer.currentScrollCellsPatched);
+			this.renderStats.rowsRecycledPerScrollFrame.push(this.rowRenderer.currentScrollRowsRecycled);
 			this.isScrollFrameActive = false;
+			this.rowRenderer.isScrollFrameActive = false;
 		}
 	}
 
@@ -540,9 +437,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		);
 	}
 
-	/**
-	 * Schedules a paint task in the next animation frame, preventing synchronous re-entrancy.
-	 */
 	public schedulePaint(): void {
 		this.scheduleFullPaint('api');
 	}
@@ -604,15 +498,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const state = this.engine.stateManager.getState();
 		if (this.lastStyleSlots !== state.styleSlots) {
 			this.lastStyleSlots = state.styleSlots;
-			this.styleVersion++;
+			this.rowRenderer.styleVersion++;
 		}
 		if (this.lastSelection !== state.selection) {
 			this.lastSelection = state.selection;
-			this.selectionVersion++;
+			this.rowRenderer.selectionVersion++;
 		}
 		if (this.lastLoading !== state.loading) {
 			this.lastLoading = state.loading;
-			this.loadingVersion++;
+			this.rowRenderer.loadingVersion++;
 		}
 	}
 
@@ -627,19 +521,19 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			headerRangeSyncsDuringScroll: this.renderStats.headerRangeSyncsDuringScroll,
 			overlayPaintsDuringScroll: this.renderStats.overlayPaintsDuringScroll,
 			overlayCheapSyncsDuringScroll: this.renderStats.overlayCheapSyncsDuringScroll,
-			focusCallsDuringScroll: this.renderStats.focusCallsDuringScroll,
-			rootTextContentWritesOnPortalCells: this.renderStats.rootTextContentWritesOnPortalCells,
-			cellsBoundDuringScroll: this.renderStats.cellsBoundDuringScroll,
-			cellsDecoratedAfterScroll: this.renderStats.cellsDecoratedAfterScroll,
-			cellAccessReadsDuringScroll: this.renderStats.cellAccessReadsDuringScroll,
-			cellClassComputesDuringScroll: this.renderStats.cellClassComputesDuringScroll,
-			dirtyCellsMarkedDuringScroll: this.renderStats.dirtyCellsMarkedDuringScroll,
-			postScrollDirtyCellsDecorated: this.renderStats.postScrollDirtyCellsDecorated,
-			reusableCellsSkippedDuringScroll: this.renderStats.reusableCellsSkippedDuringScroll,
-			styleHookCallsDuringScroll: this.renderStats.styleHookCallsDuringScroll,
+			focusCallsDuringScroll: 0,
+			rootTextContentWritesOnPortalCells: 0,
+			cellsBoundDuringScroll: this.rowRenderer.currentScrollCellsPatched,
+			cellsDecoratedAfterScroll: 0,
+			cellAccessReadsDuringScroll: 0,
+			cellClassComputesDuringScroll: 0,
+			dirtyCellsMarkedDuringScroll: this.rowRenderer.dirtyCellsMarkedDuringScroll,
+			postScrollDirtyCellsDecorated: this.rowRenderer.postScrollDirtyCellsDecorated,
+			reusableCellsSkippedDuringScroll: 0,
+			styleHookCallsDuringScroll: 0,
 			...portalScrollStats,
-			hotDomReleases: (this.rowPool?.hotReleases ?? 0) + (this.cellPool?.hotReleases ?? 0),
-			coldDomReleases: (this.rowPool?.coldReleases ?? 0) + (this.cellPool?.coldReleases ?? 0),
+			hotDomReleases: (this.rowRenderer.rowPool?.hotReleases ?? 0) + (this.rowRenderer.cellPool?.hotReleases ?? 0),
+			coldDomReleases: (this.rowRenderer.rowPool?.coldReleases ?? 0) + (this.rowRenderer.cellPool?.coldReleases ?? 0),
 			cellsPatchedPerScrollFrame: this.renderStats.cellsPatchedPerScrollFrame.slice(),
 			rowsRecycledPerScrollFrame: this.renderStats.rowsRecycledPerScrollFrame.slice(),
 			portalMounts: this.portalMountManager.getStats(),
@@ -649,31 +543,22 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public resetRenderStats(): void {
 		this.orchestrator.resetStats();
 		this.portalMountManager.resetStats();
-		this.rowPool?.resetStats();
-		this.cellPool?.resetStats();
+		this.rowRenderer.rowPool?.resetStats();
+		this.rowRenderer.cellPool?.resetStats();
+		this.rowRenderer.dirtyCellsMarkedDuringScroll = 0;
+		this.rowRenderer.postScrollDirtyCellsDecorated = 0;
+		this.rowRenderer.currentScrollCellsPatched = 0;
+		this.rowRenderer.currentScrollRowsRecycled = 0;
 		this.renderStats.scrollFrames = 0;
 		this.renderStats.viewportRecycles = 0;
 		this.renderStats.headerPaintsDuringScroll = 0;
 		this.renderStats.headerRangeSyncsDuringScroll = 0;
 		this.renderStats.overlayPaintsDuringScroll = 0;
 		this.renderStats.overlayCheapSyncsDuringScroll = 0;
-		this.renderStats.focusCallsDuringScroll = 0;
-		this.renderStats.rootTextContentWritesOnPortalCells = 0;
-		this.renderStats.cellsBoundDuringScroll = 0;
-		this.renderStats.cellsDecoratedAfterScroll = 0;
-		this.renderStats.cellAccessReadsDuringScroll = 0;
-		this.renderStats.cellClassComputesDuringScroll = 0;
-		this.renderStats.dirtyCellsMarkedDuringScroll = 0;
-		this.renderStats.postScrollDirtyCellsDecorated = 0;
-		this.renderStats.reusableCellsSkippedDuringScroll = 0;
-		this.renderStats.styleHookCallsDuringScroll = 0;
 		this.renderStats.cellsPatchedPerScrollFrame = [];
 		this.renderStats.rowsRecycledPerScrollFrame = [];
 	}
 
-	/**
-	 * Completely rebuilds grid structures, spacers, and forces recycling refresh.
-	 */
 	public fullPaint(): void {
 		this.portalMountManager.beginCellReleaseTransaction();
 		try {
@@ -683,1108 +568,30 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
-	private fullPaintInternal(): void {
-		this.syncViewportScrollFromDom();
+	private recycleViewport(isScrollFrameActive: boolean): void {
+		this.renderStats.viewportRecycles++;
+		this.rowRenderer.recycleViewport(isScrollFrameActive);
+	}
 
-		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
+	private fullPaintInternal(): void {
+		this.viewportRenderer.syncViewportScrollFromDom();
+
 		const state = this.engine.stateManager.getState();
 		const colCount = this.engine.columns.getDisplayedColumnCount();
 
-		// 1. Sync spacer height/width matching total virtual content boundaries
-		const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
-		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
-
-		if (this.scrollSpacer) {
-			this.scrollSpacer.style.height = `${totalHeight}px`;
-			this.scrollSpacer.style.width = `${totalWidth}px`;
-		}
-
-		if (this.centerLayer) {
-			const viewportWidth = this.engine.viewport.viewportWidth;
-			const targetWidth = `${Math.max(totalWidth, viewportWidth)}px`;
-
-			this.centerLayer.style.width = targetWidth;
-			this.centerLayer.style.height = `${totalHeight}px`;
-
-			if (this.headerLayer) this.headerLayer.style.width = targetWidth;
-
-			const pinLeftWidth =
-				this.engine.viewport.pinLeftColumns > 0 ? this.engine.geometry.colLefts[this.engine.viewport.pinLeftColumns] || 0 : 0;
-			if (this.leftLayer) this.leftLayer.style.width = `${pinLeftWidth}px`;
-			if (this.headerLeftLayer) this.headerLeftLayer.style.width = `${pinLeftWidth}px`;
-
-			const firstRightPinColIdx = colCount - this.engine.viewport.pinRightColumns;
-			const pinRightWidth =
-				this.engine.viewport.pinRightColumns > 0 ? totalWidth - (this.engine.geometry.colLefts[firstRightPinColIdx] || totalWidth) : 0;
-			if (this.rightLayer) this.rightLayer.style.width = `${pinRightWidth}px`;
-			if (this.headerRightLayer) this.headerRightLayer.style.width = `${pinRightWidth}px`;
-		}
-
-		// 2. Recycle viewport
-		this.recycleViewport();
-
-		// 3. Draw headers
+		this.viewportRenderer.syncSpacerAndLayers(state, colCount);
+		this.recycleViewport(false);
 		this.paintHeaders();
-
-		// 4. Draw selection overlay and focus indicators
 		this.paintOverlay();
 	}
 
-	private syncViewportScrollFromDom(): void {
-		if (!this.scrollViewport) return;
-
-		this.engine.viewport.setScrollPosition(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
-	}
-
-	/**
-	 * Perform row & cell level recycling, reusing DOM elements out of screen.
-	 */
-	private recycleViewport(): void {
-		this.renderStats.viewportRecycles++;
-		const rowModel = this.engine.getRowModel();
-		let rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
-		const state = this.engine.stateManager.getState();
-		if (state.loading && rowCount === 0) {
-			rowCount = state.loadingSkeletonCount ?? 15;
-		}
-		const colCount = this.engine.columns.getDisplayedColumnCount();
-
-		if (rowCount === 0 || colCount === 0) {
-			this.clearActiveRows();
-			return;
-		}
-
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const pinTopRows = this.engine.viewport.pinTopRows;
-		const pinBottomRows = this.engine.viewport.pinBottomRows;
-		const scrollTop = this.engine.viewport.scrollTop;
-		const viewportHeight = this.engine.viewport.viewportHeight;
-
-		// Calculate current visible row and column indexes using viewport models
-		const newRowRange = this.engine.viewport.getVisibleRowRange(rowCount);
-		const newColRange = this.engine.viewport.getVisibleColumnRange(colCount);
-
-		// If server row model is registered, trigger loading visible blocks
-		if (rowModel && typeof rowModel.loadVisibleBlocks === 'function') {
-			rowModel.loadVisibleBlocks(newRowRange.startIdx, newRowRange.endIdx);
-		}
-
-		const startRow = newRowRange.startIdx;
-		const endRow = newRowRange.endIdx;
-
-		// Phase 1: Releasing scrolled-out rows back to the recycling pool
-		for (const [rowIndex, pooledRow] of this.activeRows.entries()) {
-			const isPinnedTop = rowIndex < pinTopRows && rowIndex < rowCount;
-			const isPinnedBottom = rowIndex >= rowCount - pinBottomRows && rowIndex < rowCount;
-			const isScrollable = rowIndex >= startRow && rowIndex <= endRow;
-
-			if (!isPinnedTop && !isPinnedBottom && !isScrollable) {
-				this.releaseRow(rowIndex, pooledRow);
-				if (this.isScrollFrameActive) this.currentScrollRowsRecycled++;
-			}
-		}
-
-		// Phase 2: Render/Reposition rows in current range
-		const columns = this.engine.columns.getDisplayedColumns();
-
-		const renderRow = (r: number) => {
-			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
-			if (!visualRow && state.loading) {
-				visualRow = {
-					kind: 'loading',
-					id: `loading:${r}`,
-					rowIndex: r,
-				};
-			}
-			if (!visualRow) return;
-
-			let pooledRow = this.activeRows.get(r);
-
-			if (!pooledRow) {
-				// Acquire unused row divs from the pool
-				const rowEl = this.rowPool.acquire();
-				const leftEl = this.rowPool.acquire();
-				const rightEl = this.rowPool.acquire();
-
-				pooledRow = {
-					element: rowEl,
-					leftElement: leftEl,
-					rightElement: rightEl,
-					cells: new Map(),
-					boundRowId: visualRow.id,
-				};
-				this.activeRows.set(r, pooledRow);
-				if (this.isScrollFrameActive) this.currentScrollRowsRecycled++;
-
-				// Append row divs to center layer
-				if (this.centerLayer) this.centerLayer.appendChild(rowEl);
-				if (this.leftLayer) this.leftLayer.appendChild(leftEl);
-				if (this.rightLayer) this.rightLayer.appendChild(rightEl);
-			} else if (pooledRow.boundRowId !== visualRow.id) {
-				if (pooledRow.element.dataset.rowKey) {
-					this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
-					delete pooledRow.element.dataset.rowKey;
-				}
-				this.releaseAllCellsInRow(pooledRow);
-				pooledRow.boundRowId = visualRow.id;
-			}
-
-			// Reposition row using transforms to avoid layout-bound top/left updates.
-			let rowTop = this.engine.geometry.rowTops[r];
-			const rowHeight = this.engine.geometry.rowHeights[r];
-
-			if (r < pinTopRows) {
-				rowTop = rowTop + scrollTop;
-			} else if (r >= rowCount - pinBottomRows) {
-				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
-				const bottomOffset = totalHeight - this.engine.geometry.rowTops[r];
-				rowTop = scrollTop + viewportHeight - bottomOffset;
-			}
-
-			pooledRow.element.style.transform = `translate3d(0, ${rowTop}px, 0)`;
-			pooledRow.element.style.height = `${rowHeight}px`;
-			pooledRow.element.dataset.rowIndex = String(r);
-			pooledRow.element.dataset.rowId = visualRow.id;
-
-			if (pooledRow.leftElement) {
-				pooledRow.leftElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
-				pooledRow.leftElement.style.height = `${rowHeight}px`;
-				pooledRow.leftElement.dataset.rowIndex = String(r);
-				pooledRow.leftElement.dataset.rowId = visualRow.id;
-			}
-			if (pooledRow.rightElement) {
-				pooledRow.rightElement.style.transform = `translate3d(0, ${rowTop}px, 0)`;
-				pooledRow.rightElement.style.height = `${rowHeight}px`;
-				pooledRow.rightElement.dataset.rowIndex = String(r);
-				pooledRow.rightElement.dataset.rowId = visualRow.id;
-			}
-
-			if (visualRow.kind === 'loading') {
-				this.releaseRowPortal(pooledRow);
-				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
-				this.recycleLoadingRowCells(pooledRow, visualRow, r, newColRange.startIdx, newColRange.endIdx, columns);
-				return;
-			}
-
-			if (visualRow.kind !== 'data') {
-				this.updateVisualRowClassName(pooledRow, visualRow, r, state);
-				this.releaseAllCellsInRow(pooledRow);
-				const rowKey = visualRow.id;
-				if (pooledRow.element.dataset.rowKey !== rowKey) {
-					this.releaseRowPortal(pooledRow);
-					pooledRow.element.dataset.rowKey = rowKey;
-				}
-				const rowPortalHost = this.ensureRowPortalHost(pooledRow.element);
-				rowPortalHost.hidden = false;
-				this.portalMountManager.mountRow({
-					rowKey,
-					container: rowPortalHost,
-					visualRow,
-				});
-				return;
-			}
-
-			const node = visualRow.node;
-			this.releaseRowPortal(pooledRow);
-			this.updateRowClassName(pooledRow, node, r, state);
-
-			// Recycle individual cells inside this row
-			this.recycleRowCells(pooledRow, node, r, newColRange.startIdx, newColRange.endIdx, columns);
-		};
-
-		// 1. Render pinned top rows
-		for (let r = 0; r < pinTopRows; r++) {
-			renderRow(r);
-		}
-
-		// 2. Render scrollable rows
-		for (let r = startRow; r <= endRow; r++) {
-			if (r >= pinTopRows && r < rowCount - pinBottomRows) {
-				renderRow(r);
-			}
-		}
-
-		// 3. Render pinned bottom rows
-		for (let r = rowCount - pinBottomRows; r < rowCount; r++) {
-			if (r >= 0) {
-				renderRow(r);
-			}
-		}
-	}
-
-	private repaintInvalidatedRowsAndCells(frame: InvalidationFrame): void {
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) return;
-
-		const state = this.engine.stateManager.getState();
-		const columns = this.engine.columns.getDisplayedColumns();
-
-		for (const rowId of frame.rows) {
-			const rowIndex = rowModel.getVisualIndexByRowId(rowId);
-			const pooledRow = rowIndex >= 0 ? this.activeRows.get(rowIndex) : undefined;
-			const row = rowIndex >= 0 ? rowModel.getVisualRow(rowIndex) : null;
-			if (pooledRow && row?.kind === 'data') {
-				this.updateRowClassName(pooledRow, row.node, rowIndex, state);
-			}
-		}
-
-		for (const [rowId, colFields] of frame.cellsByRowId) {
-			const rowIndex = rowModel.getVisualIndexByRowId(rowId);
-			if (rowIndex < 0) continue;
-			for (const colField of colFields) {
-				const colIndex = this.engine.columns.getColumnIndex(colField);
-				if (colIndex < 0) continue;
-
-				const pooledRow = this.activeRows.get(rowIndex);
-				const row = rowModel.getVisualRow(rowIndex);
-				if (!pooledRow || row?.kind !== 'data' || !pooledRow.cells.has(colIndex)) continue;
-
-				this.recycleRowCells(pooledRow, row.node, rowIndex, colIndex, colIndex, columns, false);
-			}
-		}
-
-		for (const colField of frame.columns) {
-			const colIndex = this.engine.columns.getColumnIndex(colField);
-			if (colIndex < 0) continue;
-			for (const [rowIndex, pooledRow] of this.activeRows) {
-				const row = rowModel.getVisualRow(rowIndex);
-				if (row?.kind === 'data' && pooledRow.cells.has(colIndex)) {
-					this.recycleRowCells(pooledRow, row.node, rowIndex, colIndex, colIndex, columns, false);
-				}
-			}
-		}
-	}
-
-	private updateRowClassName(pooledRow: PooledRow, node: RowNode<TRowData>, rowIndex: number, state = this.engine.stateManager.getState()): void {
-		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
-		const pinTopRows = this.engine.viewport.pinTopRows;
-		const pinBottomRows = this.engine.viewport.pinBottomRows;
-
-		const isFocusedRow = state.selection.focus?.rowId === node.id;
-		const isSelectedRow = !!state.selection.bounds && rowIndex >= state.selection.bounds.minRow && rowIndex <= state.selection.bounds.maxRow;
-		const isLoadingRow = this.engine.data.isRowLoading(node.id);
-		let rowClassName = 'og-row';
-		if (rowIndex < pinTopRows) {
-			rowClassName += ' og-row-pinned-top';
-		} else if (rowIndex >= rowCount - pinBottomRows) {
-			rowClassName += ' og-row-pinned-bottom';
-		}
-		if (this.hoveredRowIndex === rowIndex) {
-			rowClassName += ' og-row-hovered';
-		}
-		if (isSelectedRow || isFocusedRow) {
-			rowClassName += ' og-row-selected';
-		}
-		if (isFocusedRow) {
-			rowClassName += ' og-row-focused';
-		}
-		if (isLoadingRow) {
-			rowClassName += ' og-row-loading';
-		}
-		if (this.isScrollFrameActive && state.styleSlots?.rowClass && node.data) {
-			this.dirtyRowsAfterScroll.add(rowIndex);
-			this.viewportDirtyAfterScroll = true;
-		} else if (state.styleSlots?.rowClass && node.data) {
-			try {
-				const customRowClass = state.styleSlots.rowClass(node.data, {
-					row: node.data,
-					rowId: node.id,
-					rowIndex,
-					isFocused: isFocusedRow,
-					isSelected: isSelectedRow || isFocusedRow,
-					isLoading: isLoadingRow,
-					selection: state.selection,
-				});
-				if (customRowClass) {
-					rowClassName += ' ' + customRowClass;
-				}
-			} catch (e) {
-				console.error('RenderEngine: Error in rowClass styleSlot', e);
-			}
-		}
-		pooledRow.element.className = rowClassName;
-		if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
-		if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
-	}
-
-	private updateVisualRowClassName(
-		pooledRow: PooledRow,
-		visualRow: Exclude<VisualRow<TRowData>, { kind: 'data' }>,
-		rowIndex: number,
-		state = this.engine.stateManager.getState()
-	): void {
-		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
-		const pinTopRows = this.engine.viewport.pinTopRows;
-		const pinBottomRows = this.engine.viewport.pinBottomRows;
-
-		let rowClassName = `og-row og-row-${visualRow.kind}`;
-		if (rowIndex < pinTopRows) {
-			rowClassName += ' og-row-pinned-top';
-		} else if (rowIndex >= rowCount - pinBottomRows) {
-			rowClassName += ' og-row-pinned-bottom';
-		}
-		if (this.hoveredRowIndex === rowIndex) {
-			rowClassName += ' og-row-hovered';
-		}
-		if (state.selection.focus?.rowId === visualRow.id) {
-			rowClassName += ' og-row-focused';
-		}
-
-		if (visualRow.kind === 'group' && state.styleSlots?.groupRowClass) {
-			try {
-				const customClass = state.styleSlots.groupRowClass(visualRow);
-				if (customClass) {
-					rowClassName += ' ' + customClass;
-				}
-			} catch (e) {
-				console.error('RenderEngine: Error in groupRowClass styleSlot', e);
-			}
-		} else if (visualRow.kind === 'detail' && state.styleSlots?.detailRowClass) {
-			try {
-				const customClass = state.styleSlots.detailRowClass(visualRow);
-				if (customClass) {
-					rowClassName += ' ' + customClass;
-				}
-			} catch (e) {
-				console.error('RenderEngine: Error in detailRowClass styleSlot', e);
-			}
-		}
-
-		pooledRow.element.className = rowClassName;
-		if (pooledRow.leftElement) pooledRow.leftElement.className = rowClassName;
-		if (pooledRow.rightElement) pooledRow.rightElement.className = rowClassName;
-	}
-
-	/**
-	 * Recycles cells horizontally inside an active row.
-	 */
-	private bindCellDuringScroll(
-		cell: HTMLDivElement,
-		node: RowNode<TRowData>,
-		rowIndex: number,
-		colIndex: number,
-		col: ColumnDef<TRowData>,
-		colCount: number,
-		pinLeftColumns: number,
-		pinRightColumns: number
-	): void {
-		const state = this.engine.stateManager.getState();
-		const rendererKind = this.getRendererKind(node, col, state);
-		const nextSlotState: CellSlotState = {
-			rowId: node.id,
-			rowIndex,
-			colField: col.field,
-			colIndex,
-			dataVersion: state.dataVersion,
-			styleVersion: this.styleVersion,
-			selectionVersion: this.selectionVersion,
-			loadingVersion: this.loadingVersion,
-			rendererKind,
-			portalKey: cell.dataset.cellKey,
-		};
-		const previous = this.cellSlotStates.get(cell);
-		if (previous && this.canReuseCellSlot(previous, nextSlotState)) {
-			this.deferFocusForHotCellIfNeeded(cell, node, col, state);
-			this.renderStats.reusableCellsSkippedDuringScroll++;
-			return;
-		}
-
-		let cellClassName = 'og-cell';
-		if (colIndex < pinLeftColumns) {
-			cellClassName += ' og-cell-pinned-left';
-		} else if (colIndex >= colCount - pinRightColumns) {
-			cellClassName += ' og-cell-pinned-right';
-		}
-		if (rendererKind === 'loading') {
-			cellClassName += ' og-cell-loading';
-		}
-		if (cell.className !== cellClassName) cell.className = cellClassName;
-		this.deferFocusForHotCellIfNeeded(cell, node, col, state);
-		if (state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender) {
-			this.markCellDirtyAfterScroll(cell);
-		}
-
-		const cellKey = createCellKey(node.id, col.field);
-		if (rendererKind === 'loading') {
-			this.markCellDirtyAfterScroll(cell);
-		} else if (rendererKind === 'custom' || rendererKind === 'editor') {
-			if (cell.dataset.cellKey !== cellKey) {
-				const customCellScrollMode = state.customCellScrollMode ?? 'skeleton';
-				if (customCellScrollMode === 'preserve') {
-					this.cellRenderer.showPortalContent(cell);
-				} else if (customCellScrollMode === 'fallback') {
-					this.cellRenderer.setPrimitiveContent(cell, this.getCheapCellText(node, col), 'fallback');
-				} else {
-					this.cellRenderer.showPendingContent(cell);
-				}
-				this.markCellDirtyAfterScroll(cell);
-			}
-		} else {
-			if (cell.dataset.cellKey) {
-				this.markCellDirtyAfterScroll(cell);
-			}
-			this.cellRenderer.setPrimitiveContent(cell, this.getCheapCellText(node, col));
-		}
-
-		nextSlotState.portalKey = cell.dataset.cellKey;
-		this.cellSlotStates.set(cell, nextSlotState);
-	}
-
-	private canReuseCellSlot(previous: CellSlotState, next: CellSlotState): boolean {
-		return (
-			previous.rowId === next.rowId &&
-			previous.rowIndex === next.rowIndex &&
-			previous.colField === next.colField &&
-			previous.colIndex === next.colIndex &&
-			previous.dataVersion === next.dataVersion &&
-			previous.styleVersion === next.styleVersion &&
-			previous.selectionVersion === next.selectionVersion &&
-			previous.loadingVersion === next.loadingVersion &&
-			previous.rendererKind === next.rendererKind &&
-			previous.portalKey === next.portalKey
-		);
-	}
-
-	private getRendererKind(node: RowNode<TRowData>, col: ColumnDef<TRowData>, state = this.engine.stateManager.getState()): CellRendererKind {
-		if (this.engine.data.isRowLoading(node.id)) return 'loading';
-		if (state.activeEdit?.rowId === node.id && state.activeEdit.colField === col.field) return 'editor';
-		if (col.cellRenderer) return 'custom';
-		return 'primitive';
-	}
-
-	private getCheapCellText(node: RowNode<TRowData>, col: ColumnDef<TRowData>): string {
-		const raw = node.data ? (node.data as Record<string, unknown>)[col.field] : undefined;
-		return raw == null ? '' : String(raw);
-	}
-
-	private deferFocusForHotCellIfNeeded(
-		cell: HTMLDivElement,
-		node: RowNode<TRowData>,
-		col: ColumnDef<TRowData>,
-		state = this.engine.stateManager.getState()
-	): void {
-		if (state.selection.focus?.rowId !== node.id || state.selection.focus.colField !== col.field) return;
-		cell.tabIndex = -1;
-		const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
-		if (
-			activeEl &&
-			(activeEl === document.body ||
-				(this.container &&
-					this.container.contains(activeEl) &&
-					activeEl !== cell &&
-					!cell.contains(activeEl) &&
-					!this.isEditorInteractiveElement(activeEl)))
-		) {
-			this.deferredFocusCell = cell;
-		}
-	}
-
-	private markCellDirtyAfterScroll(cell: HTMLDivElement): void {
-		if (!this.dirtyCellsAfterScroll.has(cell)) {
-			this.dirtyCellsAfterScroll.add(cell);
-			this.renderStats.dirtyCellsMarkedDuringScroll++;
-		}
-		this.viewportDirtyAfterScroll = true;
-	}
-
-	private recycleRowCells(
-		pooledRow: PooledRow,
-		node: RowNode<TRowData>,
-		rowIndex: number,
-		startCol: number,
-		endCol: number,
-		columns: ColumnDef<TRowData>[],
-		releaseOutOfRange = true
-	): void {
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const colCount = columns.length;
-		const state = this.engine.stateManager.getState();
-
-		// 1. Release cells out-of-column bounds
-		if (releaseOutOfRange) {
-			const colsToRelease: number[] = [];
-			for (const [c, cell] of pooledRow.cells.entries()) {
-				if (cell) {
-					if (c >= colCount) {
-						colsToRelease.push(c);
-						continue;
-					}
-
-					const isPinnedLeft = c < pinLeftColumns;
-					const isPinnedRight = c >= colCount - pinRightColumns;
-					const isScrollable = c >= startCol && c <= endCol;
-
-					if (!isPinnedLeft && !isPinnedRight && !isScrollable) {
-						colsToRelease.push(c);
-					}
-				}
-			}
-			this.releaseCellsInColumns(pooledRow, colsToRelease);
-		}
-
-		// 2. Bind cells in visible range
-		const renderCell = (c: number) => {
-			const col = columns[c];
-			if (!col) return;
-
-			let cell = pooledRow.cells.get(c);
-
-			if (!cell) {
-				cell = this.cellPool.acquire();
-				pooledRow.cells.set(c, cell);
-			}
-
-			let cellLeft = this.engine.geometry.colLefts[c];
-			const cellWidth = this.engine.geometry.colWidths[c];
-
-			let targetRowEl = pooledRow.element;
-
-			if (c < pinLeftColumns) {
-				targetRowEl = pooledRow.leftElement!;
-			} else if (c >= colCount - pinRightColumns) {
-				const firstRightPinColLeft = this.engine.geometry.colLefts[colCount - pinRightColumns];
-				cellLeft = cellLeft - firstRightPinColLeft;
-				targetRowEl = pooledRow.rightElement!;
-			} else {
-				// Normal cells do not need scrollLeft subtracted anymore due to CSS grid
-			}
-
-			if (cell.parentNode !== targetRowEl) {
-				targetRowEl.appendChild(cell);
-			}
-
-			const nextTransform = `translate3d(${cellLeft}px, 0, 0)`;
-			if (cell.style.transform !== nextTransform) cell.style.transform = nextTransform;
-			const nextWidth = `${cellWidth}px`;
-			if (cell.style.width !== nextWidth) cell.style.width = nextWidth;
-			if (cell.dataset.colField !== col.field) cell.dataset.colField = col.field;
-			const rowIndexText = String(rowIndex);
-			if (cell.dataset.rowIndex !== rowIndexText) cell.dataset.rowIndex = rowIndexText;
-
-			if (this.isScrollFrameActive) {
-				this.bindCellDuringScroll(cell, node, rowIndex, c, col, colCount, pinLeftColumns, pinRightColumns);
-				this.renderStats.cellsBoundDuringScroll++;
-				this.currentScrollCellsPatched++;
-				return;
-			}
-
-			const access = this.engine.cellAccess.get(node.id, rowIndex, node, node.data, c, col);
-			const deferCustomCellHooks = false;
-			this.renderStats.cellsDecoratedAfterScroll++;
-
-			// Handle classes including pinning, focus, and loading
-			let cellClassName = 'og-cell';
-			if (c < pinLeftColumns) {
-				cellClassName += ' og-cell-pinned-left';
-			} else if (c >= colCount - pinRightColumns) {
-				cellClassName += ' og-cell-pinned-right';
-			}
-			if (access.isFocused) {
-				cellClassName += ' og-cell-focused';
-				cell.tabIndex = -1;
-				const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
-				if (
-					activeEl &&
-					(activeEl === document.body ||
-						(this.container &&
-							this.container.contains(activeEl) &&
-							activeEl !== cell &&
-							!cell.contains(activeEl) &&
-							!this.isEditorInteractiveElement(activeEl)))
-				) {
-					if (this.isScrollFrameActive || this.isScrolling) {
-						this.deferredFocusCell = cell;
-					} else {
-						this.applyFocus(cell);
-					}
-				}
-			} else {
-				if (cell.hasAttribute('tabindex')) cell.removeAttribute('tabindex');
-			}
-			if (access.isSelected) {
-				cellClassName += ' og-cell-selected';
-			}
-			if (access.isLoading) {
-				cellClassName += ' og-cell-loading';
-			}
-			if (state.styleSlots?.cellClass && node.data) {
-				if (this.isScrollFrameActive) {
-					this.renderStats.cellClassComputesDuringScroll++;
-				}
-				try {
-					const customCellClass = state.styleSlots.cellClass(col, node.data, {
-						row: node.data,
-						rowId: node.id,
-						rowIndex,
-						col,
-						colField: col.field,
-						colIndex: c,
-						isFocused: access.isFocused,
-						isRowFocused: access.isRowFocused,
-						isRowSelected: access.isRowSelected || access.isRowFocused,
-						isSelected: access.isSelected,
-						isEditing: access.isEditing,
-						value: access.value,
-						rawValue: access.rawValue,
-						isLoading: access.isLoading,
-						selection: state.selection,
-					});
-					if (customCellClass) {
-						cellClassName += ' ' + customCellClass;
-					}
-				} catch (e) {
-					console.error('RenderEngine: Error in cellClass styleSlot', e);
-				}
-			}
-			if (cell.className !== cellClassName) cell.className = cellClassName;
-			if (!deferCustomCellHooks && state.styleSlots?.beforeCellRender) {
-				try {
-					state.styleSlots.beforeCellRender(access, cell);
-				} catch (e) {
-					console.error('RenderEngine: Error in beforeCellRender styleSlot', e);
-				}
-			}
-
-			// Bind value
-			const cellValue = access.value;
-			const cellKey = createCellKey(node.id, col.field);
-
-			// Custom renderer hook trigger or fast direct text bind (bypassed if loading to paint native skeletons synchronously or scrolling extremely fast)
-			const isFastScrolling = this.isScrollFrameActive;
-			if (isFastScrolling && cell.dataset.cellKey === cellKey) {
-				// Keep existing portal content mounted while the user is moving quickly.
-				// Churning portals during scroll costs more than temporarily stale custom content.
-			} else if ((col.cellRenderer || access.isEditing) && !access.isLoading && isFastScrolling) {
-				if (cell.dataset.cellKey !== cellKey) {
-					this.viewportDirtyAfterScroll = true;
-				}
-				const nextValText = cellValue != null ? String(cellValue) : '';
-				this.cellRenderer.setPrimitiveContent(cell, nextValText, 'fallback');
-			} else if ((col.cellRenderer || access.isEditing) && !access.isLoading) {
-				if (cell.dataset.cellKey !== cellKey) {
-					if (cell.dataset.cellKey) {
-						this.releaseCellPortal(cell);
-						this.portalMountManager.flushCellReleaseTransaction(!this.isScrollFrameActive);
-					}
-					// Set content empty so custom React portal doesn't clash with stale text
-					this.cellRenderer.clearPrimitiveContent(cell);
-					cell.dataset.cellKey = cellKey;
-				}
-				const portalHost = this.ensureCellPortalHost(cell);
-				this.cellRenderer.showPortalContent(cell);
-				this.portalMountManager.mountCell({
-					cellKey,
-					container: portalHost,
-					value: cellValue,
-					node,
-					col,
-					isEditing: access.isEditing,
-					isLoading: access.isLoading,
-				});
-			} else {
-				if (cell.dataset.cellKey) {
-					this.releaseCellPortal(cell);
-					delete cell.dataset.cellKey;
-				}
-				if (access.isLoading) {
-					if (this.isScrollFrameActive) {
-						this.viewportDirtyAfterScroll = true;
-					} else {
-						this.cellRenderer.ensureLoadingSkeleton(cell);
-					}
-				} else {
-					// Clean up skeleton if transitioning from loading to loaded state
-					if (this.isScrollFrameActive) {
-						this.viewportDirtyAfterScroll = true;
-					} else {
-						this.cellRenderer.removeLoadingSkeleton(cell);
-					}
-					// Fast path text mutation
-					const nextValText = cellValue != null ? String(cellValue) : '';
-					this.cellRenderer.setPrimitiveContent(cell, nextValText);
-				}
-			}
-			if (!deferCustomCellHooks && state.styleSlots?.afterCellRender) {
-				try {
-					state.styleSlots.afterCellRender(access, cell);
-				} catch (e) {
-					console.error('RenderEngine: Error in afterCellRender styleSlot', e);
-				}
-			}
-			this.cellSlotStates.set(cell, {
-				rowId: node.id,
-				rowIndex,
-				colField: col.field,
-				colIndex: c,
-				dataVersion: state.dataVersion,
-				styleVersion: this.styleVersion,
-				selectionVersion: this.selectionVersion,
-				loadingVersion: this.loadingVersion,
-				rendererKind: this.getRendererKind(node, col, state),
-				portalKey: cell.dataset.cellKey,
-			});
-		};
-
-		// 3. Render left pinned cells
-		for (let c = 0; c < pinLeftColumns; c++) {
-			renderCell(c);
-		}
-
-		// 4. Render scrollable cells
-		for (let c = startCol; c <= endCol; c++) {
-			if (c >= pinLeftColumns && c < colCount - pinRightColumns) {
-				renderCell(c);
-			}
-		}
-
-		// 5. Render right pinned cells
-		for (let c = colCount - pinRightColumns; c < colCount; c++) {
-			if (c >= 0) {
-				renderCell(c);
-			}
-		}
-	}
-
-	private recycleLoadingRowCells(
-		pooledRow: PooledRow,
-		_visualRow: Extract<VisualRow<TRowData>, { kind: 'loading' }>,
-		rowIndex: number,
-		startCol: number,
-		endCol: number,
-		columns: ColumnDef<TRowData>[],
-		releaseOutOfRange = true
-	): void {
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const colCount = columns.length;
-
-		if (releaseOutOfRange) {
-			const colsToRelease: number[] = [];
-			for (const [c] of pooledRow.cells.entries()) {
-				if (c >= colCount) {
-					colsToRelease.push(c);
-					continue;
-				}
-
-				const isPinnedLeft = c < pinLeftColumns;
-				const isPinnedRight = c >= colCount - pinRightColumns;
-				const isScrollable = c >= startCol && c <= endCol;
-				if (!isPinnedLeft && !isPinnedRight && !isScrollable) {
-					colsToRelease.push(c);
-				}
-			}
-			this.releaseCellsInColumns(pooledRow, colsToRelease);
-		}
-
-		const renderCell = (c: number) => {
-			const col = columns[c];
-			if (!col) return;
-
-			let cell = pooledRow.cells.get(c);
-			if (!cell) {
-				cell = this.cellPool.acquire();
-				pooledRow.cells.set(c, cell);
-			}
-
-			let cellLeft = this.engine.geometry.colLefts[c];
-			const cellWidth = this.engine.geometry.colWidths[c];
-			let targetRowEl = pooledRow.element;
-
-			if (c < pinLeftColumns) {
-				targetRowEl = pooledRow.leftElement!;
-			} else if (c >= colCount - pinRightColumns) {
-				const firstRightPinColLeft = this.engine.geometry.colLefts[colCount - pinRightColumns];
-				cellLeft = cellLeft - firstRightPinColLeft;
-				targetRowEl = pooledRow.rightElement!;
-			}
-
-			if (cell.parentNode !== targetRowEl) {
-				targetRowEl.appendChild(cell);
-			}
-
-			if (!this.isScrollFrameActive && cell.dataset.cellKey) {
-				this.releaseCellPortal(cell);
-				delete cell.dataset.cellKey;
-			} else if (this.isScrollFrameActive && cell.dataset.cellKey) {
-				this.markCellDirtyAfterScroll(cell);
-			}
-
-			cell.style.transform = `translate3d(${cellLeft}px, 0, 0)`;
-			cell.style.width = `${cellWidth}px`;
-			cell.dataset.colField = col.field;
-			cell.dataset.rowIndex = String(rowIndex);
-			cell.className = 'og-cell og-cell-loading';
-			if (this.isScrollFrameActive) {
-				this.renderStats.cellsBoundDuringScroll++;
-			} else {
-				this.renderStats.cellsDecoratedAfterScroll++;
-			}
-			if (this.isScrollFrameActive) {
-				this.markCellDirtyAfterScroll(cell);
-			} else {
-				this.cellRenderer.ensureLoadingSkeleton(cell);
-			}
-			this.cellSlotStates.set(cell, {
-				rowId: `loading:${rowIndex}`,
-				rowIndex,
-				colField: col.field,
-				colIndex: c,
-				dataVersion: this.engine.stateManager.getState().dataVersion,
-				styleVersion: this.styleVersion,
-				selectionVersion: this.selectionVersion,
-				loadingVersion: this.loadingVersion,
-				rendererKind: 'loading',
-				portalKey: cell.dataset.cellKey,
-			});
-			if (this.isScrollFrameActive) this.currentScrollCellsPatched++;
-		};
-
-		for (let c = 0; c < pinLeftColumns; c++) {
-			renderCell(c);
-		}
-		for (let c = startCol; c <= endCol; c++) {
-			if (c >= pinLeftColumns && c < colCount - pinRightColumns) {
-				renderCell(c);
-			}
-		}
-		for (let c = colCount - pinRightColumns; c < colCount; c++) {
-			if (c >= 0) {
-				renderCell(c);
-			}
-		}
-	}
-
-	private getCellPortalHost(cell: HTMLDivElement): HTMLDivElement | null {
-		return this.cellRenderer.getPortalHost(cell) as HTMLDivElement | null;
-	}
-
-	private ensureCellPortalHost(cell: HTMLDivElement): HTMLDivElement {
-		this.cellRenderer.getOrCreateCellContentLayer(cell);
-		return this.cellRenderer.getOrCreatePortalHost(cell) as HTMLDivElement;
-	}
-
-	private decorateDirtyCellsAfterScroll(): void {
-		if (this.dirtyCellsAfterScroll.size === 0 && this.dirtyRowsAfterScroll.size === 0) return;
-		this.refreshRendererEpochs();
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) {
-			this.dirtyCellsAfterScroll.clear();
-			this.dirtyRowsAfterScroll.clear();
-			return;
-		}
-		const state = this.engine.stateManager.getState();
-		const dirtyRows = Array.from(this.dirtyRowsAfterScroll);
-		this.dirtyRowsAfterScroll.clear();
-		for (const rowIndex of dirtyRows) {
-			const pooledRow = this.activeRows.get(rowIndex);
-			const visualRow = rowModel.getVisualRow(rowIndex);
-			if (pooledRow && visualRow?.kind === 'data') {
-				this.updateRowClassName(pooledRow, visualRow.node, rowIndex, state);
-			}
-		}
-		const columns = this.engine.columns.getDisplayedColumns();
-		const dirtyCells = Array.from(this.dirtyCellsAfterScroll);
-		this.dirtyCellsAfterScroll.clear();
-		for (const cell of dirtyCells) {
-			if (!cell.isConnected) continue;
-			const slot = this.cellSlotStates.get(cell);
-			if (!slot) continue;
-			const pooledRow = this.activeRows.get(slot.rowIndex);
-			if (!pooledRow) continue;
-			const visualRow = rowModel.getVisualRow(slot.rowIndex);
-			if (slot.rendererKind === 'loading') {
-				this.cellRenderer.ensureLoadingSkeleton(cell);
-				if (cell.dataset.cellKey) {
-					this.releaseCellPortal(cell);
-					delete cell.dataset.cellKey;
-				}
-				this.renderStats.postScrollDirtyCellsDecorated++;
-				continue;
-			}
-			if (visualRow?.kind !== 'data' || visualRow.rowId !== slot.rowId) continue;
-			this.recycleRowCells(pooledRow, visualRow.node, slot.rowIndex, slot.colIndex, slot.colIndex, columns, false);
-			this.renderStats.postScrollDirtyCellsDecorated++;
-		}
-	}
-
-	private isEditorInteractiveElement(element: Element): boolean {
-		return element.matches('input, textarea, select, button, [contenteditable="true"], [role="textbox"], [role="combobox"], [role="listbox"]');
-	}
-
-	private applyFocus(cell: HTMLDivElement): void {
-		if (this.isScrollFrameActive || this.isScrolling) {
-			this.renderStats.focusCallsDuringScroll++;
-		}
-		cell.focus();
-	}
-
-	/**
-	 * Release and return a cell element to the DOMPool.
-	 */
-	private releaseCell(pooledRow: PooledRow, colIdx: number): void {
-		this.releaseCellInternal(pooledRow, colIdx, false);
-	}
-
-	private releaseCellInternal(pooledRow: PooledRow, colIdx: number, skipPortalRelease: boolean): void {
-		const cell = pooledRow.cells.get(colIdx);
-		if (cell) {
-			if (!skipPortalRelease && cell.dataset.cellKey) {
-				if (this.isScrollFrameActive || this.isScrolling) {
-					this.pendingPortalReleasesAfterScroll.push({
-						cellKey: cell.dataset.cellKey,
-						container: this.getCellPortalHost(cell) ?? cell,
-						flushSync: false,
-					});
-				} else {
-					this.releaseCellPortal(cell);
-				}
-				delete cell.dataset.cellKey;
-			} else if (!skipPortalRelease) {
-				// Trigger unmount hook if a framework adapter owns this cell's content.
-				const col = this.engine.columns.getDisplayedColumns()[colIdx];
-				if (col) {
-					const cellKey = createCellKey(pooledRow.boundRowId, col.field);
-					if (this.isScrollFrameActive || this.isScrolling) {
-						this.pendingPortalReleasesAfterScroll.push({ cellKey, flushSync: false });
-					} else {
-						this.portalMountManager.releaseCell({ cellKey });
-					}
-				}
-			}
-
-			// Detach from ANY parent (center, left pinned, or right pinned row element)
-			this.portalMountManager.flushCellReleaseTransaction(!this.isScrollFrameActive);
-			if (cell.parentNode) {
-				try {
-					cell.remove();
-				} catch (e) {
-					// Safe unmount boundary catch
-				}
-			}
-			if (this.isScrollFrameActive) {
-				this.cellPool.releaseHot(cell);
-			} else {
-				this.cellPool.releaseCold(cell);
-			}
-			this.cellSlotStates.delete(cell);
-			this.dirtyCellsAfterScroll.delete(cell);
-			pooledRow.cells.delete(colIdx);
-		}
-	}
-
-	private releaseAllCellsInRow(pooledRow: PooledRow): void {
-		this.releaseCellsInColumns(pooledRow, Array.from(pooledRow.cells.keys()));
-	}
-
-	private releaseCellsInColumns(pooledRow: PooledRow, colIdxs: number[]): void {
-		if (colIdxs.length === 0) return;
-		for (const colIdx of colIdxs) {
-			const cell = pooledRow.cells.get(colIdx);
-			if (cell?.dataset.cellKey) {
-				if (this.isScrollFrameActive || this.isScrolling) {
-					this.pendingPortalReleasesAfterScroll.push({
-						cellKey: cell.dataset.cellKey,
-						container: this.getCellPortalHost(cell) ?? cell,
-						flushSync: false,
-					});
-				} else {
-					this.releaseCellPortal(cell);
-				}
-				delete cell.dataset.cellKey;
-			}
-		}
-		this.portalMountManager.flushCellReleaseTransaction(!this.isScrollFrameActive);
-
-		for (const colIdx of colIdxs) {
-			this.releaseCellInternal(pooledRow, colIdx, true);
-		}
-	}
-
-	private releaseCellPortal(cell: HTMLDivElement): void {
-		if (!cell.dataset.cellKey) return;
-		this.portalMountManager.releaseCell({
-			cellKey: cell.dataset.cellKey,
-			container: this.getCellPortalHost(cell) ?? cell,
-			flushSync: false,
-		});
-	}
-
-	private ensureRowPortalHost(row: HTMLElement): HTMLElement {
-		let host = this.rowPortalHosts.get(row);
-		if (!host) {
-			host = document.createElement('div');
-			host.className = 'og-row-portal-host';
-			host.hidden = true;
-			row.appendChild(host);
-			this.rowPortalHosts.set(row, host);
-		} else if (host.parentElement !== row) {
-			row.appendChild(host);
-		}
-		return host;
-	}
-
-	private releaseRowPortal(pooledRow: PooledRow): boolean {
-		const rowKey = pooledRow.element.dataset.rowKey;
-		if (!rowKey) return false;
-		const host = this.ensureRowPortalHost(pooledRow.element);
-		this.portalMountManager.releaseRow({ rowKey, container: host });
-		host.hidden = true;
-		host.remove();
-		delete pooledRow.element.dataset.rowKey;
-		return true;
-	}
-
-	/**
-	 * Release and return an entire row and all its cells to the pools.
-	 */
-	private releaseRow(rowIndex: number, pooledRow: PooledRow): void {
-		const hadRowPortal = this.releaseRowPortal(pooledRow);
-
-		// Release all cell DOMs inside row
-		this.releaseAllCellsInRow(pooledRow);
-
-		// Detach row elements and recycle
-		if (pooledRow.element.parentNode) pooledRow.element.remove();
-		if (pooledRow.leftElement && pooledRow.leftElement.parentNode) pooledRow.leftElement.remove();
-		if (pooledRow.rightElement && pooledRow.rightElement.parentNode) pooledRow.rightElement.remove();
-
-		if (this.isScrollFrameActive || hadRowPortal) {
-			this.rowPool.releaseHot(pooledRow.element);
-			if (pooledRow.leftElement) this.rowPool.releaseHot(pooledRow.leftElement);
-			if (pooledRow.rightElement) this.rowPool.releaseHot(pooledRow.rightElement);
-		} else {
-			this.rowPool.releaseCold(pooledRow.element);
-			if (pooledRow.leftElement) this.rowPool.releaseCold(pooledRow.leftElement);
-			if (pooledRow.rightElement) this.rowPool.releaseCold(pooledRow.rightElement);
-		}
-		this.activeRows.delete(rowIndex);
-	}
-
-	/**
-	 * Empties all active visible rows back into recycling.
-	 */
-	private clearActiveRows(): void {
-		for (const [rowIndex, pooledRow] of this.activeRows.entries()) {
-			this.releaseRow(rowIndex, pooledRow);
-		}
-		this.activeRows.clear();
-	}
-
-	/**
-	 * Renders the grid column headers.
-	 */
 	private paintHeaders(): void {
 		if (this.isScrolling) this.renderStats.headerPaintsDuringScroll++;
 		this.syncVisibleHeaders();
 	}
 
 	private syncVisibleHeaders(): void {
-		if (!this.headerLayer || !this.headerLeftLayer || !this.headerRightLayer) return;
+		if (!this.viewportRenderer.headerLayer || !this.viewportRenderer.headerLeftLayer || !this.viewportRenderer.headerRightLayer) return;
 
 		const state = this.engine.stateManager.getState();
 		const columns = this.engine.columns.getDisplayedColumns();
@@ -1815,18 +622,16 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			let cellLeft = this.engine.geometry.colLefts[c];
 			const cellWidth = this.engine.geometry.colWidths[c];
 
-			let targetLayer = this.headerLayer;
+			let targetLayer = this.viewportRenderer.headerLayer;
 
 			if (c < pinLeftColumns) {
 				className += ' og-header-cell-pinned-left';
-				targetLayer = this.headerLeftLayer;
+				targetLayer = this.viewportRenderer.headerLeftLayer;
 			} else if (c >= colCount - pinRightColumns) {
 				className += ' og-header-cell-pinned-right';
 				const firstRightPinColLeft = this.engine.geometry.colLefts[colCount - pinRightColumns];
 				cellLeft = cellLeft - firstRightPinColLeft;
-				targetLayer = this.headerRightLayer;
-			} else {
-				// No manual scrollLeft subtraction needed due to native CSS Grid scrolling!
+				targetLayer = this.viewportRenderer.headerRightLayer;
 			}
 
 			if (state.styleSlots?.headerCellClass) {
@@ -1880,19 +685,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		};
 
-		// 1. Render pinned left headers
 		for (let c = 0; c < pinLeftColumns; c++) {
 			renderHeaderCell(c);
 		}
-
-		// 2. Render scrollable headers
 		for (let c = newColRange.startIdx; c <= newColRange.endIdx; c++) {
 			if (c >= pinLeftColumns && c < colCount - pinRightColumns) {
 				renderHeaderCell(c);
 			}
 		}
-
-		// 3. Render pinned right headers
 		for (let c = colCount - pinRightColumns; c < colCount; c++) {
 			if (c >= 0) {
 				renderHeaderCell(c);
@@ -1993,7 +793,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.activeHeaderPopover = popover;
 		this.activeHeaderPopoverElement = headerCell;
 
-		// Support custom React header popover component if registered
 		if (column.headerMenuComponent && this.portalMountManager.onMountHeaderMenu) {
 			try {
 				this.portalMountManager.mountHeaderMenu({
@@ -2014,7 +813,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		}
 
-		// Support custom headerMenuRenderer if provided by the developer
 		if (column.headerMenuRenderer) {
 			try {
 				column.headerMenuRenderer({
@@ -2036,7 +834,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		}
 
-		// Default Sort Options
 		const sortContainer = document.createElement('div');
 		sortContainer.className = 'og-popover-sort-section';
 
@@ -2086,7 +883,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		divider.className = 'og-popover-divider';
 		popover.appendChild(divider);
 
-		// Default Filter Section
 		const filterContainer = document.createElement('div');
 		filterContainer.className = 'og-popover-filter-section';
 
@@ -2095,8 +891,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		filterTitle.textContent = 'Filter Column';
 		filterContainer.appendChild(filterTitle);
 
-		let currentOperator: string = 'contains';
-		let currentFilterVal: string = '';
+		let currentOperator = 'contains';
+		let currentFilterVal = '';
 		if (state.filterModel && state.filterModel[colField] !== undefined) {
 			const filterObj = state.filterModel[colField];
 			if (filterObj && typeof filterObj === 'object' && 'filter' in filterObj) {
@@ -2109,7 +905,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		const select = document.createElement('select');
 		select.className = 'og-popover-select';
-		const operators: { value: string; label: string }[] = [
+		const operators = [
 			{ value: 'contains', label: 'Contains' },
 			{ value: 'equals', label: 'Equals' },
 			{ value: 'startsWith', label: 'Starts with' },
@@ -2219,12 +1015,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.headerCells.clear();
 	}
 
-	/**
-	 * Computes selection overlays & active focus coordinates off-screen.
-	 */
 	private paintOverlay(): void {
 		if (this.isScrolling) this.renderStats.overlayPaintsDuringScroll++;
-		if (!this.overlayLayer) return;
+		if (!this.viewportRenderer.overlayLayer) return;
 
 		this.columnInteractions.reattachOverlays();
 
@@ -2240,7 +1033,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const rowCount = rowModel.getVisualRowCount();
 		const colCount = this.engine.columns.getDisplayedColumnCount();
 
-		// Check if selection limits lie inside current loaded row scope
 		const minRow = Math.max(0, bounds.minRow);
 		const maxRow = Math.min(rowCount - 1, bounds.maxRow);
 		const minCol = Math.max(0, bounds.minCol);
@@ -2260,17 +1052,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const selectionBorder = this.ensureSelectionBorder();
 		this.selectionDragBounds = { minRow, maxRow, minCol, maxCol };
 
-		// Position selection border overlay absolute
 		selectionBorder.style.transform = `translate3d(${box.left}px, ${box.top}px, 0)`;
 		selectionBorder.style.width = `${box.width}px`;
 		selectionBorder.style.height = `${box.height}px`;
 		selectionBorder.style.display = 'block';
 
-		if (selectionBorder.parentNode !== this.overlayLayer) {
-			this.overlayLayer.appendChild(selectionBorder);
+		if (selectionBorder.parentNode !== this.viewportRenderer.overlayLayer) {
+			this.viewportRenderer.overlayLayer.appendChild(selectionBorder);
 		}
 
-		// Re-append the fill preview border if actively dragging so it doesn't get cleared by textContent = ''
 		this.fillDrag.reattachPreview();
 	}
 
@@ -2391,13 +1181,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	};
 
 	private setHoveredRowIndex(rowIndex: number | null): void {
-		if (this.hoveredRowIndex === rowIndex) return;
+		if (this.rowRenderer.hoveredRowIndex === rowIndex) return;
 
-		if (this.hoveredRowIndex !== null) {
-			this.setPooledRowHoverClass(this.hoveredRowIndex, false);
+		if (this.rowRenderer.hoveredRowIndex !== null) {
+			this.setPooledRowHoverClass(this.rowRenderer.hoveredRowIndex, false);
 		}
 
-		this.hoveredRowIndex = rowIndex;
+		this.rowRenderer.hoveredRowIndex = rowIndex;
 
 		if (rowIndex !== null) {
 			this.setPooledRowHoverClass(rowIndex, true);
@@ -2405,7 +1195,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private setPooledRowHoverClass(rowIndex: number, hovered: boolean): void {
-		const pooledRow = this.activeRows.get(rowIndex);
+		const pooledRow = this.rowRenderer.activeRows.get(rowIndex);
 		if (!pooledRow) return;
 
 		pooledRow.element.classList.toggle('og-row-hovered', hovered);
@@ -2441,34 +1231,4 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const { minRow, maxRow, minCol, maxCol } = this.selectionDragBounds;
 		this.fillDrag.start(e, minRow, maxRow, minCol, maxCol);
 	};
-
-	/**
-	 * Factory function for building a row element wrapper.
-	 */
-	private createRowElement(): HTMLDivElement {
-		const el = document.createElement('div');
-		el.className = 'og-row';
-		return el;
-	}
-
-	/**
-	 * Factory function for building a cell element wrapper.
-	 */
-	private createCellElement(): HTMLDivElement {
-		const el = document.createElement('div');
-		el.className = 'og-cell';
-		this.cellRenderer.initializeCell(el);
-		return el;
-	}
-
-	/**
-	 * Injects the structural styles required by the DOM renderer.
-	 */
-	private injectStyles(): void {
-		if (typeof document === 'undefined') return;
-
-		this.styleTag = document.createElement('style');
-		this.styleTag.textContent = CORE_STYLES;
-		document.head.appendChild(this.styleTag);
-	}
 }

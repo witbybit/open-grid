@@ -87,6 +87,7 @@ export class GridEngine<TRowData = unknown> {
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
 			visibleColRange: { startIdx: 0, endIdx: 0 },
 			getRowId: config.getRowId,
+			loading: config.loading,
 			loadingSkeletonCount: config.loadingSkeletonCount,
 			styleSlots: config.styleSlots,
 			customCellScrollMode: config.customCellScrollMode ?? 'skeleton',

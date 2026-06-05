@@ -16,6 +16,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	loadingSkeletonCount?: number;
 	styleSlots?: GridStyleSlots<TRowData>;
 	customCellScrollMode?: CustomCellScrollMode;
+	loading?: boolean;
 
 	// Tree / Grouping / Master-Detail State Configuration
 	groupBy?: string[];

@@ -614,6 +614,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			sortModel: initialState.sortModel || null,
 			filterModel: initialState.filterModel || null,
 			getRowId: initialState.getRowId,
+			loading: initialState.loading,
 			loadingSkeletonCount: initialState.loadingSkeletonCount,
 			styleSlots: initialState.styleSlots,
 			customCellScrollMode: initialState.customCellScrollMode,
