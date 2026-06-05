@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, memo } from 'react';
 import { ColumnDef, GridApi, RowNode, VisualRow } from '@open-grid/core';
 import { createPortal } from 'react-dom';
+import { flushSync } from 'react-dom';
 import { GridProvider } from './OpenGrid.js';
 import { useGridApi } from './hooks.js';
 import type { ReactNode } from 'react';
@@ -18,7 +19,7 @@ export interface PortalCellProps<TRowData = unknown> {
 /**
  * Clean React Portal cell adapter that mounts only custom renderers & custom editors.
  */
-export function PortalCell<TRowData = unknown>({ rowId, colField, value, col, node, isEditing, isLoading }: PortalCellProps<TRowData>) {
+function PortalCellInner<TRowData = unknown>({ rowId, colField, value, col, node, isEditing, isLoading }: PortalCellProps<TRowData>) {
 	const api = useGridApi<TRowData>();
 
 	const [localValue, setLocalValue] = useState<unknown>(value);
@@ -144,6 +145,8 @@ export function PortalCell<TRowData = unknown>({ rowId, colField, value, col, no
 	);
 }
 
+export const PortalCell = memo(PortalCellInner) as typeof PortalCellInner;
+
 export interface PortalData<TRowData = unknown> {
 	cellKey: string;
 	container: HTMLElement;
@@ -154,7 +157,7 @@ export interface PortalData<TRowData = unknown> {
 	isLoading: boolean;
 }
 
-export function DefaultGroupRowRenderer<TRowData = unknown>({ visualRow, api }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
 	if (visualRow.kind !== 'group') return null;
 	const expanded = visualRow.expanded;
 	const depth = visualRow.depth;
@@ -174,30 +177,228 @@ export function DefaultGroupRowRenderer<TRowData = unknown>({ visualRow, api }: 
 	);
 }
 
-export function DefaultDetailRowRenderer<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+export const DefaultGroupRowRenderer = memo(DefaultGroupRowRendererInner) as typeof DefaultGroupRowRendererInner;
+
+function DefaultDetailRowRendererInner<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
 	if (visualRow.kind !== 'detail') return null;
 	return <div className='og-detail-row-content'>Nested detail view for parent row: {visualRow.parentId}</div>;
 }
 
+export const DefaultDetailRowRenderer = memo(DefaultDetailRowRendererInner) as typeof DefaultDetailRowRendererInner;
+
+export interface PortalStore<TRowData = unknown> {
+	subscribe(onStoreChange: () => void): () => void;
+	getSnapshot(): {
+		portals: Map<string, PortalData<TRowData>>;
+		rowPortals: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>;
+		menuPortals: Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>;
+	};
+}
+
+export function createPortalStore<TRowData = unknown>() {
+	const portals = new Map<string, PortalData<TRowData>>();
+	const rowPortals = new Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>();
+	const menuPortals = new Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>();
+
+	const listeners = new Set<() => void>();
+	let snapshot = { portals, rowPortals, menuPortals };
+	let scheduled = false;
+
+	function subscribe(listener: () => void) {
+		listeners.add(listener);
+		return () => {
+			listeners.delete(listener);
+		};
+	}
+
+	function getSnapshot() {
+		return snapshot;
+	}
+
+	function notify(sync = false) {
+		snapshot = {
+			portals: new Map(portals),
+			rowPortals: new Map(rowPortals),
+			menuPortals: new Map(menuPortals),
+		};
+
+		if (sync) {
+			scheduled = false;
+			flushSync(() => {
+				for (const l of listeners) l();
+			});
+			return;
+		}
+
+		if (scheduled) return;
+		scheduled = true;
+		queueMicrotask(() => {
+			scheduled = false;
+			for (const l of listeners) l();
+		});
+	}
+
+	return {
+		subscribe,
+		getSnapshot,
+		mountCell(
+			cellKey: string,
+			container: HTMLElement,
+			value: unknown,
+			node: RowNode<TRowData>,
+			col: ColumnDef<TRowData>,
+			isEditing: boolean,
+			isLoading: boolean
+		) {
+			const existing = portals.get(cellKey);
+			if (
+				existing &&
+				existing.container === container &&
+				existing.isEditing === isEditing &&
+				existing.isLoading === isLoading &&
+				existing.value === value &&
+				existing.node === node &&
+				existing.col === col
+			) {
+				return;
+			}
+
+			for (const [existingKey, existingPortal] of portals) {
+				if (existingKey !== cellKey && existingPortal.container === container) {
+					portals.delete(existingKey);
+				}
+			}
+
+			portals.set(cellKey, {
+				cellKey,
+				container,
+				value,
+				node,
+				col,
+				isEditing,
+				isLoading,
+			});
+			notify();
+		},
+		unmountCell(cellKey: string, container?: HTMLElement, sync = false) {
+			const existing = portals.get(cellKey);
+			if (!existing || (container && existing.container !== container)) return;
+			portals.delete(cellKey);
+			notify(sync);
+		},
+		flushCell(sync = false) {
+			notify(sync);
+		},
+		mountRow(rowKey: string, container: HTMLElement, visualRow: VisualRow<TRowData>) {
+			const existing = rowPortals.get(rowKey);
+			if (existing && existing.container === container && existing.visualRow === visualRow) {
+				return;
+			}
+
+			for (const [existingKey, existingPortal] of rowPortals) {
+				if (existingKey !== rowKey && existingPortal.container === container) {
+					rowPortals.delete(existingKey);
+				}
+			}
+
+			rowPortals.set(rowKey, {
+				rowKey,
+				container,
+				visualRow,
+			});
+			notify();
+		},
+		unmountRow(rowKey: string, container?: HTMLElement) {
+			const existing = rowPortals.get(rowKey);
+			if (!existing || (container && existing.container !== container)) return;
+			rowPortals.delete(rowKey);
+			notify();
+		},
+		mountMenu(colField: string, container: HTMLElement, column: ColumnDef<TRowData>, close: () => void) {
+			const existing = menuPortals.get(colField);
+			if (existing && existing.container === container && existing.column === column) {
+				return;
+			}
+
+			menuPortals.set(colField, {
+				colField,
+				container,
+				column,
+				close,
+			});
+			notify();
+		},
+		unmountMenu(colField: string, container?: HTMLElement) {
+			const existing = menuPortals.get(colField);
+			if (!existing || (container && existing.container !== container)) return;
+			menuPortals.delete(colField);
+			notify();
+		},
+		clear() {
+			portals.clear();
+			rowPortals.clear();
+			menuPortals.clear();
+			notify();
+		},
+	};
+}
+
 export interface PortalManagerProps<TRowData = unknown> {
-	portals: Map<string, PortalData<TRowData>>;
+	portals?: Map<string, PortalData<TRowData>>;
 	rowPortals?: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>;
 	menuPortals?: Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>;
 	api: GridApi<TRowData>;
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	store?: PortalStore<TRowData>;
 }
 
 export function PortalManager<TRowData = unknown>({
-	portals,
-	rowPortals = new Map(),
-	menuPortals = new Map(),
+	portals: directPortals,
+	rowPortals: directRowPortals,
+	menuPortals: directMenuPortals,
 	api,
 	groupRowRenderer,
 	detailRowRenderer,
+	store,
 }: PortalManagerProps<TRowData>) {
-	const cellPortals = latestPortalsByContainer(portals);
-	const visualRowPortals = latestPortalsByContainer(rowPortals);
+	const fallbackSnapshotRef = useRef<any>(null);
+	const prevPropsRef = useRef<any>(null);
+
+	const getSnapshot = useCallback((): {
+		portals: Map<string, PortalData<TRowData>>;
+		rowPortals: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>;
+		menuPortals: Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>;
+	} => {
+		if (store) {
+			return store.getSnapshot();
+		}
+		if (
+			!fallbackSnapshotRef.current ||
+			!prevPropsRef.current ||
+			prevPropsRef.current.portals !== directPortals ||
+			prevPropsRef.current.rowPortals !== directRowPortals ||
+			prevPropsRef.current.menuPortals !== directMenuPortals
+		) {
+			prevPropsRef.current = {
+				portals: directPortals,
+				rowPortals: directRowPortals,
+				menuPortals: directMenuPortals,
+			};
+			fallbackSnapshotRef.current = {
+				portals: directPortals || new Map(),
+				rowPortals: directRowPortals || new Map(),
+				menuPortals: directMenuPortals || new Map(),
+			};
+		}
+		return fallbackSnapshotRef.current;
+	}, [store, directPortals, directRowPortals, directMenuPortals]);
+
+	const state = useSyncExternalStore(store ? store.subscribe : (onStoreChange) => () => {}, getSnapshot, getSnapshot);
+
+	const cellPortals = latestPortalsByContainer(state.portals);
+	const visualRowPortals = latestRowPortalsByContainer(state.rowPortals);
+
 	return (
 		<>
 			{cellPortals.map((p) => {
@@ -235,7 +436,7 @@ export function PortalManager<TRowData = unknown>({
 					container
 				);
 			})}
-			{Array.from(menuPortals.values()).map((mp) => {
+			{Array.from(state.menuPortals.values()).map((mp) => {
 				const { colField, container, column, close } = mp;
 				const CustomComponent = column.headerMenuComponent;
 				if (!CustomComponent) return null;
@@ -253,6 +454,19 @@ export function PortalManager<TRowData = unknown>({
 function latestPortalsByContainer<TPortal extends { container: HTMLElement }>(portals: Map<string, TPortal>): TPortal[] {
 	const byContainer = new Map<HTMLElement, TPortal>();
 	for (const portal of portals.values()) {
+		byContainer.set(portal.container, portal);
+	}
+	return Array.from(byContainer.values());
+}
+
+function latestRowPortalsByContainer<TRowData>(
+	portals: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>
+): Array<{ rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }> {
+	const byContainer = new Map<HTMLElement, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>();
+	for (const portal of portals.values()) {
+		if (portal.container.classList.contains('og-row-portal-host') && portal.container.dataset.rowKey !== portal.rowKey) {
+			continue;
+		}
 		byContainer.set(portal.container, portal);
 	}
 	return Array.from(byContainer.values());

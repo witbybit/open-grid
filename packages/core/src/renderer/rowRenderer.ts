@@ -190,10 +190,7 @@ export class RowRenderer<TRowData = unknown> {
 				if (this.viewportRenderer.leftLayer) this.viewportRenderer.leftLayer.appendChild(leftEl);
 				if (this.viewportRenderer.rightLayer) this.viewportRenderer.rightLayer.appendChild(rightEl);
 			} else if (pooledRow.boundRowId !== visualRow.id) {
-				if (pooledRow.element.dataset.rowKey) {
-					this.portalMountManager.releaseRow({ rowKey: pooledRow.element.dataset.rowKey, container: pooledRow.element });
-					delete pooledRow.element.dataset.rowKey;
-				}
+				this.releaseRowPortal(pooledRow);
 				this.releaseAllCellsInRow(pooledRow);
 				pooledRow.boundRowId = visualRow.id;
 			}
@@ -255,6 +252,7 @@ export class RowRenderer<TRowData = unknown> {
 				}
 				const rowPortalHost = this.ensureRowPortalHost(pooledRow.element);
 				rowPortalHost.hidden = false;
+				rowPortalHost.dataset.rowKey = rowKey;
 				this.portalMountManager.mountRow({
 					rowKey,
 					container: rowPortalHost,
@@ -1118,6 +1116,7 @@ export class RowRenderer<TRowData = unknown> {
 		const host = this.ensureRowPortalHost(pooledRow.element);
 		this.portalMountManager.releaseRow({ rowKey, container: host });
 		host.hidden = true;
+		delete host.dataset.rowKey;
 		host.remove();
 		delete pooledRow.element.dataset.rowKey;
 		return true;

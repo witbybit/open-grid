@@ -12,9 +12,9 @@ import {
 	VisualRow,
 	CustomCellScrollMode,
 } from '@open-grid/core';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { PortalData, PortalManager } from './GridPortal.js';
+import { PortalData, PortalManager, createPortalStore } from './GridPortal.js';
 import { useGridNavigationController } from './hooks.js';
 
 export const GridApiContext = createContext<GridApi<unknown> | null>(null);
@@ -79,171 +79,10 @@ function OpenGridInner<TRowData = unknown>({
 	detailRowRenderer,
 	customCellScrollMode,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
-	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
-	const rowPortalsRef = useRef<Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>>(new Map());
-	const menuPortalsRef = useRef<Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>>(
-		new Map()
-	);
-	const portalFlushScheduledRef = useRef(false);
-	const mountedRef = useRef(true);
-	const [, setPortalVersion] = useState(0);
+	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const hostRef = useRef<GridHost | null>(null);
 	const isGridActiveRef = useRef(false);
-
-	const schedulePortalFlush = useCallback(() => {
-		if (!mountedRef.current) return;
-		if (portalFlushScheduledRef.current) return;
-		portalFlushScheduledRef.current = true;
-		queueMicrotask(() => {
-			portalFlushScheduledRef.current = false;
-			if (!mountedRef.current) return;
-			setPortalVersion((version) => version + 1);
-		});
-	}, []);
-
-	const applyPortalMutation = useCallback(
-		(sync: boolean, mutate: () => void) => {
-			mutate();
-			if (!mountedRef.current) return;
-			if (sync) {
-				portalFlushScheduledRef.current = false;
-				flushSync(() => {
-					setPortalVersion((version) => version + 1);
-				});
-				return;
-			}
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
-
-	const flushPortalContent = useCallback((sync = false) => {
-		portalFlushScheduledRef.current = false;
-		if (!mountedRef.current) return;
-		if (sync) {
-			flushSync(() => {
-				setPortalVersion((version) => version + 1);
-			});
-			return;
-		}
-		setPortalVersion((version) => version + 1);
-	}, []);
-
-	const mountPortal = useCallback(
-		(
-			cellKey: string,
-			container: HTMLElement,
-			value: unknown,
-			node: RowNode<TRowData>,
-			col: ColumnDef<TRowData>,
-			isEditing: boolean,
-			isLoading: boolean
-		) => {
-			const existing = portalsRef.current.get(cellKey);
-			if (
-				existing &&
-				existing.container === container &&
-				existing.isEditing === isEditing &&
-				existing.isLoading === isLoading &&
-				existing.value === value &&
-				existing.node === node &&
-				existing.col === col
-			) {
-				return;
-			}
-
-			for (const [existingKey, existingPortal] of portalsRef.current) {
-				if (existingKey !== cellKey && existingPortal.container === container) {
-					portalsRef.current.delete(existingKey);
-				}
-			}
-			portalsRef.current.set(cellKey, {
-				cellKey,
-				container,
-				value,
-				node,
-				col,
-				isEditing,
-				isLoading,
-			});
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
-
-	const unmountPortal = useCallback(
-		(cellKey: string, container?: HTMLElement, sync = false) => {
-			const existing = portalsRef.current.get(cellKey);
-			if (!existing || (container && existing.container !== container)) return;
-			applyPortalMutation(sync, () => {
-				portalsRef.current.delete(cellKey);
-			});
-		},
-		[applyPortalMutation]
-	);
-
-	const mountRowPortal = useCallback(
-		(rowKey: string, container: HTMLElement, visualRow: VisualRow<TRowData>) => {
-			const existing = rowPortalsRef.current.get(rowKey);
-			if (existing && existing.container === container && existing.visualRow === visualRow) {
-				return;
-			}
-
-			for (const [existingKey, existingPortal] of rowPortalsRef.current) {
-				if (existingKey !== rowKey && existingPortal.container === container) {
-					rowPortalsRef.current.delete(existingKey);
-				}
-			}
-			rowPortalsRef.current.set(rowKey, {
-				rowKey,
-				container,
-				visualRow,
-			});
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
-
-	const unmountRowPortal = useCallback(
-		(rowKey: string, container?: HTMLElement) => {
-			const existing = rowPortalsRef.current.get(rowKey);
-			if (!existing || (container && existing.container !== container)) return;
-			applyPortalMutation(false, () => {
-				rowPortalsRef.current.delete(rowKey);
-			});
-		},
-		[applyPortalMutation]
-	);
-
-	const mountMenuPortal = useCallback(
-		(colField: string, container: HTMLElement, column: ColumnDef<TRowData>, close: () => void) => {
-			const existing = menuPortalsRef.current.get(colField);
-			if (existing && existing.container === container && existing.column === column) {
-				return;
-			}
-
-			menuPortalsRef.current.set(colField, {
-				colField,
-				container,
-				column,
-				close,
-			});
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
-
-	const unmountMenuPortal = useCallback(
-		(colField: string, container?: HTMLElement) => {
-			const existing = menuPortalsRef.current.get(colField);
-			if (!existing || (container && existing.container !== container)) return;
-			applyPortalMutation(false, () => {
-				menuPortalsRef.current.delete(colField);
-			});
-		},
-		[applyPortalMutation]
-	);
 
 	useEffect(() => {
 		hostRef.current?.setViewportPins({
@@ -267,7 +106,6 @@ function OpenGridInner<TRowData = unknown>({
 	}, [api, customCellScrollMode]);
 
 	useEffect(() => {
-		mountedRef.current = true;
 		const container = containerRef.current;
 		if (!container) return;
 
@@ -280,43 +118,40 @@ function OpenGridInner<TRowData = unknown>({
 			},
 			cellContent: {
 				mountCellContent: (mount) => {
-					mountPortal(mount.cellKey, mount.container, mount.value, mount.node, mount.col, mount.isEditing, mount.isLoading);
+					portalStore.mountCell(mount.cellKey, mount.container, mount.value, mount.node, mount.col, mount.isEditing, mount.isLoading);
 				},
 				unmountCellContent: (unmount) => {
-					unmountPortal(unmount.cellKey, unmount.container, unmount.flushSync);
+					portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync);
 				},
 				flushCellContent: (flush) => {
-					flushPortalContent(!!flush.flushSync);
+					portalStore.flushCell(!!flush.flushSync);
 				},
 			},
 			rowContent: {
 				mountRowContent: (mount) => {
-					mountRowPortal(mount.rowKey, mount.container, mount.visualRow);
+					portalStore.mountRow(mount.rowKey, mount.container, mount.visualRow);
 				},
 				unmountRowContent: (unmount) => {
-					unmountRowPortal(unmount.rowKey, unmount.container);
+					portalStore.unmountRow(unmount.rowKey, unmount.container);
 				},
 			},
 			headerMenu: {
 				mountHeaderMenu: (mount) => {
-					mountMenuPortal(mount.colField, mount.container, mount.column, mount.close);
+					portalStore.mountMenu(mount.colField, mount.container, mount.column, mount.close);
 				},
 				unmountHeaderMenu: (unmount) => {
-					unmountMenuPortal(unmount.colField, unmount.container);
+					portalStore.unmountMenu(unmount.colField, unmount.container);
 				},
 			},
 		});
 		hostRef.current = host;
 
 		return () => {
-			mountedRef.current = false;
 			hostRef.current = null;
 			host.destroy();
-			portalsRef.current.clear();
-			rowPortalsRef.current.clear();
-			menuPortalsRef.current.clear();
+			portalStore.clear();
 		};
-	}, [api, mountPortal, unmountPortal, flushPortalContent, mountRowPortal, unmountRowPortal, mountMenuPortal, unmountMenuPortal]);
+	}, [api, portalStore]);
 
 	// Context Menu plugin controller
 	const [contextMenu, setContextMenu] = useState<GridContextMenuHandle<TRowData> | null>(null);
@@ -544,14 +379,7 @@ function OpenGridInner<TRowData = unknown>({
 
 	return (
 		<div ref={containerRef} tabIndex={-1} style={{ width: '100%', height: '100%', position: 'relative' }}>
-			<PortalManager
-				portals={portalsRef.current}
-				rowPortals={rowPortalsRef.current}
-				menuPortals={menuPortalsRef.current}
-				api={api}
-				groupRowRenderer={groupRowRenderer}
-				detailRowRenderer={detailRowRenderer}
-			/>
+			<PortalManager store={portalStore} api={api} groupRowRenderer={groupRowRenderer} detailRowRenderer={detailRowRenderer} />
 		</div>
 	);
 }

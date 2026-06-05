@@ -750,6 +750,152 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		childGrid.api.destroy();
 	});
 
+	it('should keep expanded detail row renderers bound to their own row portal hosts', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'p1', name: 'Parent A' },
+				{ id: 'p2', name: 'Parent B' },
+				{ id: 'p3', name: 'Parent C' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			initialState: {
+				masterDetailEnabled: true,
+				detailRowHeight: 120,
+			},
+		});
+
+		const { container, unmount } = render(
+			<div style={{ width: 500, height: 400 }}>
+				<OpenGrid
+					api={grid.api}
+					enableNavigation={false}
+					detailRowRenderer={({ visualRow }) =>
+						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+					}
+				/>
+			</div>
+		);
+
+		act(() => {
+			grid.api.toggleDetailExpanded('p1');
+			grid.api.toggleDetailExpanded('p2');
+		});
+
+		await waitFor(() => {
+			expect(screen.getByTestId('detail-p1')).toBeTruthy();
+			expect(screen.getByTestId('detail-p2')).toBeTruthy();
+		});
+
+		const detailHosts = Array.from(container.querySelectorAll('.og-row-portal-host')) as HTMLElement[];
+		expect(detailHosts).toHaveLength(2);
+		expect(screen.getByTestId('detail-p1').closest('.og-row-portal-host')).toBe(detailHosts[0]);
+		expect(screen.getByTestId('detail-p2').closest('.og-row-portal-host')).toBe(detailHosts[1]);
+		expect(detailHosts.map((host) => host.closest('.og-row')?.dataset.rowId)).toEqual(['detail:p1', 'detail:p2']);
+		expect(detailHosts.map((host) => (host.closest('.og-row') as HTMLElement | null)?.style.height)).toEqual(['120px', '120px']);
+
+		unmount();
+		grid.api.destroy();
+	});
+
+	it('should preserve detail row height and spacing when sorted master rows are expanded', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'p1', name: 'Cy' },
+				{ id: 'p2', name: 'In' },
+				{ id: 'p3', name: 'Um' },
+				{ id: 'p4', name: 'We' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			initialState: {
+				masterDetailEnabled: true,
+				detailRowHeight: 120,
+				sortModel: [{ colId: 'name', direction: 'asc' }],
+			},
+		});
+
+		const { container, unmount } = render(
+			<div style={{ width: 500, height: 500 }}>
+				<OpenGrid
+					api={grid.api}
+					enableNavigation={false}
+					detailRowRenderer={({ visualRow }) =>
+						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+					}
+				/>
+			</div>
+		);
+
+		act(() => {
+			grid.api.toggleDetailExpanded('p1');
+			grid.api.toggleDetailExpanded('p2');
+			grid.api.toggleDetailExpanded('p4');
+		});
+
+		await waitFor(() => {
+			expect(screen.getByTestId('detail-p1')).toBeTruthy();
+			expect(screen.getByTestId('detail-p2')).toBeTruthy();
+			expect(screen.getByTestId('detail-p4')).toBeTruthy();
+		});
+
+		const rows = Array.from(container.querySelectorAll('.og-layer-center > .og-row')) as HTMLElement[];
+		expect(rows.map((row) => [row.dataset.rowId, row.style.height, row.style.transform])).toEqual([
+			['row:p1', '40px', 'translate3d(0, 0px, 0)'],
+			['detail:p1', '120px', 'translate3d(0, 40px, 0)'],
+			['row:p2', '40px', 'translate3d(0, 160px, 0)'],
+			['detail:p2', '120px', 'translate3d(0, 200px, 0)'],
+			['row:p3', '40px', 'translate3d(0, 320px, 0)'],
+			['row:p4', '40px', 'translate3d(0, 360px, 0)'],
+			['detail:p4', '120px', 'translate3d(0, 400px, 0)'],
+		]);
+
+		unmount();
+		grid.api.destroy();
+	});
+
+	it('should remove detail row renderer content when a detail row is recycled into a data row', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'p1', name: 'Parent A' },
+				{ id: 'p2', name: 'Parent B' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			initialState: {
+				masterDetailEnabled: true,
+				detailRowHeight: 120,
+			},
+		});
+
+		const { container, unmount } = render(
+			<div style={{ width: 500, height: 240 }}>
+				<OpenGrid
+					api={grid.api}
+					enableNavigation={false}
+					detailRowRenderer={({ visualRow }) =>
+						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+					}
+				/>
+			</div>
+		);
+
+		act(() => {
+			grid.api.toggleDetailExpanded('p1');
+		});
+
+		await screen.findByTestId('detail-p1');
+
+		act(() => {
+			grid.api.toggleDetailExpanded('p1');
+		});
+
+		await waitFor(() => {
+			expect(screen.queryByTestId('detail-p1')).toBeNull();
+		});
+		expect(container.querySelector('.og-row-portal-host')).toBeNull();
+
+		unmount();
+		grid.api.destroy();
+	});
+
 	it('should render custom group and detail row renderers inside PortalManager', () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [],
@@ -855,6 +1001,45 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should ignore a stale row portal when a recycled host now belongs to another row', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [],
+			columns: [],
+		});
+		const row = document.createElement('div');
+		row.className = 'og-row';
+		row.dataset.rowKey = 'detail-new';
+		const container = document.createElement('div');
+		container.className = 'og-row-portal-host';
+		row.appendChild(container);
+		document.body.appendChild(row);
+
+		const rowPortals = new Map();
+		rowPortals.set('detail-old', {
+			rowKey: 'detail-old',
+			container,
+			visualRow: {
+				kind: 'detail',
+				id: 'detail-old',
+				parentId: 'old-parent',
+			},
+		});
+
+		render(
+			<PortalManager
+				portals={new Map()}
+				rowPortals={rowPortals}
+				api={grid.api}
+				detailRowRenderer={({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>}
+			/>
+		);
+
+		expect(screen.queryByTestId('custom-detail')).toBeNull();
+
+		document.body.removeChild(row);
+		grid.api.destroy();
+	});
+
 	it('should update row portal content when the visual row changes for the same container', () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [],
@@ -940,6 +1125,57 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining('flushSync was called from inside a lifecycle method'));
 		consoleError.mockRestore();
+		grid.api.destroy();
+	});
+
+	it('should maintain stable event listeners on the container and memoize PortalCell to prevent redundant renders', () => {
+		const addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, 'addEventListener');
+		let renderCount = 0;
+
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: '1', name: 'Product A' },
+				{ id: '2', name: 'Product B' },
+			],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellRenderer: ({ value }) => {
+						renderCount++;
+						return <span data-testid={`cell-${value}`}>{String(value)}</span>;
+					},
+				},
+			],
+		});
+
+		const { container } = render(<OpenGrid api={grid.api} />);
+		const openGridContainer = container.firstElementChild as HTMLElement;
+
+		// Initial render should bind event listeners on the container
+		const initialAddCalls = addEventListenerSpy.mock.calls.filter((call, index) => {
+			const instance = addEventListenerSpy.mock.instances[index];
+			return instance === openGridContainer && ['mousedown', 'mouseover', 'click', 'dblclick', 'contextmenu'].includes(call[0]);
+		}).length;
+		expect(initialAddCalls).toBeGreaterThanOrEqual(5);
+
+		expect(renderCount).toBeGreaterThan(0);
+		addEventListenerSpy.mockClear();
+
+		// Trigger editing on row 2, which changes the portal list state
+		act(() => {
+			grid.api.startEditing('2', 'name');
+		});
+
+		// Check if container event listeners were re-bound during this update
+		const updateAddCalls = addEventListenerSpy.mock.calls.filter((call, index) => {
+			const instance = addEventListenerSpy.mock.instances[index];
+			return instance === openGridContainer && ['mousedown', 'mouseover', 'click', 'dblclick', 'contextmenu'].includes(call[0]);
+		}).length;
+		expect(updateAddCalls).toBe(0); // Event listeners are stable and not re-bound!
+
+		addEventListenerSpy.mockRestore();
 		grid.api.destroy();
 	});
 });
