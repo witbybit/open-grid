@@ -59,10 +59,9 @@ export class CellRenderer {
 
 	public setPrimitiveContent(cell: HTMLElement, value: string, mode: 'primitive' | 'fallback' = 'primitive'): void {
 		cell.dataset.contentMode = mode;
-		const content = this.ensureCellParts(cell).content;
-		if (content.textContent !== value) {
-			content.textContent = value;
-			const parts = this.ensureCellParts(cell);
+		const parts = this.ensureCellParts(cell);
+		if (parts.content.textContent !== value || parts.skeleton) {
+			parts.content.textContent = value;
 			parts.skeleton = null;
 		}
 	}
@@ -78,7 +77,7 @@ export class CellRenderer {
 	public showPendingContent(cell: HTMLElement): void {
 		cell.dataset.contentMode = 'pending';
 		const parts = this.ensureCellParts(cell);
-		if (parts.content.textContent !== '') {
+		if (parts.content.textContent !== '' || parts.skeleton) {
 			parts.content.textContent = '';
 			parts.skeleton = null;
 		}
