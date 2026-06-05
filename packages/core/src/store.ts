@@ -375,6 +375,7 @@ export interface ColumnDef<TRowData = unknown> {
 	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;
 	headerMenuComponent?: any;
 	sortable?: boolean;
+	customCellScrollMode?: CustomCellScrollMode;
 }
 
 export interface GridRowClassParams<TRowData = unknown> {
@@ -535,6 +536,7 @@ export interface GridApi<TRowData = unknown> {
 	setRowHeight(rowId: string, height: number): void;
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
+	setCustomCellScrollMode(mode: CustomCellScrollMode): void;
 	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
 	toggleGroupExpanded(groupId: string): void;
 	toggleDetailExpanded(rowId: string): void;
@@ -771,6 +773,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setFilterModel = (filterModel: FilterModel | null): void => {
 		this.engine.setFilterModel(filterModel);
+	};
+
+	public setCustomCellScrollMode = (mode: CustomCellScrollMode): void => {
+		this.engine.stateManager.setState({ customCellScrollMode: mode });
 	};
 
 	public setStyleSlots = (styleSlots: GridStyleSlots<TRowData> | undefined): void => {

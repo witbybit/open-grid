@@ -1,5 +1,5 @@
 import React from 'react';
-import type { GridApi } from '@open-grid/react';
+import type { GridApi, CustomCellScrollMode } from '@open-grid/react';
 import { StateInspector, LiveEventLogPanel } from './RightSidebar';
 import { ViewportPanel, SortFilterPanel, ColumnOrderPanel, AccessibilityPanel, DeveloperPanel, KeyboardShortcutsPanel } from './ShowroomControls';
 import { GridPageType } from './GridShared';
@@ -24,6 +24,8 @@ interface ShowroomRightSidebarProps {
 	setEditTrigger: (t: 'singleClick' | 'doubleClick') => void;
 	arrowKeyNavigationEdit: boolean;
 	setArrowKeyNavigationEdit: (b: boolean) => void;
+	customCellScrollMode: CustomCellScrollMode;
+	setCustomCellScrollMode: (m: CustomCellScrollMode) => void;
 }
 
 export default function ShowroomRightSidebar({
@@ -46,6 +48,8 @@ export default function ShowroomRightSidebar({
 	setEditTrigger,
 	arrowKeyNavigationEdit,
 	setArrowKeyNavigationEdit,
+	customCellScrollMode,
+	setCustomCellScrollMode,
 }: ShowroomRightSidebarProps) {
 	return (
 		<div
@@ -91,7 +95,12 @@ export default function ShowroomRightSidebar({
 			<LiveEventLogPanel api={activeApi} />
 
 			{/* Developer Panel */}
-			<DeveloperPanel activePage={activePage} activeApi={activeApi} />
+			<DeveloperPanel
+				activePage={activePage}
+				activeApi={activeApi}
+				customCellScrollMode={customCellScrollMode}
+				setCustomCellScrollMode={setCustomCellScrollMode}
+			/>
 
 			{/* Keyboard Shortcuts guide */}
 			<KeyboardShortcutsPanel />

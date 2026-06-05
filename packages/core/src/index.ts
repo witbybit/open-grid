@@ -8,6 +8,7 @@ export type {
 	CellRendererProps,
 	CellState,
 	ColumnDef,
+	CustomCellScrollMode,
 	GridApi,
 	GridCellAccess,
 	GridCellClickParams,

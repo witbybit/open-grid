@@ -10,6 +10,7 @@ import {
 	mountGridHost,
 	registerGridContextMenu,
 	VisualRow,
+	CustomCellScrollMode,
 } from '@open-grid/core';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -44,6 +45,7 @@ export interface OpenGridProps<TRowData = unknown> {
 	};
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	customCellScrollMode?: CustomCellScrollMode;
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
@@ -75,6 +77,7 @@ function OpenGridInner<TRowData = unknown>({
 	navigationOptions = {},
 	groupRowRenderer,
 	detailRowRenderer,
+	customCellScrollMode,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
 	const rowPortalsRef = useRef<Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>>(new Map());
@@ -256,6 +259,12 @@ function OpenGridInner<TRowData = unknown>({
 			api.setColumnReorderEnabled(enableColumnReorder);
 		}
 	}, [api, enableColumnReorder]);
+
+	useEffect(() => {
+		if (customCellScrollMode !== undefined) {
+			api.setCustomCellScrollMode(customCellScrollMode);
+		}
+	}, [api, customCellScrollMode]);
 
 	useEffect(() => {
 		mountedRef.current = true;

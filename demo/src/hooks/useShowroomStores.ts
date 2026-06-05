@@ -91,6 +91,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Delta Δ',
 				width: 90,
 				cellRenderer: GreeksRenderer,
+				customCellScrollMode: 'fallback',
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
@@ -119,6 +120,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Vega ν',
 				width: 90,
 				cellRenderer: GreeksRenderer,
+				customCellScrollMode: 'preserve',
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
@@ -150,6 +152,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				width: 110,
 				cellEditor: StatusDropdownEditor,
 				cellRenderer: RiskBadgeRenderer,
+				customCellScrollMode: 'preserve',
 				valueGetter: ({ row }) => {
 					if (row.status === 'Active') return 'LOW';
 					if (row.status === 'Pending') return 'MEDIUM';
@@ -203,9 +206,9 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		return [
 			{ field: 'id', header: 'Trace ID', width: 130 },
 			{ field: 'timestamp', header: 'Timestamp', width: 220 },
-			{ field: 'service', header: 'Microservice', width: 140, cellRenderer: ServiceBadgeRenderer },
+			{ field: 'service', header: 'Microservice', width: 140, cellRenderer: ServiceBadgeRenderer, customCellScrollMode: 'preserve' },
 			{ field: 'severity', header: 'Severity', width: 120, cellRenderer: RiskBadgeRenderer },
-			{ field: 'latencyMs', header: 'Latency', width: 110, cellRenderer: LatencyRenderer },
+			{ field: 'latencyMs', header: 'Latency', width: 110, cellRenderer: LatencyRenderer, customCellScrollMode: 'skeleton' },
 			{ field: 'ipAddress', header: 'Origin IP', width: 140 },
 		];
 	}, []);

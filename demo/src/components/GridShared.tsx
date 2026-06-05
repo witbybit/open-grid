@@ -1,5 +1,14 @@
 import React, { useEffect } from 'react';
-import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi, GridContextMenuOptions } from '@open-grid/react';
+import {
+	OpenGrid,
+	CellRendererProps,
+	CellEditorProps,
+	GridApi,
+	GridCellClickParams,
+	useGridApi,
+	GridContextMenuOptions,
+	CustomCellScrollMode,
+} from '@open-grid/react';
 
 export type GridPageType = 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt' | 'nested';
 // ============================================================================
@@ -428,6 +437,7 @@ export interface GridViewProps {
 	enableContextMenu?: boolean;
 	contextMenuOptions?: GridContextMenuOptions<any>;
 	className?: string;
+	customCellScrollMode?: CustomCellScrollMode;
 }
 
 export function GridView({
@@ -444,6 +454,7 @@ export function GridView({
 	enableContextMenu = true,
 	contextMenuOptions,
 	className = '',
+	customCellScrollMode,
 }: GridViewProps) {
 	const [lastClick, setLastClick] = React.useState<GridCellClickParams<any> | null>(null);
 
@@ -487,6 +498,7 @@ export function GridView({
 				enableNavigation={true}
 				enableContextMenu={enableContextMenu}
 				contextMenuOptions={contextMenuOptions}
+				customCellScrollMode={customCellScrollMode}
 				onCellClick={(params) => {
 					setLastClick(params);
 				}}

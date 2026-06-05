@@ -932,7 +932,7 @@ export class RowRenderer<TRowData = unknown> {
 
 		if (rendererKind === 'portal') {
 			if (cell.dataset.cellKey !== cellKey) {
-				const customCellScrollMode = ctx.customCellScrollMode;
+				const customCellScrollMode = col.customCellScrollMode ?? ctx.customCellScrollMode;
 				if (customCellScrollMode === 'preserve') {
 					this.cellRenderer.showPortalContent(cell);
 				} else if (customCellScrollMode === 'fallback') {

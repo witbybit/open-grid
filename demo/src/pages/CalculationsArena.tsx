@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridProvider, useClientGrid } from '@open-grid/react';
+import { GridProvider, useClientGrid, CustomCellScrollMode } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Activity, ShieldAlert, BadgePercent } from 'lucide-react';
 
@@ -11,6 +11,7 @@ interface CalculationsArenaProps {
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
+	customCellScrollMode?: CustomCellScrollMode;
 }
 
 export default function CalculationsArena({
@@ -20,6 +21,7 @@ export default function CalculationsArena({
 	onCellValueChanged,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
+	customCellScrollMode,
 }: CalculationsArenaProps) {
 	const [telemetry, setTelemetry] = useState({
 		totalContracts: 0,
@@ -154,6 +156,7 @@ export default function CalculationsArena({
 							onCellValueChanged={onCellValueChanged}
 							editTrigger={editTrigger}
 							arrowKeyNavigationEdit={arrowKeyNavigationEdit}
+							customCellScrollMode={customCellScrollMode}
 						/>
 					</GridProvider>
 				</div>

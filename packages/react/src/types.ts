@@ -16,6 +16,7 @@ import type {
 	FooterVisualRow,
 	LoadingVisualRow,
 	HeaderMenuRendererProps,
+	CustomCellScrollMode,
 } from '@open-grid/core';
 
 export type {
@@ -36,6 +37,7 @@ export type {
 	FooterVisualRow,
 	LoadingVisualRow,
 	HeaderMenuRendererProps,
+	CustomCellScrollMode,
 };
 
 export interface ClientGridOptions<TRowData> {

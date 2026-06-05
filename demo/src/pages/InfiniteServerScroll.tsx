@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { GridProvider, useServerGrid } from '@open-grid/react';
+import { GridProvider, useServerGrid, CustomCellScrollMode } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Terminal, Server, Activity, ShieldAlert, Cpu, Network, Clock } from 'lucide-react';
 
@@ -10,6 +10,7 @@ interface InfiniteServerScrollProps {
 	arrowKeyNavigationEdit: boolean;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
+	customCellScrollMode?: CustomCellScrollMode;
 }
 
 type SeverityStats = {
@@ -25,6 +26,7 @@ export default function InfiniteServerScroll({
 	arrowKeyNavigationEdit,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
+	customCellScrollMode,
 }: InfiniteServerScrollProps) {
 	const [blockStats, setBlockStats] = useState({
 		loadedBlockStart: 0,
@@ -156,6 +158,7 @@ export default function InfiniteServerScroll({
 							onCellValueChanged={() => {}}
 							editTrigger={editTrigger}
 							arrowKeyNavigationEdit={arrowKeyNavigationEdit}
+							customCellScrollMode={customCellScrollMode}
 						/>
 					</GridProvider>
 				</div>
