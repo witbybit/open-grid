@@ -497,6 +497,61 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('automatically scrolls cell into view when focus changes from non-pointer source', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 30 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns: store.getState().columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 240,
+			width: 500,
+			height: 240,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		expect(scrollViewport.scrollTop).toBe(0);
+
+		// Focus row-15 (index 15), which is far below the viewport (only 5 rows fit)
+		// Selection source is 'keyboard'
+		store.selectCell({ rowId: 'row-15', colField: 'name' }, 'keyboard');
+		await Promise.resolve();
+		await Promise.resolve();
+
+		console.log('FOCUS STATE:', store.getState().selection.focus);
+		console.log('ROW HEIGHTS:', store.engine.geometry.rowHeights.slice(0, 20));
+		console.log('ROW TOPS:', store.engine.geometry.rowTops.slice(0, 20));
+		console.log('VIEWPORT HEIGHT:', store.engine.viewport.viewportHeight);
+
+		expect(store.getState().selection.focus).toEqual({ rowId: 'row-15', colField: 'name' });
+		expect(store.engine.viewport.scrollTop).toBe(440);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('does not duplicate cell invalidation through the render event listener', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);

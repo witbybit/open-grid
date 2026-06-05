@@ -363,6 +363,22 @@ function OpenGridInner<TRowData = unknown>({
 		const handlePointerDown = (e: MouseEvent) => {
 			isGridActiveRef.current = isWithinThisGrid(e.target);
 		};
+		const handleFocusIn = (e: FocusEvent) => {
+			if (isWithinThisGrid(e.target)) {
+				isGridActiveRef.current = true;
+			}
+		};
+		const handleFocusOut = (e: FocusEvent) => {
+			const related = e.relatedTarget;
+			if (related instanceof HTMLElement && !isWithinThisGrid(related)) {
+				isGridActiveRef.current = false;
+			}
+		};
+		const container = containerRef.current;
+		if (container) {
+			container.addEventListener('focusin', handleFocusIn);
+			container.addEventListener('focusout', handleFocusOut);
+		}
 		window.addEventListener('keydown', handleGlobalKeyDown);
 		if (navigation) window.addEventListener('mouseup', navigation.handleMouseUp);
 		document.addEventListener('mousedown', handlePointerDown, true);
@@ -370,6 +386,10 @@ function OpenGridInner<TRowData = unknown>({
 			window.removeEventListener('keydown', handleGlobalKeyDown);
 			if (navigation) window.removeEventListener('mouseup', navigation.handleMouseUp);
 			document.removeEventListener('mousedown', handlePointerDown, true);
+			if (container) {
+				container.removeEventListener('focusin', handleFocusIn);
+				container.removeEventListener('focusout', handleFocusOut);
+			}
 		};
 	}, [navigation, enableNavigation]);
 

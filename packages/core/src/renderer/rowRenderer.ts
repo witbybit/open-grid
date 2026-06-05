@@ -4,7 +4,7 @@ import type { GeometryController } from './geometryController.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { InvalidationFrame } from './invalidationManager.js';
-import type { ColumnDef, VisualRow, GridState, RowNode } from '../store.js';
+import type { ColumnDef, VisualRow, GridState, RowNode, GridCellPointer } from '../store.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import { createCellKey } from '../ids.js';
 import type { GridCellContentUnmount } from './IGridRenderer.js';
@@ -48,6 +48,7 @@ export class RowRenderer<TRowData = unknown> {
 	public loadingVersion = 0;
 	public hoveredRowIndex: number | null = null;
 	public deferredFocusCell: HTMLDivElement | null = null;
+	public programmaticScrollCell: GridCellPointer | null = null;
 	public renderStats: any = null;
 
 	public currentScrollCellsPatched = 0;
@@ -90,6 +91,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.dirtyRowsAfterScroll.clear();
 		this.pendingPortalReleasesAfterScroll = [];
 		this.deferredFocusCell = null;
+		this.programmaticScrollCell = null;
 	}
 
 	public sync(frame: InvalidationFrame): void {
@@ -858,7 +860,14 @@ export class RowRenderer<TRowData = unknown> {
 
 		if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {
 			cell.tabIndex = -1;
-			this.deferredFocusCell = cell;
+			const isProgrammatic =
+				this.programmaticScrollCell && this.programmaticScrollCell.rowId === node.id && this.programmaticScrollCell.colField === col.field;
+			if (isProgrammatic) {
+				this.applyFocus(cell);
+				this.programmaticScrollCell = null;
+			} else {
+				this.deferredFocusCell = cell;
+			}
 		}
 
 		const cellKey = createCellKey(node.id, col.field);
