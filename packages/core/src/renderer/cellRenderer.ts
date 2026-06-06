@@ -1,15 +1,8 @@
 import type { InvalidationFrame } from './invalidationManager.js';
+import { CellSlot } from './cellSlot.js';
 
 export class CellRenderer {
 	private readonly syncCells: (frame: InvalidationFrame) => void;
-	private readonly cellParts = new WeakMap<
-		HTMLElement,
-		{
-			content: HTMLElement;
-			portalHost: HTMLElement;
-			skeleton: HTMLElement | null;
-		}
-	>();
 
 	constructor(syncCells: (frame: InvalidationFrame) => void) {
 		this.syncCells = syncCells;
@@ -20,49 +13,31 @@ export class CellRenderer {
 	}
 
 	public initializeCell(cell: HTMLElement): void {
-		this.ensureCellParts(cell);
+		CellSlot.fromElement(cell as HTMLDivElement);
 	}
 
 	public getOrCreateCellContentLayer(cell: HTMLElement): HTMLElement {
-		return this.ensureCellParts(cell).content;
+		return CellSlot.fromElement(cell as HTMLDivElement).contentElement;
 	}
 
 	public getOrCreatePortalHost(cell: HTMLElement): HTMLElement {
-		return this.ensureCellParts(cell).portalHost;
+		return CellSlot.fromElement(cell as HTMLDivElement).portalHostElement;
 	}
 
 	public getPortalHost(cell: HTMLElement): HTMLElement | null {
-		return this.cellParts.get(cell)?.portalHost ?? null;
-	}
-
-	private ensureCellParts(cell: HTMLElement): { content: HTMLElement; portalHost: HTMLElement; skeleton: HTMLElement | null } {
-		let parts = this.cellParts.get(cell);
-		if (!parts) {
-			parts = {
-				content: document.createElement('div'),
-				portalHost: document.createElement('div'),
-				skeleton: null,
-			};
-			parts.content.className = 'og-cell-content';
-			parts.portalHost.className = 'og-cell-portal-host';
-			this.cellParts.set(cell, parts);
-		}
-
-		if (parts.content.parentElement !== cell) {
-			cell.appendChild(parts.content);
-		}
-		if (parts.portalHost.parentElement !== cell) {
-			cell.appendChild(parts.portalHost);
-		}
-		return parts;
+		return CellSlot.fromElement(cell as HTMLDivElement).portalHostElement;
 	}
 
 	public setPrimitiveContent(cell: HTMLElement, value: string, mode: 'primitive' | 'fallback' = 'primitive'): void {
-		cell.dataset.contentMode = mode;
-		const parts = this.ensureCellParts(cell);
-		if (parts.content.textContent !== value || parts.skeleton) {
-			parts.content.textContent = value;
-			parts.skeleton = null;
+		const slot = CellSlot.fromElement(cell as HTMLDivElement);
+		slot.element.dataset.contentMode = mode === 'primitive' ? 'text' : mode;
+		slot.lastContentMode = mode === 'primitive' ? 'text' : mode;
+		if (slot.contentElement.textContent !== value) {
+			slot.contentElement.textContent = value;
+		}
+		if (slot.skeleton) {
+			slot.skeleton.remove();
+			slot.skeleton = null;
 		}
 	}
 
@@ -71,35 +46,42 @@ export class CellRenderer {
 	}
 
 	public showPortalContent(cell: HTMLElement): void {
-		cell.dataset.contentMode = 'portal';
+		const slot = CellSlot.fromElement(cell as HTMLDivElement);
+		slot.element.dataset.contentMode = 'portal';
+		slot.lastContentMode = 'portal';
 	}
 
 	public showPendingContent(cell: HTMLElement): void {
-		cell.dataset.contentMode = 'pending';
-		const parts = this.ensureCellParts(cell);
-		if (parts.content.textContent !== '' || parts.skeleton) {
-			parts.content.textContent = '';
-			parts.skeleton = null;
+		const slot = CellSlot.fromElement(cell as HTMLDivElement);
+		slot.element.dataset.contentMode = 'pending';
+		slot.lastContentMode = 'pending';
+		if (slot.contentElement.textContent !== '') {
+			slot.contentElement.textContent = '';
+		}
+		if (slot.skeleton) {
+			slot.skeleton.remove();
+			slot.skeleton = null;
 		}
 	}
 
 	public ensureLoadingSkeleton(cell: HTMLElement): void {
-		cell.dataset.contentMode = 'loading';
-		const parts = this.ensureCellParts(cell);
-		if (parts.content.textContent !== '') {
-			parts.content.textContent = '';
+		const slot = CellSlot.fromElement(cell as HTMLDivElement);
+		slot.element.dataset.contentMode = 'loading';
+		slot.lastContentMode = 'loading';
+		if (slot.contentElement.textContent !== '') {
+			slot.contentElement.textContent = '';
 		}
-		if (parts.skeleton) {
-			parts.skeleton.remove();
-			parts.skeleton = null;
+		if (slot.skeleton) {
+			slot.skeleton.remove();
+			slot.skeleton = null;
 		}
 	}
 
 	public removeLoadingSkeleton(cell: HTMLElement): void {
-		const parts = this.ensureCellParts(cell);
-		if (parts.skeleton) {
-			parts.skeleton.remove();
-			parts.skeleton = null;
+		const slot = CellSlot.fromElement(cell as HTMLDivElement);
+		if (slot.skeleton) {
+			slot.skeleton.remove();
+			slot.skeleton = null;
 		}
 	}
 }

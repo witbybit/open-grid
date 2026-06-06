@@ -52,7 +52,8 @@ export class CustomRendererManager<TRowData = unknown> {
 	private activeRenderersByRendererKey = new Map<string, RendererInstance<TRowData>>();
 	private activeRendererKeyByParentContainer = new Map<HTMLElement, string>();
 	private warmRenderersByRendererKey = new Map<string, RendererInstance<TRowData>>();
-	private lruList: string[] = []; // rendererKeys in LRU order (oldest first)
+	private lruOrder = new Map<string, number>();
+	private lruCounter = 0;
 
 	// Limits
 	private maxWarm = 50;
@@ -126,7 +127,13 @@ export class CustomRendererManager<TRowData = unknown> {
 		}
 
 		// 1. Check if already active
-		let instance = this.activeRenderersByRendererKey.get(params.rendererKey) ?? this.activeRenderersByCellKey.get(params.cellKey);
+		let instance = this.activeRenderersByRendererKey.get(params.rendererKey);
+		if (!instance) {
+			const logicalInstance = this.activeRenderersByCellKey.get(params.cellKey);
+			if (logicalInstance?.rendererKey === params.rendererKey) {
+				instance = logicalInstance;
+			}
+		}
 		if (instance) {
 			this.rebindInstance(instance, params);
 			return instance;
@@ -140,7 +147,7 @@ export class CustomRendererManager<TRowData = unknown> {
 				this.engine.customRendererWarmHits++;
 			}
 			this.warmRenderersByRendererKey.delete(params.rendererKey);
-			this.lruList = this.lruList.filter((key) => key !== params.rendererKey);
+			this.lruOrder.delete(params.rendererKey);
 			this.rebindInstance(instance, params);
 			return instance;
 		}
@@ -250,7 +257,8 @@ export class CustomRendererManager<TRowData = unknown> {
 			this.destroyInstance(instance);
 		}
 		this.warmRenderersByRendererKey.clear();
-		this.lruList = [];
+		this.lruOrder.clear();
+		this.lruCounter = 0;
 		this.hiddenContainer?.remove();
 		this.hiddenContainer = null;
 	}
@@ -322,7 +330,9 @@ export class CustomRendererManager<TRowData = unknown> {
 		}
 		this.activeRendererKeyByParentContainer.set(parentContainer, rendererKey);
 
-		for (const child of Array.from(parentContainer.children)) {
+		const children = parentContainer.children;
+		for (let i = children.length - 1; i >= 0; i--) {
+			const child = children[i];
 			if (child !== activeContainer && child.classList.contains('og-custom-renderer-container')) {
 				child.remove();
 			}
@@ -331,8 +341,7 @@ export class CustomRendererManager<TRowData = unknown> {
 
 	private touchWarm(instance: RendererInstance<TRowData>): void {
 		this.warmRenderersByRendererKey.set(instance.rendererKey, instance);
-		this.lruList = this.lruList.filter((key) => key !== instance.rendererKey);
-		this.lruList.push(instance.rendererKey);
+		this.lruOrder.set(instance.rendererKey, this.lruCounter++);
 	}
 
 	private destroyInstance(instance: RendererInstance<TRowData>): void {
@@ -348,13 +357,25 @@ export class CustomRendererManager<TRowData = unknown> {
 
 	private pruneWarmCache(): void {
 		// 1. Prune by size limit
-		while (this.warmRenderersByRendererKey.size > this.maxWarm && this.lruList.length > 0) {
-			const oldestKey = this.lruList.shift()!;
-			const instance = this.warmRenderersByRendererKey.get(oldestKey);
-			if (instance) {
-				this.warmRenderersByRendererKey.delete(oldestKey);
-				this.stats.evictions++;
-				this.destroyInstance(instance);
+		while (this.warmRenderersByRendererKey.size > this.maxWarm && this.lruOrder.size > 0) {
+			let oldestKey: string | null = null;
+			let minVal = Infinity;
+			for (const [key, val] of this.lruOrder.entries()) {
+				if (val < minVal) {
+					minVal = val;
+					oldestKey = key;
+				}
+			}
+			if (oldestKey) {
+				const instance = this.warmRenderersByRendererKey.get(oldestKey);
+				this.lruOrder.delete(oldestKey);
+				if (instance) {
+					this.warmRenderersByRendererKey.delete(oldestKey);
+					this.stats.evictions++;
+					this.destroyInstance(instance);
+				}
+			} else {
+				break;
 			}
 		}
 
@@ -363,7 +384,7 @@ export class CustomRendererManager<TRowData = unknown> {
 		for (const [key, instance] of Array.from(this.warmRenderersByRendererKey.entries())) {
 			if (now - instance.lastAccessTime > this.ttlMs) {
 				this.warmRenderersByRendererKey.delete(key);
-				this.lruList = this.lruList.filter((k) => k !== key);
+				this.lruOrder.delete(key);
 				this.stats.evictions++;
 				this.destroyInstance(instance);
 			}

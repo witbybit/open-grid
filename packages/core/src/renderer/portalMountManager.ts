@@ -55,6 +55,7 @@ export class PortalMountManager<TRowData = unknown> {
 	public onUnmountHeaderMenu?: (unmount: GridHeaderMenuUnmount) => void;
 
 	public customRendererManager: CustomRendererManager<TRowData>;
+	private getPhysicalRowSlotId?: (rowIndex: number) => string | undefined;
 
 	constructor(private engine?: GridEngine<TRowData>) {
 		this.customRendererManager = new CustomRendererManager<TRowData>(engine);
@@ -64,6 +65,10 @@ export class PortalMountManager<TRowData = unknown> {
 		this.customRendererManager.onUnmountCellContent = (unmount) => {
 			this.onUnmountCellContent?.(unmount);
 		};
+	}
+
+	public setPhysicalRowSlotIdResolver(resolver: (rowIndex: number) => string | undefined): void {
+		this.getPhysicalRowSlotId = resolver;
 	}
 
 	private mountedCells = new Map<string, HTMLElement | undefined>();
@@ -100,7 +105,12 @@ export class PortalMountManager<TRowData = unknown> {
 		const rowIndex = mount.rowIndex ?? this.engine?.getRowModel()?.getVisualIndexByRowId(node.id) ?? -1;
 		const colIndex = mount.colIndex ?? (this.engine ? this.engine.columns.getColumnIndex(col.field) : -1);
 
-		const rendererKey = this.customRendererManager.getRendererKey(col, node.id, rowIndex, colIndex, mount.isEditing);
+		const rowSlotId = this.getPhysicalRowSlotId?.(rowIndex);
+		const rendererKey = mount.isEditing
+			? `${node.id}:${col.field}`
+			: rowSlotId
+				? `${col.field}@${rowSlotId}`
+				: this.customRendererManager.getRendererKey(col, node.id, rowIndex, colIndex, mount.isEditing);
 
 		this.customRendererManager.acquire({
 			rendererKey,

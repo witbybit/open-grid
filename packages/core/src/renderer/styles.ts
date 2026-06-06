@@ -253,8 +253,18 @@ export const CORE_STYLES = `
     overflow: hidden;
   }
 
+  .og-custom-renderer-container {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
   .og-cell[data-content-mode="portal"] > .og-cell-content,
-  .og-cell[data-content-mode="primitive"] > .og-cell-portal-host,
+  .og-cell[data-content-mode="text"] > .og-cell-portal-host,
+  .og-cell[data-content-mode="empty"] > .og-cell-portal-host,
   .og-cell[data-content-mode="fallback"] > .og-cell-portal-host,
   .og-cell[data-content-mode="pending"] > .og-cell-portal-host,
   .og-cell[data-content-mode="loading"] > .og-cell-portal-host {

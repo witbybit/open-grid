@@ -25,7 +25,7 @@ import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { type ColumnDef, type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
+import { type ColumnDef, type GridApi, type InternalGridApi, type SelectionChangeResult, type ColumnRenderPlan } from '../store.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -33,6 +33,9 @@ import { type ColumnDef, type GridApi, type InternalGridApi, type SelectionChang
 export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData> {
 	private readonly engine: GridEngine<TRowData>;
 	private readonly api?: InternalGridApi<TRowData>;
+
+	private cachedColumnPlans: ColumnRenderPlan<TRowData>[] | null = null;
+	private cachedHasCustomRenderers: boolean | null = null;
 
 	private readonly geometryController: GeometryController<TRowData>;
 	private readonly scrollEngine: ScrollEngine<TRowData>;
@@ -166,6 +169,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.viewportRenderer
 		);
 		this.rowRenderer.renderStats = this.renderStats;
+		this.portalMountManager.setPhysicalRowSlotIdResolver((rowIndex) => this.rowRenderer.activeRows.get(rowIndex)?.id);
 
 		this.headerRenderer = new HeaderRenderer<TRowData>(
 			engine,
@@ -332,9 +336,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private flushPendingPortalReleasesAfterScroll(): void {
-		if (this.rowRenderer.pendingPortalReleasesAfterScroll.length === 0) return;
-		const pending = this.rowRenderer.pendingPortalReleasesAfterScroll;
-		this.rowRenderer.pendingPortalReleasesAfterScroll = [];
+		if (this.rowRenderer.pendingPortalReleasesAfterScroll.size === 0) return;
+		const pending = Array.from(this.rowRenderer.pendingPortalReleasesAfterScroll.values());
+		this.rowRenderer.pendingPortalReleasesAfterScroll.clear();
 		this.portalMountManager.releaseCells(pending, true);
 		this.needsPostScrollPortalFlush = true;
 	}
@@ -446,9 +450,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				loadingVersion: this.rowRenderer.loadingVersion,
 				activeEdit: state.activeEdit,
 				hasStyleHooks: !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender),
-				hasCustomRenderers: displayedColumns.some((c) => !!c.cellRenderer),
+				hasCustomRenderers: (this.cachedHasCustomRenderers ??= displayedColumns.some((c) => !!c.cellRenderer)),
 				displayedColumns,
-				columnPlans: displayedColumns.map((c) => this.engine.columns.getColumnPlan(c.field)!),
+				columnPlans: (this.cachedColumnPlans ??= displayedColumns.map((c) => this.engine.columns.getColumnPlan(c.field)!)),
 				visibleColRange,
 				focusedCell: state.selection.focus,
 				selectionBounds: state.selection.bounds ?? undefined,
@@ -478,6 +482,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private bindInvalidationSources(): void {
 		const invalidateFull = () => {
+			this.cachedColumnPlans = null;
+			this.cachedHasCustomRenderers = null;
 			this.engine.invalidation.invalidateFull('state');
 			this.scheduler.requestFlush('state');
 		};
@@ -491,13 +497,23 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		};
 		const invalidateViewport = () => {
 			this.engine.invalidation.invalidateViewport('viewport');
+			if (this.isScrolling || this.engine.isScrolling || this.isScrollFrameActive || this.engine.isScrollFrameActive) {
+				this.viewportDirtyAfterScroll = true;
+				return;
+			}
 			this.scheduler.requestFlush('viewport');
 		};
 		const invalidateData = () => {
 			this.engine.invalidation.invalidateViewport('data');
+			if (this.isScrolling || this.engine.isScrolling || this.isScrollFrameActive || this.engine.isScrollFrameActive) {
+				this.viewportDirtyAfterScroll = true;
+				return;
+			}
 			this.scheduler.requestFlush('data');
 		};
 		const invalidateDefaultColumnGeometry = () => {
+			this.cachedColumnPlans = null;
+			this.cachedHasCustomRenderers = null;
 			this.geometryController.invalidateAll();
 			this.engine.invalidation.invalidateGeometry('columns');
 			this.engine.invalidation.invalidateViewport('columns');

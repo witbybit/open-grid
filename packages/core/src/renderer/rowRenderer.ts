@@ -28,7 +28,7 @@ export class RowRenderer<TRowData = unknown> {
 
 	public dirtyCellsAfterScroll = new Set<HTMLDivElement>();
 	public dirtyRowsAfterScroll = new Set<number>();
-	public pendingPortalReleasesAfterScroll: GridCellContentUnmount[] = [];
+	public pendingPortalReleasesAfterScroll = new Map<string, GridCellContentUnmount>();
 
 	public styleVersion = 0;
 	public selectionVersion = 0;
@@ -69,11 +69,36 @@ export class RowRenderer<TRowData = unknown> {
 
 	public mount(estRows: number): void {
 		this.rowPool = new DOMPool(() => document.createElement('div'), estRows * 3);
-		this.cellPool = new DOMPool(() => {
-			const div = document.createElement('div');
-			this.cellRenderer.initializeCell(div);
-			return div;
-		}, estRows * 10);
+		this.cellPool = new DOMPool(
+			() => {
+				const div = document.createElement('div');
+				this.cellRenderer.initializeCell(div);
+				return div;
+			},
+			estRows * 10,
+			(node) => {
+				node.className = '';
+				node.removeAttribute('style');
+				if (node.dataset) {
+					for (const key in node.dataset) {
+						delete node.dataset[key];
+					}
+				}
+				const content = node.querySelector('.og-cell-content');
+				if (content) {
+					content.textContent = '';
+					content.className = 'og-cell-content';
+				}
+				const portalHost = node.querySelector('.og-cell-portal-host');
+				if (portalHost) {
+					portalHost.className = 'og-cell-portal-host';
+					// Only remove og-custom-renderer-container children, not React roots
+					for (let i = portalHost.children.length - 1; i >= 0; i--) {
+						portalHost.children[i].remove();
+					}
+				}
+			}
+		);
 	}
 
 	public unmount(): void {
@@ -82,7 +107,7 @@ export class RowRenderer<TRowData = unknown> {
 		if (this.cellPool) this.cellPool.clear();
 		this.dirtyCellsAfterScroll.clear();
 		this.dirtyRowsAfterScroll.clear();
-		this.pendingPortalReleasesAfterScroll = [];
+		this.pendingPortalReleasesAfterScroll.clear();
 		this.deferredFocusCell = null;
 		this.programmaticScrollCell = null;
 		this.currentWindow = null;
@@ -162,6 +187,9 @@ export class RowRenderer<TRowData = unknown> {
 							}
 							cellSlot.unbind();
 							slot.cells.delete(c);
+							if (cellSlot.element.parentNode) {
+								cellSlot.element.remove();
+							}
 							if (isScrollFrameActive) {
 								this.cellPool.releaseHot(cellSlot.element);
 							} else {
@@ -174,15 +202,15 @@ export class RowRenderer<TRowData = unknown> {
 		}
 
 		// 3. Render/Reposition rows in current range
-		const getOrCreateRowSlot = (r: number): RowSlot<TRowData> | null => {
+		const getOrCreateRowSlot = (r: number): { slot: RowSlot<TRowData>; visualRow: import('../store.js').VisualRow<TRowData> } | null => {
 			let slot = this.activeRows.get(r);
-			if (slot) return slot;
-
 			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
 			if (!visualRow && loading) {
 				visualRow = { kind: 'loading', id: `loading:${r}`, rowIndex: r };
 			}
 			if (!visualRow) return null;
+
+			if (slot) return { slot, visualRow };
 
 			// If slot-pool strategy, see if we can recycle a scrolled-out row slot directly
 			if (strategy === 'slot-pool') {
@@ -210,6 +238,9 @@ export class RowRenderer<TRowData = unknown> {
 						for (const cell of slot.cells.values()) {
 							if (cell.lastPortalKey) {
 								this.releaseCellPortal(cell.element);
+							}
+							if (cell.element.parentNode) {
+								cell.element.remove();
 							}
 							this.cellPool.releaseCold(cell.element);
 						}
@@ -256,19 +287,14 @@ export class RowRenderer<TRowData = unknown> {
 				this.viewportRenderer.rightLayer?.appendChild(slot.rightElement);
 			}
 
-			return slot;
+			return { slot, visualRow };
 		};
 
 		const renderRow = (r: number) => {
 			if (isScrollFrameActive) this.currentScrollRowsVisited++;
-			const slot = getOrCreateRowSlot(r);
-			if (!slot) return;
-
-			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
-			if (!visualRow && loading) {
-				visualRow = { kind: 'loading', id: `loading:${r}`, rowIndex: r };
-			}
-			if (!visualRow) return;
+			const result = getOrCreateRowSlot(r);
+			if (!result) return;
+			const { slot, visualRow } = result;
 
 			// Position calculation
 			let rowTop = this.engine.geometry.rowTops[r];
@@ -560,7 +586,7 @@ export class RowRenderer<TRowData = unknown> {
 			let cellSlot = slot.cells.get(c);
 			if (!cellSlot) {
 				const cellEl = this.cellPool.acquire();
-				cellSlot = new CellSlot<TRowData>(cellEl);
+				cellSlot = CellSlot.fromElement<TRowData>(cellEl);
 				slot.cells.set(c, cellSlot);
 			}
 
@@ -784,7 +810,7 @@ export class RowRenderer<TRowData = unknown> {
 
 			let cellSlot = slot.cells.get(c);
 			if (!cellSlot) {
-				cellSlot = new CellSlot<TRowData>(this.cellPool.acquire());
+				cellSlot = CellSlot.fromElement<TRowData>(this.cellPool.acquire());
 				slot.cells.set(c, cellSlot);
 			}
 
@@ -930,9 +956,9 @@ export class RowRenderer<TRowData = unknown> {
 		const isPreservedPortal =
 			rendererKind === 'portal' &&
 			scrollMode === 'custom-defer' &&
-			cellSlot.element.dataset.cellKey === cellKey &&
-			cellSlot.lastPortalKey === cellKey;
-		const hasMountedPortalForCell = cellSlot.element.dataset.cellKey === cellKey && this.portalMountManager.isCellMounted(cellKey);
+			cellSlot.lastPortalKey === cellKey &&
+			this.portalMountManager.isCellMounted(cellKey);
+		const hasMountedPortalForCell = this.portalMountManager.isCellMounted(cellKey);
 		const shouldKeepLivePortalDuringScroll = scrollMode === 'custom-live' && hasMountedPortalForCell;
 		const shouldKeepPortalDuringScroll = shouldKeepLivePortalDuringScroll || isPreservedPortal;
 
@@ -968,6 +994,23 @@ export class RowRenderer<TRowData = unknown> {
 				this.cellRenderer.showPortalContent(cellSlot.element);
 				this.cancelPendingPortalRelease(cellKey);
 				contentMode = 'portal';
+				// Rebind the live portal with updated row data
+				const portalHost = this.ensureCellPortalHost(cellSlot.element);
+				this.portalMountManager.mountCellImmediately({
+					cellKey,
+					container: portalHost,
+					value: this.getScrollMountValue(node, col),
+					node,
+					col,
+					rowIndex,
+					colIndex,
+					isEditing,
+					isLoading: false,
+					phase: 'scroll',
+					isScrolling: true,
+					isFocused,
+					isSelected: false,
+				});
 			} else if (scrollMode === 'custom-defer') {
 				this.cellRenderer.showPortalContent(cellSlot.element);
 				contentMode = 'portal';
@@ -1056,6 +1099,9 @@ export class RowRenderer<TRowData = unknown> {
 				if (cell.lastPortalKey) {
 					this.releaseCellPortal(cell.element);
 				}
+				if (cell.element.parentNode) {
+					cell.element.remove();
+				}
 				this.cellPool.releaseCold(cell.element);
 			}
 			slot.destroyCold();
@@ -1093,16 +1139,19 @@ export class RowRenderer<TRowData = unknown> {
 				}
 				cell.unbind();
 				slot.cells.delete(c);
+				if (cell.element.parentNode) {
+					cell.element.remove();
+				}
 				this.cellPool.releaseCold(cell.element);
 			}
 		}
 	}
 
-	public releaseCellPortal(cell: HTMLDivElement): void {
+	public releaseCellPortal(cell: HTMLDivElement, forceDeferred?: boolean): void {
 		const cellKey = cell.dataset.cellKey;
 		if (!cellKey) return;
 		const container = this.getCellPortalHost(cell) ?? cell;
-		const isDeferred = this.isScrollFrameActive || this.isScrolling;
+		const isDeferred = forceDeferred ?? (this.isScrollFrameActive || this.isScrolling);
 
 		if (isDeferred) {
 			this.currentScrollPortalOps++;
@@ -1121,9 +1170,7 @@ export class RowRenderer<TRowData = unknown> {
 	}
 
 	public cancelPendingPortalRelease(cellKey: string): void {
-		if (this.pendingPortalReleasesAfterScroll.length > 0) {
-			this.pendingPortalReleasesAfterScroll = this.pendingPortalReleasesAfterScroll.filter((p) => p.cellKey !== cellKey);
-		}
+		this.pendingPortalReleasesAfterScroll.delete(cellKey);
 	}
 
 	private releaseRowPortal(slot: RowSlot<TRowData>): boolean {

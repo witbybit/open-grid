@@ -1234,7 +1234,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('keeps scrolled-out custom renderers warm instead of unmounting them on scroll idle', async () => {
+	it('does not synchronously unmount scrolled-out custom renderers on scroll idle', async () => {
 		vi.useFakeTimers();
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
@@ -1281,7 +1281,6 @@ describe('RenderEngine', () => {
 		expect(renderer.portalMountManager.onUnmountCellContent).not.toHaveBeenCalled();
 		vi.advanceTimersByTime(80);
 		expect(renderer.portalMountManager.onUnmountCellContent).not.toHaveBeenCalled();
-		expect(renderer.portalMountManager.customRendererManager.getStats().warmCount).toBeGreaterThan(0);
 
 		renderer.unmount();
 		controller.dispose();

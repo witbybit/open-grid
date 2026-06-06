@@ -120,6 +120,19 @@ export class ViewportModel<TRowData = unknown> {
 			overscanTop += Math.min(25, Math.floor(Math.abs(this.velocityY) * 15));
 		}
 
+		const runtimeMaxRows = state.runtimeLimits?.suppressRenderedRangeLimit ? undefined : state.runtimeLimits?.maxRenderedRows;
+		if (runtimeMaxRows && runtimeMaxRows > 0) {
+			const pinnedRows = this.pinTopRows + this.pinBottomRows;
+			const centerBudget = Math.max(1, runtimeMaxRows - pinnedRows);
+			const visibleCount = Math.max(1, activeEndIdx - activeStartIdx + 1);
+			const overscanBudget = Math.max(0, centerBudget - visibleCount);
+			const preferTop = this.velocityY < -0.2;
+			const preferredTop = preferTop ? Math.min(overscanTop, overscanBudget) : Math.min(overscanTop, Math.floor(overscanBudget / 2));
+			const preferredBottom = Math.min(overscanBottom, overscanBudget - preferredTop);
+			overscanTop = preferredTop;
+			overscanBottom = preferredBottom;
+		}
+
 		const startIdx = Math.max(this.pinTopRows, activeStartIdx - overscanTop);
 		const endIdx = Math.min(rowCount - 1 - this.pinBottomRows, activeEndIdx + overscanBottom);
 

@@ -4,6 +4,7 @@ export class CellSlot<TRowData = unknown> {
 	public readonly element: HTMLDivElement;
 	public readonly contentElement: HTMLDivElement;
 	public readonly portalHostElement: HTMLDivElement;
+	public skeleton: HTMLElement | null = null;
 
 	// Position
 	public colIndex = -1;
@@ -22,6 +23,7 @@ export class CellSlot<TRowData = unknown> {
 
 	constructor(element: HTMLDivElement) {
 		this.element = element;
+		(element as any).__cellSlot = this;
 		let content = element.querySelector('.og-cell-content') as HTMLDivElement;
 		let portalHost = element.querySelector('.og-cell-portal-host') as HTMLDivElement;
 		if (!content) {
@@ -36,6 +38,32 @@ export class CellSlot<TRowData = unknown> {
 		}
 		this.contentElement = content;
 		this.portalHostElement = portalHost;
+	}
+
+	public static fromElement<TRowData = unknown>(element: HTMLDivElement): CellSlot<TRowData> {
+		const existing = (element as any).__cellSlot as CellSlot<TRowData> | undefined;
+		if (existing && existing.element === element) {
+			return existing;
+		}
+		return new CellSlot<TRowData>(element);
+	}
+
+	public reset(): void {
+		this.lastRawValue = undefined;
+		this.lastFormattedValue = undefined;
+		this.lastTransform = '';
+		this.lastWidth = '';
+		this.lastClassName = '';
+		this.lastContentMode = 'empty';
+		this.lastPortalKey = undefined;
+		this.colIndex = -1;
+		this.colField = '';
+		this.rowIndex = -1;
+		this.rowId = '';
+		if (this.skeleton) {
+			this.skeleton.remove();
+			this.skeleton = null;
+		}
 	}
 
 	/**
@@ -166,6 +194,10 @@ export class CellSlot<TRowData = unknown> {
 		this.colField = '';
 		this.rowIndex = -1;
 		this.rowId = '';
+		if (this.skeleton) {
+			this.skeleton.remove();
+			this.skeleton = null;
+		}
 
 		// Sanitise DOM elements
 		this.contentElement.textContent = '';

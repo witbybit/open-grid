@@ -12,13 +12,15 @@
  */
 export class DOMPool<T extends HTMLElement> {
 	private available: T[] = [];
+	private cleaner?: (node: T) => void;
 	private factory: () => T;
 	private totalCreated = 0;
 	private hotReleaseCount = 0;
 	private coldReleaseCount = 0;
 
-	constructor(factory: () => T, initialCapacity: number = 50) {
+	constructor(factory: () => T, initialCapacity: number = 50, cleaner?: (node: T) => void) {
 		this.factory = factory;
+		this.cleaner = cleaner;
 
 		// Pre-warm the pool
 		for (let i = 0; i < initialCapacity; i++) {
@@ -64,16 +66,20 @@ export class DOMPool<T extends HTMLElement> {
 	 * sanitization is worth the cost.
 	 */
 	public releaseCold(node: T): void {
-		node.textContent = '';
-		node.className = '';
+		if (this.cleaner) {
+			this.cleaner(node);
+		} else {
+			node.textContent = '';
+			node.className = '';
 
-		// Clear inline styles cleanly
-		node.removeAttribute('style');
+			// Clear inline styles cleanly
+			node.removeAttribute('style');
 
-		// Clear datasets
-		if (node.dataset) {
-			for (const key in node.dataset) {
-				delete node.dataset[key];
+			// Clear datasets
+			if (node.dataset) {
+				for (const key in node.dataset) {
+					delete node.dataset[key];
+				}
 			}
 		}
 
