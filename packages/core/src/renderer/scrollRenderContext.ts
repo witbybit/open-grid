@@ -1,4 +1,4 @@
-import type { ColumnDef, GridCellPointer, GridCellRangeBounds } from '../store.js';
+import type { ColumnDef, GridCellPointer, GridCellRangeBounds, ColumnRenderPlan } from '../store.js';
 
 export interface ScrollRenderContext<TRowData = unknown> {
 	isScrolling: boolean;
@@ -14,6 +14,7 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	hasCustomRenderers: boolean;
 
 	displayedColumns: ColumnDef<TRowData>[];
+	columnPlans: ColumnRenderPlan<TRowData>[];
 	visibleColRange: { startIdx: number; endIdx: number };
 
 	focusedCell: GridCellPointer | null;

@@ -109,8 +109,10 @@ export class ViewportModel<TRowData = unknown> {
 		const activeEndIdx = this.engine.geometry.getRowIndexAtOffset(visibleBottom);
 
 		// Predictive overscan
-		let overscanTop = this.baseOverscanRows;
-		let overscanBottom = this.baseOverscanRows;
+		const state = this.engine.stateManager.getState();
+		const rowBuffer = state.rowBuffer ?? this.baseOverscanRows;
+		let overscanTop = rowBuffer;
+		let overscanBottom = rowBuffer;
 
 		if (this.velocityY > 0.2) {
 			overscanBottom += Math.min(25, Math.floor(this.velocityY * 15));

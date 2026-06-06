@@ -15,6 +15,7 @@ import {
 	useClientGrid,
 	useServerGrid,
 } from './index.js';
+import { createPortalStore } from './GridPortal.js';
 
 // Mock ResizeObserver for jsdom environment
 class MockResizeObserver {
@@ -456,6 +457,72 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(screen.getByTestId('portal-content').textContent).toBe('New');
 
 		document.body.removeChild(container);
+		grid.api.destroy();
+	});
+
+	it('should replace recycled cell portal store entries without retaining stale container owners', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: '1', name: 'Old' },
+				{ id: '2', name: 'New' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 100, cellRenderer: () => null }],
+		});
+		const store = createPortalStore<TestRow>();
+		const container = document.createElement('div');
+		const colDef = grid.api.getColumnDef('name')!;
+
+		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false);
+		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false);
+		await act(async () => {
+			await Promise.resolve();
+		});
+
+		expect(Array.from(store.getSnapshot().portals.keys())).toEqual(['2:name']);
+
+		store.unmountCell('1:name', container);
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(Array.from(store.getSnapshot().portals.keys())).toEqual(['2:name']);
+
+		grid.api.destroy();
+	});
+
+	it('should update cell data without triggering global store change listeners', async () => {
+		const store = createPortalStore<TestRow>();
+		const listener = vi.fn();
+		store.subscribe(listener);
+
+		const cellListener = vi.fn();
+		const cellKey = '1:name';
+		const container = document.createElement('div');
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const colDef = grid.api.getColumnDef('name')!;
+
+		// Mount cell first (structural change)
+		store.mountCell(cellKey, container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false);
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(listener).toHaveBeenCalledTimes(1);
+
+		// Subscribe to cell
+		const unsubscribeCell = store.subscribeToCell!(cellKey, cellListener);
+
+		// Update cell data only (non-structural change)
+		store.mountCell(cellKey, container, 'New', grid.api.getRowNodeById('1')!, colDef, false, false);
+
+		// The global store listener should NOT have been called again (remains 1)
+		expect(listener).toHaveBeenCalledTimes(1);
+		// But the cell-specific listener SHOULD have been called!
+		expect(cellListener).toHaveBeenCalledTimes(1);
+
+		// Clean up
+		unsubscribeCell();
 		grid.api.destroy();
 	});
 
@@ -1177,7 +1244,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should maintain stable event listeners on the container and memoize PortalCell to prevent redundant renders', () => {
+	it('should maintain stable event listeners on the container and memoize PortalCell to prevent redundant renders', async () => {
 		const addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, 'addEventListener');
 		let renderCount = 0;
 
@@ -1209,7 +1276,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		}).length;
 		expect(initialAddCalls).toBeGreaterThanOrEqual(5);
 
-		expect(renderCount).toBeGreaterThan(0);
+		await waitFor(() => {
+			expect(renderCount).toBeGreaterThan(0);
+		});
 		addEventListenerSpy.mockClear();
 
 		// Trigger editing on row 2, which changes the portal list state

@@ -24,6 +24,7 @@ import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { InvalidationManager } from '../renderer/invalidationManager.js';
+import type { RenderStats } from '../renderer/renderOrchestrator.js';
 
 export class GridEngine<TRowData = unknown> {
 	// Models
@@ -43,8 +44,20 @@ export class GridEngine<TRowData = unknown> {
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 
-	// Row Model registered internally
 	private rowModel: RowModel<TRowData> | null = null;
+
+	// Scrolling states
+	public isScrolling = false;
+	public isScrollFrameActive = false;
+
+	// Performance counters
+	public getCellValueCallsDuringScroll = 0;
+	public valueGetterCallsDuringScroll = 0;
+	public formulaCallsDuringScroll = 0;
+	public customRendererMountsDuringScroll = 0;
+	public customRendererHydrationChunks = 0;
+	public customRendererWarmHits = 0;
+	public customRendererWarmMisses = 0;
 
 	// Cell subscriptions are keyed by visible row id and column field.
 	public readonly cellSubscriptions = new Map<string, Set<CellSubscription>>();
@@ -52,6 +65,10 @@ export class GridEngine<TRowData = unknown> {
 	public readonly cellUpdateBatch = new Map<string, Set<string>>();
 	public batchFlushScheduled = false;
 	private _batchedUpdates = true;
+
+	// RenderEngine callbacks to bridge rendering stats
+	public getRenderStats?: () => RenderStats;
+	public resetRenderStats?: () => void;
 
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.commandHistory = new CommandHistory();
@@ -100,6 +117,10 @@ export class GridEngine<TRowData = unknown> {
 			detailRenderer: config.detailRenderer,
 			rowModelConfig: config.rowModelConfig,
 			expansion: config.expansion ?? { groups: {}, treeRows: {}, details: {} },
+			rowBuffer: config.rowBuffer ?? 12,
+			colBuffer: config.colBuffer ?? 1,
+			rowRecyclingStrategy: config.rowRecyclingStrategy ?? 'index-pool',
+			runtimeLimits: config.runtimeLimits,
 		};
 
 		// Construct StateManager with coordinate state update bridging
@@ -128,6 +149,22 @@ export class GridEngine<TRowData = unknown> {
 		this.invalidation.invalidateFull('set data');
 		this.requestRender('set data');
 		this.commandHistory.clear();
+	}
+
+	public getRowBuffer(): number {
+		return this.stateManager.getState().rowBuffer ?? 12;
+	}
+
+	public setRowBuffer(rowBuffer: number): void {
+		this.stateManager.setState({ rowBuffer });
+	}
+
+	public getColBuffer(): number {
+		return this.stateManager.getState().colBuffer ?? 1;
+	}
+
+	public setColBuffer(colBuffer: number): void {
+		this.stateManager.setState({ colBuffer });
 	}
 
 	public selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'api'): void {
@@ -244,7 +281,9 @@ export class GridEngine<TRowData = unknown> {
 		const oldValue = this.data.getRawCellValue(rowId, colField);
 		if (oldValue === value) return;
 
-		const applied = this.data.setCellValue(rowId, colField, value);
+		const col = this.columns.getColumnDef(colField);
+		const knownOldStoredValue = col?.valueGetter ? undefined : oldValue;
+		const applied = this.data.setCellValue(rowId, colField, value, knownOldStoredValue);
 		if (!applied) return;
 
 		if (undoable) {
@@ -680,7 +719,6 @@ export class GridEngine<TRowData = unknown> {
 			this.invalidation.invalidateOverlay('selection');
 		}
 
-		// Calculate visible ranges if relevant geometry/data properties changed
 		const needsRangeUpdate =
 			updatedSet.has('columns') ||
 			updatedSet.has('columnWidths') ||
@@ -688,7 +726,8 @@ export class GridEngine<TRowData = unknown> {
 			updatedSet.has('dataVersion') ||
 			updatedSet.has('defaultRowHeight') ||
 			updatedSet.has('defaultColWidth') ||
-			updatedSet.has('loading');
+			updatedSet.has('loading') ||
+			updatedSet.has('rowBuffer');
 
 		if (needsRangeUpdate) {
 			const nextRowRange = this.viewport.getVisibleRowRange(this.rowModel ? this.rowModel.getVisualRowCount() : 0);

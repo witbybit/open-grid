@@ -65,6 +65,9 @@ export function mountGridHost<TRowData>(api: GridApi<TRowData>, container: HTMLE
 	renderEngine.onMountHeaderMenu = options.headerMenu?.mountHeaderMenu;
 	renderEngine.onUnmountHeaderMenu = options.headerMenu?.unmountHeaderMenu;
 
+	engine.getRenderStats = () => renderEngine.getRenderStats();
+	engine.resetRenderStats = () => renderEngine.resetRenderStats();
+
 	if (options.pins) {
 		internalApi.setViewportPins(options.pins);
 	}
@@ -115,6 +118,8 @@ export function mountGridHost<TRowData>(api: GridApi<TRowData>, container: HTMLE
 		destroy() {
 			observer.disconnect();
 			renderEngine.unmount();
+			engine.getRenderStats = undefined;
+			engine.resetRenderStats = undefined;
 		},
 	};
 }

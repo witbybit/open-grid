@@ -221,21 +221,57 @@ export const DefaultDetailRowRenderer = memo(DefaultDetailRowRendererInner) as t
 
 export interface PortalStore<TRowData = unknown> {
 	subscribe(onStoreChange: () => void): () => void;
-	getSnapshot(): {
-		portals: Map<string, PortalData<TRowData>>;
-		rowPortals: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>;
-		menuPortals: Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>;
-	};
+	getSnapshot(): PortalSnapshot<TRowData>;
+	subscribeToCell?(cellKey: string, listener: () => void): () => void;
+	getCellData?(cellKey: string): PortalData<TRowData> | undefined;
+}
+
+interface RowPortalData<TRowData = unknown> {
+	rowKey: string;
+	container: HTMLElement;
+	visualRow: VisualRow<TRowData>;
+}
+
+interface MenuPortalData<TRowData = unknown> {
+	colField: string;
+	container: HTMLElement;
+	column: ColumnDef<TRowData>;
+	close: () => void;
+}
+
+interface PortalSnapshot<TRowData = unknown> {
+	portals: Map<string, PortalData<TRowData>>;
+	rowPortals: Map<string, RowPortalData<TRowData>>;
+	menuPortals: Map<string, MenuPortalData<TRowData>>;
+	cellPortalList: PortalData<TRowData>[];
+	rowPortalList: RowPortalData<TRowData>[];
+	menuPortalList: MenuPortalData<TRowData>[];
 }
 
 export function createPortalStore<TRowData = unknown>() {
 	const portals = new Map<string, PortalData<TRowData>>();
-	const rowPortals = new Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>();
-	const menuPortals = new Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>();
+	const rowPortals = new Map<string, RowPortalData<TRowData>>();
+	const menuPortals = new Map<string, MenuPortalData<TRowData>>();
+	const cellPortalKeyByContainer = new Map<HTMLElement, string>();
+	const rowPortalKeyByContainer = new Map<HTMLElement, string>();
 
+	const cellListeners = new Map<string, Set<() => void>>();
 	const listeners = new Set<() => void>();
-	let snapshot = { portals, rowPortals, menuPortals };
+	let snapshot = createSnapshot();
 	let scheduled = false;
+
+	function createSnapshot(): PortalSnapshot<TRowData> {
+		return {
+			portals: new Map(portals),
+			rowPortals: new Map(rowPortals),
+			menuPortals: new Map(menuPortals),
+			cellPortalList: Array.from(portals.values()),
+			rowPortalList: Array.from(rowPortals.values()).filter(
+				(portal) => !portal.container.classList.contains('og-row-portal-host') || portal.container.dataset.rowKey === portal.rowKey
+			),
+			menuPortalList: Array.from(menuPortals.values()),
+		};
+	}
 
 	function subscribe(listener: () => void) {
 		listeners.add(listener);
@@ -249,12 +285,6 @@ export function createPortalStore<TRowData = unknown>() {
 	}
 
 	function notify(sync = false) {
-		snapshot = {
-			portals: new Map(portals),
-			rowPortals: new Map(rowPortals),
-			menuPortals: new Map(menuPortals),
-		};
-
 		if (sync) {
 			scheduled = false;
 			flushSync(() => {
@@ -274,6 +304,26 @@ export function createPortalStore<TRowData = unknown>() {
 	return {
 		subscribe,
 		getSnapshot,
+		subscribeToCell(cellKey: string, listener: () => void) {
+			let list = cellListeners.get(cellKey);
+			if (!list) {
+				list = new Set();
+				cellListeners.set(cellKey, list);
+			}
+			list.add(listener);
+			return () => {
+				const list = cellListeners.get(cellKey);
+				if (list) {
+					list.delete(listener);
+					if (list.size === 0) {
+						cellListeners.delete(cellKey);
+					}
+				}
+			};
+		},
+		getCellData(cellKey: string) {
+			return portals.get(cellKey);
+		},
 		mountCell(
 			cellKey: string,
 			container: HTMLElement,
@@ -301,14 +351,20 @@ export function createPortalStore<TRowData = unknown>() {
 				existing.node === node &&
 				existing.col === col
 			) {
+				cellPortalKeyByContainer.set(container, cellKey);
 				return;
 			}
-
-			for (const [existingKey, existingPortal] of portals) {
-				if (existingKey !== cellKey && existingPortal.container === container) {
-					portals.delete(existingKey);
-				}
+			if (existing && existing.container !== container && cellPortalKeyByContainer.get(existing.container) === cellKey) {
+				cellPortalKeyByContainer.delete(existing.container);
 			}
+
+			const existingKeyForContainer = cellPortalKeyByContainer.get(container);
+			if (existingKeyForContainer && existingKeyForContainer !== cellKey) {
+				portals.delete(existingKeyForContainer);
+			}
+
+			const isStructuralChange =
+				!existing || existing.container !== container || (existingKeyForContainer && existingKeyForContainer !== cellKey);
 
 			portals.set(cellKey, {
 				cellKey,
@@ -323,27 +379,45 @@ export function createPortalStore<TRowData = unknown>() {
 				isFocused,
 				isSelected,
 			});
-			notify();
+			cellPortalKeyByContainer.set(container, cellKey);
+			snapshot = createSnapshot();
+
+			if (isStructuralChange) {
+				notify();
+			} else {
+				const list = cellListeners.get(cellKey);
+				if (list) {
+					for (const l of list) l();
+				}
+			}
 		},
 		unmountCell(cellKey: string, container?: HTMLElement, sync = false) {
 			const existing = portals.get(cellKey);
 			if (!existing || (container && existing.container !== container)) return;
 			portals.delete(cellKey);
+			if (cellPortalKeyByContainer.get(existing.container) === cellKey) {
+				cellPortalKeyByContainer.delete(existing.container);
+			}
+			snapshot = createSnapshot();
 			notify(sync);
 		},
 		flushCell(sync = false) {
+			snapshot = createSnapshot();
 			notify(sync);
 		},
 		mountRow(rowKey: string, container: HTMLElement, visualRow: VisualRow<TRowData>) {
 			const existing = rowPortals.get(rowKey);
 			if (existing && existing.container === container && existing.visualRow === visualRow) {
+				rowPortalKeyByContainer.set(container, rowKey);
 				return;
 			}
+			if (existing && existing.container !== container && rowPortalKeyByContainer.get(existing.container) === rowKey) {
+				rowPortalKeyByContainer.delete(existing.container);
+			}
 
-			for (const [existingKey, existingPortal] of rowPortals) {
-				if (existingKey !== rowKey && existingPortal.container === container) {
-					rowPortals.delete(existingKey);
-				}
+			const existingKeyForContainer = rowPortalKeyByContainer.get(container);
+			if (existingKeyForContainer && existingKeyForContainer !== rowKey) {
+				rowPortals.delete(existingKeyForContainer);
 			}
 
 			rowPortals.set(rowKey, {
@@ -351,12 +425,18 @@ export function createPortalStore<TRowData = unknown>() {
 				container,
 				visualRow,
 			});
+			rowPortalKeyByContainer.set(container, rowKey);
+			snapshot = createSnapshot();
 			notify();
 		},
 		unmountRow(rowKey: string, container?: HTMLElement) {
 			const existing = rowPortals.get(rowKey);
 			if (!existing || (container && existing.container !== container)) return;
 			rowPortals.delete(rowKey);
+			if (rowPortalKeyByContainer.get(existing.container) === rowKey) {
+				rowPortalKeyByContainer.delete(existing.container);
+			}
+			snapshot = createSnapshot();
 			notify();
 		},
 		mountMenu(colField: string, container: HTMLElement, column: ColumnDef<TRowData>, close: () => void) {
@@ -371,18 +451,23 @@ export function createPortalStore<TRowData = unknown>() {
 				column,
 				close,
 			});
+			snapshot = createSnapshot();
 			notify();
 		},
 		unmountMenu(colField: string, container?: HTMLElement) {
 			const existing = menuPortals.get(colField);
 			if (!existing || (container && existing.container !== container)) return;
 			menuPortals.delete(colField);
+			snapshot = createSnapshot();
 			notify();
 		},
 		clear() {
 			portals.clear();
 			rowPortals.clear();
 			menuPortals.clear();
+			cellPortalKeyByContainer.clear();
+			rowPortalKeyByContainer.clear();
+			snapshot = createSnapshot();
 			notify();
 		},
 	};
@@ -390,13 +475,59 @@ export function createPortalStore<TRowData = unknown>() {
 
 export interface PortalManagerProps<TRowData = unknown> {
 	portals?: Map<string, PortalData<TRowData>>;
-	rowPortals?: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>;
-	menuPortals?: Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>;
+	rowPortals?: Map<string, RowPortalData<TRowData>>;
+	menuPortals?: Map<string, MenuPortalData<TRowData>>;
 	api: GridApi<TRowData>;
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	store?: PortalStore<TRowData>;
 }
+
+interface PortalCellWrapperProps<TRowData = unknown> {
+	cellKey: string;
+	store: PortalStore<TRowData>;
+}
+
+function PortalCellWrapperInner<TRowData = unknown>({ cellKey, store }: PortalCellWrapperProps<TRowData>) {
+	const subscribe = useCallback(
+		(onStoreChange: () => void) => {
+			if (store.subscribeToCell) {
+				return store.subscribeToCell(cellKey, onStoreChange);
+			}
+			return () => {};
+		},
+		[store, cellKey]
+	);
+
+	const getSnapshot = useCallback(() => {
+		if (store.getCellData) {
+			return store.getCellData(cellKey);
+		}
+		return undefined;
+	}, [store, cellKey]);
+
+	const data = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+	if (!data) return null;
+
+	return (
+		<PortalCell<TRowData>
+			rowId={data.node.id}
+			colField={data.col.field}
+			value={data.value}
+			col={data.col}
+			node={data.node}
+			isEditing={data.isEditing}
+			isLoading={data.isLoading}
+			phase={data.phase}
+			isScrolling={data.isScrolling}
+			isFocused={data.isFocused}
+			isSelected={data.isSelected}
+		/>
+	);
+}
+
+const PortalCellWrapper = memo(PortalCellWrapperInner) as typeof PortalCellWrapperInner;
 
 export function PortalManager<TRowData = unknown>({
 	portals: directPortals,
@@ -410,11 +541,7 @@ export function PortalManager<TRowData = unknown>({
 	const fallbackSnapshotRef = useRef<any>(null);
 	const prevPropsRef = useRef<any>(null);
 
-	const getSnapshot = useCallback((): {
-		portals: Map<string, PortalData<TRowData>>;
-		rowPortals: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>;
-		menuPortals: Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>;
-	} => {
+	const getSnapshot = useCallback((): PortalSnapshot<TRowData> => {
 		if (store) {
 			return store.getSnapshot();
 		}
@@ -434,6 +561,9 @@ export function PortalManager<TRowData = unknown>({
 				portals: directPortals || new Map(),
 				rowPortals: directRowPortals || new Map(),
 				menuPortals: directMenuPortals || new Map(),
+				cellPortalList: latestPortalsByContainer(directPortals || new Map()),
+				rowPortalList: latestRowPortalsByContainer(directRowPortals || new Map()),
+				menuPortalList: Array.from((directMenuPortals || new Map()).values()),
 			};
 		}
 		return fallbackSnapshotRef.current;
@@ -441,27 +571,32 @@ export function PortalManager<TRowData = unknown>({
 
 	const state = useSyncExternalStore(store ? store.subscribe : (onStoreChange) => () => {}, getSnapshot, getSnapshot);
 
-	const cellPortals = latestPortalsByContainer(state.portals);
-	const visualRowPortals = latestRowPortalsByContainer(state.rowPortals);
+	const cellPortals = state.cellPortalList;
+	const visualRowPortals = state.rowPortalList;
 
 	return (
 		<>
 			{cellPortals.map((p) => {
+				const content = store ? (
+					<PortalCellWrapper<TRowData> cellKey={p.cellKey} store={store} />
+				) : (
+					<PortalCell<TRowData>
+						rowId={p.node.id}
+						colField={p.col.field}
+						value={p.value}
+						col={p.col}
+						node={p.node}
+						isEditing={p.isEditing}
+						isLoading={p.isLoading}
+						phase={p.phase}
+						isScrolling={p.isScrolling}
+						isFocused={p.isFocused}
+						isSelected={p.isSelected}
+					/>
+				);
 				return createPortal(
 					<GridProvider api={api} key={p.cellKey}>
-						<PortalCell<TRowData>
-							rowId={p.node.id}
-							colField={p.col.field}
-							value={p.value}
-							col={p.col}
-							node={p.node}
-							isEditing={p.isEditing}
-							isLoading={p.isLoading}
-							phase={p.phase}
-							isScrolling={p.isScrolling}
-							isFocused={p.isFocused}
-							isSelected={p.isSelected}
-						/>
+						{content}
 					</GridProvider>,
 					p.container
 				);
@@ -485,7 +620,7 @@ export function PortalManager<TRowData = unknown>({
 					container
 				);
 			})}
-			{Array.from(state.menuPortals.values()).map((mp) => {
+			{state.menuPortalList.map((mp) => {
 				const { colField, container, column, close } = mp;
 				const CustomComponent = column.headerMenuComponent;
 				if (!CustomComponent) return null;

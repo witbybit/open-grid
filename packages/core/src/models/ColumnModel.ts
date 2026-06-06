@@ -1,4 +1,4 @@
-import type { ColumnDef } from '../store.js';
+import type { ColumnDef, ColumnRenderPlan, ColumnRenderMode } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { IndexMapper } from './IndexMapper.js';
 
@@ -9,6 +9,7 @@ export class ColumnModel<TRowData = unknown> {
 	private valueGetterDependents = new Map<string, string[]>();
 	private indexMapper = new IndexMapper<string>();
 	private defaultColWidth = 100;
+	private columnPlans = new Map<string, ColumnRenderPlan<TRowData>>();
 
 	public init(engine: GridEngine<TRowData>): void {
 		this.engine = engine;
@@ -49,6 +50,57 @@ export class ColumnModel<TRowData = unknown> {
 
 		this.engine.geometry.updateColumns(widths, this.defaultColWidth);
 		this.engine.data.updateCompiledGetters(columns);
+
+		// Compute ColumnRenderPlans
+		this.columnPlans.clear();
+		for (const col of columns) {
+			if (col.field) {
+				const hasValueGetter = !!col.valueGetter;
+				const hasFormatter = !!(col as any).valueFormatter;
+				const hasFormulaSupport = true;
+				const capabilities = col.cellRendererCapabilities;
+				const fallbackStrategy = col.cellRendererCapabilities?.scrollBehavior === 'fallback' ? 'cached' : 'blank';
+
+				let mode: ColumnRenderMode = 'primitive';
+				if (col.cellRenderer) {
+					const scrollBehavior = col.cellRendererCapabilities?.scrollBehavior;
+					if (scrollBehavior === 'live') {
+						mode = 'custom-live';
+					} else if (scrollBehavior === 'defer') {
+						mode = 'custom-defer';
+					} else if (scrollBehavior === 'fallback') {
+						mode = 'custom-fallback';
+					} else {
+						mode = 'custom-skeleton';
+					}
+				} else if (hasValueGetter || hasFormatter) {
+					mode = 'primitive-formatted';
+				}
+
+				const plan: ColumnRenderPlan<TRowData> = {
+					colId: col.field,
+					field: col.field,
+					mode,
+					hasValueGetter,
+					hasFormatter,
+					hasFormulaSupport,
+					canUseCachedDisplayValue: hasValueGetter || hasFormulaSupport || !!col.cellRenderer,
+					capabilities,
+					fallbackStrategy,
+					rendererType: col.cellRenderer,
+				};
+
+				this.columnPlans.set(col.field, plan);
+			}
+		}
+	}
+
+	public getColumnPlan(colField: string): ColumnRenderPlan<TRowData> | undefined {
+		return this.columnPlans.get(colField);
+	}
+
+	public getColumnPlans(): ColumnRenderPlan<TRowData>[] {
+		return Array.from(this.columnPlans.values());
 	}
 
 	public getColumnIndex(colField: string): number {

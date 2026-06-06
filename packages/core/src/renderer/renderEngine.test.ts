@@ -1121,7 +1121,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('keeps portal hosts intact when scroll fallback text updates custom cells', () => {
+	it('evacuates custom renderer DOM from recycled cells while keeping portal hosts intact', () => {
 		vi.useFakeTimers();
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
@@ -1171,7 +1171,7 @@ describe('RenderEngine', () => {
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
 		expect(originalPortalChild.isConnected).toBe(true);
-		expect(originalPortalChild.closest('.og-cell-portal-host')).not.toBeNull();
+		expect(originalPortalChild.closest('.og-cell')).toBeNull();
 		expect(container.querySelector('.og-cell-portal-host')).not.toBeNull();
 		expect(renderer.getRenderStats().rootTextContentWritesOnPortalCells).toBe(0);
 
@@ -1234,7 +1234,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('flushes deferred portal unmounts after scroll idle', async () => {
+	it('keeps scrolled-out custom renderers warm instead of unmounting them on scroll idle', async () => {
 		vi.useFakeTimers();
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
@@ -1280,7 +1280,8 @@ describe('RenderEngine', () => {
 
 		expect(renderer.portalMountManager.onUnmountCellContent).not.toHaveBeenCalled();
 		vi.advanceTimersByTime(80);
-		expect(renderer.portalMountManager.onUnmountCellContent).toHaveBeenCalled();
+		expect(renderer.portalMountManager.onUnmountCellContent).not.toHaveBeenCalled();
+		expect(renderer.portalMountManager.customRendererManager.getStats().warmCount).toBeGreaterThan(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -1325,6 +1326,7 @@ describe('RenderEngine', () => {
 		renderer.portalMountManager.onMountCellContent = vi.fn();
 		renderer.mount(container);
 		(renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mockClear();
+		store.getCellValue('row-40', 'defer');
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 2400;
@@ -1338,6 +1340,68 @@ describe('RenderEngine', () => {
 		expect((renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mock.calls[0][0].phase).toBe('scroll-idle');
 		expect((renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mock.calls[0][0].isScrolling).toBe(false);
 		expect(renderer.getRenderStats().portalMountsDuringScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('defers newly recycled live custom renderers during the scroll frame', async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const columns = [
+			{
+				field: 'a',
+				header: 'A',
+				width: 120,
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollBehavior: 'live' as const, estimatedCost: 'cheap' as const, supportsRebind: true },
+			},
+		];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.portalMountManager.onMountCellContent = vi.fn();
+		renderer.mount(container);
+		(renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mockClear();
+		store.getCellValue('row-60', 'a');
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 2400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		expect(renderer.portalMountManager.onMountCellContent).not.toHaveBeenCalled();
+		const cellNode = container.querySelector('[data-row-id="row:row-60"]') as HTMLDivElement;
+		expect(cellNode).not.toBeNull();
+		const cellA = cellNode.querySelector('[data-col-field="a"]') as HTMLDivElement;
+		expect(cellA.dataset.contentMode).toBe('pending');
+		expect(renderer.getRenderStats().portalMountsDuringScroll).toBe(0);
+		expect(renderer.getRenderStats().customRendererMountsDuringScroll).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -2016,6 +2080,7 @@ describe('RenderEngine', () => {
 			columns,
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
+			rowBuffer: 2,
 			getRowId: (row) => row.id,
 		});
 		const controller = new ClientRowModelController(store, {
@@ -2133,6 +2198,7 @@ describe('RenderEngine', () => {
 		renderer.portalMountManager.onMountCellContent = vi.fn();
 		renderer.portalMountManager.onUnmountCellContent = vi.fn();
 		renderer.mount(container);
+		(renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mockClear();
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1600;
@@ -2149,16 +2215,10 @@ describe('RenderEngine', () => {
 		const cell3 = row40.querySelector('[data-col-field="col3"]') as HTMLDivElement;
 
 		expect(cell1.dataset.contentMode).toBe('pending');
-		expect(cell2.dataset.contentMode).toBe('portal');
+		expect(cell2.dataset.contentMode).toBe('pending');
 		expect(cell3.dataset.contentMode).toBe('fallback');
-		expect(renderer.portalMountManager.onMountCellContent).toHaveBeenCalledWith(
-			expect.objectContaining({
-				node: expect.objectContaining({ id: 'row-40' }),
-				col: expect.objectContaining({ field: 'col2' }),
-				phase: 'scroll',
-				isScrolling: true,
-			})
-		);
+		expect(renderer.portalMountManager.onMountCellContent).not.toHaveBeenCalled();
+		expect(renderer.getRenderStats().customRendererMountsDuringScroll).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -2187,7 +2247,9 @@ describe('RenderEngine', () => {
 				header: 'Defer',
 				width: 100,
 				cellRenderer: () => 'DeferRendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const, interactive: true },
+				cellRendererCapabilities: { scrollBehavior: 'defer' as const, interactive: true, deferFallback: 'snapshot' as const },
+				valueGetterDependencies: ['defer'],
+				valueGetter: ({ row }: any) => `Snapshot ${row.defer}`,
 			},
 			{
 				field: 'fallback',
@@ -2233,6 +2295,8 @@ describe('RenderEngine', () => {
 		renderer.portalMountManager.onMountCellContent = vi.fn();
 		renderer.mount(container);
 		(renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mockClear();
+		expect(store.getCellValue('row-40', 'defer')).toBe('Snapshot Defer 40');
+		expect(store.getCachedDisplayValue('row-40', 'defer')).toBe('Snapshot Defer 40');
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1600;
@@ -2243,25 +2307,78 @@ describe('RenderEngine', () => {
 
 		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
 		expect(row40).not.toBeNull();
-		expect((row40.querySelector('[data-col-field="live"]') as HTMLDivElement).dataset.contentMode).toBe('portal');
-		expect((row40.querySelector('[data-col-field="defer"]') as HTMLDivElement).dataset.contentMode).toBe('portal');
+		expect((row40.querySelector('[data-col-field="live"]') as HTMLDivElement).dataset.contentMode).toBe('pending');
+		const deferCell = row40.querySelector('[data-col-field="defer"]') as HTMLDivElement;
+		expect(deferCell.dataset.contentMode).toBe('fallback');
+		expect(deferCell.querySelector('.og-cell-content')?.textContent).toBe('Snapshot Defer 40');
 		expect((row40.querySelector('[data-col-field="fallback"]') as HTMLDivElement).dataset.contentMode).toBe('fallback');
-		const scrollMounts = (renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
-		expect(scrollMounts).toContainEqual(
-			expect.objectContaining({
-				node: expect.objectContaining({ id: 'row-40' }),
-				col: expect.objectContaining({ field: 'live' }),
-				phase: 'scroll',
-				isScrolling: true,
-			})
-		);
-		expect(scrollMounts).not.toContainEqual(
-			expect.objectContaining({
-				node: expect.objectContaining({ id: 'row-40' }),
-				col: expect.objectContaining({ field: 'defer' }),
-				phase: 'scroll',
-			})
-		);
+		expect(renderer.portalMountManager.onMountCellContent).not.toHaveBeenCalled();
+		expect(renderer.getRenderStats().customRendererMountsDuringScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+		vi.useRealTimers();
+	});
+
+	it('deferred custom renderers use pending when snapshot fallback is not enabled', () => {
+		vi.useFakeTimers();
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callbacks.push(callback);
+			return callbacks.length;
+		});
+
+		const columns = [
+			{
+				field: 'defer',
+				header: 'Defer',
+				width: 120,
+				cellRenderer: () => 'DeferRendered',
+				cellRendererCapabilities: { scrollBehavior: 'defer' as const, interactive: true },
+			},
+		];
+
+		const store = new GridStore<{ id: string; defer: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, defer: `Defer ${index}` })),
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 1600;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		expect(callbacks.length).toBe(1);
+		callbacks[0](0);
+
+		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
+		const deferCell = row40.querySelector('[data-col-field="defer"]') as HTMLDivElement;
+		expect(deferCell.dataset.contentMode).toBe('pending');
+		expect(deferCell.querySelector('.og-cell-content')?.textContent).toBe('');
 
 		renderer.unmount();
 		controller.dispose();

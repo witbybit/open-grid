@@ -7,6 +7,8 @@ import type {
 	GridRowContentUnmount,
 } from './IGridRenderer.js';
 import type { VisualRow } from '../store.js';
+import type { GridEngine } from '../engine/GridEngine.js';
+import { CustomRendererManager, type ReleaseReason } from './customRendererManager.js';
 
 function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
 	if (a === b) return true;
@@ -52,6 +54,18 @@ export class PortalMountManager<TRowData = unknown> {
 	public onMountHeaderMenu?: (mount: GridHeaderMenuMount<TRowData>) => void;
 	public onUnmountHeaderMenu?: (unmount: GridHeaderMenuUnmount) => void;
 
+	public customRendererManager: CustomRendererManager<TRowData>;
+
+	constructor(private engine?: GridEngine<TRowData>) {
+		this.customRendererManager = new CustomRendererManager<TRowData>(engine);
+		this.customRendererManager.onMountCellContent = (mount) => {
+			this.onMountCellContent?.(mount);
+		};
+		this.customRendererManager.onUnmountCellContent = (unmount) => {
+			this.onUnmountCellContent?.(unmount);
+		};
+	}
+
 	private mountedCells = new Map<string, HTMLElement | undefined>();
 	private mountedRows = new Map<string, HTMLElement | undefined>();
 	private mountedRowVisualRows = new Map<string, GridRowContentMount<TRowData>['visualRow']>();
@@ -73,6 +87,49 @@ export class PortalMountManager<TRowData = unknown> {
 		maxOpsFlushedInOneChunk: 0,
 	};
 
+	private mountCellReal(mount: GridCellContentMount<TRowData>): void {
+		const col = mount.col;
+		const isCustom = !!(col?.cellRenderer || mount.isEditing);
+
+		if (!isCustom) {
+			this.onMountCellContent?.(mount);
+			return;
+		}
+
+		const node = mount.node;
+		const rowIndex = mount.rowIndex ?? this.engine?.getRowModel()?.getVisualIndexByRowId(node.id) ?? -1;
+		const colIndex = mount.colIndex ?? (this.engine ? this.engine.columns.getColumnIndex(col.field) : -1);
+
+		const rendererKey = this.customRendererManager.getRendererKey(col, node.id, rowIndex, colIndex, mount.isEditing);
+
+		this.customRendererManager.acquire({
+			rendererKey,
+			cellKey: mount.cellKey,
+			parentContainer: mount.container,
+			value: mount.value,
+			node: mount.node,
+			col: mount.col,
+			isEditing: mount.isEditing,
+			isLoading: mount.isLoading,
+			phase: mount.phase ?? 'initial',
+			isScrolling: mount.isScrolling ?? false,
+			isFocused: mount.isFocused ?? false,
+			isSelected: mount.isSelected ?? false,
+		});
+	}
+
+	private releaseCellReal(cellKey: string, reason: ReleaseReason, originalUnmount?: GridCellContentUnmount): void {
+		const releasedCustomRenderer = this.customRendererManager.releaseByCellKey(cellKey, reason);
+		if (!releasedCustomRenderer) {
+			if (originalUnmount) {
+				this.onUnmountCellContent?.(originalUnmount);
+			} else {
+				const container = this.mountedCells.get(cellKey);
+				this.onUnmountCellContent?.({ cellKey, container, flushSync: false });
+			}
+		}
+	}
+
 	public mountCell(mount: GridCellContentMount<TRowData>): void {
 		const wasMounted = this.mountedCells.has(mount.cellKey);
 		this.mountedCells.set(mount.cellKey, mount.container);
@@ -86,7 +143,7 @@ export class PortalMountManager<TRowData = unknown> {
 			}
 			return;
 		}
-		this.onMountCellContent?.(mount);
+		this.mountCellReal(mount);
 	}
 
 	public mountCellImmediately(mount: GridCellContentMount<TRowData>): void {
@@ -97,7 +154,7 @@ export class PortalMountManager<TRowData = unknown> {
 		if (this.scrolling) {
 			this.stats.mountsDuringScroll++;
 		}
-		this.onMountCellContent?.(mount);
+		this.mountCellReal(mount);
 	}
 
 	public releaseCell(unmount: GridCellContentUnmount): void {
@@ -117,7 +174,28 @@ export class PortalMountManager<TRowData = unknown> {
 			this.pendingCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
 			return;
 		}
-		this.onUnmountCellContent?.(unmount);
+		this.releaseCellReal(unmount.cellKey, 'destroyed', unmount);
+	}
+
+	public releaseCellForScroll(unmount: GridCellContentUnmount): void {
+		const existingContainer = this.mountedCells.get(unmount.cellKey);
+		if (unmount.container && existingContainer && existingContainer !== unmount.container) return;
+		this.mountedCells.delete(unmount.cellKey);
+
+		const canceledDeferredMount = this.deferredCellMounts.delete(unmount.cellKey);
+		const wasNewDeferredMount = this.deferredNewCellMounts.delete(unmount.cellKey);
+		this.deferredCellReleases.delete(unmount.cellKey);
+		if (canceledDeferredMount && wasNewDeferredMount) return;
+
+		if (unmount.container && this.customRendererManager.releaseByParentContainer(unmount.container, 'scrolled-out')) {
+			return;
+		}
+		if (this.customRendererManager.releaseByCellKey(unmount.cellKey, 'scrolled-out')) {
+			return;
+		}
+
+		this.stats.releasesDuringScroll++;
+		this.deferredCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
 	}
 
 	public releaseCells(unmounts: GridCellContentUnmount[], flushSync = false): void {
@@ -135,7 +213,7 @@ export class PortalMountManager<TRowData = unknown> {
 				this.deferredCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
 				continue;
 			}
-			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
+			this.releaseCellReal(unmount.cellKey, 'destroyed', unmount);
 		}
 		if (flushSync) {
 			if (this.scrolling) {
@@ -161,7 +239,7 @@ export class PortalMountManager<TRowData = unknown> {
 			return;
 		}
 		for (const unmount of this.pendingCellReleases.values()) {
-			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
+			this.releaseCellReal(unmount.cellKey, 'destroyed', unmount);
 		}
 		this.pendingCellReleases.clear();
 		if (flushSync) {
@@ -194,19 +272,53 @@ export class PortalMountManager<TRowData = unknown> {
 		this.scrolling = false;
 		let processed = 0;
 
+		const activeEdit = this.engine?.stateManager.getState().activeEdit;
+		const focusedCell = this.engine?.stateManager.getState().selection.focus;
+		const rowModel = this.engine?.getRowModel();
+		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
+		const columns = this.engine?.columns.getDisplayedColumns() ?? [];
+		const colCount = columns.length;
+		const rowRange = this.engine ? this.engine.viewport.getVisibleRowRange(rowCount) : { startIdx: 0, endIdx: 0 };
+		const colRange = this.engine ? this.engine.viewport.getVisibleColumnRange(colCount) : { startIdx: 0, endIdx: 0 };
+
+		const rowCenter = (rowRange.startIdx + rowRange.endIdx) / 2;
+		const colCenter = (colRange.startIdx + colRange.endIdx) / 2;
+
+		const getPriority = (mount: GridCellContentMount<TRowData>): number => {
+			const col = mount.col;
+			const node = mount.node;
+			if (activeEdit && node.id === activeEdit.rowId && col.field === activeEdit.colField) return 1000;
+			if (focusedCell && node.id === focusedCell.rowId && col.field === focusedCell.colField) return 900;
+
+			const rowIndex = mount.rowIndex ?? rowModel?.getVisualIndexByRowId(node.id) ?? -1;
+			const colIndex = mount.colIndex ?? (this.engine ? this.engine.columns.getColumnIndex(col.field) : -1);
+
+			if (rowIndex === -1 || colIndex === -1) return 0;
+
+			const distRow = Math.abs(rowIndex - rowCenter);
+			const distCol = Math.abs(colIndex - colCenter);
+			return 500 - (distRow + distCol);
+		};
+
 		for (const [cellKey, unmount] of Array.from(this.deferredCellReleases)) {
 			if (processed >= maxItems) break;
-			this.onUnmountCellContent?.({ ...unmount, flushSync: false });
+			this.releaseCellReal(unmount.cellKey, 'scrolled-out', unmount);
 			this.deferredCellReleases.delete(cellKey);
 			processed++;
 		}
-		for (const [cellKey, mount] of Array.from(this.deferredCellMounts)) {
+
+		const sortedMounts = Array.from(this.deferredCellMounts.values()).sort((a, b) => {
+			return getPriority(b) - getPriority(a);
+		});
+
+		for (const mount of sortedMounts) {
 			if (processed >= maxItems) break;
-			this.onMountCellContent?.(mount);
-			this.deferredCellMounts.delete(cellKey);
-			this.deferredNewCellMounts.delete(cellKey);
+			this.mountCellReal(mount);
+			this.deferredCellMounts.delete(mount.cellKey);
+			this.deferredNewCellMounts.delete(mount.cellKey);
 			processed++;
 		}
+
 		for (const [rowKey, unmount] of Array.from(this.deferredRowReleases)) {
 			if (processed >= maxItems) break;
 			this.onUnmountRowContent?.(unmount);
@@ -282,9 +394,12 @@ export class PortalMountManager<TRowData = unknown> {
 		this.deferredNewCellMounts.clear();
 		this.deferredRowMounts.clear();
 		this.deferredRowReleases.clear();
+
 		for (const [cellKey, container] of this.mountedCells) {
-			this.onUnmountCellContent?.({ cellKey, container, flushSync: false });
+			this.releaseCellReal(cellKey, 'destroyed');
 		}
+		this.customRendererManager.releaseAll();
+
 		for (const [rowKey, container] of this.mountedRows) {
 			this.onUnmountRowContent?.({ rowKey, container });
 		}
@@ -295,6 +410,10 @@ export class PortalMountManager<TRowData = unknown> {
 		this.mountedRows.clear();
 		this.mountedRowVisualRows.clear();
 		this.mountedMenus.clear();
+	}
+
+	public isCellMounted(cellKey: string): boolean {
+		return this.mountedCells.has(cellKey);
 	}
 
 	public getStats(): { cells: number; rows: number; menus: number } {

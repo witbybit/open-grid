@@ -42,7 +42,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly scrollScheduler: ScrollFrameScheduler;
 	private readonly orchestrator: RenderOrchestrator;
 
-	public readonly portalMountManager = new PortalMountManager<TRowData>();
+	public readonly portalMountManager: PortalMountManager<TRowData>;
 	public readonly viewportRenderer: ViewportRenderer<TRowData>;
 	public readonly rowRenderer: RowRenderer<TRowData>;
 	public readonly cellRenderer: CellRenderer;
@@ -67,7 +67,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private lastStyleSlots: unknown = undefined;
 	private lastLoading: unknown = undefined;
 
-	private readonly portalFlushBudget = 50;
+	private readonly portalFlushBudget = 24;
+	private readonly postScrollDecorationBudget = 32;
 
 	private renderStats = {
 		scrollFrames: 0,
@@ -82,6 +83,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		stateReadsDuringScroll: 0,
 		focusCallsDuringScroll: 0,
 		rootTextContentWritesOnPortalCells: 0,
+		rowsVisitedDuringScroll: 0,
+		rowsReboundDuringScroll: 0,
+		cellsVisitedDuringScroll: 0,
+		cellsWrittenDuringScroll: 0,
+		portalOpsDuringScroll: 0,
 		cellAccessReadsDuringScroll: 0,
 		cellClassComputesDuringScroll: 0,
 		reusableCellsSkippedDuringScroll: 0,
@@ -90,6 +96,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		maxPortalOpsFlushedInOneChunk: 0,
 		postScrollDecorationChunks: 0,
 		maxCellsDecoratedInOneChunk: 0,
+		cellsDecoratedAfterScroll: 0,
 	};
 
 	public get onMountCellContent(): ((mount: GridCellContentMount<TRowData>) => void) | undefined {
@@ -143,6 +150,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	constructor(engine: GridEngine<TRowData>, api?: InternalGridApi<TRowData>) {
 		this.engine = engine;
 		this.api = api;
+		this.portalMountManager = new PortalMountManager<TRowData>(engine);
 		this.geometryController = new GeometryController(engine);
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
 		this.scheduler = new RenderScheduler(() => this.flushPaint());
@@ -285,6 +293,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private markScrolling(): void {
 		this.isScrolling = true;
+		this.engine.isScrolling = true;
 		this.rowRenderer.isScrolling = true;
 		this.portalMountManager.setScrolling(true);
 		this.clearScrollEndTimer();
@@ -295,6 +304,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private finishScrolling(): void {
 		this.clearScrollEndTimer();
 		this.isScrolling = false;
+		this.engine.isScrolling = false;
 		this.rowRenderer.isScrolling = false;
 		this.rowRenderer.programmaticScrollCell = null;
 		this.portalMountManager.setScrolling(false);
@@ -385,11 +395,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 
 			this.renderStats.postScrollDecorationChunks++;
-			const result = this.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: 100 });
+			const result = this.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.postScrollDecorationBudget });
 
 			if (result.processed > this.renderStats.maxCellsDecoratedInOneChunk) {
 				this.renderStats.maxCellsDecoratedInOneChunk = result.processed;
 			}
+			this.renderStats.cellsDecoratedAfterScroll += result.processed;
 
 			if (result.remaining > 0) {
 				this.scheduleBudgetedDecoration();
@@ -408,9 +419,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const scrollViewport = this.viewportRenderer.scrollViewport;
 		if (!scrollViewport) return;
 		this.isScrollFrameActive = true;
+		this.engine.isScrollFrameActive = true;
 		this.rowRenderer.isScrollFrameActive = true;
 		this.rowRenderer.currentScrollCellsPatched = 0;
 		this.rowRenderer.currentScrollRowsRecycled = 0;
+		this.rowRenderer.currentScrollRowsVisited = 0;
+		this.rowRenderer.currentScrollRowsRebound = 0;
+		this.rowRenderer.currentScrollCellsVisited = 0;
+		this.rowRenderer.currentScrollCellsWritten = 0;
+		this.rowRenderer.currentScrollPortalOps = 0;
 		this.renderStats.scrollFrames++;
 		const startStateReads = this.engine.stateManager.debugGetStateCount;
 		try {
@@ -431,6 +448,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				hasStyleHooks: !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender),
 				hasCustomRenderers: displayedColumns.some((c) => !!c.cellRenderer),
 				displayedColumns,
+				columnPlans: displayedColumns.map((c) => this.engine.columns.getColumnPlan(c.field)!),
 				visibleColRange,
 				focusedCell: state.selection.focus,
 				selectionBounds: state.selection.bounds ?? undefined,
@@ -438,12 +456,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			};
 
 			this.recycleViewport(true, ctx);
-			if (this.engine.viewport.scrollLeft !== this.lastHeaderScrollLeft) {
-				this.renderStats.headerRangeSyncsDuringScroll++;
-				this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
-			}
 			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
-			this.headerRenderer.syncVisibleColumnRange();
+			const didSyncRange = this.headerRenderer.syncVisibleColumnRange();
+			if (didSyncRange) {
+				this.renderStats.headerRangeSyncsDuringScroll++;
+			}
+			this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
 			this.renderStats.overlayCheapSyncsDuringScroll++;
 			this.overlayRenderer.syncScrollPosition();
 		} finally {
@@ -453,6 +471,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.renderStats.cellsPatchedPerScrollFrame.push(this.rowRenderer.currentScrollCellsPatched);
 			this.renderStats.rowsRecycledPerScrollFrame.push(this.rowRenderer.currentScrollRowsRecycled);
 			this.isScrollFrameActive = false;
+			this.engine.isScrollFrameActive = false;
 			this.rowRenderer.isScrollFrameActive = false;
 		}
 	}
@@ -629,19 +648,35 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			focusCallsDuringScroll: this.renderStats.focusCallsDuringScroll,
 			rootTextContentWritesOnPortalCells: this.renderStats.rootTextContentWritesOnPortalCells,
 			cellsBoundDuringScroll: this.rowRenderer.currentScrollCellsPatched,
-			cellsDecoratedAfterScroll: this.renderStats.postScrollDecorationChunks * 100,
+			rowsVisitedDuringScroll: this.rowRenderer.currentScrollRowsVisited,
+			rowsReboundDuringScroll: this.rowRenderer.currentScrollRowsRebound,
+			cellsVisitedDuringScroll: this.rowRenderer.currentScrollCellsVisited,
+			cellsWrittenDuringScroll: this.rowRenderer.currentScrollCellsWritten,
+			portalOpsDuringScroll:
+				this.rowRenderer.currentScrollPortalOps + portalScrollStats.portalMountsDuringScroll + portalScrollStats.portalReleasesDuringScroll,
+			cellsDecoratedAfterScroll: this.renderStats.cellsDecoratedAfterScroll,
 			cellAccessReadsDuringScroll: this.renderStats.cellAccessReadsDuringScroll,
 			cellClassComputesDuringScroll: this.renderStats.cellClassComputesDuringScroll,
 			dirtyCellsMarkedDuringScroll: this.rowRenderer.dirtyCellsMarkedDuringScroll,
 			postScrollDirtyCellsDecorated: this.rowRenderer.postScrollDirtyCellsDecorated,
 			reusableCellsSkippedDuringScroll: this.renderStats.reusableCellsSkippedDuringScroll,
 			styleHookCallsDuringScroll: this.renderStats.styleHookCallsDuringScroll,
+			getCellValueCallsDuringScroll: this.engine.getCellValueCallsDuringScroll,
+			valueGetterCallsDuringScroll: this.engine.valueGetterCallsDuringScroll,
+			formulaCallsDuringScroll: this.engine.formulaCallsDuringScroll,
+			customRendererMountsDuringScroll: this.engine.customRendererMountsDuringScroll,
+			customRendererHydrationChunks: this.engine.customRendererHydrationChunks,
+			customRendererWarmHits: this.engine.customRendererWarmHits,
+			customRendererWarmMisses: this.engine.customRendererWarmMisses,
 			...portalScrollStats,
 			hotDomReleases: (this.rowRenderer.rowPool?.hotReleases ?? 0) + (this.rowRenderer.cellPool?.hotReleases ?? 0),
 			coldDomReleases: (this.rowRenderer.rowPool?.coldReleases ?? 0) + (this.rowRenderer.cellPool?.coldReleases ?? 0),
 			cellsPatchedPerScrollFrame: this.renderStats.cellsPatchedPerScrollFrame.slice(),
 			rowsRecycledPerScrollFrame: this.renderStats.rowsRecycledPerScrollFrame.slice(),
-			portalMounts: this.portalMountManager.getStats(),
+			portalMounts: {
+				...this.portalMountManager.getStats(),
+				custom: this.portalMountManager.customRendererManager.getStats(),
+			},
 		};
 	}
 
@@ -654,6 +689,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.rowRenderer.postScrollDirtyCellsDecorated = 0;
 		this.rowRenderer.currentScrollCellsPatched = 0;
 		this.rowRenderer.currentScrollRowsRecycled = 0;
+		this.rowRenderer.currentScrollRowsVisited = 0;
+		this.rowRenderer.currentScrollRowsRebound = 0;
+		this.rowRenderer.currentScrollCellsVisited = 0;
+		this.rowRenderer.currentScrollCellsWritten = 0;
+		this.rowRenderer.currentScrollPortalOps = 0;
 		this.renderStats.scrollFrames = 0;
 		this.renderStats.viewportRecycles = 0;
 		this.renderStats.headerPaintsDuringScroll = 0;
@@ -664,13 +704,27 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.renderStats.rowsRecycledPerScrollFrame = [];
 		this.renderStats.stateReadsDuringScroll = 0;
 		this.renderStats.focusCallsDuringScroll = 0;
+		this.renderStats.cellsDecoratedAfterScroll = 0;
 		this.renderStats.rootTextContentWritesOnPortalCells = 0;
+		this.renderStats.rowsVisitedDuringScroll = 0;
+		this.renderStats.rowsReboundDuringScroll = 0;
+		this.renderStats.cellsVisitedDuringScroll = 0;
+		this.renderStats.cellsWrittenDuringScroll = 0;
+		this.renderStats.portalOpsDuringScroll = 0;
 		this.renderStats.cellAccessReadsDuringScroll = 0;
 		this.renderStats.cellClassComputesDuringScroll = 0;
 		this.renderStats.reusableCellsSkippedDuringScroll = 0;
 		this.renderStats.styleHookCallsDuringScroll = 0;
 		this.renderStats.postScrollDecorationChunks = 0;
 		this.renderStats.maxCellsDecoratedInOneChunk = 0;
+
+		this.engine.getCellValueCallsDuringScroll = 0;
+		this.engine.valueGetterCallsDuringScroll = 0;
+		this.engine.formulaCallsDuringScroll = 0;
+		this.engine.customRendererMountsDuringScroll = 0;
+		this.engine.customRendererHydrationChunks = 0;
+		this.engine.customRendererWarmHits = 0;
+		this.engine.customRendererWarmMisses = 0;
 	}
 
 	public fullPaint(): void {

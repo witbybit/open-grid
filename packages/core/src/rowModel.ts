@@ -469,14 +469,18 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (!node) return false;
 
 		const col = this.store.getColumnDef(colField);
-		const updatedRow = { ...node.data };
+		const updatedRow = col?.valueSetter ? { ...node.data } : node.data;
 		if (col?.valueSetter) {
 			if (!col.valueSetter(updatedRow, value)) return false;
 		} else {
 			setValueByPath(updatedRow, colField, value);
 		}
 
-		node.setData(updatedRow);
+		if (updatedRow !== node.data) {
+			node.setData(updatedRow);
+		} else {
+			node.clearValueCache();
+		}
 
 		// If the edited cell field affects active sorting, filtering, grouping, or aggregates,
 		// we must re-run the pipeline to update the row positions, visibility, or computed aggregates.

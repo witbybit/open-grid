@@ -3,6 +3,7 @@ import type { IGridDatasource } from './serverRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
 import type { GroupPathItem } from './rows/visualRowIds.js';
+import type { RenderStats } from './renderer/renderOrchestrator.js';
 
 export interface CellSubscription {
 	rowId: string;
@@ -247,6 +248,7 @@ export interface CellRendererCapabilities {
 	 * Whether renderer content should stay live, defer updates, or show fallback while scrolling.
 	 */
 	scrollBehavior?: 'live' | 'defer' | 'fallback';
+	deferFallback?: 'snapshot' | 'pending';
 	/**
 	 * Future lifecycle hint for renderer instance reuse.
 	 */
@@ -255,6 +257,35 @@ export interface CellRendererCapabilities {
 	interactive?: boolean;
 	supportsRebind?: boolean;
 	warmCache?: boolean;
+}
+
+export type ColumnRenderMode =
+	| 'primitive'
+	| 'primitive-formatted'
+	| 'custom-live'
+	| 'custom-defer'
+	| 'custom-fallback'
+	| 'custom-skeleton'
+	| 'loading';
+
+export interface ColumnRenderPlan<TData = unknown> {
+	colId: string;
+	field: string;
+
+	mode: ColumnRenderMode;
+
+	hasValueGetter: boolean;
+	hasFormatter: boolean;
+	hasFormulaSupport: boolean;
+
+	canUseCachedDisplayValue: boolean;
+
+	capabilities?: CellRendererCapabilities;
+
+	fallbackStrategy: 'cached' | 'formatted' | 'raw' | 'blank' | 'custom';
+
+	rendererType?: unknown;
+	diagnostics?: string[];
 }
 
 export interface CellRendererProps<TRowData = unknown> {
@@ -442,6 +473,7 @@ export interface GridStyleSlots<TRowData = unknown> {
 export function getCellRendererCapabilities<TRowData>(col: ColumnDef<TRowData>): Required<CellRendererCapabilities> {
 	return {
 		scrollBehavior: col.cellRendererCapabilities?.scrollBehavior ?? 'fallback',
+		deferFallback: col.cellRendererCapabilities?.deferFallback ?? 'pending',
 		recycle: col.cellRendererCapabilities?.recycle ?? 'preserve',
 		estimatedCost: col.cellRendererCapabilities?.estimatedCost ?? 'medium',
 		interactive: col.cellRendererCapabilities?.interactive ?? false,
@@ -493,6 +525,14 @@ export interface GridState<TRowData = unknown> {
 	visibleColRange: ViewportRange;
 
 	styleSlots?: GridStyleSlots<TRowData>;
+	rowBuffer?: number;
+	colBuffer?: number;
+	rowRecyclingStrategy?: 'index-pool' | 'slot-pool';
+	runtimeLimits?: {
+		maxRenderedRows?: number;
+		maxRenderedCells?: number;
+		suppressRenderedRangeLimit?: boolean;
+	};
 }
 
 export interface GridCellRangeBounds {
@@ -548,6 +588,11 @@ export interface GridApi<TRowData = unknown> {
 	purgeCache(): void;
 	setServerDatasource(datasource: IGridDatasource, blockSize?: number): void;
 	getCellValue(rowId: string, colField: string): unknown;
+	getCachedDisplayValue(rowId: string, colField: string): string | undefined;
+	getCheapDisplayValue(rowId: string, colField: string): string;
+	getComputedCellValue(rowId: string, colField: string): unknown;
+	getRowBuffer(): number;
+	setRowBuffer(rowBuffer: number): void;
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 	getCellState(rowId: string, colField: string): CellState;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
@@ -603,6 +648,8 @@ export interface GridApi<TRowData = unknown> {
 	canUndo(): boolean;
 	canRedo(): boolean;
 	destroy(): void;
+	getRenderStats(): RenderStats;
+	resetRenderStats(): void;
 }
 
 /**
@@ -657,6 +704,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			detailRenderer: initialState.detailRenderer,
 			rowModelConfig: initialState.rowModelConfig,
 			expansion: initialState.expansion,
+			rowBuffer: initialState.rowBuffer,
+			colBuffer: initialState.colBuffer,
+			rowRecyclingStrategy: initialState.rowRecyclingStrategy,
+			runtimeLimits: initialState.runtimeLimits,
 		});
 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
@@ -696,6 +747,26 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getCellValue = (rowId: string, colField: string): unknown => {
 		return this.engine.data.getCellValue(rowId, colField);
+	};
+
+	public getCachedDisplayValue = (rowId: string, colField: string): string | undefined => {
+		return this.engine.data.getCachedDisplayValue(rowId, colField);
+	};
+
+	public getCheapDisplayValue = (rowId: string, colField: string): string => {
+		return this.engine.data.getCheapDisplayValue(rowId, colField);
+	};
+
+	public getComputedCellValue = (rowId: string, colField: string): unknown => {
+		return this.engine.data.getComputedCellValue(rowId, colField);
+	};
+
+	public getRowBuffer = (): number => {
+		return this.state.rowBuffer ?? 12;
+	};
+
+	public setRowBuffer = (rowBuffer: number): void => {
+		this.setState({ rowBuffer });
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
@@ -1235,6 +1306,65 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public canRedo = (): boolean => {
 		return this.engine.commandHistory.canRedo();
+	};
+
+	public getRenderStats = (): RenderStats => {
+		if (this.engine.getRenderStats) {
+			return this.engine.getRenderStats();
+		}
+		return {
+			fullPaints: 0,
+			rowPaints: 0,
+			cellPaints: 0,
+			headerPaints: 0,
+			overlayPaints: 0,
+			geometryRecomputes: 0,
+			viewportPaints: 0,
+			scrollFrames: 0,
+			viewportRecycles: 0,
+			headerPaintsDuringScroll: 0,
+			headerRangeSyncsDuringScroll: 0,
+			overlayPaintsDuringScroll: 0,
+			overlayCheapSyncsDuringScroll: 0,
+			portalFlushesDuringScroll: 0,
+			portalDeferredDuringScroll: 0,
+			portalMountsDuringScroll: 0,
+			portalReleasesDuringScroll: 0,
+			portalFlushChunks: 0,
+			maxPortalOpsFlushedInOneChunk: 0,
+			focusCallsDuringScroll: 0,
+			rootTextContentWritesOnPortalCells: 0,
+			cellsBoundDuringScroll: 0,
+			rowsVisitedDuringScroll: 0,
+			rowsReboundDuringScroll: 0,
+			cellsVisitedDuringScroll: 0,
+			cellsWrittenDuringScroll: 0,
+			portalOpsDuringScroll: 0,
+			cellsDecoratedAfterScroll: 0,
+			cellAccessReadsDuringScroll: 0,
+			cellClassComputesDuringScroll: 0,
+			dirtyCellsMarkedDuringScroll: 0,
+			postScrollDirtyCellsDecorated: 0,
+			reusableCellsSkippedDuringScroll: 0,
+			styleHookCallsDuringScroll: 0,
+			hotDomReleases: 0,
+			coldDomReleases: 0,
+			cellsPatchedPerScrollFrame: [],
+			rowsRecycledPerScrollFrame: [],
+			lastInvalidationReasons: [],
+			portalMounts: { cells: 0, rows: 0, menus: 0, custom: { active: 0, warm: 0, cold: 0, hydrationQueue: 0, completedChunks: 0 } },
+			getCellValueCallsDuringScroll: 0,
+			valueGetterCallsDuringScroll: 0,
+			formulaCallsDuringScroll: 0,
+			customRendererMountsDuringScroll: 0,
+			customRendererHydrationChunks: 0,
+			customRendererWarmHits: 0,
+			customRendererWarmMisses: 0,
+		};
+	};
+
+	public resetRenderStats = (): void => {
+		this.engine.resetRenderStats?.();
 	};
 
 	public destroy = (): void => {

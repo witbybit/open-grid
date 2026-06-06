@@ -6,6 +6,8 @@ export interface GridCellContentMount<TRowData = unknown> {
 	value: unknown;
 	node: RowNode<TRowData>;
 	col: ColumnDef<TRowData>;
+	rowIndex?: number;
+	colIndex?: number;
 	isEditing: boolean;
 	isLoading: boolean;
 	phase?: CellRendererPhase;

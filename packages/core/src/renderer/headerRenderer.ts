@@ -59,7 +59,7 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.lastHeaderScrollLeft = scrollLeft;
 	}
 
-	public syncVisibleColumnRange(): void {
+	public syncVisibleColumnRange(): boolean {
 		const colCount = this.engine.columns.getDisplayedColumnCount();
 		const pinLeft = this.engine.viewport.pinLeftColumns;
 		const pinRight = this.engine.viewport.pinRightColumns;
@@ -73,10 +73,11 @@ export class HeaderRenderer<TRowData = unknown> {
 			colCount === this.lastHeaderVisibleRange.colCount
 		) {
 			// Cheap bail out! Range did not change!
-			return;
+			return false;
 		}
 
 		this.syncVisibleHeaders(false);
+		return true;
 	}
 
 	private syncVisibleHeaders(forceRepaint = false): void {

@@ -240,6 +240,31 @@ export default function InfiniteServerScroll({
 					</div>
 				</div>
 
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden'>
+					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+						<Cpu className='w-4 h-4 text-cyan-400' />
+						Custom Renderer Lifecycle Lab
+					</h3>
+					<div className='grid grid-cols-1 gap-2 text-[9px] font-mono'>
+						<div className='flex items-center justify-between rounded border border-emerald-950/50 bg-emerald-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Live Rebind</span>
+							<span className='text-emerald-300 uppercase tracking-wider'>phase=scroll</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-indigo-950/50 bg-indigo-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Defer Stable</span>
+							<span className='text-indigo-300 uppercase tracking-wider'>snapshot then idle</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-amber-950/50 bg-amber-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Fallback Cache</span>
+							<span className='text-amber-300 uppercase tracking-wider'>cached text</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-rose-950/50 bg-rose-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Destroy Recycle</span>
+							<span className='text-rose-300 uppercase tracking-wider'>no warm cache</span>
+						</div>
+					</div>
+				</div>
+
 				{/* 2. LATENCY ANALYSIS CARD */}
 				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden'>
 					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-emerald-600/5 rounded-full blur-2xl pointer-events-none' />

@@ -98,6 +98,8 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		redo: () => store.redo(),
 		canUndo: () => store.canUndo(),
 		canRedo: () => store.canRedo(),
+		getRenderStats: () => store.getRenderStats(),
+		resetRenderStats: () => store.resetRenderStats(),
 		destroy,
 	};
 

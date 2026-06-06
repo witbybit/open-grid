@@ -114,6 +114,7 @@ export class DOMPool<T extends HTMLElement> {
  * PooledRow represents a recycled row container with its cell slots.
  */
 export interface PooledRow {
+	id?: string;
 	element: HTMLDivElement;
 	leftElement?: HTMLDivElement;
 	rightElement?: HTMLDivElement;

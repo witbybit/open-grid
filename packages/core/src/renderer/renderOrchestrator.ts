@@ -23,6 +23,11 @@ export interface RenderStats {
 	focusCallsDuringScroll: number;
 	rootTextContentWritesOnPortalCells: number;
 	cellsBoundDuringScroll: number;
+	rowsVisitedDuringScroll: number;
+	rowsReboundDuringScroll: number;
+	cellsVisitedDuringScroll: number;
+	cellsWrittenDuringScroll: number;
+	portalOpsDuringScroll: number;
 	cellsDecoratedAfterScroll: number;
 	cellAccessReadsDuringScroll: number;
 	cellClassComputesDuringScroll: number;
@@ -35,7 +40,14 @@ export interface RenderStats {
 	cellsPatchedPerScrollFrame: number[];
 	rowsRecycledPerScrollFrame: number[];
 	lastInvalidationReasons: string[];
-	portalMounts?: { cells: number; rows: number; menus: number };
+	portalMounts?: { cells: number; rows: number; menus: number; custom?: any };
+	getCellValueCallsDuringScroll?: number;
+	valueGetterCallsDuringScroll?: number;
+	formulaCallsDuringScroll?: number;
+	customRendererMountsDuringScroll?: number;
+	customRendererHydrationChunks?: number;
+	customRendererWarmHits?: number;
+	customRendererWarmMisses?: number;
 }
 
 export interface RenderOrchestratorTargets {
@@ -73,6 +85,11 @@ export class RenderOrchestrator {
 		focusCallsDuringScroll: 0,
 		rootTextContentWritesOnPortalCells: 0,
 		cellsBoundDuringScroll: 0,
+		rowsVisitedDuringScroll: 0,
+		rowsReboundDuringScroll: 0,
+		cellsVisitedDuringScroll: 0,
+		cellsWrittenDuringScroll: 0,
+		portalOpsDuringScroll: 0,
 		cellsDecoratedAfterScroll: 0,
 		cellAccessReadsDuringScroll: 0,
 		cellClassComputesDuringScroll: 0,
@@ -172,6 +189,11 @@ export class RenderOrchestrator {
 		this.stats.focusCallsDuringScroll = 0;
 		this.stats.rootTextContentWritesOnPortalCells = 0;
 		this.stats.cellsBoundDuringScroll = 0;
+		this.stats.rowsVisitedDuringScroll = 0;
+		this.stats.rowsReboundDuringScroll = 0;
+		this.stats.cellsVisitedDuringScroll = 0;
+		this.stats.cellsWrittenDuringScroll = 0;
+		this.stats.portalOpsDuringScroll = 0;
 		this.stats.cellsDecoratedAfterScroll = 0;
 		this.stats.cellAccessReadsDuringScroll = 0;
 		this.stats.cellClassComputesDuringScroll = 0;
