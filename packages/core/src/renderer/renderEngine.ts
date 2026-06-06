@@ -1,4 +1,5 @@
 import { ScrollEngine } from './scrollEngine.js';
+import { sameRenderedWindow, applyRenderWindowRuntimeLimits, computeRenderWindow, type RenderWindow } from './renderWindow.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
@@ -100,6 +101,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		postScrollDecorationChunks: 0,
 		maxCellsDecoratedInOneChunk: 0,
 		cellsDecoratedAfterScroll: 0,
+		rowsEnteredDuringScroll: 0,
+		rowsExitedDuringScroll: 0,
+		rowsStayedDuringScroll: 0,
+		colsEnteredDuringScroll: 0,
+		colsExitedDuringScroll: 0,
+		colsStayedDuringScroll: 0,
+		cellsSkippedDuringScroll: 0,
+		sameWindowBailouts: 0,
+		cellsBoundDuringScroll: 0,
 	};
 
 	public get onMountCellContent(): ((mount: GridCellContentMount<TRowData>) => void) | undefined {
@@ -422,6 +432,19 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private flushScrollFrame(): void {
 		const scrollViewport = this.viewportRenderer.scrollViewport;
 		if (!scrollViewport) return;
+		this.viewportRenderer.syncViewportScrollFromDom();
+
+		const state = this.engine.stateManager.getState();
+		const nextWindow = applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits);
+
+		// Same window bailout path (Task 5)
+		if (sameRenderedWindow(this.rowRenderer.currentWindow, nextWindow)) {
+			this.renderStats.scrollFrames++;
+			this.renderStats.sameWindowBailouts = (this.renderStats.sameWindowBailouts || 0) + 1;
+			this.syncCheapScrollOnly(nextWindow);
+			return;
+		}
+
 		this.isScrollFrameActive = true;
 		this.engine.isScrollFrameActive = true;
 		this.rowRenderer.isScrollFrameActive = true;
@@ -435,9 +458,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.renderStats.scrollFrames++;
 		const startStateReads = this.engine.stateManager.debugGetStateCount;
 		try {
-			this.viewportRenderer.syncViewportScrollFromDom();
-
-			const state = this.engine.stateManager.getState();
 			const displayedColumns = this.engine.columns.getDisplayedColumns();
 			const colCount = displayedColumns.length;
 			const visibleColRange = this.engine.viewport.getVisibleColumnRange(colCount);
@@ -477,6 +497,52 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.isScrollFrameActive = false;
 			this.engine.isScrollFrameActive = false;
 			this.rowRenderer.isScrollFrameActive = false;
+		}
+	}
+
+	private syncCheapScrollOnly(window: RenderWindow): void {
+		// 1. Header scrollLeft transform
+		this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
+
+		// 2. Selection overlay transform
+		this.renderStats.overlayCheapSyncsDuringScroll++;
+		this.overlayRenderer.syncScrollPosition();
+
+		// 3. Pinned rows position update (if any)
+		const pinTopRows = window.pinTopRows;
+		const pinBottomRows = window.pinBottomRows;
+		if (pinTopRows > 0 || pinBottomRows > 0) {
+			const scrollTop = this.engine.viewport.scrollTop;
+			const viewportHeight = this.engine.viewport.viewportHeight;
+			const defaultRowHeight = this.engine.stateManager.getState().defaultRowHeight;
+			const totalHeight = this.engine.geometry.getTotalHeight(defaultRowHeight);
+
+			// Update pinned top rows
+			for (let r = 0; r < pinTopRows && r < window.rowCount; r++) {
+				const slot = this.rowRenderer.activeRows.get(r);
+				if (slot) {
+					const rowTop = this.engine.geometry.rowTops[r] + scrollTop;
+					slot.updatePosition(rowTop);
+				}
+			}
+
+			// Update pinned bottom rows
+			for (let r = window.rowCount - pinBottomRows; r < window.rowCount; r++) {
+				if (r >= pinTopRows) {
+					const slot = this.rowRenderer.activeRows.get(r);
+					if (slot) {
+						const bottomOffset = totalHeight - this.engine.geometry.rowTops[r];
+						const rowTop = scrollTop + viewportHeight - bottomOffset;
+						slot.updatePosition(rowTop);
+					}
+				}
+			}
+		}
+
+		// Update current window's scroll values
+		if (this.rowRenderer.currentWindow) {
+			this.rowRenderer.currentWindow.scrollTop = this.engine.viewport.scrollTop;
+			this.rowRenderer.currentWindow.scrollLeft = this.engine.viewport.scrollLeft;
 		}
 	}
 
@@ -677,6 +743,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			postScrollDirtyCellsDecorated: this.rowRenderer.postScrollDirtyCellsDecorated,
 			reusableCellsSkippedDuringScroll: this.renderStats.reusableCellsSkippedDuringScroll,
 			styleHookCallsDuringScroll: this.renderStats.styleHookCallsDuringScroll,
+			rowsEnteredDuringScroll: this.renderStats.rowsEnteredDuringScroll,
+			rowsExitedDuringScroll: this.renderStats.rowsExitedDuringScroll,
+			rowsStayedDuringScroll: this.renderStats.rowsStayedDuringScroll,
+			colsEnteredDuringScroll: this.renderStats.colsEnteredDuringScroll,
+			colsExitedDuringScroll: this.renderStats.colsExitedDuringScroll,
+			colsStayedDuringScroll: this.renderStats.colsStayedDuringScroll,
+			cellsSkippedDuringScroll: this.renderStats.cellsSkippedDuringScroll,
+			sameWindowBailouts: this.renderStats.sameWindowBailouts,
 			getCellValueCallsDuringScroll: this.engine.getCellValueCallsDuringScroll,
 			valueGetterCallsDuringScroll: this.engine.valueGetterCallsDuringScroll,
 			formulaCallsDuringScroll: this.engine.formulaCallsDuringScroll,
@@ -731,6 +805,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.renderStats.cellClassComputesDuringScroll = 0;
 		this.renderStats.reusableCellsSkippedDuringScroll = 0;
 		this.renderStats.styleHookCallsDuringScroll = 0;
+		this.renderStats.rowsEnteredDuringScroll = 0;
+		this.renderStats.rowsExitedDuringScroll = 0;
+		this.renderStats.rowsStayedDuringScroll = 0;
+		this.renderStats.colsEnteredDuringScroll = 0;
+		this.renderStats.colsExitedDuringScroll = 0;
+		this.renderStats.colsStayedDuringScroll = 0;
+		this.renderStats.cellsSkippedDuringScroll = 0;
+		this.renderStats.sameWindowBailouts = 0;
 		this.renderStats.postScrollDecorationChunks = 0;
 		this.renderStats.maxCellsDecoratedInOneChunk = 0;
 
@@ -1164,7 +1246,5 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (!pooledRow) return;
 
 		pooledRow.element.classList.toggle('og-row-hovered', hovered);
-		pooledRow.leftElement?.classList.toggle('og-row-hovered', hovered);
-		pooledRow.rightElement?.classList.toggle('og-row-hovered', hovered);
 	}
 }

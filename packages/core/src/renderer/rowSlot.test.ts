@@ -8,33 +8,27 @@ describe('RowSlot & CellSlot Controllers', () => {
 		const div = document.createElement('div');
 		const cell = new CellSlot(div);
 
-		// First update should write to DOM
-		const updated1 = cell.update(0, 'col1', 5, 'row-5', 'translate3d(0px, 0, 0)', '100px', 'og-cell my-class', 'text', 'hello', 'hello');
+		// First update should write to DOM (left=0, right=-1, width=100)
+		const updated1 = cell.update(0, 'col1', 5, 'row-5', 0, -1, 100, 'og-cell my-class', 'text', 'hello', 'hello');
 		expect(updated1).toBe(true);
-		expect(div.style.transform).toBe('translate3d(0px, 0, 0)');
+		expect(div.style.left).toBe('0px');
 		expect(div.style.width).toBe('100px');
 		expect(div.className).toBe('og-cell my-class');
 		expect(div.querySelector('.og-cell-content')?.textContent).toBe('hello');
 
 		// Second update with identical values should NOT write to DOM
-		const updated2 = cell.update(0, 'col1', 5, 'row-5', 'translate3d(0px, 0, 0)', '100px', 'og-cell my-class', 'text', 'hello', 'hello');
+		const updated2 = cell.update(0, 'col1', 5, 'row-5', 0, -1, 100, 'og-cell my-class', 'text', 'hello', 'hello');
 		expect(updated2).toBe(false);
 	});
 
 	it('should prevent redundant DOM writes on RowSlot if layout values match', () => {
-		const center = document.createElement('div');
-		const left = document.createElement('div');
-		const right = document.createElement('div');
-		const row = new RowSlot('row-1', center, left, right);
+		const div = document.createElement('div');
+		const row = new RowSlot('row-1', div);
 
 		const updated1 = row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');
 		expect(updated1).toBe(true);
-		expect(center.style.transform).toBe('translate3d(0, 80px, 0)');
-		expect(center.style.height).toBe('40px');
-		expect(left.style.transform).toBe('translate3d(0, 80px, 0)');
-		expect(left.style.height).toBe('40px');
-		expect(right.style.transform).toBe('translate3d(0, 80px, 0)');
-		expect(right.style.height).toBe('40px');
+		expect(div.style.top).toBe('80px');
+		expect(div.style.height).toBe('40px');
 
 		const updated2 = row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');
 		expect(updated2).toBe(false);

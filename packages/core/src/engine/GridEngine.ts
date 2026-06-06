@@ -46,6 +46,11 @@ export class GridEngine<TRowData = unknown> {
 
 	private rowModel: RowModel<TRowData> | null = null;
 
+	// Monotonic change tracking versions
+	public geometryVersion = 0;
+	public rowModelVersion = 0;
+	public columnVersion = 0;
+
 	// Scrolling states
 	public isScrolling = false;
 	public isScrollFrameActive = false;
@@ -117,10 +122,11 @@ export class GridEngine<TRowData = unknown> {
 			detailRenderer: config.detailRenderer,
 			rowModelConfig: config.rowModelConfig,
 			expansion: config.expansion ?? { groups: {}, treeRows: {}, details: {} },
-			rowBuffer: config.rowBuffer ?? 12,
+			rowBuffer: config.rowBuffer ?? 10,
 			colBuffer: config.colBuffer ?? 1,
 			rowRecyclingStrategy: config.rowRecyclingStrategy ?? 'index-pool',
 			runtimeLimits: config.runtimeLimits,
+			overscan: config.overscan,
 		};
 
 		// Construct StateManager with coordinate state update bridging
@@ -321,6 +327,8 @@ export class GridEngine<TRowData = unknown> {
 
 	public registerRowModel(rowModel: RowModel<TRowData>): void {
 		this.rowModel = rowModel;
+		this.rowModelVersion++;
+		this.geometryVersion++;
 		// Refresh coordinates
 		const state = this.stateManager.getState();
 		this.geometry.updateRows(this.getRowHeightsList(rowModel, state.rowHeights, state.defaultRowHeight), state.defaultRowHeight);
@@ -669,10 +677,16 @@ export class GridEngine<TRowData = unknown> {
 		// Synchronize sub-models
 		if (updatedSet.has('columns') || updatedSet.has('columnWidths') || updatedSet.has('defaultColWidth')) {
 			this.columns.updateColumns(currState.columns, currState.columnWidths, currState.defaultColWidth);
+			this.columnVersion++;
+			this.geometryVersion++;
 		}
 
 		if (updatedSet.has('dataVersion')) {
 			this.data.clearValueGetterCache();
+		}
+
+		if (updatedSet.has('dataVersion') || updatedSet.has('sortModel') || updatedSet.has('filterModel')) {
+			this.rowModelVersion++;
 		}
 
 		const rowCountChanged = this.rowModel ? this.rowModel.getVisualRowCount() !== this.geometry.getRowCount() : false;
@@ -688,6 +702,7 @@ export class GridEngine<TRowData = unknown> {
 				this.getRowHeightsList(this.rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight
 			);
+			this.geometryVersion++;
 		}
 
 		if (updatedSet.has('selection') || updatedSet.has('columns') || updatedSet.has('dataVersion')) {

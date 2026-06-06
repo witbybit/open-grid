@@ -38,4 +38,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
 	};
+	overscan?: {
+		mode?: 'adaptive' | 'none';
+	};
 }

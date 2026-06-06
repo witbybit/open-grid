@@ -184,7 +184,7 @@ export class PortalMountManager<TRowData = unknown> {
 			this.pendingCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
 			return;
 		}
-		this.releaseCellReal(unmount.cellKey, 'destroyed', unmount);
+		this.releaseCellReal(unmount.cellKey, unmount.reason ?? 'destroyed', unmount);
 	}
 
 	public releaseCellForScroll(unmount: GridCellContentUnmount): void {
@@ -223,7 +223,7 @@ export class PortalMountManager<TRowData = unknown> {
 				this.deferredCellReleases.set(unmount.cellKey, { ...unmount, flushSync: false });
 				continue;
 			}
-			this.releaseCellReal(unmount.cellKey, 'destroyed', unmount);
+			this.releaseCellReal(unmount.cellKey, unmount.reason ?? 'destroyed', unmount);
 		}
 		if (flushSync) {
 			if (this.scrolling) {

@@ -533,6 +533,9 @@ export interface GridState<TRowData = unknown> {
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
 	};
+	overscan?: {
+		mode?: 'adaptive' | 'none';
+	};
 }
 
 export interface GridCellRangeBounds {
@@ -708,6 +711,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			colBuffer: initialState.colBuffer,
 			rowRecyclingStrategy: initialState.rowRecyclingStrategy,
 			runtimeLimits: initialState.runtimeLimits,
+			overscan: initialState.overscan,
 		});
 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
@@ -1347,6 +1351,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			postScrollDirtyCellsDecorated: 0,
 			reusableCellsSkippedDuringScroll: 0,
 			styleHookCallsDuringScroll: 0,
+			rowsEnteredDuringScroll: 0,
+			rowsExitedDuringScroll: 0,
+			rowsStayedDuringScroll: 0,
+			colsEnteredDuringScroll: 0,
+			colsExitedDuringScroll: 0,
+			colsStayedDuringScroll: 0,
+			cellsSkippedDuringScroll: 0,
+			sameWindowBailouts: 0,
 			hotDomReleases: 0,
 			coldDomReleases: 0,
 			cellsPatchedPerScrollFrame: [],

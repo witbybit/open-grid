@@ -110,14 +110,16 @@ export class ViewportModel<TRowData = unknown> {
 
 		// Predictive overscan
 		const state = this.engine.stateManager.getState();
-		const rowBuffer = state.rowBuffer ?? this.baseOverscanRows;
+		const rowBuffer = state.rowBuffer ?? 10;
 		let overscanTop = rowBuffer;
 		let overscanBottom = rowBuffer;
 
-		if (this.velocityY > 0.2) {
-			overscanBottom += Math.min(25, Math.floor(this.velocityY * 15));
-		} else if (this.velocityY < -0.2) {
-			overscanTop += Math.min(25, Math.floor(Math.abs(this.velocityY) * 15));
+		if (state.overscan?.mode === 'adaptive') {
+			if (this.velocityY > 0.2) {
+				overscanBottom += Math.min(25, Math.floor(this.velocityY * 15));
+			} else if (this.velocityY < -0.2) {
+				overscanTop += Math.min(25, Math.floor(Math.abs(this.velocityY) * 15));
+			}
 		}
 
 		const runtimeMaxRows = state.runtimeLimits?.suppressRenderedRangeLimit ? undefined : state.runtimeLimits?.maxRenderedRows;
@@ -168,13 +170,17 @@ export class ViewportModel<TRowData = unknown> {
 		const activeEndIdx = this.engine.geometry.getColIndexAtOffset(visibleRight);
 
 		// Predictive overscan
-		let overscanLeft = this.baseOverscanCols;
-		let overscanRight = this.baseOverscanCols;
+		const state = this.engine.stateManager.getState();
+		const colBuffer = state.colBuffer ?? 1;
+		let overscanLeft = colBuffer;
+		let overscanRight = colBuffer;
 
-		if (this.velocityX > 0.2) {
-			overscanRight += Math.min(15, Math.floor(this.velocityX * 10));
-		} else if (this.velocityX < -0.2) {
-			overscanLeft += Math.min(15, Math.floor(Math.abs(this.velocityX) * 10));
+		if (state.overscan?.mode === 'adaptive') {
+			if (this.velocityX > 0.2) {
+				overscanRight += Math.min(15, Math.floor(this.velocityX * 10));
+			} else if (this.velocityX < -0.2) {
+				overscanLeft += Math.min(15, Math.floor(Math.abs(this.velocityX) * 10));
+			}
 		}
 
 		const startIdx = Math.max(this.pinLeftColumns, activeStartIdx - overscanLeft);

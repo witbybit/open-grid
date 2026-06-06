@@ -2,6 +2,7 @@ import type { InvalidationFrame } from './invalidationManager.js';
 
 export interface RenderStats {
 	fullPaints: number;
+	runtimeLimitsClamped?: number;
 	rowPaints: number;
 	cellPaints: number;
 	headerPaints: number;
@@ -29,6 +30,14 @@ export interface RenderStats {
 	cellsWrittenDuringScroll: number;
 	portalOpsDuringScroll: number;
 	cellsDecoratedAfterScroll: number;
+	rowsEnteredDuringScroll: number;
+	rowsExitedDuringScroll: number;
+	rowsStayedDuringScroll: number;
+	colsEnteredDuringScroll: number;
+	colsExitedDuringScroll: number;
+	colsStayedDuringScroll: number;
+	cellsSkippedDuringScroll: number;
+	sameWindowBailouts: number;
 	cellAccessReadsDuringScroll: number;
 	cellClassComputesDuringScroll: number;
 	dirtyCellsMarkedDuringScroll: number;
@@ -64,6 +73,7 @@ export class RenderOrchestrator {
 	private readonly targets: RenderOrchestratorTargets;
 	private readonly stats: RenderStats = {
 		fullPaints: 0,
+		runtimeLimitsClamped: 0,
 		rowPaints: 0,
 		cellPaints: 0,
 		headerPaints: 0,
@@ -91,6 +101,14 @@ export class RenderOrchestrator {
 		cellsWrittenDuringScroll: 0,
 		portalOpsDuringScroll: 0,
 		cellsDecoratedAfterScroll: 0,
+		rowsEnteredDuringScroll: 0,
+		rowsExitedDuringScroll: 0,
+		rowsStayedDuringScroll: 0,
+		colsEnteredDuringScroll: 0,
+		colsExitedDuringScroll: 0,
+		colsStayedDuringScroll: 0,
+		cellsSkippedDuringScroll: 0,
+		sameWindowBailouts: 0,
 		cellAccessReadsDuringScroll: 0,
 		cellClassComputesDuringScroll: 0,
 		dirtyCellsMarkedDuringScroll: 0,
@@ -195,6 +213,14 @@ export class RenderOrchestrator {
 		this.stats.cellsWrittenDuringScroll = 0;
 		this.stats.portalOpsDuringScroll = 0;
 		this.stats.cellsDecoratedAfterScroll = 0;
+		this.stats.rowsEnteredDuringScroll = 0;
+		this.stats.rowsExitedDuringScroll = 0;
+		this.stats.rowsStayedDuringScroll = 0;
+		this.stats.colsEnteredDuringScroll = 0;
+		this.stats.colsExitedDuringScroll = 0;
+		this.stats.colsStayedDuringScroll = 0;
+		this.stats.cellsSkippedDuringScroll = 0;
+		this.stats.sameWindowBailouts = 0;
 		this.stats.cellAccessReadsDuringScroll = 0;
 		this.stats.cellClassComputesDuringScroll = 0;
 		this.stats.dirtyCellsMarkedDuringScroll = 0;

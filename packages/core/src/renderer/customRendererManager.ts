@@ -345,11 +345,14 @@ export class CustomRendererManager<TRowData = unknown> {
 	}
 
 	private destroyInstance(instance: RendererInstance<TRowData>): void {
-		this.onUnmountCellContent?.({
-			cellKey: instance.cellKey,
-			container: instance.container,
-			flushSync: false,
-		});
+		const activeInstance = this.activeRenderersByCellKey.get(instance.cellKey);
+		if (activeInstance === undefined || activeInstance === instance) {
+			this.onUnmountCellContent?.({
+				cellKey: instance.cellKey,
+				container: instance.container,
+				flushSync: false,
+			});
+		}
 		delete instance.container.dataset.rendererKey;
 		delete instance.container.dataset.cellKey;
 		instance.container.remove();

@@ -3,7 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
-import { diffRenderWindow, getColIndices, getRowIndices, type RenderWindow } from './renderWindow.js';
+import {
+	diffRenderWindow,
+	getColIndices,
+	getRowIndices,
+	type RenderWindow,
+	sameRenderedWindow,
+	computeRenderWindow,
+	applyRenderWindowRuntimeLimits,
+} from './renderWindow.js';
 
 interface RuntimePerfRow {
 	id: string;
@@ -321,6 +329,86 @@ describe('Runtime Performance & Granular Versioning', () => {
 			}
 			expect(row.querySelectorAll(':scope > .og-custom-renderer-container')).toHaveLength(0);
 		}
+
+		cleanupGrid(grid);
+	});
+
+	it('should verify direct contiguous range math in diffRenderWindow (Task 2)', () => {
+		const base: RenderWindow = {
+			rowStart: 2,
+			rowEnd: 8,
+			colStart: 1,
+			colEnd: 4,
+			pinLeftCols: 1,
+			pinRightCols: 1,
+			pinTopRows: 1,
+			pinBottomRows: 1,
+			rowCount: 20,
+			colCount: 10,
+			scrollTop: 100,
+			scrollLeft: 50,
+			viewportWidth: 500,
+			viewportHeight: 400,
+		};
+
+		// Scroll down one row:
+		const scrollDown = { ...base, rowStart: 3, rowEnd: 9, scrollTop: 140 };
+		const dDown = diffRenderWindow(base, scrollDown);
+		expect(dDown.rowsEntered).toEqual([9]);
+		expect(dDown.rowsExited).toEqual([2]);
+		expect(dDown.rowsStayed).toEqual([0, 3, 4, 5, 6, 7, 8, 19]);
+
+		// Scroll up one row:
+		const scrollUp = { ...base, rowStart: 1, rowEnd: 7, scrollTop: 60 };
+		const dUp = diffRenderWindow(base, scrollUp);
+		expect(dUp.rowsEntered).toEqual([1]);
+		expect(dUp.rowsExited).toEqual([8]);
+
+		// Horizontal scroll one column:
+		const scrollCol = { ...base, colStart: 2, colEnd: 5, scrollLeft: 150 };
+		const dCol = diffRenderWindow(base, scrollCol);
+		expect(dCol.colsEntered).toEqual([5]);
+		expect(dCol.colsExited).toEqual([1]);
+	});
+
+	it('should verify sameRenderedWindow ignores scrollTop/scrollLeft and sameWindowBailouts works (Task 1, 4, 5)', () => {
+		const grid = createWideGrid({ rows: 1000, cols: 100 });
+
+		// Establish initial window
+		(grid.renderer as any).flushScrollFrame();
+		grid.renderer.resetRenderStats();
+
+		const scrollViewport = grid.renderer.viewportRenderer.scrollViewport!;
+		Object.defineProperty(scrollViewport, 'scrollTop', { value: 5, writable: true, configurable: true });
+		Object.defineProperty(scrollViewport, 'scrollLeft', { value: 5, writable: true, configurable: true });
+
+		// Trigger scrolling frame where window stays same
+		(grid.renderer as any).flushScrollFrame();
+
+		const stats = grid.renderer.getRenderStats();
+		expect(stats.sameWindowBailouts).toBe(1);
+
+		cleanupGrid(grid);
+	});
+
+	it('should verify delta stats for rows/cols entered/exited/stayed/skipped (Task 4)', () => {
+		const grid = createWideGrid({ rows: 100, cols: 10 });
+
+		// Establish initial window
+		(grid.renderer as any).flushScrollFrame();
+		grid.renderer.resetRenderStats();
+
+		const scrollViewport = grid.renderer.viewportRenderer.scrollViewport!;
+		Object.defineProperty(scrollViewport, 'scrollTop', { value: 80, writable: true, configurable: true });
+		Object.defineProperty(scrollViewport, 'scrollLeft', { value: 0, writable: true, configurable: true });
+
+		// Trigger scroll frame
+		(grid.renderer as any).flushScrollFrame();
+
+		const stats = grid.renderer.getRenderStats();
+		expect(stats.rowsEnteredDuringScroll).toBeGreaterThanOrEqual(1);
+		expect(stats.rowsExitedDuringScroll).toBeGreaterThanOrEqual(1);
+		expect(stats.cellsSkippedDuringScroll).toBeGreaterThan(0);
 
 		cleanupGrid(grid);
 	});

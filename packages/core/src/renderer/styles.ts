@@ -78,6 +78,10 @@ export const CORE_STYLES = `
     box-sizing: border-box;
   }
 
+  /*
+   * Scroll viewport — single overflow container for both axes.
+   * No CSS Grid: rows live in og-rows-container (block flow after the sticky header).
+   */
   .og-scroll-viewport {
     position: absolute;
     top: 0;
@@ -85,81 +89,70 @@ export const CORE_STYLES = `
     right: 0;
     bottom: 0;
     overflow: auto;
-    contain: strict;
-    will-change: transform;
     z-index: 10;
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
   }
 
-  .og-scroll-spacer {
-    grid-area: 1 / 1 / 2 / 2;
-    pointer-events: none;
-  }
-
-  .og-layer-center {
-    grid-area: 1 / 1 / 2 / 2;
-    pointer-events: auto;
-    z-index: 10;
-    margin-top: 40px;
-  }
-
-  .og-layer-left {
-    grid-area: 1 / 1 / 2 / 2;
-    position: sticky;
-    left: 0;
-    z-index: 15;
-    pointer-events: auto;
-    margin-top: 40px;
-  }
-
-  .og-layer-right {
-    grid-area: 1 / 1 / 2 / 2;
-    position: sticky;
-    right: 0;
-    justify-self: end;
-    z-index: 15;
-    pointer-events: auto;
-    margin-top: 40px;
-  }
-
-  .og-layer-header {
-    grid-area: 1 / 1 / 2 / 2;
+  /*
+   * Header wrapper — sticky at the top of the scroll viewport.
+   * Three absolutely-positioned child layers overlap inside it (center, left-pin, right-pin).
+   */
+  .og-layer-header-wrapper {
     position: sticky;
     top: 0;
     height: 40px;
     z-index: 30;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .og-layer-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
     background-color: var(--og-header-bg);
   }
 
   .og-layer-header-left {
-    grid-area: 1 / 1 / 2 / 2;
-    position: sticky;
+    position: absolute;
     top: 0;
     left: 0;
-    height: 40px;
-    z-index: 35;
+    height: 100%;
+    z-index: 5;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
     background-color: var(--og-header-bg);
   }
 
   .og-layer-header-right {
-    grid-area: 1 / 1 / 2 / 2;
-    position: sticky;
+    position: absolute;
     top: 0;
     right: 0;
-    justify-self: end;
-    height: 40px;
-    z-index: 35;
+    height: 100%;
+    z-index: 5;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
     background-color: var(--og-header-bg);
   }
 
+  /*
+   * Rows container — one compositor layer for all rows.
+   * Rows are absolutely positioned inside; will-change here (not per-row) means
+   * all rows share a single GPU texture instead of N individual layers.
+   */
+  .og-rows-container {
+    position: relative;
+    will-change: transform;
+    pointer-events: auto;
+  }
+
+  /*
+   * Overlay — absolute, outside the scroll container so selection/focus rings
+   * render over content without being clipped by overflow:auto.
+   */
   .og-layer-overlay {
     position: absolute;
     top: 40px;
@@ -171,12 +164,17 @@ export const CORE_STYLES = `
     overflow: hidden;
   }
 
+  /*
+   * Row — absolutely positioned inside og-rows-container via style.top (integer).
+   * No will-change (compositor layer is on the container, not each row).
+   * No contain:layout so that position:sticky on pinned cells propagates
+   * correctly to the scroll viewport.
+   */
   .og-row {
     position: absolute;
     left: 0;
-    width: 100%;
-    contain: layout style;
-    will-change: transform;
+    right: 0;
+    contain: style;
     border-bottom: 1px solid var(--og-border-color);
     background-color: var(--og-bg-color);
     box-sizing: border-box;
@@ -218,11 +216,16 @@ export const CORE_STYLES = `
     border-top: 2px solid var(--og-border-color) !important;
   }
 
+  /*
+   * Cells are absolutely positioned (left/width set by JS).
+   * Pin-left / pin-right cells override position to sticky and inherit the
+   * row background so they visually cover scrolling center cells.
+   */
   .og-cell {
     position: absolute;
     top: 0;
     height: 100%;
-    contain: layout style;
+    contain: style;
     box-sizing: border-box;
     padding: 0 12px;
     display: flex;
@@ -231,6 +234,18 @@ export const CORE_STYLES = `
     text-overflow: ellipsis;
     white-space: nowrap;
     border-right: 1px solid var(--og-cell-border);
+  }
+
+  .og-cell-pin-left {
+    position: sticky;
+    z-index: 3;
+    background-color: inherit;
+  }
+
+  .og-cell-pin-right {
+    position: sticky;
+    z-index: 3;
+    background-color: inherit;
   }
 
   .og-cell-content {

@@ -4,7 +4,6 @@ export class CellSlot<TRowData = unknown> {
 	public readonly element: HTMLDivElement;
 	public readonly contentElement: HTMLDivElement;
 	public readonly portalHostElement: HTMLDivElement;
-	public skeleton: HTMLElement | null = null;
 
 	// Position
 	public colIndex = -1;
@@ -12,11 +11,12 @@ export class CellSlot<TRowData = unknown> {
 	public rowIndex = -1;
 	public rowId = '';
 
-	// Cached DOM states
+	// Cached DOM states — integers are faster to compare than strings
 	public lastRawValue: unknown = undefined;
 	public lastFormattedValue: string | undefined = undefined;
-	public lastTransform = '';
-	public lastWidth = '';
+	public lastLeft = -1; // absolute left px for center and pin-left cells
+	public lastRight = -1; // distance-from-right px for pin-right cells (-1 = not set)
+	public lastWidth = -1; // column width px
 	public lastClassName = '';
 	public lastContentMode: CellContentMode = 'empty';
 	public lastPortalKey: string | undefined = undefined;
@@ -51,8 +51,9 @@ export class CellSlot<TRowData = unknown> {
 	public reset(): void {
 		this.lastRawValue = undefined;
 		this.lastFormattedValue = undefined;
-		this.lastTransform = '';
-		this.lastWidth = '';
+		this.lastLeft = -1;
+		this.lastRight = -1;
+		this.lastWidth = -1;
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
@@ -60,22 +61,24 @@ export class CellSlot<TRowData = unknown> {
 		this.colField = '';
 		this.rowIndex = -1;
 		this.rowId = '';
-		if (this.skeleton) {
-			this.skeleton.remove();
-			this.skeleton = null;
-		}
 	}
 
 	/**
 	 * Binds the cell slot to new parameters. Prevents DOM writes if values match.
+	 *
+	 * Center and pin-left cells: pass right = -1, left = column's absolute left offset.
+	 * Pin-right cells: pass left = -1, right = (totalWidth - colLeft - colWidth).
+	 * The CSS class (og-cell-pin-left / og-cell-pin-right) enables sticky positioning;
+	 * JS only provides the numeric offset.
 	 */
 	public update(
 		colIndex: number,
 		colField: string,
 		rowIndex: number,
 		rowId: string,
-		transform: string,
-		width: string,
+		left: number,
+		right: number,
+		width: number,
 		className: string,
 		contentMode: CellContentMode,
 		rawValue: unknown,
@@ -84,10 +87,7 @@ export class CellSlot<TRowData = unknown> {
 	): boolean {
 		let domUpdated = false;
 
-		// 1. Position update
-		if (this.colIndex !== colIndex) {
-			this.colIndex = colIndex;
-		}
+		if (this.colIndex !== colIndex) this.colIndex = colIndex;
 		if (this.colField !== colField) {
 			this.colField = colField;
 			if (this.element.dataset.colField !== colField) {
@@ -97,9 +97,9 @@ export class CellSlot<TRowData = unknown> {
 		}
 		if (this.rowIndex !== rowIndex) {
 			this.rowIndex = rowIndex;
-			const rowIndexText = String(rowIndex);
-			if (this.element.dataset.rowIndex !== rowIndexText) {
-				this.element.dataset.rowIndex = rowIndexText;
+			const s = String(rowIndex);
+			if (this.element.dataset.rowIndex !== s) {
+				this.element.dataset.rowIndex = s;
 				domUpdated = true;
 			}
 		}
@@ -111,35 +111,47 @@ export class CellSlot<TRowData = unknown> {
 			}
 		}
 
-		// 2. Transform (translate3d)
-		if (this.lastTransform !== transform) {
-			this.lastTransform = transform;
-			this.element.style.transform = transform;
-			domUpdated = true;
+		// Position — one DOM write per changed axis, pin-right uses right, others use left
+		if (right >= 0) {
+			if (this.lastRight !== right) {
+				this.lastRight = right;
+				this.element.style.right = `${right}px`;
+				domUpdated = true;
+			}
+			if (this.lastLeft !== -1) {
+				this.lastLeft = -1;
+				this.element.style.left = '';
+			}
+		} else {
+			if (this.lastLeft !== left) {
+				this.lastLeft = left;
+				this.element.style.left = `${left}px`;
+				domUpdated = true;
+			}
+			if (this.lastRight !== -1) {
+				this.lastRight = -1;
+				this.element.style.right = '';
+			}
 		}
 
-		// 3. Width
 		if (this.lastWidth !== width) {
 			this.lastWidth = width;
-			this.element.style.width = width;
+			this.element.style.width = `${width}px`;
 			domUpdated = true;
 		}
 
-		// 4. ClassName
 		if (this.lastClassName !== className) {
 			this.lastClassName = className;
 			this.element.className = className;
 			domUpdated = true;
 		}
 
-		// 5. Content Mode
 		if (this.lastContentMode !== contentMode) {
 			this.lastContentMode = contentMode;
 			this.element.dataset.contentMode = contentMode;
 			domUpdated = true;
 		}
 
-		// 6. Portal key datasets
 		if (this.lastPortalKey !== portalKey) {
 			this.lastPortalKey = portalKey;
 			if (portalKey) {
@@ -150,7 +162,6 @@ export class CellSlot<TRowData = unknown> {
 			domUpdated = true;
 		}
 
-		// 7. Value update
 		this.lastRawValue = rawValue;
 
 		if (contentMode === 'text' || contentMode === 'fallback') {
@@ -161,15 +172,7 @@ export class CellSlot<TRowData = unknown> {
 					domUpdated = true;
 				}
 			}
-		} else if (contentMode === 'empty' || contentMode === 'portal' || contentMode === 'pending') {
-			if (this.lastFormattedValue !== '') {
-				this.lastFormattedValue = '';
-				if (this.contentElement.textContent !== '') {
-					this.contentElement.textContent = '';
-					domUpdated = true;
-				}
-			}
-		} else if (contentMode === 'loading') {
+		} else {
 			if (this.lastFormattedValue !== '') {
 				this.lastFormattedValue = '';
 				if (this.contentElement.textContent !== '') {
@@ -182,11 +185,23 @@ export class CellSlot<TRowData = unknown> {
 		return domUpdated;
 	}
 
-	public unbind(): void {
+	public unbindHot(): void {
+		this.colIndex = -1;
+		this.colField = '';
+		this.rowIndex = -1;
+		this.rowId = '';
+		this.lastRawValue = undefined;
+		this.lastPortalKey = undefined;
+		delete this.element.dataset.cellKey;
+		delete this.element.dataset.contentMode;
+	}
+
+	public unbindCold(): void {
 		this.lastRawValue = undefined;
 		this.lastFormattedValue = undefined;
-		this.lastTransform = '';
-		this.lastWidth = '';
+		this.lastLeft = -1;
+		this.lastRight = -1;
+		this.lastWidth = -1;
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
@@ -194,12 +209,7 @@ export class CellSlot<TRowData = unknown> {
 		this.colField = '';
 		this.rowIndex = -1;
 		this.rowId = '';
-		if (this.skeleton) {
-			this.skeleton.remove();
-			this.skeleton = null;
-		}
 
-		// Sanitise DOM elements
 		this.contentElement.textContent = '';
 		this.element.className = '';
 		this.element.removeAttribute('style');

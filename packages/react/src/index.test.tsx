@@ -953,15 +953,15 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			expect(screen.getByTestId('detail-p4')).toBeTruthy();
 		});
 
-		const rows = Array.from(container.querySelectorAll('.og-layer-center > .og-row')) as HTMLElement[];
-		expect(rows.map((row) => [row.dataset.rowId, row.style.height, row.style.transform])).toEqual([
-			['row:p1', '40px', 'translate3d(0, 0px, 0)'],
-			['detail:p1', '120px', 'translate3d(0, 40px, 0)'],
-			['row:p2', '40px', 'translate3d(0, 160px, 0)'],
-			['detail:p2', '120px', 'translate3d(0, 200px, 0)'],
-			['row:p3', '40px', 'translate3d(0, 320px, 0)'],
-			['row:p4', '40px', 'translate3d(0, 360px, 0)'],
-			['detail:p4', '120px', 'translate3d(0, 400px, 0)'],
+		const rows = Array.from(container.querySelectorAll('.og-rows-container > .og-row')) as HTMLElement[];
+		expect(rows.map((row) => [row.dataset.rowId, row.style.height, row.style.top])).toEqual([
+			['row:p1', '40px', '0px'],
+			['detail:p1', '120px', '40px'],
+			['row:p2', '40px', '160px'],
+			['detail:p2', '120px', '200px'],
+			['row:p3', '40px', '320px'],
+			['row:p4', '40px', '360px'],
+			['detail:p4', '120px', '400px'],
 		]);
 
 		unmount();

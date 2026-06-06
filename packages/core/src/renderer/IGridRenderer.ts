@@ -20,6 +20,7 @@ export interface GridCellContentUnmount {
 	cellKey: string;
 	container?: HTMLElement;
 	flushSync?: boolean;
+	reason?: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated';
 }
 
 export interface GridCellContentFlush {

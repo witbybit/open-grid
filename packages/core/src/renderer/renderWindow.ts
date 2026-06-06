@@ -15,6 +15,9 @@ export interface RenderWindow {
 	scrollLeft: number;
 	viewportWidth: number;
 	viewportHeight: number;
+	geometryVersion?: number;
+	rowModelVersion?: number;
+	columnVersion?: number;
 }
 
 export interface ViewportDelta {
@@ -25,6 +28,25 @@ export interface ViewportDelta {
 	colsExited: number[];
 	colsStayed: number[];
 	hasChanges: boolean;
+}
+
+export function sameRenderedWindow(a: RenderWindow | null, b: RenderWindow | null): boolean {
+	if (!a || !b) return false;
+	return (
+		a.rowStart === b.rowStart &&
+		a.rowEnd === b.rowEnd &&
+		a.colStart === b.colStart &&
+		a.colEnd === b.colEnd &&
+		a.pinLeftCols === b.pinLeftCols &&
+		a.pinRightCols === b.pinRightCols &&
+		a.pinTopRows === b.pinTopRows &&
+		a.pinBottomRows === b.pinBottomRows &&
+		a.rowCount === b.rowCount &&
+		a.colCount === b.colCount &&
+		(a.geometryVersion ?? 0) === (b.geometryVersion ?? 0) &&
+		(a.rowModelVersion ?? 0) === (b.rowModelVersion ?? 0) &&
+		(a.columnVersion ?? 0) === (b.columnVersion ?? 0)
+	);
 }
 
 export interface RenderWindowRuntimeLimits {
@@ -83,10 +105,18 @@ export function getColIndices(w: RenderWindow): number[] {
 	return Array.from(new Set(indices)); // Deduplicate
 }
 
-export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: RenderWindowRuntimeLimits): RenderWindow {
-	if (!limits || limits.suppressRenderedRangeLimit) return window;
+export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: RenderWindowRuntimeLimits, onClamp?: () => void): RenderWindow {
+	const effectiveLimits = {
+		maxRenderedRows: 500,
+		maxRenderedCells: 20000,
+		suppressRenderedRangeLimit: false,
+		...limits,
+	};
+
+	if (effectiveLimits.suppressRenderedRangeLimit) return window;
 
 	const next = { ...window };
+	let clamped = false;
 
 	const pinTopRows = countPinnedLeading(next.pinTopRows, next.rowCount);
 	const pinBottomRows = countPinnedTrailing(next.pinBottomRows, next.rowCount, pinTopRows);
@@ -97,10 +127,14 @@ export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: Re
 		next.rowStart = Math.max(centerRowMin, Math.min(next.rowStart, centerRowMax));
 		next.rowEnd = Math.max(next.rowStart, Math.min(next.rowEnd, centerRowMax));
 
-		if (limits.maxRenderedRows && limits.maxRenderedRows > 0) {
+		if (effectiveLimits.maxRenderedRows && effectiveLimits.maxRenderedRows > 0) {
 			const pinnedRows = pinTopRows + pinBottomRows;
-			const centerBudget = Math.max(1, limits.maxRenderedRows - pinnedRows);
-			next.rowEnd = Math.max(next.rowStart, Math.min(next.rowEnd, next.rowStart + centerBudget - 1));
+			const centerBudget = Math.max(1, effectiveLimits.maxRenderedRows - pinnedRows);
+			const expectedRowEnd = Math.max(next.rowStart, Math.min(next.rowEnd, next.rowStart + centerBudget - 1));
+			if (expectedRowEnd < next.rowEnd) {
+				next.rowEnd = expectedRowEnd;
+				clamped = true;
+			}
 		}
 	} else {
 		next.rowStart = 0;
@@ -116,16 +150,31 @@ export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: Re
 		next.colStart = Math.max(centerColMin, Math.min(next.colStart, centerColMax));
 		next.colEnd = Math.max(next.colStart, Math.min(next.colEnd, centerColMax));
 
-		if (limits.maxRenderedCells && limits.maxRenderedCells > 0) {
+		if (effectiveLimits.maxRenderedCells && effectiveLimits.maxRenderedCells > 0) {
 			const renderedRows = Math.max(1, getRowIndices(next).length);
 			const pinnedCols = pinLeftCols + pinRightCols;
-			const totalColsBudget = Math.max(1, Math.floor(limits.maxRenderedCells / renderedRows));
+			const totalColsBudget = Math.max(1, Math.floor(effectiveLimits.maxRenderedCells / renderedRows));
 			const centerBudget = Math.max(1, totalColsBudget - pinnedCols);
-			next.colEnd = Math.max(next.colStart, Math.min(next.colEnd, next.colStart + centerBudget - 1));
+			const expectedColEnd = Math.max(next.colStart, Math.min(next.colEnd, next.colStart + centerBudget - 1));
+			if (expectedColEnd < next.colEnd) {
+				next.colEnd = expectedColEnd;
+				clamped = true;
+			}
 		}
 	} else {
 		next.colStart = 0;
 		next.colEnd = 0;
+	}
+
+	if (clamped) {
+		if (typeof (globalThis as any).process === 'undefined' || (globalThis as any).process?.env?.NODE_ENV !== 'production') {
+			console.warn(
+				`[OpenGrid] Render limits exceeded. Clamped rendering window: rows=${getRowIndices(next).length}/${getRowIndices(window).length}, cells=${getRowIndices(next).length * getColIndices(next).length}/${getRowIndices(window).length * getColIndices(window).length}.`
+			);
+		}
+		if (onClamp) {
+			onClamp();
+		}
 	}
 
 	return next;
@@ -163,6 +212,9 @@ export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): Ren
 		scrollLeft: engine.viewport.scrollLeft,
 		viewportWidth: engine.viewport.viewportWidth,
 		viewportHeight: engine.viewport.viewportHeight,
+		geometryVersion: (engine as any).geometryVersion ?? 0,
+		rowModelVersion: (engine as any).rowModelVersion ?? 0,
+		columnVersion: (engine as any).columnVersion ?? 0,
 	};
 }
 
@@ -178,6 +230,179 @@ export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow):
 			colsExited: [],
 			colsStayed: nextCols,
 			hasChanges: true,
+		};
+	}
+
+	// Fast path: contiguous center ranges when geometry and pinned lanes are unchanged
+	if (
+		prev.pinTopRows === next.pinTopRows &&
+		prev.pinBottomRows === next.pinBottomRows &&
+		prev.rowCount === next.rowCount &&
+		prev.pinLeftCols === next.pinLeftCols &&
+		prev.pinRightCols === next.pinRightCols &&
+		prev.colCount === next.colCount
+	) {
+		const rowsEntered: number[] = [];
+		const rowsExited: number[] = [];
+		const rowsStayed: number[] = [];
+
+		const pinTop = next.pinTopRows;
+		const pinBottom = next.pinBottomRows;
+		const rowCount = next.rowCount;
+
+		// Pinned top
+		for (let r = 0; r < pinTop && r < rowCount; r++) {
+			rowsStayed.push(r);
+		}
+
+		// Center scrollable rows bounds
+		const prevStart = Math.max(pinTop, prev.rowStart);
+		const prevEnd = Math.min(rowCount - 1 - pinBottom, prev.rowEnd);
+		const nextStart = Math.max(pinTop, next.rowStart);
+		const nextEnd = Math.min(rowCount - 1 - pinBottom, next.rowEnd);
+
+		if (prevStart <= prevEnd && nextStart <= nextEnd) {
+			const stayedStart = Math.max(prevStart, nextStart);
+			const stayedEnd = Math.min(prevEnd, nextEnd);
+
+			if (stayedStart <= stayedEnd) {
+				for (let r = stayedStart; r <= stayedEnd; r++) {
+					rowsStayed.push(r);
+				}
+				if (nextStart < prevStart) {
+					for (let r = nextStart; r < prevStart; r++) {
+						rowsEntered.push(r);
+					}
+				}
+				if (nextEnd > prevEnd) {
+					for (let r = prevEnd + 1; r <= nextEnd; r++) {
+						rowsEntered.push(r);
+					}
+				}
+				if (nextStart > prevStart) {
+					for (let r = prevStart; r < nextStart; r++) {
+						rowsExited.push(r);
+					}
+				}
+				if (nextEnd < prevEnd) {
+					for (let r = nextEnd + 1; r <= prevEnd; r++) {
+						rowsExited.push(r);
+					}
+				}
+			} else {
+				for (let r = nextStart; r <= nextEnd; r++) {
+					rowsEntered.push(r);
+				}
+				for (let r = prevStart; r <= prevEnd; r++) {
+					rowsExited.push(r);
+				}
+			}
+		} else if (nextStart <= nextEnd) {
+			for (let r = nextStart; r <= nextEnd; r++) {
+				rowsEntered.push(r);
+			}
+		} else if (prevStart <= prevEnd) {
+			for (let r = prevStart; r <= prevEnd; r++) {
+				rowsExited.push(r);
+			}
+		}
+
+		// Pinned bottom
+		const pinBottomStart = Math.max(0, rowCount - pinBottom);
+		for (let r = pinBottomStart; r < rowCount; r++) {
+			if (r >= pinTop) {
+				rowsStayed.push(r);
+			}
+		}
+
+		// Columns
+		const colsEntered: number[] = [];
+		const colsExited: number[] = [];
+		const colsStayed: number[] = [];
+
+		const pinLeft = next.pinLeftCols;
+		const pinRight = next.pinRightCols;
+		const colCount = next.colCount;
+
+		// Pinned left
+		for (let c = 0; c < pinLeft && c < colCount; c++) {
+			colsStayed.push(c);
+		}
+
+		const prevColStart = Math.max(pinLeft, prev.colStart);
+		const prevColEnd = Math.min(colCount - 1 - pinRight, prev.colEnd);
+		const nextColStart = Math.max(pinLeft, next.colStart);
+		const nextColEnd = Math.min(colCount - 1 - pinRight, next.colEnd);
+
+		if (prevColStart <= prevColEnd && nextColStart <= nextColEnd) {
+			const stayedStart = Math.max(prevColStart, nextColStart);
+			const stayedEnd = Math.min(prevColEnd, nextColEnd);
+
+			if (stayedStart <= stayedEnd) {
+				for (let c = stayedStart; c <= stayedEnd; c++) {
+					colsStayed.push(c);
+				}
+				if (nextColStart < prevColStart) {
+					for (let c = nextColStart; c < prevColStart; c++) {
+						colsEntered.push(c);
+					}
+				}
+				if (nextColEnd > prevColEnd) {
+					for (let c = prevColEnd + 1; c <= nextColEnd; c++) {
+						colsEntered.push(c);
+					}
+				}
+				if (nextColStart > prevColStart) {
+					for (let c = prevColStart; c < nextColStart; c++) {
+						colsExited.push(c);
+					}
+				}
+				if (nextColEnd < prevColEnd) {
+					for (let c = nextColEnd + 1; c <= prevColEnd; c++) {
+						colsExited.push(c);
+					}
+				}
+			} else {
+				for (let c = nextColStart; c <= nextColEnd; c++) {
+					colsEntered.push(c);
+				}
+				for (let c = prevColStart; c <= prevColEnd; c++) {
+					colsExited.push(c);
+				}
+			}
+		} else if (nextColStart <= nextColEnd) {
+			for (let c = nextColStart; c <= nextColEnd; c++) {
+				colsEntered.push(c);
+			}
+		} else if (prevColStart <= prevColEnd) {
+			for (let c = prevColStart; c <= prevColEnd; c++) {
+				colsExited.push(c);
+			}
+		}
+
+		// Pinned right
+		const pinRightStart = Math.max(0, colCount - pinRight);
+		for (let c = pinRightStart; c < colCount; c++) {
+			if (c >= pinLeft) {
+				colsStayed.push(c);
+			}
+		}
+
+		const hasChanges =
+			rowsEntered.length > 0 ||
+			rowsExited.length > 0 ||
+			colsEntered.length > 0 ||
+			colsExited.length > 0 ||
+			((next.pinTopRows > 0 || next.pinBottomRows > 0) && prev.scrollTop !== next.scrollTop);
+
+		return {
+			rowsEntered,
+			rowsExited,
+			rowsStayed,
+			colsEntered,
+			colsExited,
+			colsStayed,
+			hasChanges,
 		};
 	}
 

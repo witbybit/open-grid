@@ -151,10 +151,12 @@ async function flushAnimationFrame(): Promise<void> {
 	await flushAsync();
 }
 
-function parseTranslate3d(transform: string): { x: number; y: number } {
-	const match = /translate3d\(\s*(-?\d+(?:\.\d+)?)(?:px)?\s*,\s*(-?\d+(?:\.\d+)?)(?:px)?/i.exec(transform);
-	if (!match) return { x: 0, y: 0 };
-	return { x: Number(match[1]), y: Number(match[2]) };
+function parseRowTop(el: HTMLElement): number {
+	return parseInt(el.style.top || '0', 10);
+}
+
+function parseCellLeft(el: HTMLElement): number {
+	return parseInt(el.style.left || '0', 10);
 }
 
 function getScrollContext(grid: AuditGrid) {
@@ -308,7 +310,7 @@ function assertViewportGeometryIsContinuous(grid: AuditGrid, expectedScrollTop: 
 
 	const projectedRows = activeSlots
 		.map(([rowIndex, slot]) => {
-			const y = parseTranslate3d(slot.element.style.transform).y;
+			const y = parseRowTop(slot.element);
 			return {
 				rowIndex,
 				screenTop: y - expectedScrollTop + headerHeight,
@@ -322,8 +324,8 @@ function assertViewportGeometryIsContinuous(grid: AuditGrid, expectedScrollTop: 
 		const sample = activeSlots.slice(0, 5).map(([rowIndex, slot]) => ({
 			rowIndex,
 			rowTop: slot.rowTop,
-			transform: slot.element.style.transform,
-			projectedTop: parseTranslate3d(slot.element.style.transform).y - expectedScrollTop + headerHeight,
+			top: slot.element.style.top,
+			projectedTop: parseRowTop(slot.element) - expectedScrollTop + headerHeight,
 		}));
 		throw new Error(
 			`No projected rows in viewport: ${JSON.stringify({
@@ -339,9 +341,9 @@ function assertViewportGeometryIsContinuous(grid: AuditGrid, expectedScrollTop: 
 		const sample = activeSlots.slice(0, 24).map(([rowIndex, slot]) => ({
 			rowIndex,
 			rowTop: slot.rowTop,
-			transform: slot.element.style.transform,
-			projectedTop: parseTranslate3d(slot.element.style.transform).y - expectedScrollTop + headerHeight,
-			projectedBottom: parseTranslate3d(slot.element.style.transform).y - expectedScrollTop + headerHeight + slot.rowHeight,
+			top: slot.element.style.top,
+			projectedTop: parseRowTop(slot.element) - expectedScrollTop + headerHeight,
+			projectedBottom: parseRowTop(slot.element) - expectedScrollTop + headerHeight + slot.rowHeight,
 		}));
 		throw new Error(
 			`Too few projected rows in viewport: ${JSON.stringify({
@@ -363,11 +365,11 @@ function assertViewportGeometryIsContinuous(grid: AuditGrid, expectedScrollTop: 
 		expect(next.screenTop - prev.screenTop).toBeLessThanOrEqual(rowHeight + 1);
 	}
 
-	const centerLayer = grid.container.querySelector('.og-layer-center') || grid.container;
-	const screenRows = Array.from(centerLayer.querySelectorAll<HTMLElement>('.og-row'))
+	const rowsContainer = grid.container.querySelector('.og-rows-container') || grid.container;
+	const screenRows = Array.from(rowsContainer.querySelectorAll<HTMLElement>('.og-row'))
 		.filter((row) => row.querySelector(':scope > .og-cell'))
 		.map((row) => {
-			const y = parseTranslate3d(row.style.transform).y;
+			const y = parseRowTop(row);
 			return {
 				rowIndex: Number(row.dataset.rowIndex),
 				rowId: row.dataset.rowId,
@@ -401,7 +403,7 @@ function assertHorizontalGeometryIsContinuous(grid: AuditGrid, expectedScrollLef
 	const viewportWidth = grid.store.engine.viewport.viewportWidth;
 	const projectedCells = cells
 		.map(([colIndex, cell]) => {
-			const x = parseTranslate3d(cell.element.style.transform).x;
+			const x = parseCellLeft(cell.element);
 			return {
 				colIndex,
 				screenLeft: x - expectedScrollLeft,
@@ -415,9 +417,9 @@ function assertHorizontalGeometryIsContinuous(grid: AuditGrid, expectedScrollLef
 		const sample = cells.slice(0, 5).map(([colIndex, cell]) => ({
 			colIndex,
 			colField: cell.colField,
-			transform: cell.element.style.transform,
+			left: cell.element.style.left,
 			width: cell.element.style.width,
-			projectedLeft: parseTranslate3d(cell.element.style.transform).x - expectedScrollLeft,
+			projectedLeft: parseCellLeft(cell.element) - expectedScrollLeft,
 		}));
 		throw new Error(
 			`No projected cells in viewport: ${JSON.stringify({
@@ -460,10 +462,10 @@ function assertScrollStatsAreRuthless(grid: AuditGrid, prevWindow: RenderWindow 
 
 function assertSelectionDoesNotCreateVisibleRowIslands(grid: AuditGrid, expectedScrollTop: number): void {
 	const selectedRows = Array.from(
-		grid.container.querySelectorAll<HTMLElement>('.og-layer-center .og-row-selected, .og-layer-center .og-row-focused')
+		grid.container.querySelectorAll<HTMLElement>('.og-rows-container .og-row-selected, .og-rows-container .og-row-focused')
 	).filter((row) => row.querySelector(':scope > .og-cell'));
 	const visibleSelectedRows = selectedRows.filter((row) => {
-		const projectedTop = parseTranslate3d(row.style.transform).y - expectedScrollTop + 40;
+		const projectedTop = parseRowTop(row) - expectedScrollTop + 40;
 		const height = Number.parseFloat(row.style.height || '40');
 		return projectedTop + height > 40 && projectedTop < grid.store.engine.viewport.viewportHeight;
 	});
@@ -484,7 +486,7 @@ function assertSelectionDoesNotCreateVisibleRowIslands(grid: AuditGrid, expected
 	if (visibleSelectedRows.length === 0) return;
 	const selectedRow = visibleSelectedRows[0];
 	expect(selectedRow.dataset.rowIndex).toBe(String(focusedVisualIndex));
-	const projectedTop = parseTranslate3d(selectedRow.style.transform).y - expectedScrollTop + 40;
+	const projectedTop = parseRowTop(selectedRow) - expectedScrollTop + 40;
 	expect(projectedTop).toBeGreaterThanOrEqual(40 - 1);
 	expect(projectedTop).toBeLessThanOrEqual(grid.store.engine.viewport.viewportHeight);
 }

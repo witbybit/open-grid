@@ -35,10 +35,6 @@ export class CellRenderer {
 		if (slot.contentElement.textContent !== value) {
 			slot.contentElement.textContent = value;
 		}
-		if (slot.skeleton) {
-			slot.skeleton.remove();
-			slot.skeleton = null;
-		}
 	}
 
 	public clearPrimitiveContent(cell: HTMLElement): void {
@@ -58,10 +54,6 @@ export class CellRenderer {
 		if (slot.contentElement.textContent !== '') {
 			slot.contentElement.textContent = '';
 		}
-		if (slot.skeleton) {
-			slot.skeleton.remove();
-			slot.skeleton = null;
-		}
 	}
 
 	public ensureLoadingSkeleton(cell: HTMLElement): void {
@@ -71,17 +63,11 @@ export class CellRenderer {
 		if (slot.contentElement.textContent !== '') {
 			slot.contentElement.textContent = '';
 		}
-		if (slot.skeleton) {
-			slot.skeleton.remove();
-			slot.skeleton = null;
-		}
 	}
 
 	public removeLoadingSkeleton(cell: HTMLElement): void {
 		const slot = CellSlot.fromElement(cell as HTMLDivElement);
-		if (slot.skeleton) {
-			slot.skeleton.remove();
-			slot.skeleton = null;
-		}
+		slot.element.dataset.contentMode = 'text';
+		slot.lastContentMode = 'text';
 	}
 }
