@@ -505,6 +505,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			};
 
 			this.recycleViewport(true, ctx);
+			this.rowRenderer.syncPinnedLanePositions(nextWindow);
 			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
 			const didSyncRange = this.headerRenderer.syncVisibleColumnRange();
 			if (didSyncRange) {
@@ -564,7 +565,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		}
 
-		this.rowRenderer.syncPinnedCellPositions(window);
+		this.rowRenderer.syncPinnedLanePositions(window);
 
 		// Update current window's scroll values
 		if (this.rowRenderer.currentWindow) {
@@ -871,6 +872,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>): void {
 		this.renderStats.viewportRecycles++;
 		this.rowRenderer.recycleViewport(isScrollFrameActive, ctx);
+		if (!isScrollFrameActive && this.rowRenderer.currentWindow) {
+			this.rowRenderer.syncPinnedLanePositions(this.rowRenderer.currentWindow);
+		}
 	}
 
 	private fullPaintInternal(): void {

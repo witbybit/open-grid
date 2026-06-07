@@ -17,6 +17,14 @@ export class RowSlot<TRowData = unknown> {
 
 	public keepAlive = false;
 
+	public pinLeftContainer: HTMLDivElement | null = null;
+	public pinRightContainer: HTMLDivElement | null = null;
+	public pinLeftContainerWidth = -1;
+	public pinRightContainerWidth = -1;
+	public pinLeftContainerTransform = '';
+	public pinRightContainerLeft = -1;
+	public pinRightContainerTransform = '';
+
 	// Active cell slots inside this row: colIndex -> CellSlot
 	public readonly cells = new Map<number, CellSlot<TRowData>>();
 
@@ -114,5 +122,12 @@ export class RowSlot<TRowData = unknown> {
 		delete this.element.dataset.rowId;
 		delete this.element.dataset.rowKey;
 		this.element.textContent = '';
+		this.pinLeftContainer = null;
+		this.pinRightContainer = null;
+		this.pinLeftContainerWidth = -1;
+		this.pinRightContainerWidth = -1;
+		this.pinLeftContainerTransform = '';
+		this.pinRightContainerLeft = -1;
+		this.pinRightContainerTransform = '';
 	}
 }

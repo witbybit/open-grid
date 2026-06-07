@@ -251,14 +251,12 @@ function assertNoStaleOrOverlappingDom(grid: AuditGrid): void {
 		expect(slot.element.dataset.rowIndex).toBe(String(rowIndex));
 
 		// Assert DOM cells match the active cells map exactly to catch zombie cells
-		const centerCells = Array.from(slot.element.querySelectorAll(':scope > .og-cell'));
-		const leftCells = slot.leftElement ? Array.from(slot.leftElement.querySelectorAll(':scope > .og-cell')) : [];
-		const rightCells = slot.rightElement ? Array.from(slot.rightElement.querySelectorAll(':scope > .og-cell')) : [];
-		expect(centerCells.length + leftCells.length + rightCells.length).toBe(slot.cells.size);
+		const cells = Array.from(slot.element.querySelectorAll('.og-cell'));
+		expect(cells.length).toBe(slot.cells.size);
 	}
 
 	for (const row of rows) {
-		const cells = Array.from(row.querySelectorAll<HTMLElement>(':scope > .og-cell'));
+		const cells = Array.from(row.querySelectorAll<HTMLElement>('.og-cell'));
 		if (cells.length === 0) continue;
 		const rowIndex = Number(row.dataset.rowIndex);
 		expect(activeRowIndices.has(rowIndex)).toBe(true);

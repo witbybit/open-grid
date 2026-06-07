@@ -14,6 +14,9 @@ export class HeaderRenderer<TRowData = unknown> {
 
 	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
 	private lastHeaderScrollLeft = 0;
+	private lastHeaderLeftTransform = '';
+	private lastHeaderRightLeft = -1;
+	private lastHeaderRightTransform = '';
 
 	constructor(
 		engine: GridEngine<TRowData>,
@@ -45,6 +48,9 @@ export class HeaderRenderer<TRowData = unknown> {
 		}
 		this.headerCells.clear();
 		this.lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
+		this.lastHeaderLeftTransform = '';
+		this.lastHeaderRightLeft = -1;
+		this.lastHeaderRightTransform = '';
 	}
 
 	public sync(frame: InvalidationFrame): void {
@@ -66,23 +72,32 @@ export class HeaderRenderer<TRowData = unknown> {
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const scrollLeft = this.engine.viewport.scrollLeft;
 		const viewportWidth = this.engine.viewport.viewportWidth;
-
-		if (this.headerLeftLayer) {
-			const leftPx = `${scrollLeft}px`;
-			if (this.headerLeftLayer.style.left !== leftPx) this.headerLeftLayer.style.left = leftPx;
-		}
-
-		if (!this.headerRightLayer || pinRightColumns <= 0 || colCount === 0) return;
-		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
-		if (pinRightStart >= colCount) return;
 		const state = this.engine.stateManager.getState();
 		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
-		const pinRightBaseLeft = this.engine.geometry.colLefts[pinRightStart] ?? totalWidth;
-		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
-		const pinRightLeft = scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth);
-		const leftPx = `${pinRightLeft}px`;
-		if (this.headerRightLayer.style.left !== leftPx) this.headerRightLayer.style.left = leftPx;
+		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
+		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+
+		if (this.headerLeftLayer) {
+			const transform = pinLeftColumns > 0 ? `translate3d(${scrollLeft}px, 0, 0)` : '';
+			if (this.lastHeaderLeftTransform !== transform) {
+				this.lastHeaderLeftTransform = transform;
+				this.headerLeftLayer.style.transform = transform;
+			}
+		}
+
+		if (this.headerRightLayer && pinRightColumns > 0 && pinRightStart < colCount) {
+			if (this.lastHeaderRightLeft !== pinRightBaseLeft) {
+				this.lastHeaderRightLeft = pinRightBaseLeft;
+				this.headerRightLayer.style.left = `${pinRightBaseLeft}px`;
+			}
+			const transform = `translate3d(${scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) - pinRightBaseLeft}px, 0, 0)`;
+			if (this.lastHeaderRightTransform !== transform) {
+				this.lastHeaderRightTransform = transform;
+				this.headerRightLayer.style.transform = transform;
+			}
+		}
 	}
 
 	public syncVisibleColumnRange(): boolean {

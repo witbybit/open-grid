@@ -218,8 +218,8 @@ export const CORE_STYLES = `
 
   /*
    * Cells are absolutely positioned (left/width set by JS).
-   * Pinned cells stay absolute too; JS offsets the small pinned lanes by
-   * scrollLeft so the browser does not reflow cell layout during scroll.
+   * Pinned cells live inside sticky lane containers and stay absolute within
+   * those lanes, avoiding per-scroll cell coordinate writes.
    */
   .og-cell {
     position: absolute;
@@ -244,6 +244,24 @@ export const CORE_STYLES = `
   .og-cell-pinned-right {
     z-index: 3;
     background-color: inherit;
+  }
+
+  .og-row-pin-left,
+  .og-row-pin-right {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    z-index: 3;
+    background-color: inherit;
+    overflow: hidden;
+  }
+
+  .og-row-pin-left {
+    left: 0;
+  }
+
+  .og-row-pin-right {
+    left: 0;
   }
 
   .og-cell-content {

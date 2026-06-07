@@ -128,7 +128,54 @@ export class RowRenderer<TRowData = unknown> {
 		this.activeRows.clear();
 	}
 
-	public syncPinnedCellPositions(window: RenderWindow): void {
+	private ensurePinnedContainer(slot: RowSlot<TRowData>, side: 'left' | 'right', width: number): HTMLDivElement | null {
+		if (width <= 0) {
+			const existing = side === 'left' ? slot.pinLeftContainer : slot.pinRightContainer;
+			if (existing) {
+				existing.remove();
+				if (side === 'left') {
+					slot.pinLeftContainer = null;
+					slot.pinLeftContainerWidth = -1;
+					slot.pinLeftContainerTransform = '';
+				} else {
+					slot.pinRightContainer = null;
+					slot.pinRightContainerWidth = -1;
+					slot.pinRightContainerLeft = -1;
+					slot.pinRightContainerTransform = '';
+				}
+			}
+			return null;
+		}
+
+		let container = side === 'left' ? slot.pinLeftContainer : slot.pinRightContainer;
+		if (!container || !slot.element.contains(container)) {
+			container = document.createElement('div');
+			container.className = side === 'left' ? 'og-row-pin-left' : 'og-row-pin-right';
+			slot.element.appendChild(container);
+			if (side === 'left') {
+				slot.pinLeftContainer = container;
+				slot.pinLeftContainerWidth = -1;
+				slot.pinLeftContainerTransform = '';
+			} else {
+				slot.pinRightContainer = container;
+				slot.pinRightContainerWidth = -1;
+				slot.pinRightContainerLeft = -1;
+				slot.pinRightContainerTransform = '';
+			}
+		}
+		const previousWidth = side === 'left' ? slot.pinLeftContainerWidth : slot.pinRightContainerWidth;
+		if (previousWidth !== width) {
+			if (side === 'left') {
+				slot.pinLeftContainerWidth = width;
+			} else {
+				slot.pinRightContainerWidth = width;
+			}
+			container.style.width = `${width}px`;
+		}
+		return container;
+	}
+
+	public syncPinnedLanePositions(window: RenderWindow): void {
 		const pinLeftColumns = window.pinLeftCols;
 		const pinRightColumns = window.pinRightCols;
 		if (pinLeftColumns <= 0 && pinRightColumns <= 0) return;
@@ -137,25 +184,30 @@ export class RowRenderer<TRowData = unknown> {
 		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 		const scrollLeft = this.engine.viewport.scrollLeft;
 		const viewportWidth = this.engine.viewport.viewportWidth;
-		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
 		const state = this.engine.stateManager.getState();
 		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
 		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
 		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
+		const leftTransform = pinLeftColumns > 0 ? `translate3d(${scrollLeft}px, 0, 0)` : '';
+		const rightTransform =
+			pinRightColumns > 0 && pinRightStart < colCount
+				? `translate3d(${scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) - pinRightBaseLeft}px, 0, 0)`
+				: '';
 
 		for (const slot of this.activeRows.values()) {
-			if (slot.rowKind !== 'data' && slot.rowKind !== 'loading') continue;
-			for (let c = 0; c < pinLeftColumns && c < colCount; c++) {
-				const cellSlot = slot.cells.get(c);
-				if (cellSlot) {
-					cellSlot.updatePosition(scrollLeft + (this.engine.geometry.colLefts[c] ?? 0));
-				}
+			if (slot.pinLeftContainer && slot.pinLeftContainerTransform !== leftTransform) {
+				slot.pinLeftContainerTransform = leftTransform;
+				slot.pinLeftContainer.style.transform = leftTransform;
 			}
-			for (let c = pinRightStart; c < colCount; c++) {
-				const cellSlot = slot.cells.get(c);
-				if (cellSlot) {
-					const cellLeft = this.engine.geometry.colLefts[c] ?? pinRightBaseLeft;
-					cellSlot.updatePosition(scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) + (cellLeft - pinRightBaseLeft));
+			if (slot.pinRightContainer) {
+				if (slot.pinRightContainerLeft !== pinRightBaseLeft) {
+					slot.pinRightContainerLeft = pinRightBaseLeft;
+					slot.pinRightContainer.style.left = `${pinRightBaseLeft}px`;
+				}
+				if (slot.pinRightContainerTransform !== rightTransform) {
+					slot.pinRightContainerTransform = rightTransform;
+					slot.pinRightContainer.style.transform = rightTransform;
 				}
 			}
 		}
@@ -633,11 +685,15 @@ export class RowRenderer<TRowData = unknown> {
 		// Hoist per-row constants out of the per-cell closure
 		const state = this.engine.stateManager.getState();
 		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportWidth = this.engine.viewport.viewportWidth;
 		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
 		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
 		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const pinLeftContainer = this.ensurePinnedContainer(slot, 'left', pinLeftWidth);
+		const pinRightContainer = this.ensurePinnedContainer(slot, 'right', pinRightWidth);
+		if (pinRightContainer && slot.pinRightContainerLeft !== pinRightBaseLeft) {
+			slot.pinRightContainerLeft = pinRightBaseLeft;
+			pinRightContainer.style.left = `${pinRightBaseLeft}px`;
+		}
 		// When scroll-frame active and row didn't just enter, only render entered cols (stayed cols already positioned)
 		const renderStayed = !isScrollFrameActive || rowEntered;
 
@@ -657,14 +713,11 @@ export class RowRenderer<TRowData = unknown> {
 			const cellWidth = this.engine.geometry.colWidths[c];
 			const isPinLeft = c < pinLeftColumns;
 			const isPinRight = c >= pinRightStart;
-			const leftArg = isPinLeft
-				? scrollLeft + cellLeft
-				: isPinRight
-					? scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) + (cellLeft - pinRightBaseLeft)
-					: cellLeft;
+			const leftArg = isPinRight ? cellLeft - pinRightBaseLeft : cellLeft;
+			const targetContainer = isPinLeft ? pinLeftContainer : isPinRight ? pinRightContainer : slot.element;
 
-			if (cellSlot.element.parentNode !== slot.element) {
-				slot.element.appendChild(cellSlot.element);
+			if (targetContainer && cellSlot.element.parentNode !== targetContainer) {
+				targetContainer.appendChild(cellSlot.element);
 			}
 
 			if (isScrollFrameActive) {
@@ -867,11 +920,15 @@ export class RowRenderer<TRowData = unknown> {
 		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 		const loadingState = this.engine.stateManager.getState();
 		const totalWidth = this.engine.geometry.getTotalWidth(loadingState.defaultColWidth);
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportWidth = this.engine.viewport.viewportWidth;
 		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
 		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
 		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const pinLeftContainer = this.ensurePinnedContainer(slot, 'left', pinLeftWidth);
+		const pinRightContainer = this.ensurePinnedContainer(slot, 'right', pinRightWidth);
+		if (pinRightContainer && slot.pinRightContainerLeft !== pinRightBaseLeft) {
+			slot.pinRightContainerLeft = pinRightBaseLeft;
+			pinRightContainer.style.left = `${pinRightBaseLeft}px`;
+		}
 		const renderStayed = !isScrollFrameActive || rowEntered;
 
 		const renderCell = (c: number) => {
@@ -889,14 +946,11 @@ export class RowRenderer<TRowData = unknown> {
 			const cellWidth = this.engine.geometry.colWidths[c];
 			const isPinLeft = c < pinLeftColumns;
 			const isPinRight = c >= pinRightStart;
-			const leftArg = isPinLeft
-				? scrollLeft + cellLeft
-				: isPinRight
-					? scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) + (cellLeft - pinRightBaseLeft)
-					: cellLeft;
+			const leftArg = isPinRight ? cellLeft - pinRightBaseLeft : cellLeft;
+			const targetContainer = isPinLeft ? pinLeftContainer : isPinRight ? pinRightContainer : slot.element;
 
-			if (cellSlot.element.parentNode !== slot.element) {
-				slot.element.appendChild(cellSlot.element);
+			if (targetContainer && cellSlot.element.parentNode !== targetContainer) {
+				targetContainer.appendChild(cellSlot.element);
 			}
 
 			if (cellSlot.element.dataset.cellKey) {

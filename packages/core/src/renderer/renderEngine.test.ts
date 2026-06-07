@@ -109,7 +109,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('positions right-pinned body cells with scroll-adjusted absolute offsets', () => {
+	it('positions right-pinned body and header cells inside sticky right lanes', () => {
 		const columns = [
 			{ field: 'a', header: 'A', width: 100 },
 			{ field: 'b', header: 'B', width: 110 },
@@ -151,23 +151,26 @@ describe('RenderEngine', () => {
 		renderer.fullPaint();
 
 		const row = container.querySelector('.og-row[data-row-id="row:row-1"]') as HTMLDivElement;
+		const rightLane = row.querySelector('.og-row-pin-right') as HTMLDivElement;
 		const dCell = row.querySelector('.og-cell[data-col-field="d"]') as HTMLDivElement;
 		const eCell = row.querySelector('.og-cell[data-col-field="e"]') as HTMLDivElement;
 		const rightHeaderLayer = container.querySelector('.og-layer-header-right') as HTMLDivElement;
 		const eHeader = container.querySelector('.og-header-cell[data-col-field="e"]') as HTMLDivElement;
 
-		expect(row.querySelector('.og-row-pin-right')).toBeNull();
-		expect(dCell.parentElement).toBe(row);
-		expect(eCell.parentElement).toBe(row);
+		expect(rightLane).not.toBeNull();
+		expect(rightLane.style.width).toBe('270px');
+		expect(dCell.parentElement).toBe(rightLane);
+		expect(eCell.parentElement).toBe(rightLane);
 		expect(dCell.className).toContain('og-cell-pinned-right');
 		expect(eCell.className).toContain('og-cell-pinned-right');
 		expect(dCell.style.position).toBe('');
-		expect(eCell.style.position).toBe('');
-		expect(dCell.style.left).toBe('330px');
-		expect(eCell.style.left).toBe('460px');
+		expect(dCell.style.left).toBe('0px');
+		expect(eCell.style.left).toBe('130px');
 		expect(dCell.style.right).toBe('');
 		expect(eCell.style.right).toBe('');
+		expect(rightLane.style.left).toBe('330px');
 		expect(rightHeaderLayer.style.left).toBe('330px');
+		expect(rightHeaderLayer.style.transform).toBe(rightLane.style.transform);
 		expect(rightHeaderLayer.style.width).toBe('270px');
 		expect(eHeader.parentElement).toBe(rightHeaderLayer);
 
