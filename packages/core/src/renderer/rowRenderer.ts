@@ -18,6 +18,14 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { RowSlot } from './rowSlot.js';
 import { RowSlotPool } from './rowSlotPool.js';
 import { CellSlot, type CellContentMode } from './cellSlot.js';
+
+// Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
+const ROW_KIND_BASE: Record<string, string> = {
+	loading: 'og-row og-row-loading',
+	group: 'og-row og-row-group',
+	detail: 'og-row og-row-detail',
+	footer: 'og-row og-row-footer',
+};
 import {
 	applyRenderWindowRuntimeLimits,
 	computeRenderWindow,
@@ -445,11 +453,8 @@ export class RowRenderer<TRowData = unknown> {
 			}
 
 			// ── Row class name ────────────────────────────────────────────────────────
-			let rowClassName = 'og-row';
-			if (visualRow.kind === 'loading') {
-				rowClassName += ' og-row-loading';
-			} else if (visualRow.kind === 'group') {
-				rowClassName += ' og-row-group';
+			let rowClassName = ROW_KIND_BASE[visualRow.kind] ?? 'og-row';
+			if (visualRow.kind === 'group') {
 				if (state.styleSlots?.groupRowClass) {
 					try {
 						const customClass = state.styleSlots.groupRowClass(visualRow);
@@ -459,7 +464,6 @@ export class RowRenderer<TRowData = unknown> {
 					}
 				}
 			} else if (visualRow.kind === 'detail') {
-				rowClassName += ' og-row-detail';
 				if (state.styleSlots?.detailRowClass) {
 					try {
 						const customClass = state.styleSlots.detailRowClass(visualRow);

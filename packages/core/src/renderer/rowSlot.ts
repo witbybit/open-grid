@@ -1,4 +1,4 @@
-import { CellSlot } from './cellSlot.js';
+import { CellSlot, toPx } from './cellSlot.js';
 
 export class RowSlot<TRowData = unknown> {
 	public readonly id: string;
@@ -192,12 +192,12 @@ export class RowSlot<TRowData = unknown> {
 
 		if (this.lastTop !== rowTop) {
 			this.lastTop = rowTop;
-			this.element.style.top = `${rowTop}px`;
+			this.element.style.top = toPx(rowTop);
 			domUpdated = true;
 		}
 		if (this.lastHeight !== rowHeight) {
 			this.lastHeight = rowHeight;
-			this.element.style.height = `${rowHeight}px`;
+			this.element.style.height = toPx(rowHeight);
 			domUpdated = true;
 		}
 
@@ -223,7 +223,7 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = rowTop;
 		if (this.lastTop !== rowTop) {
 			this.lastTop = rowTop;
-			this.element.style.top = `${rowTop}px`;
+			this.element.style.top = toPx(rowTop);
 		}
 	}
 

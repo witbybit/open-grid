@@ -1,5 +1,10 @@
 export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending';
 
+// Intern common pixel strings — avoids a string allocation on every DOM write.
+// Covers all practical column widths and left offsets (0–2000 px).
+const _PX = Array.from({ length: 2001 }, (_, i) => `${i}px`);
+export const toPx = (n: number): string => (n >= 0 && n < _PX.length ? _PX[n] : `${n}px`);
+
 // Debug stats for DOM write tracking (Phase 4). Shared across all CellSlot instances.
 export const cellSlotWriteStats = {
 	cellTextWrites: 0,
@@ -119,7 +124,7 @@ export class CellSlot<TRowData = unknown> {
 		if (right >= 0) {
 			if (this.lastRight !== right) {
 				this.lastRight = right;
-				this.element.style.right = `${right}px`;
+				this.element.style.right = toPx(right);
 				domUpdated = true;
 			}
 			if (this.lastLeft !== -1) {
@@ -129,7 +134,7 @@ export class CellSlot<TRowData = unknown> {
 		} else {
 			if (this.lastLeft !== left) {
 				this.lastLeft = left;
-				this.element.style.left = `${left}px`;
+				this.element.style.left = toPx(left);
 				domUpdated = true;
 			}
 			if (this.lastRight !== -1) {
@@ -140,7 +145,7 @@ export class CellSlot<TRowData = unknown> {
 
 		if (this.lastWidth !== width) {
 			this.lastWidth = width;
-			this.element.style.width = `${width}px`;
+			this.element.style.width = toPx(width);
 			cellSlotWriteStats.cellWidthWrites++;
 			domUpdated = true;
 		}
@@ -199,7 +204,7 @@ export class CellSlot<TRowData = unknown> {
 		let domUpdated = false;
 		if (this.lastLeft !== left) {
 			this.lastLeft = left;
-			this.element.style.left = `${left}px`;
+			this.element.style.left = toPx(left);
 			domUpdated = true;
 		}
 		if (this.lastRight !== -1) {
