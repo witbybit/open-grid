@@ -25,6 +25,7 @@ import { CellRenderer } from './cellRenderer.js';
 import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
+import { SortAnimationController } from './sortAnimationController.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
 
@@ -54,6 +55,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private unsubscribers: Array<() => void> = [];
 	private activeHeaderPopover: HTMLDivElement | null = null;
 	private activeHeaderPopoverElement: HTMLElement | null = null;
+
+	private readonly sortAnimation: SortAnimationController<TRowData>;
+	private _pendingSortAnimation = false;
 
 	private isScrolling = false;
 	private scrollEndRafId: number | null = null;
@@ -203,6 +207,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		);
 		this.rowRenderer.renderStats = this.renderStats;
 		this.portalMountManager.setPhysicalRowSlotIdResolver((rowIndex) => this.rowRenderer.activeRows.get(rowIndex)?.id);
+		this.sortAnimation = new SortAnimationController(() => this.rowRenderer.activeRows);
 
 		this.headerRenderer = new HeaderRenderer<TRowData>(
 			engine,
@@ -307,6 +312,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 		this.columnInteractions.cleanup();
 		this.fillDrag.cleanup();
+		this.sortAnimation.destroy();
 		this.scheduler.destroy();
 		this.scrollScheduler.destroy();
 		this.clearScrollEndTimer();
@@ -345,6 +351,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.portalMountManager.setScrolling(true);
 		this.clearScrollEndTimer();
 		this.clearPostScrollDecorationTimer();
+		this.sortAnimation.cancel();
 	}
 
 	// RAF-counter scroll-end: fires finishScrolling after N consecutive frames with no new
@@ -682,6 +689,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		);
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('rowHeights', invalidateGeometryFull));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('enableColumnReorder', invalidateHeaders));
+		this.unsubscribers.push(
+			this.engine.stateManager.subscribeToKey('sortModel', () => {
+				this.sortAnimation.captureSnapshot();
+			})
+		);
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener<{ selection: any; result: SelectionChangeResult }>('selectionChanged', (event) => {
@@ -774,9 +786,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private flushPaint(): void {
 		this.refreshRendererEpochs();
+		const frame = this.engine.invalidation.consume();
+		if (!this.isScrolling && frame.reasons.includes('sort')) {
+			this._pendingSortAnimation = true;
+		}
 		this.portalMountManager.beginCellReleaseTransaction();
 		try {
-			this.orchestrator.flush(this.engine.invalidation.consume());
+			this.orchestrator.flush(frame);
 		} finally {
 			this.portalMountManager.endCellReleaseTransaction();
 		}
@@ -932,6 +948,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.viewportRenderer.syncSpacerAndLayers(state, colCount);
 		this.recycleViewport(false);
+		if (this._pendingSortAnimation) {
+			this._pendingSortAnimation = false;
+			this.sortAnimation.beginAnimation();
+		}
 		this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
 		this.headerRenderer.repaintHeaders();
 		this.overlayRenderer.repaintOverlay();
