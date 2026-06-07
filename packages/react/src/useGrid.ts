@@ -7,7 +7,18 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 	const initialOptionsRef = useRef(options);
 
 	const api = useMemo(() => {
-		return createClientGrid(initialOptionsRef.current);
+		const { rows, columns, getRowId, rowBuffer, colBuffer, runtimeLimits, initialState } = initialOptionsRef.current;
+		return createClientGrid({
+			rows,
+			columns,
+			getRowId,
+			initialState: {
+				rowBuffer,
+				colBuffer,
+				runtimeLimits,
+				...initialState,
+			},
+		});
 	}, []);
 
 	useEffect(() => {

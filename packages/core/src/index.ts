@@ -11,6 +11,8 @@ export type {
 	CellRendererProps,
 	CellState,
 	ColumnDef,
+	ColumnRendererSpec,
+	InternalColumnDef,
 	DomCellRenderer,
 	DomCellRendererHandle,
 	DomCellRendererParams,

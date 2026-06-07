@@ -86,19 +86,19 @@ function createWideGrid(options: { rows?: number; cols?: number; custom?: boolea
 
 function makeScrollCtx(store: GridStore<RuntimePerfRow>) {
 	const state = store.getState();
-	const displayedColumns = store.engine.columns.getDisplayedColumns();
+	const plan = store.engine.columns.getCompiledPlan();
 	return {
 		isScrolling: true,
+		state,
 		stateVersion: 0,
 		dataVersion: state.dataVersion,
 		styleVersion: 0,
 		loadingVersion: 0,
 		activeEdit: state.activeEdit,
 		hasStyleHooks: !!state.styleSlots,
-		hasCustomRenderers: displayedColumns.some((c) => !!c.cellRenderer),
-		displayedColumns,
-		columnPlans: displayedColumns.map((c) => store.engine.columns.getColumnPlan(c.field)!),
-		visibleColRange: store.engine.viewport.getVisibleColumnRange(displayedColumns.length),
+		hasCustomRenderers: plan.hasCustomRenderers,
+		plan,
+		visibleColRange: store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),
 		focusedCell: state.selection.focus,
 		selectionBounds: state.selection.bounds ?? undefined,
 		canUseCachedDisplayValues: true,
@@ -155,18 +155,17 @@ describe('Runtime Performance & Granular Versioning', () => {
 
 		// Perform scroll update
 		store.engine.viewport.setScrollPosition(100, 0);
-		const displayedColumns = store.getState().columns;
-		const columnPlans = displayedColumns.map((c) => store.engine.columns.getColumnPlan(c.field)!);
+		const plan = store.engine.columns.getCompiledPlan();
 		renderer.rowRenderer.recycleViewport(true, {
 			scrollTop: 100,
 			scrollLeft: 0,
 			isScrolling: true,
+			state: store.getState(),
 			dataVersion: store.getState().dataVersion,
 			styleVersion: 0,
 			loadingVersion: 0,
 			hasStyleHooks: false,
-			displayedColumns,
-			columnPlans,
+			plan,
 		} as any);
 
 		// Check that getCellValue is NOT called during scroll frame
@@ -387,6 +386,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 
 		const stats = grid.renderer.getRenderStats();
 		expect(stats.sameWindowBailouts).toBe(1);
+		expect(stats.stateReadsDuringScroll).toBe(0);
 
 		cleanupGrid(grid);
 	});
@@ -409,6 +409,24 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(stats.rowsEnteredDuringScroll).toBeGreaterThanOrEqual(1);
 		expect(stats.rowsExitedDuringScroll).toBeGreaterThanOrEqual(1);
 		expect(stats.cellsSkippedDuringScroll).toBeGreaterThan(0);
+		expect(stats.stateReadsDuringScroll).toBe(0);
+
+		cleanupGrid(grid);
+	});
+
+	it('keeps compiled plan stable and avoids portal mounts during active scroll for deferred renderers', () => {
+		const grid = createWideGrid({ rows: 1000, cols: 1000, custom: true });
+		const initialPlan = grid.store.engine.columns.getCompiledPlan();
+		grid.renderer.resetRenderStats();
+
+		grid.store.engine.viewport.setScrollPosition(120, 240);
+		grid.renderer.rowRenderer.recycleViewport(true, makeScrollCtx(grid.store) as any);
+
+		const stats = grid.renderer.getRenderStats();
+		expect(grid.store.engine.columns.getCompiledPlan()).toBe(initialPlan);
+		expect(stats.customRendererMountsDuringScroll).toBe(0);
+		expect(stats.portalMountsDuringScroll).toBe(0);
+		expect(stats.compiledPlanVersion).toBe(initialPlan.version);
 
 		cleanupGrid(grid);
 	});

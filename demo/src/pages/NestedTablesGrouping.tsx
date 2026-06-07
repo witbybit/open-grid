@@ -227,9 +227,9 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 		() => [
 			{ field: 'id', header: 'Item ID', width: 100 },
 			{ field: 'itemName', header: 'Product Item Name', width: 260 },
-			{ field: 'price', header: 'Unit Price', width: 130, cellRenderer: PriceBadgeRenderer },
+			{ field: 'price', header: 'Unit Price', width: 130, renderer: { kind: 'react', component: PriceBadgeRenderer } },
 			{ field: 'quantity', header: 'Qty', width: 100 },
-			{ field: 'subtotal', header: 'Total Value', width: 140, cellRenderer: PriceBadgeRenderer },
+			{ field: 'subtotal', header: 'Total Value', width: 140, renderer: { kind: 'react', component: PriceBadgeRenderer } },
 		],
 		[]
 	);
@@ -351,8 +351,8 @@ export default function NestedTablesGrouping() {
 			{ field: 'name', header: 'Full Name', width: 180 },
 			{ field: 'department', header: 'Department', width: 140 },
 			{ field: 'title', header: 'Job Title', width: 180 },
-			{ field: 'rating', header: 'Rating', width: 120, cellRenderer: RatingStarsRenderer },
-			{ field: 'salary', header: 'Salary', width: 140, cellRenderer: SalaryRenderer },
+			{ field: 'rating', header: 'Rating', width: 120, renderer: { kind: 'react', component: RatingStarsRenderer } },
+			{ field: 'salary', header: 'Salary', width: 140, renderer: { kind: 'react', component: SalaryRenderer } },
 		],
 		[]
 	);
@@ -408,20 +408,28 @@ export default function NestedTablesGrouping() {
 	// 2. Tree Data Grid config
 	const treeColumns = useMemo<ColumnDef<FileNodeRow>[]>(
 		() => [
-			{ field: 'name', header: 'Node Path / Name', width: 260, cellRenderer: TreeNameRenderer },
+			{ field: 'name', header: 'Node Path / Name', width: 260, renderer: { kind: 'react', component: TreeNameRenderer } },
 			{
 				field: 'type',
 				header: 'File Type',
 				width: 110,
-				cellRenderer: ({ value }) => (
-					<span className='text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wide'>{String(value)}</span>
-				),
+				renderer: {
+					kind: 'react',
+					component: ({ value }: CellRendererProps<any>) => (
+						<span className='text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wide'>{String(value)}</span>
+					),
+				},
 			},
 			{
 				field: 'size',
 				header: 'Capacity Size',
 				width: 120,
-				cellRenderer: ({ value }) => <span className='font-mono text-slate-400 text-xs'>{String(value ?? '—')}</span>,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: CellRendererProps<any>) => (
+						<span className='font-mono text-slate-400 text-xs'>{String(value ?? '—')}</span>
+					),
+				},
 			},
 			{ field: 'modifiedAt', header: 'Last Edited', width: 140 },
 		],
@@ -458,12 +466,12 @@ export default function NestedTablesGrouping() {
 	// 3. Master-Detail Grid Config
 	const masterColumns = useMemo<ColumnDef<OrderRow>[]>(
 		() => [
-			{ field: 'toggle', header: '🔍', width: 45, cellRenderer: DetailToggleRenderer },
+			{ field: 'toggle', header: '🔍', width: 45, renderer: { kind: 'react', component: DetailToggleRenderer } },
 			{ field: 'id', header: 'Order ID', width: 110 },
 			{ field: 'customerName', header: 'Client Corporation', width: 220 },
 			{ field: 'orderDate', header: 'Purchase Date', width: 150 },
-			{ field: 'totalAmount', header: 'Transaction Value', width: 160, cellRenderer: PriceBadgeRenderer },
-			{ field: 'status', header: 'Fulfillment Status', width: 140, cellRenderer: StatusBadgeRenderer },
+			{ field: 'totalAmount', header: 'Transaction Value', width: 160, renderer: { kind: 'react', component: PriceBadgeRenderer } },
+			{ field: 'status', header: 'Fulfillment Status', width: 140, renderer: { kind: 'react', component: StatusBadgeRenderer } },
 		],
 		[]
 	);

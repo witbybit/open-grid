@@ -38,6 +38,8 @@ export interface RenderStats {
 	colsStayedDuringScroll: number;
 	cellsSkippedDuringScroll: number;
 	sameWindowBailouts: number;
+	stateReadsDuringScroll: number;
+	compiledPlanVersion?: number;
 	cellAccessReadsDuringScroll: number;
 	cellClassComputesDuringScroll: number;
 	dirtyCellsMarkedDuringScroll: number;
@@ -109,6 +111,7 @@ export class RenderOrchestrator {
 		colsStayedDuringScroll: 0,
 		cellsSkippedDuringScroll: 0,
 		sameWindowBailouts: 0,
+		stateReadsDuringScroll: 0,
 		cellAccessReadsDuringScroll: 0,
 		cellClassComputesDuringScroll: 0,
 		dirtyCellsMarkedDuringScroll: 0,

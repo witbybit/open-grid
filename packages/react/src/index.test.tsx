@@ -138,7 +138,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: ({ value }) => <span data-testid='custom-renderer'>{String(value)}!!!</span>,
+					renderer: { kind: 'react', component: ({ value }) => <span data-testid='custom-renderer'>{String(value)}!!!</span> },
 				},
 			],
 		});
@@ -165,9 +165,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: (props) => {
-						rendererProps.push(props as unknown as Record<string, unknown>);
-						return <span data-testid='custom-renderer-phase'>{String(props.phase)}</span>;
+					renderer: {
+						kind: 'react',
+						component: (props) => {
+							rendererProps.push(props as unknown as Record<string, unknown>);
+							return <span data-testid='custom-renderer-phase'>{String(props.phase)}</span>;
+						},
 					},
 				},
 			],
@@ -385,7 +388,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: ({ value }) => <span data-testid='portal-content'>{String(value)}</span>,
+					renderer: { kind: 'react', component: ({ value }) => <span data-testid='portal-content'>{String(value)}</span> },
 				},
 			],
 		});
@@ -418,7 +421,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: ({ value }) => <span data-testid='portal-content'>{String(value)}</span>,
+					renderer: { kind: 'react', component: ({ value }) => <span data-testid='portal-content'>{String(value)}</span> },
 				},
 			],
 		});
@@ -445,7 +448,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 				{ id: '1', name: 'Old' },
 				{ id: '2', name: 'New' },
 			],
-			columns: [{ field: 'name', header: 'Name', width: 100, cellRenderer: () => null }],
+			columns: [{ field: 'name', header: 'Name', width: 100, renderer: { kind: 'react', component: () => null } }],
 		});
 		const store = createPortalStore<TestRow>();
 		const container = document.createElement('div');
@@ -555,13 +558,13 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'severity',
 					header: 'Severity',
 					width: 120,
-					cellRenderer: ({ value }) => <span data-testid='severity-renderer'>{String(value)}</span>,
+					renderer: { kind: 'react', component: ({ value }) => <span data-testid='severity-renderer'>{String(value)}</span> },
 				},
 				{
 					field: 'service',
 					header: 'Service',
 					width: 120,
-					cellRenderer: ({ value }) => <span data-testid='service-renderer'>{String(value)}</span>,
+					renderer: { kind: 'react', component: ({ value }) => <span data-testid='service-renderer'>{String(value)}</span> },
 				},
 			],
 			getRowId: (row) => row.id,
@@ -631,7 +634,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 				field: 'risk',
 				header: 'Risk',
 				width: 120,
-				cellRenderer: ({ value }: { value: unknown }) => <span data-testid='risk-renderer'>Risk {String(value)}</span>,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: { value: unknown }) => <span data-testid='risk-renderer'>Risk {String(value)}</span>,
+				},
 			},
 		];
 		const nativeColumns = [{ field: 'col_999', header: 'Col 999', width: 120 }];
@@ -774,7 +780,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: ({ value }) => <span data-testid='custom-renderer-programmatic'>{String(value)}</span>,
+					renderer: { kind: 'react', component: ({ value }) => <span data-testid='custom-renderer-programmatic'>{String(value)}</span> },
 				},
 			],
 		});
@@ -1143,7 +1149,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: ({ value }) => <span data-testid='portal-content'>{String(value)}</span>,
+					renderer: { kind: 'react', component: ({ value }) => <span data-testid='portal-content'>{String(value)}</span> },
 				},
 			],
 		});
@@ -1175,9 +1181,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: ({ value }) => {
-						renderCount++;
-						return <span data-testid={`cell-${value}`}>{String(value)}</span>;
+					renderer: {
+						kind: 'react',
+						component: ({ value }) => {
+							renderCount++;
+							return <span data-testid={`cell-${value}`}>{String(value)}</span>;
+						},
 					},
 				},
 			],

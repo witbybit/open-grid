@@ -1,8 +1,9 @@
-import type { ColumnDef, GridCellPointer, GridCellRangeBounds, ColumnRenderPlan } from '../store.js';
+import type { CompiledGridPlan, GridCellPointer, GridCellRangeBounds, GridState } from '../store.js';
 
 export interface ScrollRenderContext<TRowData = unknown> {
 	isScrolling: boolean;
 
+	state?: GridState<TRowData>;
 	stateVersion: number;
 	dataVersion: number;
 	styleVersion: number;
@@ -13,8 +14,7 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	hasStyleHooks: boolean;
 	hasCustomRenderers: boolean;
 
-	displayedColumns: ColumnDef<TRowData>[];
-	columnPlans: ColumnRenderPlan<TRowData>[];
+	plan: CompiledGridPlan<TRowData>;
 	visibleColRange: { startIdx: number; endIdx: number };
 
 	focusedCell: GridCellPointer | null;

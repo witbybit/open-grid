@@ -12,6 +12,7 @@ import {
 	Sparkles,
 	Calendar,
 	FolderTree,
+	Gauge,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -24,6 +25,12 @@ interface ShowroomLeftSidebarProps {
 
 export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, setLeftSidebarCollapsed }: ShowroomLeftSidebarProps) {
 	const navItems = [
+		{
+			id: 'lab',
+			label: 'Performance Lab',
+			subtitle: '100k x 1k Glide',
+			icon: Gauge,
+		},
 		{
 			id: 'perf',
 			label: 'Risk & Greeks Engine',

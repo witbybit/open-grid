@@ -3,6 +3,7 @@ import {
 	GridCellClickParams,
 	GridCellPointer,
 	ColumnDef,
+	InternalColumnDef,
 	RowNode,
 	GridContextMenuOptions,
 	GridContextMenuHandle,
@@ -114,7 +115,7 @@ function OpenGridInner<TRowData = unknown>({
 				mountCellContent: (mount) => {
 					// Imperative fast path — renderer exposes ref.current.update(), bypasses
 					// React scheduler entirely. Zero reconciler overhead for live price feeds.
-					if (mount.col?.cellRendererCapabilities?.imperativeUpdate && !mount.isEditing) {
+					if ((mount.col as InternalColumnDef)?.cellRendererCapabilities?.imperativeUpdate && !mount.isEditing) {
 						if (
 							portalStore.tryImperativeUpdate(
 								mount.cellKey,

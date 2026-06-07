@@ -10,7 +10,16 @@ import {
 	createElement,
 	type ComponentType,
 } from 'react';
-import { ColumnDef, GridApi, RowNode, VisualRow, type CellRendererPhase, type ImperativeCellHandle, isDomCellRenderer } from '@open-grid/core';
+import {
+	ColumnDef,
+	GridApi,
+	RowNode,
+	VisualRow,
+	type CellRendererPhase,
+	type ImperativeCellHandle,
+	type InternalColumnDef,
+	isDomCellRenderer,
+} from '@open-grid/core';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import { GridProvider } from './OpenGrid.js';
@@ -109,9 +118,10 @@ function PortalCellInner<TRowData = unknown>({
 
 	const CustomEditor = col?.cellEditor as ((props: Record<string, unknown>) => ReactNode) | undefined;
 	// DomCellRenderer is an object ({mount}), memo/forwardRef are exotic objects — use isDomCellRenderer guard
+	const iCol = col as InternalColumnDef | undefined;
 	const CustomRenderer =
-		col?.cellRenderer && !isDomCellRenderer(col.cellRenderer)
-			? (col.cellRenderer as unknown as ComponentType<Record<string, unknown>>)
+		iCol?.cellRenderer && !isDomCellRenderer(iCol.cellRenderer)
+			? (iCol.cellRenderer as unknown as ComponentType<Record<string, unknown>>)
 			: undefined;
 
 	return (
@@ -680,12 +690,13 @@ function ImperativePortalCellWrapperInner<TRowData = unknown>({ cellKey, store }
 
 	if (!data) return null;
 
-	const CustomRenderer = data.col.cellRenderer as unknown as React.ForwardRefExoticComponent<
+	const iColData = data.col as InternalColumnDef;
+	const CustomRenderer = iColData.cellRenderer as unknown as React.ForwardRefExoticComponent<
 		Record<string, unknown> & React.RefAttributes<unknown>
 	>;
 	const rowData = data.node?.data;
 
-	if (!CustomRenderer || isDomCellRenderer(data.col.cellRenderer) || !rowData) return null;
+	if (!CustomRenderer || isDomCellRenderer(iColData.cellRenderer) || !rowData) return null;
 
 	return (
 		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
@@ -732,7 +743,7 @@ function CellPortalPoolInner<TRowData = unknown>({ store, api }: CellPortalPoolP
 	return (
 		<>
 			{cellPortalList.map((p) => {
-				const useImperative = !!p.col.cellRendererCapabilities?.imperativeUpdate;
+				const useImperative = !!(p.col as InternalColumnDef).cellRendererCapabilities?.imperativeUpdate;
 				return createPortal(
 					<GridProvider api={api} key={p.cellKey}>
 						{useImperative ? (

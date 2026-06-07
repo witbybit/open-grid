@@ -70,6 +70,8 @@ export class GridEngine<TRowData = unknown> {
 	public readonly cellUpdateBatch = new Map<string, Set<string>>();
 	public batchFlushScheduled = false;
 	private _batchedUpdates = true;
+	private renderTransactionDepth = 0;
+	private pendingRenderReason: string | null = null;
 
 	// RenderEngine callbacks to bridge rendering stats
 	public getRenderStats?: () => RenderStats;
@@ -405,12 +407,14 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public batch = (callback: () => void): void => {
+		this.beginRenderTransaction();
 		this.stateManager.startTransaction();
 		try {
 			callback();
 		} finally {
 			this.stateManager.endTransaction();
 			this.flushCellUpdatesSync();
+			this.endRenderTransaction();
 		}
 	};
 
@@ -467,7 +471,7 @@ export class GridEngine<TRowData = unknown> {
 				}
 				this.invalidation.invalidateRow(rowId, 'cell');
 			}
-			this.eventBus.dispatchEvent('renderInvalidated', { reason: 'bulk-cell-change' });
+			this.requestRender('bulk-cell-change');
 		}
 	}
 
@@ -893,7 +897,26 @@ export class GridEngine<TRowData = unknown> {
 	};
 
 	private requestRender(reason: string): void {
+		if (this.renderTransactionDepth > 0) {
+			this.pendingRenderReason = this.pendingRenderReason ? `${this.pendingRenderReason}+${reason}` : reason;
+			return;
+		}
 		this.eventBus.dispatchEvent('renderInvalidated', { reason });
+	}
+
+	private beginRenderTransaction(): void {
+		this.renderTransactionDepth++;
+	}
+
+	private endRenderTransaction(): void {
+		if (this.renderTransactionDepth === 0) return;
+		this.renderTransactionDepth--;
+		if (this.renderTransactionDepth > 0) return;
+		const reason = this.pendingRenderReason;
+		this.pendingRenderReason = null;
+		if (reason) {
+			this.eventBus.dispatchEvent('renderInvalidated', { reason });
+		}
 	}
 
 	private areRangeBoundsEqual(

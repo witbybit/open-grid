@@ -51,8 +51,8 @@ export class OverlayRenderer<TRowData = unknown> {
 		this.paintOverlay();
 	}
 
-	public syncScrollPosition(): void {
-		if (this.hasVisibleSelectionOverlay()) {
+	public syncScrollPosition(hasVisibleSelectionOverlay = this.hasVisibleSelectionOverlay()): void {
+		if (hasVisibleSelectionOverlay) {
 			this.overlayDirtyDuringScroll = true;
 		}
 	}

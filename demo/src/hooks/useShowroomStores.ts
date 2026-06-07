@@ -176,12 +176,15 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'delta',
 				header: 'Delta Δ',
 				width: 90,
-				cellRenderer: GreeksRenderer,
-				cellRendererCapabilities: {
-					scrollBehavior: 'fallback',
-					estimatedCost: 'expensive',
-					recycle: 'preserve',
-					warmCache: true,
+				renderer: {
+					kind: 'react',
+					component: GreeksRenderer,
+					capabilities: {
+						scrollBehavior: 'fallback',
+						estimatedCost: 'expensive',
+						recycle: 'preserve',
+						warmCache: true,
+					},
 				},
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
@@ -196,12 +199,15 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'gamma',
 				header: 'Gamma Γ',
 				width: 95,
-				cellRenderer: GreeksRenderer,
-				cellRendererCapabilities: {
-					scrollBehavior: 'fallback',
-					estimatedCost: 'expensive',
-					recycle: 'preserve',
-					warmCache: true,
+				renderer: {
+					kind: 'react',
+					component: GreeksRenderer,
+					capabilities: {
+						scrollBehavior: 'fallback',
+						estimatedCost: 'expensive',
+						recycle: 'preserve',
+						warmCache: true,
+					},
 				},
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
@@ -216,12 +222,15 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'vega',
 				header: 'Vega ν',
 				width: 90,
-				cellRenderer: GreeksRenderer,
-				cellRendererCapabilities: {
-					scrollBehavior: 'live',
-					estimatedCost: 'cheap',
-					recycle: 'preserve',
-					supportsRebind: false,
+				renderer: {
+					kind: 'react',
+					component: GreeksRenderer,
+					capabilities: {
+						scrollBehavior: 'live',
+						estimatedCost: 'cheap',
+						recycle: 'preserve',
+						supportsRebind: false,
+					},
 				},
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
@@ -236,12 +245,15 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'theta',
 				header: 'Theta θ',
 				width: 90,
-				cellRenderer: GreeksRenderer,
-				cellRendererCapabilities: {
-					scrollBehavior: 'fallback',
-					estimatedCost: 'expensive',
-					recycle: 'preserve',
-					warmCache: true,
+				renderer: {
+					kind: 'react',
+					component: GreeksRenderer,
+					capabilities: {
+						scrollBehavior: 'fallback',
+						estimatedCost: 'expensive',
+						recycle: 'preserve',
+						warmCache: true,
+					},
 				},
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
@@ -259,13 +271,16 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Risk Rating',
 				width: 110,
 				cellEditor: StatusDropdownEditor,
-				cellRenderer: RiskBadgeRenderer,
-				cellRendererCapabilities: {
-					scrollBehavior: 'defer',
-					estimatedCost: 'medium',
-					interactive: true,
-					recycle: 'preserve',
-					warmCache: true,
+				renderer: {
+					kind: 'react',
+					component: RiskBadgeRenderer,
+					capabilities: {
+						scrollBehavior: 'defer',
+						estimatedCost: 'medium',
+						interactive: true,
+						recycle: 'preserve',
+						warmCache: true,
+					},
 				},
 				valueGetter: ({ row }) => {
 					if (row.status === 'Active') return 'LOW';
@@ -324,20 +339,26 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'service',
 				header: 'Microservice',
 				width: 140,
-				cellRenderer: ServiceBadgeRenderer,
-				cellRendererCapabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'preserve' },
+				renderer: {
+					kind: 'react',
+					component: ServiceBadgeRenderer,
+					capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'preserve' },
+				},
 			},
 			{
 				field: 'rendererLive',
 				header: 'Live Rebind',
 				width: 170,
-				cellRenderer: RendererStrategyProbe,
-				cellRendererCapabilities: {
-					scrollBehavior: 'live',
-					estimatedCost: 'cheap',
-					recycle: 'rebind',
-					supportsRebind: true,
-					warmCache: true,
+				renderer: {
+					kind: 'react',
+					component: RendererStrategyProbe,
+					capabilities: {
+						scrollBehavior: 'live',
+						estimatedCost: 'cheap',
+						recycle: 'rebind',
+						supportsRebind: true,
+						warmCache: true,
+					},
 				},
 				valueGetter: ({ row }) => `live|${row.service}`,
 			},
@@ -345,14 +366,17 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'rendererDefer',
 				header: 'Defer Stable',
 				width: 170,
-				cellRenderer: RendererStrategyProbe,
-				cellRendererCapabilities: {
-					scrollBehavior: 'defer',
-					deferFallback: 'snapshot',
-					estimatedCost: 'medium',
-					interactive: true,
-					recycle: 'preserve',
-					warmCache: true,
+				renderer: {
+					kind: 'react',
+					component: RendererStrategyProbe,
+					capabilities: {
+						scrollBehavior: 'defer',
+						deferFallback: 'snapshot',
+						estimatedCost: 'medium',
+						interactive: true,
+						recycle: 'preserve',
+						warmCache: true,
+					},
 				},
 				valueGetterDependencies: ['severity'],
 				valueGetter: ({ row }) => `defer|${row.severity}`,
@@ -361,19 +385,25 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'severity',
 				header: 'Severity',
 				width: 120,
-				cellRenderer: RiskBadgeRenderer,
-				cellRendererCapabilities: { scrollBehavior: 'fallback', estimatedCost: 'medium', interactive: false },
+				renderer: {
+					kind: 'react',
+					component: RiskBadgeRenderer,
+					capabilities: { scrollBehavior: 'fallback', estimatedCost: 'medium', interactive: false },
+				},
 			},
 			{
 				field: 'rendererFallback',
 				header: 'Fallback Cache',
 				width: 175,
-				cellRenderer: RendererStrategyProbe,
-				cellRendererCapabilities: {
-					scrollBehavior: 'fallback',
-					estimatedCost: 'expensive',
-					recycle: 'preserve',
-					warmCache: true,
+				renderer: {
+					kind: 'react',
+					component: RendererStrategyProbe,
+					capabilities: {
+						scrollBehavior: 'fallback',
+						estimatedCost: 'expensive',
+						recycle: 'preserve',
+						warmCache: true,
+					},
 				},
 				valueGetterDependencies: ['latencyMs'],
 				valueGetter: ({ row }) => `fallback|${row.latencyMs}ms`,
@@ -382,17 +412,20 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'rendererDestroy',
 				header: 'Destroy Recycle',
 				width: 180,
-				cellRenderer: RendererStrategyProbe,
-				cellRendererCapabilities: {
-					scrollBehavior: 'fallback',
-					estimatedCost: 'medium',
-					recycle: 'destroy',
-					warmCache: false,
+				renderer: {
+					kind: 'react',
+					component: RendererStrategyProbe,
+					capabilities: {
+						scrollBehavior: 'fallback',
+						estimatedCost: 'medium',
+						recycle: 'destroy',
+						warmCache: false,
+					},
 				},
 				valueGetterDependencies: ['ipAddress'],
 				valueGetter: ({ row }) => `destroy|${row.ipAddress}`,
 			},
-			{ field: 'latencyMs', header: 'Latency', width: 110, cellRenderer: LatencyRenderer },
+			{ field: 'latencyMs', header: 'Latency', width: 110, renderer: { kind: 'react', component: LatencyRenderer } },
 			{ field: 'ipAddress', header: 'Origin IP', width: 140 },
 		];
 	}, []);
@@ -600,14 +633,20 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		() => [
 			{ field: 'id', header: 'Asset ID', width: 100 },
 			{ field: 'name', header: 'Premium Asset', width: 180 },
-			{ field: 'price', header: 'Acquisition Cost ($)', width: 150, cellRenderer: PriceBadgeRenderer },
-			{ field: 'rating', header: 'Client Rating', width: 160, cellRenderer: StarRatingRenderer },
-			{ field: 'progress', header: 'Deployment Status', width: 170, cellRenderer: ProgressBarRenderer, cellEditor: ProgressSliderEditor },
+			{ field: 'price', header: 'Acquisition Cost ($)', width: 150, renderer: { kind: 'react', component: PriceBadgeRenderer } },
+			{ field: 'rating', header: 'Client Rating', width: 160, renderer: { kind: 'react', component: StarRatingRenderer } },
+			{
+				field: 'progress',
+				header: 'Deployment Status',
+				width: 170,
+				renderer: { kind: 'react', component: ProgressBarRenderer },
+				cellEditor: ProgressSliderEditor,
+			},
 			{
 				field: 'status',
 				header: 'Operational Status',
 				width: 140,
-				cellRenderer: StatusBadgeRenderer,
+				renderer: { kind: 'react', component: StatusBadgeRenderer },
 				cellEditor: StatusDropdownEditor,
 				headerMenuComponent: StatusHeaderFilter,
 			},
@@ -635,7 +674,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'subtotal',
 				header: 'Delta Δ',
 				width: 100,
-				cellRenderer: GreeksRenderer,
+				renderer: { kind: 'react', component: GreeksRenderer },
 				valueGetterDependencies: ['price', 'quantity'],
 				valueGetter: ({ row }) => {
 					const vol = parseFloat(row.quantity) || 20;
@@ -650,7 +689,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Risk Profile',
 				width: 120,
 				cellEditor: StatusDropdownEditor,
-				cellRenderer: RiskBadgeRenderer,
+				renderer: { kind: 'react', component: RiskBadgeRenderer },
 				valueGetter: ({ row }) => {
 					if (row.status === 'Active') return 'LOW';
 					if (row.status === 'Pending') return 'MEDIUM';
@@ -682,14 +721,14 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		return [
 			{ field: 'id', header: 'Token ID', width: 150 },
 			{ field: 'name', header: 'Token Key', width: 160 },
-			{ field: 'price', header: 'Raw Value ($)', width: 130, cellRenderer: PriceBadgeRenderer },
+			{ field: 'price', header: 'Raw Value ($)', width: 130, renderer: { kind: 'react', component: PriceBadgeRenderer } },
 			{ field: 'quantity', header: 'Allocated Scale', width: 130 },
 			{
 				field: 'status',
 				header: 'Luxe Status',
 				width: 130,
 				cellEditor: StatusDropdownEditor,
-				cellRenderer: RiskBadgeRenderer,
+				renderer: { kind: 'react', component: RiskBadgeRenderer },
 				valueGetter: ({ row }) => {
 					if (row.status === 'Active') return 'LOW';
 					if (row.status === 'Pending') return 'MEDIUM';
@@ -723,11 +762,14 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'price',
 				header: 'Price (DOM)',
 				width: 130,
-				cellRenderer: SparklineRenderer,
-				cellRendererCapabilities: {
-					scrollBehavior: 'live',
-					recycle: 'rebind',
-					warmCache: true,
+				renderer: {
+					kind: 'dom',
+					renderer: SparklineRenderer,
+					capabilities: {
+						scrollBehavior: 'live',
+						recycle: 'rebind',
+						warmCache: true,
+					},
 				},
 			},
 			{
@@ -737,11 +779,13 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'change',
 				header: 'Change % (Imperative)',
 				width: 165,
-				cellRenderer: LivePriceRenderer,
-				cellRendererCapabilities: {
-					scrollBehavior: 'live',
-					imperativeUpdate: true,
-					recycle: 'rebind',
+				renderer: {
+					kind: 'imperativeReact',
+					component: LivePriceRenderer,
+					capabilities: {
+						scrollBehavior: 'live',
+						recycle: 'rebind',
+					},
 				},
 			},
 			{
@@ -750,11 +794,14 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				field: 'volume',
 				header: 'Vol/Analytics (React)',
 				width: 165,
-				cellRenderer: HeavyAnalyticsCell,
-				cellRendererCapabilities: {
-					scrollBehavior: 'live',
-					recycle: 'rebind',
-					estimatedCost: 'medium',
+				renderer: {
+					kind: 'react',
+					component: HeavyAnalyticsCell,
+					capabilities: {
+						scrollBehavior: 'fallback',
+						recycle: 'preserve',
+						estimatedCost: 'medium',
+					},
 				},
 			},
 			{ field: 'risk', header: 'Risk', width: 90 },
@@ -781,8 +828,19 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 			{ field: 'sprintDay', header: 'Sprint Start', width: 100 },
 			{ field: 'durationDays', header: 'Duration (Days)', width: 120 },
 			{ field: 'progress', header: 'Progress (%)', width: 110 },
-			{ field: 'status', header: 'Status', width: 120, cellRenderer: GanttStatusBadgeRenderer, cellEditor: GanttStatusDropdownEditor },
-			{ field: 'timeline', header: 'Gantt Sprint Timeline (30 Days)', width: 280, cellRenderer: GanttTimelineRenderer },
+			{
+				field: 'status',
+				header: 'Status',
+				width: 120,
+				renderer: { kind: 'react', component: GanttStatusBadgeRenderer },
+				cellEditor: GanttStatusDropdownEditor,
+			},
+			{
+				field: 'timeline',
+				header: 'Gantt Sprint Timeline (30 Days)',
+				width: 280,
+				renderer: { kind: 'react', component: GanttTimelineRenderer },
+			},
 		];
 	}, []);
 

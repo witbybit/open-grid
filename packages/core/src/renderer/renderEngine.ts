@@ -26,7 +26,7 @@ import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { type ColumnDef, type GridApi, type InternalGridApi, type SelectionChangeResult, type ColumnRenderPlan } from '../store.js';
+import { type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -34,9 +34,6 @@ import { type ColumnDef, type GridApi, type InternalGridApi, type SelectionChang
 export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData> {
 	private readonly engine: GridEngine<TRowData>;
 	private readonly api?: InternalGridApi<TRowData>;
-
-	private cachedColumnPlans: ColumnRenderPlan<TRowData>[] | null = null;
-	private cachedHasCustomRenderers: boolean | null = null;
 
 	private readonly geometryController: GeometryController<TRowData>;
 	private readonly scrollEngine: ScrollEngine<TRowData>;
@@ -77,6 +74,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private cachedMaxScrollLeft = 0;
 	private cachedTotalWidth = 0;
 	private cachedTotalHeight = 0;
+	private cachedHasSelectionOverlay = false;
 
 	// Reusable ScrollRenderContext updated in-place each scroll frame to avoid allocation.
 	private _scrollCtx!: ScrollRenderContext<TRowData>;
@@ -182,8 +180,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			activeEdit: null,
 			hasStyleHooks: false,
 			hasCustomRenderers: false,
-			displayedColumns: [],
-			columnPlans: [],
+			plan: this.engine.columns.getCompiledPlan(),
 			visibleColRange: { startIdx: 0, endIdx: 0 },
 			focusedCell: null,
 			selectionBounds: undefined,
@@ -486,6 +483,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.viewportRenderer.syncViewportScrollFromDom();
 
 		const state = this.engine.stateManager.getState();
+		this.cachedHasSelectionOverlay = !!state.selection.bounds && !!this.engine.getRowModel();
 
 		// Refresh the cached scroll-left bound using the already-read state — no extra
 		// state read. This handles viewport resizes that happened since the last frame.
@@ -514,21 +512,20 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.renderStats.scrollFrames++;
 		const startStateReads = this.engine.stateManager.debugGetStateCount;
 		try {
-			const displayedColumns = this.engine.columns.getDisplayedColumns();
-			const colCount = displayedColumns.length;
-			const visibleColRange = this.engine.viewport.getVisibleColumnRange(colCount);
+			const plan = this.engine.columns.getCompiledPlan();
+			const visibleColRange = { startIdx: nextWindow.colStart, endIdx: nextWindow.colEnd };
 
 			// Update the reusable ScrollRenderContext in-place — avoids one object
 			// allocation per scroll frame while keeping all cached references fresh.
 			const scrollCtx = this._scrollCtx;
+			scrollCtx.state = state;
 			scrollCtx.dataVersion = state.dataVersion;
 			scrollCtx.styleVersion = this.rowRenderer.styleVersion;
 			scrollCtx.loadingVersion = this.rowRenderer.loadingVersion;
 			scrollCtx.activeEdit = state.activeEdit;
 			scrollCtx.hasStyleHooks = !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender);
-			scrollCtx.hasCustomRenderers = this.cachedHasCustomRenderers ??= displayedColumns.some((c) => !!c.cellRenderer);
-			scrollCtx.displayedColumns = displayedColumns;
-			scrollCtx.columnPlans = this.cachedColumnPlans ??= displayedColumns.map((c) => this.engine.columns.getColumnPlan(c.field)!);
+			scrollCtx.hasCustomRenderers = plan.hasCustomRenderers;
+			scrollCtx.plan = plan;
 			scrollCtx.visibleColRange = visibleColRange;
 			scrollCtx.focusedCell = state.selection.focus;
 			scrollCtx.selectionBounds = state.selection.bounds ?? undefined;
@@ -537,14 +534,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			// call computeRenderWindow a second time (duplicate binary searches + state read).
 			this.recycleViewport(true, scrollCtx, nextWindow);
 			this.rowRenderer.syncPinnedLanePositions(nextWindow, this.cachedTotalWidth);
-			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, this.cachedTotalWidth, nextWindow.colCount);
-			const didSyncRange = this.headerRenderer.syncVisibleColumnRange();
+			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, plan);
+			const didSyncRange = this.headerRenderer.syncVisibleColumnRange(plan, state, visibleColRange);
 			if (didSyncRange) {
 				this.renderStats.headerRangeSyncsDuringScroll++;
 			}
 			this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
 			this.renderStats.overlayCheapSyncsDuringScroll++;
-			this.overlayRenderer.syncScrollPosition();
+			this.overlayRenderer.syncScrollPosition(this.cachedHasSelectionOverlay);
 		} finally {
 			const stateReadsInFrame = this.engine.stateManager.debugGetStateCount - startStateReads;
 			this.renderStats.stateReadsDuringScroll += stateReadsInFrame;
@@ -558,12 +555,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private syncCheapScrollOnly(window: RenderWindow): void {
+		const plan = this.engine.columns.getCompiledPlan();
 		// 1. Header scrollLeft transform
-		this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, this.cachedTotalWidth, window.colCount);
+		this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, plan);
 
 		// 2. Selection overlay transform
 		this.renderStats.overlayCheapSyncsDuringScroll++;
-		this.overlayRenderer.syncScrollPosition();
+		this.overlayRenderer.syncScrollPosition(this.cachedHasSelectionOverlay);
 
 		// 3. Pinned rows position update (if any)
 		const pinTopRows = window.pinTopRows;
@@ -617,7 +615,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private bindInvalidationSources(): void {
 		const invalidateFull = () => {
-			clearColumnCaches();
 			this.engine.invalidation.invalidateFull('state');
 			this.scheduler.requestFlush('state');
 		};
@@ -645,12 +642,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 			this.scheduler.requestFlush('data');
 		};
-		const clearColumnCaches = () => {
-			this.cachedColumnPlans = null;
-			this.cachedHasCustomRenderers = null;
-		};
 		const invalidateDefaultColumnGeometry = () => {
-			clearColumnCaches();
 			this.geometryController.invalidateAll();
 			this.engine.invalidation.invalidateGeometry('columns');
 			this.engine.invalidation.invalidateViewport('columns');
@@ -673,10 +665,18 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleRowRange', invalidateViewport));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleColRange', invalidateViewport));
 
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('columns', invalidateFull));
+		this.unsubscribers.push(
+			this.engine.stateManager.subscribeToKey('columns', () => {
+				// Release all custom renderer instances before the column-change repaint.
+				// Without this a DOM renderer mounted in portalHostElement stays visible even
+				// after a column switches to text mode, because text writes to contentElement
+				// (a sibling div) and never clears portalHostElement.
+				this.portalMountManager.releaseAll();
+				invalidateFull();
+			})
+		);
 		this.unsubscribers.push(
 			this.engine.stateManager.subscribeToKey('columnWidths', () => {
-				clearColumnCaches();
 				invalidateGeometryFull();
 			})
 		);
@@ -829,6 +829,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			colsStayedDuringScroll: this.renderStats.colsStayedDuringScroll,
 			cellsSkippedDuringScroll: this.renderStats.cellsSkippedDuringScroll,
 			sameWindowBailouts: this.renderStats.sameWindowBailouts,
+			stateReadsDuringScroll: this.renderStats.stateReadsDuringScroll,
+			compiledPlanVersion: this.engine.columns.getCompiledPlanVersion(),
 			getCellValueCallsDuringScroll: this.engine.getCellValueCallsDuringScroll,
 			valueGetterCallsDuringScroll: this.engine.valueGetterCallsDuringScroll,
 			formulaCallsDuringScroll: this.engine.formulaCallsDuringScroll,

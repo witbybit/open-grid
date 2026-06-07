@@ -6,7 +6,7 @@ import type {
 	GridRowContentMount,
 	GridRowContentUnmount,
 } from './IGridRenderer.js';
-import type { VisualRow } from '../store.js';
+import type { VisualRow, InternalColumnDef } from '../store.js';
 import { isDomCellRenderer } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { CustomRendererManager, type ReleaseReason } from './customRendererManager.js';
@@ -97,8 +97,8 @@ export class PortalMountManager<TRowData = unknown> {
 	};
 
 	private mountCellReal(mount: GridCellContentMount<TRowData>): void {
-		const col = mount.col;
-		const isCustom = !!(col?.cellRenderer || mount.isEditing);
+		const col = mount.col as InternalColumnDef<TRowData>;
+		const isCustom = !!(col.cellRenderer || mount.isEditing);
 
 		if (!isCustom) {
 			this.onMountCellContent?.(mount);
@@ -111,7 +111,7 @@ export class PortalMountManager<TRowData = unknown> {
 		const rowSlotId = this.getPhysicalRowSlotId?.(rowIndex);
 
 		// DOM renderer — zero React overhead, direct DOM manipulation
-		if (!mount.isEditing && isDomCellRenderer(col?.cellRenderer)) {
+		if (!mount.isEditing && isDomCellRenderer(col.cellRenderer)) {
 			const rendererKey = rowSlotId ? `dom:${col.field}@${rowSlotId}` : `dom:${col.field}@${rowIndex}:${colIndex}`;
 
 			this.domCellRendererManager.acquire({

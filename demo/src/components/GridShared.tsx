@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi, GridContextMenuOptions } from '@open-grid/react';
 
-export type GridPageType = 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt' | 'nested';
+export type GridPageType = 'lab' | 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt' | 'nested';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================

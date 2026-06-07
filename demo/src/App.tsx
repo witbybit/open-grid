@@ -15,13 +15,14 @@ import HeadlessSkinsPlayground from './pages/HeadlessSkinsPlayground';
 import RealtimeDashboard from './pages/RealtimeDashboard';
 import GanttSchedulingWorkspace from './pages/GanttSchedulingWorkspace';
 import NestedTablesGrouping from './pages/NestedTablesGrouping';
+import PerformanceLab from './pages/PerformanceLab';
 import { useShowroomStores } from './hooks/useShowroomStores';
 import type { FilterModel, SortModel } from '@open-grid/react';
 import { GridPageType } from './components/GridShared';
 
 export default function App() {
 	// Active Page Routing State via URL Hash Routing
-	const [activePage, setActivePage] = useState<GridPageType>('perf');
+	const [activePage, setActivePage] = useState<GridPageType>('lab');
 
 	// Collapsible Sidebars State
 	const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
@@ -35,7 +36,7 @@ export default function App() {
 	useEffect(() => {
 		const handleHashChange = () => {
 			const hash = window.location.hash.slice(1);
-			if (['perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard', 'gantt', 'nested'].includes(hash)) {
+			if (['lab', 'perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard', 'gantt', 'nested'].includes(hash)) {
 				setActivePage(hash as any);
 			}
 		};
@@ -45,7 +46,7 @@ export default function App() {
 		if (window.location.hash) {
 			handleHashChange();
 		} else {
-			window.location.hash = 'perf';
+			window.location.hash = 'lab';
 		}
 
 		return () => window.removeEventListener('hashchange', handleHashChange);
@@ -116,6 +117,8 @@ export default function App() {
 
 	const activeApi = useMemo(() => {
 		switch (activePage) {
+			case 'lab':
+				return perfApi;
 			case 'perf':
 				return perfApi;
 			case 'server':
@@ -205,6 +208,8 @@ export default function App() {
 
 					{/* Visual Interactive Grid viewport */}
 					<div className='flex-1 min-h-0 flex flex-col'>
+						{activePage === 'lab' && <PerformanceLab />}
+
 						{activePage === 'perf' && (
 							<CalculationsArena
 								api={perfApi}

@@ -161,19 +161,19 @@ function parseCellLeft(el: HTMLElement): number {
 
 function getScrollContext(grid: AuditGrid) {
 	const state = grid.store.getState();
-	const displayedColumns = grid.store.engine.columns.getDisplayedColumns();
+	const plan = grid.store.engine.columns.getCompiledPlan();
 	return {
 		isScrolling: true,
+		state,
 		stateVersion: 0,
 		dataVersion: state.dataVersion,
 		styleVersion: 0,
 		loadingVersion: 0,
 		activeEdit: state.activeEdit,
 		hasStyleHooks: !!state.styleSlots,
-		hasCustomRenderers: displayedColumns.some((column) => !!column.cellRenderer),
-		displayedColumns,
-		columnPlans: displayedColumns.map((column) => grid.store.engine.columns.getColumnPlan(column.field)!),
-		visibleColRange: grid.store.engine.viewport.getVisibleColumnRange(displayedColumns.length),
+		hasCustomRenderers: plan.hasCustomRenderers,
+		plan,
+		visibleColRange: grid.store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),
 		focusedCell: state.selection.focus,
 		selectionBounds: state.selection.bounds ?? undefined,
 		canUseCachedDisplayValues: true,

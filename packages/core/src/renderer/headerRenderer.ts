@@ -1,6 +1,7 @@
 import type { InvalidationFrame } from './invalidationManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
+import type { CompiledGridPlan, GridState } from '../store.js';
 
 export class HeaderRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -62,20 +63,21 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.syncVisibleHeaders(true);
 	}
 
-	public syncScrollLeft(scrollLeft: number, totalWidth: number, colCount: number): void {
+	public syncScrollLeft(scrollLeft: number, plan: CompiledGridPlan<TRowData>): void {
 		this.lastHeaderScrollLeft = scrollLeft;
-		this.syncPinnedLayerPositions(totalWidth, colCount);
+		this.syncPinnedLayerPositions(plan);
 	}
 
-	private syncPinnedLayerPositions(totalWidth: number, colCount: number): void {
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
+	private syncPinnedLayerPositions(plan: CompiledGridPlan<TRowData>): void {
+		const pinLeftColumns = plan.pinLeftCount;
+		const pinRightColumns = plan.pinRightCount;
+		const colCount = plan.displayedColumns.length;
 		const scrollLeft = this.engine.viewport.scrollLeft;
 		const viewportWidth = this.engine.viewport.viewportWidth;
-		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
-		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
-		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
-		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const pinRightStart = plan.pinRightStart;
+		const pinLeftWidth = plan.pinLeftWidth;
+		const pinRightBaseLeft = plan.pinRightBaseLeft;
+		const pinRightWidth = plan.pinRightWidth;
 
 		if (this.headerLeftLayer) {
 			const transform = pinLeftColumns > 0 ? `translate3d(${scrollLeft}px, 0, 0)` : '';
@@ -98,11 +100,14 @@ export class HeaderRenderer<TRowData = unknown> {
 		}
 	}
 
-	public syncVisibleColumnRange(): boolean {
-		const colCount = this.engine.columns.getDisplayedColumnCount();
-		const pinLeft = this.engine.viewport.pinLeftColumns;
-		const pinRight = this.engine.viewport.pinRightColumns;
-		const range = this.engine.viewport.getVisibleColumnRange(colCount);
+	public syncVisibleColumnRange(
+		plan = this.engine.columns.getCompiledPlan(),
+		state?: GridState<TRowData>,
+		range = this.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length)
+	): boolean {
+		const colCount = plan.displayedColumns.length;
+		const pinLeft = plan.pinLeftCount;
+		const pinRight = plan.pinRightCount;
 
 		if (
 			range.startIdx === this.lastHeaderVisibleRange.startIdx &&
@@ -115,15 +120,20 @@ export class HeaderRenderer<TRowData = unknown> {
 			return false;
 		}
 
-		this.syncVisibleHeaders(false);
+		this.syncVisibleHeaders(false, plan, state, range);
 		return true;
 	}
 
-	private syncVisibleHeaders(forceRepaint = false): void {
+	private syncVisibleHeaders(
+		forceRepaint = false,
+		plan = this.engine.columns.getCompiledPlan(),
+		suppliedState?: GridState<TRowData>,
+		suppliedColRange = this.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length)
+	): void {
 		if (!this.headerLayer || !this.headerLeftLayer || !this.headerRightLayer) return;
 
-		const state = this.engine.stateManager.getState();
-		const columns = this.engine.columns.getDisplayedColumns();
+		const state = suppliedState ?? this.engine.stateManager.getState();
+		const columns = plan.displayedColumns;
 		const colCount = columns.length;
 		if (colCount === 0) {
 			this.clearHeaderCells();
@@ -131,11 +141,10 @@ export class HeaderRenderer<TRowData = unknown> {
 			return;
 		}
 
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const newColRange = this.engine.viewport.getVisibleColumnRange(colCount);
-		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
-		this.syncPinnedLayerPositions(totalWidth, colCount);
+		const pinLeftColumns = plan.pinLeftCount;
+		const pinRightColumns = plan.pinRightCount;
+		const newColRange = suppliedColRange;
+		this.syncPinnedLayerPositions(plan);
 
 		if (
 			!forceRepaint &&
@@ -164,8 +173,8 @@ export class HeaderRenderer<TRowData = unknown> {
 			rendered.add(c);
 
 			let className = 'og-header-cell';
-			let cellLeft = this.engine.geometry.colLefts[c];
-			const cellWidth = this.engine.geometry.colWidths[c];
+			let cellLeft = plan.colLefts[c];
+			const cellWidth = plan.colWidths[c];
 
 			let targetLayer = this.headerLayer;
 
@@ -174,7 +183,7 @@ export class HeaderRenderer<TRowData = unknown> {
 				targetLayer = this.headerLeftLayer;
 			} else if (c >= Math.max(pinLeftColumns, colCount - pinRightColumns)) {
 				className += ' og-header-cell-pinned-right';
-				const firstRightPinColLeft = this.engine.geometry.colLefts[Math.max(pinLeftColumns, colCount - pinRightColumns)];
+				const firstRightPinColLeft = plan.colLefts[Math.max(pinLeftColumns, colCount - pinRightColumns)];
 				cellLeft = cellLeft - firstRightPinColLeft;
 				targetLayer = this.headerRightLayer;
 			}

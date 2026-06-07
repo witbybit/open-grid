@@ -55,6 +55,12 @@ export interface ClientGridOptions<TRowData> {
 	rows: TRowData[];
 	columns: ColumnDef<TRowData>[];
 	getRowId?: (row: TRowData) => string;
+	/** Number of extra rows to render beyond the visible area (default: 12). */
+	rowBuffer?: number;
+	/** Number of extra columns to render beyond the visible area (default: 2). */
+	colBuffer?: number;
+	/** Override the per-frame render budget caps. */
+	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
 	initialState?: Partial<GridState<TRowData>>;
 }
 

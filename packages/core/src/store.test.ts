@@ -1165,4 +1165,110 @@ describe('GridStore undo and redo functionality', () => {
 
 		controller.dispose();
 	});
+
+	it('compiles immutable grid plans and rebuilds them only for column geometry or pin changes', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+
+		const first = store.engine.columns.getCompiledPlan();
+		const second = store.engine.columns.getCompiledPlan();
+		expect(second).toBe(first);
+		expect(first.displayedColumns.map((column) => column.field)).toEqual(['id', 'name', 'price']);
+		expect(first.totalWidth).toBe(300);
+
+		store.setColumnWidth('name', 200);
+		const afterWidth = store.engine.columns.getCompiledPlan();
+		expect(afterWidth).not.toBe(first);
+		expect(afterWidth.version).toBeGreaterThan(first.version);
+		expect(afterWidth.colWidths[1]).toBe(200);
+
+		const stable = store.engine.columns.getCompiledPlan();
+		expect(stable).toBe(afterWidth);
+
+		store.setPinnedColumns({ left: 1, right: 1 });
+		const afterPins = store.engine.columns.getCompiledPlan();
+		expect(afterPins).not.toBe(afterWidth);
+		expect(afterPins.pinLeftWidth).toBe(50);
+		expect(afterPins.pinRightStart).toBe(2);
+		expect(afterPins.pinRightWidth).toBe(100);
+	});
+
+	it('normalizes explicit renderer tiers into compiled column plans', () => {
+		const domRenderer = {
+			mount: (container: HTMLElement) => {
+				container.textContent = 'dom';
+				return { update: () => {} };
+			},
+		};
+		const reactRenderer = () => null;
+		const imperativeRenderer = () => null;
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', renderer: { kind: 'text' } },
+				{ field: 'name', header: 'Name', renderer: { kind: 'dom', renderer: domRenderer } },
+				{ field: 'price', header: 'Price', renderer: { kind: 'react', component: reactRenderer } },
+				{ field: 'tier', header: 'Tier', renderer: { kind: 'imperativeReact', component: imperativeRenderer } } as any,
+			],
+		});
+
+		const plan = store.engine.columns.getCompiledPlan();
+		expect(plan.columnPlans.map((columnPlan) => columnPlan.mode)).toEqual(['primitive', 'custom-live', 'custom-fallback', 'custom-live']);
+		expect(plan.displayedColumns[1].cellRenderer).toBe(domRenderer);
+		expect(plan.displayedColumns[2].cellRendererCapabilities?.scrollBehavior).toBe('fallback');
+		expect(plan.displayedColumns[3].cellRendererCapabilities?.imperativeUpdate).toBe(true);
+		expect(plan.hasCustomRenderers).toBe(true);
+		expect(plan.hasDomRenderers).toBe(true);
+	});
+
+	it('coalesces api.batch and api.transaction render invalidations into one render request', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const renderInvalidated = vi.fn();
+		store.addEventListener('renderInvalidated', renderInvalidated);
+
+		store.batch(() => {
+			store.setColumnWidth('id', 60);
+			store.setColumnWidth('name', 180);
+			store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+			store.setCellValue('1', 'name', 'Product A+');
+		});
+
+		expect(renderInvalidated).toHaveBeenCalledTimes(1);
+		renderInvalidated.mockClear();
+
+		store.transaction({
+			columns: [
+				{ field: 'id', header: 'ID', width: 70 },
+				{ field: 'name', header: 'Name', width: 180 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			rowTransaction: { update: [{ id: '2', name: 'Product B+', price: 22 }] },
+			filterModel: { name: { type: 'contains', filter: 'Product' } },
+			pins: { left: 1, right: 1 },
+		});
+
+		expect(renderInvalidated).toHaveBeenCalledTimes(1);
+		expect(store.getPinnedColumns()).toEqual({ left: 1, right: 1 });
+		expect(store.getState().filterModel).toEqual({ name: { type: 'contains', filter: 'Product' } });
+
+		controller.dispose();
+	});
 });

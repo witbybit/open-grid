@@ -4,7 +4,15 @@ import type { GeometryController } from './geometryController.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { InvalidationFrame } from './invalidationManager.js';
-import { type CellRendererPhase, type ColumnDef, type VisualRow, type GridState, type RowNode, type GridCellPointer } from '../store.js';
+import {
+	type CellRendererPhase,
+	type ColumnDef,
+	type InternalColumnDef,
+	type VisualRow,
+	type GridState,
+	type RowNode,
+	type GridCellPointer,
+} from '../store.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { GridCellContentUnmount } from './IGridRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
@@ -222,7 +230,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.isScrollFrameActive = isScrollFrameActive;
 		this.isScrolling = isScrollFrameActive || this.engine.isScrolling;
 
-		const state = this.engine.stateManager.getState();
+		const state = ctx?.state ?? this.engine.stateManager.getState();
 		// Use the pre-computed window from flushScrollFrame when available to avoid
 		// a duplicate computeRenderWindow call (binary searches + state read) per frame.
 		const nextWindow =
@@ -256,7 +264,8 @@ export class RowRenderer<TRowData = unknown> {
 			rowModel.loadVisibleBlocks(nextWindow.rowStart, nextWindow.rowEnd);
 		}
 
-		const columns = this.engine.columns.getDisplayedColumns();
+		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
+		const columns = plan.displayedColumns;
 		const strategy = state.rowRecyclingStrategy ?? 'index-pool';
 		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
 
@@ -404,7 +413,7 @@ export class RowRenderer<TRowData = unknown> {
 		};
 
 		// Hoist geometry constants that are constant across all rows in this viewport cycle
-		const hoistedTotalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
+		const hoistedTotalWidth = plan.totalWidth;
 		const hoistedTotalHeight = nextWindow.pinBottomRows > 0 ? this.engine.geometry.getTotalHeight(state.defaultRowHeight) : 0;
 
 		const renderRow = (r: number) => {
@@ -719,15 +728,15 @@ export class RowRenderer<TRowData = unknown> {
 	): void {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
+		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
 		const colCount = columns.length;
 		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 		// Use hoisted state/totalWidth from recycleViewport when available to avoid
 		// redundant reads for each row in the same viewport cycle.
 		const state = _hoistedState ?? this.engine.stateManager.getState();
-		const totalWidth = _hoistedTotalWidth ?? this.engine.geometry.getTotalWidth(state.defaultColWidth);
-		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
-		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
-		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const pinLeftWidth = plan.pinLeftWidth;
+		const pinRightBaseLeft = plan.pinRightBaseLeft;
+		const pinRightWidth = plan.pinRightWidth;
 		const pinLeftContainer = this.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 		const pinRightContainer = this.ensurePinnedContainer(slot, 'right', pinRightWidth);
 		if (pinRightContainer && slot.pinRightContainerLeft !== pinRightBaseLeft) {
@@ -749,8 +758,8 @@ export class RowRenderer<TRowData = unknown> {
 				slot.cells.set(c, cellSlot);
 			}
 
-			const cellLeft = this.engine.geometry.colLefts[c];
-			const cellWidth = this.engine.geometry.colWidths[c];
+			const cellLeft = plan.colLefts[c];
+			const cellWidth = plan.colWidths[c];
 			const isPinLeft = c < pinLeftColumns;
 			const isPinRight = c >= pinRightStart;
 			const leftArg = isPinRight ? cellLeft - pinRightBaseLeft : cellLeft;
@@ -861,7 +870,7 @@ export class RowRenderer<TRowData = unknown> {
 			let contentMode: CellContentMode = 'empty';
 			let formattedValue = '';
 
-			if ((col.cellRenderer || access.isEditing) && !access.isLoading) {
+			if (((col as InternalColumnDef<TRowData>).cellRenderer || access.isEditing) && !access.isLoading) {
 				contentMode = 'portal';
 				if (cellSlot.element.dataset.cellKey !== cellKey || !this.portalMountManager.isCellMounted(cellKey)) {
 					if (cellSlot.element.dataset.cellKey) {
@@ -958,13 +967,12 @@ export class RowRenderer<TRowData = unknown> {
 	): void {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
+		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
 		const colCount = columns.length;
 		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
-		const loadingState = _hoistedState ?? this.engine.stateManager.getState();
-		const totalWidth = _hoistedTotalWidth ?? this.engine.geometry.getTotalWidth(loadingState.defaultColWidth);
-		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
-		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
-		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const pinLeftWidth = plan.pinLeftWidth;
+		const pinRightBaseLeft = plan.pinRightBaseLeft;
+		const pinRightWidth = plan.pinRightWidth;
 		const pinLeftContainer = this.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 		const pinRightContainer = this.ensurePinnedContainer(slot, 'right', pinRightWidth);
 		if (pinRightContainer && slot.pinRightContainerLeft !== pinRightBaseLeft) {
@@ -984,8 +992,8 @@ export class RowRenderer<TRowData = unknown> {
 				slot.cells.set(c, cellSlot);
 			}
 
-			const cellLeft = this.engine.geometry.colLefts[c];
-			const cellWidth = this.engine.geometry.colWidths[c];
+			const cellLeft = plan.colLefts[c];
+			const cellWidth = plan.colWidths[c];
 			const isPinLeft = c < pinLeftColumns;
 			const isPinRight = c >= pinRightStart;
 			const leftArg = isPinRight ? cellLeft - pinRightBaseLeft : cellLeft;
@@ -1054,7 +1062,7 @@ export class RowRenderer<TRowData = unknown> {
 		right: number,
 		width: number
 	): void {
-		const plan = ctx.columnPlans[colIndex];
+		const plan = ctx.plan.columnPlans[colIndex];
 		const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
 		const isRowLoading = ctx.loadingVersion > 0 && this.engine.data.isRowLoading(node.id);
 
@@ -1136,7 +1144,7 @@ export class RowRenderer<TRowData = unknown> {
 					formattedValue = '';
 					contentMode = 'pending';
 				}
-			} else if (scrollMode === 'custom-defer' && col.cellRendererCapabilities?.deferFallback === 'snapshot') {
+			} else if (scrollMode === 'custom-defer' && (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.deferFallback === 'snapshot') {
 				const cachedVal = this.engine.data.getCachedDisplayValue(node.id, col.field);
 				if (cachedVal !== undefined) {
 					formattedValue = cachedVal;
@@ -1206,7 +1214,7 @@ export class RowRenderer<TRowData = unknown> {
 	}
 
 	private showDeferredSnapshot(cell: HTMLDivElement, node: RowNode<TRowData>, col: ColumnDef<TRowData>): boolean {
-		if (col.cellRendererCapabilities?.deferFallback !== 'snapshot') return false;
+		if ((col as InternalColumnDef<TRowData>).cellRendererCapabilities?.deferFallback !== 'snapshot') return false;
 		const cachedVal = this.engine.data.getCachedDisplayValue(node.id, col.field);
 		if (cachedVal === undefined) return false;
 		this.cellRenderer.setPrimitiveContent(cell, cachedVal, 'fallback');

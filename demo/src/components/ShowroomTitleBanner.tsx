@@ -10,6 +10,7 @@ import {
 	PanelRightOpen,
 	PanelRightClose,
 	Calendar,
+	Gauge,
 } from 'lucide-react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
@@ -38,6 +39,7 @@ export default function ShowroomTitleBanner({
 			<div className='z-10 flex items-center gap-3'>
 				<span className='p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400'>
 					{activePage === 'perf' && <Cpu className='w-4.5 h-4.5' />}
+					{activePage === 'lab' && <Gauge className='w-4.5 h-4.5' />}
 					{activePage === 'server' && <Database className='w-4.5 h-4.5' />}
 					{activePage === 'ranges' && <FileSpreadsheet className='w-4.5 h-4.5' />}
 					{activePage === 'editors' && <Sliders className='w-4.5 h-4.5' />}
@@ -48,6 +50,7 @@ export default function ShowroomTitleBanner({
 				</span>
 				<div>
 					<h2 className='text-sm font-extrabold text-slate-200 leading-tight uppercase tracking-wider flex items-center gap-2'>
+						{activePage === 'lab' && 'Performance Lab: compiled plans, DOM renderers, and glide telemetry'}
 						{activePage === 'perf' && 'Financial Risk & Option Greeks stress-test engine'}
 						{activePage === 'server' && 'Global Audit & Transaction Logging Ledger'}
 						{activePage === 'ranges' && 'Quantitative Financial Planning & Sheet Workbench'}
@@ -59,6 +62,8 @@ export default function ShowroomTitleBanner({
 						{activePage === 'nested' && 'Nested and Group Grid Arena'}
 					</h2>
 					<p className='text-[10px] text-slate-400 leading-tight mt-0.5'>
+						{activePage === 'lab' &&
+							'Drive a 100,000 row by 1,000 column grid through violent scroll patterns while watching bounded-work counters stay flat.'}
 						{activePage === 'perf' &&
 							'Perform high-frequency option risk simulations with O(1) Greek recalculations across 10,000 open options.'}
 						{activePage === 'server' &&

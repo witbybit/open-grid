@@ -265,6 +265,16 @@ export interface CellRendererCapabilities {
 	imperativeUpdate?: boolean;
 }
 
+export type ColumnRendererSpec<TRowData = unknown> =
+	| { kind: 'text' }
+	| { kind: 'dom'; renderer: DomCellRenderer<TRowData>; capabilities?: CellRendererCapabilities }
+	| { kind: 'react'; component: unknown; capabilities?: CellRendererCapabilities }
+	| {
+			kind: 'imperativeReact';
+			component: unknown;
+			capabilities?: CellRendererCapabilities;
+	  };
+
 // ─── Imperative handle ────────────────────────────────────────────────────────
 
 /** Exposed via forwardRef on renderers with cellRendererCapabilities.imperativeUpdate = true */
@@ -344,6 +354,27 @@ export interface ColumnRenderPlan<TData = unknown> {
 
 	rendererType?: unknown;
 	diagnostics?: string[];
+}
+
+export interface CompiledGridPlan<TData = unknown> {
+	version: number;
+	columns: InternalColumnDef<TData>[];
+	displayedColumns: InternalColumnDef<TData>[];
+	columnPlans: ColumnRenderPlan<TData>[];
+	colFields: string[];
+	colWidths: ArrayLike<number>;
+	colLefts: ArrayLike<number>;
+	totalWidth: number;
+	pinLeftCount: number;
+	pinRightCount: number;
+	pinRightStart: number;
+	pinLeftWidth: number;
+	pinRightWidth: number;
+	pinRightBaseLeft: number;
+	hasCustomRenderers: boolean;
+	hasDomRenderers: boolean;
+	hasFormattedValues: boolean;
+	hasValueGetters: boolean;
 }
 
 export interface CellRendererProps<TRowData = unknown> {
@@ -483,12 +514,21 @@ export interface ColumnDef<TRowData = unknown> {
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
 	valueGetterDependencies?: string[];
 	valueSetter?: (row: TRowData, value: unknown) => boolean;
-	cellRenderer?: ((props: CellRendererProps<TRowData>) => unknown) | DomCellRenderer<TRowData>;
-	cellRendererCapabilities?: CellRendererCapabilities;
+	renderer?: ColumnRendererSpec<TRowData>;
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
 	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;
 	headerMenuComponent?: any;
 	sortable?: boolean;
+}
+
+/**
+ * @internal
+ * Internal column definition — extends the public ColumnDef with normalised renderer fields
+ * produced by ColumnModel.normalizeColumn(). Never expose these on the public ColumnDef.
+ */
+export interface InternalColumnDef<TRowData = unknown> extends ColumnDef<TRowData> {
+	cellRenderer?: ((props: CellRendererProps<TRowData>) => unknown) | DomCellRenderer<TRowData>;
+	cellRendererCapabilities?: CellRendererCapabilities;
 }
 
 export interface GridRowClassParams<TRowData = unknown> {
@@ -529,7 +569,7 @@ export interface GridStyleSlots<TRowData = unknown> {
 	detailRowClass?: (visualRow: Extract<VisualRow<TRowData>, { kind: 'detail' }>) => string;
 }
 
-export function getCellRendererCapabilities<TRowData>(col: ColumnDef<TRowData>): Required<CellRendererCapabilities> {
+export function getCellRendererCapabilities<TRowData>(col: InternalColumnDef<TRowData>): Required<CellRendererCapabilities> {
 	return {
 		scrollBehavior: col.cellRendererCapabilities?.scrollBehavior ?? 'fallback',
 		deferFallback: col.cellRendererCapabilities?.deferFallback ?? 'pending',
@@ -649,6 +689,16 @@ export interface RowNodeTransaction<TData = unknown> {
 	add: RowNode<TData>[];
 	remove: RowNode<TData>[];
 	update: RowNode<TData>[];
+}
+
+export interface GridTransaction<TRowData = unknown> {
+	columns?: ColumnDef<TRowData>[];
+	rows?: TRowData[];
+	rowTransaction?: RowDataTransaction<TRowData>;
+	sortModel?: SortModel | null;
+	filterModel?: FilterModel | null;
+	pins?: { left?: number; right?: number; top?: number; bottom?: number };
+	styleSlots?: GridStyleSlots<TRowData>;
 }
 
 /**
@@ -1177,6 +1227,34 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return rowModel.applyTransaction(transaction);
 	};
 
+	public transaction = (transaction: GridTransaction<TRowData>): RowNodeTransaction<TRowData> | null => {
+		let rowResult: RowNodeTransaction<TRowData> | null = null;
+		this.engine.batch(() => {
+			if (transaction.columns) {
+				this.setColumns(transaction.columns);
+			}
+			if (transaction.rows) {
+				this.setRows(transaction.rows);
+			}
+			if (transaction.rowTransaction) {
+				rowResult = this.applyTransaction(transaction.rowTransaction);
+			}
+			if ('sortModel' in transaction) {
+				this.setSortModel(transaction.sortModel ?? null);
+			}
+			if ('filterModel' in transaction) {
+				this.setFilterModel(transaction.filterModel ?? null);
+			}
+			if (transaction.pins) {
+				this.setViewportPins(transaction.pins);
+			}
+			if ('styleSlots' in transaction) {
+				this.setStyleSlots(transaction.styleSlots);
+			}
+		});
+		return rowResult;
+	};
+
 	public refreshRows = (): void => {
 		this.getRowModel()?.refresh();
 	};
@@ -1447,6 +1525,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			colsStayedDuringScroll: 0,
 			cellsSkippedDuringScroll: 0,
 			sameWindowBailouts: 0,
+			stateReadsDuringScroll: 0,
+			compiledPlanVersion: this.engine.columns.getCompiledPlanVersion(),
 			hotDomReleases: 0,
 			coldDomReleases: 0,
 			cellsPatchedPerScrollFrame: [],

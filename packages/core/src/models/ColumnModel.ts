@@ -1,15 +1,27 @@
-import type { ColumnDef, ColumnRenderPlan, ColumnRenderMode } from '../store.js';
+import {
+	isDomCellRenderer,
+	type ColumnDef,
+	type InternalColumnDef,
+	type ColumnRenderPlan,
+	type ColumnRenderMode,
+	type CompiledGridPlan,
+} from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { IndexMapper } from './IndexMapper.js';
 
 export class ColumnModel<TRowData = unknown> {
 	private engine!: GridEngine<TRowData>;
-	private columnMap = new Map<string, ColumnDef<TRowData>>();
-	private displayedColumns: ColumnDef<TRowData>[] = [];
+	private columnMap = new Map<string, InternalColumnDef<TRowData>>();
+	private displayedColumns: InternalColumnDef<TRowData>[] = [];
 	private valueGetterDependents = new Map<string, string[]>();
 	private indexMapper = new IndexMapper<string>();
 	private defaultColWidth = 100;
 	private columnPlans = new Map<string, ColumnRenderPlan<TRowData>>();
+	private planVersion = 0;
+	private compiledPlan: CompiledGridPlan<TRowData> | null = null;
+	private compiledPlanPinLeft = -1;
+	private compiledPlanPinRight = -1;
+	private compiledPlanGeometryVersion = -1;
 
 	public init(engine: GridEngine<TRowData>): void {
 		this.engine = engine;
@@ -19,14 +31,15 @@ export class ColumnModel<TRowData = unknown> {
 		if (defaultColWidth !== undefined) {
 			this.defaultColWidth = defaultColWidth;
 		}
+		const normalizedColumns = columns.map((column) => this.normalizeColumn(column));
 		this.columnMap.clear();
 		this.valueGetterDependents.clear();
-		this.indexMapper.setIds(columns.map((column) => column.field));
-		for (const column of columns) {
+		this.indexMapper.setIds(normalizedColumns.map((column) => column.field));
+		for (const column of normalizedColumns) {
 			this.indexMapper.setVisible(column.field, column.hide !== true);
 		}
 
-		for (const col of columns) {
+		for (const col of normalizedColumns) {
 			if (col.field) {
 				this.columnMap.set(col.field, col);
 				if (col.valueGetter && col.valueGetterDependencies) {
@@ -42,18 +55,18 @@ export class ColumnModel<TRowData = unknown> {
 			}
 		}
 
-		const widths = this.getDisplayedColumns(columns).map((col) => {
+		const widths = this.getDisplayedColumns(normalizedColumns).map((col) => {
 			const customWidth = columnWidths[col.field] ?? col.width;
 			return customWidth !== undefined ? customWidth : this.defaultColWidth;
 		});
-		this.displayedColumns = columns.filter((column) => column.hide !== true);
+		this.displayedColumns = normalizedColumns.filter((column) => column.hide !== true);
 
 		this.engine.geometry.updateColumns(widths, this.defaultColWidth);
-		this.engine.data.updateCompiledGetters(columns);
+		this.engine.data.updateCompiledGetters(normalizedColumns);
 
 		// Compute ColumnRenderPlans
 		this.columnPlans.clear();
-		for (const col of columns) {
+		for (const col of normalizedColumns) {
 			if (col.field) {
 				const hasValueGetter = !!col.valueGetter;
 				const hasFormatter = !!(col as any).valueFormatter;
@@ -93,6 +106,102 @@ export class ColumnModel<TRowData = unknown> {
 				this.columnPlans.set(col.field, plan);
 			}
 		}
+		this.compiledPlan = null;
+	}
+
+	private normalizeColumn(column: ColumnDef<TRowData>): InternalColumnDef<TRowData> {
+		if (!column.renderer) return column as InternalColumnDef<TRowData>;
+		const renderer = column.renderer;
+		if (renderer.kind === 'text') {
+			return { ...column, cellRenderer: undefined, cellRendererCapabilities: undefined };
+		}
+		if (renderer.kind === 'dom') {
+			return {
+				...column,
+				cellRenderer: renderer.renderer,
+				cellRendererCapabilities: {
+					...renderer.renderer.capabilities,
+					...renderer.capabilities,
+					scrollBehavior: renderer.capabilities?.scrollBehavior ?? 'live',
+				},
+			};
+		}
+		if (renderer.kind === 'imperativeReact') {
+			return {
+				...column,
+				cellRenderer: renderer.component as InternalColumnDef<TRowData>['cellRenderer'],
+				cellRendererCapabilities: {
+					scrollBehavior: 'live',
+					estimatedCost: 'cheap',
+					...renderer.capabilities,
+					imperativeUpdate: true,
+				},
+			};
+		}
+		return {
+			...column,
+			cellRenderer: renderer.component as InternalColumnDef<TRowData>['cellRenderer'],
+			cellRendererCapabilities: {
+				scrollBehavior: 'fallback',
+				deferFallback: 'snapshot',
+				estimatedCost: 'medium',
+				...renderer.capabilities,
+				imperativeUpdate: false,
+			},
+		};
+	}
+
+	public getCompiledPlan(): CompiledGridPlan<TRowData> {
+		const pinLeftCount = Math.min(this.engine.viewport.pinLeftColumns, this.displayedColumns.length);
+		const pinRightCount = Math.min(this.engine.viewport.pinRightColumns, Math.max(0, this.displayedColumns.length - pinLeftCount));
+		const geometryVersion = this.engine.geometryVersion;
+		if (
+			this.compiledPlan &&
+			this.compiledPlanPinLeft === pinLeftCount &&
+			this.compiledPlanPinRight === pinRightCount &&
+			this.compiledPlanGeometryVersion === geometryVersion
+		) {
+			return this.compiledPlan;
+		}
+
+		const displayedColumns = this.displayedColumns;
+		const columnPlans = displayedColumns.map((column) => this.columnPlans.get(column.field)!);
+		const totalWidth = this.engine.geometry.getTotalWidth(this.defaultColWidth);
+		const colLefts = this.engine.geometry.colLefts.slice(0, displayedColumns.length);
+		const colWidths = this.engine.geometry.colWidths.slice(0, displayedColumns.length);
+		const pinRightStart = Math.max(pinLeftCount, displayedColumns.length - pinRightCount);
+		const pinLeftWidth = pinLeftCount > 0 ? (colLefts[Math.min(pinLeftCount, displayedColumns.length)] ?? 0) : 0;
+		const pinRightBaseLeft = pinRightStart < displayedColumns.length ? (colLefts[pinRightStart] ?? totalWidth) : totalWidth;
+		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const next: CompiledGridPlan<TRowData> = {
+			version: ++this.planVersion,
+			columns: Array.from(this.columnMap.values()),
+			displayedColumns,
+			columnPlans,
+			colFields: displayedColumns.map((column) => column.field),
+			colWidths,
+			colLefts,
+			totalWidth,
+			pinLeftCount,
+			pinRightCount,
+			pinRightStart,
+			pinLeftWidth,
+			pinRightWidth,
+			pinRightBaseLeft,
+			hasCustomRenderers: displayedColumns.some((column) => !!column.cellRenderer),
+			hasDomRenderers: displayedColumns.some((column) => isDomCellRenderer(column.cellRenderer)),
+			hasFormattedValues: columnPlans.some((plan) => plan.hasFormatter),
+			hasValueGetters: columnPlans.some((plan) => plan.hasValueGetter),
+		};
+		this.compiledPlan = next;
+		this.compiledPlanPinLeft = pinLeftCount;
+		this.compiledPlanPinRight = pinRightCount;
+		this.compiledPlanGeometryVersion = geometryVersion;
+		return next;
+	}
+
+	public getCompiledPlanVersion(): number {
+		return this.getCompiledPlan().version;
 	}
 
 	public getColumnPlan(colField: string): ColumnRenderPlan<TRowData> | undefined {
