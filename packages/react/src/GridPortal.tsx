@@ -1,5 +1,16 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, memo } from 'react';
-import { ColumnDef, GridApi, RowNode, VisualRow, type CellRendererPhase } from '@open-grid/core';
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	useSyncExternalStore,
+	memo,
+	forwardRef,
+	useImperativeHandle,
+	createElement,
+	type ComponentType,
+} from 'react';
+import { ColumnDef, GridApi, RowNode, VisualRow, type CellRendererPhase, type ImperativeCellHandle, isDomCellRenderer } from '@open-grid/core';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import { GridProvider } from './OpenGrid.js';
@@ -97,7 +108,11 @@ function PortalCellInner<TRowData = unknown>({
 	const rowData = node?.data;
 
 	const CustomEditor = col?.cellEditor as ((props: Record<string, unknown>) => ReactNode) | undefined;
-	const CustomRenderer = col?.cellRenderer as ((props: Record<string, unknown>) => ReactNode) | undefined;
+	// DomCellRenderer is an object ({mount}), memo/forwardRef are exotic objects — use isDomCellRenderer guard
+	const CustomRenderer =
+		col?.cellRenderer && !isDomCellRenderer(col.cellRenderer)
+			? (col.cellRenderer as unknown as ComponentType<Record<string, unknown>>)
+			: undefined;
 
 	return (
 		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
@@ -155,7 +170,7 @@ function PortalCellInner<TRowData = unknown>({
 					/>
 				)
 			) : CustomRenderer && rowData ? (
-				CustomRenderer({
+				createElement(CustomRenderer, {
 					value,
 					computedValue: value,
 					row: rowData,
@@ -219,11 +234,55 @@ function DefaultDetailRowRendererInner<TRowData = unknown>({ visualRow }: { visu
 
 export const DefaultDetailRowRenderer = memo(DefaultDetailRowRendererInner) as typeof DefaultDetailRowRendererInner;
 
+// ─── Snapshot types ───────────────────────────────────────────────────────────
+
+/** Snapshot used by the optimised CellPortalPool — rebuilt only on structural changes (add/remove). */
+export interface CellPortalSnapshot<TRowData = unknown> {
+	cellPortalList: PortalData<TRowData>[];
+}
+
+/** Snapshot used by the RowMenuPortalPool — rebuilt only on row/menu structural changes. */
+export interface RowMenuPortalSnapshot<TRowData = unknown> {
+	rowPortalList: RowPortalData<TRowData>[];
+	menuPortalList: MenuPortalData<TRowData>[];
+}
+
+// Imperative updater fn type — registered by ImperativePortalCellWrapper, called from OpenGrid
+type ImperativeUpdaterFn<TRowData> = (
+	value: unknown,
+	node: RowNode<TRowData>,
+	col: ColumnDef<TRowData>,
+	isEditing: boolean,
+	isLoading: boolean,
+	phase: CellRendererPhase | undefined,
+	isScrolling: boolean | undefined,
+	isFocused: boolean | undefined,
+	isSelected: boolean | undefined
+) => boolean;
+
 export interface PortalStore<TRowData = unknown> {
-	subscribe(onStoreChange: () => void): () => void;
-	getSnapshot(): PortalSnapshot<TRowData>;
 	subscribeToCell?(cellKey: string, listener: () => void): () => void;
 	getCellData?(cellKey: string): PortalData<TRowData> | undefined;
+	// Optimised split subscriptions — implemented by createPortalStore
+	subscribeCells?(listener: () => void): () => void;
+	getCellSnapshot?(): CellPortalSnapshot<TRowData>;
+	subscribeRowsMenus?(listener: () => void): () => void;
+	getRowMenuSnapshot?(): RowMenuPortalSnapshot<TRowData>;
+	// Imperative update protocol
+	registerImperativeUpdater?(cellKey: string, fn: ImperativeUpdaterFn<TRowData>): void;
+	unregisterImperativeUpdater?(cellKey: string): void;
+	tryImperativeUpdate?(
+		cellKey: string,
+		value: unknown,
+		node: RowNode<TRowData>,
+		col: ColumnDef<TRowData>,
+		isEditing: boolean,
+		isLoading: boolean,
+		phase: CellRendererPhase | undefined,
+		isScrolling: boolean | undefined,
+		isFocused: boolean | undefined,
+		isSelected: boolean | undefined
+	): boolean;
 }
 
 interface RowPortalData<TRowData = unknown> {
@@ -239,91 +298,151 @@ interface MenuPortalData<TRowData = unknown> {
 	close: () => void;
 }
 
-interface PortalSnapshot<TRowData = unknown> {
-	portals: Map<string, PortalData<TRowData>>;
-	rowPortals: Map<string, RowPortalData<TRowData>>;
-	menuPortals: Map<string, MenuPortalData<TRowData>>;
-	cellPortalList: PortalData<TRowData>[];
-	rowPortalList: RowPortalData<TRowData>[];
-	menuPortalList: MenuPortalData<TRowData>[];
-}
+// ─── Portal store ─────────────────────────────────────────────────────────────
 
 export function createPortalStore<TRowData = unknown>() {
+	// Mutable maps — source of truth
 	const portals = new Map<string, PortalData<TRowData>>();
 	const rowPortals = new Map<string, RowPortalData<TRowData>>();
 	const menuPortals = new Map<string, MenuPortalData<TRowData>>();
 	const cellPortalKeyByContainer = new Map<HTMLElement, string>();
 	const rowPortalKeyByContainer = new Map<HTMLElement, string>();
 
-	const cellListeners = new Map<string, Set<() => void>>();
-	const listeners = new Set<() => void>();
-	let snapshot = createSnapshot();
-	let scheduled = false;
+	// Per-cell data listeners — fired when a cell's value/props change (not structure)
+	const cellDataListeners = new Map<string, Set<() => void>>();
 
-	function createSnapshot(): PortalSnapshot<TRowData> {
-		return {
-			portals: new Map(portals),
-			rowPortals: new Map(rowPortals),
-			menuPortals: new Map(menuPortals),
-			cellPortalList: Array.from(portals.values()),
+	// Structural listeners — fired when the set of cells/rows/menus changes
+	const cellStructuralListeners = new Set<() => void>();
+	const rowMenuStructuralListeners = new Set<() => void>();
+
+	// Imperative updaters — registered by ImperativePortalCellWrapper, bypasses React scheduler
+	const imperativeUpdaters = new Map<string, ImperativeUpdaterFn<TRowData>>();
+
+	// Snapshots — only rebuilt on structural changes so useSyncExternalStore bails out on data updates
+	let cellSnapshot: CellPortalSnapshot<TRowData> = { cellPortalList: [] };
+	let rowMenuSnapshot: RowMenuPortalSnapshot<TRowData> = { rowPortalList: [], menuPortalList: [] };
+
+	// Coalescing flags — one microtask per notification type
+	let cellStructuralScheduled = false;
+	let rowMenuScheduled = false;
+
+	// ── Snapshot builders ──────────────────────────────────────────────────────
+
+	function rebuildCellSnapshot() {
+		cellSnapshot = { cellPortalList: Array.from(portals.values()) };
+	}
+
+	function rebuildRowMenuSnapshot() {
+		rowMenuSnapshot = {
 			rowPortalList: Array.from(rowPortals.values()).filter(
-				(portal) => !portal.container.classList.contains('og-row-portal-host') || portal.container.dataset.rowKey === portal.rowKey
+				(p) => !p.container.classList.contains('og-row-portal-host') || p.container.dataset.rowKey === p.rowKey
 			),
 			menuPortalList: Array.from(menuPortals.values()),
 		};
 	}
 
-	function subscribe(listener: () => void) {
-		listeners.add(listener);
-		return () => {
-			listeners.delete(listener);
-		};
-	}
+	// ── Notification helpers ───────────────────────────────────────────────────
 
-	function getSnapshot() {
-		return snapshot;
-	}
-
-	function notify(sync = false) {
+	function notifyCellStructural(sync = false) {
 		if (sync) {
-			scheduled = false;
 			flushSync(() => {
-				for (const l of listeners) l();
+				for (const l of cellStructuralListeners) l();
 			});
 			return;
 		}
-
-		if (scheduled) return;
-		scheduled = true;
+		if (cellStructuralScheduled) return;
+		cellStructuralScheduled = true;
 		queueMicrotask(() => {
-			scheduled = false;
-			for (const l of listeners) l();
+			cellStructuralScheduled = false;
+			for (const l of cellStructuralListeners) l();
 		});
 	}
 
+	function notifyRowMenuStructural() {
+		if (rowMenuScheduled) return;
+		rowMenuScheduled = true;
+		queueMicrotask(() => {
+			rowMenuScheduled = false;
+			for (const l of rowMenuStructuralListeners) l();
+		});
+	}
+
+	// Synchronous — called directly during the grid's paint loop so React can batch all cell updates
+	function notifyCellData(cellKey: string) {
+		const list = cellDataListeners.get(cellKey);
+		if (list) for (const l of list) l();
+	}
+
+	// ── Public API ─────────────────────────────────────────────────────────────
+
 	return {
-		subscribe,
-		getSnapshot,
+		// Per-cell data subscription — PortalCellWrapper subscribes here for value/props updates
 		subscribeToCell(cellKey: string, listener: () => void) {
-			let list = cellListeners.get(cellKey);
+			let list = cellDataListeners.get(cellKey);
 			if (!list) {
 				list = new Set();
-				cellListeners.set(cellKey, list);
+				cellDataListeners.set(cellKey, list);
 			}
 			list.add(listener);
 			return () => {
-				const list = cellListeners.get(cellKey);
-				if (list) {
-					list.delete(listener);
-					if (list.size === 0) {
-						cellListeners.delete(cellKey);
-					}
+				const l = cellDataListeners.get(cellKey);
+				if (l) {
+					l.delete(listener);
+					if (l.size === 0) cellDataListeners.delete(cellKey);
 				}
 			};
 		},
+		// Direct read — PortalCellWrapper reads here on each re-render (no snapshot allocation)
 		getCellData(cellKey: string) {
 			return portals.get(cellKey);
 		},
+
+		// ── Optimised split subscriptions ────────────────────────────────────────
+		subscribeCells(listener: () => void) {
+			cellStructuralListeners.add(listener);
+			return () => {
+				cellStructuralListeners.delete(listener);
+			};
+		},
+		getCellSnapshot() {
+			return cellSnapshot;
+		},
+
+		subscribeRowsMenus(listener: () => void) {
+			rowMenuStructuralListeners.add(listener);
+			return () => {
+				rowMenuStructuralListeners.delete(listener);
+			};
+		},
+		getRowMenuSnapshot() {
+			return rowMenuSnapshot;
+		},
+
+		// ── Imperative update protocol ────────────────────────────────────────────
+		registerImperativeUpdater(cellKey: string, fn: ImperativeUpdaterFn<TRowData>) {
+			imperativeUpdaters.set(cellKey, fn);
+		},
+		unregisterImperativeUpdater(cellKey: string) {
+			imperativeUpdaters.delete(cellKey);
+		},
+		tryImperativeUpdate(
+			cellKey: string,
+			value: unknown,
+			node: RowNode<TRowData>,
+			col: ColumnDef<TRowData>,
+			isEditing: boolean,
+			isLoading: boolean,
+			phase: CellRendererPhase | undefined,
+			isScrolling: boolean | undefined,
+			isFocused: boolean | undefined,
+			isSelected: boolean | undefined
+		): boolean {
+			const fn = imperativeUpdaters.get(cellKey);
+			if (!fn) return false;
+			return fn(value, node, col, isEditing, isLoading, phase, isScrolling, isFocused, isSelected);
+		},
+
+		// ── Cell mounts ──────────────────────────────────────────────────────────
 		mountCell(
 			cellKey: string,
 			container: HTMLElement,
@@ -338,59 +457,51 @@ export function createPortalStore<TRowData = unknown>() {
 			isSelected?: boolean
 		) {
 			const existing = portals.get(cellKey);
+
+			// Full equality check — skip everything when nothing changed
 			if (
 				existing &&
 				existing.container === container &&
+				existing.value === value &&
+				existing.node === node &&
+				existing.col === col &&
 				existing.isEditing === isEditing &&
 				existing.isLoading === isLoading &&
 				existing.phase === phase &&
 				existing.isScrolling === isScrolling &&
 				existing.isFocused === isFocused &&
-				existing.isSelected === isSelected &&
-				existing.value === value &&
-				existing.node === node &&
-				existing.col === col
+				existing.isSelected === isSelected
 			) {
 				cellPortalKeyByContainer.set(container, cellKey);
 				return;
 			}
+
+			// Container/key conflict resolution
 			if (existing && existing.container !== container && cellPortalKeyByContainer.get(existing.container) === cellKey) {
 				cellPortalKeyByContainer.delete(existing.container);
 			}
-
 			const existingKeyForContainer = cellPortalKeyByContainer.get(container);
 			if (existingKeyForContainer && existingKeyForContainer !== cellKey) {
 				portals.delete(existingKeyForContainer);
 			}
 
+			// A structural change means the SET of cell keys changed, not just the data
 			const isStructuralChange =
-				!existing || existing.container !== container || (existingKeyForContainer && existingKeyForContainer !== cellKey);
+				!existing || existing.container !== container || (existingKeyForContainer != null && existingKeyForContainer !== cellKey);
 
-			portals.set(cellKey, {
-				cellKey,
-				container,
-				value,
-				node,
-				col,
-				isEditing,
-				isLoading,
-				phase,
-				isScrolling,
-				isFocused,
-				isSelected,
-			});
+			portals.set(cellKey, { cellKey, container, value, node, col, isEditing, isLoading, phase, isScrolling, isFocused, isSelected });
 			cellPortalKeyByContainer.set(container, cellKey);
-			snapshot = createSnapshot();
 
 			if (isStructuralChange) {
-				notify();
+				// Rebuild snapshots — PortalPool components must re-render to add/remove portals
+				rebuildCellSnapshot();
+				notifyCellStructural();
 			} else {
-				const list = cellListeners.get(cellKey);
-				if (list) {
-					for (const l of list) l();
-				}
+				// Data update only — notify the specific PortalCellWrapper, skip snapshot rebuild.
+				notifyCellData(cellKey);
 			}
 		},
+
 		unmountCell(cellKey: string, container?: HTMLElement, sync = false) {
 			const existing = portals.get(cellKey);
 			if (!existing || (container && existing.container !== container)) return;
@@ -398,13 +509,17 @@ export function createPortalStore<TRowData = unknown>() {
 			if (cellPortalKeyByContainer.get(existing.container) === cellKey) {
 				cellPortalKeyByContainer.delete(existing.container);
 			}
-			snapshot = createSnapshot();
-			notify(sync);
+			imperativeUpdaters.delete(cellKey);
+			rebuildCellSnapshot();
+			notifyCellStructural(sync);
 		},
+
 		flushCell(sync = false) {
-			snapshot = createSnapshot();
-			notify(sync);
+			rebuildCellSnapshot();
+			notifyCellStructural(sync);
 		},
+
+		// ── Row mounts ───────────────────────────────────────────────────────────
 		mountRow(rowKey: string, container: HTMLElement, visualRow: VisualRow<TRowData>) {
 			const existing = rowPortals.get(rowKey);
 			if (existing && existing.container === container && existing.visualRow === visualRow) {
@@ -414,21 +529,16 @@ export function createPortalStore<TRowData = unknown>() {
 			if (existing && existing.container !== container && rowPortalKeyByContainer.get(existing.container) === rowKey) {
 				rowPortalKeyByContainer.delete(existing.container);
 			}
-
 			const existingKeyForContainer = rowPortalKeyByContainer.get(container);
 			if (existingKeyForContainer && existingKeyForContainer !== rowKey) {
 				rowPortals.delete(existingKeyForContainer);
 			}
-
-			rowPortals.set(rowKey, {
-				rowKey,
-				container,
-				visualRow,
-			});
+			rowPortals.set(rowKey, { rowKey, container, visualRow });
 			rowPortalKeyByContainer.set(container, rowKey);
-			snapshot = createSnapshot();
-			notify();
+			rebuildRowMenuSnapshot();
+			notifyRowMenuStructural();
 		},
+
 		unmountRow(rowKey: string, container?: HTMLElement) {
 			const existing = rowPortals.get(rowKey);
 			if (!existing || (container && existing.container !== container)) return;
@@ -436,77 +546,66 @@ export function createPortalStore<TRowData = unknown>() {
 			if (rowPortalKeyByContainer.get(existing.container) === rowKey) {
 				rowPortalKeyByContainer.delete(existing.container);
 			}
-			snapshot = createSnapshot();
-			notify();
+			rebuildRowMenuSnapshot();
+			notifyRowMenuStructural();
 		},
+
+		// ── Menu mounts ──────────────────────────────────────────────────────────
 		mountMenu(colField: string, container: HTMLElement, column: ColumnDef<TRowData>, close: () => void) {
 			const existing = menuPortals.get(colField);
-			if (existing && existing.container === container && existing.column === column) {
-				return;
-			}
-
-			menuPortals.set(colField, {
-				colField,
-				container,
-				column,
-				close,
-			});
-			snapshot = createSnapshot();
-			notify();
+			if (existing && existing.container === container && existing.column === column) return;
+			menuPortals.set(colField, { colField, container, column, close });
+			rebuildRowMenuSnapshot();
+			notifyRowMenuStructural();
 		},
+
 		unmountMenu(colField: string, container?: HTMLElement) {
 			const existing = menuPortals.get(colField);
 			if (!existing || (container && existing.container !== container)) return;
 			menuPortals.delete(colField);
-			snapshot = createSnapshot();
-			notify();
+			rebuildRowMenuSnapshot();
+			notifyRowMenuStructural();
 		},
+
 		clear() {
 			portals.clear();
 			rowPortals.clear();
 			menuPortals.clear();
 			cellPortalKeyByContainer.clear();
 			rowPortalKeyByContainer.clear();
-			snapshot = createSnapshot();
-			notify();
+			cellDataListeners.clear();
+			imperativeUpdaters.clear();
+			rebuildCellSnapshot();
+			rebuildRowMenuSnapshot();
+			notifyCellStructural();
+			notifyRowMenuStructural();
 		},
 	};
 }
 
-export interface PortalManagerProps<TRowData = unknown> {
-	portals?: Map<string, PortalData<TRowData>>;
-	rowPortals?: Map<string, RowPortalData<TRowData>>;
-	menuPortals?: Map<string, MenuPortalData<TRowData>>;
-	api: GridApi<TRowData>;
-	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
-	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
-	store?: PortalStore<TRowData>;
-}
+// ─── PortalCellWrapper ────────────────────────────────────────────────────────
 
 interface PortalCellWrapperProps<TRowData = unknown> {
 	cellKey: string;
 	store: PortalStore<TRowData>;
 }
 
+/**
+ * Slot-pinned cell adapter. Stays mounted for the lifetime of the cell slot — data changes
+ * flow through useSyncExternalStore (per-cell subscription) so only this component re-renders,
+ * not the whole PortalManager tree. No mount/unmount cost on scroll.
+ */
 function PortalCellWrapperInner<TRowData = unknown>({ cellKey, store }: PortalCellWrapperProps<TRowData>) {
-	const subscribe = useCallback(
-		(onStoreChange: () => void) => {
-			if (store.subscribeToCell) {
-				return store.subscribeToCell(cellKey, onStoreChange);
-			}
-			return () => {};
-		},
-		[store, cellKey]
-	);
+	// Lazy-init stable refs — cellKey and store never change while this component instance
+	// is alive (React unmounts and remounts on key change), so these closures are always correct.
+	const subscribeRef = useRef<(onStoreChange: () => void) => () => void>(null!);
+	const getSnapshotRef = useRef<() => PortalData<TRowData> | undefined>(null!);
+	if (!subscribeRef.current) {
+		subscribeRef.current = store.subscribeToCell ? (l) => store.subscribeToCell!(cellKey, l) : () => () => {};
+		getSnapshotRef.current = () => store.getCellData?.(cellKey);
+	}
 
-	const getSnapshot = useCallback(() => {
-		if (store.getCellData) {
-			return store.getCellData(cellKey);
-		}
-		return undefined;
-	}, [store, cellKey]);
-
-	const data = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+	const data = useSyncExternalStore(subscribeRef.current, getSnapshotRef.current, getSnapshotRef.current);
 
 	if (!data) return null;
 
@@ -529,79 +628,148 @@ function PortalCellWrapperInner<TRowData = unknown>({ cellKey, store }: PortalCe
 
 const PortalCellWrapper = memo(PortalCellWrapperInner) as typeof PortalCellWrapperInner;
 
-export function PortalManager<TRowData = unknown>({
-	portals: directPortals,
-	rowPortals: directRowPortals,
-	menuPortals: directMenuPortals,
-	api,
-	groupRowRenderer,
-	detailRowRenderer,
-	store,
-}: PortalManagerProps<TRowData>) {
-	const fallbackSnapshotRef = useRef<any>(null);
-	const prevPropsRef = useRef<any>(null);
+// ─── ImperativePortalCellWrapper ──────────────────────────────────────────────
 
-	const getSnapshot = useCallback((): PortalSnapshot<TRowData> => {
-		if (store) {
-			return store.getSnapshot();
-		}
-		if (
-			!fallbackSnapshotRef.current ||
-			!prevPropsRef.current ||
-			prevPropsRef.current.portals !== directPortals ||
-			prevPropsRef.current.rowPortals !== directRowPortals ||
-			prevPropsRef.current.menuPortals !== directMenuPortals
-		) {
-			prevPropsRef.current = {
-				portals: directPortals,
-				rowPortals: directRowPortals,
-				menuPortals: directMenuPortals,
-			};
-			fallbackSnapshotRef.current = {
-				portals: directPortals || new Map(),
-				rowPortals: directRowPortals || new Map(),
-				menuPortals: directMenuPortals || new Map(),
-				cellPortalList: latestPortalsByContainer(directPortals || new Map()),
-				rowPortalList: latestRowPortalsByContainer(directRowPortals || new Map()),
-				menuPortalList: Array.from((directMenuPortals || new Map()).values()),
-			};
-		}
-		return fallbackSnapshotRef.current;
-	}, [store, directPortals, directRowPortals, directMenuPortals]);
+/**
+ * Like PortalCellWrapper, but renders the renderer as a JSX element (not a function call)
+ * so forwardRef works. Registers an imperative updater in the portal store — subsequent
+ * data updates call ref.current.update() directly, bypassing React's scheduler entirely.
+ */
+function ImperativePortalCellWrapperInner<TRowData = unknown>({ cellKey, store }: PortalCellWrapperProps<TRowData>) {
+	const api = useGridApi<TRowData>();
+	const imperativeRef = useRef<ImperativeCellHandle<TRowData> | null>(null);
+	// Keep api ref current without causing re-subscription
+	const apiRef = useRef(api);
+	apiRef.current = api;
 
-	const state = useSyncExternalStore(store ? store.subscribe : (onStoreChange) => () => {}, getSnapshot, getSnapshot);
+	const subscribeRef = useRef<(onStoreChange: () => void) => () => void>(null!);
+	const getSnapshotRef = useRef<() => PortalData<TRowData> | undefined>(null!);
+	if (!subscribeRef.current) {
+		subscribeRef.current = store.subscribeToCell ? (l) => store.subscribeToCell!(cellKey, l) : () => () => {};
+		getSnapshotRef.current = () => store.getCellData?.(cellKey);
+	}
 
-	const cellPortals = state.cellPortalList;
-	const visualRowPortals = state.rowPortalList;
+	const data = useSyncExternalStore(subscribeRef.current, getSnapshotRef.current, getSnapshotRef.current);
+
+	// Register imperative updater — called by OpenGrid instead of mountCell on data-only updates
+	useEffect(() => {
+		if (!store.registerImperativeUpdater) return;
+		store.registerImperativeUpdater(cellKey, (value, node, col, isEditing, _isLoading, phase, isScrolling, isFocused, isSelected) => {
+			const handle = imperativeRef.current;
+			if (!handle) return false;
+			handle.update({
+				value,
+				computedValue: value,
+				row: node.data as TRowData,
+				rowId: node.id,
+				colField: col.field,
+				colId: col.field,
+				isScrolling: isScrolling ?? false,
+				phase: phase ?? 'initial',
+				isFocused: isFocused ?? false,
+				isEditing,
+				isSelected: isSelected ?? false,
+				api: apiRef.current,
+			});
+			return true;
+		});
+		return () => {
+			store.unregisterImperativeUpdater?.(cellKey);
+		};
+	}, [store, cellKey]);
+
+	if (!data) return null;
+
+	const CustomRenderer = data.col.cellRenderer as unknown as React.ForwardRefExoticComponent<
+		Record<string, unknown> & React.RefAttributes<unknown>
+	>;
+	const rowData = data.node?.data;
+
+	if (!CustomRenderer || isDomCellRenderer(data.col.cellRenderer) || !rowData) return null;
+
+	return (
+		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
+			<CustomRenderer
+				ref={imperativeRef as React.Ref<unknown>}
+				value={data.value}
+				computedValue={data.value}
+				row={rowData as Record<string, unknown>}
+				rowId={data.node.id}
+				colField={data.col.field}
+				colId={data.col.field}
+				isScrolling={data.isScrolling ?? false}
+				phase={data.phase ?? 'initial'}
+				isFocused={data.isFocused ?? false}
+				isEditing={data.isEditing}
+				isSelected={data.isSelected ?? false}
+				api={api as unknown as Record<string, unknown>}
+			/>
+		</div>
+	);
+}
+
+const ImperativePortalCellWrapper = memo(ImperativePortalCellWrapperInner) as typeof ImperativePortalCellWrapperInner;
+
+// ─── CellPortalPool ───────────────────────────────────────────────────────────
+
+type ConcretePortalStore<TRowData> = ReturnType<typeof createPortalStore<TRowData>>;
+
+interface CellPortalPoolProps<TRowData = unknown> {
+	store: ConcretePortalStore<TRowData>;
+	api: GridApi<TRowData>;
+}
+
+/**
+ * Renders only custom cell portals. Re-renders only when the CELL SLOT LIST changes
+ * (a cell enters or leaves the visible area). Individual cell value changes do NOT cause
+ * this component to re-render — they go directly to PortalCellWrapper via subscribeToCell,
+ * or are handled imperatively by ImperativePortalCellWrapper.
+ */
+function CellPortalPoolInner<TRowData = unknown>({ store, api }: CellPortalPoolProps<TRowData>) {
+	const snapshot = useSyncExternalStore(store.subscribeCells, store.getCellSnapshot, store.getCellSnapshot);
+	const { cellPortalList } = snapshot;
 
 	return (
 		<>
-			{cellPortals.map((p) => {
-				const content = store ? (
-					<PortalCellWrapper<TRowData> cellKey={p.cellKey} store={store} />
-				) : (
-					<PortalCell<TRowData>
-						rowId={p.node.id}
-						colField={p.col.field}
-						value={p.value}
-						col={p.col}
-						node={p.node}
-						isEditing={p.isEditing}
-						isLoading={p.isLoading}
-						phase={p.phase}
-						isScrolling={p.isScrolling}
-						isFocused={p.isFocused}
-						isSelected={p.isSelected}
-					/>
-				);
+			{cellPortalList.map((p) => {
+				const useImperative = !!p.col.cellRendererCapabilities?.imperativeUpdate;
 				return createPortal(
 					<GridProvider api={api} key={p.cellKey}>
-						{content}
+						{useImperative ? (
+							<ImperativePortalCellWrapper<TRowData> cellKey={p.cellKey} store={store} />
+						) : (
+							<PortalCellWrapper<TRowData> cellKey={p.cellKey} store={store} />
+						)}
 					</GridProvider>,
 					p.container
 				);
 			})}
-			{visualRowPortals.map((rp) => {
+		</>
+	);
+}
+
+const CellPortalPool = memo(CellPortalPoolInner) as typeof CellPortalPoolInner;
+
+// ─── RowMenuPortalPool ────────────────────────────────────────────────────────
+
+interface RowMenuPortalPoolProps<TRowData = unknown> {
+	store: ConcretePortalStore<TRowData>;
+	api: GridApi<TRowData>;
+	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+}
+
+/**
+ * Renders group/detail row portals and header menu portals. Re-renders only when rows
+ * or menus change — completely isolated from custom cell updates.
+ */
+function RowMenuPortalPoolInner<TRowData = unknown>({ store, api, groupRowRenderer, detailRowRenderer }: RowMenuPortalPoolProps<TRowData>) {
+	const snapshot = useSyncExternalStore(store.subscribeRowsMenus, store.getRowMenuSnapshot, store.getRowMenuSnapshot);
+	const { rowPortalList, menuPortalList } = snapshot;
+
+	return (
+		<>
+			{rowPortalList.map((rp) => {
 				const { rowKey, container, visualRow } = rp;
 				let content: React.ReactNode = null;
 				if (visualRow.kind === 'group') {
@@ -620,7 +788,7 @@ export function PortalManager<TRowData = unknown>({
 					container
 				);
 			})}
-			{state.menuPortalList.map((mp) => {
+			{menuPortalList.map((mp) => {
 				const { colField, container, column, close } = mp;
 				const CustomComponent = column.headerMenuComponent;
 				if (!CustomComponent) return null;
@@ -635,23 +803,37 @@ export function PortalManager<TRowData = unknown>({
 	);
 }
 
-function latestPortalsByContainer<TPortal extends { container: HTMLElement }>(portals: Map<string, TPortal>): TPortal[] {
-	const byContainer = new Map<HTMLElement, TPortal>();
-	for (const portal of portals.values()) {
-		byContainer.set(portal.container, portal);
-	}
-	return Array.from(byContainer.values());
+const RowMenuPortalPool = memo(RowMenuPortalPoolInner) as typeof RowMenuPortalPoolInner;
+
+// ─── PortalManager (public API) ───────────────────────────────────────────────
+
+export interface PortalManagerProps<TRowData = unknown> {
+	api: GridApi<TRowData>;
+	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	store?: PortalStore<TRowData>;
 }
 
-function latestRowPortalsByContainer<TRowData>(
-	portals: Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>
-): Array<{ rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }> {
-	const byContainer = new Map<HTMLElement, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>();
-	for (const portal of portals.values()) {
-		if (portal.container.classList.contains('og-row-portal-host') && portal.container.dataset.rowKey !== portal.rowKey) {
-			continue;
-		}
-		byContainer.set(portal.container, portal);
+/**
+ * Renders all portal content for the grid.
+ *
+ * Cell updates and row/menu updates are completely isolated — a price-tick in one cell
+ * never causes the row-portal tree to re-render, and a group-row expansion never causes
+ * all cell wrappers to re-render.
+ *
+ * For cells with imperativeUpdate: true, updates bypass React's scheduler entirely —
+ * the grid calls ref.current.update() directly in the paint loop.
+ */
+export function PortalManager<TRowData = unknown>({ api, groupRowRenderer, detailRowRenderer, store }: PortalManagerProps<TRowData>) {
+	if (!store?.subscribeCells || !store?.subscribeRowsMenus) {
+		// Store is required — OpenGrid always provides createPortalStore()
+		return null;
 	}
-	return Array.from(byContainer.values());
+	const concreteStore = store as ConcretePortalStore<TRowData>;
+	return (
+		<>
+			<CellPortalPool store={concreteStore} api={api} />
+			<RowMenuPortalPool store={concreteStore} api={api} groupRowRenderer={groupRowRenderer} detailRowRenderer={detailRowRenderer} />
+		</>
+	);
 }

@@ -257,6 +257,64 @@ export interface CellRendererCapabilities {
 	interactive?: boolean;
 	supportsRebind?: boolean;
 	warmCache?: boolean;
+	/**
+	 * When true, the grid calls ref.current.update() directly — bypasses React's scheduler entirely.
+	 * Cell renderer must be a forwardRef component exposing ImperativeCellHandle.
+	 * Ideal for real-time feeds (tick data, live prices) where even setState latency is too high.
+	 */
+	imperativeUpdate?: boolean;
+}
+
+// ─── Imperative handle ────────────────────────────────────────────────────────
+
+/** Exposed via forwardRef on renderers with cellRendererCapabilities.imperativeUpdate = true */
+export interface ImperativeCellHandle<TRowData = unknown> {
+	update(params: CellRendererProps<TRowData>): void;
+}
+
+// ─── DOM Cell Renderer API ────────────────────────────────────────────────────
+
+/** Parameters passed to DomCellRenderer.mount() and DomCellRendererHandle.update() */
+export interface DomCellRendererParams<TRowData = unknown> {
+	container: HTMLElement;
+	value: unknown;
+	node: RowNode<TRowData>;
+	col: ColumnDef<TRowData>;
+	isEditing: boolean;
+	isScrolling: boolean;
+	phase: CellRendererPhase;
+	isFocused: boolean;
+	isSelected: boolean;
+}
+
+/** Handle returned by DomCellRenderer.mount() — grid calls update() directly in the paint loop */
+export interface DomCellRendererHandle {
+	update(params: DomCellRendererParams<any>): void;
+	destroy?(): void;
+}
+
+/**
+ * Zero-React-overhead cell renderer. Grid calls mount() once and update() on every data change.
+ * No virtual DOM, no scheduler, no reconciler — pure DOM manipulation.
+ *
+ * @example
+ * const priceRenderer: DomCellRenderer<MyRow> = {
+ *   mount(container, params) {
+ *     const span = document.createElement('span');
+ *     span.textContent = String(params.value);
+ *     container.appendChild(span);
+ *     return { update(p) { span.textContent = String(p.value); } };
+ *   }
+ * };
+ */
+export interface DomCellRenderer<TRowData = unknown> {
+	mount(container: HTMLElement, params: DomCellRendererParams<TRowData>): DomCellRendererHandle;
+	capabilities?: CellRendererCapabilities;
+}
+
+/** Type guard — returns true when renderer is a DomCellRenderer (has a mount function) */
+export function isDomCellRenderer<TRowData = unknown>(renderer: unknown): renderer is DomCellRenderer<TRowData> {
+	return typeof renderer === 'object' && renderer !== null && typeof (renderer as DomCellRenderer).mount === 'function';
 }
 
 export type ColumnRenderMode =
@@ -424,7 +482,7 @@ export interface ColumnDef<TRowData = unknown> {
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
 	valueGetterDependencies?: string[];
 	valueSetter?: (row: TRowData, value: unknown) => boolean;
-	cellRenderer?: (props: CellRendererProps<TRowData>) => unknown;
+	cellRenderer?: ((props: CellRendererProps<TRowData>) => unknown) | DomCellRenderer<TRowData>;
 	cellRendererCapabilities?: CellRendererCapabilities;
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
 	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;
@@ -479,6 +537,7 @@ export function getCellRendererCapabilities<TRowData>(col: ColumnDef<TRowData>):
 		interactive: col.cellRendererCapabilities?.interactive ?? false,
 		supportsRebind: col.cellRendererCapabilities?.supportsRebind ?? false,
 		warmCache: col.cellRendererCapabilities?.warmCache ?? true,
+		imperativeUpdate: col.cellRendererCapabilities?.imperativeUpdate ?? false,
 	};
 }
 

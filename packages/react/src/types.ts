@@ -18,7 +18,12 @@ import type {
 	HeaderMenuRendererProps,
 	CellRendererCapabilities,
 	CellRendererPhase,
+	DomCellRenderer,
+	DomCellRendererHandle,
+	DomCellRendererParams,
+	ImperativeCellHandle,
 } from '@open-grid/core';
+export { isDomCellRenderer } from '@open-grid/core';
 
 export type {
 	ColumnDef,
@@ -40,6 +45,10 @@ export type {
 	HeaderMenuRendererProps,
 	CellRendererCapabilities,
 	CellRendererPhase,
+	DomCellRenderer,
+	DomCellRendererHandle,
+	DomCellRendererParams,
+	ImperativeCellHandle,
 };
 
 export interface ClientGridOptions<TRowData> {

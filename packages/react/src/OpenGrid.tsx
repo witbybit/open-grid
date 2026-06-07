@@ -12,9 +12,7 @@ import {
 	VisualRow,
 } from '@open-grid/core';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { flushSync } from 'react-dom';
-import { PortalCell, PortalManager, createPortalStore } from './GridPortal.js';
+import { PortalManager, createPortalStore } from './GridPortal.js';
 import { useGridNavigationController } from './hooks.js';
 
 export const GridApiContext = createContext<GridApi<unknown> | null>(null);
@@ -78,10 +76,6 @@ function OpenGridInner<TRowData = unknown>({
 	detailRowRenderer,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
-	// Stable Map<cellKey, {root, container}> — survives scroll, no PortalManager reconciliation for cells
-	const cellRootsRef = useRef<Map<string, { root: Root; container: HTMLElement }>>(new Map());
-	const apiRef = useRef<GridApi<TRowData>>(api);
-	apiRef.current = api;
 	const containerRef = useRef<HTMLDivElement>(null);
 	const hostRef = useRef<GridHost | null>(null);
 	const isGridActiveRef = useRef(false);
@@ -113,52 +107,49 @@ function OpenGridInner<TRowData = unknown>({
 				bottom: pinBottomRows,
 			},
 			cellContent: {
+				// All custom cell mounts flow through the shared portal store.
+				// CellPortalPool renders portals into the cell containers; PortalCellWrapper
+				// subscribes per-cell so only the changed cell re-renders on data updates.
+				// No N separate React roots — one shared tree, one React scheduler task.
 				mountCellContent: (mount) => {
-					const roots = cellRootsRef.current;
-					const currentApi = apiRef.current;
-					let entry = roots.get(mount.cellKey);
-					// If container changed (e.g. after invalidation), unmount old root first
-					if (entry && entry.container !== mount.container) {
-						entry.root.unmount();
-						entry = undefined;
+					// Imperative fast path — renderer exposes ref.current.update(), bypasses
+					// React scheduler entirely. Zero reconciler overhead for live price feeds.
+					if (mount.col?.cellRendererCapabilities?.imperativeUpdate && !mount.isEditing) {
+						if (
+							portalStore.tryImperativeUpdate(
+								mount.cellKey,
+								mount.value,
+								mount.node,
+								mount.col,
+								mount.isEditing,
+								mount.isLoading,
+								mount.phase,
+								mount.isScrolling,
+								mount.isFocused,
+								mount.isSelected
+							)
+						)
+							return;
 					}
-					if (!entry) {
-						entry = { root: createRoot(mount.container), container: mount.container };
-						roots.set(mount.cellKey, entry);
-					}
-					// .render() diffs props — only the changed cell's tree reconciles
-					entry.root.render(
-						<GridProvider api={currentApi}>
-							<PortalCell<TRowData>
-								rowId={mount.node.id}
-								colField={mount.col.field}
-								value={mount.value}
-								col={mount.col}
-								node={mount.node}
-								isEditing={mount.isEditing}
-								isLoading={mount.isLoading}
-								phase={mount.phase}
-								isScrolling={mount.isScrolling}
-								isFocused={mount.isFocused}
-								isSelected={mount.isSelected}
-							/>
-						</GridProvider>
+					portalStore.mountCell(
+						mount.cellKey,
+						mount.container,
+						mount.value,
+						mount.node,
+						mount.col,
+						mount.isEditing,
+						mount.isLoading,
+						mount.phase,
+						mount.isScrolling,
+						mount.isFocused,
+						mount.isSelected
 					);
 				},
 				unmountCellContent: (unmount) => {
-					const roots = cellRootsRef.current;
-					const entry = roots.get(unmount.cellKey);
-					if (entry) {
-						if (unmount.flushSync) {
-							flushSync(() => entry.root.unmount());
-						} else {
-							entry.root.unmount();
-						}
-						roots.delete(unmount.cellKey);
-					}
+					portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync ?? false);
 				},
 				flushCellContent: () => {
-					// createRoot schedules renders automatically — no explicit flush needed
+					// portalStore coalesces notifications internally via queueMicrotask
 				},
 			},
 			rowContent: {
@@ -184,11 +175,6 @@ function OpenGridInner<TRowData = unknown>({
 			hostRef.current = null;
 			host.destroy();
 			portalStore.clear();
-			// Unmount all stable cell roots
-			for (const entry of cellRootsRef.current.values()) {
-				entry.root.unmount();
-			}
-			cellRootsRef.current.clear();
 		};
 	}, [api, portalStore]);
 

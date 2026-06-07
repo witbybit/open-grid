@@ -22,6 +22,7 @@ import {
 	GanttStatusDropdownEditor,
 	GanttTimelineRenderer,
 } from '../components/GridShared';
+import { SparklineRenderer, LivePriceRenderer, HeavyAnalyticsCell } from '../components/FastRenderers';
 import {
 	useClientGrid,
 	useServerGrid,
@@ -75,6 +76,90 @@ function setInactiveRiskSideEffects(
 		api.setCellValue(rowId, 'price', '0');
 		api.setCellValue(rowId, 'quantity', '0');
 	}
+}
+
+// ─── Dashboard data generator ────────────────────────────────────────────────
+
+const SEED_STOCKS: Array<{ id: string; name: string; price: number; sector: string }> = [
+	{ id: 'AAPL', name: 'Apple Inc.', price: 175.5, sector: 'Tech' },
+	{ id: 'MSFT', name: 'Microsoft Corp.', price: 420.2, sector: 'Tech' },
+	{ id: 'GOOGL', name: 'Alphabet Inc.', price: 150.1, sector: 'Tech' },
+	{ id: 'NVDA', name: 'NVIDIA Corp.', price: 875.0, sector: 'Semis' },
+	{ id: 'TSLA', name: 'Tesla Inc.', price: 170.3, sector: 'Auto' },
+	{ id: 'AMZN', name: 'Amazon.com Inc.', price: 178.4, sector: 'Retail' },
+	{ id: 'NFLX', name: 'Netflix Inc.', price: 610.5, sector: 'Media' },
+	{ id: 'AMD', name: 'Advanced Micro Devices', price: 180.2, sector: 'Semis' },
+	{ id: 'INTC', name: 'Intel Corp.', price: 42.5, sector: 'Semis' },
+	{ id: 'PYPL', name: 'PayPal Holdings', price: 64.8, sector: 'Fintech' },
+	{ id: 'META', name: 'Meta Platforms', price: 505.3, sector: 'Tech' },
+	{ id: 'BABA', name: 'Alibaba Group', price: 78.4, sector: 'Retail' },
+	{ id: 'CRM', name: 'Salesforce Inc.', price: 275.6, sector: 'SaaS' },
+	{ id: 'SNOW', name: 'Snowflake Inc.', price: 145.9, sector: 'SaaS' },
+	{ id: 'UBER', name: 'Uber Technologies', price: 68.2, sector: 'Transport' },
+	{ id: 'LYFT', name: 'Lyft Inc.', price: 14.7, sector: 'Transport' },
+	{ id: 'SQ', name: 'Block Inc.', price: 62.4, sector: 'Fintech' },
+	{ id: 'SHOP', name: 'Shopify Inc.', price: 72.1, sector: 'SaaS' },
+	{ id: 'ZM', name: 'Zoom Video', price: 64.8, sector: 'SaaS' },
+	{ id: 'DOCN', name: 'DigitalOcean', price: 36.5, sector: 'Cloud' },
+	{ id: 'NET', name: 'Cloudflare Inc.', price: 88.4, sector: 'Cloud' },
+	{ id: 'DDOG', name: 'Datadog Inc.', price: 120.7, sector: 'DevOps' },
+	{ id: 'MDB', name: 'MongoDB Inc.', price: 225.3, sector: 'Database' },
+	{ id: 'ESTC', name: 'Elastic NV', price: 87.6, sector: 'Database' },
+	{ id: 'CRWD', name: 'CrowdStrike', price: 315.8, sector: 'Security' },
+	{ id: 'PANW', name: 'Palo Alto Networks', price: 285.4, sector: 'Security' },
+	{ id: 'OKTA', name: 'Okta Inc.', price: 95.2, sector: 'Security' },
+	{ id: 'TWLO', name: 'Twilio Inc.', price: 55.9, sector: 'SaaS' },
+	{ id: 'PINS', name: 'Pinterest Inc.', price: 28.3, sector: 'Social' },
+	{ id: 'SNAP', name: 'Snap Inc.', price: 12.1, sector: 'Social' },
+	{ id: 'RBLX', name: 'Roblox Corp.', price: 38.7, sector: 'Gaming' },
+	{ id: 'U', name: 'Unity Software', price: 22.4, sector: 'Gaming' },
+	{ id: 'ABNB', name: 'Airbnb Inc.', price: 142.6, sector: 'Travel' },
+	{ id: 'BKNG', name: 'Booking Holdings', price: 3650.0, sector: 'Travel' },
+	{ id: 'DASH', name: 'DoorDash Inc.', price: 118.4, sector: 'Delivery' },
+	{ id: 'HOOD', name: 'Robinhood Markets', price: 18.7, sector: 'Fintech' },
+	{ id: 'COIN', name: 'Coinbase Global', price: 204.5, sector: 'Crypto' },
+	{ id: 'MSTR', name: 'MicroStrategy', price: 1420.3, sector: 'Crypto' },
+	{ id: 'ARM', name: 'Arm Holdings', price: 128.6, sector: 'Semis' },
+	{ id: 'SMCI', name: 'Super Micro Computer', price: 790.4, sector: 'Semis' },
+	{ id: 'AVGO', name: 'Broadcom Inc.', price: 1380.2, sector: 'Semis' },
+	{ id: 'QCOM', name: 'Qualcomm Inc.', price: 168.9, sector: 'Semis' },
+	{ id: 'TXN', name: 'Texas Instruments', price: 178.3, sector: 'Semis' },
+	{ id: 'AMAT', name: 'Applied Materials', price: 192.7, sector: 'Semis' },
+	{ id: 'ASML', name: 'ASML Holding', price: 840.1, sector: 'Semis' },
+	{ id: 'LRCX', name: 'Lam Research', price: 890.5, sector: 'Semis' },
+	{ id: 'KLAC', name: 'KLA Corp.', price: 720.3, sector: 'Semis' },
+	{ id: 'GS', name: 'Goldman Sachs', price: 495.8, sector: 'Finance' },
+	{ id: 'JPM', name: 'JPMorgan Chase', price: 198.4, sector: 'Finance' },
+	{ id: 'MS', name: 'Morgan Stanley', price: 94.7, sector: 'Finance' },
+];
+
+function generateDashboardRows(): DashboardStockRow[] {
+	const rows: DashboardStockRow[] = [];
+	let seed = 42;
+	const rand = () => {
+		seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+		return (seed >>> 0) / 0xffffffff;
+	};
+
+	for (let rep = 0; rep < 10; rep++) {
+		for (const stock of SEED_STOCKS) {
+			const priceMult = 0.7 + rand() * 0.6;
+			const price = stock.price * priceMult;
+			const change = (rand() - 0.5) * 12;
+			const volume = 5 + rand() * 120;
+			const risk = price > 500 || Math.abs(change) > 4 ? 'High' : Math.abs(change) > 2 ? 'Medium' : 'Low';
+			const suffix = rep === 0 ? '' : `.${rep}`;
+			rows.push({
+				id: `${stock.id}${suffix}`,
+				name: rep === 0 ? stock.name : `${stock.name} (${stock.sector}-${rep})`,
+				price: price.toFixed(2),
+				change: `${change >= 0 ? '+' : ''}${change.toFixed(1)}`,
+				volume: volume.toFixed(1),
+				risk,
+			});
+		}
+	}
+	return rows;
 }
 
 export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroomStoresProps) {
@@ -626,31 +711,55 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	// --------------------------------------------------------------------------
 	const dashboardColumns = useMemo<ColumnDef<DashboardStockRow>[]>(
 		() => [
-			{ field: 'id', header: 'Ticker Symbol', width: 110 },
-			{ field: 'name', header: 'Company Name', width: 170 },
-			{ field: 'price', header: 'Market Price ($)', width: 130 },
-			{ field: 'change', header: 'Daily Change (%)', width: 130 },
-			{ field: 'volume', header: 'Volume (M Shares)', width: 130 },
-			{ field: 'risk', header: 'Risk Profile', width: 110 },
+			{ field: 'id', header: 'Ticker', width: 80 },
+			{ field: 'name', header: 'Company', width: 160 },
+			{
+				// DOM renderer — zero React overhead: canvas sparkline + price value.
+				// Grid calls DomCellRenderer.mount() once per slot, then update() on each tick.
+				// No React, no scheduler, no reconciler — pure DOM.
+				field: 'price',
+				header: 'Price (DOM)',
+				width: 130,
+				cellRenderer: SparklineRenderer,
+				cellRendererCapabilities: {
+					scrollBehavior: 'live',
+					recycle: 'rebind',
+					warmCache: true,
+				},
+			},
+			{
+				// Imperative React renderer — forwardRef + useImperativeHandle.
+				// Grid calls ref.current.update() directly — bypasses React scheduler entirely.
+				// Flash animation is direct DOM mutation (span.style.color), zero vDOM diff.
+				field: 'change',
+				header: 'Change % (Imperative)',
+				width: 165,
+				cellRenderer: LivePriceRenderer,
+				cellRendererCapabilities: {
+					scrollBehavior: 'live',
+					imperativeUpdate: true,
+					recycle: 'rebind',
+				},
+			},
+			{
+				// Standard React renderer with memo — goes through full React scheduler.
+				// Shows derived risk score to simulate heavier computation per render.
+				field: 'volume',
+				header: 'Vol/Analytics (React)',
+				width: 165,
+				cellRenderer: HeavyAnalyticsCell,
+				cellRendererCapabilities: {
+					scrollBehavior: 'live',
+					recycle: 'rebind',
+					estimatedCost: 'medium',
+				},
+			},
+			{ field: 'risk', header: 'Risk', width: 90 },
 		],
 		[]
 	);
 
-	const dashboardRows = useMemo<DashboardStockRow[]>(
-		() => [
-			{ id: 'AAPL', name: 'Apple Inc.', price: '175.50', change: '+1.2', volume: '52.4', risk: 'Low' },
-			{ id: 'MSFT', name: 'Microsoft Corp.', price: '420.20', change: '+0.8', volume: '22.8', risk: 'Low' },
-			{ id: 'GOOGL', name: 'Alphabet Inc.', price: '150.10', change: '-0.4', volume: '28.1', risk: 'Low' },
-			{ id: 'NVDA', name: 'NVIDIA Corp.', price: '875.00', change: '+4.5', volume: '44.2', risk: 'High' },
-			{ id: 'TSLA', name: 'Tesla Inc.', price: '170.30', change: '-2.1', volume: '88.5', risk: 'High' },
-			{ id: 'AMZN', name: 'Amazon.com Inc.', price: '178.40', change: '+1.5', volume: '31.6', risk: 'Medium' },
-			{ id: 'NFLX', name: 'Netflix Inc.', price: '610.50', change: '+3.2', volume: '10.5', risk: 'Medium' },
-			{ id: 'AMD', name: 'Advanced Micro Devices', price: '180.20', change: '-1.8', volume: '62.0', risk: 'High' },
-			{ id: 'INTC', name: 'Intel Corp.', price: '42.50', change: '-0.5', volume: '35.4', risk: 'Medium' },
-			{ id: 'PYPL', name: 'PayPal Holdings', price: '64.80', change: '+0.3', volume: '12.2', risk: 'Medium' },
-		],
-		[]
-	);
+	const dashboardRows = useMemo<DashboardStockRow[]>(() => generateDashboardRows(), []);
 
 	const dashboardApi = useClientGrid<DashboardStockRow>({ rows: dashboardRows, columns: dashboardColumns });
 

@@ -7,8 +7,10 @@ import type {
 	GridRowContentUnmount,
 } from './IGridRenderer.js';
 import type { VisualRow } from '../store.js';
+import { isDomCellRenderer } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { CustomRendererManager, type ReleaseReason } from './customRendererManager.js';
+import { DomCellRendererManager } from './domCellRendererManager.js';
 
 function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
 	if (a === b) return true;
@@ -55,6 +57,7 @@ export class PortalMountManager<TRowData = unknown> {
 	public onUnmountHeaderMenu?: (unmount: GridHeaderMenuUnmount) => void;
 
 	public customRendererManager: CustomRendererManager<TRowData>;
+	public domCellRendererManager: DomCellRendererManager<TRowData>;
 	private getPhysicalRowSlotId?: (rowIndex: number) => string | undefined;
 
 	constructor(private engine?: GridEngine<TRowData>) {
@@ -65,6 +68,7 @@ export class PortalMountManager<TRowData = unknown> {
 		this.customRendererManager.onUnmountCellContent = (unmount) => {
 			this.onUnmountCellContent?.(unmount);
 		};
+		this.domCellRendererManager = new DomCellRendererManager<TRowData>(engine);
 	}
 
 	public setPhysicalRowSlotIdResolver(resolver: (rowIndex: number) => string | undefined): void {
@@ -104,8 +108,30 @@ export class PortalMountManager<TRowData = unknown> {
 		const node = mount.node;
 		const rowIndex = mount.rowIndex ?? this.engine?.getRowModel()?.getVisualIndexByRowId(node.id) ?? -1;
 		const colIndex = mount.colIndex ?? (this.engine ? this.engine.columns.getColumnIndex(col.field) : -1);
-
 		const rowSlotId = this.getPhysicalRowSlotId?.(rowIndex);
+
+		// DOM renderer — zero React overhead, direct DOM manipulation
+		if (!mount.isEditing && isDomCellRenderer(col?.cellRenderer)) {
+			const rendererKey = rowSlotId ? `dom:${col.field}@${rowSlotId}` : `dom:${col.field}@${rowIndex}:${colIndex}`;
+
+			this.domCellRendererManager.acquire({
+				rendererKey,
+				cellKey: mount.cellKey,
+				parentContainer: mount.container,
+				renderer: col.cellRenderer as import('../store.js').DomCellRenderer<TRowData>,
+				value: mount.value,
+				node,
+				col,
+				isEditing: mount.isEditing,
+				phase: mount.phase ?? 'initial',
+				isScrolling: mount.isScrolling ?? false,
+				isFocused: mount.isFocused ?? false,
+				isSelected: mount.isSelected ?? false,
+			});
+			return;
+		}
+
+		// React renderer — goes through portal store
 		const rendererKey = mount.isEditing
 			? `${node.id}:${col.field}`
 			: rowSlotId
@@ -129,6 +155,9 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	private releaseCellReal(cellKey: string, reason: ReleaseReason, originalUnmount?: GridCellContentUnmount): void {
+		// DOM renderer path — no portal/React involved
+		if (this.domCellRendererManager.releaseByCellKey(cellKey, reason)) return;
+
 		const releasedCustomRenderer = this.customRendererManager.releaseByCellKey(cellKey, reason);
 		if (!releasedCustomRenderer) {
 			if (originalUnmount) {
@@ -196,6 +225,14 @@ export class PortalMountManager<TRowData = unknown> {
 		const wasNewDeferredMount = this.deferredNewCellMounts.delete(unmount.cellKey);
 		this.deferredCellReleases.delete(unmount.cellKey);
 		if (canceledDeferredMount && wasNewDeferredMount) return;
+
+		// DOM renderer — warm cache it, no portal unmount needed
+		if (unmount.container && this.domCellRendererManager.releaseByParentContainer(unmount.container, 'scrolled-out')) {
+			return;
+		}
+		if (this.domCellRendererManager.releaseByCellKey(unmount.cellKey, 'scrolled-out')) {
+			return;
+		}
 
 		if (unmount.container && this.customRendererManager.releaseByParentContainer(unmount.container, 'scrolled-out')) {
 			return;
@@ -408,6 +445,7 @@ export class PortalMountManager<TRowData = unknown> {
 		for (const [cellKey, container] of this.mountedCells) {
 			this.releaseCellReal(cellKey, 'destroyed');
 		}
+		this.domCellRendererManager.releaseAll();
 		this.customRendererManager.releaseAll();
 
 		for (const [rowKey, container] of this.mountedRows) {

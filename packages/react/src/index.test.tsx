@@ -393,19 +393,13 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const container = document.createElement('div');
 		document.body.appendChild(container);
 
-		const colDef = grid.api.getColumnDef('name');
+		const colDef = grid.api.getColumnDef('name')!;
 		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
-		const portals = new Map();
-		portals.set('1:name', {
-			cellKey: '1:name',
-			container,
-			value: 'Product A',
-			node,
-			col: colDef,
-		});
+		const store = createPortalStore<TestRow>();
+		store.mountCell('1:name', container, 'Product A', node, colDef, false, false);
 
-		render(<PortalManager portals={portals} api={grid.api} />);
+		render(<PortalManager store={store} api={grid.api} />);
 
 		expect(screen.getByTestId('portal-content').textContent).toBe('Product A');
 
@@ -430,28 +424,13 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 		const container = document.createElement('div');
 		document.body.appendChild(container);
-		const colDef = grid.api.getColumnDef('name');
-		const portals = new Map();
-		portals.set('1:name', {
-			cellKey: '1:name',
-			container,
-			value: 'Old',
-			node: grid.api.getRowNodeById('1')!,
-			col: colDef,
-			isEditing: false,
-			isLoading: false,
-		});
-		portals.set('2:name', {
-			cellKey: '2:name',
-			container,
-			value: 'New',
-			node: grid.api.getRowNodeById('2')!,
-			col: colDef,
-			isEditing: false,
-			isLoading: false,
-		});
+		const colDef = grid.api.getColumnDef('name')!;
 
-		render(<PortalManager portals={portals} api={grid.api} />);
+		const store = createPortalStore<TestRow>();
+		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false);
+		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false);
+
+		render(<PortalManager store={store} api={grid.api} />);
 
 		expect(screen.getAllByTestId('portal-content')).toHaveLength(1);
 		expect(screen.getByTestId('portal-content').textContent).toBe('New');
@@ -478,21 +457,21 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			await Promise.resolve();
 		});
 
-		expect(Array.from(store.getSnapshot().portals.keys())).toEqual(['2:name']);
+		expect(store.getCellSnapshot().cellPortalList.map((p) => p.cellKey)).toEqual(['2:name']);
 
 		store.unmountCell('1:name', container);
 		await act(async () => {
 			await Promise.resolve();
 		});
-		expect(Array.from(store.getSnapshot().portals.keys())).toEqual(['2:name']);
+		expect(store.getCellSnapshot().cellPortalList.map((p) => p.cellKey)).toEqual(['2:name']);
 
 		grid.api.destroy();
 	});
 
-	it('should update cell data without triggering global store change listeners', async () => {
+	it('should update cell data without triggering structural listeners', async () => {
 		const store = createPortalStore<TestRow>();
-		const listener = vi.fn();
-		store.subscribe(listener);
+		const structuralListener = vi.fn();
+		store.subscribeCells(structuralListener);
 
 		const cellListener = vi.fn();
 		const cellKey = '1:name';
@@ -508,7 +487,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		await act(async () => {
 			await Promise.resolve();
 		});
-		expect(listener).toHaveBeenCalledTimes(1);
+		expect(structuralListener).toHaveBeenCalledTimes(1);
 
 		// Subscribe to cell
 		const unsubscribeCell = store.subscribeToCell!(cellKey, cellListener);
@@ -516,9 +495,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		// Update cell data only (non-structural change)
 		store.mountCell(cellKey, container, 'New', grid.api.getRowNodeById('1')!, colDef, false, false);
 
-		// The global store listener should NOT have been called again (remains 1)
-		expect(listener).toHaveBeenCalledTimes(1);
-		// But the cell-specific listener SHOULD have been called!
+		// The structural listener should NOT have fired again (remains 1)
+		expect(structuralListener).toHaveBeenCalledTimes(1);
+		// But the cell-specific listener SHOULD have been called
 		expect(cellListener).toHaveBeenCalledTimes(1);
 
 		// Clean up
@@ -1023,30 +1002,21 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		document.body.appendChild(containerGroup);
 		document.body.appendChild(containerDetail);
 
-		const rowPortals = new Map();
-		rowPortals.set('group-1', {
-			rowKey: 'group-1',
-			container: containerGroup,
-			visualRow: {
-				kind: 'group',
-				id: 'group-1',
-				field: 'category',
-				key: 'Electronics',
-				expanded: true,
-				depth: 1,
-				childCount: 5,
-			},
-		});
-
-		rowPortals.set('detail-1', {
-			rowKey: 'detail-1',
-			container: containerDetail,
-			visualRow: {
-				kind: 'detail',
-				id: 'detail-1',
-				parentId: 'parent-1',
-			},
-		});
+		const store = createPortalStore<TestRow>();
+		store.mountRow('group-1', containerGroup, {
+			kind: 'group',
+			id: 'group-1',
+			field: 'category',
+			key: 'Electronics',
+			expanded: true,
+			depth: 1,
+			childCount: 5,
+		} as any);
+		store.mountRow('detail-1', containerDetail, {
+			kind: 'detail',
+			id: 'detail-1',
+			parentId: 'parent-1',
+		} as any);
 
 		const groupRenderer = ({ visualRow }: any) => (
 			<span data-testid='custom-group'>
@@ -1056,15 +1026,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const detailRenderer = ({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>;
 
-		render(
-			<PortalManager
-				portals={new Map()}
-				rowPortals={rowPortals}
-				api={grid.api}
-				groupRowRenderer={groupRenderer}
-				detailRowRenderer={detailRenderer}
-			/>
-		);
+		render(<PortalManager store={store} api={grid.api} groupRowRenderer={groupRenderer} detailRowRenderer={detailRenderer} />);
 
 		expect(screen.getByTestId('custom-group').textContent).toBe('category:Electronics (5 items)');
 		expect(screen.getByTestId('custom-detail').textContent).toBe('Details for parent-1');
@@ -1081,30 +1043,14 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 		const container = document.createElement('div');
 		document.body.appendChild(container);
-		const rowPortals = new Map();
-		rowPortals.set('detail-old', {
-			rowKey: 'detail-old',
-			container,
-			visualRow: {
-				kind: 'detail',
-				id: 'detail-old',
-				parentId: 'old-parent',
-			},
-		});
-		rowPortals.set('detail-new', {
-			rowKey: 'detail-new',
-			container,
-			visualRow: {
-				kind: 'detail',
-				id: 'detail-new',
-				parentId: 'new-parent',
-			},
-		});
+
+		const store = createPortalStore<TestRow>();
+		store.mountRow('detail-old', container, { kind: 'detail', id: 'detail-old', parentId: 'old-parent' } as any);
+		store.mountRow('detail-new', container, { kind: 'detail', id: 'detail-new', parentId: 'new-parent' } as any);
 
 		render(
 			<PortalManager
-				portals={new Map()}
-				rowPortals={rowPortals}
+				store={store}
 				api={grid.api}
 				detailRowRenderer={({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>}
 			/>
@@ -1130,21 +1076,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		row.appendChild(container);
 		document.body.appendChild(row);
 
-		const rowPortals = new Map();
-		rowPortals.set('detail-old', {
-			rowKey: 'detail-old',
-			container,
-			visualRow: {
-				kind: 'detail',
-				id: 'detail-old',
-				parentId: 'old-parent',
-			},
-		});
+		const store = createPortalStore<TestRow>();
+		store.mountRow('detail-old', container, { kind: 'detail', id: 'detail-old', parentId: 'old-parent' } as any);
 
 		render(
 			<PortalManager
-				portals={new Map()}
-				rowPortals={rowPortals}
+				store={store}
 				api={grid.api}
 				detailRowRenderer={({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>}
 			/>
@@ -1156,60 +1093,40 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should update row portal content when the visual row changes for the same container', () => {
+	it('should update row portal content when the visual row changes for the same container', async () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [],
 			columns: [],
 		});
 		const container = document.createElement('div');
 		document.body.appendChild(container);
-		const makeRowPortals = (expanded: boolean) =>
-			new Map([
-				[
-					'group-1',
-					{
-						rowKey: 'group-1',
-						container,
-						visualRow: {
-							kind: 'group',
-							id: 'group-1',
-							field: 'category',
-							key: 'Electronics',
-							expanded,
-							depth: 0,
-							childCount: expanded ? 5 : 2,
-						},
-					},
-				],
-			]);
 
-		const { rerender } = render(
-			<PortalManager
-				portals={new Map()}
-				rowPortals={makeRowPortals(false)}
-				api={grid.api}
-				groupRowRenderer={({ visualRow }: any) => (
-					<span data-testid='custom-group'>
-						{visualRow.expanded ? `expanded:${visualRow.childCount}` : `collapsed:${visualRow.childCount}`}
-					</span>
-				)}
-			/>
+		const store = createPortalStore<TestRow>();
+
+		const makeVisualRow = (expanded: boolean) => ({
+			kind: 'group' as const,
+			id: 'group-1',
+			field: 'category',
+			key: 'Electronics',
+			expanded,
+			depth: 0,
+			childCount: expanded ? 5 : 2,
+		});
+
+		const groupRenderer = ({ visualRow }: any) => (
+			<span data-testid='custom-group'>{visualRow.expanded ? `expanded:${visualRow.childCount}` : `collapsed:${visualRow.childCount}`}</span>
 		);
+
+		store.mountRow('group-1', container, makeVisualRow(false) as any);
+
+		render(<PortalManager store={store} api={grid.api} groupRowRenderer={groupRenderer} />);
 
 		expect(screen.getByTestId('custom-group').textContent).toBe('collapsed:2');
 
-		rerender(
-			<PortalManager
-				portals={new Map()}
-				rowPortals={makeRowPortals(true)}
-				api={grid.api}
-				groupRowRenderer={({ visualRow }: any) => (
-					<span data-testid='custom-group'>
-						{visualRow.expanded ? `expanded:${visualRow.childCount}` : `collapsed:${visualRow.childCount}`}
-					</span>
-				)}
-			/>
-		);
+		store.mountRow('group-1', container, makeVisualRow(true) as any);
+		await act(async () => {
+			await Promise.resolve();
+		});
 
 		expect(screen.getByTestId('custom-group').textContent).toBe('expanded:5');
 

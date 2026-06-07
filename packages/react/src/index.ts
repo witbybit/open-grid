@@ -10,6 +10,7 @@ export {
 	useGridNavigationController,
 } from './hooks.js';
 
+export { isDomCellRenderer } from './types.js';
 export type {
 	ColumnDef,
 	CellEditorProps,
@@ -26,6 +27,10 @@ export type {
 	VisualRow,
 	CellRendererCapabilities,
 	CellRendererPhase,
+	DomCellRenderer,
+	DomCellRendererHandle,
+	DomCellRendererParams,
+	ImperativeCellHandle,
 } from './types.js';
 
 export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';
