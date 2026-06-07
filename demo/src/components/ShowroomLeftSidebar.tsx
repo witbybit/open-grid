@@ -13,6 +13,7 @@ import {
 	Calendar,
 	FolderTree,
 	Gauge,
+	PanelRight,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -84,6 +85,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Performance Lab',
 			subtitle: '100k x 1k Glide',
 			icon: Gauge,
+		},
+		{
+			id: 'panels',
+			label: 'Sidebar Panels',
+			subtitle: 'Columns · Filters · Sort',
+			icon: PanelRight,
 		},
 	] as const;
 

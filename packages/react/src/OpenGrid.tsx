@@ -2,9 +2,7 @@ import {
 	GridApi,
 	GridCellClickParams,
 	GridCellPointer,
-	ColumnDef,
 	InternalColumnDef,
-	RowNode,
 	GridContextMenuOptions,
 	GridContextMenuHandle,
 	GridHost,
@@ -15,6 +13,7 @@ import {
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { PortalManager, createPortalStore } from './GridPortal.js';
 import { useGridNavigationController } from './hooks.js';
+import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
 
 export const GridApiContext = createContext<GridApi<unknown> | null>(null);
 
@@ -44,6 +43,8 @@ export interface OpenGridProps<TRowData = unknown> {
 	};
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	/** Attach a built-in animated sidebar panel strip inside the grid. */
+	sidebar?: GridSidebarConfig<TRowData>;
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
@@ -75,6 +76,7 @@ function OpenGridInner<TRowData = unknown>({
 	navigationOptions = {},
 	groupRowRenderer,
 	detailRowRenderer,
+	sidebar,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -404,9 +406,38 @@ function OpenGridInner<TRowData = unknown>({
 		};
 	}, [handleMouseDown, handleMouseOver, handleClick, handleDoubleClick, handleContextMenu]);
 
+	// Initialize sidebar default open panel on mount
+	const sidebarDefaultOpenRef = useRef(sidebar?.defaultOpen);
+	useEffect(() => {
+		if (sidebarDefaultOpenRef.current != null) api.openPanel(sidebarDefaultOpenRef.current);
+	}, []); // intentional: mount-only
+
+	const hasSidebar = sidebar != null;
+	const sidebarPosition = sidebar?.position ?? 'right';
+
 	return (
-		<div ref={containerRef} tabIndex={-1} style={{ width: '100%', height: '100%', position: 'relative' }}>
-			<PortalManager store={portalStore} api={api} groupRowRenderer={groupRowRenderer} detailRowRenderer={detailRowRenderer} />
+		<div
+			style={{
+				width: '100%',
+				height: '100%',
+				display: hasSidebar ? 'flex' : undefined,
+				flexDirection: hasSidebar ? (sidebarPosition === 'left' ? 'row-reverse' : 'row') : undefined,
+			}}
+		>
+			<div
+				ref={containerRef}
+				tabIndex={-1}
+				style={{
+					flex: hasSidebar ? 1 : undefined,
+					width: hasSidebar ? undefined : '100%',
+					height: '100%',
+					position: 'relative',
+					minWidth: hasSidebar ? 0 : undefined,
+				}}
+			>
+				<PortalManager store={portalStore} api={api} groupRowRenderer={groupRowRenderer} detailRowRenderer={detailRowRenderer} />
+			</div>
+			{hasSidebar && <GridSidebar<TRowData> api={api} config={sidebar!} />}
 		</div>
 	);
 }

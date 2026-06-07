@@ -603,6 +603,9 @@ export interface GridState<TRowData = unknown> {
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
 
+	// Sidebar UI state
+	sidebarOpenPanel?: string | null;
+
 	// Tree / Grouping / Master-Detail State
 	groupBy?: string[];
 	getParentId?: (row: TRowData) => string | null | undefined;
@@ -779,6 +782,11 @@ export interface GridApi<TRowData = unknown> {
 	redo(): void;
 	canUndo(): boolean;
 	canRedo(): boolean;
+	// Sidebar panel API
+	openPanel(panelId: string): void;
+	closePanel(): void;
+	togglePanel(panelId: string): void;
+	getOpenPanel(): string | null;
 	destroy(): void;
 	getRenderStats(): RenderStats;
 	resetRenderStats(): void;
@@ -1016,6 +1024,23 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setFilterModel = (filterModel: FilterModel | null): void => {
 		this.engine.setFilterModel(filterModel);
+	};
+
+	public openPanel = (panelId: string): void => {
+		this.setState({ sidebarOpenPanel: panelId });
+	};
+
+	public closePanel = (): void => {
+		this.setState({ sidebarOpenPanel: null });
+	};
+
+	public togglePanel = (panelId: string): void => {
+		const current = this.state.sidebarOpenPanel;
+		this.setState({ sidebarOpenPanel: current === panelId ? null : panelId });
+	};
+
+	public getOpenPanel = (): string | null => {
+		return this.state.sidebarOpenPanel ?? null;
 	};
 
 	public setStyleSlots = (styleSlots: GridStyleSlots<TRowData> | undefined): void => {
