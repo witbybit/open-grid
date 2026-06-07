@@ -91,14 +91,19 @@ export class ViewportModel<TRowData = unknown> {
 		}
 
 		// Calculate height occupied by pinned top and bottom lanes
+		// Skip the loop entirely for the common case of no pinned rows
 		let pinnedTopHeight = 0;
-		for (let i = 0; i < this.pinTopRows && i < rowCount; i++) {
-			pinnedTopHeight += this.engine.geometry.getRowHeight(i, 40);
+		if (this.pinTopRows > 0) {
+			for (let i = 0; i < this.pinTopRows && i < rowCount; i++) {
+				pinnedTopHeight += this.engine.geometry.getRowHeight(i, 40);
+			}
 		}
 
 		let pinnedBottomHeight = 0;
-		for (let i = 0; i < this.pinBottomRows && i < rowCount; i++) {
-			pinnedBottomHeight += this.engine.geometry.getRowHeight(rowCount - 1 - i, 40);
+		if (this.pinBottomRows > 0) {
+			for (let i = 0; i < this.pinBottomRows && i < rowCount; i++) {
+				pinnedBottomHeight += this.engine.geometry.getRowHeight(rowCount - 1 - i, 40);
+			}
 		}
 
 		const visibleTop = this.scrollTop + pinnedTopHeight;

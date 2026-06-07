@@ -109,6 +109,73 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('positions right-pinned body cells with scroll-adjusted absolute offsets', () => {
+		const columns = [
+			{ field: 'a', header: 'A', width: 100 },
+			{ field: 'b', header: 'B', width: 110 },
+			{ field: 'c', header: 'C', width: 120 },
+			{ field: 'd', header: 'D', width: 130 },
+			{ field: 'e', header: 'E', width: 140 },
+		];
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'row-1', a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' }],
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		store.setViewportPins({ right: 2 });
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollLeft = 100;
+		renderer.fullPaint();
+
+		const row = container.querySelector('.og-row[data-row-id="row:row-1"]') as HTMLDivElement;
+		const dCell = row.querySelector('.og-cell[data-col-field="d"]') as HTMLDivElement;
+		const eCell = row.querySelector('.og-cell[data-col-field="e"]') as HTMLDivElement;
+		const rightHeaderLayer = container.querySelector('.og-layer-header-right') as HTMLDivElement;
+		const eHeader = container.querySelector('.og-header-cell[data-col-field="e"]') as HTMLDivElement;
+
+		expect(row.querySelector('.og-row-pin-right')).toBeNull();
+		expect(dCell.parentElement).toBe(row);
+		expect(eCell.parentElement).toBe(row);
+		expect(dCell.className).toContain('og-cell-pinned-right');
+		expect(eCell.className).toContain('og-cell-pinned-right');
+		expect(dCell.style.position).toBe('');
+		expect(eCell.style.position).toBe('');
+		expect(dCell.style.left).toBe('330px');
+		expect(eCell.style.left).toBe('460px');
+		expect(dCell.style.right).toBe('');
+		expect(eCell.style.right).toBe('');
+		expect(rightHeaderLayer.style.left).toBe('330px');
+		expect(rightHeaderLayer.style.width).toBe('270px');
+		expect(eHeader.parentElement).toBe(rightHeaderLayer);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('does not render hidden columns in headers or cells', () => {
 		const columns = [
 			{ field: 'id', header: 'ID', width: 80 },
@@ -883,7 +950,7 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 1200;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		expect(callbacks).toHaveLength(1);
+		// callbacks[0] is the scroll frame; scroll-end RAF ticks are also queued but don't matter here
 		expect(renderer.getRenderStats().scrollFrames).toBe(0);
 		callbacks[0](0);
 		expect(renderer.getRenderStats().scrollFrames).toBe(1);
@@ -998,7 +1065,6 @@ describe('RenderEngine', () => {
 	});
 
 	it('does not rebuild headers or call focus during vertical scroll frames', () => {
-		vi.useFakeTimers();
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
 			return 1;
@@ -1044,12 +1110,11 @@ describe('RenderEngine', () => {
 		expect(statsDuringScroll.headerPaintsDuringScroll).toBe(0);
 		expect(statsDuringScroll.headerRangeSyncsDuringScroll).toBe(0);
 		expect(statsDuringScroll.overlayCheapSyncsDuringScroll).toBe(1);
-		expect(focusSpy).not.toHaveBeenCalled();
-		expect(statsDuringScroll.focusCallsDuringScroll).toBe(0);
-
-		vi.advanceTimersByTime(80);
+		// With RAF-based scroll-end, finishScrolling runs after 4 RAF ticks (synchronously with
+		// immediately-firing RAF stub). Focus is called in finishScrolling after isScrolling=false,
+		// so it is not counted as a during-scroll focus call.
 		expect(focusSpy).toHaveBeenCalledTimes(1);
-		expect(renderer.getRenderStats().focusCallsDuringScroll).toBe(0);
+		expect(statsDuringScroll.focusCallsDuringScroll).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -1122,10 +1187,13 @@ describe('RenderEngine', () => {
 	});
 
 	it('evacuates custom renderer DOM from recycled cells while keeping portal hosts intact', () => {
-		vi.useFakeTimers();
-		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-			callback(0);
-			return 1;
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
 		const columns = [{ field: 'name', header: 'Name', width: 120, cellRenderer: () => null }];
 		const store = new GridStore<{ id: string; name: string }>({
@@ -1169,6 +1237,7 @@ describe('RenderEngine', () => {
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
+		callbacks[0](0); // run the scroll frame; scroll-end chain stays deferred
 
 		expect(originalPortalChild.isConnected).toBe(true);
 		expect(originalPortalChild.closest('.og-cell')).toBeNull();
@@ -1181,10 +1250,13 @@ describe('RenderEngine', () => {
 	});
 
 	it('uses styled pending placeholders for recycled custom cells by default during scroll', () => {
-		vi.useFakeTimers();
-		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-			callback(0);
-			return 1;
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
 		const columns = [{ field: 'name', header: 'Name', width: 120, cellRenderer: () => null }];
 		const store = new GridStore<{ id: string; name: string }>({
@@ -1223,6 +1295,7 @@ describe('RenderEngine', () => {
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
+		callbacks[0](0); // run the scroll frame; scroll-end chain stays deferred
 
 		const pendingCell = container.querySelector<HTMLDivElement>('.og-cell[data-content-mode="pending"]');
 		expect(pendingCell).not.toBeNull();
@@ -1288,10 +1361,13 @@ describe('RenderEngine', () => {
 	});
 
 	it('mounts custom cell portals after scroll idle for cells skipped during the scroll frame', async () => {
-		vi.useFakeTimers();
-		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-			callback(0);
-			return 1;
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
 		const columns = [
 			{ field: 'a', header: 'A', width: 120, cellRenderer: () => null },
@@ -1331,10 +1407,24 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 2400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
+		// Run scroll frame — portals must not be mounted yet
+		callbacks[0](0);
 		expect(renderer.portalMountManager.onMountCellContent).not.toHaveBeenCalled();
-		vi.advanceTimersByTime(80);
+
+		// Flush scroll-end chain (4 ticks → finishScrolling) and post-scroll portal flush
+		let i = 1;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
 		await Promise.resolve();
 		await Promise.resolve();
+		// Run any additional frames scheduled by post-scroll work
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+
 		expect(renderer.portalMountManager.onMountCellContent).toHaveBeenCalled();
 		expect((renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mock.calls[0][0].phase).toBe('scroll-idle');
 		expect((renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mock.calls[0][0].isScrolling).toBe(false);
@@ -1346,10 +1436,13 @@ describe('RenderEngine', () => {
 	});
 
 	it('defers newly recycled live custom renderers during the scroll frame', async () => {
-		vi.useFakeTimers();
-		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-			callback(0);
-			return 1;
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
 		const columns = [
 			{
@@ -1394,6 +1487,8 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 2400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
+		// Run scroll frame — portals must not be mounted yet
+		callbacks[0](0);
 		expect(renderer.portalMountManager.onMountCellContent).not.toHaveBeenCalled();
 		const cellNode = container.querySelector('[data-row-id="row:row-60"]') as HTMLDivElement;
 		expect(cellNode).not.toBeNull();
@@ -1408,10 +1503,13 @@ describe('RenderEngine', () => {
 	});
 
 	it('keeps custom cell classes during scroll and defers heavier cell hooks until idle', async () => {
-		vi.useFakeTimers();
-		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-			callback(0);
-			return 1;
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
 		const columns = [{ field: 'a', header: 'A', width: 120 }];
 		const cellClass = vi.fn(() => 'custom-cell');
@@ -1456,6 +1554,8 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 2400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
+		// Run scroll frame — cell hooks must not fire yet
+		callbacks[0](0);
 		expect(cellClass).not.toHaveBeenCalled();
 		expect(beforeCellRender).not.toHaveBeenCalled();
 		expect(afterCellRender).not.toHaveBeenCalled();
@@ -1464,9 +1564,18 @@ describe('RenderEngine', () => {
 		expect(statsDuringScroll.cellClassComputesDuringScroll).toBe(0);
 		expect(statsDuringScroll.dirtyCellsMarkedDuringScroll).toBeGreaterThan(0);
 
-		vi.advanceTimersByTime(80);
+		// Flush scroll-end chain (4 RAF ticks → finishScrolling) and post-scroll decoration
+		let i = 1;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
 		await Promise.resolve();
 		await Promise.resolve();
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
 
 		expect(cellClass).toHaveBeenCalled();
 		expect(beforeCellRender).toHaveBeenCalled();
@@ -1479,10 +1588,13 @@ describe('RenderEngine', () => {
 	});
 
 	it('keeps custom row classes during scroll', async () => {
-		vi.useFakeTimers();
-		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-			callback(0);
-			return 1;
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
 		const columns = [{ field: 'a', header: 'A', width: 120 }];
 		const rowClass = vi.fn(() => 'custom-row');
@@ -1519,11 +1631,22 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 2400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
+		// Run scroll frame — rowClass must not fire yet
+		callbacks[0](0);
 		expect(rowClass).not.toHaveBeenCalled();
 
-		vi.advanceTimersByTime(80);
+		// Flush scroll-end chain (4 RAF ticks → finishScrolling) and post-scroll decoration
+		let i = 1;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
 		await Promise.resolve();
 		await Promise.resolve();
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
 
 		expect(rowClass).toHaveBeenCalled();
 
@@ -1587,10 +1710,13 @@ describe('RenderEngine', () => {
 	});
 
 	it('defers row portal work for detail rows during active scroll', () => {
-		vi.useFakeTimers();
-		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-			callback(0);
-			return 1;
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
 		const columns = [{ field: 'name', header: 'Name', width: 180 }];
 		const store = new GridStore<{ id: string; name: string }>({
@@ -1636,13 +1762,20 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
+		// Run scroll frame — row portal callbacks must not fire yet
+		callbacks[0](0);
 		const stats = renderer.getRenderStats();
 		expect(stats.scrollFrames).toBe(1);
 		expect(stats.portalMountsDuringScroll + stats.portalReleasesDuringScroll).toBeGreaterThan(0);
 		expect(renderer.portalMountManager.onMountRowContent).not.toHaveBeenCalled();
 		expect(renderer.portalMountManager.onUnmountRowContent).not.toHaveBeenCalled();
 
-		vi.advanceTimersByTime(80);
+		// Flush scroll-end chain (4 RAF ticks → finishScrolling) and post-scroll portal work
+		let i = 1;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
 		expect(
 			(renderer.portalMountManager.onMountRowContent as ReturnType<typeof vi.fn>).mock.calls.length +
 				(renderer.portalMountManager.onUnmountRowContent as ReturnType<typeof vi.fn>).mock.calls.length
@@ -1835,9 +1968,13 @@ describe('RenderEngine', () => {
 	});
 
 	it('defers portal unmounts when horizontally recycling many custom-renderer columns', async () => {
-		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-			callback(0);
-			return 1;
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
 		const columns = Array.from({ length: 1000 }, (_, index) => ({
 			field: `col_${index}`,
@@ -1885,6 +2022,8 @@ describe('RenderEngine', () => {
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollLeft = 60000;
 		scrollViewport.dispatchEvent(new Event('scroll'));
+		// Run scroll frame only — scroll-end chain stays deferred
+		callbacks[0](0);
 		await Promise.resolve();
 		await Promise.resolve();
 
@@ -2065,11 +2204,13 @@ describe('RenderEngine', () => {
 	});
 
 	it('renders valueGetter column values correctly during scroll', async () => {
-		vi.useFakeTimers();
 		const callbacks: FrameRequestCallback[] = [];
-		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-			callbacks.push(callback);
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
 			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
 		const columns = [
 			{ field: 'name', header: 'Name', width: 120 },
@@ -2110,7 +2251,7 @@ describe('RenderEngine', () => {
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
 		// Run the scroll animation frame
-		expect(callbacks.length).toBe(1);
+		expect(callbacks.length).toBeGreaterThanOrEqual(1);
 		callbacks[0](0);
 
 		// Inspect the cells rendered at the scrolled position - during scroll it shows loading placeholder
@@ -2120,12 +2261,18 @@ describe('RenderEngine', () => {
 		expect(computedCell).not.toBeNull();
 		expect(computedCell.textContent).toBe('...');
 
-		// Advance timers to trigger scroll end
-		vi.advanceTimersByTime(100);
-
-		// Execute the post-scroll decoration chunk frame
-		expect(callbacks.length).toBe(2);
-		callbacks[1](0);
+		// Flush scroll-end chain (4 RAF ticks → finishScrolling) and post-scroll decoration
+		let i = 1;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
 
 		// Now it should be resolved to the computed value
 		expect(computedCell.textContent).toBe('Row 10!');
@@ -2133,7 +2280,6 @@ describe('RenderEngine', () => {
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
-		vi.useRealTimers();
 	});
 
 	it('uses column renderer capabilities during scroll and skeletons uncategorized renderers', () => {
@@ -2203,7 +2349,7 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		expect(callbacks.length).toBe(1);
+		expect(callbacks.length).toBeGreaterThanOrEqual(1);
 		callbacks[0](0);
 
 		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
@@ -2301,7 +2447,7 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		expect(callbacks.length).toBe(1);
+		expect(callbacks.length).toBeGreaterThanOrEqual(1);
 		callbacks[0](0);
 
 		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
@@ -2371,7 +2517,7 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		expect(callbacks.length).toBe(1);
+		expect(callbacks.length).toBeGreaterThanOrEqual(1);
 		callbacks[0](0);
 
 		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;

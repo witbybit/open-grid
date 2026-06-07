@@ -57,6 +57,32 @@ export class HeaderRenderer<TRowData = unknown> {
 
 	public syncScrollLeft(scrollLeft: number): void {
 		this.lastHeaderScrollLeft = scrollLeft;
+		this.syncPinnedLayerPositions();
+	}
+
+	private syncPinnedLayerPositions(): void {
+		const colCount = this.engine.columns.getDisplayedColumnCount();
+		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
+		const pinRightColumns = this.engine.viewport.pinRightColumns;
+		const scrollLeft = this.engine.viewport.scrollLeft;
+		const viewportWidth = this.engine.viewport.viewportWidth;
+
+		if (this.headerLeftLayer) {
+			const leftPx = `${scrollLeft}px`;
+			if (this.headerLeftLayer.style.left !== leftPx) this.headerLeftLayer.style.left = leftPx;
+		}
+
+		if (!this.headerRightLayer || pinRightColumns <= 0 || colCount === 0) return;
+		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
+		if (pinRightStart >= colCount) return;
+		const state = this.engine.stateManager.getState();
+		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
+		const pinRightBaseLeft = this.engine.geometry.colLefts[pinRightStart] ?? totalWidth;
+		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
+		const pinRightLeft = scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth);
+		const leftPx = `${pinRightLeft}px`;
+		if (this.headerRightLayer.style.left !== leftPx) this.headerRightLayer.style.left = leftPx;
 	}
 
 	public syncVisibleColumnRange(): boolean {
@@ -95,6 +121,7 @@ export class HeaderRenderer<TRowData = unknown> {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const newColRange = this.engine.viewport.getVisibleColumnRange(colCount);
+		this.syncPinnedLayerPositions();
 
 		if (
 			!forceRepaint &&
@@ -130,9 +157,9 @@ export class HeaderRenderer<TRowData = unknown> {
 			if (c < pinLeftColumns) {
 				className += ' og-header-cell-pinned-left';
 				targetLayer = this.headerLeftLayer;
-			} else if (c >= colCount - pinRightColumns) {
+			} else if (c >= Math.max(pinLeftColumns, colCount - pinRightColumns)) {
 				className += ' og-header-cell-pinned-right';
-				const firstRightPinColLeft = this.engine.geometry.colLefts[colCount - pinRightColumns];
+				const firstRightPinColLeft = this.engine.geometry.colLefts[Math.max(pinLeftColumns, colCount - pinRightColumns)];
 				cellLeft = cellLeft - firstRightPinColLeft;
 				targetLayer = this.headerRightLayer;
 			}
@@ -193,11 +220,11 @@ export class HeaderRenderer<TRowData = unknown> {
 			renderHeaderCell(c);
 		}
 		for (let c = newColRange.startIdx; c <= newColRange.endIdx; c++) {
-			if (c >= pinLeftColumns && c < colCount - pinRightColumns) {
+			if (c >= pinLeftColumns && c < Math.max(pinLeftColumns, colCount - pinRightColumns)) {
 				renderHeaderCell(c);
 			}
 		}
-		for (let c = colCount - pinRightColumns; c < colCount; c++) {
+		for (let c = Math.max(pinLeftColumns, colCount - pinRightColumns); c < colCount; c++) {
 			if (c >= 0) {
 				renderHeaderCell(c);
 			}

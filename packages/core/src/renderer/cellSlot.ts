@@ -66,10 +66,8 @@ export class CellSlot<TRowData = unknown> {
 	/**
 	 * Binds the cell slot to new parameters. Prevents DOM writes if values match.
 	 *
-	 * Center and pin-left cells: pass right = -1, left = column's absolute left offset.
-	 * Pin-right cells: pass left = -1, right = (totalWidth - colLeft - colWidth).
-	 * The CSS class (og-cell-pin-left / og-cell-pin-right) enables sticky positioning;
-	 * JS only provides the numeric offset.
+	 * Center cells use content-space left offsets.
+	 * Pinned cells use scroll-adjusted left offsets and stay absolute.
 	 */
 	public update(
 		colIndex: number,
@@ -182,6 +180,21 @@ export class CellSlot<TRowData = unknown> {
 			}
 		}
 
+		return domUpdated;
+	}
+
+	public updatePosition(left: number): boolean {
+		let domUpdated = false;
+		if (this.lastLeft !== left) {
+			this.lastLeft = left;
+			this.element.style.left = `${left}px`;
+			domUpdated = true;
+		}
+		if (this.lastRight !== -1) {
+			this.lastRight = -1;
+			this.element.style.right = '';
+			domUpdated = true;
+		}
 		return domUpdated;
 	}
 

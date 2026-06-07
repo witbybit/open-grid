@@ -64,45 +64,33 @@ function countPinnedTrailing(count: number, total: number, leading: number): num
 }
 
 export function getRowIndices(w: RenderWindow): number[] {
+	const pinTop = Math.min(w.pinTopRows, w.rowCount);
+	const pinBottomStart = Math.max(pinTop, w.rowCount - w.pinBottomRows);
 	const indices: number[] = [];
 	// Pinned top
-	for (let r = 0; r < w.pinTopRows && r < w.rowCount; r++) {
-		indices.push(r);
-	}
-	// Center scrollable
+	for (let r = 0; r < pinTop; r++) indices.push(r);
+	// Center scrollable (never overlaps with pinned ranges due to bounds)
 	for (let r = w.rowStart; r <= w.rowEnd; r++) {
-		if (r >= w.pinTopRows && r < w.rowCount - w.pinBottomRows) {
-			indices.push(r);
-		}
+		if (r >= pinTop && r < pinBottomStart) indices.push(r);
 	}
 	// Pinned bottom
-	for (let r = w.rowCount - w.pinBottomRows; r < w.rowCount; r++) {
-		if (r >= 0 && r >= w.pinTopRows) {
-			indices.push(r);
-		}
-	}
-	return Array.from(new Set(indices)); // Deduplicate just in case of overlaps
+	for (let r = pinBottomStart; r < w.rowCount; r++) indices.push(r);
+	return indices;
 }
 
 export function getColIndices(w: RenderWindow): number[] {
+	const pinLeft = Math.min(w.pinLeftCols, w.colCount);
+	const pinRightStart = Math.max(pinLeft, w.colCount - w.pinRightCols);
 	const indices: number[] = [];
 	// Pinned left
-	for (let c = 0; c < w.pinLeftCols && c < w.colCount; c++) {
-		indices.push(c);
-	}
+	for (let c = 0; c < pinLeft; c++) indices.push(c);
 	// Center scrollable
 	for (let c = w.colStart; c <= w.colEnd; c++) {
-		if (c >= w.pinLeftCols && c < w.colCount - w.pinRightCols) {
-			indices.push(c);
-		}
+		if (c >= pinLeft && c < pinRightStart) indices.push(c);
 	}
 	// Pinned right
-	for (let c = w.colCount - w.pinRightCols; c < w.colCount; c++) {
-		if (c >= 0 && c >= w.pinLeftCols) {
-			indices.push(c);
-		}
-	}
-	return Array.from(new Set(indices)); // Deduplicate
+	for (let c = pinRightStart; c < w.colCount; c++) indices.push(c);
+	return indices;
 }
 
 export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: RenderWindowRuntimeLimits, onClamp?: () => void): RenderWindow {
@@ -411,18 +399,27 @@ export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow):
 	const prevCols = getColIndices(prev);
 	const nextCols = getColIndices(next);
 
-	const prevRowSet = new Set(prevRows);
-	const nextRowSet = new Set(nextRows);
-	const prevColSet = new Set(prevCols);
-	const nextColSet = new Set(nextCols);
+	// One reusable Set for membership tests — cleared between row and col phases
+	const scratch = new Set<number>();
 
-	const rowsEntered = nextRows.filter((r) => !prevRowSet.has(r));
-	const rowsExited = prevRows.filter((r) => !nextRowSet.has(r));
-	const rowsStayed = nextRows.filter((r) => prevRowSet.has(r));
+	for (const r of prevRows) scratch.add(r);
+	const rowsEntered: number[] = [];
+	const rowsExited: number[] = [];
+	const rowsStayed: number[] = [];
+	for (const r of nextRows) (scratch.has(r) ? rowsStayed : rowsEntered).push(r);
+	scratch.clear();
+	for (const r of nextRows) scratch.add(r);
+	for (const r of prevRows) if (!scratch.has(r)) rowsExited.push(r);
 
-	const colsEntered = nextCols.filter((c) => !prevColSet.has(c));
-	const colsExited = prevCols.filter((c) => !nextColSet.has(c));
-	const colsStayed = nextCols.filter((c) => prevColSet.has(c));
+	scratch.clear();
+	for (const c of prevCols) scratch.add(c);
+	const colsEntered: number[] = [];
+	const colsExited: number[] = [];
+	const colsStayed: number[] = [];
+	for (const c of nextCols) (scratch.has(c) ? colsStayed : colsEntered).push(c);
+	scratch.clear();
+	for (const c of nextCols) scratch.add(c);
+	for (const c of prevCols) if (!scratch.has(c)) colsExited.push(c);
 
 	const hasChanges =
 		rowsEntered.length > 0 ||

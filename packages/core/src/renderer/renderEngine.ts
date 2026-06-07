@@ -59,7 +59,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private activeHeaderPopoverElement: HTMLElement | null = null;
 
 	private isScrolling = false;
-	private scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
+	private scrollEndRafId: number | null = null;
+	private scrollEndFrameCount = 0;
 	private viewportDirtyAfterScroll = false;
 	private needsPostScrollPortalFlush = false;
 	private portalFlushScheduled = false;
@@ -299,10 +300,19 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Scroll hot path
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number): void => {
-		const changed = this.engine.viewport.setScrollPosition(scrollTop, scrollLeft);
+		const state = this.engine.stateManager.getState();
+		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
+		const maxScrollLeft = Math.max(0, totalWidth - this.engine.viewport.viewportWidth);
+		const clampedScrollLeft = Math.max(0, Math.min(maxScrollLeft, scrollLeft));
+		if (clampedScrollLeft !== scrollLeft && this.viewportRenderer.scrollViewport) {
+			this.viewportRenderer.scrollViewport.scrollLeft = clampedScrollLeft;
+		}
+		const changed = this.engine.viewport.setScrollPosition(scrollTop, clampedScrollLeft);
 		if (!changed) return;
 		this.markScrolling();
+		// Schedule scroll frame first so its RAF callback is ordered before the scroll-end RAF
 		this.scrollScheduler.requestFrame();
+		this.scheduleScrollEnd();
 	};
 
 	private markScrolling(): void {
@@ -312,7 +322,22 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.portalMountManager.setScrolling(true);
 		this.clearScrollEndTimer();
 		this.clearPostScrollDecorationTimer();
-		this.scrollEndTimer = setTimeout(() => this.finishScrolling(), 80);
+	}
+
+	// RAF-counter scroll-end: fires finishScrolling after N consecutive frames with no new
+	// scroll event. Device-rate-agnostic (~67ms at 60fps, ~33ms at 120fps vs fixed 80ms).
+	private scheduleScrollEnd(): void {
+		const targetCount = ++this.scrollEndFrameCount;
+		const tick = (remaining: number) => {
+			if (this.scrollEndFrameCount !== targetCount) return; // new scroll arrived
+			if (remaining > 0) {
+				this.scrollEndRafId = requestAnimationFrame(() => tick(remaining - 1));
+			} else {
+				this.scrollEndRafId = null;
+				this.finishScrolling();
+			}
+		};
+		this.scrollEndRafId = requestAnimationFrame(() => tick(3));
 	}
 
 	private finishScrolling(): void {
@@ -339,9 +364,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private clearScrollEndTimer(): void {
-		if (this.scrollEndTimer) {
-			clearTimeout(this.scrollEndTimer);
-			this.scrollEndTimer = null;
+		if (this.scrollEndRafId !== null) {
+			cancelAnimationFrame(this.scrollEndRafId);
+			this.scrollEndRafId = null;
 		}
 	}
 
@@ -539,6 +564,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		}
 
+		this.rowRenderer.syncPinnedCellPositions(window);
+
 		// Update current window's scroll values
 		if (this.rowRenderer.currentWindow) {
 			this.rowRenderer.currentWindow.scrollTop = this.engine.viewport.scrollTop;
@@ -548,8 +575,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private bindInvalidationSources(): void {
 		const invalidateFull = () => {
-			this.cachedColumnPlans = null;
-			this.cachedHasCustomRenderers = null;
+			clearColumnCaches();
 			this.engine.invalidation.invalidateFull('state');
 			this.scheduler.requestFlush('state');
 		};
@@ -577,9 +603,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 			this.scheduler.requestFlush('data');
 		};
-		const invalidateDefaultColumnGeometry = () => {
+		const clearColumnCaches = () => {
 			this.cachedColumnPlans = null;
 			this.cachedHasCustomRenderers = null;
+		};
+		const invalidateDefaultColumnGeometry = () => {
+			clearColumnCaches();
 			this.geometryController.invalidateAll();
 			this.engine.invalidation.invalidateGeometry('columns');
 			this.engine.invalidation.invalidateViewport('columns');
@@ -601,7 +630,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleColRange', invalidateViewport));
 
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('columns', invalidateFull));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('columnWidths', invalidateGeometryFull));
+		this.unsubscribers.push(
+			this.engine.stateManager.subscribeToKey('columnWidths', () => {
+				clearColumnCaches();
+				invalidateGeometryFull();
+			})
+		);
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('rowHeights', invalidateGeometryFull));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('enableColumnReorder', invalidateHeaders));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));

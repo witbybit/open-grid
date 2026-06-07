@@ -176,7 +176,7 @@ export class CustomRendererManager<TRowData = unknown> {
 			isScrolling: params.isScrolling,
 			isFocused: params.isFocused,
 			isSelected: params.isSelected,
-			lastAccessTime: Date.now(),
+			lastAccessTime: ++this.lruCounter,
 		};
 
 		this.removeSiblingContainers(newInstance.rendererKey, params.parentContainer, newInstance.container);
@@ -227,7 +227,7 @@ export class CustomRendererManager<TRowData = unknown> {
 				hiddenContainer.appendChild(instance.container);
 			}
 
-			instance.lastAccessTime = Date.now();
+			instance.lastAccessTime = ++this.lruCounter;
 			this.touchWarm(instance);
 
 			if (!this.engine?.isScrolling) {
@@ -382,10 +382,10 @@ export class CustomRendererManager<TRowData = unknown> {
 			}
 		}
 
-		// 2. Prune by TTL
-		const now = Date.now();
-		for (const [key, instance] of Array.from(this.warmRenderersByRendererKey.entries())) {
-			if (now - instance.lastAccessTime > this.ttlMs) {
+		// 2. Prune by access count gap (TTL equivalent: if not accessed in last maxWarm*2 acquires, evict)
+		const staleThreshold = this.lruCounter - this.maxWarm * 2;
+		for (const [key, instance] of this.warmRenderersByRendererKey.entries()) {
+			if (instance.lastAccessTime < staleThreshold) {
 				this.warmRenderersByRendererKey.delete(key);
 				this.lruOrder.delete(key);
 				this.stats.evictions++;

@@ -128,6 +128,39 @@ export class RowRenderer<TRowData = unknown> {
 		this.activeRows.clear();
 	}
 
+	public syncPinnedCellPositions(window: RenderWindow): void {
+		const pinLeftColumns = window.pinLeftCols;
+		const pinRightColumns = window.pinRightCols;
+		if (pinLeftColumns <= 0 && pinRightColumns <= 0) return;
+
+		const colCount = window.colCount;
+		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
+		const scrollLeft = this.engine.viewport.scrollLeft;
+		const viewportWidth = this.engine.viewport.viewportWidth;
+		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
+		const state = this.engine.stateManager.getState();
+		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
+		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
+		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+
+		for (const slot of this.activeRows.values()) {
+			if (slot.rowKind !== 'data' && slot.rowKind !== 'loading') continue;
+			for (let c = 0; c < pinLeftColumns && c < colCount; c++) {
+				const cellSlot = slot.cells.get(c);
+				if (cellSlot) {
+					cellSlot.updatePosition(scrollLeft + (this.engine.geometry.colLefts[c] ?? 0));
+				}
+			}
+			for (let c = pinRightStart; c < colCount; c++) {
+				const cellSlot = slot.cells.get(c);
+				if (cellSlot) {
+					const cellLeft = this.engine.geometry.colLefts[c] ?? pinRightBaseLeft;
+					cellSlot.updatePosition(scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) + (cellLeft - pinRightBaseLeft));
+				}
+			}
+		}
+	}
+
 	public recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>): void {
 		this.isScrollFrameActive = isScrollFrameActive;
 		this.isScrolling = isScrollFrameActive || this.engine.isScrolling;
@@ -397,7 +430,7 @@ export class RowRenderer<TRowData = unknown> {
 					columns,
 					isScrollFrameActive,
 					ctx,
-					delta.rowsEntered.includes(r)
+					rowsEnteredSet.has(r)
 				);
 			} else if (visualRow.kind === 'data') {
 				this.releaseRowPortal(slot); // Clean up row portal host if shifting to data
@@ -411,7 +444,7 @@ export class RowRenderer<TRowData = unknown> {
 					isScrollFrameActive,
 					ctx,
 					'initial',
-					delta.rowsEntered.includes(r)
+					rowsEnteredSet.has(r)
 				);
 			} else {
 				// Non-data portal group/detail rows
@@ -438,17 +471,25 @@ export class RowRenderer<TRowData = unknown> {
 			(nextWindow.pinTopRows > 0 || nextWindow.pinBottomRows > 0) &&
 			this.currentWindow.scrollTop !== nextWindow.scrollTop;
 		const columnsChangedDuringScroll = delta.colsEntered.length > 0 || delta.colsExited.length > 0;
-		const rowsToRender = isScrollFrameActive
-			? Array.from(
-					new Set([
-						...delta.rowsEntered,
-						...(columnsChangedDuringScroll ? delta.rowsStayed : []),
-						...(pinnedScrollOffsetChanged
-							? nextRows.filter((r) => r < nextWindow.pinTopRows || r >= nextWindow.rowCount - nextWindow.pinBottomRows)
-							: []),
-					])
-				)
-			: nextRows;
+
+		// Fast path: most scroll frames only have entered rows — skip all allocations
+		let rowsToRender: number[];
+		if (!isScrollFrameActive) {
+			rowsToRender = nextRows;
+		} else if (!columnsChangedDuringScroll && !pinnedScrollOffsetChanged) {
+			rowsToRender = delta.rowsEntered; // zero allocation — most common case
+		} else {
+			const toRenderSet = new Set<number>(delta.rowsEntered);
+			if (columnsChangedDuringScroll) {
+				for (const r of delta.rowsStayed) toRenderSet.add(r);
+			}
+			if (pinnedScrollOffsetChanged) {
+				for (const r of nextRows) {
+					if (r < nextWindow.pinTopRows || r >= nextWindow.rowCount - nextWindow.pinBottomRows) toRenderSet.add(r);
+				}
+			}
+			rowsToRender = Array.from(toRenderSet);
+		}
 
 		for (const r of rowsToRender) {
 			renderRow(r);
@@ -588,8 +629,17 @@ export class RowRenderer<TRowData = unknown> {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const colCount = columns.length;
-
-		const colsToRender = isScrollFrameActive && !rowEntered ? colsEntered : [...colsEntered, ...colsStayed];
+		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
+		// Hoist per-row constants out of the per-cell closure
+		const state = this.engine.stateManager.getState();
+		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
+		const scrollLeft = this.engine.viewport.scrollLeft;
+		const viewportWidth = this.engine.viewport.viewportWidth;
+		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
+		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
+		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		// When scroll-frame active and row didn't just enter, only render entered cols (stayed cols already positioned)
+		const renderStayed = !isScrollFrameActive || rowEntered;
 
 		const renderCell = (c: number) => {
 			const col = columns[c];
@@ -605,11 +655,13 @@ export class RowRenderer<TRowData = unknown> {
 
 			const cellLeft = this.engine.geometry.colLefts[c];
 			const cellWidth = this.engine.geometry.colWidths[c];
-			const isPinRight = c >= colCount - pinRightColumns;
-			const state = this.engine.stateManager.getState();
-			const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
-			const cellRight = isPinRight ? totalWidth - cellLeft - cellWidth : -1;
-			const leftArg = isPinRight ? -1 : cellLeft;
+			const isPinLeft = c < pinLeftColumns;
+			const isPinRight = c >= pinRightStart;
+			const leftArg = isPinLeft
+				? scrollLeft + cellLeft
+				: isPinRight
+					? scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) + (cellLeft - pinRightBaseLeft)
+					: cellLeft;
 
 			if (cellSlot.element.parentNode !== slot.element) {
 				slot.element.appendChild(cellSlot.element);
@@ -629,7 +681,7 @@ export class RowRenderer<TRowData = unknown> {
 					ctx!,
 					slot.id,
 					leftArg,
-					cellRight,
+					-1,
 					cellWidth
 				);
 				return;
@@ -641,7 +693,7 @@ export class RowRenderer<TRowData = unknown> {
 			let cellClassName = 'og-cell';
 			if (c < pinLeftColumns) {
 				cellClassName += ' og-cell-pinned-left';
-			} else if (c >= colCount - pinRightColumns) {
+			} else if (isPinRight) {
 				cellClassName += ' og-cell-pinned-right';
 			}
 			if (access.isFocused) {
@@ -762,7 +814,7 @@ export class RowRenderer<TRowData = unknown> {
 				rowIndex,
 				node.id,
 				leftArg,
-				cellRight,
+				-1,
 				cellWidth,
 				cellClassName,
 				contentMode,
@@ -781,18 +833,20 @@ export class RowRenderer<TRowData = unknown> {
 			}
 		};
 
-		for (let c = 0; c < pinLeftColumns; c++) {
-			renderCell(c);
+		// Pinned left — always render
+		for (let c = 0; c < pinLeftColumns; c++) renderCell(c);
+		// Center — entered cols always, stayed cols only when full render needed
+		for (const c of colsEntered) {
+			if (c >= pinLeftColumns && c < pinRightStart) renderCell(c);
 		}
-		for (const c of colsToRender) {
-			if (c >= pinLeftColumns && c < colCount - pinRightColumns) {
-				renderCell(c);
+		if (renderStayed) {
+			for (const c of colsStayed) {
+				if (c >= pinLeftColumns && c < pinRightStart) renderCell(c);
 			}
 		}
-		for (let c = colCount - pinRightColumns; c < colCount; c++) {
-			if (c >= 0) {
-				renderCell(c);
-			}
+		// Pinned right — always render
+		for (let c = pinRightStart; c < colCount; c++) {
+			if (c >= 0) renderCell(c);
 		}
 	}
 
@@ -810,8 +864,15 @@ export class RowRenderer<TRowData = unknown> {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const colCount = columns.length;
-
-		const colsToRender = isScrollFrameActive && !rowEntered ? colsEntered : [...colsEntered, ...colsStayed];
+		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
+		const loadingState = this.engine.stateManager.getState();
+		const totalWidth = this.engine.geometry.getTotalWidth(loadingState.defaultColWidth);
+		const scrollLeft = this.engine.viewport.scrollLeft;
+		const viewportWidth = this.engine.viewport.viewportWidth;
+		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
+		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
+		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
+		const renderStayed = !isScrollFrameActive || rowEntered;
 
 		const renderCell = (c: number) => {
 			const col = columns[c];
@@ -826,11 +887,13 @@ export class RowRenderer<TRowData = unknown> {
 
 			const cellLeft = this.engine.geometry.colLefts[c];
 			const cellWidth = this.engine.geometry.colWidths[c];
-			const isPinRight = c >= colCount - pinRightColumns;
-			const loadingState = this.engine.stateManager.getState();
-			const totalWidth = this.engine.geometry.getTotalWidth(loadingState.defaultColWidth);
-			const cellRight = isPinRight ? totalWidth - cellLeft - cellWidth : -1;
-			const leftArg = isPinRight ? -1 : cellLeft;
+			const isPinLeft = c < pinLeftColumns;
+			const isPinRight = c >= pinRightStart;
+			const leftArg = isPinLeft
+				? scrollLeft + cellLeft
+				: isPinRight
+					? scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) + (cellLeft - pinRightBaseLeft)
+					: cellLeft;
 
 			if (cellSlot.element.parentNode !== slot.element) {
 				slot.element.appendChild(cellSlot.element);
@@ -855,7 +918,7 @@ export class RowRenderer<TRowData = unknown> {
 				rowIndex,
 				`loading:${rowIndex}`,
 				leftArg,
-				cellRight,
+				-1,
 				cellWidth,
 				cellClassName,
 				'loading',
@@ -866,18 +929,17 @@ export class RowRenderer<TRowData = unknown> {
 			if (isScrollFrameActive && didWrite) this.currentScrollCellsWritten++;
 		};
 
-		for (let c = 0; c < pinLeftColumns; c++) {
-			renderCell(c);
+		for (let c = 0; c < pinLeftColumns; c++) renderCell(c);
+		for (const c of colsEntered) {
+			if (c >= pinLeftColumns && c < pinRightStart) renderCell(c);
 		}
-		for (const c of colsToRender) {
-			if (c >= pinLeftColumns && c < colCount - pinRightColumns) {
-				renderCell(c);
+		if (renderStayed) {
+			for (const c of colsStayed) {
+				if (c >= pinLeftColumns && c < pinRightStart) renderCell(c);
 			}
 		}
-		for (let c = colCount - pinRightColumns; c < colCount; c++) {
-			if (c >= 0) {
-				renderCell(c);
-			}
+		for (let c = pinRightStart; c < colCount; c++) {
+			if (c >= 0) renderCell(c);
 		}
 	}
 
@@ -909,7 +971,7 @@ export class RowRenderer<TRowData = unknown> {
 		let cellClassName = 'og-cell';
 		if (colIndex < pinLeftColumns) {
 			cellClassName += ' og-cell-pinned-left';
-		} else if (colIndex >= colCount - pinRightColumns) {
+		} else if (colIndex >= Math.max(pinLeftColumns, colCount - pinRightColumns)) {
 			cellClassName += ' og-cell-pinned-right';
 		}
 		if (rendererKind === 'loading') {
@@ -1238,14 +1300,21 @@ export class RowRenderer<TRowData = unknown> {
 		const state = this.engine.stateManager.getState();
 		const columns = this.engine.columns.getDisplayedColumns();
 
+		// Hoist viewport range computation — these are O(log n) binary searches, must not run per-comparison
+		const rowCount = rowModel.getVisualRowCount();
+		const colCount = columns.length;
+		const rowRange = this.engine.viewport.getVisibleRowRange(rowCount);
+		const colRange = this.engine.viewport.getVisibleColumnRange(colCount);
+		const rowCenter = (rowRange.startIdx + rowRange.endIdx) / 2;
+		const colCenter = (colRange.startIdx + colRange.endIdx) / 2;
+		const activeEdit = state.activeEdit;
+		const focusedCell = state.selection.focus;
+
 		const getCellPriority = (cell: HTMLDivElement): number => {
 			const rowIndexStr = cell.dataset.rowIndex;
 			const colField = cell.dataset.colField;
 			if (!rowIndexStr || !colField) return 0;
 			const rowIndex = Number(rowIndexStr);
-
-			const activeEdit = state.activeEdit;
-			const focusedCell = state.selection.focus;
 
 			if (activeEdit && cell.dataset.rowId === activeEdit.rowId && colField === activeEdit.colField) {
 				return 6;
@@ -1254,26 +1323,13 @@ export class RowRenderer<TRowData = unknown> {
 				return 5;
 			}
 
-			const rowCount = rowModel.getVisualRowCount();
-			const colCount = columns.length;
-			const rowRange = this.engine.viewport.getVisibleRowRange(rowCount);
-			const colRange = this.engine.viewport.getVisibleColumnRange(colCount);
-
-			const rowCenter = (rowRange.startIdx + rowRange.endIdx) / 2;
 			const colIndex = this.engine.columns.getColumnIndex(colField);
-			const colCenter = (colRange.startIdx + colRange.endIdx) / 2;
-
 			const isRowVisible = rowIndex >= rowRange.startIdx && rowIndex <= rowRange.endIdx;
 			const isColVisible = colIndex >= colRange.startIdx && colIndex <= colRange.endIdx;
 
-			if (!isRowVisible || !isColVisible) {
-				return 1;
-			}
+			if (!isRowVisible || !isColVisible) return 1;
 
-			const distRow = Math.abs(rowIndex - rowCenter);
-			const distCol = Math.abs(colIndex - colCenter);
-			const normDist = distRow + distCol;
-
+			const normDist = Math.abs(rowIndex - rowCenter) + Math.abs(colIndex - colCenter);
 			return 4 - normDist * 0.01;
 		};
 

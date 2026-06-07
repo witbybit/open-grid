@@ -113,14 +113,17 @@ export class ViewportRenderer<TRowData = unknown> {
 		}
 
 		if (this.headerLeftLayer) {
-			const pinLeftWidth =
-				this.engine.viewport.pinLeftColumns > 0 ? this.engine.geometry.colLefts[this.engine.viewport.pinLeftColumns] || 0 : 0;
+			const pinLeftCount = Math.min(this.engine.viewport.pinLeftColumns, colCount);
+			const pinLeftWidth = pinLeftCount > 0 ? this.engine.geometry.colLefts[pinLeftCount] || 0 : 0;
 			this.headerLeftLayer.style.width = `${pinLeftWidth}px`;
 		}
 		if (this.headerRightLayer) {
-			const firstRightPinColIdx = colCount - this.engine.viewport.pinRightColumns;
+			const pinLeftCount = Math.min(this.engine.viewport.pinLeftColumns, colCount);
+			const firstRightPinColIdx = Math.max(pinLeftCount, colCount - this.engine.viewport.pinRightColumns);
 			const pinRightWidth =
-				this.engine.viewport.pinRightColumns > 0 ? totalWidth - (this.engine.geometry.colLefts[firstRightPinColIdx] || totalWidth) : 0;
+				this.engine.viewport.pinRightColumns > 0 && firstRightPinColIdx < colCount
+					? totalWidth - (this.engine.geometry.colLefts[firstRightPinColIdx] || totalWidth)
+					: 0;
 			this.headerRightLayer.style.width = `${pinRightWidth}px`;
 		}
 	}
