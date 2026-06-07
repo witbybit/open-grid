@@ -648,7 +648,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		const stats = grid.renderer.getRenderStats();
 		console.log('COLD RELEASES COUNT:', stats.coldDomReleases);
 
-		const allCells = Array.from(grid.container.querySelectorAll('.og-cell'));
+		const allCells = Array.from(grid.container.querySelectorAll<HTMLElement>('.og-cell'));
 		const row10Cells = allCells.filter((cell) => cell.dataset.rowIndex === '10');
 		console.log('ROW 10 CELLS DETAIL:', row10Cells.length);
 		for (let i = 0; i < row10Cells.length; i++) {

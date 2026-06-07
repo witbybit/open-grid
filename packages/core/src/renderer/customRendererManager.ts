@@ -450,7 +450,14 @@ export class CustomRendererManager<TRowData = unknown> {
 	}
 
 	private pruneWarmCache(): void {
-		// 1. Prune by size limit
+		// Prune by size limit — evict the LRU entry whenever the warm cache exceeds maxWarm.
+		// Note: we intentionally do NOT evict by a counter-based "TTL" here. The lruCounter
+		// increments on both warm-releases and warm-misses (new instance creation), so a
+		// naive staleThreshold = lruCounter - maxWarm*2 drifts ahead of warm-entry timestamps
+		// during post-scroll decoration (when many new slots are created), causing legitimate
+		// scroll-released entries to be falsely destroyed and firing onUnmountCellContent
+		// during what should be a deferred-unmount window. Size-based LRU eviction is
+		// sufficient to bound memory.
 		while (this.warmRenderersByRendererKey.size > this.maxWarm && this.lruOrder.size > 0) {
 			let oldestKey: string | null = null;
 			let minVal = Infinity;
@@ -470,17 +477,6 @@ export class CustomRendererManager<TRowData = unknown> {
 				}
 			} else {
 				break;
-			}
-		}
-
-		// 2. Prune by access count gap (TTL equivalent: if not accessed in last maxWarm*2 acquires, evict)
-		const staleThreshold = this.lruCounter - this.maxWarm * 2;
-		for (const [key, instance] of this.warmRenderersByRendererKey.entries()) {
-			if (instance.lastAccessTime < staleThreshold) {
-				this.warmRenderersByRendererKey.delete(key);
-				this.lruOrder.delete(key);
-				this.stats.evictions++;
-				this.destroyInstance(instance);
 			}
 		}
 	}

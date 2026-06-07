@@ -2533,4 +2533,305 @@ describe('RenderEngine', () => {
 		store.destroy();
 		vi.useRealTimers();
 	});
+
+	// ── Phase 11: Stable slot model verification tests ────────────────────────────────
+
+	it('stable-slot model: row DOM elements are not appended during a steady-state scroll', () => {
+		// Use deferred RAF so we can control exactly which frame runs.
+		vi.useFakeTimers();
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+
+		const columns = [{ field: 'v', header: 'V', width: 120 }];
+		const store = new GridStore<{ id: string; v: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowBuffer: 2,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 200 }, (_, i) => ({ id: `row-${i}`, v: `V${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		// Drain any queued callbacks from mount.
+		while (callbacks.length > 0) callbacks.shift()!(0);
+
+		const rowsContainer = container.querySelector('.og-rows-container') as HTMLElement;
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+
+		// First scroll: move to a middle position (not near top or bottom) so the slot pool
+		// reaches its steady-state size (full overscan above and below).
+		scrollViewport.scrollTop = 2400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		// Run the scroll frame only, then discard queued scroll-end callbacks.
+		if (callbacks.length > 0) callbacks.shift()!(0);
+		callbacks.length = 0;
+
+		// Record the steady-state slot count (full overscan both ways).
+		const slotCountAtSteadyState = renderer.rowRenderer.rowSlotPool.count;
+		const domChildCountAtSteadyState = rowsContainer.children.length;
+		expect(slotCountAtSteadyState).toBeGreaterThan(0);
+		expect(domChildCountAtSteadyState).toBe(slotCountAtSteadyState);
+
+		renderer.resetRenderStats();
+
+		// Second scroll: move a small amount from 2400 → 2480 (2 rows) within the same
+		// middle zone. The slot pool should not grow since the window size stays constant.
+		scrollViewport.scrollTop = 2480;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		// Run the scroll frame only.
+		if (callbacks.length > 0) callbacks.shift()!(0);
+		callbacks.length = 0;
+
+		// Slot count and DOM child count must be identical after steady-state scroll.
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotCountAtSteadyState);
+		expect(rowsContainer.children.length).toBe(domChildCountAtSteadyState);
+
+		// Some rows were recycled, confirming the scroll did real work.
+		const stats = renderer.getRenderStats();
+		expect(stats.hotDomReleases).toBeGreaterThan(0);
+		expect(stats.rowsRecycledPerScrollFrame[0]).toBeGreaterThan(0);
+
+		// No DOM appends were needed — the key stable-slot property.
+		expect(renderer.rowRenderer.rowSlotPool.slotAppendCount).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+		vi.useRealTimers();
+	});
+
+	it('stable-slot model: most rows stay in place during a small scroll', () => {
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			cb(0);
+			return 1;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (_id: number) => {});
+
+		const columns = [{ field: 'a', header: 'A', width: 120 }];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowBuffer: 0, // zero overscan → exactly 4 rows visible in 160px viewport
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 120 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.resetRenderStats();
+
+		// Scroll by exactly 1 row height (40px): row 0 exits, row 4 enters, rows 1-3 stay.
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 40;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		const stats = renderer.getRenderStats();
+
+		// Only 1 row was recycled (exited and its slot reassigned to the entering row).
+		expect(stats.rowsRecycledPerScrollFrame[0]).toBe(1);
+		expect(stats.hotDomReleases).toBe(1);
+
+		// Rows 1-4 stayed: visible range is [0,4] initially (5 rows with rowBuffer=0),
+		// after 40px scroll it's [1,5]; row 0 exits, row 5 enters, rows 1-4 stay.
+		expect(stats.rowsStayedDuringScroll).toBe(4);
+		expect(stats.rowsEnteredDuringScroll).toBe(1);
+		expect(stats.rowsExitedDuringScroll).toBe(1);
+
+		// No portal mounts happen during the scroll frame — entering row gets 'pending' mode,
+		// its custom-renderer mount is deferred to the post-scroll decoration pass.
+		expect(stats.portalMountsDuringScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('stable-slot model: slot pool count equals DOM children count invariant holds after scroll', () => {
+		// Use deferred RAF (manually drained) — the same pattern as other passing scroll tests.
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+
+		const columns = [{ field: 'x', header: 'X', width: 120 }];
+		const store = new GridStore<{ id: string; x: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowBuffer: 2,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, x: `X${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const rowsContainer = container.querySelector('.og-rows-container') as HTMLElement;
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+
+		// Invariant at mount: slot count matches DOM children.
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(rowsContainer.children.length);
+
+		// Scroll to a middle position and run one scroll frame.
+		scrollViewport.scrollTop = 1200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		if (callbacks.length > 0) callbacks.shift()!(0);
+		callbacks.length = 0;
+
+		// Invariant after scroll: slot count still matches DOM children.
+		// This confirms the stable-slot model doesn't leave orphaned slots or DOM nodes.
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(rowsContainer.children.length);
+
+		// Scroll further and verify again.
+		scrollViewport.scrollTop = 2400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		if (callbacks.length > 0) callbacks.shift()!(0);
+		callbacks.length = 0;
+
+		// Invariant still holds.
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(rowsContainer.children.length);
+
+		// Confirm rows were recycled (the scrolls did real work).
+		const stats = renderer.getRenderStats();
+		expect(stats.hotDomReleases).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('stable-slot model: custom renderer warm cache is populated by exiting rows and hit by re-entering rows', () => {
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			cb(0);
+			return 1;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (_id: number) => {});
+
+		const columns = [{ field: 'a', header: 'A', width: 120, cellRenderer: () => 'CellContent' }];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowBuffer: 0,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+
+		// Capture lifecycle operations delivered to the framework adapter.
+		const lifecycleLog: Array<{ cellKey: string; op: string }> = [];
+		renderer.onMountCellContent = (mount) => {
+			lifecycleLog.push({ cellKey: mount.cellKey, op: mount.lifecycleOperation ?? 'update' });
+		};
+
+		renderer.mount(container);
+		// After mount: 5 rows visible (rows 0-4, rowBuffer=0 + getRowIndexAtOffset(160)=4),
+		// each with 1 cellRenderer → 5 warm misses (mount lifecycle).
+		const statsAfterMount = renderer.portalMountManager.customRendererManager.getStats();
+		expect(statsAfterMount.warmMisses).toBe(5);
+		expect(statsAfterMount.warmHits).toBe(0);
+
+		// Scroll far enough that all 5 initial rows exit and 5 new rows enter.
+		// rowBuffer=0: rows 0-4 exit when we scroll to show rows 10-14.
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		// After scroll + decoration: entering rows reuse the same 5 slots → 5 warm hits.
+		const statsAfterScroll = renderer.portalMountManager.customRendererManager.getStats();
+		expect(statsAfterScroll.warmHits).toBe(5); // slot-identity → warm cache hit for each entering row
+		expect(statsAfterScroll.warmMisses).toBe(5); // no new misses (slots were reused)
+
+		// The lifecycle delivered to the adapter for the re-entering rows should be 'restore',
+		// confirming that the framework skips full reconciliation.
+		const restores = lifecycleLog.filter((e) => e.op === 'restore');
+		expect(restores.length).toBe(5);
+
+		// Renderer keys are slot-based (S prefix from createSlotRendererKey).
+		for (const entry of restores) {
+			expect(entry.cellKey).toMatch(/^S\d+:rsp-/);
+		}
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
 });

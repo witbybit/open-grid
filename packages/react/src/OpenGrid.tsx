@@ -311,6 +311,7 @@ function OpenGridInner<TRowData = unknown>({
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
+			cellEl.tabIndex = -1;
 			cellEl.focus();
 			navigation.handleMouseDown(pointer.rowId, pointer.colField, e);
 		},

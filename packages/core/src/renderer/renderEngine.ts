@@ -839,8 +839,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			customRendererWarmHits: this.engine.customRendererWarmHits,
 			customRendererWarmMisses: this.engine.customRendererWarmMisses,
 			...portalScrollStats,
-			hotDomReleases: (this.rowRenderer.rowPool?.hotReleases ?? 0) + (this.rowRenderer.cellPool?.hotReleases ?? 0),
-			coldDomReleases: (this.rowRenderer.rowPool?.coldReleases ?? 0) + (this.rowRenderer.cellPool?.coldReleases ?? 0),
+			hotDomReleases: this.renderStats.rowsRecycledPerScrollFrame.reduce((a: number, b: number) => a + b, 0),
+			coldDomReleases: 0,
 			cellsPatchedPerScrollFrame: this.renderStats.cellsPatchedPerScrollFrame.slice(),
 			rowsRecycledPerScrollFrame: this.renderStats.rowsRecycledPerScrollFrame.slice(),
 			portalMounts: {
@@ -853,8 +853,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public resetRenderStats(): void {
 		this.orchestrator.resetStats();
 		this.portalMountManager.resetStats();
-		this.rowRenderer.rowPool?.resetStats();
-		this.rowRenderer.cellPool?.resetStats();
 		this.rowRenderer.dirtyCellsMarkedDuringScroll = 0;
 		this.rowRenderer.postScrollDirtyCellsDecorated = 0;
 		this.rowRenderer.currentScrollCellsPatched = 0;

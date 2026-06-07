@@ -2,7 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
-import { createClientGrid, type ClientGridOptions } from '@open-grid/core';
+import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
 import {
 	GridProvider,
 	PortalCell,
@@ -138,7 +138,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					renderer: { kind: 'react', component: ({ value }) => <span data-testid='custom-renderer'>{String(value)}!!!</span> },
+					renderer: {
+						kind: 'react',
+						component: ({ value }: { value: any }) => <span data-testid='custom-renderer'>{String(value)}!!!</span>,
+					},
 				},
 			],
 		});
@@ -167,7 +170,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					width: 100,
 					renderer: {
 						kind: 'react',
-						component: (props) => {
+						component: (props: any) => {
 							rendererProps.push(props as unknown as Record<string, unknown>);
 							return <span data-testid='custom-renderer-phase'>{String(props.phase)}</span>;
 						},
@@ -388,7 +391,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					renderer: { kind: 'react', component: ({ value }) => <span data-testid='portal-content'>{String(value)}</span> },
+					renderer: { kind: 'react', component: ({ value }: { value: any }) => <span data-testid='portal-content'>{String(value)}</span> },
 				},
 			],
 		});
@@ -421,7 +424,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					renderer: { kind: 'react', component: ({ value }) => <span data-testid='portal-content'>{String(value)}</span> },
+					renderer: { kind: 'react', component: ({ value }: { value: any }) => <span data-testid='portal-content'>{String(value)}</span> },
 				},
 			],
 		});
@@ -558,13 +561,19 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'severity',
 					header: 'Severity',
 					width: 120,
-					renderer: { kind: 'react', component: ({ value }) => <span data-testid='severity-renderer'>{String(value)}</span> },
+					renderer: {
+						kind: 'react',
+						component: ({ value }: { value: any }) => <span data-testid='severity-renderer'>{String(value)}</span>,
+					},
 				},
 				{
 					field: 'service',
 					header: 'Service',
 					width: 120,
-					renderer: { kind: 'react', component: ({ value }) => <span data-testid='service-renderer'>{String(value)}</span> },
+					renderer: {
+						kind: 'react',
+						component: ({ value }: { value: any }) => <span data-testid='service-renderer'>{String(value)}</span>,
+					},
 				},
 			],
 			getRowId: (row) => row.id,
@@ -629,7 +638,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 	});
 
 	it('should not mix stale native text with custom renderer content after column topology changes', async () => {
-		const customColumns = [
+		const customColumns: ColumnDef<{ id: string; risk: string; col_999: string }>[] = [
 			{
 				field: 'risk',
 				header: 'Risk',
@@ -780,7 +789,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					renderer: { kind: 'react', component: ({ value }) => <span data-testid='custom-renderer-programmatic'>{String(value)}</span> },
+					renderer: {
+						kind: 'react',
+						component: ({ value }: { value: any }) => <span data-testid='custom-renderer-programmatic'>{String(value)}</span>,
+					},
 				},
 			],
 		});
@@ -887,11 +899,14 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			expect(screen.getByTestId('detail-p2')).toBeTruthy();
 		});
 
-		const detailHosts = Array.from(container.querySelectorAll('.og-row-portal-host')) as HTMLElement[];
+		const getRowTop = (el: HTMLElement) => parseInt((el.closest('.og-row') as HTMLElement | null)?.style.top || '0', 10);
+		const detailHosts = (Array.from(container.querySelectorAll('.og-row-portal-host')) as HTMLElement[]).sort(
+			(a, b) => getRowTop(a) - getRowTop(b)
+		);
 		expect(detailHosts).toHaveLength(2);
 		expect(screen.getByTestId('detail-p1').closest('.og-row-portal-host')).toBe(detailHosts[0]);
 		expect(screen.getByTestId('detail-p2').closest('.og-row-portal-host')).toBe(detailHosts[1]);
-		expect(detailHosts.map((host) => host.closest('.og-row')?.dataset.rowId)).toEqual(['detail:p1', 'detail:p2']);
+		expect(detailHosts.map((host) => (host.closest('.og-row') as HTMLElement | null)?.dataset.rowId)).toEqual(['detail:p1', 'detail:p2']);
 		expect(detailHosts.map((host) => (host.closest('.og-row') as HTMLElement | null)?.style.height)).toEqual(['120px', '120px']);
 
 		unmount();
@@ -910,7 +925,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			initialState: {
 				masterDetailEnabled: true,
 				detailRowHeight: 120,
-				sortModel: [{ colId: 'name', direction: 'asc' }],
+				sortModel: [{ colId: 'name', sort: 'asc' }],
 			},
 		});
 
@@ -938,7 +953,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			expect(screen.getByTestId('detail-p4')).toBeTruthy();
 		});
 
-		const rows = Array.from(container.querySelectorAll('.og-rows-container > .og-row')) as HTMLElement[];
+		const rows = (Array.from(container.querySelectorAll('.og-rows-container > .og-row')) as HTMLElement[]).sort(
+			(a, b) => parseInt(a.style.top || '0', 10) - parseInt(b.style.top || '0', 10)
+		);
 		expect(rows.map((row) => [row.dataset.rowId, row.style.height, row.style.top])).toEqual([
 			['row:p1', '40px', '0px'],
 			['detail:p1', '120px', '40px'],
@@ -1149,7 +1166,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					renderer: { kind: 'react', component: ({ value }) => <span data-testid='portal-content'>{String(value)}</span> },
+					renderer: { kind: 'react', component: ({ value }: { value: any }) => <span data-testid='portal-content'>{String(value)}</span> },
 				},
 			],
 		});
@@ -1183,7 +1200,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					width: 100,
 					renderer: {
 						kind: 'react',
-						component: ({ value }) => {
+						component: ({ value }: { value: any }) => {
 							renderCount++;
 							return <span data-testid={`cell-${value}`}>{String(value)}</span>;
 						},

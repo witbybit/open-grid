@@ -20,7 +20,6 @@ export * from './models/GeometryModel.js';
 export * from './models/SelectionModel.js';
 export * from './models/EditModel.js';
 
-export * from './renderer/domPool.js';
 export * from './renderer/scrollEngine.js';
 export * from './renderer/IGridRenderer.js';
 export * from './renderer/renderEngine.js';
