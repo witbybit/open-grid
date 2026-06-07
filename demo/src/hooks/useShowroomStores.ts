@@ -840,6 +840,14 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				header: 'Gantt Sprint Timeline (30 Days)',
 				width: 280,
 				renderer: { kind: 'react', component: GanttTimelineRenderer },
+				// GanttTimelineRenderer reads row.status, row.sprintDay, row.durationDays,
+				// and row.progress directly — none of which are the column's own field
+				// ('timeline' doesn't exist on GanttRow). Without valueGetterDependencies
+				// the cell is never invalidated when those fields change. The valueGetter
+				// provides a composite key so the cache & invalidation system can detect
+				// changes when any of the four source fields are mutated.
+				valueGetterDependencies: ['status', 'sprintDay', 'durationDays', 'progress'],
+				valueGetter: ({ row }) => `${row.status}|${row.sprintDay}|${row.durationDays}|${row.progress}`,
 			},
 		];
 	}, []);

@@ -68,6 +68,80 @@ const ImperativeStatus = React.forwardRef<ImperativeCellHandle<LabRow>, CellRend
 	);
 });
 
+// ─── Extra custom renderers for renderer stress-testing ──────────────────────
+
+/** DOM renderer: renders a compact progress/heat bar for numeric metric values */
+const metricBarDomRenderer: DomCellRenderer<LabRow> = {
+	mount(container, params) {
+		const wrap = document.createElement('div');
+		wrap.style.cssText = 'display:flex;align-items:center;width:100%;gap:4px;padding:0 4px;box-sizing:border-box;';
+		const bar = document.createElement('div');
+		bar.style.cssText = 'flex:1;height:6px;border-radius:3px;overflow:hidden;background:rgba(100,116,139,0.2);position:relative;';
+		const fill = document.createElement('div');
+		fill.style.cssText = 'position:absolute;left:0;top:0;height:100%;border-radius:3px;transition:width 0.15s,background 0.15s;';
+		bar.appendChild(fill);
+		const label = document.createElement('span');
+		label.style.cssText = 'font:700 9px ui-monospace,monospace;color:#94a3b8;min-width:32px;text-align:right;flex-shrink:0;';
+		wrap.appendChild(bar);
+		wrap.appendChild(label);
+		container.appendChild(wrap);
+		const paint = (value: unknown) => {
+			const n = Math.min(10000, Math.max(0, Number(value) || 0));
+			const pct = (n / 10000) * 100;
+			fill.style.width = `${pct}%`;
+			fill.style.background = pct > 66 ? 'rgba(52,211,153,0.85)' : pct > 33 ? 'rgba(251,191,36,0.85)' : 'rgba(239,68,68,0.80)';
+			label.textContent = n.toString();
+		};
+		paint(params.value);
+		return {
+			update(next) {
+				paint(next.value);
+			},
+			destroy() {
+				container.textContent = '';
+			},
+		};
+	},
+};
+
+/** Imperative React renderer: a tiny sparkline-like number cell that updates in-place */
+const ImperativeMetric = React.forwardRef<ImperativeCellHandle<LabRow>, CellRendererProps<LabRow>>(function ImperativeMetric({ value }, ref) {
+	const valRef = useRef<HTMLSpanElement>(null);
+	const barRef = useRef<HTMLDivElement>(null);
+	const paint = (v: unknown) => {
+		const n = Math.min(10000, Math.max(0, Number(v) || 0));
+		if (valRef.current) valRef.current.textContent = n.toString();
+		if (barRef.current) {
+			const pct = (n / 10000) * 100;
+			barRef.current.style.width = `${pct}%`;
+			barRef.current.style.background = pct > 66 ? '#34d399' : pct > 33 ? '#fbbf24' : '#f87171';
+		}
+	};
+	React.useImperativeHandle(ref, () => ({
+		update(p) {
+			paint(p.value);
+		},
+	}));
+	return (
+		<div className='flex items-center w-full gap-1 px-1'>
+			<div className='flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden relative'>
+				<div ref={barRef} className='absolute left-0 top-0 h-full rounded-full' style={{ width: '50%', background: '#34d399' }} />
+			</div>
+			<span ref={valRef} className='font-mono text-[9px] font-bold text-slate-400 w-8 text-right shrink-0'>
+				{String(value)}
+			</span>
+		</div>
+	);
+});
+
+/** Deferred React renderer: a badge-style number with colour coding */
+const DeferredMetric = React.memo(function DeferredMetric({ value }: CellRendererProps<LabRow>) {
+	const n = Math.min(10000, Math.max(0, Number(value) || 0));
+	const pct = (n / 10000) * 100;
+	const color = pct > 66 ? 'text-emerald-400' : pct > 33 ? 'text-amber-400' : 'text-rose-400';
+	return <span className={`font-mono text-[10px] font-extrabold ${color}`}>{n}</span>;
+});
+
 function makeRows(count: number): LabRow[] {
 	const statuses = ['Active', 'Pending', 'Inactive'];
 	return Array.from({ length: count }, (_, rowIndex) => {
@@ -77,7 +151,9 @@ function makeRows(count: number): LabRow[] {
 			price: (100 + (rowIndex % 900)).toString(),
 			status: statuses[rowIndex % statuses.length],
 		};
-		for (let col = 0; col < 32; col++) {
+		// Populate 200 metric columns — enough to have real values throughout
+		// the Glide scroll path without allocating 100k × 996 strings.
+		for (let col = 0; col < 200; col++) {
 			row[`m_${col}`] = `${(rowIndex * 17 + col * 31) % 10000}`;
 		}
 		return row;
@@ -94,17 +170,32 @@ function makeColumns(mode: RendererMode): ColumnDef<LabRow>[] {
 					? { field: 'status', header: 'Status Deferred', width: 140, renderer: { kind: 'react', component: DeferredStatus } }
 					: { field: 'status', header: 'Status Text', width: 120, renderer: { kind: 'text' } };
 
+	// Spread multiple renderer flavours across the 996 metric columns to put real
+	// pressure on the portal/DOM renderer paths during Glide.
+	//   index % 40 === 0  → DOM bar renderer   (~25 columns)
+	//   index % 40 === 20 → Imperative React    (~25 columns)
+	//   index % 40 === 10 → Deferred React      (~25 columns)  [only in deferredReact mode for extra load]
+	//   rest               → plain text
+	const metricColumns: ColumnDef<LabRow>[] = Array.from({ length: 996 }, (_, index) => {
+		const base = { field: `m_${index}`, header: `Metric ${index}`, width: 96 + (index % 5) * 12 } as const;
+		if (index % 40 === 0) {
+			return { ...base, renderer: { kind: 'dom' as const, renderer: metricBarDomRenderer } };
+		}
+		if (index % 40 === 20) {
+			return { ...base, renderer: { kind: 'imperativeReact' as const, component: ImperativeMetric } };
+		}
+		if (mode === 'deferredReact' && index % 40 === 10) {
+			return { ...base, renderer: { kind: 'react' as const, component: DeferredMetric } };
+		}
+		return { ...base, renderer: { kind: 'text' as const } };
+	});
+
 	return [
 		{ field: 'id', header: 'ID', width: 130 },
 		{ field: 'name', header: 'Name', width: 160 },
 		{ field: 'price', header: 'Price', width: 100 },
 		statusColumn,
-		...Array.from({ length: 996 }, (_, index) => ({
-			field: `m_${index}`,
-			header: `Metric ${index}`,
-			width: 96 + (index % 5) * 12,
-			renderer: { kind: 'text' as const },
-		})),
+		...metricColumns,
 	];
 }
 

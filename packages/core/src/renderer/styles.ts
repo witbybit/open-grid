@@ -261,7 +261,9 @@ export const CORE_STYLES = `
   }
 
   .og-row-pin-right {
-    left: 0;
+    /* Start off-screen so there is no visible flash at left:0 before JavaScript
+       positions the container at its correct pinRightBaseLeft offset. */
+    left: -9999px;
   }
 
   .og-cell-content {

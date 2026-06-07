@@ -201,7 +201,11 @@ export class ColumnModel<TRowData = unknown> {
 	}
 
 	public getCompiledPlanVersion(): number {
-		return this.getCompiledPlan().version;
+		// Return the current planVersion directly without triggering a rebuild.
+		// getCompiledPlan() increments planVersion on every cache miss, so calling
+		// it from getRenderStats() (polled every 250 ms) caused the counter to tick
+		// up continuously even when nothing actually changed.
+		return this.planVersion;
 	}
 
 	public getColumnPlan(colField: string): ColumnRenderPlan<TRowData> | undefined {
