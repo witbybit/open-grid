@@ -17,6 +17,7 @@ export class HeaderRenderer<TRowData = unknown> {
 	private lastHeaderLeftTransform = '';
 	private lastHeaderRightLeft = -1;
 	private lastHeaderRightTransform = '';
+	private readonly renderedHeaderScratch = new Set<number>();
 
 	constructor(
 		engine: GridEngine<TRowData>,
@@ -61,19 +62,16 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.syncVisibleHeaders(true);
 	}
 
-	public syncScrollLeft(scrollLeft: number): void {
+	public syncScrollLeft(scrollLeft: number, totalWidth: number, colCount: number): void {
 		this.lastHeaderScrollLeft = scrollLeft;
-		this.syncPinnedLayerPositions();
+		this.syncPinnedLayerPositions(totalWidth, colCount);
 	}
 
-	private syncPinnedLayerPositions(): void {
-		const colCount = this.engine.columns.getDisplayedColumnCount();
+	private syncPinnedLayerPositions(totalWidth: number, colCount: number): void {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const scrollLeft = this.engine.viewport.scrollLeft;
 		const viewportWidth = this.engine.viewport.viewportWidth;
-		const state = this.engine.stateManager.getState();
-		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
 		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
 		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
@@ -136,7 +134,8 @@ export class HeaderRenderer<TRowData = unknown> {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const newColRange = this.engine.viewport.getVisibleColumnRange(colCount);
-		this.syncPinnedLayerPositions();
+		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
+		this.syncPinnedLayerPositions(totalWidth, colCount);
 
 		if (
 			!forceRepaint &&
@@ -150,7 +149,8 @@ export class HeaderRenderer<TRowData = unknown> {
 			return;
 		}
 
-		const rendered = new Set<number>();
+		const rendered = this.renderedHeaderScratch;
+		rendered.clear();
 
 		const renderHeaderCell = (c: number) => {
 			const col = columns[c];

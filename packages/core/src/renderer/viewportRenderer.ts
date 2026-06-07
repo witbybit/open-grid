@@ -14,6 +14,7 @@ export class ViewportRenderer<TRowData = unknown> {
 	public rowsContainer: HTMLDivElement | null = null;
 
 	// Header layers — kept as three overlapping absolute divs inside a sticky wrapper
+	public headerWrapper: HTMLDivElement | null = null;
 	public headerLayer: HTMLDivElement | null = null;
 	public headerLeftLayer: HTMLDivElement | null = null;
 	public headerRightLayer: HTMLDivElement | null = null;
@@ -40,6 +41,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		// ── Header (sticky top, three overlapping absolute divs) ────────────
 		const headerWrapper = document.createElement('div');
 		headerWrapper.className = 'og-layer-header-wrapper';
+		this.headerWrapper = headerWrapper;
 
 		this.headerLayer = document.createElement('div');
 		this.headerLayer.className = 'og-layer-header';
@@ -80,6 +82,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.container = null;
 		this.scrollViewport = null;
 		this.rowsContainer = null;
+		this.headerWrapper = null;
 		this.headerLayer = null;
 		this.headerLeftLayer = null;
 		this.headerRightLayer = null;
@@ -104,9 +107,8 @@ export class ViewportRenderer<TRowData = unknown> {
 			this.rowsContainer.style.width = `${contentWidth}px`;
 		}
 
-		const headerWrapper = this.scrollViewport?.querySelector<HTMLDivElement>('.og-layer-header-wrapper');
-		if (headerWrapper) {
-			headerWrapper.style.width = `${contentWidth}px`;
+		if (this.headerWrapper) {
+			this.headerWrapper.style.width = `${contentWidth}px`;
 		}
 		if (this.headerLayer) {
 			this.headerLayer.style.width = `${contentWidth}px`;

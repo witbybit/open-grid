@@ -75,6 +75,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	// Cached maximum scroll-left so the raw DOM scroll handler (120/sec on high-refresh
 	// displays) never needs to call getState() or geometry on the hot path.
 	private cachedMaxScrollLeft = 0;
+	private cachedTotalWidth = 0;
+	private cachedTotalHeight = 0;
 
 	// Reusable ScrollRenderContext updated in-place each scroll frame to avoid allocation.
 	private _scrollCtx!: ScrollRenderContext<TRowData>;
@@ -284,7 +286,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.bindInvalidationSources();
 
 		// Prime the max-scroll cache so the first scroll events don't see a stale 0
-		this.updateCachedMaxScrollLeft();
+		this.updateCachedGeometryBounds();
 
 		// Run first layout calculation and repaint
 		this.engine.invalidation.consume();
@@ -487,7 +489,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Refresh the cached scroll-left bound using the already-read state — no extra
 		// state read. This handles viewport resizes that happened since the last frame.
-		this.cachedMaxScrollLeft = Math.max(0, this.engine.geometry.getTotalWidth(state.defaultColWidth) - this.engine.viewport.viewportWidth);
+		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
 
 		const nextWindow = applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits);
 
@@ -534,8 +536,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			// Pass the already-computed nextWindow so rowRenderer.recycleViewport does not
 			// call computeRenderWindow a second time (duplicate binary searches + state read).
 			this.recycleViewport(true, scrollCtx, nextWindow);
-			this.rowRenderer.syncPinnedLanePositions(nextWindow);
-			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
+			this.rowRenderer.syncPinnedLanePositions(nextWindow, this.cachedTotalWidth);
+			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, this.cachedTotalWidth, nextWindow.colCount);
 			const didSyncRange = this.headerRenderer.syncVisibleColumnRange();
 			if (didSyncRange) {
 				this.renderStats.headerRangeSyncsDuringScroll++;
@@ -557,7 +559,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private syncCheapScrollOnly(window: RenderWindow): void {
 		// 1. Header scrollLeft transform
-		this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
+		this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, this.cachedTotalWidth, window.colCount);
 
 		// 2. Selection overlay transform
 		this.renderStats.overlayCheapSyncsDuringScroll++;
@@ -569,8 +571,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (pinTopRows > 0 || pinBottomRows > 0) {
 			const scrollTop = this.engine.viewport.scrollTop;
 			const viewportHeight = this.engine.viewport.viewportHeight;
-			const defaultRowHeight = this.engine.stateManager.getState().defaultRowHeight;
-			const totalHeight = this.engine.geometry.getTotalHeight(defaultRowHeight);
+			const totalHeight = this.cachedTotalHeight;
 
 			// Update pinned top rows
 			for (let r = 0; r < pinTopRows && r < window.rowCount; r++) {
@@ -594,7 +595,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		}
 
-		this.rowRenderer.syncPinnedLanePositions(window);
+		this.rowRenderer.syncPinnedLanePositions(window, this.cachedTotalWidth);
 
 		// Update current window's scroll values
 		if (this.rowRenderer.currentWindow) {
@@ -603,9 +604,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
-	private updateCachedMaxScrollLeft(): void {
+	private updateCachedGeometryBoundsFromState(defaultColWidth: number, defaultRowHeight: number): void {
+		this.cachedTotalWidth = this.engine.geometry.getTotalWidth(defaultColWidth);
+		this.cachedTotalHeight = this.engine.geometry.getTotalHeight(defaultRowHeight);
+		this.cachedMaxScrollLeft = Math.max(0, this.cachedTotalWidth - this.engine.viewport.viewportWidth);
+	}
+
+	private updateCachedGeometryBounds(): void {
 		const state = this.engine.stateManager.getState();
-		this.cachedMaxScrollLeft = Math.max(0, this.engine.geometry.getTotalWidth(state.defaultColWidth) - this.engine.viewport.viewportWidth);
+		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
 	}
 
 	private bindInvalidationSources(): void {
@@ -648,14 +655,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.engine.invalidation.invalidateGeometry('columns');
 			this.engine.invalidation.invalidateViewport('columns');
 			this.engine.invalidation.invalidateHeaders('columns');
-			this.updateCachedMaxScrollLeft();
+			this.updateCachedGeometryBounds();
 			this.scheduler.requestFlush('columns');
 		};
 		const invalidateGeometryFull = () => {
 			this.geometryController.invalidateAll();
 			this.engine.invalidation.invalidateGeometry('geometry');
 			this.engine.invalidation.invalidateViewport('geometry');
-			this.updateCachedMaxScrollLeft();
+			this.updateCachedGeometryBounds();
 			this.scheduler.requestFlush('geometry');
 		};
 
@@ -909,7 +916,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.renderStats.viewportRecycles++;
 		this.rowRenderer.recycleViewport(isScrollFrameActive, ctx, precomputedWindow);
 		if (!isScrollFrameActive && this.rowRenderer.currentWindow) {
-			this.rowRenderer.syncPinnedLanePositions(this.rowRenderer.currentWindow);
+			this.rowRenderer.syncPinnedLanePositions(this.rowRenderer.currentWindow, this.cachedTotalWidth);
 		}
 	}
 
@@ -919,9 +926,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const state = this.engine.stateManager.getState();
 		const colCount = this.engine.columns.getDisplayedColumnCount();
 
-		// Keep the cached max-scroll-left in sync after any full repaint
+		// Keep scroll clamps and total extents in sync after any full repaint
 		// (handles column adds/removes and viewport resizes funneled through full paint).
-		this.cachedMaxScrollLeft = Math.max(0, this.engine.geometry.getTotalWidth(state.defaultColWidth) - this.engine.viewport.viewportWidth);
+		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
 
 		this.viewportRenderer.syncSpacerAndLayers(state, colCount);
 		this.recycleViewport(false);

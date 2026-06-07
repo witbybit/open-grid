@@ -53,6 +53,9 @@ export class RowRenderer<TRowData = unknown> {
 	// Reusable Sets to avoid per-scroll-frame allocations in recycleViewport
 	private readonly _rowsEnteredSet = new Set<number>();
 	private readonly _rowsStayedSet = new Set<number>();
+	private readonly _colsExitedSet = new Set<number>();
+	private readonly _rowsToRenderSet = new Set<number>();
+	private readonly _rowsToRenderScratch: number[] = [];
 	public postScrollDirtyCellsDecorated = 0;
 
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
@@ -179,7 +182,7 @@ export class RowRenderer<TRowData = unknown> {
 		return container;
 	}
 
-	public syncPinnedLanePositions(window: RenderWindow): void {
+	public syncPinnedLanePositions(window: RenderWindow, totalWidth: number): void {
 		const pinLeftColumns = window.pinLeftCols;
 		const pinRightColumns = window.pinRightCols;
 		if (pinLeftColumns <= 0 && pinRightColumns <= 0) return;
@@ -188,8 +191,6 @@ export class RowRenderer<TRowData = unknown> {
 		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 		const scrollLeft = this.engine.viewport.scrollLeft;
 		const viewportWidth = this.engine.viewport.viewportWidth;
-		const state = this.engine.stateManager.getState();
-		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
 		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
 		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
 		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
@@ -280,7 +281,9 @@ export class RowRenderer<TRowData = unknown> {
 
 		// 2. Release cell slots in exited columns for stayed rows
 		if (delta.colsExited.length > 0) {
-			const colsExited = new Set(delta.colsExited);
+			const colsExited = this._colsExitedSet;
+			colsExited.clear();
+			for (const c of delta.colsExited) colsExited.add(c);
 			for (const r of delta.rowsStayed) {
 				const slot = this.activeRows.get(r);
 				if (slot && (slot.rowKind === 'data' || slot.rowKind === 'loading')) {
@@ -544,22 +547,37 @@ export class RowRenderer<TRowData = unknown> {
 		const columnsChangedDuringScroll = delta.colsEntered.length > 0 || delta.colsExited.length > 0;
 
 		// Fast path: most scroll frames only have entered rows — skip all allocations
-		let rowsToRender: number[];
+		let rowsToRender: readonly number[];
 		if (!isScrollFrameActive) {
 			rowsToRender = nextRows;
 		} else if (!columnsChangedDuringScroll && !pinnedScrollOffsetChanged) {
 			rowsToRender = delta.rowsEntered; // zero allocation — most common case
 		} else {
-			const toRenderSet = new Set<number>(delta.rowsEntered);
+			const toRenderSet = this._rowsToRenderSet;
+			const rowsScratch = this._rowsToRenderScratch;
+			toRenderSet.clear();
+			rowsScratch.length = 0;
+			for (const r of delta.rowsEntered) {
+				toRenderSet.add(r);
+				rowsScratch.push(r);
+			}
 			if (columnsChangedDuringScroll) {
-				for (const r of delta.rowsStayed) toRenderSet.add(r);
+				for (const r of delta.rowsStayed) {
+					if (!toRenderSet.has(r)) {
+						toRenderSet.add(r);
+						rowsScratch.push(r);
+					}
+				}
 			}
 			if (pinnedScrollOffsetChanged) {
 				for (const r of nextRows) {
-					if (r < nextWindow.pinTopRows || r >= nextWindow.rowCount - nextWindow.pinBottomRows) toRenderSet.add(r);
+					if ((r < nextWindow.pinTopRows || r >= nextWindow.rowCount - nextWindow.pinBottomRows) && !toRenderSet.has(r)) {
+						toRenderSet.add(r);
+						rowsScratch.push(r);
+					}
 				}
 			}
-			rowsToRender = Array.from(toRenderSet);
+			rowsToRender = rowsScratch;
 		}
 
 		for (const r of rowsToRender) {
