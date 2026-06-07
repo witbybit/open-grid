@@ -106,6 +106,19 @@ export class GeometryModel {
 		return defaultRowHeight;
 	}
 
+	/** Phase 9: returns the pixel offset of the bottom edge of a row. */
+	public getRowBottom(rowIdx: number, defaultRowHeight: number): number {
+		if (rowIdx >= 0 && rowIdx < this.rowCount) {
+			return this.rowTops[rowIdx] + this.rowHeights[rowIdx];
+		}
+		return (rowIdx + 1) * defaultRowHeight;
+	}
+
+	/** Phase 9: alias for getRowTop for pixel-first API consistency. */
+	public getRowOffset(rowIdx: number, defaultRowHeight: number): number {
+		return this.getRowTop(rowIdx, defaultRowHeight);
+	}
+
 	public getTotalHeight(defaultRowHeight: number): number {
 		if (this.rowCount === 0) return 0;
 		const lastIdx = this.rowCount - 1;

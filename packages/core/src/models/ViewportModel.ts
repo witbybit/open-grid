@@ -38,10 +38,6 @@ export class ViewportModel<TRowData = unknown> {
 		this.velocityX = 0;
 	}
 
-	// Base overscan buffer counts
-	private baseOverscanRows = 12;
-	private baseOverscanCols = 8;
-
 	public init(engine: GridEngine<TRowData>): void {
 		this.engine = engine;
 	}

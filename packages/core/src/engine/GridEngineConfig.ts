@@ -32,7 +32,8 @@ export interface GridEngineConfig<TRowData = unknown> {
 	};
 	rowBuffer?: number;
 	colBuffer?: number;
-	rowRecyclingStrategy?: 'index-pool' | 'slot-pool';
+	/** 'recycle-pool' = opportunistic row slot recycling. 'slot-pool' accepted as alias for backwards compatibility. */
+	rowRecyclingStrategy?: 'index-pool' | 'recycle-pool' | 'slot-pool';
 	runtimeLimits?: {
 		maxRenderedRows?: number;
 		maxRenderedCells?: number;

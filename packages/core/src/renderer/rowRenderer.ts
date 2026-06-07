@@ -19,6 +19,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { RowSlot } from './rowSlot.js';
 import { CellSlot, type CellContentMode } from './cellSlot.js';
 import { applyRenderWindowRuntimeLimits, computeRenderWindow, diffRenderWindow, getRowIndices, type RenderWindow } from './renderWindow.js';
+import { createEditRendererKey, createSlotRendererKey } from './identityKeys.js';
 
 type ResolvedCellRendererScrollMode = 'skeleton' | 'fallback' | 'preserve' | 'live';
 
@@ -266,10 +267,12 @@ export class RowRenderer<TRowData = unknown> {
 
 		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
 		const columns = plan.displayedColumns;
-		const strategy = state.rowRecyclingStrategy ?? 'index-pool';
+		// 'slot-pool' is an alias for 'recycle-pool' (opportunistic recycling, not true slot virtualization)
+		const rawStrategy = state.rowRecyclingStrategy ?? 'index-pool';
+		const strategy: 'index-pool' | 'recycle-pool' = rawStrategy === 'slot-pool' ? 'recycle-pool' : (rawStrategy as 'index-pool' | 'recycle-pool');
 		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
 
-		// 1. Release scrolled-out rows (for index-pool)
+		// 1. Release scrolled-out rows (for index-pool; recycle-pool handles this after render)
 		if (strategy === 'index-pool') {
 			for (const r of delta.rowsExited) {
 				const slot = this.activeRows.get(r);
@@ -350,7 +353,7 @@ export class RowRenderer<TRowData = unknown> {
 			if (slot) return { slot, visualRow };
 
 			// slot-pool: recycle a scrolled-out slot without releasing its DOM element
-			if (strategy === 'slot-pool') {
+			if (strategy === 'recycle-pool') {
 				let recycleIndex = -1;
 				for (const oldIdx of this.activeRows.keys()) {
 					if (!rowsStayedSet.has(oldIdx) && !rowsEnteredSet.has(oldIdx)) {
@@ -594,7 +597,7 @@ export class RowRenderer<TRowData = unknown> {
 		}
 
 		// 4. Cleanup remaining scrolled-out rows (for slot-pool)
-		if (strategy === 'slot-pool') {
+		if (strategy === 'recycle-pool') {
 			for (const oldIdx of this.activeRows.keys()) {
 				if (!rowsStayedSet.has(oldIdx) && !rowsEnteredSet.has(oldIdx)) {
 					const slot = this.activeRows.get(oldIdx)!;
@@ -801,6 +804,7 @@ export class RowRenderer<TRowData = unknown> {
 			if (access.isFocused) {
 				cellClassName += ' og-cell-focused';
 				cellSlot.element.tabIndex = -1;
+				cellSlot.hasTabIndex = true;
 				const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
 				if (
 					activeEl &&
@@ -818,8 +822,10 @@ export class RowRenderer<TRowData = unknown> {
 					}
 				}
 			} else {
-				if (cellSlot.element.hasAttribute('tabindex')) {
+				// Phase 4: use JS-side flag — no DOM read
+				if (cellSlot.hasTabIndex) {
 					cellSlot.element.removeAttribute('tabindex');
+					cellSlot.hasTabIndex = false;
 				}
 			}
 			if (access.isSelected) {
@@ -865,7 +871,7 @@ export class RowRenderer<TRowData = unknown> {
 			}
 
 			const cellValue = access.value;
-			const cellKey = access.isEditing ? `${node.id}:${col.field}` : `${col.field}@${slot.id}`;
+			const cellKey = access.isEditing ? createEditRendererKey(node.id, col.field) : createSlotRendererKey(slot.id, col.field);
 
 			let contentMode: CellContentMode = 'empty';
 			let formattedValue = '';
@@ -1084,6 +1090,7 @@ export class RowRenderer<TRowData = unknown> {
 
 		if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {
 			cellSlot.element.tabIndex = -1;
+			cellSlot.hasTabIndex = true;
 			const isProgrammatic =
 				this.programmaticScrollCell && this.programmaticScrollCell.rowId === node.id && this.programmaticScrollCell.colField === col.field;
 			this.deferredFocusCell = cellSlot.element;
@@ -1099,7 +1106,7 @@ export class RowRenderer<TRowData = unknown> {
 			}
 		}
 
-		const cellKey = isEditing ? `${node.id}:${col.field}` : `${col.field}@${pooledRowId}`;
+		const cellKey = isEditing ? createEditRendererKey(node.id, col.field) : createSlotRendererKey(pooledRowId, col.field);
 
 		let contentMode: CellContentMode = 'empty';
 		let formattedValue = '';

@@ -1,6 +1,7 @@
 import type { ColumnDef, RowNode, CellRendererPhase } from '../store.js';
-import type { GridCellContentMount, GridCellContentUnmount } from './IGridRenderer.js';
+import type { GridCellContentMount, GridCellContentUnmount, RendererLifecycleOperation } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { createEditRendererKey, createSlotRendererKey, createIndexRendererKey } from './identityKeys.js';
 
 export interface RendererInstance<TRowData = unknown> {
 	rendererKey: string;
@@ -42,6 +43,12 @@ export interface CustomRendererStats {
 	warmHits: number;
 	warmMisses: number;
 	evictions: number;
+	// Phase 7: hydration budget tracking
+	hydrationChunks: number;
+	maxHydratedInOneChunk: number;
+	// Phase 8: warm DOM move tracking
+	warmMovesDeferred: number;
+	warmMovesFlushed: number;
 }
 
 export class CustomRendererManager<TRowData = unknown> {
@@ -67,7 +74,14 @@ export class CustomRendererManager<TRowData = unknown> {
 		warmHits: 0,
 		warmMisses: 0,
 		evictions: 0,
+		hydrationChunks: 0,
+		maxHydratedInOneChunk: 0,
+		warmMovesDeferred: 0,
+		warmMovesFlushed: 0,
 	};
+
+	// Phase 8: pending warm DOM moves deferred during scroll
+	private pendingWarmMoves: RendererInstance<TRowData>[] = [];
 
 	private hiddenContainer: HTMLDivElement | null = null;
 
@@ -97,6 +111,10 @@ export class CustomRendererManager<TRowData = unknown> {
 			warmHits: 0,
 			warmMisses: 0,
 			evictions: 0,
+			hydrationChunks: 0,
+			maxHydratedInOneChunk: 0,
+			warmMovesDeferred: 0,
+			warmMovesFlushed: 0,
 		};
 	}
 
@@ -108,13 +126,13 @@ export class CustomRendererManager<TRowData = unknown> {
 
 	public getRendererKey(col: ColumnDef<TRowData>, rowId: string, rowIndex: number, colIndex: number, isEditing: boolean): string {
 		if (isEditing) {
-			return `${rowId}:${col.field}`;
+			return createEditRendererKey(rowId, col.field);
 		}
 		const pooledRow = (this.engine as any)?.rowRenderer?.activeRows.get(rowIndex);
 		if (pooledRow?.id) {
-			return `${col.field}@${pooledRow.id}`;
+			return createSlotRendererKey(pooledRow.id, col.field);
 		}
-		return `${col.field}@${rowIndex}:${colIndex}`;
+		return createIndexRendererKey(rowIndex, colIndex, col.field);
 	}
 
 	public acquire(params: AcquireRendererParams<TRowData>): RendererInstance<TRowData> {
@@ -135,7 +153,7 @@ export class CustomRendererManager<TRowData = unknown> {
 			}
 		}
 		if (instance) {
-			this.rebindInstance(instance, params);
+			this.rebindInstance(instance, params, 'update');
 			return instance;
 		}
 
@@ -148,7 +166,7 @@ export class CustomRendererManager<TRowData = unknown> {
 			}
 			this.warmRenderersByRendererKey.delete(params.rendererKey);
 			this.lruOrder.delete(params.rendererKey);
-			this.rebindInstance(instance, params);
+			this.rebindInstance(instance, params, 'restore');
 			return instance;
 		}
 
@@ -194,6 +212,7 @@ export class CustomRendererManager<TRowData = unknown> {
 			isScrolling: params.isScrolling,
 			isFocused: params.isFocused,
 			isSelected: params.isSelected,
+			lifecycleOperation: 'mount',
 		});
 
 		return newInstance;
@@ -221,16 +240,21 @@ export class CustomRendererManager<TRowData = unknown> {
 
 		// If reason is scrolled-out, cache it in warm cache instead of destroying
 		if (reason === 'scrolled-out' && this.maxWarm > 0) {
-			// Move container to hidden host
+			instance.lastAccessTime = ++this.lruCounter;
+			this.touchWarm(instance);
+
+			// Phase 8: always move to hiddenContainer immediately (display:none, no layout cost)
+			// so the container stays connected and pool cells are clean.
+			// Defer only pruneWarmCache until after scroll to avoid DOM destruction churn.
 			const hiddenContainer = this.ensureHiddenContainer();
 			if (hiddenContainer && instance.container.parentElement !== hiddenContainer) {
 				hiddenContainer.appendChild(instance.container);
 			}
-
-			instance.lastAccessTime = ++this.lruCounter;
-			this.touchWarm(instance);
-
-			if (!this.engine?.isScrolling) {
+			if (this.engine?.isScrolling) {
+				// Track deferred prune for stats; actual prune runs in flushPendingWarmMoves
+				this.pendingWarmMoves.push(instance);
+				this.stats.warmMovesDeferred++;
+			} else {
 				this.pruneWarmCache();
 			}
 			return true;
@@ -241,11 +265,56 @@ export class CustomRendererManager<TRowData = unknown> {
 		return true;
 	}
 
+	/**
+	 * Phase 8: Flush deferred warm DOM moves in budgeted chunks after scroll idle.
+	 * Returns the number of moves performed.
+	 */
+	public flushPendingWarmMoves(maxItems = 16): number {
+		if (this.pendingWarmMoves.length === 0) return 0;
+		const hiddenContainer = this.ensureHiddenContainer();
+		if (!hiddenContainer) {
+			this.pendingWarmMoves.length = 0;
+			return 0;
+		}
+		const count = Math.min(maxItems, this.pendingWarmMoves.length);
+		let moved = 0;
+		for (let i = 0; i < count; i++) {
+			const inst = this.pendingWarmMoves.shift()!;
+			// Only move if still in warm cache (not re-acquired between scroll and flush)
+			if (this.warmRenderersByRendererKey.has(inst.rendererKey)) {
+				if (inst.container.parentElement !== hiddenContainer) {
+					hiddenContainer.appendChild(inst.container);
+					moved++;
+				}
+			}
+		}
+		this.stats.warmMovesFlushed += moved;
+		if (!this.engine?.isScrolling) {
+			this.pruneWarmCache();
+		}
+		return moved;
+	}
+
+	/**
+	 * Phase 7: Flush hydration budget for CustomRendererManager-owned warm moves.
+	 * Stats tracking for hydration chunks and max hydrated per frame.
+	 */
+	public flushHydrationBudget(options: { maxItems?: number } = {}): { warmMovesFlushed: number } {
+		const maxItems = options.maxItems ?? 16;
+		const moved = this.flushPendingWarmMoves(maxItems);
+		if (moved > 0) {
+			this.stats.hydrationChunks++;
+			this.stats.maxHydratedInOneChunk = Math.max(this.stats.maxHydratedInOneChunk, moved);
+		}
+		return { warmMovesFlushed: moved };
+	}
+
 	public hasActiveRenderer(cellKey: string): boolean {
 		return this.activeRenderersByCellKey.has(cellKey);
 	}
 
 	public releaseAll(): void {
+		this.pendingWarmMoves.length = 0;
 		for (const instance of this.activeRenderersByRendererKey.values()) {
 			this.destroyInstance(instance);
 		}
@@ -281,7 +350,11 @@ export class CustomRendererManager<TRowData = unknown> {
 		}
 	}
 
-	private rebindInstance(instance: RendererInstance<TRowData>, params: AcquireRendererParams<TRowData>): void {
+	private rebindInstance(
+		instance: RendererInstance<TRowData>,
+		params: AcquireRendererParams<TRowData>,
+		operation: RendererLifecycleOperation = 'update'
+	): void {
 		// Detect whether any props the renderer cares about actually changed before
 		// notifying React — avoids a reconciliation round trip on stayed cells.
 		const needsUpdate =
@@ -332,6 +405,7 @@ export class CustomRendererManager<TRowData = unknown> {
 				isScrolling: params.isScrolling,
 				isFocused: params.isFocused,
 				isSelected: params.isSelected,
+				lifecycleOperation: operation,
 			});
 		}
 	}

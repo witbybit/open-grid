@@ -11,6 +11,13 @@ import { isDomCellRenderer } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { CustomRendererManager, type ReleaseReason } from './customRendererManager.js';
 import { DomCellRendererManager } from './domCellRendererManager.js';
+import {
+	createEditRendererKey,
+	createSlotRendererKey,
+	createIndexRendererKey,
+	createDomSlotRendererKey,
+	createDomIndexRendererKey,
+} from './identityKeys.js';
 
 function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
 	if (a === b) return true;
@@ -112,7 +119,7 @@ export class PortalMountManager<TRowData = unknown> {
 
 		// DOM renderer — zero React overhead, direct DOM manipulation
 		if (!mount.isEditing && isDomCellRenderer(col.cellRenderer)) {
-			const rendererKey = rowSlotId ? `dom:${col.field}@${rowSlotId}` : `dom:${col.field}@${rowIndex}:${colIndex}`;
+			const rendererKey = rowSlotId ? createDomSlotRendererKey(rowSlotId, col.field) : createDomIndexRendererKey(rowIndex, colIndex, col.field);
 
 			this.domCellRendererManager.acquire({
 				rendererKey,
@@ -133,9 +140,9 @@ export class PortalMountManager<TRowData = unknown> {
 
 		// React renderer — goes through portal store
 		const rendererKey = mount.isEditing
-			? `${node.id}:${col.field}`
+			? createEditRendererKey(node.id, col.field)
 			: rowSlotId
-				? `${col.field}@${rowSlotId}`
+				? createSlotRendererKey(rowSlotId, col.field)
 				: this.customRendererManager.getRendererKey(col, node.id, rowIndex, colIndex, mount.isEditing);
 
 		this.customRendererManager.acquire({
@@ -384,6 +391,13 @@ export class PortalMountManager<TRowData = unknown> {
 			this.stats.flushChunks++;
 			this.stats.maxOpsFlushedInOneChunk = Math.max(this.stats.maxOpsFlushedInOneChunk, processed);
 		}
+		// Phase 7: delegate warm DOM move budget to CustomRendererManager (it owns hydration policy)
+		if (processed > 0 || this.customRendererManager['pendingWarmMoves'].length > 0) {
+			this.customRendererManager.flushHydrationBudget({
+				maxItems: maxItems === Number.POSITIVE_INFINITY ? 16 : Math.max(1, Math.floor(maxItems / 2)),
+			});
+		}
+
 		if (flushSync && remaining === 0) {
 			this.onFlushCellContent?.({ flushSync: true });
 		}

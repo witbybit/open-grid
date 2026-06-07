@@ -1,5 +1,15 @@
 export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending';
 
+// Debug stats for DOM write tracking (Phase 4). Shared across all CellSlot instances.
+export const cellSlotWriteStats = {
+	cellTextWrites: 0,
+	cellClassWrites: 0,
+	cellTransformWrites: 0,
+	cellWidthWrites: 0,
+	cellLeftWrites: 0,
+	cellDomReadsAvoided: 0,
+};
+
 export class CellSlot<TRowData = unknown> {
 	public readonly element: HTMLDivElement;
 	public readonly contentElement: HTMLDivElement;
@@ -20,6 +30,8 @@ export class CellSlot<TRowData = unknown> {
 	public lastClassName = '';
 	public lastContentMode: CellContentMode = 'empty';
 	public lastPortalKey: string | undefined = undefined;
+	// Phase 4: track tabindex state to avoid hasAttribute DOM read in hot unbind path
+	public hasTabIndex = false;
 
 	constructor(element: HTMLDivElement) {
 		this.element = element;
@@ -57,6 +69,7 @@ export class CellSlot<TRowData = unknown> {
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
+		this.hasTabIndex = false;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;
@@ -128,12 +141,14 @@ export class CellSlot<TRowData = unknown> {
 		if (this.lastWidth !== width) {
 			this.lastWidth = width;
 			this.element.style.width = `${width}px`;
+			cellSlotWriteStats.cellWidthWrites++;
 			domUpdated = true;
 		}
 
 		if (this.lastClassName !== className) {
 			this.lastClassName = className;
 			this.element.className = className;
+			cellSlotWriteStats.cellClassWrites++;
 			domUpdated = true;
 		}
 
@@ -155,21 +170,25 @@ export class CellSlot<TRowData = unknown> {
 
 		this.lastRawValue = rawValue;
 
+		// Phase 4: compare against JS-side cache only — no DOM read.
+		// lastFormattedValue is always kept in sync with contentElement.textContent.
 		if (contentMode === 'text' || contentMode === 'fallback') {
 			if (this.lastFormattedValue !== formattedValue) {
 				this.lastFormattedValue = formattedValue;
-				if (this.contentElement.textContent !== formattedValue) {
-					this.contentElement.textContent = formattedValue;
-					domUpdated = true;
-				}
+				this.contentElement.textContent = formattedValue;
+				cellSlotWriteStats.cellTextWrites++;
+				domUpdated = true;
+			} else {
+				cellSlotWriteStats.cellDomReadsAvoided++;
 			}
 		} else {
 			if (this.lastFormattedValue !== '') {
 				this.lastFormattedValue = '';
-				if (this.contentElement.textContent !== '') {
-					this.contentElement.textContent = '';
-					domUpdated = true;
-				}
+				this.contentElement.textContent = '';
+				cellSlotWriteStats.cellTextWrites++;
+				domUpdated = true;
+			} else {
+				cellSlotWriteStats.cellDomReadsAvoided++;
 			}
 		}
 
@@ -200,8 +219,10 @@ export class CellSlot<TRowData = unknown> {
 		this.lastPortalKey = undefined;
 		delete this.element.dataset.cellKey;
 		delete this.element.dataset.contentMode;
-		if (this.element.hasAttribute('tabindex')) {
+		// Phase 4: use JS-side flag to skip DOM read in hot path
+		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');
+			this.hasTabIndex = false;
 		}
 	}
 
@@ -214,6 +235,7 @@ export class CellSlot<TRowData = unknown> {
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
+		this.hasTabIndex = false;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;

@@ -1,5 +1,18 @@
 import type { CellRendererPhase, ColumnDef, RowNode, VisualRow } from '../store.js';
 
+/**
+ * Explicit renderer lifecycle operation type (Phase 6).
+ * Adapters can use this to distinguish first mount from updates, rebinds, and warm restores.
+ *
+ *   mount   — first render of this renderer for this slot
+ *   update  — same renderer, same slot, different props (value/focus/selection changed)
+ *   rebind  — same renderer key, but slot was recycled to a new row; props entirely new
+ *   restore — renderer was warm (scrolled out) and is being scrolled back into view
+ *   unmount — renderer is leaving the viewport (not destroyed, may warm-cache)
+ *   destroy — renderer is being permanently destroyed and removed
+ */
+export type RendererLifecycleOperation = 'mount' | 'update' | 'rebind' | 'restore' | 'unmount' | 'destroy';
+
 export interface GridCellContentMount<TRowData = unknown> {
 	cellKey: string;
 	container: HTMLElement;
@@ -14,6 +27,8 @@ export interface GridCellContentMount<TRowData = unknown> {
 	isScrolling?: boolean;
 	isFocused?: boolean;
 	isSelected?: boolean;
+	/** Phase 6: explicit lifecycle operation so adapters skip reconciliation when not needed. */
+	lifecycleOperation?: RendererLifecycleOperation;
 }
 
 export interface GridCellContentUnmount {

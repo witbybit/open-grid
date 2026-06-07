@@ -18,6 +18,15 @@ export interface RenderWindow {
 	geometryVersion?: number;
 	rowModelVersion?: number;
 	columnVersion?: number;
+	// Phase 9: pixel-first windowing fields
+	/** Top pixel of the visible (non-pinned) area, accounting for pinned top rows. */
+	visibleTop?: number;
+	/** Bottom pixel of the visible area, accounting for pinned bottom rows. */
+	visibleBottom?: number;
+	/** Top pixel of the fully-buffered render region (includes overscan above visible). */
+	bufferTopPx?: number;
+	/** Bottom pixel of the fully-buffered render region (includes overscan below visible). */
+	bufferBottomPx?: number;
 }
 
 export interface ViewportDelta {
@@ -191,6 +200,27 @@ export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): Ren
 	const newRowRange = engine.viewport.getVisibleRowRange(rowCount);
 	const newColRange = engine.viewport.getVisibleColumnRange(colCount);
 
+	// Phase 9: compute pixel bounds for pixel-first windowing
+	let pinnedTopHeight = 0;
+	for (let i = 0; i < pinTopRows && i < rowCount; i++) {
+		pinnedTopHeight += engine.geometry.getRowHeight(i, 40);
+	}
+	let pinnedBottomHeight = 0;
+	for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
+		pinnedBottomHeight += engine.geometry.getRowHeight(rowCount - 1 - i, 40);
+	}
+	const scrollTop = engine.viewport.scrollTop;
+	const viewportHeight = engine.viewport.viewportHeight;
+	const visibleTop = scrollTop + pinnedTopHeight;
+	const visibleBottom = scrollTop + viewportHeight - pinnedBottomHeight;
+
+	// Buffer pixel bounds: pixel extent of the first/last rendered rows
+	const bufferTopPx = newRowRange.startIdx >= 0 ? engine.geometry.getRowTop(newRowRange.startIdx, 40) : visibleTop;
+	const lastRenderedBottom =
+		newRowRange.endIdx >= 0
+			? engine.geometry.getRowTop(newRowRange.endIdx, 40) + engine.geometry.getRowHeight(newRowRange.endIdx, 40)
+			: visibleBottom;
+
 	return {
 		rowStart: newRowRange.startIdx,
 		rowEnd: newRowRange.endIdx,
@@ -202,13 +232,17 @@ export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): Ren
 		pinBottomRows,
 		rowCount,
 		colCount,
-		scrollTop: engine.viewport.scrollTop,
+		scrollTop,
 		scrollLeft: engine.viewport.scrollLeft,
 		viewportWidth: engine.viewport.viewportWidth,
-		viewportHeight: engine.viewport.viewportHeight,
+		viewportHeight,
 		geometryVersion: (engine as any).geometryVersion ?? 0,
 		rowModelVersion: (engine as any).rowModelVersion ?? 0,
 		columnVersion: (engine as any).columnVersion ?? 0,
+		visibleTop,
+		visibleBottom,
+		bufferTopPx,
+		bufferBottomPx: lastRenderedBottom,
 	};
 }
 
