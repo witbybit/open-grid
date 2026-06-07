@@ -10,6 +10,8 @@ import {
 	type GridSelectionSource,
 	type GridState,
 	type Listener,
+	type RowDataTransaction,
+	type RowNodeTransaction,
 } from './store.js';
 
 export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowData> {
@@ -37,6 +39,7 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		getDataRowNodeAtVisualIndex: (index: number) => store.getDataRowNodeAtVisualIndex(index),
 		setRows: (rows: TRowData[]) => store.setRows(rows),
 		updateRows: (updater: (rows: TRowData[]) => TRowData[]) => store.updateRows(updater),
+		applyTransaction: (transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null => store.applyTransaction(transaction),
 		refreshRows: () => store.refreshRows(),
 		setRowHeights: (rowHeights: Record<string, number> | undefined) => store.setRowHeights(rowHeights),
 		setDefaultRowHeight: (defaultRowHeight?: number | undefined) => store.setDefaultRowHeight(defaultRowHeight),

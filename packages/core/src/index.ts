@@ -2,6 +2,7 @@ export { createApiFacade, createClientGrid, createServerGrid } from './createGri
 export type { ClientGridOptions, ServerGridOptions } from './createGrid.js';
 
 export { RowNode } from './store.js';
+export type { RowDataTransaction, RowNodeTransaction } from './store.js';
 export type {
 	CellEditorProps,
 	CellPointer,

@@ -150,9 +150,16 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 			logEvent('selectionChanged', `Selected range details updated.`, 'selection');
 		});
 
+		// cellValueChanged fires for individual cell edits (e.g. user typing in a cell)
 		const unsubValue = api.addEventListener<{ rowId: string; colField: string; value: unknown }>('cellValueChanged', (e) => {
 			updateStatsAndChart();
 			logEvent('cellValueChanged', `${e.payload.rowId}:${e.payload.colField} => ${e.payload.value}`, 'edit');
+		});
+
+		// rowsUpdated fires for bulk operations (updateRows / applyTransaction)
+		const unsubRowsUpdated = api.addEventListener<{ changedNodes: unknown[] }>('rowsUpdated', (e) => {
+			updateStatsAndChart();
+			logEvent('rowsUpdated', `${e.payload.changedNodes?.length ?? 0} rows updated in batch`, 'info');
 		});
 
 		const unsubFocus = api.addEventListener<{ focus: { rowId: string; colField: string } | null }>('focusChanged', (e) => {
@@ -163,6 +170,7 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 		return () => {
 			unsubSelect();
 			unsubValue();
+			unsubRowsUpdated();
 			unsubFocus();
 		};
 	}, [api]);

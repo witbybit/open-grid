@@ -9,6 +9,14 @@ export interface RowTransactionResult<T> {
 	mismatch: boolean;
 }
 
+export interface StoreTransactionResult<T> {
+	added: RowNode<T>[];
+	removed: RowNode<T>[];
+	updated: RowNode<T>[];
+	changedFieldsByRow: Map<string, Set<string>>;
+	changedValuesByRow: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
+}
+
 export class RowDataStore<T> {
 	private rowsById = new Map<string, RowNode<T>>();
 	private sourceOrder: string[] = [];
@@ -99,6 +107,80 @@ export class RowDataStore<T> {
 			changedValuesByRow,
 			mismatch: false,
 		};
+	}
+
+	public applyTransaction(transaction: { add?: T[]; addIndex?: number; remove?: T[]; update?: T[] }): StoreTransactionResult<T> {
+		const added: RowNode<T>[] = [];
+		const removed: RowNode<T>[] = [];
+		const updated: RowNode<T>[] = [];
+		const changedFieldsByRow = new Map<string, Set<string>>();
+		const changedValuesByRow = new Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>();
+
+		if (transaction.remove) {
+			for (const row of transaction.remove) {
+				const id = this.getRowId(row);
+				const node = this.rowsById.get(id);
+				if (node) {
+					removed.push(node);
+					this.rowsById.delete(id);
+				}
+			}
+			if (removed.length > 0) {
+				const removedIds = new Set(removed.map((n) => n.id));
+				this.sourceOrder = this.sourceOrder.filter((id) => !removedIds.has(id));
+			}
+		}
+
+		if (transaction.update) {
+			for (const row of transaction.update) {
+				const id = this.getRowId(row);
+				const node = this.rowsById.get(id);
+				if (!node) continue;
+
+				const prevRow = node.data;
+				if (prevRow === row) continue;
+
+				const changedFields = new Set<string>();
+				const changedValues = new Map<string, { oldValue: unknown; newValue: unknown }>();
+				const allKeys = new Set([...Object.keys(prevRow as object), ...Object.keys(row as object)]);
+
+				for (const key of allKeys) {
+					const oldValue = (prevRow as Record<string, unknown>)[key];
+					const newValue = (row as Record<string, unknown>)[key];
+					if (oldValue !== newValue) {
+						changedFields.add(key);
+						changedValues.set(key, { oldValue, newValue });
+					}
+				}
+
+				if (changedFields.size > 0) {
+					node.setData(row);
+					updated.push(node);
+					changedFieldsByRow.set(id, changedFields);
+					changedValuesByRow.set(id, changedValues);
+				}
+			}
+		}
+
+		if (transaction.add && transaction.add.length > 0) {
+			const newNodes: RowNode<T>[] = [];
+			for (const row of transaction.add) {
+				const id = this.getRowId(row);
+				if (this.rowsById.has(id)) continue;
+				const node = new RowNode<T>(id, row);
+				this.rowsById.set(id, node);
+				newNodes.push(node);
+				added.push(node);
+			}
+
+			if (newNodes.length > 0) {
+				const addIndex = transaction.addIndex ?? this.sourceOrder.length;
+				const newIds = newNodes.map((n) => n.id);
+				this.sourceOrder.splice(addIndex, 0, ...newIds);
+			}
+		}
+
+		return { added, removed, updated, changedFieldsByRow, changedValuesByRow };
 	}
 
 	public getNode(rowId: string): RowNode<T> | null {

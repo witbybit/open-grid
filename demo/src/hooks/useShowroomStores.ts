@@ -415,54 +415,57 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, []);
 
 	const mockDatasource = useMemo<GridDatasource>(() => {
+		// Cache sorted/filtered result so concurrent block fetches don't each re-sort 100K rows
+		let cachedSortKey = '';
+		let cachedFilterKey = '';
+		let cachedRows: ServerAuditRow[] = serverRows;
+
+		const buildRows = (sortModel: SortModel | undefined, filterModel: FilterModel | undefined): ServerAuditRow[] => {
+			const sortKey = JSON.stringify(sortModel ?? []);
+			const filterKey = JSON.stringify(filterModel ?? {});
+			if (sortKey === cachedSortKey && filterKey === cachedFilterKey) return cachedRows;
+
+			cachedSortKey = sortKey;
+			cachedFilterKey = filterKey;
+
+			let rows: ServerAuditRow[] = serverRows;
+			const statusFilter = filterModel?.status as FilterModelItem | undefined;
+			if (statusFilter?.filter) {
+				const f = statusFilter.filter;
+				if (f === 'Active') rows = rows.filter((r) => r.severity === 'CRITICAL' || r.severity === 'ERROR');
+				else if (f === 'Pending') rows = rows.filter((r) => r.severity === 'WARNING');
+				else if (f === 'Inactive') rows = rows.filter((r) => r.severity === 'INFO' || r.severity === 'DEBUG');
+			}
+			if (sortModel?.length) {
+				rows = [...rows].sort((a, b) => {
+					for (const item of sortModel) {
+						const field = item.colId as keyof ServerAuditRow;
+						const left = a[field];
+						const right = b[field];
+						const leftNum = Number(left);
+						const rightNum = Number(right);
+						const cmp =
+							!Number.isNaN(leftNum) && !Number.isNaN(rightNum)
+								? leftNum - rightNum
+								: String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+						if (cmp !== 0) return item.sort === 'desc' ? -cmp : cmp;
+					}
+					return 0;
+				});
+			}
+			cachedRows = rows;
+			return rows;
+		};
+
 		return {
 			getRows: async (params) => {
 				const start = performance.now();
+				// Sort/filter before the network delay so concurrent fetches share the cached result
+				const rows = buildRows(params.sortModel as SortModel | undefined, params.filterModel as FilterModel | undefined);
 				await new Promise((resolve) => setTimeout(resolve, 3000));
-
-				const filterModel = params.filterModel as FilterModel | undefined;
-				const sortModel = params.sortModel as SortModel | undefined;
-
-				let rows = serverRows;
-
-				const statusFilter = filterModel?.status as FilterModelItem | undefined;
-				if (statusFilter?.filter) {
-					const f = statusFilter.filter;
-					if (f === 'Active') {
-						rows = rows.filter((row) => row.severity === 'CRITICAL' || row.severity === 'ERROR');
-					} else if (f === 'Pending') {
-						rows = rows.filter((row) => row.severity === 'WARNING');
-					} else if (f === 'Inactive') {
-						rows = rows.filter((row) => row.severity === 'INFO' || row.severity === 'DEBUG');
-					}
-				}
-
-				if (sortModel?.length) {
-					rows = [...rows].sort((a, b) => {
-						for (const item of sortModel) {
-							const field = item.colId as keyof ServerAuditRow;
-							const left = a[field];
-							const right = b[field];
-							const leftNumber = Number(left);
-							const rightNumber = Number(right);
-							const comparison =
-								!Number.isNaN(leftNumber) && !Number.isNaN(rightNumber)
-									? leftNumber - rightNumber
-									: String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
-							if (comparison !== 0) return item.sort === 'desc' ? -comparison : comparison;
-						}
-						return 0;
-					});
-				}
-
 				const resultRows = rows.slice(params.startRow, params.endRow);
-				const duration = performance.now() - start;
-				LatencyProfiler.record(duration);
-
-				return {
-					rows: resultRows,
-					totalCount: rows.length,
-				};
+				LatencyProfiler.record(performance.now() - start);
+				return { rows: resultRows, totalCount: rows.length };
 			},
 		};
 	}, [serverRows]);

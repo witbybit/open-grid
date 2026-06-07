@@ -405,28 +405,24 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public batch = (callback: () => void): void => {
-		const prev = this._batchedUpdates;
-		this._batchedUpdates = true;
 		this.stateManager.startTransaction();
 		try {
 			callback();
 		} finally {
-			this._batchedUpdates = prev;
 			this.stateManager.endTransaction();
-			if (this.cellUpdateBatch.size > 0) {
-				this.flushCellUpdatesSync();
-			}
+			this.flushCellUpdatesSync();
 		}
 	};
 
 	public flushCellUpdates(): void {
-		for (const [rowId, colFields] of this.cellUpdateBatch) {
-			for (const colField of colFields) {
-				this.notifyCellChange(rowId, colField);
-			}
+		if (this.cellUpdateBatch.size === 0) {
+			this.batchFlushScheduled = false;
+			return;
 		}
+		const batch = new Map(this.cellUpdateBatch);
 		this.cellUpdateBatch.clear();
 		this.batchFlushScheduled = false;
+		this.notifyBulkCellChange(batch);
 	}
 
 	public enqueueCellUpdate(rowId: string, colField: string): void {
@@ -441,6 +437,37 @@ export class GridEngine<TRowData = unknown> {
 	public flushCellUpdatesSync(): void {
 		if (this.cellUpdateBatch.size > 0) {
 			this.flushCellUpdates();
+		}
+	}
+
+	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
+		// Clear caches and notify subscriptions for each changed cell
+		for (const [rowId, fields] of changes) {
+			for (const colField of fields) {
+				this.data.clearValueGetterCache(rowId, colField);
+				const cellKey = `${rowId}:${colField}`;
+				const cellSubs = this.cellSubscriptions.get(cellKey);
+				if (cellSubs) {
+					cellSubs.forEach((sub) => {
+						try {
+							sub.onStoreChange();
+						} catch (e) {
+							console.error(`GridEngine: Error in cell subscription notification`, e);
+						}
+					});
+				}
+			}
+		}
+		// Accumulate all invalidations, then fire ONE render event instead of N cellInvalidated events
+		const hasRenderConsumer = this.eventBus.hasListeners('cellInvalidated') || this.eventBus.hasListeners('renderInvalidated');
+		if (hasRenderConsumer) {
+			for (const [rowId, fields] of changes) {
+				for (const colField of fields) {
+					this.invalidation.invalidateCell(rowId, colField, 'cell');
+				}
+				this.invalidation.invalidateRow(rowId, 'cell');
+			}
+			this.eventBus.dispatchEvent('renderInvalidated', { reason: 'bulk-cell-change' });
 		}
 	}
 

@@ -806,8 +806,8 @@ describe('Phase 2 Engine Scalability Subsystems', () => {
 	});
 });
 
-describe('GridStore scoped batching and dirty cell fanout', () => {
-	it('should support scoped batches and execute them exactly once', () => {
+describe('GridStore auto-batching and dirty cell fanout', () => {
+	it('should auto-batch multiple setCellValue calls and flush once on demand', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'name', header: 'Name' },
@@ -822,21 +822,20 @@ describe('GridStore scoped batching and dirty cell fanout', () => {
 		const listener = vi.fn();
 		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
 
-		store.batch(() => {
-			store.setCellValue('1', 'price', 15);
-			store.setCellValue('1', 'price', 20);
-			// Listener shouldn't be notified immediately
-			expect(listener).toHaveBeenCalledTimes(0);
-		});
+		store.setCellValue('1', 'price', 15);
+		store.setCellValue('1', 'price', 20);
+		// Listener is not notified synchronously — auto-batching defers via microtask
+		expect(listener).toHaveBeenCalledTimes(0);
 
-		// Listener should be notified exactly once (batch() always flushes sync on exit)
+		// flushCellUpdatesSync() forces an immediate synchronous flush
+		store.flushCellUpdatesSync();
 		expect(listener).toHaveBeenCalledTimes(1);
 		expect(store.getCellValue('1', 'price')).toBe(20);
 
 		controller.dispose();
 	});
 
-	it('should support batchedUpdates property getter and setter', () => {
+	it('should have batchedUpdates always true by default', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'name', header: 'Name' },
@@ -851,26 +850,26 @@ describe('GridStore scoped batching and dirty cell fanout', () => {
 		const listener = vi.fn();
 		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
 
-		// batchedUpdates is true by default (library manages batching internally)
+		// batchedUpdates is true by default — all setCellValue calls are auto-batched
 		expect(store.batchedUpdates).toBe(true);
 
 		store.setCellValue('1', 'price', 15);
 		store.setCellValue('1', 'price', 20);
 		expect(listener).toHaveBeenCalledTimes(0);
 
-		// Disabling batchedUpdates should trigger flush
+		// Disabling batchedUpdates triggers an immediate flush (escape hatch)
 		store.batchedUpdates = false;
 		expect(store.batchedUpdates).toBe(false);
 		expect(listener).toHaveBeenCalledTimes(1);
 
-		// Re-enabling should work
+		// Re-enabling works
 		store.batchedUpdates = true;
 		expect(store.batchedUpdates).toBe(true);
 
 		controller.dispose();
 	});
 
-	it('should correctly flush even if callback throws an error', () => {
+	it('should flush pending updates even when an error occurs mid-batch', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'name', header: 'Name' },
@@ -885,14 +884,14 @@ describe('GridStore scoped batching and dirty cell fanout', () => {
 		const listener = vi.fn();
 		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
 
+		// setCellValue enqueues the update even if subsequent code throws
+		store.setCellValue('1', 'price', 15);
 		expect(() => {
-			store.batch(() => {
-				store.setCellValue('1', 'price', 15);
-				throw new Error('Test Error');
-			});
+			throw new Error('Test Error');
 		}).toThrow('Test Error');
 
-		// The update should still have been flushed (batch() flushes sync in finally)
+		// Flush explicitly — the queued update is still applied
+		store.flushCellUpdatesSync();
 		expect(listener).toHaveBeenCalledTimes(1);
 		expect(store.getCellValue('1', 'price')).toBe(15);
 
@@ -917,10 +916,8 @@ describe('GridStore scoped batching and dirty cell fanout', () => {
 		store.registerCellSubscription({ rowId: '1', colField: 'name', onStoreChange: nameListener });
 		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: priceListener });
 
-		// Trigger cell value change on price
-		store.batch(() => {
-			store.setCellValue('1', 'price', 15);
-		});
+		store.setCellValue('1', 'price', 15);
+		store.flushCellUpdatesSync();
 
 		// The price cell listener should be notified exactly once
 		expect(priceListener).toHaveBeenCalledTimes(1);

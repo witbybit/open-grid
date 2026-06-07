@@ -457,6 +457,7 @@ export interface RowModel<TRowData = unknown> {
 	isDetailExpanded?(rowId: string): boolean;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
+	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
 	purgeCache?(): void;
 	setDatasource?(datasource: IGridDatasource, blockSize?: number): void;
@@ -633,6 +634,23 @@ export interface GridRowsAccessor<TRowData = unknown> {
 	};
 }
 
+export interface RowDataTransaction<TData = unknown> {
+	/** Rows to add. Optional `addIndex` controls insertion position (default: end). */
+	add?: TData[];
+	/** Index at which to insert added rows. Defaults to appending at the end. */
+	addIndex?: number;
+	/** Rows to remove, matched by row ID. */
+	remove?: TData[];
+	/** Rows to update, matched by row ID. Only changed fields are notified. */
+	update?: TData[];
+}
+
+export interface RowNodeTransaction<TData = unknown> {
+	add: RowNode<TData>[];
+	remove: RowNode<TData>[];
+	update: RowNode<TData>[];
+}
+
 /**
  * Public, pristine API intended for application developers.
  */
@@ -644,6 +662,7 @@ export interface GridApi<TRowData = unknown> {
 	getDataRowNodeAtVisualIndex(index: number): RowNode<TRowData> | null;
 	setRows(rows: TRowData[]): void;
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
+	applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null;
 	refreshRows(): void;
 	setRowHeights: (rowHeights: Record<string, number> | undefined) => void;
 	setDefaultRowHeight: (defaultRowHeight?: number | undefined) => void;
@@ -728,6 +747,10 @@ export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
 	setViewportSize(width: number, height: number): boolean;
 	updateVisibleRanges(): boolean;
 	triggerCellNotifications(rowId: string): void;
+	/**
+	 * @deprecated Auto-batching is on by default. Use `flushCellUpdatesSync()` if a synchronous
+	 * flush is required, or restructure to use `applyTransaction` for row-level bulk changes.
+	 */
 	batch(callback: () => void): void;
 	batchedUpdates: boolean;
 	registerCellSubscription(sub: CellSubscription): void;
@@ -1146,6 +1169,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public updateRows = (updater: (rows: TRowData[]) => TRowData[]): void => {
 		this.getRowModel()?.updateRows?.(updater);
+	};
+
+	public applyTransaction = (transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null => {
+		const rowModel = this.getRowModel();
+		if (!rowModel?.applyTransaction) return null;
+		return rowModel.applyTransaction(transaction);
 	};
 
 	public refreshRows = (): void => {

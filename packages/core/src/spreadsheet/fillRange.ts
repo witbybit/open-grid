@@ -44,15 +44,13 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		const oldValueRecord: FillRecord[] = [];
 		const newValueRecord: FillRecord[] = [];
 
-		this.engine.batch(() => {
-			if (direction === 'DOWN' || direction === 'UP') {
-				this.fillRows(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
-			}
+		if (direction === 'DOWN' || direction === 'UP') {
+			this.fillRows(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
+		}
 
-			if (direction === 'RIGHT' || direction === 'LEFT') {
-				this.fillColumns(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
-			}
-		});
+		if (direction === 'RIGHT' || direction === 'LEFT') {
+			this.fillColumns(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
+		}
 
 		if (newValueRecord.length > 0) {
 			this.engine.commandHistory.add({
@@ -131,16 +129,14 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 	}
 
 	private restoreRecords(records: FillRecord[]): void {
-		this.engine.batch(() => {
-			for (const item of records) {
-				if (item.hasFormula && item.formula) {
-					this.engine.data.setCellValue(item.rowId, item.colField, item.formula);
-				} else {
-					this.engine.syncFormulaForCell(item.rowId, item.colField, item.value);
-					this.engine.data.setCellValue(item.rowId, item.colField, item.value);
-				}
+		for (const item of records) {
+			if (item.hasFormula && item.formula) {
+				this.engine.data.setCellValue(item.rowId, item.colField, item.formula);
+			} else {
+				this.engine.syncFormulaForCell(item.rowId, item.colField, item.value);
+				this.engine.data.setCellValue(item.rowId, item.colField, item.value);
 			}
-		});
+		}
 	}
 
 	private resolveRangeBounds(range: GridCellRange): GridBounds | null {

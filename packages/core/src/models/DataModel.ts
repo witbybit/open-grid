@@ -339,15 +339,9 @@ export class DataModel<TRowData = unknown> {
 	private scheduleBatchFlush(): void {
 		if (!this.engine.batchFlushScheduled) {
 			this.engine.batchFlushScheduled = true;
-			if (typeof requestAnimationFrame !== 'undefined') {
-				requestAnimationFrame(() => {
-					this.engine.flushCellUpdates();
-				});
-			} else {
-				Promise.resolve().then(() => {
-					this.engine.flushCellUpdates();
-				});
-			}
+			Promise.resolve().then(() => {
+				this.engine.flushCellUpdates();
+			});
 		}
 	}
 }

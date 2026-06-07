@@ -319,23 +319,21 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			if (!text) return;
 
 			const lines = text.split(/\r?\n/);
-			this.store.batch(() => {
-				for (let r = 0; r < lines.length; r++) {
-					const rowIndex = bounds.minRow + r;
-					if (rowIndex > bounds.maxRow) break;
-					const visualRow = params.api.getVisualRow(rowIndex);
-					if (visualRow?.kind !== 'data') continue;
-					const rowId = visualRow.rowId;
-					const cells = lines[r].split('\t');
-					for (let c = 0; c < cells.length; c++) {
-						const colIndex = bounds.minCol + c;
-						if (colIndex > bounds.maxCol) break;
-						const col = params.api.getState().columns[colIndex];
-						if (!col) continue;
-						this.store.setCellValue(rowId, col.field, cells[c]);
-					}
+			for (let r = 0; r < lines.length; r++) {
+				const rowIndex = bounds.minRow + r;
+				if (rowIndex > bounds.maxRow) break;
+				const visualRow = params.api.getVisualRow(rowIndex);
+				if (visualRow?.kind !== 'data') continue;
+				const rowId = visualRow.rowId;
+				const cells = lines[r].split('\t');
+				for (let c = 0; c < cells.length; c++) {
+					const colIndex = bounds.minCol + c;
+					if (colIndex > bounds.maxCol) break;
+					const col = params.api.getState().columns[colIndex];
+					if (!col) continue;
+					this.store.setCellValue(rowId, col.field, cells[c]);
 				}
-			});
+			}
 		} catch (err) {
 			console.error('Failed to paste selected range: ', err);
 		}
@@ -345,18 +343,16 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const bounds = params.selection.bounds;
 		if (!bounds) return;
 
-		this.store.batch(() => {
-			for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-				const visualRow = params.api.getVisualRow(r);
-				if (visualRow?.kind !== 'data') continue;
-				const rowId = visualRow.rowId;
-				for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-					const col = params.api.getState().columns[c];
-					if (!col) continue;
-					this.store.setCellValue(rowId, col.field, '');
-				}
+		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+			const visualRow = params.api.getVisualRow(r);
+			if (visualRow?.kind !== 'data') continue;
+			const rowId = visualRow.rowId;
+			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+				const col = params.api.getState().columns[c];
+				if (!col) continue;
+				this.store.setCellValue(rowId, col.field, '');
 			}
-		});
+		}
 	}
 
 	private selectAll(params: ContextMenuParams<TRowData>): void {

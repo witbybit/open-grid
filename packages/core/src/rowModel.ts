@@ -8,6 +8,8 @@ import {
 	type VisualRow,
 	type RowRefreshReason,
 	type RowModelRefreshResult,
+	type RowDataTransaction,
+	type RowNodeTransaction,
 } from './store.js';
 import { getFieldRoot } from './ids.js';
 import { RowPipeline, type RowModelConfig } from './rows/RowPipeline.js';
@@ -396,24 +398,54 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				}
 			}
 
-			for (const [rId, fields] of notifyCells) {
-				for (const cField of fields) {
-					this.store.engine.notifyCellChange(rId, cField);
-				}
-			}
+			this.store.engine.notifyBulkCellChange(notifyCells);
 
-			for (const [rowId, values] of result.changedValuesByRow) {
-				for (const [colField, change] of values) {
-					this.store.dispatchEvent('cellValueChanged', {
-						rowId,
-						colField,
-						oldValue: change.oldValue,
-						newValue: change.newValue,
-					});
-				}
+			if (result.changedValuesByRow.size > 0) {
+				this.store.dispatchEvent('rowsUpdated', {
+					changedValuesByRow: result.changedValuesByRow,
+					changedNodes: result.changedNodes,
+				});
 			}
 		}
 	}
+
+	public applyTransaction = (transaction: RowDataTransaction<TData>): RowNodeTransaction<TData> => {
+		const result = this.dataStore.applyTransaction(transaction);
+
+		if (result.updated.length > 0) {
+			const notifyCells = new Map<string, Set<string>>();
+			for (const [rowId, fields] of result.changedFieldsByRow) {
+				const cellSet = new Set<string>();
+				for (const field of fields) {
+					cellSet.add(field);
+					for (const dep of this.store.engine.columns.getValueGetterDependents(field)) {
+						if (dep !== field) cellSet.add(dep);
+					}
+				}
+				notifyCells.set(rowId, cellSet);
+			}
+			this.store.engine.notifyBulkCellChange(notifyCells);
+		}
+
+		if (result.added.length > 0 || result.removed.length > 0) {
+			this.refresh('bulk');
+		}
+
+		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {
+			this.store.dispatchEvent('rowsUpdated', {
+				changedValuesByRow: result.changedValuesByRow,
+				changedNodes: result.updated,
+				addedNodes: result.added,
+				removedNodes: result.removed,
+			});
+		}
+
+		return {
+			add: result.added,
+			remove: result.removed,
+			update: result.updated,
+		};
+	};
 
 	public getVisualRow = (index: number): VisualRow<TData> | null => {
 		return this.visualRows[index] ?? null;

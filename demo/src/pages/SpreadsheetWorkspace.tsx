@@ -44,20 +44,17 @@ function SpreadsheetWorkspaceInner({
 
 						const columns = params.api.getState().columns;
 						const rowIds = params.api.rows().getSelectedIds();
-						const batchUpdate = params.api.batch ? (cb: () => void) => params.api.batch(cb) : (cb: () => void) => cb();
-						batchUpdate(() => {
-							for (const rowId of rowIds) {
-								for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-									const col = columns[c];
-									if (!col || col.field === 'id') continue;
-									const val = params.api.getCellValue(rowId, col.field);
-									const num = Number(val);
-									if (!isNaN(num) && val !== '' && val !== null && val !== undefined) {
-										params.api.setCellValue(rowId, col.field, num + 100);
-									}
+						for (const rowId of rowIds) {
+							for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+								const col = columns[c];
+								if (!col || col.field === 'id') continue;
+								const val = params.api.getCellValue(rowId, col.field);
+								const num = Number(val);
+								if (!isNaN(num) && val !== '' && val !== null && val !== undefined) {
+									params.api.setCellValue(rowId, col.field, num + 100);
 								}
 							}
-						});
+						}
 					},
 				},
 				{
@@ -70,22 +67,19 @@ function SpreadsheetWorkspaceInner({
 
 						const columns = params.api.getState().columns;
 						const rowIds = params.api.rows().getSelectedIds();
-						const batchUpdate = params.api.batch ? (cb: () => void) => params.api.batch(cb) : (cb: () => void) => cb();
-						batchUpdate(() => {
-							for (const rowId of rowIds) {
-								for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-									const col = columns[c];
-									if (!col || col.field === 'id') continue;
-									const val = params.api.getCellValue(rowId, col.field);
-									const num = Number(val);
-									if (!isNaN(num) && val !== '' && val !== null && val !== undefined) {
-										const multiplied = num * 1.1;
-										const rounded = Math.round(multiplied * 1e10) / 1e10;
-										params.api.setCellValue(rowId, col.field, rounded);
-									}
+						for (const rowId of rowIds) {
+							for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+								const col = columns[c];
+								if (!col || col.field === 'id') continue;
+								const val = params.api.getCellValue(rowId, col.field);
+								const num = Number(val);
+								if (!isNaN(num) && val !== '' && val !== null && val !== undefined) {
+									const multiplied = num * 1.1;
+									const rounded = Math.round(multiplied * 1e10) / 1e10;
+									params.api.setCellValue(rowId, col.field, rounded);
 								}
 							}
-						});
+						}
 					},
 				},
 			],
