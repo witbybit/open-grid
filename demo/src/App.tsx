@@ -22,7 +22,7 @@ import { GridPageType } from './components/GridShared';
 
 export default function App() {
 	// Active Page Routing State via URL Hash Routing
-	const [activePage, setActivePage] = useState<GridPageType>('lab');
+	const [activePage, setActivePage] = useState<GridPageType>('perf');
 
 	// Collapsible Sidebars State
 	const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
@@ -36,7 +36,7 @@ export default function App() {
 	useEffect(() => {
 		const handleHashChange = () => {
 			const hash = window.location.hash.slice(1);
-			if (['lab', 'perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard', 'gantt', 'nested'].includes(hash)) {
+			if (['perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard', 'gantt', 'nested', 'lab'].includes(hash)) {
 				setActivePage(hash as any);
 			}
 		};
@@ -46,7 +46,7 @@ export default function App() {
 		if (window.location.hash) {
 			handleHashChange();
 		} else {
-			window.location.hash = 'lab';
+			window.location.hash = 'perf';
 		}
 
 		return () => window.removeEventListener('hashchange', handleHashChange);
@@ -117,8 +117,6 @@ export default function App() {
 
 	const activeApi = useMemo(() => {
 		switch (activePage) {
-			case 'lab':
-				return perfApi;
 			case 'perf':
 				return perfApi;
 			case 'server':
@@ -135,6 +133,8 @@ export default function App() {
 				return dashboardApi;
 			case 'gantt':
 				return ganttApi;
+			case 'lab':
+				return perfApi;
 			default:
 				return perfApi;
 		}
@@ -208,8 +208,6 @@ export default function App() {
 
 					{/* Visual Interactive Grid viewport */}
 					<div className='flex-1 min-h-0 flex flex-col'>
-						{activePage === 'lab' && <PerformanceLab />}
-
 						{activePage === 'perf' && (
 							<CalculationsArena
 								api={perfApi}
@@ -294,6 +292,8 @@ export default function App() {
 								pinRightColumns={pinRightColumns}
 							/>
 						)}
+
+						{activePage === 'lab' && <PerformanceLab />}
 
 						{activePage === 'nested' && <NestedTablesGrouping />}
 					</div>

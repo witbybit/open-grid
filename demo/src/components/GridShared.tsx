@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi, GridContextMenuOptions } from '@open-grid/react';
+import { GridChartOverlay } from './GridChartOverlay';
 
 export type GridPageType = 'lab' | 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt' | 'nested';
 // ============================================================================
@@ -472,6 +473,7 @@ export function GridView({
 	className = '',
 }: GridViewProps) {
 	const [lastClick, setLastClick] = React.useState<GridCellClickParams<any> | null>(null);
+	const [isChartOpen, setIsChartOpen] = React.useState(false);
 
 	// Resolve activeStore using either prop or React context hook, handling errors gracefully
 	let activeApi: GridApi<any>;
@@ -490,6 +492,26 @@ export function GridView({
 		activeApi.setRowHeights(rowHeights ?? {});
 		activeApi.setDefaultRowHeight(defaultHeight ?? 38);
 	}, [activeApi, rowHeights, defaultHeight]);
+
+	const mergedContextMenuOptions = React.useMemo(() => {
+		const baseOptions = contextMenuOptions || {};
+		const customItems = baseOptions.customItems || [];
+
+		const chartItem = {
+			id: 'chartRange',
+			label: 'Chart Selected Range',
+			icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"></path><line x1="3" y1="20" x2="21" y2="20"></line></svg>`,
+			action: () => {
+				setIsChartOpen(true);
+			},
+			disabled: (params: any) => !params.selection.bounds,
+		};
+
+		return {
+			...baseOptions,
+			customItems: [chartItem, ...customItems],
+		};
+	}, [contextMenuOptions]);
 
 	return (
 		<div
@@ -512,7 +534,7 @@ export function GridView({
 				pinBottomRows={pinBottomRows}
 				enableNavigation={true}
 				enableContextMenu={enableContextMenu}
-				contextMenuOptions={contextMenuOptions}
+				contextMenuOptions={mergedContextMenuOptions}
 				onCellClick={(params) => {
 					setLastClick(params);
 				}}
@@ -527,6 +549,7 @@ export function GridView({
 					},
 				}}
 			/>
+			{isChartOpen && <GridChartOverlay api={activeApi} onClose={() => setIsChartOpen(false)} />}
 		</div>
 	);
 }

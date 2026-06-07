@@ -26,12 +26,6 @@ interface ShowroomLeftSidebarProps {
 export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, setLeftSidebarCollapsed }: ShowroomLeftSidebarProps) {
 	const navItems = [
 		{
-			id: 'lab',
-			label: 'Performance Lab',
-			subtitle: '100k x 1k Glide',
-			icon: Gauge,
-		},
-		{
 			id: 'perf',
 			label: 'Risk & Greeks Engine',
 			subtitle: '10k Options • Live Stress',
@@ -84,6 +78,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Hierarchical Desk',
 			subtitle: 'Tree • Group • Detail',
 			icon: FolderTree,
+		},
+		{
+			id: 'lab',
+			label: 'Performance Lab',
+			subtitle: '100k x 1k Glide',
+			icon: Gauge,
 		},
 	] as const;
 
