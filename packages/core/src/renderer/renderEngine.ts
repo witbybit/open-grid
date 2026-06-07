@@ -72,6 +72,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private lastStyleSlots: unknown = undefined;
 	private lastLoading: unknown = undefined;
 
+	// Cached maximum scroll-left so the raw DOM scroll handler (120/sec on high-refresh
+	// displays) never needs to call getState() or geometry on the hot path.
+	private cachedMaxScrollLeft = 0;
+
+	// Reusable ScrollRenderContext updated in-place each scroll frame to avoid allocation.
+	private _scrollCtx!: ScrollRenderContext<TRowData>;
+
 	private readonly portalFlushBudget = 24;
 	private readonly postScrollDecorationBudget = 32;
 
@@ -164,6 +171,22 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	constructor(engine: GridEngine<TRowData>, api?: InternalGridApi<TRowData>) {
 		this.engine = engine;
 		this.api = api;
+		this._scrollCtx = {
+			isScrolling: true,
+			stateVersion: 0,
+			dataVersion: 0,
+			styleVersion: 0,
+			loadingVersion: 0,
+			activeEdit: null,
+			hasStyleHooks: false,
+			hasCustomRenderers: false,
+			displayedColumns: [],
+			columnPlans: [],
+			visibleColRange: { startIdx: 0, endIdx: 0 },
+			focusedCell: null,
+			selectionBounds: undefined,
+			canUseCachedDisplayValues: true,
+		};
 		this.portalMountManager = new PortalMountManager<TRowData>(engine);
 		this.geometryController = new GeometryController(engine);
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
@@ -260,6 +283,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.bindInvalidationSources();
 
+		// Prime the max-scroll cache so the first scroll events don't see a stale 0
+		this.updateCachedMaxScrollLeft();
+
 		// Run first layout calculation and repaint
 		this.engine.invalidation.consume();
 		this.fullPaint();
@@ -297,13 +323,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	/**
-	 * Scroll hot path
+	 * Scroll hot path — zero allocations, zero state reads.
+	 * cachedMaxScrollLeft is updated in flushScrollFrame/fullPaintInternal/geometry callbacks.
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number): void => {
-		const state = this.engine.stateManager.getState();
-		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
-		const maxScrollLeft = Math.max(0, totalWidth - this.engine.viewport.viewportWidth);
-		const clampedScrollLeft = Math.max(0, Math.min(maxScrollLeft, scrollLeft));
+		const clampedScrollLeft = Math.max(0, Math.min(this.cachedMaxScrollLeft, scrollLeft));
 		if (clampedScrollLeft !== scrollLeft && this.viewportRenderer.scrollViewport) {
 			this.viewportRenderer.scrollViewport.scrollLeft = clampedScrollLeft;
 		}
@@ -460,9 +484,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.viewportRenderer.syncViewportScrollFromDom();
 
 		const state = this.engine.stateManager.getState();
+
+		// Refresh the cached scroll-left bound using the already-read state — no extra
+		// state read. This handles viewport resizes that happened since the last frame.
+		this.cachedMaxScrollLeft = Math.max(0, this.engine.geometry.getTotalWidth(state.defaultColWidth) - this.engine.viewport.viewportWidth);
+
 		const nextWindow = applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits);
 
-		// Same window bailout path (Task 5)
+		// Same window bailout path
 		if (sameRenderedWindow(this.rowRenderer.currentWindow, nextWindow)) {
 			this.renderStats.scrollFrames++;
 			this.renderStats.sameWindowBailouts = (this.renderStats.sameWindowBailouts || 0) + 1;
@@ -487,24 +516,24 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			const colCount = displayedColumns.length;
 			const visibleColRange = this.engine.viewport.getVisibleColumnRange(colCount);
 
-			const ctx: ScrollRenderContext<TRowData> = {
-				isScrolling: true,
-				stateVersion: 0,
-				dataVersion: state.dataVersion,
-				styleVersion: this.rowRenderer.styleVersion,
-				loadingVersion: this.rowRenderer.loadingVersion,
-				activeEdit: state.activeEdit,
-				hasStyleHooks: !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender),
-				hasCustomRenderers: (this.cachedHasCustomRenderers ??= displayedColumns.some((c) => !!c.cellRenderer)),
-				displayedColumns,
-				columnPlans: (this.cachedColumnPlans ??= displayedColumns.map((c) => this.engine.columns.getColumnPlan(c.field)!)),
-				visibleColRange,
-				focusedCell: state.selection.focus,
-				selectionBounds: state.selection.bounds ?? undefined,
-				canUseCachedDisplayValues: true,
-			};
+			// Update the reusable ScrollRenderContext in-place — avoids one object
+			// allocation per scroll frame while keeping all cached references fresh.
+			const scrollCtx = this._scrollCtx;
+			scrollCtx.dataVersion = state.dataVersion;
+			scrollCtx.styleVersion = this.rowRenderer.styleVersion;
+			scrollCtx.loadingVersion = this.rowRenderer.loadingVersion;
+			scrollCtx.activeEdit = state.activeEdit;
+			scrollCtx.hasStyleHooks = !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender);
+			scrollCtx.hasCustomRenderers = this.cachedHasCustomRenderers ??= displayedColumns.some((c) => !!c.cellRenderer);
+			scrollCtx.displayedColumns = displayedColumns;
+			scrollCtx.columnPlans = this.cachedColumnPlans ??= displayedColumns.map((c) => this.engine.columns.getColumnPlan(c.field)!);
+			scrollCtx.visibleColRange = visibleColRange;
+			scrollCtx.focusedCell = state.selection.focus;
+			scrollCtx.selectionBounds = state.selection.bounds ?? undefined;
 
-			this.recycleViewport(true, ctx);
+			// Pass the already-computed nextWindow so rowRenderer.recycleViewport does not
+			// call computeRenderWindow a second time (duplicate binary searches + state read).
+			this.recycleViewport(true, scrollCtx, nextWindow);
 			this.rowRenderer.syncPinnedLanePositions(nextWindow);
 			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft);
 			const didSyncRange = this.headerRenderer.syncVisibleColumnRange();
@@ -574,6 +603,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
+	private updateCachedMaxScrollLeft(): void {
+		const state = this.engine.stateManager.getState();
+		this.cachedMaxScrollLeft = Math.max(0, this.engine.geometry.getTotalWidth(state.defaultColWidth) - this.engine.viewport.viewportWidth);
+	}
+
 	private bindInvalidationSources(): void {
 		const invalidateFull = () => {
 			clearColumnCaches();
@@ -614,12 +648,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.engine.invalidation.invalidateGeometry('columns');
 			this.engine.invalidation.invalidateViewport('columns');
 			this.engine.invalidation.invalidateHeaders('columns');
+			this.updateCachedMaxScrollLeft();
 			this.scheduler.requestFlush('columns');
 		};
 		const invalidateGeometryFull = () => {
 			this.geometryController.invalidateAll();
 			this.engine.invalidation.invalidateGeometry('geometry');
 			this.engine.invalidation.invalidateViewport('geometry');
+			this.updateCachedMaxScrollLeft();
 			this.scheduler.requestFlush('geometry');
 		};
 
@@ -869,9 +905,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
-	private recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>): void {
+	private recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
 		this.renderStats.viewportRecycles++;
-		this.rowRenderer.recycleViewport(isScrollFrameActive, ctx);
+		this.rowRenderer.recycleViewport(isScrollFrameActive, ctx, precomputedWindow);
 		if (!isScrollFrameActive && this.rowRenderer.currentWindow) {
 			this.rowRenderer.syncPinnedLanePositions(this.rowRenderer.currentWindow);
 		}
@@ -882,6 +918,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		const state = this.engine.stateManager.getState();
 		const colCount = this.engine.columns.getDisplayedColumnCount();
+
+		// Keep the cached max-scroll-left in sync after any full repaint
+		// (handles column adds/removes and viewport resizes funneled through full paint).
+		this.cachedMaxScrollLeft = Math.max(0, this.engine.geometry.getTotalWidth(state.defaultColWidth) - this.engine.viewport.viewportWidth);
 
 		this.viewportRenderer.syncSpacerAndLayers(state, colCount);
 		this.recycleViewport(false);

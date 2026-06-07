@@ -282,6 +282,21 @@ export class CustomRendererManager<TRowData = unknown> {
 	}
 
 	private rebindInstance(instance: RendererInstance<TRowData>, params: AcquireRendererParams<TRowData>): void {
+		// Detect whether any props the renderer cares about actually changed before
+		// notifying React — avoids a reconciliation round trip on stayed cells.
+		const needsUpdate =
+			instance.value !== params.value ||
+			instance.node !== params.node ||
+			instance.col !== params.col ||
+			instance.isEditing !== params.isEditing ||
+			instance.isLoading !== params.isLoading ||
+			instance.isFocused !== params.isFocused ||
+			instance.isSelected !== params.isSelected ||
+			instance.phase !== params.phase ||
+			instance.isScrolling !== params.isScrolling ||
+			instance.rendererKey !== params.rendererKey ||
+			instance.cellKey !== params.cellKey;
+
 		this.unregisterActive(instance);
 		instance.rendererKey = params.rendererKey;
 		instance.cellKey = params.cellKey;
@@ -304,19 +319,21 @@ export class CustomRendererManager<TRowData = unknown> {
 		this.removeSiblingContainers(instance.rendererKey, params.parentContainer, instance.container);
 		this.registerActive(instance);
 
-		this.onMountCellContent?.({
-			cellKey: params.cellKey,
-			container: instance.container,
-			value: params.value,
-			node: params.node,
-			col: params.col,
-			isEditing: params.isEditing,
-			isLoading: params.isLoading,
-			phase: params.phase,
-			isScrolling: params.isScrolling,
-			isFocused: params.isFocused,
-			isSelected: params.isSelected,
-		});
+		if (needsUpdate) {
+			this.onMountCellContent?.({
+				cellKey: params.cellKey,
+				container: instance.container,
+				value: params.value,
+				node: params.node,
+				col: params.col,
+				isEditing: params.isEditing,
+				isLoading: params.isLoading,
+				phase: params.phase,
+				isScrolling: params.isScrolling,
+				isFocused: params.isFocused,
+				isSelected: params.isSelected,
+			});
+		}
 	}
 
 	private removeSiblingContainers(rendererKey: string, parentContainer: HTMLElement, activeContainer: HTMLElement): void {

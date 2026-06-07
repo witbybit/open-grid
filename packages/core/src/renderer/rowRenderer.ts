@@ -49,6 +49,10 @@ export class RowRenderer<TRowData = unknown> {
 	public isScrollFrameActive = false;
 	public isScrolling = false;
 	public dirtyCellsMarkedDuringScroll = 0;
+
+	// Reusable Sets to avoid per-scroll-frame allocations in recycleViewport
+	private readonly _rowsEnteredSet = new Set<number>();
+	private readonly _rowsStayedSet = new Set<number>();
 	public postScrollDirtyCellsDecorated = 0;
 
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
@@ -213,16 +217,20 @@ export class RowRenderer<TRowData = unknown> {
 		}
 	}
 
-	public recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>): void {
+	public recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
 		this.isScrollFrameActive = isScrollFrameActive;
 		this.isScrolling = isScrollFrameActive || this.engine.isScrolling;
 
 		const state = this.engine.stateManager.getState();
-		const nextWindow = applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits, () => {
-			if (this.renderStats) {
-				this.renderStats.runtimeLimitsClamped = (this.renderStats.runtimeLimitsClamped || 0) + 1;
-			}
-		});
+		// Use the pre-computed window from flushScrollFrame when available to avoid
+		// a duplicate computeRenderWindow call (binary searches + state read) per frame.
+		const nextWindow =
+			precomputedWindow ??
+			applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits, () => {
+				if (this.renderStats) {
+					this.renderStats.runtimeLimitsClamped = (this.renderStats.runtimeLimitsClamped || 0) + 1;
+				}
+			});
 
 		const delta = diffRenderWindow(this.currentWindow, nextWindow);
 
@@ -309,9 +317,13 @@ export class RowRenderer<TRowData = unknown> {
 			}
 		}
 
-		// Pre-build sets for O(1) lookup inside loops (avoid O(n) Array.includes)
-		const rowsEnteredSet = new Set(delta.rowsEntered);
-		const rowsStayedSet = new Set(delta.rowsStayed);
+		// Reuse class-level Sets for O(1) lookup — avoids two allocations per scroll frame
+		const rowsEnteredSet = this._rowsEnteredSet;
+		const rowsStayedSet = this._rowsStayedSet;
+		rowsEnteredSet.clear();
+		rowsStayedSet.clear();
+		for (const r of delta.rowsEntered) rowsEnteredSet.add(r);
+		for (const r of delta.rowsStayed) rowsStayedSet.add(r);
 		const rowSlotCache = this.rowSlotCache;
 
 		// 3. Render/Reposition rows in current range
@@ -388,6 +400,10 @@ export class RowRenderer<TRowData = unknown> {
 			return { slot, visualRow };
 		};
 
+		// Hoist geometry constants that are constant across all rows in this viewport cycle
+		const hoistedTotalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
+		const hoistedTotalHeight = nextWindow.pinBottomRows > 0 ? this.engine.geometry.getTotalHeight(state.defaultRowHeight) : 0;
+
 		const renderRow = (r: number) => {
 			if (isScrollFrameActive) this.currentScrollRowsVisited++;
 			const result = getOrCreateRowSlot(r);
@@ -406,8 +422,7 @@ export class RowRenderer<TRowData = unknown> {
 			if (r < pinTopRows) {
 				rowTop = rowTop + scrollTop;
 			} else if (r >= nextWindow.rowCount - pinBottomRows) {
-				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
-				const bottomOffset = totalHeight - this.engine.geometry.rowTops[r];
+				const bottomOffset = hoistedTotalHeight - this.engine.geometry.rowTops[r];
 				rowTop = scrollTop + viewportHeight - bottomOffset;
 			}
 
@@ -482,7 +497,9 @@ export class RowRenderer<TRowData = unknown> {
 					columns,
 					isScrollFrameActive,
 					ctx,
-					rowsEnteredSet.has(r)
+					rowsEnteredSet.has(r),
+					state,
+					hoistedTotalWidth
 				);
 			} else if (visualRow.kind === 'data') {
 				this.releaseRowPortal(slot); // Clean up row portal host if shifting to data
@@ -496,7 +513,9 @@ export class RowRenderer<TRowData = unknown> {
 					isScrollFrameActive,
 					ctx,
 					'initial',
-					rowsEnteredSet.has(r)
+					rowsEnteredSet.has(r),
+					state,
+					hoistedTotalWidth
 				);
 			} else {
 				// Non-data portal group/detail rows
@@ -676,15 +695,18 @@ export class RowRenderer<TRowData = unknown> {
 		isScrollFrameActive: boolean,
 		ctx?: ScrollRenderContext<TRowData>,
 		phase: CellRendererPhase = 'initial',
-		rowEntered = false
+		rowEntered = false,
+		_hoistedState?: GridState<TRowData>,
+		_hoistedTotalWidth?: number
 	): void {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const colCount = columns.length;
 		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
-		// Hoist per-row constants out of the per-cell closure
-		const state = this.engine.stateManager.getState();
-		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
+		// Use hoisted state/totalWidth from recycleViewport when available to avoid
+		// redundant reads for each row in the same viewport cycle.
+		const state = _hoistedState ?? this.engine.stateManager.getState();
+		const totalWidth = _hoistedTotalWidth ?? this.engine.geometry.getTotalWidth(state.defaultColWidth);
 		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
 		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
 		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
@@ -912,14 +934,16 @@ export class RowRenderer<TRowData = unknown> {
 		columns: ColumnDef<TRowData>[],
 		isScrollFrameActive: boolean,
 		ctx?: ScrollRenderContext<TRowData>,
-		rowEntered = false
+		rowEntered = false,
+		_hoistedState?: GridState<TRowData>,
+		_hoistedTotalWidth?: number
 	): void {
 		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
 		const pinRightColumns = this.engine.viewport.pinRightColumns;
 		const colCount = columns.length;
 		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
-		const loadingState = this.engine.stateManager.getState();
-		const totalWidth = this.engine.geometry.getTotalWidth(loadingState.defaultColWidth);
+		const loadingState = _hoistedState ?? this.engine.stateManager.getState();
+		const totalWidth = _hoistedTotalWidth ?? this.engine.geometry.getTotalWidth(loadingState.defaultColWidth);
 		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
 		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
 		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
@@ -1388,12 +1412,17 @@ export class RowRenderer<TRowData = unknown> {
 		};
 
 		let processed = 0;
-		const allDirty = Array.from(this.dirtyCellsAfterScroll.values());
-		allDirty.sort((a, b) => getCellPriority(b) - getCellPriority(a));
+		// Precompute priority once per cell so the sort comparator is O(1) per comparison
+		// rather than calling getColumnIndex (a map lookup) O(n log n) times.
+		const allDirty: Array<{ cell: HTMLDivElement; priority: number }> = [];
+		for (const cell of this.dirtyCellsAfterScroll) {
+			allDirty.push({ cell, priority: getCellPriority(cell) });
+		}
+		allDirty.sort((a, b) => b.priority - a.priority);
 
-		const toProcess = allDirty.slice(0, maxCells);
-
-		for (const cell of toProcess) {
+		const limit = Math.min(allDirty.length, maxCells);
+		for (let i = 0; i < limit; i++) {
+			const { cell } = allDirty[i];
 			this.dirtyCellsAfterScroll.delete(cell);
 			const rowIndexStr = cell.dataset.rowIndex;
 			const colField = cell.dataset.colField;

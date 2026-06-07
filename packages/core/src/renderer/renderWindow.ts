@@ -94,14 +94,20 @@ export function getColIndices(w: RenderWindow): number[] {
 }
 
 export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: RenderWindowRuntimeLimits, onClamp?: () => void): RenderWindow {
-	const effectiveLimits = {
-		maxRenderedRows: 500,
-		maxRenderedCells: 20000,
-		suppressRenderedRangeLimit: false,
-		...limits,
-	};
+	if (limits?.suppressRenderedRangeLimit) return window;
 
-	if (effectiveLimits.suppressRenderedRangeLimit) return window;
+	const maxRenderedRows = limits?.maxRenderedRows ?? 500;
+	const maxRenderedCells = limits?.maxRenderedCells ?? 20000;
+
+	// Quick-exit: approximate bounds check before any object allocation.
+	// This is the common path — most frames are within limits.
+	const approxCenterRows = Math.max(0, window.rowEnd - window.rowStart + 1);
+	const approxCenterCols = Math.max(0, window.colEnd - window.colStart + 1);
+	const approxTotalRows = window.pinTopRows + approxCenterRows + window.pinBottomRows;
+	const approxTotalCols = window.pinLeftCols + approxCenterCols + window.pinRightCols;
+	if (approxTotalRows <= maxRenderedRows && approxTotalRows * approxTotalCols <= maxRenderedCells) {
+		return window;
+	}
 
 	const next = { ...window };
 	let clamped = false;
@@ -115,9 +121,9 @@ export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: Re
 		next.rowStart = Math.max(centerRowMin, Math.min(next.rowStart, centerRowMax));
 		next.rowEnd = Math.max(next.rowStart, Math.min(next.rowEnd, centerRowMax));
 
-		if (effectiveLimits.maxRenderedRows && effectiveLimits.maxRenderedRows > 0) {
+		if (maxRenderedRows > 0) {
 			const pinnedRows = pinTopRows + pinBottomRows;
-			const centerBudget = Math.max(1, effectiveLimits.maxRenderedRows - pinnedRows);
+			const centerBudget = Math.max(1, maxRenderedRows - pinnedRows);
 			const expectedRowEnd = Math.max(next.rowStart, Math.min(next.rowEnd, next.rowStart + centerBudget - 1));
 			if (expectedRowEnd < next.rowEnd) {
 				next.rowEnd = expectedRowEnd;
@@ -138,10 +144,10 @@ export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: Re
 		next.colStart = Math.max(centerColMin, Math.min(next.colStart, centerColMax));
 		next.colEnd = Math.max(next.colStart, Math.min(next.colEnd, centerColMax));
 
-		if (effectiveLimits.maxRenderedCells && effectiveLimits.maxRenderedCells > 0) {
+		if (maxRenderedCells > 0) {
 			const renderedRows = Math.max(1, getRowIndices(next).length);
 			const pinnedCols = pinLeftCols + pinRightCols;
-			const totalColsBudget = Math.max(1, Math.floor(effectiveLimits.maxRenderedCells / renderedRows));
+			const totalColsBudget = Math.max(1, Math.floor(maxRenderedCells / renderedRows));
 			const centerBudget = Math.max(1, totalColsBudget - pinnedCols);
 			const expectedColEnd = Math.max(next.colStart, Math.min(next.colEnd, next.colStart + centerBudget - 1));
 			if (expectedColEnd < next.colEnd) {

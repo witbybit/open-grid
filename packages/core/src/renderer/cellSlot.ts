@@ -88,25 +88,18 @@ export class CellSlot<TRowData = unknown> {
 		if (this.colIndex !== colIndex) this.colIndex = colIndex;
 		if (this.colField !== colField) {
 			this.colField = colField;
-			if (this.element.dataset.colField !== colField) {
-				this.element.dataset.colField = colField;
-				domUpdated = true;
-			}
+			this.element.dataset.colField = colField;
+			domUpdated = true;
 		}
 		if (this.rowIndex !== rowIndex) {
 			this.rowIndex = rowIndex;
-			const s = String(rowIndex);
-			if (this.element.dataset.rowIndex !== s) {
-				this.element.dataset.rowIndex = s;
-				domUpdated = true;
-			}
+			this.element.dataset.rowIndex = String(rowIndex);
+			domUpdated = true;
 		}
 		if (this.rowId !== rowId) {
 			this.rowId = rowId;
-			if (this.element.dataset.rowId !== rowId) {
-				this.element.dataset.rowId = rowId;
-				domUpdated = true;
-			}
+			this.element.dataset.rowId = rowId;
+			domUpdated = true;
 		}
 
 		// Position — one DOM write per changed axis, pin-right uses right, others use left
@@ -207,6 +200,9 @@ export class CellSlot<TRowData = unknown> {
 		this.lastPortalKey = undefined;
 		delete this.element.dataset.cellKey;
 		delete this.element.dataset.contentMode;
+		if (this.element.hasAttribute('tabindex')) {
+			this.element.removeAttribute('tabindex');
+		}
 	}
 
 	public unbindCold(): void {
