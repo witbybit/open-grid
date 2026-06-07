@@ -199,6 +199,48 @@ function makeColumns(mode: RendererMode): ColumnDef<LabRow>[] {
 	];
 }
 
+interface TelemetryStatsHandle {
+	refresh: () => void;
+}
+
+const TelemetryStats = React.forwardRef<TelemetryStatsHandle, { api: ReturnType<typeof useClientGrid<LabRow>> }>(({ api }, ref) => {
+	const [stats, setStats] = useState(() => api.getRenderStats());
+
+	const refresh = useCallback(() => {
+		setStats(api.getRenderStats());
+	}, [api]);
+
+	React.useImperativeHandle(ref, () => ({
+		refresh,
+	}));
+
+	useEffect(() => {
+		const id = window.setInterval(refresh, 250);
+		return () => window.clearInterval(id);
+	}, [refresh]);
+
+	return (
+		<div className='grid grid-cols-2 xl:grid-cols-4 gap-3 shrink-0'>
+			{[
+				['Frames', stats.scrollFrames],
+				['Cells Written', stats.cellsWrittenDuringScroll],
+				['Rows Visited', stats.rowsVisitedDuringScroll],
+				['Portal Mounts', stats.portalMountsDuringScroll],
+				['State Reads', stats.stateReadsDuringScroll],
+				['Plan Version', stats.compiledPlanVersion ?? 0],
+				['Same Window', stats.sameWindowBailouts],
+				['DOM Releases', stats.hotDomReleases],
+			].map(([label, value]) => (
+				<div key={label} className='rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2'>
+					<div className='text-[9px] uppercase tracking-widest text-slate-500 font-extrabold'>{label}</div>
+					<div className='font-mono text-lg font-black text-emerald-300'>{String(value)}</div>
+				</div>
+			))}
+		</div>
+	);
+});
+TelemetryStats.displayName = 'TelemetryStats';
+
 export default function PerformanceLab() {
 	const [mode, setMode] = useState<RendererMode>('dom');
 	const rows = useMemo(() => makeRows(100000), []);
@@ -212,12 +254,7 @@ export default function PerformanceLab() {
 		getRowId: (row) => row.id,
 	});
 	const hostRef = useRef<HTMLDivElement>(null);
-	const [stats, setStats] = useState(api.getRenderStats());
-
-	useEffect(() => {
-		const id = window.setInterval(() => setStats(api.getRenderStats()), 250);
-		return () => window.clearInterval(id);
-	}, [api]);
+	const statsPanelRef = useRef<TelemetryStatsHandle>(null);
 
 	const runGlide = useCallback(() => {
 		const scroller = hostRef.current?.querySelector<HTMLDivElement>('.og-scroll-viewport');
@@ -231,30 +268,14 @@ export default function PerformanceLab() {
 			scroller.scrollLeft = (frame * 190) % 80000;
 			scroller.dispatchEvent(new Event('scroll'));
 			if (frame < maxFrames) requestAnimationFrame(tick);
-			else setStats(api.getRenderStats());
+			else statsPanelRef.current?.refresh();
 		};
 		requestAnimationFrame(tick);
 	}, [api]);
 
 	return (
 		<div className='flex h-full w-full flex-col gap-4 overflow-hidden'>
-			<div className='grid grid-cols-2 xl:grid-cols-4 gap-3 shrink-0'>
-				{[
-					['Frames', stats.scrollFrames],
-					['Cells Written', stats.cellsWrittenDuringScroll],
-					['Rows Visited', stats.rowsVisitedDuringScroll],
-					['Portal Mounts', stats.portalMountsDuringScroll],
-					['State Reads', stats.stateReadsDuringScroll],
-					['Plan Version', stats.compiledPlanVersion ?? 0],
-					['Same Window', stats.sameWindowBailouts],
-					['DOM Releases', stats.hotDomReleases],
-				].map(([label, value]) => (
-					<div key={label} className='rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2'>
-						<div className='text-[9px] uppercase tracking-widest text-slate-500 font-extrabold'>{label}</div>
-						<div className='font-mono text-lg font-black text-emerald-300'>{String(value)}</div>
-					</div>
-				))}
-			</div>
+			<TelemetryStats ref={statsPanelRef} api={api} />
 
 			<div className='flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-3 shrink-0'>
 				<div className='flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-300'>
