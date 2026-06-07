@@ -1,5 +1,6 @@
 export { OpenGrid, GridProvider } from './OpenGrid.js';
 export type { OpenGridProps } from './OpenGrid.js';
+export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
 export { useClientGrid, useServerGrid } from './useGrid.js';
 export {

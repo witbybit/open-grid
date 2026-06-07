@@ -209,6 +209,7 @@ function SidebarPanelsDemoInner({ api }: { api: ReturnType<typeof useClientGrid<
 					api={api}
 					pinLeftColumns={1}
 					enableContextMenu={true}
+					enableChart
 					sidebar={{
 						panels: ['columns', 'filters', 'sort'],
 						defaultOpen: 'columns',

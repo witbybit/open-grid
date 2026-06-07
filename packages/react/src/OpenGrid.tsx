@@ -14,6 +14,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, us
 import { PortalManager, createPortalStore } from './GridPortal.js';
 import { useGridNavigationController } from './hooks.js';
 import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
+import { GridChartOverlay } from './chart/GridChartOverlay.js';
 
 export const GridApiContext = createContext<GridApi<unknown> | null>(null);
 
@@ -45,6 +46,11 @@ export interface OpenGridProps<TRowData = unknown> {
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	/** Attach a built-in animated sidebar panel strip inside the grid. */
 	sidebar?: GridSidebarConfig<TRowData>;
+	/**
+	 * Enable the built-in chart overlay (triggered via `api.openChart()` or the
+	 * default "Chart Selection" context-menu item).  Default: false.
+	 */
+	enableChart?: boolean;
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
@@ -77,6 +83,7 @@ function OpenGridInner<TRowData = unknown>({
 	groupRowRenderer,
 	detailRowRenderer,
 	sidebar,
+	enableChart = false,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -416,28 +423,31 @@ function OpenGridInner<TRowData = unknown>({
 	const sidebarPosition = sidebar?.position ?? 'right';
 
 	return (
-		<div
-			style={{
-				width: '100%',
-				height: '100%',
-				display: hasSidebar ? 'flex' : undefined,
-				flexDirection: hasSidebar ? (sidebarPosition === 'left' ? 'row-reverse' : 'row') : undefined,
-			}}
-		>
+		<>
 			<div
-				ref={containerRef}
-				tabIndex={-1}
 				style={{
-					flex: hasSidebar ? 1 : undefined,
-					width: hasSidebar ? undefined : '100%',
+					width: '100%',
 					height: '100%',
-					position: 'relative',
-					minWidth: hasSidebar ? 0 : undefined,
+					display: hasSidebar ? 'flex' : undefined,
+					flexDirection: hasSidebar ? (sidebarPosition === 'left' ? 'row-reverse' : 'row') : undefined,
 				}}
 			>
-				<PortalManager store={portalStore} api={api} groupRowRenderer={groupRowRenderer} detailRowRenderer={detailRowRenderer} />
+				<div
+					ref={containerRef}
+					tabIndex={-1}
+					style={{
+						flex: hasSidebar ? 1 : undefined,
+						width: hasSidebar ? undefined : '100%',
+						height: '100%',
+						position: 'relative',
+						minWidth: hasSidebar ? 0 : undefined,
+					}}
+				>
+					<PortalManager store={portalStore} api={api} groupRowRenderer={groupRowRenderer} detailRowRenderer={detailRowRenderer} />
+				</div>
+				{hasSidebar && <GridSidebar<TRowData> api={api} config={sidebar!} />}
 			</div>
-			{hasSidebar && <GridSidebar<TRowData> api={api} config={sidebar!} />}
-		</div>
+			{enableChart && <GridChartOverlay api={api} />}
+		</>
 	);
 }

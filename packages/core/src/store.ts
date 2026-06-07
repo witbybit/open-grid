@@ -606,6 +606,9 @@ export interface GridState<TRowData = unknown> {
 	// Sidebar UI state
 	sidebarOpenPanel?: string | null;
 
+	// Chart overlay UI state
+	chartOpen?: boolean;
+
 	// Tree / Grouping / Master-Detail State
 	groupBy?: string[];
 	getParentId?: (row: TRowData) => string | null | undefined;
@@ -787,6 +790,11 @@ export interface GridApi<TRowData = unknown> {
 	closePanel(): void;
 	togglePanel(panelId: string): void;
 	getOpenPanel(): string | null;
+	// Chart overlay API
+	openChart(): void;
+	closeChart(): void;
+	toggleChart(): void;
+	isChartOpen(): boolean;
 	destroy(): void;
 	getRenderStats(): RenderStats;
 	resetRenderStats(): void;
@@ -1041,6 +1049,22 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getOpenPanel = (): string | null => {
 		return this.state.sidebarOpenPanel ?? null;
+	};
+
+	public openChart = (): void => {
+		this.setState({ chartOpen: true });
+	};
+
+	public closeChart = (): void => {
+		this.setState({ chartOpen: false });
+	};
+
+	public toggleChart = (): void => {
+		this.setState({ chartOpen: !this.state.chartOpen });
+	};
+
+	public isChartOpen = (): boolean => {
+		return this.state.chartOpen ?? false;
 	};
 
 	public setStyleSlots = (styleSlots: GridStyleSlots<TRowData> | undefined): void => {
