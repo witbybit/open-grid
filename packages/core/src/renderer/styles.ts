@@ -372,40 +372,82 @@ export const CORE_STYLES = `
 
   .og-header-cell-movable {
     cursor: grab;
+    /* Transitions apply to pickup (class added) and drop (class removed).
+       transform is on the inline style so it animates here too. */
+    transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, opacity 0.15s ease;
   }
 
   .og-header-cell-dragging {
     cursor: grabbing;
-    opacity: 0.62;
-    background-color: color-mix(in srgb, var(--og-focus-ring) 12%, var(--og-header-bg));
+    opacity: 0.95;
+    background-color: color-mix(in srgb, var(--og-focus-ring) 20%, var(--og-header-bg));
+    /* transform is composited inline by headerRenderer — scale(1.035) translateY(-2px) */
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55),
+                0 0 0 1.5px var(--og-focus-ring),
+                0 0 20px rgba(59, 130, 246, 0.2);
+    z-index: 10;
+  }
+
+  /* Dim all non-dragging header cells so the lifted column pops out visually */
+  .og-col-reordering .og-header-cell:not(.og-header-cell-dragging) {
+    opacity: 0.38;
+    transition: opacity 0.15s ease;
   }
 
   .og-column-drop-indicator {
     position: absolute;
     top: 0;
-    width: 3px;
-    background-color: var(--og-focus-ring);
-    border-radius: 999px;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25), 0 0 12px var(--og-focus-ring);
+    width: 2px;
+    /* Fade in/out at the ends so it doesn't look clipped */
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      var(--og-focus-ring) 6%,
+      var(--og-focus-ring) 94%,
+      transparent 100%
+    );
+    box-shadow: 0 0 8px var(--og-focus-ring), 0 0 2px rgba(255, 255, 255, 0.25);
     pointer-events: none;
     z-index: 60;
   }
+
+  /* White-fill circle caps with blue ring — crisp insertion-point markers */
+  .og-column-drop-indicator::before,
+  .og-column-drop-indicator::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid var(--og-focus-ring);
+    box-shadow: 0 0 8px var(--og-focus-ring);
+  }
+
+  .og-column-drop-indicator::before { top: -5px; }
+  .og-column-drop-indicator::after  { bottom: -5px; }
 
   .og-column-drag-ghost {
     position: fixed;
     top: 0;
     left: 0;
-    max-width: min(260px, calc(100vw - 24px));
-    padding: 7px 11px;
-    border: 1px solid color-mix(in srgb, var(--og-focus-ring) 52%, rgba(255, 255, 255, 0.24));
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--og-header-bg) 88%, var(--og-focus-ring));
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+    max-width: min(240px, calc(100vw - 24px));
+    padding: 7px 12px 7px 9px;
+    border: 1px solid color-mix(in srgb, var(--og-focus-ring) 60%, transparent);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--og-header-bg) 80%, var(--og-focus-ring));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55),
+                0 4px 12px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.08) inset;
     color: var(--og-header-text);
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.03em;
-    line-height: 1.1;
+    letter-spacing: 0.04em;
+    line-height: 1;
     overflow: hidden;
     pointer-events: none;
     text-overflow: ellipsis;
@@ -413,6 +455,18 @@ export const CORE_STYLES = `
     user-select: none;
     white-space: nowrap;
     z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  /* SVG drag-handle icon injected by JS */
+  .og-drag-ghost-icon {
+    width: 10px;
+    height: 16px;
+    opacity: 0.45;
+    flex-shrink: 0;
+    color: var(--og-header-text);
   }
 
   .og-selection-border {

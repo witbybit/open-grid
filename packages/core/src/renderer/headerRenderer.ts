@@ -202,12 +202,13 @@ export class HeaderRenderer<TRowData = unknown> {
 				className += ' og-header-cell-movable';
 			}
 			const columnInteractions = this.columnInteractionsGetter();
-			if (columnInteractions.isDraggingColumn(col.field)) {
+			const isDraggingThis = columnInteractions.isDraggingColumn(col.field);
+			if (isDraggingThis) {
 				className += ' og-header-cell-dragging';
 			}
 
 			if (headerCell.className !== className) headerCell.className = className;
-			const nextTransform = `translate3d(${cellLeft}px, 0, 0)`;
+			const nextTransform = isDraggingThis ? `translate3d(${cellLeft}px, -2px, 0) scale(1.035)` : `translate3d(${cellLeft}px, 0, 0)`;
 			if (headerCell.style.transform !== nextTransform) headerCell.style.transform = nextTransform;
 			const nextWidth = `${cellWidth}px`;
 			if (headerCell.style.width !== nextWidth) headerCell.style.width = nextWidth;
