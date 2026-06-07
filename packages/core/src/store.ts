@@ -1267,10 +1267,26 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setRowHeights = (rowHeights: Record<string, number> | undefined): void => {
-		this.engine.stateManager.setState({ rowHeights });
+		const current = this.state.rowHeights;
+		const next = rowHeights ?? {};
+		const currentKeys = Object.keys(current);
+		const nextKeys = Object.keys(next);
+		if (currentKeys.length === nextKeys.length) {
+			let equal = true;
+			for (const key of currentKeys) {
+				if (current[key] !== next[key]) {
+					equal = false;
+					break;
+				}
+			}
+			if (equal) return;
+		}
+		this.engine.stateManager.setState({ rowHeights: next });
 	};
 
 	public setDefaultRowHeight = (defaultRowHeight?: number | undefined): void => {
+		if (defaultRowHeight === undefined) return;
+		if (this.state.defaultRowHeight === defaultRowHeight) return;
 		this.engine.stateManager.setState({ defaultRowHeight });
 	};
 

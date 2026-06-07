@@ -1271,4 +1271,37 @@ describe('GridStore undo and redo functionality', () => {
 
 		controller.dispose();
 	});
+
+	it('avoids redundant state updates and geometry version increments on setRowHeights and setDefaultRowHeight', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			defaultRowHeight: 40,
+			rowHeights: { '1': 60 },
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: store.getState().columns,
+		});
+
+		const initialPlan = store.engine.columns.getCompiledPlan();
+		const initialPlanVersion = initialPlan.version;
+		const initialGeometryVersion = store.engine.geometryVersion;
+
+		// Call setRowHeights with identical content but a new object reference
+		store.setRowHeights({ '1': 60 });
+		expect(store.engine.columns.getCompiledPlan().version).toBe(initialPlanVersion);
+		expect(store.engine.geometryVersion).toBe(initialGeometryVersion);
+
+		// Call setDefaultRowHeight with identical value
+		store.setDefaultRowHeight(40);
+		expect(store.engine.columns.getCompiledPlan().version).toBe(initialPlanVersion);
+		expect(store.engine.geometryVersion).toBe(initialGeometryVersion);
+
+		// Verify updates still apply when different
+		store.setRowHeights({ '1': 80 });
+		expect(store.engine.columns.getCompiledPlan().version).toBeGreaterThan(initialPlanVersion);
+		expect(store.engine.geometryVersion).toBeGreaterThan(initialGeometryVersion);
+
+		controller.dispose();
+	});
 });

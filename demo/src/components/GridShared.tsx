@@ -454,13 +454,15 @@ export interface GridViewProps {
 	className?: string;
 }
 
+const EMPTY_ROW_HEIGHTS = {};
+
 export function GridView({
 	api,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 	pinTopRows = 0,
 	pinBottomRows = 0,
-	rowHeights = {},
+	rowHeights = EMPTY_ROW_HEIGHTS,
 	defaultHeight = 38,
 	onCellValueChanged = () => {},
 	editTrigger = 'doubleClick',
