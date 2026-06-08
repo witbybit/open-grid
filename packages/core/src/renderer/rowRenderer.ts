@@ -35,6 +35,8 @@ import {
 	type RenderWindow,
 } from './renderWindow.js';
 import { createEditRendererKey, createSlotRendererKey } from './identityKeys.js';
+import type { SlotRuntimeStats } from './slotRuntimeStats.js';
+import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 
 export class RowRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -43,16 +45,22 @@ export class RowRenderer<TRowData = unknown> {
 	public readonly portalMountManager: PortalMountManager<TRowData>;
 	private readonly cellRenderer: CellRenderer;
 	private readonly viewportRenderer: ViewportRenderer<TRowData>;
+	/** Phase 7 — Real full-width row renderer (group/detail/footer/loading-fw). */
+	private fullWidthRenderer!: FullWidthRowRenderer<TRowData>;
 
-	// ── Phase 2: Stable row slot pool ─────────────────────────────────────────────────
+	// ── Stable slot pool ──────────────────────────────────────────────────────────────
 	public rowSlotPool!: RowSlotPool<TRowData>;
 
 	/**
 	 * Lookup: visualRowIndex → RowSlot.
-	 * Rebuilt every recycleViewport call from the pool positions.
-	 * O(n) rebuild; exists purely so external callers (repaint, decorate) can look up slots.
+	 * Derived from slot bindings — rebuilt at the end of every recycleViewport call.
+	 * This is NOT the primary lifecycle owner; rowSlotPool is.
 	 */
 	public activeRows = new Map<number, RowSlot<TRowData>>();
+	/** Alias for activeRows — the spec name for the derived lookup map. */
+	public get visualIndexToSlot(): Map<number, RowSlot<TRowData>> {
+		return this.activeRows;
+	}
 	public currentWindow: RenderWindow | null = null;
 
 	public dirtyCellsAfterScroll = new Set<HTMLDivElement>();
@@ -79,8 +87,22 @@ export class RowRenderer<TRowData = unknown> {
 	public dirtyCellsMarkedDuringScroll = 0;
 
 	// Phase 10: stable-slot virtualization stats
-	public slotStats = {
+	public slotStats: SlotRuntimeStats = {
+		rowSlotCount: 0,
+		cellSlotCount: 0,
+		rowSlotBindsDuringScroll: 0,
+		cellSlotBindsDuringScroll: 0,
+		rowDomAppendsDuringScroll: 0,
+		rowDomRemovesDuringScroll: 0,
+		cellDomAppendsDuringScroll: 0,
+		cellDomRemovesDuringScroll: 0,
 		sameWindowBailouts: 0,
+		fullWidthModeSwitchesDuringScroll: 0,
+		customRebindsDuringScroll: 0,
+		customWarmMovesDeferredDuringScroll: 0,
+		customWarmMovesFlushedAfterScroll: 0,
+		customColdMountsDuringScroll: 0,
+		// Legacy counters kept for backward compat
 		rowSlotAppendsTotal: 0,
 		rowSlotRemovesTotal: 0,
 		cellAppendsTotal: 0,
@@ -89,8 +111,6 @@ export class RowRenderer<TRowData = unknown> {
 		enteredOnlyFrames: 0,
 	};
 
-	// Reusable sets — avoid per-frame allocations
-	private readonly _rowsEnteredSet = new Set<number>();
 	public postScrollDirtyCellsDecorated = 0;
 
 	// Pre-allocated priority buckets for decorateDirtyCellsAfterScroll — zero allocation per scroll idle pass.
@@ -115,6 +135,7 @@ export class RowRenderer<TRowData = unknown> {
 
 	public mount(_estRows: number): void {
 		this.rowSlotPool = new RowSlotPool<TRowData>(this.viewportRenderer.rowsContainer!);
+		this.fullWidthRenderer = new FullWidthRowRenderer<TRowData>(this.portalMountManager, this.rowPortalHosts);
 	}
 
 	public unmount(): void {
@@ -132,18 +153,20 @@ export class RowRenderer<TRowData = unknown> {
 	}
 
 	public clearActiveRows(): void {
-		// Release portals for all active rows, then destroy the pool
+		// Release portals for all slots, then destroy the pool.
 		for (const slot of this.rowSlotPool?.getSlots() ?? []) {
 			this.releaseRowPortal(slot);
-			// Release any cell portals
 			slot.forEachCell((cell) => {
 				if (cell.lastPortalKey) this.releaseCellPortal(cell.element, false, 'destroyed');
 			});
 		}
 		this.rowSlotPool?.destroy();
-		// Re-create pool attached to container (mount might not be re-called)
+		// Re-create pool and fullWidthRenderer (mount might not be re-called).
 		if (this.viewportRenderer.rowsContainer) {
 			this.rowSlotPool = new RowSlotPool<TRowData>(this.viewportRenderer.rowsContainer);
+		}
+		if (!this.fullWidthRenderer) {
+			this.fullWidthRenderer = new FullWidthRowRenderer<TRowData>(this.portalMountManager, this.rowPortalHosts);
 		}
 		this.activeRows.clear();
 	}
@@ -234,7 +257,14 @@ export class RowRenderer<TRowData = unknown> {
 		}
 	}
 
-	// ── Phase 3: Core recycleViewport — stable slot virtualization ───────────────────
+	// ── Slot-based viewport virtualization core ─────────────────────────────────────
+	//
+	// Architecture (from spec Phase 2-3):
+	//   rowSlots[i] always represents viewport position i.
+	//   slot[0] → allRows[0], slot[1] → allRows[1], ...
+	//   When the render window shifts, slots rebind to new visual rows.
+	//   The slot DOM element never moves; only the binding changes.
+	//   activeRows (visualIndexToSlot) is rebuilt from slot bindings after each frame.
 
 	public recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
 		this.isScrollFrameActive = isScrollFrameActive;
@@ -249,13 +279,15 @@ export class RowRenderer<TRowData = unknown> {
 				}
 			});
 
-		// ── Phase 3: Same-window bailout ─────────────────────────────────────────────
+		// ── Same-window bailout ───────────────────────────────────────────────────────
+		// If everything is unchanged (rowStart, rowEnd, colStart, colEnd, scroll geometry),
+		// skip all row slot binding, cell slot binding, and custom renderer work.
 		if (isScrollFrameActive && sameRenderedWindow(this.currentWindow, nextWindow)) {
 			this.slotStats.sameWindowBailouts++;
 			return;
 		}
 
-		// Compute delta for stats and "entered rows only" optimisation
+		// Compute delta — needed for column layout change detection and stats.
 		const delta = diffRenderWindow(this.currentWindow, nextWindow);
 
 		if (isScrollFrameActive && this.renderStats) {
@@ -277,42 +309,23 @@ export class RowRenderer<TRowData = unknown> {
 		const columns = plan.displayedColumns;
 		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
 
-		// ── Phase 2: Identity-stable slot assignment ────────────────────────────────
-		//
-		// Each row KEEPS its slot across frames for as long as it remains in the
-		// rendered window. Only entering/exiting rows swap slots — stayed rows are
-		// 100% skipped in the hot path (no DOM work, no portal mounts).
-		//
-		// Data structures:
-		//   activeRows : Map<rowIndex, RowSlot>  — persists across frames
-		//   rowSlotPool free-queue               — unassigned, ready-to-take slots
-		//
-		const allRows = getRowIndices(nextWindow);
-		const totalSlots = allRows.length;
-		const prevSlotCount = this.rowSlotPool.count;
+		// ── Slot count management ─────────────────────────────────────────────────────
+		// Stable slot assignment: rows that are still in the window keep their current
+		// slot (isRowRebind = false), preserving their custom-live portals in place.
+		// Only entering/exiting rows use recycled slots (isRowRebind = true).
+		const sortedRows = getRowIndices(nextWindow);
+		const totalSlots = sortedRows.length;
+		const allRows = this._computeStableSlotRows(sortedRows);
 
 		this.rowSlotPool.resetScrollStats();
 
-		// Step A: Release exiting rows — evacuate their portals, unbind, return slot to free queue.
-		//         (On the very first frame currentWindow is null → delta.rowsExited is empty.)
-		for (const r of delta.rowsExited) {
-			const slot = this.activeRows.get(r);
-			if (slot) {
-				// Track recycled rows for scroll stats.
-				if (isScrollFrameActive) this.currentScrollRowsRecycled++;
-				// Release row portal (for full-width rows: group, detail, footer).
+		// Pre-evacuate portals for slots being destroyed (only runs when pool shrinks).
+		const prevSlotCount = this.rowSlotPool.count;
+		if (prevSlotCount > totalSlots) {
+			for (let i = totalSlots; i < prevSlotCount; i++) {
+				const slot = this.rowSlotPool.getSlot(i);
+				if (!slot) continue;
 				this.releaseRowPortal(slot);
-				// Evacuate cell portals using the scroll-specific path (releaseCellForScroll).
-				// This immediately moves the portal's DOM container to the hidden warm-cache
-				// container — keeping it connected to the document (so React/portal lifecycles
-				// stay intact) but removing it from inside `.og-cell` (evacuation). This avoids:
-				//   1. Firing onUnmountCellContent during the scroll frame (deferred by design).
-				//   2. Incrementing portalReleasesDuringScroll (customRendererManager handles it).
-				//   3. Leaving stale portal DOM inside a recycled cell slot.
-				// Using forceDeferred=undefined lets releaseCellPortal choose based on
-				// isScrollFrameActive (always true here), which routes to releaseCellForScroll.
-				// After evacuating, clear lastPortalKey and dataset.cellKey so the recycled
-				// slot doesn't appear to still hold a portal when the entering row binds.
 				slot.forEachCell((cell) => {
 					if (cell.lastPortalKey) {
 						this.releaseCellPortal(cell.element, undefined, 'scrolled-out');
@@ -320,36 +333,17 @@ export class RowRenderer<TRowData = unknown> {
 						delete cell.element.dataset['cellKey'];
 					}
 				});
-				slot.unbindHot();
-				this.activeRows.delete(r);
-				this.rowSlotPool.releaseSlot(slot);
 			}
 		}
 
-		// Step B: Grow pool if entering rows outnumber freed slots.
-		if (totalSlots > this.rowSlotPool.count) {
-			this.rowSlotPool.growTo(totalSlots, isScrollFrameActive);
-		}
-
-		// Step C: Assign free slots to entering rows.
-		//         (Includes brand-new slots created in step B.)
-		for (const r of delta.rowsEntered) {
-			const slot = this.rowSlotPool.acquireSlot(isScrollFrameActive);
-			this.activeRows.set(r, slot);
-		}
-
-		// Step D: Shrink pool if free slots are excess (pool grew in a prior frame
-		//         but the viewport has since shrunk).
-		if (this.rowSlotPool.count > totalSlots) {
-			this.rowSlotPool.shrinkFreeBy(this.rowSlotPool.count - totalSlots, isScrollFrameActive);
-		}
+		this.rowSlotPool.ensureSlotCount(totalSlots, isScrollFrameActive);
 
 		if (isScrollFrameActive) {
 			this.slotStats.rowSlotAppendsTotal += this.rowSlotPool.slotAppendCount;
 			this.slotStats.rowSlotRemovesTotal += this.rowSlotPool.slotRemoveCount;
 		}
 
-		// ── Phase 7: Column layout constants ─────────────────────────────────────────
+		// ── Column layout constants ───────────────────────────────────────────────────
 		const pinLeftColumns = nextWindow.pinLeftCols;
 		const pinRightColumns = nextWindow.pinRightCols;
 		const colCount = columns.length;
@@ -358,79 +352,44 @@ export class RowRenderer<TRowData = unknown> {
 		const centerColEnd = nextWindow.colEnd;
 		const centerColCount = Math.max(0, centerColEnd - centerColStart + 1);
 
-		// ── Determine rebind scope ────────────────────────────────────────────────────
-		// Identity-stable "entered-only" optimisation:
-		//   - Scroll frame with no column/pinned changes: ONLY bind newly-entered rows.
-		//     Stayed rows keep their slot assignment and all DOM content unchanged.
-		//   - Column layout changed, pinned offset changed, pool resized, or non-scroll
-		//     frame (initial paint / forced repaint): rebind ALL rows.
+		// Column layout change detection — used for full vs partial cell rebind.
 		const columnLayoutChanged = delta.colsEntered.length > 0 || delta.colsExited.length > 0;
-		// Pinned rows change their CSS top on every vertical scroll frame (they "follow"
-		// scrollTop). However this does NOT require a full rebind of every stayed row —
-		// only the pinned rows themselves need position recalculation.
-		const pinnedScrollOffsetChanged =
-			!!this.currentWindow &&
-			(nextWindow.pinTopRows > 0 || nextWindow.pinBottomRows > 0) &&
-			this.currentWindow.scrollTop !== nextWindow.scrollTop;
-		// rebindAll = true forces every visible row to be re-processed.
-		// pinnedScrollOffsetChanged and slotPoolResized are intentionally excluded:
-		//   - pinnedScrollOffsetChanged: pinned rows added selectively to rowsToProcess below.
-		//   - slotPoolResized: entering rows are already in delta.rowsEntered; rebinding ALL
-		//     stayed rows when the pool grows by just 1 is unnecessary and costly.
-		const rebindAll = !isScrollFrameActive || columnLayoutChanged;
 
 		if (isScrollFrameActive) {
-			if (rebindAll) this.slotStats.fullRebindFrames++;
+			if (columnLayoutChanged) this.slotStats.fullRebindFrames++;
 			else this.slotStats.enteredOnlyFrames++;
 		}
 
-		const rowsEnteredSet = this._rowsEnteredSet;
-		rowsEnteredSet.clear();
-		for (const r of delta.rowsEntered) rowsEnteredSet.add(r);
-
 		// Hoisted constants
-		const hoistedTotalWidth = plan.totalWidth;
 		const hoistedTotalHeight = nextWindow.pinBottomRows > 0 ? this.engine.geometry.getTotalHeight(state.defaultRowHeight) : 0;
 
-		// ── Phase 3+4: Bind slots ─────────────────────────────────────────────────────
-		//
-		// Identity-stable "entered-only" optimisation:
-		//   rebindAll=true               → all visible rows
-		//   pinnedScrollOffsetChanged    → entered rows + pinned rows (position update only)
-		//   neither                      → entered rows only (stayed rows: zero work)
-		//
-		let rowsToProcess: number[];
-		if (rebindAll) {
-			rowsToProcess = allRows;
-		} else if (pinnedScrollOffsetChanged) {
-			// Only entered rows + pinned rows need processing. Stayed non-pinned rows
-			// retain their existing slot/cell content — no DOM work required.
-			rowsToProcess = [...delta.rowsEntered];
-			for (let pr = 0; pr < nextWindow.pinTopRows; pr++) {
-				if (!rowsEnteredSet.has(pr)) rowsToProcess.push(pr);
-			}
-			const pinBottomStart = Math.max(0, nextWindow.rowCount - nextWindow.pinBottomRows);
-			for (let pr = pinBottomStart; pr < nextWindow.rowCount; pr++) {
-				if (!rowsEnteredSet.has(pr)) rowsToProcess.push(pr);
-			}
-		} else {
-			rowsToProcess = delta.rowsEntered;
-		}
+		// ── Slot binding loop ─────────────────────────────────────────────────────────
+		// Each slot[i] binds to allRows[i]. Stable-slot assignment keeps staying rows
+		// in their current slots (isRowRebind=false) and recycles exiting-row slots
+		// for entering rows (isRowRebind=true).
+		//   slot DOM element never moves.
+		//   slot.visualIndex tracks which visual row is currently bound.
+		//   When isRowRebind=true the row portal is released before the new row binds.
+		for (let slotIdx = 0; slotIdx < allRows.length; slotIdx++) {
+			const r = allRows[slotIdx];
+			const slot = this.rowSlotPool.getSlot(slotIdx);
+			if (!slot) continue;
 
-		// Track cells completely skipped due to identity-stable stayed-row optimisation
-		if (isScrollFrameActive && this.renderStats) {
-			const rowsSkipped = allRows.length - rowsToProcess.length;
-			if (rowsSkipped > 0) {
-				const visibleCols = pinLeftColumns + centerColCount + pinRightColumns;
-				this.renderStats.cellsSkippedDuringScroll = (this.renderStats.cellsSkippedDuringScroll || 0) + rowsSkipped * visibleCols;
-			}
-		}
-
-		for (const r of rowsToProcess) {
 			if (isScrollFrameActive) this.currentScrollRowsVisited++;
 
-			const slot = this.activeRows.get(r);
-			if (!slot) continue;
+			// Detect slot rebind — slot is transitioning to a different visual row.
+			const isRowRebind = slot.visualIndex >= 0 && slot.visualIndex !== r;
+			if (isRowRebind) {
+				// Release the row portal only (for full-width rows: group/detail/footer content).
+				// Cell portals are intentionally NOT pre-evacuated here. Releasing all portals
+				// for every rebinding slot would flood the warm cache (size-bounded) with O(allSlots)
+				// entries simultaneously, causing warm cache evictions and cold remounts. Instead,
+				// each cell's binding code handles its own portal lifecycle with full context about
+				// the incoming row's content — allowing custom-live portals to be preserved in place,
+				// custom-fallback portals to show snapshots, and stale portals to be properly released.
+				this.releaseRowPortal(slot);
+				if (isScrollFrameActive) this.currentScrollRowsRecycled++;
+			}
 
 			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
 			if (!visualRow && loading) {
@@ -513,8 +472,7 @@ export class RowRenderer<TRowData = unknown> {
 			const rowUpdated = slot.update(r, visualRow.id, visualRow.kind as any, rowTop, rowHeight, rowClassName);
 			if (isScrollFrameActive && rowUpdated) this.currentScrollRowsRebound++;
 
-			// ── Phase 4: Bind cells based on row kind ────────────────────────────────
-			const rowEntered = rowsEnteredSet.has(r);
+			// ── Bind cells based on row kind ──────────────────────────────────────────
 			if (visualRow.kind === 'loading') {
 				this.releaseRowPortal(slot);
 				this._bindAllLoadingCells(
@@ -547,13 +505,23 @@ export class RowRenderer<TRowData = unknown> {
 					isScrollFrameActive,
 					ctx,
 					state,
-					rowEntered,
+					isRowRebind,
 					delta.colsEntered,
 					delta.colsExited
 				);
 			} else {
-				// ── Phase 9: Full-width row (group / detail / footer) ─────────────────
+				// Full-width row (group / detail / footer)
 				this._bindFullWidthRow(slot, visualRow, columns);
+			}
+		}
+
+		// ── Rebuild visualIndexToSlot (activeRows) ────────────────────────────────────
+		// activeRows is derived from slot bindings, not the primary lifecycle owner.
+		// Rebuilt here so external callers (repaint, decoration, API) can look up slots.
+		this.activeRows.clear();
+		for (const slot of this.rowSlotPool.getSlots()) {
+			if (slot.visualIndex >= 0) {
+				this.activeRows.set(slot.visualIndex, slot);
 			}
 		}
 
@@ -591,7 +559,7 @@ export class RowRenderer<TRowData = unknown> {
 		isScrollFrameActive: boolean,
 		ctx: ScrollRenderContext<TRowData> | undefined,
 		state: GridState<TRowData>,
-		rowEntered: boolean,
+		isRowRebind: boolean,
 		colsEntered: readonly number[] = [],
 		colsExited: readonly number[] = []
 	): void {
@@ -646,7 +614,8 @@ export class RowRenderer<TRowData = unknown> {
 					slot.id,
 					leftArg,
 					-1,
-					cellWidth
+					cellWidth,
+					isRowRebind
 				);
 			} else {
 				this._bindCellFull(
@@ -690,10 +659,11 @@ export class RowRenderer<TRowData = unknown> {
 			const cellSlot = slot.centerCells[i];
 			if (!cellSlot) continue;
 
-			// Identity-stable skip: if this cell already holds the correct column
-			// (i.e. colIndex matches the expected position-indexed column), its DOM
-			// content and portal are still valid — no work needed.
-			if (isScrollFrameActive && !rowEntered && cellSlot.colIndex === c) {
+			// Identity-stable skip: if the slot's visual row did not change (isRowRebind=false)
+			// and this cell already holds the correct column, its DOM content is still valid.
+			// With the stable-slot assignment, staying rows have isRowRebind=false, so this
+			// skip fires during pure vertical scroll for rows that didn't enter or exit.
+			if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === c) {
 				continue;
 			}
 
@@ -715,7 +685,8 @@ export class RowRenderer<TRowData = unknown> {
 					slot.id,
 					leftArg,
 					-1,
-					cellWidth
+					cellWidth,
+					isRowRebind
 				);
 			} else {
 				this._bindCellFull(
@@ -764,7 +735,8 @@ export class RowRenderer<TRowData = unknown> {
 					slot.id,
 					leftArg,
 					-1,
-					cellWidth
+					cellWidth,
+					isRowRebind
 				);
 			} else {
 				this._bindCellFull(
@@ -874,32 +846,26 @@ export class RowRenderer<TRowData = unknown> {
 	}
 
 	/**
-	 * Phase 9: Full-width row (group / detail / footer).
-	 * Reduce cell lane counts to zero (releasing any existing cell slots) and
-	 * mount the row portal into the slot's portal host.
+	 * Phase 7: Full-width row (group / detail / footer).
+	 * Delegates to FullWidthRowRenderer which owns the row portal host lifecycle.
+	 * Collapses cell lanes before mounting the full-width portal.
 	 */
 	private _bindFullWidthRow(slot: RowSlot<TRowData>, visualRow: VisualRow<TRowData>, _columns: ColumnDef<TRowData>[]): void {
-		const initCell = (el: HTMLDivElement) => this._initCell(el);
-		const releaseCellFn = (cell: CellSlot<TRowData>) => this._releaseCellFn(cell);
-
-		// Collapse all lanes — any previously mounted cell portals are released by releaseCellFn
-		slot.ensureLeftCells(0, null, initCell, releaseCellFn);
-		slot.ensureCenterCells(0, initCell, releaseCellFn);
-		slot.ensureRightCells(0, null, initCell, releaseCellFn);
-
-		// Remove pin containers (no cells → no containers needed)
-		this.ensurePinnedContainer(slot, 'left', 0);
-		this.ensurePinnedContainer(slot, 'right', 0);
-
-		const rowKey = visualRow.id;
-		if (slot.element.dataset.rowKey !== rowKey) {
-			this.releaseRowPortal(slot);
-			slot.element.dataset.rowKey = rowKey;
-		}
-		const rowPortalHost = this.ensureRowPortalHost(slot.element);
-		rowPortalHost.hidden = false;
-		rowPortalHost.dataset.rowKey = rowKey;
-		this.portalMountManager.mountRow({ rowKey, container: rowPortalHost, visualRow });
+		this.fullWidthRenderer.bind(
+			slot,
+			visualRow,
+			(s) => {
+				// Collapse all lanes — cell portals released via releaseCellFn
+				const initCell = (el: HTMLDivElement) => this._initCell(el);
+				const releaseCellFn = (cell: CellSlot<TRowData>) => this._releaseCellFn(cell);
+				s.ensureLeftCells(0, null, initCell, releaseCellFn);
+				s.ensureCenterCells(0, initCell, releaseCellFn);
+				s.ensureRightCells(0, null, initCell, releaseCellFn);
+				this.ensurePinnedContainer(s, 'left', 0);
+				this.ensurePinnedContainer(s, 'right', 0);
+			},
+			(s) => this.releaseRowPortal(s)
+		);
 	}
 
 	// ── Full cell binding (non-scroll frame) ─────────────────────────────────────────
@@ -1025,6 +991,7 @@ export class RowRenderer<TRowData = unknown> {
 				col,
 				rowIndex,
 				colIndex,
+				rowSlotId: slotId,
 				isEditing: access.isEditing,
 				isLoading: access.isLoading,
 				phase: access.isEditing ? 'edit' : phase,
@@ -1263,6 +1230,51 @@ export class RowRenderer<TRowData = unknown> {
 		for (const c of colsStayed) bindOne(c);
 	}
 
+	// ── Stable slot assignment ───────────────────────────────────────────────────────
+
+	/**
+	 * Computes which visual row each slot should show, keeping stable rows in their
+	 * current slot (isRowRebind = false) and assigning freed slots to entering rows.
+	 *
+	 * Time: O(n). Space: O(n) for the Set + output array.
+	 */
+	private _computeStableSlotRows(newWindowRows: readonly number[]): number[] {
+		const n = newWindowRows.length;
+		const result = new Array<number>(n);
+		const newWindowSet = new Set(newWindowRows);
+		const assignedRows = new Set<number>();
+		const freeSlotIndices: number[] = [];
+
+		// Pass 1: slots whose current row is still in the new window stay in place.
+		const slotCount = Math.min(this.rowSlotPool.count, n);
+		for (let i = 0; i < slotCount; i++) {
+			const slot = this.rowSlotPool.getSlot(i);
+			const vi = slot ? slot.visualIndex : -1;
+			if (vi >= 0 && newWindowSet.has(vi)) {
+				result[i] = vi;
+				assignedRows.add(vi);
+			} else {
+				result[i] = -1;
+				freeSlotIndices.push(i);
+			}
+		}
+		// New slots (pool growth): they're all free.
+		for (let i = slotCount; i < n; i++) {
+			result[i] = -1;
+			freeSlotIndices.push(i);
+		}
+
+		// Pass 2: assign entering rows to freed slots in window order.
+		let freeIdx = 0;
+		for (const row of newWindowRows) {
+			if (!assignedRows.has(row)) {
+				result[freeSlotIndices[freeIdx++]] = row;
+			}
+		}
+
+		return result;
+	}
+
 	// ── Scroll-path fast cell binding ────────────────────────────────────────────────
 
 	private bindCellSlotDuringScroll(
@@ -1278,7 +1290,8 @@ export class RowRenderer<TRowData = unknown> {
 		pooledRowId: string,
 		left: number,
 		right: number,
-		width: number
+		width: number,
+		isRowRebind: boolean
 	): void {
 		const plan = ctx.plan.columnPlans[colIndex];
 		const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
@@ -1341,13 +1354,17 @@ export class RowRenderer<TRowData = unknown> {
 
 		const scrollMode = rendererKind === 'portal' ? plan?.mode : undefined;
 		const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
+		// Only preserve portals when the slot is NOT rebinding to a new row.
+		// isRowRebind=true means this slot just got a different row — the old
+		// renderer's data is stale and should not be shown.
 		const isPreservedPortal =
+			!isRowRebind &&
 			rendererKind === 'portal' &&
 			scrollMode === 'custom-defer' &&
 			cellSlot.lastPortalKey === cellKey &&
 			this.portalMountManager.isCellMounted(cellKey);
 		const hasMountedPortalForCell = this.portalMountManager.isCellMounted(cellKey);
-		const shouldKeepLivePortalDuringScroll = scrollMode === 'custom-live' && hasMountedPortalForCell;
+		const shouldKeepLivePortalDuringScroll = !isRowRebind && scrollMode === 'custom-live' && hasMountedPortalForCell;
 		const shouldKeepPortalDuringScroll = shouldKeepLivePortalDuringScroll || isPreservedPortal;
 
 		// Release any stale portal when transitioning away from portal mode (e.g. the cell
@@ -1392,10 +1409,9 @@ export class RowRenderer<TRowData = unknown> {
 				this.cancelPendingPortalRelease(cellKey);
 				contentMode = 'portal';
 				// Only call mountCellImmediately if the portal is NOT already live
-				// under this exact key. If lastPortalKey === cellKey, the renderer is
-				// already mounted and current — calling mountCellImmediately would
-				// spuriously increment customRendererMountsDuringScroll.
-				const isAlreadyLive = cellSlot.lastPortalKey === cellKey && this.portalMountManager.isCellMounted(cellKey);
+				// under this exact key for this same row. isRowRebind=false guarantees
+				// the slot still holds the same row, so skipping the mount is safe.
+				const isAlreadyLive = !isRowRebind && cellSlot.lastPortalKey === cellKey && this.portalMountManager.isCellMounted(cellKey);
 				if (!isAlreadyLive) {
 					const portalHost = this.ensureCellPortalHost(cellSlot.element);
 					this.portalMountManager.mountCellImmediately({
@@ -1406,6 +1422,7 @@ export class RowRenderer<TRowData = unknown> {
 						col,
 						rowIndex,
 						colIndex,
+						rowSlotId: pooledRowId,
 						isEditing,
 						isLoading: false,
 						phase: 'scroll',
@@ -1594,6 +1611,11 @@ export class RowRenderer<TRowData = unknown> {
 	}
 
 	private releaseRowPortal(slot: RowSlot<TRowData>): boolean {
+		// Delegate to FullWidthRowRenderer which owns the portal host lifecycle.
+		// Falls back to direct cleanup if fullWidthRenderer not yet initialized (clearActiveRows on unmount).
+		if (this.fullWidthRenderer) {
+			return this.fullWidthRenderer.release(slot);
+		}
 		const rowKey = slot.element.dataset.rowKey;
 		if (!rowKey) return false;
 		const host = this.rowPortalHosts.get(slot.element);
@@ -1607,20 +1629,6 @@ export class RowRenderer<TRowData = unknown> {
 		host.remove();
 		delete slot.element.dataset.rowKey;
 		return true;
-	}
-
-	private ensureRowPortalHost(row: HTMLElement): HTMLElement {
-		let host = this.rowPortalHosts.get(row);
-		if (!host) {
-			host = document.createElement('div');
-			host.className = 'og-row-portal-host';
-			host.hidden = true;
-			row.appendChild(host);
-			this.rowPortalHosts.set(row, host);
-		} else if (host.parentElement !== row) {
-			row.appendChild(host);
-		}
-		return host;
 	}
 
 	private ensureCellPortalHost(cell: HTMLDivElement): HTMLDivElement {

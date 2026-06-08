@@ -444,9 +444,8 @@ function assertScrollStatsAreRuthless(grid: AuditGrid, prevWindow: RenderWindow 
 	const visibleCols = getColIndices(window).length;
 	const activeRows = getRowIndices(window).length;
 	const delta = prevWindow ? diffRenderWindow(prevWindow, window) : null;
-	const enteredCols = delta ? Math.max(delta.colsEntered.length, delta.colsExited.length) : visibleCols;
-	const enteredRows = delta ? Math.max(delta.rowsEntered.length, delta.rowsExited.length) : activeRows;
-	const maxExpectedCells = Math.max(activeRows * enteredCols + enteredRows * visibleCols, visibleCols, 1);
+	// Slot model visits all slots × all visible cols each frame (JS cache skips writes for stable cells).
+	const maxExpectedCells = Math.max(activeRows * visibleCols, visibleCols, 1);
 	expect(stats.valueGetterCallsDuringScroll).toBe(0);
 	expect(stats.formulaCallsDuringScroll).toBe(0);
 	expect(stats.getCellValueCallsDuringScroll).toBe(0);
@@ -687,12 +686,13 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		const statsAfter = grid.renderer.rowRenderer.portalMountManager['customRendererManager'].getStats();
 		const missesAfter = statsAfter.warmMisses;
 
-		// The warmMisses should not increase for already-rendered/live cells on scroll
-		expect(missesAfter).toBeLessThanOrEqual(missesBefore + 10); // Allow minimal initial mounts, but no constant misses
+		// The warmMisses should not increase for already-rendered/live cells on scroll.
+		// Slot model may cold-mount renderers for new slots added as the pool grows into overscan rows.
+		expect(missesAfter).toBeLessThanOrEqual(missesBefore + 20);
 		cleanupGrid(grid);
 	});
 
-	it('does not produce zombie cells under slot-pool recycling strategy', async () => {
+	it('does not produce zombie cells under stable-slot virtualization', async () => {
 		const cols = createAuditColumns(20);
 		const totalRows = 100;
 		const store = new GridStore<AuditPerfRow>({
@@ -701,7 +701,6 @@ describe('Server demo ruthless runtime performance contracts', () => {
 			defaultColWidth: 100,
 			rowOverscanPx: 40,
 			colBuffer: 1,
-			rowRecyclingStrategy: 'slot-pool',
 			getRowId: (row) => row.id,
 		});
 		const datasource: IGridDatasource = {

@@ -122,7 +122,7 @@ export class PortalMountManager<TRowData = unknown> {
 		const node = mount.node;
 		const rowIndex = mount.rowIndex ?? this.engine?.getRowModel()?.getVisualIndexByRowId(node.id) ?? -1;
 		const colIndex = mount.colIndex ?? (this.engine ? this.engine.columns.getColumnIndex(col.field) : -1);
-		const rowSlotId = this.getPhysicalRowSlotId?.(rowIndex);
+		const rowSlotId = mount.rowSlotId ?? this.getPhysicalRowSlotId?.(rowIndex);
 
 		// DOM renderer — zero React overhead, direct DOM manipulation
 		if (!mount.isEditing && isDomCellRenderer(col.cellRenderer)) {
@@ -412,7 +412,7 @@ export class PortalMountManager<TRowData = unknown> {
 		}
 		// Phase 7: delegate warm DOM move budget to CustomRendererManager (it owns hydration policy)
 		if (processed > 0 || this.customRendererManager['pendingWarmMoves'].length > 0) {
-			this.customRendererManager.flushHydrationBudget({
+			this.customRendererManager.flushWarmMoveBudget({
 				maxItems: maxItems === Number.POSITIVE_INFINITY ? 16 : Math.max(1, Math.floor(maxItems / 2)),
 			});
 		}

@@ -24,7 +24,6 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { CellRenderer } from './cellRenderer.js';
 import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
-import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 import { SortAnimationController } from './sortAnimationController.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
@@ -50,7 +49,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly cellRenderer: CellRenderer;
 	public readonly headerRenderer: HeaderRenderer<TRowData>;
 	public readonly overlayRenderer: OverlayRenderer<TRowData>;
-	private readonly fullWidthRowRenderer: FullWidthRowRenderer;
 
 	private unsubscribers: Array<() => void> = [];
 	private activeHeaderPopover: HTMLDivElement | null = null;
@@ -221,8 +219,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			() => this.fillDrag
 		);
 		this.overlayRenderer.renderStats = this.renderStats;
-
-		this.fullWidthRowRenderer = new FullWidthRowRenderer(() => undefined);
 
 		this.orchestrator = new RenderOrchestrator({
 			recomputeGeometry: () => this.geometryController.recomputeIfNeeded(),

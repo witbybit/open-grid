@@ -38,8 +38,6 @@ export interface GridEngineConfig<TRowData = unknown> {
 	 */
 	rowOverscanPx?: number;
 	colBuffer?: number;
-	/** 'recycle-pool' = opportunistic row slot recycling. 'slot-pool' accepted as alias for backwards compatibility. */
-	rowRecyclingStrategy?: 'index-pool' | 'recycle-pool' | 'slot-pool';
 	runtimeLimits?: {
 		maxRenderedRows?: number;
 		maxRenderedCells?: number;

@@ -21,6 +21,8 @@ export interface GridCellContentMount<TRowData = unknown> {
 	col: ColumnDef<TRowData>;
 	rowIndex?: number;
 	colIndex?: number;
+	/** Stable physical slot ID — bypasses the stale activeRows resolver during the binding loop. */
+	rowSlotId?: string;
 	isEditing: boolean;
 	isLoading: boolean;
 	phase?: CellRendererPhase;

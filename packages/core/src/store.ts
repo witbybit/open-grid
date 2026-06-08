@@ -637,8 +637,6 @@ export interface GridState<TRowData = unknown> {
 	 */
 	rowOverscanPx?: number;
 	colBuffer?: number;
-	/** 'recycle-pool' = opportunistic row slot recycling (formerly 'slot-pool'). 'slot-pool' accepted as alias. */
-	rowRecyclingStrategy?: 'index-pool' | 'recycle-pool' | 'slot-pool';
 	runtimeLimits?: {
 		maxRenderedRows?: number;
 		maxRenderedCells?: number;
@@ -865,7 +863,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			expansion: initialState.expansion,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 1,
-			rowRecyclingStrategy: initialState.rowRecyclingStrategy ?? 'index-pool',
 			// Phase 2: always normalize runtimeLimits so all callers can assume it exists
 			runtimeLimits: {
 				maxRenderedRows: 500,

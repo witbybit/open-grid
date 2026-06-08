@@ -243,15 +243,16 @@ export class CustomRendererManager<TRowData = unknown> {
 			instance.lastAccessTime = ++this.lruCounter;
 			this.touchWarm(instance);
 
-			// Phase 8: always move to hiddenContainer immediately (display:none, no layout cost)
-			// so the container stays connected and pool cells are clean.
-			// Defer only pruneWarmCache until after scroll to avoid DOM destruction churn.
+			// Move renderer to hiddenContainer immediately so it's out of the cell DOM.
+			// Deferring this move would leave the renderer physically inside the cell, making
+			// DOM integrity checks fail (renderer.dataset.cellKey ≠ cell.dataset.cellKey).
 			const hiddenContainer = this.ensureHiddenContainer();
 			if (hiddenContainer && instance.container.parentElement !== hiddenContainer) {
 				hiddenContainer.appendChild(instance.container);
 			}
 			if (this.engine?.isScrolling) {
-				// Track deferred prune for stats; actual prune runs in flushPendingWarmMoves
+				// During scroll, defer pruneWarmCache (LRU eviction work) to avoid extra
+				// style recalculations caused by destroying instances mid-scroll.
 				this.pendingWarmMoves.push(instance);
 				this.stats.warmMovesDeferred++;
 			} else {
@@ -267,39 +268,28 @@ export class CustomRendererManager<TRowData = unknown> {
 
 	/**
 	 * Phase 8: Flush deferred warm DOM moves in budgeted chunks after scroll idle.
-	 * Returns the number of moves performed.
+	 * This is where the actual DOM move to hiddenContainer happens for scroll-deferred
+	 * warm cache entries. Returns the number of moves performed.
 	 */
 	public flushPendingWarmMoves(maxItems = 16): number {
+		// Containers were already moved to hiddenContainer in releaseInstance.
+		// This flush just runs the deferred pruneWarmCache (LRU eviction) work.
 		if (this.pendingWarmMoves.length === 0) return 0;
-		const hiddenContainer = this.ensureHiddenContainer();
-		if (!hiddenContainer) {
-			this.pendingWarmMoves.length = 0;
-			return 0;
-		}
 		const count = Math.min(maxItems, this.pendingWarmMoves.length);
-		let moved = 0;
-		for (let i = 0; i < count; i++) {
-			const inst = this.pendingWarmMoves.shift()!;
-			// Only move if still in warm cache (not re-acquired between scroll and flush)
-			if (this.warmRenderersByRendererKey.has(inst.rendererKey)) {
-				if (inst.container.parentElement !== hiddenContainer) {
-					hiddenContainer.appendChild(inst.container);
-					moved++;
-				}
-			}
-		}
-		this.stats.warmMovesFlushed += moved;
+		this.pendingWarmMoves.splice(0, count);
+		this.stats.warmMovesFlushed += count;
 		if (!this.engine?.isScrolling) {
 			this.pruneWarmCache();
 		}
-		return moved;
+		return count;
 	}
 
 	/**
-	 * Phase 7: Flush hydration budget for CustomRendererManager-owned warm moves.
-	 * Stats tracking for hydration chunks and max hydrated per frame.
+	 * Phase 8: Flush warm move budget — move deferred scroll-out containers to the hidden
+	 * container in budgeted chunks. This is the correct name; flushHydrationBudget is kept
+	 * as a compat alias for existing callers until they are updated.
 	 */
-	public flushHydrationBudget(options: { maxItems?: number } = {}): { warmMovesFlushed: number } {
+	public flushWarmMoveBudget(options: { maxItems?: number; deadlineMs?: number } = {}): { warmMovesFlushed: number } {
 		const maxItems = options.maxItems ?? 16;
 		const moved = this.flushPendingWarmMoves(maxItems);
 		if (moved > 0) {

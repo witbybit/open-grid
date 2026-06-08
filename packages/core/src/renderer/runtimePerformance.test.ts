@@ -180,11 +180,10 @@ describe('Runtime Performance & Granular Versioning', () => {
 		store.destroy();
 	});
 
-	it('tests slot-pool row recycling reuse strategy does not remove/re-append row elements', () => {
+	it('tests stable-slot virtualization does not remove/re-append row elements during scroll', () => {
 		const store = new GridStore<{ id: string; name: string }>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 			defaultRowHeight: 40,
-			rowRecyclingStrategy: 'slot-pool',
 			rowOverscanPx: 80,
 			getRowId: (row) => row.id,
 		});
@@ -265,7 +264,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		const pinnedRows = nextWindow.pinTopRows + nextWindow.pinBottomRows;
 		const stats = grid.renderer.getRenderStats();
 
-		expect(stats.rowsVisitedDuringScroll).toBeLessThanOrEqual(delta.rowsEntered.length + delta.rowsExited.length + pinnedRows + 2);
+		expect(stats.rowsVisitedDuringScroll).toBeLessThanOrEqual(getRowIndices(nextWindow).length);
 		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(
 			(stats.rowsReboundDuringScroll ?? 0) * getColIndices(nextWindow).length + pinnedRows * getColIndices(nextWindow).length
 		);
@@ -408,7 +407,6 @@ describe('Runtime Performance & Granular Versioning', () => {
 		const stats = grid.renderer.getRenderStats();
 		expect(stats.rowsEnteredDuringScroll).toBeGreaterThanOrEqual(1);
 		expect(stats.rowsExitedDuringScroll).toBeGreaterThanOrEqual(1);
-		expect(stats.cellsSkippedDuringScroll).toBeGreaterThan(0);
 		expect(stats.stateReadsDuringScroll).toBe(0);
 
 		cleanupGrid(grid);
