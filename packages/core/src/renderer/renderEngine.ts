@@ -1,5 +1,6 @@
 ﻿import { defaultGridScheduler } from './gridScheduler.js';
 import { HeaderMenuController } from './headerMenuController.js';
+import { computeScrollTarget } from './scrollIntoView.js';
 import { ScrollEngine } from './scrollEngine.js';
 import { sameRenderedWindow, applyRenderWindowRuntimeLimits, computeRenderWindow, type RenderWindow } from './renderWindow.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
@@ -983,89 +984,32 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const colIndex = this.engine.columns.getColumnIndex(colField);
 		if (rowIndex === null || rowIndex === -1 || colIndex === -1) return;
 
-		const rowCount = rowModel.getVisualRowCount();
-		const colCount = this.engine.columns.getDisplayedColumnCount();
+		const target = computeScrollTarget({
+			rowIndex,
+			colIndex,
+			rowCount: rowModel.getVisualRowCount(),
+			colCount: this.engine.columns.getDisplayedColumnCount(),
+			pinLeftColumns: this.engine.viewport.pinLeftColumns,
+			pinRightColumns: this.engine.viewport.pinRightColumns,
+			pinTopRows: this.engine.viewport.pinTopRows,
+			pinBottomRows: this.engine.viewport.pinBottomRows,
+			scrollTop: this.engine.viewport.scrollTop,
+			scrollLeft: this.engine.viewport.scrollLeft,
+			viewportHeight: this.engine.viewport.viewportHeight,
+			viewportWidth: this.engine.viewport.viewportWidth,
+			rowTops: this.engine.geometry.rowTops,
+			rowHeights: this.engine.geometry.rowHeights,
+			colLefts: this.engine.geometry.colLefts,
+			colWidths: this.engine.geometry.colWidths,
+			scrollViewportScrollHeight: scrollViewport.scrollHeight,
+			scrollViewportScrollWidth: scrollViewport.scrollWidth,
+			scrollViewportClientHeight: scrollViewport.clientHeight,
+			scrollViewportClientWidth: scrollViewport.clientWidth,
+		});
 
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const pinTopRows = this.engine.viewport.pinTopRows;
-		const pinBottomRows = this.engine.viewport.pinBottomRows;
-
-		const scrollTop = this.engine.viewport.scrollTop;
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportHeight = this.engine.viewport.viewportHeight;
-		const viewportWidth = this.engine.viewport.viewportWidth;
-
-		let pinnedLeftWidth = 0;
-		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
-			pinnedLeftWidth += this.engine.geometry.colWidths[i] || 0;
-		}
-
-		let pinnedRightWidth = 0;
-		for (let i = 0; i < pinRightColumns && i < colCount; i++) {
-			pinnedRightWidth += this.engine.geometry.colWidths[colCount - 1 - i] || 0;
-		}
-
-		let pinnedTopHeight = 0;
-		for (let i = 0; i < pinTopRows && i < rowCount; i++) {
-			pinnedTopHeight += this.engine.geometry.rowHeights[i] || 0;
-		}
-
-		let pinnedBottomHeight = 0;
-		for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
-			pinnedBottomHeight += this.engine.geometry.rowHeights[rowCount - 1 - i] || 0;
-		}
-
-		let targetScrollTop = scrollTop;
-		let targetScrollLeft = scrollLeft;
-
-		// 1. Vertical Scroll Into View
-		if (rowIndex >= pinTopRows && rowIndex < rowCount - pinBottomRows) {
-			const rowTop = this.engine.geometry.rowTops[rowIndex] || 0;
-			const rowHeight = this.engine.geometry.rowHeights[rowIndex] || 0;
-
-			const visibleTopLimit = scrollTop + pinnedTopHeight;
-			const visibleBottomLimit = scrollTop + (viewportHeight - 40) - pinnedBottomHeight;
-
-			if (rowTop < visibleTopLimit) {
-				targetScrollTop = rowTop - pinnedTopHeight;
-			} else if (rowTop + rowHeight > visibleBottomLimit) {
-				targetScrollTop = rowTop + rowHeight - (viewportHeight - 40) + pinnedBottomHeight;
-			}
-		}
-
-		// 2. Horizontal Scroll Into View
-		if (colIndex >= pinLeftColumns && colIndex < colCount - pinRightColumns) {
-			const colLeft = this.engine.geometry.colLefts[colIndex] || 0;
-			const colWidth = this.engine.geometry.colWidths[colIndex] || 0;
-
-			const visibleLeftLimit = scrollLeft + pinnedLeftWidth;
-			const visibleRightLimit = scrollLeft + viewportWidth - pinnedRightWidth;
-
-			if (colLeft < visibleLeftLimit) {
-				targetScrollLeft = colLeft - pinnedLeftWidth;
-			} else if (colLeft + colWidth > visibleRightLimit) {
-				targetScrollLeft = colLeft + colWidth - viewportWidth + pinnedRightWidth;
-			}
-		}
-
-		// Clamp scroll positions (only if layout dimensions are populated, e.g. not in headless JSDOM)
-		if (scrollViewport.scrollHeight > 0) {
-			const maxScrollTop = Math.max(0, scrollViewport.scrollHeight - scrollViewport.clientHeight);
-			targetScrollTop = Math.max(0, Math.min(maxScrollTop, targetScrollTop));
-		} else {
-			targetScrollTop = Math.max(0, targetScrollTop);
-		}
-		if (scrollViewport.scrollWidth > 0) {
-			const maxScrollLeft = Math.max(0, scrollViewport.scrollWidth - scrollViewport.clientWidth);
-			targetScrollLeft = Math.max(0, Math.min(maxScrollLeft, targetScrollLeft));
-		} else {
-			targetScrollLeft = Math.max(0, targetScrollLeft);
-		}
-
-		if (targetScrollTop !== scrollTop || targetScrollLeft !== scrollLeft) {
-			this.scrollEngine.scrollTo(targetScrollTop, targetScrollLeft);
-			this.engine.viewport.setScrollPosition(targetScrollTop, targetScrollLeft);
+		if (target) {
+			this.scrollEngine.scrollTo(target.top, target.left);
+			this.engine.viewport.setScrollPosition(target.top, target.left);
 		}
 	}
 
