@@ -1,3 +1,4 @@
+import { defaultGridScheduler } from './gridScheduler.js';
 import { ScrollEngine } from './scrollEngine.js';
 import { sameRenderedWindow, applyRenderWindowRuntimeLimits, computeRenderWindow, type RenderWindow } from './renderWindow.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
@@ -357,13 +358,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const tick = (remaining: number) => {
 			if (this.scrollEndFrameCount !== targetCount) return; // new scroll arrived
 			if (remaining > 0) {
-				this.scrollEndRafId = requestAnimationFrame(() => tick(remaining - 1));
+				this.scrollEndRafId = defaultGridScheduler.raf(() => tick(remaining - 1));
 			} else {
 				this.scrollEndRafId = null;
 				this.finishScrolling();
 			}
 		};
-		this.scrollEndRafId = requestAnimationFrame(() => tick(3));
+		this.scrollEndRafId = defaultGridScheduler.raf(() => tick(3));
 	}
 
 	private finishScrolling(): void {
@@ -391,7 +392,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private clearScrollEndTimer(): void {
 		if (this.scrollEndRafId !== null) {
-			cancelAnimationFrame(this.scrollEndRafId);
+			defaultGridScheduler.cancelRaf(this.scrollEndRafId);
 			this.scrollEndRafId = null;
 		}
 	}
@@ -407,12 +408,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private scheduleBudgetedPortalFlush(): void {
 		if (this.portalFlushScheduled) return;
 		this.portalFlushScheduled = true;
-		const schedule =
-			typeof window !== 'undefined' && 'requestIdleCallback' in window
-				? (callback: () => void) => (window as unknown as { requestIdleCallback: (cb: () => void) => number }).requestIdleCallback(callback)
-				: (callback: () => void) => requestAnimationFrame(() => callback());
-
-		schedule(() => {
+		defaultGridScheduler.idle(() => {
 			this.portalFlushScheduled = false;
 			if (this.isScrolling) {
 				this.needsPostScrollPortalFlush = true;
@@ -432,11 +428,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private clearPostScrollDecorationTimer(): void {
 		if (this.postScrollDecorationTimer !== null) {
-			if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-				(window as any).cancelIdleCallback(this.postScrollDecorationTimer);
-			} else {
-				cancelAnimationFrame(this.postScrollDecorationTimer);
-			}
+			defaultGridScheduler.cancelIdle(this.postScrollDecorationTimer);
 			this.postScrollDecorationTimer = null;
 		}
 		this.postScrollDecorationScheduled = false;
@@ -446,12 +438,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (this.postScrollDecorationScheduled) return;
 		this.postScrollDecorationScheduled = true;
 
-		const schedule =
-			typeof window !== 'undefined' && 'requestIdleCallback' in window
-				? (callback: () => void) => (window as any).requestIdleCallback(callback)
-				: (callback: () => void) => requestAnimationFrame(() => callback());
-
-		this.postScrollDecorationTimer = schedule(() => {
+		this.postScrollDecorationTimer = defaultGridScheduler.idle(() => {
 			this.postScrollDecorationTimer = null;
 			this.postScrollDecorationScheduled = false;
 
@@ -990,7 +977,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			if (colField) {
 				this.portalMountManager.releaseHeaderMenu({ colField, container: el });
 			}
-			setTimeout(() => {
+			defaultGridScheduler.timeout(() => {
 				el.remove();
 			}, 120);
 			this.activeHeaderPopover = null;
@@ -1234,13 +1221,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		popover.style.left = `${left}px`;
 		popover.style.top = `${top}px`;
 
-		if (typeof requestAnimationFrame !== 'undefined') {
-			requestAnimationFrame(() => {
-				popover.classList.add('og-visible');
-			});
-		} else {
+		defaultGridScheduler.raf(() => {
 			popover.classList.add('og-visible');
-		}
+		});
 	}
 
 	public scrollCellIntoView(rowId: string, colField: string): void {

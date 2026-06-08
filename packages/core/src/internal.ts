@@ -31,6 +31,8 @@ export { InvalidationManager, type InvalidationFrame } from './renderer/invalida
 export { PortalMountManager } from './renderer/portalMountManager.js';
 export { RenderOrchestrator, type RenderStats } from './renderer/renderOrchestrator.js';
 export { RenderScheduler } from './renderer/renderScheduler.js';
+export { type GridScheduler, DefaultGridScheduler, defaultGridScheduler } from './renderer/gridScheduler.js';
+export { type GridDiagnostics, NoopDiagnostics, ActiveDiagnostics, createDiagnostics } from './renderer/gridDiagnostics.js';
 export { CellRenderer } from './renderer/cellRenderer.js';
 export { FullWidthRowRenderer } from './renderer/fullWidthRowRenderer.js';
 export { HeaderRenderer } from './renderer/headerRenderer.js';

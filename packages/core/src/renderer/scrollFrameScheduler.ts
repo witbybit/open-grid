@@ -1,21 +1,20 @@
+import { type GridScheduler, defaultGridScheduler } from './gridScheduler.js';
+
 export class ScrollFrameScheduler {
 	private scheduled = false;
 	private destroyed = false;
 	private readonly flush: () => void;
+	private readonly scheduler: GridScheduler;
 
-	constructor(flush: () => void) {
+	constructor(flush: () => void, scheduler: GridScheduler = defaultGridScheduler) {
 		this.flush = flush;
+		this.scheduler = scheduler;
 	}
 
 	public requestFrame(): void {
 		if (this.destroyed || this.scheduled) return;
 		this.scheduled = true;
-
-		if (typeof requestAnimationFrame !== 'undefined') {
-			requestAnimationFrame(() => this.run());
-		} else {
-			this.run();
-		}
+		this.scheduler.raf(() => this.run());
 	}
 
 	public destroy(): void {

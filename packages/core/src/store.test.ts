@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GridStore } from './store.js';
+import { GridStore, validateColumns, validateRowIds } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
 
@@ -1303,5 +1303,82 @@ describe('GridStore undo and redo functionality', () => {
 		expect(store.engine.geometryVersion).toBeGreaterThan(initialGeometryVersion);
 
 		controller.dispose();
+	});
+});
+
+describe('Column and row validation', () => {
+	describe('validateColumns()', () => {
+		it('throws on empty field', () => {
+			expect(() => validateColumns([{ field: '' }])).toThrow('non-empty field');
+		});
+
+		it('throws on duplicate field', () => {
+			expect(() => validateColumns([{ field: 'id' }, { field: 'name' }, { field: 'id' }])).toThrow('duplicate column field "id"');
+		});
+
+		it('throws on zero width', () => {
+			expect(() => validateColumns([{ field: 'id', width: 0 }])).toThrow('invalid width');
+		});
+
+		it('throws on negative width', () => {
+			expect(() => validateColumns([{ field: 'id', width: -10 }])).toThrow('invalid width');
+		});
+
+		it('throws on Infinity width', () => {
+			expect(() => validateColumns([{ field: 'id', width: Infinity }])).toThrow('invalid width');
+		});
+
+		it('passes for valid columns', () => {
+			expect(() =>
+				validateColumns([
+					{ field: 'id', width: 80 },
+					{ field: 'name', width: 200 },
+				])
+			).not.toThrow();
+		});
+
+		it('passes for columns with no width', () => {
+			expect(() => validateColumns([{ field: 'id' }, { field: 'name' }])).not.toThrow();
+		});
+	});
+
+	describe('validateRowIds()', () => {
+		it('throws on empty row ID', () => {
+			expect(() => validateRowIds(['a', '', 'b'])).toThrow('empty string');
+		});
+
+		it('throws on duplicate row ID', () => {
+			expect(() => validateRowIds(['a', 'b', 'a'])).toThrow('duplicate row ID "a"');
+		});
+
+		it('passes for valid IDs', () => {
+			expect(() => validateRowIds(['a', 'b', 'c'])).not.toThrow();
+		});
+	});
+
+	describe('GridStore validation integration', () => {
+		it('throws on construction with duplicate column fields', () => {
+			expect(
+				() =>
+					new GridStore({
+						columns: [{ field: 'id' }, { field: 'id' }],
+					})
+			).toThrow('duplicate column field "id"');
+		});
+
+		it('throws on setColumns() with duplicate fields', () => {
+			const store = new GridStore({ columns: [{ field: 'id' }] });
+			expect(() => store.setColumns([{ field: 'name' }, { field: 'name' }])).toThrow('duplicate column field "name"');
+		});
+
+		it('accepts valid column updates via setColumns()', () => {
+			const store = new GridStore({ columns: [{ field: 'id' }] });
+			expect(() =>
+				store.setColumns([
+					{ field: 'id', width: 100 },
+					{ field: 'name', width: 200 },
+				])
+			).not.toThrow();
+		});
 	});
 });

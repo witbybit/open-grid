@@ -1,30 +1,24 @@
+import { type GridScheduler, defaultGridScheduler } from './gridScheduler.js';
+
 export class RenderScheduler {
 	private scheduled = false;
 	private destroyed = false;
 	private readonly flush: () => void;
+	private readonly scheduler: GridScheduler;
 
-	constructor(flush: () => void) {
+	constructor(flush: () => void, scheduler: GridScheduler = defaultGridScheduler) {
 		this.flush = flush;
+		this.scheduler = scheduler;
 	}
 
 	public requestFlush(_reason?: string): void {
 		if (this.destroyed || this.scheduled) return;
 		this.scheduled = true;
 
-		const enqueueFrame = () => {
+		this.scheduler.microtask(() => {
 			if (this.destroyed) return;
-			if (typeof requestAnimationFrame !== 'undefined') {
-				requestAnimationFrame(() => this.run());
-			} else {
-				this.run();
-			}
-		};
-
-		if (typeof queueMicrotask !== 'undefined') {
-			queueMicrotask(enqueueFrame);
-		} else {
-			Promise.resolve().then(enqueueFrame);
-		}
+			this.scheduler.raf(() => this.run());
+		});
 	}
 
 	public flushNow(): void {
