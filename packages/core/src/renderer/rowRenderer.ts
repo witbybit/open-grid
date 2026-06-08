@@ -368,8 +368,21 @@ export class RowRenderer<TRowData = unknown> {
 			else this.slotStats.enteredOnlyFrames++;
 		}
 
-		// Hoisted constants
+		// Hoisted loop-invariant constants — read once before the slot loop, not per row.
 		const hoistedTotalHeight = nextWindow.pinBottomRows > 0 ? this.engine.geometry.getTotalHeight(state.defaultRowHeight) : 0;
+		const pinTopRows = nextWindow.pinTopRows;
+		const pinBottomRows = nextWindow.pinBottomRows;
+		const scrollTop = this.engine.viewport.scrollTop;
+		const viewportHeight = this.engine.viewport.viewportHeight;
+		const rowTops = this.engine.geometry.rowTops;
+		const rowHeights = this.engine.geometry.rowHeights;
+
+		// Build O(1) sticky-group lookup. stickyGroupIndices.indexOf(r) is O(K) per row;
+		// with a Map it becomes one property read per row regardless of group count.
+		const stickyGroupMap: Map<number, number> | null =
+			nextWindow.stickyGroupIndices && nextWindow.stickyGroupTops
+				? new Map(nextWindow.stickyGroupIndices.map((idx, i) => [idx, nextWindow.stickyGroupTops![i]!]))
+				: null;
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
 		// Each slot[i] binds to allRows[i]. Stable-slot assignment keeps staying rows
@@ -409,23 +422,19 @@ export class RowRenderer<TRowData = unknown> {
 			}
 
 			// ── Position calculation ──────────────────────────────────────────────────
-			let rowTop = this.engine.geometry.rowTops[r];
-			const rowHeight = this.engine.geometry.rowHeights[r];
-			const pinTopRows = nextWindow.pinTopRows;
-			const pinBottomRows = nextWindow.pinBottomRows;
-			const scrollTop = this.engine.viewport.scrollTop;
-			const viewportHeight = this.engine.viewport.viewportHeight;
+			let rowTop = rowTops[r];
+			const rowHeight = rowHeights[r];
 
 			let isStickyGroup = false;
 			if (r < pinTopRows) {
 				rowTop = rowTop + scrollTop;
 			} else if (r >= nextWindow.rowCount - pinBottomRows) {
-				const bottomOffset = hoistedTotalHeight - this.engine.geometry.rowTops[r];
+				const bottomOffset = hoistedTotalHeight - rowTops[r];
 				rowTop = scrollTop + viewportHeight - bottomOffset;
-			} else if (nextWindow.stickyGroupIndices && nextWindow.stickyGroupTops) {
-				const stickyPos = nextWindow.stickyGroupIndices.indexOf(r);
-				if (stickyPos >= 0) {
-					rowTop = nextWindow.stickyGroupTops[stickyPos]!;
+			} else if (stickyGroupMap) {
+				const stickyTop = stickyGroupMap.get(r);
+				if (stickyTop !== undefined) {
+					rowTop = stickyTop;
 					isStickyGroup = true;
 				}
 			}
@@ -546,15 +555,15 @@ export class RowRenderer<TRowData = unknown> {
 
 	// ── Phase 5+6: Lane cell binding helpers ─────────────────────────────────────────
 
-	/** Shared init/release callbacks for all ensureXCells calls. */
-	private _initCell(el: HTMLDivElement): void {
+	// Arrow properties so these can be passed directly as callbacks without wrapping
+	// in a new closure on every row bind — the hot path calls these once per lane per row.
+	private readonly _initCell = (el: HTMLDivElement): void => {
 		this.cellRenderer.initializeCell(el);
-	}
-
-	private _releaseCellFn(cell: CellSlot<TRowData>): void {
+	};
+	private readonly _releaseCellFn = (cell: CellSlot<TRowData>): void => {
 		if (cell.lastPortalKey) this.releaseCellPortal(cell.element, false, 'destroyed');
 		cell.unbindCold();
-	}
+	};
 
 	/**
 	 * Phase 5+6: Bind all cells for a data row using stable lane arrays.
@@ -597,8 +606,8 @@ export class RowRenderer<TRowData = unknown> {
 		slot.pinLeftCount = pinLeftColumns;
 		slot.pinRightStart = pinRightStart;
 
-		const initCell = (el: HTMLDivElement) => this._initCell(el);
-		const releaseCellFn = (cell: CellSlot<TRowData>) => this._releaseCellFn(cell);
+		const initCell = this._initCell;
+		const releaseCellFn = this._releaseCellFn;
 
 		// ── Phase 7: Horizontal same-count bailout ────────────────────────────────────
 		// ensureXCells is a no-op when the count hasn't changed (zero DOM appends/removes).
@@ -808,8 +817,8 @@ export class RowRenderer<TRowData = unknown> {
 		slot.pinLeftCount = pinLeftColumns;
 		slot.pinRightStart = pinRightStart;
 
-		const initCell = (el: HTMLDivElement) => this._initCell(el);
-		const releaseCellFn = (cell: CellSlot<TRowData>) => this._releaseCellFn(cell);
+		const initCell = this._initCell;
+		const releaseCellFn = this._releaseCellFn;
 
 		slot.ensureLeftCells(pinLeftColumns, pinLeftContainer, initCell, releaseCellFn);
 		slot.ensureCenterCells(centerColCount, initCell, releaseCellFn);
@@ -872,11 +881,9 @@ export class RowRenderer<TRowData = unknown> {
 			visualRow,
 			(s) => {
 				// Collapse all lanes — cell portals released via releaseCellFn
-				const initCell = (el: HTMLDivElement) => this._initCell(el);
-				const releaseCellFn = (cell: CellSlot<TRowData>) => this._releaseCellFn(cell);
-				s.ensureLeftCells(0, null, initCell, releaseCellFn);
-				s.ensureCenterCells(0, initCell, releaseCellFn);
-				s.ensureRightCells(0, null, initCell, releaseCellFn);
+				s.ensureLeftCells(0, null, this._initCell, this._releaseCellFn);
+				s.ensureCenterCells(0, this._initCell, this._releaseCellFn);
+				s.ensureRightCells(0, null, this._initCell, this._releaseCellFn);
 				this.ensurePinnedContainer(s, 'left', 0);
 				this.ensurePinnedContainer(s, 'right', 0);
 			},
@@ -1263,11 +1270,7 @@ export class RowRenderer<TRowData = unknown> {
 		const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
 		const isRowLoading = ctx.loadingVersion > 0 && this.engine.data.isRowLoading(node.id);
 
-		const rendererKind: 'primitive' | 'portal' | 'loading' = isRowLoading
-			? 'loading'
-			: isEditing || (plan && plan.mode.startsWith('custom-'))
-				? 'portal'
-				: 'primitive';
+		const rendererKind: 'primitive' | 'portal' | 'loading' = isRowLoading ? 'loading' : isEditing || plan?.isCustom ? 'portal' : 'primitive';
 
 		let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, Math.max(pinLeftColumns, colCount - pinRightColumns));
 		if (rendererKind === 'loading') {
@@ -1318,14 +1321,10 @@ export class RowRenderer<TRowData = unknown> {
 		// Only preserve portals when the slot is NOT rebinding to a new row.
 		// isRowRebind=true means this slot just got a different row — the old
 		// renderer's data is stale and should not be shown.
+		const isMounted = this.portalMountManager.isCellMounted(cellKey);
 		const isPreservedPortal =
-			!isRowRebind &&
-			rendererKind === 'portal' &&
-			scrollMode === 'custom-defer' &&
-			cellSlot.lastPortalKey === cellKey &&
-			this.portalMountManager.isCellMounted(cellKey);
-		const hasMountedPortalForCell = this.portalMountManager.isCellMounted(cellKey);
-		const shouldKeepLivePortalDuringScroll = !isRowRebind && scrollMode === 'custom-live' && hasMountedPortalForCell;
+			!isRowRebind && rendererKind === 'portal' && scrollMode === 'custom-defer' && cellSlot.lastPortalKey === cellKey && isMounted;
+		const shouldKeepLivePortalDuringScroll = !isRowRebind && scrollMode === 'custom-live' && isMounted;
 		const shouldKeepPortalDuringScroll = shouldKeepLivePortalDuringScroll || isPreservedPortal;
 
 		// Release any stale portal when transitioning away from portal mode (e.g. the cell
@@ -1530,8 +1529,8 @@ export class RowRenderer<TRowData = unknown> {
 
 	public releaseRowSlot(rowIndex: number, slot: RowSlot<TRowData>, _isScrollFrameActive: boolean): void {
 		this.releaseRowPortal(slot);
-		const initCell = (el: HTMLDivElement) => this._initCell(el);
-		const releaseCellFn = (cell: CellSlot<TRowData>) => this._releaseCellFn(cell);
+		const initCell = this._initCell;
+		const releaseCellFn = this._releaseCellFn;
 		slot.ensureLeftCells(0, null, initCell, releaseCellFn);
 		slot.ensureCenterCells(0, initCell, releaseCellFn);
 		slot.ensureRightCells(0, null, initCell, releaseCellFn);

@@ -16,10 +16,10 @@ export interface ScrollIntoViewParams {
 	scrollLeft: number;
 	viewportHeight: number;
 	viewportWidth: number;
-	rowTops: readonly number[];
-	rowHeights: readonly number[];
-	colLefts: readonly number[];
-	colWidths: readonly number[];
+	rowTops: ArrayLike<number>;
+	rowHeights: ArrayLike<number>;
+	colLefts: ArrayLike<number>;
+	colWidths: ArrayLike<number>;
 	scrollViewportScrollHeight: number;
 	scrollViewportScrollWidth: number;
 	scrollViewportClientHeight: number;

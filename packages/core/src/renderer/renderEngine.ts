@@ -72,11 +72,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private lastStyleSlots: unknown = undefined;
 	private lastLoading: unknown = undefined;
 
-	// Cached maximum scroll-left so the raw DOM scroll handler (120/sec on high-refresh
-	// displays) never needs to call getState() or geometry on the hot path.
+	// Cached geometry values so the raw DOM scroll handler (120/sec on high-refresh
+	// displays) and same-window fast path never need to call getState() or geometry.
 	private cachedMaxScrollLeft = 0;
 	private cachedTotalWidth = 0;
 	private cachedTotalHeight = 0;
+	private cachedDefaultRowHeight = 40;
 	private cachedHasSelectionOverlay = false;
 
 	// Reusable ScrollRenderContext updated in-place each scroll frame to avoid allocation.
@@ -605,7 +606,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const stickyIndices = window.stickyGroupIndices;
 		if (stickyIndices && stickyIndices.length > 0) {
 			const scrollTop = this.engine.viewport.scrollTop;
-			const defaultRowHeight = this.engine.stateManager.getState().defaultRowHeight ?? 40;
+			const defaultRowHeight = this.cachedDefaultRowHeight;
 			let stickyOffset = 0;
 			for (const stickyIdx of stickyIndices) {
 				const slot = this.rowRenderer.activeRows.get(stickyIdx);
@@ -628,6 +629,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private updateCachedGeometryBoundsFromState(defaultColWidth: number, defaultRowHeight: number): void {
 		this.cachedTotalWidth = this.engine.geometry.getTotalWidth(defaultColWidth);
 		this.cachedTotalHeight = this.engine.geometry.getTotalHeight(defaultRowHeight);
+		this.cachedDefaultRowHeight = defaultRowHeight ?? 40;
 		this.cachedMaxScrollLeft = Math.max(0, this.cachedTotalWidth - this.engine.viewport.viewportWidth);
 	}
 

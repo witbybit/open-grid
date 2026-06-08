@@ -115,6 +115,8 @@ export interface ColumnRenderPlan<TData = unknown> {
 	colId: string;
 	field: string;
 	mode: ColumnRenderMode;
+	/** True when the column uses a custom cell renderer (mode starts with 'custom-'). Pre-computed to avoid string.startsWith on the hot scroll path. */
+	isCustom: boolean;
 	hasValueGetter: boolean;
 	hasFormatter: boolean;
 	hasFormulaSupport: boolean;

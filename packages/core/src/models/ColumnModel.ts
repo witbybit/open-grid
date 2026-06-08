@@ -94,6 +94,7 @@ export class ColumnModel<TRowData = unknown> {
 					colId: col.field,
 					field: col.field,
 					mode,
+					isCustom: mode !== 'primitive' && mode !== 'primitive-formatted',
 					hasValueGetter,
 					hasFormatter,
 					hasFormulaSupport,
