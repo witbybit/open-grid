@@ -84,6 +84,13 @@ export class PortalMountManager<TRowData = unknown> {
 
 	private mountedCells = new Map<string, HTMLElement | undefined>();
 	private mountedRows = new Map<string, HTMLElement | undefined>();
+	// Pre-allocated priority buckets for flushDeferred — zero allocation per flush.
+	// Bucket layout: [0] active-edit (≥1000), [1] focused (≥900), [2] everything else.
+	private readonly _mountBuckets: [GridCellContentMount<TRowData>[], GridCellContentMount<TRowData>[], GridCellContentMount<TRowData>[]] = [
+		[],
+		[],
+		[],
+	];
 	private mountedRowVisualRows = new Map<string, GridRowContentMount<TRowData>['visualRow']>();
 	private mountedMenus = new Map<string, HTMLElement | undefined>();
 	private cellReleaseTransactionDepth = 0;
@@ -361,16 +368,28 @@ export class PortalMountManager<TRowData = unknown> {
 			processed++;
 		}
 
-		const sortedMounts = Array.from(this.deferredCellMounts.values()).sort((a, b) => {
-			return getPriority(b) - getPriority(a);
-		});
-
-		for (const mount of sortedMounts) {
-			if (processed >= maxItems) break;
-			this.mountCellReal(mount);
-			this.deferredCellMounts.delete(mount.cellKey);
-			this.deferredNewCellMounts.delete(mount.cellKey);
-			processed++;
+		// Classify deferred mounts into priority buckets — O(N) with zero allocation.
+		const mb0 = this._mountBuckets[0];
+		mb0.length = 0;
+		const mb1 = this._mountBuckets[1];
+		mb1.length = 0;
+		const mb2 = this._mountBuckets[2];
+		mb2.length = 0;
+		for (const mount of this.deferredCellMounts.values()) {
+			const p = getPriority(mount);
+			if (p >= 1000) mb0.push(mount);
+			else if (p >= 900) mb1.push(mount);
+			else mb2.push(mount);
+		}
+		for (let bi = 0; bi < 3 && processed < maxItems; bi++) {
+			const bucket = this._mountBuckets[bi];
+			for (let i = 0; i < bucket.length && processed < maxItems; i++) {
+				const mount = bucket[i];
+				this.mountCellReal(mount);
+				this.deferredCellMounts.delete(mount.cellKey);
+				this.deferredNewCellMounts.delete(mount.cellKey);
+				processed++;
+			}
 		}
 
 		for (const [rowKey, unmount] of Array.from(this.deferredRowReleases)) {

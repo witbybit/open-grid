@@ -93,6 +93,10 @@ export class RowRenderer<TRowData = unknown> {
 	private readonly _rowsEnteredSet = new Set<number>();
 	public postScrollDirtyCellsDecorated = 0;
 
+	// Pre-allocated priority buckets for decorateDirtyCellsAfterScroll — zero allocation per scroll idle pass.
+	// Bucket layout: [0] active-edit, [1] focused cell, [2] visible range, [3] off-screen / unknown.
+	private readonly _dirtyBuckets: [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]] = [[], [], [], []];
+
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 
 	constructor(
@@ -1677,59 +1681,74 @@ export class RowRenderer<TRowData = unknown> {
 			return 4 - normDist * 0.01;
 		};
 
-		let processed = 0;
-		const allDirty: Array<{ cell: HTMLDivElement; priority: number }> = [];
+		// Classify dirty cells into priority buckets — O(N) with zero per-cell allocation.
+		// Buckets: [0] active edit, [1] focused, [2] visible range, [3] off-screen/unknown.
+		const b0 = this._dirtyBuckets[0];
+		b0.length = 0;
+		const b1 = this._dirtyBuckets[1];
+		b1.length = 0;
+		const b2 = this._dirtyBuckets[2];
+		b2.length = 0;
+		const b3 = this._dirtyBuckets[3];
+		b3.length = 0;
 		for (const cell of this.dirtyCellsAfterScroll) {
-			allDirty.push({ cell, priority: getCellPriority(cell) });
+			const p = getCellPriority(cell);
+			if (p >= 6) b0.push(cell);
+			else if (p >= 5) b1.push(cell);
+			else if (p > 1) b2.push(cell);
+			else b3.push(cell);
 		}
-		allDirty.sort((a, b) => b.priority - a.priority);
 
-		const limit = Math.min(allDirty.length, maxCells);
-		for (let i = 0; i < limit; i++) {
-			const { cell } = allDirty[i];
-			this.dirtyCellsAfterScroll.delete(cell);
-			const rowIndexStr = cell.dataset.rowIndex;
-			const colField = cell.dataset.colField;
-			if (!rowIndexStr || !colField) continue;
+		let processed = 0;
+		for (let bi = 0; bi < 4 && processed < maxCells; bi++) {
+			const bucket = this._dirtyBuckets[bi];
+			for (let i = 0; i < bucket.length; i++) {
+				if (processed >= maxCells) break;
+				const cell = bucket[i];
+				this.dirtyCellsAfterScroll.delete(cell);
+				const rowIndexStr = cell.dataset.rowIndex;
+				const colField = cell.dataset.colField;
+				if (!rowIndexStr || !colField) continue;
 
-			const rowIndex = Number(rowIndexStr);
-			const visualRow = rowModel.getVisualRow(rowIndex);
-			const colIndex = this.engine.columns.getColumnIndex(colField);
+				const rowIndex = Number(rowIndexStr);
+				const visualRow = rowModel.getVisualRow(rowIndex);
+				const colIndex = this.engine.columns.getColumnIndex(colField);
 
-			if (visualRow?.kind === 'data' && colIndex >= 0) {
-				const slot = this.activeRows.get(rowIndex);
-				if (slot) {
-					const cellSlot = slot.getCellForCol(colIndex);
-					if (cellSlot && cellSlot.element === cell) {
-						this._bindCellFull(
-							cellSlot,
-							slot.id,
-							visualRow.node,
-							rowIndex,
-							colIndex,
-							columns[colIndex],
-							pinLeftColumns,
-							pinRightColumns,
-							pinRightStart,
-							pinRightBaseLeft,
-							plan,
-							state,
-							false,
-							undefined,
-							'scroll-idle'
-						);
-						this.postScrollDirtyCellsDecorated++;
-						processed++;
+				if (visualRow?.kind === 'data' && colIndex >= 0) {
+					const slot = this.activeRows.get(rowIndex);
+					if (slot) {
+						const cellSlot = slot.getCellForCol(colIndex);
+						if (cellSlot && cellSlot.element === cell) {
+							this._bindCellFull(
+								cellSlot,
+								slot.id,
+								visualRow.node,
+								rowIndex,
+								colIndex,
+								columns[colIndex],
+								pinLeftColumns,
+								pinRightColumns,
+								pinRightStart,
+								pinRightBaseLeft,
+								plan,
+								state,
+								false,
+								undefined,
+								'scroll-idle'
+							);
+							this.postScrollDirtyCellsDecorated++;
+							processed++;
+						}
 					}
-				}
-			} else if (visualRow?.kind === 'loading' && colIndex >= 0) {
-				const slot = this.activeRows.get(rowIndex);
-				if (slot) {
-					const cellSlot = slot.getCellForCol(colIndex);
-					if (cellSlot && cellSlot.element === cell) {
-						this.cellRenderer.ensureLoadingSkeleton(cell);
-						this.postScrollDirtyCellsDecorated++;
-						processed++;
+				} else if (visualRow?.kind === 'loading' && colIndex >= 0) {
+					const slot = this.activeRows.get(rowIndex);
+					if (slot) {
+						const cellSlot = slot.getCellForCol(colIndex);
+						if (cellSlot && cellSlot.element === cell) {
+							this.cellRenderer.ensureLoadingSkeleton(cell);
+							this.postScrollDirtyCellsDecorated++;
+							processed++;
+						}
 					}
 				}
 			}

@@ -99,6 +99,13 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 		// 1. Navigation logic when NOT in cell editing mode
 		if (!isEditing) {
+			// Ctrl+C / Cmd+C — copy selection to clipboard
+			if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+				event.preventDefault();
+				this.copySelectionToClipboard();
+				return;
+			}
+
 			let nextRow = row;
 			let nextCol = col;
 			let handled = false;
@@ -426,5 +433,45 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 	public cancelEdit(): void {
 		this.store.stopEditing(true);
+	}
+
+	/**
+	 * Copy the current selection to the clipboard as tab-separated values (TSV).
+	 * Single-cell selection copies the display value; multi-cell copies a TSV block
+	 * that pastes correctly into Excel and Google Sheets.
+	 */
+	private copySelectionToClipboard(): void {
+		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+		const state = this.store.getState();
+		const selection = state.selection;
+		const bounds = selection.bounds;
+
+		if (!bounds) {
+			// Single focused cell
+			const focus = selection.focus;
+			if (!focus) return;
+			const text = this.store.getCheapDisplayValue(focus.rowId, focus.colField);
+			navigator.clipboard.writeText(text).catch(() => {});
+			return;
+		}
+
+		const rowModel = this.store.getRowModel();
+		if (!rowModel) return;
+
+		const rows: string[] = [];
+		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+			const visualRow = rowModel.getVisualRow(r);
+			if (!visualRow || visualRow.kind !== 'data') continue;
+			const cells: string[] = [];
+			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+				const colField = this.store.getColumnField(c);
+				if (colField === null) continue;
+				cells.push(this.store.getCheapDisplayValue(visualRow.rowId, colField));
+			}
+			rows.push(cells.join('\t'));
+		}
+
+		if (rows.length === 0) return;
+		navigator.clipboard.writeText(rows.join('\n')).catch(() => {});
 	}
 }
