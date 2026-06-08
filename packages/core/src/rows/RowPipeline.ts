@@ -8,7 +8,7 @@ import { sortTreeStage } from './stages/sortTreeStage.js';
 import { aggregateStage, type AggregationDef } from './stages/aggregateStage.js';
 import { flattenStage } from './stages/flattenStage.js';
 import type { RowTreeNode } from './stages/types.js';
-import { toDataVisualRowId } from './visualRowIds.js';
+import { toDataVisualRowId, toGroupVisualRowId } from './visualRowIds.js';
 
 export interface GroupDef<TData = unknown> {
 	colId: string;
@@ -225,6 +225,27 @@ export class RowPipeline<TData = unknown> {
 				loadingRowCount,
 			},
 		};
+	}
+
+	public collectAllGroupIds(input: Pick<RowPipelineInput<TData>, 'nodes' | 'columns' | 'groupBy' | 'rowModelConfig' | 'filterModel'>): string[] {
+		const { nodes, columns, groupBy, rowModelConfig, filterModel } = input;
+		const groupingConfig = rowModelConfig?.grouping;
+		const groupDefs: GroupDef<TData>[] = groupingConfig?.model ?? (groupBy ?? []).map((colId) => ({ colId }));
+		if (groupDefs.length === 0) return [];
+		const filteredNodes = applyClientSortAndFilter(nodes, columns, null, filterModel).map((w) => w.node);
+		const context = createRowPipelineContext(columns, { groups: new Set(), treeRows: new Set(), details: new Set() });
+		const roots = groupStage(filteredNodes, groupDefs, context);
+		const ids: string[] = [];
+		const collect = (nodes: RowTreeNode<TData>[]) => {
+			for (const node of nodes) {
+				if (node.kind === 'group') {
+					ids.push(toGroupVisualRowId(node.path));
+					collect(node.children);
+				}
+			}
+		};
+		collect(roots);
+		return ids;
 	}
 
 	private filterTree<TData>(

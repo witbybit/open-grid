@@ -57,6 +57,8 @@ export type {
 	FooterVisualRow,
 	LoadingVisualRow,
 	GroupDef,
+	AggregationDef,
+	CsvExportOptions,
 	CellRendererCapabilities,
 	CellRendererPhase,
 	DomCellRenderer,

@@ -4,6 +4,8 @@ import { ViewportController, type ViewportRange } from './viewportController.js'
 import { GridEngine } from './engine/GridEngine.js';
 import type { GroupPathItem } from './rows/visualRowIds.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
+import type { AggregationDef } from './rows/stages/aggregateStage.js';
+import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 
 export interface CellSubscription {
 	rowId: string;
@@ -486,6 +488,8 @@ export interface RowModel<TRowData = unknown> {
 	toggleDetailExpanded?(rowId: string): void;
 	isGroupExpanded?(groupId: string): boolean;
 	isDetailExpanded?(rowId: string): boolean;
+	expandAllGroups?(): void;
+	collapseAllGroups?(): void;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
@@ -613,6 +617,7 @@ export interface GridState<TRowData = unknown> {
 
 	// Tree / Grouping / Master-Detail State
 	groupBy?: string[];
+	aggDefs?: AggregationDef<TRowData>[];
 	getParentId?: (row: TRowData) => string | null | undefined;
 	masterDetailEnabled?: boolean;
 	groupRowHeight?: number;
@@ -760,6 +765,10 @@ export interface GridApi<TRowData = unknown> {
 	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
 	setGroupBy(colIds: string[]): void;
 	getGroupBy(): string[];
+	setAggDefs(defs: AggregationDef<TRowData>[]): void;
+	getAggDefs(): AggregationDef<TRowData>[];
+	expandAllGroups(): void;
+	collapseAllGroups(): void;
 	toggleGroupExpanded(groupId: string): void;
 	toggleDetailExpanded(rowId: string): void;
 	isGroupExpanded(groupId: string): boolean;
@@ -804,10 +813,13 @@ export interface GridApi<TRowData = unknown> {
 	closeChart(): void;
 	toggleChart(): void;
 	isChartOpen(): boolean;
+	exportCsv(options?: CsvExportOptions): void;
 	destroy(): void;
 	getRenderStats(): RenderStats;
 	resetRenderStats(): void;
 }
+
+export type { CsvExportOptions };
 
 /**
  * Internal API intended for the rendering engine, plugins, and custom framework adapters.
@@ -1048,6 +1060,26 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getGroupBy = (): string[] => {
 		return this.state.groupBy ?? [];
+	};
+
+	public setAggDefs = (defs: AggregationDef<TRowData>[]): void => {
+		this.engine.setAggDefs(defs);
+	};
+
+	public getAggDefs = (): AggregationDef<TRowData>[] => {
+		return this.state.aggDefs ?? [];
+	};
+
+	public expandAllGroups = (): void => {
+		this.getRowModel()?.expandAllGroups?.();
+	};
+
+	public collapseAllGroups = (): void => {
+		this.getRowModel()?.collapseAllGroups?.();
+	};
+
+	public exportCsv = (options?: CsvExportOptions): void => {
+		exportToCsv(this, options);
 	};
 
 	public openPanel = (panelId: string): void => {

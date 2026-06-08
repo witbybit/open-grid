@@ -66,6 +66,8 @@ export { OverlayRenderer } from './renderer/overlayRenderer.js';
 export { RowRenderer } from './renderer/rowRenderer.js';
 export { ViewportRenderer } from './renderer/viewportRenderer.js';
 export type { FilterModel, FilterModelItem, GroupDef, RowModelConfig, SortModel } from './rowModel.js';
+export type { AggregationDef } from './rows/stages/aggregateStage.js';
+export type { CsvExportOptions } from './store.js';
 export {
 	parseVisualRowId,
 	toDataVisualRowId,

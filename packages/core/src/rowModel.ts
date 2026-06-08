@@ -272,6 +272,27 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return !!this.store.getState().expansion.details[rowId];
 	};
 
+	public expandAllGroups = (): void => {
+		const state = this.store.getState();
+		const allIds = this.pipeline.collectAllGroupIds({
+			nodes: this.dataStore.getAllNodes(),
+			columns: state.columns,
+			groupBy: state.groupBy,
+			rowModelConfig: state.rowModelConfig,
+			filterModel: state.filterModel,
+		});
+		const groups: Record<string, true> = {};
+		for (const id of allIds) groups[id] = true;
+		this.store.setState({ expansion: { ...state.expansion, groups } });
+		this.refresh();
+	};
+
+	public collapseAllGroups = (): void => {
+		const state = this.store.getState();
+		this.store.setState({ expansion: { ...state.expansion, groups: {} } });
+		this.refresh();
+	};
+
 	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
 		this.store = store;
 		this.dataStore = new RowDataStore<TData>((row) => this.store.getRowId(row));
@@ -286,7 +307,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.unsubscribers.push(
 			this.store.addEventListener('sortChanged', () => this.refresh()),
 			this.store.addEventListener('filterChanged', () => this.refresh()),
-			this.store.addEventListener('groupByChanged', () => this.refresh())
+			this.store.addEventListener('groupByChanged', () => this.refresh()),
+			this.store.addEventListener('aggDefsChanged', () => this.refresh())
 		);
 		this.setRows(options.rows);
 	}
@@ -574,6 +596,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			groupBy: state.groupBy,
 			rowModelConfig,
 			getParentId: state.getParentId,
+			aggDefs: state.aggDefs ?? [],
 			expandedGroupIds: new Set(Object.keys(expansion.groups)),
 			expandedTreeRowIds: new Set(Object.keys(expansion.treeRows)),
 			expandedDetailRowIds: new Set(Object.keys(expansion.details)),

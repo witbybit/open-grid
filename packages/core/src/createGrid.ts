@@ -4,6 +4,7 @@ import { ServerRowModelController, type IGridDatasource, type ServerRowModelOpti
 import {
 	GridStore,
 	type ColumnDef,
+	type CsvExportOptions,
 	type GridApi,
 	type GridCellPointer,
 	type GridEventListener,
@@ -13,6 +14,7 @@ import {
 	type RowDataTransaction,
 	type RowNodeTransaction,
 } from './store.js';
+import { exportToCsv } from './export/csvExport.js';
 
 export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowData> {
 	getRowId?: (row: TRowData) => string;
@@ -68,6 +70,11 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		setFilterModel: (filterModel: FilterModel | null) => store.setFilterModel(filterModel),
 		setGroupBy: (colIds: string[]) => store.setGroupBy(colIds),
 		getGroupBy: () => store.getGroupBy(),
+		setAggDefs: (defs: Parameters<typeof store.setAggDefs>[0]) => store.setAggDefs(defs),
+		getAggDefs: () => store.getAggDefs(),
+		expandAllGroups: () => store.expandAllGroups(),
+		collapseAllGroups: () => store.collapseAllGroups(),
+		exportCsv: (options?: CsvExportOptions) => exportToCsv(store, options),
 		setStyleSlots: (styleSlots: GridState<TRowData>['styleSlots']) => store.setStyleSlots(styleSlots),
 		addEventListener: <T = unknown>(type: string, callback: GridEventListener<T>) => store.addEventListener(type, callback),
 		dispatchEvent: <T = unknown>(type: string, payload: T) => store.dispatchEvent(type, payload),

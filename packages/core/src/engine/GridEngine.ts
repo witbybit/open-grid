@@ -293,6 +293,12 @@ export class GridEngine<TRowData = unknown> {
 		this.requestRender('groupBy');
 	}
 
+	public setAggDefs(defs: import('../rows/stages/aggregateStage.js').AggregationDef<any>[]): void {
+		this.stateManager.setState({ aggDefs: defs });
+		this.invalidation.invalidateFull('aggDefs');
+		this.requestRender('aggDefs');
+	}
+
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
 		const oldValue = this.data.getRawCellValue(rowId, colField);
 		if (oldValue === value) return;
@@ -904,6 +910,9 @@ export class GridEngine<TRowData = unknown> {
 		}
 		if (updatedSet.has('groupBy')) {
 			this.eventBus.dispatchEvent('groupByChanged', { groupBy: currState.groupBy });
+		}
+		if (updatedSet.has('aggDefs')) {
+			this.eventBus.dispatchEvent('aggDefsChanged', { aggDefs: currState.aggDefs });
 		}
 	};
 
