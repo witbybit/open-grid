@@ -284,6 +284,15 @@ export class GridEngine<TRowData = unknown> {
 		}
 	}
 
+	public setGroupBy(colIds: string[]): void {
+		const state = this.stateManager.getState();
+		// Clear stale group expansion state when grouping columns change
+		const newExpansion = { ...state.expansion, groups: {} as Record<string, true> };
+		this.stateManager.setState({ groupBy: colIds, expansion: newExpansion });
+		this.invalidation.invalidateFull('groupBy');
+		this.requestRender('groupBy');
+	}
+
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
 		const oldValue = this.data.getRawCellValue(rowId, colField);
 		if (oldValue === value) return;
@@ -892,6 +901,9 @@ export class GridEngine<TRowData = unknown> {
 		}
 		if (updatedSet.has('filterModel')) {
 			this.eventBus.dispatchEvent('filterChanged', { filterModel: currState.filterModel });
+		}
+		if (updatedSet.has('groupBy')) {
+			this.eventBus.dispatchEvent('groupByChanged', { groupBy: currState.groupBy });
 		}
 	};
 

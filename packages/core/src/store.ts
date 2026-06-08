@@ -519,6 +519,8 @@ export interface ColumnDef<TRowData = unknown> {
 	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;
 	headerMenuComponent?: any;
 	sortable?: boolean;
+	/** When false, this column cannot be added to the row grouping. Defaults to true. */
+	enableRowGroup?: boolean;
 }
 
 /**
@@ -756,6 +758,8 @@ export interface GridApi<TRowData = unknown> {
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
 	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
+	setGroupBy(colIds: string[]): void;
+	getGroupBy(): string[];
 	toggleGroupExpanded(groupId: string): void;
 	toggleDetailExpanded(rowId: string): void;
 	isGroupExpanded(groupId: string): boolean;
@@ -1036,6 +1040,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setFilterModel = (filterModel: FilterModel | null): void => {
 		this.engine.setFilterModel(filterModel);
+	};
+
+	public setGroupBy = (colIds: string[]): void => {
+		this.engine.setGroupBy(colIds);
+	};
+
+	public getGroupBy = (): string[] => {
+		return this.state.groupBy ?? [];
 	};
 
 	public openPanel = (panelId: string): void => {

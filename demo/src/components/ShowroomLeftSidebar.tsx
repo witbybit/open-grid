@@ -15,6 +15,7 @@ import {
 	Gauge,
 	PanelRight,
 	Boxes,
+	Layers,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -98,6 +99,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Native Cell Types',
 			subtitle: 'Checkbox · Tags · Date · More',
 			icon: Boxes,
+		},
+		{
+			id: 'grouping',
+			label: 'Live Grouping',
+			subtitle: 'Drag · Drop · Reorder Groups',
+			icon: Layers,
 		},
 	] as const;
 

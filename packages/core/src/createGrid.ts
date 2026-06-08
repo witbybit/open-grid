@@ -66,6 +66,8 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		setRowHeight: (rowId: string, height: number) => store.setRowHeight(rowId, height),
 		setSortModel: (sortModel: SortModel | null) => store.setSortModel(sortModel),
 		setFilterModel: (filterModel: FilterModel | null) => store.setFilterModel(filterModel),
+		setGroupBy: (colIds: string[]) => store.setGroupBy(colIds),
+		getGroupBy: () => store.getGroupBy(),
 		setStyleSlots: (styleSlots: GridState<TRowData>['styleSlots']) => store.setStyleSlots(styleSlots),
 		addEventListener: <T = unknown>(type: string, callback: GridEventListener<T>) => store.addEventListener(type, callback),
 		dispatchEvent: <T = unknown>(type: string, payload: T) => store.dispatchEvent(type, payload),

@@ -285,7 +285,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		this.unsubscribers.push(
 			this.store.addEventListener('sortChanged', () => this.refresh()),
-			this.store.addEventListener('filterChanged', () => this.refresh())
+			this.store.addEventListener('filterChanged', () => this.refresh()),
+			this.store.addEventListener('groupByChanged', () => this.refresh())
 		);
 		this.setRows(options.rows);
 	}

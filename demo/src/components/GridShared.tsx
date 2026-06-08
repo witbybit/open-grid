@@ -13,7 +13,8 @@ export type GridPageType =
 	| 'gantt'
 	| 'nested'
 	| 'panels'
-	| 'native';
+	| 'native'
+	| 'grouping';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================

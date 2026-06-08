@@ -24,6 +24,7 @@ import type {
 	ImperativeCellHandle,
 } from '@open-grid/core';
 export { isDomCellRenderer } from '@open-grid/core';
+export type { GroupDef } from '@open-grid/core';
 
 export type {
 	ColumnDef,
