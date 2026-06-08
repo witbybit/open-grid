@@ -536,6 +536,20 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			// Pass the already-computed nextWindow so rowRenderer.recycleViewport does not
 			// call computeRenderWindow a second time (duplicate binary searches + state read).
 			this.recycleViewport(true, scrollCtx, nextWindow);
+
+			// Sticky group rows must render immediately — never defer their portal mounts.
+			// If a sticky row's slot was freshly assigned (row was outside the overscan buffer),
+			// its portal mount would otherwise be queued and appear blank for 1-2 frames.
+			if (nextWindow.stickyGroupIndices && nextWindow.stickyGroupIndices.length > 0) {
+				const rowModel = this.engine.getRowModel();
+				if (rowModel) {
+					for (const idx of nextWindow.stickyGroupIndices) {
+						const vr = rowModel.getVisualRow(idx);
+						if (vr) this.portalMountManager.flushDeferredRowMount(vr.id);
+					}
+				}
+			}
+
 			this.rowRenderer.syncPinnedLanePositions(nextWindow, this.cachedTotalWidth);
 			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, plan);
 			const didSyncRange = this.headerRenderer.syncVisibleColumnRange(plan, state, visibleColRange);
@@ -593,6 +607,21 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 						slot.updatePosition(rowTop);
 					}
 				}
+			}
+		}
+
+		// 4. Sticky group rows position update
+		const stickyIndices = window.stickyGroupIndices;
+		if (stickyIndices && stickyIndices.length > 0) {
+			const scrollTop = this.engine.viewport.scrollTop;
+			const defaultRowHeight = this.engine.stateManager.getState().defaultRowHeight ?? 40;
+			let stickyOffset = 0;
+			for (const stickyIdx of stickyIndices) {
+				const slot = this.rowRenderer.activeRows.get(stickyIdx);
+				if (slot) {
+					slot.updatePosition(scrollTop + stickyOffset);
+				}
+				stickyOffset += this.engine.geometry.getRowHeight(stickyIdx, defaultRowHeight);
 			}
 		}
 

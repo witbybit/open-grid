@@ -18,17 +18,26 @@ export interface FlattenConfig<TData = unknown> {
 	includeFooter?: boolean;
 }
 
-export function flattenStage<TData>(roots: RowTreeNode<TData>[], config: FlattenConfig<TData>): VisualRow<TData>[] {
+export function flattenStage<TData>(
+	roots: RowTreeNode<TData>[],
+	config: FlattenConfig<TData>,
+	stickyGroupMeta?: Map<number, number>
+): VisualRow<TData>[] {
 	const result: VisualRow<TData>[] = [];
 
 	for (const root of roots) {
-		flattenNodeRecursively(root, config, result);
+		flattenNodeRecursively(root, config, result, stickyGroupMeta);
 	}
 
 	return result;
 }
 
-function flattenNodeRecursively<TData>(node: RowTreeNode<TData>, config: FlattenConfig<TData>, result: VisualRow<TData>[]): void {
+function flattenNodeRecursively<TData>(
+	node: RowTreeNode<TData>,
+	config: FlattenConfig<TData>,
+	result: VisualRow<TData>[],
+	stickyGroupMeta?: Map<number, number>
+): void {
 	if (node.kind === 'data') {
 		const rowId = node.node.id;
 		const explicitHeight = config.rowHeightsRecord[rowId];
@@ -48,7 +57,7 @@ function flattenNodeRecursively<TData>(node: RowTreeNode<TData>, config: Flatten
 		const isExpandedTreeRow = config.defaultTreeRowsExpanded || config.expandedTreeRowIds.has(rowId);
 		if (node.children?.length && isExpandedTreeRow) {
 			for (const child of node.children) {
-				flattenNodeRecursively(child, config, result);
+				flattenNodeRecursively(child, config, result, stickyGroupMeta);
 			}
 		}
 
@@ -69,6 +78,7 @@ function flattenNodeRecursively<TData>(node: RowTreeNode<TData>, config: Flatten
 
 	const isExpanded = config.defaultGroupsExpanded || config.expandedGroupIds.has(node.id);
 	const groupHeight = config.groupRowHeight || config.defaultRowHeight;
+	const groupRowIdx = result.length;
 
 	result.push({
 		kind: 'group',
@@ -90,18 +100,31 @@ function flattenNodeRecursively<TData>(node: RowTreeNode<TData>, config: Flatten
 
 	if (isExpanded) {
 		for (const child of node.children) {
-			flattenNodeRecursively(child, config, result);
+			flattenNodeRecursively(child, config, result, stickyGroupMeta);
 		}
+
+		// Record sticky boundary using the last content descendant (before the footer).
+		// This ensures the group stops being sticky when its last data row scrolls off,
+		// not when the footer itself scrolls off — preventing header+footer overlap at the top.
+		if (stickyGroupMeta && result.length > groupRowIdx + 1) {
+			stickyGroupMeta.set(groupRowIdx, result.length - 1);
+		}
+
+		// Only add footer for leaf groups (children are data rows, not nested groups).
+		// This prevents duplicate subtotals at every nesting level.
 		if (config.includeFooter) {
-			result.push({
-				kind: 'footer',
-				id: toFooterVisualRowId(node.id),
-				parentGroupId: node.id,
-				depth: node.depth,
-				aggregateValues: node.aggregateValues,
-				aggregate: node.aggregateValues,
-				height: groupHeight,
-			});
+			const hasGroupChildren = node.children.some((c) => c.kind === 'group');
+			if (!hasGroupChildren) {
+				result.push({
+					kind: 'footer',
+					id: toFooterVisualRowId(node.id),
+					parentGroupId: node.id,
+					depth: node.depth,
+					aggregateValues: node.aggregateValues,
+					aggregate: node.aggregateValues,
+					height: groupHeight,
+				});
+			}
 		}
 	}
 }

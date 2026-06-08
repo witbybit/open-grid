@@ -70,6 +70,8 @@ export interface RowPipelineOutput<TData = unknown> {
 	rowIdToVisualIndex: Map<string, number>;
 	rowIdToVisualRowId: Map<string, string>;
 	rowIdToVisualRowIds?: Map<string, string[]>;
+	/** Maps each expanded group row's visual index → its last descendant's visual index. */
+	stickyGroupMeta: Map<number, number>;
 	version: number;
 	stats: {
 		totalDataRows: number;
@@ -162,21 +164,26 @@ export class RowPipeline<TData = unknown> {
 			aggregateStage(roots, aggDefs, context);
 		}
 
-		visualRows ??= flattenStage(roots ?? [], {
-			expandedGroupIds: context.expansion.groups,
-			expandedTreeRowIds: context.expansion.treeRows,
-			expandedDetailRowIds: context.expansion.details,
-			defaultRowHeight,
-			rowHeightsRecord,
-			groupRowHeight,
-			detailRowHeight: detailConfig?.defaultDetailHeight ?? detailRowHeight,
-			getDetailHeight: detailConfig?.getDetailHeight ?? getDetailHeight,
-			masterDetailEnabled: detailConfig?.enabled ?? masterDetailEnabled,
-			detailRenderer,
-			defaultGroupsExpanded: groupingConfig?.defaultExpanded,
-			defaultTreeRowsExpanded: treeConfig?.defaultExpanded,
-			includeFooter: groupingConfig?.includeFooter,
-		});
+		const stickyGroupMeta = new Map<number, number>();
+		visualRows ??= flattenStage(
+			roots ?? [],
+			{
+				expandedGroupIds: context.expansion.groups,
+				expandedTreeRowIds: context.expansion.treeRows,
+				expandedDetailRowIds: context.expansion.details,
+				defaultRowHeight,
+				rowHeightsRecord,
+				groupRowHeight,
+				detailRowHeight: detailConfig?.defaultDetailHeight ?? detailRowHeight,
+				getDetailHeight: detailConfig?.getDetailHeight ?? getDetailHeight,
+				masterDetailEnabled: detailConfig?.enabled ?? masterDetailEnabled,
+				detailRenderer,
+				defaultGroupsExpanded: groupingConfig?.defaultExpanded,
+				defaultTreeRowsExpanded: treeConfig?.defaultExpanded,
+				includeFooter: groupingConfig?.includeFooter,
+			},
+			stickyGroupMeta
+		);
 
 		const visualRowIdToIndex = new Map<string, number>();
 		const rowIdToVisualIndex = new Map<string, number>();
@@ -216,6 +223,7 @@ export class RowPipeline<TData = unknown> {
 			rowIdToVisualIndex,
 			rowIdToVisualRowId,
 			rowIdToVisualRowIds,
+			stickyGroupMeta,
 			version: ++this.version,
 			stats: {
 				totalDataRows: nodes.length,

@@ -123,6 +123,8 @@ export class GridEngine<TRowData = unknown> {
 			detailRowHeight: config.detailRowHeight,
 			detailRenderer: config.detailRenderer,
 			rowModelConfig: config.rowModelConfig,
+			showGroupFooter: config.showGroupFooter,
+			enableStickyGroupRows: config.enableStickyGroupRows,
 			expansion: config.expansion ?? { groups: {}, treeRows: {}, details: {} },
 			rowOverscanPx: config.rowOverscanPx ?? 400,
 			colBuffer: config.colBuffer ?? 1,
@@ -297,6 +299,18 @@ export class GridEngine<TRowData = unknown> {
 		this.stateManager.setState({ aggDefs: defs });
 		this.invalidation.invalidateFull('aggDefs');
 		this.requestRender('aggDefs');
+	}
+
+	public setShowGroupFooter(enabled: boolean): void {
+		this.stateManager.setState({ showGroupFooter: enabled });
+		this.invalidation.invalidateFull('showGroupFooter');
+		this.requestRender('showGroupFooter');
+	}
+
+	public setStickyGroupRows(enabled: boolean): void {
+		this.stateManager.setState({ enableStickyGroupRows: enabled });
+		this.invalidation.invalidateFull('enableStickyGroupRows');
+		this.requestRender('enableStickyGroupRows');
 	}
 
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
@@ -913,6 +927,12 @@ export class GridEngine<TRowData = unknown> {
 		}
 		if (updatedSet.has('aggDefs')) {
 			this.eventBus.dispatchEvent('aggDefsChanged', { aggDefs: currState.aggDefs });
+		}
+		if (updatedSet.has('showGroupFooter')) {
+			this.eventBus.dispatchEvent('showGroupFooterChanged', { showGroupFooter: currState.showGroupFooter });
+		}
+		if (updatedSet.has('enableStickyGroupRows')) {
+			this.eventBus.dispatchEvent('enableStickyGroupRowsChanged', { enableStickyGroupRows: currState.enableStickyGroupRows });
 		}
 	};
 

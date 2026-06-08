@@ -455,6 +455,15 @@ export class PortalMountManager<TRowData = unknown> {
 		this.onUnmountRowContent?.(unmount);
 	}
 
+	/** Immediately flush a deferred row mount (bypasses the scrolling-deferred queue). */
+	public flushDeferredRowMount(rowKey: string): void {
+		const mount = this.deferredRowMounts.get(rowKey);
+		if (mount) {
+			this.deferredRowMounts.delete(rowKey);
+			this.onMountRowContent?.(mount);
+		}
+	}
+
 	public mountHeaderMenu(mount: GridHeaderMenuMount<TRowData>): void {
 		this.mountedMenus.set(mount.colField, mount.container);
 		this.onMountHeaderMenu?.(mount);

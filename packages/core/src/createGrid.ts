@@ -15,14 +15,49 @@ import {
 	type RowNodeTransaction,
 } from './store.js';
 import { exportToCsv } from './export/csvExport.js';
+import {
+	type GridPersistenceAdapter,
+	type PersistedGridState,
+	type PersistenceController,
+	type PersistenceStatus,
+	createLocalStorageAdapter,
+	applyPersistedState,
+	applyPersistedStateViaApi,
+	createPersistenceSubscription,
+} from './persistence/statePersistence.js';
+
+export type { GridPersistenceAdapter, PersistedGridState };
+export { createLocalStorageAdapter };
 
 export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowData> {
 	getRowId?: (row: TRowData) => string;
 	initialState?: Partial<GridState<TRowData>>;
+	/**
+	 * Persistence adapter. Pass `createLocalStorageAdapter(key)` for the built-in
+	 * localStorage implementation, or supply your own for remote/API-backed storage.
+	 *
+	 * @example localStorage
+	 * persistence: createLocalStorageAdapter('my-grid')
+	 *
+	 * @example Remote API
+	 * persistence: {
+	 *   async load() { return fetch('/api/grid-prefs').then(r => r.json()); },
+	 *   async save(state) { await fetch('/api/grid-prefs', { method: 'PUT', body: JSON.stringify(state) }); },
+	 *   async clear() { await fetch('/api/grid-prefs', { method: 'DELETE' }); },
+	 * }
+	 */
+	persistence?: GridPersistenceAdapter;
 }
 
 export interface ServerGridOptions<TRowData> extends ServerRowModelOptions<TRowData> {
 	initialState?: Partial<GridState<TRowData>>;
+	/**
+	 * Persistence adapter — same interface as client grid.
+	 * Column order, visibility, widths, sort model, filter model,
+	 * showGroupFooter, and enableStickyGroupRows are persisted.
+	 * Row data is not persisted (fetched from the server datasource on load).
+	 */
+	persistence?: GridPersistenceAdapter;
 }
 
 function buildColumnWidths<TRowData>(columns: Array<ColumnDef<TRowData>>): Record<string, number> {
@@ -32,7 +67,12 @@ function buildColumnWidths<TRowData>(columns: Array<ColumnDef<TRowData>>): Recor
 	}, {});
 }
 
-export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: () => void): GridApi<TRowData> & ApiBridge<TRowData> {
+export function createApiFacade<TRowData>(
+	store: GridStore<TRowData>,
+	destroy: () => void,
+	persistenceAdapter?: GridPersistenceAdapter,
+	persistenceController?: PersistenceController
+): GridApi<TRowData> & ApiBridge<TRowData> {
 	const api = {
 		getState: () => store.getState(),
 		getRowId: (row: TRowData) => store.getRowId(row),
@@ -48,6 +88,9 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		purgeCache: () => store.purgeCache(),
 		setServerDatasource: (datasource: IGridDatasource, blockSize?: number) => store.setServerDatasource(datasource, blockSize),
 		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
+		getCachedDisplayValue: (rowId: string, colField: string) => store.getCachedDisplayValue(rowId, colField),
+		getCheapDisplayValue: (rowId: string, colField: string) => store.getCheapDisplayValue(rowId, colField),
+		getComputedCellValue: (rowId: string, colField: string) => store.getComputedCellValue(rowId, colField),
 		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
 		getCellState: (rowId: string, colField: string) => store.getCellState(rowId, colField),
 		selectCell: (pointer: GridCellPointer | null, source?: GridSelectionSource) => store.selectCell(pointer, source),
@@ -74,6 +117,8 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		getAggDefs: () => store.getAggDefs(),
 		expandAllGroups: () => store.expandAllGroups(),
 		collapseAllGroups: () => store.collapseAllGroups(),
+		setShowGroupFooter: (enabled: boolean) => store.setShowGroupFooter(enabled),
+		setStickyGroupRows: (enabled: boolean) => store.setStickyGroupRows(enabled),
 		exportCsv: (options?: CsvExportOptions) => exportToCsv(store, options),
 		setStyleSlots: (styleSlots: GridState<TRowData>['styleSlots']) => store.setStyleSlots(styleSlots),
 		addEventListener: <T = unknown>(type: string, callback: GridEventListener<T>) => store.addEventListener(type, callback),
@@ -122,49 +167,136 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		resetRenderStats: () => store.resetRenderStats(),
 		getRowOverscanPx: () => store.getRowOverscanPx(),
 		setRowOverscanPx: (px: number) => store.setRowOverscanPx(px),
+		hasPersistence: (): boolean => persistenceAdapter !== undefined,
+		clearPersistedState: (): void | Promise<void> => persistenceAdapter?.clear?.(),
+		setAutoSave: (enabled: boolean): void => persistenceController?.setAutoSave(enabled),
+		isAutoSaveEnabled: (): boolean => persistenceController?.isAutoSaveEnabled() ?? true,
+		getPersistenceStatus: (): PersistenceStatus => persistenceController?.getStatus() ?? { status: 'idle', autoSave: true },
+		subscribeToPersistenceStatus: (listener: (status: PersistenceStatus) => void): (() => void) =>
+			persistenceController?.onStatusChange(listener) ?? (() => {}),
+		saveNow: (): void => persistenceController?.saveNow(),
 		destroy,
 	};
 
 	Object.defineProperties(api, {
-		__getEngine: {
-			value: () => store.engine,
-		},
-		__getInternalApi: {
-			value: () => store,
-		},
+		__getEngine: { value: () => store.engine },
+		__getInternalApi: { value: () => store },
 	});
 
 	return Object.freeze(api) as GridApi<TRowData> & ApiBridge<TRowData>;
 }
 
+function wireGridPersistence<TRowData>(
+	options: { columns: ColumnDef<TRowData>[]; initialState?: Partial<GridState<TRowData>>; persistence?: GridPersistenceAdapter },
+	store: GridStore<TRowData>
+): PersistenceController | undefined {
+	const { persistence: adapter } = options;
+	if (!adapter) return undefined;
+	return createPersistenceSubscription(
+		adapter,
+		// Wrap subscribeToKey — persistence listener only needs () => void, extra args are ignored at runtime
+		(key, cb) => store.subscribeToKey(key, cb as Parameters<typeof store.subscribeToKey>[1]),
+		() => store.getState(),
+		adapter.debounceMs ?? 500
+	);
+}
+
 export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridApi<TRowData> {
+	const { persistence: adapter } = options;
+
+	let mergedInitial: Partial<GridState<TRowData>> = options.initialState ?? {};
+	let asyncLoad: Promise<PersistedGridState | null> | undefined;
+
+	if (adapter) {
+		const loaded = adapter.load();
+		if (loaded instanceof Promise) {
+			asyncLoad = loaded;
+		} else if (loaded) {
+			mergedInitial = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]) as Partial<
+				GridState<TRowData>
+			>;
+		}
+	}
+
 	const store = new GridStore<TRowData>({
-		columns: options.columns,
+		columns: mergedInitial.columns ?? options.columns,
 		getRowId: options.getRowId,
-		columnWidths: buildColumnWidths(options.columns),
-		...options.initialState,
+		columnWidths: buildColumnWidths(mergedInitial.columns ?? options.columns),
+		...mergedInitial,
 	});
 
 	const controller = new ClientRowModelController<TRowData>(store, options);
+	const persistenceController = wireGridPersistence(options, store);
+	const api = createApiFacade(
+		store,
+		() => {
+			persistenceController?.destroy();
+			controller.dispose();
+			store.destroy();
+		},
+		adapter,
+		persistenceController
+	);
 
-	return createApiFacade(store, () => {
-		controller.dispose();
-		store.destroy();
-	});
+	if (asyncLoad) {
+		asyncLoad
+			.then((saved) => {
+				if (saved) applyPersistedStateViaApi(api as GridApi<TRowData>, saved, options.columns);
+			})
+			.catch(() => {
+				/* load failure — grid stays in default state */
+			});
+	}
+
+	return api;
 }
 
 export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>): GridApi<TRowData> {
+	const { persistence: adapter } = options;
+
+	let mergedInitial: Partial<GridState<TRowData>> = options.initialState ?? {};
+	let asyncLoad: Promise<PersistedGridState | null> | undefined;
+
+	if (adapter) {
+		const loaded = adapter.load();
+		if (loaded instanceof Promise) {
+			asyncLoad = loaded;
+		} else if (loaded) {
+			mergedInitial = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]) as Partial<
+				GridState<TRowData>
+			>;
+		}
+	}
+
 	const store = new GridStore<TRowData>({
-		columns: options.columns,
+		columns: mergedInitial.columns ?? options.columns,
 		getRowId: options.getRowId,
-		columnWidths: buildColumnWidths(options.columns),
-		...options.initialState,
+		columnWidths: buildColumnWidths(mergedInitial.columns ?? options.columns),
+		...mergedInitial,
 	});
 
 	const controller = new ServerRowModelController<TRowData>(store, options);
+	const persistenceController = wireGridPersistence(options, store);
+	const api = createApiFacade(
+		store,
+		() => {
+			persistenceController?.destroy();
+			controller.dispose();
+			store.destroy();
+		},
+		adapter,
+		persistenceController
+	);
 
-	return createApiFacade(store, () => {
-		controller.dispose();
-		store.destroy();
-	});
+	if (asyncLoad) {
+		asyncLoad
+			.then((saved) => {
+				if (saved) applyPersistedStateViaApi(api as GridApi<TRowData>, saved, options.columns);
+			})
+			.catch(() => {
+				/* load failure — grid stays in default state */
+			});
+	}
+
+	return api;
 }

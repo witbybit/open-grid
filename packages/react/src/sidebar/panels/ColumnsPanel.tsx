@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import type { GridApi, ColumnDef } from '../../types.js';
+import React, { useEffect, useRef, useState } from 'react';
+import type { GridApi, ColumnDef, PersistenceStatus } from '../../types.js';
 import { useGridKeySelector } from '../../hooks.js';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -45,6 +45,37 @@ const GroupIcon = () => (
 	</svg>
 );
 
+const FooterIcon = () => (
+	<svg width='13' height='13' viewBox='0 0 13 13' fill='none' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round'>
+		<rect x='1' y='1' width='11' height='11' rx='1.5' />
+		<path d='M1 9h11' />
+		<path d='M4 11V9' />
+	</svg>
+);
+
+const StickyIcon = () => (
+	<svg width='13' height='13' viewBox='0 0 13 13' fill='none' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round'>
+		<path d='M1 3h11' />
+		<path d='M1 6h7' />
+		<path d='M1 9h5' />
+		<path d='M10 7v5M8.5 10.5l1.5 1.5 1.5-1.5' />
+	</svg>
+);
+
+const SaveIcon = () => (
+	<svg width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round'>
+		<path d='M2 1h7l2 2v8a1 1 0 01-1 1H2a1 1 0 01-1-1V2a1 1 0 011-1z' />
+		<path d='M4 1v3h5V1' />
+		<rect x='3' y='7' width='6' height='4' rx='0.5' />
+	</svg>
+);
+
+const PinIcon = () => (
+	<svg width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round'>
+		<path d='M8 1L11 4L7.5 7.5L7 10L5.5 8.5L3 11L2 10L4.5 7.5L3 6L6.5 5L8 1Z' />
+	</svg>
+);
+
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const PANEL_BG = '#0b0d14';
@@ -58,6 +89,8 @@ const ACCENT_LIGHT = '#60a5fa';
 const GROUP_ACCENT = '#a78bfa';
 const GROUP_ACCENT_BG = 'rgba(167,139,250,0.12)';
 const GROUP_ACCENT_BORDER = 'rgba(167,139,250,0.35)';
+const SUCCESS = '#22c55e';
+const WARN = '#f59e0b';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -71,13 +104,32 @@ const EMPTY_GROUP_BY: string[] = [];
 
 export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	const stateColumns = useGridKeySelector<ColumnDef<any>[]>('columns', (s) => s.columns as ColumnDef<any>[]);
-	// Return the raw state reference (undefined when unset) — avoid ?? [] inside the selector
-	// because that creates a new array on every snapshot call, breaking useSyncExternalStore equality.
 	const stateGroupBy = useGridKeySelector<string[] | undefined>('groupBy', (s) => s.groupBy);
+	const showGroupFooter = useGridKeySelector<boolean>('showGroupFooter', (s) => !!s.showGroupFooter);
+	const enableStickyGroupRows = useGridKeySelector<boolean>('enableStickyGroupRows', (s) => !!s.enableStickyGroupRows);
+
+	// hasPersistence is fixed at grid-creation time — not reactive state, plain call is correct.
+	const hasPersistence = api.hasPersistence();
 
 	const allCols = api.getColumns();
 	const groupBy: string[] = stateGroupBy ?? EMPTY_GROUP_BY;
 	const visibleCount = allCols.filter((c) => !c.hide).length;
+
+	const [clearConfirm, setClearConfirm] = useState(false);
+	const clearConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Real persistence status — subscribes to actual save events from the adapter.
+	const [persistStatus, setPersistStatus] = useState<PersistenceStatus>(() => api.getPersistenceStatus());
+	useEffect(() => {
+		return api.subscribeToPersistenceStatus(setPersistStatus);
+	}, [api]);
+
+	// Clear the confirmation timer on unmount to prevent setState on unmounted component.
+	useEffect(() => {
+		return () => {
+			if (clearConfirmTimerRef.current) clearTimeout(clearConfirmTimerRef.current);
+		};
+	}, []);
 
 	// Drag-to-reorder for column list
 	const dragFromIdx = useRef<number | null>(null);
@@ -86,7 +138,6 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	// Drag-to-reorder for group pills
 	const groupDragFromIdx = useRef<number | null>(null);
 	const [groupDropTargetIdx, setGroupDropTargetIdx] = useState<number | null>(null);
-	// Drag from column list into group drop zone
 	const [groupDropZoneActive, setGroupDropZoneActive] = useState(false);
 
 	// ── Column list drag handlers ──────────────────────────────────────────────
@@ -146,7 +197,6 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	// ── Grouping handlers ──────────────────────────────────────────────────────
 
 	const isGrouped = (field: string) => groupBy.includes(field);
-
 	const canGroup = (col: ColumnDef<any>) => col.enableRowGroup !== false;
 
 	const toggleGroup = (field: string) => {
@@ -160,7 +210,6 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 
 	const clearAllGroups = () => api.setGroupBy?.([]);
 
-	// Reorder group pills via drag
 	const handleGroupPillDragStart = (e: React.DragEvent, index: number) => {
 		groupDragFromIdx.current = index;
 		e.dataTransfer.effectAllowed = 'move';
@@ -186,7 +235,6 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 		api.setGroupBy?.(next);
 	};
 
-	// Drop a column from the list into the group zone
 	const handleGroupZoneDragOver = (e: React.DragEvent) => {
 		if (dragFromIdx.current === null) return;
 		e.preventDefault();
@@ -206,7 +254,48 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 		api.setGroupBy?.([...groupBy, field]);
 	};
 
+	// ── Pin handlers ──────────────────────────────────────────────────────────
+
+	const handleTogglePinLeft = (colField: string) => {
+		const displayedCols = api.getDisplayedColumns();
+		const { left, right } = api.getPinnedColumns();
+		const colIdx = displayedCols.findIndex((c) => c.field === colField);
+		if (colIdx < 0) return; // hidden column — cannot pin
+		const isPinned = colIdx < left;
+		if (isPinned) {
+			// Move column to just after the pin zone, then shrink pin count
+			api.moveColumn(colField, left);
+			api.setPinnedColumns({ left: left - 1, right });
+		} else {
+			// Move column to the end of the pin zone, then grow pin count
+			api.moveColumn(colField, left);
+			api.setPinnedColumns({ left: left + 1, right });
+		}
+	};
+
+	// ── Persistence handlers ───────────────────────────────────────────────────
+
+	const handleClearPersistence = () => {
+		if (!clearConfirm) {
+			setClearConfirm(true);
+			clearConfirmTimerRef.current = setTimeout(() => setClearConfirm(false), 3000);
+			return;
+		}
+		if (clearConfirmTimerRef.current) {
+			clearTimeout(clearConfirmTimerRef.current);
+			clearConfirmTimerRef.current = null;
+		}
+		const result = api.clearPersistedState();
+		if (result instanceof Promise) result.catch(console.error);
+		setClearConfirm(false);
+	};
+
 	void stateColumns;
+
+	// Read pin state at render time — pin operations via sidebar also trigger a columns state change
+	// so the panel re-renders and gets fresh values from getPinnedColumns().
+	const pins = api.getPinnedColumns();
+	const displayedCols = api.getDisplayedColumns();
 
 	const groupableCols = allCols.filter(canGroup);
 	const hasGroups = groupBy.length > 0;
@@ -260,7 +349,6 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 				{/* ── Row Groups Section ────────────────────────────────── */}
 				{groupableCols.length > 0 && (
 					<div style={{ flexShrink: 0 }}>
-						{/* Section label */}
 						<div
 							style={{
 								display: 'flex',
@@ -385,6 +473,40 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 							})}
 						</div>
 
+						{/* ── Group Options ─────────────────────────────────── */}
+						{groupableCols.length > 0 && (
+							<div style={{ padding: '4px 12px 8px' }}>
+								<div
+									style={{
+										fontSize: 9,
+										fontWeight: 700,
+										letterSpacing: '0.08em',
+										textTransform: 'uppercase',
+										color: TEXT_MUTED,
+										marginBottom: 5,
+									}}
+								>
+									Group Options
+								</div>
+								<div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+									<ToggleRow
+										icon={<FooterIcon />}
+										label='Show subtotals'
+										description='Footer row with aggregates below each leaf group'
+										checked={showGroupFooter}
+										onChange={(v) => api.setShowGroupFooter(v)}
+									/>
+									<ToggleRow
+										icon={<StickyIcon />}
+										label='Sticky group headers'
+										description='Group header rows stay visible while scrolling'
+										checked={enableStickyGroupRows}
+										onChange={(v) => api.setStickyGroupRows(v)}
+									/>
+								</div>
+							</div>
+						)}
+
 						<div style={{ height: 1, background: BORDER, margin: '0 0 4px' }} />
 					</div>
 				)}
@@ -396,6 +518,8 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 						const isDragTarget = dropTargetIdx === index;
 						const grouped = isGrouped(col.field);
 						const groupable = canGroup(col);
+						const displayedIdx = displayedCols.findIndex((c) => c.field === col.field);
+						const isPinnedLeft = !isHidden && displayedIdx >= 0 && displayedIdx < pins.left;
 						return (
 							<div
 								key={col.field}
@@ -451,6 +575,18 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 									</button>
 								)}
 								<button
+									onClick={() => !isHidden && handleTogglePinLeft(col.field)}
+									title={isHidden ? 'Show column to pin' : isPinnedLeft ? 'Unpin column' : 'Pin column left'}
+									style={{
+										...iconBtnStyle,
+										color: isPinnedLeft ? ACCENT_LIGHT : TEXT_MUTED,
+										opacity: isHidden ? 0.3 : 1,
+										cursor: isHidden ? 'default' : 'pointer',
+									}}
+								>
+									<PinIcon />
+								</button>
+								<button
 									onClick={() => handleToggle(col.field, isHidden)}
 									title={isHidden ? 'Show column' : 'Hide column'}
 									style={{
@@ -464,6 +600,210 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 						);
 					})}
 				</div>
+
+				{/* ── Persistence Section ────────────────────────────────── */}
+				{hasPersistence && (
+					<div
+						style={{
+							flexShrink: 0,
+							marginTop: 'auto',
+							borderTop: `1px solid ${BORDER}`,
+							padding: '8px 12px 10px',
+						}}
+					>
+						{/* Header row */}
+						<div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+							<SaveIcon />
+							<span
+								style={{
+									fontSize: 9,
+									fontWeight: 700,
+									letterSpacing: '0.08em',
+									textTransform: 'uppercase',
+									color: TEXT_MUTED,
+								}}
+							>
+								Saved Settings
+							</span>
+							<PersistenceStatusBadge status={persistStatus} />
+						</div>
+
+						{/* Auto-save toggle */}
+						<ToggleRow
+							icon={<SaveIcon />}
+							label='Auto-save'
+							description='Automatically save settings after each change'
+							checked={persistStatus.autoSave}
+							onChange={(v) => api.setAutoSave(v)}
+						/>
+
+						<div style={{ fontSize: 10, color: TEXT_MUTED, margin: '6px 0 7px', lineHeight: 1.4 }}>
+							Column order, visibility, widths, sort, filters, grouping, and pinning are persisted across sessions.
+						</div>
+						<div style={{ display: 'flex', gap: 5 }}>
+							<button
+								onClick={() => api.saveNow()}
+								style={{
+									flex: 1,
+									height: 26,
+									fontSize: 10,
+									fontWeight: 600,
+									letterSpacing: '0.04em',
+									borderRadius: 5,
+									border: `1px solid rgba(59,130,246,0.4)`,
+									background: 'rgba(59,130,246,0.1)',
+									color: ACCENT_LIGHT,
+									cursor: 'pointer',
+									transition: 'all 0.15s',
+								}}
+							>
+								Save now
+							</button>
+							<button
+								onClick={handleClearPersistence}
+								style={{
+									flex: 1,
+									height: 26,
+									fontSize: 10,
+									fontWeight: 600,
+									letterSpacing: '0.04em',
+									borderRadius: 5,
+									border: clearConfirm ? `1px solid rgba(239,68,68,0.5)` : `1px solid rgba(30,41,59,0.8)`,
+									background: clearConfirm ? 'rgba(239,68,68,0.12)' : 'rgba(15,23,42,0.5)',
+									color: clearConfirm ? '#f87171' : WARN,
+									cursor: 'pointer',
+									transition: 'all 0.15s',
+								}}
+							>
+								{clearConfirm ? 'Confirm reset' : 'Reset settings'}
+							</button>
+						</div>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+// ── Persistence status badge ──────────────────────────────────────────────────
+
+function PersistenceStatusBadge({ status }: { status: PersistenceStatus }) {
+	let color: string;
+	let label: string;
+
+	if (!status.autoSave) {
+		color = TEXT_MUTED;
+		label = 'Off';
+	} else if (status.status === 'saving') {
+		color = WARN;
+		label = 'Saving…';
+	} else if (status.status === 'saved') {
+		color = SUCCESS;
+		label = 'Saved';
+	} else if (status.status === 'error') {
+		color = '#f87171';
+		label = 'Error';
+	} else {
+		color = SUCCESS;
+		label = 'Auto-save on';
+	}
+
+	return (
+		<span
+			style={{
+				marginLeft: 'auto',
+				display: 'flex',
+				alignItems: 'center',
+				gap: 3,
+				fontSize: 9,
+				color,
+				fontWeight: 600,
+			}}
+			title={status.status === 'error' ? String(status.error) : undefined}
+		>
+			<span
+				style={{
+					width: 5,
+					height: 5,
+					borderRadius: '50%',
+					background: color,
+					flexShrink: 0,
+					transition: 'background 0.2s',
+				}}
+			/>
+			{label}
+		</span>
+	);
+}
+
+// ── Toggle row component ──────────────────────────────────────────────────────
+
+function ToggleRow({
+	icon,
+	label,
+	description,
+	checked,
+	onChange,
+}: {
+	icon: React.ReactNode;
+	label: string;
+	description: string;
+	checked: boolean;
+	onChange: (v: boolean) => void;
+}) {
+	return (
+		<div
+			onClick={() => onChange(!checked)}
+			title={description}
+			style={{
+				display: 'flex',
+				alignItems: 'center',
+				gap: 7,
+				padding: '5px 6px',
+				borderRadius: 5,
+				cursor: 'pointer',
+				background: checked ? GROUP_ACCENT_BG : 'transparent',
+				border: checked ? `1px solid ${GROUP_ACCENT_BORDER}` : '1px solid transparent',
+				transition: 'background 0.1s, border-color 0.1s',
+				userSelect: 'none',
+			}}
+		>
+			<span style={{ color: checked ? GROUP_ACCENT : TEXT_MUTED, display: 'flex', flexShrink: 0 }}>{icon}</span>
+			<span
+				style={{
+					flex: 1,
+					fontSize: 10,
+					fontWeight: 600,
+					color: checked ? GROUP_ACCENT : TEXT_MUTED,
+				}}
+			>
+				{label}
+			</span>
+			{/* Toggle pill */}
+			<div
+				style={{
+					width: 28,
+					height: 15,
+					borderRadius: 999,
+					background: checked ? GROUP_ACCENT : 'rgba(30,41,59,0.8)',
+					border: checked ? `1px solid ${GROUP_ACCENT}` : '1px solid rgba(51,65,85,0.8)',
+					position: 'relative',
+					flexShrink: 0,
+					transition: 'background 0.15s, border-color 0.15s',
+				}}
+			>
+				<div
+					style={{
+						position: 'absolute',
+						top: 2,
+						left: checked ? 14 : 2,
+						width: 9,
+						height: 9,
+						borderRadius: '50%',
+						background: checked ? '#fff' : '#475569',
+						transition: 'left 0.15s',
+					}}
+				/>
 			</div>
 		</div>
 	);

@@ -6,6 +6,9 @@ import type { GroupPathItem } from './rows/visualRowIds.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
+import type { PersistenceStatus } from './persistence/statePersistence.js';
+
+export type { PersistenceStatus };
 
 export interface CellSubscription {
 	rowId: string;
@@ -490,6 +493,7 @@ export interface RowModel<TRowData = unknown> {
 	isDetailExpanded?(rowId: string): boolean;
 	expandAllGroups?(): void;
 	collapseAllGroups?(): void;
+	getStickyGroupMeta?(): Map<number, number>;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
@@ -618,6 +622,9 @@ export interface GridState<TRowData = unknown> {
 	// Tree / Grouping / Master-Detail State
 	groupBy?: string[];
 	aggDefs?: AggregationDef<TRowData>[];
+	showGroupFooter?: boolean;
+	enableStickyGroupRows?: boolean;
+	pinnedColumns?: { left: number; right: number };
 	getParentId?: (row: TRowData) => string | null | undefined;
 	masterDetailEnabled?: boolean;
 	groupRowHeight?: number;
@@ -769,6 +776,8 @@ export interface GridApi<TRowData = unknown> {
 	getAggDefs(): AggregationDef<TRowData>[];
 	expandAllGroups(): void;
 	collapseAllGroups(): void;
+	setShowGroupFooter(enabled: boolean): void;
+	setStickyGroupRows(enabled: boolean): void;
 	toggleGroupExpanded(groupId: string): void;
 	toggleDetailExpanded(rowId: string): void;
 	isGroupExpanded(groupId: string): boolean;
@@ -814,6 +823,20 @@ export interface GridApi<TRowData = unknown> {
 	toggleChart(): void;
 	isChartOpen(): boolean;
 	exportCsv(options?: CsvExportOptions): void;
+	/** Returns true when a persistence adapter is configured for this grid instance. */
+	hasPersistence(): boolean;
+	/** Clear all persisted state saved by the configured persistence adapter. No-op when no adapter is set. */
+	clearPersistedState(): void | Promise<void>;
+	/** Enable or disable auto-save. When disabled, state changes are not persisted until re-enabled. */
+	setAutoSave(enabled: boolean): void;
+	/** Returns whether auto-save is currently enabled. */
+	isAutoSaveEnabled(): boolean;
+	/** Returns the current persistence save status. */
+	getPersistenceStatus(): PersistenceStatus;
+	/** Subscribe to persistence status changes. Fires immediately when saving starts/ends or errors. */
+	subscribeToPersistenceStatus(listener: (status: PersistenceStatus) => void): () => void;
+	/** Immediately save current state, bypassing the debounce timer. No-op when no adapter is set. */
+	saveNow(): void;
 	destroy(): void;
 	getRenderStats(): RenderStats;
 	resetRenderStats(): void;
@@ -876,6 +899,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			detailRowHeight: initialState.detailRowHeight,
 			detailRenderer: initialState.detailRenderer,
 			rowModelConfig: initialState.rowModelConfig,
+			showGroupFooter: initialState.showGroupFooter,
+			enableStickyGroupRows: initialState.enableStickyGroupRows,
 			expansion: initialState.expansion,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 1,
@@ -890,6 +915,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		});
 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
+
+		// Apply persisted pin counts at construction time before any renders occur
+		if (initialState.pinnedColumns) {
+			this.viewportController.pinLeftColumns = initialState.pinnedColumns.left ?? 0;
+			this.viewportController.pinRightColumns = initialState.pinnedColumns.right ?? 0;
+		}
 
 		// Notify plugins of viewport shifts
 		this.engine.stateManager.subscribeToKey('visibleRowRange', () => {
@@ -1078,9 +1109,28 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.getRowModel()?.collapseAllGroups?.();
 	};
 
+	public setShowGroupFooter = (enabled: boolean): void => {
+		this.engine.setShowGroupFooter(enabled);
+	};
+
+	public setStickyGroupRows = (enabled: boolean): void => {
+		this.engine.setStickyGroupRows(enabled);
+	};
+
 	public exportCsv = (options?: CsvExportOptions): void => {
 		exportToCsv(this, options);
 	};
+
+	// All persistence methods are overridden by createApiFacade when an adapter is configured.
+	public hasPersistence = (): boolean => false;
+	public clearPersistedState = (): void => {};
+	public setAutoSave = (_enabled: boolean): void => {};
+	public isAutoSaveEnabled = (): boolean => true;
+	public getPersistenceStatus = (): PersistenceStatus => ({ status: 'idle', autoSave: true });
+	public subscribeToPersistenceStatus =
+		(_listener: (status: PersistenceStatus) => void): (() => void) =>
+		() => {};
+	public saveNow = (): void => {};
 
 	public openPanel = (panelId: string): void => {
 		this.setState({ sidebarOpenPanel: panelId });
@@ -1400,6 +1450,15 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		if (pins.right !== undefined) this.viewportController.pinRightColumns = pins.right;
 		if (pins.top !== undefined) this.viewportController.pinTopRows = pins.top;
 		if (pins.bottom !== undefined) this.viewportController.pinBottomRows = pins.bottom;
+		// Sync column pin counts into state so they can be subscribed to and persisted
+		if (pins.left !== undefined || pins.right !== undefined) {
+			this.engine.stateManager.setState({
+				pinnedColumns: {
+					left: this.viewportController.pinLeftColumns,
+					right: this.viewportController.pinRightColumns,
+				},
+			});
+		}
 	};
 
 	public setViewportSize = (width: number, height: number): boolean => {

@@ -27,6 +27,12 @@ export interface RenderWindow {
 	bufferTopPx?: number;
 	/** Bottom pixel of the fully-buffered render region (includes overscan below visible). */
 	bufferBottomPx?: number;
+	// Sticky group rows — group rows that have scrolled above the viewport but whose
+	// descendants are still visible. Rendered at the top of the viewport, stacked by depth.
+	stickyGroupIndices?: number[];
+	stickyGroupTops?: number[];
+	/** Comma-separated sticky indices — cheap equality key for sameRenderedWindow. */
+	stickyGroupKey?: string;
 }
 
 export interface ViewportDelta {
@@ -54,7 +60,8 @@ export function sameRenderedWindow(a: RenderWindow | null, b: RenderWindow | nul
 		a.colCount === b.colCount &&
 		(a.geometryVersion ?? 0) === (b.geometryVersion ?? 0) &&
 		(a.rowModelVersion ?? 0) === (b.rowModelVersion ?? 0) &&
-		(a.columnVersion ?? 0) === (b.columnVersion ?? 0)
+		(a.columnVersion ?? 0) === (b.columnVersion ?? 0) &&
+		(a.stickyGroupKey ?? '') === (b.stickyGroupKey ?? '')
 	);
 }
 
@@ -75,15 +82,46 @@ function countPinnedTrailing(count: number, total: number, leading: number): num
 export function getRowIndices(w: RenderWindow): number[] {
 	const pinTop = Math.min(w.pinTopRows, w.rowCount);
 	const pinBottomStart = Math.max(pinTop, w.rowCount - w.pinBottomRows);
-	const indices: number[] = [];
-	// Pinned top
-	for (let r = 0; r < pinTop; r++) indices.push(r);
-	// Center scrollable (never overlaps with pinned ranges due to bounds)
-	for (let r = w.rowStart; r <= w.rowEnd; r++) {
-		if (r >= pinTop && r < pinBottomStart) indices.push(r);
+	const stickyIndices = w.stickyGroupIndices;
+
+	if (!stickyIndices || stickyIndices.length === 0) {
+		// Fast path: no sticky rows — original O(n) logic with no Set allocation
+		const indices: number[] = [];
+		for (let r = 0; r < pinTop; r++) indices.push(r);
+		for (let r = w.rowStart; r <= w.rowEnd; r++) {
+			if (r >= pinTop && r < pinBottomStart) indices.push(r);
+		}
+		for (let r = pinBottomStart; r < w.rowCount; r++) indices.push(r);
+		return indices;
 	}
-	// Pinned bottom
-	for (let r = pinBottomStart; r < w.rowCount; r++) indices.push(r);
+
+	// Slow path: deduplicate when sticky rows are present
+	const seen = new Set<number>();
+	const indices: number[] = [];
+
+	for (let r = 0; r < pinTop; r++) {
+		indices.push(r);
+		seen.add(r);
+	}
+	// Sticky group rows that are above the scrollable range
+	for (const stickyIdx of stickyIndices) {
+		if (!seen.has(stickyIdx) && stickyIdx < w.rowCount) {
+			indices.push(stickyIdx);
+			seen.add(stickyIdx);
+		}
+	}
+	for (let r = w.rowStart; r <= w.rowEnd; r++) {
+		if (r >= pinTop && r < pinBottomStart && !seen.has(r)) {
+			indices.push(r);
+			seen.add(r);
+		}
+	}
+	for (let r = pinBottomStart; r < w.rowCount; r++) {
+		if (!seen.has(r)) {
+			indices.push(r);
+			seen.add(r);
+		}
+	}
 	return indices;
 }
 
@@ -219,6 +257,38 @@ export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): Ren
 	const bufferTopPx = newRowRange.startIdx >= 0 ? engine.geometry.getRowTop(newRowRange.startIdx, defaultRowHeight) : visibleTop;
 	const lastRenderedBottom = newRowRange.endIdx >= 0 ? engine.geometry.getRowBottom(newRowRange.endIdx, defaultRowHeight) : visibleBottom;
 
+	// Sticky group rows: groups whose natural top is above scrollTop but whose last
+	// descendant is still at or below scrollTop — they "stick" to the viewport top.
+	let stickyGroupIndices: number[] | undefined;
+	let stickyGroupTops: number[] | undefined;
+	let stickyGroupKey: string | undefined;
+
+	if (state.enableStickyGroupRows && rowCount > 0) {
+		const stickyMeta = rowModel?.getStickyGroupMeta?.();
+		if (stickyMeta && stickyMeta.size > 0) {
+			let stickyOffset = 0;
+			const indices: number[] = [];
+			const tops: number[] = [];
+
+			for (const [groupIdx, lastDescIdx] of stickyMeta) {
+				if (groupIdx >= rowCount || lastDescIdx >= rowCount) continue;
+				const groupTop = engine.geometry.getRowTop(groupIdx, defaultRowHeight);
+				const lastDescBottom = engine.geometry.getRowBottom(lastDescIdx, defaultRowHeight);
+				if (groupTop < scrollTop && lastDescBottom > scrollTop) {
+					indices.push(groupIdx);
+					tops.push(scrollTop + stickyOffset);
+					stickyOffset += engine.geometry.getRowHeight(groupIdx, defaultRowHeight);
+				}
+			}
+
+			if (indices.length > 0) {
+				stickyGroupIndices = indices;
+				stickyGroupTops = tops;
+				stickyGroupKey = indices.join(',');
+			}
+		}
+	}
+
 	return {
 		rowStart: newRowRange.startIdx,
 		rowEnd: newRowRange.endIdx,
@@ -241,6 +311,9 @@ export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): Ren
 		visibleBottom,
 		bufferTopPx,
 		bufferBottomPx: lastRenderedBottom,
+		stickyGroupIndices,
+		stickyGroupTops,
+		stickyGroupKey,
 	};
 }
 

@@ -244,6 +244,42 @@ function DefaultDetailRowRendererInner<TRowData = unknown>({ visualRow }: { visu
 
 export const DefaultDetailRowRenderer = memo(DefaultDetailRowRendererInner) as typeof DefaultDetailRowRendererInner;
 
+function DefaultFooterRowRendererInner<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+	if (visualRow.kind !== 'footer') return null;
+	const agg = visualRow.aggregateValues;
+	return (
+		<div
+			style={{
+				display: 'flex',
+				alignItems: 'center',
+				height: '100%',
+				paddingLeft: 12,
+				gap: 12,
+				fontSize: 11,
+				color: 'var(--og-header-text)',
+				fontWeight: 600,
+			}}
+		>
+			<span style={{ color: 'rgba(167,139,250,0.6)', fontWeight: 700, fontSize: 10, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+				Subtotal
+			</span>
+			{agg &&
+				Object.entries(agg).map(([field, value]) =>
+					value != null ? (
+						<span key={field} style={{ color: '#94a3b8' }}>
+							<span style={{ opacity: 0.6 }}>{field}: </span>
+							<span style={{ color: '#e2e8f0' }}>
+								{typeof value === 'number' && value > 1000 ? `$${value.toLocaleString()}` : String(value)}
+							</span>
+						</span>
+					) : null
+				)}
+		</div>
+	);
+}
+
+export const DefaultFooterRowRenderer = memo(DefaultFooterRowRendererInner) as typeof DefaultFooterRowRendererInner;
+
 // ─── Snapshot types ───────────────────────────────────────────────────────────
 
 /** Snapshot used by the optimised CellPortalPool — rebuilt only on structural changes (add/remove). */
@@ -768,13 +804,20 @@ interface RowMenuPortalPoolProps<TRowData = unknown> {
 	api: GridApi<TRowData>;
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	footerRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 }
 
 /**
- * Renders group/detail row portals and header menu portals. Re-renders only when rows
+ * Renders group/detail/footer row portals and header menu portals. Re-renders only when rows
  * or menus change — completely isolated from custom cell updates.
  */
-function RowMenuPortalPoolInner<TRowData = unknown>({ store, api, groupRowRenderer, detailRowRenderer }: RowMenuPortalPoolProps<TRowData>) {
+function RowMenuPortalPoolInner<TRowData = unknown>({
+	store,
+	api,
+	groupRowRenderer,
+	detailRowRenderer,
+	footerRowRenderer,
+}: RowMenuPortalPoolProps<TRowData>) {
 	const snapshot = useSyncExternalStore(store.subscribeRowsMenus, store.getRowMenuSnapshot, store.getRowMenuSnapshot);
 	const { rowPortalList, menuPortalList } = snapshot;
 
@@ -790,6 +833,12 @@ function RowMenuPortalPoolInner<TRowData = unknown>({ store, api, groupRowRender
 						detailRowRenderer({ visualRow, api })
 					) : (
 						<DefaultDetailRowRenderer visualRow={visualRow} api={api} />
+					);
+				} else if (visualRow.kind === 'footer') {
+					content = footerRowRenderer ? (
+						footerRowRenderer({ visualRow, api })
+					) : (
+						<DefaultFooterRowRenderer visualRow={visualRow} api={api} />
 					);
 				}
 				return createPortal(
@@ -822,6 +871,7 @@ export interface PortalManagerProps<TRowData = unknown> {
 	api: GridApi<TRowData>;
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	footerRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	store?: PortalStore<TRowData>;
 }
 
@@ -835,7 +885,13 @@ export interface PortalManagerProps<TRowData = unknown> {
  * For cells with imperativeUpdate: true, updates bypass React's scheduler entirely —
  * the grid calls ref.current.update() directly in the paint loop.
  */
-export function PortalManager<TRowData = unknown>({ api, groupRowRenderer, detailRowRenderer, store }: PortalManagerProps<TRowData>) {
+export function PortalManager<TRowData = unknown>({
+	api,
+	groupRowRenderer,
+	detailRowRenderer,
+	footerRowRenderer,
+	store,
+}: PortalManagerProps<TRowData>) {
 	if (!store?.subscribeCells || !store?.subscribeRowsMenus) {
 		// Store is required — OpenGrid always provides createPortalStore()
 		return null;
@@ -844,7 +900,13 @@ export function PortalManager<TRowData = unknown>({ api, groupRowRenderer, detai
 	return (
 		<>
 			<CellPortalPool store={concreteStore} api={api} />
-			<RowMenuPortalPool store={concreteStore} api={api} groupRowRenderer={groupRowRenderer} detailRowRenderer={detailRowRenderer} />
+			<RowMenuPortalPool
+				store={concreteStore}
+				api={api}
+				groupRowRenderer={groupRowRenderer}
+				detailRowRenderer={detailRowRenderer}
+				footerRowRenderer={footerRowRenderer}
+			/>
 		</>
 	);
 }

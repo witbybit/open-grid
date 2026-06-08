@@ -1,5 +1,6 @@
-export { createApiFacade, createClientGrid, createServerGrid } from './createGrid.js';
-export type { ClientGridOptions, ServerGridOptions } from './createGrid.js';
+export { createApiFacade, createClientGrid, createServerGrid, createLocalStorageAdapter } from './createGrid.js';
+export type { ClientGridOptions, ServerGridOptions, GridPersistenceAdapter, PersistedGridState } from './createGrid.js';
+export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 
 export { RowNode } from './store.js';
 export type { RowDataTransaction, RowNodeTransaction } from './store.js';

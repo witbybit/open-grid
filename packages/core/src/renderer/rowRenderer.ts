@@ -408,15 +408,23 @@ export class RowRenderer<TRowData = unknown> {
 			const scrollTop = this.engine.viewport.scrollTop;
 			const viewportHeight = this.engine.viewport.viewportHeight;
 
+			let isStickyGroup = false;
 			if (r < pinTopRows) {
 				rowTop = rowTop + scrollTop;
 			} else if (r >= nextWindow.rowCount - pinBottomRows) {
 				const bottomOffset = hoistedTotalHeight - this.engine.geometry.rowTops[r];
 				rowTop = scrollTop + viewportHeight - bottomOffset;
+			} else if (nextWindow.stickyGroupIndices && nextWindow.stickyGroupTops) {
+				const stickyPos = nextWindow.stickyGroupIndices.indexOf(r);
+				if (stickyPos >= 0) {
+					rowTop = nextWindow.stickyGroupTops[stickyPos]!;
+					isStickyGroup = true;
+				}
 			}
 
 			// ── Row class name ────────────────────────────────────────────────────────
 			let rowClassName = ROW_KIND_BASE[visualRow.kind] ?? 'og-row';
+			if (isStickyGroup) rowClassName += ' og-row-group-sticky';
 			if (visualRow.kind === 'group') {
 				if (state.styleSlots?.groupRowClass) {
 					try {

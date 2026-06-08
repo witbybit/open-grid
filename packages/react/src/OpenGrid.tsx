@@ -44,6 +44,7 @@ export interface OpenGridProps<TRowData = unknown> {
 	};
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	footerRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	/** Attach a built-in animated sidebar panel strip inside the grid. */
 	sidebar?: GridSidebarConfig<TRowData>;
 	/**
@@ -82,6 +83,7 @@ function OpenGridInner<TRowData = unknown>({
 	navigationOptions = {},
 	groupRowRenderer,
 	detailRowRenderer,
+	footerRowRenderer,
 	sidebar,
 	enableChart = false,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
@@ -443,7 +445,13 @@ function OpenGridInner<TRowData = unknown>({
 						minWidth: hasSidebar ? 0 : undefined,
 					}}
 				>
-					<PortalManager store={portalStore} api={api} groupRowRenderer={groupRowRenderer} detailRowRenderer={detailRowRenderer} />
+					<PortalManager
+						store={portalStore}
+						api={api}
+						groupRowRenderer={groupRowRenderer}
+						detailRowRenderer={detailRowRenderer}
+						footerRowRenderer={footerRowRenderer}
+					/>
 				</div>
 				{hasSidebar && <GridSidebar<TRowData> api={api} config={sidebar!} />}
 			</div>

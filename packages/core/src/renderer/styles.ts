@@ -210,6 +210,12 @@ export const CORE_STYLES = `
     border-bottom: 2px solid var(--og-border-color) !important;
   }
 
+  .og-row-group-sticky {
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    border-bottom: 1px solid rgba(167, 139, 250, 0.2) !important;
+  }
+
   .og-row-pinned-bottom {
     background-color: var(--og-header-bg);
     z-index: 25;

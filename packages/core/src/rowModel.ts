@@ -228,6 +228,9 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	private unsubscribers: Array<() => void> = [];
 
 	private pipeline = new RowPipeline<TData>();
+	private _stickyGroupMeta = new Map<number, number>();
+
+	public getStickyGroupMeta = (): Map<number, number> => this._stickyGroupMeta;
 
 	public toggleGroupExpanded = (groupId: string): void => {
 		const expansion = this.store.getState().expansion;
@@ -308,7 +311,9 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			this.store.addEventListener('sortChanged', () => this.refresh()),
 			this.store.addEventListener('filterChanged', () => this.refresh()),
 			this.store.addEventListener('groupByChanged', () => this.refresh()),
-			this.store.addEventListener('aggDefsChanged', () => this.refresh())
+			this.store.addEventListener('aggDefsChanged', () => this.refresh()),
+			this.store.addEventListener('showGroupFooterChanged', () => this.refresh()),
+			this.store.addEventListener('enableStickyGroupRowsChanged', () => this.refresh())
 		);
 		this.setRows(options.rows);
 	}
@@ -576,7 +581,9 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			(state.groupBy?.length || state.getParentId || state.masterDetailEnabled
 				? {
 						type: 'client',
-						grouping: state.groupBy?.length ? { model: state.groupBy.map((colId) => ({ colId })) } : undefined,
+						grouping: state.groupBy?.length
+							? { model: state.groupBy.map((colId) => ({ colId })), includeFooter: !!state.showGroupFooter }
+							: undefined,
 						treeData: state.getParentId ? { enabled: true, getParentId: state.getParentId } : undefined,
 						masterDetail: state.masterDetailEnabled
 							? {
@@ -616,6 +623,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.rowIdToVisualIndex = result.rowIdToVisualIndex;
 		this.rowIdToVisualRowId = result.rowIdToVisualRowId;
 		this.rowIdToVisualRowIds = result.rowIdToVisualRowIds;
+		this._stickyGroupMeta = result.stickyGroupMeta;
 
 		this.store.setState({
 			dataVersion: state.dataVersion + 1,
