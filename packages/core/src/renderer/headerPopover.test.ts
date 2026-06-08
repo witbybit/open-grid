@@ -69,13 +69,13 @@ describe('HeaderPopoverMenu', () => {
 		menuBtn.click();
 		let popover = document.querySelector('.og-header-popover');
 		expect(popover).not.toBeNull();
-		expect((engine as any).activeHeaderPopover).toBe(popover);
+		expect((engine as any).headerMenu.activePopover).toBe(popover);
 
 		// Click again to close (toggle)
 		menuBtn.click();
 		popover = document.querySelector('.og-header-popover');
 		// Closed asynchronously due to fading out timeout
-		expect((engine as any).activeHeaderPopover).toBeNull();
+		expect((engine as any).headerMenu.activePopover).toBeNull();
 	});
 
 	it('should sort ascending and descending when sort options are clicked', () => {
