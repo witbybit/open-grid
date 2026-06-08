@@ -66,12 +66,17 @@ interface ColumnsPanelProps {
 	onClose: () => void;
 }
 
+// Stable fallback so useSyncExternalStore never sees a new reference when groupBy is undefined.
+const EMPTY_GROUP_BY: string[] = [];
+
 export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	const stateColumns = useGridKeySelector<ColumnDef<any>[]>('columns', (s) => s.columns as ColumnDef<any>[]);
-	const stateGroupBy = useGridKeySelector<string[]>('groupBy', (s) => (s.groupBy ?? []) as string[]);
+	// Return the raw state reference (undefined when unset) — avoid ?? [] inside the selector
+	// because that creates a new array on every snapshot call, breaking useSyncExternalStore equality.
+	const stateGroupBy = useGridKeySelector<string[] | undefined>('groupBy', (s) => s.groupBy);
 
 	const allCols = api.getColumns();
-	const groupBy: string[] = stateGroupBy ?? api.getGroupBy?.() ?? [];
+	const groupBy: string[] = stateGroupBy ?? EMPTY_GROUP_BY;
 	const visibleCount = allCols.filter((c) => !c.hide).length;
 
 	// Drag-to-reorder for column list
