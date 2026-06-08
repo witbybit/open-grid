@@ -9,6 +9,8 @@ export interface CsvExportOptions {
 	columns?: string[];
 	/** Export only selected rows. Default: false */
 	onlySelected?: boolean;
+	/** Export only rows with these IDs (in order). Takes precedence over onlySelected. */
+	rowIds?: string[];
 }
 
 // Minimal duck-typed interface — avoids a circular import with store.ts
@@ -20,7 +22,7 @@ interface Exportable<TRowData> {
 }
 
 export function exportToCsv<TRowData>(api: Exportable<TRowData>, options: CsvExportOptions = {}): void {
-	const { fileName = 'export.csv', delimiter = ',', includeHeader = true, columns: colFilter, onlySelected = false } = options;
+	const { fileName = 'export.csv', delimiter = ',', includeHeader = true, columns: colFilter, onlySelected = false, rowIds } = options;
 
 	const cols = api.getDisplayedColumns().filter((col) => !colFilter || colFilter.includes(col.field));
 
@@ -30,7 +32,15 @@ export function exportToCsv<TRowData>(api: Exportable<TRowData>, options: CsvExp
 		lines.push(cols.map((col) => escapeCell(col.header || col.field, delimiter)).join(delimiter));
 	}
 
-	const dataRows = onlySelected ? api.rows().getSelected() : api.rows().getAll();
+	const allRows = api.rows().getAll();
+	const dataRows = rowIds
+		? (() => {
+				const set = new Set(rowIds);
+				return allRows.filter((r) => set.has(api.getRowId(r)));
+			})()
+		: onlySelected
+			? api.rows().getSelected()
+			: allRows;
 
 	for (const row of dataRows) {
 		const rowId = api.getRowId(row);

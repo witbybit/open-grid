@@ -1,4 +1,5 @@
 import { GridStore, GridCellPointer, GridPlugin, GridApi, InternalGridApi, GridSelectionState } from './store.js';
+import { exportToCsv } from './export/csvExport.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
@@ -20,7 +21,7 @@ export interface GridContextMenuItem<TRowData = unknown> {
 export interface GridContextMenuOptions<TRowData = unknown> {
 	disabled?: boolean;
 	disableDefaults?: boolean;
-	excludeDefaults?: Array<'copy' | 'cut' | 'paste' | 'clear' | 'selectAll' | 'divider'>;
+	excludeDefaults?: Array<'copy' | 'cut' | 'paste' | 'clear' | 'selectAll' | 'exportAll' | 'exportSelected' | 'divider'>;
 	customItems?: Array<GridContextMenuItem<TRowData>>;
 }
 
@@ -155,6 +156,20 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				label: 'Select All',
 				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4"></rect></svg>`,
 				action: (p) => this.selectAll(p),
+			},
+			{ id: 'divider', isDivider: true },
+			{
+				id: 'exportAll',
+				label: 'Export All as CSV',
+				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+				action: (p) => exportToCsv(this.store, { fileName: 'export.csv' }),
+			},
+			{
+				id: 'exportSelected',
+				label: 'Export Selection as CSV',
+				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+				hidden: (p) => !p.selection.bounds,
+				action: (p) => this.exportSelectionAsCsv(p),
 			},
 		];
 
@@ -369,5 +384,23 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const lastRowId = lastRow.rowId;
 
 		params.api.selectRange({ rowId: firstRowId, colField: columns[0].field }, { rowId: lastRowId, colField: columns[columns.length - 1].field });
+	}
+
+	private exportSelectionAsCsv(params: ContextMenuParams<TRowData>): void {
+		const bounds = params.selection.bounds;
+		if (!bounds) return;
+
+		const rowIds: string[] = [];
+		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+			const visualRow = params.api.getVisualRow(r);
+			if (visualRow?.kind !== 'data') continue;
+			rowIds.push(visualRow.rowId);
+		}
+		if (rowIds.length === 0) return;
+
+		const state = params.api.getState();
+		const colFields = state.columns.slice(bounds.minCol, bounds.maxCol + 1).map((c) => c.field);
+
+		exportToCsv(this.store, { fileName: 'export-selection.csv', rowIds, columns: colFields });
 	}
 }
