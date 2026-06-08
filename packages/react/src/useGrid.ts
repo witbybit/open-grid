@@ -3,6 +3,18 @@ import { createClientGrid, createServerGrid, type GridApi } from '@open-grid/cor
 
 import type { ClientGridOptions, ServerGridOptions } from './types.js';
 
+declare const process: { env: { NODE_ENV: string } } | undefined;
+const DEV = typeof process === 'undefined' || process.env.NODE_ENV !== 'production';
+
+function warnInitialOnlyChanged(hookName: string, optName: string): void {
+	if (DEV) {
+		console.warn(
+			`[open-grid] ${hookName}: \`${optName}\` changed after mount but it is an initial-only option. ` +
+				`The new value will be ignored. Set it once before the first render.`
+		);
+	}
+}
+
 export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridApi<TRowData> {
 	const initialOptionsRef = useRef(options);
 	// Skip the first mount — columns are already set at grid-creation time (with persisted state applied).
@@ -38,6 +50,22 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 	useEffect(() => {
 		api.setRows(options.rows);
 	}, [api, options.rows]);
+
+	const initialGetRowId = initialOptionsRef.current.getRowId;
+	const initialPersistence = initialOptionsRef.current.persistence;
+	const initialInitialState = initialOptionsRef.current.initialState;
+
+	useEffect(() => {
+		if (options.getRowId !== initialGetRowId) warnInitialOnlyChanged('useClientGrid', 'getRowId');
+	}, [options.getRowId, initialGetRowId]);
+
+	useEffect(() => {
+		if (options.persistence !== initialPersistence) warnInitialOnlyChanged('useClientGrid', 'persistence');
+	}, [options.persistence, initialPersistence]);
+
+	useEffect(() => {
+		if (options.initialState !== initialInitialState) warnInitialOnlyChanged('useClientGrid', 'initialState');
+	}, [options.initialState, initialInitialState]);
 
 	useInsertionEffect(() => {
 		return () => {
@@ -87,6 +115,22 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): G
 		}
 		api.setServerDatasource(options.datasource, options.blockSize);
 	}, [api, options.datasource, options.blockSize]);
+
+	const serverInitialGetRowId = initialOptionsRef.current.getRowId;
+	const serverInitialPersistence = initialOptionsRef.current.persistence;
+	const serverInitialInitialState = initialOptionsRef.current.initialState;
+
+	useEffect(() => {
+		if (options.getRowId !== serverInitialGetRowId) warnInitialOnlyChanged('useServerGrid', 'getRowId');
+	}, [options.getRowId, serverInitialGetRowId]);
+
+	useEffect(() => {
+		if (options.persistence !== serverInitialPersistence) warnInitialOnlyChanged('useServerGrid', 'persistence');
+	}, [options.persistence, serverInitialPersistence]);
+
+	useEffect(() => {
+		if (options.initialState !== serverInitialInitialState) warnInitialOnlyChanged('useServerGrid', 'initialState');
+	}, [options.initialState, serverInitialInitialState]);
 
 	useInsertionEffect(() => {
 		return () => {
