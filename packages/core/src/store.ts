@@ -2,13 +2,53 @@ import type { FilterModel, SortModel } from './rowModel.js';
 import type { IGridDatasource } from './serverRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
-import type { GroupPathItem } from './rows/visualRowIds.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 import type { PersistenceStatus } from './persistence/statePersistence.js';
 
+// ── Focused sub-modules — re-export so callers of store.ts continue to work ──
+export { RowNode } from './rowNode.js';
+
+export { isDomCellRenderer, getCellRendererCapabilities, getValueByPath, setValueByPath, compilePathGetter } from './columnDef.js';
+export type {
+	ValueGetterParams,
+	CellRendererPhase,
+	CellRendererCapabilities,
+	ImperativeCellHandle,
+	DomCellRendererParams,
+	DomCellRendererHandle,
+	DomCellRenderer,
+	ColumnRendererSpec,
+	ColumnRenderMode,
+	ColumnRenderPlan,
+	CompiledGridPlan,
+	ColumnDef,
+	InternalColumnDef,
+	GridRowClassParams,
+	GridCellClassParams,
+	GridStyleSlots,
+} from './columnDef.js';
+
+export {
+	isDataVisualRow,
+	isFullWidthVisualRow,
+	isSelectableVisualRow,
+	isEditableVisualRow,
+	canEditCell,
+	canFocusVisualRow,
+	isDataCellSelectable,
+} from './visualRow.js';
+export type { DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow, VisualRow } from './visualRow.js';
+
 export type { PersistenceStatus };
+
+// ── Internal imports (for use by definitions in this file) ───────────────────
+import { RowNode } from './rowNode.js';
+import type { ColumnDef, GridStyleSlots, CellRendererPhase } from './columnDef.js';
+import type { VisualRow } from './visualRow.js';
+
+// ── Cell / selection types ────────────────────────────────────────────────────
 
 export interface CellSubscription {
 	rowId: string;
@@ -109,278 +149,7 @@ export interface GridEvent<T = unknown> {
 
 export type GridEventListener<T = unknown> = (event: GridEvent<T>) => void;
 
-export class RowNode<TRowData = unknown> {
-	public id!: string;
-	public data!: TRowData;
-
-	// Caches computed cell values for this row until the row data changes.
-	private cellValueCache = new Map<string, unknown>();
-
-	constructor(id: string, data: TRowData) {
-		this.id = id;
-		this.data = data;
-	}
-
-	public setData(data: TRowData): void {
-		if (this.data !== data) {
-			this.data = data;
-			this.clearValueCache();
-		}
-	}
-
-	public getCellValue(colField: string, compiledGetter: (data: TRowData) => unknown): unknown {
-		if (this.cellValueCache.has(colField)) {
-			return this.cellValueCache.get(colField);
-		}
-		const val = compiledGetter(this.data);
-		this.cellValueCache.set(colField, val);
-		return val;
-	}
-
-	public clearValueCache(): void {
-		this.cellValueCache.clear();
-	}
-}
-
-export interface DataVisualRow<T> {
-	kind: 'data';
-	id: string;
-	rowId: string;
-	node: RowNode<T>;
-	depth: number;
-	height?: number;
-	selectable?: true;
-	editable?: true;
-}
-
-export interface GroupVisualRow<T> {
-	kind: 'group';
-	id: string;
-	groupId: string;
-	field: string;
-	key: unknown;
-	keyString: string;
-	path: GroupPathItem[];
-	depth: number;
-	expanded: boolean;
-	childCount: number;
-	leafCount: number;
-	aggregateValues?: Record<string, unknown>;
-	aggregate?: Record<string, unknown>;
-	height?: number;
-	selectable?: boolean;
-	editable?: false;
-}
-
-export interface DetailVisualRow<T> {
-	kind: 'detail';
-	id: string;
-	parentId: string;
-	parentRowId?: string;
-	depth: number;
-	height: number;
-	render: unknown;
-	selectable?: false;
-	editable?: false;
-}
-
-export interface FooterVisualRow<T> {
-	kind: 'footer';
-	id: string;
-	parentGroupId: string;
-	depth: number;
-	aggregateValues?: Record<string, unknown>;
-	aggregate?: Record<string, unknown>;
-	height?: number;
-	editable?: false;
-}
-
-export interface LoadingVisualRow {
-	kind: 'loading';
-	id: string;
-	rowIndex: number;
-	height?: number;
-	editable?: false;
-}
-
-export type VisualRow<TRowData = unknown> =
-	| DataVisualRow<TRowData>
-	| GroupVisualRow<TRowData>
-	| DetailVisualRow<TRowData>
-	| FooterVisualRow<TRowData>
-	| LoadingVisualRow;
-
-export function isDataVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): row is DataVisualRow<TRowData> {
-	return row?.kind === 'data';
-}
-
-export function isFullWidthVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
-	return row?.kind === 'detail' || row?.kind === 'loading';
-}
-
-export function isSelectableVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
-	if (row?.kind === 'data') return true;
-	if (row?.kind === 'group') return row.selectable !== false;
-	return false;
-}
-
-export function isEditableVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
-	return row?.kind === 'data';
-}
-
-export function canEditCell<TRowData>(row: VisualRow<TRowData> | null | undefined, column: ColumnDef<TRowData> | null | undefined): boolean {
-	return row?.kind === 'data' && !!column;
-}
-
-export function canFocusVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
-	return !!row && row.kind !== 'loading';
-}
-
-export function isDataCellSelectable<TRowData>(row: VisualRow<TRowData> | null | undefined, column: ColumnDef<TRowData> | null | undefined): boolean {
-	return row?.kind === 'data' && !!column;
-}
-
-export interface ValueGetterParams<TRowData = unknown> {
-	node: RowNode<TRowData>;
-	row: TRowData;
-	colField: string;
-}
-
-export type CellRendererPhase = 'initial' | 'scroll' | 'scroll-idle' | 'interaction' | 'edit' | 'destroy';
-
-export interface CellRendererCapabilities {
-	/**
-	 * Whether renderer content should stay live, defer updates, or show fallback while scrolling.
-	 */
-	scrollBehavior?: 'live' | 'defer' | 'fallback';
-	deferFallback?: 'snapshot' | 'pending';
-	/**
-	 * Future lifecycle hint for renderer instance reuse.
-	 */
-	recycle?: 'rebind' | 'preserve' | 'destroy';
-	estimatedCost?: 'cheap' | 'medium' | 'expensive';
-	interactive?: boolean;
-	supportsRebind?: boolean;
-	warmCache?: boolean;
-	/**
-	 * When true, the grid calls ref.current.update() directly — bypasses React's scheduler entirely.
-	 * Cell renderer must be a forwardRef component exposing ImperativeCellHandle.
-	 * Ideal for real-time feeds (tick data, live prices) where even setState latency is too high.
-	 */
-	imperativeUpdate?: boolean;
-}
-
-export type ColumnRendererSpec<TRowData = unknown> =
-	| { kind: 'text' }
-	| { kind: 'dom'; renderer: DomCellRenderer<TRowData>; capabilities?: CellRendererCapabilities }
-	| { kind: 'react'; component: unknown; capabilities?: CellRendererCapabilities }
-	| {
-			kind: 'imperativeReact';
-			component: unknown;
-			capabilities?: CellRendererCapabilities;
-	  };
-
-// ─── Imperative handle ────────────────────────────────────────────────────────
-
-/** Exposed via forwardRef on renderers with cellRendererCapabilities.imperativeUpdate = true */
-export interface ImperativeCellHandle<TRowData = unknown> {
-	update(params: CellRendererProps<TRowData>): void;
-}
-
-// ─── DOM Cell Renderer API ────────────────────────────────────────────────────
-
-/** Parameters passed to DomCellRenderer.mount() and DomCellRendererHandle.update() */
-export interface DomCellRendererParams<TRowData = unknown> {
-	container: HTMLElement;
-	value: unknown;
-	node: RowNode<TRowData>;
-	col: ColumnDef<TRowData>;
-	isEditing: boolean;
-	isScrolling: boolean;
-	phase: CellRendererPhase;
-	isFocused: boolean;
-	isSelected: boolean;
-}
-
-/** Handle returned by DomCellRenderer.mount() — grid calls update() directly in the paint loop */
-export interface DomCellRendererHandle {
-	update(params: DomCellRendererParams<any>): void;
-	destroy?(): void;
-}
-
-/**
- * Zero-React-overhead cell renderer. Grid calls mount() once and update() on every data change.
- * No virtual DOM, no scheduler, no reconciler — pure DOM manipulation.
- *
- * @example
- * const priceRenderer: DomCellRenderer<MyRow> = {
- *   mount(container, params) {
- *     const span = document.createElement('span');
- *     span.textContent = String(params.value);
- *     container.appendChild(span);
- *     return { update(p) { span.textContent = String(p.value); } };
- *   }
- * };
- */
-export interface DomCellRenderer<TRowData = unknown> {
-	mount(container: HTMLElement, params: DomCellRendererParams<TRowData>): DomCellRendererHandle;
-	capabilities?: CellRendererCapabilities;
-}
-
-/** Type guard — returns true when renderer is a DomCellRenderer (has a mount function) */
-export function isDomCellRenderer<TRowData = unknown>(renderer: unknown): renderer is DomCellRenderer<TRowData> {
-	return typeof renderer === 'object' && renderer !== null && typeof (renderer as DomCellRenderer).mount === 'function';
-}
-
-export type ColumnRenderMode =
-	| 'primitive'
-	| 'primitive-formatted'
-	| 'custom-live'
-	| 'custom-defer'
-	| 'custom-fallback'
-	| 'custom-skeleton'
-	| 'loading';
-
-export interface ColumnRenderPlan<TData = unknown> {
-	colId: string;
-	field: string;
-
-	mode: ColumnRenderMode;
-
-	hasValueGetter: boolean;
-	hasFormatter: boolean;
-	hasFormulaSupport: boolean;
-
-	canUseCachedDisplayValue: boolean;
-
-	capabilities?: CellRendererCapabilities;
-
-	fallbackStrategy: 'cached' | 'formatted' | 'raw' | 'blank' | 'custom';
-
-	rendererType?: unknown;
-	diagnostics?: string[];
-}
-
-export interface CompiledGridPlan<TData = unknown> {
-	version: number;
-	columns: InternalColumnDef<TData>[];
-	displayedColumns: InternalColumnDef<TData>[];
-	columnPlans: ColumnRenderPlan<TData>[];
-	colFields: string[];
-	colWidths: ArrayLike<number>;
-	colLefts: ArrayLike<number>;
-	totalWidth: number;
-	pinLeftCount: number;
-	pinRightCount: number;
-	pinRightStart: number;
-	pinLeftWidth: number;
-	pinRightWidth: number;
-	pinRightBaseLeft: number;
-	hasCustomRenderers: boolean;
-	hasDomRenderers: boolean;
-	hasFormattedValues: boolean;
-	hasValueGetters: boolean;
-}
+// ── Cell renderer / editor props (stay here — they reference GridApi) ─────────
 
 export interface CellRendererProps<TRowData = unknown> {
 	value: unknown;
@@ -418,61 +187,7 @@ export interface CellEditorProps<TRowData = unknown> {
 	onCancel: () => void;
 }
 
-export function getValueByPath(obj: unknown, path: string): unknown {
-	if (!obj || typeof obj !== 'object' || !path) return undefined;
-	const record = obj as Record<string, unknown>;
-	if (!path.includes('.')) return record[path];
-	return path.split('.').reduce((acc: unknown, part) => {
-		if (acc && typeof acc === 'object') {
-			return (acc as Record<string, unknown>)[part];
-		}
-		return undefined;
-	}, obj);
-}
-
-export function setValueByPath(obj: unknown, path: string, value: unknown): boolean {
-	if (!obj || typeof obj !== 'object' || !path) return false;
-	const record = obj as Record<string, unknown>;
-	if (!path.includes('.')) {
-		record[path] = value;
-		return true;
-	}
-	const parts = path.split('.');
-	let curr = record;
-	for (let i = 0; i < parts.length - 1; i++) {
-		const part = parts[i];
-		if (!curr[part] || typeof curr[part] !== 'object') {
-			curr[part] = {};
-		}
-		curr = curr[part] as Record<string, unknown>;
-	}
-	curr[parts[parts.length - 1]] = value;
-	return true;
-}
-
-const pathGetterCache = new Map<string, (data: unknown) => unknown>();
-
-export function compilePathGetter(path: string): (data: unknown) => unknown {
-	if (!path) return () => undefined;
-	if (pathGetterCache.has(path)) return pathGetterCache.get(path)!;
-
-	let getter: (data: unknown) => unknown;
-	if (!path.includes('.')) {
-		getter = (data: unknown) => (data && typeof data === 'object' ? (data as Record<string, unknown>)[path] : undefined);
-	} else {
-		const parts = path.split('.');
-		getter = (data: unknown) => {
-			let curr: unknown = data;
-			for (let i = 0; i < parts.length; i++) {
-				if (curr === null || curr === undefined || typeof curr !== 'object') return undefined;
-				curr = (curr as Record<string, unknown>)[parts[i]];
-			}
-			return curr;
-		};
-	}
-	pathGetterCache.set(path, getter);
-	return getter;
-}
+// ── Row model ─────────────────────────────────────────────────────────────────
 
 export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit';
 export interface RowModelRefreshResult {
@@ -512,85 +227,7 @@ export interface HeaderMenuRendererProps<TRowData = unknown> {
 	container: HTMLDivElement;
 }
 
-export interface ColumnDef<TRowData = unknown> {
-	field: string;
-	header: string;
-	width?: number;
-	hide?: boolean;
-	movable?: boolean;
-	loading?: boolean;
-	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
-	valueGetterDependencies?: string[];
-	valueSetter?: (row: TRowData, value: unknown) => boolean;
-	renderer?: ColumnRendererSpec<TRowData>;
-	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
-	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;
-	headerMenuComponent?: any;
-	sortable?: boolean;
-	/** When false, this column cannot be added to the row grouping. Defaults to true. */
-	enableRowGroup?: boolean;
-}
-
-/**
- * @internal
- * Internal column definition — extends the public ColumnDef with normalised renderer fields
- * produced by ColumnModel.normalizeColumn(). Never expose these on the public ColumnDef.
- */
-export interface InternalColumnDef<TRowData = unknown> extends ColumnDef<TRowData> {
-	cellRenderer?: ((props: CellRendererProps<TRowData>) => unknown) | DomCellRenderer<TRowData>;
-	cellRendererCapabilities?: CellRendererCapabilities;
-}
-
-export interface GridRowClassParams<TRowData = unknown> {
-	row: TRowData;
-	rowId: string;
-	rowIndex: number;
-	isFocused: boolean;
-	isSelected: boolean;
-	isLoading: boolean;
-	selection: GridSelectionState;
-}
-
-export interface GridCellClassParams<TRowData = unknown> {
-	row: TRowData;
-	rowId: string;
-	rowIndex: number;
-	col: ColumnDef<TRowData>;
-	colField: string;
-	colIndex: number;
-	isFocused: boolean;
-	isRowFocused: boolean;
-	isRowSelected: boolean;
-	isSelected: boolean;
-	isEditing: boolean;
-	value: unknown;
-	rawValue: unknown;
-	isLoading: boolean;
-	selection: GridSelectionState;
-}
-
-export interface GridStyleSlots<TRowData = unknown> {
-	rowClass?: (row: TRowData, params: GridRowClassParams<TRowData>) => string;
-	cellClass?: (col: ColumnDef<TRowData>, row: TRowData, params: GridCellClassParams<TRowData>) => string;
-	headerCellClass?: (col: ColumnDef<TRowData>) => string;
-	beforeCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
-	afterCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
-	groupRowClass?: (visualRow: Extract<VisualRow<TRowData>, { kind: 'group' }>) => string;
-	detailRowClass?: (visualRow: Extract<VisualRow<TRowData>, { kind: 'detail' }>) => string;
-}
-
-export function getCellRendererCapabilities<TRowData>(col: InternalColumnDef<TRowData>): Required<CellRendererCapabilities> {
-	return {
-		scrollBehavior: col.cellRendererCapabilities?.scrollBehavior ?? 'fallback',
-		deferFallback: col.cellRendererCapabilities?.deferFallback ?? 'pending',
-		recycle: col.cellRendererCapabilities?.recycle ?? 'preserve',
-		estimatedCost: col.cellRendererCapabilities?.estimatedCost ?? 'medium',
-		interactive: col.cellRendererCapabilities?.interactive ?? false,
-		supportsRebind: col.cellRendererCapabilities?.supportsRebind ?? false,
-		warmCache: col.cellRendererCapabilities?.warmCache ?? true,
-		imperativeUpdate: col.cellRendererCapabilities?.imperativeUpdate ?? false,
-	};
-}
+// ── Grid state ────────────────────────────────────────────────────────────────
 
 export interface GridState<TRowData = unknown> {
 	getRowId?: (row: TRowData) => string;

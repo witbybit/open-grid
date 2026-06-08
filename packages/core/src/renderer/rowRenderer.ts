@@ -37,6 +37,14 @@ import {
 import { createEditRendererKey, createSlotRendererKey } from './identityKeys.js';
 import type { SlotRuntimeStats } from './slotRuntimeStats.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
+import { computeStableSlotRows } from './stableSlotAssigner.js';
+
+/** Build the base CSS class string for a data cell, including pin-zone classes. */
+function buildCellPinClass(colIndex: number, pinLeftColumns: number, pinRightStart: number): string {
+	if (colIndex < pinLeftColumns) return 'og-cell og-cell-pinned-left';
+	if (colIndex >= pinRightStart) return 'og-cell og-cell-pinned-right';
+	return 'og-cell';
+}
 
 export class RowRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -315,7 +323,7 @@ export class RowRenderer<TRowData = unknown> {
 		// Only entering/exiting rows use recycled slots (isRowRebind = true).
 		const sortedRows = getRowIndices(nextWindow);
 		const totalSlots = sortedRows.length;
-		const allRows = this._computeStableSlotRows(sortedRows);
+		const allRows = computeStableSlotRows(sortedRows, this.rowSlotPool);
 
 		this.rowSlotPool.resetScrollStats();
 
@@ -898,12 +906,7 @@ export class RowRenderer<TRowData = unknown> {
 		const colCount = plan.displayedColumns.length;
 		const access = this.engine.cellAccess.get(node.id, rowIndex, node, node.data, colIndex, col);
 
-		let cellClassName = 'og-cell';
-		if (colIndex < pinLeftColumns) {
-			cellClassName += ' og-cell-pinned-left';
-		} else if (colIndex >= pinRightStart) {
-			cellClassName += ' og-cell-pinned-right';
-		}
+		let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, pinRightStart);
 		if (access.isFocused) {
 			cellClassName += ' og-cell-focused';
 			cellSlot.element.tabIndex = -1;
@@ -1238,51 +1241,6 @@ export class RowRenderer<TRowData = unknown> {
 		for (const c of colsStayed) bindOne(c);
 	}
 
-	// ── Stable slot assignment ───────────────────────────────────────────────────────
-
-	/**
-	 * Computes which visual row each slot should show, keeping stable rows in their
-	 * current slot (isRowRebind = false) and assigning freed slots to entering rows.
-	 *
-	 * Time: O(n). Space: O(n) for the Set + output array.
-	 */
-	private _computeStableSlotRows(newWindowRows: readonly number[]): number[] {
-		const n = newWindowRows.length;
-		const result = new Array<number>(n);
-		const newWindowSet = new Set(newWindowRows);
-		const assignedRows = new Set<number>();
-		const freeSlotIndices: number[] = [];
-
-		// Pass 1: slots whose current row is still in the new window stay in place.
-		const slotCount = Math.min(this.rowSlotPool.count, n);
-		for (let i = 0; i < slotCount; i++) {
-			const slot = this.rowSlotPool.getSlot(i);
-			const vi = slot ? slot.visualIndex : -1;
-			if (vi >= 0 && newWindowSet.has(vi)) {
-				result[i] = vi;
-				assignedRows.add(vi);
-			} else {
-				result[i] = -1;
-				freeSlotIndices.push(i);
-			}
-		}
-		// New slots (pool growth): they're all free.
-		for (let i = slotCount; i < n; i++) {
-			result[i] = -1;
-			freeSlotIndices.push(i);
-		}
-
-		// Pass 2: assign entering rows to freed slots in window order.
-		let freeIdx = 0;
-		for (const row of newWindowRows) {
-			if (!assignedRows.has(row)) {
-				result[freeSlotIndices[freeIdx++]] = row;
-			}
-		}
-
-		return result;
-	}
-
 	// ── Scroll-path fast cell binding ────────────────────────────────────────────────
 
 	private bindCellSlotDuringScroll(
@@ -1311,12 +1269,7 @@ export class RowRenderer<TRowData = unknown> {
 				? 'portal'
 				: 'primitive';
 
-		let cellClassName = 'og-cell';
-		if (colIndex < pinLeftColumns) {
-			cellClassName += ' og-cell-pinned-left';
-		} else if (colIndex >= Math.max(pinLeftColumns, colCount - pinRightColumns)) {
-			cellClassName += ' og-cell-pinned-right';
-		}
+		let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, Math.max(pinLeftColumns, colCount - pinRightColumns));
 		if (rendererKind === 'loading') {
 			cellClassName += ' og-cell-loading';
 		}

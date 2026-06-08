@@ -39,6 +39,7 @@ export { HeaderRenderer } from './renderer/headerRenderer.js';
 export { OverlayRenderer } from './renderer/overlayRenderer.js';
 export { RowRenderer } from './renderer/rowRenderer.js';
 export { ViewportRenderer } from './renderer/viewportRenderer.js';
+export { computeStableSlotRows } from './renderer/stableSlotAssigner.js';
 
 // Grid host — low-level DOM mounting used by framework adapters, not application code.
 export { mountGridHost, type GridCellContentAdapter, type GridHost, type GridHostOptions } from './gridHost.js';
