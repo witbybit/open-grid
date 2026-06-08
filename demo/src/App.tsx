@@ -17,6 +17,7 @@ import GanttSchedulingWorkspace from './pages/GanttSchedulingWorkspace';
 import NestedTablesGrouping from './pages/NestedTablesGrouping';
 import PerformanceLab from './pages/PerformanceLab';
 import SidebarPanelsDemo from './pages/SidebarPanelsDemo';
+import NativeCellTypesDemo from './pages/NativeCellTypesDemo';
 import { useShowroomStores } from './hooks/useShowroomStores';
 import type { FilterModel, SortModel } from '@open-grid/react';
 import { GridPageType } from './components/GridShared';
@@ -37,7 +38,9 @@ export default function App() {
 	useEffect(() => {
 		const handleHashChange = () => {
 			const hash = window.location.hash.slice(1);
-			if (['perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard', 'gantt', 'nested', 'lab', 'panels'].includes(hash)) {
+			if (
+				['perf', 'server', 'ranges', 'editors', 'layout', 'skins', 'dashboard', 'gantt', 'nested', 'lab', 'panels', 'native'].includes(hash)
+			) {
 				setActivePage(hash as any);
 			}
 		};
@@ -299,6 +302,8 @@ export default function App() {
 						{activePage === 'nested' && <NestedTablesGrouping />}
 
 						{activePage === 'panels' && <SidebarPanelsDemo />}
+
+						{activePage === 'native' && <NativeCellTypesDemo />}
 					</div>
 				</div>
 

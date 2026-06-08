@@ -14,6 +14,7 @@ import {
 	FolderTree,
 	Gauge,
 	PanelRight,
+	Boxes,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -91,6 +92,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Sidebar Panels',
 			subtitle: 'Columns · Filters · Sort',
 			icon: PanelRight,
+		},
+		{
+			id: 'native',
+			label: 'Native Cell Types',
+			subtitle: 'Checkbox · Tags · Date · More',
+			icon: Boxes,
 		},
 	] as const;
 

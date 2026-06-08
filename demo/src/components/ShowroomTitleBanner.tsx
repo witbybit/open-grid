@@ -11,6 +11,7 @@ import {
 	PanelRightClose,
 	Calendar,
 	Gauge,
+	Boxes,
 } from 'lucide-react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
@@ -47,6 +48,7 @@ export default function ShowroomTitleBanner({
 					{activePage === 'skins' && <Paintbrush className='w-4.5 h-4.5' />}
 					{activePage === 'dashboard' && <TrendingUp className='w-4.5 h-4.5' />}
 					{activePage === 'gantt' && <Calendar className='w-4.5 h-4.5' />}
+					{activePage === 'native' && <Boxes className='w-4.5 h-4.5' />}
 				</span>
 				<div>
 					<h2 className='text-sm font-extrabold text-slate-200 leading-tight uppercase tracking-wider flex items-center gap-2'>
@@ -60,6 +62,7 @@ export default function ShowroomTitleBanner({
 						{activePage === 'dashboard' && 'Executive Portfolio & SVG Market Analytics Streamer'}
 						{activePage === 'gantt' && 'Quantitative Gantt Scheduling & Task Optimizer Arena'}
 						{activePage === 'nested' && 'Nested and Group Grid Arena'}
+						{activePage === 'native' && 'Native Cell Types — Built into @open-grid/react'}
 					</h2>
 					<p className='text-[10px] text-slate-400 leading-tight mt-0.5'>
 						{activePage === 'lab' &&
@@ -81,6 +84,8 @@ export default function ShowroomTitleBanner({
 						{activePage === 'gantt' &&
 							'Track, extrapolate, and align multi-day team sprints utilizing dynamic styling slots and drag-to-fill date progressions.'}
 						{activePage === 'nested' && 'Examples of nested and grouped grids'}
+						{activePage === 'native' &&
+							'Checkbox, multi-select tags, date picker, dropdown badge, and number stepper — all zero external deps, CSS-variable themed.'}
 					</p>
 				</div>
 			</div>

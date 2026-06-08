@@ -13,6 +13,29 @@ export {
 } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
 
+// ─── Built-in cell renderers & editors ───────────────────────────────────────
+export {
+	// Checkbox
+	CheckboxCellRenderer,
+	// Multi-select
+	MultiSelectCellRenderer,
+	createMultiSelectCellRenderer,
+	createMultiSelectCellEditor,
+	// Date
+	DateCellRenderer,
+	DateCellEditor,
+	// Dropdown / enum badge
+	createDropdownCellRenderer,
+	createDropdownCellEditor,
+	// Number
+	createNumberCellRenderer,
+	createNumberCellEditor,
+	// Utilities
+	parseMultiValue,
+	TagsCellRenderer,
+} from './renderers/CellTypes.js';
+export type { DropdownOption, DropdownOptionColor, NumberCellRendererOptions, NumberCellEditorOptions } from './renderers/CellTypes.js';
+
 export { isDomCellRenderer } from './types.js';
 export type {
 	ColumnDef,

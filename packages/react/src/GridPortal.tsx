@@ -116,7 +116,7 @@ function PortalCellInner<TRowData = unknown>({
 
 	const rowData = node?.data;
 
-	const CustomEditor = col?.cellEditor as ((props: Record<string, unknown>) => ReactNode) | undefined;
+	const CustomEditor = col?.cellEditor as ComponentType<Record<string, unknown>> | undefined;
 	// DomCellRenderer is an object ({mount}), memo/forwardRef are exotic objects — use isDomCellRenderer guard
 	const iCol = col as InternalColumnDef | undefined;
 	const CustomRenderer =
@@ -143,7 +143,7 @@ function PortalCellInner<TRowData = unknown>({
 							}
 						}}
 					>
-						{CustomEditor({
+						{createElement(CustomEditor, {
 							rowId,
 							colField,
 							value: localValue,
