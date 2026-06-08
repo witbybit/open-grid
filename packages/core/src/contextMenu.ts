@@ -285,7 +285,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		const rows: string[] = [];
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const visualRow = params.api.getVisualRow(r);
+			const visualRow = this.store.getVisualRow(r);
 			if (visualRow?.kind !== 'data') continue;
 			const rowId = visualRow.rowId;
 			const rowVals: string[] = [];
@@ -337,7 +337,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			for (let r = 0; r < lines.length; r++) {
 				const rowIndex = bounds.minRow + r;
 				if (rowIndex > bounds.maxRow) break;
-				const visualRow = params.api.getVisualRow(rowIndex);
+				const visualRow = this.store.getVisualRow(rowIndex);
 				if (visualRow?.kind !== 'data') continue;
 				const rowId = visualRow.rowId;
 				const cells = lines[r].split('\t');
@@ -359,7 +359,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		if (!bounds) return;
 
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const visualRow = params.api.getVisualRow(r);
+			const visualRow = this.store.getVisualRow(r);
 			if (visualRow?.kind !== 'data') continue;
 			const rowId = visualRow.rowId;
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
@@ -373,11 +373,11 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	private selectAll(params: ContextMenuParams<TRowData>): void {
 		const state = params.api.getState();
 		const columns = state.columns;
-		const rowCount = params.api.getVisualRowCount();
+		const rowCount = this.store.getVisualRowCount();
 		if (columns.length === 0 || rowCount === 0) return;
 
-		const firstRow = params.api.getVisualRow(0);
-		const lastRow = params.api.getVisualRow(rowCount - 1);
+		const firstRow = this.store.getVisualRow(0);
+		const lastRow = this.store.getVisualRow(rowCount - 1);
 		if (firstRow?.kind !== 'data' || lastRow?.kind !== 'data') return;
 
 		const firstRowId = firstRow.rowId;
@@ -392,7 +392,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		const rowIds: string[] = [];
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const visualRow = params.api.getVisualRow(r);
+			const visualRow = this.store.getVisualRow(r);
 			if (visualRow?.kind !== 'data') continue;
 			rowIds.push(visualRow.rowId);
 		}

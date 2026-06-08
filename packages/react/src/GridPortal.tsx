@@ -10,16 +10,8 @@ import {
 	createElement,
 	type ComponentType,
 } from 'react';
-import {
-	ColumnDef,
-	GridApi,
-	RowNode,
-	VisualRow,
-	type CellRendererPhase,
-	type ImperativeCellHandle,
-	type InternalColumnDef,
-	isDomCellRenderer,
-} from '@open-grid/core';
+import { ColumnDef, GridApi, RowNode, VisualRow, type CellRendererPhase, type ImperativeCellHandle, isDomCellRenderer } from '@open-grid/core';
+import type { InternalColumnDef } from '@open-grid/core/internal';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import { GridProvider } from './OpenGrid.js';

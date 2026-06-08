@@ -728,6 +728,52 @@ export interface GridTransaction<TRowData = unknown> {
 }
 
 /**
+ * Validates column definitions before they are applied to the grid.
+ * Throws early with a clear message rather than silently producing broken layout.
+ */
+export function validateColumns<TRowData>(columns: ColumnDef<TRowData>[]): void {
+	const seen = new Set<string>();
+
+	for (const column of columns) {
+		const id = column.field;
+
+		if (!id) {
+			throw new Error('Open Grid: every column must have a non-empty field.');
+		}
+
+		if (seen.has(id)) {
+			throw new Error(`Open Grid: duplicate column field "${id}". Each column must have a unique field.`);
+		}
+
+		seen.add(id);
+
+		if (column.width != null && (!Number.isFinite(column.width) || column.width <= 0)) {
+			throw new Error(`Open Grid: invalid width for column "${id}". Width must be a positive finite number, got ${column.width}.`);
+		}
+	}
+}
+
+/**
+ * Validates row IDs produced by getRowId before they are inserted into the grid.
+ * Throws on empty or duplicate IDs, which would otherwise cause silent identity corruption.
+ */
+export function validateRowIds(ids: string[], context = 'setRows'): void {
+	const seen = new Set<string>();
+
+	for (const id of ids) {
+		if (!id) {
+			throw new Error(`Open Grid [${context}]: getRowId returned an empty string. Every row must have a non-empty ID.`);
+		}
+
+		if (seen.has(id)) {
+			throw new Error(`Open Grid [${context}]: duplicate row ID "${id}". Each row must have a unique ID.`);
+		}
+
+		seen.add(id);
+	}
+}
+
+/**
  * Public, pristine API intended for application developers.
  */
 export interface GridApi<TRowData = unknown> {
@@ -745,13 +791,7 @@ export interface GridApi<TRowData = unknown> {
 	purgeCache(): void;
 	setServerDatasource(datasource: IGridDatasource, blockSize?: number): void;
 	getCellValue(rowId: string, colField: string): unknown;
-	getCachedDisplayValue(rowId: string, colField: string): string | undefined;
-	getCheapDisplayValue(rowId: string, colField: string): string;
-	getComputedCellValue(rowId: string, colField: string): unknown;
-	getRowOverscanPx(): number;
-	setRowOverscanPx(px: number): void;
 	setCellValue(rowId: string, colField: string, value: unknown): void;
-	getCellState(rowId: string, colField: string): CellState;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
 	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
@@ -782,11 +822,6 @@ export interface GridApi<TRowData = unknown> {
 	toggleDetailExpanded(rowId: string): void;
 	isGroupExpanded(groupId: string): boolean;
 	isDetailExpanded(rowId: string): boolean;
-	getVisualRow(index: number): VisualRow<TRowData> | null;
-	getVisualRowCount(): number;
-	getVisualRowIndexById(id: string): number | null;
-	getVisualIndexById(visualRowId: string): number | null;
-	getVisualIndexByRowId(rowId: string): number | null;
 	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRawRowById(rowId: string): TRowData | null;
 	rows(): GridRowsAccessor<TRowData>;
@@ -796,18 +831,9 @@ export interface GridApi<TRowData = unknown> {
 	stopEditing(cancel?: boolean): void;
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
-	subscribeToViewport(listener: Listener<TRowData>): () => void;
-	subscribeToSelection(listener: Listener<TRowData>): () => void;
-	subscribeToFocusedCell(listener: Listener<TRowData>): () => void;
-	subscribeToEditingCell(listener: Listener<TRowData>): () => void;
-	subscribeToCell(rowId: string, colField: string, listener: () => void): () => void;
-	subscribeToRow(rowId: string, listener: Listener<TRowData>): () => void;
-	subscribeToColumn(colField: string, listener: Listener<TRowData>): () => void;
-	subscribeToHeaders(listener: Listener<TRowData>): () => void;
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
-	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
 	undo(): void;
 	redo(): void;
 	canUndo(): boolean;
@@ -838,16 +864,50 @@ export interface GridApi<TRowData = unknown> {
 	/** Immediately save current state, bypassing the debounce timer. No-op when no adapter is set. */
 	saveNow(): void;
 	destroy(): void;
-	getRenderStats(): RenderStats;
-	resetRenderStats(): void;
 }
 
 export type { CsvExportOptions };
 
 /**
  * Internal API intended for the rendering engine, plugins, and custom framework adapters.
+ * Extends GridApi with renderer-level and store-level access that must not leak to application code.
+ *
+ * Access this via getInternalApiFromApi(api) or getStoreFromApi(api) from @open-grid/core/internal.
  */
 export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
+	// ── Renderer-level display value access ──────────────────────────────────
+	getCachedDisplayValue(rowId: string, colField: string): string | undefined;
+	getCheapDisplayValue(rowId: string, colField: string): string;
+	getComputedCellValue(rowId: string, colField: string): unknown;
+	getCellState(rowId: string, colField: string): CellState;
+	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
+
+	// ── Render config (viewport / overscan) ──────────────────────────────────
+	getRowOverscanPx(): number;
+	setRowOverscanPx(px: number): void;
+
+	// ── Render diagnostics ───────────────────────────────────────────────────
+	getRenderStats(): RenderStats;
+	resetRenderStats(): void;
+
+	// ── Visual row model access (used by renderer, not application code) ─────
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	getVisualRowCount(): number;
+	getVisualRowIndexById(id: string): number | null;
+	getVisualIndexById(visualRowId: string): number | null;
+	getVisualIndexByRowId(rowId: string): number | null;
+
+	// ── Fine-grained subscriptions (used by cell/row portals) ────────────────
+	subscribeToViewport(listener: Listener<TRowData>): () => void;
+	subscribeToSelection(listener: Listener<TRowData>): () => void;
+	subscribeToFocusedCell(listener: Listener<TRowData>): () => void;
+	subscribeToEditingCell(listener: Listener<TRowData>): () => void;
+	subscribeToCell(rowId: string, colField: string, listener: () => void): () => void;
+	subscribeToRow(rowId: string, listener: Listener<TRowData>): () => void;
+	subscribeToColumn(colField: string, listener: Listener<TRowData>): () => void;
+	subscribeToHeaders(listener: Listener<TRowData>): () => void;
+
+	// ── Store / engine internals ─────────────────────────────────────────────
 	setState(updater: GridStateUpdater<TRowData>): void;
 	registerRowModel(rowModel: RowModel<TRowData>): void;
 	getRowModel(): RowModel<TRowData> | null;
@@ -877,6 +937,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private plugins = new Map<string, GridPlugin<TRowData>>();
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
+		validateColumns(initialState.columns || []);
 		this.engine = new GridEngine<TRowData>({
 			columns: initialState.columns || [],
 			selection: initialState.selection,
@@ -1564,6 +1625,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setColumns = (columns: ColumnDef<TRowData>[]): void => {
+		validateColumns(columns);
 		this.engine.setColumns(columns);
 	};
 

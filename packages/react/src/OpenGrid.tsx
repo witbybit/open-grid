@@ -2,14 +2,12 @@ import {
 	GridApi,
 	GridCellClickParams,
 	GridCellPointer,
-	InternalColumnDef,
 	GridContextMenuOptions,
 	GridContextMenuHandle,
-	GridHost,
-	mountGridHost,
 	registerGridContextMenu,
 	VisualRow,
 } from '@open-grid/core';
+import { InternalColumnDef, GridHost, mountGridHost, getInternalApiFromApi } from '@open-grid/core/internal';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { PortalManager, createPortalStore } from './GridPortal.js';
 import { useGridNavigationController } from './hooks.js';
@@ -282,7 +280,7 @@ function OpenGridInner<TRowData = unknown>({
 			const colField = cellEl.dataset.colField;
 			const rowEl = cellEl.closest('.og-row') as HTMLElement;
 			const rowIndex = Number(rowEl?.dataset.rowIndex);
-			const visualRow = Number.isFinite(rowIndex) ? api.getVisualRow(rowIndex) : null;
+			const visualRow = Number.isFinite(rowIndex) ? getInternalApiFromApi(api).getVisualRow(rowIndex) : null;
 			const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
 			if (!colField || !rowId) return null;
 			return { cellEl, pointer: { rowId, colField } };
@@ -292,7 +290,7 @@ function OpenGridInner<TRowData = unknown>({
 
 	const getCellClickParams = useCallback(
 		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {
-			const access = api.getCellAccess(pointer.rowId, pointer.colField);
+			const access = getInternalApiFromApi(api).getCellAccess(pointer.rowId, pointer.colField);
 			if (!access) return null;
 			return {
 				rowId: access.rowId,

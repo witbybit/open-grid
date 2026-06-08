@@ -14,6 +14,28 @@ import {
 	type RowDataTransaction,
 	type RowNodeTransaction,
 } from './store.js';
+
+// WeakMap reverse-lookup: maps a public GridApi to the internal GridStore that backs it.
+// This is the canonical way for framework adapters to recover the store from a public API handle.
+const apiStoreMap = new WeakMap<GridApi<unknown>, GridStore<unknown>>();
+
+/**
+ * Recover the internal GridStore from a public GridApi handle.
+ * Only works for APIs created by Open Grid factory functions.
+ * Framework adapters (e.g. @open-grid/react) use this to access renderer-level internals
+ * without exposing GridStore on the public GridApi type.
+ *
+ * @throws if the api was not created by Open Grid.
+ */
+export function getStoreFromApi<TRowData>(api: GridApi<TRowData>): GridStore<TRowData> {
+	const store = apiStoreMap.get(api as GridApi<unknown>);
+
+	if (!store) {
+		throw new Error('Invalid GridApi. This API was not created by Open Grid.');
+	}
+
+	return store as GridStore<TRowData>;
+}
 import { exportToCsv } from './export/csvExport.js';
 import {
 	type GridPersistenceAdapter,
@@ -88,11 +110,7 @@ export function createApiFacade<TRowData>(
 		purgeCache: () => store.purgeCache(),
 		setServerDatasource: (datasource: IGridDatasource, blockSize?: number) => store.setServerDatasource(datasource, blockSize),
 		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
-		getCachedDisplayValue: (rowId: string, colField: string) => store.getCachedDisplayValue(rowId, colField),
-		getCheapDisplayValue: (rowId: string, colField: string) => store.getCheapDisplayValue(rowId, colField),
-		getComputedCellValue: (rowId: string, colField: string) => store.getComputedCellValue(rowId, colField),
 		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
-		getCellState: (rowId: string, colField: string) => store.getCellState(rowId, colField),
 		selectCell: (pointer: GridCellPointer | null, source?: GridSelectionSource) => store.selectCell(pointer, source),
 		selectRange: (start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource) =>
 			store.selectRange(start, end, source),
@@ -129,28 +147,14 @@ export function createApiFacade<TRowData>(
 		toggleDetailExpanded: (rowId: string) => store.toggleDetailExpanded(rowId),
 		isGroupExpanded: (groupId: string) => store.isGroupExpanded(groupId),
 		isDetailExpanded: (rowId: string) => store.isDetailExpanded(rowId),
-		getVisualRow: (index: number) => store.getVisualRow(index),
-		getVisualRowCount: () => store.getVisualRowCount(),
-		getVisualRowIndexById: (id: string) => store.getVisualRowIndexById(id),
-		getVisualIndexById: (visualRowId: string) => store.getVisualIndexById(visualRowId),
-		getVisualIndexByRowId: (rowId: string) => store.getVisualIndexByRowId(rowId),
 		getRowNodeById: (rowId: string) => store.getRowNodeById(rowId),
 		getRawRowById: (rowId: string) => store.getRawRowById(rowId),
 		rows: () => store.rows(),
 		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
 		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
-		subscribeToViewport: (listener: Listener<TRowData>) => store.subscribeToViewport(listener),
-		subscribeToSelection: (listener: Listener<TRowData>) => store.subscribeToSelection(listener),
-		subscribeToFocusedCell: (listener: Listener<TRowData>) => store.subscribeToFocusedCell(listener),
-		subscribeToEditingCell: (listener: Listener<TRowData>) => store.subscribeToEditingCell(listener),
-		subscribeToCell: (rowId: string, colField: string, listener: () => void) => store.subscribeToCell(rowId, colField, listener),
-		subscribeToRow: (rowId: string, listener: Listener<TRowData>) => store.subscribeToRow(rowId, listener),
-		subscribeToColumn: (colField: string, listener: Listener<TRowData>) => store.subscribeToColumn(colField, listener),
-		subscribeToHeaders: (listener: Listener<TRowData>) => store.subscribeToHeaders(listener),
 		getColumnIndex: (colField: string) => store.getColumnIndex(colField),
 		getColumnField: (colIndex: number) => store.getColumnField(colIndex),
 		getColumnDef: (colField: string) => store.getColumnDef(colField),
-		getCellAccess: (rowId: string, colField: string) => store.getCellAccess(rowId, colField),
 		openPanel: (panelId: string) => store.openPanel(panelId),
 		closePanel: () => store.closePanel(),
 		togglePanel: (panelId: string) => store.togglePanel(panelId),
@@ -163,10 +167,6 @@ export function createApiFacade<TRowData>(
 		redo: () => store.redo(),
 		canUndo: () => store.canUndo(),
 		canRedo: () => store.canRedo(),
-		getRenderStats: () => store.getRenderStats(),
-		resetRenderStats: () => store.resetRenderStats(),
-		getRowOverscanPx: () => store.getRowOverscanPx(),
-		setRowOverscanPx: (px: number) => store.setRowOverscanPx(px),
 		hasPersistence: (): boolean => persistenceAdapter !== undefined,
 		clearPersistedState: (): void | Promise<void> => persistenceAdapter?.clear?.(),
 		setAutoSave: (enabled: boolean): void => persistenceController?.setAutoSave(enabled),
@@ -183,7 +183,9 @@ export function createApiFacade<TRowData>(
 		__getInternalApi: { value: () => store },
 	});
 
-	return Object.freeze(api) as GridApi<TRowData> & ApiBridge<TRowData>;
+	const frozen = Object.freeze(api) as GridApi<TRowData> & ApiBridge<TRowData>;
+	apiStoreMap.set(frozen as unknown as GridApi<unknown>, store as unknown as GridStore<unknown>);
+	return frozen;
 }
 
 function wireGridPersistence<TRowData>(
