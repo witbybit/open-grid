@@ -422,37 +422,45 @@ function OpenGridInner<TRowData = unknown>({
 	const hasSidebar = sidebar != null;
 	const sidebarPosition = sidebar?.position ?? 'right';
 
+	const gridPane = (
+		<div
+			ref={containerRef}
+			tabIndex={-1}
+			style={{
+				flex: hasSidebar ? 1 : undefined,
+				width: hasSidebar ? undefined : '100%',
+				height: '100%',
+				position: 'relative',
+				minWidth: hasSidebar ? 0 : undefined,
+			}}
+		>
+			<PortalManager
+				store={portalStore}
+				api={api}
+				groupRowRenderer={groupRowRenderer}
+				detailRowRenderer={detailRowRenderer}
+				footerRowRenderer={footerRowRenderer}
+			/>
+		</div>
+	);
+
 	return (
 		<>
-			<div
-				style={{
-					width: '100%',
-					height: '100%',
-					display: hasSidebar ? 'flex' : undefined,
-					flexDirection: hasSidebar ? (sidebarPosition === 'left' ? 'row-reverse' : 'row') : undefined,
-				}}
-			>
+			{hasSidebar ? (
 				<div
-					ref={containerRef}
-					tabIndex={-1}
 					style={{
-						flex: hasSidebar ? 1 : undefined,
-						width: hasSidebar ? undefined : '100%',
+						width: '100%',
 						height: '100%',
-						position: 'relative',
-						minWidth: hasSidebar ? 0 : undefined,
+						display: 'flex',
+						flexDirection: sidebarPosition === 'left' ? 'row-reverse' : 'row',
 					}}
 				>
-					<PortalManager
-						store={portalStore}
-						api={api}
-						groupRowRenderer={groupRowRenderer}
-						detailRowRenderer={detailRowRenderer}
-						footerRowRenderer={footerRowRenderer}
-					/>
+					{gridPane}
+					<GridSidebar<TRowData> api={api} config={sidebar!} />
 				</div>
-				{hasSidebar && <GridSidebar<TRowData> api={api} config={sidebar!} />}
-			</div>
+			) : (
+				gridPane
+			)}
 			{enableChart && <GridChartOverlay api={api} />}
 		</>
 	);
