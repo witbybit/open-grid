@@ -111,6 +111,8 @@ export function createApiFacade<TRowData>(store: GridStore<TRowData>, destroy: (
 		canRedo: () => store.canRedo(),
 		getRenderStats: () => store.getRenderStats(),
 		resetRenderStats: () => store.resetRenderStats(),
+		getRowOverscanPx: () => store.getRowOverscanPx(),
+		setRowOverscanPx: (px: number) => store.setRowOverscanPx(px),
 		destroy,
 	};
 

@@ -33,8 +33,8 @@ describe('ViewportController scrolling range computations', () => {
 	it('calculates velocity and expands row boundaries predictively during high-speed scrolling', () => {
 		const store = new GridStore<{ id: string }>({
 			columns: Array.from({ length: 3 }, (_, i) => ({ field: `C${i}`, header: `Col ${i}` })),
-			overscan: { mode: 'adaptive' },
-			rowBuffer: 12,
+			overscanAdaptive: true,
+			rowOverscanPx: 480, // 12 rows × 40px
 		});
 		new ClientRowModelController<{ id: string }>(store, {
 			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}` })),

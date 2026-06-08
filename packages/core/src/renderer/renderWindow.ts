@@ -200,26 +200,24 @@ export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): Ren
 	const newRowRange = engine.viewport.getVisibleRowRange(rowCount);
 	const newColRange = engine.viewport.getVisibleColumnRange(colCount);
 
-	// Phase 9: compute pixel bounds for pixel-first windowing
+	// Pixel annotations for the rendered window — used by downstream systems (e.g. overlay positioning).
+	const defaultRowHeight = state.defaultRowHeight ?? 40;
 	let pinnedTopHeight = 0;
 	for (let i = 0; i < pinTopRows && i < rowCount; i++) {
-		pinnedTopHeight += engine.geometry.getRowHeight(i, 40);
+		pinnedTopHeight += engine.geometry.getRowHeight(i, defaultRowHeight);
 	}
 	let pinnedBottomHeight = 0;
 	for (let i = 0; i < pinBottomRows && i < rowCount; i++) {
-		pinnedBottomHeight += engine.geometry.getRowHeight(rowCount - 1 - i, 40);
+		pinnedBottomHeight += engine.geometry.getRowHeight(rowCount - 1 - i, defaultRowHeight);
 	}
 	const scrollTop = engine.viewport.scrollTop;
 	const viewportHeight = engine.viewport.viewportHeight;
 	const visibleTop = scrollTop + pinnedTopHeight;
 	const visibleBottom = scrollTop + viewportHeight - pinnedBottomHeight;
 
-	// Buffer pixel bounds: pixel extent of the first/last rendered rows
-	const bufferTopPx = newRowRange.startIdx >= 0 ? engine.geometry.getRowTop(newRowRange.startIdx, 40) : visibleTop;
-	const lastRenderedBottom =
-		newRowRange.endIdx >= 0
-			? engine.geometry.getRowTop(newRowRange.endIdx, 40) + engine.geometry.getRowHeight(newRowRange.endIdx, 40)
-			: visibleBottom;
+	// Buffer pixel bounds: the actual pixel span of the first/last rendered rows.
+	const bufferTopPx = newRowRange.startIdx >= 0 ? engine.geometry.getRowTop(newRowRange.startIdx, defaultRowHeight) : visibleTop;
+	const lastRenderedBottom = newRowRange.endIdx >= 0 ? engine.geometry.getRowBottom(newRowRange.endIdx, defaultRowHeight) : visibleBottom;
 
 	return {
 		rowStart: newRowRange.startIdx,

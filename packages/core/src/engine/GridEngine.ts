@@ -124,11 +124,11 @@ export class GridEngine<TRowData = unknown> {
 			detailRenderer: config.detailRenderer,
 			rowModelConfig: config.rowModelConfig,
 			expansion: config.expansion ?? { groups: {}, treeRows: {}, details: {} },
-			rowBuffer: config.rowBuffer ?? 10,
+			rowOverscanPx: config.rowOverscanPx ?? 400,
 			colBuffer: config.colBuffer ?? 1,
 			rowRecyclingStrategy: config.rowRecyclingStrategy ?? 'index-pool',
 			runtimeLimits: config.runtimeLimits,
-			overscan: config.overscan,
+			overscanAdaptive: config.overscanAdaptive,
 		};
 
 		// Construct StateManager with coordinate state update bridging
@@ -159,12 +159,12 @@ export class GridEngine<TRowData = unknown> {
 		this.commandHistory.clear();
 	}
 
-	public getRowBuffer(): number {
-		return this.stateManager.getState().rowBuffer ?? 12;
+	public getRowOverscanPx(): number {
+		return this.stateManager.getState().rowOverscanPx ?? 400;
 	}
 
-	public setRowBuffer(rowBuffer: number): void {
-		this.stateManager.setState({ rowBuffer });
+	public setRowOverscanPx(px: number): void {
+		this.stateManager.setState({ rowOverscanPx: px });
 	}
 
 	public getColBuffer(): number {
@@ -773,7 +773,7 @@ export class GridEngine<TRowData = unknown> {
 			updatedSet.has('defaultRowHeight') ||
 			updatedSet.has('defaultColWidth') ||
 			updatedSet.has('loading') ||
-			updatedSet.has('rowBuffer');
+			updatedSet.has('rowOverscanPx');
 
 		if (needsRangeUpdate) {
 			const nextRowRange = this.viewport.getVisibleRowRange(this.rowModel ? this.rowModel.getVisualRowCount() : 0);

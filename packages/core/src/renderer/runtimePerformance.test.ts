@@ -72,7 +72,7 @@ function createWideGrid(options: { rows?: number; cols?: number; custom?: boolea
 		columns,
 		defaultRowHeight: 40,
 		defaultColWidth: 100,
-		rowBuffer: 1,
+		rowOverscanPx: 40,
 		colBuffer: 1,
 		getRowId: (row) => row.id,
 		runtimeLimits: { maxRenderedRows: 20, maxRenderedCells: 220 },
@@ -185,7 +185,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 			defaultRowHeight: 40,
 			rowRecyclingStrategy: 'slot-pool',
-			rowBuffer: 2,
+			rowOverscanPx: 80,
 			getRowId: (row) => row.id,
 		});
 		const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));

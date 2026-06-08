@@ -7,13 +7,14 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 	const initialOptionsRef = useRef(options);
 
 	const api = useMemo(() => {
-		const { rows, columns, getRowId, rowBuffer, colBuffer, runtimeLimits, initialState } = initialOptionsRef.current;
+		const { rows, columns, getRowId, rowOverscanPx, colBuffer, runtimeLimits, initialState, overscanAdaptive } = initialOptionsRef.current;
 		return createClientGrid({
 			rows,
 			columns,
 			getRowId,
 			initialState: {
-				rowBuffer,
+				rowOverscanPx,
+				overscanAdaptive,
 				colBuffer,
 				runtimeLimits,
 				...initialState,
@@ -43,7 +44,21 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): G
 	const didMountServerOptionsRef = useRef(false);
 
 	const api = useMemo(() => {
-		return createServerGrid(initialOptionsRef.current);
+		const { datasource, columns, blockSize, getRowId, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits, initialState } =
+			initialOptionsRef.current;
+		return createServerGrid({
+			datasource,
+			columns,
+			blockSize,
+			getRowId,
+			initialState: {
+				rowOverscanPx,
+				overscanAdaptive,
+				colBuffer,
+				runtimeLimits,
+				...initialState,
+			},
+		});
 	}, []);
 
 	useEffect(() => {

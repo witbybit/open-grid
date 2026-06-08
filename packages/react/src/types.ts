@@ -51,20 +51,21 @@ export type {
 	ImperativeCellHandle,
 };
 
-export interface ClientGridOptions<TRowData> {
+/**
+ * Fields from GridState that can be configured as top-level props on both
+ * ClientGridOptions and ServerGridOptions. Sourced from the canonical GridState
+ * type so these never drift out of sync with the core.
+ */
+type GridRenderOptions<TRowData> = Pick<GridState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;
+
+export interface ClientGridOptions<TRowData> extends GridRenderOptions<TRowData> {
 	rows: TRowData[];
 	columns: ColumnDef<TRowData>[];
 	getRowId?: (row: TRowData) => string;
-	/** Number of extra rows to render beyond the visible area (default: 12). */
-	rowBuffer?: number;
-	/** Number of extra columns to render beyond the visible area (default: 2). */
-	colBuffer?: number;
-	/** Override the per-frame render budget caps. */
-	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
 	initialState?: Partial<GridState<TRowData>>;
 }
 
-export interface ServerGridOptions<TRowData> {
+export interface ServerGridOptions<TRowData> extends GridRenderOptions<TRowData> {
 	datasource: IGridDatasource;
 	columns: ColumnDef<TRowData>[];
 	blockSize?: number;

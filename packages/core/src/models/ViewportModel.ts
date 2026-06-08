@@ -86,58 +86,53 @@ export class ViewportModel<TRowData = unknown> {
 			return { startIdx: 0, endIdx: 0 };
 		}
 
-		// Calculate height occupied by pinned top and bottom lanes
-		// Skip the loop entirely for the common case of no pinned rows
+		const state = this.engine.stateManager.getState();
+		const defaultRowHeight = state.defaultRowHeight ?? 40;
+
+		// Pixel heights consumed by pinned top and bottom bands.
+		// Pinned rows are always rendered and excluded from the scrollable range.
 		let pinnedTopHeight = 0;
 		if (this.pinTopRows > 0) {
 			for (let i = 0; i < this.pinTopRows && i < rowCount; i++) {
-				pinnedTopHeight += this.engine.geometry.getRowHeight(i, 40);
+				pinnedTopHeight += this.engine.geometry.getRowHeight(i, defaultRowHeight);
 			}
 		}
-
 		let pinnedBottomHeight = 0;
 		if (this.pinBottomRows > 0) {
 			for (let i = 0; i < this.pinBottomRows && i < rowCount; i++) {
-				pinnedBottomHeight += this.engine.geometry.getRowHeight(rowCount - 1 - i, 40);
+				pinnedBottomHeight += this.engine.geometry.getRowHeight(rowCount - 1 - i, defaultRowHeight);
 			}
 		}
 
+		// Pixel boundaries of the scrollable visible area (excludes pinned bands).
 		const visibleTop = this.scrollTop + pinnedTopHeight;
 		const visibleBottom = this.scrollTop + this.viewportHeight - pinnedBottomHeight;
 
-		// Perform O(log R) binary searches on GeometryModel
-		const activeStartIdx = this.engine.geometry.getRowIndexAtOffset(visibleTop);
-		const activeEndIdx = this.engine.geometry.getRowIndexAtOffset(visibleBottom);
+		// Pixel-first overscan: fixed px budget that scales correctly with variable row heights.
+		// A tall row costs proportionally more of the budget than a short one, so the number of
+		// buffered rows self-adjusts — no more under/over-shoot with variable-height grids.
+		const baseOverscanPx = state.rowOverscanPx ?? 400;
 
-		// Predictive overscan
-		const state = this.engine.stateManager.getState();
-		const rowBuffer = state.rowBuffer ?? 10;
-		let overscanTop = rowBuffer;
-		let overscanBottom = rowBuffer;
+		let overscanTopPx = baseOverscanPx;
+		let overscanBottomPx = baseOverscanPx;
 
-		if (state.overscan?.mode === 'adaptive') {
+		// Adaptive mode: expand the leading edge buffer proportional to scroll velocity.
+		// Cap at 2× the base so very high velocity doesn't mount an unbounded number of rows.
+		if (state.overscanAdaptive) {
 			if (this.velocityY > 0.2) {
-				overscanBottom += Math.min(25, Math.floor(this.velocityY * 15));
+				overscanBottomPx += Math.min(baseOverscanPx * 2, this.velocityY * 600);
 			} else if (this.velocityY < -0.2) {
-				overscanTop += Math.min(25, Math.floor(Math.abs(this.velocityY) * 15));
+				overscanTopPx += Math.min(baseOverscanPx * 2, Math.abs(this.velocityY) * 600);
 			}
 		}
 
-		const runtimeMaxRows = state.runtimeLimits?.suppressRenderedRangeLimit ? undefined : state.runtimeLimits?.maxRenderedRows;
-		if (runtimeMaxRows && runtimeMaxRows > 0) {
-			const pinnedRows = this.pinTopRows + this.pinBottomRows;
-			const centerBudget = Math.max(1, runtimeMaxRows - pinnedRows);
-			const visibleCount = Math.max(1, activeEndIdx - activeStartIdx + 1);
-			const overscanBudget = Math.max(0, centerBudget - visibleCount);
-			const preferTop = this.velocityY < -0.2;
-			const preferredTop = preferTop ? Math.min(overscanTop, overscanBudget) : Math.min(overscanTop, Math.floor(overscanBudget / 2));
-			const preferredBottom = Math.min(overscanBottom, overscanBudget - preferredTop);
-			overscanTop = preferredTop;
-			overscanBottom = preferredBottom;
-		}
+		// Pixel boundaries of the full buffered render region.
+		const bufferTopPx = Math.max(0, visibleTop - overscanTopPx);
+		const bufferBottomPx = visibleBottom + overscanBottomPx;
 
-		const startIdx = Math.max(this.pinTopRows, activeStartIdx - overscanTop);
-		const endIdx = Math.min(rowCount - 1 - this.pinBottomRows, activeEndIdx + overscanBottom);
+		// O(log R) binary searches to map pixel bounds → row indices.
+		const startIdx = Math.max(this.pinTopRows, this.engine.geometry.getRowIndexAtOffset(bufferTopPx));
+		const endIdx = Math.min(rowCount - 1 - this.pinBottomRows, this.engine.geometry.getRowIndexAtOffset(bufferBottomPx));
 
 		return { startIdx, endIdx };
 	}
@@ -176,7 +171,7 @@ export class ViewportModel<TRowData = unknown> {
 		let overscanLeft = colBuffer;
 		let overscanRight = colBuffer;
 
-		if (state.overscan?.mode === 'adaptive') {
+		if (state.overscanAdaptive) {
 			if (this.velocityX > 0.2) {
 				overscanRight += Math.min(15, Math.floor(this.velocityX * 10));
 			} else if (this.velocityX < -0.2) {

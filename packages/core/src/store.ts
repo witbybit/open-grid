@@ -631,7 +631,11 @@ export interface GridState<TRowData = unknown> {
 	visibleColRange: ViewportRange;
 
 	styleSlots?: GridStyleSlots<TRowData>;
-	rowBuffer?: number;
+	/**
+	 * Pixel height of the pre-render buffer above and below the visible viewport.
+	 * Default: 400px (roughly 10 rows at the default 40px row height).
+	 */
+	rowOverscanPx?: number;
 	colBuffer?: number;
 	/** 'recycle-pool' = opportunistic row slot recycling (formerly 'slot-pool'). 'slot-pool' accepted as alias. */
 	rowRecyclingStrategy?: 'index-pool' | 'recycle-pool' | 'slot-pool';
@@ -640,9 +644,12 @@ export interface GridState<TRowData = unknown> {
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
 	};
-	overscan?: {
-		mode?: 'adaptive' | 'none';
-	};
+	/**
+	 * When true, the overscan buffer automatically expands in the scroll direction proportional
+	 * to scroll velocity, reducing blank-band flashes during fast scrolling.
+	 * Default: false.
+	 */
+	overscanAdaptive?: boolean;
 }
 
 export interface GridCellRangeBounds {
@@ -729,8 +736,8 @@ export interface GridApi<TRowData = unknown> {
 	getCachedDisplayValue(rowId: string, colField: string): string | undefined;
 	getCheapDisplayValue(rowId: string, colField: string): string;
 	getComputedCellValue(rowId: string, colField: string): unknown;
-	getRowBuffer(): number;
-	setRowBuffer(rowBuffer: number): void;
+	getRowOverscanPx(): number;
+	setRowOverscanPx(px: number): void;
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 	getCellState(rowId: string, colField: string): CellState;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
@@ -856,7 +863,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			detailRenderer: initialState.detailRenderer,
 			rowModelConfig: initialState.rowModelConfig,
 			expansion: initialState.expansion,
-			rowBuffer: initialState.rowBuffer ?? 10,
+			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 1,
 			rowRecyclingStrategy: initialState.rowRecyclingStrategy ?? 'index-pool',
 			// Phase 2: always normalize runtimeLimits so all callers can assume it exists
@@ -866,7 +873,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				suppressRenderedRangeLimit: false,
 				...initialState.runtimeLimits,
 			},
-			overscan: initialState.overscan,
+			overscanAdaptive: initialState.overscanAdaptive,
 		});
 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
@@ -920,12 +927,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.data.getComputedCellValue(rowId, colField);
 	};
 
-	public getRowBuffer = (): number => {
-		return this.state.rowBuffer ?? 12;
+	public getRowOverscanPx = (): number => {
+		return this.state.rowOverscanPx ?? 400;
 	};
 
-	public setRowBuffer = (rowBuffer: number): void => {
-		this.setState({ rowBuffer });
+	public setRowOverscanPx = (px: number): void => {
+		this.setState({ rowOverscanPx: px });
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): void => {

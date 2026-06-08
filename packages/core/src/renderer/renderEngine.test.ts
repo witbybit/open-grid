@@ -2223,7 +2223,7 @@ describe('RenderEngine', () => {
 			columns,
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
-			rowBuffer: 2,
+			rowOverscanPx: 80,
 			getRowId: (row) => row.id,
 		});
 		const controller = new ClientRowModelController(store, {
@@ -2554,7 +2554,7 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			rowBuffer: 2,
+			rowOverscanPx: 80,
 		});
 		const controller = new ClientRowModelController(store, {
 			rows: Array.from({ length: 200 }, (_, i) => ({ id: `row-${i}`, v: `V${i}` })),
@@ -2637,7 +2637,7 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			rowBuffer: 0, // zero overscan → exactly 4 rows visible in 160px viewport
+			rowOverscanPx: 0, // zero overscan → exactly 4 rows visible in 160px viewport
 		});
 		const controller = new ClientRowModelController(store, {
 			rows: Array.from({ length: 120 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
@@ -2672,7 +2672,7 @@ describe('RenderEngine', () => {
 		expect(stats.rowsRecycledPerScrollFrame[0]).toBe(1);
 		expect(stats.hotDomReleases).toBe(1);
 
-		// Rows 1-4 stayed: visible range is [0,4] initially (5 rows with rowBuffer=0),
+		// Rows 1-4 stayed: visible range is [0,4] initially (5 rows with rowOverscanPx=0),
 		// after 40px scroll it's [1,5]; row 0 exits, row 5 enters, rows 1-4 stay.
 		expect(stats.rowsStayedDuringScroll).toBe(4);
 		expect(stats.rowsEnteredDuringScroll).toBe(1);
@@ -2704,7 +2704,7 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			rowBuffer: 2,
+			rowOverscanPx: 80,
 		});
 		const controller = new ClientRowModelController(store, {
 			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, x: `X${i}` })),
@@ -2774,7 +2774,7 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			rowBuffer: 0,
+			rowOverscanPx: 0,
 		});
 		const controller = new ClientRowModelController(store, {
 			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
@@ -2803,14 +2803,14 @@ describe('RenderEngine', () => {
 		};
 
 		renderer.mount(container);
-		// After mount: 5 rows visible (rows 0-4, rowBuffer=0 + getRowIndexAtOffset(160)=4),
+		// After mount: 5 rows visible (rows 0-4, rowOverscanPx=0 + getRowIndexAtOffset(160)=4),
 		// each with 1 cellRenderer → 5 warm misses (mount lifecycle).
 		const statsAfterMount = renderer.portalMountManager.customRendererManager.getStats();
 		expect(statsAfterMount.warmMisses).toBe(5);
 		expect(statsAfterMount.warmHits).toBe(0);
 
 		// Scroll far enough that all 5 initial rows exit and 5 new rows enter.
-		// rowBuffer=0: rows 0-4 exit when we scroll to show rows 10-14.
+		// rowOverscanPx=0: rows 0-4 exit when we scroll to show rows 10-14.
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 400;
 		scrollViewport.dispatchEvent(new Event('scroll'));

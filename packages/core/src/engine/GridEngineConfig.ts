@@ -30,7 +30,13 @@ export interface GridEngineConfig<TRowData = unknown> {
 		treeRows: Record<string, true>;
 		details: Record<string, true>;
 	};
-	rowBuffer?: number;
+	/**
+	 * Pixel height of the pre-render buffer above and below the visible viewport.
+	 * The grid renders all rows that overlap [visibleTop - rowOverscanPx, visibleBottom + rowOverscanPx],
+	 * so the buffer is always a fixed pixel amount regardless of individual row heights.
+	 * Default: 400px (roughly 10 rows at the default 40px row height).
+	 */
+	rowOverscanPx?: number;
 	colBuffer?: number;
 	/** 'recycle-pool' = opportunistic row slot recycling. 'slot-pool' accepted as alias for backwards compatibility. */
 	rowRecyclingStrategy?: 'index-pool' | 'recycle-pool' | 'slot-pool';
@@ -39,7 +45,10 @@ export interface GridEngineConfig<TRowData = unknown> {
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
 	};
-	overscan?: {
-		mode?: 'adaptive' | 'none';
-	};
+	/**
+	 * When true, the overscan buffer automatically expands in the scroll direction proportional
+	 * to scroll velocity, reducing blank-band flashes during fast scrolling.
+	 * Default: false.
+	 */
+	overscanAdaptive?: boolean;
 }

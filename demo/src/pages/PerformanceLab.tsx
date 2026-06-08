@@ -248,7 +248,7 @@ export default function PerformanceLab() {
 	const api = useClientGrid<LabRow>({
 		rows,
 		columns,
-		rowBuffer: 2,
+		rowOverscanPx: 100,
 		colBuffer: 1,
 		runtimeLimits: { maxRenderedRows: 36, maxRenderedCells: 900 },
 		getRowId: (row) => row.id,
