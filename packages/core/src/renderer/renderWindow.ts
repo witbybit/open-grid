@@ -221,7 +221,40 @@ export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: Re
 	return next;
 }
 
-export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): RenderWindow {
+/** Create a zeroed RenderWindow for use as a pre-allocated double-buffer slot. */
+export function createEmptyRenderWindow(): RenderWindow {
+	return {
+		rowStart: 0,
+		rowEnd: 0,
+		colStart: 0,
+		colEnd: 0,
+		pinLeftCols: 0,
+		pinRightCols: 0,
+		pinTopRows: 0,
+		pinBottomRows: 0,
+		rowCount: 0,
+		colCount: 0,
+		scrollTop: 0,
+		scrollLeft: 0,
+		viewportWidth: 0,
+		viewportHeight: 0,
+		geometryVersion: 0,
+		rowModelVersion: 0,
+		columnVersion: 0,
+		visibleTop: 0,
+		visibleBottom: 0,
+		bufferTopPx: 0,
+		bufferBottomPx: 0,
+	};
+}
+
+/**
+ * Fill `target` with the current render window values in-place.
+ * Used by the double-buffer hot path in RenderEngine to avoid per-frame allocation.
+ * Callers must NOT store a reference to `target` across calls — its fields are
+ * overwritten every frame.
+ */
+export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, target: RenderWindow): void {
 	const rowModel = engine.getRowModel();
 	let rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 	const state = engine.stateManager.getState();
@@ -289,32 +322,36 @@ export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): Ren
 		}
 	}
 
-	return {
-		rowStart: newRowRange.startIdx,
-		rowEnd: newRowRange.endIdx,
-		colStart: newColRange.startIdx,
-		colEnd: newColRange.endIdx,
-		pinLeftCols,
-		pinRightCols,
-		pinTopRows,
-		pinBottomRows,
-		rowCount,
-		colCount,
-		scrollTop,
-		scrollLeft: engine.viewport.scrollLeft,
-		viewportWidth: engine.viewport.viewportWidth,
-		viewportHeight,
-		geometryVersion: (engine as any).geometryVersion ?? 0,
-		rowModelVersion: (engine as any).rowModelVersion ?? 0,
-		columnVersion: (engine as any).columnVersion ?? 0,
-		visibleTop,
-		visibleBottom,
-		bufferTopPx,
-		bufferBottomPx: lastRenderedBottom,
-		stickyGroupIndices,
-		stickyGroupTops,
-		stickyGroupKey,
-	};
+	target.rowStart = newRowRange.startIdx;
+	target.rowEnd = newRowRange.endIdx;
+	target.colStart = newColRange.startIdx;
+	target.colEnd = newColRange.endIdx;
+	target.pinLeftCols = pinLeftCols;
+	target.pinRightCols = pinRightCols;
+	target.pinTopRows = pinTopRows;
+	target.pinBottomRows = pinBottomRows;
+	target.rowCount = rowCount;
+	target.colCount = colCount;
+	target.scrollTop = scrollTop;
+	target.scrollLeft = engine.viewport.scrollLeft;
+	target.viewportWidth = engine.viewport.viewportWidth;
+	target.viewportHeight = viewportHeight;
+	target.geometryVersion = (engine as any).geometryVersion ?? 0;
+	target.rowModelVersion = (engine as any).rowModelVersion ?? 0;
+	target.columnVersion = (engine as any).columnVersion ?? 0;
+	target.visibleTop = visibleTop;
+	target.visibleBottom = visibleBottom;
+	target.bufferTopPx = bufferTopPx;
+	target.bufferBottomPx = lastRenderedBottom;
+	target.stickyGroupIndices = stickyGroupIndices;
+	target.stickyGroupTops = stickyGroupTops;
+	target.stickyGroupKey = stickyGroupKey;
+}
+
+export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): RenderWindow {
+	const target = createEmptyRenderWindow();
+	computeRenderWindowInto(engine, target);
+	return target;
 }
 
 export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow): ViewportDelta {

@@ -11,6 +11,8 @@ import {
 	type GridState,
 	type RowNode,
 	type GridCellPointer,
+	type GridRowClassParams,
+	type GridCellClassParams,
 } from '../store.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { GridCellContentUnmount } from './IGridRenderer.js';
@@ -37,7 +39,6 @@ import {
 import { createEditRendererKey, createSlotRendererKey } from './identityKeys.js';
 import type { SlotRuntimeStats } from './slotRuntimeStats.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
-import { computeStableSlotRows } from './stableSlotAssigner.js';
 
 /** Build the base CSS class string for a data cell, including pin-zone classes. */
 function buildCellPinClass(colIndex: number, pinLeftColumns: number, pinRightStart: number): string {
@@ -125,7 +126,43 @@ export class RowRenderer<TRowData = unknown> {
 	// Bucket layout: [0] active-edit, [1] focused cell, [2] visible range, [3] off-screen / unknown.
 	private readonly _dirtyBuckets: [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]] = [[], [], [], []];
 
+	// Pre-allocated scratch objects for styleSlot callbacks — mutated in place before each call
+	// to eliminate per-cell object literal allocation during decoration passes.
+	private readonly _rowClassScratch: GridRowClassParams<TRowData> = {
+		row: null as unknown as TRowData,
+		rowId: '',
+		rowIndex: 0,
+		isFocused: false,
+		isSelected: false,
+		isLoading: false,
+		selection: null as unknown,
+	} as GridRowClassParams<TRowData>;
+	private readonly _cellClassScratch: GridCellClassParams<TRowData> = {
+		row: null as unknown as TRowData,
+		rowId: '',
+		rowIndex: 0,
+		col: null as unknown as ColumnDef<TRowData>,
+		colField: '',
+		colIndex: 0,
+		isFocused: false,
+		isRowFocused: false,
+		isRowSelected: false,
+		isSelected: false,
+		isEditing: false,
+		value: undefined,
+		rawValue: undefined,
+		isLoading: false,
+		selection: null as unknown,
+	} as GridCellClassParams<TRowData>;
+
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
+
+	// Pre-allocated scratch for stable-slot assignment — reused per recycleViewport call
+	// to avoid 4 per-frame allocations (result array, newWindowSet, assignedRows, freeSlots).
+	private _ssResult: number[] = [];
+	private _ssNewWindowSet = new Set<number>();
+	private _ssAssignedRows = new Set<number>();
+	private _ssFreeSlots: number[] = [];
 
 	constructor(
 		engine: GridEngine<TRowData>,
@@ -323,7 +360,8 @@ export class RowRenderer<TRowData = unknown> {
 		// Only entering/exiting rows use recycled slots (isRowRebind = true).
 		const sortedRows = getRowIndices(nextWindow);
 		const totalSlots = sortedRows.length;
-		const allRows = computeStableSlotRows(sortedRows, this.rowSlotPool);
+		// Inline stable-slot assignment using pre-allocated scratch — avoids 4 per-frame allocations.
+		const allRows = this._computeStableSlotRowsInline(sortedRows);
 
 		this.rowSlotPool.resetScrollStats();
 
@@ -478,15 +516,15 @@ export class RowRenderer<TRowData = unknown> {
 					this.dirtyRowsAfterScroll.add(r);
 				} else if (state.styleSlots?.rowClass && node.data) {
 					try {
-						const customRowClass = state.styleSlots.rowClass(node.data, {
-							row: node.data,
-							rowId: node.id,
-							rowIndex: r,
-							isFocused: isFocusedRow,
-							isSelected: isSelectedRow || isFocusedRow,
-							isLoading: isLoadingRow,
-							selection: state.selection,
-						});
+						const rs = this._rowClassScratch;
+						rs.row = node.data;
+						rs.rowId = node.id;
+						rs.rowIndex = r;
+						rs.isFocused = isFocusedRow;
+						rs.isSelected = isSelectedRow || isFocusedRow;
+						rs.isLoading = isLoadingRow;
+						rs.selection = state.selection;
+						const customRowClass = state.styleSlots.rowClass(node.data, rs);
 						if (customRowClass) rowClassName += ' ' + customRowClass;
 					} catch (e) {
 						console.error('RenderEngine: Error in rowClass styleSlot', e);
@@ -593,6 +631,9 @@ export class RowRenderer<TRowData = unknown> {
 		const pinRightWidth = plan.pinRightWidth;
 		const colCount = columns.length;
 
+		// Hoist per-row loading check — same result for every cell in the row.
+		const isRowLoading = ctx ? ctx.loadingVersion > 0 && this.engine.data.isRowLoading(node.id) : false;
+
 		// Ensure pinned containers (lazy creation, width-based)
 		const pinLeftContainer = this.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 		const pinRightContainer = this.ensurePinnedContainer(slot, 'right', pinRightWidth);
@@ -632,15 +673,15 @@ export class RowRenderer<TRowData = unknown> {
 					rowIndex,
 					i,
 					col,
-					colCount,
 					pinLeftColumns,
-					pinRightColumns,
+					pinRightStart,
 					ctx!,
 					slot.id,
 					leftArg,
 					-1,
 					cellWidth,
-					isRowRebind
+					isRowRebind,
+					isRowLoading
 				);
 			} else {
 				this._bindCellFull(
@@ -703,15 +744,15 @@ export class RowRenderer<TRowData = unknown> {
 					rowIndex,
 					c,
 					col,
-					colCount,
 					pinLeftColumns,
-					pinRightColumns,
+					pinRightStart,
 					ctx!,
 					slot.id,
 					leftArg,
 					-1,
 					cellWidth,
-					isRowRebind
+					isRowRebind,
+					isRowLoading
 				);
 			} else {
 				this._bindCellFull(
@@ -753,15 +794,15 @@ export class RowRenderer<TRowData = unknown> {
 					rowIndex,
 					c,
 					col,
-					colCount,
 					pinLeftColumns,
-					pinRightColumns,
+					pinRightStart,
 					ctx!,
 					slot.id,
 					leftArg,
 					-1,
 					cellWidth,
-					isRowRebind
+					isRowRebind,
+					isRowLoading
 				);
 			} else {
 				this._bindCellFull(
@@ -911,7 +952,7 @@ export class RowRenderer<TRowData = unknown> {
 		phase: CellRendererPhase = 'initial'
 	): void {
 		const colCount = plan.displayedColumns.length;
-		const access = this.engine.cellAccess.get(node.id, rowIndex, node, node.data, colIndex, col);
+		const access = this.engine.cellAccess.get(node.id, rowIndex, node, node.data, colIndex, col, undefined, state);
 
 		let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, pinRightStart);
 		if (access.isFocused) {
@@ -945,23 +986,23 @@ export class RowRenderer<TRowData = unknown> {
 
 		if (state.styleSlots?.cellClass && node.data) {
 			try {
-				const customCellClass = state.styleSlots.cellClass(col, node.data, {
-					row: node.data,
-					rowId: node.id,
-					rowIndex,
-					col,
-					colField: col.field,
-					colIndex,
-					isFocused: access.isFocused,
-					isRowFocused: access.isRowFocused,
-					isRowSelected: access.isRowSelected || access.isRowFocused,
-					isSelected: access.isSelected,
-					isEditing: access.isEditing,
-					value: access.value,
-					rawValue: access.rawValue,
-					isLoading: access.isLoading,
-					selection: state.selection,
-				});
+				const s = this._cellClassScratch;
+				s.row = node.data;
+				s.rowId = node.id;
+				s.rowIndex = rowIndex;
+				s.col = col;
+				s.colField = col.field;
+				s.colIndex = colIndex;
+				s.isFocused = access.isFocused;
+				s.isRowFocused = access.isRowFocused;
+				s.isRowSelected = access.isRowSelected || access.isRowFocused;
+				s.isSelected = access.isSelected;
+				s.isEditing = access.isEditing;
+				s.value = access.value;
+				s.rawValue = access.rawValue;
+				s.isLoading = access.isLoading;
+				s.selection = state.selection;
+				const customCellClass = state.styleSlots.cellClass(col, node.data, s);
 				if (customCellClass) cellClassName += ' ' + customCellClass;
 			} catch (e) {
 				console.error('RenderEngine: Error in cellClass styleSlot', e);
@@ -1256,23 +1297,22 @@ export class RowRenderer<TRowData = unknown> {
 		rowIndex: number,
 		colIndex: number,
 		col: ColumnDef<TRowData>,
-		colCount: number,
 		pinLeftColumns: number,
-		pinRightColumns: number,
+		pinRightStart: number,
 		ctx: ScrollRenderContext<TRowData>,
 		pooledRowId: string,
 		left: number,
 		right: number,
 		width: number,
-		isRowRebind: boolean
+		isRowRebind: boolean,
+		isRowLoading: boolean
 	): void {
 		const plan = ctx.plan.columnPlans[colIndex];
 		const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
-		const isRowLoading = ctx.loadingVersion > 0 && this.engine.data.isRowLoading(node.id);
 
 		const rendererKind: 'primitive' | 'portal' | 'loading' = isRowLoading ? 'loading' : isEditing || plan?.isCustom ? 'portal' : 'primitive';
 
-		let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, Math.max(pinLeftColumns, colCount - pinRightColumns));
+		let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, pinRightStart);
 		if (rendererKind === 'loading') {
 			cellClassName += ' og-cell-loading';
 		}
@@ -1295,16 +1335,13 @@ export class RowRenderer<TRowData = unknown> {
 			}
 		}
 
-		const cellKey = isEditing ? createEditRendererKey(node.id, col.field) : createSlotRendererKey(pooledRowId, col.field);
-
 		let contentMode: CellContentMode = 'empty';
 		let formattedValue = '';
 
 		if (rendererKind === 'loading') {
 			contentMode = 'loading';
-		} else if (rendererKind === 'portal') {
-			contentMode = 'portal';
-		} else {
+		} else if (rendererKind !== 'portal') {
+			// Primitive fast path — no cellKey allocation needed.
 			const cachedVal = this.engine.data.getCachedDisplayValue(node.id, col.field);
 			if (cachedVal !== undefined) {
 				formattedValue = cachedVal;
@@ -1314,29 +1351,48 @@ export class RowRenderer<TRowData = unknown> {
 				contentMode = 'text';
 				this.markCellDirtyAfterScroll(cellSlot.element);
 			}
+			// Release any stale portal from a column that previously had a custom renderer.
+			if (cellSlot.element.dataset.cellKey) {
+				this.releaseCellPortal(cellSlot.element, false, 'invalidated');
+			}
+			const didWritePrimitive = cellSlot.update(
+				colIndex,
+				col.field,
+				rowIndex,
+				node.id,
+				left,
+				right,
+				width,
+				cellClassName,
+				contentMode,
+				undefined,
+				formattedValue,
+				undefined
+			);
+			if (didWritePrimitive) this.currentScrollCellsWritten++;
+			if (this.renderStats) {
+				this.renderStats.cellsBoundDuringScroll = (this.renderStats.cellsBoundDuringScroll || 0) + 1;
+			}
+			return;
+		} else {
+			contentMode = 'portal';
 		}
 
-		const scrollMode = rendererKind === 'portal' ? plan?.mode : undefined;
+		// Portal path — compute cellKey only when needed.
+		const cellKey = isEditing ? createEditRendererKey(node.id, col.field) : createSlotRendererKey(pooledRowId, col.field);
+
+		const scrollMode = plan?.mode;
 		const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
 		// Only preserve portals when the slot is NOT rebinding to a new row.
 		// isRowRebind=true means this slot just got a different row — the old
 		// renderer's data is stale and should not be shown.
 		const isMounted = this.portalMountManager.isCellMounted(cellKey);
-		const isPreservedPortal =
-			!isRowRebind && rendererKind === 'portal' && scrollMode === 'custom-defer' && cellSlot.lastPortalKey === cellKey && isMounted;
+		// We are always in portal mode from here on (primitive/loading returned early).
+		const isPreservedPortal = !isRowRebind && scrollMode === 'custom-defer' && cellSlot.lastPortalKey === cellKey && isMounted;
 		const shouldKeepLivePortalDuringScroll = !isRowRebind && scrollMode === 'custom-live' && isMounted;
 		const shouldKeepPortalDuringScroll = shouldKeepLivePortalDuringScroll || isPreservedPortal;
 
-		// Release any stale portal when transitioning away from portal mode (e.g. the cell
-		// was rebound to a different column during horizontal scroll, and the new column
-		// has no custom renderer). Without this, cellSlot.update() would clear
-		// dataset.cellKey while the portal renderer inside remains mounted, causing
-		// renderer.dataset.cellKey ≠ cell.dataset.cellKey in the DOM.
-		if (rendererKind !== 'portal' && cellSlot.element.dataset.cellKey) {
-			this.releaseCellPortal(cellSlot.element, false, 'invalidated');
-		}
-
-		if (rendererKind === 'portal' && !shouldKeepPortalDuringScroll) {
+		if (!shouldKeepPortalDuringScroll) {
 			if (cellSlot.element.dataset.cellKey) {
 				this.releaseCellPortal(cellSlot.element);
 			}
@@ -1363,7 +1419,7 @@ export class RowRenderer<TRowData = unknown> {
 				contentMode = 'pending';
 			}
 			this.markCellDirtyAfterScroll(cellSlot.element);
-		} else if (rendererKind === 'portal') {
+		} else {
 			if (scrollMode === 'custom-live') {
 				this.cellRenderer.showPortalContent(cellSlot.element);
 				this.cancelPendingPortalRelease(cellKey);
@@ -1394,13 +1450,6 @@ export class RowRenderer<TRowData = unknown> {
 			} else if (scrollMode === 'custom-defer') {
 				this.cellRenderer.showPortalContent(cellSlot.element);
 				contentMode = 'portal';
-			}
-		} else {
-			if (cellSlot.element.dataset.cellKey) {
-				this.markCellDirtyAfterScroll(cellSlot.element);
-			}
-			if (rendererKind === 'loading') {
-				contentMode = 'loading';
 			}
 		}
 
@@ -1462,15 +1511,15 @@ export class RowRenderer<TRowData = unknown> {
 			this.dirtyRowsAfterScroll.add(rowIndex);
 		} else if (state.styleSlots?.rowClass && node.data) {
 			try {
-				const customRowClass = state.styleSlots.rowClass(node.data, {
-					row: node.data,
-					rowId: node.id,
-					rowIndex,
-					isFocused: isFocusedRow,
-					isSelected: isSelectedRow || isFocusedRow,
-					isLoading: isLoadingRow,
-					selection: state.selection,
-				});
+				const rs = this._rowClassScratch;
+				rs.row = node.data;
+				rs.rowId = node.id;
+				rs.rowIndex = rowIndex;
+				rs.isFocused = isFocusedRow;
+				rs.isSelected = isSelectedRow || isFocusedRow;
+				rs.isLoading = isLoadingRow;
+				rs.selection = state.selection;
+				const customRowClass = state.styleSlots.rowClass(node.data, rs);
 				if (customRowClass) {
 					rowClassName += ' ' + customRowClass;
 				}
@@ -1523,6 +1572,63 @@ export class RowRenderer<TRowData = unknown> {
 			this.dirtyCellsAfterScroll.add(cell);
 			this.dirtyCellsMarkedDuringScroll++;
 		}
+	}
+
+	// ── Stable slot assignment (inlined, scratch-reusing) ───────────────────────────────
+
+	/**
+	 * Assign new-window rows to existing slot indices without allocating.
+	 * Pre-allocated scratch (result array, sets, free-slot list) are cleared and reused.
+	 *
+	 * Pass 1: slots whose current row is still in the new window stay in place.
+	 * Pass 2: entering rows fill freed slots in window order.
+	 */
+	private _computeStableSlotRowsInline(newWindowRows: readonly number[]): number[] {
+		const n = newWindowRows.length;
+
+		// Resize result array in place when the window grows.
+		const result = this._ssResult;
+		if (result.length < n) {
+			result.length = n;
+		}
+
+		// Populate the new-window set (cleared from last call).
+		const newWindowSet = this._ssNewWindowSet;
+		newWindowSet.clear();
+		for (let i = 0; i < n; i++) newWindowSet.add(newWindowRows[i]);
+
+		const assignedRows = this._ssAssignedRows;
+		assignedRows.clear();
+
+		const freeSlots = this._ssFreeSlots;
+		freeSlots.length = 0;
+
+		const slotCount = Math.min(this.rowSlotPool.count, n);
+		for (let i = 0; i < slotCount; i++) {
+			const slot = this.rowSlotPool.getSlot(i);
+			const vi = slot ? slot.visualIndex : -1;
+			if (vi >= 0 && newWindowSet.has(vi)) {
+				result[i] = vi;
+				assignedRows.add(vi);
+			} else {
+				result[i] = -1;
+				freeSlots.push(i);
+			}
+		}
+		for (let i = slotCount; i < n; i++) {
+			result[i] = -1;
+			freeSlots.push(i);
+		}
+
+		let freeIdx = 0;
+		for (let i = 0; i < n; i++) {
+			const row = newWindowRows[i];
+			if (!assignedRows.has(row)) {
+				result[freeSlots[freeIdx++]] = row;
+			}
+		}
+
+		return result;
 	}
 
 	// ── Legacy slot release (kept for API compat; not called during steady scroll) ───

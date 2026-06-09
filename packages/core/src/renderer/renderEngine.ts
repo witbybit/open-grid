@@ -2,7 +2,14 @@
 import { HeaderMenuController } from './headerMenuController.js';
 import { computeScrollTarget } from './scrollIntoView.js';
 import { ScrollEngine } from './scrollEngine.js';
-import { sameRenderedWindow, applyRenderWindowRuntimeLimits, computeRenderWindow, type RenderWindow } from './renderWindow.js';
+import {
+	sameRenderedWindow,
+	applyRenderWindowRuntimeLimits,
+	computeRenderWindow,
+	computeRenderWindowInto,
+	createEmptyRenderWindow,
+	type RenderWindow,
+} from './renderWindow.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
@@ -82,6 +89,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	// Reusable ScrollRenderContext updated in-place each scroll frame to avoid allocation.
 	private _scrollCtx!: ScrollRenderContext<TRowData>;
+
+	// Double-buffered RenderWindow — alternated each frame to avoid per-frame allocation.
+	// _activeRenderWindowBufIdx points to the buffer currently stored as currentWindow.
+	// The candidate (next) buffer is always the OTHER slot.
+	private readonly _renderWindowBufs: [RenderWindow, RenderWindow] = [createEmptyRenderWindow(), createEmptyRenderWindow()];
+	private _activeRenderWindowBufIdx = 0;
 
 	private readonly portalFlushBudget = 24;
 	private readonly postScrollDecorationBudget = 32;
@@ -485,7 +498,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// state read. This handles viewport resizes that happened since the last frame.
 		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
 
-		const nextWindow = applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits);
+		// Double-buffer: fill the candidate slot in-place to avoid per-frame allocation.
+		// The candidate is always the buffer NOT currently stored as currentWindow.
+		const candidateIdx = 1 - this._activeRenderWindowBufIdx;
+		const candidateBuf = this._renderWindowBufs[candidateIdx];
+		computeRenderWindowInto(this.engine, candidateBuf);
+		const nextWindow = applyRenderWindowRuntimeLimits(candidateBuf, state.runtimeLimits);
+		// nextWindow === candidateBuf on the fast path (limits not exceeded).
+		// nextWindow is a new object on the slow path (limits applied, rare).
 
 		// Same window bailout path
 		if (sameRenderedWindow(this.rowRenderer.currentWindow, nextWindow)) {
@@ -493,6 +513,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.renderStats.sameWindowBailouts = (this.renderStats.sameWindowBailouts || 0) + 1;
 			this.syncCheapScrollOnly(nextWindow);
 			return;
+		}
+
+		// Window changed: if nextWindow is our candidate buffer, swap the active index so
+		// next frame fills the other buffer (zero allocation). Otherwise (limits applied),
+		// the new object is used directly and no swap is needed.
+		if (nextWindow === candidateBuf) {
+			this._activeRenderWindowBufIdx = candidateIdx;
 		}
 
 		this.isScrollFrameActive = true;
@@ -509,7 +536,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const startStateReads = this.engine.stateManager.debugGetStateCount;
 		try {
 			const plan = this.engine.columns.getCompiledPlan();
-			const visibleColRange = { startIdx: nextWindow.colStart, endIdx: nextWindow.colEnd };
 
 			// Update the reusable ScrollRenderContext in-place â€” avoids one object
 			// allocation per scroll frame while keeping all cached references fresh.
@@ -522,7 +548,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			scrollCtx.hasStyleHooks = !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender);
 			scrollCtx.hasCustomRenderers = plan.hasCustomRenderers;
 			scrollCtx.plan = plan;
-			scrollCtx.visibleColRange = visibleColRange;
+			// Mutate visibleColRange in-place — avoids a new { } allocation per frame.
+			scrollCtx.visibleColRange.startIdx = nextWindow.colStart;
+			scrollCtx.visibleColRange.endIdx = nextWindow.colEnd;
+			const visibleColRange = scrollCtx.visibleColRange;
 			scrollCtx.focusedCell = state.selection.focus;
 			scrollCtx.selectionBounds = state.selection.bounds ?? undefined;
 
@@ -565,8 +594,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private syncCheapScrollOnly(window: RenderWindow): void {
 		const plan = this.engine.columns.getCompiledPlan();
+		const scrollTop = this.engine.viewport.scrollTop;
+		const scrollLeft = this.engine.viewport.scrollLeft;
+
 		// 1. Header scrollLeft transform
-		this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, plan);
+		this.headerRenderer.syncScrollLeft(scrollLeft, plan);
 
 		// 2. Selection overlay transform
 		this.renderStats.overlayCheapSyncsDuringScroll++;
@@ -576,16 +608,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const pinTopRows = window.pinTopRows;
 		const pinBottomRows = window.pinBottomRows;
 		if (pinTopRows > 0 || pinBottomRows > 0) {
-			const scrollTop = this.engine.viewport.scrollTop;
 			const viewportHeight = this.engine.viewport.viewportHeight;
 			const totalHeight = this.cachedTotalHeight;
+			const rowTops = this.engine.geometry.rowTops;
 
 			// Update pinned top rows
 			for (let r = 0; r < pinTopRows && r < window.rowCount; r++) {
 				const slot = this.rowRenderer.activeRows.get(r);
 				if (slot) {
-					const rowTop = this.engine.geometry.rowTops[r] + scrollTop;
-					slot.updatePosition(rowTop);
+					slot.updatePosition(rowTops[r] + scrollTop);
 				}
 			}
 
@@ -594,9 +625,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				if (r >= pinTopRows) {
 					const slot = this.rowRenderer.activeRows.get(r);
 					if (slot) {
-						const bottomOffset = totalHeight - this.engine.geometry.rowTops[r];
-						const rowTop = scrollTop + viewportHeight - bottomOffset;
-						slot.updatePosition(rowTop);
+						slot.updatePosition(scrollTop + viewportHeight - (totalHeight - rowTops[r]));
 					}
 				}
 			}
@@ -605,7 +634,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// 4. Sticky group rows position update
 		const stickyIndices = window.stickyGroupIndices;
 		if (stickyIndices && stickyIndices.length > 0) {
-			const scrollTop = this.engine.viewport.scrollTop;
 			const defaultRowHeight = this.cachedDefaultRowHeight;
 			let stickyOffset = 0;
 			for (const stickyIdx of stickyIndices) {
@@ -621,8 +649,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Update current window's scroll values
 		if (this.rowRenderer.currentWindow) {
-			this.rowRenderer.currentWindow.scrollTop = this.engine.viewport.scrollTop;
-			this.rowRenderer.currentWindow.scrollLeft = this.engine.viewport.scrollLeft;
+			this.rowRenderer.currentWindow.scrollTop = scrollTop;
+			this.rowRenderer.currentWindow.scrollLeft = scrollLeft;
 		}
 	}
 

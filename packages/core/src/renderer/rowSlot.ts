@@ -14,6 +14,8 @@ export class RowSlot<TRowData = unknown> {
 	public lastTop = -1;
 	public lastHeight = -1;
 	public lastClassName = '';
+	public lastVisualIndex = -2; // distinct from -1 so first update always fires
+	public lastVisualRowId = '\0'; // guaranteed != any real rowId on first update
 
 	public keepAlive = false;
 
@@ -201,12 +203,13 @@ export class RowSlot<TRowData = unknown> {
 			domUpdated = true;
 		}
 
-		const indexStr = String(visualIndex);
-		if (this.element.dataset.rowIndex !== indexStr) {
-			this.element.dataset.rowIndex = indexStr;
+		if (this.lastVisualIndex !== visualIndex) {
+			this.lastVisualIndex = visualIndex;
+			this.element.dataset.rowIndex = String(visualIndex);
 			domUpdated = true;
 		}
-		if (this.element.dataset.rowId !== visualRowId) {
+		if (this.lastVisualRowId !== visualRowId) {
+			this.lastVisualRowId = visualRowId;
 			this.element.dataset.rowId = visualRowId;
 			domUpdated = true;
 		}
