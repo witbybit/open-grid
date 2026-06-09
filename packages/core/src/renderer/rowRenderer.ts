@@ -656,11 +656,21 @@ export class RowRenderer<TRowData = unknown> {
 		slot.ensureRightCells(pinRightColumns, pinRightContainer, initCell, releaseCellFn);
 
 		// ── Bind left cells ───────────────────────────────────────────────────────────
+		//
+		// Identity-stable skip (mirrors centre cells): pinned-left columns are always
+		// at the same visual positions regardless of horizontal scroll. If this row
+		// is staying (isRowRebind=false) and the cell's existing column assignment
+		// already matches slot i, the DOM content is still valid — skip entirely.
 		for (let i = 0; i < pinLeftColumns; i++) {
 			const col = columns[i];
 			if (!col) continue;
 			const cellSlot = slot.leftCells[i];
 			if (!cellSlot) continue;
+
+			if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === i) {
+				continue;
+			}
+
 			if (isScrollFrameActive) this.currentScrollCellsVisited++;
 			const leftArg = plan.colLefts[i];
 			const cellWidth = plan.colWidths[i];
@@ -774,6 +784,10 @@ export class RowRenderer<TRowData = unknown> {
 		}
 
 		// ── Bind right cells ──────────────────────────────────────────────────────────
+		//
+		// Identity-stable skip (mirrors centre cells): pinned-right columns are
+		// always at fixed positions. If the row is staying and the cell's column
+		// assignment already matches column c, the DOM is still valid — skip it.
 		for (let i = 0; i < pinRightColumns; i++) {
 			const c = pinRightStart + i;
 			if (c >= colCount) continue;
@@ -781,6 +795,11 @@ export class RowRenderer<TRowData = unknown> {
 			if (!col) continue;
 			const cellSlot = slot.rightCells[i];
 			if (!cellSlot) continue;
+
+			if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === c) {
+				continue;
+			}
+
 			if (isScrollFrameActive) this.currentScrollCellsVisited++;
 			const cellLeft = plan.colLefts[c];
 			const cellWidth = plan.colWidths[c];
