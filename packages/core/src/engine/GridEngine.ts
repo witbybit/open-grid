@@ -764,7 +764,7 @@ export class GridEngine<TRowData = unknown> {
 			this.geometryVersion++;
 		}
 
-		if (updatedSet.has('selection') || updatedSet.has('columns') || updatedSet.has('dataVersion')) {
+		if (updatedSet.has('selection') || updatedSet.has('columns')) {
 			const rangeBounds = this.selection.calculateRangeBounds(
 				currState.selection.range,
 				(id) => (this.rowModel ? this.rowModel.getVisualIndexByRowId(id) : -1),

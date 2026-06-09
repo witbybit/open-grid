@@ -379,11 +379,20 @@ export function GridChartOverlay<TRowData>({ api }: { api: GridApi<TRowData> }) 
 	const selection = useGridKeySelector('selection', (s) => s.selection);
 	const bounds = selection?.bounds;
 
+	// ── Live data version ───────────────────────────────────────────────────
+	// bounds reference is now stable during live updates (no longer jumps on
+	// dataVersion change). Subscribe to dataVersion so the chart re-extracts
+	// fresh cell values from the fixed window on every 10hz tick.
+	const dataVersion = useGridKeySelector('dataVersion', (s) => s.dataVersion);
+
 	// ── Extract chart data ──────────────────────────────────────────────────
 	const { categories, series, allSeries } = useMemo(
-		() => extractData(api, bounds, transposed, disabledSeries),
+		() => {
+			if (!chartOpen) return { categories: [], series: [], allSeries: [] };
+			return extractData(api, bounds, transposed, disabledSeries);
+		},
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[api, bounds, transposed, disabledSeries]
+		[api, bounds, transposed, disabledSeries, dataVersion, chartOpen]
 	);
 
 	const colors = THEMES[theme];
