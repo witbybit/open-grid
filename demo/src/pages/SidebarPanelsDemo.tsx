@@ -144,7 +144,7 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		width: 100,
 		sortable: true,
 		movable: true,
-		renderer: { kind: 'react', component: PriceRenderer, capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap' } },
+		renderer: { kind: 'react', component: PriceRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
 	{
 		field: 'change',
@@ -152,7 +152,7 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		width: 100,
 		sortable: true,
 		movable: true,
-		renderer: { kind: 'react', component: ChangeRenderer, capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap' } },
+		renderer: { kind: 'react', component: ChangeRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
 	{
 		field: 'changePct',
@@ -160,7 +160,7 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		width: 105,
 		sortable: true,
 		movable: true,
-		renderer: { kind: 'react', component: ChangePctRenderer, capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap' } },
+		renderer: { kind: 'react', component: ChangePctRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
 	{ field: 'marketCap', header: 'Mkt Cap', width: 100, sortable: true, movable: true },
 	{ field: 'volume', header: 'Volume', width: 110, sortable: true, movable: true },
@@ -173,7 +173,7 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		width: 90,
 		sortable: true,
 		movable: true,
-		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap' } },
+		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
 ];
 

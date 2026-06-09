@@ -152,7 +152,7 @@ const SKATER_COLUMNS: ColumnDef<SkaterRow>[] = [
 		renderer: {
 			kind: 'react',
 			component: TricksRenderer,
-			capabilities: { scrollBehavior: 'fallback', estimatedCost: 'cheap', recycle: 'rebind' },
+			capabilities: { scrollBehavior: 'defer' },
 		},
 		cellEditor: TricksEditor,
 	},
@@ -163,7 +163,7 @@ const SKATER_COLUMNS: ColumnDef<SkaterRow>[] = [
 		renderer: {
 			kind: 'react',
 			component: YearsRenderer,
-			capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'rebind' },
+			capabilities: { scrollBehavior: 'live' },
 		},
 		cellEditor: YearsEditor,
 		sortable: true,
@@ -175,7 +175,7 @@ const SKATER_COLUMNS: ColumnDef<SkaterRow>[] = [
 		renderer: {
 			kind: 'react',
 			component: DateCellRenderer,
-			capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'rebind' },
+			capabilities: { scrollBehavior: 'live' },
 		},
 		cellEditor: DateCellEditor,
 		sortable: true,
@@ -187,7 +187,7 @@ const SKATER_COLUMNS: ColumnDef<SkaterRow>[] = [
 		renderer: {
 			kind: 'react',
 			component: CheckboxCellRenderer,
-			capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'rebind', interactive: true },
+			capabilities: { scrollBehavior: 'live' },
 		},
 		// No cellEditor — CheckboxCellRenderer toggles via onMouseDown directly
 	},
@@ -198,7 +198,7 @@ const SKATER_COLUMNS: ColumnDef<SkaterRow>[] = [
 		renderer: {
 			kind: 'react',
 			component: LevelRenderer,
-			capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'rebind' },
+			capabilities: { scrollBehavior: 'live' },
 		},
 		cellEditor: LevelEditor,
 		sortable: true,
@@ -210,7 +210,7 @@ const SKATER_COLUMNS: ColumnDef<SkaterRow>[] = [
 		renderer: {
 			kind: 'react',
 			component: ({ value }: any) => <MediaCell value={value} />,
-			capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'rebind' },
+			capabilities: { scrollBehavior: 'live' },
 		},
 	},
 ];
@@ -409,7 +409,7 @@ const columns: ColumnDef<Row>[] = [
   {
     field: 'isActive',
     renderer: { kind: 'react', component: CheckboxCellRenderer,
-      capabilities: { scrollBehavior: 'live', interactive: true } },
+      capabilities: { scrollBehavior: 'live' } },
   },
   {
     field: 'tricks',
@@ -540,7 +540,10 @@ function NativeCellTypesDemoInner({ api }: { api: ReturnType<typeof useClientGri
 						{ dot: 'bg-cyan-500', t: 'Checkbox toggles via api directly on mousedown — zero editor overhead' },
 						{ dot: 'bg-emerald-500', t: 'Factory functions create stable renderer identity — never inside a component' },
 						{ dot: 'bg-amber-500', t: 'Theme via CSS vars: override --og-ct-* on any ancestor element' },
-						{ dot: 'bg-rose-500', t: 'scrollBehavior: fallback used on expensive renderers — cached during fast scroll' },
+						{
+							dot: 'bg-rose-500',
+							t: 'scrollBehavior: defer freezes the portal during scroll — re-renders only when data version changes',
+						},
 					].map((n, i) => (
 						<div key={i} className='flex items-start gap-2 text-[10px] text-slate-500 leading-relaxed'>
 							<span className={`w-1.5 h-1.5 rounded-full ${n.dot} mt-1 shrink-0`} />

@@ -10,7 +10,7 @@ import type { PersistenceStatus } from './persistence/statePersistence.js';
 // ── Focused sub-modules — re-export so callers of store.ts continue to work ──
 export { RowNode } from './rowNode.js';
 
-export { isDomCellRenderer, getCellRendererCapabilities, getValueByPath, setValueByPath, compilePathGetter } from './columnDef.js';
+export { isDomCellRenderer, getValueByPath, setValueByPath, compilePathGetter } from './columnDef.js';
 export type {
 	ValueGetterParams,
 	CellRendererPhase,

@@ -58,14 +58,14 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Microservice',
 			width: 140,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'preserve' },
+			cellRendererCapabilities: { scrollBehavior: 'live' },
 		},
 		{
 			field: 'rendererLive',
 			header: 'Live Rebind',
 			width: 170,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'rebind', supportsRebind: true, warmCache: true },
+			cellRendererCapabilities: { scrollBehavior: 'live' },
 			valueGetter: ({ row }) => `live|${row.service}`,
 		},
 		{
@@ -73,14 +73,7 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Defer Stable',
 			width: 170,
 			cellRenderer: renderer,
-			cellRendererCapabilities: {
-				scrollBehavior: 'defer',
-				deferFallback: 'snapshot',
-				estimatedCost: 'medium',
-				interactive: true,
-				recycle: 'preserve',
-				warmCache: true,
-			},
+			cellRendererCapabilities: { scrollBehavior: 'defer' },
 			valueGetterDependencies: ['severity'],
 			valueGetter: ({ row }) => `defer|${row.severity}`,
 		},
@@ -89,14 +82,14 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Severity',
 			width: 120,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'fallback', estimatedCost: 'medium', interactive: false },
+			cellRendererCapabilities: { scrollBehavior: 'defer' },
 		},
 		{
 			field: 'rendererFallback',
 			header: 'Fallback Cache',
 			width: 175,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'fallback', estimatedCost: 'expensive', recycle: 'preserve', warmCache: true },
+			cellRendererCapabilities: { scrollBehavior: 'defer' },
 			valueGetterDependencies: ['latencyMs'],
 			valueGetter: ({ row }) => `fallback|${row.latencyMs}ms`,
 		},
@@ -105,7 +98,7 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Destroy Recycle',
 			width: 180,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'fallback', estimatedCost: 'medium', recycle: 'destroy', warmCache: false },
+			cellRendererCapabilities: { scrollBehavior: 'defer' },
 			valueGetterDependencies: ['ipAddress'],
 			valueGetter: ({ row }) => `destroy|${row.ipAddress}`,
 		},
@@ -122,11 +115,7 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			...(index % 7 === 0
 				? {
 						cellRenderer: renderer,
-						cellRendererCapabilities: {
-							scrollBehavior: 'defer' as const,
-							deferFallback: 'snapshot' as const,
-							estimatedCost: 'medium' as const,
-						},
+						cellRendererCapabilities: { scrollBehavior: 'defer' as const },
 					}
 				: {}),
 			...(index % 11 === 0

@@ -180,10 +180,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					kind: 'react',
 					component: GreeksRenderer,
 					capabilities: {
-						scrollBehavior: 'fallback',
-						estimatedCost: 'expensive',
-						recycle: 'preserve',
-						warmCache: true,
+						scrollBehavior: 'defer',
 					},
 				},
 				valueGetterDependencies: ['price', 'quantity'],
@@ -203,10 +200,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					kind: 'react',
 					component: GreeksRenderer,
 					capabilities: {
-						scrollBehavior: 'fallback',
-						estimatedCost: 'expensive',
-						recycle: 'preserve',
-						warmCache: true,
+						scrollBehavior: 'defer',
 					},
 				},
 				valueGetterDependencies: ['price', 'quantity'],
@@ -227,9 +221,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					component: GreeksRenderer,
 					capabilities: {
 						scrollBehavior: 'live',
-						estimatedCost: 'cheap',
-						recycle: 'preserve',
-						supportsRebind: false,
 					},
 				},
 				valueGetterDependencies: ['price', 'quantity'],
@@ -249,10 +240,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					kind: 'react',
 					component: GreeksRenderer,
 					capabilities: {
-						scrollBehavior: 'fallback',
-						estimatedCost: 'expensive',
-						recycle: 'preserve',
-						warmCache: true,
+						scrollBehavior: 'defer',
 					},
 				},
 				valueGetterDependencies: ['price', 'quantity'],
@@ -276,10 +264,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					component: RiskBadgeRenderer,
 					capabilities: {
 						scrollBehavior: 'defer',
-						estimatedCost: 'medium',
-						interactive: true,
-						recycle: 'preserve',
-						warmCache: true,
 					},
 				},
 				valueGetter: ({ row }) => {
@@ -342,7 +326,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				renderer: {
 					kind: 'react',
 					component: ServiceBadgeRenderer,
-					capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', recycle: 'preserve' },
+					capabilities: { scrollBehavior: 'live' },
 				},
 			},
 			{
@@ -354,10 +338,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					component: RendererStrategyProbe,
 					capabilities: {
 						scrollBehavior: 'live',
-						estimatedCost: 'cheap',
-						recycle: 'rebind',
-						supportsRebind: true,
-						warmCache: true,
 					},
 				},
 				valueGetter: ({ row }) => `live|${row.service}`,
@@ -371,11 +351,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					component: RendererStrategyProbe,
 					capabilities: {
 						scrollBehavior: 'defer',
-						deferFallback: 'snapshot',
-						estimatedCost: 'medium',
-						interactive: true,
-						recycle: 'preserve',
-						warmCache: true,
 					},
 				},
 				valueGetterDependencies: ['severity'],
@@ -388,25 +363,22 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 				renderer: {
 					kind: 'react',
 					component: RiskBadgeRenderer,
-					capabilities: { scrollBehavior: 'fallback', estimatedCost: 'medium', interactive: false },
+					capabilities: { scrollBehavior: 'defer' },
 				},
 			},
 			{
 				field: 'rendererFallback',
-				header: 'Fallback Cache',
+				header: 'Defer Freeze',
 				width: 175,
 				renderer: {
 					kind: 'react',
 					component: RendererStrategyProbe,
 					capabilities: {
-						scrollBehavior: 'fallback',
-						estimatedCost: 'expensive',
-						recycle: 'preserve',
-						warmCache: true,
+						scrollBehavior: 'defer',
 					},
 				},
 				valueGetterDependencies: ['latencyMs'],
-				valueGetter: ({ row }) => `fallback|${row.latencyMs}ms`,
+				valueGetter: ({ row }) => `defer|${row.latencyMs}ms`,
 			},
 			{
 				field: 'rendererDestroy',
@@ -416,10 +388,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					kind: 'react',
 					component: RendererStrategyProbe,
 					capabilities: {
-						scrollBehavior: 'fallback',
-						estimatedCost: 'medium',
-						recycle: 'destroy',
-						warmCache: false,
+						scrollBehavior: 'defer',
 					},
 				},
 				valueGetterDependencies: ['ipAddress'],
@@ -767,8 +736,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					renderer: SparklineRenderer,
 					capabilities: {
 						scrollBehavior: 'live',
-						recycle: 'rebind',
-						warmCache: true,
 					},
 				},
 			},
@@ -784,7 +751,6 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					component: LivePriceRenderer,
 					capabilities: {
 						scrollBehavior: 'live',
-						recycle: 'rebind',
 					},
 				},
 			},
@@ -798,9 +764,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 					kind: 'react',
 					component: HeavyAnalyticsCell,
 					capabilities: {
-						scrollBehavior: 'fallback',
-						recycle: 'preserve',
-						estimatedCost: 'medium',
+						scrollBehavior: 'defer',
 					},
 				},
 			},

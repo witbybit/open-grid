@@ -47,7 +47,7 @@ function createWideGrid(options: { rows?: number; cols?: number; custom?: boolea
 		...(options.custom && index % 4 === 0
 			? {
 					cellRenderer: () => `Rendered ${index}`,
-					cellRendererCapabilities: { scrollBehavior: 'defer' as const, deferFallback: 'snapshot' as const },
+					cellRendererCapabilities: { scrollBehavior: 'defer' as const },
 				}
 			: {}),
 		...(options.valueGetter && index % 5 === 0

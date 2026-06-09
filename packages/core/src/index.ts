@@ -46,7 +46,6 @@ export type {
 export {
 	canEditCell,
 	canFocusVisualRow,
-	getCellRendererCapabilities,
 	isDomCellRenderer,
 	isDataVisualRow,
 	isDataCellSelectable,

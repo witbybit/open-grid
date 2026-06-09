@@ -210,7 +210,7 @@ export default function CalculationsArena({
 					<div className='grid grid-cols-1 gap-2 text-[9px] font-mono'>
 						<div className='flex items-center justify-between rounded border border-rose-950/50 bg-rose-950/15 px-2.5 py-2'>
 							<span className='text-slate-300 font-bold'>Delta / Gamma / Theta</span>
-							<span className='text-rose-300 uppercase tracking-wider'>fallback</span>
+							<span className='text-rose-300 uppercase tracking-wider'>defer</span>
 						</div>
 						<div className='flex items-center justify-between rounded border border-emerald-950/50 bg-emerald-950/15 px-2.5 py-2'>
 							<span className='text-slate-300 font-bold'>Vega</span>
@@ -218,7 +218,7 @@ export default function CalculationsArena({
 						</div>
 						<div className='flex items-center justify-between rounded border border-indigo-950/50 bg-indigo-950/15 px-2.5 py-2'>
 							<span className='text-slate-300 font-bold'>Risk Rating</span>
-							<span className='text-indigo-300 uppercase tracking-wider'>defer interactive</span>
+							<span className='text-indigo-300 uppercase tracking-wider'>defer</span>
 						</div>
 					</div>
 				</div>

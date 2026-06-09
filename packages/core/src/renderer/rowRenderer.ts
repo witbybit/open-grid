@@ -443,9 +443,8 @@ export class RowRenderer<TRowData = unknown> {
 				// Cell portals are intentionally NOT pre-evacuated here. Releasing all portals
 				// for every rebinding slot would flood the warm cache (size-bounded) with O(allSlots)
 				// entries simultaneously, causing warm cache evictions and cold remounts. Instead,
-				// each cell's binding code handles its own portal lifecycle with full context about
-				// the incoming row's content — allowing custom-live portals to be preserved in place,
-				// custom-fallback portals to show snapshots, and stale portals to be properly released.
+				// each cell's binding code handles its own portal lifecycle: stable slots (same key)
+				// are updated in-place via rebindInstance; new slots mount immediately with full content.
 				this.releaseRowPortal(slot);
 				if (isScrollFrameActive) this.currentScrollRowsRecycled++;
 			}
@@ -1383,74 +1382,76 @@ export class RowRenderer<TRowData = unknown> {
 
 		const scrollMode = plan?.mode;
 		const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
-		// Only preserve portals when the slot is NOT rebinding to a new row.
-		// isRowRebind=true means this slot just got a different row — the old
-		// renderer's data is stale and should not be shown.
 		const isMounted = this.portalMountManager.isCellMounted(cellKey);
-		// We are always in portal mode from here on (primitive/loading returned early).
-		const isPreservedPortal = !isRowRebind && scrollMode === 'custom-defer' && cellSlot.lastPortalKey === cellKey && isMounted;
-		const shouldKeepLivePortalDuringScroll = !isRowRebind && scrollMode === 'custom-live' && isMounted;
-		const shouldKeepPortalDuringScroll = shouldKeepLivePortalDuringScroll || isPreservedPortal;
 
-		if (!shouldKeepPortalDuringScroll) {
-			if (cellSlot.element.dataset.cellKey) {
-				this.releaseCellPortal(cellSlot.element);
-			}
-			if (scrollMode === 'custom-fallback') {
-				const cachedVal = this.engine.data.getCachedDisplayValue(node.id, col.field);
-				if (cachedVal !== undefined) {
-					formattedValue = cachedVal;
-					contentMode = 'fallback';
-				} else {
-					formattedValue = '';
-					contentMode = 'pending';
-				}
-			} else if (scrollMode === 'custom-defer' && (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.deferFallback === 'snapshot') {
-				const cachedVal = this.engine.data.getCachedDisplayValue(node.id, col.field);
-				if (cachedVal !== undefined) {
-					formattedValue = cachedVal;
-					contentMode = 'fallback';
-				} else {
-					formattedValue = '';
-					contentMode = 'pending';
-				}
+		// Two freeze variants keep React work off the hot scroll path:
+		//   isPortalFrozen: slot stayed on the same row — portal is fully current.
+		//   isStaleFrozen:  slot moved to a new row (isRowRebind) but the slot-keyed portal
+		//                   is already mounted — keep showing stale content during scroll
+		//                   (no blank flash) and schedule a post-scroll full rebind.
+		// Only 'custom-live' same-row portals bypass the freeze to push fresh data each frame.
+		const canFreezePortal = cellSlot.lastPortalKey === cellKey && isMounted;
+		const isPortalFrozen = !isRowRebind && canFreezePortal;
+		const isStaleFrozen = isRowRebind && canFreezePortal;
+
+		if (isPortalFrozen || isStaleFrozen) {
+			// Keep the existing portal visible — no React work this scroll frame.
+			this.cellRenderer.showPortalContent(cellSlot.element);
+			this.cancelPendingPortalRelease(cellKey);
+			contentMode = 'portal';
+
+			if (isPortalFrozen && scrollMode === 'custom-live') {
+				// Live same-row portal: push fresh data on every scroll frame.
+				// mountCellImmediately tries imperativeUpdate first (zero React cost if supported).
+				const portalHost = this.ensureCellPortalHost(cellSlot.element);
+				this.portalMountManager.mountCellImmediately({
+					cellKey,
+					container: portalHost,
+					value: this.getScrollMountValue(node, col, cellSlot),
+					node,
+					col,
+					rowIndex,
+					colIndex,
+					rowSlotId: pooledRowId,
+					isEditing,
+					isLoading: false,
+					phase: 'scroll',
+					isScrolling: false,
+					isFocused,
+					isSelected: false,
+				});
+				cellSlot.lastMountedDataVersion = ctx.dataVersion;
 			} else {
-				formattedValue = '';
-				contentMode = 'pending';
+				// Stale (row rebind) or non-live same-row: defer to post-scroll decoration pass.
+				this.markCellDirtyAfterScroll(cellSlot.element);
 			}
-			this.markCellDirtyAfterScroll(cellSlot.element);
 		} else {
-			if (scrollMode === 'custom-live') {
-				this.cellRenderer.showPortalContent(cellSlot.element);
-				this.cancelPendingPortalRelease(cellKey);
-				contentMode = 'portal';
-				// Only call mountCellImmediately if the portal is NOT already live
-				// under this exact key for this same row. isRowRebind=false guarantees
-				// the slot still holds the same row, so skipping the mount is safe.
-				const isAlreadyLive = !isRowRebind && cellSlot.lastPortalKey === cellKey && this.portalMountManager.isCellMounted(cellKey);
-				if (!isAlreadyLive) {
-					const portalHost = this.ensureCellPortalHost(cellSlot.element);
-					this.portalMountManager.mountCellImmediately({
-						cellKey,
-						container: portalHost,
-						value: this.getScrollMountValue(node, col, cellSlot),
-						node,
-						col,
-						rowIndex,
-						colIndex,
-						rowSlotId: pooledRowId,
-						isEditing,
-						isLoading: false,
-						phase: 'scroll',
-						isScrolling: true,
-						isFocused,
-						isSelected: false,
-					});
-				}
-			} else if (scrollMode === 'custom-defer') {
-				this.cellRenderer.showPortalContent(cellSlot.element);
-				contentMode = 'portal';
+			// New key (column renderer changed) or first-ever mount for this slot.
+			// Release the old portal if it had a different key.
+			if (cellSlot.lastPortalKey && cellSlot.lastPortalKey !== cellKey) {
+				// Use undefined (not false) so the release is deferred during scroll,
+				// and 'scrolled-out' so it goes to the warm cache (not destroyed).
+				this.releaseCellPortal(cellSlot.element, undefined, 'scrolled-out');
 			}
+			const portalHost = this.ensureCellPortalHost(cellSlot.element);
+			this.portalMountManager.mountCellImmediately({
+				cellKey,
+				container: portalHost,
+				value: this.getScrollMountValue(node, col, cellSlot),
+				node,
+				col,
+				rowIndex,
+				colIndex,
+				rowSlotId: pooledRowId,
+				isEditing,
+				isLoading: isRowLoading,
+				phase: 'scroll',
+				isScrolling: false,
+				isFocused,
+				isSelected: false,
+			});
+			contentMode = 'portal';
+			cellSlot.lastMountedDataVersion = ctx.dataVersion;
 		}
 
 		const didWrite = cellSlot.update(
@@ -1532,14 +1533,6 @@ export class RowRenderer<TRowData = unknown> {
 	}
 
 	// ── Misc helpers ─────────────────────────────────────────────────────────────────
-
-	private showDeferredSnapshot(cell: HTMLDivElement, node: RowNode<TRowData>, col: ColumnDef<TRowData>): boolean {
-		if ((col as InternalColumnDef<TRowData>).cellRendererCapabilities?.deferFallback !== 'snapshot') return false;
-		const cachedVal = this.engine.data.getCachedDisplayValue(node.id, col.field);
-		if (cachedVal === undefined) return false;
-		this.cellRenderer.setPrimitiveContent(cell, cachedVal, 'fallback');
-		return true;
-	}
 
 	private getScrollMountValue(node: RowNode<TRowData>, col: ColumnDef<TRowData>, cellSlot?: CellSlot<TRowData>): unknown {
 		const cachedVal = this.engine.data.getCachedDisplayValue(node.id, col.field);

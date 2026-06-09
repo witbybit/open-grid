@@ -21,15 +21,17 @@ export interface ValueGetterParams<TRowData = unknown> {
 export type CellRendererPhase = 'initial' | 'scroll' | 'scroll-idle' | 'interaction' | 'edit' | 'destroy';
 
 export interface CellRendererCapabilities {
-	/** Whether renderer content should stay live, defer updates, or show fallback while scrolling. */
-	scrollBehavior?: 'live' | 'defer' | 'fallback';
-	deferFallback?: 'snapshot' | 'pending';
-	/** Future lifecycle hint for renderer instance reuse. */
-	recycle?: 'rebind' | 'preserve' | 'destroy';
-	estimatedCost?: 'cheap' | 'medium' | 'expensive';
-	interactive?: boolean;
-	supportsRebind?: boolean;
-	warmCache?: boolean;
+	/**
+	 * Controls how the portal is updated while the grid is actively scrolling.
+	 *
+	 * - `'live'`  — Re-render with fresh data on every scroll frame (great for real-time feeds,
+	 *               cheap components). The portal is kept alive and updated in-place.
+	 * - `'defer'` — Keep the portal alive and frozen during scroll; refresh only when the row's
+	 *               data version changes (default for most static or expensive renderers).
+	 *
+	 * Both modes always show the full React component — the grid never strips content during scroll.
+	 */
+	scrollBehavior?: 'live' | 'defer';
 	/**
 	 * When true, the grid calls ref.current.update() directly — bypasses React's scheduler entirely.
 	 * Cell renderer must be a forwardRef component exposing ImperativeCellHandle.
@@ -101,30 +103,24 @@ export type ColumnRendererSpec<TRowData = unknown> =
 // ─── Column render plan (produced by ColumnModel) ─────────────────────────────
 
 export type ColumnRenderMode =
-	| 'primitive'
-	| 'primitive-formatted'
-	| 'custom-live'
-	| 'custom-dom'
-	| 'custom-imperative'
-	| 'custom-defer'
-	| 'custom-fallback'
-	| 'custom-skeleton'
-	| 'loading';
+	| 'primitive' // No renderer; raw/text value only
+	| 'primitive-formatted' // No renderer; value goes through a getter or formatter
+	| 'custom-live' // React portal refreshed every scroll frame (scrollBehavior:'live')
+	| 'custom' // React portal frozen during scroll; refreshed only on data change
+	| 'custom-dom' // DomCellRenderer — direct DOM manipulation, no React overhead
+	| 'custom-imperative' // React portal with imperativeUpdate protocol
+	| 'loading'; // Loading skeleton row
 
 export interface ColumnRenderPlan<TData = unknown> {
 	colId: string;
 	field: string;
 	mode: ColumnRenderMode;
-	/** True when the column uses a custom cell renderer (mode starts with 'custom-'). Pre-computed to avoid string.startsWith on the hot scroll path. */
+	/** True when the column uses a custom cell renderer (mode starts with 'custom'). Pre-computed to avoid string.startsWith on the hot scroll path. */
 	isCustom: boolean;
 	hasValueGetter: boolean;
 	hasFormatter: boolean;
 	hasFormulaSupport: boolean;
 	canUseCachedDisplayValue: boolean;
-	capabilities?: CellRendererCapabilities;
-	fallbackStrategy: 'cached' | 'formatted' | 'raw' | 'blank' | 'custom';
-	rendererType?: unknown;
-	diagnostics?: string[];
 }
 
 export interface CompiledGridPlan<TData = unknown> {
@@ -217,21 +213,6 @@ export interface GridStyleSlots<TRowData = unknown> {
 	afterCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
 	groupRowClass?: (visualRow: GroupVisualRow<TRowData>) => string;
 	detailRowClass?: (visualRow: DetailVisualRow<TRowData>) => string;
-}
-
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
-export function getCellRendererCapabilities<TRowData>(col: InternalColumnDef<TRowData>): Required<CellRendererCapabilities> {
-	return {
-		scrollBehavior: col.cellRendererCapabilities?.scrollBehavior ?? 'fallback',
-		deferFallback: col.cellRendererCapabilities?.deferFallback ?? 'pending',
-		recycle: col.cellRendererCapabilities?.recycle ?? 'preserve',
-		estimatedCost: col.cellRendererCapabilities?.estimatedCost ?? 'medium',
-		interactive: col.cellRendererCapabilities?.interactive ?? false,
-		supportsRebind: col.cellRendererCapabilities?.supportsRebind ?? false,
-		warmCache: col.cellRendererCapabilities?.warmCache ?? true,
-		imperativeUpdate: col.cellRendererCapabilities?.imperativeUpdate ?? false,
-	};
 }
 
 // ─── Path utilities ───────────────────────────────────────────────────────────

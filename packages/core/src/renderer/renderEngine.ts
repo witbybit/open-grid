@@ -368,6 +368,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.clearScrollEndTimer();
 		this.clearPostScrollDecorationTimer();
 		this.sortAnimation.cancel();
+		// Clear hover immediately so no row stays highlighted while the viewport moves.
+		this.setHoveredRowIndex(null);
 	}
 
 	// RAF-counter scroll-end: fires finishScrolling after N consecutive frames with no new
@@ -645,7 +647,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		}
 
-		this.rowRenderer.syncPinnedLanePositions(window, this.cachedTotalWidth);
+		// Only update pinned lane transforms when scrollLeft actually changed.
+		// During vertical-only scroll, scrollLeft is constant — skipping the call
+		// avoids building translate3d strings and iterating all row slots each frame,
+		// which is the primary source of the Layerize cost in profiling.
+		if (scrollLeft !== this.rowRenderer.currentWindow?.scrollLeft) {
+			this.rowRenderer.syncPinnedLanePositions(window, this.cachedTotalWidth);
+		}
 
 		// Update current window's scroll values
 		if (this.rowRenderer.currentWindow) {
@@ -1044,6 +1052,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private onRowMouseOver = (event: MouseEvent): void => {
+		// During scroll the viewport is moving — hover state would flicker across every
+		// row the pointer passes over and trigger className writes + style recalcs on each.
+		// Suppress until scrolling stops; finishScrolling clears the hovered row anyway.
+		if (this.isScrolling) return;
+
 		const rowEl = (event.target as HTMLElement).closest('.og-row') as HTMLElement | null;
 		const rowIndexText = rowEl?.dataset.rowIndex;
 		if (rowIndexText === undefined) {

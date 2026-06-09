@@ -356,7 +356,9 @@ export function createPortalStore<TRowData = unknown>() {
 	// Imperative updaters — registered by ImperativePortalCellWrapper, bypasses React scheduler
 	const imperativeUpdaters = new Map<string, ImperativeUpdaterFn<TRowData>>();
 
-	// Snapshots — only rebuilt on structural changes so useSyncExternalStore bails out on data updates
+	// Snapshots — only rebuilt on structural changes; CellPortalPool's useSyncExternalStore
+	// bails out on data updates (cellSnapshot reference unchanged) so only structural changes
+	// cause the pool to re-render. Per-cell data flows through PortalCellWrapper's useState.
 	let cellSnapshot: CellPortalSnapshot<TRowData> = { cellPortalList: [] };
 	let rowMenuSnapshot: RowMenuPortalSnapshot<TRowData> = { rowPortalList: [], menuPortalList: [] };
 
@@ -629,37 +631,59 @@ interface PortalCellWrapperProps<TRowData = unknown> {
 }
 
 /**
- * Slot-pinned cell adapter. Stays mounted for the lifetime of the cell slot — data changes
- * flow through useSyncExternalStore (per-cell subscription) so only this component re-renders,
- * not the whole PortalManager tree. No mount/unmount cost on scroll.
+ * Slot-pinned cell adapter. Stays mounted for the lifetime of the cell slot.
+ *
+ * Data updates flow through useState + useEffect rather than useSyncExternalStore.
+ * This has two key benefits:
+ *
+ *   1. No synchronous React re-renders during scroll frames — React 18 automatic
+ *      batching defers all post-scroll setData calls into a single reconciliation
+ *      cycle, keeping the animation loop free of React scheduler overhead.
+ *
+ *   2. lastKnownRef prevents blank-cell flashes: if the store data is transiently
+ *      undefined during a concurrent-mode render pass (structural change in flight,
+ *      slot-reassignment race, etc.) the last known good data is rendered instead of
+ *      returning null and briefly blanking the cell.
  */
 function PortalCellWrapperInner<TRowData = unknown>({ cellKey, store }: PortalCellWrapperProps<TRowData>) {
-	// Lazy-init stable refs — cellKey and store never change while this component instance
-	// is alive (React unmounts and remounts on key change), so these closures are always correct.
-	const subscribeRef = useRef<(onStoreChange: () => void) => () => void>(null!);
-	const getSnapshotRef = useRef<() => PortalData<TRowData> | undefined>(null!);
-	if (!subscribeRef.current) {
-		subscribeRef.current = store.subscribeToCell ? (l) => store.subscribeToCell!(cellKey, l) : () => () => {};
-		getSnapshotRef.current = () => store.getCellData?.(cellKey);
-	}
+	// Initialise synchronously from the store so the very first render has real data.
+	const [data, setData] = useState<PortalData<TRowData> | undefined>(() => store.getCellData?.(cellKey));
 
-	const data = useSyncExternalStore(subscribeRef.current, getSnapshotRef.current, getSnapshotRef.current);
+	// Preserve the last non-undefined snapshot. Rendered when data is momentarily
+	// absent so the cell never goes blank during transitions.
+	const lastKnownRef = useRef(data);
+	if (data !== undefined) lastKnownRef.current = data;
 
-	if (!data) return null;
+	useEffect(() => {
+		// Cover the render→effect gap: sync with the store in case it was mutated
+		// between the initial render and this effect running (rare under concurrent mode).
+		const current = store.getCellData?.(cellKey);
+		if (current !== lastKnownRef.current) {
+			setData(current);
+		}
+		// Subscribe to all future data-only updates for this cell key.
+		if (!store.subscribeToCell) return;
+		return store.subscribeToCell(cellKey, () => {
+			setData(store.getCellData?.(cellKey));
+		});
+	}, [cellKey, store]); // cellKey and store are both stable for this component's lifetime
+
+	const effectiveData = data ?? lastKnownRef.current;
+	if (!effectiveData) return null;
 
 	return (
 		<PortalCell<TRowData>
-			rowId={data.node.id}
-			colField={data.col.field}
-			value={data.value}
-			col={data.col}
-			node={data.node}
-			isEditing={data.isEditing}
-			isLoading={data.isLoading}
-			phase={data.phase}
-			isScrolling={data.isScrolling}
-			isFocused={data.isFocused}
-			isSelected={data.isSelected}
+			rowId={effectiveData.node.id}
+			colField={effectiveData.col.field}
+			value={effectiveData.value}
+			col={effectiveData.col}
+			node={effectiveData.node}
+			isEditing={effectiveData.isEditing}
+			isLoading={effectiveData.isLoading}
+			phase={effectiveData.phase}
+			isScrolling={effectiveData.isScrolling}
+			isFocused={effectiveData.isFocused}
+			isSelected={effectiveData.isSelected}
 		/>
 	);
 }
@@ -672,6 +696,10 @@ const PortalCellWrapper = memo(PortalCellWrapperInner) as typeof PortalCellWrapp
  * Like PortalCellWrapper, but renders the renderer as a JSX element (not a function call)
  * so forwardRef works. Registers an imperative updater in the portal store — subsequent
  * data updates call ref.current.update() directly, bypassing React's scheduler entirely.
+ *
+ * Uses the same useState + lastKnownRef pattern as PortalCellWrapper: async-batched updates
+ * and no blank-cell flashes. In practice notifyCellData is rarely called for imperative cells
+ * (tryImperativeUpdate short-circuits it) so the subscription is mostly a safety net.
  */
 function ImperativePortalCellWrapperInner<TRowData = unknown>({ cellKey, store }: PortalCellWrapperProps<TRowData>) {
 	const api = useGridApi<TRowData>();
@@ -680,14 +708,17 @@ function ImperativePortalCellWrapperInner<TRowData = unknown>({ cellKey, store }
 	const apiRef = useRef(api);
 	apiRef.current = api;
 
-	const subscribeRef = useRef<(onStoreChange: () => void) => () => void>(null!);
-	const getSnapshotRef = useRef<() => PortalData<TRowData> | undefined>(null!);
-	if (!subscribeRef.current) {
-		subscribeRef.current = store.subscribeToCell ? (l) => store.subscribeToCell!(cellKey, l) : () => () => {};
-		getSnapshotRef.current = () => store.getCellData?.(cellKey);
-	}
+	// useState + lastKnownRef: same blank-prevention & batching strategy as PortalCellWrapper.
+	const [data, setData] = useState<PortalData<TRowData> | undefined>(() => store.getCellData?.(cellKey));
+	const lastKnownRef = useRef(data);
+	if (data !== undefined) lastKnownRef.current = data;
 
-	const data = useSyncExternalStore(subscribeRef.current, getSnapshotRef.current, getSnapshotRef.current);
+	useEffect(() => {
+		const current = store.getCellData?.(cellKey);
+		if (current !== lastKnownRef.current) setData(current);
+		if (!store.subscribeToCell) return;
+		return store.subscribeToCell(cellKey, () => setData(store.getCellData?.(cellKey)));
+	}, [cellKey, store]);
 
 	// Register imperative updater — called by OpenGrid instead of mountCell on data-only updates
 	useEffect(() => {
@@ -716,13 +747,14 @@ function ImperativePortalCellWrapperInner<TRowData = unknown>({ cellKey, store }
 		};
 	}, [store, cellKey]);
 
-	if (!data) return null;
+	const effectiveData = data ?? lastKnownRef.current;
+	if (!effectiveData) return null;
 
-	const iColData = data.col as InternalColumnDef;
+	const iColData = effectiveData.col as InternalColumnDef;
 	const CustomRenderer = iColData.cellRenderer as unknown as React.ForwardRefExoticComponent<
 		Record<string, unknown> & React.RefAttributes<unknown>
 	>;
-	const rowData = data.node?.data;
+	const rowData = effectiveData.node?.data;
 
 	if (!CustomRenderer || isDomCellRenderer(iColData.cellRenderer) || !rowData) return null;
 
@@ -730,17 +762,17 @@ function ImperativePortalCellWrapperInner<TRowData = unknown>({ cellKey, store }
 		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
 			<CustomRenderer
 				ref={imperativeRef as React.Ref<unknown>}
-				value={data.value}
-				computedValue={data.value}
+				value={effectiveData.value}
+				computedValue={effectiveData.value}
 				row={rowData as Record<string, unknown>}
-				rowId={data.node.id}
-				colField={data.col.field}
-				colId={data.col.field}
-				isScrolling={data.isScrolling ?? false}
-				phase={data.phase ?? 'initial'}
-				isFocused={data.isFocused ?? false}
-				isEditing={data.isEditing}
-				isSelected={data.isSelected ?? false}
+				rowId={effectiveData.node.id}
+				colField={effectiveData.col.field}
+				colId={effectiveData.col.field}
+				isScrolling={effectiveData.isScrolling ?? false}
+				phase={effectiveData.phase ?? 'initial'}
+				isFocused={effectiveData.isFocused ?? false}
+				isEditing={effectiveData.isEditing}
+				isSelected={effectiveData.isSelected ?? false}
 				api={api as unknown as Record<string, unknown>}
 			/>
 		</div>

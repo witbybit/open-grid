@@ -434,7 +434,7 @@ export const RendererStrategyProbe = ({ value, phase, isScrolling, isFocused, is
 			? 'border-emerald-500/40 bg-emerald-950/25 text-emerald-300'
 			: strategy === 'defer'
 				? 'border-indigo-500/40 bg-indigo-950/25 text-indigo-300'
-				: strategy === 'fallback'
+				: strategy === 'destroy'
 					? 'border-amber-500/40 bg-amber-950/25 text-amber-300'
 					: 'border-rose-500/40 bg-rose-950/25 text-rose-300';
 	const ring = isFocused || isSelected ? 'ring-1 ring-cyan-400/60' : '';

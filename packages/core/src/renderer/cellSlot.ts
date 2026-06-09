@@ -37,6 +37,9 @@ export class CellSlot<TRowData = unknown> {
 	public lastPortalKey: string | undefined = undefined;
 	// Phase 4: track tabindex state to avoid hasAttribute DOM read in hot unbind path
 	public hasTabIndex = false;
+	// Data version when this cell's portal content was last mounted.
+	// Used during scroll to detect whether a frozen portal has gone stale.
+	public lastMountedDataVersion = -1;
 
 	constructor(element: HTMLDivElement) {
 		this.element = element;
@@ -75,6 +78,7 @@ export class CellSlot<TRowData = unknown> {
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
 		this.hasTabIndex = false;
+		this.lastMountedDataVersion = -1;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;
@@ -222,6 +226,7 @@ export class CellSlot<TRowData = unknown> {
 		this.rowId = '';
 		this.lastRawValue = undefined;
 		this.lastPortalKey = undefined;
+		this.lastMountedDataVersion = -1;
 		delete this.element.dataset.cellKey;
 		delete this.element.dataset.contentMode;
 		// Phase 4: use JS-side flag to skip DOM read in hot path
@@ -241,6 +246,7 @@ export class CellSlot<TRowData = unknown> {
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
 		this.hasTabIndex = false;
+		this.lastMountedDataVersion = -1;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;

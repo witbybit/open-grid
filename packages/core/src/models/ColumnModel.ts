@@ -1,4 +1,4 @@
-import {
+﻿import {
 	isDomCellRenderer,
 	type ColumnDef,
 	type InternalColumnDef,
@@ -71,20 +71,18 @@ export class ColumnModel<TRowData = unknown> {
 				const hasValueGetter = !!col.valueGetter;
 				const hasFormatter = !!(col as any).valueFormatter;
 				const hasFormulaSupport = true;
-				const capabilities = col.cellRendererCapabilities;
-				const fallbackStrategy = col.cellRendererCapabilities?.scrollBehavior === 'fallback' ? 'cached' : 'blank';
 
 				let mode: ColumnRenderMode = 'primitive';
 				if (col.cellRenderer) {
-					const scrollBehavior = col.cellRendererCapabilities?.scrollBehavior;
-					if (scrollBehavior === 'live') {
+					const caps = col.cellRendererCapabilities;
+					if (caps?.imperativeUpdate) {
+						mode = 'custom-imperative';
+					} else if (isDomCellRenderer(col.cellRenderer)) {
+						mode = 'custom-dom';
+					} else if (caps?.scrollBehavior === 'live') {
 						mode = 'custom-live';
-					} else if (scrollBehavior === 'defer') {
-						mode = 'custom-defer';
-					} else if (scrollBehavior === 'fallback') {
-						mode = 'custom-fallback';
 					} else {
-						mode = 'custom-skeleton';
+						mode = 'custom';
 					}
 				} else if (hasValueGetter || hasFormatter) {
 					mode = 'primitive-formatted';
@@ -99,9 +97,6 @@ export class ColumnModel<TRowData = unknown> {
 					hasFormatter,
 					hasFormulaSupport,
 					canUseCachedDisplayValue: hasValueGetter || hasFormulaSupport || !!col.cellRenderer,
-					capabilities,
-					fallbackStrategy,
-					rendererType: col.cellRenderer,
 				};
 
 				this.columnPlans.set(col.field, plan);
@@ -133,19 +128,17 @@ export class ColumnModel<TRowData = unknown> {
 				cellRenderer: renderer.component as InternalColumnDef<TRowData>['cellRenderer'],
 				cellRendererCapabilities: {
 					scrollBehavior: 'live',
-					estimatedCost: 'cheap',
 					...renderer.capabilities,
 					imperativeUpdate: true,
 				},
 			};
 		}
+		// kind === 'react': default to defer (full portal, frozen during scroll)
 		return {
 			...column,
 			cellRenderer: renderer.component as InternalColumnDef<TRowData>['cellRenderer'],
 			cellRendererCapabilities: {
-				scrollBehavior: 'fallback',
-				deferFallback: 'snapshot',
-				estimatedCost: 'medium',
+				scrollBehavior: 'defer',
 				...renderer.capabilities,
 				imperativeUpdate: false,
 			},
