@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import type { GridApi } from '../types.js';
 import { useGridKeySelector } from '../hooks.js';
-import { getInternalApiFromApi } from '@open-grid/core/internal';
+import { getStoreFromApi } from '@open-grid/core/internal';
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
@@ -87,7 +87,7 @@ function extractData(
 
 	const columns = api.getState().columns || [];
 
-	const internalApi = getInternalApiFromApi(api);
+	const internalApi = getStoreFromApi(api);
 	const selectedRows: { id: string; label: string }[] = [];
 	for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
 		const vr = internalApi.getVisualRow(r);

@@ -1,5 +1,6 @@
 import { RowNode, compilePathGetter, type ColumnDef, type GridCellPointer } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { defaultGridScheduler } from '../renderer/gridScheduler.js';
 
 export class DataModel<TRowData = unknown> {
 	private engine!: GridEngine<TRowData>;
@@ -339,7 +340,7 @@ export class DataModel<TRowData = unknown> {
 	private scheduleBatchFlush(): void {
 		if (!this.engine.batchFlushScheduled) {
 			this.engine.batchFlushScheduled = true;
-			Promise.resolve().then(() => {
+			defaultGridScheduler.microtask(() => {
 				this.engine.flushCellUpdates();
 			});
 		}

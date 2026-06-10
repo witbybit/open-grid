@@ -1,4 +1,4 @@
-import { getEngineFromApi, getInternalApiFromApi } from './apiBridge.js';
+import { getStoreFromApi } from './createGrid.js';
 import { RenderEngine } from './renderer/renderEngine.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
 import type {
@@ -53,8 +53,9 @@ export interface GridHost {
 }
 
 export function mountGridHost<TRowData>(api: GridApi<TRowData>, container: HTMLElement, options: GridHostOptions<TRowData> = {}): GridHost {
-	const engine = getEngineFromApi(api);
-	const internalApi = getInternalApiFromApi(api);
+	const store = getStoreFromApi(api);
+	const engine = store.engine;
+	const internalApi = store;
 	const renderEngine = new RenderEngine(engine, internalApi);
 
 	renderEngine.onMountCellContent = options.cellContent?.mountCellContent;

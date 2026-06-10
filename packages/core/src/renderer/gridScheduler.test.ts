@@ -23,12 +23,15 @@ describe('DefaultGridScheduler', () => {
 		expect(cb).toHaveBeenCalledTimes(1);
 	});
 
-	it('raf() falls back to synchronous call when requestAnimationFrame is unavailable', () => {
+	it('raf() falls back to an async setTimeout when requestAnimationFrame is unavailable', () => {
 		const originalRaf = globalThis.requestAnimationFrame;
 		// @ts-expect-error intentionally removing raf
 		delete globalThis.requestAnimationFrame;
 		const cb = vi.fn();
 		scheduler.raf(cb);
+		// Must NOT fire synchronously — a synchronous fallback breaks render batching.
+		expect(cb).not.toHaveBeenCalled();
+		vi.advanceTimersByTime(16);
 		expect(cb).toHaveBeenCalledTimes(1);
 		globalThis.requestAnimationFrame = originalRaf;
 	});

@@ -20,6 +20,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { RowSlot } from './rowSlot.js';
 import { RowSlotPool } from './rowSlotPool.js';
 import { CellSlot, type CellContentMode } from './cellSlot.js';
+import { StableSlotAssigner } from './stableSlotAssigner.js';
 
 // Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
 const ROW_KIND_BASE: Record<string, string> = {
@@ -162,12 +163,11 @@ export class RowRenderer<TRowData = unknown> {
 
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 
-	// Pre-allocated scratch for stable-slot assignment — reused per recycleViewport call
-	// to avoid 4 per-frame allocations (result array, newWindowSet, assignedRows, freeSlots).
-	private _ssResult: number[] = [];
-	private _ssNewWindowSet = new Set<number>();
-	private _ssAssignedRows = new Set<number>();
-	private _ssFreeSlots: number[] = [];
+	// Stable slot assigner — single implementation shared with tests.
+	// Internal scratch buffers are reused per call: zero per-frame allocations.
+	private readonly _slotAssigner = new StableSlotAssigner();
+	// Pre-allocated scratch for extracting current visual indices from the slot pool.
+	private _currentSlotRowsScratch: number[] = [];
 
 	constructor(
 		engine: GridEngine<TRowData>,
@@ -336,8 +336,16 @@ export class RowRenderer<TRowData = unknown> {
 		// Only entering/exiting rows use recycled slots (isRowRebind = true).
 		const sortedRows = getRowIndices(nextWindow, this._rowIndicesScratch);
 		const totalSlots = sortedRows.length;
-		// Inline stable-slot assignment using pre-allocated scratch — avoids 4 per-frame allocations.
-		const allRows = this._computeStableSlotRowsInline(sortedRows);
+
+		// Extract current visual indices from the slot pool into pre-allocated scratch,
+		// then run stable-slot assignment through the single shared implementation.
+		const poolCount = this.rowSlotPool.count;
+		this._currentSlotRowsScratch.length = poolCount;
+		for (let i = 0; i < poolCount; i++) {
+			const slot = this.rowSlotPool.getSlot(i);
+			this._currentSlotRowsScratch[i] = slot ? slot.visualIndex : -1;
+		}
+		const allRows = this._slotAssigner.assign(this._currentSlotRowsScratch, sortedRows);
 
 		this.rowSlotPool.resetScrollStats();
 
@@ -1603,63 +1611,6 @@ export class RowRenderer<TRowData = unknown> {
 		}
 	}
 
-	// ── Stable slot assignment (inlined, scratch-reusing) ───────────────────────────────
-
-	/**
-	 * Assign new-window rows to existing slot indices without allocating.
-	 * Pre-allocated scratch (result array, sets, free-slot list) are cleared and reused.
-	 *
-	 * Pass 1: slots whose current row is still in the new window stay in place.
-	 * Pass 2: entering rows fill freed slots in window order.
-	 */
-	private _computeStableSlotRowsInline(newWindowRows: readonly number[]): number[] {
-		const n = newWindowRows.length;
-
-		// Resize result array in place — also trims the stale tail when the window
-		// shrinks (the caller iterates result.length, so leftover entries from a
-		// larger previous window would be visited otherwise).
-		const result = this._ssResult;
-		result.length = n;
-
-		// Populate the new-window set (cleared from last call).
-		const newWindowSet = this._ssNewWindowSet;
-		newWindowSet.clear();
-		for (let i = 0; i < n; i++) newWindowSet.add(newWindowRows[i]);
-
-		const assignedRows = this._ssAssignedRows;
-		assignedRows.clear();
-
-		const freeSlots = this._ssFreeSlots;
-		freeSlots.length = 0;
-
-		const slotCount = Math.min(this.rowSlotPool.count, n);
-		for (let i = 0; i < slotCount; i++) {
-			const slot = this.rowSlotPool.getSlot(i);
-			const vi = slot ? slot.visualIndex : -1;
-			if (vi >= 0 && newWindowSet.has(vi)) {
-				result[i] = vi;
-				assignedRows.add(vi);
-			} else {
-				result[i] = -1;
-				freeSlots.push(i);
-			}
-		}
-		for (let i = slotCount; i < n; i++) {
-			result[i] = -1;
-			freeSlots.push(i);
-		}
-
-		let freeIdx = 0;
-		for (let i = 0; i < n; i++) {
-			const row = newWindowRows[i];
-			if (!assignedRows.has(row)) {
-				result[freeSlots[freeIdx++]] = row;
-			}
-		}
-
-		return result;
-	}
-
 	// ── Legacy slot release (kept for API compat; not called during steady scroll) ───
 
 	public releaseRowSlot(rowIndex: number, slot: RowSlot<TRowData>, _isScrollFrameActive: boolean): void {
@@ -1679,7 +1630,10 @@ export class RowRenderer<TRowData = unknown> {
 		forceDeferred?: boolean,
 		reason: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated' = 'scrolled-out'
 	): void {
-		const cellKey = cell.dataset.cellKey;
+		// Use CellSlot.binding as the authoritative identity source; fall back to dataset
+		// for elements not yet fully migrated (e.g. full-width row slots).
+		const cellSlot = CellSlot.fromElement(cell);
+		const cellKey = cellSlot.binding?.cellKey ?? cell.dataset.cellKey;
 		if (!cellKey) return;
 		const container = this.getCellPortalHost(cell) ?? cell;
 		const isDeferred = forceDeferred ?? (this.isScrollFrameActive || this.isScrolling);

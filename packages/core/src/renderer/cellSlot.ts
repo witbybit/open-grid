@@ -1,5 +1,20 @@
 export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending';
 
+/**
+ * Authoritative identity record for a bound cell slot.
+ * Logic must read identity from CellSlot.binding, not from element.dataset.
+ * Dataset attributes mirror binding for debug/DevTools inspection only.
+ */
+export interface CellBinding {
+	readonly rowSlotId: string;
+	readonly rowId: string;
+	readonly rowIndex: number;
+	readonly colId: string;
+	readonly colIndex: number;
+	readonly cellKey: string;
+	readonly contentMode: CellContentMode;
+}
+
 // Intern common pixel strings — avoids a string allocation on every DOM write.
 // Covers all practical column widths and left offsets (0–2000 px).
 const _PX = Array.from({ length: 2001 }, (_, i) => `${i}px`);
@@ -24,7 +39,14 @@ export class CellSlot<TRowData = unknown> {
 	 */
 	public portalHostElement: HTMLDivElement | null = null;
 
-	// Position
+	/**
+	 * Authoritative identity for this bound slot.
+	 * Null when the slot is unbound. Logic that needs cell identity (portal key, row/col
+	 * association) must read from binding, not from element.dataset.
+	 */
+	public binding: CellBinding | null = null;
+
+	// Position — also reflected in binding when bound
 	public colIndex = -1;
 	public colField = '';
 	public rowIndex = -1;
@@ -80,6 +102,7 @@ export class CellSlot<TRowData = unknown> {
 	}
 
 	public reset(): void {
+		this.binding = null;
 		this.lastRawValue = undefined;
 		this.lastFormattedValue = undefined;
 		this.lastLeft = -1;
@@ -230,7 +253,25 @@ export class CellSlot<TRowData = unknown> {
 		return domUpdated;
 	}
 
+	/**
+	 * Set the authoritative binding for this cell slot.
+	 * Called by RowRenderer when it binds a cell to a new physical row slot.
+	 * Dataset attributes remain as debug mirrors; logic must read from binding.
+	 */
+	public setBinding(
+		rowSlotId: string,
+		rowId: string,
+		rowIndex: number,
+		colId: string,
+		colIndex: number,
+		cellKey: string,
+		contentMode: CellContentMode
+	): void {
+		this.binding = { rowSlotId, rowId, rowIndex, colId, colIndex, cellKey, contentMode };
+	}
+
 	public unbindHot(): void {
+		this.binding = null;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;
@@ -248,6 +289,7 @@ export class CellSlot<TRowData = unknown> {
 	}
 
 	public unbindCold(): void {
+		this.binding = null;
 		this.lastRawValue = undefined;
 		this.lastFormattedValue = undefined;
 		this.lastLeft = -1;

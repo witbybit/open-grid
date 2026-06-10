@@ -39,17 +39,14 @@ export { HeaderRenderer } from './renderer/headerRenderer.js';
 export { OverlayRenderer } from './renderer/overlayRenderer.js';
 export { RowRenderer } from './renderer/rowRenderer.js';
 export { ViewportRenderer } from './renderer/viewportRenderer.js';
-export { computeStableSlotRows } from './renderer/stableSlotAssigner.js';
+export { StableSlotAssigner } from './renderer/stableSlotAssigner.js';
 export { computeScrollTarget } from './renderer/scrollIntoView.js';
 export type { ScrollTarget, ScrollIntoViewParams } from './renderer/scrollIntoView.js';
 
 // Grid host — low-level DOM mounting used by framework adapters, not application code.
 export { mountGridHost, type GridCellContentAdapter, type GridHost, type GridHostOptions } from './gridHost.js';
 
-// ApiBridge — internal reverse-lookup utilities for recovering engine/store from a public GridApi.
-export * from './apiBridge.js';
-
-// WeakMap-based store reverse-lookup. Prefer this over ApiBridge for new code.
+// WeakMap-based store reverse-lookup — the canonical way to access GridStore from a public GridApi.
 export { getStoreFromApi } from './createGrid.js';
 
 export * from './contextMenu.js';

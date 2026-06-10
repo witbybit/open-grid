@@ -36,8 +36,8 @@ export class DefaultGridScheduler implements GridScheduler {
 		if (typeof requestAnimationFrame !== 'undefined') {
 			return requestAnimationFrame(callback);
 		}
-		callback();
-		return 0;
+		// Async fallback: never call synchronously (synchronous RAF breaks render batching).
+		return setTimeout(callback, 16) as unknown as number;
 	}
 
 	cancelRaf(id: number): void {

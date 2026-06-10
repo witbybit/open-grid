@@ -64,8 +64,8 @@ describe('Public/internal boundary', () => {
 			expect(typeof (internalApi as Record<string, unknown>)['getStoreFromApi']).toBe('function');
 		});
 
-		it('exports getInternalApiFromApi', () => {
-			expect(typeof (internalApi as Record<string, unknown>)['getInternalApiFromApi']).toBe('function');
+		it('does not export getInternalApiFromApi (removed with ApiBridge)', () => {
+			expect((internalApi as Record<string, unknown>)['getInternalApiFromApi']).toBeUndefined();
 		});
 
 		it('exports renderer classes', () => {
@@ -131,6 +131,23 @@ describe('Public/internal boundary', () => {
 		it('getStoreFromApi throws for a frozen plain object', () => {
 			const fake = Object.freeze({ getState: () => ({}) });
 			expect(() => getStoreFromApi(fake as never)).toThrow('Invalid GridApi');
+		});
+
+		it('public API has no __getEngine escape hatch', () => {
+			const api = createClientGrid({ columns: [{ field: 'id' }], rows: [] }) as Record<string, unknown>;
+			expect(api['__getEngine']).toBeUndefined();
+		});
+
+		it('public API has no __getInternalApi escape hatch', () => {
+			const api = createClientGrid({ columns: [{ field: 'id' }], rows: [] }) as Record<string, unknown>;
+			expect(api['__getInternalApi']).toBeUndefined();
+		});
+
+		it('Object.getOwnPropertyNames(api) contains no hidden bridge properties', () => {
+			const api = createClientGrid({ columns: [{ field: 'id' }], rows: [] });
+			const names = Object.getOwnPropertyNames(api);
+			expect(names).not.toContain('__getEngine');
+			expect(names).not.toContain('__getInternalApi');
 		});
 	});
 });

@@ -1,4 +1,3 @@
-import { ApiBridge } from './apiBridge.js';
 import { ClientRowModelController, type ClientRowModelOptions, type FilterModel, type SortModel } from './rowModel.js';
 import { ServerRowModelController, type IGridDatasource, type ServerRowModelOptions } from './serverRowModel.js';
 import {
@@ -94,7 +93,7 @@ export function createApiFacade<TRowData>(
 	destroy: () => void,
 	persistenceAdapter?: GridPersistenceAdapter,
 	persistenceController?: PersistenceController
-): GridApi<TRowData> & ApiBridge<TRowData> {
+): GridApi<TRowData> {
 	const api = {
 		getState: () => store.getState(),
 		getRowId: (row: TRowData) => store.getRowId(row),
@@ -178,12 +177,7 @@ export function createApiFacade<TRowData>(
 		destroy,
 	};
 
-	Object.defineProperties(api, {
-		__getEngine: { value: () => store.engine },
-		__getInternalApi: { value: () => store },
-	});
-
-	const frozen = Object.freeze(api) as GridApi<TRowData> & ApiBridge<TRowData>;
+	const frozen = Object.freeze(api) as GridApi<TRowData>;
 	apiStoreMap.set(frozen as unknown as GridApi<unknown>, store as unknown as GridStore<unknown>);
 	return frozen;
 }

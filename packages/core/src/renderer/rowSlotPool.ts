@@ -10,10 +10,14 @@ export interface SlotCountChange {
 }
 
 /**
- * Phase 2 (slot-based) — Fixed viewport slot pool.
+ * Fixed viewport slot pool — stable physical DOM owners.
  *
  * Key contract:
- *  - slots[i] always represents viewport position i.
+ *  - Row slots are stable physical DOM owners. A slot may keep ownership of the same
+ *    visual row across many scroll frames while that row remains visible.
+ *  - Slot index is NOT the same as viewport position. Visual order is determined by
+ *    absolute positioning/transform applied to each slot element; DOM order must not
+ *    be treated as visual row order.
  *  - slot DOM elements NEVER leave the rows container during steady-state scroll.
  *  - When the rendered row count changes, ensureSlotCount() grows or shrinks the array.
  *  - Growth: createElement, append once, push to slots[].
@@ -21,12 +25,11 @@ export interface SlotCountChange {
  *  - During normal scroll (same rendered-row count): slot count is unchanged, zero DOM
  *    append/remove operations occur.
  *
- * Callers bind slots by position index (not by visual row index):
+ * Callers look up slots by physical pool index, not by visual row index:
  *   slot = rowSlotPool.getSlot(slotIndex)          // always O(1)
- *   slot.bindVisualRow(renderWindow.rowStart + slotIndex)
  */
 export class RowSlotPool<TRowData = unknown> {
-	/** All active slots in creation/position order. slots[i] → viewport position i. */
+	/** All active slots in physical pool order. Slot index ≠ viewport position. */
 	private readonly _slots: RowSlot<TRowData>[] = [];
 	private readonly container: HTMLElement;
 

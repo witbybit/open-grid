@@ -1,4 +1,4 @@
-import { getInternalApiFromApi } from './apiBridge.js';
+import { getStoreFromApi } from './createGrid.js';
 import { GridContextMenuPlugin, type GridContextMenuOptions } from './contextMenu.js';
 import { GridNavigationController, type GridNavigationOptions } from './navigation.js';
 import type { GridApi } from './store.js';
@@ -20,7 +20,7 @@ export interface GridContextMenuHandle<TRowData = unknown> {
 }
 
 export function registerGridNavigation<TRowData>(api: GridApi<TRowData>, options: GridNavigationOptions = {}): GridNavigationHandle {
-	const internalApi = getInternalApiFromApi(api);
+	const internalApi = getStoreFromApi(api);
 	const controller = new GridNavigationController<TRowData>(options);
 	internalApi.registerPlugin(controller);
 
@@ -42,7 +42,7 @@ export function registerGridContextMenu<TRowData>(
 	api: GridApi<TRowData>,
 	options: GridContextMenuOptions<TRowData> = {}
 ): GridContextMenuHandle<TRowData> {
-	const internalApi = getInternalApiFromApi(api);
+	const internalApi = getStoreFromApi(api);
 	const plugin = new GridContextMenuPlugin<TRowData>(options);
 	internalApi.registerPlugin(plugin);
 

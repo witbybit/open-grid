@@ -1,4 +1,4 @@
-import { RowNode } from '../store.js';
+import { RowNode, validateRowIds } from '../store.js';
 
 export type RowUpdate<T> = (rows: T[]) => T[];
 
@@ -27,9 +27,23 @@ export class RowDataStore<T> {
 	}
 
 	public setRows(rows: T[]): void {
-		const nextNodeMap = new Map<string, RowNode<T>>();
-		this.sourceOrder = rows.map((row) => {
+		// Validate before mutating any state so a bad input is a no-op.
+		const ids = rows.map((row, index) => {
+			if (row == null) {
+				throw new Error(`Open Grid: row at index ${index} is null or undefined.`);
+			}
 			const id = this.getRowId(row);
+			if (typeof id !== 'string' || id.length === 0) {
+				throw new Error(`Open Grid: getRowId() returned an invalid id for row at index ${index}.`);
+			}
+			return id;
+		});
+		validateRowIds(ids, 'setRows');
+
+		const nextNodeMap = new Map<string, RowNode<T>>();
+		for (let i = 0; i < rows.length; i++) {
+			const row = rows[i];
+			const id = ids[i];
 			let node = this.rowsById.get(id);
 			if (node) {
 				node.setData(row);
@@ -37,8 +51,8 @@ export class RowDataStore<T> {
 				node = new RowNode<T>(id, row);
 			}
 			nextNodeMap.set(id, node);
-			return id;
-		});
+		}
+		this.sourceOrder = ids;
 		this.rowsById = nextNodeMap;
 	}
 
