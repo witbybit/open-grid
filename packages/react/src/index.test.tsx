@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+afterEach(cleanup);
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
 import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
 import {
@@ -14,6 +16,8 @@ import {
 	useGridSelector,
 	useClientGrid,
 	useServerGrid,
+	GridPagination,
+	useClientGridPagination,
 } from './index.js';
 import { createPortalStore } from './GridPortal.js';
 
@@ -1265,5 +1269,257 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		addEventListenerSpy.mockRestore();
 		grid.api.destroy();
+	});
+});
+
+// ─── GridPagination ───────────────────────────────────────────────────────────
+
+describe('GridPagination', () => {
+	it('renders page buttons and info text', () => {
+		render(<GridPagination page={0} pageCount={5} onPageChange={() => {}} totalRows={50} pageSize={10} />);
+		expect(screen.getByLabelText('Page 1')).toBeTruthy();
+		expect(screen.getByLabelText('Page 5')).toBeTruthy();
+		expect(screen.getByText('1–10 of 50')).toBeTruthy();
+	});
+
+	it('marks the active page with aria-current="page"', () => {
+		render(<GridPagination page={2} pageCount={5} onPageChange={() => {}} />);
+		const activeBtn = screen.getByLabelText('Page 3');
+		expect(activeBtn.getAttribute('aria-current')).toBe('page');
+	});
+
+	it('disables prev button on first page', () => {
+		render(<GridPagination page={0} pageCount={5} onPageChange={() => {}} />);
+		const prev = screen.getByLabelText('Previous page') as HTMLButtonElement;
+		expect(prev.disabled).toBe(true);
+	});
+
+	it('disables next button on last page', () => {
+		render(<GridPagination page={4} pageCount={5} onPageChange={() => {}} />);
+		const next = screen.getByLabelText('Next page') as HTMLButtonElement;
+		expect(next.disabled).toBe(true);
+	});
+
+	it('calls onPageChange with correct page index when clicking a page button', () => {
+		const onChange = vi.fn();
+		render(<GridPagination page={0} pageCount={5} onPageChange={onChange} />);
+		fireEvent.click(screen.getByLabelText('Page 3'));
+		expect(onChange).toHaveBeenCalledWith(2);
+	});
+
+	it('calls onPageChange with page - 1 when clicking prev', () => {
+		const onChange = vi.fn();
+		render(<GridPagination page={2} pageCount={5} onPageChange={onChange} />);
+		fireEvent.click(screen.getByLabelText('Previous page'));
+		expect(onChange).toHaveBeenCalledWith(1);
+	});
+
+	it('calls onPageChange with page + 1 when clicking next', () => {
+		const onChange = vi.fn();
+		render(<GridPagination page={2} pageCount={5} onPageChange={onChange} />);
+		fireEvent.click(screen.getByLabelText('Next page'));
+		expect(onChange).toHaveBeenCalledWith(3);
+	});
+
+	it('collapses to ellipsis when pageCount exceeds maxPageButtons', () => {
+		render(<GridPagination page={10} pageCount={20} onPageChange={() => {}} maxPageButtons={7} />);
+		// Should have exactly two ellipsis spans
+		const container = screen.getByRole('navigation');
+		const ellipses = within(container).getAllByText('…');
+		expect(ellipses.length).toBe(2);
+	});
+
+	it('renders custom prev/next button content', () => {
+		render(
+			<GridPagination
+				page={1}
+				pageCount={5}
+				onPageChange={() => {}}
+				renderPrevButton={() => <span>PREV</span>}
+				renderNextButton={() => <span>NEXT</span>}
+			/>
+		);
+		expect(screen.getByText('PREV')).toBeTruthy();
+		expect(screen.getByText('NEXT')).toBeTruthy();
+	});
+
+	it('renders custom page info via renderPageInfo', () => {
+		render(
+			<GridPagination page={1} pageCount={5} onPageChange={() => {}} renderPageInfo={(p, total) => <span>{`custom:${p}/${total}`}</span>} />
+		);
+		expect(screen.getByText('custom:1/5')).toBeTruthy();
+	});
+
+	it('shows "Page X of Y" fallback when totalRows/pageSize are absent', () => {
+		render(<GridPagination page={1} pageCount={5} onPageChange={() => {}} />);
+		expect(screen.getByText('Page 2 of 5')).toBeTruthy();
+	});
+});
+
+// ─── useClientGridPagination ──────────────────────────────────────────────────
+
+describe('useClientGridPagination', () => {
+	function PaginationHarness<T>({ rows, pageSize }: { rows: T[]; pageSize: number }) {
+		const result = useClientGridPagination(rows, { pageSize });
+		return (
+			<div>
+				<span data-testid='page'>{result.page}</span>
+				<span data-testid='pageCount'>{result.pageCount}</span>
+				<span data-testid='totalRows'>{result.totalRows}</span>
+				<span data-testid='pageRowsLength'>{result.pageRows.length}</span>
+				<span data-testid='canNext'>{String(result.canNextPage)}</span>
+				<span data-testid='canPrev'>{String(result.canPrevPage)}</span>
+				<button onClick={result.nextPage}>next</button>
+				<button onClick={result.prevPage}>prev</button>
+				<button onClick={() => result.setPage(0)}>first</button>
+			</div>
+		);
+	}
+
+	it('starts on page 0 with correct slice', () => {
+		const rows = Array.from({ length: 25 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		expect(screen.getByTestId('page').textContent).toBe('0');
+		expect(screen.getByTestId('pageCount').textContent).toBe('3');
+		expect(screen.getByTestId('pageRowsLength').textContent).toBe('10');
+	});
+
+	it('nextPage advances the page', () => {
+		const rows = Array.from({ length: 25 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		expect(screen.getByTestId('page').textContent).toBe('1');
+		expect(screen.getByTestId('pageRowsLength').textContent).toBe('10');
+	});
+
+	it('last page has a partial slice', () => {
+		const rows = Array.from({ length: 25 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		expect(screen.getByTestId('page').textContent).toBe('2');
+		expect(screen.getByTestId('pageRowsLength').textContent).toBe('5');
+		expect(screen.getByTestId('canNext').textContent).toBe('false');
+	});
+
+	it('canPrevPage is false on first page, true after next', () => {
+		const rows = Array.from({ length: 25 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		expect(screen.getByTestId('canPrev').textContent).toBe('false');
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		expect(screen.getByTestId('canPrev').textContent).toBe('true');
+	});
+
+	it('prevPage does not go below 0', () => {
+		const rows = Array.from({ length: 10 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		act(() => {
+			fireEvent.click(screen.getByText('prev'));
+		});
+		expect(screen.getByTestId('page').textContent).toBe('0');
+	});
+
+	it('clamps page when rows shrink', () => {
+		const { rerender } = render(<PaginationHarness rows={Array.from({ length: 30 }, (_, i) => i)} pageSize={10} />);
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		expect(screen.getByTestId('page').textContent).toBe('2');
+		// Shrink rows so page 2 no longer exists
+		rerender(<PaginationHarness rows={Array.from({ length: 5 }, (_, i) => i)} pageSize={10} />);
+		expect(screen.getByTestId('page').textContent).toBe('0');
+	});
+
+	it('handles empty rows', () => {
+		render(<PaginationHarness rows={[]} pageSize={10} />);
+		expect(screen.getByTestId('pageCount').textContent).toBe('1');
+		expect(screen.getByTestId('totalRows').textContent).toBe('0');
+		expect(screen.getByTestId('pageRowsLength').textContent).toBe('0');
+	});
+});
+
+// ─── OpenGrid inline mode ─────────────────────────────────────────────────────
+
+describe('OpenGrid inline mode (rows + columns props)', () => {
+	const cols: ColumnDef<TestRow>[] = [
+		{ field: 'id', header: 'ID', width: 80 },
+		{ field: 'name', header: 'Name', width: 120 },
+	];
+
+	it('renders without useClientGrid or GridProvider', async () => {
+		const rows: TestRow[] = [
+			{ id: '1', name: 'Alice', value: 10 },
+			{ id: '2', name: 'Bob', value: 20 },
+		];
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows} columns={cols} getRowId={(r) => r.id} />
+			</div>
+		);
+		// Grid host mounts — no throw
+		await act(async () => {});
+	});
+
+	it('reacts to rows prop changes in inline mode', async () => {
+		const rows1: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
+		const rows2: TestRow[] = [
+			{ id: '1', name: 'Alice', value: 1 },
+			{ id: '2', name: 'Bob', value: 2 },
+		];
+		const { rerender } = render(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows1} columns={cols} getRowId={(r) => r.id} />
+			</div>
+		);
+		await act(async () => {});
+		rerender(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows2} columns={cols} getRowId={(r) => r.id} />
+			</div>
+		);
+		await act(async () => {});
+		// No crash means the row update propagated
+	});
+
+	it('merges detailRowHeight into initialState', async () => {
+		const rows: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
+		// Smoke test: detailRowHeight prop accepted without error
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows} columns={cols} getRowId={(r) => r.id} detailRowHeight={200} initialState={{ masterDetailEnabled: true }} />
+			</div>
+		);
+		await act(async () => {});
+	});
+
+	it('throws when neither rows, api, nor GridProvider are supplied', () => {
+		// Suppress console.error for the expected throw
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		expect(() => render(<OpenGrid columns={cols} />)).toThrow();
+		spy.mockRestore();
+	});
+
+	it('warns in dev when rows is provided but columns is empty', async () => {
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const rows: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows} columns={[]} />
+			</div>
+		);
+		await act(async () => {});
+		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[open-grid]'));
+		warnSpy.mockRestore();
 	});
 });

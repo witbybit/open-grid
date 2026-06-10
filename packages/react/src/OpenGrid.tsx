@@ -13,6 +13,9 @@ import {
 import { InternalColumnDef, GridHost, mountGridHost, getInternalApiFromApi } from '@open-grid/core/internal';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { useClientGrid } from './useGrid.js';
+
+declare const process: { env: { NODE_ENV: string } } | undefined;
+const DEV = typeof process === 'undefined' || process.env.NODE_ENV !== 'production';
 import { PortalManager, createPortalStore } from './GridPortal.js';
 import { useGridNavigationController } from './hooks.js';
 import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
@@ -117,6 +120,11 @@ function OpenGridManagedClient<TRowData = unknown>({
 	detailRowHeight,
 	...rest
 }: OpenGridProps<TRowData> & { rows: TRowData[] }) {
+	if (DEV && (!columns || columns.length === 0)) {
+		console.warn(
+			'[open-grid] <OpenGrid> received `rows` but no `columns`. ' + 'Pass a `columns` prop alongside `rows`, or the grid will render empty.'
+		);
+	}
 	const mergedInitialState = detailRowHeight != null ? { detailRowHeight, ...initialState } : initialState;
 	const api = useClientGrid<TRowData>({
 		rows: rows!,

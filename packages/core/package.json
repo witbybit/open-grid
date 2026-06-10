@@ -25,6 +25,7 @@
 	"sideEffects": false,
 	"scripts": {
 		"build": "tsc",
+		"prepublishOnly": "npm run build",
 		"watch": "tsc --watch",
 		"test": "vitest run"
 	},
