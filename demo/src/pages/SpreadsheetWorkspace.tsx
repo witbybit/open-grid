@@ -106,7 +106,7 @@ function SpreadsheetWorkspaceInner({
 				}
 			}
 		};
-		const unsub = api.addEventListener('cellValueChanged' as any, handleCellChanged);
+		const unsub = api.addEventListener('cellValueChanged', handleCellChanged);
 		return () => unsub();
 	}, [api, focusedCell]);
 

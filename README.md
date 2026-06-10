@@ -404,7 +404,7 @@ interface CustomFilterProps {
 
 export const StatusHeaderFilter = ({ colField, api, close }: CustomFilterProps) => {
 	const state = api.getState();
-	const activeFilter = state.filterModel?.[colField] as any;
+	const activeFilter = state.filterModel?.[colField];
 	const [selectedValue, setSelectedValue] = useState(activeFilter?.filter || '');
 
 	const handleApply = () => {

@@ -126,8 +126,8 @@ function BulkActions({
 	bulkTag: string;
 	setBulkTag: (v: string) => void;
 }) {
-	const api = useGridApi<OrderRow>() as any;
-	const selectedCount = useGridKeySelector('selectedRowIds', (s: any) => (s.selectedRowIds as string[]).length);
+	const api = useGridApi<OrderRow>();
+	const selectedCount = useGridKeySelector('selectedRowIds', (s) => (s.selectedRowIds as string[]).length);
 	const hasSelection = selectedCount > 0;
 
 	return (
@@ -197,7 +197,7 @@ export default function RowMultiSelectDemo() {
 		columns: COLUMNS,
 		getRowId: (r) => r.id,
 		rowSelection: 'multiple',
-	} as any) as any;
+	});
 
 	// Subscribe to rowSelectionChanged for the event log
 	useEffect(() => {

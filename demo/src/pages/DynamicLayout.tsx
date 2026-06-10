@@ -38,7 +38,7 @@ function DynamicLayoutInner({
 				scrollLeft: scrollLeft ?? 0,
 			});
 		};
-		const unsub = api.addEventListener('gridScrolled' as any, handleScroll);
+		const unsub = api.addEventListener('gridScrolled', handleScroll);
 		return () => unsub();
 	}, [api]);
 
