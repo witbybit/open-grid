@@ -91,7 +91,6 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		if (!coords) return;
 
 		const { rowIdx: row, colIdx: col } = coords;
-		const maxRow = this.store.getVisualRowCount() - 1;
 		const maxCol = state.columns.length - 1;
 
 		const cellState = this.store.getCellState(active.rowId, active.colField);
