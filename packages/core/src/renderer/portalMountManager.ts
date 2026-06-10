@@ -218,6 +218,7 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	public releaseCell(unmount: GridCellContentUnmount): void {
+		if (!this.mountedCells.has(unmount.cellKey)) return;
 		const existingContainer = this.mountedCells.get(unmount.cellKey);
 		if (unmount.container && existingContainer && existingContainer !== unmount.container) return;
 		this.mountedCells.delete(unmount.cellKey);

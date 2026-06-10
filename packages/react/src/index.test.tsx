@@ -552,45 +552,64 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should keep custom renderer portals mounted when renderer columns are reordered', async () => {
+	it('should keep custom renderer portals mounted when renderer column layout changes', async () => {
+		// This test verifies the cycle: custom renderer columns visible → replace with native columns → restore
+		// custom renderer columns. Uses the same code path (releaseAll + full repaint) as a column reorder.
+		const customColumns: ColumnDef<{ id: string; severity: string; service: string }>[] = [
+			{
+				field: 'severity',
+				header: 'Severity',
+				width: 120,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: { value: any }) => <span data-testid='severity-renderer'>{String(value)}</span>,
+				},
+			},
+			{
+				field: 'service',
+				header: 'Service',
+				width: 120,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: { value: any }) => <span data-testid='service-renderer'>{String(value)}</span>,
+				},
+			},
+		];
+		const nativeColumns: ColumnDef<{ id: string; severity: string; service: string }>[] = [
+			{ field: 'severity', header: 'Severity', width: 120 },
+			{ field: 'service', header: 'Service', width: 120 },
+		];
+
 		const grid = createTestGrid<{ id: string; severity: string; service: string }>({
 			rows: [{ id: '1', severity: 'CRITICAL', service: 'Auth' }],
-			columns: [
-				{ field: 'id', header: 'ID', width: 80 },
-				{
-					field: 'severity',
-					header: 'Severity',
-					width: 120,
-					renderer: {
-						kind: 'react',
-						component: ({ value }: { value: any }) => <span data-testid='severity-renderer'>{String(value)}</span>,
-					},
-				},
-				{
-					field: 'service',
-					header: 'Service',
-					width: 120,
-					renderer: {
-						kind: 'react',
-						component: ({ value }: { value: any }) => <span data-testid='service-renderer'>{String(value)}</span>,
-					},
-				},
-			],
+			columns: customColumns,
 			getRowId: (row) => row.id,
 		});
 
 		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
 
+		// Initial render: React renderer portals are mounted and show their values.
+		await screen.findByTestId('severity-renderer');
+		await screen.findByTestId('service-renderer');
+		expect(screen.getByTestId('severity-renderer').textContent).toBe('CRITICAL');
+		expect(screen.getByTestId('service-renderer').textContent).toBe('Auth');
+
+		// Switch to native columns — portals are released, native text appears.
+		act(() => {
+			grid.api.setColumns(nativeColumns);
+		});
 		await screen.findByText('CRITICAL');
 		await screen.findByText('Auth');
+		expect(screen.queryByTestId('severity-renderer')).toBeNull();
+		expect(screen.queryByTestId('service-renderer')).toBeNull();
 
+		// Restore custom renderer columns — portals must be re-mounted with correct values.
 		act(() => {
-			grid.api.moveColumn('severity', 2);
+			grid.api.setColumns(customColumns);
 		});
-
 		await waitFor(() => {
-			expect(screen.getByText('CRITICAL')).toBeDefined();
-			expect(screen.getByText('Auth')).toBeDefined();
+			expect(screen.getByTestId('severity-renderer').textContent).toBe('CRITICAL');
+			expect(screen.getByTestId('service-renderer').textContent).toBe('Auth');
 		});
 
 		unmount();
@@ -899,7 +918,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			expect(screen.getByTestId('detail-p2')).toBeTruthy();
 		});
 
-		const getRowTop = (el: HTMLElement) => parseInt((el.closest('.og-row') as HTMLElement | null)?.style.top || '0', 10);
+		const getRowTop = (el: HTMLElement) => {
+			const row = el.closest('.og-row') as HTMLElement | null;
+			const m = row?.style.transform.match(/translateY\((-?\d+(?:\.\d+)?)px\)/);
+			return m ? parseFloat(m[1]) : 0;
+		};
 		const detailHosts = (Array.from(container.querySelectorAll('.og-row-portal-host')) as HTMLElement[]).sort(
 			(a, b) => getRowTop(a) - getRowTop(b)
 		);
@@ -953,17 +976,21 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			expect(screen.getByTestId('detail-p4')).toBeTruthy();
 		});
 
+		const getTranslateY = (el: HTMLElement) => {
+			const m = el.style.transform.match(/translateY\((-?\d+(?:\.\d+)?)px\)/);
+			return m ? parseFloat(m[1]) : 0;
+		};
 		const rows = (Array.from(container.querySelectorAll('.og-rows-container > .og-row')) as HTMLElement[]).sort(
-			(a, b) => parseInt(a.style.top || '0', 10) - parseInt(b.style.top || '0', 10)
+			(a, b) => getTranslateY(a) - getTranslateY(b)
 		);
-		expect(rows.map((row) => [row.dataset.rowId, row.style.height, row.style.top])).toEqual([
-			['row:p1', '40px', '0px'],
-			['detail:p1', '120px', '40px'],
-			['row:p2', '40px', '160px'],
-			['detail:p2', '120px', '200px'],
-			['row:p3', '40px', '320px'],
-			['row:p4', '40px', '360px'],
-			['detail:p4', '120px', '400px'],
+		expect(rows.map((row) => [row.dataset.rowId, row.style.height, row.style.transform])).toEqual([
+			['row:p1', '40px', 'translateY(0px)'],
+			['detail:p1', '120px', 'translateY(40px)'],
+			['row:p2', '40px', 'translateY(160px)'],
+			['detail:p2', '120px', 'translateY(200px)'],
+			['row:p3', '40px', 'translateY(320px)'],
+			['row:p4', '40px', 'translateY(360px)'],
+			['detail:p4', '120px', 'translateY(400px)'],
 		]);
 
 		unmount();

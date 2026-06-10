@@ -411,8 +411,21 @@ export class RowRenderer<TRowData = unknown> {
 
 			if (isScrollFrameActive) this.currentScrollRowsVisited++;
 
+			// Resolve the visual row early — needed for identity-based rebind check.
+			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
+			if (!visualRow && loading) {
+				visualRow = { kind: 'loading', id: `loading:${r}`, rowIndex: r };
+			}
+			if (!visualRow) {
+				slot.unbindHot();
+				continue;
+			}
+
 			// Detect slot rebind — slot is transitioning to a different visual row.
-			const isRowRebind = slot.visualIndex >= 0 && slot.visualIndex !== r;
+			// Check both position index AND row identity: a slot that stays at the same
+			// visual index but now holds a different row (e.g. a detail row collapses and
+			// the row below slides up to fill its position) must still release its portal.
+			const isRowRebind = slot.visualIndex >= 0 && (slot.visualIndex !== r || slot.lastVisualRowId !== visualRow.id);
 
 			// ── Staying-row cheap path ───────────────────────────────────────────────
 			// During a scroll frame, a slot that keeps its visual row and whose column
@@ -460,15 +473,6 @@ export class RowRenderer<TRowData = unknown> {
 				// are updated in-place via rebindInstance; new slots mount immediately with full content.
 				this.releaseRowPortal(slot);
 				if (isScrollFrameActive) this.currentScrollRowsRecycled++;
-			}
-
-			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
-			if (!visualRow && loading) {
-				visualRow = { kind: 'loading', id: `loading:${r}`, rowIndex: r };
-			}
-			if (!visualRow) {
-				slot.unbindHot();
-				continue;
 			}
 
 			// ── Position calculation ──────────────────────────────────────────────────
