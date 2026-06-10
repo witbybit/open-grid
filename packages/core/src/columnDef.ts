@@ -181,6 +181,8 @@ export interface ColumnDef<TRowData = unknown> {
 	onCopy?: (params: CellCopyParams<TRowData>) => string;
 	/** Transform pasted text before setting the cell value. Return the value to write. */
 	onPaste?: (params: CellPasteParams<TRowData>) => unknown;
+	/** When true, renders a checkbox in this column for row multi-select */
+	checkboxSelection?: boolean;
 }
 
 /**

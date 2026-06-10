@@ -267,6 +267,9 @@ export interface GridState<TRowData = unknown> {
 
 	selection: GridSelectionState;
 
+	// Row-level multi-select (independent of cell range selection)
+	selectedRowIds: string[];
+
 	rowHeights: Record<string, number>; // rowId -> height in px
 	columnWidths: Record<string, number>; // colField -> width in px
 	defaultRowHeight: number;
@@ -365,6 +368,10 @@ export interface GridRowsAccessor<TRowData = unknown> {
 		getIds(): string[];
 		getData(): TRowData[];
 	};
+	/** Get data rows that have been row-selected (checkbox/Ctrl+Click) */
+	getChecked(): TRowData[];
+	/** Get IDs of row-selected rows */
+	getCheckedIds(): string[];
 }
 
 export interface RowDataTransaction<TData = unknown> {
@@ -462,6 +469,13 @@ export interface GridApi<TRowData = unknown> {
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
 	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
+	// Row node multi-select
+	selectRows(rowIds: string[]): void;
+	deselectRows(rowIds: string[]): void;
+	toggleRowSelection(rowId: string): void;
+	selectAllRows(): void;
+	clearRowSelection(): void;
+	isRowNodeSelected(rowId: string): boolean;
 	setColumns(columns: ColumnDef<TRowData>[]): void;
 	setColumnWidth(colField: string, width: number): void;
 	setColumnVisible(colField: string, visible: boolean): void;
@@ -608,6 +622,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine = new GridEngine<TRowData>({
 			columns: initialState.columns || [],
 			selection: initialState.selection,
+			selectedRowIds: initialState.selectedRowIds ?? [],
 			rowHeights: initialState.rowHeights || {},
 			columnWidths: initialState.columnWidths || {},
 			defaultRowHeight: initialState.defaultRowHeight || 40,
@@ -740,6 +755,30 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public extendSelection = (end: GridCellPointer, source: GridSelectionSource = 'api'): void => {
 		const state = this.getState();
 		this.engine.selectRange(state.selection.anchor ?? state.selection.focus ?? end, end, source);
+	};
+
+	public selectRows = (rowIds: string[]): void => {
+		this.engine.selectRowIds(rowIds);
+	};
+
+	public deselectRows = (rowIds: string[]): void => {
+		this.engine.deselectRowIds(rowIds);
+	};
+
+	public toggleRowSelection = (rowId: string): void => {
+		this.engine.toggleRowId(rowId);
+	};
+
+	public selectAllRows = (): void => {
+		this.engine.selectAllDataRows();
+	};
+
+	public clearRowSelection = (): void => {
+		this.engine.clearRowSelection();
+	};
+
+	public isRowNodeSelected = (rowId: string): boolean => {
+		return this.state.selectedRowIds.includes(rowId);
 	};
 
 	public setColumnWidth = (colField: string, width: number): void => {
@@ -1091,6 +1130,25 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 						return data;
 					},
 				};
+			},
+			getChecked: (): TRowData[] => {
+				const checkedSet = new Set(this.state.selectedRowIds);
+				const result: TRowData[] = [];
+				const rowModel = this.getRowModel();
+				if (rowModel) {
+					const count = rowModel.getVisualRowCount();
+					for (let i = 0; i < count; i++) {
+						const vr = rowModel.getVisualRow(i);
+						if (vr?.kind === 'data' && checkedSet.has(vr.rowId)) {
+							const node = rowModel.getRowNodeById(vr.rowId);
+							if (node) result.push(node.data);
+						}
+					}
+				}
+				return result;
+			},
+			getCheckedIds: (): string[] => {
+				return [...this.state.selectedRowIds];
 			},
 		};
 	};

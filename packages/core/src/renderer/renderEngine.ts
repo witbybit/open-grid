@@ -791,6 +791,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('loading', invalidateViewport));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleRowRange', invalidateViewport));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleColRange', invalidateViewport));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('selectedRowIds', invalidateViewport));
 
 		this.unsubscribers.push(
 			this.engine.stateManager.subscribeToKey('columns', () => {

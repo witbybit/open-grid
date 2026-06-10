@@ -357,6 +357,12 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		// Left click only
 		if (event.button !== 0) return;
 
+		// Ctrl/Cmd+Click: toggle row selection without moving cell focus
+		if (event.ctrlKey || event.metaKey) {
+			this.store.toggleRowSelection(rowId);
+			return; // do not move cell focus
+		}
+
 		const state = this.store.getState();
 		const prevFocus = state.selection.focus;
 		const trigger = this.options.editTrigger ?? 'doubleClick';

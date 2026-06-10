@@ -535,6 +535,7 @@ export class RowRenderer<TRowData = unknown> {
 				if (this.hoveredRowIndex === r) rowClassName += ' og-row-hovered';
 				if (isSelectedRow || isFocusedRow) rowClassName += ' og-row-selected';
 				if (isFocusedRow) rowClassName += ' og-row-focused';
+				if (state.selectedRowIds.includes(node.id)) rowClassName += ' og-row-node-selected';
 				if (isLoadingRow) rowClassName += ' og-row-loading';
 
 				if (isScrollFrameActive && state.styleSlots?.rowClass && node.data) {
@@ -1057,6 +1058,28 @@ export class RowRenderer<TRowData = unknown> {
 			}
 		}
 
+		// Checkbox selection column: render a checkbox instead of normal cell content
+		if (col.checkboxSelection) {
+			const cell = cellSlot.contentElement;
+			const rowId = node.id;
+			const isChecked = state.selectedRowIds.includes(rowId);
+			let checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
+			if (!checkbox) {
+				checkbox = document.createElement('input');
+				checkbox.type = 'checkbox';
+				checkbox.className = 'og-row-checkbox';
+				checkbox.style.cssText = 'pointer-events:auto;cursor:pointer;margin:0';
+				checkbox.addEventListener('change', (e) => {
+					e.stopPropagation();
+					this.engine.toggleRowId(rowId);
+				});
+				cell.textContent = '';
+				cell.appendChild(checkbox);
+			}
+			if (checkbox.checked !== isChecked) checkbox.checked = isChecked;
+			return;
+		}
+
 		const isPinRight = colIndex >= pinRightStart;
 		const cellLeft = plan.colLefts[colIndex];
 		const leftArg = isPinRight ? cellLeft - pinRightBaseLeft : cellLeft;
@@ -1551,6 +1574,9 @@ export class RowRenderer<TRowData = unknown> {
 		}
 		if (isFocusedRow) {
 			rowClassName += ' og-row-focused';
+		}
+		if (state.selectedRowIds.includes(node.id)) {
+			rowClassName += ' og-row-node-selected';
 		}
 		if (isLoadingRow) {
 			rowClassName += ' og-row-loading';

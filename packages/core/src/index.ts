@@ -27,6 +27,7 @@ export type {
 	GridCellRangeBounds,
 	GridEvent,
 	GridEventListener,
+	GridRowsAccessor,
 	GridSelectionSource,
 	GridSelectionState,
 	GridState,

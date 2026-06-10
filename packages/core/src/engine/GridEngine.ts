@@ -99,6 +99,7 @@ export class GridEngine<TRowData = unknown> {
 		const initialState: GridState<TRowData> = {
 			columns: config.columns || [],
 			selection: initialSelection,
+			selectedRowIds: config.selectedRowIds ?? [],
 			rowHeights: config.rowHeights || {},
 			columnWidths: config.columnWidths || {},
 			defaultRowHeight: config.defaultRowHeight || 40,
@@ -587,6 +588,89 @@ export class GridEngine<TRowData = unknown> {
 			this.colSubscriptions.get(newColField)!.add(sub);
 		}
 	};
+
+	// ── Row node selection ─────────────────────────────────────────────────────
+
+	private applyRowSelection(
+		op: 'select' | 'deselect' | 'toggle' | 'selectAll' | 'clear',
+		rowIds?: string[]
+	): void {
+		const current = this.stateManager.getState();
+		const currentSet = new Set(current.selectedRowIds);
+		let newIds: string[];
+
+		switch (op) {
+			case 'select': {
+				const toAdd = rowIds ?? [];
+				toAdd.forEach(id => currentSet.add(id));
+				newIds = [...currentSet];
+				break;
+			}
+			case 'deselect': {
+				const toRemove = new Set(rowIds ?? []);
+				newIds = current.selectedRowIds.filter(id => !toRemove.has(id));
+				break;
+			}
+			case 'toggle': {
+				const id = rowIds?.[0];
+				if (!id) return;
+				if (currentSet.has(id)) currentSet.delete(id);
+				else currentSet.add(id);
+				newIds = [...currentSet];
+				break;
+			}
+			case 'selectAll': {
+				const allIds: string[] = [];
+				if (this.rowModel) {
+					const count = this.rowModel.getVisualRowCount();
+					for (let i = 0; i < count; i++) {
+						const vr = this.rowModel.getVisualRow(i);
+						if (vr?.kind === 'data') allIds.push(vr.rowId);
+					}
+				}
+				newIds = allIds;
+				break;
+			}
+			case 'clear': {
+				newIds = [];
+				break;
+			}
+			default:
+				return;
+		}
+
+		const prevSet = new Set(current.selectedRowIds);
+		const newSet = new Set(newIds);
+		const changed = newIds
+			.filter(id => !prevSet.has(id))
+			.concat(current.selectedRowIds.filter(id => !newSet.has(id)));
+
+		this.stateManager.setState({ selectedRowIds: newIds });
+		this.eventBus.dispatchEvent('rowSelectionChanged', {
+			selectedRowIds: newIds,
+			changedRowIds: changed,
+		});
+	}
+
+	public selectRowIds(rowIds: string[]): void {
+		this.applyRowSelection('select', rowIds);
+	}
+
+	public deselectRowIds(rowIds: string[]): void {
+		this.applyRowSelection('deselect', rowIds);
+	}
+
+	public toggleRowId(rowId: string): void {
+		this.applyRowSelection('toggle', [rowId]);
+	}
+
+	public selectAllDataRows(): void {
+		this.applyRowSelection('selectAll');
+	}
+
+	public clearRowSelection(): void {
+		this.applyRowSelection('clear');
+	}
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
 		const validStart = this.isDataCellSelectable(start) ? start : null;

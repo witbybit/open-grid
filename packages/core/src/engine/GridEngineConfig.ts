@@ -10,6 +10,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	defaultColWidth?: number;
 	enableColumnReorder?: boolean;
 	selection?: GridSelectionState;
+	selectedRowIds?: string[];
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
 	activeEdit?: GridCellPointer | null;

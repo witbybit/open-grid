@@ -227,7 +227,38 @@ export class HeaderRenderer<TRowData = unknown> {
 			if (headerCell.style.width !== nextWidth) headerCell.style.width = nextWidth;
 
 			const textSpan = headerCell.firstElementChild as HTMLSpanElement | null;
-			if (textSpan && textSpan.textContent !== (col.header || col.field)) {
+			if (col.checkboxSelection) {
+				let checkbox = headerCell.querySelector<HTMLInputElement>('input[type="checkbox"].og-header-checkbox');
+				if (!checkbox) {
+					checkbox = document.createElement('input');
+					checkbox.type = 'checkbox';
+					checkbox.className = 'og-header-checkbox';
+					checkbox.style.cssText = 'pointer-events:auto;cursor:pointer;margin:0';
+					checkbox.addEventListener('change', (e) => {
+						e.stopPropagation();
+						if ((e.target as HTMLInputElement).checked) {
+							this.engine.selectAllDataRows();
+						} else {
+							this.engine.clearRowSelection();
+						}
+					});
+					if (textSpan) textSpan.textContent = '';
+					headerCell.insertBefore(checkbox, textSpan);
+				}
+				const rowModel = this.engine.getRowModel();
+				let totalDataRows = 0;
+				if (rowModel) {
+					const vCount = rowModel.getVisualRowCount();
+					for (let i = 0; i < vCount; i++) {
+						if (rowModel.getVisualRow(i)?.kind === 'data') totalDataRows++;
+					}
+				}
+				const selectedCount = state.selectedRowIds.length;
+				const newChecked = selectedCount > 0 && selectedCount >= totalDataRows;
+				const newIndeterminate = selectedCount > 0 && selectedCount < totalDataRows;
+				if (checkbox.checked !== newChecked) checkbox.checked = newChecked;
+				if (checkbox.indeterminate !== newIndeterminate) checkbox.indeterminate = newIndeterminate;
+			} else if (textSpan && textSpan.textContent !== (col.header || col.field)) {
 				textSpan.textContent = col.header || col.field;
 			}
 
