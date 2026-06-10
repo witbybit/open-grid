@@ -16,6 +16,13 @@ export const CORE_STYLES = `
     --og-selection-bg: rgba(59, 130, 246, 0.04);
     --og-focus-ring: #3b82f6;
 
+    /* Pin column boundary — border and shadow on the dividing edge.
+       Override these vars to customise or disable the pin boundary visual. */
+    --og-pin-left-border-color: rgba(255, 255, 255, 0.07);
+    --og-pin-right-border-color: rgba(255, 255, 255, 0.07);
+    --og-pin-left-shadow: 4px 0 14px rgba(0, 0, 0, 0.45);
+    --og-pin-right-shadow: -4px 0 14px rgba(0, 0, 0, 0.45);
+
     /* Skeletons Styling */
     --og-skeleton-start: #1e293b;
     --og-skeleton-mid: #334155;
@@ -124,6 +131,8 @@ export const CORE_STYLES = `
     z-index: 5;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
+    border-right: 1px solid var(--og-pin-left-border-color);
+    box-shadow: var(--og-pin-left-shadow);
     background-color: var(--og-header-bg);
   }
 
@@ -135,6 +144,8 @@ export const CORE_STYLES = `
     z-index: 5;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
+    border-left: 1px solid var(--og-pin-right-border-color);
+    box-shadow: var(--og-pin-right-shadow);
     background-color: var(--og-header-bg);
   }
 
@@ -166,14 +177,18 @@ export const CORE_STYLES = `
 
   /*
    * Row — absolutely positioned inside og-rows-container via style.top (integer).
-   * No will-change (compositor layer is on the container, not each row).
-   * No contain:layout so that position:sticky on pinned cells propagates
-   * correctly to the scroll viewport.
+   * display:flex so the sticky pin containers (og-row-pin-left / og-row-pin-right)
+   * can use margin-left:auto and position:sticky for zero-lag compositor pinning.
+   * contain:style only (NOT layout) so that position:sticky propagates correctly
+   * to the scroll viewport as the containing scroll ancestor.
+   * No will-change — the compositor layer is on og-rows-container, not each row.
    */
   .og-row {
     position: absolute;
     left: 0;
     right: 0;
+    display: flex;
+    align-items: stretch;
     contain: style;
     border-bottom: 1px solid var(--og-border-color);
     background-color: var(--og-bg-color);
@@ -252,11 +267,22 @@ export const CORE_STYLES = `
     background-color: inherit;
   }
 
+  /*
+   * Pin containers use position:sticky so the browser compositor handles
+   * their fixed-edge behaviour natively — no RAF-based JS transforms needed.
+   * This eliminates the one-frame lag that caused flicker on horizontal scroll.
+   *
+   * Left pin: sticks to left:0 of the scroll viewport.
+   * Right pin: margin-left:auto pushes it to the natural right side of the
+   *   full-width flex row; sticky right:0 then anchors it to the viewport's
+   *   right edge when horizontal scrolling would otherwise move it off-screen.
+   */
   .og-row-pin-left,
   .og-row-pin-right {
-    position: absolute;
+    position: sticky;
     top: 0;
     height: 100%;
+    flex-shrink: 0;
     z-index: 3;
     background-color: inherit;
     overflow: hidden;
@@ -264,12 +290,15 @@ export const CORE_STYLES = `
 
   .og-row-pin-left {
     left: 0;
+    border-right: 1px solid var(--og-pin-left-border-color);
+    box-shadow: var(--og-pin-left-shadow);
   }
 
   .og-row-pin-right {
-    /* Start off-screen so there is no visible flash at left:0 before JavaScript
-       positions the container at its correct pinRightBaseLeft offset. */
-    left: -9999px;
+    right: 0;
+    margin-left: auto;
+    border-left: 1px solid var(--og-pin-right-border-color);
+    box-shadow: var(--og-pin-right-shadow);
   }
 
   .og-cell-content {

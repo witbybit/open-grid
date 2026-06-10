@@ -265,41 +265,11 @@ export class RowRenderer<TRowData = unknown> {
 		return container;
 	}
 
-	public syncPinnedLanePositions(window: RenderWindow, totalWidth: number): void {
-		const pinLeftColumns = window.pinLeftCols;
-		const pinRightColumns = window.pinRightCols;
-		if (pinLeftColumns <= 0 && pinRightColumns <= 0) return;
-
-		const colCount = window.colCount;
-		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportWidth = this.engine.viewport.viewportWidth;
-		const pinRightBaseLeft = pinRightStart < colCount ? (this.engine.geometry.colLefts[pinRightStart] ?? totalWidth) : totalWidth;
-		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
-		const pinLeftWidth = pinLeftColumns > 0 ? (this.engine.geometry.colLefts[Math.min(pinLeftColumns, colCount)] ?? 0) : 0;
-		const leftTransform = pinLeftColumns > 0 ? `translate3d(${scrollLeft}px, 0, 0)` : '';
-		const rightTransform =
-			pinRightColumns > 0 && pinRightStart < colCount
-				? `translate3d(${scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) - pinRightBaseLeft}px, 0, 0)`
-				: '';
-
-		// Phase 3: iterate pool slots instead of activeRows.values()
-		for (const slot of this.rowSlotPool.getSlots()) {
-			if (slot.pinLeftContainer && slot.pinLeftContainerTransform !== leftTransform) {
-				slot.pinLeftContainerTransform = leftTransform;
-				slot.pinLeftContainer.style.transform = leftTransform;
-			}
-			if (slot.pinRightContainer) {
-				if (slot.pinRightContainerLeft !== pinRightBaseLeft) {
-					slot.pinRightContainerLeft = pinRightBaseLeft;
-					slot.pinRightContainer.style.left = `${pinRightBaseLeft}px`;
-				}
-				if (slot.pinRightContainerTransform !== rightTransform) {
-					slot.pinRightContainerTransform = rightTransform;
-					slot.pinRightContainer.style.transform = rightTransform;
-				}
-			}
-		}
+	public syncPinnedLanePositions(_window: RenderWindow, _totalWidth: number): void {
+		// Pin container positioning is now handled entirely by CSS position:sticky.
+		// The left container sticks at left:0 and the right container sticks at
+		// right:0 via margin-left:auto in the flex row — no JS transforms needed.
+		// This eliminates the one-frame lag that caused flicker on horizontal scroll.
 	}
 
 	// ── Slot-based viewport virtualization core ─────────────────────────────────────
@@ -636,10 +606,8 @@ export class RowRenderer<TRowData = unknown> {
 		// Ensure pinned containers (lazy creation, width-based)
 		const pinLeftContainer = this.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 		const pinRightContainer = this.ensurePinnedContainer(slot, 'right', pinRightWidth);
-		if (pinRightContainer && slot.pinRightContainerLeft !== pinRightBaseLeft) {
-			slot.pinRightContainerLeft = pinRightBaseLeft;
-			pinRightContainer.style.left = `${pinRightBaseLeft}px`;
-		}
+		// Note: right container horizontal position is now handled by CSS sticky
+		// (position:sticky; right:0; margin-left:auto in a flex row) — no JS needed.
 
 		// Update slot column-layout metadata for getCellForCol() lookups
 		slot.centerColStart = centerColStart;
@@ -867,10 +835,8 @@ export class RowRenderer<TRowData = unknown> {
 
 		const pinLeftContainer = this.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 		const pinRightContainer = this.ensurePinnedContainer(slot, 'right', pinRightWidth);
-		if (pinRightContainer && slot.pinRightContainerLeft !== pinRightBaseLeft) {
-			slot.pinRightContainerLeft = pinRightBaseLeft;
-			pinRightContainer.style.left = `${pinRightBaseLeft}px`;
-		}
+		// Note: right container's horizontal position is now handled by CSS sticky
+		// (position:sticky; right:0; margin-left:auto in a flex row) — no JS needed.
 
 		slot.centerColStart = centerColStart;
 		slot.pinLeftCount = pinLeftColumns;

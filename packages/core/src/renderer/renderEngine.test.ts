@@ -168,9 +168,11 @@ describe('RenderEngine', () => {
 		expect(eCell.style.left).toBe('130px');
 		expect(dCell.style.right).toBe('');
 		expect(eCell.style.right).toBe('');
-		expect(rightLane.style.left).toBe('330px');
+		// Right lane position is now CSS sticky (position:sticky; right:0; margin-left:auto)
+		// rather than JS-managed style.left — no inline left style is written.
+		expect(rightLane.style.left).toBe('');
+		// Header right layer still uses JS-managed left for its absolute positioning.
 		expect(rightHeaderLayer.style.left).toBe('330px');
-		expect(rightHeaderLayer.style.transform).toBe(rightLane.style.transform);
 		expect(rightHeaderLayer.style.width).toBe('270px');
 		expect(eHeader.parentElement).toBe(rightHeaderLayer);
 
