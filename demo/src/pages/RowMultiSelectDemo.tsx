@@ -9,7 +9,7 @@
  *   - rowSelectionChanged event →  reactive event log
  */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, useGridKeySelector, useGridApi } from '@open-grid/react';
+import { OpenGrid, GridProvider, GridEventName, useClientGrid, useGridKeySelector, useGridApi } from '@open-grid/react';
 import type { ColumnDef, GridApi } from '@open-grid/react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
 
@@ -201,7 +201,7 @@ export default function RowMultiSelectDemo() {
 
 	// Subscribe to rowSelectionChanged for the event log
 	useEffect(() => {
-		return api.addEventListener('rowSelectionChanged', (event: any) => {
+		return api.addEventListener(GridEventName.rowSelectionChanged, (event) => {
 			const { selectedRowIds, changedRowIds } = event.payload;
 			setLastEvent(`${changedRowIds.length} row(s) toggled → ${selectedRowIds.length} total selected`);
 		});

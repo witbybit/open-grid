@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { GridProvider, useClientGrid } from '@open-grid/react';
+import { GridEventName, GridProvider, useClientGrid } from '@open-grid/react';
 import { DashboardStockRow } from '../hooks/useShowroomStores';
 import { GridView } from '../components/GridShared';
 import { TrendingUp, BarChart3, Activity, RefreshCw, Zap, Code2 } from 'lucide-react';
@@ -145,26 +145,26 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 		updateStatsAndChart();
 
 		// Event subscriptions
-		const unsubSelect = api.addEventListener('selectionChanged', (e) => {
+		const unsubSelect = api.addEventListener(GridEventName.selectionChanged, (e) => {
 			updateStatsAndChart();
-			logEvent('selectionChanged', `Selected range details updated.`, 'selection');
+			logEvent(GridEventName.selectionChanged, `Selected range details updated.`, 'selection');
 		});
 
 		// cellValueChanged fires for individual cell edits (e.g. user typing in a cell)
-		const unsubValue = api.addEventListener<{ rowId: string; colField: string; value: unknown }>('cellValueChanged', (e) => {
+		const unsubValue = api.addEventListener(GridEventName.cellValueChanged, (e) => {
 			updateStatsAndChart();
-			logEvent('cellValueChanged', `${e.payload.rowId}:${e.payload.colField} => ${e.payload.value}`, 'edit');
+			logEvent(GridEventName.cellValueChanged, `${e.payload.rowId}:${e.payload.colField} => ${e.payload.newValue}`, 'edit');
 		});
 
 		// rowsUpdated fires for bulk operations (updateRows / applyTransaction)
-		const unsubRowsUpdated = api.addEventListener<{ changedNodes: unknown[] }>('rowsUpdated', (e) => {
+		const unsubRowsUpdated = api.addEventListener(GridEventName.rowsUpdated, (e) => {
 			updateStatsAndChart();
-			logEvent('rowsUpdated', `${e.payload.changedNodes?.length ?? 0} rows updated in batch`, 'info');
+			logEvent(GridEventName.rowsUpdated, `${e.payload.changedNodes?.length ?? 0} rows updated in batch`, 'info');
 		});
 
-		const unsubFocus = api.addEventListener<{ focus: { rowId: string; colField: string } | null }>('focusChanged', (e) => {
+		const unsubFocus = api.addEventListener(GridEventName.focusChanged, (e) => {
 			const focus = e.payload.focus;
-			logEvent('focusChanged', focus ? `Cell focus: ${focus.rowId}:${focus.colField}` : 'Cell focus cleared', 'focus');
+			logEvent(GridEventName.focusChanged, focus ? `Cell focus: ${focus.rowId}:${focus.colField}` : 'Cell focus cleared', 'focus');
 		});
 
 		return () => {

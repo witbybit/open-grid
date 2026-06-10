@@ -10,7 +10,16 @@ import {
 	createElement,
 	type ComponentType,
 } from 'react';
-import { ColumnDef, GridApi, RowNode, VisualRow, type CellRendererPhase, type ImperativeCellHandle, isDomCellRenderer } from '@open-grid/core';
+import {
+	ColumnDef,
+	GridApi,
+	GridEventName,
+	RowNode,
+	VisualRow,
+	type CellRendererPhase,
+	type ImperativeCellHandle,
+	isDomCellRenderer,
+} from '@open-grid/core';
 import type { InternalColumnDef } from '@open-grid/core/internal';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
@@ -67,7 +76,7 @@ function PortalCellInner<TRowData = unknown>({
 	}, [isEditing, value]);
 
 	useEffect(() => {
-		const unsubscribe = api.addEventListener<{ rowId: string; colField: string; cancel: boolean }>('editStopped', (event) => {
+		const unsubscribe = api.addEventListener(GridEventName.editStopped, (event) => {
 			if (event.payload.rowId === rowId && event.payload.colField === colField) {
 				if (event.payload.cancel) {
 					isCancelledRef.current = true;

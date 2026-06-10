@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GridApi, GridProvider, useGridKeySelector } from '@open-grid/react';
+import { GridApi, GridEventName, GridProvider, useGridKeySelector } from '@open-grid/react';
 import { TableProperties, Terminal } from 'lucide-react';
 
 // ============================================================================
@@ -68,28 +68,28 @@ export const LiveEventLogPanel = React.memo(({ api }: LiveEventLogPanelProps) =>
 			setEventLogs((prev) => [msg, ...prev].slice(0, 4));
 		};
 
-		const unsubValue = api.addEventListener('cellValueChanged', (e) => {
-			addLog(formatLog('cellValueChanged', e.payload));
+		const unsubValue = api.addEventListener(GridEventName.cellValueChanged, (e) => {
+			addLog(formatLog(GridEventName.cellValueChanged, e.payload));
 		});
 
-		const unsubResize = api.addEventListener('columnResized', (e) => {
-			addLog(formatLog('columnResized', e.payload));
+		const unsubResize = api.addEventListener(GridEventName.columnResized, (e) => {
+			addLog(formatLog(GridEventName.columnResized, e.payload));
 		});
 
-		const unsubFocus = api.addEventListener('focusChanged', (e) => {
-			addLog(formatLog('focusChanged', e.payload));
+		const unsubFocus = api.addEventListener(GridEventName.focusChanged, (e) => {
+			addLog(formatLog(GridEventName.focusChanged, e.payload));
 		});
 
-		const unsubSelect = api.addEventListener('selectionChanged', (e) => {
-			addLog(formatLog('selectionChanged', e.payload));
+		const unsubSelect = api.addEventListener(GridEventName.selectionChanged, (e) => {
+			addLog(formatLog(GridEventName.selectionChanged, e.payload));
 		});
 
-		const unsubSort = api.addEventListener('sortChanged', (e) => {
-			addLog(formatLog('sortChanged', e.payload));
+		const unsubSort = api.addEventListener(GridEventName.sortChanged, (e) => {
+			addLog(formatLog(GridEventName.sortChanged, e.payload));
 		});
 
-		const unsubFilter = api.addEventListener('filterChanged', (e) => {
-			addLog(formatLog('filterChanged', e.payload));
+		const unsubFilter = api.addEventListener(GridEventName.filterChanged, (e) => {
+			addLog(formatLog(GridEventName.filterChanged, e.payload));
 		});
 
 		return () => {

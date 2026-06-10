@@ -1,4 +1,4 @@
-import { GridStore, GridCellPointer, GridPlugin, InternalGridApi } from './store.js';
+import { GridStore, GridEventName, GridCellPointer, GridPlugin, InternalGridApi } from './store.js';
 
 export interface GridNavigationOptions {
 	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
@@ -23,13 +23,10 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 		// Bind store event listener to invoke options callback when edits are committed
 		if (this.options.onCellValueChanged) {
-			this.unsubscribeCellValueChanged = this.store.addEventListener<{ rowId: string; colField: string; newValue: unknown }>(
-				'cellValueChanged',
-				(event) => {
-					const { rowId, colField, newValue } = event.payload;
-					this.options.onCellValueChanged?.(rowId, colField, newValue);
-				}
-			);
+			this.unsubscribeCellValueChanged = this.store.addEventListener(GridEventName.cellValueChanged, (event) => {
+				const { rowId, colField, newValue } = event.payload;
+				this.options.onCellValueChanged?.(rowId, colField, newValue);
+			});
 		}
 	}
 
@@ -481,7 +478,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			}
 			navigator.clipboard.writeText(text).catch(() => {});
 			copiedCells.push({ rowId: focus.rowId, colField: focus.colField });
-			this.store.dispatchEvent('cellsCopied', { cells: copiedCells });
+			this.store.dispatchEvent(GridEventName.cellsCopied, { cells: copiedCells });
 			return;
 		}
 
@@ -515,7 +512,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 		if (rows.length === 0) return;
 		navigator.clipboard.writeText(rows.join('\n')).catch(() => {});
-		this.store.dispatchEvent('cellsCopied', { cells: copiedCells });
+		this.store.dispatchEvent(GridEventName.cellsCopied, { cells: copiedCells });
 	}
 
 	private async pasteFromClipboard(): Promise<void> {

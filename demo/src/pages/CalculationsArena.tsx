@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridProvider, useClientGrid } from '@open-grid/react';
+import { GridEventName, GridProvider, useClientGrid } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Activity, ShieldAlert, BadgePercent } from 'lucide-react';
 
@@ -120,7 +120,7 @@ export default function CalculationsArena({
 		calculateTelemetry();
 
 		// Subscribe to changes in the active grid values
-		const unsubValue = api.addEventListener('cellValueChanged', calculateTelemetry);
+		const unsubValue = api.addEventListener(GridEventName.cellValueChanged, calculateTelemetry);
 		return () => unsubValue();
 	}, [api]);
 

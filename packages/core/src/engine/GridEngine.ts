@@ -1,6 +1,7 @@
 import {
 	canEditCell,
 	isDataCellSelectable,
+	GridEventName,
 	type GridState,
 	type RowModel,
 	type CellSubscription,
@@ -39,7 +40,7 @@ export class GridEngine<TRowData = unknown> {
 	// Infrastructure
 	public readonly stateManager: StateManager<TRowData>;
 	public readonly commandHistory: CommandHistory;
-	public readonly eventBus: EventBus;
+	public readonly eventBus: EventBus<TRowData>;
 	public readonly invalidation: InvalidationManager;
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
@@ -79,7 +80,7 @@ export class GridEngine<TRowData = unknown> {
 
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.commandHistory = new CommandHistory();
-		this.eventBus = new EventBus();
+		this.eventBus = new EventBus<TRowData>();
 		this.invalidation = new InvalidationManager();
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
@@ -232,7 +233,7 @@ export class GridEngine<TRowData = unknown> {
 	public setColumnReorderEnabled(enabled: boolean): void {
 		this.stateManager.setState({ enableColumnReorder: enabled });
 		this.invalidation.invalidateHeaders('column reorder toggle');
-		this.eventBus.dispatchEvent('columnReorderToggled', { enabled });
+		this.eventBus.dispatchEvent(GridEventName.columnReorderToggled, { enabled });
 		this.requestRender('column reorder toggle');
 	}
 
@@ -339,7 +340,7 @@ export class GridEngine<TRowData = unknown> {
 		this.invalidation.invalidateCell(rowId, colField, 'edit started');
 		this.invalidation.invalidateOverlay('edit started');
 		this.notifyCellChange(rowId, colField);
-		this.eventBus.dispatchEvent('editStarted', { rowId, colField });
+		this.eventBus.dispatchEvent(GridEventName.editStarted, { rowId, colField });
 		this.requestRender('edit started');
 	}
 
@@ -352,7 +353,7 @@ export class GridEngine<TRowData = unknown> {
 		this.invalidation.invalidateCell(rowId, colField, 'edit stopped');
 		this.invalidation.invalidateOverlay('edit stopped');
 		this.notifyCellChange(rowId, colField);
-		this.eventBus.dispatchEvent('editStopped', { rowId, colField, cancel });
+		this.eventBus.dispatchEvent(GridEventName.editStopped, { rowId, colField, cancel });
 		this.requestRender('edit stopped');
 	}
 
@@ -492,7 +493,8 @@ export class GridEngine<TRowData = unknown> {
 			}
 		}
 		// Accumulate all invalidations, then fire ONE render event instead of N cellInvalidated events
-		const hasRenderConsumer = this.eventBus.hasListeners('cellInvalidated') || this.eventBus.hasListeners('renderInvalidated');
+		const hasRenderConsumer =
+			this.eventBus.hasListeners(GridEventName.cellInvalidated) || this.eventBus.hasListeners(GridEventName.renderInvalidated);
 		if (hasRenderConsumer) {
 			for (const [rowId, fields] of changes) {
 				for (const colField of fields) {
@@ -517,11 +519,12 @@ export class GridEngine<TRowData = unknown> {
 				}
 			});
 		}
-		const hasRenderConsumer = this.eventBus.hasListeners('cellInvalidated') || this.eventBus.hasListeners('renderInvalidated');
+		const hasRenderConsumer =
+			this.eventBus.hasListeners(GridEventName.cellInvalidated) || this.eventBus.hasListeners(GridEventName.renderInvalidated);
 		if (hasRenderConsumer) {
 			this.invalidation.invalidateCell(rowId, colField, 'cell');
 			this.invalidation.invalidateRow(rowId, 'cell');
-			this.eventBus.dispatchEvent('cellInvalidated', { rowId, colField });
+			this.eventBus.dispatchEvent(GridEventName.cellInvalidated, { rowId, colField });
 		}
 	}
 
@@ -641,7 +644,7 @@ export class GridEngine<TRowData = unknown> {
 		const changed = newIds.filter((id) => !prevSet.has(id)).concat(current.selectedRowIds.filter((id) => !newSet.has(id)));
 
 		this.stateManager.setState({ selectedRowIds: newIds });
-		this.eventBus.dispatchEvent('rowSelectionChanged', {
+		this.eventBus.dispatchEvent(GridEventName.rowSelectionChanged, {
 			selectedRowIds: newIds,
 			changedRowIds: changed,
 		});
@@ -726,7 +729,7 @@ export class GridEngine<TRowData = unknown> {
 		this.invalidation.invalidateFull('columns');
 		this.requestRender('columns');
 
-		this.eventBus.dispatchEvent('columnsChanged', {
+		this.eventBus.dispatchEvent(GridEventName.columnsChanged, {
 			columns,
 			columnFields: columns.map((column) => column.field),
 		});
@@ -760,7 +763,7 @@ export class GridEngine<TRowData = unknown> {
 		this.invalidation.invalidateColumn(colField, 'column resize');
 		this.invalidation.invalidateHeaders('column resize');
 
-		this.eventBus.dispatchEvent('columnResized', {
+		this.eventBus.dispatchEvent(GridEventName.columnResized, {
 			colField,
 			width,
 		});
@@ -776,7 +779,7 @@ export class GridEngine<TRowData = unknown> {
 
 		this.stateManager.setState({ columns });
 		this.invalidation.invalidateFull('column order');
-		this.eventBus.dispatchEvent('columnOrderChanged', {
+		this.eventBus.dispatchEvent(GridEventName.columnOrderChanged, {
 			columns,
 			columnFields: nextFields,
 		});
@@ -800,7 +803,7 @@ export class GridEngine<TRowData = unknown> {
 		this.invalidation.invalidateGeometry('row resize');
 		this.invalidation.invalidateRow(rowId, 'row resize');
 
-		this.eventBus.dispatchEvent('rowResized', {
+		this.eventBus.dispatchEvent(GridEventName.rowResized, {
 			rowId,
 			height,
 		});
@@ -986,32 +989,32 @@ export class GridEngine<TRowData = unknown> {
 
 		// Propagate structured events
 		if (updatedSet.has('selection') && prevState.selection.focus !== currState.selection.focus) {
-			this.eventBus.dispatchEvent('focusChanged', { focus: currState.selection.focus, selection: currState.selection });
+			this.eventBus.dispatchEvent(GridEventName.focusChanged, { focus: currState.selection.focus, selection: currState.selection });
 		}
 		if (updatedSet.has('selection')) {
-			this.eventBus.dispatchEvent('selectionChanged', {
+			this.eventBus.dispatchEvent(GridEventName.selectionChanged, {
 				selection: currState.selection,
 				result: this.selection.describeChange(prevState.selection, currState.selection, this.rowModel, currState.columns),
 			});
 			this.requestRender('selection');
 		}
 		if (updatedSet.has('sortModel')) {
-			this.eventBus.dispatchEvent('sortChanged', { sortModel: currState.sortModel });
+			this.eventBus.dispatchEvent(GridEventName.sortChanged, { sortModel: currState.sortModel });
 		}
 		if (updatedSet.has('filterModel')) {
-			this.eventBus.dispatchEvent('filterChanged', { filterModel: currState.filterModel });
+			this.eventBus.dispatchEvent(GridEventName.filterChanged, { filterModel: currState.filterModel });
 		}
 		if (updatedSet.has('groupBy')) {
-			this.eventBus.dispatchEvent('groupByChanged', { groupBy: currState.groupBy });
+			this.eventBus.dispatchEvent(GridEventName.groupByChanged, { groupBy: currState.groupBy });
 		}
 		if (updatedSet.has('aggDefs')) {
-			this.eventBus.dispatchEvent('aggDefsChanged', { aggDefs: currState.aggDefs });
+			this.eventBus.dispatchEvent(GridEventName.aggDefsChanged, { aggDefs: currState.aggDefs });
 		}
 		if (updatedSet.has('showGroupFooter')) {
-			this.eventBus.dispatchEvent('showGroupFooterChanged', { showGroupFooter: currState.showGroupFooter });
+			this.eventBus.dispatchEvent(GridEventName.showGroupFooterChanged, { showGroupFooter: currState.showGroupFooter });
 		}
 		if (updatedSet.has('enableStickyGroupRows')) {
-			this.eventBus.dispatchEvent('enableStickyGroupRowsChanged', { enableStickyGroupRows: currState.enableStickyGroupRows });
+			this.eventBus.dispatchEvent(GridEventName.enableStickyGroupRowsChanged, { enableStickyGroupRows: currState.enableStickyGroupRows });
 		}
 	};
 
@@ -1020,7 +1023,7 @@ export class GridEngine<TRowData = unknown> {
 			this.pendingRenderReason = this.pendingRenderReason ? `${this.pendingRenderReason}+${reason}` : reason;
 			return;
 		}
-		this.eventBus.dispatchEvent('renderInvalidated', { reason });
+		this.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason });
 	}
 
 	private beginRenderTransaction(): void {
@@ -1034,7 +1037,7 @@ export class GridEngine<TRowData = unknown> {
 		const reason = this.pendingRenderReason;
 		this.pendingRenderReason = null;
 		if (reason) {
-			this.eventBus.dispatchEvent('renderInvalidated', { reason });
+			this.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason });
 		}
 	}
 

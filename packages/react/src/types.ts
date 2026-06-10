@@ -24,11 +24,12 @@ import type {
 	ImperativeCellHandle,
 	GridPersistenceAdapter,
 } from '@open-grid/core';
-export { isDomCellRenderer, createLocalStorageAdapter } from '@open-grid/core';
+export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@open-grid/core';
 export type {
 	GroupDef,
 	AggregationDef,
 	CsvExportOptions,
+	GridEventPayloadMap,
 	GridPersistenceAdapter,
 	PersistedGridState,
 	PersistenceStatus,

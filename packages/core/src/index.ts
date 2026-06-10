@@ -2,8 +2,9 @@ export { createApiFacade, createClientGrid, createServerGrid, createLocalStorage
 export type { ClientGridOptions, ServerGridOptions, GridPersistenceAdapter, PersistedGridState } from './createGrid.js';
 export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 
-export { RowNode } from './store.js';
+export { RowNode, GridEventName } from './store.js';
 export type { RowDataTransaction, RowNodeTransaction } from './store.js';
+export type { GridEventPayloadMap } from './store.js';
 export type {
 	CellCopyParams,
 	CellPasteParams,

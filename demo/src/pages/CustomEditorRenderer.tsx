@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
+import { GridEventName, GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
 import { CustomShowcaseRow, GridView } from '../components/GridShared';
 import { ShieldCheck, BarChart3, Star, AlertTriangle, Play, RefreshCw, Gauge } from 'lucide-react';
 
@@ -78,7 +78,7 @@ function CustomEditorRendererInner({
 
 	useEffect(() => {
 		calculateTelemetry();
-		const unsub = api.addEventListener('cellValueChanged', calculateTelemetry);
+		const unsub = api.addEventListener(GridEventName.cellValueChanged, calculateTelemetry);
 		return () => unsub();
 	}, [api]);
 

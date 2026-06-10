@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GridStore, validateColumns, validateRowIds } from './store.js';
+import { GridStore, GridEventName, validateColumns, validateRowIds } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
 
@@ -103,7 +103,7 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 		const listener = vi.fn();
-		store.addEventListener('selectionChanged', listener);
+		store.addEventListener(GridEventName.selectionChanged, listener);
 
 		store.selectCell({ rowId: '1', colField: 'name' });
 		store.selectCell({ rowId: '2', colField: 'name' });
@@ -286,7 +286,7 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 		const listener = vi.fn();
-		store.addEventListener('cellValueChanged', listener);
+		store.addEventListener(GridEventName.cellValueChanged, listener);
 
 		store.setCellValue('1', 'status', 'Inactive');
 		store.setCellValue('1', 'status', 'Inactive');
@@ -432,7 +432,7 @@ describe('GridStore generic row-store functionality', () => {
 		});
 
 		const resizeListener = vi.fn();
-		store.addEventListener('columnResized', resizeListener);
+		store.addEventListener(GridEventName.columnResized, resizeListener);
 
 		store.setColumnWidth('name', 250);
 
@@ -454,7 +454,7 @@ describe('GridStore generic row-store functionality', () => {
 		});
 
 		const reorderListener = vi.fn();
-		store.addEventListener('columnOrderChanged', reorderListener);
+		store.addEventListener(GridEventName.columnOrderChanged, reorderListener);
 
 		store.moveColumn('price', 0);
 
@@ -556,7 +556,7 @@ describe('GridStore generic row-store functionality', () => {
 		});
 
 		const toggleListener = vi.fn();
-		store.addEventListener('columnReorderToggled', toggleListener);
+		store.addEventListener(GridEventName.columnReorderToggled, toggleListener);
 
 		expect(store.getState().enableColumnReorder).toBe(true);
 
@@ -1242,7 +1242,7 @@ describe('GridStore undo and redo functionality', () => {
 			columns: store.getState().columns,
 		});
 		const renderInvalidated = vi.fn();
-		store.addEventListener('renderInvalidated', renderInvalidated);
+		store.addEventListener(GridEventName.renderInvalidated, renderInvalidated);
 
 		store.batch(() => {
 			store.setColumnWidth('id', 60);
@@ -1474,7 +1474,7 @@ describe('row multi-select', () => {
 	it('rowSelectionChanged event fires on toggle', () => {
 		const { store, controller } = makeStore();
 		const handler = vi.fn();
-		store.addEventListener('rowSelectionChanged', handler);
+		store.addEventListener(GridEventName.rowSelectionChanged, handler);
 		store.toggleRowSelection('row-1');
 		expect(handler).toHaveBeenCalledWith(
 			expect.objectContaining({

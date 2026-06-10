@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
+import { GridEventName, GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
 import { SpreadsheetRow, GridView } from '../components/GridShared';
 import { Calculator, Sparkles, TrendingUp, Layers, BookOpen, Sigma, RefreshCw } from 'lucide-react';
 
@@ -106,7 +106,7 @@ function SpreadsheetWorkspaceInner({
 				}
 			}
 		};
-		const unsub = api.addEventListener('cellValueChanged', handleCellChanged);
+		const unsub = api.addEventListener(GridEventName.cellValueChanged, handleCellChanged);
 		return () => unsub();
 	}, [api, focusedCell]);
 

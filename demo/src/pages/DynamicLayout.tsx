@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Layout, Maximize2, Cpu, Compass, CheckCircle2 } from 'lucide-react';
@@ -29,18 +29,6 @@ function DynamicLayoutInner({
 	const columns = useGridKeySelector('columns', (state) => state.columns);
 
 	const [scrollPosition, setScrollPosition] = useState({ scrollTop: 0, scrollLeft: 0 });
-
-	useEffect(() => {
-		const handleScroll = (event: any) => {
-			const { scrollTop, scrollLeft } = event.detail || {};
-			setScrollPosition({
-				scrollTop: scrollTop ?? 0,
-				scrollLeft: scrollLeft ?? 0,
-			});
-		};
-		const unsub = api.addEventListener('gridScrolled', handleScroll);
-		return () => unsub();
-	}, [api]);
 
 	// Sizing parameters
 	const layoutStats = useMemo(() => {

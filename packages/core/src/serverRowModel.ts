@@ -1,5 +1,6 @@
 import {
 	GridStore,
+	GridEventName,
 	ColumnDef,
 	RowModel,
 	RowNode,
@@ -57,8 +58,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.store.registerRowModel(this);
 
 		this.unsubscribers.push(
-			this.store.addEventListener('sortChanged', () => this.purgeCache()),
-			this.store.addEventListener('filterChanged', () => this.purgeCache())
+			this.store.addEventListener(GridEventName.sortChanged, () => this.purgeCache()),
+			this.store.addEventListener(GridEventName.filterChanged, () => this.purgeCache())
 		);
 
 		// Trigger initial fetch of block 0 to obtain totalCount and sparse placeholders
@@ -301,7 +302,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			}));
 
 			const requestFinishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-			this.store.dispatchEvent('serverBlockLoaded', {
+			this.store.dispatchEvent(GridEventName.serverBlockLoaded, {
 				blockIndex,
 				loadedBlockStart: startRow,
 				loadedBlockEnd: startRow + response.rows.length - 1,

@@ -1,5 +1,6 @@
 import {
 	GridApi,
+	GridEventName,
 	GridCellClickParams,
 	GridCellPointer,
 	GridContextMenuOptions,
@@ -436,7 +437,7 @@ function OpenGridInner<TRowData = unknown>({
 			const clickParams = getCellClickParams(pointer, e);
 			if (clickParams) {
 				onCellClick?.(clickParams);
-				api.dispatchEvent('cellClicked', clickParams);
+				api.dispatchEvent(GridEventName.cellClicked, clickParams);
 			}
 
 			if (!navigation) return;
@@ -503,7 +504,7 @@ function OpenGridInner<TRowData = unknown>({
 	// cleanup so a rapid second copy cancels the first timer before starting a new one.
 	useEffect(() => {
 		let cancelFlash: (() => void) | undefined;
-		const unsub = api.addEventListener<{ cells: Array<{ rowId: string; colField: string }> }>('cellsCopied', ({ payload }) => {
+		const unsub = api.addEventListener(GridEventName.cellsCopied, ({ payload }) => {
 			const container = containerRef.current;
 			if (!container) return;
 			cancelFlash?.();

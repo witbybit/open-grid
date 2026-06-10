@@ -38,8 +38,8 @@ export {
 } from './renderers/CellTypes.js';
 export type { DropdownOption, DropdownOptionColor, NumberCellRendererOptions, NumberCellEditorOptions } from './renderers/CellTypes.js';
 
-export { isDomCellRenderer, createLocalStorageAdapter } from './types.js';
-export type { GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
+export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from './types.js';
+export type { GridEventPayloadMap, GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
 export type {
 	ColumnDef,
 	CellEditorProps,

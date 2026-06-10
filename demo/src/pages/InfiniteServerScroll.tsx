@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { GridProvider, useServerGrid, GridPagination } from '@open-grid/react';
+import { GridEventName, GridProvider, useServerGrid, GridPagination } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Terminal, Server, Activity, ShieldAlert, Cpu, Network, Clock } from 'lucide-react';
 
@@ -97,10 +97,10 @@ export default function InfiniteServerScroll({
 		};
 
 		refreshSeverityStats();
-		const unsubBlockLoaded = api.addEventListener('serverBlockLoaded', handleBlockLoaded);
-		const unsubCellValueChanged = api.addEventListener('cellValueChanged', refreshSeverityStats);
-		const unsubSortChanged = api.addEventListener('sortChanged', clearSeverityStats);
-		const unsubFilterChanged = api.addEventListener('filterChanged', clearSeverityStats);
+		const unsubBlockLoaded = api.addEventListener(GridEventName.serverBlockLoaded, handleBlockLoaded);
+		const unsubCellValueChanged = api.addEventListener(GridEventName.cellValueChanged, refreshSeverityStats);
+		const unsubSortChanged = api.addEventListener(GridEventName.sortChanged, clearSeverityStats);
+		const unsubFilterChanged = api.addEventListener(GridEventName.filterChanged, clearSeverityStats);
 		return () => {
 			unsubBlockLoaded();
 			unsubCellValueChanged();
