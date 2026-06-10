@@ -157,6 +157,11 @@ export function createApiFacade<TRowData>(
 		isDetailExpanded: (rowId: string) => store.isDetailExpanded(rowId),
 		getRowNodeById: (rowId: string) => store.getRowNodeById(rowId),
 		getRawRowById: (rowId: string) => store.getRawRowById(rowId),
+		selectRows: (rowIds: string[]) => store.selectRows(rowIds),
+		deselectRows: (rowIds: string[]) => store.deselectRows(rowIds),
+		toggleRowSelection: (rowId: string) => store.toggleRowSelection(rowId),
+		selectAllRows: () => store.selectAllRows(),
+		clearRowSelection: () => store.clearRowSelection(),
 		rows: () => store.rows(),
 		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
 		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
@@ -223,7 +228,6 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 			checkboxSelection: true,
 			sortable: false,
 			movable: false,
-			resizable: false,
 		} as unknown as ColumnDef<TRowData>;
 		columns = [checkboxCol, ...columns];
 		// Auto-bump the left pin count so the checkbox column is always visible
@@ -255,7 +259,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 		...mergedInitial,
 	});
 
-	const controller = new ClientRowModelController<TRowData>(store, options);
+	const controller = new ClientRowModelController<TRowData>(store, { ...options, columns: resolvedColumns });
 	const persistenceController = wireGridPersistence(options, store);
 	const api = createApiFacade(
 		store,

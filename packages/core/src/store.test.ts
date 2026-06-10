@@ -1476,9 +1476,11 @@ describe('row multi-select', () => {
 		const handler = vi.fn();
 		store.addEventListener('rowSelectionChanged', handler);
 		store.toggleRowSelection('row-1');
-		expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-			payload: expect.objectContaining({ selectedRowIds: ['row-1'], changedRowIds: ['row-1'] }),
-		}));
+		expect(handler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({ selectedRowIds: ['row-1'], changedRowIds: ['row-1'] }),
+			})
+		);
 		controller.dispose();
 	});
 

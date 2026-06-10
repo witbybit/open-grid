@@ -14,7 +14,8 @@ export type GridPageType =
 	| 'nested'
 	| 'panels'
 	| 'native'
-	| 'grouping';
+	| 'grouping'
+	| 'multiselect';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================

@@ -147,8 +147,8 @@ function OpenGridManagedClient<TRowData = unknown>({
 
 function OpenGridInner<TRowData = unknown>({
 	api,
-	pinLeftColumns = 0,
-	pinRightColumns = 0,
+	pinLeftColumns,
+	pinRightColumns,
 	pinTopRows = 0,
 	pinBottomRows = 0,
 	enableColumnReorder,
@@ -168,13 +168,18 @@ function OpenGridInner<TRowData = unknown>({
 	const hostRef = useRef<GridHost | null>(null);
 	const isGridActiveRef = useRef(false);
 
+	// Only push pin values when they are explicitly provided as props.
+	// If undefined, the grid keeps whatever pin state was set by createClientGrid
+	// (e.g. auto-pinned by rowSelection: 'multiple') instead of being overridden to 0.
 	useEffect(() => {
-		hostRef.current?.setViewportPins({
-			left: pinLeftColumns,
-			right: pinRightColumns,
-			top: pinTopRows,
-			bottom: pinBottomRows,
-		});
+		if (pinLeftColumns !== undefined || pinRightColumns !== undefined) {
+			hostRef.current?.setViewportPins({
+				left: pinLeftColumns ?? 0,
+				right: pinRightColumns ?? 0,
+				top: pinTopRows,
+				bottom: pinBottomRows,
+			});
+		}
 	}, [pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
 
 	useEffect(() => {
@@ -187,10 +192,13 @@ function OpenGridInner<TRowData = unknown>({
 		const container = containerRef.current;
 		if (!container) return;
 
+		// Read the pin state already set in the store (e.g. auto-pinned by rowSelection: 'multiple')
+		// so we don't accidentally override it with 0 when the prop is not passed.
+		const storePins = api.getPinnedColumns();
 		const host = mountGridHost(api, container, {
 			pins: {
-				left: pinLeftColumns,
-				right: pinRightColumns,
+				left: pinLeftColumns !== undefined ? pinLeftColumns : storePins.left,
+				right: pinRightColumns !== undefined ? pinRightColumns : storePins.right,
 				top: pinTopRows,
 				bottom: pinBottomRows,
 			},

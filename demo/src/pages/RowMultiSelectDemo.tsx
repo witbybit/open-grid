@@ -280,11 +280,7 @@ export default function RowMultiSelectDemo() {
 
 				{/* ── Grid ───────────────────────────────────────────────────── */}
 				<div className='flex-1 min-h-0 border border-slate-800 rounded-xl overflow-hidden bg-slate-950 shadow-2xl'>
-					<OpenGrid
-						api={api as GridApi<OrderRow>}
-						enableNavigation={true}
-						navigationOptions={{ editTrigger: 'doubleClick' }}
-					/>
+					<OpenGrid api={api as GridApi<OrderRow>} enableNavigation={true} navigationOptions={{ editTrigger: 'doubleClick' }} />
 				</div>
 
 				{/* ── Event log ──────────────────────────────────────────────── */}

@@ -1592,7 +1592,7 @@ export class RowRenderer<TRowData = unknown> {
 		if (isFocusedRow) {
 			rowClassName += ' og-row-focused';
 		}
-		if (this._selectedRowIdSet?.has(node.id) ?? state.selectedRowIds.includes(node.id)) {
+		if (state.selectedRowIds.length > 0 && state.selectedRowIds.includes(node.id)) {
 			rowClassName += ' og-row-node-selected';
 		}
 		if (isLoadingRow) {

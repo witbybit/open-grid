@@ -591,10 +591,7 @@ export class GridEngine<TRowData = unknown> {
 
 	// ── Row node selection ─────────────────────────────────────────────────────
 
-	private applyRowSelection(
-		op: 'select' | 'deselect' | 'toggle' | 'selectAll' | 'clear',
-		rowIds?: string[]
-	): void {
+	private applyRowSelection(op: 'select' | 'deselect' | 'toggle' | 'selectAll' | 'clear', rowIds?: string[]): void {
 		const current = this.stateManager.getState();
 		const currentSet = new Set(current.selectedRowIds);
 		let newIds: string[];
@@ -602,13 +599,13 @@ export class GridEngine<TRowData = unknown> {
 		switch (op) {
 			case 'select': {
 				const toAdd = rowIds ?? [];
-				toAdd.forEach(id => currentSet.add(id));
+				toAdd.forEach((id) => currentSet.add(id));
 				newIds = [...currentSet];
 				break;
 			}
 			case 'deselect': {
 				const toRemove = new Set(rowIds ?? []);
-				newIds = current.selectedRowIds.filter(id => !toRemove.has(id));
+				newIds = current.selectedRowIds.filter((id) => !toRemove.has(id));
 				break;
 			}
 			case 'toggle': {
@@ -641,9 +638,7 @@ export class GridEngine<TRowData = unknown> {
 
 		const prevSet = new Set(current.selectedRowIds);
 		const newSet = new Set(newIds);
-		const changed = newIds
-			.filter(id => !prevSet.has(id))
-			.concat(current.selectedRowIds.filter(id => !newSet.has(id)));
+		const changed = newIds.filter((id) => !prevSet.has(id)).concat(current.selectedRowIds.filter((id) => !newSet.has(id)));
 
 		this.stateManager.setState({ selectedRowIds: newIds });
 		this.eventBus.dispatchEvent('rowSelectionChanged', {

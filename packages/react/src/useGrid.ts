@@ -17,9 +17,12 @@ function warnInitialOnlyChanged(hookName: string, optName: string): void {
 
 export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridApi<TRowData> {
 	const initialOptionsRef = useRef(options);
-	// Skip the first mount — columns are already set at grid-creation time (with persisted state applied).
-	// Only propagate when options.columns actually changes after the initial render.
-	const didMountColumnsRef = useRef(false);
+	// Track the last columns reference we synced to the grid.
+	// Initialised to the initial columns so the first mount (and any Strict-Mode
+	// double-invoke) skips setColumns — the grid was already seeded by createClientGrid.
+	// A genuine columns change produces a new reference that differs from lastColumnsRef,
+	// which then triggers setColumns and updates the ref.
+	const lastColumnsRef = useRef(initialOptionsRef.current.columns);
 
 	const api = useMemo(() => {
 		const { rows, columns, getRowId, rowOverscanPx, colBuffer, runtimeLimits, initialState, overscanAdaptive, persistence, rowSelection } =
@@ -41,10 +44,8 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 	}, []);
 
 	useEffect(() => {
-		if (!didMountColumnsRef.current) {
-			didMountColumnsRef.current = true;
-			return;
-		}
+		if (options.columns === lastColumnsRef.current) return;
+		lastColumnsRef.current = options.columns;
 		api.setColumns(options.columns);
 	}, [api, options.columns]);
 
@@ -79,7 +80,7 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 
 export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): GridApi<TRowData> {
 	const initialOptionsRef = useRef(options);
-	const didMountColumnsRef = useRef(false);
+	const lastServerColumnsRef = useRef(initialOptionsRef.current.columns);
 	const didMountServerOptionsRef = useRef(false);
 
 	const api = useMemo(() => {
@@ -102,10 +103,8 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): G
 	}, []);
 
 	useEffect(() => {
-		if (!didMountColumnsRef.current) {
-			didMountColumnsRef.current = true;
-			return;
-		}
+		if (options.columns === lastServerColumnsRef.current) return;
+		lastServerColumnsRef.current = options.columns;
 		api.setColumns(options.columns);
 	}, [api, options.columns]);
 

@@ -25,16 +25,17 @@ Open Grid currently has only cell-range selection (anchor → focus rectangle). 
 
 ## Files in scope
 
-| File | Change |
-|------|--------|
-| `packages/core/src/store.ts` | Add `selectedRowIds` to `GridState`, default init, `GridRowsAccessor` interface additions, new `GridApi` methods, `GridStore` implementations |
-| `packages/core/src/engine/GridEngine.ts` | Add `applyRowSelection()` private method, public `selectRowIds`, `deselectRowIds`, `toggleRowId`, `selectAllDataRows`, `clearRowSelection` methods, wire `rowSelectionChanged` event |
-| `packages/core/src/columnDef.ts` | Add `checkboxSelection?: boolean` to `ColumnDef` |
-| `packages/core/src/renderer/rowRenderer.ts` | Apply `.og-row-node-selected` class; render checkbox cell for checkbox columns; render select-all checkbox in header |
-| `packages/core/src/renderer/styles.ts` | Add `.og-row-node-selected` CSS |
-| `packages/core/src/navigation.ts` | Intercept `Ctrl/Cmd+Click` in `handleMouseDown` to toggle row selection |
+| File                                        | Change                                                                                                                                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/core/src/store.ts`                | Add `selectedRowIds` to `GridState`, default init, `GridRowsAccessor` interface additions, new `GridApi` methods, `GridStore` implementations                                        |
+| `packages/core/src/engine/GridEngine.ts`    | Add `applyRowSelection()` private method, public `selectRowIds`, `deselectRowIds`, `toggleRowId`, `selectAllDataRows`, `clearRowSelection` methods, wire `rowSelectionChanged` event |
+| `packages/core/src/columnDef.ts`            | Add `checkboxSelection?: boolean` to `ColumnDef`                                                                                                                                     |
+| `packages/core/src/renderer/rowRenderer.ts` | Apply `.og-row-node-selected` class; render checkbox cell for checkbox columns; render select-all checkbox in header                                                                 |
+| `packages/core/src/renderer/styles.ts`      | Add `.og-row-node-selected` CSS                                                                                                                                                      |
+| `packages/core/src/navigation.ts`           | Intercept `Ctrl/Cmd+Click` in `handleMouseDown` to toggle row selection                                                                                                              |
 
 **Out of scope:**
+
 - `packages/react/` — the React package auto-exposes new API methods through existing hooks; no changes needed.
 - `SelectionModel.ts` — row node selection lives in `GridState`, not `GridSelectionState`; `SelectionModel` is not touched.
 - `serverRowModel.ts` — server-side "select all" is complex; skip it (clear selection instead).
@@ -57,6 +58,7 @@ selectedRowIds: string[];
 **1b. Initialize in `GridStore` constructor** (around line 608–643, inside the `new GridEngine<TRowData>({...})` call — but `GridEngine` takes an `Partial<GridState>`, so you also need to add the default at the point where `initialState` values are applied):
 
 Find the block starting at line 606:
+
 ```typescript
 constructor(initialState: Partial<GridState<TRowData>> = {}) {
     validateColumns(initialState.columns || []);
@@ -67,6 +69,7 @@ constructor(initialState: Partial<GridState<TRowData>> = {}) {
 ```
 
 Add alongside the other `initialState.xxx || default` entries:
+
 ```typescript
 selectedRowIds: initialState.selectedRowIds ?? [],
 ```
@@ -264,9 +267,9 @@ You need access to `state.selectedRowIds` as a `Set` for O(1) lookup. Look for h
 // Near where og-row-selected is applied, also apply og-row-node-selected:
 const isNodeSelected = selectedRowIdsSet.has(rowId); // build Set once per render pass
 if (isNodeSelected) {
-    rowEl.classList.add('og-row-node-selected');
+	rowEl.classList.add('og-row-node-selected');
 } else {
-    rowEl.classList.remove('og-row-node-selected');
+	rowEl.classList.remove('og-row-node-selected');
 }
 ```
 
@@ -278,10 +281,10 @@ Find where `.og-row-selected` is defined (search for `og-row-selected`). Add a s
 
 ```css
 .og-row-node-selected {
-  background-color: var(--og-row-selected-bg, rgba(59, 130, 246, 0.08));
+	background-color: var(--og-row-selected-bg, rgba(59, 130, 246, 0.08));
 }
 .og-row-node-selected .og-cell {
-  background-color: inherit;
+	background-color: inherit;
 }
 ```
 
@@ -299,23 +302,23 @@ Find where cells are rendered for data rows. The renderer reads `col.renderer` t
 
 ```typescript
 if (colDef.checkboxSelection) {
-    // Create or reuse a checkbox input element
-    let checkbox = cellEl.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
-    if (!checkbox) {
-        checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'og-row-checkbox';
-        checkbox.style.cssText = 'pointer-events:auto;cursor:pointer;margin:0';
-        checkbox.addEventListener('change', (e) => {
-            e.stopPropagation();
-            // Access the engine via closure or the engine reference available in the renderer
-            engine.toggleRowId(rowId);
-        });
-        cellEl.innerHTML = '';
-        cellEl.appendChild(checkbox);
-    }
-    checkbox.checked = selectedRowIdsSet.has(rowId);
-    return; // skip normal cell rendering
+	// Create or reuse a checkbox input element
+	let checkbox = cellEl.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
+	if (!checkbox) {
+		checkbox = document.createElement('input');
+		checkbox.type = 'checkbox';
+		checkbox.className = 'og-row-checkbox';
+		checkbox.style.cssText = 'pointer-events:auto;cursor:pointer;margin:0';
+		checkbox.addEventListener('change', (e) => {
+			e.stopPropagation();
+			// Access the engine via closure or the engine reference available in the renderer
+			engine.toggleRowId(rowId);
+		});
+		cellEl.innerHTML = '';
+		cellEl.appendChild(checkbox);
+	}
+	checkbox.checked = selectedRowIdsSet.has(rowId);
+	return; // skip normal cell rendering
 }
 ```
 
@@ -370,8 +373,8 @@ In `handleMouseDown` (line 356), at the very top after the `event.button !== 0` 
 ```typescript
 // Ctrl/Cmd+Click: toggle row selection without moving cell focus
 if (event.ctrlKey || event.metaKey) {
-    this.store.toggleRowSelection(rowId);
-    return; // do not move cell focus
+	this.store.toggleRowSelection(rowId);
+	return; // do not move cell focus
 }
 ```
 
@@ -390,6 +393,7 @@ Confirm `GridRowsAccessor` (with the new methods) and the new `GridApi` methods 
 **File:** `packages/core/src/index.ts`
 
 Search for `GridApi` and `GridRowsAccessor` exports. If either is missing, add:
+
 ```typescript
 export type { GridRowsAccessor } from './store.js';
 ```
@@ -401,6 +405,7 @@ export type { GridRowsAccessor } from './store.js';
 **File:** `packages/core/src/store.test.ts` (1000+ lines — follow existing patterns)
 
 Test pattern (from existing tests):
+
 ```typescript
 const store = new GridStore<TestRow>({ columns: [...], getRowId: (r) => r.id });
 const controller = new ClientRowModelController(store, { rows: [...], columns: [...] });
@@ -410,68 +415,79 @@ store.updateVisibleRanges(); // if needed
 Add a `describe('row multi-select', () => {` block with the following tests:
 
 1. **selectRows adds to selectedRowIds**
-   ```typescript
-   store.selectRows(['row-1', 'row-2']);
-   expect(store.getState().selectedRowIds).toEqual(['row-1', 'row-2']);
-   ```
+
+    ```typescript
+    store.selectRows(['row-1', 'row-2']);
+    expect(store.getState().selectedRowIds).toEqual(['row-1', 'row-2']);
+    ```
 
 2. **deselectRows removes from selectedRowIds**
-   ```typescript
-   store.selectRows(['row-1', 'row-2']);
-   store.deselectRows(['row-1']);
-   expect(store.getState().selectedRowIds).toEqual(['row-2']);
-   ```
+
+    ```typescript
+    store.selectRows(['row-1', 'row-2']);
+    store.deselectRows(['row-1']);
+    expect(store.getState().selectedRowIds).toEqual(['row-2']);
+    ```
 
 3. **toggleRowSelection adds when not selected**
-   ```typescript
-   store.toggleRowSelection('row-1');
-   expect(store.getState().selectedRowIds).toContain('row-1');
-   ```
+
+    ```typescript
+    store.toggleRowSelection('row-1');
+    expect(store.getState().selectedRowIds).toContain('row-1');
+    ```
 
 4. **toggleRowSelection removes when already selected**
-   ```typescript
-   store.selectRows(['row-1']);
-   store.toggleRowSelection('row-1');
-   expect(store.getState().selectedRowIds).not.toContain('row-1');
-   ```
+
+    ```typescript
+    store.selectRows(['row-1']);
+    store.toggleRowSelection('row-1');
+    expect(store.getState().selectedRowIds).not.toContain('row-1');
+    ```
 
 5. **clearRowSelection empties the list**
-   ```typescript
-   store.selectRows(['row-1', 'row-2']);
-   store.clearRowSelection();
-   expect(store.getState().selectedRowIds).toEqual([]);
-   ```
+
+    ```typescript
+    store.selectRows(['row-1', 'row-2']);
+    store.clearRowSelection();
+    expect(store.getState().selectedRowIds).toEqual([]);
+    ```
 
 6. **isRowNodeSelected returns correct boolean**
-   ```typescript
-   store.selectRows(['row-1']);
-   expect(store.isRowNodeSelected('row-1')).toBe(true);
-   expect(store.isRowNodeSelected('row-2')).toBe(false);
-   ```
+
+    ```typescript
+    store.selectRows(['row-1']);
+    expect(store.isRowNodeSelected('row-1')).toBe(true);
+    expect(store.isRowNodeSelected('row-2')).toBe(false);
+    ```
 
 7. **getCheckedIds returns selected row IDs**
-   ```typescript
-   store.selectRows(['row-1']);
-   expect(store.rows().getCheckedIds()).toEqual(['row-1']);
-   ```
+
+    ```typescript
+    store.selectRows(['row-1']);
+    expect(store.rows().getCheckedIds()).toEqual(['row-1']);
+    ```
 
 8. **getChecked returns selected row data**
-   ```typescript
-   store.selectRows(['row-1']);
-   const checked = store.rows().getChecked();
-   expect(checked).toHaveLength(1);
-   expect(checked[0]).toMatchObject({ id: 'row-1' });
-   ```
+
+    ```typescript
+    store.selectRows(['row-1']);
+    const checked = store.rows().getChecked();
+    expect(checked).toHaveLength(1);
+    expect(checked[0]).toMatchObject({ id: 'row-1' });
+    ```
 
 9. **rowSelectionChanged event fires on toggle**
-   ```typescript
-   const handler = vi.fn();
-   store.addEventListener('rowSelectionChanged', handler);
-   store.toggleRowSelection('row-1');
-   expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-       payload: expect.objectContaining({ selectedRowIds: ['row-1'], changedRowIds: ['row-1'] })
-   }));
-   ```
+
+    ```typescript
+    const handler = vi.fn();
+    store.addEventListener('rowSelectionChanged', handler);
+    store.toggleRowSelection('row-1');
+    expect(handler).toHaveBeenCalledWith(
+    	expect.objectContaining({
+    		payload: expect.objectContaining({ selectedRowIds: ['row-1'], changedRowIds: ['row-1'] }),
+    	})
+    );
+    ```
 
 10. **selectRows is idempotent** (selecting already-selected row does not duplicate)
     ```typescript
@@ -500,6 +516,7 @@ pnpm -F @open-grid/core build
 ```
 
 Additionally verify manually:
+
 - `store.getState().selectedRowIds` exists and is `[]` by default on a fresh grid
 - `store.selectRows(['x'])` → `store.getState().selectedRowIds === ['x']`
 - `store.toggleRowSelection('x')` twice → back to `[]`

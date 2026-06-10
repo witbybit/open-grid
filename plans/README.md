@@ -1,8 +1,8 @@
 # Plans
 
-| # | Plan | Status | Commit |
-|---|------|--------|--------|
-| 001 | [Row Multi-Select](./001-row-multiselect.md) | TODO | 3d32692 |
+| #   | Plan                                         | Status | Commit  |
+| --- | -------------------------------------------- | ------ | ------- |
+| 001 | [Row Multi-Select](./001-row-multiselect.md) | TODO   | 3d32692 |
 
 ## Execution order
 
