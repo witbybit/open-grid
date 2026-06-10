@@ -78,7 +78,7 @@ function ensureStyles() {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0)   scale(1);    }
 }
-.og-ct-panel { animation: og-ct-fade-in 0.14s cubic-bezier(0.16,1,0.3,1) both; }
+.og-ct-panel { width: 400px; animation: og-ct-fade-in 0.14s cubic-bezier(0.16,1,0.3,1) both; }
 
 /* scrollable list inside dropdown */
 .og-ct-scroll {
