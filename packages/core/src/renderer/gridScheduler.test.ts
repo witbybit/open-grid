@@ -68,6 +68,24 @@ describe('DefaultGridScheduler', () => {
 		vi.advanceTimersByTime(200);
 		expect(cb).not.toHaveBeenCalled();
 	});
+
+	it('cancelRaf() cancels the setTimeout fallback when requestAnimationFrame is unavailable', () => {
+		const originalRaf = globalThis.requestAnimationFrame;
+		const originalCancel = globalThis.cancelAnimationFrame;
+		// @ts-expect-error intentionally removing raf
+		delete globalThis.requestAnimationFrame;
+		// @ts-expect-error intentionally removing cancelAnimationFrame
+		delete globalThis.cancelAnimationFrame;
+
+		const cb = vi.fn();
+		const id = scheduler.raf(cb);
+		scheduler.cancelRaf(id);
+		vi.advanceTimersByTime(100);
+		expect(cb).not.toHaveBeenCalled();
+
+		globalThis.requestAnimationFrame = originalRaf;
+		globalThis.cancelAnimationFrame = originalCancel;
+	});
 });
 
 describe('RenderScheduler with GridScheduler', () => {

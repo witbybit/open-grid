@@ -1435,8 +1435,11 @@ export class RowRenderer<TRowData = unknown> {
 		//                   (no blank flash) and schedule a post-scroll full rebind.
 		// Only 'custom-live' same-row portals bypass the freeze to push fresh data each frame.
 		const canFreezePortal = cellSlot.lastPortalKey === cellKey && isMounted;
-		const isPortalFrozen = !isRowRebind && canFreezePortal;
-		const isStaleFrozen = isRowRebind && canFreezePortal;
+		// Data-stale: same row/key but the data version changed since last mount (sort/filter during scroll).
+		const isDataStale =
+			!isRowRebind && canFreezePortal && cellSlot.lastMountedDataVersion !== -1 && ctx.dataVersion !== cellSlot.lastMountedDataVersion;
+		const isPortalFrozen = !isRowRebind && canFreezePortal && !isDataStale;
+		const isStaleFrozen = (isRowRebind || isDataStale) && canFreezePortal;
 
 		if (isPortalFrozen || isStaleFrozen) {
 			// Keep the existing portal visible — no React work this scroll frame.
