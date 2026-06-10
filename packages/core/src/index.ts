@@ -5,6 +5,8 @@ export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/sta
 export { RowNode } from './store.js';
 export type { RowDataTransaction, RowNodeTransaction } from './store.js';
 export type {
+	CellCopyParams,
+	CellPasteParams,
 	CellEditorProps,
 	CellPointer,
 	CellRendererCapabilities,

@@ -17,6 +17,7 @@ import { useClientGrid } from './useGrid.js';
 declare const process: { env: { NODE_ENV: string } } | undefined;
 const DEV = typeof process === 'undefined' || process.env.NODE_ENV !== 'production';
 import { PortalManager, createPortalStore } from './GridPortal.js';
+import { flashCopiedCells } from './cellFlash.js';
 import { useGridNavigationController } from './hooks.js';
 import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
 import { GridChartOverlay } from './chart/GridChartOverlay.js';
@@ -489,6 +490,22 @@ function OpenGridInner<TRowData = unknown>({
 			container.removeEventListener('contextmenu', handleContextMenu);
 		};
 	}, [handleMouseDown, handleMouseOver, handleClick, handleDoubleClick, handleContextMenu]);
+
+	// Flash copied cells when a copy event fires. cancelFlash holds the active
+	// cleanup so a rapid second copy cancels the first timer before starting a new one.
+	useEffect(() => {
+		let cancelFlash: (() => void) | undefined;
+		const unsub = api.addEventListener<{ cells: Array<{ rowId: string; colField: string }> }>('cellsCopied', ({ payload }) => {
+			const container = containerRef.current;
+			if (!container) return;
+			cancelFlash?.();
+			cancelFlash = flashCopiedCells(container, payload.cells);
+		});
+		return () => {
+			unsub();
+			cancelFlash?.();
+		};
+	}, [api]);
 
 	// Initialize sidebar default open panel on mount
 	const sidebarDefaultOpenRef = useRef(sidebar?.defaultOpen);

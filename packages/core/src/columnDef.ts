@@ -146,6 +146,20 @@ export interface CompiledGridPlan<TData = unknown> {
 
 // ─── Column definition ────────────────────────────────────────────────────────
 
+export interface CellCopyParams<TRowData = unknown> {
+	rowId: string;
+	colField: string;
+	value: unknown;
+	row: TRowData;
+}
+
+export interface CellPasteParams<TRowData = unknown> {
+	rowId: string;
+	colField: string;
+	pastedText: string;
+	row: TRowData;
+}
+
 export interface ColumnDef<TRowData = unknown> {
 	field: string;
 	header: string;
@@ -163,6 +177,10 @@ export interface ColumnDef<TRowData = unknown> {
 	sortable?: boolean;
 	/** When false, this column cannot be added to the row grouping. Defaults to true. */
 	enableRowGroup?: boolean;
+	/** Override the clipboard text for this cell on copy. Return the string to write. */
+	onCopy?: (params: CellCopyParams<TRowData>) => string;
+	/** Transform pasted text before setting the cell value. Return the value to write. */
+	onPaste?: (params: CellPasteParams<TRowData>) => unknown;
 }
 
 /**

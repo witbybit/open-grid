@@ -12,6 +12,8 @@ export { RowNode } from './rowNode.js';
 
 export { isDomCellRenderer, getValueByPath, setValueByPath, compilePathGetter } from './columnDef.js';
 export type {
+	CellCopyParams,
+	CellPasteParams,
 	ValueGetterParams,
 	CellRendererPhase,
 	CellRendererCapabilities,

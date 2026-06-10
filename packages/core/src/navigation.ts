@@ -105,6 +105,13 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 				return;
 			}
 
+			// Ctrl+V / Cmd+V — paste from clipboard
+			if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+				event.preventDefault();
+				void this.pasteFromClipboard();
+				return;
+			}
+
 			let nextRow = row;
 			let nextCol = col;
 			let handled = false;
@@ -438,19 +445,37 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	 * Copy the current selection to the clipboard as tab-separated values (TSV).
 	 * Single-cell selection copies the display value; multi-cell copies a TSV block
 	 * that pastes correctly into Excel and Google Sheets.
+	 * Fires a `cellsCopied` event so the renderer can flash the copied cells.
 	 */
 	private copySelectionToClipboard(): void {
 		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
 		const state = this.store.getState();
 		const selection = state.selection;
 		const bounds = selection.bounds;
+		const copiedCells: Array<{ rowId: string; colField: string }> = [];
 
 		if (!bounds) {
-			// Single focused cell
 			const focus = selection.focus;
 			if (!focus) return;
-			const text = this.store.getCheapDisplayValue(focus.rowId, focus.colField);
+			const colDef = state.columns.find((c) => c.field === focus.colField);
+			let text: string;
+			if (colDef?.onCopy) {
+				const row = this.store.getRawRowById(focus.rowId);
+				text =
+					row !== null
+						? colDef.onCopy({
+								row,
+								rowId: focus.rowId,
+								colField: focus.colField,
+								value: this.store.getCellValue(focus.rowId, focus.colField),
+							})
+						: this.store.getCheapDisplayValue(focus.rowId, focus.colField);
+			} else {
+				text = this.store.getCheapDisplayValue(focus.rowId, focus.colField);
+			}
 			navigator.clipboard.writeText(text).catch(() => {});
+			copiedCells.push({ rowId: focus.rowId, colField: focus.colField });
+			this.store.dispatchEvent('cellsCopied', { cells: copiedCells });
 			return;
 		}
 
@@ -465,12 +490,75 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 				const colField = this.store.getColumnField(c);
 				if (colField === null) continue;
-				cells.push(this.store.getCheapDisplayValue(visualRow.rowId, colField));
+				const colDef = state.columns.find((col) => col.field === colField);
+				let cellText: string;
+				if (colDef?.onCopy) {
+					const row = this.store.getRawRowById(visualRow.rowId);
+					cellText =
+						row !== null
+							? colDef.onCopy({ row, rowId: visualRow.rowId, colField, value: this.store.getCellValue(visualRow.rowId, colField) })
+							: this.store.getCheapDisplayValue(visualRow.rowId, colField);
+				} else {
+					cellText = this.store.getCheapDisplayValue(visualRow.rowId, colField);
+				}
+				cells.push(cellText);
+				copiedCells.push({ rowId: visualRow.rowId, colField });
 			}
 			rows.push(cells.join('\t'));
 		}
 
 		if (rows.length === 0) return;
 		navigator.clipboard.writeText(rows.join('\n')).catch(() => {});
+		this.store.dispatchEvent('cellsCopied', { cells: copiedCells });
+	}
+
+	private async pasteFromClipboard(): Promise<void> {
+		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+		const state = this.store.getState();
+		const selection = state.selection;
+		const focus = selection.focus;
+		if (!focus) return;
+
+		const focusCoords = this.getCoordsFromPointer(focus);
+		if (!focusCoords) return;
+
+		const startRow = selection.bounds ? selection.bounds.minRow : focusCoords.rowIdx;
+		const startCol = selection.bounds ? selection.bounds.minCol : focusCoords.colIdx;
+
+		try {
+			const text = await navigator.clipboard.readText();
+			if (!text) return;
+
+			const rowModel = this.store.getRowModel();
+			if (!rowModel) return;
+			const maxRow = this.store.getVisualRowCount();
+			const lines = text.split(/\r?\n/);
+
+			for (let r = 0; r < lines.length; r++) {
+				if (!lines[r] && r === lines.length - 1) break; // skip trailing newline
+				const rowIndex = startRow + r;
+				if (rowIndex >= maxRow) break;
+				const visualRow = rowModel.getVisualRow(rowIndex);
+				if (!visualRow || visualRow.kind !== 'data') continue;
+				const rowId = visualRow.rowId;
+				const cells = lines[r].split('\t');
+				for (let c = 0; c < cells.length; c++) {
+					const colIndex = startCol + c;
+					if (colIndex >= state.columns.length) break;
+					const colDef = state.columns[colIndex];
+					if (!colDef) continue;
+					let value: unknown = cells[c];
+					if (colDef.onPaste) {
+						const row = this.store.getRawRowById(rowId);
+						if (row !== null) {
+							value = colDef.onPaste({ row, rowId, colField: colDef.field, pastedText: cells[c] });
+						}
+					}
+					this.store.setCellValue(rowId, colDef.field, value);
+				}
+			}
+		} catch {
+			// Clipboard access denied — silently ignore
+		}
 	}
 }

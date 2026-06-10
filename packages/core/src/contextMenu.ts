@@ -346,7 +346,14 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 					if (colIndex > bounds.maxCol) break;
 					const col = params.api.getState().columns[colIndex];
 					if (!col) continue;
-					this.store.setCellValue(rowId, col.field, cells[c]);
+					let value: unknown = cells[c];
+					if (col.onPaste) {
+						const row = params.api.getRawRowById(rowId);
+						if (row !== null) {
+							value = col.onPaste({ row, rowId, colField: col.field, pastedText: cells[c] });
+						}
+					}
+					this.store.setCellValue(rowId, col.field, value);
 				}
 			}
 		} catch (err) {

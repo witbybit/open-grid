@@ -47,6 +47,15 @@ export const CORE_STYLES = `
     --og-detail-row-font-size: 12px;
   }
 
+  @keyframes og-cell-flash {
+    0%   { background-color: var(--og-copy-flash-color, rgba(99, 179, 237, 0.45)); }
+    100% { background-color: transparent; }
+  }
+
+  .og-cell-flash {
+    animation: og-cell-flash var(--og-copy-flash-duration, 380ms) ease-out;
+  }
+
   @keyframes og-shimmer {
     0% {
       background-position: -200% 0;
