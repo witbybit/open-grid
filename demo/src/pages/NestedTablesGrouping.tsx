@@ -151,18 +151,39 @@ const RatingStarsRenderer = ({ value }: CellRendererProps<EmployeeRow>) => {
 
 // Custom Tree node name renderer with indent and folder/file icon!
 const TreeNameRenderer = ({ value, row, rowId, api }: CellRendererProps<FileNodeRow>) => {
-	const visualIndex = api.getRowIndexById(rowId) ?? 0;
-	const visualRow = api.getVisualRow(visualIndex);
-	const depth = visualRow?.depth ?? 0;
+	const visualRow = api.rows().getVisualRowById(rowId);
+	const depth = visualRow && 'depth' in visualRow ? visualRow.depth : 0;
 
 	const isFolder = row.type === 'folder';
+	const isExpanded = api.isGroupExpanded(rowId);
 	let Icon = File;
 	if (isFolder) {
 		Icon = Folder;
 	}
 
+	const handleToggle = (e: React.MouseEvent) => {
+		if (!isFolder) return;
+		e.stopPropagation();
+		const start = performance.now();
+		api.toggleGroupExpanded(rowId);
+		LatencyProfiler.record(performance.now() - start);
+	};
+
 	return (
 		<div className='flex items-center h-full select-none' style={{ paddingLeft: `${depth * 20}px` }}>
+			<button
+				type='button'
+				onClick={handleToggle}
+				className='w-4 h-4 mr-1 flex items-center justify-center rounded hover:bg-slate-800 transition-colors'
+			>
+				{isFolder ? (
+					isExpanded ? (
+						<ChevronDown className='w-3.5 h-3.5 text-amber-400' />
+					) : (
+						<ChevronRight className='w-3.5 h-3.5 text-slate-400' />
+					)
+				) : null}
+			</button>
 			<Icon className={`w-3.5 h-3.5 mr-2 shrink-0 ${isFolder ? 'text-amber-400' : 'text-slate-400'}`} />
 			<span className={`${isFolder ? 'font-semibold text-slate-200' : 'text-slate-300'}`}>{String(value)}</span>
 		</div>
@@ -206,9 +227,9 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 		() => [
 			{ field: 'id', header: 'Item ID', width: 100 },
 			{ field: 'itemName', header: 'Product Item Name', width: 260 },
-			{ field: 'price', header: 'Unit Price', width: 130, cellRenderer: PriceBadgeRenderer },
+			{ field: 'price', header: 'Unit Price', width: 130, renderer: { kind: 'react', component: PriceBadgeRenderer } },
 			{ field: 'quantity', header: 'Qty', width: 100 },
-			{ field: 'subtotal', header: 'Total Value', width: 140, cellRenderer: PriceBadgeRenderer },
+			{ field: 'subtotal', header: 'Total Value', width: 140, renderer: { kind: 'react', component: PriceBadgeRenderer } },
 		],
 		[]
 	);
@@ -224,10 +245,9 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 		const start = performance.now();
 		if (colField === 'quantity') {
 			const q = parseInt(String(val)) || 0;
-			const index = detailApi.getRowIndexById(rowId);
-			const rowNode = index !== null ? detailApi.getRowNode(index) : null;
-			if (rowNode) {
-				const p = rowNode.data.price;
+			const row = detailApi.getRawRowById(rowId);
+			if (row) {
+				const p = row.price;
 				const newSubtotal = q * p;
 				detailApi.setCellValue(rowId, 'subtotal', newSubtotal);
 
@@ -241,10 +261,9 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 				// Re-calculate parent grid totals!
 				setTimeout(() => {
 					let parentSum = 0;
-					for (let i = 0; i < detailApi.getRowCount(); i++) {
-						const item = detailApi.getRow(i);
-						if (item) parentSum += item.subtotal;
-					}
+					detailApi.rows().forEach((item) => {
+						parentSum += item.subtotal;
+					});
 					parentApi.setCellValue(orderId, 'totalAmount', parentSum);
 				}, 0);
 			}
@@ -332,8 +351,8 @@ export default function NestedTablesGrouping() {
 			{ field: 'name', header: 'Full Name', width: 180 },
 			{ field: 'department', header: 'Department', width: 140 },
 			{ field: 'title', header: 'Job Title', width: 180 },
-			{ field: 'rating', header: 'Rating', width: 120, cellRenderer: RatingStarsRenderer },
-			{ field: 'salary', header: 'Salary', width: 140, cellRenderer: SalaryRenderer },
+			{ field: 'rating', header: 'Rating', width: 120, renderer: { kind: 'react', component: RatingStarsRenderer } },
+			{ field: 'salary', header: 'Salary', width: 140, renderer: { kind: 'react', component: SalaryRenderer } },
 		],
 		[]
 	);
@@ -389,20 +408,28 @@ export default function NestedTablesGrouping() {
 	// 2. Tree Data Grid config
 	const treeColumns = useMemo<ColumnDef<FileNodeRow>[]>(
 		() => [
-			{ field: 'name', header: 'Node Path / Name', width: 260, cellRenderer: TreeNameRenderer },
+			{ field: 'name', header: 'Node Path / Name', width: 260, renderer: { kind: 'react', component: TreeNameRenderer } },
 			{
 				field: 'type',
 				header: 'File Type',
 				width: 110,
-				cellRenderer: ({ value }) => (
-					<span className='text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wide'>{String(value)}</span>
-				),
+				renderer: {
+					kind: 'react',
+					component: ({ value }: CellRendererProps<any>) => (
+						<span className='text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wide'>{String(value)}</span>
+					),
+				},
 			},
 			{
 				field: 'size',
 				header: 'Capacity Size',
 				width: 120,
-				cellRenderer: ({ value }) => <span className='font-mono text-slate-400 text-xs'>{String(value ?? '—')}</span>,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: CellRendererProps<any>) => (
+						<span className='font-mono text-slate-400 text-xs'>{String(value ?? '—')}</span>
+					),
+				},
 			},
 			{ field: 'modifiedAt', header: 'Last Edited', width: 140 },
 		],
@@ -413,65 +440,38 @@ export default function NestedTablesGrouping() {
 		rows: treeRows,
 		columns: treeColumns,
 		initialState: {
-			getParentId: (row) => row.parentId,
-			groupRowHeight: 38,
+			rowModelConfig: {
+				type: 'client',
+				treeData: {
+					enabled: true,
+					getParentId: (row) => row.parentId,
+				},
+			},
+			expansion: {
+				groups: {},
+				treeRows: treeRows.reduce<Record<string, true>>((acc, row) => {
+					if (row.type === 'folder') acc[row.id] = true;
+					return acc;
+				}, {}),
+				details: {},
+			},
 			styleSlots: {
-				groupRowClass: (visualRow) => {
-					return 'border-l-[3px] border-amber-500 bg-amber-950/5';
+				rowClass: (row) => {
+					return row.type === 'folder' ? 'border-l-[3px] border-amber-500 bg-amber-950/5' : '';
 				},
 			},
 		},
 	});
 
-	// Custom Tree node renderer (in parent-child tree, parent nodes map to group rows)
-	const handleTreeRowRender = useCallback(({ visualRow, api }: { visualRow: VisualRow<FileNodeRow>; api: GridApi<FileNodeRow> }) => {
-		if (visualRow.kind !== 'group') return null;
-		const expanded = visualRow.expanded;
-		const depth = visualRow.depth;
-
-		// The key of the tree group is the node ID
-		const nodeId = visualRow.key;
-		// Find full row data in treeRows
-		const rowData = treeRows.find((r) => r.id === nodeId);
-		if (!rowData) return null;
-
-		const handleToggle = (e: React.MouseEvent) => {
-			e.stopPropagation();
-			const start = performance.now();
-			api.toggleGroupExpanded(visualRow.id);
-			LatencyProfiler.record(performance.now() - start);
-		};
-
-		return (
-			<div
-				className='og-tree-group-content flex items-center justify-between px-4 h-full w-full border-b border-slate-900 bg-slate-900/20 hover:bg-slate-900/40 cursor-pointer'
-				onClick={handleToggle}
-				style={{ paddingLeft: `${depth * 20 + 16}px` }}
-			>
-				<div className='flex items-center gap-2'>
-					<span className='p-0.5 rounded hover:bg-slate-800 transition-colors'>
-						{expanded ? <ChevronDown className='w-4 h-4 text-amber-400' /> : <ChevronRight className='w-4 h-4 text-slate-400' />}
-					</span>
-					<Folder className='w-4 h-4 text-amber-400 shrink-0' />
-					<span className='text-slate-200 text-xs font-semibold'>{rowData.name}</span>
-				</div>
-				<div className='flex items-center gap-4 text-[10px] text-slate-500 font-mono font-bold'>
-					<span>{rowData.modifiedAt}</span>
-					<span className='text-[9px] text-amber-500 bg-amber-950/20 border border-amber-900/30 px-1.5 py-0.5 rounded'>Folder</span>
-				</div>
-			</div>
-		);
-	}, []);
-
 	// 3. Master-Detail Grid Config
 	const masterColumns = useMemo<ColumnDef<OrderRow>[]>(
 		() => [
-			{ field: 'toggle', header: '🔍', width: 45, cellRenderer: DetailToggleRenderer },
+			{ field: 'toggle', header: '🔍', width: 45, renderer: { kind: 'react', component: DetailToggleRenderer } },
 			{ field: 'id', header: 'Order ID', width: 110 },
 			{ field: 'customerName', header: 'Client Corporation', width: 220 },
 			{ field: 'orderDate', header: 'Purchase Date', width: 150 },
-			{ field: 'totalAmount', header: 'Transaction Value', width: 160, cellRenderer: PriceBadgeRenderer },
-			{ field: 'status', header: 'Fulfillment Status', width: 140, cellRenderer: StatusBadgeRenderer },
+			{ field: 'totalAmount', header: 'Transaction Value', width: 160, renderer: { kind: 'react', component: PriceBadgeRenderer } },
+			{ field: 'status', header: 'Fulfillment Status', width: 140, renderer: { kind: 'react', component: StatusBadgeRenderer } },
 		],
 		[]
 	);
@@ -563,7 +563,6 @@ export default function NestedTablesGrouping() {
 						<GridProvider api={treeApi} key={`tree-${gridVersion}`}>
 							<OpenGrid
 								enableNavigation={true}
-								groupRowRenderer={handleTreeRowRender}
 								navigationOptions={{
 									editTrigger: 'doubleClick',
 								}}

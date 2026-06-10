@@ -1,12 +1,24 @@
-export { createApiFacade, createClientGrid, createServerGrid } from './createGrid.js';
-export type { ClientGridOptions, ServerGridOptions } from './createGrid.js';
+export { createApiFacade, createClientGrid, createServerGrid, createLocalStorageAdapter } from './createGrid.js';
+export type { ClientGridOptions, ServerGridOptions, GridPersistenceAdapter, PersistedGridState } from './createGrid.js';
+export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 
 export { RowNode } from './store.js';
+export type { RowDataTransaction, RowNodeTransaction } from './store.js';
 export type {
+	CellCopyParams,
+	CellPasteParams,
 	CellEditorProps,
+	CellPointer,
+	CellRendererCapabilities,
+	CellRendererPhase,
 	CellRendererProps,
 	CellState,
 	ColumnDef,
+	ColumnRendererSpec,
+	DomCellRenderer,
+	DomCellRendererHandle,
+	DomCellRendererParams,
+	ImperativeCellHandle,
 	GridApi,
 	GridCellAccess,
 	GridCellClickParams,
@@ -22,14 +34,40 @@ export type {
 	HeaderMenuRendererProps,
 	Listener,
 	RowModel,
+	SelectionChangeResult,
 	ValueGetterParams,
 	VisualRow,
+	VisualRowPointer,
+	DataVisualRow,
+	GroupVisualRow,
+	DetailVisualRow,
+	FooterVisualRow,
+	LoadingVisualRow,
 } from './store.js';
 
-export type { FilterModel, FilterModelItem, SortModel } from './rowModel.js';
+export {
+	canEditCell,
+	canFocusVisualRow,
+	isDomCellRenderer,
+	isDataVisualRow,
+	isDataCellSelectable,
+	isEditableVisualRow,
+	isFullWidthVisualRow,
+	isSelectableVisualRow,
+} from './store.js';
+export type { FilterModel, FilterModelItem, GroupDef, RowModelConfig, SortModel } from './rowModel.js';
+export type { AggregationDef } from './rows/stages/aggregateStage.js';
+export type { CsvExportOptions } from './store.js';
+export {
+	parseVisualRowId,
+	toDataVisualRowId,
+	toDetailVisualRowId,
+	toFooterVisualRowId,
+	toGroupVisualRowId,
+	toLoadingVisualRowId,
+} from './rows/visualRowIds.js';
+export type { GroupPathItem } from './rows/visualRowIds.js';
 export type { IGridDatasource } from './serverRowModel.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
-export { mountGridHost, type GridCellContentAdapter, type GridHost, type GridHostOptions } from './gridHost.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
 export type { GridNavigationOptions } from './navigation.js';
-export type { GridCellContentMount, GridCellContentUnmount } from './renderer/IGridRenderer.js';

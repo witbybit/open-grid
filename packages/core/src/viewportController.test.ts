@@ -31,20 +31,37 @@ describe('ViewportController scrolling range computations', () => {
 	});
 
 	it('calculates velocity and expands row boundaries predictively during high-speed scrolling', () => {
-		const store = createStore(100, 3);
+		const store = new GridStore<{ id: string }>({
+			columns: Array.from({ length: 3 }, (_, i) => ({ field: `C${i}`, header: `Col ${i}` })),
+			overscanAdaptive: true,
+			rowOverscanPx: 480, // 12 rows × 40px
+		});
+		new ClientRowModelController<{ id: string }>(store, {
+			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}` })),
+			columns: store.getState().columns,
+		});
 		store.setViewportSize(300, 200);
 
 		store.setScrollPosition(100, 0, 1000);
 		store.setScrollPosition(250, 0, 1100);
 
 		expect(store.getScrollVelocity().vy).toBe(1.5);
-		expect(store.getVisibleRowRange()).toEqual({ startIdx: 0, endIdx: 45 });
+		// Adaptive expansion: min(480*2, 1.5*600) = 900px, quantized up to the 200px
+		// bucket = 1000px. bufferBottom = 450 + 480 + 1000 = 1930px → row 48.
+		expect(store.getVisibleRowRange()).toEqual({ startIdx: 0, endIdx: 48 });
 
 		store.destroy();
 	});
 
 	it('respects pinned columns when calculating scrollable visible space', () => {
-		const store = createStore(5, 10);
+		const store = new GridStore<{ id: string }>({
+			columns: Array.from({ length: 10 }, (_, i) => ({ field: `C${i}`, header: `Col ${i}` })),
+			colBuffer: 8,
+		});
+		new ClientRowModelController<{ id: string }>(store, {
+			rows: Array.from({ length: 5 }, (_, i) => ({ id: `row-${i}` })),
+			columns: store.getState().columns,
+		});
 		store.setViewportSize(400, 200);
 		store.setViewportPins({ left: 2, right: 1 });
 		store.setScrollPosition(0, 300);

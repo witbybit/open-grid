@@ -72,11 +72,11 @@ pnpm install @open-grid/core @open-grid/react
 
 ### 2. Basic Setup Example
 
-Here is how to quickly spin up a basic virtualized grid using React:
+The simplest way to use Open Grid — pass `rows` and `columns` directly to `<OpenGrid>`. No separate hook required.
 
 ```tsx
 import React, { useMemo } from 'react';
-import { GridProvider, OpenGrid, useClientGrid, type ColumnDef } from '@open-grid/react';
+import { OpenGrid, type ColumnDef } from '@open-grid/react';
 
 interface BookRow {
 	id: string;
@@ -86,7 +86,6 @@ interface BookRow {
 }
 
 export default function BookInventoryGrid() {
-	// 1. Define your column definitions
 	const columns = useMemo<ColumnDef<BookRow>[]>(
 		() => [
 			{ field: 'id', header: 'Asset ID', width: 100 },
@@ -102,8 +101,7 @@ export default function BookInventoryGrid() {
 		[]
 	);
 
-	// 2. Define initial row records
-	const initialRows = useMemo<BookRow[]>(
+	const rows = useMemo<BookRow[]>(
 		() => [
 			{ id: 'B-101', title: 'The Pragmatic Programmer', author: 'Andy Hunt', price: 49.99 },
 			{ id: 'B-102', title: 'Clean Code', author: 'Robert C. Martin', price: 42.5 },
@@ -112,27 +110,42 @@ export default function BookInventoryGrid() {
 		[]
 	);
 
-	// 3. Create the public GridApi handle
-	const api = useClientGrid<BookRow>({
-		rows: initialRows,
-		columns,
-		getRowId: (row) => row.id,
-		initialState: {
-			defaultColWidth: 120,
-			defaultRowHeight: 38,
-		},
-	});
-
-	// 4. Wrap your component in a GridProvider and render the OpenGrid component
 	return (
 		<div style={{ width: '100%', height: '500px' }}>
-			<GridProvider api={api}>
-				<OpenGrid
-					pinLeftColumns={1} // Keep Asset ID column sticky
-					enableNavigation={true} // Enable arrow key keyboard movement
-				/>
-			</GridProvider>
+			<OpenGrid
+				rows={rows}
+				columns={columns}
+				getRowId={(row) => row.id}
+				initialState={{ defaultColWidth: 120, defaultRowHeight: 38 }}
+				pinLeftColumns={1}
+				enableNavigation
+			/>
 		</div>
+	);
+}
+```
+
+#### When to use `useClientGrid` instead
+
+Use the `useClientGrid` hook (and `GridProvider`) when you need the `GridApi` handle outside of `<OpenGrid>` — for example, to add a toolbar, a custom pagination bar, or access the api in a sibling component:
+
+```tsx
+import { GridProvider, OpenGrid, useClientGrid, useGridApi } from '@open-grid/react';
+
+function Toolbar() {
+	const api = useGridApi<BookRow>(); // reads api from nearest GridProvider
+	return <button onClick={() => api.exportCsv()}>Export CSV</button>;
+}
+
+export function BookGrid({ rows, columns }) {
+	const api = useClientGrid({ rows, columns });
+	return (
+		<GridProvider api={api}>
+			<Toolbar />
+			<div style={{ height: '500px' }}>
+				<OpenGrid pinLeftColumns={1} />
+			</div>
+		</GridProvider>
 	);
 }
 ```
@@ -171,15 +184,6 @@ export function GroupedEmployeesGrid({ data }: { data: EmployeeRow[] }) {
 		[]
 	);
 
-	const api = useClientGrid<EmployeeRow>({
-		rows: data,
-		columns,
-		initialState: {
-			groupBy: ['department'], // Group on-the-fly by department
-			groupRowHeight: 42,
-		},
-	});
-
 	// Custom group row renderer to display summary aggregates
 	const groupRowRenderer = useCallback(({ visualRow, api }: { visualRow: VisualRow<EmployeeRow>; api: GridApi<EmployeeRow> }) => {
 		if (visualRow.kind !== 'group') return null;
@@ -210,9 +214,12 @@ export function GroupedEmployeesGrid({ data }: { data: EmployeeRow[] }) {
 
 	return (
 		<div style={{ height: '500px' }}>
-			<GridProvider api={api}>
-				<OpenGrid groupRowRenderer={groupRowRenderer} />
-			</GridProvider>
+			<OpenGrid
+				rows={data}
+				columns={columns}
+				initialState={{ groupBy: ['department'], groupRowHeight: 42 }}
+				groupRowRenderer={groupRowRenderer}
+			/>
 		</div>
 	);
 }
@@ -262,20 +269,9 @@ export function FileDirectoryGrid({ nodes }: { nodes: FileNode[] }) {
 		[]
 	);
 
-	const api = useClientGrid<FileNode>({
-		rows: nodes,
-		columns,
-		initialState: {
-			getParentId: (row) => row.parentId, // Identifies hierarchical parents
-			groupRowHeight: 38,
-		},
-	});
-
 	return (
 		<div style={{ height: '400px' }}>
-			<GridProvider api={api}>
-				<OpenGrid />
-			</GridProvider>
+			<OpenGrid rows={nodes} columns={columns} initialState={{ getParentId: (row) => row.parentId, groupRowHeight: 38 }} />
 		</div>
 	);
 }
@@ -368,24 +364,19 @@ export function MasterOrdersGrid({ orders }: { orders: OrderRow[] }) {
 		[]
 	);
 
-	const api = useClientGrid<OrderRow>({
-		rows: orders,
-		columns: masterColumns,
-		initialState: {
-			masterDetailEnabled: true,
-			detailRowHeight: 220, // Height in pixels allocated for nested component
-		},
-	});
-
 	const detailRowRenderer = useCallback(({ visualRow, api }: { visualRow: VisualRow<OrderRow>; api: GridApi<OrderRow> }) => {
 		return <NestedItemsGrid visualRow={visualRow} parentApi={api} />;
 	}, []);
 
 	return (
 		<div style={{ height: '600px' }}>
-			<GridProvider api={api}>
-				<OpenGrid detailRowRenderer={detailRowRenderer} />
-			</GridProvider>
+			<OpenGrid
+				rows={orders}
+				columns={masterColumns}
+				initialState={{ masterDetailEnabled: true }}
+				detailRowHeight={220}
+				detailRowRenderer={detailRowRenderer}
+			/>
 		</div>
 	);
 }
@@ -463,6 +454,100 @@ export const StatusHeaderFilter = ({ colField, api, close }: CustomFilterProps) 
 
 ---
 
+### 5. Pagination
+
+Open Grid ships a built-in `GridPagination` component and a `useClientGridPagination` hook. Both are headless-first and fully styleable via CSS custom properties or className overrides.
+
+#### Client-side pagination
+
+```tsx
+import { OpenGrid, GridPagination, useClientGridPagination, type ColumnDef } from '@open-grid/react';
+
+export function PaginatedGrid({ allRows, columns }: { allRows: MyRow[]; columns: ColumnDef<MyRow>[] }) {
+	const { pageRows, page, pageCount, setPage, totalRows, pageSize } = useClientGridPagination(allRows, {
+		pageSize: 50,
+	});
+
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
+			<div style={{ flex: 1, minHeight: 0 }}>
+				<OpenGrid rows={pageRows} columns={columns} />
+			</div>
+			<GridPagination page={page} pageCount={pageCount} totalRows={totalRows} pageSize={pageSize} onPageChange={setPage} />
+		</div>
+	);
+}
+```
+
+#### Server-side pagination
+
+For server grids you manage the page state yourself — just drive your datasource and pass page metadata to `<GridPagination>`:
+
+```tsx
+import { GridProvider, OpenGrid, GridPagination, useServerGrid, type ColumnDef } from '@open-grid/react';
+
+const PAGE_SIZE = 100;
+
+export function ServerPaginatedGrid({ columns }: { columns: ColumnDef<MyRow>[] }) {
+	const [page, setPage] = useState(0);
+	const { datasource, totalRows } = useMyServerDatasource({ page, pageSize: PAGE_SIZE });
+
+	const api = useServerGrid({ datasource, columns });
+
+	return (
+		<GridProvider api={api}>
+			<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
+				<div style={{ flex: 1, minHeight: 0 }}>
+					<OpenGrid />
+				</div>
+				<GridPagination
+					page={page}
+					pageCount={Math.ceil(totalRows / PAGE_SIZE)}
+					totalRows={totalRows}
+					pageSize={PAGE_SIZE}
+					onPageChange={setPage}
+				/>
+			</div>
+		</GridProvider>
+	);
+}
+```
+
+#### Theming via CSS custom properties
+
+```css
+.my-grid-footer {
+	--og-pagination-border: #1e293b;
+	--og-pagination-bg: transparent;
+	--og-pagination-color: #94a3b8;
+	--og-pagination-active-bg: #7c3aed;
+	--og-pagination-active-color: #ffffff;
+}
+```
+
+```tsx
+<GridPagination className='my-grid-footer' page={page} pageCount={pageCount} onPageChange={setPage} />
+```
+
+#### Custom button content
+
+```tsx
+<GridPagination
+	page={page}
+	pageCount={pageCount}
+	onPageChange={setPage}
+	renderPrevButton={() => <ChevronLeft size={14} />}
+	renderNextButton={() => <ChevronRight size={14} />}
+	renderPageInfo={(page, pageCount, total) => (
+		<span style={{ marginLeft: 8 }}>
+			{total} results · page {page + 1}/{pageCount}
+		</span>
+	)}
+/>
+```
+
+---
+
 ## 🛠️ Public API Reference (`GridApi`)
 
 Application code coordinates with the spreadsheet engine through the standard `GridApi` interface. In React, this handle can be retrieved anywhere inside the tree using the `useGridApi()` hook.
@@ -482,7 +567,11 @@ Application code coordinates with the spreadsheet engine through the standard `G
 | **`setSortModel`**         | `(sortModel: SortModel \| null) => void`                    | Sets sorting schema (supports multi-column sort).                    |
 | **`setFilterModel`**       | `(filterModel: FilterModel \| null) => void`                | Sets filtering schema (supports custom operators per column).        |
 | **`toggleGroupExpanded`**  | `(groupId: string) => void`                                 | Toggles expanded/collapsed state of a grouped folder node.           |
-| **`toggleDetailExpanded`** | `(rowId: string) => void`                                   | Toggles expansion of nested detail grid portals.                     |
+| **`isGroupExpanded`**      | `(groupId: string) => boolean`                              | Returns whether a group row is currently expanded.                   |
+| **`toggleDetailExpanded`** | `(rowId: string) => void`                                   | Toggles expansion of nested master-detail portals.                   |
+| **`isDetailExpanded`**     | `(rowId: string) => boolean`                                | Returns whether a detail row is currently expanded.                  |
+| **`expandAllGroups`**      | `() => void`                                                | Expands all group rows.                                              |
+| **`collapseAllGroups`**    | `() => void`                                                | Collapses all group rows.                                            |
 | **`getVisualRow`**         | `(index: number) => VisualRow \| null`                      | Resolves visual layout state at a specific visible index.            |
 | **`subscribeToKey`**       | `(key: string, listener: Listener) => () => void`           | Subscribes selectively to updates for a specific coordinate key.     |
 | **`addEventListener`**     | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).          |
@@ -593,22 +682,23 @@ export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRenderer
 
 ### 2. Custom Cell Editor (Operational Status Dropdown)
 
-Editors handle active inline cell editing (e.g. text-entry or status selection), offering hooks to commit or cancel operations.
+Editors handle active inline cell editing. Use the second type parameter `TValue` to avoid casting `value`:
 
 ```tsx
 import React from 'react';
 import type { CellEditorProps } from '@open-grid/react';
 
-export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorProps<ProductRow>) => {
+// CellEditorProps<RowType, ValueType> — value is now typed as string, no cast needed
+export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorProps<ProductRow, string>) => {
 	return (
 		<select
 			autoFocus
-			value={value as string}
-			onChange={(e) => onCommit(e.target.value)} // Commit value and close edit mode
-			onMouseDown={(e) => e.stopPropagation()} // Prevent cell focus shifting
+			value={value} // typed as string — no `as string` needed
+			onChange={(e) => onCommit(e.target.value)}
+			onMouseDown={(e) => e.stopPropagation()}
 			onDoubleClick={(e) => e.stopPropagation()}
 			onKeyDown={(e) => {
-				if (e.key === 'Escape') onCancel(); // Cancel editing
+				if (e.key === 'Escape') onCancel();
 			}}
 			className='absolute inset-0 w-full h-full px-2 text-xs bg-slate-900 text-white border-2 border-purple-500 outline-none z-20 font-semibold cursor-pointer'
 		>
@@ -618,6 +708,343 @@ export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorPr
 		</select>
 	);
 };
+```
+
+The same `TValue` parameter is available on `CellRendererProps<TRowData, TValue>`.
+
+#### Cell-level validation
+
+Return an error state from `onChange` / `onCommit` flow by keeping local state:
+
+```tsx
+const PriceEditor = ({ value, rowId, colField, api, onCommit, onCancel }: CellEditorProps<OrderRow, string>) => {
+	const [draft, setDraft] = React.useState(value);
+	const [error, setError] = React.useState('');
+
+	const handleCommit = () => {
+		const n = Number(draft);
+		if (Number.isNaN(n) || n < 0) {
+			setError('Must be a non-negative number');
+			return; // stay in edit mode — do not commit
+		}
+		onCommit(draft);
+	};
+
+	return (
+		<div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+			<input
+				autoFocus
+				value={draft}
+				onChange={(e) => {
+					setDraft(e.target.value);
+					setError('');
+				}}
+				onBlur={handleCommit}
+				onKeyDown={(e) => {
+					if (e.key === 'Enter') handleCommit();
+					if (e.key === 'Escape') onCancel();
+				}}
+				style={{ flex: 1, padding: '0 8px', border: error ? '2px solid #f87171' : '2px solid #7c3aed', background: '#0f172a', color: '#fff' }}
+				aria-invalid={!!error}
+				aria-describedby={error ? `${rowId}-${colField}-err` : undefined}
+			/>
+			{error && (
+				<div
+					id={`${rowId}-${colField}-err`}
+					role='alert'
+					style={{ padding: '2px 6px', fontSize: 11, color: '#f87171', background: '#1e0a0a' }}
+				>
+					{error}
+				</div>
+			)}
+		</div>
+	);
+};
+```
+
+---
+
+## 🌐 Server-Side Grids
+
+### Implementing a server datasource
+
+The `GridDatasource` interface has a single `getRows` method. Open Grid calls it as the user scrolls into un-loaded blocks, passing the row range and the current sort/filter models.
+
+```tsx
+import { useServerGrid, GridPagination, GridProvider, OpenGrid, type GridDatasource, type SortModel, type FilterModel } from '@open-grid/react';
+
+interface LogRow {
+	id: string;
+	timestamp: string;
+	service: string;
+	severity: string;
+	latencyMs: number;
+}
+
+// ─── 1. Implement GridDatasource ─────────────────────────────────────────────
+
+function createLogDatasource(baseUrl: string): GridDatasource {
+	return {
+		async getRows({ startRow, endRow, sortModel, filterModel }) {
+			const params = new URLSearchParams({
+				start: String(startRow),
+				end: String(endRow),
+			});
+
+			// Forward sort and filter to the server
+			if (sortModel && (sortModel as SortModel).length) params.set('sort', JSON.stringify(sortModel));
+			if (filterModel && Object.keys(filterModel as FilterModel).length) params.set('filter', JSON.stringify(filterModel));
+
+			const res = await fetch(`${baseUrl}/logs?${params}`);
+			if (!res.ok) throw new Error(`Server error ${res.status}`);
+			const json = (await res.json()) as { rows: LogRow[]; totalCount: number };
+			return { rows: json.rows, totalCount: json.totalCount };
+		},
+	};
+}
+
+// ─── 2. Use in a component ───────────────────────────────────────────────────
+
+export function ServerLogGrid() {
+	const [page, setPage] = React.useState(0);
+	const PAGE_SIZE = 500;
+
+	// The datasource is memoized so recreating it on page change re-fetches the right slice.
+	// For true virtual-scroll (all rows at once), remove the page offset and let the grid
+	// load blocks on demand as the user scrolls.
+	const datasource = React.useMemo<GridDatasource>(
+		() => ({
+			async getRows(params) {
+				const offset = page * PAGE_SIZE;
+				const res = await fetch(`/api/logs?start=${offset + params.startRow}&end=${offset + params.endRow}`);
+				if (!res.ok) throw new Error(`Server error ${res.status}`);
+				return res.json();
+			},
+		}),
+		[page]
+	);
+
+	const columns = React.useMemo<import('@open-grid/react').ColumnDef<LogRow>[]>(
+		() => [
+			{ field: 'timestamp', header: 'Time', width: 180 },
+			{ field: 'service', header: 'Service', width: 140 },
+			{ field: 'severity', header: 'Severity', width: 110 },
+			{ field: 'latencyMs', header: 'Latency', width: 100 },
+		],
+		[]
+	);
+
+	const api = useServerGrid<LogRow>({ datasource, columns, blockSize: 100 });
+
+	return (
+		<GridProvider api={api}>
+			<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
+				<div style={{ flex: 1, minHeight: 0 }}>
+					<OpenGrid />
+				</div>
+				<GridPagination
+					page={page}
+					pageCount={200} // totalCount / PAGE_SIZE — update from first getRows response
+					totalRows={100_000}
+					pageSize={PAGE_SIZE}
+					onPageChange={setPage}
+				/>
+			</div>
+		</GridProvider>
+	);
+}
+```
+
+> **Virtual scroll vs. page-based** — For true infinite scroll, pass a single datasource and let the grid load blocks on demand as the user scrolls. For explicit page navigation, recreate the datasource on `onPageChange` with the new offset (as above), or scroll the viewport programmatically via `containerRef.current.querySelector('.og-scroll-viewport').scrollTop = page * pageSize * rowHeight`.
+
+### Handling server errors
+
+Listen to the `serverBlockError` event to display in-grid error states:
+
+```tsx
+React.useEffect(() => {
+	const unsub = api.addEventListener<{ error: Error; startRow: number; endRow: number }>('serverBlockError', ({ payload }) => {
+		setLoadError(`Failed to load rows ${payload.startRow}–${payload.endRow}: ${payload.error.message}`);
+	});
+	return unsub;
+}, [api]);
+```
+
+For a per-row loading indicator while blocks are in-flight, render loading rows with a skeleton renderer — loading rows have `kind: 'loading'` in the `VisualRow` discriminated union and the grid passes `isLoading: true` to the cell renderer:
+
+```tsx
+// In your column def — show a placeholder while the server block loads
+const SkeletonRenderer = ({ isLoading }: CellRendererProps<LogRow>) => {
+	if (!isLoading) return null;
+	return <div style={{ width: '60%', height: 8, borderRadius: 4, background: 'rgba(148,163,184,0.15)' }} />;
+};
+
+const columns: ColumnDef<LogRow>[] = [
+	{ field: 'timestamp', header: 'Time', width: 180, cellRenderer: SkeletonRenderer },
+	// ...
+];
+```
+
+---
+
+## 🛠️ Toolbar & Bulk Actions
+
+Use `useGridApi()` inside any component wrapped by `<GridProvider>` to access the grid api for bulk operations.
+
+### Selection-based bulk actions
+
+Open Grid's selection model tracks focused cell and range bounds. Read `state.selection` to derive which rows are selected:
+
+```tsx
+import { useGridApi, useGridSelector, GridProvider, OpenGrid, useClientGrid } from '@open-grid/react';
+
+function GridToolbar<TRowData extends { id: string }>() {
+	const api = useGridApi<TRowData>();
+	// Re-renders only when the selection key changes — not on every grid state update
+	const selection = useGridSelector((s) => s.selection);
+
+	const selectedRowIds = React.useMemo(() => {
+		const bounds = selection.bounds;
+		if (!bounds) return [];
+		const ids: string[] = [];
+		for (let i = bounds.minRow; i <= bounds.maxRow; i++) {
+			const visualRow = api.getVisualRow(i);
+			if (visualRow?.kind === 'data') ids.push(visualRow.rowId);
+		}
+		return ids;
+	}, [api, selection]);
+
+	const handleDeleteSelected = () => {
+		// Example: bulk-remove via cell edits or external state
+		selectedRowIds.forEach((rowId) => api.setCellValue(rowId, 'deleted', true));
+	};
+
+	const handleExport = () => api.exportCsv({ filename: 'export.csv' });
+
+	return (
+		<div style={{ display: 'flex', gap: 8, padding: '6px 0', alignItems: 'center' }}>
+			<span style={{ fontSize: 12, color: '#94a3b8' }}>
+				{selectedRowIds.length > 0 ? `${selectedRowIds.length} row(s) selected` : 'No selection'}
+			</span>
+			<button disabled={selectedRowIds.length === 0} onClick={handleDeleteSelected}>
+				Delete selected
+			</button>
+			<button onClick={handleExport}>Export CSV</button>
+			<button onClick={() => api.setSortModel(null)}>Clear sort</button>
+			<button onClick={() => api.setFilterModel(null)}>Clear filters</button>
+			<button onClick={() => api.undo()} disabled={!api.canUndo()}>
+				Undo
+			</button>
+			<button onClick={() => api.redo()} disabled={!api.canRedo()}>
+				Redo
+			</button>
+		</div>
+	);
+}
+
+// Usage: wrap in GridProvider so Toolbar can call useGridApi()
+export function MyGrid({ rows, columns }) {
+	const api = useClientGrid({ rows, columns });
+	return (
+		<GridProvider api={api}>
+			<GridToolbar />
+			<div style={{ height: '500px' }}>
+				<OpenGrid />
+			</div>
+		</GridProvider>
+	);
+}
+```
+
+### Batch cell updates
+
+Group multiple cell mutations into a single render cycle with `api.batch()` (where supported) or sequence them — the engine coalesces invalidations internally:
+
+```tsx
+// Apply a 10% price increase to all selected rows
+const applyBulkPriceIncrease = (selectedRowIds: string[]) => {
+	selectedRowIds.forEach((rowId) => {
+		const current = Number(api.getCellValue(rowId, 'price')) || 0;
+		api.setCellValue(rowId, 'price', (current * 1.1).toFixed(2));
+	});
+};
+```
+
+---
+
+## ♿ Accessibility
+
+### Keyboard navigation
+
+Open Grid ships full keyboard navigation out of the box when `enableNavigation` is `true` (the default):
+
+| Key                     | Action                             |
+| :---------------------- | :--------------------------------- |
+| Arrow keys              | Move focus between cells           |
+| `Enter` / `F2`          | Start editing the focused cell     |
+| `Escape`                | Cancel edit / clear selection      |
+| `Tab` / `Shift+Tab`     | Move to next / previous cell       |
+| `Page Up` / `Page Down` | Scroll the viewport one page       |
+| `Home` / `End`          | Jump to first / last column in row |
+| `Shift + Arrow`         | Extend selection range             |
+
+Configure the edit trigger:
+
+```tsx
+<OpenGrid
+	rows={rows}
+	columns={columns}
+	navigationOptions={{
+		editTrigger: 'doubleClick', // 'singleClick' | 'doubleClick'
+		arrowKeyNavigationEdit: false, // arrow keys inside an editor move focus (false = stay in cell)
+		onCellValueChanged: (rowId, col, v) => console.log(rowId, col, v),
+	}}
+/>
+```
+
+### ARIA roles
+
+The grid container renders with `tabIndex={-1}` to be focusable but removed from natural tab order. Each cell receives `tabIndex={-1}` when focused, so the browser focus ring follows the active cell. To make the grid fully accessible, wrap it in a labelled region:
+
+```tsx
+<div role='region' aria-label='Order data grid' aria-describedby='grid-instructions'>
+	<p id='grid-instructions' className='sr-only'>
+		Use arrow keys to navigate cells. Press Enter to edit. Press Escape to cancel editing. Hold Shift and use arrow keys to extend the selection.
+	</p>
+	<OpenGrid rows={rows} columns={columns} />
+</div>
+```
+
+### Focus management with editors
+
+Custom editors should always include `autoFocus` on the primary input so focus moves immediately into the editor on activation:
+
+```tsx
+const MyEditor = ({ value, onCommit, onCancel }: CellEditorProps<MyRow, string>) => (
+	<input
+		autoFocus // required — moves focus into editor immediately
+		defaultValue={value}
+		onBlur={(e) => onCommit(e.target.value)}
+		onKeyDown={(e) => {
+			if (e.key === 'Escape') onCancel();
+			if (e.key === 'Enter') onCommit((e.target as HTMLInputElement).value);
+		}}
+		aria-label='Cell editor'
+	/>
+);
+```
+
+### Reduced motion
+
+The grid respects `prefers-reduced-motion` through CSS. If your custom renderers use transitions, guard them:
+
+```css
+@media (prefers-reduced-motion: reduce) {
+	.my-cell-animation {
+		transition: none;
+		animation: none;
+	}
+}
 ```
 
 ---

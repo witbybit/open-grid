@@ -202,13 +202,12 @@ describe('Performance Benchmarks', () => {
 
 			const start = performance.now();
 
-			// Update 1000 random cells using scoped batching
-			store.batch(() => {
-				for (let i = 0; i < 1000; i++) {
-					const rowIdx = Math.floor(Math.random() * 10000);
-					store.setCellValue(`row-${rowIdx}`, 'price', Math.random() * 1000);
-				}
-			});
+			// Update 1000 random cells — auto-batching coalesces all into one flush
+			for (let i = 0; i < 1000; i++) {
+				const rowIdx = Math.floor(Math.random() * 10000);
+				store.setCellValue(`row-${rowIdx}`, 'price', Math.random() * 1000);
+			}
+			store.flushCellUpdatesSync();
 
 			const duration = performance.now() - start;
 

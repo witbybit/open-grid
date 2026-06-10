@@ -1,7 +1,20 @@
 import React, { useEffect } from 'react';
 import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi, GridContextMenuOptions } from '@open-grid/react';
 
-export type GridPageType = 'perf' | 'server' | 'ranges' | 'editors' | 'layout' | 'skins' | 'dashboard' | 'gantt' | 'nested';
+export type GridPageType =
+	| 'lab'
+	| 'perf'
+	| 'server'
+	| 'ranges'
+	| 'editors'
+	| 'layout'
+	| 'skins'
+	| 'dashboard'
+	| 'gantt'
+	| 'nested'
+	| 'panels'
+	| 'native'
+	| 'grouping';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================
@@ -357,20 +370,21 @@ export const PriceBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 	);
 };
 
-export const GreeksRenderer = ({ value }: CellRendererProps<any>) => {
+export const GreeksRenderer = ({ value, phase }: CellRendererProps<any>) => {
 	const valNum = parseFloat(String(value)) || 0;
 	const isPositive = valNum >= 0;
 	const colorClass = isPositive ? 'text-emerald-400 text-glow-emerald font-extrabold' : 'text-rose-400 text-glow-rose font-extrabold';
 	const sign = isPositive ? '+' : '';
+	const phaseClass = phase === 'scroll-idle' ? 'opacity-100' : 'opacity-90';
 	return (
-		<span className={`font-mono text-xs leading-none ${colorClass}`}>
+		<span className={`font-mono text-xs leading-none transition-opacity ${phaseClass} ${colorClass}`}>
 			{sign}
 			{valNum.toFixed(4)}
 		</span>
 	);
 };
 
-export const RiskBadgeRenderer = ({ value }: CellRendererProps<any>) => {
+export const RiskBadgeRenderer = ({ value, isFocused, isSelected }: CellRendererProps<any>) => {
 	const valStr = String(value).toUpperCase();
 	let colorClass = 'bg-slate-500/10 border-slate-700/50 text-slate-400';
 	if (valStr === 'CRITICAL' || valStr === 'HIGH RISK') {
@@ -382,8 +396,11 @@ export const RiskBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 	} else if (valStr === 'LOW' || valStr === 'NO RISK') {
 		colorClass = 'bg-emerald-950/30 border-emerald-500/25 text-emerald-400 font-medium';
 	}
+	const focusClass = isFocused || isSelected ? 'ring-1 ring-cyan-400/50' : '';
 	return (
-		<span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border leading-none inline-block ${colorClass}`}>{valStr}</span>
+		<span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border leading-none inline-block ${focusClass} ${colorClass}`}>
+			{valStr}
+		</span>
 	);
 };
 
@@ -410,6 +427,26 @@ export const LatencyRenderer = ({ value }: CellRendererProps<any>) => {
 	return <span className={`font-mono text-xs ${colorClass}`}>{lat} ms</span>;
 };
 
+export const RendererStrategyProbe = ({ value, phase, isScrolling, isFocused, isSelected }: CellRendererProps<any>) => {
+	const [strategy, label] = String(value ?? '').split('|');
+	const palette =
+		strategy === 'live'
+			? 'border-emerald-500/40 bg-emerald-950/25 text-emerald-300'
+			: strategy === 'defer'
+				? 'border-indigo-500/40 bg-indigo-950/25 text-indigo-300'
+				: strategy === 'destroy'
+					? 'border-amber-500/40 bg-amber-950/25 text-amber-300'
+					: 'border-rose-500/40 bg-rose-950/25 text-rose-300';
+	const ring = isFocused || isSelected ? 'ring-1 ring-cyan-400/60' : '';
+	return (
+		<span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-mono leading-none ${palette} ${ring}`}>
+			<span className='font-black uppercase'>{strategy}</span>
+			<span className='text-slate-300'>{label}</span>
+			<span className={isScrolling ? 'text-cyan-300' : 'text-slate-500'}>{phase ?? 'initial'}</span>
+		</span>
+	);
+};
+
 // ============================================================================
 // 4. Grid View Panel
 // ============================================================================
@@ -430,13 +467,15 @@ export interface GridViewProps {
 	className?: string;
 }
 
+const EMPTY_ROW_HEIGHTS = {};
+
 export function GridView({
 	api,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 	pinTopRows = 0,
 	pinBottomRows = 0,
-	rowHeights = {},
+	rowHeights = EMPTY_ROW_HEIGHTS,
 	defaultHeight = 38,
 	onCellValueChanged = () => {},
 	editTrigger = 'doubleClick',
@@ -465,6 +504,26 @@ export function GridView({
 		activeApi.setDefaultRowHeight(defaultHeight ?? 38);
 	}, [activeApi, rowHeights, defaultHeight]);
 
+	const mergedContextMenuOptions = React.useMemo(() => {
+		const baseOptions = contextMenuOptions || {};
+		const customItems = baseOptions.customItems || [];
+
+		const chartItem = {
+			id: 'chartRange',
+			label: 'Chart Selected Range',
+			icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"></path><line x1="3" y1="20" x2="21" y2="20"></line></svg>`,
+			action: () => {
+				activeApi.openChart();
+			},
+			disabled: (params: any) => !params.selection.bounds,
+		};
+
+		return {
+			...baseOptions,
+			customItems: [chartItem, ...customItems],
+		};
+	}, [contextMenuOptions]);
+
 	return (
 		<div
 			className={`w-full h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative demo-grid-surface ${className}`}
@@ -486,7 +545,7 @@ export function GridView({
 				pinBottomRows={pinBottomRows}
 				enableNavigation={true}
 				enableContextMenu={enableContextMenu}
-				contextMenuOptions={contextMenuOptions}
+				contextMenuOptions={mergedContextMenuOptions}
 				onCellClick={(params) => {
 					setLastClick(params);
 				}}
@@ -500,6 +559,7 @@ export function GridView({
 						LatencyProfiler.record(duration);
 					},
 				}}
+				enableChart={true}
 			/>
 		</div>
 	);

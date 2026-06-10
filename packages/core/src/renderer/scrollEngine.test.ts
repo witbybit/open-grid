@@ -30,7 +30,7 @@ describe('ScrollEngine', () => {
 			// Dispatch scroll event
 			container.dispatchEvent(new Event('scroll'));
 
-			expect(onScrollMock).toHaveBeenCalledWith(10, 5);
+			expect(onScrollMock).toHaveBeenCalledWith(10, 5, 1010);
 
 			// Velocity calculations:
 			// scrollTop went 0 -> 10 over 10ms => 1.0 px/ms
@@ -45,7 +45,7 @@ describe('ScrollEngine', () => {
 			time = 1020; // 10ms later
 			container.dispatchEvent(new Event('scroll'));
 
-			expect(onScrollMock).toHaveBeenLastCalledWith(30, 5);
+			expect(onScrollMock).toHaveBeenLastCalledWith(30, 5, 1020);
 			const velocity2 = scrollEngine.getVelocity();
 			expect(velocity2.vy).toBeCloseTo(2.0); // 20px / 10ms
 			expect(velocity2.vx).toBeCloseTo(0.0); // 0px change

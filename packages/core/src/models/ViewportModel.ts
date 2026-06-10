@@ -20,8 +20,42 @@ export class ViewportModel<TRowData = unknown> {
 	private velocityY = 0; // px/ms
 	private velocityX = 0; // px/ms
 
-	// Centralized velocity threshold for high-performance optimizations (1.5 px/ms)
+	// Centralized velocity threshold for high-performance optimizations (px/ms)
 	private readonly FAST_SCROLL_THRESHOLD = 5;
+
+	// Adaptive overscan state. Raw velocity fluctuates on every scroll event; feeding it
+	// straight into the buffer bounds shifts the render window almost every frame, which
+	// defeats the sameRenderedWindow() bailout exactly when scrolling fastest. We quantize
+	// the adaptive expansion to coarse buckets and only let it SHRINK after a run of calm
+	// frames (hysteresis), so the window stays stable across many frames.
+	private static readonly ADAPTIVE_ROW_QUANTUM_PX = 200;
+	private static readonly ADAPTIVE_COL_QUANTUM = 5;
+	private static readonly ADAPTIVE_SHRINK_FRAMES = 12;
+	private adaptiveTopPx = 0;
+	private adaptiveBottomPx = 0;
+	private adaptiveLeftCols = 0;
+	private adaptiveRightCols = 0;
+	private calmTop = 0;
+	private calmBottom = 0;
+	private calmLeft = 0;
+	private calmRight = 0;
+
+	// Scratch out-param for the hold helper (avoids per-frame closures/objects).
+	private heldCalm = 0;
+
+	/**
+	 * Quantize-and-hold: grow immediately to the bucketed target, shrink only after
+	 * ADAPTIVE_SHRINK_FRAMES consecutive calls wanting a smaller value.
+	 * Returns the held value; the updated calm counter is left in this.heldCalm.
+	 */
+	private holdAdaptive(current: number, target: number, calm: number): number {
+		if (target >= current || calm + 1 >= ViewportModel.ADAPTIVE_SHRINK_FRAMES) {
+			this.heldCalm = 0;
+			return target;
+		}
+		this.heldCalm = calm + 1;
+		return current;
+	}
 
 	/**
 	 * Evaluates if the grid is currently scrolling faster than the fluid performance threshold.
@@ -37,10 +71,6 @@ export class ViewportModel<TRowData = unknown> {
 		this.velocityY = 0;
 		this.velocityX = 0;
 	}
-
-	// Base overscan buffer counts
-	private baseOverscanRows = 12;
-	private baseOverscanCols = 8;
 
 	public init(engine: GridEngine<TRowData>): void {
 		this.engine = engine;
@@ -90,36 +120,59 @@ export class ViewportModel<TRowData = unknown> {
 			return { startIdx: 0, endIdx: 0 };
 		}
 
-		// Calculate height occupied by pinned top and bottom lanes
+		const state = this.engine.stateManager.getState();
+		const defaultRowHeight = state.defaultRowHeight ?? 40;
+
+		// Pixel heights consumed by pinned top and bottom bands.
+		// Pinned rows are always rendered and excluded from the scrollable range.
 		let pinnedTopHeight = 0;
-		for (let i = 0; i < this.pinTopRows && i < rowCount; i++) {
-			pinnedTopHeight += this.engine.geometry.getRowHeight(i, 40);
+		if (this.pinTopRows > 0) {
+			for (let i = 0; i < this.pinTopRows && i < rowCount; i++) {
+				pinnedTopHeight += this.engine.geometry.getRowHeight(i, defaultRowHeight);
+			}
 		}
-
 		let pinnedBottomHeight = 0;
-		for (let i = 0; i < this.pinBottomRows && i < rowCount; i++) {
-			pinnedBottomHeight += this.engine.geometry.getRowHeight(rowCount - 1 - i, 40);
+		if (this.pinBottomRows > 0) {
+			for (let i = 0; i < this.pinBottomRows && i < rowCount; i++) {
+				pinnedBottomHeight += this.engine.geometry.getRowHeight(rowCount - 1 - i, defaultRowHeight);
+			}
 		}
 
+		// Pixel boundaries of the scrollable visible area (excludes pinned bands).
 		const visibleTop = this.scrollTop + pinnedTopHeight;
 		const visibleBottom = this.scrollTop + this.viewportHeight - pinnedBottomHeight;
 
-		// Perform O(log R) binary searches on GeometryModel
-		const activeStartIdx = this.engine.geometry.getRowIndexAtOffset(visibleTop);
-		const activeEndIdx = this.engine.geometry.getRowIndexAtOffset(visibleBottom);
+		// Pixel-first overscan: fixed px budget that scales correctly with variable row heights.
+		// A tall row costs proportionally more of the budget than a short one, so the number of
+		// buffered rows self-adjusts — no more under/over-shoot with variable-height grids.
+		const baseOverscanPx = state.rowOverscanPx ?? 400;
 
-		// Predictive overscan
-		let overscanTop = this.baseOverscanRows;
-		let overscanBottom = this.baseOverscanRows;
+		let overscanTopPx = baseOverscanPx;
+		let overscanBottomPx = baseOverscanPx;
 
-		if (this.velocityY > 0.2) {
-			overscanBottom += Math.min(25, Math.floor(this.velocityY * 15));
-		} else if (this.velocityY < -0.2) {
-			overscanTop += Math.min(25, Math.floor(Math.abs(this.velocityY) * 15));
+		// Adaptive mode: expand the leading edge buffer proportional to scroll velocity.
+		// Cap at 2× the base so very high velocity doesn't mount an unbounded number of rows.
+		// Quantized to ADAPTIVE_ROW_QUANTUM_PX buckets + shrink hysteresis so the resulting
+		// render window stays identical across frames (keeps the same-window bailout alive).
+		if (state.overscanAdaptive) {
+			const quantum = ViewportModel.ADAPTIVE_ROW_QUANTUM_PX;
+			const wantBottom = this.velocityY > 0.2 ? Math.ceil(Math.min(baseOverscanPx * 2, this.velocityY * 600) / quantum) * quantum : 0;
+			const wantTop = this.velocityY < -0.2 ? Math.ceil(Math.min(baseOverscanPx * 2, -this.velocityY * 600) / quantum) * quantum : 0;
+			this.adaptiveBottomPx = this.holdAdaptive(this.adaptiveBottomPx, wantBottom, this.calmBottom);
+			this.calmBottom = this.heldCalm;
+			overscanBottomPx += this.adaptiveBottomPx;
+			this.adaptiveTopPx = this.holdAdaptive(this.adaptiveTopPx, wantTop, this.calmTop);
+			this.calmTop = this.heldCalm;
+			overscanTopPx += this.adaptiveTopPx;
 		}
 
-		const startIdx = Math.max(this.pinTopRows, activeStartIdx - overscanTop);
-		const endIdx = Math.min(rowCount - 1 - this.pinBottomRows, activeEndIdx + overscanBottom);
+		// Pixel boundaries of the full buffered render region.
+		const bufferTopPx = Math.max(0, visibleTop - overscanTopPx);
+		const bufferBottomPx = visibleBottom + overscanBottomPx;
+
+		// O(log R) binary searches to map pixel bounds → row indices.
+		const startIdx = Math.max(this.pinTopRows, this.engine.geometry.getRowIndexAtOffset(bufferTopPx));
+		const endIdx = Math.min(rowCount - 1 - this.pinBottomRows, this.engine.geometry.getRowIndexAtOffset(bufferBottomPx));
 
 		return { startIdx, endIdx };
 	}
@@ -153,13 +206,22 @@ export class ViewportModel<TRowData = unknown> {
 		const activeEndIdx = this.engine.geometry.getColIndexAtOffset(visibleRight);
 
 		// Predictive overscan
-		let overscanLeft = this.baseOverscanCols;
-		let overscanRight = this.baseOverscanCols;
+		const state = this.engine.stateManager.getState();
+		const colBuffer = state.colBuffer ?? 1;
+		let overscanLeft = colBuffer;
+		let overscanRight = colBuffer;
 
-		if (this.velocityX > 0.2) {
-			overscanRight += Math.min(15, Math.floor(this.velocityX * 10));
-		} else if (this.velocityX < -0.2) {
-			overscanLeft += Math.min(15, Math.floor(Math.abs(this.velocityX) * 10));
+		if (state.overscanAdaptive) {
+			// Same quantize-and-hold as the row path: keep the column window stable across frames.
+			const quantum = ViewportModel.ADAPTIVE_COL_QUANTUM;
+			const wantRight = this.velocityX > 0.2 ? Math.ceil(Math.min(15, Math.floor(this.velocityX * 10)) / quantum) * quantum : 0;
+			const wantLeft = this.velocityX < -0.2 ? Math.ceil(Math.min(15, Math.floor(-this.velocityX * 10)) / quantum) * quantum : 0;
+			this.adaptiveRightCols = this.holdAdaptive(this.adaptiveRightCols, wantRight, this.calmRight);
+			this.calmRight = this.heldCalm;
+			overscanRight += this.adaptiveRightCols;
+			this.adaptiveLeftCols = this.holdAdaptive(this.adaptiveLeftCols, wantLeft, this.calmLeft);
+			this.calmLeft = this.heldCalm;
+			overscanLeft += this.adaptiveLeftCols;
 		}
 
 		const startIdx = Math.max(this.pinLeftColumns, activeStartIdx - overscanLeft);

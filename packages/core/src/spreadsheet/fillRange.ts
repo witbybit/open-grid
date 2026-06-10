@@ -44,15 +44,13 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		const oldValueRecord: FillRecord[] = [];
 		const newValueRecord: FillRecord[] = [];
 
-		this.engine.batch(() => {
-			if (direction === 'DOWN' || direction === 'UP') {
-				this.fillRows(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
-			}
+		if (direction === 'DOWN' || direction === 'UP') {
+			this.fillRows(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
+		}
 
-			if (direction === 'RIGHT' || direction === 'LEFT') {
-				this.fillColumns(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
-			}
-		});
+		if (direction === 'RIGHT' || direction === 'LEFT') {
+			this.fillColumns(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
+		}
 
 		if (newValueRecord.length > 0) {
 			this.engine.commandHistory.add({
@@ -78,20 +76,20 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 			const sourceValues: CapturedCell[] = [];
 			for (let r = sourceBounds.minRow; r <= sourceBounds.maxRow; r++) {
-				const node = rowModel.getRowNode(r);
-				if (node) sourceValues.push(this.captureCell(node.id, col.field));
+				const visualRow = rowModel.getVisualRow(r);
+				if (visualRow?.kind === 'data') sourceValues.push(this.captureCell(visualRow.rowId, col.field));
 			}
 
 			if (sourceValues.length === 0) continue;
 
 			const series = this.analyzeFillSeries(sourceValues);
 			fillRows.forEach((r, idx) => {
-				const node = rowModel.getRowNode(r);
-				if (!node) return;
+				const visualRow = rowModel.getVisualRow(r);
+				if (visualRow?.kind !== 'data') return;
 
 				const srcItem = sourceValues[idx % sourceValues.length];
 				const deltaRow = r - (direction === 'DOWN' ? sourceBounds.maxRow : sourceBounds.minRow);
-				this.applyFillValue(node.id, col.field, idx, srcItem, series, deltaRow, 0, rowModel, columns, oldValueRecord, newValueRecord);
+				this.applyFillValue(visualRow.rowId, col.field, idx, srcItem, series, deltaRow, 0, rowModel, columns, oldValueRecord, newValueRecord);
 			});
 		}
 	}
@@ -107,13 +105,13 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 	): void {
 		const fillCols = this.buildOrderedIndexes(targetBounds.minCol, targetBounds.maxCol, direction === 'LEFT');
 		for (let r = targetBounds.minRow; r <= targetBounds.maxRow; r++) {
-			const node = rowModel.getRowNode(r);
-			if (!node) continue;
+			const visualRow = rowModel.getVisualRow(r);
+			if (visualRow?.kind !== 'data') continue;
 
 			const sourceValues: CapturedCell[] = [];
 			for (let c = sourceBounds.minCol; c <= sourceBounds.maxCol; c++) {
 				const col = columns[c];
-				if (col) sourceValues.push(this.captureCell(node.id, col.field));
+				if (col) sourceValues.push(this.captureCell(visualRow.rowId, col.field));
 			}
 
 			if (sourceValues.length === 0) continue;
@@ -125,30 +123,28 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 				const srcItem = sourceValues[idx % sourceValues.length];
 				const deltaCol = c - (direction === 'RIGHT' ? sourceBounds.maxCol : sourceBounds.minCol);
-				this.applyFillValue(node.id, col.field, idx, srcItem, series, 0, deltaCol, rowModel, columns, oldValueRecord, newValueRecord);
+				this.applyFillValue(visualRow.rowId, col.field, idx, srcItem, series, 0, deltaCol, rowModel, columns, oldValueRecord, newValueRecord);
 			});
 		}
 	}
 
 	private restoreRecords(records: FillRecord[]): void {
-		this.engine.batch(() => {
-			for (const item of records) {
-				if (item.hasFormula && item.formula) {
-					this.engine.data.setCellValue(item.rowId, item.colField, item.formula);
-				} else {
-					this.engine.syncFormulaForCell(item.rowId, item.colField, item.value);
-					this.engine.data.setCellValue(item.rowId, item.colField, item.value);
-				}
+		for (const item of records) {
+			if (item.hasFormula && item.formula) {
+				this.engine.data.setCellValue(item.rowId, item.colField, item.formula);
+			} else {
+				this.engine.syncFormulaForCell(item.rowId, item.colField, item.value);
+				this.engine.data.setCellValue(item.rowId, item.colField, item.value);
 			}
-		});
+		}
 	}
 
 	private resolveRangeBounds(range: GridCellRange): GridBounds | null {
 		const rowModel = this.engine.getRowModel();
 		if (!rowModel) return null;
 
-		const startRowIdx = rowModel.getRowIndexById(range.start.rowId);
-		const endRowIdx = rowModel.getRowIndexById(range.end.rowId);
+		const startRowIdx = rowModel.getVisualIndexByRowId(range.start.rowId);
+		const endRowIdx = rowModel.getVisualIndexByRowId(range.end.rowId);
 		const startColIdx = this.engine.columns.getColumnIndex(range.start.colField);
 		const endColIdx = this.engine.columns.getColumnIndex(range.end.colField);
 
@@ -246,12 +242,12 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 			let newColField = refColField;
 
 			if (deltaRow !== 0) {
-				const rowIdx = rowModel.getRowIndexById(refRowId);
+				const rowIdx = rowModel.getVisualIndexByRowId(refRowId);
 				if (rowIdx !== -1) {
 					const newRowIdx = rowIdx + deltaRow;
-					const newRowNode = rowModel.getRowNode(newRowIdx);
-					if (newRowNode) {
-						newRowId = newRowNode.id;
+					const newVisualRow = rowModel.getVisualRow(newRowIdx);
+					if (newVisualRow?.kind === 'data') {
+						newRowId = newVisualRow.rowId;
 					}
 				}
 			}

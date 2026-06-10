@@ -1,4 +1,14 @@
-import type { GridState, RowModel, CellSubscription, ColumnDef, GridCellRange, GridCellPointer, GridSelectionSource } from '../store.js';
+import {
+	canEditCell,
+	isDataCellSelectable,
+	type GridState,
+	type RowModel,
+	type CellSubscription,
+	type ColumnDef,
+	type GridCellRange,
+	type GridCellPointer,
+	type GridSelectionSource,
+} from '../store.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
 import { EventBus } from '../events/EventBus.js';
@@ -9,10 +19,12 @@ import { GeometryModel } from '../models/GeometryModel.js';
 import { SelectionModel } from '../models/SelectionModel.js';
 import { EditModel } from '../models/EditModel.js';
 import { CellAccessModel } from '../models/CellAccess.js';
-import { DagEngine } from '../calculations/dagEngine.js';
+import { DagEngine, type FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import { InvalidationManager } from '../renderer/invalidationManager.js';
+import type { RenderStats } from '../renderer/renderOrchestrator.js';
 
 export class GridEngine<TRowData = unknown> {
 	// Models
@@ -28,22 +40,47 @@ export class GridEngine<TRowData = unknown> {
 	public readonly stateManager: StateManager<TRowData>;
 	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus;
+	public readonly invalidation: InvalidationManager;
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 
-	// Row Model registered internally
 	private rowModel: RowModel<TRowData> | null = null;
+
+	// Monotonic change tracking versions
+	public geometryVersion = 0;
+	public rowModelVersion = 0;
+	public columnVersion = 0;
+
+	// Scrolling states
+	public isScrolling = false;
+	public isScrollFrameActive = false;
+
+	// Performance counters
+	public getCellValueCallsDuringScroll = 0;
+	public valueGetterCallsDuringScroll = 0;
+	public formulaCallsDuringScroll = 0;
+	public customRendererMountsDuringScroll = 0;
+	public customRendererHydrationChunks = 0;
+	public customRendererWarmHits = 0;
+	public customRendererWarmMisses = 0;
 
 	// Cell subscriptions are keyed by visible row id and column field.
 	public readonly cellSubscriptions = new Map<string, Set<CellSubscription>>();
 	public readonly colSubscriptions = new Map<string, Set<CellSubscription>>();
-	public readonly cellUpdateBatch = new Set<string>();
+	public readonly cellUpdateBatch = new Map<string, Set<string>>();
 	public batchFlushScheduled = false;
 	private _batchedUpdates = true;
+	private renderTransactionDepth = 0;
+	private pendingRenderReason: string | null = null;
+
+	// RenderEngine callbacks to bridge rendering stats
+	public getRenderStats?: () => RenderStats;
+	public resetRenderStats?: () => void;
 
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.commandHistory = new CommandHistory();
 		this.eventBus = new EventBus();
+		this.invalidation = new InvalidationManager();
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
@@ -74,6 +111,7 @@ export class GridEngine<TRowData = unknown> {
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
 			visibleColRange: { startIdx: 0, endIdx: 0 },
 			getRowId: config.getRowId,
+			loading: config.loading,
 			loadingSkeletonCount: config.loadingSkeletonCount,
 			styleSlots: config.styleSlots,
 
@@ -84,6 +122,14 @@ export class GridEngine<TRowData = unknown> {
 			groupRowHeight: config.groupRowHeight,
 			detailRowHeight: config.detailRowHeight,
 			detailRenderer: config.detailRenderer,
+			rowModelConfig: config.rowModelConfig,
+			showGroupFooter: config.showGroupFooter,
+			enableStickyGroupRows: config.enableStickyGroupRows,
+			expansion: config.expansion ?? { groups: {}, treeRows: {}, details: {} },
+			rowOverscanPx: config.rowOverscanPx ?? 400,
+			colBuffer: config.colBuffer ?? 1,
+			runtimeLimits: config.runtimeLimits,
+			overscanAdaptive: config.overscanAdaptive,
 		};
 
 		// Construct StateManager with coordinate state update bridging
@@ -109,7 +155,25 @@ export class GridEngine<TRowData = unknown> {
 			...state,
 			...payload,
 		}));
+		this.invalidation.invalidateFull('set data');
+		this.requestRender('set data');
 		this.commandHistory.clear();
+	}
+
+	public getRowOverscanPx(): number {
+		return this.stateManager.getState().rowOverscanPx ?? 400;
+	}
+
+	public setRowOverscanPx(px: number): void {
+		this.stateManager.setState({ rowOverscanPx: px });
+	}
+
+	public getColBuffer(): number {
+		return this.stateManager.getState().colBuffer ?? 1;
+	}
+
+	public setColBuffer(colBuffer: number): void {
+		this.stateManager.setState({ colBuffer });
 	}
 
 	public selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'api'): void {
@@ -132,13 +196,16 @@ export class GridEngine<TRowData = unknown> {
 
 	public moveColumn(colField: string, toIndex: number): void {
 		const state = this.stateManager.getState();
-		const fromIndex = state.columns.findIndex((column) => column.field === colField);
+		const displayedColumns = this.columns.getDisplayedColumns();
+		const fromIndex = displayedColumns.findIndex((column) => column.field === colField);
 		if (fromIndex === -1 || !Number.isFinite(toIndex)) return;
 
-		const boundedToIndex = Math.max(0, Math.min(state.columns.length - 1, Math.trunc(toIndex)));
+		const boundedToIndex = Math.max(0, Math.min(displayedColumns.length - 1, Math.trunc(toIndex)));
 		if (fromIndex === boundedToIndex) return;
 
-		this.applyColumnOrder(this.moveColumnInList(state.columns, fromIndex, boundedToIndex));
+		const nextDisplayed = this.moveColumnInList(displayedColumns, fromIndex, boundedToIndex);
+		const hiddenColumns = state.columns.filter((column) => column.hide === true);
+		this.applyColumnOrder([...nextDisplayed, ...hiddenColumns]);
 	}
 
 	public setColumnOrderByFields(colFields: string[]): void {
@@ -163,7 +230,17 @@ export class GridEngine<TRowData = unknown> {
 
 	public setColumnReorderEnabled(enabled: boolean): void {
 		this.stateManager.setState({ enableColumnReorder: enabled });
+		this.invalidation.invalidateHeaders('column reorder toggle');
 		this.eventBus.dispatchEvent('columnReorderToggled', { enabled });
+		this.requestRender('column reorder toggle');
+	}
+
+	public setStyleSlots(styleSlots: GridState<TRowData>['styleSlots']): void {
+		this.stateManager.setState({ styleSlots });
+		this.invalidation.invalidateViewport('style slots');
+		this.invalidation.invalidateHeaders('style slots');
+		this.invalidation.invalidateOverlay('style slots');
+		this.requestRender('style slots');
 	}
 
 	public resizeRow(rowId: string, height: number, undoable = true): void {
@@ -183,6 +260,9 @@ export class GridEngine<TRowData = unknown> {
 	public setSortModel(sortModel: SortModel | null, undoable = true): void {
 		const oldSort = this.stateManager.getState().sortModel;
 		this.stateManager.setState({ sortModel });
+		this.invalidation.invalidateHeaders('sort');
+		this.invalidation.invalidateFull('sort');
+		this.requestRender('sort');
 
 		if (undoable) {
 			this.commandHistory.add({
@@ -195,6 +275,8 @@ export class GridEngine<TRowData = unknown> {
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
 		const oldFilter = this.stateManager.getState().filterModel;
 		this.stateManager.setState({ filterModel });
+		this.invalidation.invalidateFull('filter');
+		this.requestRender('filter');
 
 		if (undoable) {
 			this.commandHistory.add({
@@ -204,11 +286,40 @@ export class GridEngine<TRowData = unknown> {
 		}
 	}
 
+	public setGroupBy(colIds: string[]): void {
+		const state = this.stateManager.getState();
+		// Clear stale group expansion state when grouping columns change
+		const newExpansion = { ...state.expansion, groups: {} as Record<string, true> };
+		this.stateManager.setState({ groupBy: colIds, expansion: newExpansion });
+		this.invalidation.invalidateFull('groupBy');
+		this.requestRender('groupBy');
+	}
+
+	public setAggDefs(defs: import('../rows/stages/aggregateStage.js').AggregationDef<any>[]): void {
+		this.stateManager.setState({ aggDefs: defs });
+		this.invalidation.invalidateFull('aggDefs');
+		this.requestRender('aggDefs');
+	}
+
+	public setShowGroupFooter(enabled: boolean): void {
+		this.stateManager.setState({ showGroupFooter: enabled });
+		this.invalidation.invalidateFull('showGroupFooter');
+		this.requestRender('showGroupFooter');
+	}
+
+	public setStickyGroupRows(enabled: boolean): void {
+		this.stateManager.setState({ enableStickyGroupRows: enabled });
+		this.invalidation.invalidateFull('enableStickyGroupRows');
+		this.requestRender('enableStickyGroupRows');
+	}
+
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
 		const oldValue = this.data.getRawCellValue(rowId, colField);
 		if (oldValue === value) return;
 
-		const applied = this.data.setCellValue(rowId, colField, value);
+		const col = this.columns.getColumnDef(colField);
+		const knownOldStoredValue = col?.valueGetter ? undefined : oldValue;
+		const applied = this.data.setCellValue(rowId, colField, value, knownOldStoredValue);
 		if (!applied) return;
 
 		if (undoable) {
@@ -220,11 +331,15 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public startEdit(rowId: string, colField: string): void {
+		if (!this.canEditCell(rowId, colField)) return;
 		this.stateManager.setState({
 			activeEdit: { rowId, colField },
 		});
+		this.invalidation.invalidateCell(rowId, colField, 'edit started');
+		this.invalidation.invalidateOverlay('edit started');
 		this.notifyCellChange(rowId, colField);
 		this.eventBus.dispatchEvent('editStarted', { rowId, colField });
+		this.requestRender('edit started');
 	}
 
 	public stopEdit(cancel = false): void {
@@ -233,16 +348,24 @@ export class GridEngine<TRowData = unknown> {
 
 		const { rowId, colField } = activeEdit;
 		this.stateManager.setState({ activeEdit: null });
+		this.invalidation.invalidateCell(rowId, colField, 'edit stopped');
+		this.invalidation.invalidateOverlay('edit stopped');
 		this.notifyCellChange(rowId, colField);
 		this.eventBus.dispatchEvent('editStopped', { rowId, colField, cancel });
+		this.requestRender('edit stopped');
 	}
 
 	public registerRowModel(rowModel: RowModel<TRowData>): void {
 		this.rowModel = rowModel;
+		this.rowModelVersion++;
+		this.geometryVersion++;
 		// Refresh coordinates
 		const state = this.stateManager.getState();
 		this.geometry.updateRows(this.getRowHeightsList(rowModel, state.rowHeights, state.defaultRowHeight), state.defaultRowHeight);
 		this.stateManager.setState({ dataVersion: state.dataVersion + 1 });
+		this.invalidation.invalidateGeometry('row model registered');
+		this.invalidation.invalidateFull('row model registered');
+		this.requestRender('row model registered');
 	}
 
 	public getRowModel(): RowModel<TRowData> | null {
@@ -273,8 +396,12 @@ export class GridEngine<TRowData = unknown> {
 		return this.formulas.getCellValue(rowId, colField, getRawValue);
 	}
 
-	public invalidateFormulaCell(rowId: string, colField: string): string[] {
+	public invalidateFormulaCell(rowId: string, colField: string): FormulaCellCoordinate[] {
 		return this.formulas.invalidateCell(rowId, colField);
+	}
+
+	public getCachedFormulaValue(rowId: string, colField: string): { hasCached: boolean; value: unknown } {
+		return this.formulas.getCachedFormulaValue(rowId, colField);
 	}
 
 	private getRowHeightsList(rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number): number[] {
@@ -308,34 +435,71 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public batch = (callback: () => void): void => {
-		const prev = this._batchedUpdates;
-		this._batchedUpdates = true;
+		this.beginRenderTransaction();
 		this.stateManager.startTransaction();
 		try {
 			callback();
 		} finally {
-			this._batchedUpdates = prev;
 			this.stateManager.endTransaction();
-			if (this.cellUpdateBatch.size > 0) {
-				this.flushCellUpdatesSync();
-			}
+			this.flushCellUpdatesSync();
+			this.endRenderTransaction();
 		}
 	};
 
 	public flushCellUpdates(): void {
-		this.cellUpdateBatch.forEach((key) => {
-			const colonIdx = key.indexOf(':');
-			const rowId = colonIdx === -1 ? key : key.substring(0, colonIdx);
-			const colField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
-			this.notifyCellChange(rowId, colField);
-		});
+		if (this.cellUpdateBatch.size === 0) {
+			this.batchFlushScheduled = false;
+			return;
+		}
+		const batch = new Map(this.cellUpdateBatch);
 		this.cellUpdateBatch.clear();
 		this.batchFlushScheduled = false;
+		this.notifyBulkCellChange(batch);
+	}
+
+	public enqueueCellUpdate(rowId: string, colField: string): void {
+		let fields = this.cellUpdateBatch.get(rowId);
+		if (!fields) {
+			fields = new Set<string>();
+			this.cellUpdateBatch.set(rowId, fields);
+		}
+		fields.add(colField);
 	}
 
 	public flushCellUpdatesSync(): void {
 		if (this.cellUpdateBatch.size > 0) {
 			this.flushCellUpdates();
+		}
+	}
+
+	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
+		// Clear caches and notify subscriptions for each changed cell
+		for (const [rowId, fields] of changes) {
+			for (const colField of fields) {
+				this.data.clearValueGetterCache(rowId, colField);
+				const cellKey = `${rowId}:${colField}`;
+				const cellSubs = this.cellSubscriptions.get(cellKey);
+				if (cellSubs) {
+					cellSubs.forEach((sub) => {
+						try {
+							sub.onStoreChange();
+						} catch (e) {
+							console.error(`GridEngine: Error in cell subscription notification`, e);
+						}
+					});
+				}
+			}
+		}
+		// Accumulate all invalidations, then fire ONE render event instead of N cellInvalidated events
+		const hasRenderConsumer = this.eventBus.hasListeners('cellInvalidated') || this.eventBus.hasListeners('renderInvalidated');
+		if (hasRenderConsumer) {
+			for (const [rowId, fields] of changes) {
+				for (const colField of fields) {
+					this.invalidation.invalidateCell(rowId, colField, 'cell');
+				}
+				this.invalidation.invalidateRow(rowId, 'cell');
+			}
+			this.requestRender('bulk-cell-change');
 		}
 	}
 
@@ -352,7 +516,12 @@ export class GridEngine<TRowData = unknown> {
 				}
 			});
 		}
-		this.eventBus.dispatchEvent('cellInvalidated', { rowId, colField });
+		const hasRenderConsumer = this.eventBus.hasListeners('cellInvalidated') || this.eventBus.hasListeners('renderInvalidated');
+		if (hasRenderConsumer) {
+			this.invalidation.invalidateCell(rowId, colField, 'cell');
+			this.invalidation.invalidateRow(rowId, 'cell');
+			this.eventBus.dispatchEvent('cellInvalidated', { rowId, colField });
+		}
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
@@ -420,6 +589,12 @@ export class GridEngine<TRowData = unknown> {
 	};
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
+		const validStart = this.isDataCellSelectable(start) ? start : null;
+		const validEnd = this.isDataCellSelectable(end) ? end : null;
+		if ((start || end) && (!validStart || !validEnd)) {
+			start = validStart;
+			end = validEnd;
+		}
 		const range = start !== null && end !== null ? { start, end } : null;
 		const selection = this.selection.setSelection({
 			focus: end,
@@ -431,6 +606,21 @@ export class GridEngine<TRowData = unknown> {
 			selection,
 		});
 	};
+
+	private canEditCell(rowId: string, colField: string): boolean {
+		const rowModel = this.getRowModel();
+		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
+		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
+		return canEditCell(visualRow, this.columns.getColumnDef(colField));
+	}
+
+	private isDataCellSelectable(pointer: GridCellPointer | null): pointer is GridCellPointer {
+		if (!pointer) return false;
+		const rowModel = this.getRowModel();
+		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(pointer.rowId) : -1;
+		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
+		return isDataCellSelectable(visualRow, this.columns.getColumnDef(pointer.colField));
+	}
 
 	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {
 		const state = this.stateManager.getState();
@@ -454,6 +644,8 @@ export class GridEngine<TRowData = unknown> {
 			columns,
 			columnWidths: nextWidths,
 		});
+		this.invalidation.invalidateFull('columns');
+		this.requestRender('columns');
 
 		this.eventBus.dispatchEvent('columnsChanged', {
 			columns,
@@ -485,11 +677,15 @@ export class GridEngine<TRowData = unknown> {
 				[colField]: width,
 			},
 		}));
+		this.invalidation.invalidateGeometry('column resize');
+		this.invalidation.invalidateColumn(colField, 'column resize');
+		this.invalidation.invalidateHeaders('column resize');
 
 		this.eventBus.dispatchEvent('columnResized', {
 			colField,
 			width,
 		});
+		this.requestRender('column resize');
 	};
 
 	private applyColumnOrder(columns: ColumnDef<TRowData>[]): void {
@@ -500,10 +696,12 @@ export class GridEngine<TRowData = unknown> {
 		}
 
 		this.stateManager.setState({ columns });
+		this.invalidation.invalidateFull('column order');
 		this.eventBus.dispatchEvent('columnOrderChanged', {
 			columns,
 			columnFields: nextFields,
 		});
+		this.requestRender('column order');
 	}
 
 	private moveColumnInList(columns: ColumnDef<TRowData>[], fromIndex: number, toIndex: number): ColumnDef<TRowData>[] {
@@ -520,11 +718,14 @@ export class GridEngine<TRowData = unknown> {
 				[rowId]: height,
 			},
 		}));
+		this.invalidation.invalidateGeometry('row resize');
+		this.invalidation.invalidateRow(rowId, 'row resize');
 
 		this.eventBus.dispatchEvent('rowResized', {
 			rowId,
 			height,
 		});
+		this.requestRender('row resize');
 	};
 
 	// State-to-coordinate change mapping bridge callback
@@ -535,26 +736,38 @@ export class GridEngine<TRowData = unknown> {
 		// Synchronize sub-models
 		if (updatedSet.has('columns') || updatedSet.has('columnWidths') || updatedSet.has('defaultColWidth')) {
 			this.columns.updateColumns(currState.columns, currState.columnWidths, currState.defaultColWidth);
+			this.columnVersion++;
+			this.geometryVersion++;
 		}
 
 		if (updatedSet.has('dataVersion')) {
 			this.data.clearValueGetterCache();
 		}
 
+		if (updatedSet.has('dataVersion') || updatedSet.has('sortModel') || updatedSet.has('filterModel')) {
+			this.rowModelVersion++;
+		}
+
+		const rowCountChanged = this.rowModel ? this.rowModel.getVisualRowCount() !== this.geometry.getRowCount() : false;
 		if (
 			this.rowModel &&
-			(updatedSet.has('rowHeights') || updatedSet.has('defaultRowHeight') || updatedSet.has('dataVersion') || updatedSet.has('loading'))
+			(updatedSet.has('rowHeights') ||
+				updatedSet.has('defaultRowHeight') ||
+				updatedSet.has('loading') ||
+				updatedSet.has('dataVersion') ||
+				rowCountChanged)
 		) {
 			this.geometry.updateRows(
 				this.getRowHeightsList(this.rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight
 			);
+			this.geometryVersion++;
 		}
 
-		if (updatedSet.has('selection') || updatedSet.has('columns') || updatedSet.has('dataVersion')) {
+		if (updatedSet.has('selection') || updatedSet.has('columns')) {
 			const rangeBounds = this.selection.calculateRangeBounds(
 				currState.selection.range,
-				(id) => (this.rowModel ? this.rowModel.getVisualRowIndexById(id) : -1),
+				(id) => (this.rowModel ? this.rowModel.getVisualIndexByRowId(id) : -1),
 				(field) => this.columns.getColumnIndex(field)
 			);
 			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds) ? currState.selection.bounds : rangeBounds;
@@ -577,9 +790,9 @@ export class GridEngine<TRowData = unknown> {
 
 		if (updatedSet.has('selection')) {
 			this.selection.setSelection(currState.selection);
+			this.invalidation.invalidateOverlay('selection');
 		}
 
-		// Calculate visible ranges if relevant geometry/data properties changed
 		const needsRangeUpdate =
 			updatedSet.has('columns') ||
 			updatedSet.has('columnWidths') ||
@@ -587,11 +800,12 @@ export class GridEngine<TRowData = unknown> {
 			updatedSet.has('dataVersion') ||
 			updatedSet.has('defaultRowHeight') ||
 			updatedSet.has('defaultColWidth') ||
-			updatedSet.has('loading');
+			updatedSet.has('loading') ||
+			updatedSet.has('rowOverscanPx');
 
 		if (needsRangeUpdate) {
 			const nextRowRange = this.viewport.getVisibleRowRange(this.rowModel ? this.rowModel.getVisualRowCount() : 0);
-			const nextColRange = this.viewport.getVisibleColumnRange(currState.columns.length);
+			const nextColRange = this.viewport.getVisibleColumnRange(this.columns.getDisplayedColumnCount());
 
 			const rowRangeChanged =
 				!currState.visibleRowRange ||
@@ -627,6 +841,10 @@ export class GridEngine<TRowData = unknown> {
 		if (updatedSet.has('selection')) {
 			if (prevState.selection.focus) notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
 			if (currState.selection.focus) notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
+			if (prevState.selection.focus)
+				this.invalidation.invalidateCell(prevState.selection.focus.rowId, prevState.selection.focus.colField, 'focus');
+			if (currState.selection.focus)
+				this.invalidation.invalidateCell(currState.selection.focus.rowId, currState.selection.focus.colField, 'focus');
 		}
 
 		if (updatedSet.has('activeEdit')) {
@@ -638,15 +856,17 @@ export class GridEngine<TRowData = unknown> {
 			const rowModel = this.rowModel;
 			if (rowModel) {
 				const viewport = this.getSelectionNotificationViewport();
+				const displayedColumns = this.columns.getDisplayedColumns();
 				this.selection.forEachDirtyCoordinateInViewport(
 					prevState.selection.bounds,
 					currState.selection.bounds,
 					viewport,
 					(rowIdx, colIdx) => {
-						const row = rowModel.getRow(rowIdx);
-						const col = currState.columns[colIdx];
-						if (row && col) {
-							notifyCellOnce(this.data.getRowId(row), col.field);
+						const visualRow = rowModel.getVisualRow(rowIdx);
+						const col = displayedColumns[colIdx];
+						if (visualRow?.kind === 'data' && col) {
+							notifyCellOnce(visualRow.rowId, col.field);
+							this.invalidation.invalidateCell(visualRow.rowId, col.field, 'selection');
 						}
 					}
 				);
@@ -690,7 +910,11 @@ export class GridEngine<TRowData = unknown> {
 			this.eventBus.dispatchEvent('focusChanged', { focus: currState.selection.focus, selection: currState.selection });
 		}
 		if (updatedSet.has('selection')) {
-			this.eventBus.dispatchEvent('selectionChanged', { selection: currState.selection });
+			this.eventBus.dispatchEvent('selectionChanged', {
+				selection: currState.selection,
+				result: this.selection.describeChange(prevState.selection, currState.selection, this.rowModel, currState.columns),
+			});
+			this.requestRender('selection');
 		}
 		if (updatedSet.has('sortModel')) {
 			this.eventBus.dispatchEvent('sortChanged', { sortModel: currState.sortModel });
@@ -698,7 +922,42 @@ export class GridEngine<TRowData = unknown> {
 		if (updatedSet.has('filterModel')) {
 			this.eventBus.dispatchEvent('filterChanged', { filterModel: currState.filterModel });
 		}
+		if (updatedSet.has('groupBy')) {
+			this.eventBus.dispatchEvent('groupByChanged', { groupBy: currState.groupBy });
+		}
+		if (updatedSet.has('aggDefs')) {
+			this.eventBus.dispatchEvent('aggDefsChanged', { aggDefs: currState.aggDefs });
+		}
+		if (updatedSet.has('showGroupFooter')) {
+			this.eventBus.dispatchEvent('showGroupFooterChanged', { showGroupFooter: currState.showGroupFooter });
+		}
+		if (updatedSet.has('enableStickyGroupRows')) {
+			this.eventBus.dispatchEvent('enableStickyGroupRowsChanged', { enableStickyGroupRows: currState.enableStickyGroupRows });
+		}
 	};
+
+	private requestRender(reason: string): void {
+		if (this.renderTransactionDepth > 0) {
+			this.pendingRenderReason = this.pendingRenderReason ? `${this.pendingRenderReason}+${reason}` : reason;
+			return;
+		}
+		this.eventBus.dispatchEvent('renderInvalidated', { reason });
+	}
+
+	private beginRenderTransaction(): void {
+		this.renderTransactionDepth++;
+	}
+
+	private endRenderTransaction(): void {
+		if (this.renderTransactionDepth === 0) return;
+		this.renderTransactionDepth--;
+		if (this.renderTransactionDepth > 0) return;
+		const reason = this.pendingRenderReason;
+		this.pendingRenderReason = null;
+		if (reason) {
+			this.eventBus.dispatchEvent('renderInvalidated', { reason });
+		}
+	}
 
 	private areRangeBoundsEqual(
 		left: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null,
@@ -718,7 +977,7 @@ export class GridEngine<TRowData = unknown> {
 	private getSelectionNotificationViewport(): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
 		const state = this.stateManager.getState();
 		const rowCount = this.rowModel ? this.rowModel.getVisualRowCount() : 0;
-		const colCount = state.columns.length;
+		const colCount = this.columns.getDisplayedColumnCount();
 
 		if (rowCount === 0 || colCount === 0) {
 			return { minRow: 1, maxRow: 0, minCol: 1, maxCol: 0 };

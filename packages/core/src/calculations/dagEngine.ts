@@ -1,3 +1,8 @@
+export interface FormulaCellCoordinate {
+	rowId: string;
+	colField: string;
+}
+
 export class DagEngine {
 	private dependents = new Map<string, Set<string>>(); // dependencyKey -> Set of dependentKeys
 	private dependencies = new Map<string, Set<string>>(); // dependentKey -> Set of dependencyKeys
@@ -39,7 +44,7 @@ export class DagEngine {
 		this.dependencies.set(targetKey, depSet);
 
 		// Mark target and all its dependents as dirty
-		const invalidated = new Set<string>();
+		const invalidated = new Map<string, FormulaCellCoordinate>();
 		this.invalidateCell(rowId, colField, invalidated);
 	}
 
@@ -51,7 +56,7 @@ export class DagEngine {
 		if (this.formulas.has(targetKey)) {
 			this.formulas.delete(targetKey);
 			this.unregisterFormulaDependencies(targetKey);
-			const invalidated = new Set<string>();
+			const invalidated = new Map<string, FormulaCellCoordinate>();
 			this.invalidateCell(rowId, colField, invalidated);
 		}
 	}
@@ -68,6 +73,14 @@ export class DagEngine {
 	 */
 	public getFormula(rowId: string, colField: string): string | undefined {
 		return this.formulas.get(this.getCellKey(rowId, colField));
+	}
+
+	public getCachedFormulaValue(rowId: string, colField: string): { hasCached: boolean; value: unknown } {
+		const key = this.getCellKey(rowId, colField);
+		if (this.cache.has(key) && !this.dirty.has(key)) {
+			return { hasCached: true, value: this.cache.get(key) };
+		}
+		return { hasCached: false, value: undefined };
 	}
 
 	public clearAll(): void {
@@ -117,38 +130,49 @@ export class DagEngine {
 	 * Recursively invalidates all dependent cell caches.
 	 * Returns the list of cell keys that were invalidated.
 	 */
-	public invalidateCell(rowId: string, colField: string, invalidated: Set<string> = new Set()): string[] {
+	public invalidateCell(rowId: string, colField: string, invalidated: Map<string, FormulaCellCoordinate> = new Map()): FormulaCellCoordinate[] {
 		const key = this.getCellKey(rowId, colField);
 		if (invalidated.has(key)) return [];
 
-		invalidated.add(key);
+		invalidated.set(key, { rowId, colField });
 		this.cache.delete(key);
 		this.dirty.add(key);
 
 		const dependentsSet = this.dependents.get(key);
 		if (dependentsSet) {
 			for (const depKey of dependentsSet) {
-				const [depRowId, depColField] = depKey.split(':');
-				this.invalidateCell(depRowId, depColField, invalidated);
+				const depCoordinate = this.parseInternalCellKey(depKey);
+				if (depCoordinate) {
+					this.invalidateCell(depCoordinate.rowId, depCoordinate.colField, invalidated);
+				}
 			}
 		}
 
-		return Array.from(invalidated);
+		return Array.from(invalidated.values());
 	}
 
 	private getCellKey(rowId: string, colField: string): string {
-		return `${rowId}:${colField}`;
+		return `${rowId}\u0000${colField}`;
+	}
+
+	private parseInternalCellKey(key: string): FormulaCellCoordinate | null {
+		const separatorIdx = key.indexOf('\u0000');
+		if (separatorIdx === -1) return null;
+		return {
+			rowId: key.substring(0, separatorIdx),
+			colField: key.substring(separatorIdx + 1),
+		};
 	}
 
 	/**
 	 * Scans a formula string to extract all dependent cell coordinates matching `[rowId:colField]`.
 	 */
 	private extractReferences(formula: string): string[] {
-		const regex = /\[([^\]:]+):([^\]:]+)\]/g;
+		const regex = /\[(.+?):([^\]:]+)\]/g;
 		const references: string[] = [];
 		let match;
 		while ((match = regex.exec(formula)) !== null) {
-			references.push(`${match[1]}:${match[2]}`);
+			references.push(this.getCellKey(match[1], match[2]));
 		}
 		return references;
 	}
@@ -208,7 +232,7 @@ export class DagEngine {
 		}
 
 		// 1. Resolve cell references [rowId:colField] to their current values
-		const refRegex = /\[([^\]:]+):([^\]:]+)\]/g;
+		const refRegex = /\[(.+?):([^\]:]+)\]/g;
 		expr = expr.replace(refRegex, (_, rId, cField) => {
 			const resolved = this.getCellValue(rId, cField, getRawValue);
 			const num = Number(resolved);

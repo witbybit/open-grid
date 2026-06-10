@@ -315,6 +315,22 @@ interface DeveloperPanelProps {
 }
 
 export function DeveloperPanel({ activePage, activeApi }: DeveloperPanelProps) {
+	const [stats, setStats] = React.useState<any>(null);
+
+	React.useEffect(() => {
+		if (!activeApi || typeof activeApi.getRenderStats !== 'function') {
+			setStats(null);
+			return;
+		}
+		// Fetch initial stats
+		setStats(activeApi.getRenderStats());
+
+		const interval = setInterval(() => {
+			setStats(activeApi.getRenderStats?.());
+		}, 300);
+		return () => clearInterval(interval);
+	}, [activeApi]);
+
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
 			<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
@@ -497,6 +513,70 @@ export function DeveloperPanel({ activePage, activeApi }: DeveloperPanelProps) {
 					<div className='p-2 bg-slate-950 border border-slate-900 rounded text-[10px] text-slate-400 leading-relaxed'>
 						<strong>Analytics Streamer</strong>: Edits to company prices automatically re-render the SVG area chart and recalculate math
 						instantly!
+					</div>
+				</div>
+			)}
+
+			{stats && (
+				<div className='mt-2 pt-3 border-t border-slate-800/60 flex flex-col gap-2'>
+					<div className='flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1'>
+						<span>Performance Stats</span>
+						<button
+							onClick={() => activeApi.resetRenderStats?.()}
+							className='px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all text-[9px] font-semibold font-sans'
+						>
+							Reset
+						</button>
+					</div>
+
+					<div className='grid grid-cols-2 gap-2 text-[10px] text-slate-300 font-semibold font-mono'>
+						<div className='bg-slate-950/40 p-1.5 border border-slate-800 rounded flex flex-col justify-between'>
+							<span className='text-slate-500 text-[8px] uppercase tracking-wider'>Scroll Path Purity</span>
+							<div className='flex flex-col gap-0.5 mt-1'>
+								<div className='flex justify-between'>
+									<span>focus() Calls:</span>
+									<span className={stats.focusCallsDuringScroll === 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+										{stats.focusCallsDuringScroll}
+									</span>
+								</div>
+								<div className='flex justify-between'>
+									<span>Value Calls:</span>
+									<span
+										className={
+											stats.getCellValueCallsDuringScroll === 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'
+										}
+									>
+										{stats.getCellValueCallsDuringScroll}
+									</span>
+								</div>
+								<div className='flex justify-between'>
+									<span>Formula Calls:</span>
+									<span className={stats.formulaCallsDuringScroll === 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+										{stats.formulaCallsDuringScroll}
+									</span>
+								</div>
+							</div>
+						</div>
+
+						<div className='bg-slate-950/40 p-1.5 border border-slate-800 rounded flex flex-col justify-between'>
+							<span className='text-slate-500 text-[8px] uppercase tracking-wider'>Custom Renderers</span>
+							<div className='flex flex-col gap-0.5 mt-1'>
+								<div className='flex justify-between'>
+									<span>Active / Warm:</span>
+									<span className='text-purple-400 font-bold'>
+										{stats.portalMounts?.custom?.activeCount ?? 0} / {stats.portalMounts?.custom?.warmCount ?? 0}
+									</span>
+								</div>
+								<div className='flex justify-between'>
+									<span>Warm Hits:</span>
+									<span className='text-sky-400 font-bold'>{stats.portalMounts?.custom?.warmHits ?? 0}</span>
+								</div>
+								<div className='flex justify-between'>
+									<span>Hydration:</span>
+									<span className='text-amber-400 font-bold'>{stats.customRendererHydrationChunks ?? 0}</span>
+								</div>
+							</div>
+						</div>
 					</div>
 				</div>
 			)}

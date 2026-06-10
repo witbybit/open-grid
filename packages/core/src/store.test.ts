@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GridStore } from './store.js';
+import { GridStore, validateColumns, validateRowIds } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
 
@@ -27,12 +27,104 @@ describe('GridStore generic row-store functionality', () => {
 		const state = store.getState();
 		const rowModel = store.getRowModel()!;
 
-		expect(rowModel.getRowCount()).toBe(2);
+		expect(store.getVisualRowCount()).toBe(2);
 		expect(state.columns).toHaveLength(2);
 		expect(state.selection.focus).toBeNull();
 		expect(state.selection.range).toBeNull();
 
 		controller.dispose();
+	});
+
+	it('should expose targeted subscriptions for viewport, selection, editing, cells, rows, columns, and headers', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const viewport = vi.fn();
+		const selection = vi.fn();
+		const editing = vi.fn();
+		const cell = vi.fn();
+		const row = vi.fn();
+		const column = vi.fn();
+		const headers = vi.fn();
+
+		const unsubscribers = [
+			store.subscribeToViewport(viewport),
+			store.subscribeToSelection(selection),
+			store.subscribeToEditingCell(editing),
+			store.subscribeToCell('1', 'name', cell),
+			store.subscribeToRow('1', row),
+			store.subscribeToColumn('name', column),
+			store.subscribeToHeaders(headers),
+		];
+
+		store.selectCell({ rowId: '1', colField: 'name' });
+		store.startEditing('1', 'name');
+		store.setCellValue('1', 'name', 'Product A+');
+		store.flushCellUpdatesSync();
+		store.setColumnWidth('name', 180);
+		store.setRowHeight('row:1', 60);
+		store.setViewportSize(20, 20);
+		store.updateVisibleRanges();
+
+		expect(selection).toHaveBeenCalled();
+		expect(editing).toHaveBeenCalled();
+		expect(cell).toHaveBeenCalled();
+		expect(row).toHaveBeenCalled();
+		expect(column).toHaveBeenCalled();
+		expect(headers).toHaveBeenCalled();
+		expect(viewport).toHaveBeenCalled();
+
+		unsubscribers.forEach((unsubscribe) => unsubscribe());
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('should expose precise selection change invalidation results', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const listener = vi.fn();
+		store.addEventListener('selectionChanged', listener);
+
+		store.selectCell({ rowId: '1', colField: 'name' });
+		store.selectCell({ rowId: '2', colField: 'name' });
+
+		expect(listener).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					result: expect.objectContaining({
+						invalidatedCells: [
+							{ rowId: '1', colField: 'name' },
+							{ rowId: '2', colField: 'name' },
+						],
+						invalidatedRows: ['1', '2'],
+						overlayChanged: true,
+					}),
+				}),
+			})
+		);
+
+		controller.dispose();
+		store.destroy();
 	});
 
 	it('should preserve initial style slots in grid state', () => {
@@ -200,7 +292,7 @@ describe('GridStore generic row-store functionality', () => {
 		store.setCellValue('1', 'status', 'Inactive');
 
 		expect(store.getCellValue('1', 'status')).toBe('HIGH');
-		expect(store.getRow(0)).toMatchObject({ status: 'Inactive' });
+		expect(store.getDataRowAtVisualIndex(0)).toMatchObject({ status: 'Inactive' });
 		expect(listener).toHaveBeenCalledTimes(1);
 
 		controller.dispose();
@@ -382,6 +474,82 @@ describe('GridStore generic row-store functionality', () => {
 		expect(store.getColumnIndex('id')).toBe(2);
 	});
 
+	it('should move columns by displayed index without counting hidden columns', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'hidden', header: 'Hidden', width: 100, hide: true },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+
+		store.moveColumn('price', 1);
+
+		expect(store.getDisplayedColumns().map((column) => column.field)).toEqual(['id', 'price', 'name']);
+		expect(store.getColumnIndex('price')).toBe(1);
+		expect(store.getColumnIndex('hidden')).toBe(-1);
+	});
+
+	it('should expose displayed column controls through the public store API', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150, hide: true },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+
+		expect(store.getColumns().map((column) => column.field)).toEqual(['id', 'name', 'price']);
+		expect(store.getDisplayedColumns().map((column) => column.field)).toEqual(['id', 'price']);
+		expect(store.getColumnIndex('price')).toBe(1);
+		expect(store.getColumnIndex('name')).toBe(-1);
+
+		store.setColumnVisible('name', true);
+		expect(store.getDisplayedColumns().map((column) => column.field)).toEqual(['id', 'name', 'price']);
+
+		store.setColumnsVisible(['id', 'price'], false);
+		expect(store.getDisplayedColumns().map((column) => column.field)).toEqual(['name']);
+
+		store.setPinnedColumns({ left: 1, right: 2 });
+		expect(store.getPinnedColumns()).toEqual({ left: 1, right: 2 });
+	});
+
+	it('should recompute detail row geometry when sorting moves expanded details', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			defaultRowHeight: 40,
+			masterDetailEnabled: true,
+			detailRowHeight: 220,
+			expansion: {
+				groups: {},
+				treeRows: {},
+				details: { '1': true },
+			},
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Apex', price: 10 },
+				{ id: '2', name: 'Beta', price: 20 },
+				{ id: '3', name: 'Cyberdyne', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(Array.from(store.engine.geometry.rowHeights)).toEqual([40, 220, 40, 40]);
+
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+
+		expect(store.getVisualRow(3)?.id).toBe('detail:1');
+		expect(Array.from(store.engine.geometry.rowHeights)).toEqual([40, 40, 40, 220]);
+
+		controller.dispose();
+	});
+
 	it('should toggle column reorder state through the public store API', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
@@ -420,22 +588,22 @@ describe('ClientRowModelController sorting and filtering', () => {
 		const rowModel = store.getRowModel()!;
 
 		// Check initial rows load
-		expect(rowModel.getRowCount()).toBe(3);
+		expect(store.getVisualRowCount()).toBe(3);
 
 		// Apply sort by name Ascending
 		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
-		expect(rowModel.getRow(0)?.name).toBe('Apple');
-		expect(rowModel.getRow(1)?.name).toBe('Banana');
-		expect(rowModel.getRow(2)?.name).toBe('Cherry');
+		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Apple');
+		expect(store.getDataRowAtVisualIndex(1)?.name).toBe('Banana');
+		expect(store.getDataRowAtVisualIndex(2)?.name).toBe('Cherry');
 
 		// Apply sorting descending
 		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
-		expect(rowModel.getRow(0)?.name).toBe('Cherry');
+		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Cherry');
 
 		// Apply filter by name contains 'an'
 		store.setFilterModel({ name: { type: 'contains', filter: 'an' } });
-		expect(rowModel.getRowCount()).toBe(1);
-		expect(rowModel.getRow(0)?.name).toBe('Banana');
+		expect(store.getVisualRowCount()).toBe(1);
+		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Banana');
 
 		controller.dispose();
 	});
@@ -454,9 +622,8 @@ describe('ClientRowModelController sorting and filtering', () => {
 			columns: store.getState().columns,
 		});
 
-		const rowModel = store.getRowModel()!;
 		const t0 = performance.now();
-		const idx = rowModel.getRowIndexById('999999');
+		const idx = store.getVisualIndexByRowId('999999');
 		const t1 = performance.now();
 
 		expect(idx).toBe(999999);
@@ -491,15 +658,15 @@ describe('ServerRowModelController paginated lazily populated row-patching', () 
 		});
 
 		// Access row at index 0, should return null initially and trigger fetching
-		const initial = controller.getRow(0);
+		const initial = store.getDataRowAtVisualIndex(0);
 		expect(initial).toBeNull();
 
 		// Wait for mock datasource promise to resolve and state to update
 		await vi.waitFor(() => {
-			return controller.getRow(0) !== null;
+			return store.getDataRowAtVisualIndex(0) !== null;
 		});
 
-		const loaded = controller.getRow(0);
+		const loaded = store.getDataRowAtVisualIndex(0);
 		expect(loaded?.name).toBe('Server A');
 
 		controller.dispose();
@@ -519,8 +686,7 @@ describe('RowNode path getters and state batching', () => {
 			columns: store.getState().columns,
 		});
 
-		const rowModel = store.getRowModel()!;
-		const node = rowModel.getRowNode!(0)!;
+		const node = store.getDataRowNodeAtVisualIndex(0)!;
 
 		expect(node).toBeDefined();
 		expect(node.id).toBe('1');
@@ -640,8 +806,8 @@ describe('Phase 2 Engine Scalability Subsystems', () => {
 	});
 });
 
-describe('GridStore scoped batching and dirty cell fanout', () => {
-	it('should support scoped batches and execute them exactly once', () => {
+describe('GridStore auto-batching and dirty cell fanout', () => {
+	it('should auto-batch multiple setCellValue calls and flush once on demand', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'name', header: 'Name' },
@@ -656,21 +822,20 @@ describe('GridStore scoped batching and dirty cell fanout', () => {
 		const listener = vi.fn();
 		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
 
-		store.batch(() => {
-			store.setCellValue('1', 'price', 15);
-			store.setCellValue('1', 'price', 20);
-			// Listener shouldn't be notified immediately
-			expect(listener).toHaveBeenCalledTimes(0);
-		});
+		store.setCellValue('1', 'price', 15);
+		store.setCellValue('1', 'price', 20);
+		// Listener is not notified synchronously — auto-batching defers via microtask
+		expect(listener).toHaveBeenCalledTimes(0);
 
-		// Listener should be notified exactly once (batch() always flushes sync on exit)
+		// flushCellUpdatesSync() forces an immediate synchronous flush
+		store.flushCellUpdatesSync();
 		expect(listener).toHaveBeenCalledTimes(1);
 		expect(store.getCellValue('1', 'price')).toBe(20);
 
 		controller.dispose();
 	});
 
-	it('should support batchedUpdates property getter and setter', () => {
+	it('should have batchedUpdates always true by default', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'name', header: 'Name' },
@@ -685,26 +850,26 @@ describe('GridStore scoped batching and dirty cell fanout', () => {
 		const listener = vi.fn();
 		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
 
-		// batchedUpdates is true by default (library manages batching internally)
+		// batchedUpdates is true by default — all setCellValue calls are auto-batched
 		expect(store.batchedUpdates).toBe(true);
 
 		store.setCellValue('1', 'price', 15);
 		store.setCellValue('1', 'price', 20);
 		expect(listener).toHaveBeenCalledTimes(0);
 
-		// Disabling batchedUpdates should trigger flush
+		// Disabling batchedUpdates triggers an immediate flush (escape hatch)
 		store.batchedUpdates = false;
 		expect(store.batchedUpdates).toBe(false);
 		expect(listener).toHaveBeenCalledTimes(1);
 
-		// Re-enabling should work
+		// Re-enabling works
 		store.batchedUpdates = true;
 		expect(store.batchedUpdates).toBe(true);
 
 		controller.dispose();
 	});
 
-	it('should correctly flush even if callback throws an error', () => {
+	it('should flush pending updates even when an error occurs mid-batch', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'name', header: 'Name' },
@@ -719,14 +884,14 @@ describe('GridStore scoped batching and dirty cell fanout', () => {
 		const listener = vi.fn();
 		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
 
+		// setCellValue enqueues the update even if subsequent code throws
+		store.setCellValue('1', 'price', 15);
 		expect(() => {
-			store.batch(() => {
-				store.setCellValue('1', 'price', 15);
-				throw new Error('Test Error');
-			});
+			throw new Error('Test Error');
 		}).toThrow('Test Error');
 
-		// The update should still have been flushed (batch() flushes sync in finally)
+		// Flush explicitly — the queued update is still applied
+		store.flushCellUpdatesSync();
 		expect(listener).toHaveBeenCalledTimes(1);
 		expect(store.getCellValue('1', 'price')).toBe(15);
 
@@ -751,10 +916,8 @@ describe('GridStore scoped batching and dirty cell fanout', () => {
 		store.registerCellSubscription({ rowId: '1', colField: 'name', onStoreChange: nameListener });
 		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: priceListener });
 
-		// Trigger cell value change on price
-		store.batch(() => {
-			store.setCellValue('1', 'price', 15);
-		});
+		store.setCellValue('1', 'price', 15);
+		store.flushCellUpdatesSync();
 
 		// The price cell listener should be notified exactly once
 		expect(priceListener).toHaveBeenCalledTimes(1);
@@ -925,8 +1088,297 @@ describe('GridStore undo and redo functionality', () => {
 		while (store.canUndo()) {
 			store.undo();
 		}
-
 		// The width should be 105 because the oldest undoable action was setting it to 106 (which reverted to 105)
 		expect(store.getState().columnWidths['name']).toBe(105);
+	});
+
+	it('should support GridStore facade methods getVisualIndexById, getVisualIndexByRowId, getRowNodeById, and getRawRowById correctly', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getVisualIndexById('row:1')).toBe(0);
+		expect(store.getVisualIndexById('row:2')).toBe(1);
+		expect(store.getVisualIndexById('1')).toBeNull();
+		expect(store.getVisualIndexByRowId('1')).toBe(0);
+		expect(store.getVisualIndexByRowId('2')).toBe(1);
+		expect(store.getRowNodeById('1')?.data.name).toBe('Product A');
+		expect(store.getRawRowById('1')).toEqual({ id: '1', name: 'Product A', price: 10 });
+		expect(store.getRawRowById('non-existent')).toBeNull();
+
+		// Test the luxury row collection APIs
+		expect(store.rows().getAll()).toEqual([
+			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '2', name: 'Product B', price: 20 },
+		]);
+
+		const processed: any[] = [];
+		store.rows().forEach((row, index) => {
+			processed.push({ ...row, index });
+		});
+		expect(processed).toEqual([
+			{ id: '1', name: 'Product A', price: 10, index: 0 },
+			{ id: '2', name: 'Product B', price: 20, index: 1 },
+		]);
+
+		// Selection bounds test
+		expect(store.rows().getSelected()).toEqual([]);
+		expect(store.rows().getSelectedIds()).toEqual([]);
+
+		store.selectRange({ rowId: '1', colField: 'name' }, { rowId: '2', colField: 'name' });
+		expect(store.rows().getSelected()).toEqual([
+			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '2', name: 'Product B', price: 20 },
+		]);
+		expect(store.rows().getSelectedIds()).toEqual(['1', '2']);
+
+		// Getters & Count
+		expect(store.rows().getCount()).toBe(2);
+		expect(store.rows().getById('1')).toEqual({ id: '1', name: 'Product A', price: 10 });
+		expect(store.rows().getNodeById('2')?.data.name).toBe('Product B');
+		expect(store.rows().getVisualRowById('1')?.kind).toBe('data');
+
+		// Range testing
+		const range = { start: { rowId: '1', colField: 'name' }, end: { rowId: '2', colField: 'name' } };
+		expect(store.rows().inRange(range).getIds()).toEqual(['1', '2']);
+		expect(store.rows().inRange(range).getData()).toEqual([
+			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '2', name: 'Product B', price: 20 },
+		]);
+
+		const rangeProcessed: string[] = [];
+		store
+			.rows()
+			.inRange(range)
+			.forEach((id, idx) => {
+				rangeProcessed.push(`${id}-${idx}`);
+			});
+		expect(rangeProcessed).toEqual(['1-0', '2-1']);
+
+		controller.dispose();
+	});
+
+	it('compiles immutable grid plans and rebuilds them only for column geometry or pin changes', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+
+		const first = store.engine.columns.getCompiledPlan();
+		const second = store.engine.columns.getCompiledPlan();
+		expect(second).toBe(first);
+		expect(first.displayedColumns.map((column) => column.field)).toEqual(['id', 'name', 'price']);
+		expect(first.totalWidth).toBe(300);
+
+		store.setColumnWidth('name', 200);
+		const afterWidth = store.engine.columns.getCompiledPlan();
+		expect(afterWidth).not.toBe(first);
+		expect(afterWidth.version).toBeGreaterThan(first.version);
+		expect(afterWidth.colWidths[1]).toBe(200);
+
+		const stable = store.engine.columns.getCompiledPlan();
+		expect(stable).toBe(afterWidth);
+
+		store.setPinnedColumns({ left: 1, right: 1 });
+		const afterPins = store.engine.columns.getCompiledPlan();
+		expect(afterPins).not.toBe(afterWidth);
+		expect(afterPins.pinLeftWidth).toBe(50);
+		expect(afterPins.pinRightStart).toBe(2);
+		expect(afterPins.pinRightWidth).toBe(100);
+	});
+
+	it('normalizes explicit renderer tiers into compiled column plans', () => {
+		const domRenderer = {
+			mount: (container: HTMLElement) => {
+				container.textContent = 'dom';
+				return { update: () => {} };
+			},
+		};
+		const reactRenderer = () => null;
+		const imperativeRenderer = () => null;
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', renderer: { kind: 'text' } },
+				{ field: 'name', header: 'Name', renderer: { kind: 'dom', renderer: domRenderer } },
+				{ field: 'price', header: 'Price', renderer: { kind: 'react', component: reactRenderer } },
+				{ field: 'tier', header: 'Tier', renderer: { kind: 'imperativeReact', component: imperativeRenderer } } as any,
+			],
+		});
+
+		const plan = store.engine.columns.getCompiledPlan();
+		expect(plan.columnPlans.map((columnPlan) => columnPlan.mode)).toEqual(['primitive', 'custom-dom', 'custom', 'custom-imperative']);
+		expect(plan.displayedColumns[1].cellRenderer).toBe(domRenderer);
+		expect(plan.displayedColumns[2].cellRendererCapabilities?.scrollBehavior).toBe('defer');
+		expect(plan.displayedColumns[3].cellRendererCapabilities?.imperativeUpdate).toBe(true);
+		expect(plan.hasCustomRenderers).toBe(true);
+		expect(plan.hasDomRenderers).toBe(true);
+	});
+
+	it('coalesces api.batch and api.transaction render invalidations into one render request', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const renderInvalidated = vi.fn();
+		store.addEventListener('renderInvalidated', renderInvalidated);
+
+		store.batch(() => {
+			store.setColumnWidth('id', 60);
+			store.setColumnWidth('name', 180);
+			store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+			store.setCellValue('1', 'name', 'Product A+');
+		});
+
+		expect(renderInvalidated).toHaveBeenCalledTimes(1);
+		renderInvalidated.mockClear();
+
+		store.transaction({
+			columns: [
+				{ field: 'id', header: 'ID', width: 70 },
+				{ field: 'name', header: 'Name', width: 180 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			rowTransaction: { update: [{ id: '2', name: 'Product B+', price: 22 }] },
+			filterModel: { name: { type: 'contains', filter: 'Product' } },
+			pins: { left: 1, right: 1 },
+		});
+
+		expect(renderInvalidated).toHaveBeenCalledTimes(1);
+		expect(store.getPinnedColumns()).toEqual({ left: 1, right: 1 });
+		expect(store.getState().filterModel).toEqual({ name: { type: 'contains', filter: 'Product' } });
+
+		controller.dispose();
+	});
+
+	it('avoids redundant state updates and geometry version increments on setRowHeights and setDefaultRowHeight', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			defaultRowHeight: 40,
+			rowHeights: { '1': 60 },
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: store.getState().columns,
+		});
+
+		const initialPlan = store.engine.columns.getCompiledPlan();
+		const initialPlanVersion = initialPlan.version;
+		const initialGeometryVersion = store.engine.geometryVersion;
+
+		// Call setRowHeights with identical content but a new object reference
+		store.setRowHeights({ '1': 60 });
+		expect(store.engine.columns.getCompiledPlan().version).toBe(initialPlanVersion);
+		expect(store.engine.geometryVersion).toBe(initialGeometryVersion);
+
+		// Call setDefaultRowHeight with identical value
+		store.setDefaultRowHeight(40);
+		expect(store.engine.columns.getCompiledPlan().version).toBe(initialPlanVersion);
+		expect(store.engine.geometryVersion).toBe(initialGeometryVersion);
+
+		// Verify updates still apply when different
+		store.setRowHeights({ '1': 80 });
+		expect(store.engine.columns.getCompiledPlan().version).toBeGreaterThan(initialPlanVersion);
+		expect(store.engine.geometryVersion).toBeGreaterThan(initialGeometryVersion);
+
+		controller.dispose();
+	});
+});
+
+describe('Column and row validation', () => {
+	describe('validateColumns()', () => {
+		it('throws on empty field', () => {
+			expect(() => validateColumns([{ field: '' }])).toThrow('non-empty field');
+		});
+
+		it('throws on duplicate field', () => {
+			expect(() => validateColumns([{ field: 'id' }, { field: 'name' }, { field: 'id' }])).toThrow('duplicate column field "id"');
+		});
+
+		it('throws on zero width', () => {
+			expect(() => validateColumns([{ field: 'id', width: 0 }])).toThrow('invalid width');
+		});
+
+		it('throws on negative width', () => {
+			expect(() => validateColumns([{ field: 'id', width: -10 }])).toThrow('invalid width');
+		});
+
+		it('throws on Infinity width', () => {
+			expect(() => validateColumns([{ field: 'id', width: Infinity }])).toThrow('invalid width');
+		});
+
+		it('passes for valid columns', () => {
+			expect(() =>
+				validateColumns([
+					{ field: 'id', width: 80 },
+					{ field: 'name', width: 200 },
+				])
+			).not.toThrow();
+		});
+
+		it('passes for columns with no width', () => {
+			expect(() => validateColumns([{ field: 'id' }, { field: 'name' }])).not.toThrow();
+		});
+	});
+
+	describe('validateRowIds()', () => {
+		it('throws on empty row ID', () => {
+			expect(() => validateRowIds(['a', '', 'b'])).toThrow('empty string');
+		});
+
+		it('throws on duplicate row ID', () => {
+			expect(() => validateRowIds(['a', 'b', 'a'])).toThrow('duplicate row ID "a"');
+		});
+
+		it('passes for valid IDs', () => {
+			expect(() => validateRowIds(['a', 'b', 'c'])).not.toThrow();
+		});
+	});
+
+	describe('GridStore validation integration', () => {
+		it('throws on construction with duplicate column fields', () => {
+			expect(
+				() =>
+					new GridStore({
+						columns: [{ field: 'id' }, { field: 'id' }],
+					})
+			).toThrow('duplicate column field "id"');
+		});
+
+		it('throws on setColumns() with duplicate fields', () => {
+			const store = new GridStore({ columns: [{ field: 'id' }] });
+			expect(() => store.setColumns([{ field: 'name' }, { field: 'name' }])).toThrow('duplicate column field "name"');
+		});
+
+		it('accepts valid column updates via setColumns()', () => {
+			const store = new GridStore({ columns: [{ field: 'id' }] });
+			expect(() =>
+				store.setColumns([
+					{ field: 'id', width: 100 },
+					{ field: 'name', width: 200 },
+				])
+			).not.toThrow();
+		});
 	});
 });

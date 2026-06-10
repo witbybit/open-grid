@@ -96,6 +96,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.columnDropInsertionIndex = -1;
 		this.removeColumnDropIndicator();
 		this.removeColumnDragGhost();
+		this.getScrollViewport()?.closest('.og-grid-container')?.classList.remove('og-col-reordering');
 	}
 
 	public reattachOverlays(): void {
@@ -116,6 +117,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 			this.isColumnReordering = true;
 			this.ensureColumnDropIndicator();
 			this.ensureColumnDragGhost();
+			this.getScrollViewport()?.closest('.og-grid-container')?.classList.add('og-col-reordering');
 			this.schedulePaint();
 		}
 
@@ -185,7 +187,16 @@ export class ColumnInteractionController<TRowData = unknown> {
 
 		this.columnDragGhost = document.createElement('div');
 		this.columnDragGhost.className = 'og-column-drag-ghost';
-		this.columnDragGhost.textContent = label;
+		// 6-dot drag-handle SVG + column label (textContent avoids XSS)
+		this.columnDragGhost.innerHTML =
+			'<svg class="og-drag-ghost-icon" viewBox="0 0 10 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor" aria-hidden="true">' +
+			'<circle cx="3" cy="3.5" r="1.3"/><circle cx="7" cy="3.5" r="1.3"/>' +
+			'<circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/>' +
+			'<circle cx="3" cy="12.5" r="1.3"/><circle cx="7" cy="12.5" r="1.3"/>' +
+			'</svg>';
+		const labelSpan = document.createElement('span');
+		labelSpan.textContent = label;
+		this.columnDragGhost.appendChild(labelSpan);
 		document.body.appendChild(this.columnDragGhost);
 	}
 
