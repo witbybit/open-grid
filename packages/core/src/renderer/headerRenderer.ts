@@ -15,6 +15,8 @@ export class HeaderRenderer<TRowData = unknown> {
 
 	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
 	private lastHeaderScrollLeft = 0;
+	private lastSyncedPlan: CompiledGridPlan<TRowData> | null = null;
+	private lastSyncedViewportWidth = -1;
 	private lastHeaderLeftTransform = '';
 	private lastHeaderRightLeft = -1;
 	private lastHeaderRightTransform = '';
@@ -50,6 +52,8 @@ export class HeaderRenderer<TRowData = unknown> {
 		}
 		this.headerCells.clear();
 		this.lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
+		this.lastSyncedPlan = null;
+		this.lastSyncedViewportWidth = -1;
 		this.lastHeaderLeftTransform = '';
 		this.lastHeaderRightLeft = -1;
 		this.lastHeaderRightTransform = '';
@@ -64,7 +68,16 @@ export class HeaderRenderer<TRowData = unknown> {
 	}
 
 	public syncScrollLeft(scrollLeft: number, plan: CompiledGridPlan<TRowData>): void {
+		// Numeric early-exit for pure vertical scroll: scrollLeft, plan identity and
+		// viewport width fully determine the pinned-layer transforms, so when none of
+		// them changed there is nothing to do — no translate3d string building.
+		const viewportWidth = this.engine.viewport.viewportWidth;
+		if (scrollLeft === this.lastHeaderScrollLeft && plan === this.lastSyncedPlan && viewportWidth === this.lastSyncedViewportWidth) {
+			return;
+		}
 		this.lastHeaderScrollLeft = scrollLeft;
+		this.lastSyncedPlan = plan;
+		this.lastSyncedViewportWidth = viewportWidth;
 		this.syncPinnedLayerPositions(plan);
 	}
 

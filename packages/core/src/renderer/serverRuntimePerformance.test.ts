@@ -141,7 +141,9 @@ async function flushAnimationFrame(): Promise<void> {
 }
 
 function parseRowTop(el: HTMLElement): number {
-	return parseInt(el.style.top || '0', 10);
+	// Rows are positioned via transform: translateY(<top>px)
+	const match = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(el.style.transform);
+	return match ? parseInt(match[1], 10) : 0;
 }
 
 function parseCellLeft(el: HTMLElement): number {
@@ -258,7 +260,8 @@ function assertNoStaleOrOverlappingDom(grid: AuditGrid): void {
 			expect(cell.dataset.rowIndex).toBe(row.dataset.rowIndex);
 			expect(row.dataset.rowId === cell.dataset.rowId || row.dataset.rowId === `row:${cell.dataset.rowId}`).toBe(true);
 			expect(cell.querySelectorAll(':scope > .og-cell-content')).toHaveLength(1);
-			expect(cell.querySelectorAll(':scope > .og-cell-portal-host')).toHaveLength(1);
+			// Portal hosts are created lazily on first portal use — text cells have none.
+			expect(cell.querySelectorAll(':scope > .og-cell-portal-host').length).toBeLessThanOrEqual(1);
 			for (const renderer of Array.from(cell.querySelectorAll<HTMLElement>('.og-custom-renderer-container'))) {
 				expect(renderer.dataset.cellKey).toBe(cell.dataset.cellKey);
 				if (cell.dataset.cellKey?.includes('@row-pool-')) {
@@ -311,7 +314,7 @@ function assertViewportGeometryIsContinuous(grid: AuditGrid, expectedScrollTop: 
 		const sample = activeSlots.slice(0, 5).map(([rowIndex, slot]) => ({
 			rowIndex,
 			rowTop: slot.rowTop,
-			top: slot.element.style.top,
+			top: slot.element.style.transform,
 			projectedTop: parseRowTop(slot.element) - expectedScrollTop + headerHeight,
 		}));
 		throw new Error(
@@ -328,7 +331,7 @@ function assertViewportGeometryIsContinuous(grid: AuditGrid, expectedScrollTop: 
 		const sample = activeSlots.slice(0, 24).map(([rowIndex, slot]) => ({
 			rowIndex,
 			rowTop: slot.rowTop,
-			top: slot.element.style.top,
+			top: slot.element.style.transform,
 			projectedTop: parseRowTop(slot.element) - expectedScrollTop + headerHeight,
 			projectedBottom: parseRowTop(slot.element) - expectedScrollTop + headerHeight + slot.rowHeight,
 		}));
@@ -433,7 +436,7 @@ function assertScrollStatsAreRuthless(grid: AuditGrid, prevWindow: RenderWindow 
 	const visibleCols = getColIndices(window).length;
 	const activeRows = getRowIndices(window).length;
 	const delta = prevWindow ? diffRenderWindow(prevWindow, window) : null;
-	// Slot model visits all slots × all visible cols each frame (JS cache skips writes for stable cells).
+	// Slot model visits all slots x all visible cols each frame (JS cache skips writes for stable cells).
 	const maxExpectedCells = Math.max(activeRows * visibleCols, visibleCols, 1);
 	expect(stats.valueGetterCallsDuringScroll).toBe(0);
 	expect(stats.formulaCallsDuringScroll).toBe(0);
@@ -647,7 +650,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 				childClasses: Array.from(cell.childNodes).map((c: any) => c.className),
 				hasCachedParts: !!slot,
 				cachedContentHasParent: slot ? !!slot.contentElement.parentNode : false,
-				cachedPortalHasParent: slot ? !!slot.portalHostElement.parentNode : false,
+				cachedPortalHasParent: slot ? !!slot.portalHostElement?.parentNode : false,
 			});
 		}
 

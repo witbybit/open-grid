@@ -31,8 +31,6 @@ export interface RenderWindow {
 	// descendants are still visible. Rendered at the top of the viewport, stacked by depth.
 	stickyGroupIndices?: number[];
 	stickyGroupTops?: number[];
-	/** Comma-separated sticky indices — cheap equality key for sameRenderedWindow. */
-	stickyGroupKey?: string;
 }
 
 export interface ViewportDelta {
@@ -43,6 +41,17 @@ export interface ViewportDelta {
 	colsExited: number[];
 	colsStayed: number[];
 	hasChanges: boolean;
+}
+
+/** Element-wise equality of sticky index arrays — avoids the per-frame join(',') string. */
+function sameStickyIndices(a: number[] | undefined, b: number[] | undefined): boolean {
+	const an = a ? a.length : 0;
+	const bn = b ? b.length : 0;
+	if (an !== bn) return false;
+	for (let i = 0; i < an; i++) {
+		if (a![i] !== b![i]) return false;
+	}
+	return true;
 }
 
 export function sameRenderedWindow(a: RenderWindow | null, b: RenderWindow | null): boolean {
@@ -61,14 +70,50 @@ export function sameRenderedWindow(a: RenderWindow | null, b: RenderWindow | nul
 		(a.geometryVersion ?? 0) === (b.geometryVersion ?? 0) &&
 		(a.rowModelVersion ?? 0) === (b.rowModelVersion ?? 0) &&
 		(a.columnVersion ?? 0) === (b.columnVersion ?? 0) &&
-		(a.stickyGroupKey ?? '') === (b.stickyGroupKey ?? '')
+		sameStickyIndices(a.stickyGroupIndices, b.stickyGroupIndices)
 	);
 }
+
+// Dev warning latch — the clamp warning fires once per session instead of per frame.
+let clampWarned = false;
 
 export interface RenderWindowRuntimeLimits {
 	maxRenderedRows?: number;
 	maxRenderedCells?: number;
 	suppressRenderedRangeLimit?: boolean;
+}
+
+// Cached array form of the sticky-group meta Map. A new Map instance is built on every
+// row-model refresh, so Map identity doubles as the version key. Arrays let the per-frame
+// sticky walk binary-search instead of iterating Map entries.
+const stickyMetaArraysCache = new WeakMap<Map<number, number>, { idx: number[]; last: number[] }>();
+
+function getStickyMetaArrays(meta: Map<number, number>): { idx: number[]; last: number[] } {
+	let arrays = stickyMetaArraysCache.get(meta);
+	if (!arrays) {
+		const idx = new Array<number>(meta.size);
+		const last = new Array<number>(meta.size);
+		let i = 0;
+		for (const [groupIdx, lastDescIdx] of meta) {
+			idx[i] = groupIdx;
+			last[i] = lastDescIdx;
+			i++;
+		}
+		arrays = { idx, last };
+		stickyMetaArraysCache.set(meta, arrays);
+	}
+	return arrays;
+}
+
+/** First index in `sorted` (ascending) whose value is > `value`, searching from `lo`. */
+function firstIndexAfter(sorted: number[], value: number, lo: number): number {
+	let hi = sorted.length;
+	while (lo < hi) {
+		const mid = (lo + hi) >> 1;
+		if (sorted[mid] <= value) lo = mid + 1;
+		else hi = mid;
+	}
+	return lo;
 }
 
 function countPinnedLeading(count: number, total: number): number {
@@ -79,14 +124,19 @@ function countPinnedTrailing(count: number, total: number, leading: number): num
 	return Math.max(0, Math.min(count, Math.max(0, total - leading)));
 }
 
-export function getRowIndices(w: RenderWindow): number[] {
+/**
+ * Row indices rendered for this window. Pass `out` to reuse a scratch array on hot
+ * paths (it is cleared and refilled; valid until the next call with the same array).
+ */
+export function getRowIndices(w: RenderWindow, out?: number[]): number[] {
 	const pinTop = Math.min(w.pinTopRows, w.rowCount);
 	const pinBottomStart = Math.max(pinTop, w.rowCount - w.pinBottomRows);
 	const stickyIndices = w.stickyGroupIndices;
 
 	if (!stickyIndices || stickyIndices.length === 0) {
 		// Fast path: no sticky rows — original O(n) logic with no Set allocation
-		const indices: number[] = [];
+		const indices: number[] = out ?? [];
+		indices.length = 0;
 		for (let r = 0; r < pinTop; r++) indices.push(r);
 		for (let r = w.rowStart; r <= w.rowEnd; r++) {
 			if (r >= pinTop && r < pinBottomStart) indices.push(r);
@@ -97,7 +147,8 @@ export function getRowIndices(w: RenderWindow): number[] {
 
 	// Slow path: deduplicate when sticky rows are present
 	const seen = new Set<number>();
-	const indices: number[] = [];
+	const indices: number[] = out ?? [];
+	indices.length = 0;
 
 	for (let r = 0; r < pinTop; r++) {
 		indices.push(r);
@@ -157,6 +208,10 @@ export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: Re
 	}
 
 	const next = { ...window };
+	// The sticky arrays on `window` are per-double-buffer scratch reused every frame —
+	// the clamped window outlives the frame, so it needs its own copies.
+	next.stickyGroupIndices = window.stickyGroupIndices ? window.stickyGroupIndices.slice() : undefined;
+	next.stickyGroupTops = window.stickyGroupTops ? window.stickyGroupTops.slice() : undefined;
 	let clamped = false;
 
 	const pinTopRows = countPinnedLeading(next.pinTopRows, next.rowCount);
@@ -208,7 +263,10 @@ export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: Re
 	}
 
 	if (clamped) {
-		if (typeof (globalThis as any).process === 'undefined' || (globalThis as any).process?.env?.NODE_ENV !== 'production') {
+		// Warn once per session, not per frame — while clamped, every scroll frame hits
+		// this path and the template literal alone evaluates getRow/ColIndices four times.
+		if (!clampWarned && (typeof (globalThis as any).process === 'undefined' || (globalThis as any).process?.env?.NODE_ENV !== 'production')) {
+			clampWarned = true;
 			console.warn(
 				`[OpenGrid] Render limits exceeded. Clamped rendering window: rows=${getRowIndices(next).length}/${getRowIndices(window).length}, cells=${getRowIndices(next).length * getColIndices(next).length}/${getRowIndices(window).length * getColIndices(window).length}.`
 			);
@@ -292,32 +350,47 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 
 	// Sticky group rows: groups whose natural top is above scrollTop but whose last
 	// descendant is still at or below scrollTop — they "stick" to the viewport top.
-	let stickyGroupIndices: number[] | undefined;
-	let stickyGroupTops: number[] | undefined;
-	let stickyGroupKey: string | undefined;
+	// Reuse the target's arrays across frames (zero per-frame allocation); they are
+	// per-double-buffer so mutation never aliases the currently-rendered window.
+	const stickyIndices = target.stickyGroupIndices ?? (target.stickyGroupIndices = []);
+	const stickyTops = target.stickyGroupTops ?? (target.stickyGroupTops = []);
+	stickyIndices.length = 0;
+	stickyTops.length = 0;
 
 	if (state.enableStickyGroupRows && rowCount > 0) {
 		const stickyMeta = rowModel?.getStickyGroupMeta?.();
 		if (stickyMeta && stickyMeta.size > 0) {
+			// stickyMeta is built during the DFS flatten, so group indices — and therefore
+			// group tops — ascend in iteration order. That allows two cuts vs scanning every
+			// group per frame: break once groupTop >= scrollTop (no later group can be
+			// sticky), and when a subtree ends above the viewport, binary-search past all
+			// groups inside it instead of visiting them.
+			const meta = getStickyMetaArrays(stickyMeta);
+			const groupIdxs = meta.idx;
+			const lastIdxs = meta.last;
 			let stickyOffset = 0;
-			const indices: number[] = [];
-			const tops: number[] = [];
-
-			for (const [groupIdx, lastDescIdx] of stickyMeta) {
-				if (groupIdx >= rowCount || lastDescIdx >= rowCount) continue;
+			let i = 0;
+			const n = groupIdxs.length;
+			while (i < n) {
+				const groupIdx = groupIdxs[i];
+				if (groupIdx >= rowCount) break; // ascending — all later are out of range too
 				const groupTop = engine.geometry.getRowTop(groupIdx, defaultRowHeight);
-				const lastDescBottom = engine.geometry.getRowBottom(lastDescIdx, defaultRowHeight);
-				if (groupTop < scrollTop && lastDescBottom > scrollTop) {
-					indices.push(groupIdx);
-					tops.push(scrollTop + stickyOffset);
-					stickyOffset += engine.geometry.getRowHeight(groupIdx, defaultRowHeight);
+				if (groupTop >= scrollTop) break; // ascending tops — nothing later can be sticky
+				const lastDescIdx = lastIdxs[i];
+				if (lastDescIdx >= rowCount) {
+					i++;
+					continue;
 				}
-			}
-
-			if (indices.length > 0) {
-				stickyGroupIndices = indices;
-				stickyGroupTops = tops;
-				stickyGroupKey = indices.join(',');
+				if (engine.geometry.getRowBottom(lastDescIdx, defaultRowHeight) > scrollTop) {
+					// Sticky: descend into this subtree (its children follow in DFS order).
+					stickyIndices.push(groupIdx);
+					stickyTops.push(scrollTop + stickyOffset);
+					stickyOffset += engine.geometry.getRowHeight(groupIdx, defaultRowHeight);
+					i++;
+				} else {
+					// Whole subtree ends above the viewport — skip every group inside it.
+					i = firstIndexAfter(groupIdxs, lastDescIdx, i + 1);
+				}
 			}
 		}
 	}
@@ -343,9 +416,7 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	target.visibleBottom = visibleBottom;
 	target.bufferTopPx = bufferTopPx;
 	target.bufferBottomPx = lastRenderedBottom;
-	target.stickyGroupIndices = stickyGroupIndices;
-	target.stickyGroupTops = stickyGroupTops;
-	target.stickyGroupKey = stickyGroupKey;
+	// stickyGroupIndices / stickyGroupTops were filled in-place above.
 }
 
 export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): RenderWindow {
@@ -354,7 +425,17 @@ export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): Ren
 	return target;
 }
 
-export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow): ViewportDelta {
+/** Create an empty ViewportDelta for use as a caller-owned reusable scratch. */
+export function createEmptyViewportDelta(): ViewportDelta {
+	return { rowsEntered: [], rowsExited: [], rowsStayed: [], colsEntered: [], colsExited: [], colsStayed: [], hasChanges: false };
+}
+
+/**
+ * Diff two render windows. Pass `out` (a caller-owned ViewportDelta) on hot paths to
+ * reuse its arrays instead of allocating six per call — the result is then valid only
+ * until the next call with the same `out`.
+ */
+export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow, out?: ViewportDelta): ViewportDelta {
 	if (!prev) {
 		const nextRows = getRowIndices(next);
 		const nextCols = getColIndices(next);
@@ -369,6 +450,20 @@ export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow):
 		};
 	}
 
+	const d = out ?? createEmptyViewportDelta();
+	const rowsEntered = d.rowsEntered;
+	const rowsExited = d.rowsExited;
+	const rowsStayed = d.rowsStayed;
+	const colsEntered = d.colsEntered;
+	const colsExited = d.colsExited;
+	const colsStayed = d.colsStayed;
+	rowsEntered.length = 0;
+	rowsExited.length = 0;
+	rowsStayed.length = 0;
+	colsEntered.length = 0;
+	colsExited.length = 0;
+	colsStayed.length = 0;
+
 	// Fast path: contiguous center ranges when geometry and pinned lanes are unchanged
 	if (
 		prev.pinTopRows === next.pinTopRows &&
@@ -378,10 +473,6 @@ export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow):
 		prev.pinRightCols === next.pinRightCols &&
 		prev.colCount === next.colCount
 	) {
-		const rowsEntered: number[] = [];
-		const rowsExited: number[] = [];
-		const rowsStayed: number[] = [];
-
 		const pinTop = next.pinTopRows;
 		const pinBottom = next.pinBottomRows;
 		const rowCount = next.rowCount;
@@ -452,10 +543,6 @@ export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow):
 		}
 
 		// Columns
-		const colsEntered: number[] = [];
-		const colsExited: number[] = [];
-		const colsStayed: number[] = [];
-
 		const pinLeft = next.pinLeftCols;
 		const pinRight = next.pinRightCols;
 		const colCount = next.colCount;
@@ -524,22 +611,14 @@ export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow):
 			}
 		}
 
-		const hasChanges =
+		d.hasChanges =
 			rowsEntered.length > 0 ||
 			rowsExited.length > 0 ||
 			colsEntered.length > 0 ||
 			colsExited.length > 0 ||
 			((next.pinTopRows > 0 || next.pinBottomRows > 0) && prev.scrollTop !== next.scrollTop);
 
-		return {
-			rowsEntered,
-			rowsExited,
-			rowsStayed,
-			colsEntered,
-			colsExited,
-			colsStayed,
-			hasChanges,
-		};
+		return d;
 	}
 
 	const prevRows = getRowIndices(prev);
@@ -551,9 +630,6 @@ export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow):
 	const scratch = new Set<number>();
 
 	for (const r of prevRows) scratch.add(r);
-	const rowsEntered: number[] = [];
-	const rowsExited: number[] = [];
-	const rowsStayed: number[] = [];
 	for (const r of nextRows) (scratch.has(r) ? rowsStayed : rowsEntered).push(r);
 	scratch.clear();
 	for (const r of nextRows) scratch.add(r);
@@ -561,15 +637,12 @@ export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow):
 
 	scratch.clear();
 	for (const c of prevCols) scratch.add(c);
-	const colsEntered: number[] = [];
-	const colsExited: number[] = [];
-	const colsStayed: number[] = [];
 	for (const c of nextCols) (scratch.has(c) ? colsStayed : colsEntered).push(c);
 	scratch.clear();
 	for (const c of nextCols) scratch.add(c);
 	for (const c of prevCols) if (!scratch.has(c)) colsExited.push(c);
 
-	const hasChanges =
+	d.hasChanges =
 		rowsEntered.length > 0 ||
 		rowsExited.length > 0 ||
 		colsEntered.length > 0 ||
@@ -580,13 +653,5 @@ export function diffRenderWindow(prev: RenderWindow | null, next: RenderWindow):
 		prev.pinBottomRows !== next.pinBottomRows ||
 		((next.pinTopRows > 0 || next.pinBottomRows > 0) && prev.scrollTop !== next.scrollTop);
 
-	return {
-		rowsEntered,
-		rowsExited,
-		rowsStayed,
-		colsEntered,
-		colsExited,
-		colsStayed,
-		hasChanges,
-	};
+	return d;
 }

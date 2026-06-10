@@ -47,6 +47,13 @@ export interface DeferredPortalFlushOptions {
 	maxItems?: number;
 	reason?: string;
 	flushSync?: boolean;
+	/**
+	 * Idle deadline — when provided, the flush stops early once timeRemaining() hits 0
+	 * (after at least one op, to guarantee progress). When the idle callback fired via
+	 * its timeout (didTimeout), the deadline is ignored: we are already late, so the
+	 * full op budget is used to drain faster.
+	 */
+	deadline?: { timeRemaining(): number; readonly didTimeout: boolean };
 }
 
 export interface DeferredPortalFlushResult {
@@ -324,6 +331,7 @@ export class PortalMountManager<TRowData = unknown> {
 		const normalized = typeof options === 'boolean' ? { flushSync: options } : options;
 		const maxItems = normalized.maxItems ?? Number.POSITIVE_INFINITY;
 		const flushSync = normalized.flushSync ?? false;
+		const deadline = normalized.deadline && !normalized.deadline.didTimeout ? normalized.deadline : undefined;
 		const pendingBefore = this.getDeferredCount();
 		if (pendingBefore === 0 || maxItems <= 0) {
 			return { processed: 0, remaining: pendingBefore };
@@ -332,9 +340,16 @@ export class PortalMountManager<TRowData = unknown> {
 		const wasScrolling = this.scrolling;
 		this.scrolling = false;
 		let processed = 0;
+		// Weighted op budget: a cold mount commits a brand-new React subtree (~ms), a
+		// warm-hit mount or release is a cheap re-parent/bookkeeping op. Budgeting by
+		// weight keeps chunk wall-time roughly constant regardless of mix.
+		const COLD_MOUNT_WEIGHT = 3;
+		let budgetUsed = 0;
+		const outOfBudget = (): boolean => budgetUsed >= maxItems || (deadline !== undefined && processed > 0 && deadline.timeRemaining() <= 0);
 
-		const activeEdit = this.engine?.stateManager.getState().activeEdit;
-		const focusedCell = this.engine?.stateManager.getState().selection.focus;
+		const flushState = this.engine?.stateManager.getState();
+		const activeEdit = flushState?.activeEdit;
+		const focusedCell = flushState?.selection.focus;
 		const rowModel = this.engine?.getRowModel();
 		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const columns = this.engine?.columns.getDisplayedColumns() ?? [];
@@ -361,11 +376,14 @@ export class PortalMountManager<TRowData = unknown> {
 			return 500 - (distRow + distCol);
 		};
 
-		for (const [cellKey, unmount] of Array.from(this.deferredCellReleases)) {
-			if (processed >= maxItems) break;
+		// Iterate Maps directly — deleting the current key during iteration is safe and
+		// avoids an O(remaining) Array.from copy per chunk (O(N²/budget) over the drain).
+		for (const [cellKey, unmount] of this.deferredCellReleases) {
+			if (outOfBudget()) break;
 			this.releaseCellReal(unmount.cellKey, 'scrolled-out', unmount);
 			this.deferredCellReleases.delete(cellKey);
 			processed++;
+			budgetUsed++;
 		}
 
 		// Classify deferred mounts into priority buckets — O(N) with zero allocation.
@@ -381,28 +399,32 @@ export class PortalMountManager<TRowData = unknown> {
 			else if (p >= 900) mb1.push(mount);
 			else mb2.push(mount);
 		}
-		for (let bi = 0; bi < 3 && processed < maxItems; bi++) {
+		for (let bi = 0; bi < 3 && !outOfBudget(); bi++) {
 			const bucket = this._mountBuckets[bi];
-			for (let i = 0; i < bucket.length && processed < maxItems; i++) {
+			for (let i = 0; i < bucket.length && !outOfBudget(); i++) {
 				const mount = bucket[i];
+				const isColdMount = this.deferredNewCellMounts.has(mount.cellKey);
 				this.mountCellReal(mount);
 				this.deferredCellMounts.delete(mount.cellKey);
 				this.deferredNewCellMounts.delete(mount.cellKey);
 				processed++;
+				budgetUsed += isColdMount ? COLD_MOUNT_WEIGHT : 1;
 			}
 		}
 
-		for (const [rowKey, unmount] of Array.from(this.deferredRowReleases)) {
-			if (processed >= maxItems) break;
+		for (const [rowKey, unmount] of this.deferredRowReleases) {
+			if (outOfBudget()) break;
 			this.onUnmountRowContent?.(unmount);
 			this.deferredRowReleases.delete(rowKey);
 			processed++;
+			budgetUsed++;
 		}
-		for (const [rowKey, mount] of Array.from(this.deferredRowMounts)) {
-			if (processed >= maxItems) break;
+		for (const [rowKey, mount] of this.deferredRowMounts) {
+			if (outOfBudget()) break;
 			this.onMountRowContent?.(mount);
 			this.deferredRowMounts.delete(rowKey);
 			processed++;
+			budgetUsed += COLD_MOUNT_WEIGHT;
 		}
 
 		const remaining = this.getDeferredCount();

@@ -18,6 +18,8 @@ export class RowSlot<TRowData = unknown> {
 	public lastVisualRowId = '\0'; // guaranteed != any real rowId on first update
 
 	public keepAlive = false;
+	/** True while the bound row is rendered as a sticky group row (scroll-pinned top). */
+	public isStickyGroup = false;
 
 	public pinLeftContainer: HTMLDivElement | null = null;
 	public pinRightContainer: HTMLDivElement | null = null;
@@ -194,7 +196,9 @@ export class RowSlot<TRowData = unknown> {
 
 		if (this.lastTop !== rowTop) {
 			this.lastTop = rowTop;
-			this.element.style.top = toPx(rowTop);
+			// translateY (not top): moving a row must never invalidate layout — transform
+			// changes are paint/composite-only. Rows sit at top:0 and are offset here.
+			this.element.style.transform = `translateY(${rowTop}px)`;
 			domUpdated = true;
 		}
 		if (this.lastHeight !== rowHeight) {
@@ -226,7 +230,7 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = rowTop;
 		if (this.lastTop !== rowTop) {
 			this.lastTop = rowTop;
-			this.element.style.top = toPx(rowTop);
+			this.element.style.transform = `translateY(${rowTop}px)`;
 		}
 	}
 
@@ -242,6 +246,7 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = -1;
 		this.rowHeight = -1;
 		this.keepAlive = false;
+		this.isStickyGroup = false;
 		// Cell slots remain mounted — they will be rebound on next renderViewport.
 	}
 
@@ -256,6 +261,7 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = -1;
 		this.rowHeight = -1;
 		this.keepAlive = false;
+		this.isStickyGroup = false;
 		this.lastTop = -1;
 		this.lastHeight = -1;
 		this.lastClassName = '';

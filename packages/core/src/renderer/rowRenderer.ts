@@ -32,6 +32,7 @@ import {
 	applyRenderWindowRuntimeLimits,
 	computeRenderWindow,
 	diffRenderWindow,
+	createEmptyViewportDelta,
 	getRowIndices,
 	sameRenderedWindow,
 	type RenderWindow,
@@ -125,6 +126,10 @@ export class RowRenderer<TRowData = unknown> {
 	// Pre-allocated priority buckets for decorateDirtyCellsAfterScroll — zero allocation per scroll idle pass.
 	// Bucket layout: [0] active-edit, [1] focused cell, [2] visible range, [3] off-screen / unknown.
 	private readonly _dirtyBuckets: [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]] = [[], [], [], []];
+	// Reusable scratch for getRowIndices() — avoids an O(visibleRows) array per frame.
+	private readonly _rowIndicesScratch: number[] = [];
+	// Reusable scratch for diffRenderWindow() — avoids six array allocations per frame.
+	private readonly _deltaScratch = createEmptyViewportDelta();
 
 	// Pre-allocated scratch objects for styleSlot callbacks — mutated in place before each call
 	// to eliminate per-cell object literal allocation during decoration passes.
@@ -303,7 +308,8 @@ export class RowRenderer<TRowData = unknown> {
 		}
 
 		// Compute delta — needed for column layout change detection and stats.
-		const delta = diffRenderWindow(this.currentWindow, nextWindow);
+		// Uses the reusable scratch delta (valid until the next recycleViewport call).
+		const delta = diffRenderWindow(this.currentWindow, nextWindow, this._deltaScratch);
 
 		if (isScrollFrameActive && this.renderStats) {
 			this.renderStats.rowsEnteredDuringScroll = (this.renderStats.rowsEnteredDuringScroll || 0) + delta.rowsEntered.length;
@@ -328,7 +334,7 @@ export class RowRenderer<TRowData = unknown> {
 		// Stable slot assignment: rows that are still in the window keep their current
 		// slot (isRowRebind = false), preserving their custom-live portals in place.
 		// Only entering/exiting rows use recycled slots (isRowRebind = true).
-		const sortedRows = getRowIndices(nextWindow);
+		const sortedRows = getRowIndices(nextWindow, this._rowIndicesScratch);
 		const totalSlots = sortedRows.length;
 		// Inline stable-slot assignment using pre-allocated scratch — avoids 4 per-frame allocations.
 		const allRows = this._computeStableSlotRowsInline(sortedRows);
@@ -385,12 +391,11 @@ export class RowRenderer<TRowData = unknown> {
 		const rowTops = this.engine.geometry.rowTops;
 		const rowHeights = this.engine.geometry.rowHeights;
 
-		// Build O(1) sticky-group lookup. stickyGroupIndices.indexOf(r) is O(K) per row;
-		// with a Map it becomes one property read per row regardless of group count.
-		const stickyGroupMap: Map<number, number> | null =
-			nextWindow.stickyGroupIndices && nextWindow.stickyGroupTops
-				? new Map(nextWindow.stickyGroupIndices.map((idx, i) => [idx, nextWindow.stickyGroupTops![i]!]))
-				: null;
+		// Sticky-group lookup: the indices array is tiny (≤ group nesting depth), so a
+		// linear indexOf per row beats rebuilding a Map every frame (allocation + churn).
+		const stickyIdxArr = nextWindow.stickyGroupIndices && nextWindow.stickyGroupIndices.length > 0 ? nextWindow.stickyGroupIndices : null;
+		const stickyTopArr = nextWindow.stickyGroupTops;
+		const hasRowClassHook = !!state.styleSlots?.rowClass;
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
 		// Each slot[i] binds to allRows[i]. Stable-slot assignment keeps staying rows
@@ -408,6 +413,44 @@ export class RowRenderer<TRowData = unknown> {
 
 			// Detect slot rebind — slot is transitioning to a different visual row.
 			const isRowRebind = slot.visualIndex >= 0 && slot.visualIndex !== r;
+
+			// ── Staying-row cheap path ───────────────────────────────────────────────
+			// During a scroll frame, a slot that keeps its visual row and whose column
+			// layout did not change needs only a position refresh: its class, cells and
+			// portals are all still valid (cells would all hit the identity-stable skip
+			// below anyway). Data/selection/hover changes are gated during scroll and
+			// repainted post-scroll, so nothing here can go stale. Excluded: loading
+			// rows (kind may flip when a block lands) and sticky transitions (class
+			// flips when a group starts/stops sticking).
+			if (
+				isScrollFrameActive &&
+				!isRowRebind &&
+				!columnLayoutChanged &&
+				slot.visualIndex === r &&
+				slot.rowKind !== '' &&
+				slot.rowKind !== 'loading'
+			) {
+				const stickyPos = stickyIdxArr ? stickyIdxArr.indexOf(r) : -1;
+				const isStickyNow = stickyPos >= 0;
+				if (isStickyNow === slot.isStickyGroup) {
+					let top: number;
+					if (r < pinTopRows) {
+						top = rowTops[r] + scrollTop;
+					} else if (r >= nextWindow.rowCount - pinBottomRows) {
+						top = scrollTop + viewportHeight - (hoistedTotalHeight - rowTops[r]);
+					} else if (isStickyNow) {
+						top = stickyTopArr![stickyPos];
+					} else {
+						top = rowTops[r];
+					}
+					slot.updatePosition(top);
+					if (hasRowClassHook && slot.rowKind === 'data') {
+						this.dirtyRowsAfterScroll.add(r);
+					}
+					continue;
+				}
+			}
+
 			if (isRowRebind) {
 				// Release the row portal only (for full-width rows: group/detail/footer content).
 				// Cell portals are intentionally NOT pre-evacuated here. Releasing all portals
@@ -438,13 +481,14 @@ export class RowRenderer<TRowData = unknown> {
 			} else if (r >= nextWindow.rowCount - pinBottomRows) {
 				const bottomOffset = hoistedTotalHeight - rowTops[r];
 				rowTop = scrollTop + viewportHeight - bottomOffset;
-			} else if (stickyGroupMap) {
-				const stickyTop = stickyGroupMap.get(r);
-				if (stickyTop !== undefined) {
-					rowTop = stickyTop;
+			} else if (stickyIdxArr) {
+				const stickyPos = stickyIdxArr.indexOf(r);
+				if (stickyPos >= 0) {
+					rowTop = stickyTopArr![stickyPos];
 					isStickyGroup = true;
 				}
 			}
+			slot.isStickyGroup = isStickyGroup;
 
 			// ── Row class name ────────────────────────────────────────────────────────
 			let rowClassName = ROW_KIND_BASE[visualRow.kind] ?? 'og-row';
@@ -1018,8 +1062,11 @@ export class RowRenderer<TRowData = unknown> {
 			contentMode = 'portal';
 			if (cellSlot.element.dataset.cellKey !== stableKey || !this.portalMountManager.isCellMounted(stableKey)) {
 				if (cellSlot.element.dataset.cellKey) {
+					// No per-cell sync flush here: inside a release transaction the release is
+					// batched and flushed once at endCellReleaseTransaction; outside one it
+					// executes immediately. Either way a per-cell flushSync React commit is
+					// never needed — keyed portals reconcile old-out/new-in within one commit.
 					this.releaseCellPortal(cellSlot.element, false, 'invalidated');
-					this.portalMountManager.flushCellReleaseTransaction(true);
 				}
 				cellSlot.contentElement.textContent = '';
 			}
@@ -1564,11 +1611,11 @@ export class RowRenderer<TRowData = unknown> {
 	private _computeStableSlotRowsInline(newWindowRows: readonly number[]): number[] {
 		const n = newWindowRows.length;
 
-		// Resize result array in place when the window grows.
+		// Resize result array in place — also trims the stale tail when the window
+		// shrinks (the caller iterates result.length, so leftover entries from a
+		// larger previous window would be visited otherwise).
 		const result = this._ssResult;
-		if (result.length < n) {
-			result.length = n;
-		}
+		result.length = n;
 
 		// Populate the new-window set (cleared from last call).
 		const newWindowSet = this._ssNewWindowSet;
@@ -1715,16 +1762,18 @@ export class RowRenderer<TRowData = unknown> {
 		const activeEdit = state.activeEdit;
 		const focusedCell = state.selection.focus;
 
+		// Read identity from the JS-side CellSlot mirror — no dataset attribute reads
+		// or string→number parsing per cell.
 		const getCellPriority = (cell: HTMLDivElement): number => {
-			const rowIndexStr = cell.dataset.rowIndex;
-			const colField = cell.dataset.colField;
-			if (!rowIndexStr || !colField) return 0;
-			const rowIndex = Number(rowIndexStr);
+			const cs = (cell as unknown as { __cellSlot?: CellSlot<TRowData> }).__cellSlot;
+			if (!cs || cs.rowIndex < 0 || !cs.colField) return 0;
+			const rowIndex = cs.rowIndex;
+			const colField = cs.colField;
 
-			if (activeEdit && cell.dataset.rowId === activeEdit.rowId && colField === activeEdit.colField) return 6;
-			if (focusedCell && cell.dataset.rowId === focusedCell.rowId && colField === focusedCell.colField) return 5;
+			if (activeEdit && cs.rowId === activeEdit.rowId && colField === activeEdit.colField) return 6;
+			if (focusedCell && cs.rowId === focusedCell.rowId && colField === focusedCell.colField) return 5;
 
-			const colIndex = this.engine.columns.getColumnIndex(colField);
+			const colIndex = cs.colIndex;
 			const isRowVisible = rowIndex >= rowRange.startIdx && rowIndex <= rowRange.endIdx;
 			const isColVisible = colIndex >= colRange.startIdx && colIndex <= colRange.endIdx;
 			if (!isRowVisible || !isColVisible) return 1;
@@ -1758,13 +1807,12 @@ export class RowRenderer<TRowData = unknown> {
 				if (processed >= maxCells) break;
 				const cell = bucket[i];
 				this.dirtyCellsAfterScroll.delete(cell);
-				const rowIndexStr = cell.dataset.rowIndex;
-				const colField = cell.dataset.colField;
-				if (!rowIndexStr || !colField) continue;
+				const cs = (cell as unknown as { __cellSlot?: CellSlot<TRowData> }).__cellSlot;
+				if (!cs || cs.rowIndex < 0 || !cs.colField) continue;
 
-				const rowIndex = Number(rowIndexStr);
+				const rowIndex = cs.rowIndex;
 				const visualRow = rowModel.getVisualRow(rowIndex);
-				const colIndex = this.engine.columns.getColumnIndex(colField);
+				const colIndex = cs.colIndex;
 
 				if (visualRow?.kind === 'data' && colIndex >= 0) {
 					const slot = this.activeRows.get(rowIndex);

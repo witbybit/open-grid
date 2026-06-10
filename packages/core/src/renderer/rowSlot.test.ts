@@ -27,7 +27,7 @@ describe('RowSlot & CellSlot Controllers', () => {
 
 		const updated1 = row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');
 		expect(updated1).toBe(true);
-		expect(div.style.top).toBe('80px');
+		expect(div.style.transform).toBe('translateY(80px)');
 		expect(div.style.height).toBe('40px');
 
 		const updated2 = row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');

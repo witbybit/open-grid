@@ -176,7 +176,12 @@ export const CORE_STYLES = `
   }
 
   /*
-   * Row — absolutely positioned inside og-rows-container via style.top (integer).
+   * Row — absolutely positioned at top:0 inside og-rows-container and offset via
+   * transform: translateY() (paint/composite-only; writing style.top invalidates
+   * layout, and pinned/sticky rows reposition every scroll frame).
+   * A 2D transform on .og-row does NOT break descendant position:sticky — sticky
+   * resolves against the nearest scrollport, not the transformed ancestor (the FLIP
+   * sort animation has always relied on this).
    * display:flex so the sticky pin containers (og-row-pin-left / og-row-pin-right)
    * can use margin-left:auto and position:sticky for zero-lag compositor pinning.
    * contain:style only (NOT layout) so that position:sticky propagates correctly
@@ -185,6 +190,7 @@ export const CORE_STYLES = `
    */
   .og-row {
     position: absolute;
+    top: 0;
     left: 0;
     right: 0;
     display: flex;
@@ -196,9 +202,19 @@ export const CORE_STYLES = `
     transition: background-color 0.15s ease;
   }
 
-  .og-row:hover,
+  /*
+   * Hover only matches while NOT scrolling (og-is-scrolling on the container during
+   * scroll): the cursor sweeps dozens of rows per second during scroll, and each
+   * :hover match + 150ms background transition is style-recalc and paint work stolen
+   * from the frame budget. Transitions are likewise suspended during scroll.
+   */
+  .og-grid-container:not(.og-is-scrolling) .og-row:hover,
   .og-row-hovered {
     background-color: var(--og-row-hover-bg);
+  }
+
+  .og-is-scrolling .og-row {
+    transition: none;
   }
 
   .og-row-portal-host {

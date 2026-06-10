@@ -18,7 +18,11 @@ export const cellSlotWriteStats = {
 export class CellSlot<TRowData = unknown> {
 	public readonly element: HTMLDivElement;
 	public readonly contentElement: HTMLDivElement;
-	public readonly portalHostElement: HTMLDivElement;
+	/**
+	 * Lazily created on first portal use (getOrCreatePortalHost). Plain-text columns —
+	 * the common case — never pay the extra DOM node (+50% viewport node count).
+	 */
+	public portalHostElement: HTMLDivElement | null = null;
 
 	// Position
 	public colIndex = -1;
@@ -45,19 +49,26 @@ export class CellSlot<TRowData = unknown> {
 		this.element = element;
 		(element as any).__cellSlot = this;
 		let content = element.querySelector('.og-cell-content') as HTMLDivElement;
-		let portalHost = element.querySelector('.og-cell-portal-host') as HTMLDivElement;
 		if (!content) {
 			content = document.createElement('div');
 			content.className = 'og-cell-content';
 			element.appendChild(content);
 		}
-		if (!portalHost) {
-			portalHost = document.createElement('div');
-			portalHost.className = 'og-cell-portal-host';
-			element.appendChild(portalHost);
-		}
 		this.contentElement = content;
-		this.portalHostElement = portalHost;
+		// Adopt an existing portal host (recycled element); otherwise create lazily.
+		this.portalHostElement = element.querySelector('.og-cell-portal-host') as HTMLDivElement | null;
+	}
+
+	/** Portal host accessor — creates the div on first use only. */
+	public getOrCreatePortalHost(): HTMLDivElement {
+		let host = this.portalHostElement;
+		if (!host) {
+			host = document.createElement('div');
+			host.className = 'og-cell-portal-host';
+			this.element.appendChild(host);
+			this.portalHostElement = host;
+		}
+		return host;
 	}
 
 	public static fromElement<TRowData = unknown>(element: HTMLDivElement): CellSlot<TRowData> {

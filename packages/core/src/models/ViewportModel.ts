@@ -20,8 +20,42 @@ export class ViewportModel<TRowData = unknown> {
 	private velocityY = 0; // px/ms
 	private velocityX = 0; // px/ms
 
-	// Centralized velocity threshold for high-performance optimizations (1.5 px/ms)
+	// Centralized velocity threshold for high-performance optimizations (px/ms)
 	private readonly FAST_SCROLL_THRESHOLD = 5;
+
+	// Adaptive overscan state. Raw velocity fluctuates on every scroll event; feeding it
+	// straight into the buffer bounds shifts the render window almost every frame, which
+	// defeats the sameRenderedWindow() bailout exactly when scrolling fastest. We quantize
+	// the adaptive expansion to coarse buckets and only let it SHRINK after a run of calm
+	// frames (hysteresis), so the window stays stable across many frames.
+	private static readonly ADAPTIVE_ROW_QUANTUM_PX = 200;
+	private static readonly ADAPTIVE_COL_QUANTUM = 5;
+	private static readonly ADAPTIVE_SHRINK_FRAMES = 12;
+	private adaptiveTopPx = 0;
+	private adaptiveBottomPx = 0;
+	private adaptiveLeftCols = 0;
+	private adaptiveRightCols = 0;
+	private calmTop = 0;
+	private calmBottom = 0;
+	private calmLeft = 0;
+	private calmRight = 0;
+
+	// Scratch out-param for the hold helper (avoids per-frame closures/objects).
+	private heldCalm = 0;
+
+	/**
+	 * Quantize-and-hold: grow immediately to the bucketed target, shrink only after
+	 * ADAPTIVE_SHRINK_FRAMES consecutive calls wanting a smaller value.
+	 * Returns the held value; the updated calm counter is left in this.heldCalm.
+	 */
+	private holdAdaptive(current: number, target: number, calm: number): number {
+		if (target >= current || calm + 1 >= ViewportModel.ADAPTIVE_SHRINK_FRAMES) {
+			this.heldCalm = 0;
+			return target;
+		}
+		this.heldCalm = calm + 1;
+		return current;
+	}
 
 	/**
 	 * Evaluates if the grid is currently scrolling faster than the fluid performance threshold.
@@ -118,12 +152,18 @@ export class ViewportModel<TRowData = unknown> {
 
 		// Adaptive mode: expand the leading edge buffer proportional to scroll velocity.
 		// Cap at 2× the base so very high velocity doesn't mount an unbounded number of rows.
+		// Quantized to ADAPTIVE_ROW_QUANTUM_PX buckets + shrink hysteresis so the resulting
+		// render window stays identical across frames (keeps the same-window bailout alive).
 		if (state.overscanAdaptive) {
-			if (this.velocityY > 0.2) {
-				overscanBottomPx += Math.min(baseOverscanPx * 2, this.velocityY * 600);
-			} else if (this.velocityY < -0.2) {
-				overscanTopPx += Math.min(baseOverscanPx * 2, Math.abs(this.velocityY) * 600);
-			}
+			const quantum = ViewportModel.ADAPTIVE_ROW_QUANTUM_PX;
+			const wantBottom = this.velocityY > 0.2 ? Math.ceil(Math.min(baseOverscanPx * 2, this.velocityY * 600) / quantum) * quantum : 0;
+			const wantTop = this.velocityY < -0.2 ? Math.ceil(Math.min(baseOverscanPx * 2, -this.velocityY * 600) / quantum) * quantum : 0;
+			this.adaptiveBottomPx = this.holdAdaptive(this.adaptiveBottomPx, wantBottom, this.calmBottom);
+			this.calmBottom = this.heldCalm;
+			overscanBottomPx += this.adaptiveBottomPx;
+			this.adaptiveTopPx = this.holdAdaptive(this.adaptiveTopPx, wantTop, this.calmTop);
+			this.calmTop = this.heldCalm;
+			overscanTopPx += this.adaptiveTopPx;
 		}
 
 		// Pixel boundaries of the full buffered render region.
@@ -172,11 +212,16 @@ export class ViewportModel<TRowData = unknown> {
 		let overscanRight = colBuffer;
 
 		if (state.overscanAdaptive) {
-			if (this.velocityX > 0.2) {
-				overscanRight += Math.min(15, Math.floor(this.velocityX * 10));
-			} else if (this.velocityX < -0.2) {
-				overscanLeft += Math.min(15, Math.floor(Math.abs(this.velocityX) * 10));
-			}
+			// Same quantize-and-hold as the row path: keep the column window stable across frames.
+			const quantum = ViewportModel.ADAPTIVE_COL_QUANTUM;
+			const wantRight = this.velocityX > 0.2 ? Math.ceil(Math.min(15, Math.floor(this.velocityX * 10)) / quantum) * quantum : 0;
+			const wantLeft = this.velocityX < -0.2 ? Math.ceil(Math.min(15, Math.floor(-this.velocityX * 10)) / quantum) * quantum : 0;
+			this.adaptiveRightCols = this.holdAdaptive(this.adaptiveRightCols, wantRight, this.calmRight);
+			this.calmRight = this.heldCalm;
+			overscanRight += this.adaptiveRightCols;
+			this.adaptiveLeftCols = this.holdAdaptive(this.adaptiveLeftCols, wantLeft, this.calmLeft);
+			this.calmLeft = this.heldCalm;
+			overscanLeft += this.adaptiveLeftCols;
 		}
 
 		const startIdx = Math.max(this.pinLeftColumns, activeStartIdx - overscanLeft);

@@ -14,8 +14,8 @@ import { ColumnDef, GridApi, RowNode, VisualRow, type CellRendererPhase, type Im
 import type { InternalColumnDef } from '@open-grid/core/internal';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
-import { GridProvider } from './OpenGrid.js';
 import { useGridApi } from './hooks.js';
+import { GridProvider } from './OpenGrid.js';
 import type { ReactNode } from 'react';
 
 export interface PortalCellProps<TRowData = unknown> {
@@ -367,18 +367,18 @@ export function createPortalStore<TRowData = unknown>() {
 	let rowMenuScheduled = false;
 
 	// ── Snapshot builders ──────────────────────────────────────────────────────
+	// Lazy: structural ops mark the snapshot dirty; the O(N) rebuild happens once in
+	// the getter when React actually reads it. A budgeted flush chunk of 24 ops would
+	// otherwise rebuild 24 times before the single coalesced notification fires.
+	let cellSnapshotDirty = false;
+	let rowMenuSnapshotDirty = false;
 
 	function rebuildCellSnapshot() {
-		cellSnapshot = { cellPortalList: Array.from(portals.values()) };
+		cellSnapshotDirty = true;
 	}
 
 	function rebuildRowMenuSnapshot() {
-		rowMenuSnapshot = {
-			rowPortalList: Array.from(rowPortals.values()).filter(
-				(p) => !p.container.classList.contains('og-row-portal-host') || p.container.dataset.rowKey === p.rowKey
-			),
-			menuPortalList: Array.from(menuPortals.values()),
-		};
+		rowMenuSnapshotDirty = true;
 	}
 
 	// ── Notification helpers ───────────────────────────────────────────────────
@@ -445,6 +445,10 @@ export function createPortalStore<TRowData = unknown>() {
 			};
 		},
 		getCellSnapshot() {
+			if (cellSnapshotDirty) {
+				cellSnapshotDirty = false;
+				cellSnapshot = { cellPortalList: Array.from(portals.values()) };
+			}
 			return cellSnapshot;
 		},
 
@@ -455,6 +459,15 @@ export function createPortalStore<TRowData = unknown>() {
 			};
 		},
 		getRowMenuSnapshot() {
+			if (rowMenuSnapshotDirty) {
+				rowMenuSnapshotDirty = false;
+				rowMenuSnapshot = {
+					rowPortalList: Array.from(rowPortals.values()).filter(
+						(p) => !p.container.classList.contains('og-row-portal-host') || p.container.dataset.rowKey === p.rowKey
+					),
+					menuPortalList: Array.from(menuPortals.values()),
+				};
+			}
 			return rowMenuSnapshot;
 		},
 
@@ -796,7 +809,7 @@ interface CellPortalPoolProps<TRowData = unknown> {
  * this component to re-render — they go directly to PortalCellWrapper via subscribeToCell,
  * or are handled imperatively by ImperativePortalCellWrapper.
  */
-function CellPortalPoolInner<TRowData = unknown>({ store, api }: CellPortalPoolProps<TRowData>) {
+function CellPortalPoolInner<TRowData = unknown>({ store }: CellPortalPoolProps<TRowData>) {
 	const snapshot = useSyncExternalStore(store.subscribeCells, store.getCellSnapshot, store.getCellSnapshot);
 	const { cellPortalList } = snapshot;
 
@@ -804,15 +817,18 @@ function CellPortalPoolInner<TRowData = unknown>({ store, api }: CellPortalPoolP
 		<>
 			{cellPortalList.map((p) => {
 				const useImperative = !!(p.col as InternalColumnDef).cellRendererCapabilities?.imperativeUpdate;
+				// Key MUST be createPortal's third argument: the pool reconciles an array of
+				// portal objects, and a portal whose containerInfo differs is never reused.
+				// Without it React matches by index and one structural change remounts every
+				// portal after it. Context (GridProvider) is inherited from PortalManager.
 				return createPortal(
-					<GridProvider api={api} key={p.cellKey}>
-						{useImperative ? (
-							<ImperativePortalCellWrapper<TRowData> cellKey={p.cellKey} store={store} />
-						) : (
-							<PortalCellWrapper<TRowData> cellKey={p.cellKey} store={store} />
-						)}
-					</GridProvider>,
-					p.container
+					useImperative ? (
+						<ImperativePortalCellWrapper<TRowData> cellKey={p.cellKey} store={store} />
+					) : (
+						<PortalCellWrapper<TRowData> cellKey={p.cellKey} store={store} />
+					),
+					p.container,
+					p.cellKey
 				);
 			})}
 		</>
@@ -865,23 +881,14 @@ function RowMenuPortalPoolInner<TRowData = unknown>({
 						<DefaultFooterRowRenderer visualRow={visualRow} api={api} />
 					);
 				}
-				return createPortal(
-					<GridProvider api={api} key={rowKey}>
-						{content}
-					</GridProvider>,
-					container
-				);
+				// Keyed via createPortal's third arg — see CellPortalPool note.
+				return createPortal(content, container, rowKey);
 			})}
 			{menuPortalList.map((mp) => {
 				const { colField, container, column, close } = mp;
 				const CustomComponent = column.headerMenuComponent;
 				if (!CustomComponent) return null;
-				return createPortal(
-					<GridProvider api={api} key={`menu-${colField}`}>
-						<CustomComponent colField={colField} column={column} api={api} close={close} />
-					</GridProvider>,
-					container
-				);
+				return createPortal(<CustomComponent colField={colField} column={column} api={api} close={close} />, container, `menu-${colField}`);
 			})}
 		</>
 	);
@@ -921,8 +928,11 @@ export function PortalManager<TRowData = unknown>({
 		return null;
 	}
 	const concreteStore = store as ConcretePortalStore<TRowData>;
+	// One GridProvider for ALL portals (they inherit context from where createPortal is
+	// rendered, not from their DOM container) — keeps PortalManager self-contained while
+	// avoiding the old one-provider-per-portal overhead.
 	return (
-		<>
+		<GridProvider api={api}>
 			<CellPortalPool store={concreteStore} api={api} />
 			<RowMenuPortalPool
 				store={concreteStore}
@@ -931,6 +941,6 @@ export function PortalManager<TRowData = unknown>({
 				detailRowRenderer={detailRowRenderer}
 				footerRowRenderer={footerRowRenderer}
 			/>
-		</>
+		</GridProvider>
 	);
 }

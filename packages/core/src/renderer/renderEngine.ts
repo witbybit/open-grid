@@ -68,8 +68,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private isScrolling = false;
 	private scrollEndRafId: number | null = null;
-	private scrollEndFrameCount = 0;
+	private scrollEndQuietFrames = 0;
+	private scrollEndTickerActive = false;
 	private viewportDirtyAfterScroll = false;
+	private flushPendingAfterScroll = false;
 	private needsPostScrollPortalFlush = false;
 	private portalFlushScheduled = false;
 	private isScrollFrameActive = false;
@@ -347,12 +349,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * Scroll hot path â€” zero allocations, zero state reads.
 	 * cachedMaxScrollLeft is updated in flushScrollFrame/fullPaintInternal/geometry callbacks.
 	 */
-	private onScroll = (scrollTop: number, scrollLeft: number): void => {
+	private onScroll = (scrollTop: number, scrollLeft: number, timestamp?: number): void => {
 		const clampedScrollLeft = Math.max(0, Math.min(this.cachedMaxScrollLeft, scrollLeft));
 		if (clampedScrollLeft !== scrollLeft && this.viewportRenderer.scrollViewport) {
 			this.viewportRenderer.scrollViewport.scrollLeft = clampedScrollLeft;
 		}
-		const changed = this.engine.viewport.setScrollPosition(scrollTop, clampedScrollLeft);
+		const changed = this.engine.viewport.setScrollPosition(scrollTop, clampedScrollLeft, timestamp);
 		if (!changed) return;
 		this.markScrolling();
 		// Schedule scroll frame first so its RAF callback is ordered before the scroll-end RAF
@@ -361,11 +363,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	};
 
 	private markScrolling(): void {
+		if (!this.isScrolling) {
+			// Once-per-gesture work — the per-event path below is just flag/counter writes.
+			this.viewportRenderer.setScrollingClass(true);
+		}
 		this.isScrolling = true;
 		this.engine.isScrolling = true;
 		this.rowRenderer.isScrolling = true;
 		this.portalMountManager.setScrolling(true);
-		this.clearScrollEndTimer();
 		this.clearPostScrollDecorationTimer();
 		this.sortAnimation.cancel();
 		// Clear hover immediately so no row stays highlighted while the viewport moves.
@@ -374,22 +379,39 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	// RAF-counter scroll-end: fires finishScrolling after N consecutive frames with no new
 	// scroll event. Device-rate-agnostic (~67ms at 60fps, ~33ms at 120fps vs fixed 80ms).
+	// One persistent RAF ticker per gesture: each scroll event resets a counter (zero
+	// allocation, no cancel/re-schedule churn — the old per-event closure pair cost
+	// ~240 allocations + 120 cancelRAF/requestRAF pairs per second at 120Hz).
+	// scrollEndTickerActive (not the RAF id) gates scheduling: schedulers that execute
+	// RAF callbacks synchronously (tests) would otherwise overwrite the id AFTER the
+	// callback chain already finished, wedging the ticker permanently "scheduled".
+	private readonly scrollEndTick = (): void => {
+		if (!this.isScrolling) {
+			this.scrollEndTickerActive = false;
+			this.scrollEndRafId = null;
+			return;
+		}
+		if (this.scrollEndQuietFrames >= 3) {
+			this.scrollEndTickerActive = false;
+			this.scrollEndRafId = null;
+			this.finishScrolling();
+			return;
+		}
+		this.scrollEndQuietFrames++;
+		this.scrollEndRafId = defaultGridScheduler.raf(this.scrollEndTick);
+	};
+
 	private scheduleScrollEnd(): void {
-		const targetCount = ++this.scrollEndFrameCount;
-		const tick = (remaining: number) => {
-			if (this.scrollEndFrameCount !== targetCount) return; // new scroll arrived
-			if (remaining > 0) {
-				this.scrollEndRafId = defaultGridScheduler.raf(() => tick(remaining - 1));
-			} else {
-				this.scrollEndRafId = null;
-				this.finishScrolling();
-			}
-		};
-		this.scrollEndRafId = defaultGridScheduler.raf(() => tick(3));
+		this.scrollEndQuietFrames = 0;
+		if (!this.scrollEndTickerActive) {
+			this.scrollEndTickerActive = true;
+			this.scrollEndRafId = defaultGridScheduler.raf(this.scrollEndTick);
+		}
 	}
 
 	private finishScrolling(): void {
 		this.clearScrollEndTimer();
+		this.viewportRenderer.setScrollingClass(false);
 		this.isScrolling = false;
 		this.engine.isScrolling = false;
 		this.rowRenderer.isScrolling = false;
@@ -401,6 +423,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.scheduleBudgetedPortalFlush();
 		}
 		this.restoreDeferredFocus();
+		if (this.flushPendingAfterScroll) {
+			// Drain invalidations that were gated during the scroll in one flush.
+			this.flushPendingAfterScroll = false;
+			this.scheduler.requestFlush('post-scroll');
+		}
 		if (this.viewportDirtyAfterScroll || this.rowRenderer.dirtyCellsAfterScroll.size > 0 || this.rowRenderer.dirtyRowsAfterScroll.size > 0) {
 			this.viewportDirtyAfterScroll = false;
 			this.scheduleBudgetedDecoration();
@@ -412,6 +439,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private clearScrollEndTimer(): void {
+		this.scrollEndTickerActive = false;
 		if (this.scrollEndRafId !== null) {
 			defaultGridScheduler.cancelRaf(this.scrollEndRafId);
 			this.scrollEndRafId = null;
@@ -422,14 +450,18 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (this.rowRenderer.pendingPortalReleasesAfterScroll.size === 0) return;
 		const pending = Array.from(this.rowRenderer.pendingPortalReleasesAfterScroll.values());
 		this.rowRenderer.pendingPortalReleasesAfterScroll.clear();
-		this.portalMountManager.releaseCells(pending, true);
+		// flushSync=false: the DOM side of a release is a cheap warm-cache re-parent, but
+		// the old `true` forced one synchronous React unmount commit for ALL pending
+		// releases — a guaranteed hitch on the first post-scroll frame. With false the
+		// React unmounts coalesce into a single async commit on the next microtask.
+		this.portalMountManager.releaseCells(pending, false);
 		this.needsPostScrollPortalFlush = true;
 	}
 
 	private scheduleBudgetedPortalFlush(): void {
 		if (this.portalFlushScheduled) return;
 		this.portalFlushScheduled = true;
-		defaultGridScheduler.idle(() => {
+		defaultGridScheduler.idle((deadline) => {
 			this.portalFlushScheduled = false;
 			if (this.isScrolling) {
 				this.needsPostScrollPortalFlush = true;
@@ -439,6 +471,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				maxItems: this.portalFlushBudget,
 				reason: 'scroll-idle',
 				flushSync: false,
+				deadline,
 			});
 			this.needsPostScrollPortalFlush = result.remaining > 0;
 			if (result.remaining > 0) {
@@ -468,7 +501,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 
 			this.renderStats.postScrollDecorationChunks++;
-			const result = this.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.postScrollDecorationBudget });
+			// One release transaction per chunk: portal releases triggered by _bindCellFull
+			// batch into a single flush instead of one synchronous React commit per cell.
+			this.portalMountManager.beginCellReleaseTransaction();
+			let result;
+			try {
+				result = this.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.postScrollDecorationBudget });
+			} finally {
+				this.portalMountManager.endCellReleaseTransaction();
+			}
 
 			if (result.processed > this.renderStats.maxCellsDecoratedInOneChunk) {
 				this.renderStats.maxCellsDecoratedInOneChunk = result.processed;
@@ -586,6 +627,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			const stateReadsInFrame = this.engine.stateManager.debugGetStateCount - startStateReads;
 			this.renderStats.stateReadsDuringScroll += stateReadsInFrame;
 
+			// Bounded: these grow per window-changing frame — without a cap a long scroll
+			// session reallocates the backing stores forever (GC pressure during scroll).
+			if (this.renderStats.cellsPatchedPerScrollFrame.length >= 1024) {
+				this.renderStats.cellsPatchedPerScrollFrame.length = 0;
+			}
+			if (this.renderStats.rowsRecycledPerScrollFrame.length >= 1024) {
+				this.renderStats.rowsRecycledPerScrollFrame.length = 0;
+			}
 			this.renderStats.cellsPatchedPerScrollFrame.push(this.rowRenderer.currentScrollCellsPatched);
 			this.renderStats.rowsRecycledPerScrollFrame.push(this.rowRenderer.currentScrollRowsRecycled);
 			this.isScrollFrameActive = false;
@@ -674,18 +723,35 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
 	}
 
+	/**
+	 * Scroll-gated flush request. While a scroll (or scroll frame) is active, a paint
+	 * flush competes with flushScrollFrame for the same frame budget — the single
+	 * biggest source of dropped frames with live data/selection during scroll.
+	 * Invalidation records accumulate in InvalidationManager regardless, so deferring
+	 * the flush to finishScrolling() loses nothing: one flushPaint consumes them all.
+	 * Scroll frames themselves keep visuals correct meanwhile (geometry/column version
+	 * bumps change the render window, which forces a full recycle on the scroll path).
+	 */
+	private requestFlushGated(reason: string): void {
+		if (this.isScrolling || this.engine.isScrolling || this.isScrollFrameActive || this.engine.isScrollFrameActive) {
+			this.flushPendingAfterScroll = true;
+			return;
+		}
+		this.scheduler.requestFlush(reason);
+	}
+
 	private bindInvalidationSources(): void {
 		const invalidateFull = () => {
 			this.engine.invalidation.invalidateFull('state');
-			this.scheduler.requestFlush('state');
+			this.requestFlushGated('state');
 		};
 		const invalidateHeaders = () => {
 			this.engine.invalidation.invalidateHeaders('headers');
-			this.scheduler.requestFlush('headers');
+			this.requestFlushGated('headers');
 		};
 		const invalidateOverlay = () => {
 			this.engine.invalidation.invalidateOverlay('overlay');
-			this.scheduler.requestFlush('overlay');
+			this.requestFlushGated('overlay');
 		};
 		const invalidateViewport = () => {
 			this.engine.invalidation.invalidateViewport('viewport');
@@ -709,14 +775,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.engine.invalidation.invalidateViewport('columns');
 			this.engine.invalidation.invalidateHeaders('columns');
 			this.updateCachedGeometryBounds();
-			this.scheduler.requestFlush('columns');
+			this.requestFlushGated('columns');
 		};
 		const invalidateGeometryFull = () => {
 			this.geometryController.invalidateAll();
 			this.engine.invalidation.invalidateGeometry('geometry');
 			this.engine.invalidation.invalidateViewport('geometry');
 			this.updateCachedGeometryBounds();
-			this.scheduler.requestFlush('geometry');
+			this.requestFlushGated('geometry');
 		};
 
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('defaultRowHeight', invalidateGeometryFull));
@@ -764,29 +830,29 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				if (selection?.focus && selection.source !== 'pointer') {
 					this.scrollCellIntoView(selection.focus.rowId, selection.focus.colField);
 				}
-				this.scheduler.requestFlush('selection');
+				this.requestFlushGated('selection');
 			})
 		);
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener('cellInvalidated', () => {
-				this.scheduler.requestFlush('cell');
+				this.requestFlushGated('cell');
 			})
 		);
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener<{ colField: string }>('columnResized', (event) => {
 				this.geometryController.invalidateColumns([event.payload.colField]);
-				this.scheduler.requestFlush('column resize');
+				this.requestFlushGated('column resize');
 			})
 		);
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener<{ rowId: string }>('rowResized', (event) => {
 				this.geometryController.invalidateRows([event.payload.rowId]);
-				this.scheduler.requestFlush('row resize');
+				this.requestFlushGated('row resize');
 			})
 		);
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener<{ reason: string }>('renderInvalidated', (event) => {
-				this.scheduler.requestFlush(event.payload.reason);
+				this.requestFlushGated(event.payload.reason);
 			})
 		);
 	}
@@ -797,37 +863,37 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	public scheduleFullPaint(reason = 'api'): void {
 		this.engine.invalidation.invalidateFull(reason);
-		this.scheduler.requestFlush(reason);
+		this.requestFlushGated(reason);
 	}
 
 	public scheduleViewportPaint(reason = 'viewport'): void {
 		this.engine.invalidation.invalidateViewport(reason);
-		this.scheduler.requestFlush(reason);
+		this.requestFlushGated(reason);
 	}
 
 	public scheduleHeaderPaint(reason = 'headers'): void {
 		this.engine.invalidation.invalidateHeaders(reason);
-		this.scheduler.requestFlush(reason);
+		this.requestFlushGated(reason);
 	}
 
 	public scheduleOverlayPaint(reason = 'overlay'): void {
 		this.engine.invalidation.invalidateOverlay(reason);
-		this.scheduler.requestFlush(reason);
+		this.requestFlushGated(reason);
 	}
 
 	public scheduleCellPaint(rowId: string, colId: string, reason = 'cell'): void {
 		this.engine.invalidation.invalidateCell(rowId, colId, reason);
-		this.scheduler.requestFlush(reason);
+		this.requestFlushGated(reason);
 	}
 
 	public scheduleRowPaint(rowId: string, reason = 'row'): void {
 		this.engine.invalidation.invalidateRow(rowId, reason);
-		this.scheduler.requestFlush(reason);
+		this.requestFlushGated(reason);
 	}
 
 	public scheduleColumnPaint(colId: string, reason = 'column'): void {
 		this.engine.invalidation.invalidateColumn(colId, reason);
-		this.scheduler.requestFlush(reason);
+		this.requestFlushGated(reason);
 	}
 
 	public scheduleGeometryPaint(reason = 'geometry'): void {
@@ -835,7 +901,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.engine.invalidation.invalidateGeometry(reason);
 		this.engine.invalidation.invalidateViewport(reason);
 		this.engine.invalidation.invalidateHeaders(reason);
-		this.scheduler.requestFlush(reason);
+		this.requestFlushGated(reason);
 	}
 
 	private flushPaint(): void {

@@ -21,7 +21,7 @@ export class CellRenderer {
 	}
 
 	public getOrCreatePortalHost(cell: HTMLElement): HTMLElement {
-		return CellSlot.fromElement(cell as HTMLDivElement).portalHostElement;
+		return CellSlot.fromElement(cell as HTMLDivElement).getOrCreatePortalHost();
 	}
 
 	public getPortalHost(cell: HTMLElement): HTMLElement | null {

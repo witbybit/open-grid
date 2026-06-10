@@ -95,6 +95,15 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.engine.viewport.setScrollPosition(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
 	}
 
+	/**
+	 * Toggle the container-level scrolling marker class. CSS uses it to disable row
+	 * hover matching and background transitions during scroll — both trigger style
+	 * recalc/paint work per frame as the cursor sweeps moving rows.
+	 */
+	public setScrollingClass(scrolling: boolean): void {
+		this.container?.classList.toggle('og-is-scrolling', scrolling);
+	}
+
 	public syncSpacerAndLayers(state: GridState<TRowData>, colCount: number): void {
 		const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
 		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);

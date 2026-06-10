@@ -1,11 +1,22 @@
+/** Subset of the DOM IdleDeadline interface (kept structural for non-DOM test envs). */
+export interface GridIdleDeadline {
+	timeRemaining(): number;
+	readonly didTimeout: boolean;
+}
+
 export interface GridScheduler {
 	/** Schedule a callback after the current microtask queue drains. */
 	microtask(callback: () => void): void;
 	/** Schedule a callback on the next animation frame. */
 	raf(callback: () => void): number;
 	cancelRaf(id: number): void;
-	/** Schedule a callback in idle time, falling back to RAF when unavailable. */
-	idle(callback: () => void): number;
+	/**
+	 * Schedule a callback in idle time, falling back to RAF when unavailable.
+	 * Passes the IdleDeadline through (when available) so callers can budget work by
+	 * remaining time instead of fixed op counts. A timeout guarantees the callback
+	 * runs even on busy pages where idle time never arrives.
+	 */
+	idle(callback: (deadline?: GridIdleDeadline) => void): number;
 	cancelIdle(id: number): void;
 	/** Schedule a callback after a delay (ms). */
 	timeout(callback: () => void, ms: number): ReturnType<typeof setTimeout>;
@@ -35,9 +46,13 @@ export class DefaultGridScheduler implements GridScheduler {
 		}
 	}
 
-	idle(callback: () => void): number {
+	idle(callback: (deadline?: GridIdleDeadline) => void): number {
 		if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-			return (window as unknown as { requestIdleCallback: (cb: () => void) => number }).requestIdleCallback(callback);
+			return (
+				window as unknown as {
+					requestIdleCallback: (cb: (deadline: GridIdleDeadline) => void, opts?: { timeout: number }) => number;
+				}
+			).requestIdleCallback(callback, { timeout: 100 });
 		}
 		return this.raf(() => callback());
 	}
