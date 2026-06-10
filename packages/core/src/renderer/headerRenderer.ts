@@ -211,7 +211,7 @@ export class HeaderRenderer<TRowData = unknown> {
 					console.error('HeaderRenderer: Error in headerCellClass styleSlot', e);
 				}
 			}
-			if (state.enableColumnReorder && col.movable !== false) {
+			if (state.enableColumnReorder && col.movable !== false && !col.checkboxSelection) {
 				className += ' og-header-cell-movable';
 			}
 			const columnInteractions = this.columnInteractionsGetter();
@@ -227,6 +227,16 @@ export class HeaderRenderer<TRowData = unknown> {
 			if (headerCell.style.width !== nextWidth) headerCell.style.width = nextWidth;
 
 			const textSpan = headerCell.firstElementChild as HTMLSpanElement | null;
+			// Suppress interactive chrome (menu, sort indicator) for checkbox columns
+			if (col.checkboxSelection) {
+				const menuBtnEl = headerCell.querySelector<HTMLDivElement>('.og-header-menu-button');
+				if (menuBtnEl) menuBtnEl.style.display = 'none';
+				const resizeEl = headerCell.querySelector<HTMLDivElement>('.og-header-resize-handle');
+				if (resizeEl) resizeEl.style.display = 'none';
+				const sortEl = headerCell.querySelector<HTMLDivElement>('.og-header-sort-indicator');
+				if (sortEl) sortEl.style.display = 'none';
+			}
+
 			if (col.checkboxSelection) {
 				let checkbox = headerCell.querySelector<HTMLInputElement>('input[type="checkbox"].og-header-checkbox');
 				if (!checkbox) {

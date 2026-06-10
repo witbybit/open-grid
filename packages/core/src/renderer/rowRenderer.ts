@@ -163,6 +163,9 @@ export class RowRenderer<TRowData = unknown> {
 
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 
+	// Cached Set for O(1) row-selection checks — rebuilt each recycleViewport frame from selectedRowIds.
+	private _selectedRowIdSet: Set<string> | null = null;
+
 	// Stable slot assigner — single implementation shared with tests.
 	// Internal scratch buffers are reused per call: zero per-frame allocations.
 	private readonly _slotAssigner = new StableSlotAssigner();
@@ -291,6 +294,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.isScrolling = isScrollFrameActive || this.engine.isScrolling;
 
 		const state = ctx?.state ?? this.engine.stateManager.getState();
+		this._selectedRowIdSet = state.selectedRowIds.length > 0 ? new Set(state.selectedRowIds) : null;
 		const nextWindow =
 			precomputedWindow ??
 			applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits, () => {
@@ -535,7 +539,7 @@ export class RowRenderer<TRowData = unknown> {
 				if (this.hoveredRowIndex === r) rowClassName += ' og-row-hovered';
 				if (isSelectedRow || isFocusedRow) rowClassName += ' og-row-selected';
 				if (isFocusedRow) rowClassName += ' og-row-focused';
-				if (state.selectedRowIds.includes(node.id)) rowClassName += ' og-row-node-selected';
+				if (this._selectedRowIdSet?.has(node.id)) rowClassName += ' og-row-node-selected';
 				if (isLoadingRow) rowClassName += ' og-row-loading';
 
 				if (isScrollFrameActive && state.styleSlots?.rowClass && node.data) {
@@ -1058,11 +1062,17 @@ export class RowRenderer<TRowData = unknown> {
 			}
 		}
 
-		// Checkbox selection column: render a checkbox instead of normal cell content
+		const isPinRight = colIndex >= pinRightStart;
+		const cellLeft = plan.colLefts[colIndex];
+		const leftArg = isPinRight ? cellLeft - pinRightBaseLeft : cellLeft;
+		const cellWidth = plan.colWidths[colIndex];
+
+		// Checkbox selection column: render a checkbox instead of normal cell content.
+		// Uses 'custom' contentMode so cellSlot.update() positions the cell without clearing the checkbox DOM.
 		if (col.checkboxSelection) {
 			const cell = cellSlot.contentElement;
 			const rowId = node.id;
-			const isChecked = state.selectedRowIds.includes(rowId);
+			const isChecked = (this._selectedRowIdSet ?? new Set(state.selectedRowIds)).has(rowId);
 			let checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
 			if (!checkbox) {
 				checkbox = document.createElement('input');
@@ -1071,19 +1081,17 @@ export class RowRenderer<TRowData = unknown> {
 				checkbox.style.cssText = 'pointer-events:auto;cursor:pointer;margin:0';
 				checkbox.addEventListener('change', (e) => {
 					e.stopPropagation();
-					this.engine.toggleRowId(rowId);
+					const id = (e.currentTarget as HTMLInputElement).dataset.rowId;
+					if (id) this.engine.toggleRowId(id);
 				});
 				cell.textContent = '';
 				cell.appendChild(checkbox);
 			}
+			checkbox.dataset.rowId = rowId;
 			if (checkbox.checked !== isChecked) checkbox.checked = isChecked;
+			cellSlot.update(colIndex, col.field, rowIndex, node.id, leftArg, -1, cellWidth, cellClassName, 'custom', undefined, '', undefined);
 			return;
 		}
-
-		const isPinRight = colIndex >= pinRightStart;
-		const cellLeft = plan.colLefts[colIndex];
-		const leftArg = isPinRight ? cellLeft - pinRightBaseLeft : cellLeft;
-		const cellWidth = plan.colWidths[colIndex];
 		const cellValue = access.value;
 		// slotId is the stable RowSlot id (e.g. "rsp-0") passed in by the caller.
 		// Using slot.id (not data-row-id or node.id) ensures the portal key is stable
@@ -1373,6 +1381,15 @@ export class RowRenderer<TRowData = unknown> {
 		isRowRebind: boolean,
 		isRowLoading: boolean
 	): void {
+		// Checkbox column: defer full render to the post-scroll decoration pass so the
+		// checkbox DOM is never overwritten by the primitive fast-path text writer.
+		if (col.checkboxSelection) {
+			this.markCellDirtyAfterScroll(cellSlot.element);
+			let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, pinRightStart);
+			cellSlot.update(colIndex, col.field, rowIndex, node.id, left, right, width, cellClassName, 'custom', undefined, '', undefined);
+			return;
+		}
+
 		const plan = ctx.plan.columnPlans[colIndex];
 		const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
 
@@ -1575,7 +1592,7 @@ export class RowRenderer<TRowData = unknown> {
 		if (isFocusedRow) {
 			rowClassName += ' og-row-focused';
 		}
-		if (state.selectedRowIds.includes(node.id)) {
+		if (this._selectedRowIdSet?.has(node.id) ?? state.selectedRowIds.includes(node.id)) {
 			rowClassName += ' og-row-node-selected';
 		}
 		if (isLoadingRow) {

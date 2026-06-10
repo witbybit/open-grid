@@ -22,13 +22,14 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 	const didMountColumnsRef = useRef(false);
 
 	const api = useMemo(() => {
-		const { rows, columns, getRowId, rowOverscanPx, colBuffer, runtimeLimits, initialState, overscanAdaptive, persistence } =
+		const { rows, columns, getRowId, rowOverscanPx, colBuffer, runtimeLimits, initialState, overscanAdaptive, persistence, rowSelection } =
 			initialOptionsRef.current;
 		return createClientGrid({
 			rows,
 			columns,
 			getRowId,
 			persistence,
+			rowSelection,
 			initialState: {
 				rowOverscanPx,
 				overscanAdaptive,

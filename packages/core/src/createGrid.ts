@@ -54,6 +54,15 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 	getRowId?: (row: TRowData) => string;
 	initialState?: Partial<GridState<TRowData>>;
 	/**
+	 * Enable first-class row selection. When set to `'multiple'`, a built-in checkbox
+	 * column is automatically prepended and pinned to the left — no need to add a
+	 * `checkboxSelection: true` column manually. Works like AG Grid's `rowSelection` prop.
+	 *
+	 * @example
+	 * useClientGrid({ rows, columns, rowSelection: 'multiple' })
+	 */
+	rowSelection?: 'single' | 'multiple';
+	/**
 	 * Persistence adapter. Pass `createLocalStorageAdapter(key)` for the built-in
 	 * localStorage implementation, or supply your own for remote/API-backed storage.
 	 *
@@ -200,8 +209,32 @@ function wireGridPersistence<TRowData>(
 export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridApi<TRowData> {
 	const { persistence: adapter } = options;
 
+	let columns = options.columns;
 	let mergedInitial: Partial<GridState<TRowData>> = options.initialState ?? {};
 	let asyncLoad: Promise<PersistedGridState | null> | undefined;
+
+	// First-class row selection: auto-inject the built-in checkbox column at position 0
+	// and auto-pin it left — users configure `rowSelection: 'multiple'` instead of a manual column def.
+	if (options.rowSelection === 'multiple') {
+		const checkboxCol = {
+			field: '__rowSelect__',
+			header: '',
+			width: 40,
+			checkboxSelection: true,
+			sortable: false,
+			movable: false,
+			resizable: false,
+		} as unknown as ColumnDef<TRowData>;
+		columns = [checkboxCol, ...columns];
+		// Auto-bump the left pin count so the checkbox column is always visible
+		mergedInitial = {
+			...mergedInitial,
+			pinnedColumns: {
+				left: (mergedInitial.pinnedColumns?.left ?? 0) + 1,
+				right: mergedInitial.pinnedColumns?.right ?? 0,
+			},
+		};
+	}
 
 	if (adapter) {
 		const loaded = adapter.load();
@@ -214,10 +247,11 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 		}
 	}
 
+	const resolvedColumns = mergedInitial.columns ?? columns;
 	const store = new GridStore<TRowData>({
-		columns: mergedInitial.columns ?? options.columns,
+		columns: resolvedColumns,
 		getRowId: options.getRowId,
-		columnWidths: buildColumnWidths(mergedInitial.columns ?? options.columns),
+		columnWidths: buildColumnWidths(resolvedColumns),
 		...mergedInitial,
 	});
 

@@ -74,6 +74,11 @@ export interface ClientGridOptions<TRowData> extends GridRenderOptions<TRowData>
 	getRowId?: (row: TRowData) => string;
 	initialState?: Partial<GridState<TRowData>>;
 	/**
+	 * Enable first-class row selection. When set to `'multiple'`, a built-in checkbox
+	 * column is automatically prepended and pinned to the left — no manual column def needed.
+	 */
+	rowSelection?: 'single' | 'multiple';
+	/**
 	 * Persistence adapter. Pass `createLocalStorageAdapter(key)` for localStorage,
 	 * or provide a custom adapter for remote/API-backed storage.
 	 *

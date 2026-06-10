@@ -1,4 +1,4 @@
-export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending';
+export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending' | 'custom';
 
 /**
  * Authoritative identity record for a bound cell slot.
@@ -215,23 +215,26 @@ export class CellSlot<TRowData = unknown> {
 
 		// Phase 4: compare against JS-side cache only — no DOM read.
 		// lastFormattedValue is always kept in sync with contentElement.textContent.
-		if (contentMode === 'text' || contentMode === 'fallback') {
-			if (this.lastFormattedValue !== formattedValue) {
-				this.lastFormattedValue = formattedValue;
-				this.contentElement.textContent = formattedValue;
-				cellSlotWriteStats.cellTextWrites++;
-				domUpdated = true;
+		// 'custom' mode: content is managed externally (e.g. checkbox cells) — never touch textContent.
+		if (contentMode !== 'custom') {
+			if (contentMode === 'text' || contentMode === 'fallback') {
+				if (this.lastFormattedValue !== formattedValue) {
+					this.lastFormattedValue = formattedValue;
+					this.contentElement.textContent = formattedValue;
+					cellSlotWriteStats.cellTextWrites++;
+					domUpdated = true;
+				} else {
+					cellSlotWriteStats.cellDomReadsAvoided++;
+				}
 			} else {
-				cellSlotWriteStats.cellDomReadsAvoided++;
-			}
-		} else {
-			if (this.lastFormattedValue !== '') {
-				this.lastFormattedValue = '';
-				this.contentElement.textContent = '';
-				cellSlotWriteStats.cellTextWrites++;
-				domUpdated = true;
-			} else {
-				cellSlotWriteStats.cellDomReadsAvoided++;
+				if (this.lastFormattedValue !== '') {
+					this.lastFormattedValue = '';
+					this.contentElement.textContent = '';
+					cellSlotWriteStats.cellTextWrites++;
+					domUpdated = true;
+				} else {
+					cellSlotWriteStats.cellDomReadsAvoided++;
+				}
 			}
 		}
 
