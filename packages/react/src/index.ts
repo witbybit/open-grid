@@ -1,5 +1,7 @@
 export { OpenGrid, GridProvider } from './OpenGrid.js';
 export type { OpenGridProps } from './OpenGrid.js';
+export { GridPagination, useClientGridPagination } from './pagination.js';
+export type { GridPaginationProps, ClientGridPaginationResult } from './pagination.js';
 export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
 export { useClientGrid, useServerGrid } from './useGrid.js';

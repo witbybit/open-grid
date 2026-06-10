@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { GridProvider, useServerGrid } from '@open-grid/react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { GridProvider, useServerGrid, GridPagination } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Terminal, Server, Activity, ShieldAlert, Cpu, Network, Clock } from 'lucide-react';
 
@@ -19,6 +19,9 @@ type SeverityStats = {
 	infoDebug: number;
 };
 
+const SERVER_PAGE_SIZE = 5000;
+const SERVER_ROW_HEIGHT = 40;
+
 export default function InfiniteServerScroll({
 	api,
 	editTrigger,
@@ -26,6 +29,7 @@ export default function InfiniteServerScroll({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: InfiniteServerScrollProps) {
+	const gridHostRef = useRef<HTMLDivElement>(null);
 	const [blockStats, setBlockStats] = useState({
 		loadedBlockStart: 0,
 		loadedBlockEnd: 0,
@@ -33,6 +37,7 @@ export default function InfiniteServerScroll({
 		durationMs: 0,
 	});
 
+	const [serverPage, setServerPage] = useState(0);
 	const [latencyHistory, setLatencyHistory] = useState<number[]>([45, 80, 55, 120, 95, 60, 110, 85]);
 	const [severityStats, setSeverityStats] = useState<SeverityStats>({
 		totalLoaded: 0,
@@ -147,7 +152,7 @@ export default function InfiniteServerScroll({
 					</div>
 				</div>
 
-				<div className='flex-1 min-h-0 min-w-0'>
+				<div ref={gridHostRef} className='flex-1 min-h-0 min-w-0'>
 					<GridProvider api={api}>
 						<GridView
 							api={api}
@@ -159,6 +164,24 @@ export default function InfiniteServerScroll({
 						/>
 					</GridProvider>
 				</div>
+				<GridPagination
+					page={serverPage}
+					pageCount={Math.ceil(blockStats.totalRecords / SERVER_PAGE_SIZE)}
+					totalRows={blockStats.totalRecords}
+					pageSize={SERVER_PAGE_SIZE}
+					onPageChange={(p) => {
+						setServerPage(p);
+						const viewport = gridHostRef.current?.querySelector<HTMLElement>('.og-scroll-viewport');
+						if (viewport) viewport.scrollTop = p * SERVER_PAGE_SIZE * SERVER_ROW_HEIGHT;
+					}}
+					style={{
+						background: 'rgba(15,23,42,0.6)',
+						border: '1px solid #1e293b',
+						borderRadius: '8px',
+						color: '#94a3b8',
+						flexShrink: 0,
+					}}
+				/>
 			</div>
 
 			{/* Right Column: Auditor Telemetry Sidebar */}

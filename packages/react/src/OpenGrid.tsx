@@ -6,9 +6,13 @@ import {
 	GridContextMenuHandle,
 	registerGridContextMenu,
 	VisualRow,
+	ColumnDef,
+	GridState,
+	GridPersistenceAdapter,
 } from '@open-grid/core';
 import { InternalColumnDef, GridHost, mountGridHost, getInternalApiFromApi } from '@open-grid/core/internal';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
+import { useClientGrid } from './useGrid.js';
 import { PortalManager, createPortalStore } from './GridPortal.js';
 import { useGridNavigationController } from './hooks.js';
 import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
@@ -25,7 +29,30 @@ export function GridProvider<TRowData = unknown>({ api, children }: GridProvider
 	return <GridApiContext.Provider value={api as unknown as GridApi<unknown>}>{children}</GridApiContext.Provider>;
 }
 export interface OpenGridProps<TRowData = unknown> {
+	// ─── Inline data mode ────────────────────────────────────────────────────
+	// Pass rows + columns directly — no separate hook needed for simple client grids.
+	// OpenGrid creates and owns the grid instance internally.
+	// For server grids or when you need the api object from sibling/parent components,
+	// use `useClientGrid` / `useServerGrid` and pass the resulting `api` instead.
+	rows?: TRowData[];
+	columns?: ColumnDef<TRowData>[];
+	getRowId?: (row: TRowData) => string;
+	initialState?: Partial<GridState<TRowData>>;
+	persistence?: GridPersistenceAdapter;
+	rowOverscanPx?: number;
+	colBuffer?: number;
+	overscanAdaptive?: boolean;
+	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
+	/** Shortcut for `initialState.detailRowHeight`. Height in px for expanded master-detail rows. */
+	detailRowHeight?: number;
+
+	// ─── External api mode ───────────────────────────────────────────────────
+	// Pass a pre-created GridApi from `useClientGrid()` or `useServerGrid()`.
+	// Required for server grids; also use when multiple components share the same grid.
+	// Alternatively, wrap in `<GridProvider api={api}>` and omit this prop entirely.
 	api?: GridApi<TRowData>;
+
+	// ─── Display / behaviour ─────────────────────────────────────────────────
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 	pinTopRows?: number;
@@ -53,16 +80,58 @@ export interface OpenGridProps<TRowData = unknown> {
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
-	const contextApi = useContext(GridApiContext);
-	const api = props.api ?? (contextApi as GridApi<TRowData> | null);
+	const contextApi = useContext(GridApiContext) as GridApi<TRowData> | null;
 
+	// Inline mode: rows provided without a pre-created api — create and own the grid internally.
+	if (!props.api && props.rows !== undefined) {
+		return <OpenGridManagedClient {...props} rows={props.rows} />;
+	}
+
+	const api = props.api ?? contextApi;
 	if (!api) {
-		throw new Error('OpenGrid must be provided an api either via props or GridProvider context.');
+		throw new Error(
+			'OpenGrid requires one of: (1) `rows` + `columns` props for a self-contained grid, ' +
+				'(2) an `api` prop from `useClientGrid` / `useServerGrid`, or ' +
+				'(3) a parent `<GridProvider api={...}>` wrapper.'
+		);
 	}
 
 	return (
 		<GridProvider api={api}>
 			<OpenGridInner {...props} api={api} />
+		</GridProvider>
+	);
+}
+
+// Internal: manages the grid lifecycle when rows/columns are passed directly to <OpenGrid>.
+function OpenGridManagedClient<TRowData = unknown>({
+	rows,
+	columns,
+	getRowId,
+	initialState,
+	persistence,
+	rowOverscanPx,
+	colBuffer,
+	overscanAdaptive,
+	runtimeLimits,
+	detailRowHeight,
+	...rest
+}: OpenGridProps<TRowData> & { rows: TRowData[] }) {
+	const mergedInitialState = detailRowHeight != null ? { detailRowHeight, ...initialState } : initialState;
+	const api = useClientGrid<TRowData>({
+		rows: rows!,
+		columns: columns ?? [],
+		getRowId,
+		initialState: mergedInitialState,
+		persistence,
+		rowOverscanPx,
+		colBuffer,
+		overscanAdaptive,
+		runtimeLimits,
+	});
+	return (
+		<GridProvider api={api}>
+			<OpenGridInner {...rest} api={api} />
 		</GridProvider>
 	);
 }

@@ -3,6 +3,8 @@ import { Gauge, Play } from 'lucide-react';
 import {
 	GridProvider,
 	useClientGrid,
+	useClientGridPagination,
+	GridPagination,
 	type ColumnDef,
 	type DomCellRenderer,
 	type ImperativeCellHandle,
@@ -199,12 +201,17 @@ function makeColumns(mode: RendererMode): ColumnDef<LabRow>[] {
 	];
 }
 
+const PAGE_SIZE = 5000;
+
 export default function PerformanceLab() {
 	const [mode, setMode] = useState<RendererMode>('dom');
-	const rows = useMemo(() => makeRows(100000), []);
+	const allRows = useMemo(() => makeRows(100000), []);
 	const columns = useMemo(() => makeColumns(mode), [mode]);
+
+	const { pageRows, page, pageCount, setPage, totalRows } = useClientGridPagination(allRows, { pageSize: PAGE_SIZE });
+
 	const api = useClientGrid<LabRow>({
-		rows,
+		rows: pageRows,
 		columns,
 		rowOverscanPx: 100,
 		colBuffer: 1,
@@ -262,6 +269,20 @@ export default function PerformanceLab() {
 					<GridView api={api} pinLeftColumns={2} pinRightColumns={1} defaultHeight={34} enableContextMenu={false} />
 				</GridProvider>
 			</div>
+			<GridPagination
+				page={page}
+				pageCount={pageCount}
+				totalRows={totalRows}
+				pageSize={PAGE_SIZE}
+				onPageChange={setPage}
+				style={{
+					background: 'rgba(15,23,42,0.6)',
+					border: '1px solid #1e293b',
+					borderRadius: '8px',
+					color: '#94a3b8',
+					flexShrink: 0,
+				}}
+			/>
 		</div>
 	);
 }

@@ -151,9 +151,17 @@ export type GridEventListener<T = unknown> = (event: GridEvent<T>) => void;
 
 // ── Cell renderer / editor props (stay here — they reference GridApi) ─────────
 
-export interface CellRendererProps<TRowData = unknown> {
-	value: unknown;
-	computedValue: unknown;
+/**
+ * Props passed to every custom cell renderer component.
+ *
+ * @typeParam TRowData - Shape of the row data object.
+ * @typeParam TValue   - Type of the cell value (defaults to `unknown`; narrow it
+ *                       to get typed `value` inside your renderer, e.g.
+ *                       `CellRendererProps<MyRow, string>`).
+ */
+export interface CellRendererProps<TRowData = unknown, TValue = unknown> {
+	value: TValue;
+	computedValue: TValue;
 	row: TRowData;
 	rowId: string;
 	colField: string;
@@ -166,23 +174,43 @@ export interface CellRendererProps<TRowData = unknown> {
 	api: GridApi<TRowData>;
 }
 
-export interface CellEditorProps<TRowData = unknown> {
+/**
+ * Props passed to every custom cell editor component.
+ *
+ * @typeParam TRowData - Shape of the row data object.
+ * @typeParam TValue   - Type of the cell value (defaults to `unknown`; narrow it
+ *                       to avoid casting inside your editor, e.g.
+ *                       `CellEditorProps<MyRow, string>`).
+ *
+ * @example Typed string editor
+ * ```tsx
+ * const MyEditor = ({ value, onCommit, onCancel }: CellEditorProps<MyRow, string>) => (
+ *   <input
+ *     autoFocus
+ *     defaultValue={value}
+ *     onBlur={(e) => onCommit(e.target.value)}
+ *     onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+ *   />
+ * );
+ * ```
+ */
+export interface CellEditorProps<TRowData = unknown, TValue = unknown> {
 	rowId: string;
 	colField: string;
-	value: unknown;
+	value: TValue;
 	/**
 	 * Update the local editing value without committing.
-	 * Use this for text inputs where user is still typing.
+	 * Use this for text inputs where the user is still typing.
 	 */
-	onChange: (value: unknown) => void;
+	onChange: (value: TValue) => void;
 	api: GridApi<TRowData>;
 	/**
 	 * Commit the value and exit edit mode.
-	 * If no value is provided, commits the current value from onChange.
+	 * If no value is passed, commits the last value set via `onChange`.
 	 */
-	onCommit: (finalValue?: unknown) => void;
+	onCommit: (finalValue?: TValue) => void;
 	/**
-	 * Cancel editing and revert to original value.
+	 * Cancel editing and revert to the original value.
 	 */
 	onCancel: () => void;
 }
