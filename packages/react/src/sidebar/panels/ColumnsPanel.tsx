@@ -98,6 +98,7 @@ const GROUP_ACCENT_BG = 'rgba(167,139,250,0.12)';
 const GROUP_ACCENT_BORDER = 'rgba(167,139,250,0.35)';
 const SUCCESS = '#22c55e';
 const WARN = '#f59e0b';
+type ColumnViewMode = 'all' | 'groupable' | 'hidden';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -124,6 +125,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 
 	const [clearConfirm, setClearConfirm] = useState(false);
 	const [columnQuery, setColumnQuery] = useState('');
+	const [columnView, setColumnView] = useState<ColumnViewMode>('all');
 	const clearConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	// Real persistence status — subscribes to actual save events from the adapter.
@@ -281,6 +283,26 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 		}
 	};
 
+	const handleTogglePinRight = (colField: string) => {
+		const displayedCols = api.getDisplayedColumns();
+		const { left, right } = api.getPinnedColumns();
+		const colIdx = displayedCols.findIndex((c) => c.field === colField);
+		if (colIdx < 0) return;
+		const firstRight = Math.max(left, displayedCols.length - right);
+		const isPinned = colIdx >= firstRight;
+		if (isPinned) {
+			const nextRight = Math.max(0, right - 1);
+			const nextFirstRight = displayedCols.length - nextRight;
+			if (colIdx >= nextFirstRight) {
+				api.moveColumn(colField, Math.max(left, nextFirstRight - 1));
+			}
+			api.setPinnedColumns({ left, right: nextRight });
+		} else {
+			api.moveColumn(colField, firstRight);
+			api.setPinnedColumns({ left, right: right + 1 });
+		}
+	};
+
 	// ── Persistence handlers ───────────────────────────────────────────────────
 
 	const handleClearPersistence = () => {
@@ -309,10 +331,14 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	const hasGroups = groupBy.length > 0;
 	const normalizedQuery = columnQuery.trim().toLowerCase();
 	const filteredCols = useMemo(() => {
-		if (!normalizedQuery) return allCols;
-		return allCols.filter((col) => `${col.header ?? ''} ${col.field}`.toLowerCase().includes(normalizedQuery));
-	}, [allCols, normalizedQuery]);
+		let next = allCols;
+		if (columnView === 'groupable') next = next.filter(canGroup);
+		if (columnView === 'hidden') next = next.filter((col) => !!col.hide);
+		if (!normalizedQuery) return next;
+		return next.filter((col) => `${col.header ?? ''} ${col.field}`.toLowerCase().includes(normalizedQuery));
+	}, [allCols, columnView, normalizedQuery]);
 	const ungroupedGroupableCount = groupableCols.filter((col) => !isGrouped(col.field)).length;
+	const hiddenCount = allCols.length - visibleCount;
 
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: PANEL_BG }}>
@@ -395,6 +421,16 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 						</button>
 					)}
 				</label>
+			</div>
+
+			<div style={{ display: 'flex', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+				<SegmentButton active={columnView === 'all'} label={`All ${allCols.length}`} onClick={() => setColumnView('all')} />
+				<SegmentButton
+					active={columnView === 'groupable'}
+					label={`Groupable ${groupableCols.length}`}
+					onClick={() => setColumnView('groupable')}
+				/>
+				<SegmentButton active={columnView === 'hidden'} label={`Hidden ${hiddenCount}`} onClick={() => setColumnView('hidden')} />
 			</div>
 
 			{/* Scrollable body */}
@@ -593,6 +629,8 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 						const groupable = canGroup(col);
 						const displayedIdx = displayedCols.findIndex((c) => c.field === col.field);
 						const isPinnedLeft = !isHidden && displayedIdx >= 0 && displayedIdx < pins.left;
+						const firstRightPinIdx = Math.max(pins.left, displayedCols.length - pins.right);
+						const isPinnedRight = !isHidden && displayedIdx >= 0 && displayedIdx >= firstRightPinIdx;
 						return (
 							<div
 								key={col.field}
@@ -632,6 +670,27 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 								>
 									{col.header || col.field}
 								</span>
+								{(col.type || groupable || grouped) && (
+									<span
+										style={{
+											maxWidth: 72,
+											overflow: 'hidden',
+											textOverflow: 'ellipsis',
+											whiteSpace: 'nowrap',
+											fontSize: 9,
+											fontWeight: 800,
+											color: grouped ? GROUP_ACCENT : groupable ? '#38bdf8' : TEXT_MUTED,
+											border: `1px solid ${grouped ? GROUP_ACCENT_BORDER : 'rgba(51,65,85,0.8)'}`,
+											background: grouped ? GROUP_ACCENT_BG : 'rgba(15,23,42,0.55)',
+											borderRadius: 4,
+											padding: '2px 4px',
+											textTransform: 'uppercase',
+										}}
+										title={col.type ? `Type: ${String(col.type)}` : groupable ? 'Groupable column' : undefined}
+									>
+										{grouped ? 'Grouped' : col.type ? String(col.type) : 'Group'}
+									</span>
+								)}
 								{groupable && (
 									<button
 										onClick={() => toggleGroup(col.field)}
@@ -655,6 +714,19 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 										color: isPinnedLeft ? ACCENT_LIGHT : TEXT_MUTED,
 										opacity: isHidden ? 0.3 : 1,
 										cursor: isHidden ? 'default' : 'pointer',
+									}}
+								>
+									<PinIcon />
+								</button>
+								<button
+									onClick={() => !isHidden && handleTogglePinRight(col.field)}
+									title={isHidden ? 'Show column to pin' : isPinnedRight ? 'Unpin right' : 'Pin column right'}
+									style={{
+										...iconBtnStyle,
+										color: isPinnedRight ? ACCENT_LIGHT : TEXT_MUTED,
+										opacity: isHidden ? 0.3 : 1,
+										cursor: isHidden ? 'default' : 'pointer',
+										transform: 'scaleX(-1)',
 									}}
 								>
 									<PinIcon />
@@ -810,6 +882,34 @@ function PersistenceStatusBadge({ status }: { status: PersistenceStatus }) {
 }
 
 // ── Toggle row component ──────────────────────────────────────────────────────
+
+function SegmentButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+	return (
+		<button
+			onClick={onClick}
+			style={{
+				flex: 1,
+				minWidth: 0,
+				height: 24,
+				borderRadius: 5,
+				border: active ? `1px solid rgba(96,165,250,0.45)` : `1px solid rgba(30,41,59,0.8)`,
+				background: active ? 'rgba(59,130,246,0.13)' : 'rgba(15,23,42,0.45)',
+				color: active ? ACCENT_LIGHT : TEXT_MUTED,
+				cursor: 'pointer',
+				fontSize: 9,
+				fontWeight: 800,
+				letterSpacing: 0,
+				overflow: 'hidden',
+				padding: '0 4px',
+				textOverflow: 'ellipsis',
+				textTransform: 'uppercase',
+				whiteSpace: 'nowrap',
+			}}
+		>
+			{label}
+		</button>
+	);
+}
 
 function ToggleRow({
 	icon,

@@ -175,6 +175,7 @@ export class RowRenderer<TRowData = unknown> {
 	// Cached Set for O(1) row-selection checks — rebuilt each recycleViewport frame from selectedRowIds.
 	private _selectedRowIdSet: Set<string> | null = null;
 	private _rowCheckboxAnchorId: string | null = null;
+	private readonly _rowSelectionClickCells = new WeakSet<HTMLElement>();
 
 	// Stable slot assigner — single implementation shared with tests.
 	// Internal scratch buffers are reused per call: zero per-frame allocations.
@@ -649,6 +650,10 @@ export class RowRenderer<TRowData = unknown> {
 	// in a new closure on every row bind — the hot path calls these once per lane per row.
 	private readonly _initCell = (el: HTMLDivElement): void => {
 		this.cellRenderer.initializeCell(el);
+		if (!this._rowSelectionClickCells.has(el)) {
+			this._rowSelectionClickCells.add(el);
+			el.addEventListener('click', this.onDataCellClickForRowSelection);
+		}
 	};
 	private readonly _releaseCellFn = (cell: CellSlot<TRowData>): void => {
 		if (cell.lastPortalKey) this.releaseCellPortal(cell.element, false, 'destroyed');
@@ -1717,6 +1722,50 @@ export class RowRenderer<TRowData = unknown> {
 			this.dirtyCellsAfterScroll.add(cell);
 			this.dirtyCellsMarkedDuringScroll++;
 		}
+	}
+
+	private readonly onDataCellClickForRowSelection = (e: MouseEvent): void => {
+		if (e.defaultPrevented || e.button !== 0) return;
+		const target = e.target as HTMLElement | null;
+		if (this.isRowSelectionIgnoredTarget(target)) return;
+
+		const cellSlot = CellSlot.fromElement(e.currentTarget as HTMLDivElement);
+		if (!cellSlot.rowId || !cellSlot.colField) return;
+
+		const state = this.engine.stateManager.getState();
+		if (!state.columns.some((col) => col.checkboxSelection)) return;
+		const col = this.engine.columns.getColumnDef(cellSlot.colField);
+		if (col?.checkboxSelection) return;
+
+		const rowModel = this.engine.getRowModel();
+		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(cellSlot.rowId) : -1;
+		const row = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
+		if (row?.kind !== 'data') return;
+
+		if (e.shiftKey && this._rowCheckboxAnchorId) {
+			const rangeIds = this.getDataRowIdsBetween(this._rowCheckboxAnchorId, cellSlot.rowId);
+			if (rangeIds.length > 0) {
+				this.engine.applyRowSelectionGesture({ kind: 'select', rowIds: rangeIds, source: 'pointer' });
+				e.preventDefault();
+				return;
+			}
+		}
+
+		if (e.ctrlKey || e.metaKey) {
+			this.engine.toggleRowId(cellSlot.rowId, 'pointer');
+		} else {
+			this.engine.applyRowSelectionGesture({ kind: 'replace', rowIds: [cellSlot.rowId], source: 'pointer' });
+		}
+		this._rowCheckboxAnchorId = cellSlot.rowId;
+	};
+
+	private isRowSelectionIgnoredTarget(el: Element | null): boolean {
+		if (!el) return false;
+		return (
+			el.closest('button, input, select, textarea, a, [role="button"], [contenteditable="true"]') !== null ||
+			el.closest('.og-cell-editor') !== null ||
+			el.closest('.og-context-menu') !== null
+		);
 	}
 
 	private getDataRowIdsBetween(anchorRowId: string, targetRowId: string): string[] {

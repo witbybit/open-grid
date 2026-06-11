@@ -1157,6 +1157,55 @@ export const CORE_STYLES = `
     line-height: 1;
   }
 
+  .og-group-row-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    display: inline-grid;
+    place-content: center;
+    border: 1.5px solid rgba(147, 197, 253, 0.5);
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.62);
+    cursor: pointer;
+    flex: 0 0 auto;
+    pointer-events: auto;
+  }
+
+  .og-group-row-checkbox:hover {
+    border-color: #bfdbfe;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.13);
+  }
+
+  .og-group-row-checkbox:focus-visible {
+    outline: 2px solid var(--og-focus-ring);
+    outline-offset: 2px;
+  }
+
+  .og-group-row-checkbox:checked,
+  .og-group-row-checkbox:indeterminate {
+    border-color: #93c5fd;
+    background: linear-gradient(180deg, #60a5fa, #2563eb);
+  }
+
+  .og-group-row-checkbox:checked::after {
+    content: '';
+    width: 8px;
+    height: 5px;
+    border-left: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    transform: rotate(-45deg) translateY(-1px);
+  }
+
+  .og-group-row-checkbox:indeterminate::after {
+    content: '';
+    width: 8px;
+    height: 2px;
+    border-radius: 2px;
+    background: #ffffff;
+  }
+
   .og-group-row-toggle-expanded {
     transform: rotate(90deg);
   }
@@ -1182,6 +1231,38 @@ export const CORE_STYLES = `
     font-weight: 700;
     white-space: nowrap;
     flex: 0 0 auto;
+  }
+
+  .og-group-row-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .og-group-aggregate {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    max-width: 160px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(15, 23, 42, 0.32);
+    color: #94a3b8;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .og-group-aggregate span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .og-group-aggregate strong {
+    color: #dbeafe;
+    font-weight: 800;
   }
 
   .og-detail-row-content {

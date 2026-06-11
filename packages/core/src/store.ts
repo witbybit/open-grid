@@ -571,6 +571,7 @@ export interface GridApi<TRowData = unknown> {
 	selectAllRows(): void;
 	clearRowSelection(): void;
 	isRowNodeSelected(rowId: string): boolean;
+	getSelectedRowCount(): number;
 	setColumns(columns: ColumnDef<TRowData>[]): void;
 	setColumnWidth(colField: string, width: number): void;
 	setColumnVisible(colField: string, visible: boolean): void;
@@ -886,6 +887,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public isRowNodeSelected = (rowId: string): boolean => {
 		return this.state.selectedRowIds.includes(rowId);
+	};
+
+	public getSelectedRowCount = (): number => {
+		return this.state.selectedRowIds.length;
 	};
 
 	public setColumnWidth = (colField: string, width: number): void => {

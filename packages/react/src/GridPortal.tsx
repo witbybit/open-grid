@@ -20,7 +20,7 @@ import {
 	type ImperativeCellHandle,
 	isDomCellRenderer,
 } from '@open-grid/core';
-import type { InternalColumnDef } from '@open-grid/core/internal';
+import type { InternalColumnDef, InternalGridApi } from '@open-grid/core/internal';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import { useGridApi } from './hooks.js';
@@ -220,23 +220,81 @@ function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { 
 	if (visualRow.kind !== 'group') return null;
 	const expanded = visualRow.expanded;
 	const depth = visualRow.depth;
+	const selectedRowIds = useSyncExternalStore(
+		useCallback((onStoreChange) => api.subscribeToKey('selectedRowIds', onStoreChange), [api]),
+		() => api.getState().selectedRowIds,
+		() => api.getState().selectedRowIds
+	);
+	const descendantIds = getVisibleGroupDescendantRowIds(api, visualRow);
+	const selectedSet = new Set(selectedRowIds);
+	const selectedDescendantCount = descendantIds.reduce((count, rowId) => count + (selectedSet.has(rowId) ? 1 : 0), 0);
+	const allDescendantsSelected = descendantIds.length > 0 && selectedDescendantCount === descendantIds.length;
+	const someDescendantsSelected = selectedDescendantCount > 0 && selectedDescendantCount < descendantIds.length;
 
 	const handleToggle = (e: React.MouseEvent) => {
 		e.stopPropagation();
 		api.toggleGroupExpanded(visualRow.id);
 	};
 
+	const handleGroupSelection = (e: React.MouseEvent<HTMLInputElement>) => {
+		e.stopPropagation();
+		if (descendantIds.length === 0) return;
+		if (allDescendantsSelected) api.deselectRows(descendantIds);
+		else api.selectRows(descendantIds);
+	};
+
 	return (
 		<div className='og-group-row-content' style={{ paddingLeft: `${depth * 20 + 8}px` }} onClick={handleToggle}>
+			<input
+				type='checkbox'
+				className='og-group-row-checkbox'
+				checked={allDescendantsSelected}
+				ref={(input) => {
+					if (input) input.indeterminate = someDescendantsSelected;
+				}}
+				onClick={handleGroupSelection}
+				onChange={() => undefined}
+				aria-label={allDescendantsSelected ? 'Deselect group rows' : 'Select group rows'}
+				title={
+					selectedDescendantCount > 0
+						? `${selectedDescendantCount} of ${descendantIds.length} visible rows selected`
+						: `Select ${descendantIds.length} visible rows`
+				}
+			/>
 			<span className={`og-group-row-toggle ${expanded ? 'og-group-row-toggle-expanded' : ''}`}>▶</span>
 			<span className='og-group-row-label-prefix'>{visualRow.field}:</span>
-			<span>{String(visualRow.key)}</span>
-			<span className='og-group-count'>{visualRow.childCount} items</span>
+			<span className='og-group-row-value'>{String(visualRow.key)}</span>
+			<span className='og-group-count'>{visualRow.leafCount ?? visualRow.childCount} rows</span>
+			{visualRow.aggregateValues &&
+				Object.entries(visualRow.aggregateValues)
+					.slice(0, 3)
+					.map(([field, value]) =>
+						value != null ? (
+							<span key={field} className='og-group-aggregate'>
+								<span>{field}</span>
+								<strong>{String(value)}</strong>
+							</span>
+						) : null
+					)}
 		</div>
 	);
 }
 
 export const DefaultGroupRowRenderer = memo(DefaultGroupRowRendererInner) as typeof DefaultGroupRowRendererInner;
+
+function getVisibleGroupDescendantRowIds<TRowData>(api: GridApi<TRowData>, groupRow: Extract<VisualRow<TRowData>, { kind: 'group' }>): string[] {
+	const internalApi = api as unknown as InternalGridApi<TRowData>;
+	const groupIndex = internalApi.getVisualIndexById?.(groupRow.id);
+	const rowCount = internalApi.getVisualRowCount?.() ?? 0;
+	if (groupIndex == null || groupIndex < 0 || rowCount <= 0) return [];
+	const rowIds: string[] = [];
+	for (let i = groupIndex + 1; i < rowCount; i++) {
+		const row = internalApi.getVisualRow(i);
+		if (!row || ('depth' in row && row.depth <= groupRow.depth)) break;
+		if (row.kind === 'data') rowIds.push(row.rowId);
+	}
+	return rowIds;
+}
 
 function DefaultDetailRowRendererInner<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
 	if (visualRow.kind !== 'detail') return null;
