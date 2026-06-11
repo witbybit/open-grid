@@ -184,6 +184,9 @@ export enum GridEventName {
 	filterChanged = 'filterChanged',
 	focusChanged = 'focusChanged',
 	groupByChanged = 'groupByChanged',
+	groupColumnAdded = 'groupColumnAdded',
+	groupColumnRemoved = 'groupColumnRemoved',
+	groupColumnMoved = 'groupColumnMoved',
 	renderInvalidated = 'renderInvalidated',
 	rowResized = 'rowResized',
 	rowSelectionChanged = 'rowSelectionChanged',
@@ -210,6 +213,9 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.filterChanged]: { filterModel: FilterModel | null };
 	[GridEventName.focusChanged]: { focus: GridCellPointer | null; selection: GridSelectionState };
 	[GridEventName.groupByChanged]: { groupBy: string[] | undefined };
+	[GridEventName.groupColumnAdded]: { colId: string; index: number; groupBy: string[] };
+	[GridEventName.groupColumnRemoved]: { colId: string; groupBy: string[] };
+	[GridEventName.groupColumnMoved]: { colId: string; fromIndex: number; toIndex: number; groupBy: string[] };
 	[GridEventName.renderInvalidated]: { reason: string };
 	[GridEventName.rowResized]: { rowId: string; height: number };
 	[GridEventName.rowSelectionChanged]: RowSelectionChangeResult;
@@ -380,6 +386,7 @@ export interface GridState<TRowData = unknown> {
 	aggDefs?: AggregationDef<TRowData>[];
 	showGroupFooter?: boolean;
 	enableStickyGroupRows?: boolean;
+	showGroupPanel?: boolean;
 	pinnedColumns?: { left: number; right: number };
 	getParentId?: (row: TRowData) => string | null | undefined;
 	masterDetailEnabled?: boolean;
@@ -580,12 +587,16 @@ export interface GridApi<TRowData = unknown> {
 	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
 	setGroupBy(colIds: string[]): void;
 	getGroupBy(): string[];
+	addGroupBy(colId: string, atIndex?: number): void;
+	removeGroupBy(colId: string): void;
+	moveGroupBy(colId: string, toIndex: number): void;
 	setAggDefs(defs: AggregationDef<TRowData>[]): void;
 	getAggDefs(): AggregationDef<TRowData>[];
 	expandAllGroups(): void;
 	collapseAllGroups(): void;
 	setShowGroupFooter(enabled: boolean): void;
 	setStickyGroupRows(enabled: boolean): void;
+	setShowGroupPanel(enabled: boolean): void;
 	toggleGroupExpanded(groupId: string): void;
 	toggleDetailExpanded(rowId: string): void;
 	isGroupExpanded(groupId: string): boolean;
@@ -734,6 +745,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			rowModelConfig: initialState.rowModelConfig,
 			showGroupFooter: initialState.showGroupFooter,
 			enableStickyGroupRows: initialState.enableStickyGroupRows,
+			showGroupPanel: initialState.showGroupPanel,
 			expansion: initialState.expansion,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 1,
@@ -954,6 +966,18 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.state.groupBy ?? [];
 	};
 
+	public addGroupBy = (colId: string, atIndex?: number): void => {
+		this.engine.addGroupBy(colId, atIndex);
+	};
+
+	public removeGroupBy = (colId: string): void => {
+		this.engine.removeGroupBy(colId);
+	};
+
+	public moveGroupBy = (colId: string, toIndex: number): void => {
+		this.engine.moveGroupBy(colId, toIndex);
+	};
+
 	public setAggDefs = (defs: AggregationDef<TRowData>[]): void => {
 		this.engine.setAggDefs(defs);
 	};
@@ -997,6 +1021,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setStickyGroupRows = (enabled: boolean): void => {
 		this.engine.setStickyGroupRows(enabled);
+	};
+
+	public setShowGroupPanel = (enabled: boolean): void => {
+		this.engine.setShowGroupPanel(enabled);
 	};
 
 	public exportCsv = (options?: CsvExportOptions): void => {

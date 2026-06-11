@@ -130,6 +130,7 @@ export class GridEngine<TRowData = unknown> {
 			rowModelConfig: config.rowModelConfig,
 			showGroupFooter: config.showGroupFooter,
 			enableStickyGroupRows: config.enableStickyGroupRows,
+			showGroupPanel: config.showGroupPanel,
 			expansion: config.expansion ?? { groups: {}, treeRows: {}, details: {} },
 			rowOverscanPx: config.rowOverscanPx ?? 400,
 			colBuffer: config.colBuffer ?? 1,
@@ -301,6 +302,42 @@ export class GridEngine<TRowData = unknown> {
 		this.invalidation.invalidateHeaders('groupBy');
 		this.invalidation.invalidateOverlay('groupBy');
 		this.requestRender('groupBy');
+	}
+
+	public addGroupBy(colId: string, atIndex?: number): void {
+		const current = this.stateManager.getState().groupBy ?? [];
+		if (current.includes(colId)) return;
+		const next = [...current];
+		const insertAt = atIndex !== undefined ? Math.max(0, Math.min(next.length, atIndex)) : next.length;
+		next.splice(insertAt, 0, colId);
+		this.setGroupBy(next);
+		this.eventBus.dispatchEvent(GridEventName.groupColumnAdded, { colId, index: insertAt, groupBy: next });
+	}
+
+	public removeGroupBy(colId: string): void {
+		const current = this.stateManager.getState().groupBy ?? [];
+		if (!current.includes(colId)) return;
+		const next = current.filter((id) => id !== colId);
+		this.setGroupBy(next);
+		this.eventBus.dispatchEvent(GridEventName.groupColumnRemoved, { colId, groupBy: next });
+	}
+
+	public moveGroupBy(colId: string, toIndex: number): void {
+		const current = this.stateManager.getState().groupBy ?? [];
+		const fromIndex = current.indexOf(colId);
+		if (fromIndex === -1) return;
+		const next = [...current];
+		next.splice(fromIndex, 1);
+		const boundedTo = Math.max(0, Math.min(next.length, toIndex));
+		next.splice(boundedTo, 0, colId);
+		if (boundedTo === fromIndex) return;
+		this.setGroupBy(next);
+		this.eventBus.dispatchEvent(GridEventName.groupColumnMoved, { colId, fromIndex, toIndex: boundedTo, groupBy: next });
+	}
+
+	public setShowGroupPanel(enabled: boolean): void {
+		this.stateManager.setState({ showGroupPanel: enabled });
+		this.requestRender('showGroupPanel');
 	}
 
 	public setAggDefs(defs: import('../rows/stages/aggregateStage.js').AggregationDef<any>[]): void {

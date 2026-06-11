@@ -13,6 +13,10 @@ export class ViewportRenderer<TRowData = unknown> {
 	// Single rows container — all row elements live here (no separate left/right layers)
 	public rowsContainer: HTMLDivElement | null = null;
 
+	// Group panel — optional sticky strip above the header for groupBy chips.
+	// Only present in the DOM; shown/hidden by setGroupPanelVisible().
+	public groupPanel: HTMLDivElement | null = null;
+
 	// Header layers — kept as three overlapping absolute divs inside a sticky wrapper
 	public headerWrapper: HTMLDivElement | null = null;
 	public headerLayer: HTMLDivElement | null = null;
@@ -37,6 +41,12 @@ export class ViewportRenderer<TRowData = unknown> {
 		// Single scroll container — the only element that has overflow:auto
 		this.scrollViewport = document.createElement('div');
 		this.scrollViewport.className = 'og-scroll-viewport';
+
+		// ── Group panel (sticky, above header, hidden by default) ────────────
+		this.groupPanel = document.createElement('div');
+		this.groupPanel.className = 'og-group-panel';
+		this.groupPanel.style.display = 'none';
+		this.scrollViewport.appendChild(this.groupPanel);
 
 		// ── Header (sticky top, three overlapping absolute divs) ────────────
 		const headerWrapper = document.createElement('div');
@@ -82,6 +92,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.container = null;
 		this.scrollViewport = null;
 		this.rowsContainer = null;
+		this.groupPanel = null;
 		this.headerWrapper = null;
 		this.headerLayer = null;
 		this.headerLeftLayer = null;
@@ -102,6 +113,12 @@ export class ViewportRenderer<TRowData = unknown> {
 	 */
 	public setScrollingClass(scrolling: boolean): void {
 		this.container?.classList.toggle('og-is-scrolling', scrolling);
+	}
+
+	public setGroupPanelVisible(visible: boolean): void {
+		if (this.groupPanel) {
+			this.groupPanel.style.display = visible ? 'flex' : 'none';
+		}
 	}
 
 	public syncSpacerAndLayers(state: GridState<TRowData>, colCount: number): void {

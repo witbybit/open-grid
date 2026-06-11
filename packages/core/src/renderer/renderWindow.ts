@@ -40,8 +40,7 @@ export interface RenderWindow {
 	bufferBottomPx?: number;
 	// Sticky group rows — group rows that have scrolled above the viewport but whose
 	// descendants are still visible. Rendered at the top of the viewport, stacked by depth.
-	stickyGroupIndices?: number[];
-	stickyGroupTops?: number[];
+	// Each entry contains the visual index, pixel position, and boundary metadata.
 	stickyGroupStack?: StickyGroupStackItem[];
 }
 
@@ -55,13 +54,13 @@ export interface ViewportDelta {
 	hasChanges: boolean;
 }
 
-/** Element-wise equality of sticky index arrays — avoids the per-frame join(',') string. */
-function sameStickyIndices(a: number[] | undefined, b: number[] | undefined): boolean {
+/** Element-wise equality of sticky group stacks by visual index — avoids per-frame allocations. */
+function sameStickyStack(a: StickyGroupStackItem[] | undefined, b: StickyGroupStackItem[] | undefined): boolean {
 	const an = a ? a.length : 0;
 	const bn = b ? b.length : 0;
 	if (an !== bn) return false;
 	for (let i = 0; i < an; i++) {
-		if (a![i] !== b![i]) return false;
+		if (a![i].visualIndex !== b![i].visualIndex) return false;
 	}
 	return true;
 }
@@ -82,7 +81,7 @@ export function sameRenderedWindow(a: RenderWindow | null, b: RenderWindow | nul
 		(a.geometryVersion ?? 0) === (b.geometryVersion ?? 0) &&
 		(a.rowModelVersion ?? 0) === (b.rowModelVersion ?? 0) &&
 		(a.columnVersion ?? 0) === (b.columnVersion ?? 0) &&
-		sameStickyIndices(a.stickyGroupIndices, b.stickyGroupIndices)
+		sameStickyStack(a.stickyGroupStack, b.stickyGroupStack)
 	);
 }
 
@@ -143,9 +142,9 @@ function countPinnedTrailing(count: number, total: number, leading: number): num
 export function getRowIndices(w: RenderWindow, out?: number[]): number[] {
 	const pinTop = Math.min(w.pinTopRows, w.rowCount);
 	const pinBottomStart = Math.max(pinTop, w.rowCount - w.pinBottomRows);
-	const stickyIndices = w.stickyGroupIndices;
+	const stickyStack = w.stickyGroupStack;
 
-	if (!stickyIndices || stickyIndices.length === 0) {
+	if (!stickyStack || stickyStack.length === 0) {
 		// Fast path: no sticky rows — original O(n) logic with no Set allocation
 		const indices: number[] = out ?? [];
 		indices.length = 0;
@@ -166,11 +165,11 @@ export function getRowIndices(w: RenderWindow, out?: number[]): number[] {
 		indices.push(r);
 		seen.add(r);
 	}
-	// Sticky group rows that are above the scrollable range
-	for (const stickyIdx of stickyIndices) {
-		if (!seen.has(stickyIdx) && stickyIdx < w.rowCount) {
-			indices.push(stickyIdx);
-			seen.add(stickyIdx);
+	// Sticky group rows whose natural position is above the scrollable range
+	for (const item of stickyStack) {
+		if (!seen.has(item.visualIndex) && item.visualIndex < w.rowCount) {
+			indices.push(item.visualIndex);
+			seen.add(item.visualIndex);
 		}
 	}
 	for (let r = w.rowStart; r <= w.rowEnd; r++) {
@@ -220,10 +219,8 @@ export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: Re
 	}
 
 	const next = { ...window };
-	// The sticky arrays on `window` are per-double-buffer scratch reused every frame —
-	// the clamped window outlives the frame, so it needs its own copies.
-	next.stickyGroupIndices = window.stickyGroupIndices ? window.stickyGroupIndices.slice() : undefined;
-	next.stickyGroupTops = window.stickyGroupTops ? window.stickyGroupTops.slice() : undefined;
+	// The stickyGroupStack on `window` is per-double-buffer scratch reused every frame —
+	// the clamped window outlives the frame, so it needs its own deep copy.
 	next.stickyGroupStack = window.stickyGroupStack ? window.stickyGroupStack.map((item) => ({ ...item })) : undefined;
 	let clamped = false;
 
@@ -361,15 +358,11 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	const bufferTopPx = newRowRange.startIdx >= 0 ? engine.geometry.getRowTop(newRowRange.startIdx, defaultRowHeight) : visibleTop;
 	const lastRenderedBottom = newRowRange.endIdx >= 0 ? engine.geometry.getRowBottom(newRowRange.endIdx, defaultRowHeight) : visibleBottom;
 
-	// Sticky group rows: groups whose natural top is above scrollTop but whose last
-	// descendant is still at or below scrollTop — they "stick" to the viewport top.
-	// Reuse the target's arrays across frames (zero per-frame allocation); they are
+	// Sticky group rows: groups whose natural top is above visibleTop but whose last
+	// descendant is still at or below visibleTop — they "stick" to the viewport top.
+	// Reuse the target array across frames (zero per-frame allocation); it is
 	// per-double-buffer so mutation never aliases the currently-rendered window.
-	const stickyIndices = target.stickyGroupIndices ?? (target.stickyGroupIndices = []);
-	const stickyTops = target.stickyGroupTops ?? (target.stickyGroupTops = []);
 	const stickyGroupStack = target.stickyGroupStack ?? (target.stickyGroupStack = []);
-	stickyIndices.length = 0;
-	stickyTops.length = 0;
 	stickyGroupStack.length = 0;
 
 	if (state.enableStickyGroupRows && rowCount > 0) {
@@ -377,7 +370,7 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 		if (stickyMeta && stickyMeta.size > 0) {
 			// stickyMeta is built during the DFS flatten, so group indices — and therefore
 			// group tops — ascend in iteration order. That allows two cuts vs scanning every
-			// group per frame: break once groupTop >= scrollTop (no later group can be
+			// group per frame: break once groupTop >= visibleTop (no later group can be
 			// sticky), and when a subtree ends above the viewport, binary-search past all
 			// groups inside it instead of visiting them.
 			const meta = getStickyMetaArrays(stickyMeta);
@@ -402,8 +395,6 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 					const desiredTop = visibleTop + stickyOffset;
 					const rowHeight = engine.geometry.getRowHeight(groupIdx, defaultRowHeight);
 					const stickyTop = Math.min(desiredTop, boundaryBottom - rowHeight);
-					stickyIndices.push(groupIdx);
-					stickyTops.push(stickyTop);
 					const visualRow = rowModel?.getVisualRow(groupIdx);
 					if (visualRow?.kind === 'group') {
 						stickyGroupStack.push({
@@ -448,7 +439,6 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	target.visibleBottom = visibleBottom;
 	target.bufferTopPx = bufferTopPx;
 	target.bufferBottomPx = lastRenderedBottom;
-	// stickyGroupIndices / stickyGroupTops were filled in-place above.
 }
 
 export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): RenderWindow {

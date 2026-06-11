@@ -1,4 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { GroupPanelRenderer } from './groupPanelRenderer.js';
 
 export interface ColumnInteractionControllerOptions<TRowData> {
 	engine: GridEngine<TRowData>;
@@ -20,6 +21,11 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private columnDropInsertionIndex = -1;
 	private columnDropIndicator: HTMLDivElement | null = null;
 	private columnDragGhost: HTMLDivElement | null = null;
+
+	// Group panel reference — set by RenderEngine when panel is mounted.
+	private groupPanel: GroupPanelRenderer<TRowData> | null = null;
+	// Whether the current column drag is over the group panel.
+	private columnDragOverGroupPanel = false;
 
 	constructor(options: ColumnInteractionControllerOptions<TRowData>) {
 		this.engine = options.engine;
@@ -85,11 +91,20 @@ export class ColumnInteractionController<TRowData = unknown> {
 		window.addEventListener('blur', this.onHeaderColumnDragMouseUp);
 	};
 
+	/** Called by RenderEngine to wire up the group panel for drag-to-group support. */
+	public setGroupPanel(panel: GroupPanelRenderer<TRowData> | null): void {
+		this.groupPanel = panel;
+	}
+
 	public cleanup(): void {
 		window.removeEventListener('mousemove', this.onHeaderColumnDragMove);
 		window.removeEventListener('mouseup', this.onHeaderColumnDragMouseUp);
 		window.removeEventListener('blur', this.onHeaderColumnDragMouseUp);
 
+		if (this.columnDragOverGroupPanel && this.groupPanel) {
+			this.groupPanel.onHeaderDragLeave();
+		}
+		this.columnDragOverGroupPanel = false;
 		this.isColumnReordering = false;
 		this.columnDragFromIndex = -1;
 		this.columnDragField = null;
@@ -123,6 +138,32 @@ export class ColumnInteractionController<TRowData = unknown> {
 
 		e.preventDefault();
 		this.updateColumnDragGhost(e);
+
+		// Route to group panel when the dragged column supports grouping and the
+		// pointer is over the panel.  Hide the column drop indicator while over it.
+		const colField = this.columnDragField;
+		if (colField && this.groupPanel) {
+			const state = this.engine.stateManager.getState();
+			const col = state.columns.find((c) => c.field === colField);
+			const isGroupable = col?.enableRowGroup !== false;
+			const overPanel = isGroupable && this.groupPanel.containsPoint(e.clientX, e.clientY);
+
+			if (overPanel !== this.columnDragOverGroupPanel) {
+				this.columnDragOverGroupPanel = overPanel;
+				if (overPanel) {
+					this.groupPanel.onHeaderDragEnter(colField);
+					this.columnDropIndicator && (this.columnDropIndicator.style.display = 'none');
+				} else {
+					this.groupPanel.onHeaderDragLeave();
+					this.columnDropIndicator && (this.columnDropIndicator.style.display = '');
+				}
+			}
+			if (overPanel) {
+				this.groupPanel.onHeaderDragMove(e);
+				return;
+			}
+		}
+
 		this.updateColumnDropTarget(e);
 	};
 	private onHeaderColumnDragMouseUp = (): void => {
@@ -130,6 +171,14 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const fromIndex = this.columnDragFromIndex;
 		const insertionIndex = this.columnDropInsertionIndex;
 		const colField = this.columnDragField;
+		const wasOverGroupPanel = this.columnDragOverGroupPanel;
+
+		// Finalise group-panel drop before cleanup() clears drag state
+		if (wasOverGroupPanel && this.groupPanel) {
+			this.groupPanel.onHeaderDragEnd(true);
+		} else if (this.groupPanel?.isHeaderDragActive()) {
+			this.groupPanel.onHeaderDragEnd(false);
+		}
 
 		this.cleanup();
 
@@ -149,6 +198,9 @@ export class ColumnInteractionController<TRowData = unknown> {
 			}
 			return;
 		}
+
+		// Group panel drop was handled above — don't also reorder columns.
+		if (wasOverGroupPanel) return;
 
 		if (!wasReordering || !colField || fromIndex < 0 || insertionIndex < 0) {
 			this.schedulePaint();

@@ -35,6 +35,7 @@ import { CellRenderer } from './cellRenderer.js';
 import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { SortAnimationController } from './sortAnimationController.js';
+import { GroupPanelRenderer } from './groupPanelRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName, type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
 
@@ -59,6 +60,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly cellRenderer: CellRenderer;
 	public readonly headerRenderer: HeaderRenderer<TRowData>;
 	public readonly overlayRenderer: OverlayRenderer<TRowData>;
+	public readonly groupPanelRenderer: GroupPanelRenderer<TRowData>;
 
 	private unsubscribers: Array<() => void> = [];
 	private readonly headerMenu: HeaderMenuController<TRowData>;
@@ -271,6 +273,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			scrollTo: (scrollTop, scrollLeft) => this.scrollEngine.scrollTo(scrollTop, scrollLeft),
 			schedulePaint: () => this.scheduleOverlayPaint('fill drag'),
 		});
+
+		// Group panel renderer — mounts when showGroupPanel is true
+		this.groupPanelRenderer = new GroupPanelRenderer<TRowData>(engine);
 	}
 
 	/**
@@ -293,6 +298,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				this.viewportRenderer.headerRightLayer
 			);
 		}
+
+		// Group panel: mount if showGroupPanel is already true at mount time
+		if (this.viewportRenderer.groupPanel) {
+			this.groupPanelRenderer.mount(this.viewportRenderer.groupPanel);
+			const showPanel = this.engine.stateManager.getState().showGroupPanel ?? false;
+			this.viewportRenderer.setGroupPanelVisible(showPanel);
+			this.columnInteractions.setGroupPanel(this.groupPanelRenderer);
+		}
+
 		this.overlayRenderer.mount();
 
 		// Pre-warm DOM recycling pools
@@ -329,7 +343,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			scrollViewport.removeEventListener('mouseleave', this.onRowMouseLeave);
 		}
 		this.columnInteractions.cleanup();
+		this.columnInteractions.setGroupPanel(null);
 		this.fillDrag.cleanup();
+		this.groupPanelRenderer.unmount();
 		this.sortAnimation.destroy();
 		this.scheduler.destroy();
 		this.scrollScheduler.destroy();
@@ -850,6 +866,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener(GridEventName.renderInvalidated, (event) => {
 				this.requestFlushGated(event.payload.reason);
+			})
+		);
+		this.unsubscribers.push(
+			this.engine.stateManager.subscribeToKey('showGroupPanel', () => {
+				const show = this.engine.stateManager.getState().showGroupPanel ?? false;
+				this.viewportRenderer.setGroupPanelVisible(show);
 			})
 		);
 	}

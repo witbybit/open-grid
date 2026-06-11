@@ -108,6 +108,137 @@ export const CORE_STYLES = `
     z-index: 10;
   }
 
+  /* ── Group panel ─────────────────────────────────────────────────────── */
+
+  .og-group-panel {
+    position: sticky;
+    top: 0;
+    z-index: 31;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 6px 10px;
+    min-height: 38px;
+    background: var(--og-header-bg);
+    border-bottom: 1px solid var(--og-border-color);
+    overflow: hidden;
+    box-sizing: border-box;
+    transition: background 0.15s;
+  }
+
+  .og-group-panel-drop-active {
+    background: rgba(59, 130, 246, 0.06);
+    border-bottom-color: rgba(59, 130, 246, 0.4);
+  }
+
+  .og-group-panel-empty {
+    font-size: 12px;
+    color: var(--og-header-text);
+    opacity: 0.55;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Drop position indicator within the panel */
+  .og-group-panel-drop-indicator {
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: rgba(59, 130, 246, 0.8);
+    border-radius: 2px;
+    pointer-events: none;
+    display: none;
+    z-index: 2;
+  }
+
+  /* Group-by chip */
+  .og-group-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 6px 3px 5px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #93c5fd;
+    cursor: grab;
+    user-select: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.12s, border-color 0.12s;
+  }
+
+  .og-group-chip:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.5);
+  }
+
+  .og-group-chip:active,
+  .og-group-panel-chip-dragging .og-group-chip {
+    cursor: grabbing;
+  }
+
+  .og-group-chip-handle {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.5;
+    flex-shrink: 0;
+    color: #93c5fd;
+  }
+
+  .og-group-chip-handle svg {
+    width: 8px;
+    height: 13px;
+  }
+
+  .og-group-chip-label {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .og-group-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: #93c5fd;
+    opacity: 0.55;
+    border-radius: 3px;
+    flex-shrink: 0;
+    transition: opacity 0.1s, background 0.1s;
+  }
+
+  .og-group-chip-remove:hover {
+    opacity: 1;
+    background: rgba(59, 130, 246, 0.25);
+  }
+
+  .og-group-chip-remove svg {
+    width: 10px;
+    height: 10px;
+    pointer-events: none;
+  }
+
+  /* Drop-position highlights when reordering chips */
+  .og-group-chip-drop-before {
+    border-left-color: rgba(59, 130, 246, 0.9);
+    border-left-width: 2px;
+  }
+
+  .og-group-chip-drop-after {
+    border-right-color: rgba(59, 130, 246, 0.9);
+    border-right-width: 2px;
+  }
+
   /*
    * Header wrapper — sticky at the top of the scroll viewport.
    * Three absolutely-positioned child layers overlap inside it (center, left-pin, right-pin).

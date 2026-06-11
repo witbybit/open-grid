@@ -185,9 +185,9 @@ describe('RenderWindow & ViewportDelta calculations', () => {
 		store.setScrollPosition(80, 0);
 
 		const window = computeRenderWindow(store.engine);
-		expect(window.stickyGroupIndices).toContain(1);
-		const stickyPos = window.stickyGroupIndices?.indexOf(1) ?? -1;
-		expect(window.stickyGroupTops?.[stickyPos]).toBe(120);
+		expect(window.stickyGroupStack?.map((s) => s.visualIndex)).toContain(1);
+		const stickyItem = window.stickyGroupStack?.find((s) => s.visualIndex === 1);
+		expect(stickyItem?.top).toBe(120);
 		expect(window.stickyGroupStack).toEqual([
 			{
 				groupId: 'group:category=Hardware/product=Workstation',
@@ -248,7 +248,7 @@ describe('RenderWindow & ViewportDelta calculations', () => {
 				pushed: true,
 			},
 		]);
-		expect(window.stickyGroupTops).toEqual([80]);
+		expect(window.stickyGroupStack?.map((s) => s.top)).toEqual([80]);
 
 		controller.dispose();
 		store.destroy();

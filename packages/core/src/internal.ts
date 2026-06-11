@@ -35,6 +35,7 @@ export { type GridScheduler, DefaultGridScheduler, defaultGridScheduler } from '
 export { type GridDiagnostics, NoopDiagnostics, ActiveDiagnostics, createDiagnostics } from './renderer/gridDiagnostics.js';
 export { CellRenderer } from './renderer/cellRenderer.js';
 export { FullWidthRowRenderer } from './renderer/fullWidthRowRenderer.js';
+export { GroupPanelRenderer } from './renderer/groupPanelRenderer.js';
 export { HeaderRenderer } from './renderer/headerRenderer.js';
 export { OverlayRenderer } from './renderer/overlayRenderer.js';
 export { RowRenderer } from './renderer/rowRenderer.js';

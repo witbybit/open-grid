@@ -30,6 +30,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	rowModelConfig?: import('../rowModel.js').RowModelConfig<TRowData>;
 	showGroupFooter?: boolean;
 	enableStickyGroupRows?: boolean;
+	showGroupPanel?: boolean;
 	expansion?: {
 		groups: Record<string, true>;
 		treeRows: Record<string, true>;

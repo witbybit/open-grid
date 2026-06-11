@@ -1529,3 +1529,152 @@ describe('row multi-select', () => {
 		controller.dispose();
 	});
 });
+
+describe('groupBy mutation API', () => {
+	const makeGroupStore = () =>
+		new GridStore<{ id: string; region: string; country: string; category: string }>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'region', header: 'Region', enableRowGroup: true },
+				{ field: 'country', header: 'Country', enableRowGroup: true },
+				{ field: 'category', header: 'Category', enableRowGroup: true },
+			],
+		});
+
+	it('addGroupBy appends a column to an empty groupBy', () => {
+		const store = makeGroupStore();
+		store.addGroupBy('region');
+		expect(store.getGroupBy()).toEqual(['region']);
+		store.destroy();
+	});
+
+	it('addGroupBy inserts at specified index', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region', 'category']);
+		store.addGroupBy('country', 1);
+		expect(store.getGroupBy()).toEqual(['region', 'country', 'category']);
+		store.destroy();
+	});
+
+	it('addGroupBy appends when index > length', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region']);
+		store.addGroupBy('country', 99);
+		expect(store.getGroupBy()).toEqual(['region', 'country']);
+		store.destroy();
+	});
+
+	it('addGroupBy is idempotent — ignores duplicates', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region', 'country']);
+		store.addGroupBy('region');
+		expect(store.getGroupBy()).toEqual(['region', 'country']);
+		store.destroy();
+	});
+
+	it('removeGroupBy removes an existing column', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region', 'country', 'category']);
+		store.removeGroupBy('country');
+		expect(store.getGroupBy()).toEqual(['region', 'category']);
+		store.destroy();
+	});
+
+	it('removeGroupBy is a no-op for unknown column', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region']);
+		store.removeGroupBy('country');
+		expect(store.getGroupBy()).toEqual(['region']);
+		store.destroy();
+	});
+
+	it('moveGroupBy reorders an existing column', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region', 'country', 'category']);
+		store.moveGroupBy('region', 2);
+		expect(store.getGroupBy()).toEqual(['country', 'category', 'region']);
+		store.destroy();
+	});
+
+	it('moveGroupBy is a no-op when target is same position', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region', 'country']);
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.groupColumnMoved, handler);
+		store.moveGroupBy('region', 0);
+		expect(handler).not.toHaveBeenCalled();
+		store.destroy();
+	});
+
+	it('moveGroupBy is a no-op for unknown column', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region']);
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.groupColumnMoved, handler);
+		store.moveGroupBy('category', 0);
+		expect(handler).not.toHaveBeenCalled();
+		store.destroy();
+	});
+
+	it('addGroupBy fires groupColumnAdded event with correct payload', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region']);
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.groupColumnAdded, handler);
+		store.addGroupBy('country', 1);
+		expect(handler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: { colId: 'country', index: 1, groupBy: ['region', 'country'] },
+			})
+		);
+		store.destroy();
+	});
+
+	it('removeGroupBy fires groupColumnRemoved event', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region', 'country']);
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.groupColumnRemoved, handler);
+		store.removeGroupBy('region');
+		expect(handler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: { colId: 'region', groupBy: ['country'] },
+			})
+		);
+		store.destroy();
+	});
+
+	it('moveGroupBy fires groupColumnMoved event with fromIndex and toIndex', () => {
+		const store = makeGroupStore();
+		store.setGroupBy(['region', 'country', 'category']);
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.groupColumnMoved, handler);
+		store.moveGroupBy('region', 2);
+		expect(handler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: { colId: 'region', fromIndex: 0, toIndex: 2, groupBy: ['country', 'category', 'region'] },
+			})
+		);
+		store.destroy();
+	});
+
+	it('addGroupBy clears invalidation geometry when first group is added', () => {
+		const store = makeGroupStore();
+		store.engine.invalidation.consume();
+		store.addGroupBy('region');
+		const frame = store.engine.invalidation.consume();
+		expect(frame.geometry).toBe(true);
+		expect(frame.viewport).toBe(true);
+		store.destroy();
+	});
+
+	it('setShowGroupPanel toggles showGroupPanel state', () => {
+		const store = makeGroupStore();
+		expect(store.getState().showGroupPanel).toBeUndefined();
+		store.setShowGroupPanel(true);
+		expect(store.getState().showGroupPanel).toBe(true);
+		store.setShowGroupPanel(false);
+		expect(store.getState().showGroupPanel).toBe(false);
+		store.destroy();
+	});
+});
