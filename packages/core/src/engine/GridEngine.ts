@@ -9,6 +9,9 @@ import {
 	type GridCellRange,
 	type GridCellPointer,
 	type GridSelectionSource,
+	type RowSelectionChangeResult,
+	type RowSelectionGesture,
+	type RowSelectionGestureSource,
 } from '../store.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
@@ -600,41 +603,49 @@ export class GridEngine<TRowData = unknown> {
 
 	// ── Row node selection ─────────────────────────────────────────────────────
 
-	private applyRowSelection(op: 'select' | 'deselect' | 'toggle' | 'selectAll' | 'clear', rowIds?: string[]): void {
+	private getAllSelectableDataRowIds(): string[] {
+		const allIds: string[] = [];
+		if (!this.rowModel) return allIds;
+		const count = this.rowModel.getVisualRowCount();
+		for (let i = 0; i < count; i++) {
+			const vr = this.rowModel.getVisualRow(i);
+			if (vr?.kind === 'data') allIds.push(vr.rowId);
+		}
+		return allIds;
+	}
+
+	private reduceRowSelection(gesture: RowSelectionGesture): RowSelectionChangeResult | null {
 		const current = this.stateManager.getState();
 		const currentSet = new Set(current.selectedRowIds);
+		const rowIds = gesture.rowIds ?? [];
 		let newIds: string[];
 
-		switch (op) {
+		switch (gesture.kind) {
+			case 'replace': {
+				const nextSet = new Set(rowIds);
+				newIds = [...nextSet];
+				break;
+			}
 			case 'select': {
-				const toAdd = rowIds ?? [];
-				toAdd.forEach((id) => currentSet.add(id));
+				rowIds.forEach((id) => currentSet.add(id));
 				newIds = [...currentSet];
 				break;
 			}
 			case 'deselect': {
-				const toRemove = new Set(rowIds ?? []);
+				const toRemove = new Set(rowIds);
 				newIds = current.selectedRowIds.filter((id) => !toRemove.has(id));
 				break;
 			}
 			case 'toggle': {
-				const id = rowIds?.[0];
-				if (!id) return;
+				const id = rowIds[0];
+				if (!id) return null;
 				if (currentSet.has(id)) currentSet.delete(id);
 				else currentSet.add(id);
 				newIds = [...currentSet];
 				break;
 			}
 			case 'selectAll': {
-				const allIds: string[] = [];
-				if (this.rowModel) {
-					const count = this.rowModel.getVisualRowCount();
-					for (let i = 0; i < count; i++) {
-						const vr = this.rowModel.getVisualRow(i);
-						if (vr?.kind === 'data') allIds.push(vr.rowId);
-					}
-				}
-				newIds = allIds;
+				newIds = this.getAllSelectableDataRowIds();
 				break;
 			}
 			case 'clear': {
@@ -642,38 +653,57 @@ export class GridEngine<TRowData = unknown> {
 				break;
 			}
 			default:
-				return;
+				return null;
 		}
 
 		const prevSet = new Set(current.selectedRowIds);
 		const newSet = new Set(newIds);
-		const changed = newIds.filter((id) => !prevSet.has(id)).concat(current.selectedRowIds.filter((id) => !newSet.has(id)));
+		const addedRowIds = newIds.filter((id) => !prevSet.has(id));
+		const removedRowIds = current.selectedRowIds.filter((id) => !newSet.has(id));
+		const changedRowIds = addedRowIds.concat(removedRowIds);
+		if (changedRowIds.length === 0) return null;
 
-		this.stateManager.setState({ selectedRowIds: newIds });
-		this.eventBus.dispatchEvent(GridEventName.rowSelectionChanged, {
+		return {
 			selectedRowIds: newIds,
-			changedRowIds: changed,
-		});
+			changedRowIds,
+			addedRowIds,
+			removedRowIds,
+			source: gesture.source ?? 'api',
+		};
 	}
 
-	public selectRowIds(rowIds: string[]): void {
-		this.applyRowSelection('select', rowIds);
+	public applyRowSelectionGesture(gesture: RowSelectionGesture): RowSelectionChangeResult | null {
+		const result = this.reduceRowSelection(gesture);
+		if (!result) return null;
+
+		this.stateManager.setState({ selectedRowIds: result.selectedRowIds });
+		for (const rowId of result.changedRowIds) {
+			this.invalidation.invalidateRow(rowId, 'selection');
+		}
+		this.invalidation.invalidateHeaders('selection');
+		this.eventBus.dispatchEvent(GridEventName.rowSelectionChanged, result);
+		this.requestRender('selection');
+		return result;
 	}
 
-	public deselectRowIds(rowIds: string[]): void {
-		this.applyRowSelection('deselect', rowIds);
+	public selectRowIds(rowIds: string[], source: RowSelectionGestureSource = 'api'): void {
+		this.applyRowSelectionGesture({ kind: 'select', rowIds, source });
 	}
 
-	public toggleRowId(rowId: string): void {
-		this.applyRowSelection('toggle', [rowId]);
+	public deselectRowIds(rowIds: string[], source: RowSelectionGestureSource = 'api'): void {
+		this.applyRowSelectionGesture({ kind: 'deselect', rowIds, source });
 	}
 
-	public selectAllDataRows(): void {
-		this.applyRowSelection('selectAll');
+	public toggleRowId(rowId: string, source: RowSelectionGestureSource = 'api'): void {
+		this.applyRowSelectionGesture({ kind: 'toggle', rowIds: [rowId], source });
 	}
 
-	public clearRowSelection(): void {
-		this.applyRowSelection('clear');
+	public selectAllDataRows(source: RowSelectionGestureSource = 'api'): void {
+		this.applyRowSelectionGesture({ kind: 'selectAll', source });
+	}
+
+	public clearRowSelection(source: RowSelectionGestureSource = 'api'): void {
+		this.applyRowSelectionGesture({ kind: 'clear', source });
 	}
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {

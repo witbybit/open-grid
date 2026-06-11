@@ -356,7 +356,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 		// Ctrl/Cmd+Click: toggle row selection without moving cell focus
 		if (event.ctrlKey || event.metaKey) {
-			this.store.toggleRowSelection(rowId);
+			this.store.applyRowSelectionGesture({ kind: 'toggle', rowIds: [rowId], source: 'pointer' });
 			return; // do not move cell focus
 		}
 

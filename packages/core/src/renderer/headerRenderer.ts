@@ -247,9 +247,9 @@ export class HeaderRenderer<TRowData = unknown> {
 					checkbox.addEventListener('change', (e) => {
 						e.stopPropagation();
 						if ((e.target as HTMLInputElement).checked) {
-							this.engine.selectAllDataRows();
+							this.engine.selectAllDataRows('headerCheckbox');
 						} else {
-							this.engine.clearRowSelection();
+							this.engine.clearRowSelection('headerCheckbox');
 						}
 					});
 					if (textSpan) textSpan.textContent = '';

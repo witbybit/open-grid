@@ -11,6 +11,7 @@ import {
 	type Listener,
 	type RowDataTransaction,
 	type RowNodeTransaction,
+	type RowSelectionGesture,
 } from './store.js';
 
 // WeakMap reverse-lookup: maps a public GridApi to the internal GridStore that backs it.
@@ -156,6 +157,7 @@ export function createApiFacade<TRowData>(
 		isDetailExpanded: (rowId: string) => store.isDetailExpanded(rowId),
 		getRowNodeById: (rowId: string) => store.getRowNodeById(rowId),
 		getRawRowById: (rowId: string) => store.getRawRowById(rowId),
+		applyRowSelectionGesture: (gesture: RowSelectionGesture) => store.applyRowSelectionGesture(gesture),
 		selectRows: (rowIds: string[]) => store.selectRows(rowIds),
 		deselectRows: (rowIds: string[]) => store.deselectRows(rowIds),
 		toggleRowSelection: (rowId: string) => store.toggleRowSelection(rowId),

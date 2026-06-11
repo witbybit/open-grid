@@ -1478,17 +1478,54 @@ describe('row multi-select', () => {
 		store.toggleRowSelection('row-1');
 		expect(handler).toHaveBeenCalledWith(
 			expect.objectContaining({
-				payload: expect.objectContaining({ selectedRowIds: ['row-1'], changedRowIds: ['row-1'] }),
+				payload: expect.objectContaining({
+					selectedRowIds: ['row-1'],
+					changedRowIds: ['row-1'],
+					addedRowIds: ['row-1'],
+					removedRowIds: [],
+					source: 'api',
+				}),
 			})
 		);
 		controller.dispose();
 	});
 
+	it('row selection gestures include source metadata and targeted invalidations', () => {
+		const { store, controller } = makeStore();
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.rowSelectionChanged, handler);
+		store.engine.invalidation.consume();
+
+		const result = store.applyRowSelectionGesture({ kind: 'toggle', rowIds: ['row-1'], source: 'checkbox' });
+		const frame = store.engine.invalidation.consume();
+
+		expect(result).toEqual({
+			selectedRowIds: ['row-1'],
+			changedRowIds: ['row-1'],
+			addedRowIds: ['row-1'],
+			removedRowIds: [],
+			source: 'checkbox',
+		});
+		expect(handler).toHaveBeenCalledWith(expect.objectContaining({ payload: result }));
+		expect(frame.full).toBe(false);
+		expect(frame.viewport).toBe(false);
+		expect(frame.rows).toEqual(new Set(['row-1']));
+		expect(frame.headers).toBe(true);
+		expect(frame.invalidations).toContainEqual({ kind: 'row', rowId: 'row-1', reason: 'selection' });
+		expect(frame.invalidations).toContainEqual({ kind: 'headers', reason: 'selection' });
+		controller.dispose();
+	});
+
 	it('selectRows is idempotent', () => {
 		const { store, controller } = makeStore();
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.rowSelectionChanged, handler);
 		store.selectRows(['row-1']);
+		store.engine.invalidation.consume();
 		store.selectRows(['row-1']);
 		expect(store.getState().selectedRowIds).toEqual(['row-1']);
+		expect(handler).toHaveBeenCalledTimes(1);
+		expect(store.engine.invalidation.consume().invalidations).toEqual([]);
 		controller.dispose();
 	});
 });

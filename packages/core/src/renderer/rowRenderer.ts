@@ -1090,7 +1090,7 @@ export class RowRenderer<TRowData = unknown> {
 				checkbox.addEventListener('change', (e) => {
 					e.stopPropagation();
 					const id = (e.currentTarget as HTMLInputElement).dataset.rowId;
-					if (id) this.engine.toggleRowId(id);
+					if (id) this.engine.toggleRowId(id, 'checkbox');
 				});
 				cell.textContent = '';
 				cell.appendChild(checkbox);

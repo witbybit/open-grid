@@ -78,6 +78,23 @@ export interface SelectionChangeResult {
 	overlayChanged: boolean;
 }
 
+export type RowSelectionGestureSource = 'api' | 'checkbox' | 'headerCheckbox' | 'pointer' | 'keyboard';
+export type RowSelectionGestureKind = 'replace' | 'select' | 'deselect' | 'toggle' | 'selectAll' | 'clear';
+
+export interface RowSelectionGesture {
+	kind: RowSelectionGestureKind;
+	rowIds?: string[];
+	source?: RowSelectionGestureSource;
+}
+
+export interface RowSelectionChangeResult {
+	selectedRowIds: string[];
+	changedRowIds: string[];
+	addedRowIds: string[];
+	removedRowIds: string[];
+	source: RowSelectionGestureSource;
+}
+
 export interface GridCellCoordinates {
 	rowIndex: number;
 	colIndex: number;
@@ -195,7 +212,7 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.groupByChanged]: { groupBy: string[] | undefined };
 	[GridEventName.renderInvalidated]: { reason: string };
 	[GridEventName.rowResized]: { rowId: string; height: number };
-	[GridEventName.rowSelectionChanged]: { selectedRowIds: string[]; changedRowIds: string[] };
+	[GridEventName.rowSelectionChanged]: RowSelectionChangeResult;
 	[GridEventName.rowsUpdated]: {
 		changedValuesByRow: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
 		changedNodes: RowNode<TRowData>[];
@@ -539,6 +556,7 @@ export interface GridApi<TRowData = unknown> {
 	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
 	// Row node multi-select
+	applyRowSelectionGesture(gesture: RowSelectionGesture): RowSelectionChangeResult | null;
 	selectRows(rowIds: string[]): void;
 	deselectRows(rowIds: string[]): void;
 	toggleRowSelection(rowId: string): void;
@@ -829,24 +847,28 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.selectRange(state.selection.anchor ?? state.selection.focus ?? end, end, source);
 	};
 
+	public applyRowSelectionGesture = (gesture: RowSelectionGesture): RowSelectionChangeResult | null => {
+		return this.engine.applyRowSelectionGesture(gesture);
+	};
+
 	public selectRows = (rowIds: string[]): void => {
-		this.engine.selectRowIds(rowIds);
+		this.engine.selectRowIds(rowIds, 'api');
 	};
 
 	public deselectRows = (rowIds: string[]): void => {
-		this.engine.deselectRowIds(rowIds);
+		this.engine.deselectRowIds(rowIds, 'api');
 	};
 
 	public toggleRowSelection = (rowId: string): void => {
-		this.engine.toggleRowId(rowId);
+		this.engine.toggleRowId(rowId, 'api');
 	};
 
 	public selectAllRows = (): void => {
-		this.engine.selectAllDataRows();
+		this.engine.selectAllDataRows('api');
 	};
 
 	public clearRowSelection = (): void => {
-		this.engine.clearRowSelection();
+		this.engine.clearRowSelection('api');
 	};
 
 	public isRowNodeSelected = (rowId: string): boolean => {
