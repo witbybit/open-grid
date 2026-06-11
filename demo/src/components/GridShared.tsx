@@ -14,54 +14,11 @@ export type GridPageType =
 	| 'nested'
 	| 'panels'
 	| 'native'
-	| 'grouping';
+	| 'grouping'
+	| 'multiselect';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================
-
-export const GlobalRenderTracker = {
-	cellRenders: 0,
-	rowRenders: 0,
-	flashEnabled: true,
-	cellRenderCounts: {} as Record<string, number>,
-	listeners: new Set<() => void>(),
-	notifyTimeout: null as any,
-
-	subscribe(cb: () => void) {
-		this.listeners.add(cb);
-		return () => {
-			this.listeners.delete(cb);
-		};
-	},
-	notify() {
-		if (this.notifyTimeout) return;
-		this.notifyTimeout = setTimeout(() => {
-			this.notifyTimeout = null;
-			this.listeners.forEach((cb) => cb());
-		}, 0);
-	},
-	incrementCellRender(rowId: string, colField: string) {
-		this.cellRenders++;
-		const key = `${rowId}:${colField}`;
-		this.cellRenderCounts[key] = (this.cellRenderCounts[key] || 0) + 1;
-		this.notify();
-		return this.cellRenderCounts[key];
-	},
-	incrementRowRender(rowIndex: number) {
-		this.rowRenders++;
-		this.notify();
-	},
-	getCellRenderCount(rowId: string, colField: string) {
-		const key = `${rowId}:${colField}`;
-		return this.cellRenderCounts[key] || 0;
-	},
-	reset() {
-		this.cellRenders = 0;
-		this.rowRenders = 0;
-		this.cellRenderCounts = {};
-		this.notify();
-	},
-};
 
 export const LatencyProfiler = {
 	latencies: [] as number[],
@@ -284,7 +241,7 @@ export const StatusHeaderFilter = ({ colField, api, close }: { colField: string;
 	let activeFilterVal = '';
 	if (activeFilter) {
 		if (typeof activeFilter === 'object' && 'filter' in activeFilter) {
-			activeFilterVal = String((activeFilter as any).filter ?? '');
+			activeFilterVal = String(activeFilter.filter ?? '');
 		} else {
 			activeFilterVal = String(activeFilter);
 		}

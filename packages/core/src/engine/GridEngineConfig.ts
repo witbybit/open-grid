@@ -3,6 +3,8 @@ import type { SortModel, FilterModel } from '../rowModel.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
 	columns: ColumnDef<TRowData>[];
+	/** When 'multiple', a built-in checkbox column is auto-injected at position 0 and pinned left. */
+	rowSelection?: 'single' | 'multiple';
 	getRowId?: (row: TRowData) => string;
 	rowHeights?: Record<string, number>;
 	columnWidths?: Record<string, number>;
@@ -10,6 +12,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	defaultColWidth?: number;
 	enableColumnReorder?: boolean;
 	selection?: GridSelectionState;
+	selectedRowIds?: string[];
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
 	activeEdit?: GridCellPointer | null;

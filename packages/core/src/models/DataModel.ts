@@ -1,4 +1,4 @@
-import { RowNode, compilePathGetter, type ColumnDef, type GridCellPointer } from '../store.js';
+import { RowNode, GridEventName, compilePathGetter, type ColumnDef, type GridCellPointer } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { defaultGridScheduler } from '../renderer/gridScheduler.js';
 
@@ -239,7 +239,7 @@ export class DataModel<TRowData = unknown> {
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown, knownOldStoredValue?: unknown): boolean => {
-		const shouldEmitValueChanged = this.engine.eventBus.hasListeners('cellValueChanged');
+		const shouldEmitValueChanged = this.engine.eventBus.hasListeners(GridEventName.cellValueChanged);
 		const oldValue = shouldEmitValueChanged ? this.getCellValue(rowId, colField) : undefined;
 		const oldStoredValue = knownOldStoredValue !== undefined ? knownOldStoredValue : this.getStoredCellValue(rowId, colField);
 		if (oldStoredValue === value) return false;
@@ -278,7 +278,7 @@ export class DataModel<TRowData = unknown> {
 				this.engine.notifyCellChange(rowId, colField);
 			}
 			if (shouldEmitValueChanged) {
-				this.engine.eventBus.dispatchEvent('cellValueChanged', {
+				this.engine.eventBus.dispatchEvent(GridEventName.cellValueChanged, {
 					rowId,
 					colField,
 					oldValue,
@@ -327,7 +327,7 @@ export class DataModel<TRowData = unknown> {
 		}
 
 		if (shouldEmitValueChanged) {
-			this.engine.eventBus.dispatchEvent('cellValueChanged', {
+			this.engine.eventBus.dispatchEvent(GridEventName.cellValueChanged, {
 				rowId,
 				colField,
 				oldValue,

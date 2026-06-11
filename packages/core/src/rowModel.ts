@@ -1,5 +1,6 @@
 import {
 	GridStore,
+	GridEventName,
 	ColumnDef,
 	RowModel,
 	RowNode,
@@ -308,12 +309,12 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.store.registerRowModel(this);
 
 		this.unsubscribers.push(
-			this.store.addEventListener('sortChanged', () => this.refresh()),
-			this.store.addEventListener('filterChanged', () => this.refresh()),
-			this.store.addEventListener('groupByChanged', () => this.refresh()),
-			this.store.addEventListener('aggDefsChanged', () => this.refresh()),
-			this.store.addEventListener('showGroupFooterChanged', () => this.refresh()),
-			this.store.addEventListener('enableStickyGroupRowsChanged', () => this.refresh())
+			this.store.addEventListener(GridEventName.sortChanged, () => this.refresh()),
+			this.store.addEventListener(GridEventName.filterChanged, () => this.refresh()),
+			this.store.addEventListener(GridEventName.groupByChanged, () => this.refresh()),
+			this.store.addEventListener(GridEventName.aggDefsChanged, () => this.refresh()),
+			this.store.addEventListener(GridEventName.showGroupFooterChanged, () => this.refresh()),
+			this.store.addEventListener(GridEventName.enableStickyGroupRowsChanged, () => this.refresh())
 		);
 		this.setRows(options.rows);
 	}
@@ -429,7 +430,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			this.store.engine.notifyBulkCellChange(notifyCells);
 
 			if (result.changedValuesByRow.size > 0) {
-				this.store.dispatchEvent('rowsUpdated', {
+				this.store.dispatchEvent(GridEventName.rowsUpdated, {
 					changedValuesByRow: result.changedValuesByRow,
 					changedNodes: result.changedNodes,
 				});
@@ -460,7 +461,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {
-			this.store.dispatchEvent('rowsUpdated', {
+			this.store.dispatchEvent(GridEventName.rowsUpdated, {
 				changedValuesByRow: result.changedValuesByRow,
 				changedNodes: result.updated,
 				addedNodes: result.added,

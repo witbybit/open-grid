@@ -24,11 +24,16 @@ import type {
 	ImperativeCellHandle,
 	GridPersistenceAdapter,
 } from '@open-grid/core';
-export { isDomCellRenderer, createLocalStorageAdapter } from '@open-grid/core';
+import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
+import type { StyleRule } from './styleRules.js';
+export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@open-grid/core';
+export type { ColumnTypeDefinition } from './renderers/CellTypes.js';
+export type { StyleRule, RowStyleRule, CellStyleRule, HeaderCellStyleRule } from './styleRules.js';
 export type {
 	GroupDef,
 	AggregationDef,
 	CsvExportOptions,
+	GridEventPayloadMap,
 	GridPersistenceAdapter,
 	PersistedGridState,
 	PersistenceStatus,
@@ -74,6 +79,11 @@ export interface ClientGridOptions<TRowData> extends GridRenderOptions<TRowData>
 	getRowId?: (row: TRowData) => string;
 	initialState?: Partial<GridState<TRowData>>;
 	/**
+	 * Enable first-class row selection. When set to `'multiple'`, a built-in checkbox
+	 * column is automatically prepended and pinned to the left — no manual column def needed.
+	 */
+	rowSelection?: 'single' | 'multiple';
+	/**
 	 * Persistence adapter. Pass `createLocalStorageAdapter(key)` for localStorage,
 	 * or provide a custom adapter for remote/API-backed storage.
 	 *
@@ -88,6 +98,30 @@ export interface ClientGridOptions<TRowData> extends GridRenderOptions<TRowData>
 	 * }
 	 */
 	persistence?: GridPersistenceAdapter;
+	/**
+	 * Map of type name → ColumnTypeDefinition. Merged with built-in types (`checkbox`, `date`, `number`);
+	 * user entries override built-ins with the same name.
+	 *
+	 * Use the `type` field on a `ColumnDef` to reference a registered type.
+	 *
+	 * @example
+	 * columnTypes={{ currency: { renderer: { kind: 'react', component: CurrencyRenderer } } }}
+	 */
+	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
+	/**
+	 * Declarative array of row/cell styling rules. Compiled into a single `setStyleSlots` call —
+	 * same performance as the imperative API with less boilerplate for common patterns.
+	 *
+	 * Rules are evaluated in order; all matching rules contribute classes (space-joined).
+	 * Memoize with `useMemo` to avoid unnecessary recompilation on each render.
+	 *
+	 * @example
+	 * styleRules={[
+	 *   { kind: 'row',  when: (row) => row.pnl < 0, rowClass: 'text-rose-400' },
+	 *   { kind: 'cell', field: 'price', when: (row) => row.price > 100, cellClass: 'font-bold' },
+	 * ]}
+	 */
+	styleRules?: StyleRule<TRowData>[];
 }
 
 export interface ServerGridOptions<TRowData> extends GridRenderOptions<TRowData> {
@@ -102,4 +136,8 @@ export interface ServerGridOptions<TRowData> extends GridRenderOptions<TRowData>
 	 * settings. Row data is not persisted (always fetched from the server datasource).
 	 */
 	persistence?: GridPersistenceAdapter;
+	/** Named column types, same as ClientGridOptions.columnTypes. */
+	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
+	/** Declarative style rules, same as ClientGridOptions.styleRules. */
+	styleRules?: StyleRule<TRowData>[];
 }

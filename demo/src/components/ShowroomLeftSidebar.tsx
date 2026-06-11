@@ -16,6 +16,7 @@ import {
 	PanelRight,
 	Boxes,
 	Layers,
+	CheckSquare,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -105,6 +106,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Live Grouping',
 			subtitle: 'Drag · Drop · Reorder Groups',
 			icon: Layers,
+		},
+		{
+			id: 'multiselect',
+			label: 'Row Multi-Select',
+			subtitle: 'Checkbox · Ctrl+Click · Bulk Ops',
+			icon: CheckSquare,
 		},
 	] as const;
 

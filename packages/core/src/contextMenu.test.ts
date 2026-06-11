@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GridStore, type GridCellPointer } from './store.js';
+import { GridStore, GridEventName, type GridCellPointer } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { GridContextMenuPlugin, type ContextMenuParams } from './contextMenu.js';
 
@@ -288,7 +288,7 @@ describe('GridContextMenuPlugin', () => {
 
 	it('should dispatch cellValueChanged event when setting a cell value', () => {
 		const spy = vi.fn();
-		store.addEventListener('cellValueChanged', spy);
+		store.addEventListener(GridEventName.cellValueChanged, spy);
 		store.setCellValue('r1', 'price', 999);
 		expect(spy).toHaveBeenCalled();
 		const event = spy.mock.calls[0][0];

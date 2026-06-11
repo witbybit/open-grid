@@ -7,10 +7,10 @@ import { render, screen, fireEvent, act, within, waitFor } from '@testing-librar
 import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
 import {
 	GridProvider,
+	GridEventName,
 	PortalCell,
 	PortalManager,
 	OpenGrid,
-	useGridNavigationController,
 	useGridKeySelector,
 	useGridApi,
 	useGridSelector,
@@ -19,6 +19,7 @@ import {
 	GridPagination,
 	useClientGridPagination,
 } from './index.js';
+import { useGridNavigationController } from './hooks.js';
 import { createPortalStore } from './GridPortal.js';
 
 // Mock ResizeObserver for jsdom environment
@@ -627,7 +628,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 		const onCellClick = vi.fn();
 		const eventListener = vi.fn();
-		const unsubscribe = grid.api.addEventListener('cellClicked', eventListener);
+		const unsubscribe = grid.api.addEventListener(GridEventName.cellClicked, eventListener);
 
 		const { container, unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} onCellClick={onCellClick} />);
 

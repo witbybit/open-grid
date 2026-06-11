@@ -6,7 +6,6 @@ import {
 	type CsvExportOptions,
 	type GridApi,
 	type GridCellPointer,
-	type GridEventListener,
 	type GridSelectionSource,
 	type GridState,
 	type Listener,
@@ -53,6 +52,15 @@ export { createLocalStorageAdapter };
 export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowData> {
 	getRowId?: (row: TRowData) => string;
 	initialState?: Partial<GridState<TRowData>>;
+	/**
+	 * Enable first-class row selection. When set to `'multiple'`, a built-in checkbox
+	 * column is automatically prepended and pinned to the left — no need to add a
+	 * `checkboxSelection: true` column manually. Works like AG Grid's `rowSelection` prop.
+	 *
+	 * @example
+	 * useClientGrid({ rows, columns, rowSelection: 'multiple' })
+	 */
+	rowSelection?: 'single' | 'multiple';
 	/**
 	 * Persistence adapter. Pass `createLocalStorageAdapter(key)` for the built-in
 	 * localStorage implementation, or supply your own for remote/API-backed storage.
@@ -138,8 +146,8 @@ export function createApiFacade<TRowData>(
 		setStickyGroupRows: (enabled: boolean) => store.setStickyGroupRows(enabled),
 		exportCsv: (options?: CsvExportOptions) => exportToCsv(store, options),
 		setStyleSlots: (styleSlots: GridState<TRowData>['styleSlots']) => store.setStyleSlots(styleSlots),
-		addEventListener: <T = unknown>(type: string, callback: GridEventListener<T>) => store.addEventListener(type, callback),
-		dispatchEvent: <T = unknown>(type: string, payload: T) => store.dispatchEvent(type, payload),
+		addEventListener: store.addEventListener,
+		dispatchEvent: store.dispatchEvent,
 		startEditing: (rowId: string, colField: string) => store.startEditing(rowId, colField),
 		stopEditing: (cancel?: boolean) => store.stopEditing(cancel),
 		toggleGroupExpanded: (groupId: string) => store.toggleGroupExpanded(groupId),
@@ -148,6 +156,11 @@ export function createApiFacade<TRowData>(
 		isDetailExpanded: (rowId: string) => store.isDetailExpanded(rowId),
 		getRowNodeById: (rowId: string) => store.getRowNodeById(rowId),
 		getRawRowById: (rowId: string) => store.getRawRowById(rowId),
+		selectRows: (rowIds: string[]) => store.selectRows(rowIds),
+		deselectRows: (rowIds: string[]) => store.deselectRows(rowIds),
+		toggleRowSelection: (rowId: string) => store.toggleRowSelection(rowId),
+		selectAllRows: () => store.selectAllRows(),
+		clearRowSelection: () => store.clearRowSelection(),
 		rows: () => store.rows(),
 		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
 		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
@@ -200,8 +213,31 @@ function wireGridPersistence<TRowData>(
 export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridApi<TRowData> {
 	const { persistence: adapter } = options;
 
+	let columns = options.columns;
 	let mergedInitial: Partial<GridState<TRowData>> = options.initialState ?? {};
 	let asyncLoad: Promise<PersistedGridState | null> | undefined;
+
+	// First-class row selection: auto-inject the built-in checkbox column at position 0
+	// and auto-pin it left — users configure `rowSelection: 'multiple'` instead of a manual column def.
+	if (options.rowSelection === 'multiple') {
+		const checkboxCol = {
+			field: '__rowSelect__',
+			header: '',
+			width: 40,
+			checkboxSelection: true,
+			sortable: false,
+			movable: false,
+		} as unknown as ColumnDef<TRowData>;
+		columns = [checkboxCol, ...columns];
+		// Auto-bump the left pin count so the checkbox column is always visible
+		mergedInitial = {
+			...mergedInitial,
+			pinnedColumns: {
+				left: (mergedInitial.pinnedColumns?.left ?? 0) + 1,
+				right: mergedInitial.pinnedColumns?.right ?? 0,
+			},
+		};
+	}
 
 	if (adapter) {
 		const loaded = adapter.load();
@@ -214,14 +250,15 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 		}
 	}
 
+	const resolvedColumns = mergedInitial.columns ?? columns;
 	const store = new GridStore<TRowData>({
-		columns: mergedInitial.columns ?? options.columns,
+		columns: resolvedColumns,
 		getRowId: options.getRowId,
-		columnWidths: buildColumnWidths(mergedInitial.columns ?? options.columns),
+		columnWidths: buildColumnWidths(resolvedColumns),
 		...mergedInitial,
 	});
 
-	const controller = new ClientRowModelController<TRowData>(store, options);
+	const controller = new ClientRowModelController<TRowData>(store, { ...options, columns: resolvedColumns });
 	const persistenceController = wireGridPersistence(options, store);
 	const api = createApiFacade(
 		store,

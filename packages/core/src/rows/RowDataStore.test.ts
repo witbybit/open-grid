@@ -62,3 +62,51 @@ describe('RowDataStore.setRows — row ID validation', () => {
 		expect(store.getNode('a')?.data.name).toBe('Alice Updated');
 	});
 });
+
+describe('RowDataStore.updateRows', () => {
+	it('returns changed nodes when fields differ', () => {
+		const store = makeStore();
+		store.setRows([
+			{ id: 'a', name: 'Alice' },
+			{ id: 'b', name: 'Bob' },
+		]);
+		const result = store.updateRows((rows) => [{ id: 'a', name: 'Alice 2' }, rows[1]]);
+		expect(result.mismatch).toBe(false);
+		expect(result.changedNodes).toHaveLength(1);
+		expect(result.changedNodes[0].id).toBe('a');
+		expect(result.changedFieldsByRow.get('a')?.has('name')).toBe(true);
+		expect(store.getNode('a')?.data.name).toBe('Alice 2');
+	});
+
+	it('returns mismatch when updater returns a different row count', () => {
+		const store = makeStore();
+		store.setRows([{ id: 'a', name: 'Alice' }]);
+		const result = store.updateRows(() => []);
+		expect(result.mismatch).toBe(true);
+		expect(result.changedNodes).toHaveLength(0);
+		// State must not be mutated
+		expect(store.getNode('a')?.data.name).toBe('Alice');
+	});
+
+	it('returns mismatch when updater changes a row ID', () => {
+		const store = makeStore();
+		store.setRows([{ id: 'a', name: 'Alice' }]);
+		const result = store.updateRows(() => [{ id: 'z', name: 'Alice' }]);
+		expect(result.mismatch).toBe(true);
+	});
+
+	it('returns mismatch when updater returns null at a position', () => {
+		const store = makeStore();
+		store.setRows([{ id: 'a', name: 'Alice' }]);
+		const result = store.updateRows(() => [null as unknown as { id: string; name: string }]);
+		expect(result.mismatch).toBe(true);
+	});
+
+	it('returns empty changedNodes when no fields differ', () => {
+		const store = makeStore();
+		store.setRows([{ id: 'a', name: 'Alice' }]);
+		const result = store.updateRows((rows) => [...rows]);
+		expect(result.mismatch).toBe(false);
+		expect(result.changedNodes).toHaveLength(0);
+	});
+});

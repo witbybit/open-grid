@@ -164,6 +164,8 @@ export interface ColumnDef<TRowData = unknown> {
 	field: string;
 	header: string;
 	width?: number;
+	/** Named column type registered via `columnTypes` on the grid options. Resolved in the React layer. */
+	type?: string;
 	hide?: boolean;
 	movable?: boolean;
 	loading?: boolean;
@@ -181,6 +183,8 @@ export interface ColumnDef<TRowData = unknown> {
 	onCopy?: (params: CellCopyParams<TRowData>) => string;
 	/** Transform pasted text before setting the cell value. Return the value to write. */
 	onPaste?: (params: CellPasteParams<TRowData>) => unknown;
+	/** When true, renders a checkbox in this column for row multi-select */
+	checkboxSelection?: boolean;
 }
 
 /**

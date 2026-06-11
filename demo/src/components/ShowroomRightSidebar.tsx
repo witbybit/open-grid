@@ -1,7 +1,7 @@
 import React from 'react';
 import type { GridApi } from '@open-grid/react';
 import { StateInspector, LiveEventLogPanel } from './RightSidebar';
-import { ViewportPanel, SortFilterPanel, ColumnOrderPanel, AccessibilityPanel, DeveloperPanel, KeyboardShortcutsPanel } from './ShowroomControls';
+import { ViewportPanel, SortFilterPanel, ColumnOrderPanel, AccessibilityPanel, KeyboardShortcutsPanel } from './ShowroomControls';
 import { GridPageType } from './GridShared';
 
 interface ShowroomRightSidebarProps {
@@ -89,9 +89,6 @@ export default function ShowroomRightSidebar({
 
 			{/* Live core event log panel */}
 			<LiveEventLogPanel api={activeApi} />
-
-			{/* Developer Panel */}
-			<DeveloperPanel activePage={activePage} activeApi={activeApi} />
 
 			{/* Keyboard Shortcuts guide */}
 			<KeyboardShortcutsPanel />

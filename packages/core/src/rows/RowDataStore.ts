@@ -77,7 +77,14 @@ export class RowDataStore<T> {
 			const currentId = this.sourceOrder[i];
 			const node = this.rowsById.get(currentId)!;
 			const nextRow = nextRows[i];
-			if (!nextRow) continue;
+			if (nextRow == null) {
+				return {
+					changedNodes: [],
+					changedFieldsByRow: new Map(),
+					changedValuesByRow: new Map(),
+					mismatch: true,
+				};
+			}
 
 			const nextId = this.getRowId(nextRow);
 			if (node.id !== nextId) {

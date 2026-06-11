@@ -240,6 +240,13 @@ export const CORE_STYLES = `
     background-color: var(--og-selection-bg) !important;
   }
 
+  .og-row-node-selected {
+    background-color: var(--og-row-selected-bg, rgba(59, 130, 246, 0.08));
+  }
+  .og-row-node-selected .og-cell {
+    background-color: inherit;
+  }
+
   .og-row-focused {
     background-color: var(--og-selection-bg) !important;
   }

@@ -2,6 +2,8 @@ import { useEffect, useInsertionEffect, useMemo, useRef } from 'react';
 import { createClientGrid, createServerGrid, type GridApi } from '@open-grid/core';
 
 import type { ClientGridOptions, ServerGridOptions } from './types.js';
+import { resolveColumnTypes } from './resolveColumnTypes.js';
+import { compileStyleRules } from './styleRules.js';
 
 declare const process: { env: { NODE_ENV: string } } | undefined;
 const DEV = typeof process === 'undefined' || process.env.NODE_ENV !== 'production';
@@ -17,18 +19,33 @@ function warnInitialOnlyChanged(hookName: string, optName: string): void {
 
 export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridApi<TRowData> {
 	const initialOptionsRef = useRef(options);
-	// Skip the first mount — columns are already set at grid-creation time (with persisted state applied).
-	// Only propagate when options.columns actually changes after the initial render.
-	const didMountColumnsRef = useRef(false);
+	// Track the last columns reference we synced to the grid.
+	// Initialised to the initial columns so the first mount (and any Strict-Mode
+	// double-invoke) skips setColumns — the grid was already seeded by createClientGrid.
+	// A genuine columns change produces a new reference that differs from lastColumnsRef,
+	// which then triggers setColumns and updates the ref.
+	const lastColumnsRef = useRef(initialOptionsRef.current.columns);
 
 	const api = useMemo(() => {
-		const { rows, columns, getRowId, rowOverscanPx, colBuffer, runtimeLimits, initialState, overscanAdaptive, persistence } =
-			initialOptionsRef.current;
-		return createClientGrid({
+		const {
 			rows,
 			columns,
+			columnTypes,
+			getRowId,
+			rowOverscanPx,
+			colBuffer,
+			runtimeLimits,
+			initialState,
+			overscanAdaptive,
+			persistence,
+			rowSelection,
+		} = initialOptionsRef.current;
+		return createClientGrid({
+			rows,
+			columns: resolveColumnTypes(columns, columnTypes),
 			getRowId,
 			persistence,
+			rowSelection,
 			initialState: {
 				rowOverscanPx,
 				overscanAdaptive,
@@ -40,11 +57,9 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 	}, []);
 
 	useEffect(() => {
-		if (!didMountColumnsRef.current) {
-			didMountColumnsRef.current = true;
-			return;
-		}
-		api.setColumns(options.columns);
+		if (options.columns === lastColumnsRef.current) return;
+		lastColumnsRef.current = options.columns;
+		api.setColumns(resolveColumnTypes(options.columns, options.columnTypes));
 	}, [api, options.columns]);
 
 	useEffect(() => {
@@ -67,6 +82,14 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 		if (options.initialState !== initialInitialState) warnInitialOnlyChanged('useClientGrid', 'initialState');
 	}, [options.initialState, initialInitialState]);
 
+	useEffect(() => {
+		if (!options.styleRules || options.styleRules.length === 0) {
+			api.setStyleSlots(undefined);
+			return;
+		}
+		api.setStyleSlots(compileStyleRules(options.styleRules));
+	}, [api, options.styleRules]);
+
 	useInsertionEffect(() => {
 		return () => {
 			api.destroy();
@@ -78,15 +101,26 @@ export function useClientGrid<TRowData>(options: ClientGridOptions<TRowData>): G
 
 export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): GridApi<TRowData> {
 	const initialOptionsRef = useRef(options);
-	const didMountColumnsRef = useRef(false);
+	const lastServerColumnsRef = useRef(initialOptionsRef.current.columns);
 	const didMountServerOptionsRef = useRef(false);
 
 	const api = useMemo(() => {
-		const { datasource, columns, blockSize, getRowId, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits, initialState, persistence } =
-			initialOptionsRef.current;
-		return createServerGrid({
+		const {
 			datasource,
 			columns,
+			columnTypes,
+			blockSize,
+			getRowId,
+			rowOverscanPx,
+			colBuffer,
+			overscanAdaptive,
+			runtimeLimits,
+			initialState,
+			persistence,
+		} = initialOptionsRef.current;
+		return createServerGrid({
+			datasource,
+			columns: resolveColumnTypes(columns, columnTypes),
 			blockSize,
 			getRowId,
 			persistence,
@@ -101,11 +135,9 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): G
 	}, []);
 
 	useEffect(() => {
-		if (!didMountColumnsRef.current) {
-			didMountColumnsRef.current = true;
-			return;
-		}
-		api.setColumns(options.columns);
+		if (options.columns === lastServerColumnsRef.current) return;
+		lastServerColumnsRef.current = options.columns;
+		api.setColumns(resolveColumnTypes(options.columns, options.columnTypes));
 	}, [api, options.columns]);
 
 	useEffect(() => {
@@ -131,6 +163,14 @@ export function useServerGrid<TRowData>(options: ServerGridOptions<TRowData>): G
 	useEffect(() => {
 		if (options.initialState !== serverInitialInitialState) warnInitialOnlyChanged('useServerGrid', 'initialState');
 	}, [options.initialState, serverInitialInitialState]);
+
+	useEffect(() => {
+		if (!options.styleRules || options.styleRules.length === 0) {
+			api.setStyleSlots(undefined);
+			return;
+		}
+		api.setStyleSlots(compileStyleRules(options.styleRules));
+	}, [api, options.styleRules]);
 
 	useInsertionEffect(() => {
 		return () => {

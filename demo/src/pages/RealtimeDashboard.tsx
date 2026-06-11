@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { GridProvider, useClientGrid } from '@open-grid/react';
+import { GridEventName, GridProvider, useClientGrid, useStyleRules, type StyleRule } from '@open-grid/react';
 import { DashboardStockRow } from '../hooks/useShowroomStores';
 import { GridView } from '../components/GridShared';
 import { TrendingUp, BarChart3, Activity, RefreshCw, Zap, Code2 } from 'lucide-react';
@@ -35,50 +35,57 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 	autoFireRef.current = autoFire;
 	const autoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-	// Dynamic styleSlots for live-updating dashboard cells & rows
-	useEffect(() => {
-		api.setStyleSlots({
-			rowClass: (row) => {
-				const r = row as DashboardStockRow;
-				if (!r) return '';
-				let base = 'transition-all duration-200 border-l-2 ';
-				const changeVal = parseFloat(r.change) || 0;
-				if (changeVal > 0) {
-					return base + 'border-emerald-500/60 bg-emerald-950/5 hover:bg-emerald-900/10 text-emerald-100/90';
-				} else if (changeVal < 0) {
-					return base + 'border-rose-500/60 bg-rose-950/5 hover:bg-rose-900/10 text-rose-100/90';
-				}
-				return base + 'border-slate-800 bg-slate-900/5 hover:bg-slate-800/10';
+	// Declarative style rules for live-updating dashboard cells & rows
+	const styleRules = useMemo<StyleRule<DashboardStockRow>[]>(
+		() => [
+			{
+				kind: 'row',
+				when: (row) => (parseFloat(row.change) || 0) > 0,
+				rowClass: 'transition-all duration-200 border-l-2 border-emerald-500/60 bg-emerald-950/5 hover:bg-emerald-900/10 text-emerald-100/90',
 			},
-			cellClass: (col, row) => {
-				const r = row as DashboardStockRow;
-				if (!r) return '';
-				if (col.field === 'change') {
-					const changeVal = parseFloat(r.change) || 0;
-					if (changeVal > 0) {
-						return 'text-emerald-400 font-extrabold font-mono';
-					} else if (changeVal < 0) {
-						return 'text-rose-400 font-extrabold font-mono';
-					}
-				}
-				if (col.field === 'price') {
-					return 'font-mono font-bold text-slate-200';
-				}
-				if (col.field === 'risk') {
-					if (r.risk === 'High') return 'text-rose-450 font-bold';
-					if (r.risk === 'Medium') return 'text-amber-450 font-bold';
-					return 'text-emerald-450 font-bold';
-				}
-				return '';
+			{
+				kind: 'row',
+				when: (row) => (parseFloat(row.change) || 0) < 0,
+				rowClass: 'transition-all duration-200 border-l-2 border-rose-500/60 bg-rose-950/5 hover:bg-rose-900/10 text-rose-100/90',
 			},
-			headerCellClass: (col) => {
-				if (col.field === 'change') {
-					return 'bg-emerald-950/10 text-emerald-400 font-extrabold border-b border-emerald-900/20';
-				}
-				return 'font-semibold text-slate-400';
+			{
+				kind: 'row',
+				when: (row) => (parseFloat(row.change) || 0) === 0,
+				rowClass: 'transition-all duration-200 border-l-2 border-slate-800 bg-slate-900/5 hover:bg-slate-800/10',
 			},
-		});
-	}, [api]);
+			{
+				kind: 'cell',
+				field: 'change',
+				when: (row) => (parseFloat(row.change) || 0) > 0,
+				cellClass: 'text-emerald-400 font-extrabold font-mono',
+			},
+			{
+				kind: 'cell',
+				field: 'change',
+				when: (row) => (parseFloat(row.change) || 0) < 0,
+				cellClass: 'text-rose-400 font-extrabold font-mono',
+			},
+			{
+				kind: 'cell',
+				field: 'price',
+				when: () => true,
+				cellClass: 'font-mono font-bold text-slate-200',
+			},
+			{ kind: 'cell', field: 'risk', when: (row) => row.risk === 'High', cellClass: 'text-rose-450 font-bold' },
+			{ kind: 'cell', field: 'risk', when: (row) => row.risk === 'Medium', cellClass: 'text-amber-450 font-bold' },
+			{ kind: 'cell', field: 'risk', when: (row) => row.risk !== 'High' && row.risk !== 'Medium', cellClass: 'text-emerald-450 font-bold' },
+			{
+				kind: 'headerCell',
+				field: 'change',
+				when: () => true,
+				headerCellClass: 'bg-emerald-950/10 text-emerald-400 font-extrabold border-b border-emerald-900/20',
+			},
+			{ kind: 'headerCell', when: (col) => col.field !== 'change', headerCellClass: 'font-semibold text-slate-400' },
+		],
+		[]
+	);
+
+	useStyleRules(api, styleRules);
 
 	// Hook into grid events
 	useEffect(() => {
@@ -145,26 +152,26 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 		updateStatsAndChart();
 
 		// Event subscriptions
-		const unsubSelect = api.addEventListener('selectionChanged', (e) => {
+		const unsubSelect = api.addEventListener(GridEventName.selectionChanged, (e) => {
 			updateStatsAndChart();
-			logEvent('selectionChanged', `Selected range details updated.`, 'selection');
+			logEvent(GridEventName.selectionChanged, `Selected range details updated.`, 'selection');
 		});
 
 		// cellValueChanged fires for individual cell edits (e.g. user typing in a cell)
-		const unsubValue = api.addEventListener<{ rowId: string; colField: string; value: unknown }>('cellValueChanged', (e) => {
+		const unsubValue = api.addEventListener(GridEventName.cellValueChanged, (e) => {
 			updateStatsAndChart();
-			logEvent('cellValueChanged', `${e.payload.rowId}:${e.payload.colField} => ${e.payload.value}`, 'edit');
+			logEvent(GridEventName.cellValueChanged, `${e.payload.rowId}:${e.payload.colField} => ${e.payload.newValue}`, 'edit');
 		});
 
 		// rowsUpdated fires for bulk operations (updateRows / applyTransaction)
-		const unsubRowsUpdated = api.addEventListener<{ changedNodes: unknown[] }>('rowsUpdated', (e) => {
+		const unsubRowsUpdated = api.addEventListener(GridEventName.rowsUpdated, (e) => {
 			updateStatsAndChart();
-			logEvent('rowsUpdated', `${e.payload.changedNodes?.length ?? 0} rows updated in batch`, 'info');
+			logEvent(GridEventName.rowsUpdated, `${e.payload.changedNodes?.length ?? 0} rows updated in batch`, 'info');
 		});
 
-		const unsubFocus = api.addEventListener<{ focus: { rowId: string; colField: string } | null }>('focusChanged', (e) => {
+		const unsubFocus = api.addEventListener(GridEventName.focusChanged, (e) => {
 			const focus = e.payload.focus;
-			logEvent('focusChanged', focus ? `Cell focus: ${focus.rowId}:${focus.colField}` : 'Cell focus cleared', 'focus');
+			logEvent(GridEventName.focusChanged, focus ? `Cell focus: ${focus.rowId}:${focus.colField}` : 'Cell focus cleared', 'focus');
 		});
 
 		return () => {

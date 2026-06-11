@@ -36,7 +36,7 @@ import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { SortAnimationController } from './sortAnimationController.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
+import { GridEventName, type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -791,6 +791,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('loading', invalidateViewport));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleRowRange', invalidateViewport));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleColRange', invalidateViewport));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('selectedRowIds', invalidateViewport));
 
 		this.unsubscribers.push(
 			this.engine.stateManager.subscribeToKey('columns', () => {
@@ -816,7 +817,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		);
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));
 		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener<{ selection: any; result: SelectionChangeResult }>('selectionChanged', (event) => {
+			this.engine.eventBus.addEventListener(GridEventName.selectionChanged, (event) => {
 				const { result, selection } = event.payload;
 				for (const cell of result.invalidatedCells) {
 					this.engine.invalidation.invalidateCell(cell.rowId, cell.colField, 'selection');
@@ -834,24 +835,24 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			})
 		);
 		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener('cellInvalidated', () => {
+			this.engine.eventBus.addEventListener(GridEventName.cellInvalidated, () => {
 				this.requestFlushGated('cell');
 			})
 		);
 		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener<{ colField: string }>('columnResized', (event) => {
+			this.engine.eventBus.addEventListener(GridEventName.columnResized, (event) => {
 				this.geometryController.invalidateColumns([event.payload.colField]);
 				this.requestFlushGated('column resize');
 			})
 		);
 		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener<{ rowId: string }>('rowResized', (event) => {
+			this.engine.eventBus.addEventListener(GridEventName.rowResized, (event) => {
 				this.geometryController.invalidateRows([event.payload.rowId]);
 				this.requestFlushGated('row resize');
 			})
 		);
 		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener<{ reason: string }>('renderInvalidated', (event) => {
+			this.engine.eventBus.addEventListener(GridEventName.renderInvalidated, (event) => {
 				this.requestFlushGated(event.payload.reason);
 			})
 		);

@@ -5,14 +5,7 @@ export type { GridPaginationProps, ClientGridPaginationResult } from './paginati
 export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
 export { useClientGrid, useServerGrid } from './useGrid.js';
-export {
-	useGridApi,
-	useGridSelector,
-	useGridSelectorWithEquality,
-	useGridKeySelector,
-	useGridKeySelectorWithEquality,
-	useGridNavigationController,
-} from './hooks.js';
+export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
 
 // ─── Built-in cell renderers & editors ───────────────────────────────────────
@@ -35,11 +28,25 @@ export {
 	// Utilities
 	parseMultiValue,
 	TagsCellRenderer,
+	// Column type registry
+	BUILTIN_COLUMN_TYPES,
+	// Column type helpers
+	numberColumnType,
+	multiSelectColumnType,
+	dropdownColumnType,
 } from './renderers/CellTypes.js';
-export type { DropdownOption, DropdownOptionColor, NumberCellRendererOptions, NumberCellEditorOptions } from './renderers/CellTypes.js';
+export type {
+	DropdownOption,
+	DropdownOptionColor,
+	NumberCellRendererOptions,
+	NumberCellEditorOptions,
+	ColumnTypeDefinition,
+} from './renderers/CellTypes.js';
 
-export { isDomCellRenderer, createLocalStorageAdapter } from './types.js';
-export type { GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
+export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from './types.js';
+export type { GridEventPayloadMap, GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
+export { useStyleRules } from './styleRules.js';
+export type { StyleRule, RowStyleRule, CellStyleRule, HeaderCellStyleRule } from './styleRules.js';
 export type {
 	ColumnDef,
 	CellEditorProps,

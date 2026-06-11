@@ -19,6 +19,7 @@ import PerformanceLab from './pages/PerformanceLab';
 import SidebarPanelsDemo from './pages/SidebarPanelsDemo';
 import NativeCellTypesDemo from './pages/NativeCellTypesDemo';
 import RealtimeGroupingDemo from './pages/RealtimeGroupingDemo';
+import RowMultiSelectDemo from './pages/RowMultiSelectDemo';
 import { useShowroomStores } from './hooks/useShowroomStores';
 import type { FilterModel, SortModel } from '@open-grid/react';
 import { GridPageType } from './components/GridShared';
@@ -54,6 +55,7 @@ export default function App() {
 					'panels',
 					'native',
 					'grouping',
+					'multiselect',
 				].includes(hash)
 			) {
 				setActivePage(hash as any);
@@ -321,6 +323,8 @@ export default function App() {
 						{activePage === 'native' && <NativeCellTypesDemo />}
 
 						{activePage === 'grouping' && <RealtimeGroupingDemo />}
+
+						{activePage === 'multiselect' && <RowMultiSelectDemo />}
 					</div>
 				</div>
 

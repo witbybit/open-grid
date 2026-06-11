@@ -43,6 +43,8 @@ export class DefaultGridScheduler implements GridScheduler {
 	cancelRaf(id: number): void {
 		if (typeof cancelAnimationFrame !== 'undefined') {
 			cancelAnimationFrame(id);
+		} else {
+			clearTimeout(id);
 		}
 	}
 

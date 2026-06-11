@@ -19,7 +19,7 @@ export function useGridSelector<T, TRowData = unknown>(selector: (state: GridSta
 	return useGridSelectorWithEquality(selector, isEqual);
 }
 
-export function useGridSelectorWithEquality<T, TRowData = unknown>(
+function useGridSelectorWithEquality<T, TRowData = unknown>(
 	selector: (state: GridState<TRowData>) => T,
 	isEqual: (left: T, right: T) => boolean = Object.is
 ): T {
@@ -46,17 +46,19 @@ export function useGridSelectorWithEquality<T, TRowData = unknown>(
 
 /**
  * Targeted selector for individual keys to achieve optimal performance.
+ * The `key` must be a valid key of GridState — this drives fine-grained subscriptions
+ * so the component only re-renders when that specific slice changes.
  */
 export function useGridKeySelector<T, TRowData = unknown>(
-	key: string,
+	key: keyof GridState<TRowData>,
 	selector: (state: GridState<TRowData>) => T,
 	isEqual?: (left: T, right: T) => boolean
 ): T {
 	return useGridKeySelectorWithEquality(key, selector, isEqual);
 }
 
-export function useGridKeySelectorWithEquality<T, TRowData = unknown>(
-	key: string,
+function useGridKeySelectorWithEquality<T, TRowData = unknown>(
+	key: keyof GridState<TRowData>,
 	selector: (state: GridState<TRowData>) => T,
 	isEqual: (left: T, right: T) => boolean = Object.is
 ): T {

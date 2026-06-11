@@ -1,5 +1,6 @@
 import {
 	GridApi,
+	GridEventName,
 	GridCellClickParams,
 	GridCellPointer,
 	GridContextMenuOptions,
@@ -10,6 +11,8 @@ import {
 	GridState,
 	GridPersistenceAdapter,
 } from '@open-grid/core';
+import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
+import type { StyleRule } from './styleRules.js';
 import { InternalColumnDef, GridHost, mountGridHost, getStoreFromApi } from '@open-grid/core/internal';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { useClientGrid } from './useGrid.js';
@@ -49,6 +52,10 @@ export interface OpenGridProps<TRowData = unknown> {
 	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
 	/** Shortcut for `initialState.detailRowHeight`. Height in px for expanded master-detail rows. */
 	detailRowHeight?: number;
+	/** Named column types resolved against the `type` field on ColumnDef. See `ClientGridOptions.columnTypes`. */
+	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
+	/** Declarative style rules. See `ClientGridOptions.styleRules`. */
+	styleRules?: StyleRule<TRowData>[];
 
 	// ─── External api mode ───────────────────────────────────────────────────
 	// Pass a pre-created GridApi from `useClientGrid()` or `useServerGrid()`.
@@ -111,6 +118,8 @@ export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
 function OpenGridManagedClient<TRowData = unknown>({
 	rows,
 	columns,
+	columnTypes,
+	styleRules,
 	getRowId,
 	initialState,
 	persistence,
@@ -130,6 +139,8 @@ function OpenGridManagedClient<TRowData = unknown>({
 	const api = useClientGrid<TRowData>({
 		rows: rows!,
 		columns: columns ?? [],
+		columnTypes,
+		styleRules,
 		getRowId,
 		initialState: mergedInitialState,
 		persistence,
@@ -147,8 +158,8 @@ function OpenGridManagedClient<TRowData = unknown>({
 
 function OpenGridInner<TRowData = unknown>({
 	api,
-	pinLeftColumns = 0,
-	pinRightColumns = 0,
+	pinLeftColumns,
+	pinRightColumns,
 	pinTopRows = 0,
 	pinBottomRows = 0,
 	enableColumnReorder,
@@ -168,13 +179,18 @@ function OpenGridInner<TRowData = unknown>({
 	const hostRef = useRef<GridHost | null>(null);
 	const isGridActiveRef = useRef(false);
 
+	// Only push pin values when they are explicitly provided as props.
+	// If undefined, the grid keeps whatever pin state was set by createClientGrid
+	// (e.g. auto-pinned by rowSelection: 'multiple') instead of being overridden to 0.
 	useEffect(() => {
-		hostRef.current?.setViewportPins({
-			left: pinLeftColumns,
-			right: pinRightColumns,
-			top: pinTopRows,
-			bottom: pinBottomRows,
-		});
+		if (pinLeftColumns !== undefined || pinRightColumns !== undefined) {
+			hostRef.current?.setViewportPins({
+				left: pinLeftColumns ?? 0,
+				right: pinRightColumns ?? 0,
+				top: pinTopRows,
+				bottom: pinBottomRows,
+			});
+		}
 	}, [pinLeftColumns, pinRightColumns, pinTopRows, pinBottomRows]);
 
 	useEffect(() => {
@@ -187,10 +203,13 @@ function OpenGridInner<TRowData = unknown>({
 		const container = containerRef.current;
 		if (!container) return;
 
+		// Read the pin state already set in the store (e.g. auto-pinned by rowSelection: 'multiple')
+		// so we don't accidentally override it with 0 when the prop is not passed.
+		const storePins = api.getPinnedColumns();
 		const host = mountGridHost(api, container, {
 			pins: {
-				left: pinLeftColumns,
-				right: pinRightColumns,
+				left: pinLeftColumns !== undefined ? pinLeftColumns : storePins.left,
+				right: pinRightColumns !== undefined ? pinRightColumns : storePins.right,
 				top: pinTopRows,
 				bottom: pinBottomRows,
 			},
@@ -428,7 +447,7 @@ function OpenGridInner<TRowData = unknown>({
 			const clickParams = getCellClickParams(pointer, e);
 			if (clickParams) {
 				onCellClick?.(clickParams);
-				api.dispatchEvent('cellClicked', clickParams);
+				api.dispatchEvent(GridEventName.cellClicked, clickParams);
 			}
 
 			if (!navigation) return;
@@ -495,7 +514,7 @@ function OpenGridInner<TRowData = unknown>({
 	// cleanup so a rapid second copy cancels the first timer before starting a new one.
 	useEffect(() => {
 		let cancelFlash: (() => void) | undefined;
-		const unsub = api.addEventListener<{ cells: Array<{ rowId: string; colField: string }> }>('cellsCopied', ({ payload }) => {
+		const unsub = api.addEventListener(GridEventName.cellsCopied, ({ payload }) => {
 			const container = containerRef.current;
 			if (!container) return;
 			cancelFlash?.();

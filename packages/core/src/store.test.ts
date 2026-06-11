@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GridStore, validateColumns, validateRowIds } from './store.js';
+import { GridStore, GridEventName, validateColumns, validateRowIds } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
 
@@ -103,7 +103,7 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 		const listener = vi.fn();
-		store.addEventListener('selectionChanged', listener);
+		store.addEventListener(GridEventName.selectionChanged, listener);
 
 		store.selectCell({ rowId: '1', colField: 'name' });
 		store.selectCell({ rowId: '2', colField: 'name' });
@@ -286,7 +286,7 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 		const listener = vi.fn();
-		store.addEventListener('cellValueChanged', listener);
+		store.addEventListener(GridEventName.cellValueChanged, listener);
 
 		store.setCellValue('1', 'status', 'Inactive');
 		store.setCellValue('1', 'status', 'Inactive');
@@ -432,7 +432,7 @@ describe('GridStore generic row-store functionality', () => {
 		});
 
 		const resizeListener = vi.fn();
-		store.addEventListener('columnResized', resizeListener);
+		store.addEventListener(GridEventName.columnResized, resizeListener);
 
 		store.setColumnWidth('name', 250);
 
@@ -454,7 +454,7 @@ describe('GridStore generic row-store functionality', () => {
 		});
 
 		const reorderListener = vi.fn();
-		store.addEventListener('columnOrderChanged', reorderListener);
+		store.addEventListener(GridEventName.columnOrderChanged, reorderListener);
 
 		store.moveColumn('price', 0);
 
@@ -556,7 +556,7 @@ describe('GridStore generic row-store functionality', () => {
 		});
 
 		const toggleListener = vi.fn();
-		store.addEventListener('columnReorderToggled', toggleListener);
+		store.addEventListener(GridEventName.columnReorderToggled, toggleListener);
 
 		expect(store.getState().enableColumnReorder).toBe(true);
 
@@ -1242,7 +1242,7 @@ describe('GridStore undo and redo functionality', () => {
 			columns: store.getState().columns,
 		});
 		const renderInvalidated = vi.fn();
-		store.addEventListener('renderInvalidated', renderInvalidated);
+		store.addEventListener(GridEventName.renderInvalidated, renderInvalidated);
 
 		store.batch(() => {
 			store.setColumnWidth('id', 60);
@@ -1380,5 +1380,115 @@ describe('Column and row validation', () => {
 				])
 			).not.toThrow();
 		});
+	});
+});
+
+describe('row multi-select', () => {
+	const makeStore = () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (r) => r.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: 'row-1', name: 'Alice', price: 10 },
+				{ id: 'row-2', name: 'Bob', price: 20 },
+				{ id: 'row-3', name: 'Charlie', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+		return { store, controller };
+	};
+
+	it('selectedRowIds is empty by default', () => {
+		const { store, controller } = makeStore();
+		expect(store.getState().selectedRowIds).toEqual([]);
+		controller.dispose();
+	});
+
+	it('selectRows adds to selectedRowIds', () => {
+		const { store, controller } = makeStore();
+		store.selectRows(['row-1', 'row-2']);
+		expect(store.getState().selectedRowIds).toEqual(['row-1', 'row-2']);
+		controller.dispose();
+	});
+
+	it('deselectRows removes from selectedRowIds', () => {
+		const { store, controller } = makeStore();
+		store.selectRows(['row-1', 'row-2']);
+		store.deselectRows(['row-1']);
+		expect(store.getState().selectedRowIds).toEqual(['row-2']);
+		controller.dispose();
+	});
+
+	it('toggleRowSelection adds when not selected', () => {
+		const { store, controller } = makeStore();
+		store.toggleRowSelection('row-1');
+		expect(store.getState().selectedRowIds).toContain('row-1');
+		controller.dispose();
+	});
+
+	it('toggleRowSelection removes when already selected', () => {
+		const { store, controller } = makeStore();
+		store.selectRows(['row-1']);
+		store.toggleRowSelection('row-1');
+		expect(store.getState().selectedRowIds).not.toContain('row-1');
+		controller.dispose();
+	});
+
+	it('clearRowSelection empties the list', () => {
+		const { store, controller } = makeStore();
+		store.selectRows(['row-1', 'row-2']);
+		store.clearRowSelection();
+		expect(store.getState().selectedRowIds).toEqual([]);
+		controller.dispose();
+	});
+
+	it('isRowNodeSelected returns correct boolean', () => {
+		const { store, controller } = makeStore();
+		store.selectRows(['row-1']);
+		expect(store.isRowNodeSelected('row-1')).toBe(true);
+		expect(store.isRowNodeSelected('row-2')).toBe(false);
+		controller.dispose();
+	});
+
+	it('getCheckedIds returns selected row IDs', () => {
+		const { store, controller } = makeStore();
+		store.selectRows(['row-1']);
+		expect(store.rows().getCheckedIds()).toEqual(['row-1']);
+		controller.dispose();
+	});
+
+	it('getChecked returns selected row data', () => {
+		const { store, controller } = makeStore();
+		store.selectRows(['row-1']);
+		const checked = store.rows().getChecked();
+		expect(checked).toHaveLength(1);
+		expect(checked[0]).toMatchObject({ id: 'row-1' });
+		controller.dispose();
+	});
+
+	it('rowSelectionChanged event fires on toggle', () => {
+		const { store, controller } = makeStore();
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.rowSelectionChanged, handler);
+		store.toggleRowSelection('row-1');
+		expect(handler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({ selectedRowIds: ['row-1'], changedRowIds: ['row-1'] }),
+			})
+		);
+		controller.dispose();
+	});
+
+	it('selectRows is idempotent', () => {
+		const { store, controller } = makeStore();
+		store.selectRows(['row-1']);
+		store.selectRows(['row-1']);
+		expect(store.getState().selectedRowIds).toEqual(['row-1']);
+		controller.dispose();
 	});
 });

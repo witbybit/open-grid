@@ -151,6 +151,69 @@ export interface GridEvent<T = unknown> {
 
 export type GridEventListener<T = unknown> = (event: GridEvent<T>) => void;
 
+export enum GridEventName {
+	aggDefsChanged = 'aggDefsChanged',
+	cellClicked = 'cellClicked',
+	cellInvalidated = 'cellInvalidated',
+	cellsCopied = 'cellsCopied',
+	cellValueChanged = 'cellValueChanged',
+	columnOrderChanged = 'columnOrderChanged',
+	columnReorderToggled = 'columnReorderToggled',
+	columnResized = 'columnResized',
+	columnsChanged = 'columnsChanged',
+	editStarted = 'editStarted',
+	editStopped = 'editStopped',
+	enableStickyGroupRowsChanged = 'enableStickyGroupRowsChanged',
+	filterChanged = 'filterChanged',
+	focusChanged = 'focusChanged',
+	groupByChanged = 'groupByChanged',
+	renderInvalidated = 'renderInvalidated',
+	rowResized = 'rowResized',
+	rowSelectionChanged = 'rowSelectionChanged',
+	rowsUpdated = 'rowsUpdated',
+	selectionChanged = 'selectionChanged',
+	serverBlockLoaded = 'serverBlockLoaded',
+	showGroupFooterChanged = 'showGroupFooterChanged',
+	sortChanged = 'sortChanged',
+}
+
+export interface GridEventPayloadMap<TRowData = unknown> {
+	[GridEventName.aggDefsChanged]: { aggDefs: AggregationDef<TRowData>[] | undefined };
+	[GridEventName.cellClicked]: GridCellClickParams<TRowData>;
+	[GridEventName.cellInvalidated]: { rowId: string; colField: string };
+	[GridEventName.cellsCopied]: { cells: Array<{ rowId: string; colField: string }> };
+	[GridEventName.cellValueChanged]: { rowId: string; colField: string; oldValue: unknown; newValue: unknown };
+	[GridEventName.columnOrderChanged]: { columns: ColumnDef<TRowData>[]; columnFields: string[] };
+	[GridEventName.columnReorderToggled]: { enabled: boolean };
+	[GridEventName.columnResized]: { colField: string; width: number };
+	[GridEventName.columnsChanged]: { columns: ColumnDef<TRowData>[]; columnFields: string[] };
+	[GridEventName.editStarted]: { rowId: string; colField: string };
+	[GridEventName.editStopped]: { rowId: string; colField: string; cancel: boolean };
+	[GridEventName.enableStickyGroupRowsChanged]: { enableStickyGroupRows: boolean | undefined };
+	[GridEventName.filterChanged]: { filterModel: FilterModel | null };
+	[GridEventName.focusChanged]: { focus: GridCellPointer | null; selection: GridSelectionState };
+	[GridEventName.groupByChanged]: { groupBy: string[] | undefined };
+	[GridEventName.renderInvalidated]: { reason: string };
+	[GridEventName.rowResized]: { rowId: string; height: number };
+	[GridEventName.rowSelectionChanged]: { selectedRowIds: string[]; changedRowIds: string[] };
+	[GridEventName.rowsUpdated]: {
+		changedValuesByRow: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
+		changedNodes: RowNode<TRowData>[];
+		addedNodes?: RowNode<TRowData>[];
+		removedNodes?: RowNode<TRowData>[];
+	};
+	[GridEventName.selectionChanged]: { selection: GridSelectionState; result: SelectionChangeResult };
+	[GridEventName.serverBlockLoaded]: {
+		blockIndex: number;
+		loadedBlockStart: number;
+		loadedBlockEnd: number;
+		totalRecords: number;
+		durationMs: number;
+	};
+	[GridEventName.showGroupFooterChanged]: { showGroupFooter: boolean | undefined };
+	[GridEventName.sortChanged]: { sortModel: SortModel | null };
+}
+
 // ── Cell renderer / editor props (stay here — they reference GridApi) ─────────
 
 /**
@@ -267,6 +330,9 @@ export interface GridState<TRowData = unknown> {
 
 	selection: GridSelectionState;
 
+	// Row-level multi-select (independent of cell range selection)
+	selectedRowIds: string[];
+
 	rowHeights: Record<string, number>; // rowId -> height in px
 	columnWidths: Record<string, number>; // colField -> width in px
 	defaultRowHeight: number;
@@ -365,6 +431,10 @@ export interface GridRowsAccessor<TRowData = unknown> {
 		getIds(): string[];
 		getData(): TRowData[];
 	};
+	/** Get data rows that have been row-selected (checkbox/Ctrl+Click) */
+	getChecked(): TRowData[];
+	/** Get IDs of row-selected rows */
+	getCheckedIds(): string[];
 }
 
 export interface RowDataTransaction<TData = unknown> {
@@ -462,6 +532,13 @@ export interface GridApi<TRowData = unknown> {
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
 	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
+	// Row node multi-select
+	selectRows(rowIds: string[]): void;
+	deselectRows(rowIds: string[]): void;
+	toggleRowSelection(rowId: string): void;
+	selectAllRows(): void;
+	clearRowSelection(): void;
+	isRowNodeSelected(rowId: string): boolean;
 	setColumns(columns: ColumnDef<TRowData>[]): void;
 	setColumnWidth(colField: string, width: number): void;
 	setColumnVisible(colField: string, visible: boolean): void;
@@ -492,8 +569,11 @@ export interface GridApi<TRowData = unknown> {
 	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRawRowById(rowId: string): TRowData | null;
 	rows(): GridRowsAccessor<TRowData>;
-	addEventListener<T = unknown>(type: string, callback: GridEventListener<T>): () => void;
-	dispatchEvent<T = unknown>(type: string, payload: T): void;
+	addEventListener<K extends keyof GridEventPayloadMap<TRowData>>(
+		type: K,
+		callback: GridEventListener<GridEventPayloadMap<TRowData>[K]>
+	): () => void;
+	dispatchEvent<K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void;
 	startEditing(rowId: string, colField: string): void;
 	stopEditing(cancel?: boolean): void;
 	subscribe(listener: Listener<TRowData>): () => void;
@@ -608,6 +688,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine = new GridEngine<TRowData>({
 			columns: initialState.columns || [],
 			selection: initialState.selection,
+			selectedRowIds: initialState.selectedRowIds ?? [],
 			rowHeights: initialState.rowHeights || {},
 			columnWidths: initialState.columnWidths || {},
 			defaultRowHeight: initialState.defaultRowHeight || 40,
@@ -740,6 +821,30 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public extendSelection = (end: GridCellPointer, source: GridSelectionSource = 'api'): void => {
 		const state = this.getState();
 		this.engine.selectRange(state.selection.anchor ?? state.selection.focus ?? end, end, source);
+	};
+
+	public selectRows = (rowIds: string[]): void => {
+		this.engine.selectRowIds(rowIds);
+	};
+
+	public deselectRows = (rowIds: string[]): void => {
+		this.engine.deselectRowIds(rowIds);
+	};
+
+	public toggleRowSelection = (rowId: string): void => {
+		this.engine.toggleRowId(rowId);
+	};
+
+	public selectAllRows = (): void => {
+		this.engine.selectAllDataRows();
+	};
+
+	public clearRowSelection = (): void => {
+		this.engine.clearRowSelection();
+	};
+
+	public isRowNodeSelected = (rowId: string): boolean => {
+		return this.state.selectedRowIds.includes(rowId);
 	};
 
 	public setColumnWidth = (colField: string, width: number): void => {
@@ -943,11 +1048,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.getRowModel()?.getRawRowById(rowId) ?? null;
 	};
 
-	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {
+	public addEventListener = <K extends keyof GridEventPayloadMap<TRowData>>(
+		type: K,
+		callback: GridEventListener<GridEventPayloadMap<TRowData>[K]>
+	): (() => void) => {
 		return this.engine.eventBus.addEventListener(type, callback);
 	};
 
-	public dispatchEvent = <T = unknown>(type: string, payload: T): void => {
+	public dispatchEvent = <K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void => {
 		this.engine.eventBus.dispatchEvent(type, payload);
 	};
 
@@ -1091,6 +1199,25 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 						return data;
 					},
 				};
+			},
+			getChecked: (): TRowData[] => {
+				const checkedSet = new Set(this.state.selectedRowIds);
+				const result: TRowData[] = [];
+				const rowModel = this.getRowModel();
+				if (rowModel) {
+					const count = rowModel.getVisualRowCount();
+					for (let i = 0; i < count; i++) {
+						const vr = rowModel.getVisualRow(i);
+						if (vr?.kind === 'data' && checkedSet.has(vr.rowId)) {
+							const node = rowModel.getRowNodeById(vr.rowId);
+							if (node) result.push(node.data);
+						}
+					}
+				}
+				return result;
+			},
+			getCheckedIds: (): string[] => {
+				return [...this.state.selectedRowIds];
 			},
 		};
 	};
@@ -1251,7 +1378,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public subscribeToRow = (rowId: string, listener: Listener<TRowData>): (() => void) => {
 		const unsubscribeData = this.subscribeToKey('dataVersion', listener);
 		const unsubscribeHeights = this.subscribeToKey('rowHeights', listener);
-		const unsubscribeEvent = this.addEventListener<{ rowId: string }>('rowResized', (event) => {
+		const unsubscribeEvent = this.addEventListener(GridEventName.rowResized, (event) => {
 			if (event.payload.rowId === rowId) listener(this.getState());
 		});
 		return () => {
@@ -1264,7 +1391,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public subscribeToColumn = (colField: string, listener: Listener<TRowData>): (() => void) => {
 		const unsubscribeColumns = this.subscribeToKey('columns', listener);
 		const unsubscribeWidths = this.subscribeToKey('columnWidths', listener);
-		const unsubscribeEvent = this.addEventListener<{ colField: string }>('columnResized', (event) => {
+		const unsubscribeEvent = this.addEventListener(GridEventName.columnResized, (event) => {
 			if (event.payload.colField === colField) listener(this.getState());
 		});
 		return () => {
