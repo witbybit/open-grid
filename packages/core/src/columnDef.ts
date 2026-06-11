@@ -185,6 +185,13 @@ export interface ColumnDef<TRowData = unknown> {
 	onPaste?: (params: CellPasteParams<TRowData>) => unknown;
 	/** When true, renders a checkbox in this column for row multi-select */
 	checkboxSelection?: boolean;
+	/**
+	 * One or more group header labels for this column.
+	 * A string places the column under a single group band.
+	 * An array places it under nested groups from outermost to innermost
+	 * (e.g. `['Financials', 'Revenue']` → Financials > Revenue > this leaf).
+	 */
+	headerGroup?: string | string[];
 }
 
 /**

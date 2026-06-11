@@ -124,6 +124,7 @@ export class ViewportRenderer<TRowData = unknown> {
 	public syncLayoutPlan(plan: GridLayoutPlan): void {
 		this.layoutPlan = plan;
 		this.container?.style.setProperty('--og-leaf-header-height', `${plan.chrome.leafHeaderHeight}px`);
+		this.container?.style.setProperty('--og-total-header-height', `${plan.chrome.totalHeaderHeight}px`);
 		this.container?.style.setProperty('--og-group-panel-height', `${plan.chrome.groupPanelHeight}px`);
 		this.container?.style.setProperty('--og-overlay-top', `${plan.origins.overlayTop}px`);
 		const visible = plan.chrome.groupPanelHeight > 0;

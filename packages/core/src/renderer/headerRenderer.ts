@@ -1,26 +1,26 @@
 import type { InvalidationFrame } from './invalidationManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
-import type { CompiledGridPlan, GridState } from '../store.js';
+import { computeGridLayoutPlan, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
 
 export class HeaderRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
 	private readonly columnInteractionsGetter: () => ColumnInteractionController<TRowData>;
 	private readonly showHeaderMenu: (cell: HTMLElement, colField: string) => void;
 
-	private headerCells = new Map<number, HTMLDivElement>();
+	// Keyed by "${depth}:${colStart}" to support multi-band group headers
+	private headerCells = new Map<string, HTMLDivElement>();
 	private headerLayer: HTMLDivElement | null = null;
 	private headerLeftLayer: HTMLDivElement | null = null;
 	private headerRightLayer: HTMLDivElement | null = null;
 
 	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
 	private lastHeaderScrollLeft = 0;
-	private lastSyncedPlan: CompiledGridPlan<TRowData> | null = null;
 	private lastSyncedViewportWidth = -1;
 	private lastHeaderLeftTransform = '';
 	private lastHeaderRightLeft = -1;
 	private lastHeaderRightTransform = '';
-	private readonly renderedHeaderScratch = new Set<number>();
+	private readonly renderedHeaderScratch = new Set<string>();
 
 	constructor(
 		engine: GridEngine<TRowData>,
@@ -52,55 +52,48 @@ export class HeaderRenderer<TRowData = unknown> {
 		}
 		this.headerCells.clear();
 		this.lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
-		this.lastSyncedPlan = null;
 		this.lastSyncedViewportWidth = -1;
+		this.lastHeaderScrollLeft = 0;
 		this.lastHeaderLeftTransform = '';
 		this.lastHeaderRightLeft = -1;
 		this.lastHeaderRightTransform = '';
 	}
 
-	public sync(frame: InvalidationFrame): void {
+	public sync(_frame: InvalidationFrame): void {
 		this.repaintHeaders();
 	}
 
-	public repaintHeaders(): void {
-		this.syncVisibleHeaders(true);
+	public repaintHeaders(layoutPlan?: GridLayoutPlan): void {
+		this.syncVisibleHeaders(true, layoutPlan ?? computeGridLayoutPlan(this.engine));
 	}
 
-	public syncScrollLeft(scrollLeft: number, plan: CompiledGridPlan<TRowData>): void {
-		// Numeric early-exit for pure vertical scroll: scrollLeft, plan identity and
-		// viewport width fully determine the pinned-layer transforms, so when none of
-		// them changed there is nothing to do — no translate3d string building.
-		const viewportWidth = this.engine.viewport.viewportWidth;
-		if (scrollLeft === this.lastHeaderScrollLeft && plan === this.lastSyncedPlan && viewportWidth === this.lastSyncedViewportWidth) {
+	public syncScrollLeft(layoutPlan: GridLayoutPlan): void {
+		const scrollLeft = layoutPlan.viewport.scrollLeft;
+		const viewportWidth = layoutPlan.viewport.width;
+		if (scrollLeft === this.lastHeaderScrollLeft && viewportWidth === this.lastSyncedViewportWidth) {
 			return;
 		}
 		this.lastHeaderScrollLeft = scrollLeft;
-		this.lastSyncedPlan = plan;
 		this.lastSyncedViewportWidth = viewportWidth;
-		this.syncPinnedLayerPositions(plan);
+		this.syncPinnedLayerPositions(layoutPlan);
 	}
 
-	private syncPinnedLayerPositions(plan: CompiledGridPlan<TRowData>): void {
-		const pinLeftColumns = plan.pinLeftCount;
-		const pinRightColumns = plan.pinRightCount;
-		const colCount = plan.displayedColumns.length;
-		const scrollLeft = this.engine.viewport.scrollLeft;
-		const viewportWidth = this.engine.viewport.viewportWidth;
-		const pinRightStart = plan.pinRightStart;
-		const pinLeftWidth = plan.pinLeftWidth;
-		const pinRightBaseLeft = plan.pinRightBaseLeft;
-		const pinRightWidth = plan.pinRightWidth;
+	private syncPinnedLayerPositions(layoutPlan: GridLayoutPlan): void {
+		const { pinLeftCount, pinRightCount, pinLeftWidth, pinRightWidth } = layoutPlan.columns;
+		const scrollLeft = layoutPlan.viewport.scrollLeft;
+		const viewportWidth = layoutPlan.viewport.width;
+		// pinRightBaseLeft = totalColumnsWidth - pinRightWidth
+		const pinRightBaseLeft = layoutPlan.dimensions.totalColumnsWidth - pinRightWidth;
 
 		if (this.headerLeftLayer) {
-			const transform = pinLeftColumns > 0 ? `translate3d(${scrollLeft}px, 0, 0)` : '';
+			const transform = pinLeftCount > 0 ? `translate3d(${scrollLeft}px, 0, 0)` : '';
 			if (this.lastHeaderLeftTransform !== transform) {
 				this.lastHeaderLeftTransform = transform;
 				this.headerLeftLayer.style.transform = transform;
 			}
 		}
 
-		if (this.headerRightLayer && pinRightColumns > 0 && pinRightStart < colCount) {
+		if (this.headerRightLayer && pinRightCount > 0) {
 			if (this.lastHeaderRightLeft !== pinRightBaseLeft) {
 				this.lastHeaderRightLeft = pinRightBaseLeft;
 				this.headerRightLayer.style.left = `${pinRightBaseLeft}px`;
@@ -113,231 +106,255 @@ export class HeaderRenderer<TRowData = unknown> {
 		}
 	}
 
-	public syncVisibleColumnRange(
-		plan = this.engine.columns.getCompiledPlan(),
-		state?: GridState<TRowData>,
-		range = this.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length)
-	): boolean {
-		const colCount = plan.displayedColumns.length;
-		const pinLeft = plan.pinLeftCount;
-		const pinRight = plan.pinRightCount;
+	public syncVisibleColumnRange(layoutPlan: GridLayoutPlan, range?: { startIdx: number; endIdx: number }): boolean {
+		const band = layoutPlan.headerBands[0];
+		const colCount = band?.cells.length ?? 0;
+		const { pinLeftCount: pinLeft, pinRightCount: pinRight } = layoutPlan.columns;
+		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
+		const colEnd = range?.endIdx ?? layoutPlan.columns.colEnd;
 
 		if (
-			range.startIdx === this.lastHeaderVisibleRange.startIdx &&
-			range.endIdx === this.lastHeaderVisibleRange.endIdx &&
+			colStart === this.lastHeaderVisibleRange.startIdx &&
+			colEnd === this.lastHeaderVisibleRange.endIdx &&
 			pinLeft === this.lastHeaderVisibleRange.pinLeft &&
 			pinRight === this.lastHeaderVisibleRange.pinRight &&
 			colCount === this.lastHeaderVisibleRange.colCount
 		) {
-			// Cheap bail out! Range did not change!
 			return false;
 		}
 
-		this.syncVisibleHeaders(false, plan, state, range);
+		this.syncVisibleHeaders(false, layoutPlan, range);
 		return true;
 	}
 
-	private syncVisibleHeaders(
-		forceRepaint = false,
-		plan = this.engine.columns.getCompiledPlan(),
-		suppliedState?: GridState<TRowData>,
-		suppliedColRange = this.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length)
-	): void {
+	private syncVisibleHeaders(forceRepaint = false, layoutPlan: GridLayoutPlan, range?: { startIdx: number; endIdx: number }): void {
 		if (!this.headerLayer || !this.headerLeftLayer || !this.headerRightLayer) return;
 
-		const state = suppliedState ?? this.engine.stateManager.getState();
-		const columns = plan.displayedColumns;
-		const colCount = columns.length;
-		if (colCount === 0) {
+		const { headerBands } = layoutPlan;
+		if (headerBands.length === 0) {
 			this.clearHeaderCells();
-			this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
 			return;
 		}
 
-		const pinLeftColumns = plan.pinLeftCount;
-		const pinRightColumns = plan.pinRightCount;
-		const newColRange = suppliedColRange;
-		this.syncPinnedLayerPositions(plan);
+		// Leaf band is always the last band
+		const leafBand = headerBands[headerBands.length - 1];
+		if (leafBand.cells.length === 0) {
+			this.clearHeaderCells();
+			return;
+		}
+
+		const state = this.engine.stateManager.getState();
+		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
+		const colCount = leafBand.cells.length;
+		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
+		const colEnd = range?.endIdx ?? layoutPlan.columns.colEnd;
+		const pinRightBaseLeft = layoutPlan.dimensions.totalColumnsWidth - layoutPlan.columns.pinRightWidth;
+
+		this.syncPinnedLayerPositions(layoutPlan);
 
 		if (
 			!forceRepaint &&
-			newColRange.startIdx === this.lastHeaderVisibleRange.startIdx &&
-			newColRange.endIdx === this.lastHeaderVisibleRange.endIdx &&
-			pinLeftColumns === this.lastHeaderVisibleRange.pinLeft &&
-			pinRightColumns === this.lastHeaderVisibleRange.pinRight &&
+			colStart === this.lastHeaderVisibleRange.startIdx &&
+			colEnd === this.lastHeaderVisibleRange.endIdx &&
+			pinLeftCount === this.lastHeaderVisibleRange.pinLeft &&
+			pinRightCount === this.lastHeaderVisibleRange.pinRight &&
 			colCount === this.lastHeaderVisibleRange.colCount
 		) {
-			// Range did not change, skip full sync!
 			return;
 		}
 
 		const rendered = this.renderedHeaderScratch;
 		rendered.clear();
 
-		const renderHeaderCell = (c: number) => {
-			const col = columns[c];
-			if (!col) return;
+		const renderCell = (cell: HeaderCellLayout) => {
+			const cellKey = `${cell.depth}:${cell.colStart}`;
 
-			let headerCell = this.headerCells.get(c);
+			let headerCell = this.headerCells.get(cellKey);
 			if (!headerCell) {
-				headerCell = this.createHeaderCellElement();
-				this.headerCells.set(c, headerCell);
+				headerCell = this.createHeaderCellElement(cell.isLeaf);
+				this.headerCells.set(cellKey, headerCell);
 			}
-			rendered.add(c);
+			rendered.add(cellKey);
 
-			let className = 'og-header-cell';
-			let cellLeft = plan.colLefts[c];
-			const cellWidth = plan.colWidths[c];
-
+			let className = cell.isLeaf ? 'og-header-cell' : 'og-header-cell og-header-group-cell';
+			let cellLeft = cell.left;
 			let targetLayer = this.headerLayer;
 
-			if (c < pinLeftColumns) {
+			if (cell.pinned === 'left') {
 				className += ' og-header-cell-pinned-left';
 				targetLayer = this.headerLeftLayer;
-			} else if (c >= Math.max(pinLeftColumns, colCount - pinRightColumns)) {
+			} else if (cell.pinned === 'right') {
 				className += ' og-header-cell-pinned-right';
-				const firstRightPinColLeft = plan.colLefts[Math.max(pinLeftColumns, colCount - pinRightColumns)];
-				cellLeft = cellLeft - firstRightPinColLeft;
+				cellLeft = cell.left - pinRightBaseLeft;
 				targetLayer = this.headerRightLayer;
 			}
 
-			if (state.styleSlots?.headerCellClass) {
-				try {
-					const customHeaderClass = state.styleSlots.headerCellClass(col);
-					if (customHeaderClass) {
-						className += ' ' + customHeaderClass;
+			if (cell.isLeaf) {
+				if (state.styleSlots?.headerCellClass) {
+					try {
+						const col = this.engine.columns.getCompiledPlan().displayedColumns[cell.colStart];
+						if (!col) return;
+						const customHeaderClass = state.styleSlots.headerCellClass(col);
+						if (customHeaderClass) className += ' ' + customHeaderClass;
+					} catch (e) {
+						console.error('HeaderRenderer: Error in headerCellClass styleSlot', e);
 					}
-				} catch (e) {
-					console.error('HeaderRenderer: Error in headerCellClass styleSlot', e);
 				}
-			}
-			if (state.enableColumnReorder && col.movable !== false && !col.checkboxSelection) {
-				className += ' og-header-cell-movable';
-			}
-			if (col.checkboxSelection) {
-				className += ' og-header-cell-row-selector';
-			}
-			const columnInteractions = this.columnInteractionsGetter();
-			const isDraggingThis = columnInteractions.isDraggingColumn(col.field);
-			if (isDraggingThis) {
-				className += ' og-header-cell-dragging';
-			}
+				if (cell.movable) className += ' og-header-cell-movable';
+				if (cell.checkboxSelection) className += ' og-header-cell-row-selector';
 
-			if (headerCell.className !== className) headerCell.className = className;
-			const nextTransform = isDraggingThis ? `translate3d(${cellLeft}px, -2px, 0) scale(1.035)` : `translate3d(${cellLeft}px, 0, 0)`;
-			if (headerCell.style.transform !== nextTransform) headerCell.style.transform = nextTransform;
-			const nextWidth = `${cellWidth}px`;
-			if (headerCell.style.width !== nextWidth) headerCell.style.width = nextWidth;
+				const columnInteractions = this.columnInteractionsGetter();
+				const isDraggingThis = columnInteractions.isDraggingColumn(cell.field);
+				if (isDraggingThis) className += ' og-header-cell-dragging';
 
-			const textSpan = headerCell.firstElementChild as HTMLSpanElement | null;
-			// Suppress interactive chrome (menu, sort indicator) for checkbox columns
-			if (col.checkboxSelection) {
-				const menuBtnEl = headerCell.querySelector<HTMLDivElement>('.og-header-menu-button');
-				if (menuBtnEl) menuBtnEl.style.display = 'none';
-				const resizeEl = headerCell.querySelector<HTMLDivElement>('.og-header-resize-handle');
-				if (resizeEl) resizeEl.style.display = 'none';
-				const sortEl = headerCell.querySelector<HTMLDivElement>('.og-header-sort-indicator');
-				if (sortEl) sortEl.style.display = 'none';
-			}
+				if (headerCell.className !== className) headerCell.className = className;
+				const nextTransform = isDraggingThis ? `translate3d(${cellLeft}px, -2px, 0) scale(1.035)` : `translate3d(${cellLeft}px, 0, 0)`;
+				if (headerCell.style.transform !== nextTransform) headerCell.style.transform = nextTransform;
+				const nextWidth = `${cell.width}px`;
+				if (headerCell.style.width !== nextWidth) headerCell.style.width = nextWidth;
+				const nextTop = `${cell.top}px`;
+				if (headerCell.style.top !== nextTop) headerCell.style.top = nextTop;
+				const nextHeight = `${cell.height}px`;
+				if (headerCell.style.height !== nextHeight) headerCell.style.height = nextHeight;
 
-			if (col.checkboxSelection) {
-				let checkbox = headerCell.querySelector<HTMLInputElement>('input[type="checkbox"].og-header-checkbox');
-				if (!checkbox) {
-					checkbox = document.createElement('input');
-					checkbox.type = 'checkbox';
-					checkbox.className = 'og-header-checkbox';
-					checkbox.addEventListener('change', (e) => {
-						e.stopPropagation();
-						if ((e.target as HTMLInputElement).checked) {
-							this.engine.selectAllDataRows('headerCheckbox');
-						} else {
-							this.engine.clearRowSelection('headerCheckbox');
-						}
-					});
-					if (textSpan) textSpan.textContent = '';
-					headerCell.insertBefore(checkbox, textSpan);
+				const textSpan = headerCell.firstElementChild as HTMLSpanElement | null;
+				if (cell.checkboxSelection) {
+					const menuBtnEl = headerCell.querySelector<HTMLDivElement>('.og-header-menu-button');
+					if (menuBtnEl) menuBtnEl.style.display = 'none';
+					const resizeEl = headerCell.querySelector<HTMLDivElement>('.og-header-resize-handle');
+					if (resizeEl) resizeEl.style.display = 'none';
+					const sortEl = headerCell.querySelector<HTMLDivElement>('.og-header-sort-indicator');
+					if (sortEl) sortEl.style.display = 'none';
 				}
-				const rowModel = this.engine.getRowModel();
-				const totalDataRows =
-					rowModel?.getDataRowCount?.() ??
-					(() => {
-						if (!rowModel) return 0;
-						let count = 0;
-						const vCount = rowModel.getVisualRowCount();
-						for (let i = 0; i < vCount; i++) {
-							if (rowModel.getVisualRow(i)?.kind === 'data') count++;
-						}
-						return count;
-					})();
-				const selectedCount = rowModel
-					? state.selectedRowIds.filter((rowId) => rowModel.getVisualIndexByRowId(rowId) >= 0).length
-					: state.selectedRowIds.length;
-				const newChecked = selectedCount > 0 && selectedCount >= totalDataRows;
-				const newIndeterminate = selectedCount > 0 && selectedCount < totalDataRows;
-				checkbox.title = selectedCount > 0 ? `${selectedCount} of ${totalDataRows} rows selected` : `Select all ${totalDataRows} rows`;
-				checkbox.setAttribute('aria-label', newChecked ? 'Clear row selection' : 'Select all rows');
-				if (checkbox.checked !== newChecked) checkbox.checked = newChecked;
-				if (checkbox.indeterminate !== newIndeterminate) checkbox.indeterminate = newIndeterminate;
-			} else if (textSpan && textSpan.textContent !== (col.header || col.field)) {
-				textSpan.textContent = col.header || col.field;
-			}
 
-			const currentSort = state.sortModel?.find((s) => s.colId === col.field);
-			const sortIndicator = headerCell.querySelector('.og-header-sort-indicator') as HTMLDivElement | null;
-			if (sortIndicator) {
-				if (currentSort) {
-					sortIndicator.style.display = 'flex';
-					const isAsc = currentSort.sort === 'asc';
-					const svgAsc = sortIndicator.querySelector('.og-sort-svg-asc') as SVGElement | null;
-					const svgDesc = sortIndicator.querySelector('.og-sort-svg-desc') as SVGElement | null;
-					if (svgAsc) svgAsc.style.display = isAsc ? 'block' : 'none';
-					if (svgDesc) svgDesc.style.display = isAsc ? 'none' : 'block';
-				} else {
-					sortIndicator.style.display = 'none';
+				if (cell.checkboxSelection) {
+					let checkbox = headerCell.querySelector<HTMLInputElement>('input[type="checkbox"].og-header-checkbox');
+					if (!checkbox) {
+						checkbox = document.createElement('input');
+						checkbox.type = 'checkbox';
+						checkbox.className = 'og-header-checkbox';
+						checkbox.addEventListener('change', (e) => {
+							e.stopPropagation();
+							if ((e.target as HTMLInputElement).checked) {
+								this.engine.selectAllDataRows('headerCheckbox');
+							} else {
+								this.engine.clearRowSelection('headerCheckbox');
+							}
+						});
+						if (textSpan) textSpan.textContent = '';
+						headerCell.insertBefore(checkbox, textSpan);
+					}
+					const rowModel = this.engine.getRowModel();
+					const totalDataRows =
+						rowModel?.getDataRowCount?.() ??
+						(() => {
+							if (!rowModel) return 0;
+							let count = 0;
+							const vCount = rowModel.getVisualRowCount();
+							for (let i = 0; i < vCount; i++) {
+								if (rowModel.getVisualRow(i)?.kind === 'data') count++;
+							}
+							return count;
+						})();
+					const selectedCount = rowModel
+						? state.selectedRowIds.filter((rowId) => rowModel.getVisualIndexByRowId(rowId) >= 0).length
+						: state.selectedRowIds.length;
+					const newChecked = selectedCount > 0 && selectedCount >= totalDataRows;
+					const newIndeterminate = selectedCount > 0 && selectedCount < totalDataRows;
+					checkbox.title = selectedCount > 0 ? `${selectedCount} of ${totalDataRows} rows selected` : `Select all ${totalDataRows} rows`;
+					checkbox.setAttribute('aria-label', newChecked ? 'Clear row selection' : 'Select all rows');
+					if (checkbox.checked !== newChecked) checkbox.checked = newChecked;
+					if (checkbox.indeterminate !== newIndeterminate) checkbox.indeterminate = newIndeterminate;
+				} else if (textSpan && textSpan.textContent !== cell.label) {
+					textSpan.textContent = cell.label;
 				}
+
+				const currentSort = state.sortModel?.find((s) => s.colId === cell.field);
+				const sortIndicator = headerCell.querySelector('.og-header-sort-indicator') as HTMLDivElement | null;
+				if (sortIndicator) {
+					if (currentSort) {
+						sortIndicator.style.display = 'flex';
+						const isAsc = currentSort.sort === 'asc';
+						const svgAsc = sortIndicator.querySelector('.og-sort-svg-asc') as SVGElement | null;
+						const svgDesc = sortIndicator.querySelector('.og-sort-svg-desc') as SVGElement | null;
+						if (svgAsc) svgAsc.style.display = isAsc ? 'block' : 'none';
+						if (svgDesc) svgDesc.style.display = isAsc ? 'none' : 'block';
+					} else {
+						sortIndicator.style.display = 'none';
+					}
+				}
+
+				if (headerCell.dataset.colField !== cell.field) headerCell.dataset.colField = cell.field;
+				const colIndexText = String(cell.colStart);
+				if (headerCell.dataset.colIndex !== colIndexText) headerCell.dataset.colIndex = colIndexText;
+			} else {
+				// Group header cell — simpler rendering: label only, no interactive chrome
+				if (headerCell.className !== className) headerCell.className = className;
+				const nextTransform = `translate3d(${cellLeft}px, 0, 0)`;
+				if (headerCell.style.transform !== nextTransform) headerCell.style.transform = nextTransform;
+				const nextWidth = `${cell.width}px`;
+				if (headerCell.style.width !== nextWidth) headerCell.style.width = nextWidth;
+				const nextTop = `${cell.top}px`;
+				if (headerCell.style.top !== nextTop) headerCell.style.top = nextTop;
+				const nextHeight = `${cell.height}px`;
+				if (headerCell.style.height !== nextHeight) headerCell.style.height = nextHeight;
+
+				const textSpan = headerCell.firstElementChild as HTMLSpanElement | null;
+				if (textSpan && textSpan.textContent !== cell.label) textSpan.textContent = cell.label;
 			}
 
-			if (headerCell.dataset.colField !== col.field) headerCell.dataset.colField = col.field;
-			const colIndexText = String(c);
-			if (headerCell.dataset.colIndex !== colIndexText) headerCell.dataset.colIndex = colIndexText;
 			if (headerCell.parentNode !== targetLayer) {
 				targetLayer!.appendChild(headerCell);
 			}
 		};
 
-		for (let c = 0; c < pinLeftColumns; c++) {
-			renderHeaderCell(c);
-		}
-		for (let c = newColRange.startIdx; c <= newColRange.endIdx; c++) {
-			if (c >= pinLeftColumns && c < Math.max(pinLeftColumns, colCount - pinRightColumns)) {
-				renderHeaderCell(c);
+		// Render group bands (all cells fully visible — group bands aren't virtualized)
+		for (let b = 0; b < headerBands.length - 1; b++) {
+			for (const cell of headerBands[b].cells) {
+				if (cell.pinned === 'left') renderCell(cell);
 			}
-		}
-		for (let c = Math.max(pinLeftColumns, colCount - pinRightColumns); c < colCount; c++) {
-			if (c >= 0) {
-				renderHeaderCell(c);
+			for (const cell of headerBands[b].cells) {
+				if (cell.pinned === 'center') renderCell(cell);
+			}
+			for (const cell of headerBands[b].cells) {
+				if (cell.pinned === 'right') renderCell(cell);
 			}
 		}
 
-		for (const [colIdx, cell] of this.headerCells.entries()) {
-			if (!rendered.has(colIdx) || colIdx >= colCount) {
-				cell.remove();
-				this.headerCells.delete(colIdx);
+		// Render leaf band with visible-range virtualization
+		for (const cell of leafBand.cells) {
+			if (cell.pinned === 'left') renderCell(cell);
+		}
+		for (const cell of leafBand.cells) {
+			if (cell.pinned === 'center' && cell.colStart >= colStart && cell.colStart <= colEnd) {
+				renderCell(cell);
 			}
 		}
-		this.lastHeaderScrollLeft = this.engine.viewport.scrollLeft;
+		for (const cell of leafBand.cells) {
+			if (cell.pinned === 'right') renderCell(cell);
+		}
+
+		// Remove cells that are no longer in any rendered band
+		for (const [cellKey, cell] of this.headerCells.entries()) {
+			if (!rendered.has(cellKey)) {
+				cell.remove();
+				this.headerCells.delete(cellKey);
+			}
+		}
+
+		this.lastHeaderScrollLeft = layoutPlan.viewport.scrollLeft;
+		this.lastSyncedViewportWidth = layoutPlan.viewport.width;
 		this.lastHeaderVisibleRange = {
-			startIdx: newColRange.startIdx,
-			endIdx: newColRange.endIdx,
-			pinLeft: pinLeftColumns,
-			pinRight: pinRightColumns,
+			startIdx: colStart,
+			endIdx: colEnd,
+			pinLeft: pinLeftCount,
+			pinRight: pinRightCount,
 			colCount,
 		};
 	}
 
-	private createHeaderCellElement(): HTMLDivElement {
+	private createHeaderCellElement(isLeaf = true): HTMLDivElement {
 		const headerCell = document.createElement('div');
-		headerCell.addEventListener('mousedown', (e) => this.columnInteractionsGetter().onHeaderCellMouseDown(e));
 
 		const textSpan = document.createElement('span');
 		textSpan.style.overflow = 'hidden';
@@ -346,10 +363,17 @@ export class HeaderRenderer<TRowData = unknown> {
 		textSpan.style.flex = '1';
 		headerCell.appendChild(textSpan);
 
+		if (!isLeaf) {
+			// Group header cells have no interactive chrome
+			return headerCell;
+		}
+
+		headerCell.addEventListener('mousedown', (e) => this.columnInteractionsGetter().onHeaderCellMouseDown(e));
+
 		const sortIndicator = document.createElement('div');
 		sortIndicator.className = 'og-header-sort-indicator';
 
-		// Pre-create sort indicator SVG nodes to avoid innerHTML churn!
+		// Pre-create sort indicator SVG nodes to avoid innerHTML churn
 		const svgAsc = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 		svgAsc.setAttribute('width', '10');
 		svgAsc.setAttribute('height', '10');

@@ -627,8 +627,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.recycleViewport(true, scrollCtx, nextWindow);
 			this.stickyGroupRenderer.sync(layoutPlan);
 
-			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, plan);
-			const didSyncRange = this.headerRenderer.syncVisibleColumnRange(plan, state, visibleColRange);
+			this.headerRenderer.syncScrollLeft(layoutPlan);
+			const didSyncRange = this.headerRenderer.syncVisibleColumnRange(layoutPlan, visibleColRange);
 			if (didSyncRange) {
 				this.renderStats.headerRangeSyncsDuringScroll++;
 			}
@@ -656,12 +656,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private syncCheapScrollOnly(layoutPlan: GridLayoutPlan): void {
 		const window = layoutPlan.renderWindow;
-		const plan = this.engine.columns.getCompiledPlan();
-		const scrollTop = this.engine.viewport.scrollTop;
-		const scrollLeft = this.engine.viewport.scrollLeft;
+		const scrollTop = layoutPlan.viewport.scrollTop;
+		const scrollLeft = layoutPlan.viewport.scrollLeft;
 
 		// 1. Header scrollLeft transform
-		this.headerRenderer.syncScrollLeft(scrollLeft, plan);
+		this.headerRenderer.syncScrollLeft(layoutPlan);
 
 		// 2. Selection overlay transform
 		this.renderStats.overlayCheapSyncsDuringScroll++;
@@ -1078,7 +1077,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this._pendingSortAnimation = false;
 			this.sortAnimation.beginAnimation();
 		}
-		this.headerRenderer.repaintHeaders();
+		this.headerRenderer.repaintHeaders(layoutPlan);
 		this.overlayRenderer.repaintOverlay();
 	}
 

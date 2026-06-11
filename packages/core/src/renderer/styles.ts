@@ -307,7 +307,7 @@ export const CORE_STYLES = `
   .og-layer-header-wrapper {
     position: sticky;
     top: 0;
-    height: 40px;
+    height: var(--og-total-header-height, 40px);
     z-index: 30;
     overflow: hidden;
     flex-shrink: 0;
@@ -726,6 +726,14 @@ export const CORE_STYLES = `
     border-right: 1px solid var(--og-border-color);
     box-sizing: border-box;
     user-select: none;
+  }
+
+  .og-header-group-cell {
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--og-border-color);
+    justify-content: center;
+    cursor: default;
   }
 
   .og-header-cell-movable {
