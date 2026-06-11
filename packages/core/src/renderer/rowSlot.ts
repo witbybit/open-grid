@@ -151,29 +151,6 @@ export class RowSlot<TRowData = unknown> {
 		return this.leftCells.length + this.centerCells.length + this.rightCells.length;
 	}
 
-	/**
-	 * Backward-compat shim: builds a Map<colIndex, CellSlot> on-demand.
-	 * Used by legacy tests and external code that still references slot.cells.
-	 * O(n) — don't call in hot paths.
-	 * @deprecated Use getCellForCol() or lane arrays directly.
-	 */
-	public get cells(): {
-		size: number;
-		get(key: number): CellSlot<TRowData> | undefined;
-		has(key: number): boolean;
-		entries(): IterableIterator<[number, CellSlot<TRowData>]>;
-		values(): IterableIterator<CellSlot<TRowData>>;
-		keys(): IterableIterator<number>;
-		forEach(fn: (value: CellSlot<TRowData>, key: number) => void): void;
-	} {
-		const map = new Map<number, CellSlot<TRowData>>();
-		for (let i = 0; i < this.leftCells.length; i++) map.set(i, this.leftCells[i]);
-		const cs = this.centerColStart;
-		for (let i = 0; i < this.centerCells.length; i++) map.set(cs + i, this.centerCells[i]);
-		for (let i = 0; i < this.rightCells.length; i++) map.set(this.pinRightStart + i, this.rightCells[i]);
-		return map;
-	}
-
 	// ── Row position / identity ──────────────────────────────────────────────────────
 
 	public update(

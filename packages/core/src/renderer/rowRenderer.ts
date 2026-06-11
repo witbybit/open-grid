@@ -113,11 +113,8 @@ export class RowRenderer<TRowData = unknown> {
 		customWarmMovesDeferredDuringScroll: 0,
 		customWarmMovesFlushedAfterScroll: 0,
 		customColdMountsDuringScroll: 0,
-		// Legacy counters kept for backward compat
 		rowSlotAppendsTotal: 0,
 		rowSlotRemovesTotal: 0,
-		cellAppendsTotal: 0,
-		cellRemovesTotal: 0,
 		fullRebindFrames: 0,
 		enteredOnlyFrames: 0,
 	};
@@ -273,13 +270,6 @@ export class RowRenderer<TRowData = unknown> {
 			container.style.width = `${width}px`;
 		}
 		return container;
-	}
-
-	public syncPinnedLanePositions(_window: RenderWindow, _totalWidth: number): void {
-		// Pin container positioning is now handled entirely by CSS position:sticky.
-		// The left container sticks at left:0 and the right container sticks at
-		// right:0 via margin-left:auto in the flex row — no JS transforms needed.
-		// This eliminates the one-frame lag that caused flicker on horizontal scroll.
 	}
 
 	// ── Slot-based viewport virtualization core ─────────────────────────────────────
@@ -1287,109 +1277,6 @@ export class RowRenderer<TRowData = unknown> {
 		}
 	}
 
-	/**
-	 * Kept as a public method for external callers (e.g. orchestrator); internally
-	 * uses the lane-based _bindCellFull instead of the old Map-based logic.
-	 */
-	public recycleRowCellsSlot(
-		slot: RowSlot<TRowData>,
-		node: RowNode<TRowData>,
-		rowIndex: number,
-		colsEntered: number[],
-		colsStayed: number[],
-		columns: ColumnDef<TRowData>[],
-		isScrollFrameActive: boolean,
-		ctx?: ScrollRenderContext<TRowData>,
-		_phase: CellRendererPhase = 'initial',
-		_rowEntered = false,
-		_hoistedState?: GridState<TRowData>,
-		_hoistedTotalWidth?: number
-	): void {
-		const state = _hoistedState ?? this.engine.stateManager.getState();
-		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
-		const colCount = columns.length;
-		const pinLeftColumns = this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = this.engine.viewport.pinRightColumns;
-		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
-		const pinRightBaseLeft = plan.pinRightBaseLeft;
-
-		const bindOne = (c: number) => {
-			const col = columns[c];
-			if (!col) return;
-			const cellSlot = slot.getCellForCol(c);
-			if (!cellSlot) return;
-			this._bindCellFull(
-				cellSlot,
-				slot.id,
-				node,
-				rowIndex,
-				c,
-				col,
-				pinLeftColumns,
-				pinRightColumns,
-				pinRightStart,
-				pinRightBaseLeft,
-				plan,
-				state,
-				isScrollFrameActive,
-				ctx,
-				'initial'
-			);
-		};
-
-		for (const c of colsEntered) bindOne(c);
-		for (const c of colsStayed) bindOne(c);
-	}
-
-	public recycleLoadingRowCellsSlot(
-		slot: RowSlot<TRowData>,
-		_visualRow: Extract<VisualRow<TRowData>, { kind: 'loading' }>,
-		rowIndex: number,
-		colsEntered: number[],
-		colsStayed: number[],
-		columns: ColumnDef<TRowData>[],
-		isScrollFrameActive: boolean,
-		ctx?: ScrollRenderContext<TRowData>,
-		_rowEntered = false,
-		_hoistedState?: GridState<TRowData>,
-		_hoistedTotalWidth?: number
-	): void {
-		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
-		const pinRightBaseLeft = plan.pinRightBaseLeft;
-
-		const bindOne = (c: number) => {
-			const col = columns[c];
-			if (!col) return;
-			const cellSlot = slot.getCellForCol(c);
-			if (!cellSlot) return;
-			if (cellSlot.element.dataset.cellKey) this.releaseCellPortal(cellSlot.element);
-			const leftArg = plan.colLefts[c];
-			const cellWidth = plan.colWidths[c];
-			if (!isScrollFrameActive) {
-				this.cellRenderer.ensureLoadingSkeleton(cellSlot.element);
-			} else {
-				this.markCellDirtyAfterScroll(cellSlot.element);
-			}
-			cellSlot.update(
-				c,
-				col.field,
-				rowIndex,
-				`loading:${rowIndex}`,
-				leftArg,
-				-1,
-				cellWidth,
-				'og-cell og-cell-loading',
-				'loading',
-				undefined,
-				'',
-				undefined
-			);
-		};
-
-		for (const c of colsEntered) bindOne(c);
-		for (const c of colsStayed) bindOne(c);
-	}
-
 	// ── Scroll-path fast cell binding ────────────────────────────────────────────────
 
 	private bindCellSlotDuringScroll(
@@ -1742,20 +1629,6 @@ export class RowRenderer<TRowData = unknown> {
 			if (row?.kind === 'data') rowIds.push(row.rowId);
 		}
 		return rowIds;
-	}
-
-	// ── Legacy slot release (kept for API compat; not called during steady scroll) ───
-
-	public releaseRowSlot(rowIndex: number, slot: RowSlot<TRowData>, _isScrollFrameActive: boolean): void {
-		this.releaseRowPortal(slot);
-		const initCell = this._initCell;
-		const releaseCellFn = this._releaseCellFn;
-		slot.ensureLeftCells(0, null, initCell, releaseCellFn);
-		slot.ensureCenterCells(0, initCell, releaseCellFn);
-		slot.ensureRightCells(0, null, initCell, releaseCellFn);
-		slot.destroyCold();
-		this.activeRows.delete(rowIndex);
-		if (slot.element.parentNode) slot.element.remove();
 	}
 
 	public releaseCellPortal(

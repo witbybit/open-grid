@@ -627,7 +627,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.recycleViewport(true, scrollCtx, nextWindow);
 			this.stickyGroupRenderer.sync(layoutPlan);
 
-			this.rowRenderer.syncPinnedLanePositions(nextWindow, this.cachedTotalWidth);
 			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, plan);
 			const didSyncRange = this.headerRenderer.syncVisibleColumnRange(plan, state, visibleColRange);
 			if (didSyncRange) {
@@ -696,14 +695,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		this.stickyGroupRenderer.sync(layoutPlan);
-
-		// Only update pinned lane transforms when scrollLeft actually changed.
-		// During vertical-only scroll, scrollLeft is constant — skipping the call
-		// avoids building translate3d strings and iterating all row slots each frame,
-		// which is the primary source of the Layerize cost in profiling.
-		if (scrollLeft !== this.rowRenderer.currentWindow?.scrollLeft) {
-			this.rowRenderer.syncPinnedLanePositions(window, this.cachedTotalWidth);
-		}
 
 		// Update current window's scroll values
 		if (this.rowRenderer.currentWindow) {
@@ -1063,9 +1054,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
 		this.renderStats.viewportRecycles++;
 		this.rowRenderer.recycleViewport(isScrollFrameActive, ctx, precomputedWindow);
-		if (!isScrollFrameActive && this.rowRenderer.currentWindow) {
-			this.rowRenderer.syncPinnedLanePositions(this.rowRenderer.currentWindow, this.cachedTotalWidth);
-		}
 	}
 
 	private syncLayoutPlan(renderWindow?: RenderWindow): GridLayoutPlan {

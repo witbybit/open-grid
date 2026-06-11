@@ -237,13 +237,13 @@ function assertNoStaleOrOverlappingDom(grid: AuditGrid): void {
 	expect(rows.length).toBeLessThanOrEqual(28 * 3);
 	for (const [rowIndex, slot] of grid.renderer.rowRenderer.activeRows) {
 		expect(expectedRowIndices.has(rowIndex)).toBe(true);
-		expect(slot.cells.size).toBeGreaterThan(0);
-		expect(slot.cells.size).toBeLessThanOrEqual(360);
+		expect(slot.cellCount).toBeGreaterThan(0);
+		expect(slot.cellCount).toBeLessThanOrEqual(360);
 		expect(slot.element.dataset.rowIndex).toBe(String(rowIndex));
 
-		// Assert DOM cells match the active cells map exactly to catch zombie cells
+		// Assert DOM cells match the active cell count exactly to catch zombie cells
 		const cells = Array.from(slot.element.querySelectorAll('.og-cell'));
-		expect(cells.length).toBe(slot.cells.size);
+		expect(cells.length).toBe(slot.cellCount);
 	}
 
 	for (const row of rows) {
@@ -387,7 +387,12 @@ function assertHorizontalGeometryIsContinuous(grid: AuditGrid, expectedScrollLef
 	);
 	expect(activeSlots.length).toBeGreaterThan(0);
 	const firstSlot = activeSlots[0];
-	const cells = Array.from(firstSlot.cells.entries()).sort(([left], [right]) => left - right);
+	const cells: [number, (typeof firstSlot.leftCells)[number]][] = [];
+	for (let i = 0; i < firstSlot.leftCells.length; i++) cells.push([i, firstSlot.leftCells[i]]);
+	const cs = firstSlot.centerColStart;
+	for (let i = 0; i < firstSlot.centerCells.length; i++) cells.push([cs + i, firstSlot.centerCells[i]]);
+	for (let i = 0; i < firstSlot.rightCells.length; i++) cells.push([firstSlot.pinRightStart + i, firstSlot.rightCells[i]]);
+	cells.sort(([a], [b]) => a - b);
 	expect(cells.length).toBeGreaterThan(0);
 
 	const viewportWidth = grid.store.engine.viewport.viewportWidth;
