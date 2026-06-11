@@ -1389,9 +1389,15 @@ export class RowRenderer<TRowData = unknown> {
 		//                   (no blank flash) and schedule a post-scroll full rebind.
 		// Only 'custom-live' same-row portals bypass the freeze to push fresh data each frame.
 		const canFreezePortal = cellSlot.lastPortalKey === cellKey && isMounted;
-		// Data-stale: same row/key but the data version changed since last mount (sort/filter during scroll).
-		const isDataStale =
-			!isRowRebind && canFreezePortal && cellSlot.lastMountedDataVersion !== -1 && ctx.dataVersion !== cellSlot.lastMountedDataVersion;
+		// Data-stale checks use two independent versions:
+		//   globalVersion: bumped on sort/filter/group/row-add-remove → all portals thaw
+		//   rowVersions[rowId]: bumped only when that row's data changed → only that row thaws
+		const globalChanged = cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalVersion !== cellSlot.lastMountedGlobalVersion;
+		const rowChanged =
+			cellSlot.lastMountedRowVersion !== -1 &&
+			ctx.rowVersions.get(node.id) !== undefined &&
+			ctx.rowVersions.get(node.id) !== cellSlot.lastMountedRowVersion;
+		const isDataStale = !isRowRebind && canFreezePortal && (globalChanged || rowChanged);
 		const isPortalFrozen = !isRowRebind && canFreezePortal && !isDataStale;
 		const isStaleFrozen = (isRowRebind || isDataStale) && canFreezePortal;
 
@@ -1421,7 +1427,8 @@ export class RowRenderer<TRowData = unknown> {
 					isFocused,
 					isSelected: false,
 				});
-				cellSlot.lastMountedDataVersion = ctx.dataVersion;
+				cellSlot.lastMountedRowVersion = ctx.rowVersions.get(node.id) ?? -1;
+				cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 			} else {
 				// Stale (row rebind) or non-live same-row: defer to post-scroll decoration pass.
 				this.markCellDirtyAfterScroll(cellSlot.element);
@@ -1452,7 +1459,8 @@ export class RowRenderer<TRowData = unknown> {
 				isSelected: false,
 			});
 			contentMode = 'portal';
-			cellSlot.lastMountedDataVersion = ctx.dataVersion;
+			cellSlot.lastMountedRowVersion = ctx.rowVersions.get(node.id) ?? -1;
+			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 		}
 
 		const didWrite = cellSlot.update(

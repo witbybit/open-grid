@@ -213,7 +213,7 @@ describe('ServerRowModelController', () => {
 		expect(controller.getVisualRowCount()).toBe(100);
 	});
 
-	it('should not synchronously set state and increment dataVersion when fetching subsequent blocks (blockIndex > 0)', async () => {
+	it('should not synchronously set state and increment globalVersion when fetching subsequent blocks (blockIndex > 0)', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
@@ -239,9 +239,9 @@ describe('ServerRowModelController', () => {
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		// Reset dataVersion/loading change listeners
+		// Reset globalVersion/loading change listeners
 		const stateBefore = store.getState();
-		const initialDataVersion = stateBefore.dataVersion;
+		const initialGlobalVersion = stateBefore.globalVersion;
 
 		const stateSpy = vi.spyOn(store, 'setState');
 
@@ -249,16 +249,16 @@ describe('ServerRowModelController', () => {
 		controller.loadVisibleBlocks(60, 60);
 
 		// The setState should not have been called synchronously during the fetch start for block index 1
-		// Since setState wasn't called synchronously, dataVersion should still be the same
+		// Since setState wasn't called synchronously, globalVersion should still be the same
 		expect(stateSpy).not.toHaveBeenCalled();
-		expect(store.getState().dataVersion).toBe(initialDataVersion);
+		expect(store.getState().globalVersion).toBe(initialGlobalVersion);
 
 		// Now wait for the async fetch to complete
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		// Now the async response should have arrived, triggering setState with dataVersion increment
+		// Now the async response should have arrived, triggering setState with globalVersion increment
 		expect(stateSpy).toHaveBeenCalled();
-		expect(store.getState().dataVersion).toBe(initialDataVersion + 1);
+		expect(store.getState().globalVersion).toBe(initialGlobalVersion + 1);
 	});
 
 	it('should ignore an in-flight response after dispose', async () => {

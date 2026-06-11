@@ -198,7 +198,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this._scrollCtx = {
 			isScrolling: true,
 			stateVersion: 0,
-			dataVersion: 0,
+			rowVersions: this.engine.rowVersions,
+			globalVersion: 0,
 			styleVersion: 0,
 			loadingVersion: 0,
 			activeEdit: null,
@@ -608,7 +609,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			// allocation per scroll frame while keeping all cached references fresh.
 			const scrollCtx = this._scrollCtx;
 			scrollCtx.state = state;
-			scrollCtx.dataVersion = state.dataVersion;
+			scrollCtx.rowVersions = this.engine.rowVersions;
+			scrollCtx.globalVersion = state.globalVersion;
 			scrollCtx.styleVersion = this.rowRenderer.styleVersion;
 			scrollCtx.loadingVersion = this.rowRenderer.loadingVersion;
 			scrollCtx.activeEdit = state.activeEdit;
@@ -778,7 +780,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('defaultRowHeight', invalidateGeometryFull));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('defaultColWidth', invalidateDefaultColumnGeometry));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('dataVersion', invalidateData));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('globalVersion', invalidateData));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('loading', invalidateViewport));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleRowRange', invalidateViewport));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleColRange', invalidateViewport));

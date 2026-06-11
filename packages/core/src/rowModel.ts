@@ -718,7 +718,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.dataRowCount = result.stats.totalDataRows;
 
 		this.store.setState({
-			dataVersion: state.dataVersion + 1,
+			globalVersion: state.globalVersion + 1,
 		});
 
 		return refreshResult;

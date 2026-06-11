@@ -55,6 +55,10 @@ export class GridEngine<TRowData = unknown> {
 	public rowModelVersion = 0;
 	public columnVersion = 0;
 
+	// Per-row version map: rowId → version, bumped on each row data mutation.
+	// Keyed directly on the engine (not in GridState) so updates are zero-allocation.
+	public readonly rowVersions = new Map<string, number>();
+
 	// Scrolling states
 	public isScrolling = false;
 	public isScrollFrameActive = false;
@@ -112,7 +116,7 @@ export class GridEngine<TRowData = unknown> {
 			activeEdit: config.activeEdit || null,
 			sortModel: config.sortModel || null,
 			filterModel: config.filterModel || null,
-			dataVersion: 0,
+			globalVersion: 0,
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
 			visibleColRange: { startIdx: 0, endIdx: 0 },
 			getRowId: config.getRowId,
@@ -410,7 +414,7 @@ export class GridEngine<TRowData = unknown> {
 		// Refresh coordinates
 		const state = this.stateManager.getState();
 		this.geometry.updateRows(this.getRowHeightsList(rowModel, state.rowHeights, state.defaultRowHeight), state.defaultRowHeight);
-		this.stateManager.setState({ dataVersion: state.dataVersion + 1 });
+		this.stateManager.setState({ globalVersion: state.globalVersion + 1 });
 		this.invalidation.invalidateGeometry('row model registered');
 		this.invalidation.invalidateFull('row model registered');
 		this.requestRender('row model registered');
@@ -521,6 +525,10 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
+		// Bump per-row versions so the renderer freeze check can thaw only affected rows
+		for (const rowId of changes.keys()) {
+			this.rowVersions.set(rowId, (this.rowVersions.get(rowId) ?? 0) + 1);
+		}
 		// Clear caches and notify subscriptions for each changed cell
 		for (const [rowId, fields] of changes) {
 			for (const colField of fields) {
@@ -553,6 +561,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public notifyCellChange(rowId: string, colField: string): void {
+		this.rowVersions.set(rowId, (this.rowVersions.get(rowId) ?? 0) + 1);
 		this.data.clearValueGetterCache(rowId, colField);
 		const cellKey = `${rowId}:${colField}`;
 		const cellSubs = this.cellSubscriptions.get(cellKey);
@@ -895,11 +904,11 @@ export class GridEngine<TRowData = unknown> {
 			this.geometryVersion++;
 		}
 
-		if (updatedSet.has('dataVersion')) {
+		if (updatedSet.has('globalVersion')) {
 			this.data.clearValueGetterCache();
 		}
 
-		if (updatedSet.has('dataVersion') || updatedSet.has('sortModel') || updatedSet.has('filterModel')) {
+		if (updatedSet.has('globalVersion') || updatedSet.has('sortModel') || updatedSet.has('filterModel')) {
 			this.rowModelVersion++;
 		}
 
@@ -909,7 +918,7 @@ export class GridEngine<TRowData = unknown> {
 			(updatedSet.has('rowHeights') ||
 				updatedSet.has('defaultRowHeight') ||
 				updatedSet.has('loading') ||
-				updatedSet.has('dataVersion') ||
+				updatedSet.has('globalVersion') ||
 				rowCountChanged)
 		) {
 			this.geometry.updateRows(
@@ -925,7 +934,7 @@ export class GridEngine<TRowData = unknown> {
 			// Any change that reshuffles visual row indices invalidates visual-index bounds
 			updatedSet.has('sortModel') ||
 			updatedSet.has('filterModel') ||
-			updatedSet.has('dataVersion') ||
+			updatedSet.has('globalVersion') ||
 			updatedSet.has('expansion') ||
 			updatedSet.has('groupBy')
 		) {
@@ -961,7 +970,7 @@ export class GridEngine<TRowData = unknown> {
 			updatedSet.has('columns') ||
 			updatedSet.has('columnWidths') ||
 			updatedSet.has('rowHeights') ||
-			updatedSet.has('dataVersion') ||
+			updatedSet.has('globalVersion') ||
 			updatedSet.has('defaultRowHeight') ||
 			updatedSet.has('defaultColWidth') ||
 			updatedSet.has('loading') ||
@@ -1057,7 +1066,7 @@ export class GridEngine<TRowData = unknown> {
 			});
 		}
 
-		if (updatedSet.has('dataVersion')) {
+		if (updatedSet.has('globalVersion')) {
 			this.cellSubscriptions.forEach((subs) => {
 				subs.forEach((sub) => {
 					try {

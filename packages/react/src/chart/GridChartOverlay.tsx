@@ -381,9 +381,9 @@ export function GridChartOverlay<TRowData>({ api }: { api: GridApi<TRowData> }) 
 
 	// ── Live data version ───────────────────────────────────────────────────
 	// bounds reference is now stable during live updates (no longer jumps on
-	// dataVersion change). Subscribe to dataVersion so the chart re-extracts
+	// globalVersion change). Subscribe to globalVersion so the chart re-extracts
 	// fresh cell values from the fixed window on every 10hz tick.
-	const dataVersion = useGridKeySelector('dataVersion', (s) => s.dataVersion);
+	const dataVersion = useGridKeySelector('globalVersion', (s) => s.globalVersion);
 
 	// ── Extract chart data ──────────────────────────────────────────────────
 	const { categories, series, allSeries } = useMemo(

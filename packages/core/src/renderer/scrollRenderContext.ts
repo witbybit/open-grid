@@ -5,7 +5,12 @@ export interface ScrollRenderContext<TRowData = unknown> {
 
 	state?: GridState<TRowData>;
 	stateVersion: number;
-	dataVersion: number;
+	// Per-row version map: rowId → version bumped on each row data mutation.
+	// Used by the freeze check to thaw only cells whose row actually changed.
+	rowVersions: ReadonlyMap<string, number>;
+	// Bumped on any structural change (sort, filter, group, row add/remove).
+	// When this changes all frozen portals must thaw.
+	globalVersion: number;
 	styleVersion: number;
 	loadingVersion: number;
 

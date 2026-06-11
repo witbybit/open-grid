@@ -222,7 +222,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		if (blockIndex === 0) {
 			this.store.setState((s) => ({
 				loading: true,
-				dataVersion: s.dataVersion + 1,
+				globalVersion: s.globalVersion + 1,
 			}));
 		}
 
@@ -302,7 +302,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			const hasActiveFetches = this.loadingBlockCount > 0;
 			this.store.setState((s) => ({
 				loading: hasActiveFetches,
-				dataVersion: s.dataVersion + 1,
+				globalVersion: s.globalVersion + 1,
 			}));
 
 			const requestFinishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -323,7 +323,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			const hasActiveFetches = this.loadingBlockCount > 0;
 			this.store.setState({
 				loading: hasActiveFetches,
-				dataVersion: this.store.getState().dataVersion + 1,
+				globalVersion: this.store.getState().globalVersion + 1,
 			});
 		}
 	};
@@ -341,7 +341,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.store.engine.clearFormulas();
 		this.store.setState({
 			loading: true,
-			dataVersion: this.store.getState().dataVersion + 1,
+			globalVersion: this.store.getState().globalVersion + 1,
 		});
 		this.fetchBlock(0);
 	};

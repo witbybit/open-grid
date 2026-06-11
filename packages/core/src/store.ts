@@ -403,8 +403,9 @@ export interface GridState<TRowData = unknown> {
 		details: Record<string, true>;
 	};
 
-	// React cache invalidator
-	dataVersion: number;
+	// Incremented on any change that restructures the visual row set (sort, filter, group, row add/remove).
+	// Used by the renderer to detect when all frozen portals need thawing.
+	globalVersion: number;
 
 	// 2D Recycled Viewport Range states
 	visibleRowRange: ViewportRange;
@@ -1461,7 +1462,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public subscribeToRow = (rowId: string, listener: Listener<TRowData>): (() => void) => {
-		const unsubscribeData = this.subscribeToKey('dataVersion', listener);
+		const unsubscribeData = this.subscribeToKey('globalVersion', listener);
 		const unsubscribeHeights = this.subscribeToKey('rowHeights', listener);
 		const unsubscribeEvent = this.addEventListener(GridEventName.rowResized, (event) => {
 			if (event.payload.rowId === rowId) listener(this.getState());

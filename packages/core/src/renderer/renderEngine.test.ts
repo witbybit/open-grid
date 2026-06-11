@@ -830,7 +830,7 @@ describe('RenderEngine', () => {
 		renderer.fullPaint();
 		const before = renderer.getRenderStats();
 
-		store.setState((state) => ({ dataVersion: state.dataVersion + 1 }));
+		store.setState((state) => ({ globalVersion: state.globalVersion + 1 }));
 		await Promise.resolve();
 		await Promise.resolve();
 		const afterData = renderer.getRenderStats();
@@ -2105,7 +2105,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('replaces loading skeletons with data rows immediately when loading state and dataVersion update', async () => {
+	it('replaces loading skeletons with data rows immediately when loading state and globalVersion update', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
 			return 1;

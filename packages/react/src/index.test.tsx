@@ -43,7 +43,7 @@ function createTestGrid<TRowData>(options: ClientGridOptions<TRowData>) {
 
 const SelectorInspector = () => {
 	const focused = useGridSelector((s) => s.selection.focus);
-	const dataVersion = useGridKeySelector('dataVersion', (s) => s.dataVersion);
+	const dataVersion = useGridKeySelector('globalVersion', (s) => s.globalVersion);
 	const api = useGridApi<TestRow>();
 
 	return (
@@ -728,7 +728,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const EqualityInspector = () => {
 			const selected = useGridSelector(
-				(state) => ({ version: state.dataVersion }),
+				(state) => ({ version: state.globalVersion }),
 				(left, right) => left.version === right.version
 			);
 			renderSpy(selected);
