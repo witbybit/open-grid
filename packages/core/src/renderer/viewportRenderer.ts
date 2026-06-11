@@ -1,7 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GeometryController } from './geometryController.js';
-import type { GridState } from '../store.js';
 import { CORE_STYLES } from './styles.js';
+import type { GridLayoutPlan } from './layoutPlan.js';
 
 export class ViewportRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -14,7 +14,7 @@ export class ViewportRenderer<TRowData = unknown> {
 	public rowsContainer: HTMLDivElement | null = null;
 
 	// Group panel — optional sticky strip above the header for groupBy chips.
-	// Only present in the DOM; shown/hidden by setGroupPanelVisible().
+	// Only present in the DOM; shown/hidden by syncLayoutPlan().
 	public groupPanel: HTMLDivElement | null = null;
 
 	// Header layers — kept as three overlapping absolute divs inside a sticky wrapper
@@ -27,6 +27,7 @@ export class ViewportRenderer<TRowData = unknown> {
 	public overlayLayer: HTMLDivElement | null = null;
 
 	private styleTag: HTMLStyleElement | null = null;
+	private layoutPlan: GridLayoutPlan | null = null;
 
 	constructor(engine: GridEngine<TRowData>, geometryController: GeometryController<TRowData>) {
 		this.engine = engine;
@@ -115,29 +116,30 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.container?.classList.toggle('og-is-scrolling', scrolling);
 	}
 
-	public setGroupPanelVisible(visible: boolean): void {
+	public syncLayoutPlan(plan: GridLayoutPlan): void {
+		this.layoutPlan = plan;
+		this.container?.style.setProperty('--og-leaf-header-height', `${plan.chrome.leafHeaderHeight}px`);
+		this.container?.style.setProperty('--og-group-panel-height', `${plan.chrome.groupPanelHeight}px`);
+		this.container?.style.setProperty('--og-overlay-top', `${plan.origins.overlayTop}px`);
+		const visible = plan.chrome.groupPanelHeight > 0;
 		if (this.groupPanel) {
 			this.groupPanel.style.display = visible ? 'flex' : 'none';
+			this.groupPanel.style.height = visible ? `${plan.chrome.groupPanelHeight}px` : '0';
 		}
-		// Keep the header sticky position below the group panel so they don't overlap.
-		// The group panel CSS min-height is 42px; offset the header by that amount when visible.
 		if (this.headerWrapper) {
-			this.headerWrapper.style.top = visible ? '42px' : '0';
+			this.headerWrapper.style.top = `${plan.origins.headerTop}px`;
+			this.headerWrapper.style.height = `${plan.chrome.totalHeaderHeight}px`;
 		}
 		if (this.overlayLayer) {
-			this.overlayLayer.style.top = visible ? '82px' : '40px';
+			this.overlayLayer.style.top = `${plan.origins.overlayTop}px`;
 		}
-	}
 
-	public syncSpacerAndLayers(state: GridState<TRowData>, colCount: number): void {
-		const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
-		const totalWidth = this.engine.geometry.getTotalWidth(state.defaultColWidth);
-		const viewportWidth = this.engine.viewport.viewportWidth;
-
-		const contentWidth = Math.max(totalWidth, viewportWidth);
+		const totalWidth = plan.dimensions.totalColumnsWidth;
+		const contentWidth = plan.dimensions.contentWidth;
+		const colCount = plan.renderWindow.colCount;
 
 		if (this.rowsContainer) {
-			this.rowsContainer.style.height = `${totalHeight}px`;
+			this.rowsContainer.style.height = `${plan.dimensions.contentHeight}px`;
 			this.rowsContainer.style.width = `${contentWidth}px`;
 		}
 
@@ -149,19 +151,15 @@ export class ViewportRenderer<TRowData = unknown> {
 		}
 
 		if (this.headerLeftLayer) {
-			const pinLeftCount = Math.min(this.engine.viewport.pinLeftColumns, colCount);
-			const pinLeftWidth = pinLeftCount > 0 ? this.engine.geometry.colLefts[pinLeftCount] || 0 : 0;
-			this.headerLeftLayer.style.width = `${pinLeftWidth}px`;
+			this.headerLeftLayer.style.width = `${plan.columns.pinLeftWidth}px`;
 		}
 		if (this.headerRightLayer) {
-			const pinLeftCount = Math.min(this.engine.viewport.pinLeftColumns, colCount);
-			const firstRightPinColIdx = Math.max(pinLeftCount, colCount - this.engine.viewport.pinRightColumns);
-			const pinRightWidth =
-				this.engine.viewport.pinRightColumns > 0 && firstRightPinColIdx < colCount
-					? totalWidth - (this.engine.geometry.colLefts[firstRightPinColIdx] || totalWidth)
-					: 0;
-			this.headerRightLayer.style.width = `${pinRightWidth}px`;
+			this.headerRightLayer.style.width = `${plan.columns.pinRightWidth}px`;
 		}
+	}
+
+	public getLayoutPlan(): GridLayoutPlan | null {
+		return this.layoutPlan;
 	}
 
 	private injectStyles(): void {

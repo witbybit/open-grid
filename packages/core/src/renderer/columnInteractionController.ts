@@ -1,10 +1,12 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GroupPanelRenderer } from './groupPanelRenderer.js';
+import type { GridLayoutPlan } from './layoutPlan.js';
 
 export interface ColumnInteractionControllerOptions<TRowData> {
 	engine: GridEngine<TRowData>;
 	getOverlayLayer: () => HTMLDivElement | null;
 	getScrollViewport: () => HTMLDivElement | null;
+	getLayoutPlan: () => GridLayoutPlan | null;
 	schedulePaint: () => void;
 }
 
@@ -12,6 +14,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private engine: GridEngine<TRowData>;
 	private getOverlayLayer: () => HTMLDivElement | null;
 	private getScrollViewport: () => HTMLDivElement | null;
+	private getLayoutPlan: () => GridLayoutPlan | null;
 	private schedulePaint: () => void;
 	private isColumnReordering = false;
 	private columnDragStartX = 0;
@@ -31,6 +34,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.engine = options.engine;
 		this.getOverlayLayer = options.getOverlayLayer;
 		this.getScrollViewport = options.getScrollViewport;
+		this.getLayoutPlan = options.getLayoutPlan;
 		this.schedulePaint = options.schedulePaint;
 	}
 
@@ -288,6 +292,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 
 		this.columnDropIndicator.style.display = 'block';
 		this.columnDropIndicator.style.transform = `translate3d(${indicatorViewportLeft}px, 0, 0)`;
-		this.columnDropIndicator.style.height = `${Math.max(0, this.engine.viewport.viewportHeight - 40)}px`;
+		const topChromeHeight = this.getLayoutPlan()?.chrome.topChromeHeight ?? 0;
+		this.columnDropIndicator.style.height = `${Math.max(0, this.engine.viewport.viewportHeight - topChromeHeight)}px`;
 	}
 }

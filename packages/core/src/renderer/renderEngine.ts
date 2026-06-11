@@ -36,6 +36,7 @@ import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { SortAnimationController } from './sortAnimationController.js';
 import { GroupPanelRenderer } from './groupPanelRenderer.js';
+import { computeGridLayoutPlan, type GridLayoutPlan } from './layoutPlan.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName, type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
 
@@ -247,10 +248,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.orchestrator = new RenderOrchestrator({
 			recomputeGeometry: () => this.geometryController.recomputeIfNeeded(),
 			syncViewport: (frame) => {
-				const state = this.engine.stateManager.getState();
-				const colCount = this.engine.columns.getDisplayedColumnCount();
-				this.viewportRenderer.syncSpacerAndLayers(state, colCount);
-				this.recycleViewport(false);
+				const layoutPlan = this.syncLayoutPlan();
+				this.recycleViewport(false, undefined, layoutPlan.renderWindow);
 			},
 			syncHeaders: (frame) => this.headerRenderer.sync(frame),
 			syncOverlay: (frame) => this.overlayRenderer.sync(frame),
@@ -263,6 +262,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			engine,
 			getOverlayLayer: () => this.viewportRenderer.overlayLayer,
 			getScrollViewport: () => this.viewportRenderer.scrollViewport,
+			getLayoutPlan: () => this.viewportRenderer.getLayoutPlan(),
 			schedulePaint: () => this.scheduleHeaderPaint('column interaction'),
 		});
 		this.fillDrag = new FillDragController<TRowData>({
@@ -302,8 +302,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// Group panel: mount if showGroupPanel is already true at mount time
 		if (this.viewportRenderer.groupPanel) {
 			this.groupPanelRenderer.mount(this.viewportRenderer.groupPanel);
-			const showPanel = this.engine.stateManager.getState().showGroupPanel ?? false;
-			this.viewportRenderer.setGroupPanelVisible(showPanel);
+			this.syncLayoutPlan();
 			this.columnInteractions.setGroupPanel(this.groupPanelRenderer);
 		}
 
@@ -565,6 +564,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const nextWindow = applyRenderWindowRuntimeLimits(candidateBuf, state.runtimeLimits);
 		// nextWindow === candidateBuf on the fast path (limits not exceeded).
 		// nextWindow is a new object on the slow path (limits applied, rare).
+		this.syncLayoutPlan(nextWindow);
 
 		// Same window bailout path
 		if (sameRenderedWindow(this.rowRenderer.currentWindow, nextWindow)) {
@@ -875,8 +875,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		);
 		this.unsubscribers.push(
 			this.engine.stateManager.subscribeToKey('showGroupPanel', () => {
-				const show = this.engine.stateManager.getState().showGroupPanel ?? false;
-				this.viewportRenderer.setGroupPanelVisible(show);
+				this.syncLayoutPlan();
+				this.scheduleGeometryPaint('showGroupPanel');
 			})
 		);
 	}
@@ -1080,18 +1080,23 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
+	private syncLayoutPlan(renderWindow?: RenderWindow): GridLayoutPlan {
+		const layoutPlan = computeGridLayoutPlan(this.engine, renderWindow);
+		this.viewportRenderer.syncLayoutPlan(layoutPlan);
+		return layoutPlan;
+	}
+
 	private fullPaintInternal(): void {
 		this.viewportRenderer.syncViewportScrollFromDom();
 
 		const state = this.engine.stateManager.getState();
-		const colCount = this.engine.columns.getDisplayedColumnCount();
 
 		// Keep scroll clamps and total extents in sync after any full repaint
 		// (handles column adds/removes and viewport resizes funneled through full paint).
 		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
 
-		this.viewportRenderer.syncSpacerAndLayers(state, colCount);
-		this.recycleViewport(false);
+		const layoutPlan = this.syncLayoutPlan();
+		this.recycleViewport(false, undefined, layoutPlan.renderWindow);
 		if (this._pendingSortAnimation) {
 			this._pendingSortAnimation = false;
 			this.sortAnimation.beginAnimation();
@@ -1111,6 +1116,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const rowIndex = rowModel.getVisualIndexByRowId(rowId);
 		const colIndex = this.engine.columns.getColumnIndex(colField);
 		if (rowIndex === null || rowIndex === -1 || colIndex === -1) return;
+		const layoutPlan = this.viewportRenderer.getLayoutPlan() ?? this.syncLayoutPlan();
 
 		const target = computeScrollTarget({
 			rowIndex,
@@ -1125,6 +1131,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			scrollLeft: this.engine.viewport.scrollLeft,
 			viewportHeight: this.engine.viewport.viewportHeight,
 			viewportWidth: this.engine.viewport.viewportWidth,
+			topChromeHeight: layoutPlan.chrome.topChromeHeight,
 			rowTops: this.engine.geometry.rowTops,
 			rowHeights: this.engine.geometry.rowHeights,
 			colLefts: this.engine.geometry.colLefts,

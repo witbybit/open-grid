@@ -15,6 +15,9 @@ export const CORE_STYLES = `
     --og-selection-border: rgba(59, 130, 246, 0.6);
     --og-selection-bg: rgba(59, 130, 246, 0.04);
     --og-focus-ring: #3b82f6;
+    --og-leaf-header-height: 40px;
+    --og-group-panel-height: 42px;
+    --og-overlay-top: var(--og-leaf-header-height);
 
     /* Pin column boundary — border and shadow on the dividing edge.
        Override these vars to customise or disable the pin boundary visual. */
@@ -119,7 +122,7 @@ export const CORE_STYLES = `
     flex-wrap: nowrap;
     gap: 7px;
     padding: 7px 10px;
-    min-height: 42px;
+    min-height: var(--og-group-panel-height);
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
       var(--og-header-bg);
@@ -364,7 +367,7 @@ export const CORE_STYLES = `
    */
   .og-layer-overlay {
     position: absolute;
-    top: 40px;
+    top: var(--og-overlay-top);
     left: 0;
     right: 0;
     bottom: 0;

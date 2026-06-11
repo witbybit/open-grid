@@ -16,6 +16,7 @@ export interface ScrollIntoViewParams {
 	scrollLeft: number;
 	viewportHeight: number;
 	viewportWidth: number;
+	topChromeHeight: number;
 	rowTops: ArrayLike<number>;
 	rowHeights: ArrayLike<number>;
 	colLefts: ArrayLike<number>;
@@ -59,12 +60,12 @@ export function computeScrollTarget(p: ScrollIntoViewParams): ScrollTarget | nul
 		const rowTop = p.rowTops[p.rowIndex] || 0;
 		const rowHeight = p.rowHeights[p.rowIndex] || 0;
 		const visibleTopLimit = p.scrollTop + pinnedTopHeight;
-		const visibleBottomLimit = p.scrollTop + (p.viewportHeight - 40) - pinnedBottomHeight;
+		const visibleBottomLimit = p.scrollTop + (p.viewportHeight - p.topChromeHeight) - pinnedBottomHeight;
 
 		if (rowTop < visibleTopLimit) {
 			targetScrollTop = rowTop - pinnedTopHeight;
 		} else if (rowTop + rowHeight > visibleBottomLimit) {
-			targetScrollTop = rowTop + rowHeight - (p.viewportHeight - 40) + pinnedBottomHeight;
+			targetScrollTop = rowTop + rowHeight - (p.viewportHeight - p.topChromeHeight) + pinnedBottomHeight;
 		}
 	}
 

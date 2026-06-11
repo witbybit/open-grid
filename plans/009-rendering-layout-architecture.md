@@ -14,6 +14,7 @@
 - **Depends on**: none, but should precede deeper column grouping and sticky grouping feature work
 - **Category**: architecture, correctness, rendering robustness
 - **Planned at**: commit `78e8122`, 2026-06-12
+- **Progress**: Phase 1 foundation started. `GridLayoutPlan` now owns top chrome, content dimensions, pinned widths, layout origins, and the active render window. Viewport chrome offsets, overlay clamping, column-drop indicator height, and programmatic scroll-to-cell now consume the layout contract.
 
 ## Vision
 
@@ -60,54 +61,54 @@ Suggested public/internal types:
 
 ```ts
 export interface GridLayoutPlan {
-  viewport: {
-    width: number;
-    height: number;
-    scrollTop: number;
-    scrollLeft: number;
-  };
-  dimensions: {
-    totalRowsHeight: number;
-    totalColumnsWidth: number;
-    contentWidth: number;
-    contentHeight: number;
-  };
-  chrome: {
-    groupPanelHeight: number;
-    columnGroupHeaderHeight: number;
-    leafHeaderHeight: number;
-    totalHeaderHeight: number;
-    topChromeHeight: number;
-  };
-  rows: {
-    rowStart: number;
-    rowEnd: number;
-    pinnedTopCount: number;
-    pinnedBottomCount: number;
-    pinnedTopHeight: number;
-    pinnedBottomHeight: number;
-    visibleTop: number;
-    visibleBottom: number;
-    bufferTopPx: number;
-    bufferBottomPx: number;
-  };
-  columns: {
-    colStart: number;
-    colEnd: number;
-    pinLeftCount: number;
-    pinRightCount: number;
-    pinLeftWidth: number;
-    pinRightWidth: number;
-    centerWidth: number;
-  };
-  origins: {
-    headerTop: number;
-    rowLayerTop: number;
-    stickyGroupLayerTop: number;
-    overlayTop: number;
-  };
-  stickyGroups: StickyGroupLayoutItem[];
-  headerBands: HeaderBandLayout[];
+	viewport: {
+		width: number;
+		height: number;
+		scrollTop: number;
+		scrollLeft: number;
+	};
+	dimensions: {
+		totalRowsHeight: number;
+		totalColumnsWidth: number;
+		contentWidth: number;
+		contentHeight: number;
+	};
+	chrome: {
+		groupPanelHeight: number;
+		columnGroupHeaderHeight: number;
+		leafHeaderHeight: number;
+		totalHeaderHeight: number;
+		topChromeHeight: number;
+	};
+	rows: {
+		rowStart: number;
+		rowEnd: number;
+		pinnedTopCount: number;
+		pinnedBottomCount: number;
+		pinnedTopHeight: number;
+		pinnedBottomHeight: number;
+		visibleTop: number;
+		visibleBottom: number;
+		bufferTopPx: number;
+		bufferBottomPx: number;
+	};
+	columns: {
+		colStart: number;
+		colEnd: number;
+		pinLeftCount: number;
+		pinRightCount: number;
+		pinLeftWidth: number;
+		pinRightWidth: number;
+		centerWidth: number;
+	};
+	origins: {
+		headerTop: number;
+		rowLayerTop: number;
+		stickyGroupLayerTop: number;
+		overlayTop: number;
+	};
+	stickyGroups: StickyGroupLayoutItem[];
+	headerBands: HeaderBandLayout[];
 }
 ```
 
@@ -171,26 +172,26 @@ Column definition shape can be introduced later, but the renderer architecture s
 
 ```ts
 export interface HeaderCellLayout {
-  id: string;
-  depth: number;
-  colStart: number;
-  colEnd: number;
-  left: number;
-  width: number;
-  height: number;
-  top: number;
-  pinned: 'left' | 'center' | 'right';
-  isLeaf: boolean;
-  label: string;
-  resizable: boolean;
-  movable: boolean;
+	id: string;
+	depth: number;
+	colStart: number;
+	colEnd: number;
+	left: number;
+	width: number;
+	height: number;
+	top: number;
+	pinned: 'left' | 'center' | 'right';
+	isLeaf: boolean;
+	label: string;
+	resizable: boolean;
+	movable: boolean;
 }
 
 export interface HeaderBandLayout {
-  depth: number;
-  top: number;
-  height: number;
-  cells: HeaderCellLayout[];
+	depth: number;
+	top: number;
+	height: number;
+	cells: HeaderCellLayout[];
 }
 ```
 
@@ -204,21 +205,21 @@ Suggested model:
 
 ```ts
 export interface GroupRowMeta {
-  groupId: string;
-  visualIndex: number;
-  depth: number;
-  parentGroupId: string | null;
-  firstChildIndex: number;
-  lastChildIndex: number;
-  firstLeafIndex: number;
-  lastLeafIndex: number;
-  descendantRowIds: string[];
-  visibleDescendantRowIds: string[];
-  childGroupIds: string[];
-  leafCount: number;
-  childCount: number;
-  expanded: boolean;
-  aggregateValues?: Record<string, unknown>;
+	groupId: string;
+	visualIndex: number;
+	depth: number;
+	parentGroupId: string | null;
+	firstChildIndex: number;
+	lastChildIndex: number;
+	firstLeafIndex: number;
+	lastLeafIndex: number;
+	descendantRowIds: string[];
+	visibleDescendantRowIds: string[];
+	childGroupIds: string[];
+	leafCount: number;
+	childCount: number;
+	expanded: boolean;
+	aggregateValues?: Record<string, unknown>;
 }
 ```
 
@@ -414,11 +415,11 @@ Possible `ColumnDef` extension:
 
 ```ts
 export interface ColumnGroupDef<TRowData = unknown> {
-  groupId: string;
-  headerName: string;
-  children: Array<ColumnGroupDef<TRowData> | ColumnDef<TRowData>>;
-  marryChildren?: boolean;
-  openByDefault?: boolean;
+	groupId: string;
+	headerName: string;
+	children: Array<ColumnGroupDef<TRowData> | ColumnDef<TRowData>>;
+	marryChildren?: boolean;
+	openByDefault?: boolean;
 }
 ```
 
@@ -426,7 +427,7 @@ Or support a lighter first step:
 
 ```ts
 interface ColumnDef {
-  headerGroup?: string | string[];
+	headerGroup?: string | string[];
 }
 ```
 
@@ -480,27 +481,27 @@ Done criteria:
 Add tests at three levels:
 
 1. **Pure layout tests**
-   - Given viewport, row model metadata, column plan, and chrome config, assert exact layout plan values.
-   - These should be fast and deterministic.
+    - Given viewport, row model metadata, column plan, and chrome config, assert exact layout plan values.
+    - These should be fast and deterministic.
 
 2. **Renderer characterization tests**
-   - Assert DOM layer existence, transform/top values, sticky group mount/unmount behavior, and header band alignment.
+    - Assert DOM layer existence, transform/top values, sticky group mount/unmount behavior, and header band alignment.
 
 3. **React integration tests**
-   - Assert group row selection, sticky group portal rendering, and column panel/header UI state.
+    - Assert group row selection, sticky group portal rendering, and column panel/header UI state.
 
 The pure layout tests are the most important. AG Grid-level reliability comes from being able to prove geometry before the DOM gets involved.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-| --- | --- | --- |
-| Core tests | `corepack pnpm --filter @open-grid/core test` | exit 0 |
-| Core build | `corepack pnpm --filter @open-grid/core build` | exit 0 |
-| React tests | `corepack pnpm --filter @open-grid/react test` | exit 0 |
-| React build | `corepack pnpm --filter @open-grid/react build` | exit 0 |
-| Demo build | `corepack pnpm --filter demo-app build` | exit 0 |
-| Formatting | `corepack pnpm exec prettier --check <touched files>` | exit 0 |
+| Purpose     | Command                                               | Expected on success |
+| ----------- | ----------------------------------------------------- | ------------------- |
+| Core tests  | `corepack pnpm --filter @open-grid/core test`         | exit 0              |
+| Core build  | `corepack pnpm --filter @open-grid/core build`        | exit 0              |
+| React tests | `corepack pnpm --filter @open-grid/react test`        | exit 0              |
+| React build | `corepack pnpm --filter @open-grid/react build`       | exit 0              |
+| Demo build  | `corepack pnpm --filter demo-app build`               | exit 0              |
+| Formatting  | `corepack pnpm exec prettier --check <touched files>` | exit 0              |
 
 ## Scope
 
@@ -558,4 +559,3 @@ Future features that should build on this plan:
 - Tree-data sticky parents.
 - Header row auto-height.
 - Pivot-like column group generation.
-

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeScrollTarget, type ScrollIntoViewParams } from './scrollIntoView.js';
+import { GROUP_PANEL_HEIGHT, LEAF_HEADER_HEIGHT } from './layoutPlan.js';
 
 function makeParams(overrides: Partial<ScrollIntoViewParams> = {}): ScrollIntoViewParams {
 	// 10 rows × 5 cols, each row 30px, each col 100px, viewport 300×400
@@ -20,6 +21,7 @@ function makeParams(overrides: Partial<ScrollIntoViewParams> = {}): ScrollIntoVi
 		scrollLeft: 0,
 		viewportHeight: 300,
 		viewportWidth: 400,
+		topChromeHeight: LEAF_HEADER_HEIGHT,
 		rowTops: Array.from({ length: rowCount }, (_, i) => i * rowHeight),
 		rowHeights: Array.from({ length: rowCount }, () => rowHeight),
 		colLefts: Array.from({ length: colCount }, (_, i) => i * colWidth),
@@ -41,11 +43,17 @@ describe('computeScrollTarget', () => {
 	});
 
 	it('scrolls down when the target row is below the visible area', () => {
-		// viewportHeight=300, so effective bottom = 300-40=260px visible from scrollTop=0
+		// viewportHeight=300, so effective bottom = 300-header=260px visible from scrollTop=0
 		// rowIndex=9 → rowTop=270, rowHeight=30; bottom=300 > 260 → need to scroll
 		const result = computeScrollTarget(makeParams({ rowIndex: 9 }));
 		expect(result).not.toBeNull();
 		expect(result!.top).toBeGreaterThan(0);
+	});
+
+	it('uses top chrome height when scrolling a row into view', () => {
+		const result = computeScrollTarget(makeParams({ rowIndex: 8, topChromeHeight: LEAF_HEADER_HEIGHT + GROUP_PANEL_HEIGHT }));
+
+		expect(result).toEqual({ top: 52, left: 0 });
 	});
 
 	it('scrolls up when the target row is above the visible area', () => {
