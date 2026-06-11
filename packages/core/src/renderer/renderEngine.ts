@@ -847,6 +847,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			})
 		);
 		this.unsubscribers.push(
+			this.engine.eventBus.addEventListener(GridEventName.rowSelectionChanged, () => {
+				this.requestFlushGated('selection');
+			})
+		);
+		this.unsubscribers.push(
 			this.engine.eventBus.addEventListener(GridEventName.cellInvalidated, () => {
 				this.requestFlushGated('cell');
 			})

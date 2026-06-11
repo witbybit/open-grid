@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GridProvider, OpenGrid, useClientGrid, createLocalStorageAdapter } from '@open-grid/react';
 import type { AggregationDef, ColumnDef, CellRendererProps, GroupVisualRow } from '@open-grid/react';
 
@@ -284,7 +284,15 @@ function aggChip(color: string): React.CSSProperties {
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
-function Toolbar({ api }: { api: ReturnType<typeof useClientGrid<SalesRow>> }) {
+function Toolbar({
+	api,
+	showPanel,
+	onTogglePanel,
+}: {
+	api: ReturnType<typeof useClientGrid<SalesRow>>;
+	showPanel: boolean;
+	onTogglePanel: () => void;
+}) {
 	return (
 		<div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
 			<ToolBtn onClick={() => api.expandAllGroups()} title='Expand all groups'>
@@ -292,6 +300,10 @@ function Toolbar({ api }: { api: ReturnType<typeof useClientGrid<SalesRow>> }) {
 			</ToolBtn>
 			<ToolBtn onClick={() => api.collapseAllGroups()} title='Collapse all groups'>
 				Collapse All
+			</ToolBtn>
+			<div style={{ width: 1, height: 16, background: 'rgba(100,116,139,0.3)', margin: '0 2px' }} />
+			<ToolBtn onClick={onTogglePanel} title='Toggle drag-to-group panel' accent={showPanel}>
+				{showPanel ? 'Hide Group Panel' : 'Group Panel'}
 			</ToolBtn>
 			<div style={{ width: 1, height: 16, background: 'rgba(100,116,139,0.3)', margin: '0 2px' }} />
 			<ToolBtn onClick={() => api.exportCsv({ fileName: 'sales-pipeline.csv' })} title='Download as CSV (Excel-compatible)' accent>
@@ -329,10 +341,16 @@ function ToolBtn({ children, onClick, title, accent }: { children: React.ReactNo
 // ── Inner component ───────────────────────────────────────────────────────────
 
 function RealtimeGroupingDemoInner({ api }: { api: ReturnType<typeof useClientGrid<SalesRow>> }) {
+	const [showPanel, setShowPanel] = useState(true);
+
 	useEffect(() => {
 		api.setRows(ROWS);
 		api.setAggDefs(AGG_DEFS);
 	}, [api]);
+
+	useEffect(() => {
+		api.setShowGroupPanel(showPanel);
+	}, [api, showPanel]);
 
 	return (
 		<div style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 12 }}>
@@ -343,8 +361,11 @@ function RealtimeGroupingDemoInner({ api }: { api: ReturnType<typeof useClientGr
 					<span className='text-[10px] text-slate-400 font-extrabold uppercase tracking-wider'>
 						Sales Pipeline — 500 rows · 10 columns · Live Grouping + Aggregations
 					</span>
+					{showPanel && (
+						<span className='text-[10px] text-blue-400/60 font-semibold ml-2'>· Drag column headers into the group panel to group</span>
+					)}
 				</div>
-				<Toolbar api={api} />
+				<Toolbar api={api} showPanel={showPanel} onTogglePanel={() => setShowPanel((v) => !v)} />
 			</div>
 
 			{/* Grid */}
@@ -378,6 +399,7 @@ export default function RealtimeGroupingDemo() {
 			groupRowHeight: 44,
 			showGroupFooter: true,
 			enableStickyGroupRows: true,
+			showGroupPanel: true,
 		},
 	});
 

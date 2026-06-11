@@ -119,6 +119,11 @@ export class ViewportRenderer<TRowData = unknown> {
 		if (this.groupPanel) {
 			this.groupPanel.style.display = visible ? 'flex' : 'none';
 		}
+		// Keep the header sticky position below the group panel so they don't overlap.
+		// The group panel CSS min-height is 38px; offset the header by that amount when visible.
+		if (this.headerWrapper) {
+			this.headerWrapper.style.top = visible ? '38px' : '0';
+		}
 	}
 
 	public syncSpacerAndLayers(state: GridState<TRowData>, colCount: number): void {

@@ -1194,6 +1194,9 @@ export class RowRenderer<TRowData = unknown> {
 		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 		const pinRightBaseLeft = plan.pinRightBaseLeft;
 
+		// Refresh the selection set so any checkbox cells repainted here see the current state.
+		this._selectedRowIdSet = state.selectedRowIds.length > 0 ? new Set(state.selectedRowIds) : null;
+
 		// Repaint rows
 		for (const rowId of frame.rows) {
 			const rowIndex = rowModel.getVisualIndexByRowId(rowId);
@@ -1201,6 +1204,29 @@ export class RowRenderer<TRowData = unknown> {
 			const row = rowIndex >= 0 ? rowModel.getVisualRow(rowIndex) : null;
 			if (slot && row?.kind === 'data') {
 				this.updateRowClassNameSlot(slot, row.node, rowIndex, state);
+				// Rebind checkbox cells so their checked state reflects the new selection.
+				for (let c = 0; c < colCount; c++) {
+					if (!columns[c].checkboxSelection) continue;
+					const cellSlot = slot.getCellForCol(c);
+					if (!cellSlot) continue;
+					this._bindCellFull(
+						cellSlot,
+						slot.id,
+						row.node,
+						rowIndex,
+						c,
+						columns[c],
+						pinLeftColumns,
+						pinRightColumns,
+						pinRightStart,
+						pinRightBaseLeft,
+						plan,
+						state,
+						false,
+						undefined,
+						'initial'
+					);
+				}
 			}
 		}
 
