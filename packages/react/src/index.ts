@@ -5,14 +5,7 @@ export type { GridPaginationProps, ClientGridPaginationResult } from './paginati
 export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
 export { useClientGrid, useServerGrid } from './useGrid.js';
-export {
-	useGridApi,
-	useGridSelector,
-	useGridSelectorWithEquality,
-	useGridKeySelector,
-	useGridKeySelectorWithEquality,
-	useGridNavigationController,
-} from './hooks.js';
+export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
 
 // ─── Built-in cell renderers & editors ───────────────────────────────────────

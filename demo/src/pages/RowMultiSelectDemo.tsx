@@ -81,7 +81,7 @@ const COLUMNS: ColumnDef<OrderRow>[] = [
 // ─── Selection status bar (reactive via useGridKeySelector) ───────────────────
 
 function SelectionStatusBar({ totalCount }: { totalCount: number }) {
-	const selectedIds = useGridKeySelector('selectedRowIds', (s: any) => s.selectedRowIds as string[]);
+	const selectedIds = useGridKeySelector('selectedRowIds', (s) => s.selectedRowIds);
 	const count = selectedIds.length;
 
 	if (count === 0) {
@@ -127,7 +127,7 @@ function BulkActions({
 	setBulkTag: (v: string) => void;
 }) {
 	const api = useGridApi<OrderRow>();
-	const selectedCount = useGridKeySelector('selectedRowIds', (s) => (s.selectedRowIds as string[]).length);
+	const selectedCount = useGridKeySelector('selectedRowIds', (s) => s.selectedRowIds.length);
 	const hasSelection = selectedCount > 0;
 
 	return (

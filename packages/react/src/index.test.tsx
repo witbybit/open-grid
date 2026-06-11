@@ -11,7 +11,6 @@ import {
 	PortalCell,
 	PortalManager,
 	OpenGrid,
-	useGridNavigationController,
 	useGridKeySelector,
 	useGridApi,
 	useGridSelector,
@@ -20,6 +19,7 @@ import {
 	GridPagination,
 	useClientGridPagination,
 } from './index.js';
+import { useGridNavigationController } from './hooks.js';
 import { createPortalStore } from './GridPortal.js';
 
 // Mock ResizeObserver for jsdom environment
