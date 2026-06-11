@@ -685,14 +685,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// 4. Sticky group rows position update
 		const stickyIndices = window.stickyGroupIndices;
 		if (stickyIndices && stickyIndices.length > 0) {
-			const defaultRowHeight = this.cachedDefaultRowHeight;
-			let stickyOffset = 0;
-			for (const stickyIdx of stickyIndices) {
+			const stickyTops = window.stickyGroupTops;
+			for (let i = 0; i < stickyIndices.length; i++) {
+				const stickyIdx = stickyIndices[i];
 				const slot = this.rowRenderer.activeRows.get(stickyIdx);
 				if (slot) {
-					slot.updatePosition(scrollTop + stickyOffset);
+					slot.updatePosition(stickyTops?.[i] ?? scrollTop);
 				}
-				stickyOffset += this.engine.geometry.getRowHeight(stickyIdx, defaultRowHeight);
 			}
 		}
 

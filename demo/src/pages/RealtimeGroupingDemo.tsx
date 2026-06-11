@@ -154,12 +154,26 @@ function GroupRowRenderer({ visualRow, api }: { visualRow: GroupVisualRow<SalesR
 				display: 'flex',
 				alignItems: 'center',
 				height: '100%',
-				paddingLeft: 8 + visualRow.depth * 16,
-				gap: 10,
+				paddingLeft: 12 + visualRow.depth * 18,
+				paddingRight: 12,
+				gap: 8,
 				cursor: 'pointer',
+				minWidth: 0,
+				background: 'linear-gradient(90deg, rgba(124,58,237,0.16), rgba(37,99,235,0.08) 42%, rgba(15,23,42,0.02))',
+				boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
 			}}
 			onClick={() => api.toggleGroupExpanded(visualRow.groupId)}
 		>
+			<span
+				style={{
+					width: 3,
+					height: 22,
+					borderRadius: 999,
+					background: visualRow.depth === 0 ? '#8b5cf6' : '#3b82f6',
+					opacity: 0.9,
+					flexShrink: 0,
+				}}
+			/>
 			<span
 				style={{
 					display: 'flex',
@@ -180,7 +194,40 @@ function GroupRowRenderer({ visualRow, api }: { visualRow: GroupVisualRow<SalesR
 				▶
 			</span>
 
-			<span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', letterSpacing: '0.03em', minWidth: 80 }}>{visualRow.keyString}</span>
+			<span
+				style={{
+					display: 'flex',
+					alignItems: 'baseline',
+					gap: 6,
+					minWidth: 130,
+					maxWidth: 260,
+					overflow: 'hidden',
+				}}
+			>
+				<span
+					style={{
+						fontSize: 10,
+						fontWeight: 800,
+						color: '#94a3b8',
+						textTransform: 'uppercase',
+						whiteSpace: 'nowrap',
+					}}
+				>
+					{visualRow.field}
+				</span>
+				<span
+					style={{
+						fontSize: 13,
+						fontWeight: 800,
+						color: '#c4b5fd',
+						whiteSpace: 'nowrap',
+						overflow: 'hidden',
+						textOverflow: 'ellipsis',
+					}}
+				>
+					{visualRow.keyString}
+				</span>
+			</span>
 
 			<span
 				style={{
@@ -199,7 +246,7 @@ function GroupRowRenderer({ visualRow, api }: { visualRow: GroupVisualRow<SalesR
 
 			{/* Aggregate chips */}
 			{agg && (
-				<div style={{ display: 'flex', gap: 6, marginLeft: 4 }}>
+				<div style={{ display: 'flex', gap: 6, marginLeft: 'auto', minWidth: 0, overflow: 'hidden' }}>
 					{agg.revenue != null && (
 						<span style={aggChip('#3b82f6')}>
 							Rev: <strong>${Number(agg.revenue).toLocaleString()}</strong>
@@ -224,13 +271,14 @@ function GroupRowRenderer({ visualRow, api }: { visualRow: GroupVisualRow<SalesR
 function aggChip(color: string): React.CSSProperties {
 	return {
 		fontSize: 10,
-		fontWeight: 500,
-		padding: '1px 7px',
-		borderRadius: 10,
+		fontWeight: 700,
+		padding: '2px 8px',
+		borderRadius: 999,
 		background: `${color}14`,
 		border: `1px solid ${color}33`,
 		color: `${color}cc`,
 		whiteSpace: 'nowrap',
+		flexShrink: 0,
 	};
 }
 
@@ -327,7 +375,7 @@ export default function RealtimeGroupingDemo() {
 		persistence: createLocalStorageAdapter('open-grid-sales-demo'),
 		initialState: {
 			groupBy: ['region', 'category'],
-			groupRowHeight: 40,
+			groupRowHeight: 44,
 			showGroupFooter: true,
 			enableStickyGroupRows: true,
 		},

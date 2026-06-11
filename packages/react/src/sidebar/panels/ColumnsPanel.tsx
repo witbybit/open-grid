@@ -373,13 +373,29 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 								Row Groups
 							</span>
 							{hasGroups && (
-								<button
-									onClick={clearAllGroups}
-									style={{ ...iconBtnStyle, fontSize: 9, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
-									title='Clear all groups'
-								>
-									Clear
-								</button>
+								<div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+									<button
+										onClick={() => api.expandAllGroups?.()}
+										style={{ ...iconBtnStyle, fontSize: 9, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
+										title='Expand all groups'
+									>
+										Expand
+									</button>
+									<button
+										onClick={() => api.collapseAllGroups?.()}
+										style={{ ...iconBtnStyle, fontSize: 9, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
+										title='Collapse all groups'
+									>
+										Collapse
+									</button>
+									<button
+										onClick={clearAllGroups}
+										style={{ ...iconBtnStyle, fontSize: 9, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
+										title='Clear all groups'
+									>
+										Clear
+									</button>
+								</div>
 							)}
 						</div>
 

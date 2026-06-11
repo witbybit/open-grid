@@ -1,6 +1,15 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { applyRenderWindowRuntimeLimits, getRowIndices, getColIndices, diffRenderWindow, type RenderWindow } from './renderWindow.js';
+import {
+	applyRenderWindowRuntimeLimits,
+	getRowIndices,
+	getColIndices,
+	diffRenderWindow,
+	computeRenderWindow,
+	type RenderWindow,
+} from './renderWindow.js';
+import { GridStore } from '../store.js';
+import { ClientRowModelController } from '../rowModel.js';
 
 describe('RenderWindow & ViewportDelta calculations', () => {
 	const baseWindow: RenderWindow = {
@@ -142,5 +151,45 @@ describe('RenderWindow & ViewportDelta calculations', () => {
 		expect(limited.colEnd).toBeGreaterThanOrEqual(limited.colStart);
 		expect(getRowIndices(limited)).toEqual([0, 1, 2, 3, 17, 18, 19]);
 		expect(getColIndices(limited)).toEqual([0, 1, 2, 8, 9]);
+	});
+
+	it('anchors sticky group rows below pinned top rows', () => {
+		const store = new GridStore<{ id: string; category: string; product: string }>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'product', header: 'Product' },
+			],
+			defaultRowHeight: 40,
+			groupRowHeight: 40,
+			enableStickyGroupRows: true,
+			rowModelConfig: {
+				type: 'client',
+				grouping: {
+					model: [{ colId: 'category' }, { colId: 'product' }],
+					defaultExpanded: true,
+				},
+			},
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', category: 'Hardware', product: 'Workstation' },
+				{ id: '2', category: 'Hardware', product: 'Workstation' },
+				{ id: '3', category: 'Hardware', product: 'Laptop' },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.setViewportPins({ top: 1 });
+		store.setViewportSize(500, 160);
+		store.setScrollPosition(80, 0);
+
+		const window = computeRenderWindow(store.engine);
+		expect(window.stickyGroupIndices).toContain(1);
+		const stickyPos = window.stickyGroupIndices?.indexOf(1) ?? -1;
+		expect(window.stickyGroupTops?.[stickyPos]).toBe(120);
+
+		controller.dispose();
+		store.destroy();
 	});
 });

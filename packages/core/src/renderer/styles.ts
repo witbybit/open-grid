@@ -258,9 +258,9 @@ export const CORE_STYLES = `
   }
 
   .og-row-group-sticky {
-    z-index: 10;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-    border-bottom: 1px solid rgba(167, 139, 250, 0.2) !important;
+    z-index: 28;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28), 0 1px 0 rgba(167, 139, 250, 0.24);
+    border-bottom: 1px solid rgba(167, 139, 250, 0.28) !important;
   }
 
   .og-row-pinned-bottom {
@@ -848,21 +848,38 @@ export const CORE_STYLES = `
     width: 100%;
     user-select: none;
     cursor: pointer;
-    background-color: var(--og-group-row-bg);
+    background:
+      linear-gradient(90deg, rgba(167, 139, 250, 0.13), rgba(59, 130, 246, 0.08) 44%, rgba(15, 23, 42, 0.02)),
+      var(--og-group-row-bg);
     color: var(--og-group-row-text);
     font-size: var(--og-group-row-font-size);
     font-weight: var(--og-group-row-font-weight);
+    gap: 10px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
     transition: background-color 0.15s ease;
   }
 
   .og-group-row-content:hover {
-    background-color: var(--og-group-row-hover-bg);
+    background:
+      linear-gradient(90deg, rgba(167, 139, 250, 0.18), rgba(59, 130, 246, 0.11) 44%, rgba(15, 23, 42, 0.04)),
+      var(--og-group-row-hover-bg);
   }
 
   .og-group-row-toggle {
-    margin-right: 8px;
+    width: 18px;
+    height: 18px;
+    margin-right: 0;
     transition: transform 0.15s ease;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border-radius: 4px;
+    border: 1px solid rgba(167, 139, 250, 0.34);
+    background: rgba(167, 139, 250, 0.14);
+    color: #c4b5fd;
+    line-height: 1;
   }
 
   .og-group-row-toggle-expanded {
@@ -870,21 +887,26 @@ export const CORE_STYLES = `
   }
 
   .og-group-row-label-prefix {
-    opacity: 0.6;
+    opacity: 0.72;
     margin-right: 6px;
     text-transform: uppercase;
     font-size: 11px;
-    letter-spacing: 0.5px;
+    letter-spacing: 0;
+    color: #94a3b8;
+    white-space: nowrap;
   }
 
   .og-group-count {
-    margin-left: 10px;
+    margin-left: 4px;
     background: var(--og-group-badge-bg);
     border: 1px solid var(--og-group-badge-border);
     color: var(--og-group-badge-text);
-    padding: 1px 6px;
-    border-radius: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
     font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    flex: 0 0 auto;
   }
 
   .og-detail-row-content {

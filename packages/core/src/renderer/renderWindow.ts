@@ -375,16 +375,16 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 				const groupIdx = groupIdxs[i];
 				if (groupIdx >= rowCount) break; // ascending — all later are out of range too
 				const groupTop = engine.geometry.getRowTop(groupIdx, defaultRowHeight);
-				if (groupTop >= scrollTop) break; // ascending tops — nothing later can be sticky
+				if (groupTop >= visibleTop) break; // ascending tops — nothing later can be sticky
 				const lastDescIdx = lastIdxs[i];
 				if (lastDescIdx >= rowCount) {
 					i++;
 					continue;
 				}
-				if (engine.geometry.getRowBottom(lastDescIdx, defaultRowHeight) > scrollTop) {
+				if (engine.geometry.getRowBottom(lastDescIdx, defaultRowHeight) > visibleTop) {
 					// Sticky: descend into this subtree (its children follow in DFS order).
 					stickyIndices.push(groupIdx);
-					stickyTops.push(scrollTop + stickyOffset);
+					stickyTops.push(visibleTop + stickyOffset);
 					stickyOffset += engine.geometry.getRowHeight(groupIdx, defaultRowHeight);
 					i++;
 				} else {
