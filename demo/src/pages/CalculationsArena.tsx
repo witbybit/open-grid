@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridEventName, GridProvider, useClientGrid } from '@open-grid/react';
+import { GridEventName, GridProvider, useClientGrid, useStyleRules, type StyleRule } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Activity, ShieldAlert, BadgePercent } from 'lucide-react';
 
@@ -30,47 +30,67 @@ export default function CalculationsArena({
 		highRiskCount: 0,
 	});
 
-	// Register premium style slots for Option Greeks & Risk
-	useEffect(() => {
-		api.setStyleSlots({
-			rowClass: (row) => {
-				const r = row as PerformanceRow;
-				if (!r) return '';
-				let base = 'transition-all duration-200 border-l-2 ';
-				if (r.status === 'Inactive') {
-					return base + 'border-rose-500/80 bg-rose-950/5 hover:bg-rose-900/10 text-rose-200/90';
-				}
-				if (r.status === 'Pending') {
-					return base + 'border-amber-500/60 bg-amber-950/5 hover:bg-amber-900/10 text-amber-200/90';
-				}
-				return base + 'border-emerald-500/40 bg-emerald-950/5 hover:bg-emerald-900/10 text-emerald-200/90';
+	const GREEK_FIELDS = ['delta', 'gamma', 'vega', 'theta'];
+
+	// Declarative style rules for Option Greeks & Risk
+	const styleRules = useMemo<StyleRule<PerformanceRow>[]>(
+		() => [
+			{
+				kind: 'row',
+				when: (row) => row.status === 'Inactive',
+				rowClass: 'transition-all duration-200 border-l-2 border-rose-500/80 bg-rose-950/5 hover:bg-rose-900/10 text-rose-200/90',
 			},
-			cellClass: (col, row) => {
-				const r = row as PerformanceRow;
-				if (!r) return '';
-				if (col.field === 'delta') {
-					const vol = parseFloat(r.quantity) || 20;
-					const strike = parseFloat(r.price) || 100;
+			{
+				kind: 'row',
+				when: (row) => row.status === 'Pending',
+				rowClass: 'transition-all duration-200 border-l-2 border-amber-500/60 bg-amber-950/5 hover:bg-amber-900/10 text-amber-200/90',
+			},
+			{
+				kind: 'row',
+				when: (row) => row.status !== 'Inactive' && row.status !== 'Pending',
+				rowClass: 'transition-all duration-200 border-l-2 border-emerald-500/40 bg-emerald-950/5 hover:bg-emerald-900/10 text-emerald-200/90',
+			},
+			{
+				kind: 'cell',
+				field: 'delta',
+				when: (row) => {
+					const vol = parseFloat(row.quantity) || 20;
+					const strike = parseFloat(row.price) || 100;
 					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
-					const delta = 0.5 + 0.5 * Math.tanh(d1);
-					if (delta > 0.8) return 'text-emerald-400 font-extrabold font-mono';
-					if (delta < 0.2) return 'text-rose-400 font-extrabold font-mono';
-				}
-				if (col.field === 'status') {
-					if (r.status === 'Inactive') return 'text-rose-400 font-bold animate-pulse';
-					if (r.status === 'Pending') return 'text-amber-400 font-bold';
-					return 'text-emerald-400 font-bold';
-				}
-				return '';
+					return 0.5 + 0.5 * Math.tanh(d1) > 0.8;
+				},
+				cellClass: 'text-emerald-400 font-extrabold font-mono',
 			},
-			headerCellClass: (col) => {
-				if (['delta', 'gamma', 'vega', 'theta'].includes(col.field)) {
-					return 'text-purple-350 font-extrabold bg-purple-950/10 border-b border-purple-900/20';
-				}
-				return 'font-semibold text-slate-400';
+			{
+				kind: 'cell',
+				field: 'delta',
+				when: (row) => {
+					const vol = parseFloat(row.quantity) || 20;
+					const strike = parseFloat(row.price) || 100;
+					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
+					return 0.5 + 0.5 * Math.tanh(d1) < 0.2;
+				},
+				cellClass: 'text-rose-400 font-extrabold font-mono',
 			},
-		});
-	}, [api]);
+			{ kind: 'cell', field: 'status', when: (row) => row.status === 'Inactive', cellClass: 'text-rose-400 font-bold animate-pulse' },
+			{ kind: 'cell', field: 'status', when: (row) => row.status === 'Pending', cellClass: 'text-amber-400 font-bold' },
+			{
+				kind: 'cell',
+				field: 'status',
+				when: (row) => row.status !== 'Inactive' && row.status !== 'Pending',
+				cellClass: 'text-emerald-400 font-bold',
+			},
+			{
+				kind: 'headerCell',
+				when: (col) => GREEK_FIELDS.includes(col.field),
+				headerCellClass: 'text-purple-350 font-extrabold bg-purple-950/10 border-b border-purple-900/20',
+			},
+			{ kind: 'headerCell', when: (col) => !GREEK_FIELDS.includes(col.field), headerCellClass: 'font-semibold text-slate-400' },
+		],
+		[]
+	);
+
+	useStyleRules(api, styleRules);
 
 	useEffect(() => {
 		const calculateTelemetry = () => {

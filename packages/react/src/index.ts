@@ -28,11 +28,25 @@ export {
 	// Utilities
 	parseMultiValue,
 	TagsCellRenderer,
+	// Column type registry
+	BUILTIN_COLUMN_TYPES,
+	// Column type helpers
+	numberColumnType,
+	multiSelectColumnType,
+	dropdownColumnType,
 } from './renderers/CellTypes.js';
-export type { DropdownOption, DropdownOptionColor, NumberCellRendererOptions, NumberCellEditorOptions } from './renderers/CellTypes.js';
+export type {
+	DropdownOption,
+	DropdownOptionColor,
+	NumberCellRendererOptions,
+	NumberCellEditorOptions,
+	ColumnTypeDefinition,
+} from './renderers/CellTypes.js';
 
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from './types.js';
 export type { GridEventPayloadMap, GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
+export { useStyleRules } from './styleRules.js';
+export type { StyleRule, RowStyleRule, CellStyleRule, HeaderCellStyleRule } from './styleRules.js';
 export type {
 	ColumnDef,
 	CellEditorProps,

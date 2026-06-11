@@ -11,6 +11,8 @@ import {
 	GridState,
 	GridPersistenceAdapter,
 } from '@open-grid/core';
+import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
+import type { StyleRule } from './styleRules.js';
 import { InternalColumnDef, GridHost, mountGridHost, getStoreFromApi } from '@open-grid/core/internal';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { useClientGrid } from './useGrid.js';
@@ -50,6 +52,10 @@ export interface OpenGridProps<TRowData = unknown> {
 	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
 	/** Shortcut for `initialState.detailRowHeight`. Height in px for expanded master-detail rows. */
 	detailRowHeight?: number;
+	/** Named column types resolved against the `type` field on ColumnDef. See `ClientGridOptions.columnTypes`. */
+	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
+	/** Declarative style rules. See `ClientGridOptions.styleRules`. */
+	styleRules?: StyleRule<TRowData>[];
 
 	// ─── External api mode ───────────────────────────────────────────────────
 	// Pass a pre-created GridApi from `useClientGrid()` or `useServerGrid()`.
@@ -112,6 +118,8 @@ export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
 function OpenGridManagedClient<TRowData = unknown>({
 	rows,
 	columns,
+	columnTypes,
+	styleRules,
 	getRowId,
 	initialState,
 	persistence,
@@ -131,6 +139,8 @@ function OpenGridManagedClient<TRowData = unknown>({
 	const api = useClientGrid<TRowData>({
 		rows: rows!,
 		columns: columns ?? [],
+		columnTypes,
+		styleRules,
 		getRowId,
 		initialState: mergedInitialState,
 		persistence,

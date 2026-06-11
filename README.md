@@ -454,7 +454,170 @@ export const StatusHeaderFilter = ({ colField, api, close }: CustomFilterProps) 
 
 ---
 
-### 5. Pagination
+### 5. Built-in Cell Types & Column Type Registry
+
+`@open-grid/react` ships six ready-to-use cell types — checkbox, date, number, multi-select, dropdown, and tags. Attach them to a column with `type: 'name'` and the grid resolves the renderer and editor automatically, with no component imports needed in your column definitions.
+
+#### Built-in types (no configuration required)
+
+| `type` value | Renderer           | Editor                              |
+| :----------- | :----------------- | :---------------------------------- |
+| `'checkbox'` | Toggle checkbox    | Toggles on click — no editor needed |
+| `'date'`     | DD/MM/YYYY display | Native date picker                  |
+| `'number'`   | Mono number        | Stepper with ↑↓ keys                |
+
+```tsx
+const columns: ColumnDef<Row>[] = [
+	{ field: 'isActive', header: 'Active', width: 70, type: 'checkbox' },
+	{ field: 'startDate', header: 'Start Date', width: 145, type: 'date' },
+	{ field: 'quantity', header: 'Qty', width: 100, type: 'number' },
+];
+```
+
+#### Parameterised types via `columnTypes`
+
+Types that need runtime config (options list, formatting, bounds) are registered in the `columnTypes` prop using the helper factories. The type name is then referenced in `ColumnDef.type` exactly like a built-in.
+
+```tsx
+import { multiSelectColumnType, dropdownColumnType, numberColumnType, type ColumnTypeDefinition, type DropdownOption } from '@open-grid/react';
+
+const STATUS_OPTIONS: DropdownOption[] = [
+	{ value: 'Active', color: 'emerald' },
+	{ value: 'Pending', color: 'amber' },
+	{ value: 'Inactive', color: 'default' },
+];
+
+const SKILLS_OPTIONS = ['React', 'TypeScript', 'Node', 'Go', 'Rust'];
+
+// Registered once at module level — references are stable
+const MY_COLUMN_TYPES: Record<string, ColumnTypeDefinition<EmployeeRow>> = {
+	status: dropdownColumnType(STATUS_OPTIONS),
+	skills: multiSelectColumnType(SKILLS_OPTIONS, 3),
+	salary: numberColumnType({ prefix: '$', decimals: 2, locale: true }),
+	yearsExp: numberColumnType({ suffix: ' yrs', min: 0, max: 50, step: 1 }),
+};
+
+const columns: ColumnDef<EmployeeRow>[] = [
+	{ field: 'name', header: 'Name', width: 180 },
+	{ field: 'status', header: 'Status', width: 130, type: 'status' },
+	{ field: 'skills', header: 'Skills', width: 260, type: 'skills' },
+	{ field: 'salary', header: 'Salary', width: 130, type: 'salary' },
+	{ field: 'yearsExp', header: 'Experience', width: 120, type: 'yearsExp' },
+	{ field: 'joinDate', header: 'Joined', width: 145, type: 'date' },
+	{ field: 'isPro', header: 'Pro', width: 68, type: 'checkbox' },
+];
+
+const api = useClientGrid<EmployeeRow>({ rows, columns, columnTypes: MY_COLUMN_TYPES });
+```
+
+Column-level `renderer` / `cellEditor` always override a type — so you can use a type as a default and override on specific columns.
+
+#### Helper factory reference
+
+| Factory                                       | Options                                                        | Description                                |
+| :-------------------------------------------- | :------------------------------------------------------------- | :----------------------------------------- |
+| `numberColumnType(opts?)`                     | `prefix`, `suffix`, `decimals`, `locale`, `min`, `max`, `step` | Formatted number renderer + stepper editor |
+| `multiSelectColumnType(options, maxVisible?)` | `string[]` option list, visible cap                            | Pill-tag renderer + search dropdown editor |
+| `dropdownColumnType(options)`                 | `DropdownOption[]` with `value`, `label`, `color`              | Badge renderer + `<select>` editor         |
+
+---
+
+### 6. Declarative Style Rules
+
+`styleRules` is the recommended way to conditionally style rows, cells, and header cells. It replaces the imperative `api.setStyleSlots()` call with a plain array of rule objects that the grid compiles internally — no import of a compiler function needed.
+
+#### Passing rules as a prop
+
+When you own the grid via `useClientGrid` or `<OpenGrid>`, pass `styleRules` directly:
+
+```tsx
+import { useClientGrid, type StyleRule } from '@open-grid/react';
+
+const styleRules = useMemo<StyleRule<OrderRow>[]>(
+	() => [
+		// Row rules — applied to the whole row
+		{
+			kind: 'row',
+			when: (row) => row.status === 'Cancelled',
+			rowClass: 'opacity-50 line-through text-slate-500',
+		},
+		// Cell rules — optionally scoped to a single field
+		{
+			kind: 'cell',
+			field: 'total',
+			when: (row) => Number(row.total) > 10_000,
+			cellClass: 'text-emerald-400 font-extrabold font-mono',
+		},
+		// Header cell rules
+		{
+			kind: 'headerCell',
+			field: 'total',
+			when: () => true,
+			headerCellClass: 'text-emerald-400 font-bold',
+		},
+		{
+			kind: 'headerCell',
+			when: (col) => col.field !== 'total',
+			headerCellClass: 'font-semibold text-slate-400',
+		},
+	],
+	[]
+);
+
+const api = useClientGrid<OrderRow>({ rows, columns, styleRules });
+```
+
+All matching rules contribute their class strings (space-joined), so rules are composable. Evaluate order follows array order — later rules can override earlier ones via the CSS cascade.
+
+#### `useStyleRules` — for components that receive `api` as a prop
+
+When a component receives an API handle from a parent (rather than owning it via `useClientGrid`), use the `useStyleRules` hook to apply rules without touching `api.setStyleSlots` directly:
+
+```tsx
+import { useStyleRules, type StyleRule } from '@open-grid/react';
+
+function DashboardGrid({ api }: { api: GridApi<StockRow> }) {
+	const styleRules = useMemo<StyleRule<StockRow>[]>(
+		() => [
+			{
+				kind: 'row',
+				when: (row) => parseFloat(row.change) > 0,
+				rowClass: 'border-l-2 border-emerald-500/60 bg-emerald-950/5',
+			},
+			{
+				kind: 'row',
+				when: (row) => parseFloat(row.change) < 0,
+				rowClass: 'border-l-2 border-rose-500/60 bg-rose-950/5',
+			},
+			{
+				kind: 'headerCell',
+				field: 'change',
+				when: () => true,
+				headerCellClass: 'text-emerald-400 font-extrabold',
+			},
+		],
+		[]
+	);
+
+	useStyleRules(api, styleRules); // compiles and applies; re-applies when rules reference changes
+
+	return <GridView api={api} />;
+}
+```
+
+#### Rule type reference
+
+| `kind`         | Required fields                     | `when` signature                | Applied to                                       |
+| :------------- | :---------------------------------- | :------------------------------ | :----------------------------------------------- |
+| `'row'`        | `rowClass`                          | `(row, params) => boolean`      | Entire row element                               |
+| `'cell'`       | `cellClass`, optional `field`       | `(row, col, params) => boolean` | Single cell; if `field` is set, only that column |
+| `'headerCell'` | `headerCellClass`, optional `field` | `(col) => boolean`              | Header cell; if `field` is set, only that column |
+
+`api.setStyleSlots()` remains available for full imperative control when you need to set slots not covered by `styleRules` (e.g. `beforeCellRender`, `afterCellRender`).
+
+---
+
+### 7. Pagination
 
 Open Grid ships a built-in `GridPagination` component and a `useClientGridPagination` hook. Both are headless-first and fully styleable via CSS custom properties or className overrides.
 
@@ -595,29 +758,42 @@ api.batch(() => {
 });
 ```
 
-### 2. State-Driven Conditional Styling (`styleSlots`)
+### 2. Declarative Conditional Styling (`styleRules`)
 
-Provide conditional predicates to style rows or cells dynamically based on live business values:
+Style rows, cells, and header cells declaratively using an array of rule objects. The grid compiles them internally — no separate compiler call needed:
 
 ```tsx
-const api = useClientGrid<ProductRow>({
-	rows,
-	columns,
-	initialState: {
-		styleSlots: {
-			rowClass: (row, params) => {
-				return row.status === 'Inactive' ? 'bg-slate-900/50 opacity-60' : '';
-			},
-			cellClass: (col, row, params) => {
-				if (col.field === 'price' && Number(row.price) > 500) {
-					return 'text-rose-400 font-extrabold bg-rose-950/10 border-rose-800/30';
-				}
-				return '';
-			},
+import { useClientGrid, type StyleRule } from '@open-grid/react';
+
+const styleRules = useMemo<StyleRule<ProductRow>[]>(
+	() => [
+		{
+			kind: 'row',
+			when: (row) => row.status === 'Inactive',
+			rowClass: 'bg-slate-900/50 opacity-60',
 		},
-	},
-});
+		{
+			kind: 'cell',
+			field: 'price',
+			when: (row) => Number(row.price) > 500,
+			cellClass: 'text-rose-400 font-extrabold bg-rose-950/10 border-rose-800/30',
+		},
+		{
+			kind: 'headerCell',
+			field: 'price',
+			when: () => true,
+			headerCellClass: 'text-rose-300 font-bold',
+		},
+	],
+	[]
+);
+
+const api = useClientGrid<ProductRow>({ rows, columns, styleRules });
 ```
+
+For components that receive `api` as a prop, use the `useStyleRules` hook instead — see [Declarative Style Rules](#6-declarative-style-rules) for the full guide.
+
+For imperative control (e.g. `beforeCellRender`), `api.setStyleSlots()` remains available.
 
 ### 3. Highly Granular Cell-Level Pub-Sub Subscriptions
 

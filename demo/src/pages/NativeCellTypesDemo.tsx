@@ -5,20 +5,8 @@
  * they ship inside the package, not here in the demo.
  */
 import React, { useMemo, useState } from 'react';
-import { GridProvider, useClientGrid } from '@open-grid/react';
-import type { ColumnDef } from '@open-grid/react';
-import {
-	CheckboxCellRenderer,
-	createMultiSelectCellRenderer,
-	createMultiSelectCellEditor,
-	DateCellRenderer,
-	DateCellEditor,
-	createDropdownCellRenderer,
-	createDropdownCellEditor,
-	createNumberCellRenderer,
-	createNumberCellEditor,
-	type DropdownOption,
-} from '@open-grid/react';
+import { GridProvider, useClientGrid, multiSelectColumnType, dropdownColumnType, numberColumnType } from '@open-grid/react';
+import type { ColumnDef, ColumnTypeDefinition, DropdownOption } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { CheckSquare, Tag, Calendar, List, Hash, Film, Sparkles, Code2, ChevronRight, Box } from 'lucide-react';
 
@@ -66,17 +54,15 @@ const LEVEL_OPTIONS: DropdownOption[] = [
 	{ value: 'Legend', color: 'rose' },
 ];
 
-// ─── Cell type instances — created ONCE at module level ───────────────────────
-// Factory results must be stable references; never create them inside a component.
+// ─── Column types registry ────────────────────────────────────────────────────
+// All cell types are registered here. Built-in helpers (multiSelectColumnType,
+// dropdownColumnType, numberColumnType) create stable renderer+editor pairs.
 
-const TricksRenderer = createMultiSelectCellRenderer(TRICKS_OPTIONS, 2);
-const TricksEditor = createMultiSelectCellEditor(TRICKS_OPTIONS);
-
-const LevelRenderer = createDropdownCellRenderer(LEVEL_OPTIONS);
-const LevelEditor = createDropdownCellEditor(LEVEL_OPTIONS);
-
-const YearsRenderer = createNumberCellRenderer({ suffix: ' yrs' });
-const YearsEditor = createNumberCellEditor({ min: 0, max: 80, step: 1 });
+const SKATER_COLUMN_TYPES: Record<string, ColumnTypeDefinition<SkaterRow>> = {
+	tricks: multiSelectColumnType(TRICKS_OPTIONS, 2),
+	level: dropdownColumnType(LEVEL_OPTIONS),
+	'years-number': numberColumnType({ suffix: ' yrs', min: 0, max: 80, step: 1 }),
+};
 
 // ─── Media renderer (demo-only, for file columns) ─────────────────────────────
 
@@ -145,64 +131,11 @@ function MediaCell({ value }: { value: unknown }) {
 const SKATER_COLUMNS: ColumnDef<SkaterRow>[] = [
 	{ field: 'id', header: 'Skater ID', width: 100 },
 	{ field: 'skaterName', header: 'Name', width: 160, sortable: true },
-	{
-		field: 'tricks',
-		header: 'Tricks',
-		width: 250,
-		renderer: {
-			kind: 'react',
-			component: TricksRenderer,
-			capabilities: { scrollBehavior: 'defer' },
-		},
-		cellEditor: TricksEditor,
-	},
-	{
-		field: 'yearsSkating',
-		header: 'Years Skating',
-		width: 130,
-		renderer: {
-			kind: 'react',
-			component: YearsRenderer,
-			capabilities: { scrollBehavior: 'live' },
-		},
-		cellEditor: YearsEditor,
-		sortable: true,
-	},
-	{
-		field: 'skatedSince',
-		header: 'Skating Since',
-		width: 145,
-		renderer: {
-			kind: 'react',
-			component: DateCellRenderer,
-			capabilities: { scrollBehavior: 'live' },
-		},
-		cellEditor: DateCellEditor,
-		sortable: true,
-	},
-	{
-		field: 'isPro',
-		header: 'Pro',
-		width: 68,
-		renderer: {
-			kind: 'react',
-			component: CheckboxCellRenderer,
-			capabilities: { scrollBehavior: 'live' },
-		},
-		// No cellEditor — CheckboxCellRenderer toggles via onMouseDown directly
-	},
-	{
-		field: 'level',
-		header: 'Level',
-		width: 130,
-		renderer: {
-			kind: 'react',
-			component: LevelRenderer,
-			capabilities: { scrollBehavior: 'live' },
-		},
-		cellEditor: LevelEditor,
-		sortable: true,
-	},
+	{ field: 'tricks', header: 'Tricks', width: 250, type: 'tricks' },
+	{ field: 'yearsSkating', header: 'Years Skating', width: 130, type: 'years-number', sortable: true },
+	{ field: 'skatedSince', header: 'Skating Since', width: 145, type: 'date', sortable: true },
+	{ field: 'isPro', header: 'Pro', width: 68, type: 'checkbox' },
+	{ field: 'level', header: 'Level', width: 130, type: 'level', sortable: true },
 	{
 		field: 'media',
 		header: 'Media',
@@ -578,7 +511,7 @@ function NativeCellTypesDemoInner({ api }: { api: ReturnType<typeof useClientGri
 
 export default function NativeCellTypesDemo() {
 	const rows = useMemo(() => generateSkaterRows(50), []);
-	const api = useClientGrid<SkaterRow>({ rows, columns: SKATER_COLUMNS });
+	const api = useClientGrid<SkaterRow>({ rows, columns: SKATER_COLUMNS, columnTypes: SKATER_COLUMN_TYPES });
 
 	return (
 		<GridProvider api={api}>

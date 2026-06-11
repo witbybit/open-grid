@@ -1229,3 +1229,83 @@ export function createNumberCellEditor(opts: NumberCellEditorOptions = {}) {
  * need the full interactive multi-select experience.
  */
 export const TagsCellRenderer = MultiSelectCellRenderer;
+
+// ─── Column type registry ─────────────────────────────────────────────────────
+
+import type { ColumnDef } from '../types.js';
+
+export interface ColumnTypeDefinition<TRowData = unknown> {
+	renderer?: ColumnDef<TRowData>['renderer'];
+	cellEditor?: ColumnDef<TRowData>['cellEditor'];
+}
+
+// Singleton instances for built-in types — created once at module load, never re-created.
+const _numberRenderer = createNumberCellRenderer();
+const _numberEditor = createNumberCellEditor();
+
+export const BUILTIN_COLUMN_TYPES: Record<string, ColumnTypeDefinition<any>> = {
+	checkbox: {
+		renderer: { kind: 'react', component: CheckboxCellRenderer },
+	},
+	date: {
+		renderer: { kind: 'react', component: DateCellRenderer },
+		cellEditor: DateCellEditor,
+	},
+	number: {
+		renderer: { kind: 'react', component: _numberRenderer },
+		cellEditor: _numberEditor,
+	},
+};
+
+// ─── Column type helpers ──────────────────────────────────────────────────────
+
+/**
+ * Creates a column type definition for a number column.
+ * Pass a single options object — fields overlap between renderer and editor.
+ *
+ * @example
+ * ```ts
+ * columnTypes: { 'usd': numberColumnType({ prefix: '$', decimals: 2, locale: true }) }
+ * ```
+ */
+export function numberColumnType(opts?: NumberCellRendererOptions & NumberCellEditorOptions): ColumnTypeDefinition<any> {
+	return {
+		renderer: { kind: 'react', component: createNumberCellRenderer(opts), capabilities: { scrollBehavior: 'live' } },
+		cellEditor: createNumberCellEditor(opts),
+	};
+}
+
+/**
+ * Creates a column type definition for a multi-select column.
+ *
+ * @example
+ * ```ts
+ * columnTypes: { 'skills': multiSelectColumnType(['React', 'TypeScript', 'Node']) }
+ * ```
+ */
+export function multiSelectColumnType(options: string[], maxVisible = 2): ColumnTypeDefinition<any> {
+	return {
+		renderer: { kind: 'react', component: createMultiSelectCellRenderer(options, maxVisible) },
+		cellEditor: createMultiSelectCellEditor(options),
+	};
+}
+
+/**
+ * Creates a column type definition for a dropdown / enum-badge column.
+ *
+ * @example
+ * ```ts
+ * columnTypes: {
+ *   'status': dropdownColumnType([
+ *     { value: 'Active',  color: 'emerald' },
+ *     { value: 'Pending', color: 'amber'   },
+ *   ])
+ * }
+ * ```
+ */
+export function dropdownColumnType(options: DropdownOption[]): ColumnTypeDefinition<any> {
+	return {
+		renderer: { kind: 'react', component: createDropdownCellRenderer(options), capabilities: { scrollBehavior: 'live' } },
+		cellEditor: createDropdownCellEditor(options),
+	};
+}

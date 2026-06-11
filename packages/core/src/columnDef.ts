@@ -164,6 +164,8 @@ export interface ColumnDef<TRowData = unknown> {
 	field: string;
 	header: string;
 	width?: number;
+	/** Named column type registered via `columnTypes` on the grid options. Resolved in the React layer. */
+	type?: string;
 	hide?: boolean;
 	movable?: boolean;
 	loading?: boolean;
