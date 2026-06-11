@@ -37,6 +37,7 @@ import { OverlayRenderer } from './overlayRenderer.js';
 import { SortAnimationController } from './sortAnimationController.js';
 import { GroupPanelRenderer } from './groupPanelRenderer.js';
 import { computeGridLayoutPlan, type GridLayoutPlan } from './layoutPlan.js';
+import { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName, type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
 
@@ -62,6 +63,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly headerRenderer: HeaderRenderer<TRowData>;
 	public readonly overlayRenderer: OverlayRenderer<TRowData>;
 	public readonly groupPanelRenderer: GroupPanelRenderer<TRowData>;
+	public readonly stickyGroupRenderer: StickyGroupRenderer<TRowData>;
 
 	private unsubscribers: Array<() => void> = [];
 	private readonly headerMenu: HeaderMenuController<TRowData>;
@@ -250,6 +252,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			syncViewport: (frame) => {
 				const layoutPlan = this.syncLayoutPlan();
 				this.recycleViewport(false, undefined, layoutPlan.renderWindow);
+				this.stickyGroupRenderer.sync(layoutPlan);
 			},
 			syncHeaders: (frame) => this.headerRenderer.sync(frame),
 			syncOverlay: (frame) => this.overlayRenderer.sync(frame),
@@ -276,6 +279,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Group panel renderer — mounts when showGroupPanel is true
 		this.groupPanelRenderer = new GroupPanelRenderer<TRowData>(engine);
+		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
 	}
 
 	/**
@@ -297,6 +301,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				this.viewportRenderer.headerLeftLayer,
 				this.viewportRenderer.headerRightLayer
 			);
+		}
+		if (this.viewportRenderer.stickyGroupLayer) {
+			this.stickyGroupRenderer.mount(this.viewportRenderer.stickyGroupLayer);
 		}
 
 		// Group panel: mount if showGroupPanel is already true at mount time
@@ -345,6 +352,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.columnInteractions.setGroupPanel(null);
 		this.fillDrag.cleanup();
 		this.groupPanelRenderer.unmount();
+		this.stickyGroupRenderer.unmount();
 		this.sortAnimation.destroy();
 		this.scheduler.destroy();
 		this.scrollScheduler.destroy();
@@ -564,13 +572,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const nextWindow = applyRenderWindowRuntimeLimits(candidateBuf, state.runtimeLimits);
 		// nextWindow === candidateBuf on the fast path (limits not exceeded).
 		// nextWindow is a new object on the slow path (limits applied, rare).
-		this.syncLayoutPlan(nextWindow);
+		const layoutPlan = this.syncLayoutPlan(nextWindow);
 
 		// Same window bailout path
 		if (sameRenderedWindow(this.rowRenderer.currentWindow, nextWindow)) {
 			this.renderStats.scrollFrames++;
 			this.renderStats.sameWindowBailouts = (this.renderStats.sameWindowBailouts || 0) + 1;
-			this.syncCheapScrollOnly(nextWindow);
+			this.syncCheapScrollOnly(layoutPlan);
 			return;
 		}
 
@@ -617,19 +625,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			// Pass the already-computed nextWindow so rowRenderer.recycleViewport does not
 			// call computeRenderWindow a second time (duplicate binary searches + state read).
 			this.recycleViewport(true, scrollCtx, nextWindow);
-
-			// Sticky group rows must render immediately â€” never defer their portal mounts.
-			// If a sticky row's slot was freshly assigned (row was outside the overscan buffer),
-			// its portal mount would otherwise be queued and appear blank for 1-2 frames.
-			if (nextWindow.stickyGroupStack && nextWindow.stickyGroupStack.length > 0) {
-				const rowModel = this.engine.getRowModel();
-				if (rowModel) {
-					for (const stickyGroup of nextWindow.stickyGroupStack) {
-						const vr = rowModel.getVisualRow(stickyGroup.visualIndex);
-						if (vr) this.portalMountManager.flushDeferredRowMount(vr.id);
-					}
-				}
-			}
+			this.stickyGroupRenderer.sync(layoutPlan);
 
 			this.rowRenderer.syncPinnedLanePositions(nextWindow, this.cachedTotalWidth);
 			this.headerRenderer.syncScrollLeft(this.engine.viewport.scrollLeft, plan);
@@ -659,7 +655,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 	}
 
-	private syncCheapScrollOnly(window: RenderWindow): void {
+	private syncCheapScrollOnly(layoutPlan: GridLayoutPlan): void {
+		const window = layoutPlan.renderWindow;
 		const plan = this.engine.columns.getCompiledPlan();
 		const scrollTop = this.engine.viewport.scrollTop;
 		const scrollLeft = this.engine.viewport.scrollLeft;
@@ -698,16 +695,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 		}
 
-		// 4. Sticky group rows position update
-		const stickyGroupStack = window.stickyGroupStack;
-		if (stickyGroupStack && stickyGroupStack.length > 0) {
-			for (const stickyGroup of stickyGroupStack) {
-				const slot = this.rowRenderer.activeRows.get(stickyGroup.visualIndex);
-				if (slot) {
-					slot.updatePosition(stickyGroup.top);
-				}
-			}
-		}
+		this.stickyGroupRenderer.sync(layoutPlan);
 
 		// Only update pinned lane transforms when scrollLeft actually changed.
 		// During vertical-only scroll, scrollLeft is constant — skipping the call
@@ -1097,6 +1085,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		const layoutPlan = this.syncLayoutPlan();
 		this.recycleViewport(false, undefined, layoutPlan.renderWindow);
+		this.stickyGroupRenderer.sync(layoutPlan);
 		if (this._pendingSortAnimation) {
 			this._pendingSortAnimation = false;
 			this.sortAnimation.beginAnimation();

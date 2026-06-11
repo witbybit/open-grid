@@ -54,14 +54,15 @@ export interface ViewportDelta {
 	hasChanges: boolean;
 }
 
-/** Element-wise equality of sticky group stacks by visual index — avoids per-frame allocations. */
+/** Element-wise equality for sticky stack membership/state; pixel movement is handled by the sticky layer. */
 function sameStickyStack(a: StickyGroupStackItem[] | undefined, b: StickyGroupStackItem[] | undefined): boolean {
 	const an = a ? a.length : 0;
 	const bn = b ? b.length : 0;
 	if (an !== bn) return false;
 	for (let i = 0; i < an; i++) {
 		if (a![i].visualIndex !== b![i].visualIndex) return false;
-		if (a![i].top !== b![i].top) return false;
+		if (a![i].height !== b![i].height) return false;
+		if (a![i].depth !== b![i].depth) return false;
 		if (a![i].pushed !== b![i].pushed) return false;
 	}
 	return true;
@@ -144,48 +145,15 @@ function countPinnedTrailing(count: number, total: number, leading: number): num
 export function getRowIndices(w: RenderWindow, out?: number[]): number[] {
 	const pinTop = Math.min(w.pinTopRows, w.rowCount);
 	const pinBottomStart = Math.max(pinTop, w.rowCount - w.pinBottomRows);
-	const stickyStack = w.stickyGroupStack;
 
-	if (!stickyStack || stickyStack.length === 0) {
-		// Fast path: no sticky rows — original O(n) logic with no Set allocation
-		const indices: number[] = out ?? [];
-		indices.length = 0;
-		for (let r = 0; r < pinTop; r++) indices.push(r);
-		for (let r = w.rowStart; r <= w.rowEnd; r++) {
-			if (r >= pinTop && r < pinBottomStart) indices.push(r);
-		}
-		for (let r = pinBottomStart; r < w.rowCount; r++) indices.push(r);
-		return indices;
-	}
-
-	// Slow path: deduplicate when sticky rows are present
-	const seen = new Set<number>();
 	const indices: number[] = out ?? [];
 	indices.length = 0;
 
-	for (let r = 0; r < pinTop; r++) {
-		indices.push(r);
-		seen.add(r);
-	}
-	// Sticky group rows whose natural position is above the scrollable range
-	for (const item of stickyStack) {
-		if (!seen.has(item.visualIndex) && item.visualIndex < w.rowCount) {
-			indices.push(item.visualIndex);
-			seen.add(item.visualIndex);
-		}
-	}
+	for (let r = 0; r < pinTop; r++) indices.push(r);
 	for (let r = w.rowStart; r <= w.rowEnd; r++) {
-		if (r >= pinTop && r < pinBottomStart && !seen.has(r)) {
-			indices.push(r);
-			seen.add(r);
-		}
+		if (r >= pinTop && r < pinBottomStart) indices.push(r);
 	}
-	for (let r = pinBottomStart; r < w.rowCount; r++) {
-		if (!seen.has(r)) {
-			indices.push(r);
-			seen.add(r);
-		}
-	}
+	for (let r = pinBottomStart; r < w.rowCount; r++) indices.push(r);
 	return indices;
 }
 

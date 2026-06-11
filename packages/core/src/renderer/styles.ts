@@ -361,6 +361,19 @@ export const CORE_STYLES = `
     pointer-events: auto;
   }
 
+  .og-layer-sticky-groups {
+    position: sticky;
+    top: 0;
+    left: 0;
+    height: 0;
+    z-index: 29;
+    pointer-events: none;
+  }
+
+  .og-sticky-group-row-host {
+    pointer-events: auto;
+  }
+
   /*
    * Overlay — absolute, outside the scroll container so selection/focus rings
    * render over content without being clipped by overflow:auto.

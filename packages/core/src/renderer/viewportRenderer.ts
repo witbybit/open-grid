@@ -22,6 +22,7 @@ export class ViewportRenderer<TRowData = unknown> {
 	public headerLayer: HTMLDivElement | null = null;
 	public headerLeftLayer: HTMLDivElement | null = null;
 	public headerRightLayer: HTMLDivElement | null = null;
+	public stickyGroupLayer: HTMLDivElement | null = null;
 
 	// Overlay sits outside the scroll viewport so it covers the full grid without scrolling
 	public overlayLayer: HTMLDivElement | null = null;
@@ -70,8 +71,11 @@ export class ViewportRenderer<TRowData = unknown> {
 		// ── Rows container (single compositor layer, no per-row will-change) ─
 		this.rowsContainer = document.createElement('div');
 		this.rowsContainer.className = 'og-rows-container';
+		this.stickyGroupLayer = document.createElement('div');
+		this.stickyGroupLayer.className = 'og-layer-sticky-groups';
 
 		this.scrollViewport.appendChild(headerWrapper);
+		this.scrollViewport.appendChild(this.stickyGroupLayer);
 		this.scrollViewport.appendChild(this.rowsContainer);
 
 		// ── Overlay (outside scroll container, absolute over grid) ────────────
@@ -98,6 +102,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.headerLayer = null;
 		this.headerLeftLayer = null;
 		this.headerRightLayer = null;
+		this.stickyGroupLayer = null;
 		this.overlayLayer = null;
 		this.styleTag = null;
 	}
@@ -148,6 +153,10 @@ export class ViewportRenderer<TRowData = unknown> {
 		}
 		if (this.headerLayer) {
 			this.headerLayer.style.width = `${contentWidth}px`;
+		}
+		if (this.stickyGroupLayer) {
+			this.stickyGroupLayer.style.width = `${contentWidth}px`;
+			this.stickyGroupLayer.style.transform = `translate3d(0, ${plan.origins.stickyGroupLayerTop}px, 0)`;
 		}
 
 		if (this.headerLeftLayer) {

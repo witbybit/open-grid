@@ -37,7 +37,6 @@ import {
 	getRowIndices,
 	sameRenderedWindow,
 	type RenderWindow,
-	type StickyGroupStackItem,
 } from './renderWindow.js';
 import { createEditRendererKey, createSlotRendererKey } from './identityKeys.js';
 import type { SlotRuntimeStats } from './slotRuntimeStats.js';
@@ -48,14 +47,6 @@ function buildCellPinClass(colIndex: number, pinLeftColumns: number, pinRightSta
 	if (colIndex < pinLeftColumns) return 'og-cell og-cell-pinned-left';
 	if (colIndex >= pinRightStart) return 'og-cell og-cell-pinned-right';
 	return 'og-cell';
-}
-
-function findStickyGroup(stack: StickyGroupStackItem[] | null, visualIndex: number): StickyGroupStackItem | null {
-	if (!stack) return null;
-	for (const item of stack) {
-		if (item.visualIndex === visualIndex) return item;
-	}
-	return null;
 }
 
 export class RowRenderer<TRowData = unknown> {
@@ -414,9 +405,6 @@ export class RowRenderer<TRowData = unknown> {
 		const rowTops = this.engine.geometry.rowTops;
 		const rowHeights = this.engine.geometry.rowHeights;
 
-		// Sticky-group lookup: the stack is tiny (bounded by group nesting depth), so a
-		// short linear scan avoids rebuilding a Map on every scroll frame.
-		const stickyGroupStack = nextWindow.stickyGroupStack && nextWindow.stickyGroupStack.length > 0 ? nextWindow.stickyGroupStack : null;
 		const hasRowClassHook = !!state.styleSlots?.rowClass;
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
@@ -455,8 +443,7 @@ export class RowRenderer<TRowData = unknown> {
 			// portals are all still valid (cells would all hit the identity-stable skip
 			// below anyway). Data/selection/hover changes are gated during scroll and
 			// repainted post-scroll, so nothing here can go stale. Excluded: loading
-			// rows (kind may flip when a block lands) and sticky transitions (class
-			// flips when a group starts/stops sticking).
+			// rows (kind may flip when a block lands).
 			if (
 				isScrollFrameActive &&
 				!isRowRebind &&
@@ -465,27 +452,19 @@ export class RowRenderer<TRowData = unknown> {
 				slot.rowKind !== '' &&
 				slot.rowKind !== 'loading'
 			) {
-				const stickyGroup = findStickyGroup(stickyGroupStack, r);
-				const isStickyNow = !!stickyGroup;
-				const stickyPushed = !!stickyGroup?.pushed;
-				if (isStickyNow === slot.isStickyGroup && stickyPushed === slot.stickyGroupPushed) {
-					let top: number;
-					if (r < pinTopRows) {
-						top = rowTops[r] + scrollTop;
-					} else if (r >= nextWindow.rowCount - pinBottomRows) {
-						top = scrollTop + viewportHeight - (hoistedTotalHeight - rowTops[r]);
-					} else if (stickyGroup) {
-						top = stickyGroup.top;
-					} else {
-						top = rowTops[r];
-					}
-					slot.updatePosition(top);
-					slot.stickyGroupDepth = stickyGroup?.depth ?? 0;
-					if (hasRowClassHook && slot.rowKind === 'data') {
-						this.dirtyRowsAfterScroll.add(r);
-					}
-					continue;
+				let top: number;
+				if (r < pinTopRows) {
+					top = rowTops[r] + scrollTop;
+				} else if (r >= nextWindow.rowCount - pinBottomRows) {
+					top = scrollTop + viewportHeight - (hoistedTotalHeight - rowTops[r]);
+				} else {
+					top = rowTops[r];
 				}
+				slot.updatePosition(top);
+				if (hasRowClassHook && slot.rowKind === 'data') {
+					this.dirtyRowsAfterScroll.add(r);
+				}
+				continue;
 			}
 
 			if (isRowRebind) {
@@ -503,33 +482,15 @@ export class RowRenderer<TRowData = unknown> {
 			let rowTop = rowTops[r];
 			const rowHeight = rowHeights[r];
 
-			let isStickyGroup = false;
-			let stickyGroupPushed = false;
-			let stickyGroupDepth = 0;
 			if (r < pinTopRows) {
 				rowTop = rowTop + scrollTop;
 			} else if (r >= nextWindow.rowCount - pinBottomRows) {
 				const bottomOffset = hoistedTotalHeight - rowTops[r];
 				rowTop = scrollTop + viewportHeight - bottomOffset;
-			} else if (stickyGroupStack) {
-				const stickyGroup = findStickyGroup(stickyGroupStack, r);
-				if (stickyGroup) {
-					rowTop = stickyGroup.top;
-					isStickyGroup = true;
-					stickyGroupPushed = stickyGroup.pushed;
-					stickyGroupDepth = stickyGroup.depth;
-				}
 			}
-			slot.isStickyGroup = isStickyGroup;
-			slot.stickyGroupPushed = stickyGroupPushed;
-			slot.stickyGroupDepth = stickyGroupDepth;
 
 			// ── Row class name ────────────────────────────────────────────────────────
 			let rowClassName = ROW_KIND_BASE[visualRow.kind] ?? 'og-row';
-			if (isStickyGroup) {
-				rowClassName += ` og-row-group-sticky og-row-group-sticky-depth-${Math.min(stickyGroupDepth, 4)}`;
-				if (stickyGroupPushed) rowClassName += ' og-row-group-sticky-pushed';
-			}
 			if (visualRow.kind === 'group') {
 				if (state.styleSlots?.groupRowClass) {
 					try {
@@ -584,8 +545,7 @@ export class RowRenderer<TRowData = unknown> {
 			}
 
 			const rowUpdated = slot.update(r, visualRow.id, visualRow.kind as any, rowTop, rowHeight, rowClassName);
-			const nextZIndex = isStickyGroup ? String(34 + Math.min(stickyGroupDepth, 8)) : '';
-			if (slot.element.style.zIndex !== nextZIndex) slot.element.style.zIndex = nextZIndex;
+			if (slot.element.style.zIndex !== '') slot.element.style.zIndex = '';
 			if (isScrollFrameActive && rowUpdated) this.currentScrollRowsRebound++;
 
 			// ── Bind cells based on row kind ──────────────────────────────────────────

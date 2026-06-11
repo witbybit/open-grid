@@ -6,6 +6,7 @@ import {
 	getColIndices,
 	diffRenderWindow,
 	computeRenderWindow,
+	sameRenderedWindow,
 	type RenderWindow,
 } from './renderWindow.js';
 import { GridStore } from '../store.js';
@@ -203,6 +204,51 @@ describe('RenderWindow & ViewportDelta calculations', () => {
 
 		controller.dispose();
 		store.destroy();
+	});
+
+	it('does not invalidate the row window for sticky group pixel movement only', () => {
+		const base = {
+			rowStart: 10,
+			rowEnd: 20,
+			colStart: 0,
+			colEnd: 3,
+			pinLeftCols: 0,
+			pinRightCols: 0,
+			pinTopRows: 0,
+			pinBottomRows: 0,
+			rowCount: 100,
+			colCount: 4,
+			scrollTop: 120,
+			scrollLeft: 0,
+			viewportWidth: 500,
+			viewportHeight: 300,
+			stickyGroupStack: [
+				{
+					groupId: 'category:Hardware',
+					visualIndex: 4,
+					depth: 0,
+					top: 120,
+					height: 40,
+					lastDescendantIndex: 30,
+					boundaryBottom: 1240,
+					pushed: false,
+				},
+			],
+		};
+
+		expect(
+			sameRenderedWindow(base, {
+				...base,
+				scrollTop: 160,
+				stickyGroupStack: [{ ...base.stickyGroupStack[0], top: 160 }],
+			})
+		).toBe(true);
+		expect(
+			sameRenderedWindow(base, {
+				...base,
+				stickyGroupStack: [{ ...base.stickyGroupStack[0], pushed: true }],
+			})
+		).toBe(false);
 	});
 
 	it('pushes sticky group rows off at their subtree boundary', () => {

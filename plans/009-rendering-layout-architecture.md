@@ -14,7 +14,7 @@
 - **Depends on**: none, but should precede deeper column grouping and sticky grouping feature work
 - **Category**: architecture, correctness, rendering robustness
 - **Planned at**: commit `78e8122`, 2026-06-12
-- **Progress**: Phase 1 foundation started. `GridLayoutPlan` now owns top chrome, content dimensions, pinned widths, layout origins, and the active render window. Viewport chrome offsets, overlay clamping, column-drop indicator height, and programmatic scroll-to-cell now consume the layout contract.
+- **Progress**: Phase 1 foundation complete and Phase 2 started. `GridLayoutPlan` now owns top chrome, content dimensions, pinned widths, layout origins, header-band projection, sticky group stack, and the active render window. Viewport chrome offsets, overlay clamping, column-drop indicator height, and programmatic scroll-to-cell consume the layout contract. Sticky group rows now render through a dedicated `StickyGroupRenderer` and `.og-layer-sticky-groups` instead of mutating normal `RowSlot` state.
 
 ## Vision
 

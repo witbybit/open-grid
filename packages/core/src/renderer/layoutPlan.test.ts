@@ -88,4 +88,35 @@ describe('GridLayoutPlan', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('projects displayed columns into header bands', () => {
+		const store = new GridStore<{ id: string; a: string; b: string; c: string }>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'a', header: 'A', width: 80 },
+				{ field: 'b', header: 'B', width: 120, movable: false },
+				{ field: 'c', header: 'C', width: 160 },
+			],
+			defaultRowHeight: 30,
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: '1', a: 'a1', b: 'b1', c: 'c1' }],
+			columns: store.getState().columns,
+		});
+
+		store.setViewportSize(300, 180);
+		store.setViewportPins({ left: 1, right: 1 });
+		const plan = computeGridLayoutPlan(store.engine);
+
+		expect(plan.headerBands).toHaveLength(1);
+		expect(plan.headerBands[0]).toMatchObject({ depth: 0, top: 0, height: LEAF_HEADER_HEIGHT });
+		expect(plan.headerBands[0].cells.map((cell) => [cell.field, cell.label, cell.left, cell.width, cell.pinned, cell.movable])).toEqual([
+			['a', 'A', 0, 80, 'left', true],
+			['b', 'B', 80, 120, 'center', false],
+			['c', 'C', 200, 160, 'right', true],
+		]);
+
+		controller.dispose();
+		store.destroy();
+	});
 });

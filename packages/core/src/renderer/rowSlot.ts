@@ -18,10 +18,6 @@ export class RowSlot<TRowData = unknown> {
 	public lastVisualRowId = '\0'; // guaranteed != any real rowId on first update
 
 	public keepAlive = false;
-	/** True while the bound row is rendered as a sticky group row (scroll-pinned top). */
-	public isStickyGroup = false;
-	public stickyGroupPushed = false;
-	public stickyGroupDepth = 0;
 
 	public pinLeftContainer: HTMLDivElement | null = null;
 	public pinRightContainer: HTMLDivElement | null = null;
@@ -248,7 +244,6 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = -1;
 		this.rowHeight = -1;
 		this.keepAlive = false;
-		this.isStickyGroup = false;
 		// Cell slots remain mounted — they will be rebound on next renderViewport.
 	}
 
@@ -263,7 +258,6 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = -1;
 		this.rowHeight = -1;
 		this.keepAlive = false;
-		this.isStickyGroup = false;
 		this.lastTop = -1;
 		this.lastHeight = -1;
 		this.lastClassName = '';

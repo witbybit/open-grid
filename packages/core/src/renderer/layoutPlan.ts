@@ -5,6 +5,30 @@ export const LEAF_HEADER_HEIGHT = 40;
 export const GROUP_PANEL_HEIGHT = 42;
 export const COLUMN_GROUP_HEADER_HEIGHT = 0;
 
+export interface HeaderCellLayout {
+	id: string;
+	field: string;
+	label: string;
+	depth: number;
+	colStart: number;
+	colEnd: number;
+	left: number;
+	width: number;
+	top: number;
+	height: number;
+	pinned: 'left' | 'center' | 'right';
+	isLeaf: boolean;
+	movable: boolean;
+	resizable: boolean;
+}
+
+export interface HeaderBandLayout {
+	depth: number;
+	top: number;
+	height: number;
+	cells: HeaderCellLayout[];
+}
+
 export interface GridLayoutPlan {
 	viewport: {
 		width: number;
@@ -52,16 +76,18 @@ export interface GridLayoutPlan {
 		stickyGroupLayerTop: number;
 		overlayTop: number;
 	};
+	headerBands: HeaderBandLayout[];
 	stickyGroups: StickyGroupStackItem[];
 	renderWindow: RenderWindow;
 }
 
 export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, renderWindow = computeRenderWindow(engine)): GridLayoutPlan {
 	const state = engine.stateManager.getState();
+	const columnPlan = engine.columns.getCompiledPlan();
 	const viewportWidth = engine.viewport.viewportWidth;
 	const viewportHeight = engine.viewport.viewportHeight;
 	const totalRowsHeight = engine.geometry.getTotalHeight(state.defaultRowHeight);
-	const totalColumnsWidth = engine.geometry.getTotalWidth(state.defaultColWidth);
+	const totalColumnsWidth = columnPlan.totalWidth;
 	const contentWidth = Math.max(totalColumnsWidth, viewportWidth);
 	const groupPanelHeight = state.showGroupPanel ? GROUP_PANEL_HEIGHT : 0;
 	const columnGroupHeaderHeight = COLUMN_GROUP_HEADER_HEIGHT;
@@ -76,6 +102,30 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 		pinRightCount > 0 && firstRightPinColIdx < renderWindow.colCount
 			? totalColumnsWidth - (engine.geometry.colLefts[firstRightPinColIdx] || totalColumnsWidth)
 			: 0;
+	const leafHeaderBand: HeaderBandLayout = {
+		depth: 0,
+		top: columnGroupHeaderHeight,
+		height: leafHeaderHeight,
+		cells: columnPlan.displayedColumns.map((column, colIndex) => {
+			const pinned = colIndex < pinLeftCount ? 'left' : colIndex >= firstRightPinColIdx ? 'right' : 'center';
+			return {
+				id: column.field,
+				field: column.field,
+				label: column.header ?? column.field,
+				depth: 0,
+				colStart: colIndex,
+				colEnd: colIndex,
+				left: columnPlan.colLefts[colIndex] ?? 0,
+				width: columnPlan.colWidths[colIndex] ?? state.defaultColWidth,
+				top: columnGroupHeaderHeight,
+				height: leafHeaderHeight,
+				pinned,
+				isLeaf: true,
+				movable: state.enableColumnReorder && column.movable !== false,
+				resizable: true,
+			};
+		}),
+	};
 
 	let pinnedTopHeight = 0;
 	for (let i = 0; i < renderWindow.pinTopRows && i < renderWindow.rowCount; i++) {
@@ -133,6 +183,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			stickyGroupLayerTop: topChromeHeight,
 			overlayTop: topChromeHeight,
 		},
+		headerBands: [leafHeaderBand],
 		stickyGroups: renderWindow.stickyGroupStack ?? [],
 		renderWindow,
 	};
