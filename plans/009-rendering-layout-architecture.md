@@ -14,7 +14,7 @@
 - **Depends on**: none, but should precede deeper column grouping and sticky grouping feature work
 - **Category**: architecture, correctness, rendering robustness
 - **Planned at**: commit `78e8122`, 2026-06-12
-- **Progress**: Phase 1 and Phase 2 complete. `GridLayoutPlan` owns top chrome, content dimensions, pinned widths, layout origins, header-band projection, sticky group stack, and the active render window. Sticky group rows render through `StickyGroupRenderer` / `.og-layer-sticky-groups`; `RowSlot` has no sticky fields. `RowRenderer` has no sticky z-index/depth/push logic. `syncPinnedLanePositions` (no-op), `recycleRowCellsSlot`, `recycleLoadingRowCellsSlot`, `releaseRowSlot`, and the deprecated `RowSlot.cells` getter are removed. Phase 3 (row pipeline group metadata) is next.
+- **Progress**: Phases 1–3 complete. `GridLayoutPlan` owns top chrome, content dimensions, pinned widths, layout origins, header-band projection, sticky group stack, and the active render window. Sticky group rows render through `StickyGroupRenderer` / `.og-layer-sticky-groups`. `RowPipeline` now computes `GroupRowMeta` (rich per-group metadata: child range, leaf indices, visible descendant rowIds, child group IDs, parent link) and exposes it via `ClientRowModelController.getGroupMeta`/`getGroupMetaByVisualIndex`. `GridPortal.tsx` `DefaultGroupRowRenderer` uses `getGroupMeta` instead of the old O(n) visual-row scan. Dead code removed: `syncPinnedLanePositions`, `recycleRowCellsSlot`, `recycleLoadingRowCellsSlot`, `releaseRowSlot`, deprecated `RowSlot.cells` getter, `getVisibleGroupDescendantRowIds`. Phase 4 (header band architecture) is next.
 
 ## Vision
 

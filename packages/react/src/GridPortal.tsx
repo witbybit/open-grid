@@ -225,7 +225,8 @@ function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { 
 		() => api.getState().selectedRowIds,
 		() => api.getState().selectedRowIds
 	);
-	const descendantIds = getVisibleGroupDescendantRowIds(api, visualRow);
+	const descendantIds =
+		(api as unknown as InternalGridApi<TRowData>).getRowModel()?.getGroupMeta?.(visualRow.groupId)?.visibleDescendantRowIds ?? [];
 	const selectedSet = new Set(selectedRowIds);
 	const selectedDescendantCount = descendantIds.reduce((count, rowId) => count + (selectedSet.has(rowId) ? 1 : 0), 0);
 	const allDescendantsSelected = descendantIds.length > 0 && selectedDescendantCount === descendantIds.length;
@@ -281,20 +282,6 @@ function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { 
 }
 
 export const DefaultGroupRowRenderer = memo(DefaultGroupRowRendererInner) as typeof DefaultGroupRowRendererInner;
-
-function getVisibleGroupDescendantRowIds<TRowData>(api: GridApi<TRowData>, groupRow: Extract<VisualRow<TRowData>, { kind: 'group' }>): string[] {
-	const internalApi = api as unknown as InternalGridApi<TRowData>;
-	const groupIndex = internalApi.getVisualIndexById?.(groupRow.id);
-	const rowCount = internalApi.getVisualRowCount?.() ?? 0;
-	if (groupIndex == null || groupIndex < 0 || rowCount <= 0) return [];
-	const rowIds: string[] = [];
-	for (let i = groupIndex + 1; i < rowCount; i++) {
-		const row = internalApi.getVisualRow(i);
-		if (!row || ('depth' in row && row.depth <= groupRow.depth)) break;
-		if (row.kind === 'data') rowIds.push(row.rowId);
-	}
-	return rowIds;
-}
 
 function DefaultDetailRowRendererInner<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
 	if (visualRow.kind !== 'detail') return null;

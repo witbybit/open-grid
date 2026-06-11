@@ -1,5 +1,5 @@
 import { RowNode, type ColumnDef, type VisualRow } from '../store.js';
-import type { SortModel, FilterModel } from '../rowModel.js';
+import type { SortModel, FilterModel, GroupRowMeta } from '../rowModel.js';
 import { applyClientFilterOnly, applyClientSortAndFilter } from '../rowModel.js';
 import { createRowPipelineContext } from './pipelineContext.js';
 import { groupStage } from './stages/groupStage.js';
@@ -72,6 +72,10 @@ export interface RowPipelineOutput<TData = unknown> {
 	rowIdToVisualRowIds?: Map<string, string[]>;
 	/** Maps each expanded group row's visual index → its last descendant's visual index. */
 	stickyGroupMeta: Map<number, number>;
+	/** Rich metadata for each group row, keyed by groupId. */
+	groupMeta: Map<string, GroupRowMeta>;
+	/** Rich metadata for each group row, keyed by visual index. */
+	groupMetaByVisualIndex: Map<number, GroupRowMeta>;
 	version: number;
 	stats: {
 		totalDataRows: number;
@@ -216,6 +220,8 @@ export class RowPipeline<TData = unknown> {
 			}
 		});
 
+		const { byId: groupMeta, byVisualIndex: groupMetaByVisualIndex } = computeGroupMeta(visualRows);
+
 		return {
 			visualRows,
 			visualRowIdToIndex,
@@ -223,6 +229,8 @@ export class RowPipeline<TData = unknown> {
 			rowIdToVisualRowId,
 			rowIdToVisualRowIds,
 			stickyGroupMeta,
+			groupMeta,
+			groupMetaByVisualIndex,
 			version: ++this.version,
 			stats: {
 				totalDataRows: nodes.length,
@@ -283,6 +291,60 @@ export class RowPipeline<TData = unknown> {
 		};
 		return roots.map(includeNode).filter((node): node is RowTreeNode<TData> => !!node);
 	}
+}
+
+function computeGroupMeta<TData>(visualRows: VisualRow<TData>[]): {
+	byId: Map<string, GroupRowMeta>;
+	byVisualIndex: Map<number, GroupRowMeta>;
+} {
+	const byId = new Map<string, GroupRowMeta>();
+	const byVisualIndex = new Map<number, GroupRowMeta>();
+	const stack: GroupRowMeta[] = [];
+
+	for (let i = 0; i < visualRows.length; i++) {
+		const row = visualRows[i];
+		if (row.kind === 'group') {
+			// Close groups on the stack that are at same or deeper depth than this new group.
+			while (stack.length > 0 && stack[stack.length - 1].depth >= row.depth) {
+				const closing = stack.pop()!;
+				if (closing.firstChildIndex !== -1) closing.lastChildIndex = i - 1;
+			}
+			const parentGroupId = stack.length > 0 ? stack[stack.length - 1].groupId : null;
+			const meta: GroupRowMeta = {
+				groupId: row.groupId,
+				visualIndex: i,
+				depth: row.depth,
+				parentGroupId,
+				firstChildIndex: row.expanded ? i + 1 : -1,
+				lastChildIndex: row.expanded ? visualRows.length - 1 : -1,
+				firstLeafIndex: -1,
+				lastLeafIndex: -1,
+				visibleDescendantRowIds: [],
+				childGroupIds: [],
+				leafCount: row.leafCount ?? 0,
+				childCount: row.childCount ?? 0,
+				expanded: row.expanded,
+				aggregateValues: row.aggregateValues,
+			};
+			if (parentGroupId !== null) byId.get(parentGroupId)?.childGroupIds.push(row.groupId);
+			byId.set(row.groupId, meta);
+			byVisualIndex.set(i, meta);
+			if (row.expanded) stack.push(meta);
+		} else if (row.kind === 'data') {
+			for (const group of stack) {
+				group.visibleDescendantRowIds.push(row.rowId);
+				if (group.firstLeafIndex === -1) group.firstLeafIndex = i;
+				group.lastLeafIndex = i;
+			}
+		}
+	}
+	// Close any groups still open at end of list.
+	while (stack.length > 0) {
+		const closing = stack.pop()!;
+		if (closing.firstChildIndex !== -1) closing.lastChildIndex = visualRows.length - 1;
+	}
+
+	return { byId, byVisualIndex };
 }
 
 function collectDataNodes<TData>(root: RowTreeNode<TData>): RowNode<TData>[] {

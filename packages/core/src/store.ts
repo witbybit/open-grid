@@ -332,6 +332,8 @@ export interface RowModel<TRowData = unknown> {
 	expandAllGroups?(): RowModelRefreshResult | void;
 	collapseAllGroups?(): RowModelRefreshResult | void;
 	getStickyGroupMeta?(): Map<number, number>;
+	getGroupMeta?(groupId: string): import('./rowModel.js').GroupRowMeta | null;
+	getGroupMetaByVisualIndex?(visualIndex: number): import('./rowModel.js').GroupRowMeta | null;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;

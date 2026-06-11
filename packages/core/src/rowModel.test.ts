@@ -451,3 +451,157 @@ describe('ClientRowModelController', () => {
 		expect(controller.getVisualIndexById('detail:1')).toBe(1);
 	});
 });
+
+describe('GroupRowMeta', () => {
+	interface GRow {
+		id: string;
+		category: string;
+		sub?: string;
+	}
+
+	function groupIdAt(ctrl: ClientRowModelController<GRow>, visualIndex: number): string {
+		const row = ctrl.getVisualRow(visualIndex);
+		if (row?.kind !== 'group') throw new Error(`row at ${visualIndex} is not a group`);
+		return row.groupId;
+	}
+
+	it('returns null for unknown groupId', () => {
+		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
+		const ctrl = new ClientRowModelController(store, { rows: [{ id: '1', category: 'A' }], columns: store.getState().columns });
+		expect(ctrl.getGroupMeta('no-such-id')).toBeNull();
+	});
+
+	it('collapsed group: firstChildIndex and lastChildIndex are -1, visibleDescendantRowIds is empty', () => {
+		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
+		const ctrl = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', category: 'A' },
+				{ id: '2', category: 'A' },
+			],
+			columns: store.getState().columns,
+		});
+		const groupId = groupIdAt(ctrl, 0);
+		const meta = ctrl.getGroupMeta(groupId);
+		expect(meta).not.toBeNull();
+		expect(meta!.expanded).toBe(false);
+		expect(meta!.firstChildIndex).toBe(-1);
+		expect(meta!.lastChildIndex).toBe(-1);
+		expect(meta!.visibleDescendantRowIds).toEqual([]);
+	});
+
+	it('expanded group: firstChildIndex, lastChildIndex, and visibleDescendantRowIds are correct', () => {
+		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
+		const ctrl = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', category: 'A' },
+				{ id: '2', category: 'A' },
+			],
+			columns: store.getState().columns,
+		});
+		const groupId = groupIdAt(ctrl, 0);
+		store.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
+		ctrl.refresh();
+
+		const meta = ctrl.getGroupMeta(groupId);
+		expect(meta!.expanded).toBe(true);
+		expect(meta!.firstChildIndex).toBe(1);
+		expect(meta!.lastChildIndex).toBe(2);
+		expect(meta!.visibleDescendantRowIds).toEqual(['1', '2']);
+		expect(meta!.firstLeafIndex).toBe(1);
+		expect(meta!.lastLeafIndex).toBe(2);
+	});
+
+	it('getGroupMetaByVisualIndex returns same object as getGroupMeta', () => {
+		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
+		const ctrl = new ClientRowModelController(store, {
+			rows: [{ id: '1', category: 'A' }],
+			columns: store.getState().columns,
+		});
+		const groupId = groupIdAt(ctrl, 0);
+		store.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
+		ctrl.refresh();
+
+		const byId = ctrl.getGroupMeta(groupId);
+		const byIndex = ctrl.getGroupMetaByVisualIndex(0);
+		expect(byIndex).toBe(byId);
+	});
+
+	it('multiple sibling groups each have correct descendant ids', () => {
+		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
+		const ctrl = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', category: 'A' },
+				{ id: '2', category: 'B' },
+				{ id: '3', category: 'B' },
+			],
+			columns: store.getState().columns,
+		});
+		const idA = groupIdAt(ctrl, 0);
+		const idB = groupIdAt(ctrl, 1);
+		store.setState({ expansion: { groups: { [idA]: true, [idB]: true }, treeRows: {}, details: {} } });
+		ctrl.refresh();
+
+		expect(ctrl.getGroupMeta(idA)!.visibleDescendantRowIds).toEqual(['1']);
+		expect(ctrl.getGroupMeta(idB)!.visibleDescendantRowIds).toEqual(['2', '3']);
+		// A's range ends just before B's group row (index 2)
+		expect(ctrl.getGroupMeta(idA)!.lastChildIndex).toBe(1);
+		// B's range starts at index 3
+		expect(ctrl.getGroupMeta(idB)!.firstChildIndex).toBe(3);
+	});
+
+	it('nested groups: parent has all leaf descendants, child has only its own', () => {
+		const store = new GridStore<GRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'sub', header: 'Sub' },
+			],
+			groupBy: ['category', 'sub'],
+		});
+		const ctrl = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', category: 'A', sub: 'x' },
+				{ id: '2', category: 'A', sub: 'x' },
+			],
+			columns: store.getState().columns,
+		});
+		// Expand outer first to reveal the inner group at index 1
+		const outer = groupIdAt(ctrl, 0);
+		store.setState({ expansion: { groups: { [outer]: true }, treeRows: {}, details: {} } });
+		ctrl.refresh();
+		const inner = groupIdAt(ctrl, 1);
+		store.setState({ expansion: { groups: { [outer]: true, [inner]: true }, treeRows: {}, details: {} } });
+		ctrl.refresh();
+
+		const outerMeta = ctrl.getGroupMeta(outer);
+		const innerMeta = ctrl.getGroupMeta(inner);
+		expect(outerMeta!.visibleDescendantRowIds).toEqual(['1', '2']);
+		expect(innerMeta!.visibleDescendantRowIds).toEqual(['1', '2']);
+		expect(outerMeta!.childGroupIds).toContain(inner);
+		expect(innerMeta!.parentGroupId).toBe(outer);
+	});
+
+	it('group with footer: footer row does not appear in visibleDescendantRowIds but is in child range', () => {
+		const store = new GridStore<GRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'category', header: 'Category' }],
+			groupBy: ['category'],
+			showGroupFooter: true,
+		});
+		const ctrl = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', category: 'A' },
+				{ id: '2', category: 'A' },
+			],
+			columns: store.getState().columns,
+		});
+		const groupId = groupIdAt(ctrl, 0);
+		store.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
+		ctrl.refresh();
+
+		const meta = ctrl.getGroupMeta(groupId);
+		expect(meta!.visibleDescendantRowIds).toEqual(['1', '2']);
+		const footerRow = ctrl.getVisualRow(meta!.lastChildIndex);
+		expect(footerRow?.kind).toBe('footer');
+	});
+});

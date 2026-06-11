@@ -13,7 +13,7 @@ import {
 	type RowNodeTransaction,
 } from './store.js';
 import { getFieldRoot } from './ids.js';
-import { RowPipeline, type RowModelConfig } from './rows/RowPipeline.js';
+import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
 import { RowDataStore } from './rows/RowDataStore.js';
 
 export type SortDirection = 'asc' | 'desc';
@@ -40,6 +40,27 @@ export interface ClientRowModelOptions<TData = unknown> {
 }
 
 export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
+
+export interface GroupRowMeta {
+	groupId: string;
+	visualIndex: number;
+	depth: number;
+	parentGroupId: string | null;
+	/** Index of the first child visual row (group or data), or -1 if collapsed. */
+	firstChildIndex: number;
+	/** Index of the last child visual row (group or data), or -1 if collapsed. */
+	lastChildIndex: number;
+	firstLeafIndex: number;
+	lastLeafIndex: number;
+	/** rowIds of all visible (non-collapsed) data rows beneath this group. */
+	visibleDescendantRowIds: string[];
+	/** groupIds of immediate child group rows that are visible. */
+	childGroupIds: string[];
+	leafCount: number;
+	childCount: number;
+	expanded: boolean;
+	aggregateValues?: Record<string, unknown>;
+}
 
 function getFilterItemValue(item: FilterModelItem | unknown): { operator: FilterOperator; filter: unknown } {
 	if (item && typeof item === 'object' && 'filter' in item) {
@@ -291,8 +312,12 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	private pipeline = new RowPipeline<TData>();
 	private _stickyGroupMeta = new Map<number, number>();
+	private _groupMeta = new Map<string, GroupRowMeta>();
+	private _groupMetaByVisualIndex = new Map<number, GroupRowMeta>();
 
 	public getStickyGroupMeta = (): Map<number, number> => this._stickyGroupMeta;
+	public getGroupMeta = (groupId: string): GroupRowMeta | null => this._groupMeta.get(groupId) ?? null;
+	public getGroupMetaByVisualIndex = (visualIndex: number): GroupRowMeta | null => this._groupMetaByVisualIndex.get(visualIndex) ?? null;
 
 	public getDataRowCount = (): number => this.dataRowCount;
 
@@ -688,6 +713,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.rowIdToVisualRowId = result.rowIdToVisualRowId;
 		this.rowIdToVisualRowIds = result.rowIdToVisualRowIds;
 		this._stickyGroupMeta = result.stickyGroupMeta;
+		this._groupMeta = result.groupMeta;
+		this._groupMetaByVisualIndex = result.groupMetaByVisualIndex;
 		this.dataRowCount = result.stats.totalDataRows;
 
 		this.store.setState({
