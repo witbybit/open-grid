@@ -293,25 +293,31 @@ export class GridEngine<TRowData = unknown> {
 		// Clear stale group expansion state when grouping columns change
 		const newExpansion = { ...state.expansion, groups: {} as Record<string, true> };
 		this.stateManager.setState({ groupBy: colIds, expansion: newExpansion });
-		this.invalidation.invalidateFull('groupBy');
+		this.invalidation.invalidateGeometry('groupBy');
+		this.invalidation.invalidateViewport('groupBy');
+		this.invalidation.invalidateHeaders('groupBy');
+		this.invalidation.invalidateOverlay('groupBy');
 		this.requestRender('groupBy');
 	}
 
 	public setAggDefs(defs: import('../rows/stages/aggregateStage.js').AggregationDef<any>[]): void {
 		this.stateManager.setState({ aggDefs: defs });
-		this.invalidation.invalidateFull('aggDefs');
+		this.invalidation.invalidateViewport('aggDefs');
+		this.invalidation.invalidateOverlay('aggDefs');
 		this.requestRender('aggDefs');
 	}
 
 	public setShowGroupFooter(enabled: boolean): void {
 		this.stateManager.setState({ showGroupFooter: enabled });
-		this.invalidation.invalidateFull('showGroupFooter');
+		this.invalidation.invalidateGeometry('showGroupFooter');
+		this.invalidation.invalidateViewport('showGroupFooter');
+		this.invalidation.invalidateOverlay('showGroupFooter');
 		this.requestRender('showGroupFooter');
 	}
 
 	public setStickyGroupRows(enabled: boolean): void {
 		this.stateManager.setState({ enableStickyGroupRows: enabled });
-		this.invalidation.invalidateFull('enableStickyGroupRows');
+		this.invalidation.invalidateViewport('enableStickyGroupRows');
 		this.requestRender('enableStickyGroupRows');
 	}
 

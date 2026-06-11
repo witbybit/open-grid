@@ -37,6 +37,7 @@ import {
 	getRowIndices,
 	sameRenderedWindow,
 	type RenderWindow,
+	type StickyGroupStackItem,
 } from './renderWindow.js';
 import { createEditRendererKey, createSlotRendererKey } from './identityKeys.js';
 import type { SlotRuntimeStats } from './slotRuntimeStats.js';
@@ -47,6 +48,14 @@ function buildCellPinClass(colIndex: number, pinLeftColumns: number, pinRightSta
 	if (colIndex < pinLeftColumns) return 'og-cell og-cell-pinned-left';
 	if (colIndex >= pinRightStart) return 'og-cell og-cell-pinned-right';
 	return 'og-cell';
+}
+
+function findStickyGroup(stack: StickyGroupStackItem[] | null, visualIndex: number): StickyGroupStackItem | null {
+	if (!stack) return null;
+	for (const item of stack) {
+		if (item.visualIndex === visualIndex) return item;
+	}
+	return null;
 }
 
 export class RowRenderer<TRowData = unknown> {
@@ -403,10 +412,9 @@ export class RowRenderer<TRowData = unknown> {
 		const rowTops = this.engine.geometry.rowTops;
 		const rowHeights = this.engine.geometry.rowHeights;
 
-		// Sticky-group lookup: the indices array is tiny (≤ group nesting depth), so a
-		// linear indexOf per row beats rebuilding a Map every frame (allocation + churn).
-		const stickyIdxArr = nextWindow.stickyGroupIndices && nextWindow.stickyGroupIndices.length > 0 ? nextWindow.stickyGroupIndices : null;
-		const stickyTopArr = nextWindow.stickyGroupTops;
+		// Sticky-group lookup: the stack is tiny (bounded by group nesting depth), so a
+		// short linear scan avoids rebuilding a Map on every scroll frame.
+		const stickyGroupStack = nextWindow.stickyGroupStack && nextWindow.stickyGroupStack.length > 0 ? nextWindow.stickyGroupStack : null;
 		const hasRowClassHook = !!state.styleSlots?.rowClass;
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
@@ -455,16 +463,16 @@ export class RowRenderer<TRowData = unknown> {
 				slot.rowKind !== '' &&
 				slot.rowKind !== 'loading'
 			) {
-				const stickyPos = stickyIdxArr ? stickyIdxArr.indexOf(r) : -1;
-				const isStickyNow = stickyPos >= 0;
+				const stickyGroup = findStickyGroup(stickyGroupStack, r);
+				const isStickyNow = !!stickyGroup;
 				if (isStickyNow === slot.isStickyGroup) {
 					let top: number;
 					if (r < pinTopRows) {
 						top = rowTops[r] + scrollTop;
 					} else if (r >= nextWindow.rowCount - pinBottomRows) {
 						top = scrollTop + viewportHeight - (hoistedTotalHeight - rowTops[r]);
-					} else if (isStickyNow) {
-						top = stickyTopArr![stickyPos];
+					} else if (stickyGroup) {
+						top = stickyGroup.top;
 					} else {
 						top = rowTops[r];
 					}
@@ -497,10 +505,10 @@ export class RowRenderer<TRowData = unknown> {
 			} else if (r >= nextWindow.rowCount - pinBottomRows) {
 				const bottomOffset = hoistedTotalHeight - rowTops[r];
 				rowTop = scrollTop + viewportHeight - bottomOffset;
-			} else if (stickyIdxArr) {
-				const stickyPos = stickyIdxArr.indexOf(r);
-				if (stickyPos >= 0) {
-					rowTop = stickyTopArr![stickyPos];
+			} else if (stickyGroupStack) {
+				const stickyGroup = findStickyGroup(stickyGroupStack, r);
+				if (stickyGroup) {
+					rowTop = stickyGroup.top;
 					isStickyGroup = true;
 				}
 			}

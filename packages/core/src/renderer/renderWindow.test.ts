@@ -188,6 +188,16 @@ describe('RenderWindow & ViewportDelta calculations', () => {
 		expect(window.stickyGroupIndices).toContain(1);
 		const stickyPos = window.stickyGroupIndices?.indexOf(1) ?? -1;
 		expect(window.stickyGroupTops?.[stickyPos]).toBe(120);
+		expect(window.stickyGroupStack).toEqual([
+			{
+				groupId: 'group:category=Hardware/product=Workstation',
+				visualIndex: 1,
+				depth: 1,
+				top: 120,
+				height: 40,
+				lastDescendantIndex: 3,
+			},
+		]);
 
 		controller.dispose();
 		store.destroy();

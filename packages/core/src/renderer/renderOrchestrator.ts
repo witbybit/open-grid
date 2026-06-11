@@ -1,4 +1,4 @@
-import type { InvalidationFrame } from './invalidationManager.js';
+import type { GridInvalidation, InvalidationFrame } from './invalidationManager.js';
 
 export interface RenderStats {
 	fullPaints: number;
@@ -51,6 +51,7 @@ export interface RenderStats {
 	cellsPatchedPerScrollFrame: number[];
 	rowsRecycledPerScrollFrame: number[];
 	lastInvalidationReasons: string[];
+	lastInvalidations: GridInvalidation[];
 	portalMounts?: { cells: number; rows: number; menus: number; custom?: any };
 	getCellValueCallsDuringScroll?: number;
 	valueGetterCallsDuringScroll?: number;
@@ -123,6 +124,7 @@ export class RenderOrchestrator {
 		cellsPatchedPerScrollFrame: [],
 		rowsRecycledPerScrollFrame: [],
 		lastInvalidationReasons: [],
+		lastInvalidations: [],
 	};
 
 	constructor(targets: RenderOrchestratorTargets) {
@@ -131,6 +133,7 @@ export class RenderOrchestrator {
 
 	public flush(frame: InvalidationFrame): void {
 		this.stats.lastInvalidationReasons = frame.reasons;
+		this.stats.lastInvalidations = frame.invalidations;
 
 		if (frame.full) {
 			this.stats.fullPaints++;
@@ -184,6 +187,7 @@ export class RenderOrchestrator {
 			cellsPatchedPerScrollFrame: this.stats.cellsPatchedPerScrollFrame.slice(),
 			rowsRecycledPerScrollFrame: this.stats.rowsRecycledPerScrollFrame.slice(),
 			lastInvalidationReasons: this.stats.lastInvalidationReasons.slice(),
+			lastInvalidations: this.stats.lastInvalidations.slice(),
 		};
 	}
 
@@ -235,5 +239,6 @@ export class RenderOrchestrator {
 		this.stats.cellsPatchedPerScrollFrame = [];
 		this.stats.rowsRecycledPerScrollFrame = [];
 		this.stats.lastInvalidationReasons = [];
+		this.stats.lastInvalidations = [];
 	}
 }

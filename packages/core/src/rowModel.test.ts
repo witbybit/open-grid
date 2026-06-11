@@ -290,9 +290,79 @@ describe('ClientRowModelController', () => {
 		});
 
 		expect(controller.getVisualRowCount()).toBe(1);
-		controller.toggleGroupExpanded('group:category=A');
+		const result = controller.toggleGroupExpanded('group:category=A');
 		expect(store.getState().expansion.groups['group:category=A']).toBe(true);
 		expect(controller.getVisualRowCount()).toBe(3);
+		expect(result).toMatchObject({
+			changed: true,
+			reason: 'expansion',
+			groupId: 'group:category=A',
+			previousRowCount: 1,
+			nextRowCount: 3,
+			changedStartIndex: 1,
+			changedEndIndex: 2,
+		});
+	});
+
+	it('emits explicit invalidation lanes for group expansion', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'category', header: 'Category' }],
+			rowModelConfig: { type: 'client', grouping: { model: [{ colId: 'category' }] } },
+		});
+
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', name: 'One', category: 'A' },
+				{ id: '2', name: 'Two', category: 'A' },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.engine.invalidation.consume();
+		store.toggleGroupExpanded('group:category=A');
+		const frame = store.engine.invalidation.consume();
+
+		expect(frame.groups).toEqual(new Set(['group:category=A']));
+		expect(frame.rowRanges).toEqual([{ startIndex: 1, endIndex: 2, reason: 'group expansion' }]);
+		expect(frame.geometry).toBe(true);
+		expect(frame.viewport).toBe(true);
+		expect(frame.invalidations).toContainEqual({ kind: 'group', groupId: 'group:category=A', reason: 'group expansion' });
+		expect(frame.invalidations).toContainEqual({ kind: 'row-range', startIndex: 1, endIndex: 2, reason: 'group expansion' });
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('uses targeted structural invalidations when grouping columns change', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'category', header: 'Category' }],
+		});
+
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', name: 'One', category: 'A' },
+				{ id: '2', name: 'Two', category: 'B' },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.engine.invalidation.consume();
+		store.setGroupBy(['category']);
+		const frame = store.engine.invalidation.consume();
+
+		expect(frame.full).toBe(false);
+		expect(frame.geometry).toBe(true);
+		expect(frame.viewport).toBe(true);
+		expect(frame.headers).toBe(true);
+		expect(frame.overlay).toBe(true);
+		expect(frame.reasons).toContain('groupBy');
+		expect(frame.invalidations).toContainEqual({ kind: 'geometry', reason: 'groupBy' });
+		expect(frame.invalidations).toContainEqual({ kind: 'viewport', reason: 'groupBy' });
+
+		controller.dispose();
+		store.destroy();
 	});
 
 	it('keeps tree parents as data visual rows and preserves ancestors while filtering', () => {

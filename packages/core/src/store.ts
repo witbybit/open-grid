@@ -285,6 +285,12 @@ export interface CellEditorProps<TRowData = unknown, TValue = unknown> {
 export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit';
 export interface RowModelRefreshResult {
 	changed: boolean;
+	reason?: RowRefreshReason;
+	previousRowCount?: number;
+	nextRowCount?: number;
+	changedStartIndex?: number;
+	changedEndIndex?: number;
+	groupId?: string;
 }
 
 export interface RowModel<TRowData = unknown> {
@@ -295,12 +301,12 @@ export interface RowModel<TRowData = unknown> {
 	getVisualIndexByRowId(rowId: string): number;
 	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRawRowById(rowId: string): TRowData | null;
-	toggleGroupExpanded?(groupId: string): void;
-	toggleDetailExpanded?(rowId: string): void;
+	toggleGroupExpanded?(groupId: string): RowModelRefreshResult | void;
+	toggleDetailExpanded?(rowId: string): RowModelRefreshResult | void;
 	isGroupExpanded?(groupId: string): boolean;
 	isDetailExpanded?(rowId: string): boolean;
-	expandAllGroups?(): void;
-	collapseAllGroups?(): void;
+	expandAllGroups?(): RowModelRefreshResult | void;
+	collapseAllGroups?(): RowModelRefreshResult | void;
 	getStickyGroupMeta?(): Map<number, number>;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
@@ -934,12 +940,33 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.state.aggDefs ?? [];
 	};
 
+	private applyRowModelRefreshInvalidation = (
+		result: RowModelRefreshResult | void,
+		reason: 'group expansion' | 'detail',
+		groupId?: string
+	): void => {
+		if (!result?.changed) return;
+
+		const invalidationReason = reason;
+		const targetGroupId = result.groupId ?? groupId;
+		if (targetGroupId) {
+			this.engine.invalidation.invalidateGroup(targetGroupId, invalidationReason);
+		}
+		if (result.changedStartIndex !== undefined && result.changedEndIndex !== undefined) {
+			this.engine.invalidation.invalidateRowRange(result.changedStartIndex, result.changedEndIndex, invalidationReason);
+		}
+		if (result.previousRowCount !== result.nextRowCount) {
+			this.engine.invalidation.invalidateGeometry(invalidationReason);
+		}
+		this.engine.invalidation.invalidateViewport(invalidationReason);
+	};
+
 	public expandAllGroups = (): void => {
-		this.getRowModel()?.expandAllGroups?.();
+		this.applyRowModelRefreshInvalidation(this.getRowModel()?.expandAllGroups?.(), 'group expansion');
 	};
 
 	public collapseAllGroups = (): void => {
-		this.getRowModel()?.collapseAllGroups?.();
+		this.applyRowModelRefreshInvalidation(this.getRowModel()?.collapseAllGroups?.(), 'group expansion');
 	};
 
 	public setShowGroupFooter = (enabled: boolean): void => {
@@ -1003,11 +1030,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public toggleGroupExpanded = (groupId: string): void => {
-		this.getRowModel()?.toggleGroupExpanded?.(groupId);
+		this.applyRowModelRefreshInvalidation(this.getRowModel()?.toggleGroupExpanded?.(groupId), 'group expansion', groupId);
 	};
 
 	public toggleDetailExpanded = (rowId: string): void => {
-		this.getRowModel()?.toggleDetailExpanded?.(rowId);
+		this.applyRowModelRefreshInvalidation(this.getRowModel()?.toggleDetailExpanded?.(rowId), 'detail');
 	};
 
 	public isGroupExpanded = (groupId: string): boolean => {
@@ -1567,6 +1594,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			cellsPatchedPerScrollFrame: [],
 			rowsRecycledPerScrollFrame: [],
 			lastInvalidationReasons: [],
+			lastInvalidations: [],
 			portalMounts: { cells: 0, rows: 0, menus: 0, custom: { active: 0, warm: 0, cold: 0, hydrationQueue: 0, completedChunks: 0 } },
 			getCellValueCallsDuringScroll: 0,
 			valueGetterCallsDuringScroll: 0,

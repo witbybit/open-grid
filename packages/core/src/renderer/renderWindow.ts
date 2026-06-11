@@ -1,5 +1,14 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 
+export interface StickyGroupStackItem {
+	groupId: string;
+	visualIndex: number;
+	depth: number;
+	top: number;
+	height: number;
+	lastDescendantIndex: number;
+}
+
 export interface RenderWindow {
 	rowStart: number;
 	rowEnd: number;
@@ -31,6 +40,7 @@ export interface RenderWindow {
 	// descendants are still visible. Rendered at the top of the viewport, stacked by depth.
 	stickyGroupIndices?: number[];
 	stickyGroupTops?: number[];
+	stickyGroupStack?: StickyGroupStackItem[];
 }
 
 export interface ViewportDelta {
@@ -212,6 +222,7 @@ export function applyRenderWindowRuntimeLimits(window: RenderWindow, limits?: Re
 	// the clamped window outlives the frame, so it needs its own copies.
 	next.stickyGroupIndices = window.stickyGroupIndices ? window.stickyGroupIndices.slice() : undefined;
 	next.stickyGroupTops = window.stickyGroupTops ? window.stickyGroupTops.slice() : undefined;
+	next.stickyGroupStack = window.stickyGroupStack ? window.stickyGroupStack.map((item) => ({ ...item })) : undefined;
 	let clamped = false;
 
 	const pinTopRows = countPinnedLeading(next.pinTopRows, next.rowCount);
@@ -354,8 +365,10 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	// per-double-buffer so mutation never aliases the currently-rendered window.
 	const stickyIndices = target.stickyGroupIndices ?? (target.stickyGroupIndices = []);
 	const stickyTops = target.stickyGroupTops ?? (target.stickyGroupTops = []);
+	const stickyGroupStack = target.stickyGroupStack ?? (target.stickyGroupStack = []);
 	stickyIndices.length = 0;
 	stickyTops.length = 0;
+	stickyGroupStack.length = 0;
 
 	if (state.enableStickyGroupRows && rowCount > 0) {
 		const stickyMeta = rowModel?.getStickyGroupMeta?.();
@@ -383,9 +396,22 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 				}
 				if (engine.geometry.getRowBottom(lastDescIdx, defaultRowHeight) > visibleTop) {
 					// Sticky: descend into this subtree (its children follow in DFS order).
+					const stickyTop = visibleTop + stickyOffset;
+					const rowHeight = engine.geometry.getRowHeight(groupIdx, defaultRowHeight);
 					stickyIndices.push(groupIdx);
-					stickyTops.push(visibleTop + stickyOffset);
-					stickyOffset += engine.geometry.getRowHeight(groupIdx, defaultRowHeight);
+					stickyTops.push(stickyTop);
+					const visualRow = rowModel?.getVisualRow(groupIdx);
+					if (visualRow?.kind === 'group') {
+						stickyGroupStack.push({
+							groupId: visualRow.groupId,
+							visualIndex: groupIdx,
+							depth: visualRow.depth,
+							top: stickyTop,
+							height: rowHeight,
+							lastDescendantIndex: lastDescIdx,
+						});
+					}
+					stickyOffset += rowHeight;
 					i++;
 				} else {
 					// Whole subtree ends above the viewport — skip every group inside it.

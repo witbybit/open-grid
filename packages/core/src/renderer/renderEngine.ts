@@ -605,11 +605,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			// Sticky group rows must render immediately â€” never defer their portal mounts.
 			// If a sticky row's slot was freshly assigned (row was outside the overscan buffer),
 			// its portal mount would otherwise be queued and appear blank for 1-2 frames.
-			if (nextWindow.stickyGroupIndices && nextWindow.stickyGroupIndices.length > 0) {
+			if (nextWindow.stickyGroupStack && nextWindow.stickyGroupStack.length > 0) {
 				const rowModel = this.engine.getRowModel();
 				if (rowModel) {
-					for (const idx of nextWindow.stickyGroupIndices) {
-						const vr = rowModel.getVisualRow(idx);
+					for (const stickyGroup of nextWindow.stickyGroupStack) {
+						const vr = rowModel.getVisualRow(stickyGroup.visualIndex);
 						if (vr) this.portalMountManager.flushDeferredRowMount(vr.id);
 					}
 				}
@@ -683,14 +683,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		}
 
 		// 4. Sticky group rows position update
-		const stickyIndices = window.stickyGroupIndices;
-		if (stickyIndices && stickyIndices.length > 0) {
-			const stickyTops = window.stickyGroupTops;
-			for (let i = 0; i < stickyIndices.length; i++) {
-				const stickyIdx = stickyIndices[i];
-				const slot = this.rowRenderer.activeRows.get(stickyIdx);
+		const stickyGroupStack = window.stickyGroupStack;
+		if (stickyGroupStack && stickyGroupStack.length > 0) {
+			for (const stickyGroup of stickyGroupStack) {
+				const slot = this.rowRenderer.activeRows.get(stickyGroup.visualIndex);
 				if (slot) {
-					slot.updatePosition(stickyTops?.[i] ?? scrollTop);
+					slot.updatePosition(stickyGroup.top);
 				}
 			}
 		}
