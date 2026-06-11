@@ -196,8 +196,59 @@ describe('RenderWindow & ViewportDelta calculations', () => {
 				top: 120,
 				height: 40,
 				lastDescendantIndex: 3,
+				boundaryBottom: 160,
+				pushed: false,
 			},
 		]);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('pushes sticky group rows off at their subtree boundary', () => {
+		const store = new GridStore<{ id: string; category: string; product: string }>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'product', header: 'Product' },
+			],
+			defaultRowHeight: 40,
+			groupRowHeight: 40,
+			enableStickyGroupRows: true,
+			rowModelConfig: {
+				type: 'client',
+				grouping: {
+					model: [{ colId: 'category' }],
+					defaultExpanded: true,
+				},
+			},
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', category: 'Hardware', product: 'Workstation' },
+				{ id: '2', category: 'Hardware', product: 'Laptop' },
+				{ id: '3', category: 'Software', product: 'IDE' },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.setViewportSize(500, 160);
+		store.setScrollPosition(90, 0);
+
+		const window = computeRenderWindow(store.engine);
+		expect(window.stickyGroupStack).toEqual([
+			{
+				groupId: 'group:category=Hardware',
+				visualIndex: 0,
+				depth: 0,
+				top: 80,
+				height: 40,
+				lastDescendantIndex: 2,
+				boundaryBottom: 120,
+				pushed: true,
+			},
+		]);
+		expect(window.stickyGroupTops).toEqual([80]);
 
 		controller.dispose();
 		store.destroy();

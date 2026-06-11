@@ -7,6 +7,8 @@ export interface StickyGroupStackItem {
 	top: number;
 	height: number;
 	lastDescendantIndex: number;
+	boundaryBottom: number;
+	pushed: boolean;
 }
 
 export interface RenderWindow {
@@ -394,10 +396,12 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 					i++;
 					continue;
 				}
-				if (engine.geometry.getRowBottom(lastDescIdx, defaultRowHeight) > visibleTop) {
+				const boundaryBottom = engine.geometry.getRowBottom(lastDescIdx, defaultRowHeight);
+				if (boundaryBottom > visibleTop) {
 					// Sticky: descend into this subtree (its children follow in DFS order).
-					const stickyTop = visibleTop + stickyOffset;
+					const desiredTop = visibleTop + stickyOffset;
 					const rowHeight = engine.geometry.getRowHeight(groupIdx, defaultRowHeight);
+					const stickyTop = Math.min(desiredTop, boundaryBottom - rowHeight);
 					stickyIndices.push(groupIdx);
 					stickyTops.push(stickyTop);
 					const visualRow = rowModel?.getVisualRow(groupIdx);
@@ -409,6 +413,8 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 							top: stickyTop,
 							height: rowHeight,
 							lastDescendantIndex: lastDescIdx,
+							boundaryBottom,
+							pushed: stickyTop < desiredTop,
 						});
 					}
 					stickyOffset += rowHeight;
