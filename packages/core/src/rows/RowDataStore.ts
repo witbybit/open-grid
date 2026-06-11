@@ -2,6 +2,11 @@ import { RowNode, validateRowIds } from '../store.js';
 
 export type RowUpdate<T> = (rows: T[]) => T[];
 
+interface RowDiff {
+	changedFields: Set<string>;
+	changedValues: Map<string, { oldValue: unknown; newValue: unknown }>;
+}
+
 export interface RowTransactionResult<T> {
 	changedNodes: RowNode<T>[];
 	changedFieldsByRow: Map<string, Set<string>>;
@@ -15,6 +20,42 @@ export interface StoreTransactionResult<T> {
 	updated: RowNode<T>[];
 	changedFieldsByRow: Map<string, Set<string>>;
 	changedValuesByRow: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
+}
+
+const hasOwn = Object.prototype.hasOwnProperty;
+
+function diffRows(prevRow: unknown, nextRow: unknown): RowDiff | null {
+	const prevRecord = prevRow as Record<string, unknown>;
+	const nextRecord = nextRow as Record<string, unknown>;
+	let changedFields: Set<string> | null = null;
+	let changedValues: Map<string, { oldValue: unknown; newValue: unknown }> | null = null;
+
+	const recordChange = (key: string, oldValue: unknown, newValue: unknown) => {
+		if (!changedFields) {
+			changedFields = new Set<string>();
+			changedValues = new Map<string, { oldValue: unknown; newValue: unknown }>();
+		}
+		changedFields.add(key);
+		changedValues!.set(key, { oldValue, newValue });
+	};
+
+	for (const key of Object.keys(prevRecord)) {
+		const oldValue = prevRecord[key];
+		const hasNextKey = hasOwn.call(nextRecord, key);
+		const newValue = nextRecord[key];
+		if (!hasNextKey || oldValue !== newValue) {
+			recordChange(key, oldValue, newValue);
+		}
+	}
+
+	for (const key of Object.keys(nextRecord)) {
+		if (!hasOwn.call(prevRecord, key)) {
+			recordChange(key, undefined, nextRecord[key]);
+		}
+	}
+
+	if (!changedFields || !changedValues) return null;
+	return { changedFields, changedValues };
 }
 
 export class RowDataStore<T> {
@@ -98,26 +139,12 @@ export class RowDataStore<T> {
 
 			const prevRow = node.data;
 			if (prevRow !== nextRow) {
-				const changedFields = new Set<string>();
-				const changedValues = new Map<string, { oldValue: unknown; newValue: unknown }>();
-				const prevKeys = Object.keys(prevRow as object);
-				const nextKeys = Object.keys(nextRow as object);
-				const allKeys = new Set([...prevKeys, ...nextKeys]);
-
-				for (const key of allKeys) {
-					const oldValue = (prevRow as Record<string, unknown>)[key];
-					const newValue = (nextRow as Record<string, unknown>)[key];
-					if (oldValue !== newValue) {
-						changedFields.add(key);
-						changedValues.set(key, { oldValue, newValue });
-					}
-				}
-
-				if (changedFields.size > 0) {
+				const diff = diffRows(prevRow, nextRow);
+				if (diff) {
 					node.setData(nextRow);
 					changedNodes.push(node);
-					changedFieldsByRow.set(node.id, changedFields);
-					changedValuesByRow.set(node.id, changedValues);
+					changedFieldsByRow.set(node.id, diff.changedFields);
+					changedValuesByRow.set(node.id, diff.changedValues);
 				}
 			}
 		}
@@ -161,24 +188,12 @@ export class RowDataStore<T> {
 				const prevRow = node.data;
 				if (prevRow === row) continue;
 
-				const changedFields = new Set<string>();
-				const changedValues = new Map<string, { oldValue: unknown; newValue: unknown }>();
-				const allKeys = new Set([...Object.keys(prevRow as object), ...Object.keys(row as object)]);
-
-				for (const key of allKeys) {
-					const oldValue = (prevRow as Record<string, unknown>)[key];
-					const newValue = (row as Record<string, unknown>)[key];
-					if (oldValue !== newValue) {
-						changedFields.add(key);
-						changedValues.set(key, { oldValue, newValue });
-					}
-				}
-
-				if (changedFields.size > 0) {
+				const diff = diffRows(prevRow, row);
+				if (diff) {
 					node.setData(row);
 					updated.push(node);
-					changedFieldsByRow.set(id, changedFields);
-					changedValuesByRow.set(id, changedValues);
+					changedFieldsByRow.set(id, diff.changedFields);
+					changedValuesByRow.set(id, diff.changedValues);
 				}
 			}
 		}

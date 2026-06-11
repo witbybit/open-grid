@@ -109,4 +109,36 @@ describe('RowDataStore.updateRows', () => {
 		expect(result.mismatch).toBe(false);
 		expect(result.changedNodes).toHaveLength(0);
 	});
+
+	it('does not mark a new object changed when all fields are identical', () => {
+		const store = makeStore();
+		store.setRows([{ id: 'a', name: 'Alice' }]);
+		const result = store.updateRows(() => [{ id: 'a', name: 'Alice' }]);
+		expect(result.mismatch).toBe(false);
+		expect(result.changedNodes).toHaveLength(0);
+	});
+
+	it('reports added and removed keys in changed value maps', () => {
+		const store = new RowDataStore<{ id: string; name?: string; age?: number; note?: string }>((row) => row.id);
+		store.setRows([{ id: 'a', name: 'Alice', age: 30, note: undefined }]);
+		const result = store.updateRows(() => [{ id: 'a', name: 'Alice', note: 'new' }]);
+
+		expect(result.changedNodes).toHaveLength(1);
+		expect(result.changedFieldsByRow.get('a')).toEqual(new Set(['age', 'note']));
+		expect(result.changedValuesByRow.get('a')?.get('age')).toEqual({ oldValue: 30, newValue: undefined });
+		expect(result.changedValuesByRow.get('a')?.get('note')).toEqual({ oldValue: undefined, newValue: 'new' });
+	});
+});
+
+describe('RowDataStore.applyTransaction', () => {
+	it('uses the same field diff semantics for update transactions', () => {
+		const store = new RowDataStore<{ id: string; name?: string; age?: number; note?: string }>((row) => row.id);
+		store.setRows([{ id: 'a', name: 'Alice', age: 30, note: undefined }]);
+		const result = store.applyTransaction({ update: [{ id: 'a', name: 'Alice', note: 'new' }] });
+
+		expect(result.updated).toHaveLength(1);
+		expect(result.changedFieldsByRow.get('a')).toEqual(new Set(['age', 'note']));
+		expect(result.changedValuesByRow.get('a')?.get('age')).toEqual({ oldValue: 30, newValue: undefined });
+		expect(result.changedValuesByRow.get('a')?.get('note')).toEqual({ oldValue: undefined, newValue: 'new' });
+	});
 });

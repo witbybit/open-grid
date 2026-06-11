@@ -131,6 +131,60 @@ describe('aggregateStage', () => {
 		expect((roots[0] as any).aggregateValues['amount']).toBe(200);
 	});
 
+	it('computes multiple built-in aggregations in one pass', () => {
+		const nodes = [
+			makeNode('1', { category: 'A', amount: 10 }),
+			makeNode('2', { category: 'A', amount: 20 }),
+			makeNode('3', { category: 'A', amount: 5 }),
+		];
+		const { roots, ctx } = buildGroups(nodes);
+		aggregateStage(
+			roots,
+			[
+				{ field: 'amount', aggFunc: 'sum' },
+				{ field: 'amountAvg', aggFunc: 'avg' },
+				{ field: 'amountMin', aggFunc: 'min' },
+				{ field: 'amountMax', aggFunc: 'max' },
+				{ field: 'amountCount', aggFunc: 'count' },
+			],
+			createRowPipelineContext<Row>(
+				[
+					{ field: 'category', header: 'category' },
+					{ field: 'amount', header: 'amount' },
+					{ field: 'amountAvg', header: 'amountAvg', valueGetter: ({ row }) => row.amount },
+					{ field: 'amountMin', header: 'amountMin', valueGetter: ({ row }) => row.amount },
+					{ field: 'amountMax', header: 'amountMax', valueGetter: ({ row }) => row.amount },
+					{ field: 'amountCount', header: 'amountCount', valueGetter: ({ row }) => row.amount },
+				],
+				ctx.expansion
+			)
+		);
+
+		const values = (roots[0] as any).aggregateValues;
+		expect(values.amount).toBe(35);
+		expect(values.amountAvg).toBe(35 / 3);
+		expect(values.amountMin).toBe(5);
+		expect(values.amountMax).toBe(20);
+		expect(values.amountCount).toBe(3);
+	});
+
+	it('preserves custom aggregation leaf node order alongside built-ins', () => {
+		const nodes = [makeNode('1', { category: 'A', amount: 10, label: 'first' }), makeNode('2', { category: 'A', amount: 20, label: 'second' })];
+		const { roots, ctx } = buildGroups(nodes);
+		aggregateStage(
+			roots,
+			[
+				{ field: 'amount', aggFunc: 'sum' },
+				{ field: 'label', aggFunc: (leafNodes) => leafNodes.map((node) => node.id).join(',') },
+			],
+			ctx
+		);
+
+		const values = (roots[0] as any).aggregateValues;
+		expect(values.amount).toBe(30);
+		expect(values.label).toBe('1,2');
+	});
+
 	it('custom function that throws is caught and sets value to undefined', () => {
 		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const nodes = [makeNode('1', { category: 'A', amount: 10 })];

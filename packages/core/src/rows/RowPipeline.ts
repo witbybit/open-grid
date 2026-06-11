@@ -1,6 +1,6 @@
 import { RowNode, type ColumnDef, type VisualRow } from '../store.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
-import { applyClientSortAndFilter } from '../rowModel.js';
+import { applyClientFilterOnly, applyClientSortAndFilter } from '../rowModel.js';
 import { createRowPipelineContext } from './pipelineContext.js';
 import { groupStage } from './stages/groupStage.js';
 import { treeStage } from './stages/treeStage.js';
@@ -124,8 +124,7 @@ export class RowPipeline<TData = unknown> {
 		let visualRows: VisualRow<TData>[] | null = null;
 
 		if (groupDefs.length > 0) {
-			const filteredWrappers = applyClientSortAndFilter(nodes, columns, null, filterModel);
-			const filteredNodes = filteredWrappers.map((w) => w.node);
+			const filteredNodes = applyClientFilterOnly(nodes, columns, filterModel);
 			roots = groupStage(filteredNodes, groupDefs, context);
 		} else if (effectiveGetParentId) {
 			const treeRoots = treeStage(nodes, effectiveGetParentId);
@@ -240,7 +239,7 @@ export class RowPipeline<TData = unknown> {
 		const groupingConfig = rowModelConfig?.grouping;
 		const groupDefs: GroupDef<TData>[] = groupingConfig?.model ?? (groupBy ?? []).map((colId) => ({ colId }));
 		if (groupDefs.length === 0) return [];
-		const filteredNodes = applyClientSortAndFilter(nodes, columns, null, filterModel).map((w) => w.node);
+		const filteredNodes = applyClientFilterOnly(nodes, columns, filterModel);
 		const context = createRowPipelineContext(columns, { groups: new Set(), treeRows: new Set(), details: new Set() });
 		const roots = groupStage(filteredNodes, groupDefs, context);
 		const ids: string[] = [];

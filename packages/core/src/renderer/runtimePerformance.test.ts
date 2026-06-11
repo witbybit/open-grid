@@ -237,6 +237,19 @@ describe('Runtime Performance & Granular Versioning', () => {
 		store.destroy();
 	});
 
+	it('applies row-selection class through the cached selection membership set', () => {
+		const grid = createWideGrid({ rows: 100, cols: 4 });
+		try {
+			grid.store.selectRows(['row-0', 'row-20', 'row-40']);
+			grid.renderer.fullPaint();
+
+			const selectedRows = Array.from(grid.container.querySelectorAll<HTMLElement>('.og-row-node-selected'));
+			expect(selectedRows.some((row) => row.dataset.rowId === 'row:row-0')).toBe(true);
+		} finally {
+			cleanupGrid(grid);
+		}
+	});
+
 	it('does zero row and cell work when the scroll render window is unchanged', () => {
 		const grid = createWideGrid({ rows: 1000, cols: 100 });
 		grid.renderer.resetRenderStats();

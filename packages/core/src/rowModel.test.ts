@@ -240,6 +240,40 @@ describe('ClientRowModelController', () => {
 		expect(group?.kind === 'group' ? group.aggregateValues?.doubleAmount : undefined).toBe(24);
 	});
 
+	it('filters grouped rows without changing group counts or labels', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'name', header: 'Name' },
+			],
+			filterModel: { name: { type: 'contains', filter: 'keep' } },
+			rowModelConfig: {
+				type: 'client',
+				grouping: { model: [{ colId: 'category' }], defaultExpanded: true },
+			},
+		});
+
+		const controller = new ClientRowModelController(store, {
+			rows: [
+				{ id: '1', name: 'keep alpha', category: 'A' },
+				{ id: '2', name: 'drop beta', category: 'A' },
+				{ id: '3', name: 'keep gamma', category: 'B' },
+			],
+			columns: store.getState().columns,
+		});
+
+		const rows = Array.from({ length: controller.getVisualRowCount() }, (_, index) => controller.getVisualRow(index));
+		const groups = rows.filter((row) => row?.kind === 'group');
+		const dataRows = rows.filter((row) => row?.kind === 'data');
+
+		expect(groups.map((row) => (row?.kind === 'group' ? [row.keyString, row.childCount] : null))).toEqual([
+			['A', 1],
+			['B', 1],
+		]);
+		expect(dataRows.map((row) => (row?.kind === 'data' ? row.rowId : null))).toEqual(['1', '3']);
+	});
+
 	it('hides and shows grouped children based on serializable expansion state', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,

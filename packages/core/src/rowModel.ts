@@ -115,62 +115,84 @@ function fieldsAffectColumn(fields: Set<string>, columnField: string): boolean {
 	return fields.has(columnField) || fields.has(getFieldRoot(columnField));
 }
 
+function createColumnLookup<TData>(columns: Array<ColumnDef<TData>>): Map<string, ColumnDef<TData>> {
+	const columnById = new Map<string, ColumnDef<TData>>();
+	columns.forEach((column) => {
+		columnById.set(column.field, column);
+	});
+	return columnById;
+}
+
+function prepareFilters<TData>(columns: Array<ColumnDef<TData>>, filterModel: FilterModel | null | undefined): PreparedFilter<TData>[] {
+	const preparedFilters: PreparedFilter<TData>[] = [];
+	if (!filterModel) return preparedFilters;
+
+	const columnById = createColumnLookup(columns);
+	for (const [colId, item] of Object.entries(filterModel)) {
+		const { operator, filter } = getFilterItemValue(item);
+		if (filter == null || filter === '') continue;
+
+		const column = columnById.get(colId);
+		if (!column) continue;
+
+		const textFilter = String(filter).toLowerCase();
+		const numericFilter = Number(filter);
+
+		let getter: (node: RowNode<TData>) => unknown;
+		if (column.valueGetter) {
+			const colValGetter = column.valueGetter;
+			getter = (node: RowNode<TData>) => colValGetter({ node, row: node.data, colField: column.field });
+		} else {
+			const pathGetter = compilePathGetter(column.field);
+			getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
+		}
+
+		preparedFilters.push({
+			column,
+			getter,
+			operator,
+			textFilter,
+			numericFilter,
+		});
+	}
+
+	return preparedFilters;
+}
+
+function nodeMatchesPreparedFilters<TData>(node: RowNode<TData>, preparedFilters: PreparedFilter<TData>[]): boolean {
+	for (let i = 0; i < preparedFilters.length; i++) {
+		const pf = preparedFilters[i];
+		const val = pf.getter(node);
+		if (!matchesPreparedFilter(val, pf)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+export function applyClientFilterOnly<TData>(
+	nodes: RowNode<TData>[],
+	columns: Array<ColumnDef<TData>>,
+	filterModel: FilterModel | null | undefined
+): RowNode<TData>[] {
+	const preparedFilters = prepareFilters(columns, filterModel);
+	if (preparedFilters.length === 0) return nodes;
+	return nodes.filter((node) => nodeMatchesPreparedFilters(node, preparedFilters));
+}
+
 export function applyClientSortAndFilter<TData>(
 	nodes: RowNode<TData>[],
 	columns: Array<ColumnDef<TData>>,
 	sortModel: SortModel | null | undefined,
 	filterModel: FilterModel | null | undefined
 ): Array<{ node: RowNode<TData>; sourceIndex: number }> {
-	const columnById = new Map<string, ColumnDef<TData>>();
-	columns.forEach((column) => {
-		columnById.set(column.field, column);
-	});
-
+	const columnById = createColumnLookup(columns);
 	let result = nodes.map((node, sourceIndex) => ({ node, sourceIndex }));
 
 	// 1. Pre-compile and pre-resolve active filters to avoid O(N) entries allocations, string manipulation, and Map lookups
-	const preparedFilters: PreparedFilter<TData>[] = [];
-	if (filterModel) {
-		for (const [colId, item] of Object.entries(filterModel)) {
-			const { operator, filter } = getFilterItemValue(item);
-			if (filter == null || filter === '') continue;
-
-			const column = columnById.get(colId);
-			if (!column) continue;
-
-			const textFilter = String(filter).toLowerCase();
-			const numericFilter = Number(filter);
-
-			let getter: (node: RowNode<TData>) => unknown;
-			if (column.valueGetter) {
-				const colValGetter = column.valueGetter;
-				getter = (node: RowNode<TData>) => colValGetter({ node, row: node.data, colField: column.field });
-			} else {
-				const pathGetter = compilePathGetter(column.field);
-				getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
-			}
-
-			preparedFilters.push({
-				column,
-				getter,
-				operator,
-				textFilter,
-				numericFilter,
-			});
-		}
-	}
-
+	const preparedFilters = prepareFilters(columns, filterModel);
 	if (preparedFilters.length > 0) {
-		result = result.filter(({ node }) => {
-			for (let i = 0; i < preparedFilters.length; i++) {
-				const pf = preparedFilters[i];
-				const val = pf.getter(node);
-				if (!matchesPreparedFilter(val, pf)) {
-					return false;
-				}
-			}
-			return true;
-		});
+		result = result.filter(({ node }) => nodeMatchesPreparedFilters(node, preparedFilters));
 	}
 
 	// 2. Pre-compile sort getters to avoid O(N log N) getter compilations and map lookups
