@@ -919,7 +919,16 @@ export class GridEngine<TRowData = unknown> {
 			this.geometryVersion++;
 		}
 
-		if (updatedSet.has('selection') || updatedSet.has('columns')) {
+		if (
+			updatedSet.has('selection') ||
+			updatedSet.has('columns') ||
+			// Any change that reshuffles visual row indices invalidates visual-index bounds
+			updatedSet.has('sortModel') ||
+			updatedSet.has('filterModel') ||
+			updatedSet.has('dataVersion') ||
+			updatedSet.has('expansion') ||
+			updatedSet.has('groupBy')
+		) {
 			const rangeBounds = this.selection.calculateRangeBounds(
 				currState.selection.range,
 				(id) => (this.rowModel ? this.rowModel.getVisualIndexByRowId(id) : -1),

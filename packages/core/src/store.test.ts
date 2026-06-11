@@ -198,6 +198,119 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('should recompute selection bounds after sort reorders rows', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'Bravo', price: 10 },
+				{ id: '2', name: 'Alpha', price: 20 },
+				{ id: '3', name: 'Charlie', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// id='1'(Bravo) at idx=0, id='2'(Alpha) at idx=1
+		store.selectRange({ rowId: '1', colField: 'id' }, { rowId: '2', colField: 'id' });
+		expect(store.getState().selection.bounds?.minRow).toBe(0);
+		expect(store.getState().selection.bounds?.maxRow).toBe(1);
+
+		// Sort asc by name: Alpha(id=2)→0, Bravo(id=1)→1, Charlie(id=3)→2
+		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+
+		// Both ids still in range; new positions: id=2 at 0, id=1 at 1 — bounds unchanged in extent
+		const bounds = store.getState().selection.bounds;
+		expect(bounds?.minRow).toBe(0);
+		expect(bounds?.maxRow).toBe(1);
+
+		// Now select only id='3' (Charlie, always last) — then sort desc: Charlie→0
+		store.selectRange({ rowId: '3', colField: 'id' }, { rowId: '3', colField: 'id' });
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+
+		// After desc sort: Charlie(id=3)→0, Bravo(id=1)→1, Alpha(id=2)→2
+		// id='3' moved from idx=2 to idx=0 — bounds must update
+		expect(store.getState().selection.bounds?.minRow).toBe(0);
+		expect(store.getState().selection.bounds?.maxRow).toBe(0);
+
+		controller.dispose();
+	});
+
+	it('should recompute selection bounds after filter shifts row indices', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'remove', price: 10 },
+				{ id: '2', name: 'keep-first', price: 20 },
+				{ id: '3', name: 'keep-second', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Select id='2'(idx=1) and id='3'(idx=2)
+		store.selectRange({ rowId: '2', colField: 'id' }, { rowId: '3', colField: 'id' });
+		expect(store.getState().selection.bounds?.minRow).toBe(1);
+		expect(store.getState().selection.bounds?.maxRow).toBe(2);
+
+		// Filter to rows containing 'keep' — removes id='1', shifts id='2'→0, id='3'→1
+		store.setFilterModel({ name: { type: 'text', filter: 'keep' } });
+
+		const bounds = store.getState().selection.bounds;
+		expect(bounds?.minRow).toBe(0);
+		expect(bounds?.maxRow).toBe(1);
+
+		controller.dispose();
+	});
+
+	it('should recompute selection bounds to null when selected rows are hidden by group collapse', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			groupBy: ['name'],
+		});
+		const controller = new ClientRowModelController<TestRow>(store, {
+			rows: [
+				{ id: '1', name: 'GroupA', price: 10 },
+				{ id: '2', name: 'GroupB', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Find the group ID for GroupA by inspecting the visual rows
+		const groupARow = controller.getVisualRow(0);
+		expect(groupARow?.kind).toBe('group');
+		const groupAId = groupARow?.kind === 'group' ? groupARow.groupId : null;
+		expect(groupAId).not.toBeNull();
+
+		// Expand group A — data row id='1' becomes visible
+		store.toggleGroupExpanded(groupAId!);
+		// Visual layout: [group:GroupA(0), data:1(1), group:GroupB(2)]
+		expect(controller.getVisualIndexByRowId('1')).toBe(1);
+
+		// Select the data row inside group A
+		store.selectRange({ rowId: '1', colField: 'id' }, { rowId: '1', colField: 'id' });
+		expect(store.getState().selection.bounds?.minRow).toBe(1);
+
+		// Collapse group A — id='1' is now hidden, getVisualIndexByRowId returns -1
+		store.toggleGroupExpanded(groupAId!);
+		expect(controller.getVisualIndexByRowId('1')).toBe(-1);
+
+		// Bounds must be null since the selected row is no longer visible
+		expect(store.getState().selection.bounds).toBeNull();
+
+		controller.dispose();
+	});
+
 	it('should support valueGetter dynamically', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
