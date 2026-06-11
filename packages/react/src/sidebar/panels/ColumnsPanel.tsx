@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { GridApi, ColumnDef, PersistenceStatus } from '../../types.js';
 import { useGridKeySelector } from '../../hooks.js';
 
@@ -76,6 +76,13 @@ const PinIcon = () => (
 	</svg>
 );
 
+const SearchIcon = () => (
+	<svg width='13' height='13' viewBox='0 0 13 13' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round'>
+		<circle cx='5.8' cy='5.8' r='4.2' />
+		<path d='M9 9l3 3' />
+	</svg>
+);
+
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const PANEL_BG = '#0b0d14';
@@ -116,6 +123,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	const visibleCount = allCols.filter((c) => !c.hide).length;
 
 	const [clearConfirm, setClearConfirm] = useState(false);
+	const [columnQuery, setColumnQuery] = useState('');
 	const clearConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	// Real persistence status — subscribes to actual save events from the adapter.
@@ -299,6 +307,12 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 
 	const groupableCols = allCols.filter(canGroup);
 	const hasGroups = groupBy.length > 0;
+	const normalizedQuery = columnQuery.trim().toLowerCase();
+	const filteredCols = useMemo(() => {
+		if (!normalizedQuery) return allCols;
+		return allCols.filter((col) => `${col.header ?? ''} ${col.field}`.toLowerCase().includes(normalizedQuery));
+	}, [allCols, normalizedQuery]);
+	const ungroupedGroupableCount = groupableCols.filter((col) => !isGrouped(col.field)).length;
 
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: PANEL_BG }}>
@@ -344,6 +358,45 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 				</button>
 			</div>
 
+			<div style={{ padding: '8px 12px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+				<label
+					style={{
+						height: 28,
+						display: 'flex',
+						alignItems: 'center',
+						gap: 7,
+						padding: '0 8px',
+						borderRadius: 6,
+						border: `1px solid rgba(30,41,59,0.9)`,
+						background: 'rgba(15,23,42,0.7)',
+						color: TEXT_MUTED,
+					}}
+				>
+					<SearchIcon />
+					<input
+						value={columnQuery}
+						onChange={(e) => setColumnQuery(e.target.value)}
+						placeholder='Find columns'
+						style={{
+							flex: 1,
+							minWidth: 0,
+							border: 'none',
+							outline: 'none',
+							background: 'transparent',
+							color: TEXT,
+							fontSize: 11,
+							fontWeight: 600,
+							letterSpacing: 0,
+						}}
+					/>
+					{columnQuery && (
+						<button onClick={() => setColumnQuery('')} style={{ ...iconBtnStyle, width: 18, height: 18 }} title='Clear search'>
+							<CloseIcon />
+						</button>
+					)}
+				</label>
+			</div>
+
 			{/* Scrollable body */}
 			<div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
 				{/* ── Row Groups Section ────────────────────────────────── */}
@@ -371,6 +424,9 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 							>
 								<GroupIcon />
 								Row Groups
+							</span>
+							<span style={{ fontSize: 10, color: TEXT_MUTED, fontWeight: 700 }}>
+								{groupBy.length} active / {ungroupedGroupableCount} available
 							</span>
 							{hasGroups && (
 								<div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -529,7 +585,8 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 
 				{/* ── Column list ───────────────────────────────────────── */}
 				<div style={{ padding: '4px 0' }}>
-					{allCols.map((col, index) => {
+					{filteredCols.map((col) => {
+						const index = allCols.findIndex((c) => c.field === col.field);
 						const isHidden = !!col.hide;
 						const isDragTarget = dropTargetIdx === index;
 						const grouped = isGrouped(col.field);

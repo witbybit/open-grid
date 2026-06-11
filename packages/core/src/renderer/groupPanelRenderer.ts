@@ -59,14 +59,29 @@ export class GroupPanelRenderer<TRowData = unknown> {
 		if (!this.panel) return;
 		const groupBy = this.engine.stateManager.getState().groupBy ?? [];
 		this.panel.innerHTML = '';
+		this.panel.dataset.groupCount = String(groupBy.length);
 
 		if (groupBy.length === 0) {
 			const empty = document.createElement('div');
 			empty.className = 'og-group-panel-empty';
-			empty.textContent = 'Drag here to set row groups';
+			empty.innerHTML =
+				'<span class="og-group-panel-empty-icon" aria-hidden="true">' +
+				'<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+				'<rect x="2.5" y="2.5" width="13" height="4" rx="1.2"/><rect x="4.5" y="11.5" width="9" height="4" rx="1.2"/><path d="M9 6.5v5"/>' +
+				'</svg></span><span>Drag columns here to group rows</span>';
 			this.panel.appendChild(empty);
 		} else {
+			const label = document.createElement('div');
+			label.className = 'og-group-panel-label';
+			label.textContent = 'Row groups';
+			this.panel.appendChild(label);
 			for (let i = 0; i < groupBy.length; i++) {
+				if (i > 0) {
+					const arrow = document.createElement('span');
+					arrow.className = 'og-group-chip-separator';
+					arrow.textContent = '›';
+					this.panel.appendChild(arrow);
+				}
 				this.panel.appendChild(this.createChip(groupBy[i], i));
 			}
 		}
@@ -141,6 +156,9 @@ export class GroupPanelRenderer<TRowData = unknown> {
 		const chip = document.createElement('div');
 		chip.className = 'og-group-chip';
 		chip.dataset.colId = colId;
+		chip.tabIndex = 0;
+		chip.setAttribute('role', 'button');
+		chip.setAttribute('aria-label', `Grouped by ${label}. Drag to reorder or press Delete to remove.`);
 
 		// Drag handle icon
 		const handle = document.createElement('span');
@@ -177,6 +195,12 @@ export class GroupPanelRenderer<TRowData = unknown> {
 
 		// Chip reorder drag
 		chip.addEventListener('mousedown', (e) => this.onChipMouseDown(e, colId));
+		chip.addEventListener('keydown', (e) => {
+			if (e.key === 'Delete' || e.key === 'Backspace') {
+				e.preventDefault();
+				this.engine.removeGroupBy(colId);
+			}
+		});
 
 		return chip;
 	}
@@ -197,6 +221,9 @@ export class GroupPanelRenderer<TRowData = unknown> {
 				this._chipDragActive = true;
 				this._chipDragColId = colId;
 				this.panel?.classList.add('og-group-panel-chip-dragging');
+				this.panel
+					?.querySelectorAll<HTMLElement>('.og-group-chip')
+					.forEach((chip) => chip.classList.toggle('og-group-chip-drag-source', chip.dataset.colId === colId));
 			}
 			if (dragging) {
 				this._chipDragDropIndex = this.computeDropIndex(moveEvent, colId);
@@ -285,7 +312,7 @@ export class GroupPanelRenderer<TRowData = unknown> {
 	private clearChipHighlights(): void {
 		if (!this.panel) return;
 		for (const chip of this.panel.querySelectorAll<HTMLElement>('.og-group-chip')) {
-			chip.classList.remove('og-group-chip-drop-before', 'og-group-chip-drop-after');
+			chip.classList.remove('og-group-chip-drop-before', 'og-group-chip-drop-after', 'og-group-chip-drag-source');
 		}
 	}
 }

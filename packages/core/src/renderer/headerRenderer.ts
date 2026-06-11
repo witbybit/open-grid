@@ -214,6 +214,9 @@ export class HeaderRenderer<TRowData = unknown> {
 			if (state.enableColumnReorder && col.movable !== false && !col.checkboxSelection) {
 				className += ' og-header-cell-movable';
 			}
+			if (col.checkboxSelection) {
+				className += ' og-header-cell-row-selector';
+			}
 			const columnInteractions = this.columnInteractionsGetter();
 			const isDraggingThis = columnInteractions.isDraggingColumn(col.field);
 			if (isDraggingThis) {
@@ -243,7 +246,6 @@ export class HeaderRenderer<TRowData = unknown> {
 					checkbox = document.createElement('input');
 					checkbox.type = 'checkbox';
 					checkbox.className = 'og-header-checkbox';
-					checkbox.style.cssText = 'pointer-events:auto;cursor:pointer;margin:0';
 					checkbox.addEventListener('change', (e) => {
 						e.stopPropagation();
 						if ((e.target as HTMLInputElement).checked) {
@@ -256,16 +258,24 @@ export class HeaderRenderer<TRowData = unknown> {
 					headerCell.insertBefore(checkbox, textSpan);
 				}
 				const rowModel = this.engine.getRowModel();
-				let totalDataRows = 0;
-				if (rowModel) {
-					const vCount = rowModel.getVisualRowCount();
-					for (let i = 0; i < vCount; i++) {
-						if (rowModel.getVisualRow(i)?.kind === 'data') totalDataRows++;
-					}
-				}
-				const selectedCount = state.selectedRowIds.length;
+				const totalDataRows =
+					rowModel?.getDataRowCount?.() ??
+					(() => {
+						if (!rowModel) return 0;
+						let count = 0;
+						const vCount = rowModel.getVisualRowCount();
+						for (let i = 0; i < vCount; i++) {
+							if (rowModel.getVisualRow(i)?.kind === 'data') count++;
+						}
+						return count;
+					})();
+				const selectedCount = rowModel
+					? state.selectedRowIds.filter((rowId) => rowModel.getVisualIndexByRowId(rowId) >= 0).length
+					: state.selectedRowIds.length;
 				const newChecked = selectedCount > 0 && selectedCount >= totalDataRows;
 				const newIndeterminate = selectedCount > 0 && selectedCount < totalDataRows;
+				checkbox.title = selectedCount > 0 ? `${selectedCount} of ${totalDataRows} rows selected` : `Select all ${totalDataRows} rows`;
+				checkbox.setAttribute('aria-label', newChecked ? 'Clear row selection' : 'Select all rows');
 				if (checkbox.checked !== newChecked) checkbox.checked = newChecked;
 				if (checkbox.indeterminate !== newIndeterminate) checkbox.indeterminate = newIndeterminate;
 			} else if (textSpan && textSpan.textContent !== (col.header || col.field)) {

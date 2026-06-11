@@ -174,6 +174,7 @@ export class RowRenderer<TRowData = unknown> {
 
 	// Cached Set for O(1) row-selection checks — rebuilt each recycleViewport frame from selectedRowIds.
 	private _selectedRowIdSet: Set<string> | null = null;
+	private _rowCheckboxAnchorId: string | null = null;
 
 	// Stable slot assigner — single implementation shared with tests.
 	// Internal scratch buffers are reused per call: zero per-frame allocations.
@@ -465,7 +466,8 @@ export class RowRenderer<TRowData = unknown> {
 			) {
 				const stickyGroup = findStickyGroup(stickyGroupStack, r);
 				const isStickyNow = !!stickyGroup;
-				if (isStickyNow === slot.isStickyGroup) {
+				const stickyPushed = !!stickyGroup?.pushed;
+				if (isStickyNow === slot.isStickyGroup && stickyPushed === slot.stickyGroupPushed) {
 					let top: number;
 					if (r < pinTopRows) {
 						top = rowTops[r] + scrollTop;
@@ -477,6 +479,7 @@ export class RowRenderer<TRowData = unknown> {
 						top = rowTops[r];
 					}
 					slot.updatePosition(top);
+					slot.stickyGroupDepth = stickyGroup?.depth ?? 0;
 					if (hasRowClassHook && slot.rowKind === 'data') {
 						this.dirtyRowsAfterScroll.add(r);
 					}
@@ -500,6 +503,8 @@ export class RowRenderer<TRowData = unknown> {
 			const rowHeight = rowHeights[r];
 
 			let isStickyGroup = false;
+			let stickyGroupPushed = false;
+			let stickyGroupDepth = 0;
 			if (r < pinTopRows) {
 				rowTop = rowTop + scrollTop;
 			} else if (r >= nextWindow.rowCount - pinBottomRows) {
@@ -510,13 +515,20 @@ export class RowRenderer<TRowData = unknown> {
 				if (stickyGroup) {
 					rowTop = stickyGroup.top;
 					isStickyGroup = true;
+					stickyGroupPushed = stickyGroup.pushed;
+					stickyGroupDepth = stickyGroup.depth;
 				}
 			}
 			slot.isStickyGroup = isStickyGroup;
+			slot.stickyGroupPushed = stickyGroupPushed;
+			slot.stickyGroupDepth = stickyGroupDepth;
 
 			// ── Row class name ────────────────────────────────────────────────────────
 			let rowClassName = ROW_KIND_BASE[visualRow.kind] ?? 'og-row';
-			if (isStickyGroup) rowClassName += ' og-row-group-sticky';
+			if (isStickyGroup) {
+				rowClassName += ` og-row-group-sticky og-row-group-sticky-depth-${Math.min(stickyGroupDepth, 4)}`;
+				if (stickyGroupPushed) rowClassName += ' og-row-group-sticky-pushed';
+			}
 			if (visualRow.kind === 'group') {
 				if (state.styleSlots?.groupRowClass) {
 					try {
@@ -571,6 +583,8 @@ export class RowRenderer<TRowData = unknown> {
 			}
 
 			const rowUpdated = slot.update(r, visualRow.id, visualRow.kind as any, rowTop, rowHeight, rowClassName);
+			const nextZIndex = isStickyGroup ? String(34 + Math.min(stickyGroupDepth, 8)) : '';
+			if (slot.element.style.zIndex !== nextZIndex) slot.element.style.zIndex = nextZIndex;
 			if (isScrollFrameActive && rowUpdated) this.currentScrollRowsRebound++;
 
 			// ── Bind cells based on row kind ──────────────────────────────────────────
@@ -1081,21 +1095,35 @@ export class RowRenderer<TRowData = unknown> {
 			const cell = cellSlot.contentElement;
 			const rowId = node.id;
 			const isChecked = (this._selectedRowIdSet ?? new Set(state.selectedRowIds)).has(rowId);
+			cellClassName += ' og-cell-row-selector';
 			let checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
 			if (!checkbox) {
 				checkbox = document.createElement('input');
 				checkbox.type = 'checkbox';
 				checkbox.className = 'og-row-checkbox';
-				checkbox.style.cssText = 'pointer-events:auto;cursor:pointer;margin:0';
-				checkbox.addEventListener('change', (e) => {
+				checkbox.addEventListener('click', (e) => {
 					e.stopPropagation();
-					const id = (e.currentTarget as HTMLInputElement).dataset.rowId;
-					if (id) this.engine.toggleRowId(id, 'checkbox');
+					const input = e.currentTarget as HTMLInputElement;
+					const id = input.dataset.rowId;
+					if (!id) return;
+					const shouldSelect = input.checked;
+					if ((e as MouseEvent).shiftKey && this._rowCheckboxAnchorId) {
+						const rangeIds = this.getDataRowIdsBetween(this._rowCheckboxAnchorId, id);
+						if (rangeIds.length > 0) {
+							if (shouldSelect) this.engine.selectRowIds(rangeIds, 'checkbox');
+							else this.engine.deselectRowIds(rangeIds, 'checkbox');
+						}
+					} else {
+						this.engine.toggleRowId(id, 'checkbox');
+					}
+					this._rowCheckboxAnchorId = id;
 				});
 				cell.textContent = '';
 				cell.appendChild(checkbox);
 			}
 			checkbox.dataset.rowId = rowId;
+			checkbox.setAttribute('aria-label', isChecked ? `Deselect row ${rowIndex + 1}` : `Select row ${rowIndex + 1}`);
+			checkbox.title = 'Select row. Shift-click selects a range.';
 			if (checkbox.checked !== isChecked) checkbox.checked = isChecked;
 			cellSlot.update(colIndex, col.field, rowIndex, node.id, leftArg, -1, cellWidth, cellClassName, 'custom', undefined, '', undefined);
 			return;
@@ -1419,7 +1447,7 @@ export class RowRenderer<TRowData = unknown> {
 		// checkbox DOM is never overwritten by the primitive fast-path text writer.
 		if (col.checkboxSelection) {
 			this.markCellDirtyAfterScroll(cellSlot.element);
-			let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, pinRightStart);
+			let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, pinRightStart) + ' og-cell-row-selector';
 			cellSlot.update(colIndex, col.field, rowIndex, node.id, left, right, width, cellClassName, 'custom', undefined, '', undefined);
 			return;
 		}
@@ -1689,6 +1717,22 @@ export class RowRenderer<TRowData = unknown> {
 			this.dirtyCellsAfterScroll.add(cell);
 			this.dirtyCellsMarkedDuringScroll++;
 		}
+	}
+
+	private getDataRowIdsBetween(anchorRowId: string, targetRowId: string): string[] {
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return [];
+		const anchorIndex = rowModel.getVisualIndexByRowId(anchorRowId);
+		const targetIndex = rowModel.getVisualIndexByRowId(targetRowId);
+		if (anchorIndex < 0 || targetIndex < 0) return [];
+		const start = Math.min(anchorIndex, targetIndex);
+		const end = Math.max(anchorIndex, targetIndex);
+		const rowIds: string[] = [];
+		for (let i = start; i <= end; i++) {
+			const row = rowModel.getVisualRow(i);
+			if (row?.kind === 'data') rowIds.push(row.rowId);
+		}
+		return rowIds;
 	}
 
 	// ── Legacy slot release (kept for API compat; not called during steady scroll) ───

@@ -319,6 +319,7 @@ export interface RowModelRefreshResult {
 export interface RowModel<TRowData = unknown> {
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	getVisualRowCount(): number;
+	getDataRowCount?(): number;
 	getVisualRowIndexById(id: string): number;
 	getVisualIndexById(visualRowId: string): number;
 	getVisualIndexByRowId(rowId: string): number;

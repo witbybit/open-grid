@@ -286,12 +286,15 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	private rowIdToVisualIndex = new Map<string, number>();
 	private rowIdToVisualRowId = new Map<string, string>();
 	private rowIdToVisualRowIds: Map<string, string[]> | undefined;
+	private dataRowCount = 0;
 	private unsubscribers: Array<() => void> = [];
 
 	private pipeline = new RowPipeline<TData>();
 	private _stickyGroupMeta = new Map<number, number>();
 
 	public getStickyGroupMeta = (): Map<number, number> => this._stickyGroupMeta;
+
+	public getDataRowCount = (): number => this.dataRowCount;
 
 	public toggleGroupExpanded = (groupId: string): RowModelRefreshResult => {
 		const expansion = this.store.getState().expansion;
@@ -685,6 +688,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.rowIdToVisualRowId = result.rowIdToVisualRowId;
 		this.rowIdToVisualRowIds = result.rowIdToVisualRowIds;
 		this._stickyGroupMeta = result.stickyGroupMeta;
+		this.dataRowCount = result.stats.totalDataRows;
 
 		this.store.setState({
 			dataVersion: state.dataVersion + 1,

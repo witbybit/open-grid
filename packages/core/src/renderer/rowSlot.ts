@@ -20,6 +20,8 @@ export class RowSlot<TRowData = unknown> {
 	public keepAlive = false;
 	/** True while the bound row is rendered as a sticky group row (scroll-pinned top). */
 	public isStickyGroup = false;
+	public stickyGroupPushed = false;
+	public stickyGroupDepth = 0;
 
 	public pinLeftContainer: HTMLDivElement | null = null;
 	public pinRightContainer: HTMLDivElement | null = null;

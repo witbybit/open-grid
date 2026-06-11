@@ -61,6 +61,8 @@ function sameStickyStack(a: StickyGroupStackItem[] | undefined, b: StickyGroupSt
 	if (an !== bn) return false;
 	for (let i = 0; i < an; i++) {
 		if (a![i].visualIndex !== b![i].visualIndex) return false;
+		if (a![i].top !== b![i].top) return false;
+		if (a![i].pushed !== b![i].pushed) return false;
 	}
 	return true;
 }

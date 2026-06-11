@@ -154,6 +154,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		return this.visualRows.length;
 	};
 
+	public getDataRowCount = (): number => {
+		return this.visualRows.length;
+	};
+
 	public getVisualRowIndexById = (id: string): number => {
 		const idx = this.visualRowIdToIndex.get(id) ?? this.rowIdToVisualIndex.get(id);
 		return idx !== undefined ? idx : -1;
