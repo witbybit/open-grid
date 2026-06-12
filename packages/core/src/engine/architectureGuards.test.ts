@@ -74,8 +74,8 @@ describe('Architecture guardrails', () => {
 
 	it('rowRenderer live row/data binding delegates lane orchestration', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderer.ts'), 'utf-8');
-		expect(content).toContain('bindAllDataCellsRuntime(this.getRowRendererRuntimeArgs()');
-		expect(content).toContain('bindAllLoadingCellsRuntime(this.getRowRendererRuntimeArgs()');
+		expect(content).toContain('bindAllDataCellsRuntime(createRowRendererRuntimeArgs(');
+		expect(content).toContain('bindAllLoadingCellsRuntime(createRowRendererRuntimeArgs(');
 	});
 
 	it('rowCellBinder owns extracted live cell-binding policy', () => {

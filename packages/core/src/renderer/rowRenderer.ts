@@ -14,12 +14,13 @@ import { CellSlot } from './cellSlot.js';
 import { StableSlotAssigner } from './stableSlotAssigner.js';
 import { reportRendererFault } from './rendererFaults.js';
 import {
+	createRowRendererRuntimeArgs,
 	bindAllDataCellsRuntime,
 	bindAllLoadingCellsRuntime,
 	bindFullWidthRow,
 	decorateDirtyCellsAfterScroll as decorateDirtyCellsAfterScrollRuntime,
 	repaintInvalidatedRowsAndCells as repaintInvalidatedRowsAndCellsRuntime,
-	type RowRendererRuntimeArgs,
+	type RowRendererRuntimeHost,
 } from './rowRendererRuntime.js';
 
 // Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
@@ -530,7 +531,7 @@ export class RowRenderer<TRowData = unknown> {
 			// ── Bind cells based on row kind ──────────────────────────────────────────
 			if (visualRow.kind === 'loading') {
 				this.releaseRowPortal(slot);
-				bindAllLoadingCellsRuntime(this.getRowRendererRuntimeArgs(), {
+				bindAllLoadingCellsRuntime(createRowRendererRuntimeArgs(this as unknown as RowRendererRuntimeHost<TRowData>), {
 					slot,
 					rowIndex: r,
 					pinLeftColumns,
@@ -544,7 +545,7 @@ export class RowRenderer<TRowData = unknown> {
 				});
 			} else if (visualRow.kind === 'data') {
 				this.releaseRowPortal(slot);
-				bindAllDataCellsRuntime(this.getRowRendererRuntimeArgs(), {
+				bindAllDataCellsRuntime(createRowRendererRuntimeArgs(this as unknown as RowRendererRuntimeHost<TRowData>), {
 					slot,
 					node: visualRow.node,
 					rowIndex: r,
@@ -562,7 +563,7 @@ export class RowRenderer<TRowData = unknown> {
 				});
 			} else {
 				// Full-width row (group / detail / footer)
-				bindFullWidthRow(this.getRowRendererRuntimeArgs(), slot, visualRow);
+				bindFullWidthRow(createRowRendererRuntimeArgs(this as unknown as RowRendererRuntimeHost<TRowData>), slot, visualRow);
 			}
 		}
 
@@ -592,70 +593,58 @@ export class RowRenderer<TRowData = unknown> {
 		cell.unbindCold();
 	};
 
-	private getRowRendererRuntimeArgs(): RowRendererRuntimeArgs<TRowData> {
-		return {
-			engine: this.engine,
-			cellRenderer: this.cellRenderer,
-			portalMountManager: this.portalMountManager,
-			viewportContainer: this.viewportRenderer.container,
-			selectionPaint: this.selectionPaint,
-			cellClassScratch: this._cellClassScratch,
-			fullWidthRenderer: this.fullWidthRenderer,
-			currentWindow: this.currentWindow,
-			dirtyCellsAfterScroll: this.dirtyCellsAfterScroll,
-			dirtyRowsAfterScroll: this.dirtyRowsAfterScroll,
-			dirtyBuckets: this._dirtyBuckets,
-			activeRows: this.activeRows,
-			initCell: this.initCell,
-			releaseCellFn: this.releaseCellFn,
-			ensurePinnedContainer: (slot: RowSlot<TRowData>, side: 'left' | 'right', width: number) => this.ensurePinnedContainer(slot, side, width),
-			releaseRowPortal: (slot: RowSlot<TRowData>) => this.releaseRowPortal(slot),
-			ensureCellPortalHost: (cell: HTMLDivElement) => this.ensureCellPortalHost(cell),
-			getCellPortalHost: (cell: HTMLDivElement) => this.getCellPortalHost(cell),
-			markCellDirtyAfterScroll: (cell: HTMLDivElement) => this.markCellDirtyAfterScroll(cell),
-			releaseCellPortal: (
-				cell: HTMLDivElement,
-				forceDeferred?: boolean,
-				reason: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated' = 'scrolled-out'
-			) => this.releaseCellPortal(cell, forceDeferred, reason),
-			cancelPendingPortalRelease: (cellKey: string) => this.cancelPendingPortalRelease(cellKey),
-			applyFocus: (cell: HTMLDivElement) => this.applyFocus(cell),
-			isEditorInteractiveElement: (el: Element | null) => this.isEditorInteractiveElement(el),
-			isScrolling: this.isScrolling,
-			isScrollFrameActive: this.isScrollFrameActive,
-			renderStats: this.renderStats,
-			getProgrammaticScrollCell: () => this.programmaticScrollCell,
-			clearProgrammaticScrollCell: () => {
-				this.programmaticScrollCell = null;
-			},
-			setDeferredFocusCell: (cell: HTMLDivElement) => {
-				this.deferredFocusCell = cell;
-			},
-			incrementStyleHookCallsDuringScroll: () => {
-				if (this.renderStats) this.renderStats.styleHookCallsDuringScroll++;
-			},
-			incrementCellsBoundDuringScroll: () => {
-				if (this.renderStats) this.renderStats.cellsBoundDuringScroll = (this.renderStats.cellsBoundDuringScroll || 0) + 1;
-			},
-			incrementCurrentScrollCellsVisited: () => {
-				this.currentScrollCellsVisited++;
-			},
-			incrementCurrentScrollCellsPatched: () => {
-				this.currentScrollCellsPatched++;
-			},
-			incrementCurrentScrollCellsWritten: () => {
-				this.currentScrollCellsWritten++;
-			},
-			incrementPostScrollDirtyCellsDecorated: () => {
-				this.postScrollDirtyCellsDecorated++;
-			},
-		};
+	public get cellClassScratch(): GridCellClassParams<TRowData> {
+		return this._cellClassScratch;
 	}
+
+	public get dirtyBuckets(): [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]] {
+		return this._dirtyBuckets;
+	}
+
+	public get viewportContainer(): HTMLElement | null | undefined {
+		return this.viewportRenderer.container;
+	}
+
+	public get fullWidthRendererRef(): FullWidthRowRenderer<TRowData> {
+		return this.fullWidthRenderer;
+	}
+
+	public readonly clearProgrammaticScrollCell = (): void => {
+		this.programmaticScrollCell = null;
+	};
+
+	public readonly setDeferredFocusCell = (cell: HTMLDivElement): void => {
+		this.deferredFocusCell = cell;
+	};
+
+	public readonly incrementStyleHookCallsDuringScroll = (): void => {
+		if (this.renderStats) this.renderStats.styleHookCallsDuringScroll++;
+	};
+
+	public readonly incrementCellsBoundDuringScroll = (): void => {
+		if (this.renderStats) this.renderStats.cellsBoundDuringScroll = (this.renderStats.cellsBoundDuringScroll || 0) + 1;
+	};
+
+	public readonly incrementCurrentScrollCellsVisited = (): void => {
+		this.currentScrollCellsVisited++;
+	};
+
+	public readonly incrementCurrentScrollCellsPatched = (): void => {
+		this.currentScrollCellsPatched++;
+	};
+
+	public readonly incrementCurrentScrollCellsWritten = (): void => {
+		this.currentScrollCellsWritten++;
+	};
+
+	public readonly incrementPostScrollDirtyCellsDecorated = (): void => {
+		this.postScrollDirtyCellsDecorated++;
+	};
 
 	// ── Repaint helpers ──────────────────────────────────────────────────────────────
 
 	public repaintInvalidatedRowsAndCells(frame: InvalidationFrame): void {
-		repaintInvalidatedRowsAndCellsRuntime(this.getRowRendererRuntimeArgs(), frame);
+		repaintInvalidatedRowsAndCellsRuntime(createRowRendererRuntimeArgs(this as unknown as RowRendererRuntimeHost<TRowData>), frame);
 	}
 
 	// ── Misc helpers ─────────────────────────────────────────────────────────────────
@@ -734,7 +723,7 @@ export class RowRenderer<TRowData = unknown> {
 	// ── Post-scroll decoration ────────────────────────────────────────────────────────
 
 	public decorateDirtyCellsAfterScroll(options?: { maxCells?: number }): { remaining: number; processed: number } {
-		return decorateDirtyCellsAfterScrollRuntime(this.getRowRendererRuntimeArgs(), options);
+		return decorateDirtyCellsAfterScrollRuntime(createRowRendererRuntimeArgs(this as unknown as RowRendererRuntimeHost<TRowData>), options);
 	}
 
 	public applyFocus(cell: HTMLDivElement): void {

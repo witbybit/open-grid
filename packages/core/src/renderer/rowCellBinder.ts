@@ -330,10 +330,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {
 		cellSlot.element.tabIndex = -1;
 		cellSlot.hasTabIndex = true;
-		const isProgrammatic =
-			deps.getProgrammaticScrollCell() &&
-			deps.getProgrammaticScrollCell()!.rowId === node.id &&
-			deps.getProgrammaticScrollCell()!.colField === col.field;
+		const programmaticScrollCell = deps.getProgrammaticScrollCell();
+		const isProgrammatic = programmaticScrollCell && programmaticScrollCell.rowId === node.id && programmaticScrollCell.colField === col.field;
 		deps.setDeferredFocusCell(cellSlot.element);
 		if (isProgrammatic) deps.clearProgrammaticScrollCell();
 	}

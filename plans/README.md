@@ -25,6 +25,7 @@
 | 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)               | REVIEW | bb60b76      |
 | 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                           | REVIEW | bb60b76      |
 | 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md) | DONE   | working tree |
+| 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)       | DONE   | working tree |
 
 ## Execution order
 
@@ -51,6 +52,7 @@
 21. `021-row-cell-binding-lane-boundary.md` - P0 renderer hardening after 020; routes left/center/right lane binding through a dedicated helper before extracting hotter per-cell binding logic
 22. `022-row-cell-binder-boundary.md` - P0 renderer hardening after 021; routes the live cell-binding path through a dedicated binder before retiring leftover RowRenderer wrappers
 23. `023-row-renderer-runtime-adapter-boundary.md` - P0 renderer hardening after 022; moves full-width orchestration and post-scroll coordination adapters into a dedicated runtime module so the shell is mostly viewport ownership plus delegation
+24. `024-row-renderer-runtime-host-contract.md` - P1 renderer hardening after 023; stabilizes the runtime host surface so the adapter consumes real RowRenderer state without dragging the shell back into policy assembly
 
 ## Dependency graph
 
@@ -78,6 +80,7 @@
 021  (row-cell binding lanes)       - follows 020; moves lane-level left/center/right binding orchestration out of the main renderer path before per-cell binder extraction
 022  (row-cell binder)              - follows 021; moves live per-cell binding policy out of RowRenderer before wrapper cleanup and final slot-lifecycle narrowing
 023  (row-renderer runtime adapter) - follows 022; moves runtime adapter construction for full-width orchestration and post-scroll coordination out of RowRenderer
+024  (row-renderer runtime host)    - follows 023; aligns the runtime adapter with the existing RowRenderer host surface and keeps the shell from regrowing
 ```
 
 ## Notes
