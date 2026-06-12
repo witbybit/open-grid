@@ -197,7 +197,7 @@ describe('Architecture guardrails', () => {
 		const bridge = readFileSync(resolve(REACT_ROOT, 'src', 'reactHostBridge.ts'), 'utf-8');
 		expect(bridge).toContain("from '@open-grid/core/internal'");
 
-		const files = ['GridView.tsx', 'GridPortal.tsx', 'hooks.ts', 'ClientGrid.tsx', 'ServerGrid.tsx', 'gridContext.tsx'];
+		const files = ['Grid.tsx', 'GridView.tsx', 'GridPortal.tsx', 'hooks.ts', 'gridContext.tsx'];
 		for (const file of files) {
 			const content = readFileSync(resolve(REACT_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not import @open-grid/core/internal directly`).not.toContain('@open-grid/core/internal');
