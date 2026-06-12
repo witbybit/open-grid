@@ -27,6 +27,7 @@
 | 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md)   | DONE   | working tree |
 | 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)         | DONE   | working tree |
 | 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md) | DONE   | working tree |
+| 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)    | DONE   | working tree |
 
 ## Execution order
 
@@ -55,6 +56,7 @@
 23. `023-row-renderer-runtime-adapter-boundary.md` - P0 renderer hardening after 022; moves full-width orchestration and post-scroll coordination adapters into a dedicated runtime module so the shell is mostly viewport ownership plus delegation
 24. `024-row-renderer-runtime-host-contract.md` - P1 renderer hardening after 023; stabilizes the runtime host surface so the adapter consumes real RowRenderer state without dragging the shell back into policy assembly
 25. `025-render-engine-scroll-frame-coordinator.md` - P0 renderer hardening after 024; extracts scroll-frame orchestration and cheap-path fan-out so `RenderEngine` becomes a narrower composition root before deeper render-pipeline cuts
+26. `026-render-paint-pipeline-coordinator.md` - P0 renderer hardening after 025; extracts paint lifecycle orchestration and full-paint fan-out so `RenderEngine` becomes a slimmer composition root before the next pipeline cut
 
 ## Dependency graph
 
@@ -84,6 +86,7 @@
 023  (row-renderer runtime adapter) - follows 022; moves runtime adapter construction for full-width orchestration and post-scroll coordination out of RowRenderer
 024  (row-renderer runtime host)    - follows 023; aligns the runtime adapter with the existing RowRenderer host surface and keeps the shell from regrowing
 025  (render-engine scroll coordinator) - follows 024; isolates scroll-frame orchestration and cheap-path synchronization before deeper render-pipeline work
+026  (render-engine paint coordinator) - follows 025; moves paint lifecycle orchestration and full-paint fan-out out of RenderEngine
 ```
 
 ## Notes

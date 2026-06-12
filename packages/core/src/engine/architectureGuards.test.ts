@@ -74,6 +74,19 @@ describe('Architecture guardrails', () => {
 		expect(engineContent).not.toContain('sameRenderedWindow(');
 	});
 
+	it('renderPaintCoordinator owns paint lifecycle orchestration', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderPaintCoordinator.ts'), 'utf-8');
+		expect(content).toContain('public flushPaint =');
+		expect(content).toContain('public fullPaint =');
+		expect(content).toContain('public refreshRendererEpochs');
+
+		const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
+		expect(engineContent).toContain('this.paintCoordinator.flushPaint()');
+		expect(engineContent).toContain('this.paintCoordinator.fullPaint()');
+		expect(engineContent).not.toContain('this.orchestrator.flush(frame)');
+		expect(engineContent).not.toContain('refreshRendererEpochs()');
+	});
+
 	it('rowRenderMaintenance owns scroll-idle repair and invalidation repaint orchestration', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderMaintenance.ts'), 'utf-8');
 		expect(content).toContain('export function repaintInvalidatedRowsAndCells');

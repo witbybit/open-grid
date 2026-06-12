@@ -32,6 +32,7 @@ import { computeGridLayoutPlan, type GridLayoutPlan } from './layoutPlan.js';
 import { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import { RenderInvalidationCoordinator } from './RenderInvalidationCoordinator.js';
 import { collectRenderStats, createRenderRuntimeStats, resetRenderTelemetry } from './renderTelemetry.js';
+import { RenderPaintCoordinator, type RenderPaintCoordinatorState } from './renderPaintCoordinator.js';
 import { RenderScrollCoordinator, type RenderScrollCoordinatorState } from './renderScrollCoordinator.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi, InternalGridApi } from '../store.js';
@@ -50,6 +51,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly scheduler: RenderScheduler;
 	private readonly scrollScheduler: ScrollFrameScheduler;
 	private readonly orchestrator: RenderOrchestrator;
+	private readonly paintCoordinator!: RenderPaintCoordinator<TRowData>;
 	private readonly scrollCoordinator!: RenderScrollCoordinator<TRowData>;
 
 	public readonly portalMountManager: PortalMountManager<TRowData>;
@@ -218,7 +220,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			syncOverlay: (frame) => this.overlayRenderer.sync(frame),
 			syncRows: (frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame),
 			syncCells: (frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame),
-			fullPaint: () => this.fullPaintInternal(),
+			fullPaint: () => this.fullPaint(),
 		});
 
 		this.columnInteractions = new ColumnInteractionController<TRowData>({
@@ -280,6 +282,30 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				syncLayoutPlan: (renderWindow) => this.syncLayoutPlan(renderWindow),
 			},
 			scrollState
+		);
+		const paintState: RenderPaintCoordinatorState = {
+			pendingSortAnimation: this._pendingSortAnimation,
+			lastStyleSlots: this.lastStyleSlots,
+			lastLoading: this.lastLoading,
+		};
+		this.paintCoordinator = new RenderPaintCoordinator<TRowData>(
+			{
+				engine,
+				viewportRenderer: this.viewportRenderer,
+				rowRenderer: this.rowRenderer,
+				headerRenderer: this.headerRenderer,
+				overlayRenderer: this.overlayRenderer,
+				stickyGroupRenderer: this.stickyGroupRenderer,
+				portalMountManager: this.portalMountManager,
+				orchestrator: this.orchestrator,
+				scrollCoordinator: this.scrollCoordinator,
+				sortAnimation: this.sortAnimation,
+				recycleViewport: (isScrollFrameActive, ctx, precomputedWindow) => this.recycleViewport(isScrollFrameActive, ctx, precomputedWindow),
+				syncLayoutPlan: (renderWindow) => this.syncLayoutPlan(renderWindow),
+				updateCachedGeometryBoundsFromState: (defaultColWidth, defaultRowHeight) =>
+					this.updateCachedGeometryBoundsFromState(defaultColWidth, defaultRowHeight),
+			},
+			paintState
 		);
 		this.invalidationCoordinator = new RenderInvalidationCoordinator<TRowData>({
 			engine,
@@ -485,29 +511,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	private flushPaint(): void {
-		this.refreshRendererEpochs();
-		const frame = this.engine.invalidation.consume();
-		if (!this.scrollCoordinator.getIsScrolling() && frame.reasons.includes('sort')) {
-			this._pendingSortAnimation = true;
-		}
-		this.portalMountManager.beginCellReleaseTransaction();
-		try {
-			this.orchestrator.flush(frame);
-		} finally {
-			this.portalMountManager.endCellReleaseTransaction();
-		}
-	}
-
-	private refreshRendererEpochs(): void {
-		const state = this.engine.stateManager.getState();
-		if (this.lastStyleSlots !== state.styleSlots) {
-			this.lastStyleSlots = state.styleSlots;
-			this.rowRenderer.styleVersion++;
-		}
-		if (this.lastLoading !== state.loading) {
-			this.lastLoading = state.loading;
-			this.rowRenderer.loadingVersion++;
-		}
+		this.paintCoordinator.flushPaint();
 	}
 
 	public getRenderStats(): RenderStats {
@@ -525,12 +529,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	public fullPaint(): void {
-		this.portalMountManager.beginCellReleaseTransaction();
-		try {
-			this.fullPaintInternal();
-		} finally {
-			this.portalMountManager.endCellReleaseTransaction();
-		}
+		this.paintCoordinator.fullPaint();
 	}
 
 	private recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
@@ -542,26 +541,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		const layoutPlan = computeGridLayoutPlan(this.engine, renderWindow);
 		this.viewportRenderer.syncLayoutPlan(layoutPlan);
 		return layoutPlan;
-	}
-
-	private fullPaintInternal(): void {
-		this.viewportRenderer.syncViewportScrollFromDom();
-
-		const state = this.engine.stateManager.getState();
-
-		// Keep scroll clamps and total extents in sync after any full repaint
-		// (handles column adds/removes and viewport resizes funneled through full paint).
-		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
-
-		const layoutPlan = this.syncLayoutPlan();
-		this.recycleViewport(false, undefined, layoutPlan.renderWindow);
-		this.stickyGroupRenderer.sync(layoutPlan);
-		if (this._pendingSortAnimation) {
-			this._pendingSortAnimation = false;
-			this.sortAnimation.beginAnimation();
-		}
-		this.headerRenderer.repaintHeaders(layoutPlan);
-		this.overlayRenderer.repaintOverlay();
 	}
 
 	public scrollCellIntoView(rowId: string, colField: string): void {
