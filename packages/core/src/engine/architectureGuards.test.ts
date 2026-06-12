@@ -60,6 +60,20 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('eventBus.addEventListener');
 	});
 
+	it('renderScrollCoordinator owns scroll-frame orchestration and cheap-path fan-out', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts'), 'utf-8');
+		expect(content).toContain('computeRenderWindowInto');
+		expect(content).toContain('sameRenderedWindow');
+		expect(content).toContain('public flushScrollFrame =');
+		expect(content).toContain('public syncCheapScrollOnly');
+
+		const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
+		expect(engineContent).toContain('this.scrollCoordinator.flushScrollFrame()');
+		expect(engineContent).toContain('this.scrollCoordinator.syncCheapScrollOnly(layoutPlan)');
+		expect(engineContent).not.toContain('computeRenderWindowInto(');
+		expect(engineContent).not.toContain('sameRenderedWindow(');
+	});
+
 	it('rowRenderMaintenance owns scroll-idle repair and invalidation repaint orchestration', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderMaintenance.ts'), 'utf-8');
 		expect(content).toContain('export function repaintInvalidatedRowsAndCells');

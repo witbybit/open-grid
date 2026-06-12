@@ -1,15 +1,7 @@
-﻿import { defaultGridScheduler } from './gridScheduler.js';
 import { HeaderMenuController } from './headerMenuController.js';
 import { computeScrollTarget } from './scrollIntoView.js';
 import { ScrollEngine } from './scrollEngine.js';
-import {
-	sameRenderedWindow,
-	applyRenderWindowRuntimeLimits,
-	computeRenderWindow,
-	computeRenderWindowInto,
-	createEmptyRenderWindow,
-	type RenderWindow,
-} from './renderWindow.js';
+import { createEmptyRenderWindow, type RenderWindow } from './renderWindow.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
 import { FillDragController, type OverlayBox } from './fillDragController.js';
 import { createCellKey } from '../ids.js';
@@ -40,6 +32,7 @@ import { computeGridLayoutPlan, type GridLayoutPlan } from './layoutPlan.js';
 import { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import { RenderInvalidationCoordinator } from './RenderInvalidationCoordinator.js';
 import { collectRenderStats, createRenderRuntimeStats, resetRenderTelemetry } from './renderTelemetry.js';
+import { RenderScrollCoordinator, type RenderScrollCoordinatorState } from './renderScrollCoordinator.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi, InternalGridApi } from '../store.js';
 
@@ -57,6 +50,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly scheduler: RenderScheduler;
 	private readonly scrollScheduler: ScrollFrameScheduler;
 	private readonly orchestrator: RenderOrchestrator;
+	private readonly scrollCoordinator!: RenderScrollCoordinator<TRowData>;
 
 	public readonly portalMountManager: PortalMountManager<TRowData>;
 	public readonly viewportRenderer: ViewportRenderer<TRowData>;
@@ -246,6 +240,47 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// Group panel renderer — mounts when showGroupPanel is true
 		this.groupPanelRenderer = new GroupPanelRenderer<TRowData>(engine);
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
+		const scrollState: RenderScrollCoordinatorState<TRowData> = {
+			isScrolling: this.isScrolling,
+			scrollEndRafId: this.scrollEndRafId,
+			scrollEndQuietFrames: this.scrollEndQuietFrames,
+			scrollEndTickerActive: this.scrollEndTickerActive,
+			viewportDirtyAfterScroll: this.viewportDirtyAfterScroll,
+			flushPendingAfterScroll: this.flushPendingAfterScroll,
+			needsPostScrollPortalFlush: this.needsPostScrollPortalFlush,
+			portalFlushScheduled: this.portalFlushScheduled,
+			isScrollFrameActive: this.isScrollFrameActive,
+			postScrollDecorationScheduled: this.postScrollDecorationScheduled,
+			postScrollDecorationTimer: this.postScrollDecorationTimer,
+			cachedMaxScrollLeft: this.cachedMaxScrollLeft,
+			cachedTotalWidth: this.cachedTotalWidth,
+			cachedTotalHeight: this.cachedTotalHeight,
+			cachedDefaultRowHeight: this.cachedDefaultRowHeight,
+			cachedHasSelectionOverlay: this.cachedHasSelectionOverlay,
+			scrollCtx: this._scrollCtx,
+			renderWindowBufs: this._renderWindowBufs,
+			activeRenderWindowBufIdx: this._activeRenderWindowBufIdx,
+			portalFlushBudget: this.portalFlushBudget,
+			postScrollDecorationBudget: this.postScrollDecorationBudget,
+		};
+		this.scrollCoordinator = new RenderScrollCoordinator<TRowData>(
+			{
+				engine,
+				viewportRenderer: this.viewportRenderer,
+				rowRenderer: this.rowRenderer,
+				headerRenderer: this.headerRenderer,
+				overlayRenderer: this.overlayRenderer,
+				stickyGroupRenderer: this.stickyGroupRenderer,
+				portalMountManager: this.portalMountManager,
+				scheduler: this.scheduler,
+				requestScrollFrame: () => this.scrollScheduler.requestFrame(),
+				sortAnimation: this.sortAnimation,
+				renderStats: this.renderStats,
+				recycleViewport: (isScrollFrameActive, ctx, precomputedWindow) => this.recycleViewport(isScrollFrameActive, ctx, precomputedWindow),
+				syncLayoutPlan: (renderWindow) => this.syncLayoutPlan(renderWindow),
+			},
+			scrollState
+		);
 		this.invalidationCoordinator = new RenderInvalidationCoordinator<TRowData>({
 			engine,
 			geometryController: this.geometryController,
@@ -257,13 +292,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			},
 			scrollCellIntoView: (rowId, colField) => this.scrollCellIntoView(rowId, colField),
 			updateCachedGeometryBounds: () => this.updateCachedGeometryBounds(),
-			getIsScrolling: () => this.isScrolling,
-			getIsScrollFrameActive: () => this.isScrollFrameActive,
+			getIsScrolling: () => this.scrollCoordinator.getIsScrolling(),
+			getIsScrollFrameActive: () => this.scrollCoordinator.getIsScrollFrameActive(),
 			markFlushPendingAfterScroll: () => {
-				this.flushPendingAfterScroll = true;
+				this.scrollCoordinator.markFlushPendingAfterScroll();
 			},
 			markViewportDirtyAfterScroll: () => {
-				this.viewportDirtyAfterScroll = true;
+				this.scrollCoordinator.markViewportDirtyAfterScroll();
 			},
 		});
 	}
@@ -357,346 +392,60 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 * cachedMaxScrollLeft is updated in flushScrollFrame/fullPaintInternal/geometry callbacks.
 	 */
 	private onScroll = (scrollTop: number, scrollLeft: number, timestamp?: number): void => {
-		const clampedScrollLeft = Math.max(0, Math.min(this.cachedMaxScrollLeft, scrollLeft));
-		if (clampedScrollLeft !== scrollLeft && this.viewportRenderer.scrollViewport) {
-			this.viewportRenderer.scrollViewport.scrollLeft = clampedScrollLeft;
-		}
-		const changed = this.engine.viewport.setScrollPosition(scrollTop, clampedScrollLeft, timestamp);
-		if (!changed) return;
-		this.markScrolling();
-		// Schedule scroll frame first so its RAF callback is ordered before the scroll-end RAF
-		this.scrollScheduler.requestFrame();
-		this.scheduleScrollEnd();
+		this.scrollCoordinator.onScroll(scrollTop, scrollLeft, timestamp);
 	};
 
 	private markScrolling(): void {
-		if (!this.isScrolling) {
-			// Once-per-gesture work — the per-event path below is just flag/counter writes.
-			this.viewportRenderer.setScrollingClass(true);
-		}
-		this.isScrolling = true;
-		this.engine.isScrolling = true;
-		this.rowRenderer.isScrolling = true;
-		this.portalMountManager.setScrolling(true);
-		this.clearPostScrollDecorationTimer();
-		this.sortAnimation.cancel();
-		// Clear hover immediately so no row stays highlighted while the viewport moves.
-		this.setHoveredRowIndex(null);
+		this.scrollCoordinator.markScrolling();
 	}
 
-	// RAF-counter scroll-end: fires finishScrolling after N consecutive frames with no new
-	// scroll event. Device-rate-agnostic (~67ms at 60fps, ~33ms at 120fps vs fixed 80ms).
-	// One persistent RAF ticker per gesture: each scroll event resets a counter (zero
-	// allocation, no cancel/re-schedule churn — the old per-event closure pair cost
-	// ~240 allocations + 120 cancelRAF/requestRAF pairs per second at 120Hz).
-	// scrollEndTickerActive (not the RAF id) gates scheduling: schedulers that execute
-	// RAF callbacks synchronously (tests) would otherwise overwrite the id AFTER the
-	// callback chain already finished, wedging the ticker permanently "scheduled".
-	private readonly scrollEndTick = (): void => {
-		if (!this.isScrolling) {
-			this.scrollEndTickerActive = false;
-			this.scrollEndRafId = null;
-			return;
-		}
-		if (this.scrollEndQuietFrames >= 3) {
-			this.scrollEndTickerActive = false;
-			this.scrollEndRafId = null;
-			this.finishScrolling();
-			return;
-		}
-		this.scrollEndQuietFrames++;
-		this.scrollEndRafId = defaultGridScheduler.raf(this.scrollEndTick);
-	};
-
 	private scheduleScrollEnd(): void {
-		this.scrollEndQuietFrames = 0;
-		if (!this.scrollEndTickerActive) {
-			this.scrollEndTickerActive = true;
-			this.scrollEndRafId = defaultGridScheduler.raf(this.scrollEndTick);
-		}
+		this.scrollCoordinator.scheduleScrollEnd();
 	}
 
 	private finishScrolling(): void {
-		this.clearScrollEndTimer();
-		this.viewportRenderer.setScrollingClass(false);
-		this.isScrolling = false;
-		this.engine.isScrolling = false;
-		this.rowRenderer.isScrolling = false;
-		this.rowRenderer.programmaticScrollCell = null;
-		this.portalMountManager.setScrolling(false);
-		this.flushPendingPortalReleasesAfterScroll();
-		this.needsPostScrollPortalFlush = this.needsPostScrollPortalFlush || this.portalMountManager.getDeferredCount() > 0;
-		if (this.needsPostScrollPortalFlush) {
-			this.scheduleBudgetedPortalFlush();
-		}
-		this.restoreDeferredFocus();
-		if (this.flushPendingAfterScroll) {
-			// Drain invalidations that were gated during the scroll in one flush.
-			this.flushPendingAfterScroll = false;
-			this.scheduler.requestFlush('post-scroll');
-		}
-		if (this.viewportDirtyAfterScroll || this.rowRenderer.dirtyCellsAfterScroll.size > 0 || this.rowRenderer.dirtyRowsAfterScroll.size > 0) {
-			this.viewportDirtyAfterScroll = false;
-			this.scheduleBudgetedDecoration();
-		}
-		if (this.overlayRenderer.overlayDirtyDuringScroll) {
-			this.overlayRenderer.overlayDirtyDuringScroll = false;
-			this.overlayRenderer.repaintOverlay();
-		}
+		this.scrollCoordinator.finishScrolling();
 	}
 
 	private clearScrollEndTimer(): void {
-		this.scrollEndTickerActive = false;
-		if (this.scrollEndRafId !== null) {
-			defaultGridScheduler.cancelRaf(this.scrollEndRafId);
-			this.scrollEndRafId = null;
-		}
+		this.scrollCoordinator.clearScrollEndTimer();
 	}
 
 	private flushPendingPortalReleasesAfterScroll(): void {
-		if (this.rowRenderer.pendingPortalReleasesAfterScroll.size === 0) return;
-		const pending = Array.from(this.rowRenderer.pendingPortalReleasesAfterScroll.values());
-		this.rowRenderer.pendingPortalReleasesAfterScroll.clear();
-		// flushSync=false: the DOM side of a release is a cheap warm-cache re-parent, but
-		// the old `true` forced one synchronous React unmount commit for ALL pending
-		// releases — a guaranteed hitch on the first post-scroll frame. With false the
-		// React unmounts coalesce into a single async commit on the next microtask.
-		this.portalMountManager.releaseCells(pending, false);
-		this.needsPostScrollPortalFlush = true;
+		this.scrollCoordinator.flushPendingPortalReleasesAfterScroll();
 	}
 
 	private scheduleBudgetedPortalFlush(): void {
-		if (this.portalFlushScheduled) return;
-		this.portalFlushScheduled = true;
-		defaultGridScheduler.idle((deadline) => {
-			this.portalFlushScheduled = false;
-			if (this.isScrolling) {
-				this.needsPostScrollPortalFlush = true;
-				return;
-			}
-			const result = this.portalMountManager.flushDeferred({
-				maxItems: this.portalFlushBudget,
-				reason: 'scroll-idle',
-				flushSync: false,
-				deadline,
-			});
-			this.needsPostScrollPortalFlush = result.remaining > 0;
-			if (result.remaining > 0) {
-				this.scheduleBudgetedPortalFlush();
-			}
-		});
+		this.scrollCoordinator.scheduleBudgetedPortalFlush();
 	}
 
 	private clearPostScrollDecorationTimer(): void {
-		if (this.postScrollDecorationTimer !== null) {
-			defaultGridScheduler.cancelIdle(this.postScrollDecorationTimer);
-			this.postScrollDecorationTimer = null;
-		}
-		this.postScrollDecorationScheduled = false;
+		this.scrollCoordinator.clearPostScrollDecorationTimer();
 	}
 
 	private scheduleBudgetedDecoration(): void {
-		if (this.postScrollDecorationScheduled) return;
-		this.postScrollDecorationScheduled = true;
-
-		this.postScrollDecorationTimer = defaultGridScheduler.idle(() => {
-			this.postScrollDecorationTimer = null;
-			this.postScrollDecorationScheduled = false;
-
-			if (this.isScrolling) {
-				return;
-			}
-
-			this.renderStats.postScrollDecorationChunks++;
-			// One release transaction per chunk: portal releases triggered by row cell rebinding
-			// batch into a single flush instead of one synchronous React commit per cell.
-			this.portalMountManager.beginCellReleaseTransaction();
-			let result;
-			try {
-				result = this.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.postScrollDecorationBudget });
-			} finally {
-				this.portalMountManager.endCellReleaseTransaction();
-			}
-
-			if (result.processed > this.renderStats.maxCellsDecoratedInOneChunk) {
-				this.renderStats.maxCellsDecoratedInOneChunk = result.processed;
-			}
-			this.renderStats.cellsDecoratedAfterScroll += result.processed;
-
-			if (result.remaining > 0) {
-				this.scheduleBudgetedDecoration();
-			}
-		});
+		this.scrollCoordinator.scheduleBudgetedDecoration();
 	}
 
 	private restoreDeferredFocus(): void {
-		const cell = this.rowRenderer.deferredFocusCell;
-		this.rowRenderer.deferredFocusCell = null;
-		if (!cell || !cell.isConnected) return;
-		this.rowRenderer.applyFocus(cell);
+		this.scrollCoordinator.restoreDeferredFocus();
 	}
 
 	private flushScrollFrame(): void {
-		const scrollViewport = this.viewportRenderer.scrollViewport;
-		if (!scrollViewport) return;
-		this.viewportRenderer.syncViewportScrollFromDom();
-
-		const state = this.engine.stateManager.getState();
-		this.cachedHasSelectionOverlay = !!state.selection.bounds && !!this.engine.getRowModel();
-
-		// Refresh the cached scroll-left bound using the already-read state â€” no extra
-		// state read. This handles viewport resizes that happened since the last frame.
-		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
-
-		// Double-buffer: fill the candidate slot in-place to avoid per-frame allocation.
-		// The candidate is always the buffer NOT currently stored as currentWindow.
-		const candidateIdx = 1 - this._activeRenderWindowBufIdx;
-		const candidateBuf = this._renderWindowBufs[candidateIdx];
-		computeRenderWindowInto(this.engine, candidateBuf);
-		const nextWindow = applyRenderWindowRuntimeLimits(candidateBuf, state.runtimeLimits);
-		// nextWindow === candidateBuf on the fast path (limits not exceeded).
-		// nextWindow is a new object on the slow path (limits applied, rare).
-		const layoutPlan = this.syncLayoutPlan(nextWindow);
-
-		// Same window bailout path
-		if (sameRenderedWindow(this.rowRenderer.currentWindow, nextWindow)) {
-			this.renderStats.scrollFrames++;
-			this.renderStats.sameWindowBailouts = (this.renderStats.sameWindowBailouts || 0) + 1;
-			this.syncCheapScrollOnly(layoutPlan);
-			return;
-		}
-
-		// Window changed: if nextWindow is our candidate buffer, swap the active index so
-		// next frame fills the other buffer (zero allocation). Otherwise (limits applied),
-		// the new object is used directly and no swap is needed.
-		if (nextWindow === candidateBuf) {
-			this._activeRenderWindowBufIdx = candidateIdx;
-		}
-
-		this.isScrollFrameActive = true;
-		this.engine.isScrollFrameActive = true;
-		this.rowRenderer.isScrollFrameActive = true;
-		this.rowRenderer.currentScrollCellsPatched = 0;
-		this.rowRenderer.currentScrollRowsRecycled = 0;
-		this.rowRenderer.currentScrollRowsVisited = 0;
-		this.rowRenderer.currentScrollRowsRebound = 0;
-		this.rowRenderer.currentScrollCellsVisited = 0;
-		this.rowRenderer.currentScrollCellsWritten = 0;
-		this.rowRenderer.currentScrollPortalOps = 0;
-		this.renderStats.scrollFrames++;
-		const startStateReads = this.engine.stateManager.debugGetStateCount;
-		try {
-			const plan = this.engine.columns.getCompiledPlan();
-
-			// Update the reusable ScrollRenderContext in-place â€” avoids one object
-			// allocation per scroll frame while keeping all cached references fresh.
-			const scrollCtx = this._scrollCtx;
-			scrollCtx.state = state;
-			scrollCtx.rowVersions = this.engine.rowVersions;
-			scrollCtx.globalVersion = state.globalVersion;
-			scrollCtx.styleVersion = this.rowRenderer.styleVersion;
-			scrollCtx.loadingVersion = this.rowRenderer.loadingVersion;
-			scrollCtx.activeEdit = state.activeEdit;
-			scrollCtx.hasStyleHooks = !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender);
-			scrollCtx.hasCustomRenderers = plan.hasCustomRenderers;
-			scrollCtx.plan = plan;
-			// Mutate visibleColRange in-place — avoids a new { } allocation per frame.
-			scrollCtx.visibleColRange.startIdx = nextWindow.colStart;
-			scrollCtx.visibleColRange.endIdx = nextWindow.colEnd;
-			const visibleColRange = scrollCtx.visibleColRange;
-			scrollCtx.focusedCell = state.selection.focus;
-			scrollCtx.selectionBounds = state.selection.bounds ?? undefined;
-
-			// Pass the already-computed nextWindow so rowRenderer.recycleViewport does not
-			// call computeRenderWindow a second time (duplicate binary searches + state read).
-			this.recycleViewport(true, scrollCtx, nextWindow);
-			this.stickyGroupRenderer.sync(layoutPlan);
-
-			this.headerRenderer.syncScrollLeft(layoutPlan);
-			const didSyncRange = this.headerRenderer.syncVisibleColumnRange(layoutPlan, visibleColRange);
-			if (didSyncRange) {
-				this.renderStats.headerRangeSyncsDuringScroll++;
-			}
-			this.renderStats.overlayCheapSyncsDuringScroll++;
-			this.overlayRenderer.syncScrollPosition(this.cachedHasSelectionOverlay);
-		} finally {
-			const stateReadsInFrame = this.engine.stateManager.debugGetStateCount - startStateReads;
-			this.renderStats.stateReadsDuringScroll += stateReadsInFrame;
-
-			// Bounded: these grow per window-changing frame — without a cap a long scroll
-			// session reallocates the backing stores forever (GC pressure during scroll).
-			if (this.renderStats.cellsPatchedPerScrollFrame.length >= 1024) {
-				this.renderStats.cellsPatchedPerScrollFrame.length = 0;
-			}
-			if (this.renderStats.rowsRecycledPerScrollFrame.length >= 1024) {
-				this.renderStats.rowsRecycledPerScrollFrame.length = 0;
-			}
-			this.renderStats.cellsPatchedPerScrollFrame.push(this.rowRenderer.currentScrollCellsPatched);
-			this.renderStats.rowsRecycledPerScrollFrame.push(this.rowRenderer.currentScrollRowsRecycled);
-			this.isScrollFrameActive = false;
-			this.engine.isScrollFrameActive = false;
-			this.rowRenderer.isScrollFrameActive = false;
-		}
+		this.scrollCoordinator.flushScrollFrame();
 	}
 
 	private syncCheapScrollOnly(layoutPlan: GridLayoutPlan): void {
-		const window = layoutPlan.renderWindow;
-		const scrollTop = layoutPlan.viewport.scrollTop;
-		const scrollLeft = layoutPlan.viewport.scrollLeft;
-
-		// 1. Header scrollLeft transform
-		this.headerRenderer.syncScrollLeft(layoutPlan);
-
-		// 2. Selection overlay transform
-		this.renderStats.overlayCheapSyncsDuringScroll++;
-		this.overlayRenderer.syncScrollPosition(this.cachedHasSelectionOverlay);
-
-		// 3. Pinned rows position update (if any)
-		const pinTopRows = window.pinTopRows;
-		const pinBottomRows = window.pinBottomRows;
-		if (pinTopRows > 0 || pinBottomRows > 0) {
-			const viewportHeight = this.engine.viewport.viewportHeight;
-			const totalHeight = this.cachedTotalHeight;
-			const rowTops = this.engine.geometry.rowTops;
-
-			// Update pinned top rows
-			for (let r = 0; r < pinTopRows && r < window.rowCount; r++) {
-				const slot = this.rowRenderer.activeRows.get(r);
-				if (slot) {
-					slot.updatePosition(rowTops[r] + scrollTop);
-				}
-			}
-
-			// Update pinned bottom rows
-			for (let r = window.rowCount - pinBottomRows; r < window.rowCount; r++) {
-				if (r >= pinTopRows) {
-					const slot = this.rowRenderer.activeRows.get(r);
-					if (slot) {
-						slot.updatePosition(scrollTop + viewportHeight - (totalHeight - rowTops[r]));
-					}
-				}
-			}
-		}
-
-		this.stickyGroupRenderer.sync(layoutPlan);
-
-		// Update current window's scroll values
-		if (this.rowRenderer.currentWindow) {
-			this.rowRenderer.currentWindow.scrollTop = scrollTop;
-			this.rowRenderer.currentWindow.scrollLeft = scrollLeft;
-		}
+		this.scrollCoordinator.syncCheapScrollOnly(layoutPlan);
 	}
 
 	private updateCachedGeometryBoundsFromState(defaultColWidth: number, defaultRowHeight: number): void {
-		this.cachedTotalWidth = this.engine.geometry.getTotalWidth(defaultColWidth);
-		this.cachedTotalHeight = this.engine.geometry.getTotalHeight(defaultRowHeight);
-		this.cachedDefaultRowHeight = defaultRowHeight ?? 40;
-		this.cachedMaxScrollLeft = Math.max(0, this.cachedTotalWidth - this.engine.viewport.viewportWidth);
+		this.scrollCoordinator.updateCachedGeometryBoundsFromState(defaultColWidth, defaultRowHeight);
 	}
 
 	private updateCachedGeometryBounds(): void {
 		const state = this.engine.stateManager.getState();
-		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
+		this.scrollCoordinator.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
 	}
 
 	public schedulePaint(): void {
@@ -738,7 +487,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private flushPaint(): void {
 		this.refreshRendererEpochs();
 		const frame = this.engine.invalidation.consume();
-		if (!this.isScrolling && frame.reasons.includes('sort')) {
+		if (!this.scrollCoordinator.getIsScrolling() && frame.reasons.includes('sort')) {
 			this._pendingSortAnimation = true;
 		}
 		this.portalMountManager.beginCellReleaseTransaction();
@@ -862,7 +611,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// During scroll the viewport is moving — hover state would flicker across every
 		// row the pointer passes over and trigger className writes + style recalcs on each.
 		// Suppress until scrolling stops; finishScrolling clears the hovered row anyway.
-		if (this.isScrolling) return;
+		if (this.scrollCoordinator.getIsScrolling()) return;
 
 		const rowEl = (event.target as HTMLElement).closest('.og-row') as HTMLElement | null;
 		const rowIndexText = rowEl?.dataset.rowIndex;
