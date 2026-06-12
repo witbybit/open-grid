@@ -23,9 +23,9 @@ function coreFileContains(relPath: string, substring: string): boolean {
 }
 
 describe('Architecture guardrails', () => {
-	it('store.ts is below 900 lines (intermediate budget, target 850)', () => {
+	it('store.ts is below 875 lines (intermediate budget, target 850)', () => {
 		const lines = countLines('store.ts');
-		expect(lines, `store.ts has ${lines} lines; intermediate budget is 900 and target is 850`).toBeLessThan(900);
+		expect(lines, `store.ts has ${lines} lines; intermediate budget is 875 and target is 850`).toBeLessThan(875);
 	});
 
 	it('GridEngine.ts is below 1000 lines (intermediate budget, target 800)', () => {
@@ -145,5 +145,20 @@ describe('Architecture guardrails', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not use store.engine reach-through`).not.toContain('store.engine.');
 		}
+	});
+
+	it('navigation and contextMenu plugins do not depend on GridStore downcasts', () => {
+		const files = ['navigation.ts', 'contextMenu.ts'];
+		for (const file of files) {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
+			expect(content, `${file} must not reference GridStore`).not.toContain('GridStore');
+			expect(content, `${file} must not cast api as GridStore`).not.toContain('api as GridStore');
+		}
+	});
+
+	it('GridPlugin no longer initializes against InternalGridApi', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		expect(content).not.toContain('onInit?(api: InternalGridApi');
+		expect(content).toContain('onInit?(api: GridPluginRuntime');
 	});
 });

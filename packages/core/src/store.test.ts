@@ -597,7 +597,15 @@ describe('GridStore generic row-store functionality', () => {
 
 		store.registerPlugin(customFeature);
 
-		expect(initSpy).toHaveBeenCalledWith(store);
+		expect(initSpy).toHaveBeenCalledWith(
+			expect.objectContaining({
+				getState: expect.any(Function),
+				getRowModel: expect.any(Function),
+				getVisualRow: expect.any(Function),
+				getCellState: expect.any(Function),
+			})
+		);
+		expect(initSpy).not.toHaveBeenCalledWith(store);
 		expect(store.getPlugin<typeof customFeature>('customService')).toBe(customFeature);
 		expect((store as unknown as Record<string, unknown>).customService).toBeUndefined();
 		expect((store as unknown as Record<string, unknown>).customApiCall).toBeUndefined();

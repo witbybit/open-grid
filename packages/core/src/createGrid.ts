@@ -7,6 +7,7 @@ import {
 	type CsvExportOptions,
 	type GridApi,
 	type GridCellPointer,
+	type GridPluginController,
 	type GridSelectionSource,
 	type GridState,
 	type Listener,
@@ -35,6 +36,10 @@ export function getStoreFromApi<TRowData>(api: GridApi<TRowData>): GridStore<TRo
 	}
 
 	return store as GridStore<TRowData>;
+}
+
+export function getPluginControllerFromApi<TRowData>(api: GridApi<TRowData>): GridPluginController<TRowData> {
+	return getStoreFromApi(api).getPluginController();
 }
 import { exportToCsv } from './export/csvExport.js';
 import {

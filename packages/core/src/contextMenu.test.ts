@@ -273,7 +273,8 @@ describe('GridContextMenuPlugin', () => {
 		const params = customAction.mock.calls[0][0];
 		expect(params.rowId).toBe('r1');
 		expect(params.colField).toBe('name');
-		expect(params.api).toBe(store);
+		expect(params.api).not.toBe(store);
+		expect(params.api.getState()).toEqual(store.getState());
 		expect(params.selection.range).toEqual({
 			start: { rowId: 'r1', colField: 'name' },
 			end: { rowId: 'r2', colField: 'price' },

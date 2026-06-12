@@ -1,4 +1,4 @@
-import { getStoreFromApi } from './createGrid.js';
+import { getPluginControllerFromApi } from './createGrid.js';
 import { GridContextMenuPlugin, type GridContextMenuOptions } from './contextMenu.js';
 import { GridNavigationController, type GridNavigationOptions } from './navigation.js';
 import type { GridApi } from './store.js';
@@ -20,9 +20,9 @@ export interface GridContextMenuHandle<TRowData = unknown> {
 }
 
 export function registerGridNavigation<TRowData>(api: GridApi<TRowData>, options: GridNavigationOptions = {}): GridNavigationHandle {
-	const internalApi = getStoreFromApi(api);
+	const pluginController = getPluginControllerFromApi(api);
 	const controller = new GridNavigationController<TRowData>(options);
-	internalApi.registerPlugin(controller);
+	pluginController.registerPlugin(controller);
 
 	return {
 		handleKeyDown: controller.handleKeyDown,
@@ -33,7 +33,7 @@ export function registerGridNavigation<TRowData>(api: GridApi<TRowData>, options
 		setCellEditing: controller.setCellEditing.bind(controller),
 		dispose() {
 			controller.dispose();
-			internalApi.unregisterPlugin(controller.name);
+			pluginController.unregisterPlugin(controller.name);
 		},
 	};
 }
@@ -42,15 +42,15 @@ export function registerGridContextMenu<TRowData>(
 	api: GridApi<TRowData>,
 	options: GridContextMenuOptions<TRowData> = {}
 ): GridContextMenuHandle<TRowData> {
-	const internalApi = getStoreFromApi(api);
+	const pluginController = getPluginControllerFromApi(api);
 	const plugin = new GridContextMenuPlugin<TRowData>(options);
-	internalApi.registerPlugin(plugin);
+	pluginController.registerPlugin(plugin);
 
 	return {
 		setOptions: (nextOptions) => plugin.setOptions(nextOptions),
 		show: (rowId, colField, clientX, clientY) => plugin.show(rowId, colField, clientX, clientY),
 		dispose() {
-			internalApi.unregisterPlugin(plugin.name);
+			pluginController.unregisterPlugin(plugin.name);
 		},
 	};
 }

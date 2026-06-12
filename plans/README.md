@@ -17,6 +17,7 @@
 | 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)             | DONE   | 94c9453 |
 | 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                         | DONE   | 94c9453 |
 | 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                   | DONE   | 0f93724 |
+| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)               | DONE   | 6b3ecc5 |
 
 ## Execution order
 
@@ -35,6 +36,7 @@
 13. `013-thin-engine-effects-boundary.md` - P0 architecture lock-in; makes `GridEngine` a thin kernel, completes typed feature effect routing, and activates the skipped engine-size guard
 14. `014-runtime-port-inversion.md` - P0 boundary hardening after 013; breaks the `GridStore -> GridEngine -> models -> rowModel` cycle so row/data/formula features stop requiring cross-file protocol patches
 15. `015-internal-adapter-boundary.md` - P0 adapter-boundary hardening after 014; seals `@open-grid/core/internal` into an explicit host/adapter contract before deeper renderer decomposition
+16. `016-store-runtime-decomposition.md` - P0 runtime hardening after 015; splits `InternalGridApi` by audience, removes plugin `GridStore` downcasts, and makes `GridStore` a true facade before pre-renderer cleanup continues
 
 ## Dependency graph
 
@@ -54,6 +56,7 @@
 013  (thin engine effects boundary) - follows 012; required before the next feature wave so feature side effects and engine ownership are enforceable
 014  (runtime port inversion)       - follows 013; required before deeper row-model, formula, and store-surface feature work so internal modules depend on ports instead of concrete engine/store reach-through
 015  (internal adapter boundary)    - follows 014; required before renderer refactors so framework adapters depend on a narrow host contract instead of broad engine/store/renderer internals
+016  (store runtime decomposition)  - follows 015; required before renderer refactors so plugins, store facades, and host/runtime contracts stop sharing one oversized internal surface
 ```
 
 ## Notes
@@ -69,6 +72,8 @@
 - Plan 014 leaves `store.ts` under the active intermediate guard (`< 900`, currently 891 lines) but not yet at the aspirational `850` target. Treat that as deferred cleanup rather than a hidden failure.
 - Plan 015 targets the next pre-renderer hardening step: narrow `@open-grid/core/internal` from a broad export barrel into the explicit adapter host contract used by React and future renderers.
 - Plan 015 is implemented and verified on 2026-06-12: `@open-grid/core/internal` now exports only the adapter host contract and `hasImperativeRendererCapability`; React no longer imports `InternalColumnDef`; boundary and architecture guards prevent broad internal barrels and raw implementation exports from returning.
+- Plan 016 is implemented and verified on 2026-06-12: plugins now initialize against `GridPluginRuntime` instead of `InternalGridApi`, plugin lifecycle is owned by `GridPluginRegistry`, `gridPlugins.ts` registers through a dedicated plugin controller, and `navigation.ts` / `contextMenu.ts` no longer reference `GridStore` or cast `api as GridStore`.
+- Plan 016 leaves `store.ts` below the active intermediate guard (`< 875`, currently 870 lines) but not yet at the aspirational `850` target. Treat that final shrink as follow-on cleanup rather than a hidden failure.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

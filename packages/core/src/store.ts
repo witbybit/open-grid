@@ -69,6 +69,8 @@ import type {
 	GridCellAccess,
 	CellState,
 	GridPlugin,
+	GridPluginController,
+	GridPluginRuntime,
 	GridRowsAccessor,
 	RowDataTransaction,
 	RowNodeTransaction,
@@ -81,6 +83,8 @@ import type {
 import type { GridState, GridStateUpdater, Listener, ColumnState } from './state/GridState.js';
 import type { GridEventPayloadMap, GridEventListener } from './api/GridEvents.js';
 import { GridEventName } from './api/GridEvents.js';
+import { GridPluginRegistry } from './plugins/GridPluginRegistry.js';
+import { createGridPluginRuntime } from './plugins/createGridPluginRuntime.js';
 
 export { validateRowIds } from './ids.js';
 
@@ -88,7 +92,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public engine: GridEngine<TRowData>;
 
 	private readonly viewportController: ViewportController<TRowData>;
-	private plugins = new Map<string, GridPlugin<TRowData>>();
+	private readonly pluginRuntime: GridPluginRuntime<TRowData>;
+	private readonly pluginRegistry: GridPluginRegistry<TRowData>;
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
 		validateColumns(initialState.columns || []);
@@ -132,6 +137,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		});
 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
+		this.pluginRuntime = createGridPluginRuntime(this as unknown as GridPluginRuntime<TRowData>);
+		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime);
 
 		// Apply persisted pin counts at construction time before any renders occur
 		if (initialState.pinnedColumns) {
@@ -142,9 +149,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		// Notify plugins of viewport shifts
 		this.engine.subscribeToKey('visibleRowRange', () => {
 			const range = this.state.visibleRowRange;
-			this.plugins.forEach((plugin) => {
-				if (plugin.onViewportChange) plugin.onViewportChange(range);
-			});
+			this.pluginRegistry.notifyViewportChange(range);
 		});
 	}
 
@@ -155,6 +160,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private set state(val: GridState<TRowData>) {
 		this.engine.setState(val);
 	}
+
+	public getPluginController = (): GridPluginController<TRowData> => this.pluginRegistry;
 
 	public getState = (): GridState<TRowData> => this.engine.getState();
 
@@ -816,33 +823,15 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public registerPlugin = (plugin: GridPlugin<TRowData>): void => {
-		if (this.plugins.has(plugin.name)) {
-			this.unregisterPlugin(plugin.name);
-		}
-		this.plugins.set(plugin.name, plugin);
-
-		if (plugin.onInit) {
-			plugin.onInit(this);
-		}
+		this.pluginRegistry.registerPlugin(plugin);
 	};
 
 	public unregisterPlugin = (name: string): void => {
-		const plugin = this.plugins.get(name);
-		if (!plugin) return;
-
-		if (plugin.onDestroy) {
-			try {
-				plugin.onDestroy();
-			} catch (e) {
-				console.error(e);
-			}
-		}
-
-		this.plugins.delete(name);
+		this.pluginRegistry.unregisterPlugin(name);
 	};
 
 	public getPlugin = <T = unknown>(name: string): T | null => {
-		return (this.plugins.get(name) as unknown as T) || null;
+		return this.pluginRegistry.getPlugin<T>(name);
 	};
 
 	public undo = (): void => {
@@ -875,17 +864,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public destroy = (): void => {
-		this.plugins.forEach((plugin) => {
-			if (plugin.onDestroy) {
-				try {
-					plugin.onDestroy();
-				} catch (e) {
-					console.error(e);
-				}
-			}
-		});
-		this.plugins.clear();
-
+		this.pluginRegistry.destroy();
 		this.engine.destroy();
 	};
 }

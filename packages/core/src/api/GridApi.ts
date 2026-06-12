@@ -86,7 +86,7 @@ export interface GridSelectionState {
 
 export interface GridPlugin<TRowData = unknown> {
 	readonly name: string;
-	onInit?(api: InternalGridApi<TRowData>): void;
+	onInit?(api: GridPluginRuntime<TRowData>): void;
 	onMount?(): void;
 	onDestroy?(): void;
 	onViewportChange?(range: ViewportRange): void;
@@ -388,13 +388,78 @@ export interface GridApi<TRowData = unknown> {
 	destroy(): void;
 }
 
+export interface GridPluginRuntime<TRowData = unknown> extends GridApi<TRowData> {
+	getCellState(rowId: string, colField: string): CellState;
+	getCheapDisplayValue(rowId: string, colField: string): string;
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	getVisualRowCount(): number;
+	getVisualIndexByRowId(rowId: string): number | null;
+	getColumnIndex(colField: string): number;
+	getColumnField(colIndex: number): string | null;
+	getRowModel(): import('../store.js').RowModel<TRowData> | null;
+}
+
+export interface GridPluginController<TRowData = unknown> {
+	registerPlugin(plugin: GridPlugin<TRowData>): void;
+	getPlugin<T = unknown>(name: string): T | null;
+	unregisterPlugin(name: string): void;
+}
+
+export interface GridRendererApi<TRowData = unknown> extends GridApi<TRowData> {
+	getCachedDisplayValue(rowId: string, colField: string): string | undefined;
+	getCheapDisplayValue(rowId: string, colField: string): string;
+	getComputedCellValue(rowId: string, colField: string): unknown;
+	getCellState(rowId: string, colField: string): CellState;
+	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
+	getRowOverscanPx(): number;
+	setRowOverscanPx(px: number): void;
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	getVisualRowCount(): number;
+	getVisualRowIndexById(id: string): number | null;
+	getVisualIndexById(visualRowId: string): number | null;
+	getVisualIndexByRowId(rowId: string): number | null;
+	subscribeToViewport(listener: Listener<TRowData>): () => void;
+	subscribeToSelection(listener: Listener<TRowData>): () => void;
+	subscribeToFocusedCell(listener: Listener<TRowData>): () => void;
+	subscribeToEditingCell(listener: Listener<TRowData>): () => void;
+	subscribeToCell(rowId: string, colField: string, listener: () => void): () => void;
+	subscribeToRow(rowId: string, listener: Listener<TRowData>): () => void;
+	subscribeToColumn(colField: string, listener: Listener<TRowData>): () => void;
+	subscribeToHeaders(listener: Listener<TRowData>): () => void;
+}
+
+export interface GridHostRuntime<TRowData = unknown> {
+	getRenderStats(): RenderStats;
+	resetRenderStats(): void;
+	setViewportPins(pins: { left?: number; right?: number; top?: number; bottom?: number }): void;
+	setViewportSize(width: number, height: number): boolean;
+	updateVisibleRanges(): boolean;
+}
+
+export interface GridStoreRuntime<TRowData = unknown> {
+	setState(updater: GridStateUpdater<TRowData>): void;
+	registerRowModel(rowModel: import('../store.js').RowModel<TRowData>): void;
+	getRowModel(): import('../store.js').RowModel<TRowData> | null;
+	triggerCellNotifications(rowId: string): void;
+	/**
+	 * @deprecated Auto-batching is on by default. Use `flushCellUpdatesSync()` if a synchronous
+	 * flush is required, or restructure to use `applyTransaction` for row-level bulk changes.
+	 */
+	batch(callback: () => void): void;
+	batchedUpdates: boolean;
+	registerCellSubscription(sub: CellSubscription): void;
+	unregisterCellSubscription(sub: CellSubscription): void;
+	updateCellSubscription(sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void;
+	flushCellUpdatesSync(): void;
+}
+
 /**
- * Internal API intended for the rendering engine, plugins, and custom framework adapters.
- * Extends GridApi with renderer-level and store-level access that must not leak to application code.
+ * Internal API intended for the rendering engine and custom framework adapters.
+ * Plugin code should use GridPluginRuntime instead of sharing this broader surface.
  *
- * Access this via getInternalApiFromApi(api) or getStoreFromApi(api) from @open-grid/core/internal.
+ * Access this from internal composition roots such as store-owned renderer/host wiring.
  */
-export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
+export interface InternalGridApi<TRowData = unknown> extends GridRendererApi<TRowData>, GridHostRuntime<TRowData>, GridStoreRuntime<TRowData> {
 	// ── Renderer-level display value access ──────────────────────────────────
 	getCachedDisplayValue(rowId: string, colField: string): string | undefined;
 	getCheapDisplayValue(rowId: string, colField: string): string;
@@ -431,9 +496,6 @@ export interface InternalGridApi<TRowData = unknown> extends GridApi<TRowData> {
 	setState(updater: GridStateUpdater<TRowData>): void;
 	registerRowModel(rowModel: import('../store.js').RowModel<TRowData>): void;
 	getRowModel(): import('../store.js').RowModel<TRowData> | null;
-	registerPlugin(plugin: GridPlugin<TRowData>): void;
-	getPlugin<T = unknown>(name: string): T | null;
-	unregisterPlugin(name: string): void;
 	setViewportPins(pins: { left?: number; right?: number; top?: number; bottom?: number }): void;
 	setViewportSize(width: number, height: number): boolean;
 	updateVisibleRanges(): boolean;

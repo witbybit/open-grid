@@ -1,4 +1,4 @@
-import { GridStore, GridEventName, GridCellPointer, GridPlugin, InternalGridApi } from './store.js';
+import { GridEventName, GridCellPointer, GridPlugin, GridPluginRuntime } from './store.js';
 
 export interface GridNavigationOptions {
 	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
@@ -8,7 +8,7 @@ export interface GridNavigationOptions {
 
 export class GridNavigationController<TRowData = unknown> implements GridPlugin<TRowData> {
 	readonly name = 'navigation';
-	private store!: GridStore<TRowData>;
+	private runtime!: GridPluginRuntime<TRowData>;
 	private isSelecting = false;
 	private rangeStart: GridCellPointer | null = null;
 	private options: GridNavigationOptions;
@@ -18,12 +18,12 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		this.options = options;
 	}
 
-	public onInit(api: InternalGridApi<TRowData>): void {
-		this.store = api as GridStore<TRowData>;
+	public onInit(api: GridPluginRuntime<TRowData>): void {
+		this.runtime = api;
 
 		// Bind store event listener to invoke options callback when edits are committed
 		if (this.options.onCellValueChanged) {
-			this.unsubscribeCellValueChanged = this.store.addEventListener(GridEventName.cellValueChanged, (event) => {
+			this.unsubscribeCellValueChanged = this.runtime.addEventListener(GridEventName.cellValueChanged, (event) => {
 				const { rowId, colField, newValue } = event.payload;
 				this.options.onCellValueChanged?.(rowId, colField, newValue);
 			});
@@ -40,8 +40,8 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	}
 
 	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
-		const state = this.store.getState();
-		const visualRow = this.store.getVisualRow(rowIdx);
+		const state = this.runtime.getState();
+		const visualRow = this.runtime.getVisualRow(rowIdx);
 		const col = state.columns[colIdx];
 		if (!visualRow || !col) return null;
 		if (visualRow.kind !== 'data') return null;
@@ -54,14 +54,14 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 	private getCoordsFromPointer(pointer: GridCellPointer | null): { rowIdx: number; colIdx: number } | null {
 		if (!pointer) return null;
-		const rowIdx = this.store.getVisualIndexByRowId(pointer.rowId) ?? -1;
-		const colIdx = this.store.getColumnIndex(pointer.colField);
+		const rowIdx = this.runtime.getVisualIndexByRowId(pointer.rowId) ?? -1;
+		const colIdx = this.runtime.getColumnIndex(pointer.colField);
 		if (rowIdx === -1 || colIdx === -1) return null;
 		return { rowIdx, colIdx };
 	}
 
 	private getNextDataRowIndex(currentIndex: number, direction: 'up' | 'down'): number {
-		const rowModel = this.store.getRowModel();
+		const rowModel = this.runtime.getRowModel();
 		if (!rowModel) return -1;
 		const rowCount = rowModel.getVisualRowCount();
 		let step = direction === 'down' ? 1 : -1;
@@ -80,7 +80,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	 * Handle standard keyboard movements and selection expansions.
 	 */
 	public handleKeyDown = (event: KeyboardEvent): void => {
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const active = state.selection.focus;
 		if (!active) return;
 
@@ -90,7 +90,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		const { rowIdx: row, colIdx: col } = coords;
 		const maxCol = state.columns.length - 1;
 
-		const cellState = this.store.getCellState(active.rowId, active.colField);
+		const cellState = this.runtime.getCellState(active.rowId, active.colField);
 		const isEditing = cellState.isEditing;
 
 		// 1. Navigation logic when NOT in cell editing mode
@@ -157,17 +157,17 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					break;
 				case ' ': {
 					event.preventDefault();
-					const rowModel = this.store.getRowModel();
+					const rowModel = this.runtime.getRowModel();
 					if (rowModel) {
-						const currentIdx = this.store.getVisualIndexByRowId(active.rowId);
+						const currentIdx = this.runtime.getVisualIndexByRowId(active.rowId);
 						if (currentIdx !== null && currentIdx !== -1) {
 							const currentVisualRow = rowModel.getVisualRow(currentIdx);
 							if (currentVisualRow) {
 								if (currentVisualRow.kind === 'group') {
-									this.store.toggleGroupExpanded(currentVisualRow.id);
+									this.runtime.toggleGroupExpanded(currentVisualRow.id);
 								} else if (currentVisualRow.kind === 'data') {
-									if (this.store.getState().masterDetailEnabled) {
-										this.store.toggleDetailExpanded(active.rowId);
+									if (this.runtime.getState().masterDetailEnabled) {
+										this.runtime.toggleDetailExpanded(active.rowId);
 									} else {
 										let parentGroupRowId: string | null = null;
 										for (let i = currentIdx - 1; i >= 0; i--) {
@@ -178,7 +178,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 											}
 										}
 										if (parentGroupRowId) {
-											this.store.toggleGroupExpanded(parentGroupRowId);
+											this.runtime.toggleGroupExpanded(parentGroupRowId);
 										}
 									}
 								}
@@ -195,7 +195,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 				case 'Escape':
 					event.preventDefault();
 					// Clear selections
-					this.store.selectCell(null, 'keyboard');
+					this.runtime.selectCell(null, 'keyboard');
 					return;
 				default:
 					// Any printable character starts typing immediately (Excel style!)
@@ -218,11 +218,11 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					const end = targetPointer;
 
 					this.rangeStart = start;
-					this.store.extendSelection(end, 'keyboard');
+					this.runtime.extendSelection(end, 'keyboard');
 				} else {
 					// Reset selection range and move focus
 					this.rangeStart = targetPointer;
-					this.store.selectCell(targetPointer, 'keyboard');
+					this.runtime.selectCell(targetPointer, 'keyboard');
 
 					// Opt-in: Auto-edit on arrow key navigation
 					if (this.options.arrowKeyNavigationEdit) {
@@ -242,7 +242,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 						const target = this.getPointerFromCoords(upRow, col);
 						if (target) {
 							this.rangeStart = target;
-							this.store.selectCell(target, 'keyboard');
+							this.runtime.selectCell(target, 'keyboard');
 							if (this.options.arrowKeyNavigationEdit) {
 								if (target.rowId !== active.rowId || target.colField !== active.colField) {
 									this.setCellEditing(target.rowId, target.colField, true);
@@ -260,7 +260,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 						const target = this.getPointerFromCoords(downRow, col);
 						if (target) {
 							this.rangeStart = target;
-							this.store.selectCell(target, 'keyboard');
+							this.runtime.selectCell(target, 'keyboard');
 							if (this.options.arrowKeyNavigationEdit) {
 								if (target.rowId !== active.rowId || target.colField !== active.colField) {
 									this.setCellEditing(target.rowId, target.colField, true);
@@ -278,7 +278,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 						const target = this.getPointerFromCoords(row, leftCol);
 						if (target) {
 							this.rangeStart = target;
-							this.store.selectCell(target, 'keyboard');
+							this.runtime.selectCell(target, 'keyboard');
 							if (target.rowId !== active.rowId || target.colField !== active.colField) {
 								this.setCellEditing(target.rowId, target.colField, true);
 							}
@@ -294,7 +294,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 						const target = this.getPointerFromCoords(row, rightCol);
 						if (target) {
 							this.rangeStart = target;
-							this.store.selectCell(target, 'keyboard');
+							this.runtime.selectCell(target, 'keyboard');
 							if (target.rowId !== active.rowId || target.colField !== active.colField) {
 								this.setCellEditing(target.rowId, target.colField, true);
 							}
@@ -311,7 +311,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 						const target = this.getPointerFromCoords(nextRowIdx, col);
 						if (target) {
 							this.rangeStart = target;
-							this.store.selectCell(target, 'keyboard');
+							this.runtime.selectCell(target, 'keyboard');
 							if (this.options.arrowKeyNavigationEdit) {
 								if (target.rowId !== active.rowId || target.colField !== active.colField) {
 									this.setCellEditing(target.rowId, target.colField, true);
@@ -329,7 +329,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					const target = this.getPointerFromCoords(row, nextCol);
 					if (target) {
 						this.rangeStart = target;
-						this.store.selectCell(target, 'keyboard');
+						this.runtime.selectCell(target, 'keyboard');
 						if (this.options.arrowKeyNavigationEdit) {
 							if (target.rowId !== active.rowId || target.colField !== active.colField) {
 								this.setCellEditing(target.rowId, target.colField, true);
@@ -356,18 +356,18 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 		// Ctrl/Cmd+Click: toggle row selection without moving cell focus
 		if (event.ctrlKey || event.metaKey) {
-			this.store.applyRowSelectionGesture({ kind: 'toggle', rowIds: [rowId], source: 'pointer' });
+			this.runtime.applyRowSelectionGesture({ kind: 'toggle', rowIds: [rowId], source: 'pointer' });
 			return; // do not move cell focus
 		}
 
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const prevFocus = state.selection.focus;
 		const trigger = this.options.editTrigger ?? 'doubleClick';
 
 		// Handle singleClick edit trigger
 		if (trigger === 'singleClick') {
 			if (prevFocus && (prevFocus.rowId !== rowId || prevFocus.colField !== colField)) {
-				const prevCellState = this.store.getCellState(prevFocus.rowId, prevFocus.colField);
+				const prevCellState = this.runtime.getCellState(prevFocus.rowId, prevFocus.colField);
 				if (prevCellState.isEditing) {
 					this.commitEdit();
 				}
@@ -375,13 +375,13 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			const pointer: GridCellPointer = { rowId, colField };
 			this.isSelecting = true;
 			this.rangeStart = pointer;
-			this.store.selectCell(pointer, 'pointer');
+			this.runtime.selectCell(pointer, 'pointer');
 			return;
 		}
 
 		// If focused on another cell, save its edit first
 		if (prevFocus && (prevFocus.rowId !== rowId || prevFocus.colField !== colField)) {
-			const prevCellState = this.store.getCellState(prevFocus.rowId, prevFocus.colField);
+			const prevCellState = this.runtime.getCellState(prevFocus.rowId, prevFocus.colField);
 			if (prevCellState.isEditing) {
 				this.commitEdit();
 			}
@@ -391,7 +391,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		this.isSelecting = true;
 		this.rangeStart = pointer;
 
-		this.store.selectCell(pointer, 'pointer');
+		this.runtime.selectCell(pointer, 'pointer');
 	};
 
 	/**
@@ -401,7 +401,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		const trigger = this.options.editTrigger ?? 'doubleClick';
 		if (trigger !== 'singleClick') return;
 
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const range = state.selection.range;
 		// Only enter editing if the selection is a single cell (not a multi-cell range drag)
 		const isSingleCell = !range || (range.start.rowId === range.end.rowId && range.start.colField === range.end.colField);
@@ -417,7 +417,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	public handleMouseEnter = (rowId: string, colField: string): void => {
 		if (!this.isSelecting || !this.rangeStart) return;
 
-		this.store.extendSelection({ rowId, colField }, 'pointer');
+		this.runtime.extendSelection({ rowId, colField }, 'pointer');
 	};
 
 	/**
@@ -430,18 +430,18 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	// Helper Methods
 	public setCellEditing(rowId: string, colField: string, isEditing: boolean): void {
 		if (isEditing) {
-			this.store.startEditing(rowId, colField);
+			this.runtime.startEditing(rowId, colField);
 		} else {
-			this.store.stopEditing();
+			this.runtime.stopEditing();
 		}
 	}
 
 	public commitEdit(): void {
-		this.store.stopEditing(false);
+		this.runtime.stopEditing(false);
 	}
 
 	public cancelEdit(): void {
-		this.store.stopEditing(true);
+		this.runtime.stopEditing(true);
 	}
 
 	/**
@@ -452,7 +452,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	 */
 	private copySelectionToClipboard(): void {
 		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const selection = state.selection;
 		const bounds = selection.bounds;
 		const copiedCells: Array<{ rowId: string; colField: string }> = [];
@@ -463,26 +463,26 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			const colDef = state.columns.find((c) => c.field === focus.colField);
 			let text: string;
 			if (colDef?.onCopy) {
-				const row = this.store.getRawRowById(focus.rowId);
+				const row = this.runtime.getRawRowById(focus.rowId);
 				text =
 					row !== null
 						? colDef.onCopy({
 								row,
 								rowId: focus.rowId,
 								colField: focus.colField,
-								value: this.store.getCellValue(focus.rowId, focus.colField),
+								value: this.runtime.getCellValue(focus.rowId, focus.colField),
 							})
-						: this.store.getCheapDisplayValue(focus.rowId, focus.colField);
+						: this.runtime.getCheapDisplayValue(focus.rowId, focus.colField);
 			} else {
-				text = this.store.getCheapDisplayValue(focus.rowId, focus.colField);
+				text = this.runtime.getCheapDisplayValue(focus.rowId, focus.colField);
 			}
 			navigator.clipboard.writeText(text).catch(() => {});
 			copiedCells.push({ rowId: focus.rowId, colField: focus.colField });
-			this.store.dispatchEvent(GridEventName.cellsCopied, { cells: copiedCells });
+			this.runtime.dispatchEvent(GridEventName.cellsCopied, { cells: copiedCells });
 			return;
 		}
 
-		const rowModel = this.store.getRowModel();
+		const rowModel = this.runtime.getRowModel();
 		if (!rowModel) return;
 
 		const rows: string[] = [];
@@ -491,18 +491,18 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			if (!visualRow || visualRow.kind !== 'data') continue;
 			const cells: string[] = [];
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-				const colField = this.store.getColumnField(c);
+				const colField = this.runtime.getColumnField(c);
 				if (colField === null) continue;
 				const colDef = state.columns.find((col) => col.field === colField);
 				let cellText: string;
 				if (colDef?.onCopy) {
-					const row = this.store.getRawRowById(visualRow.rowId);
+					const row = this.runtime.getRawRowById(visualRow.rowId);
 					cellText =
 						row !== null
-							? colDef.onCopy({ row, rowId: visualRow.rowId, colField, value: this.store.getCellValue(visualRow.rowId, colField) })
-							: this.store.getCheapDisplayValue(visualRow.rowId, colField);
+							? colDef.onCopy({ row, rowId: visualRow.rowId, colField, value: this.runtime.getCellValue(visualRow.rowId, colField) })
+							: this.runtime.getCheapDisplayValue(visualRow.rowId, colField);
 				} else {
-					cellText = this.store.getCheapDisplayValue(visualRow.rowId, colField);
+					cellText = this.runtime.getCheapDisplayValue(visualRow.rowId, colField);
 				}
 				cells.push(cellText);
 				copiedCells.push({ rowId: visualRow.rowId, colField });
@@ -512,12 +512,12 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 		if (rows.length === 0) return;
 		navigator.clipboard.writeText(rows.join('\n')).catch(() => {});
-		this.store.dispatchEvent(GridEventName.cellsCopied, { cells: copiedCells });
+		this.runtime.dispatchEvent(GridEventName.cellsCopied, { cells: copiedCells });
 	}
 
 	private async pasteFromClipboard(): Promise<void> {
 		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const selection = state.selection;
 		const focus = selection.focus;
 		if (!focus) return;
@@ -532,9 +532,9 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			const text = await navigator.clipboard.readText();
 			if (!text) return;
 
-			const rowModel = this.store.getRowModel();
+			const rowModel = this.runtime.getRowModel();
 			if (!rowModel) return;
-			const maxRow = this.store.getVisualRowCount();
+			const maxRow = this.runtime.getVisualRowCount();
 			const lines = text.split(/\r?\n/);
 
 			for (let r = 0; r < lines.length; r++) {
@@ -552,12 +552,12 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					if (!colDef) continue;
 					let value: unknown = cells[c];
 					if (colDef.onPaste) {
-						const row = this.store.getRawRowById(rowId);
+						const row = this.runtime.getRawRowById(rowId);
 						if (row !== null) {
 							value = colDef.onPaste({ row, rowId, colField: colDef.field, pastedText: cells[c] });
 						}
 					}
-					this.store.setCellValue(rowId, colDef.field, value);
+					this.runtime.setCellValue(rowId, colDef.field, value);
 				}
 			}
 		} catch {

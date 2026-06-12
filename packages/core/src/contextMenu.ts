@@ -1,4 +1,4 @@
-import { GridStore, GridCellPointer, GridPlugin, GridApi, InternalGridApi, GridSelectionState } from './store.js';
+import { GridCellPointer, GridPlugin, GridApi, GridPluginRuntime, GridSelectionState } from './store.js';
 import { exportToCsv } from './export/csvExport.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
@@ -29,7 +29,7 @@ type DefaultContextMenuItemId = NonNullable<GridContextMenuOptions['excludeDefau
 
 export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRowData> {
 	readonly name = 'contextMenu';
-	private store!: GridStore<TRowData>;
+	private runtime!: GridPluginRuntime<TRowData>;
 	private menuElement: HTMLDivElement | null = null;
 	private activePointer: GridCellPointer | null = null;
 	private options: GridContextMenuOptions<TRowData>;
@@ -42,17 +42,17 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		this.options = options;
 	}
 
-	public onInit(api: InternalGridApi<TRowData>): void {
-		this.store = api as GridStore<TRowData>;
+	public onInit(api: GridPluginRuntime<TRowData>): void {
+		this.runtime = api;
 	}
 
 	public show(rowId: string, colField: string, clientX: number, clientY: number): void {
 		if (this.options.disabled) return;
 
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		let inSelection = false;
 		if (state.selection.bounds) {
-			const rowModel = this.store.getRowModel();
+			const rowModel = this.runtime.getRowModel();
 			if (rowModel) {
 				const clickedRowIdx = rowModel.getVisualRowIndexById(rowId);
 				const clickedColIdx = state.columns.findIndex((c) => c.field === colField);
@@ -69,7 +69,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		}
 
 		if (!inSelection) {
-			this.store.selectCell({ rowId, colField }, 'pointer');
+			this.runtime.selectCell({ rowId, colField }, 'pointer');
 		}
 
 		this.activePointer = { rowId, colField };
@@ -115,11 +115,11 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		menu.className = 'og-context-menu';
 		this.menuElement = menu;
 
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const params: ContextMenuParams<TRowData> = {
 			rowId,
 			colField,
-			api: this.store,
+			api: this.runtime,
 			selection: state.selection,
 		};
 
@@ -162,7 +162,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				id: 'exportAll',
 				label: 'Export All as CSV',
 				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
-				action: (p) => exportToCsv(this.store, { fileName: 'export.csv' }),
+				action: () => exportToCsv(this.runtime, { fileName: 'export.csv' }),
 			},
 			{
 				id: 'exportSelected',
@@ -285,14 +285,14 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		const rows: string[] = [];
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const visualRow = this.store.getVisualRow(r);
+			const visualRow = this.runtime.getVisualRow(r);
 			if (visualRow?.kind !== 'data') continue;
 			const rowId = visualRow.rowId;
 			const rowVals: string[] = [];
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 				const col = params.api.getState().columns[c];
 				if (!col) continue;
-				const val = this.store.getCellValue(rowId, col.field);
+				const val = this.runtime.getCellValue(rowId, col.field);
 				rowVals.push(val !== undefined && val !== null ? String(val) : '');
 			}
 			rows.push(rowVals.join('\t'));
@@ -337,7 +337,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			for (let r = 0; r < lines.length; r++) {
 				const rowIndex = bounds.minRow + r;
 				if (rowIndex > bounds.maxRow) break;
-				const visualRow = this.store.getVisualRow(rowIndex);
+				const visualRow = this.runtime.getVisualRow(rowIndex);
 				if (visualRow?.kind !== 'data') continue;
 				const rowId = visualRow.rowId;
 				const cells = lines[r].split('\t');
@@ -353,7 +353,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 							value = col.onPaste({ row, rowId, colField: col.field, pastedText: cells[c] });
 						}
 					}
-					this.store.setCellValue(rowId, col.field, value);
+					this.runtime.setCellValue(rowId, col.field, value);
 				}
 			}
 		} catch (err) {
@@ -366,13 +366,13 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		if (!bounds) return;
 
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const visualRow = this.store.getVisualRow(r);
+			const visualRow = this.runtime.getVisualRow(r);
 			if (visualRow?.kind !== 'data') continue;
 			const rowId = visualRow.rowId;
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 				const col = params.api.getState().columns[c];
 				if (!col) continue;
-				this.store.setCellValue(rowId, col.field, '');
+				this.runtime.setCellValue(rowId, col.field, '');
 			}
 		}
 	}
@@ -380,11 +380,11 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	private selectAll(params: ContextMenuParams<TRowData>): void {
 		const state = params.api.getState();
 		const columns = state.columns;
-		const rowCount = this.store.getVisualRowCount();
+		const rowCount = this.runtime.getVisualRowCount();
 		if (columns.length === 0 || rowCount === 0) return;
 
-		const firstRow = this.store.getVisualRow(0);
-		const lastRow = this.store.getVisualRow(rowCount - 1);
+		const firstRow = this.runtime.getVisualRow(0);
+		const lastRow = this.runtime.getVisualRow(rowCount - 1);
 		if (firstRow?.kind !== 'data' || lastRow?.kind !== 'data') return;
 
 		const firstRowId = firstRow.rowId;
@@ -399,7 +399,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		const rowIds: string[] = [];
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const visualRow = this.store.getVisualRow(r);
+			const visualRow = this.runtime.getVisualRow(r);
 			if (visualRow?.kind !== 'data') continue;
 			rowIds.push(visualRow.rowId);
 		}
@@ -408,6 +408,6 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const state = params.api.getState();
 		const colFields = state.columns.slice(bounds.minCol, bounds.maxCol + 1).map((c) => c.field);
 
-		exportToCsv(this.store, { fileName: 'export-selection.csv', rowIds, columns: colFields });
+		exportToCsv(this.runtime, { fileName: 'export-selection.csv', rowIds, columns: colFields });
 	}
 }
