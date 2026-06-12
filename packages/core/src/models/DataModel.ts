@@ -1,6 +1,5 @@
 import { RowNode, GridEventName, compilePathGetter, type ColumnDef, type GridCellPointer } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { defaultGridScheduler } from '../renderer/gridScheduler.js';
 
 export class DataModel<TRowData = unknown> {
 	private engine!: GridEngine<TRowData>;
@@ -122,7 +121,7 @@ export class DataModel<TRowData = unknown> {
 		return node.getCellValue(colField, getter);
 	};
 
-	private getStoredCellValue = (rowId: string, colField: string): unknown => {
+	public getStoredCellValue = (rowId: string, colField: string): unknown => {
 		if (this.isRowLoading(rowId)) {
 			return '';
 		}
@@ -249,20 +248,10 @@ export class DataModel<TRowData = unknown> {
 			return false;
 		}
 
-		const hadFormula = this.engine.hasFormula(rowId, colField);
-		const previousFormula = this.engine.getFormula(rowId, colField);
+		const applied = rowModel.setCellValue(rowId, colField, value);
+		if (!applied) return false;
 
 		this.engine.syncFormulaForCell(rowId, colField, value);
-
-		const applied = rowModel.setCellValue(rowId, colField, value);
-		if (!applied) {
-			if (hadFormula && previousFormula !== undefined) {
-				this.engine.syncFormulaForCell(rowId, colField, previousFormula);
-			} else {
-				this.engine.syncFormulaForCell(rowId, colField, undefined);
-			}
-			return false;
-		}
 
 		// Invalidate this cell and any formula dependents.
 		const invalidatedFormulaCells = this.engine.invalidateFormulaCell(rowId, colField);
@@ -338,11 +327,6 @@ export class DataModel<TRowData = unknown> {
 	};
 
 	private scheduleBatchFlush(): void {
-		if (!this.engine.batchFlushScheduled) {
-			this.engine.batchFlushScheduled = true;
-			defaultGridScheduler.microtask(() => {
-				this.engine.flushCellUpdates();
-			});
-		}
+		this.engine.scheduleBatchFlush();
 	}
 }

@@ -453,6 +453,74 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('setCellValue preserves formula string and recomputes on dependency change', () => {
+		const store = new GridStore<{ id: string; val: number; formula: unknown }>({
+			columns: [
+				{ field: 'val', header: 'Val' },
+				{ field: 'formula', header: 'Formula' },
+			],
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'r1', val: 10, formula: '' }],
+			columns: store.getState().columns,
+		});
+
+		store.setCellValue('r1', 'formula', '=[r1:val]*2');
+
+		expect(store.getCellState('r1', 'formula').value).toBe('=[r1:val]*2');
+		expect(store.getCellValue('r1', 'formula')).toBe(20);
+
+		store.setCellValue('r1', 'val', 30);
+		expect(store.getCellValue('r1', 'formula')).toBe(60);
+
+		controller.dispose();
+	});
+
+	it('getCellState returns raw formula string in .value and computed value in .computedValue', () => {
+		const store = new GridStore<{ id: string; val: number; formula: unknown }>({
+			columns: [
+				{ field: 'val', header: 'Val' },
+				{ field: 'formula', header: 'Formula' },
+			],
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'r1', val: 5, formula: '' }],
+			columns: store.getState().columns,
+		});
+
+		store.setCellValue('r1', 'formula', '=[r1:val]*3');
+
+		const state = store.getCellState('r1', 'formula');
+		expect(state.value).toBe('=[r1:val]*3');
+		expect(state.computedValue).toBe(15);
+		expect(store.getCellValue('r1', 'formula')).toBe(15);
+
+		controller.dispose();
+	});
+
+	it('replacing a formula cell with a raw value clears formula registration', () => {
+		const store = new GridStore<{ id: string; val: number; formula: unknown }>({
+			columns: [
+				{ field: 'val', header: 'Val' },
+				{ field: 'formula', header: 'Formula' },
+			],
+		});
+		const controller = new ClientRowModelController(store, {
+			rows: [{ id: 'r1', val: 10, formula: '' }],
+			columns: store.getState().columns,
+		});
+
+		store.setCellValue('r1', 'formula', '=[r1:val]*2');
+		expect(store.getCellValue('r1', 'formula')).toBe(20);
+
+		store.setCellValue('r1', 'formula', 99);
+		expect(store.getCellState('r1', 'formula').value).toBe(99);
+		expect(store.getCellValue('r1', 'formula')).toBe(99);
+		expect(store.engine.hasFormula('r1', 'formula')).toBe(false);
+
+		controller.dispose();
+	});
+
 	it('should allow replacing a formula with its computed literal value', () => {
 		const store = new GridStore<{ id: string; a: number; b: string | number }>({
 			columns: [

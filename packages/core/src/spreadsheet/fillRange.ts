@@ -130,12 +130,11 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 	private restoreRecords(records: FillRecord[]): void {
 		for (const item of records) {
-			if (item.hasFormula && item.formula) {
-				this.engine.data.setCellValue(item.rowId, item.colField, item.formula);
-			} else {
-				this.engine.syncFormulaForCell(item.rowId, item.colField, item.value);
-				this.engine.data.setCellValue(item.rowId, item.colField, item.value);
-			}
+			const restoreValue = item.hasFormula && item.formula ? item.formula : item.value;
+			this.engine.dataMutation.applyCellValueChange(item.rowId, item.colField, restoreValue, {
+				undoable: false,
+				source: 'undo',
+			});
 		}
 	}
 
@@ -216,8 +215,11 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 			nextValue = Number.isInteger(finalVal) ? finalVal : parseFloat(finalVal.toFixed(4));
 		}
 
-		const applied = this.engine.data.setCellValue(rowId, colField, nextValue);
-		if (!applied) return;
+		const result = this.engine.dataMutation.applyCellValueChange(rowId, colField, nextValue, {
+			undoable: false,
+			source: 'fill',
+		});
+		if (!result.applied) return;
 
 		oldValueRecord.push({ rowId, colField, ...oldValue });
 		newValueRecord.push({

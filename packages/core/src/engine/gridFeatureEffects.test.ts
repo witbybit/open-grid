@@ -72,15 +72,13 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const ctrl = makeController(store);
 			const engine = (store as any).engine;
 
-			const spyGeometry = vi.spyOn(engine.invalidation, 'invalidateGeometry');
-			const spyHeaders = vi.spyOn(engine.invalidation, 'invalidateHeaders');
-			const spyColumn = vi.spyOn(engine.invalidation, 'invalidateColumn');
+			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
 
 			store.setColumnWidth('name', 200);
 
-			expect(spyGeometry).toHaveBeenCalled();
-			expect(spyHeaders).toHaveBeenCalled();
-			expect(spyColumn).toHaveBeenCalledWith('name', expect.anything());
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'geometry' }));
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'column', colId: 'name' }));
 
 			ctrl.dispose();
 			store.destroy();
@@ -120,17 +118,14 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const store = makeStore();
 			const engine = (store as any).engine;
 
-			const spyGeometry = vi.spyOn(engine.invalidation, 'invalidateGeometry');
-			const spyViewport = vi.spyOn(engine.invalidation, 'invalidateViewport');
-			const spyHeaders = vi.spyOn(engine.invalidation, 'invalidateHeaders');
-			const spyOverlay = vi.spyOn(engine.invalidation, 'invalidateOverlay');
+			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
 
 			store.setGroupBy(['name']);
 
-			expect(spyGeometry).toHaveBeenCalled();
-			expect(spyViewport).toHaveBeenCalled();
-			expect(spyHeaders).toHaveBeenCalled();
-			expect(spyOverlay).toHaveBeenCalled();
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'geometry' }));
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'viewport' }));
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'overlay' }));
 
 			store.destroy();
 		});
@@ -170,13 +165,12 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const store = makeStore();
 			const engine = (store as any).engine;
 
-			const spyViewport = vi.spyOn(engine.invalidation, 'invalidateViewport');
-			const spyOverlay = vi.spyOn(engine.invalidation, 'invalidateOverlay');
+			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
 
 			store.setAggDefs([] as any[]);
 
-			expect(spyViewport).toHaveBeenCalled();
-			expect(spyOverlay).toHaveBeenCalled();
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'viewport' }));
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'overlay' }));
 
 			store.destroy();
 		});

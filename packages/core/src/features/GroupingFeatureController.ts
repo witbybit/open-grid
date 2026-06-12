@@ -31,14 +31,17 @@ export class GroupingFeatureController<TRowData = unknown> {
 
 	public setGroupBy(colIds: string[]): void {
 		const state = this.ctx.stateManager.getState();
-		// Clear stale group expansion state when grouping columns change
 		const newExpansion = { ...state.expansion, groups: {} as Record<string, true> };
-		this.ctx.stateManager.setState({ groupBy: colIds, expansion: newExpansion });
-		this.ctx.invalidation.invalidateGeometry('groupBy');
-		this.ctx.invalidation.invalidateViewport('groupBy');
-		this.ctx.invalidation.invalidateHeaders('groupBy');
-		this.ctx.invalidation.invalidateOverlay('groupBy');
-		this.ctx.requestRender('groupBy');
+		this.ctx.changeApplier.apply({
+			reason: 'groupBy',
+			state: { groupBy: colIds, expansion: newExpansion },
+			invalidations: [
+				{ kind: 'geometry', reason: 'groupBy' },
+				{ kind: 'viewport', reason: 'groupBy' },
+				{ kind: 'headers', reason: 'groupBy' },
+				{ kind: 'overlay', reason: 'groupBy' },
+			],
+		});
 	}
 
 	public addGroupBy(colId: string, atIndex?: number): void {
@@ -73,10 +76,11 @@ export class GroupingFeatureController<TRowData = unknown> {
 	}
 
 	public setAggDefs(defs: AggregationDef<TRowData>[]): void {
-		this.ctx.stateManager.setState({ aggDefs: defs });
-		this.ctx.invalidation.invalidateViewport('aggDefs');
-		this.ctx.invalidation.invalidateOverlay('aggDefs');
-		this.ctx.requestRender('aggDefs');
+		this.ctx.changeApplier.apply({
+			reason: 'aggDefs',
+			state: { aggDefs: defs },
+			invalidations: [{ kind: 'viewport' }, { kind: 'overlay' }],
+		});
 	}
 
 	public setShowGroupFooter(enabled: boolean): void {

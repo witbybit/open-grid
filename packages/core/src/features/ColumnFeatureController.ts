@@ -7,17 +7,12 @@ export class ColumnFeatureController<TRowData = unknown> {
 	// ─── private helpers ──────────────────────────────────────────────────────
 
 	private applyColumnWidth(colField: string, width: number): void {
-		this.ctx.stateManager.setState((state) => ({
-			columnWidths: {
-				...state.columnWidths,
-				[colField]: width,
-			},
-		}));
-		this.ctx.invalidation.invalidateGeometry('column resize');
-		this.ctx.invalidation.invalidateColumn(colField, 'column resize');
-		this.ctx.invalidation.invalidateHeaders('column resize');
-		this.ctx.eventBus.dispatchEvent(GridEventName.columnResized, { colField, width });
-		this.ctx.requestRender('column resize');
+		this.ctx.changeApplier.apply({
+			reason: 'column resize',
+			state: (state) => ({ columnWidths: { ...state.columnWidths, [colField]: width } }),
+			invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+			events: [{ type: GridEventName.columnResized, payload: { colField, width } as never }],
+		});
 	}
 
 	private applyColumnOrder(columns: ColumnDef<TRowData>[]): void {
@@ -26,13 +21,12 @@ export class ColumnFeatureController<TRowData = unknown> {
 		if (prevFields.length === nextFields.length && prevFields.every((field, index) => field === nextFields[index])) {
 			return;
 		}
-		this.ctx.stateManager.setState({ columns });
-		this.ctx.invalidation.invalidateFull('column order');
-		this.ctx.eventBus.dispatchEvent(GridEventName.columnOrderChanged, {
-			columns,
-			columnFields: nextFields,
+		this.ctx.changeApplier.apply({
+			reason: 'column order',
+			state: { columns },
+			invalidations: [{ kind: 'full' }],
+			events: [{ type: GridEventName.columnOrderChanged, payload: { columns, columnFields: nextFields } as never }],
 		});
-		this.ctx.requestRender('column order');
 	}
 
 	private moveColumnInList(columns: ColumnDef<TRowData>[], fromIndex: number, toIndex: number): ColumnDef<TRowData>[] {
@@ -93,10 +87,12 @@ export class ColumnFeatureController<TRowData = unknown> {
 	}
 
 	public setColumnReorderEnabled(enabled: boolean): void {
-		this.ctx.stateManager.setState({ enableColumnReorder: enabled });
-		this.ctx.invalidation.invalidateHeaders('column reorder toggle');
-		this.ctx.eventBus.dispatchEvent(GridEventName.columnReorderToggled, { enabled });
-		this.ctx.requestRender('column reorder toggle');
+		this.ctx.changeApplier.apply({
+			reason: 'column reorder toggle',
+			state: { enableColumnReorder: enabled },
+			invalidations: [{ kind: 'headers' }],
+			events: [{ type: GridEventName.columnReorderToggled, payload: { enabled } as never }],
+		});
 	}
 
 	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {
@@ -114,31 +110,18 @@ export class ColumnFeatureController<TRowData = unknown> {
 			return acc;
 		}, {});
 
-		this.ctx.stateManager.setState({ columns, columnWidths: nextWidths });
-		this.ctx.invalidation.invalidateFull('columns');
-		this.ctx.requestRender('columns');
-
-		this.ctx.eventBus.dispatchEvent(GridEventName.columnsChanged, {
-			columns,
-			columnFields: columns.map((column) => column.field),
+		this.ctx.changeApplier.apply({
+			reason: 'columns',
+			state: { columns, columnWidths: nextWidths },
+			invalidations: [{ kind: 'full' }],
+			events: [{ type: GridEventName.columnsChanged, payload: { columns, columnFields: columns.map((c) => c.field) } as never }],
+			...(undoable
+				? {
+						undo: { reason: 'columns', state: { columns: prevColumns, columnWidths: prevWidths }, invalidations: [{ kind: 'full' }], requestRender: true },
+						redo: { reason: 'columns', state: { columns, columnWidths: nextWidths }, invalidations: [{ kind: 'full' }], requestRender: true },
+					}
+				: {}),
 		});
-
-		if (undoable) {
-			this.ctx.commandHistory.add({
-				undo: () => {
-					this.ctx.stateManager.setState({
-						columns: prevColumns,
-						columnWidths: prevWidths,
-					});
-				},
-				redo: () => {
-					this.ctx.stateManager.setState({
-						columns,
-						columnWidths: nextWidths,
-					});
-				},
-			});
-		}
 	}
 
 	public getColumnState(): ColumnState[] {

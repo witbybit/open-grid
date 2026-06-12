@@ -13,7 +13,7 @@
 | 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)           | TODO   | 78e8122 |
 | 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)               | DONE   | 53fe61f |
 | 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)           | REVIEW | 39c83e3 |
-| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)         | TODO   | 39c83e3 |
+| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)         | DONE   | 39c83e3 |
 
 ## Execution order
 

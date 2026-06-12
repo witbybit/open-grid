@@ -34,6 +34,8 @@ import { ColumnFeatureController } from '../features/ColumnFeatureController.js'
 import { GroupingFeatureController } from '../features/GroupingFeatureController.js';
 import { EditingFeatureController } from '../features/EditingFeatureController.js';
 import { RowSelectionFeatureController } from '../features/RowSelectionFeatureController.js';
+import { DataMutationController } from '../features/DataMutationController.js';
+import { defaultGridScheduler } from '../renderer/gridScheduler.js';
 
 export class GridEngine<TRowData = unknown> {
 	// Models
@@ -55,6 +57,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly groupingFeature: GroupingFeatureController<TRowData>;
 	public readonly editingFeature: EditingFeatureController<TRowData>;
 	public readonly rowSelectionFeature: RowSelectionFeatureController<TRowData>;
+	public readonly dataMutation: DataMutationController<TRowData>;
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 
@@ -184,6 +187,19 @@ export class GridEngine<TRowData = unknown> {
 			setCellValue: (rowId, colField, value, undoable) => this.setCellValue(rowId, colField, value, undoable),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
+		this.dataMutation = new DataMutationController<TRowData>({
+			data: this.data,
+			columns: this.columns,
+			commandHistory: this.commandHistory,
+			eventBus: this.eventBus,
+			getRowModel: () => this.rowModel,
+			syncFormulaForCell: (rowId, colField, value) => this.syncFormulaForCell(rowId, colField, value),
+			invalidateFormulaCell: (rowId, colField) => this.invalidateFormulaCell(rowId, colField),
+			getBatchedUpdates: () => this._batchedUpdates,
+			enqueueCellUpdate: (rowId, colField) => this.enqueueCellUpdate(rowId, colField),
+			scheduleBatchFlush: () => this.scheduleBatchFlush(),
+			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
+		});
 
 		// Link sub-models back to this engine context
 		this.data.init(this);
@@ -330,20 +346,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
-		const oldValue = this.data.getRawCellValue(rowId, colField);
-		if (oldValue === value) return;
-
-		const col = this.columns.getColumnDef(colField);
-		const knownOldStoredValue = col?.valueGetter ? undefined : oldValue;
-		const applied = this.data.setCellValue(rowId, colField, value, knownOldStoredValue);
-		if (!applied) return;
-
-		if (undoable) {
-			this.commandHistory.add({
-				undo: () => this.setCellValue(rowId, colField, oldValue, false),
-				redo: () => this.setCellValue(rowId, colField, value, false),
-			});
-		}
+		this.dataMutation.applyCellValueChange(rowId, colField, value, { undoable });
 	}
 
 	public startEdit(rowId: string, colField: string): void {
@@ -444,6 +447,13 @@ export class GridEngine<TRowData = unknown> {
 			this.endRenderTransaction();
 		}
 	};
+
+	public scheduleBatchFlush(): void {
+		if (!this.batchFlushScheduled) {
+			this.batchFlushScheduled = true;
+			defaultGridScheduler.microtask(() => this.flushCellUpdates());
+		}
+	}
 
 	public flushCellUpdates(): void {
 		if (this.cellUpdateBatch.size === 0) {
