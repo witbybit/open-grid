@@ -1,33 +1,34 @@
 # Plans
 
-| #   | Plan                                                                                      | Status | Commit       |
-| --- | ----------------------------------------------------------------------------------------- | ------ | ------------ |
-| 001 | [Row Multi-Select](./001-row-multiselect.md)                                              | TODO   | 3d32692      |
-| 002 | [ColumnType Registry](./002-column-type-registry.md)                                      | DONE   | 970c777      |
-| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                         | DONE   | 970c777      |
-| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                               | DONE   | 970c777      |
-| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                               | DONE   | 66c92c2      |
-| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                       | DONE   | 66c92c2      |
-| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)         | DONE   | 66c92c2      |
-| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)           | DONE   | 66c92c2      |
-| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                   | TODO   | 78e8122      |
-| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                       | DONE   | 53fe61f      |
-| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                   | REVIEW | 39c83e3      |
-| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)                 | DONE   | 39c83e3      |
-| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                     | DONE   | 94c9453      |
-| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                                 | DONE   | 94c9453      |
-| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                           | DONE   | 0f93724      |
-| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                       | DONE   | 6b3ecc5      |
-| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                         | REVIEW | eecb571      |
-| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)         | REVIEW | bb60b76      |
-| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md)     | REVIEW | bb60b76      |
-| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)           | REVIEW | bb60b76      |
-| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)                 | REVIEW | bb60b76      |
-| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                             | REVIEW | bb60b76      |
-| 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md)   | DONE   | working tree |
-| 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)         | DONE   | working tree |
-| 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md) | DONE   | working tree |
-| 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)    | DONE   | working tree |
+| #   | Plan                                                                                            | Status | Commit       |
+| --- | ----------------------------------------------------------------------------------------------- | ------ | ------------ |
+| 001 | [Row Multi-Select](./001-row-multiselect.md)                                                    | TODO   | 3d32692      |
+| 002 | [ColumnType Registry](./002-column-type-registry.md)                                            | DONE   | 970c777      |
+| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                               | DONE   | 970c777      |
+| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                                     | DONE   | 970c777      |
+| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                                     | DONE   | 66c92c2      |
+| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                             | DONE   | 66c92c2      |
+| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)               | DONE   | 66c92c2      |
+| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)                 | DONE   | 66c92c2      |
+| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                         | TODO   | 78e8122      |
+| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                             | DONE   | 53fe61f      |
+| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                         | REVIEW | 39c83e3      |
+| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)                       | DONE   | 39c83e3      |
+| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                           | DONE   | 94c9453      |
+| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                                       | DONE   | 94c9453      |
+| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                                 | DONE   | 0f93724      |
+| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                             | DONE   | 6b3ecc5      |
+| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                               | REVIEW | eecb571      |
+| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)               | REVIEW | bb60b76      |
+| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md)           | REVIEW | bb60b76      |
+| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)                 | REVIEW | bb60b76      |
+| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)                       | REVIEW | bb60b76      |
+| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                                   | REVIEW | bb60b76      |
+| 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md)         | DONE   | working tree |
+| 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)               | DONE   | working tree |
+| 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md)       | DONE   | working tree |
+| 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)          | DONE   | working tree |
+| 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md) | DONE   | working tree |
 
 ## Execution order
 
@@ -57,6 +58,7 @@
 24. `024-row-renderer-runtime-host-contract.md` - P1 renderer hardening after 023; stabilizes the runtime host surface so the adapter consumes real RowRenderer state without dragging the shell back into policy assembly
 25. `025-render-engine-scroll-frame-coordinator.md` - P0 renderer hardening after 024; extracts scroll-frame orchestration and cheap-path fan-out so `RenderEngine` becomes a narrower composition root before deeper render-pipeline cuts
 26. `026-render-paint-pipeline-coordinator.md` - P0 renderer hardening after 025; extracts paint lifecycle orchestration and full-paint fan-out so `RenderEngine` becomes a slimmer composition root before the next pipeline cut
+27. `027-render-engine-viewport-layout-coordinator.md` - P0 renderer hardening after 026; extracts viewport/layout orchestration and scroll-into-view targeting so `RenderEngine` can step back further before deeper pipeline cuts
 
 ## Dependency graph
 
@@ -87,6 +89,7 @@
 024  (row-renderer runtime host)    - follows 023; aligns the runtime adapter with the existing RowRenderer host surface and keeps the shell from regrowing
 025  (render-engine scroll coordinator) - follows 024; isolates scroll-frame orchestration and cheap-path synchronization before deeper render-pipeline work
 026  (render-engine paint coordinator) - follows 025; moves paint lifecycle orchestration and full-paint fan-out out of RenderEngine
+027  (render-engine viewport/layout coordinator) - follows 026; moves viewport layout computation, recycling, and scroll-targeting out of RenderEngine
 ```
 
 ## Notes
@@ -117,6 +120,7 @@
 - Plan 021 is implemented in the working tree and verified on 2026-06-12: the live row/data and loading lane path now routes through `rowCellBindingLanes.ts`, architecture guards assert the lane helper boundary, and core/React/demo verification passed. `RowRenderer` still retains wrapper mass and dead-size pressure, so the next slice should remove the leftover lane wrappers and extract hotter per-cell binding policy.
 - Plan 022 is the next renderer slice: move the live per-cell binding path through `rowCellBinder.ts` so the remaining RowRenderer pressure is mostly wrapper cleanup and slot-lifecycle ownership.
 - Plan 022 is implemented in the working tree and verified on 2026-06-12: the live lane path now routes per-cell policy through `rowCellBinder.ts`, architecture guards assert the binder boundary through `rowCellBindingLanes.ts`, and core/React/demo verification passed. `RowRenderer` is still 1599 lines because legacy wrapper bodies remain, so the next slice should delete the dead wrappers and continue shrinking toward a true slot-lifecycle shell.
+- Plan 027 is implemented in the working tree and verified on 2026-06-13: viewport/layout orchestration and scroll-into-view targeting now live in `renderViewportCoordinator.ts`, and `RenderEngine` delegates the last layout bridge.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

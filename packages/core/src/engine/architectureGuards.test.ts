@@ -87,6 +87,22 @@ describe('Architecture guardrails', () => {
 		expect(engineContent).not.toContain('refreshRendererEpochs()');
 	});
 
+	it('renderViewportCoordinator owns viewport layout and scroll-into-view orchestration', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderViewportCoordinator.ts'), 'utf-8');
+		expect(content).toContain('computeGridLayoutPlan');
+		expect(content).toContain('computeScrollTarget');
+		expect(content).toContain('public syncLayoutPlan');
+		expect(content).toContain('public recycleViewport');
+		expect(content).toContain('public scrollCellIntoView');
+
+		const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
+		expect(engineContent).toContain('this.viewportCoordinator.syncLayoutPlan()');
+		expect(engineContent).toContain('this.viewportCoordinator.recycleViewport(false, undefined, layoutPlan.renderWindow)');
+		expect(engineContent).toContain('this.viewportCoordinator.scrollCellIntoView(rowId, colField)');
+		expect(engineContent).not.toContain('computeGridLayoutPlan(');
+		expect(engineContent).not.toContain('computeScrollTarget(');
+	});
+
 	it('rowRenderMaintenance owns scroll-idle repair and invalidation repaint orchestration', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderMaintenance.ts'), 'utf-8');
 		expect(content).toContain('export function repaintInvalidatedRowsAndCells');

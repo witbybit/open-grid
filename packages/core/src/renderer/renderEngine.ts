@@ -1,5 +1,4 @@
 import { HeaderMenuController } from './headerMenuController.js';
-import { computeScrollTarget } from './scrollIntoView.js';
 import { ScrollEngine } from './scrollEngine.js';
 import { createEmptyRenderWindow, type RenderWindow } from './renderWindow.js';
 import { ColumnInteractionController } from './columnInteractionController.js';
@@ -28,12 +27,13 @@ import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { SortAnimationController } from './sortAnimationController.js';
 import { GroupPanelRenderer } from './groupPanelRenderer.js';
-import { computeGridLayoutPlan, type GridLayoutPlan } from './layoutPlan.js';
+import type { GridLayoutPlan } from './layoutPlan.js';
 import { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import { RenderInvalidationCoordinator } from './RenderInvalidationCoordinator.js';
 import { collectRenderStats, createRenderRuntimeStats, resetRenderTelemetry } from './renderTelemetry.js';
 import { RenderPaintCoordinator, type RenderPaintCoordinatorState } from './renderPaintCoordinator.js';
 import { RenderScrollCoordinator, type RenderScrollCoordinatorState } from './renderScrollCoordinator.js';
+import { RenderViewportCoordinator } from './renderViewportCoordinator.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi, InternalGridApi } from '../store.js';
 
@@ -53,6 +53,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly orchestrator: RenderOrchestrator;
 	private readonly paintCoordinator!: RenderPaintCoordinator<TRowData>;
 	private readonly scrollCoordinator!: RenderScrollCoordinator<TRowData>;
+	private readonly viewportCoordinator!: RenderViewportCoordinator<TRowData>;
 
 	public readonly portalMountManager: PortalMountManager<TRowData>;
 	public readonly viewportRenderer: ViewportRenderer<TRowData>;
@@ -211,9 +212,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.orchestrator = new RenderOrchestrator({
 			recomputeGeometry: () => this.geometryController.recomputeIfNeeded(),
-			syncViewport: (frame) => {
-				const layoutPlan = this.syncLayoutPlan();
-				this.recycleViewport(false, undefined, layoutPlan.renderWindow);
+			syncViewport: (_frame) => {
+				const layoutPlan = this.viewportCoordinator.syncLayoutPlan();
+				this.viewportCoordinator.recycleViewport(false, undefined, layoutPlan.renderWindow);
 				this.stickyGroupRenderer.sync(layoutPlan);
 			},
 			syncHeaders: (frame) => this.headerRenderer.sync(frame),
@@ -278,11 +279,19 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				requestScrollFrame: () => this.scrollScheduler.requestFrame(),
 				sortAnimation: this.sortAnimation,
 				renderStats: this.renderStats,
-				recycleViewport: (isScrollFrameActive, ctx, precomputedWindow) => this.recycleViewport(isScrollFrameActive, ctx, precomputedWindow),
-				syncLayoutPlan: (renderWindow) => this.syncLayoutPlan(renderWindow),
+				recycleViewport: (isScrollFrameActive, ctx, precomputedWindow) =>
+					this.viewportCoordinator.recycleViewport(isScrollFrameActive, ctx, precomputedWindow),
+				syncLayoutPlan: (renderWindow) => this.viewportCoordinator.syncLayoutPlan(renderWindow),
 			},
 			scrollState
 		);
+		this.viewportCoordinator = new RenderViewportCoordinator<TRowData>({
+			engine,
+			viewportRenderer: this.viewportRenderer,
+			rowRenderer: this.rowRenderer,
+			scrollEngine: this.scrollEngine,
+			renderStats: this.renderStats,
+		});
 		const paintState: RenderPaintCoordinatorState = {
 			pendingSortAnimation: this._pendingSortAnimation,
 			lastStyleSlots: this.lastStyleSlots,
@@ -300,8 +309,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				orchestrator: this.orchestrator,
 				scrollCoordinator: this.scrollCoordinator,
 				sortAnimation: this.sortAnimation,
-				recycleViewport: (isScrollFrameActive, ctx, precomputedWindow) => this.recycleViewport(isScrollFrameActive, ctx, precomputedWindow),
-				syncLayoutPlan: (renderWindow) => this.syncLayoutPlan(renderWindow),
+				recycleViewport: (isScrollFrameActive, ctx, precomputedWindow) =>
+					this.viewportCoordinator.recycleViewport(isScrollFrameActive, ctx, precomputedWindow),
+				syncLayoutPlan: (renderWindow) => this.viewportCoordinator.syncLayoutPlan(renderWindow),
 				updateCachedGeometryBoundsFromState: (defaultColWidth, defaultRowHeight) =>
 					this.updateCachedGeometryBoundsFromState(defaultColWidth, defaultRowHeight),
 			},
@@ -314,9 +324,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			sortAnimation: this.sortAnimation,
 			scheduler: this.scheduler,
 			syncLayoutPlan: () => {
-				this.syncLayoutPlan();
+				this.viewportCoordinator.syncLayoutPlan();
 			},
-			scrollCellIntoView: (rowId, colField) => this.scrollCellIntoView(rowId, colField),
+			scrollCellIntoView: (rowId, colField) => this.viewportCoordinator.scrollCellIntoView(rowId, colField),
 			updateCachedGeometryBounds: () => this.updateCachedGeometryBounds(),
 			getIsScrolling: () => this.scrollCoordinator.getIsScrolling(),
 			getIsScrollFrameActive: () => this.scrollCoordinator.getIsScrollFrameActive(),
@@ -356,7 +366,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// Group panel: mount if showGroupPanel is already true at mount time
 		if (this.viewportRenderer.groupPanel) {
 			this.groupPanelRenderer.mount(this.viewportRenderer.groupPanel);
-			this.syncLayoutPlan();
+			this.viewportCoordinator.syncLayoutPlan();
 			this.columnInteractions.setGroupPanel(this.groupPanelRenderer);
 		}
 
@@ -532,58 +542,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.paintCoordinator.fullPaint();
 	}
 
-	private recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
-		this.renderStats.viewportRecycles++;
-		this.rowRenderer.recycleViewport(isScrollFrameActive, ctx, precomputedWindow);
-	}
-
-	private syncLayoutPlan(renderWindow?: RenderWindow): GridLayoutPlan {
-		const layoutPlan = computeGridLayoutPlan(this.engine, renderWindow);
-		this.viewportRenderer.syncLayoutPlan(layoutPlan);
-		return layoutPlan;
-	}
-
 	public scrollCellIntoView(rowId: string, colField: string): void {
-		this.rowRenderer.programmaticScrollCell = { rowId, colField };
-		const scrollViewport = this.viewportRenderer.scrollViewport;
-		if (!scrollViewport) return;
-
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) return;
-
-		const rowIndex = rowModel.getVisualIndexByRowId(rowId);
-		const colIndex = this.engine.columns.getColumnIndex(colField);
-		if (rowIndex === null || rowIndex === -1 || colIndex === -1) return;
-		const layoutPlan = this.viewportRenderer.getLayoutPlan() ?? this.syncLayoutPlan();
-
-		const target = computeScrollTarget({
-			rowIndex,
-			colIndex,
-			rowCount: rowModel.getVisualRowCount(),
-			colCount: this.engine.columns.getDisplayedColumnCount(),
-			pinLeftColumns: this.engine.viewport.pinLeftColumns,
-			pinRightColumns: this.engine.viewport.pinRightColumns,
-			pinTopRows: this.engine.viewport.pinTopRows,
-			pinBottomRows: this.engine.viewport.pinBottomRows,
-			scrollTop: this.engine.viewport.scrollTop,
-			scrollLeft: this.engine.viewport.scrollLeft,
-			viewportHeight: this.engine.viewport.viewportHeight,
-			viewportWidth: this.engine.viewport.viewportWidth,
-			topChromeHeight: layoutPlan.chrome.topChromeHeight,
-			rowTops: this.engine.geometry.rowTops,
-			rowHeights: this.engine.geometry.rowHeights,
-			colLefts: this.engine.geometry.colLefts,
-			colWidths: this.engine.geometry.colWidths,
-			scrollViewportScrollHeight: scrollViewport.scrollHeight,
-			scrollViewportScrollWidth: scrollViewport.scrollWidth,
-			scrollViewportClientHeight: scrollViewport.clientHeight,
-			scrollViewportClientWidth: scrollViewport.clientWidth,
-		});
-
-		if (target) {
-			this.scrollEngine.scrollTo(target.top, target.left);
-			this.engine.viewport.setScrollPosition(target.top, target.left);
-		}
+		this.viewportCoordinator.scrollCellIntoView(rowId, colField);
 	}
 
 	private onRowMouseOver = (event: MouseEvent): void => {
