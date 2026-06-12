@@ -16,6 +16,7 @@
 | 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)         | DONE   | 39c83e3 |
 | 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)             | DONE   | 94c9453 |
 | 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                         | DONE   | 94c9453 |
+| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                   | DONE   | 0f93724 |
 
 ## Execution order
 
@@ -33,6 +34,7 @@
 12. `012-data-mutation-kernel-hardening.md` - P0 correctness and architecture follow-up; fixes formula fill regression and makes cell data mutation a single owned pipeline
 13. `013-thin-engine-effects-boundary.md` - P0 architecture lock-in; makes `GridEngine` a thin kernel, completes typed feature effect routing, and activates the skipped engine-size guard
 14. `014-runtime-port-inversion.md` - P0 boundary hardening after 013; breaks the `GridStore -> GridEngine -> models -> rowModel` cycle so row/data/formula features stop requiring cross-file protocol patches
+15. `015-internal-adapter-boundary.md` - P0 adapter-boundary hardening after 014; seals `@open-grid/core/internal` into an explicit host/adapter contract before deeper renderer decomposition
 
 ## Dependency graph
 
@@ -51,6 +53,7 @@
 012  (data mutation kernel)         - follows 011; required before new edit/fill/formula/paste features
 013  (thin engine effects boundary) - follows 012; required before the next feature wave so feature side effects and engine ownership are enforceable
 014  (runtime port inversion)       - follows 013; required before deeper row-model, formula, and store-surface feature work so internal modules depend on ports instead of concrete engine/store reach-through
+015  (internal adapter boundary)    - follows 014; required before renderer refactors so framework adapters depend on a narrow host contract instead of broad engine/store/renderer internals
 ```
 
 ## Notes
@@ -64,6 +67,8 @@
 - Plan 013 is implemented and verified on 2026-06-12: `GridEngine.ts` is now below the active 800-line guard, subscription batching and state-reaction logic are extracted, feature controllers route through the narrowed effect boundary, and React's chart overlay no longer imports `@open-grid/core/internal`.
 - Plan 014 is implemented and verified on 2026-06-12: shared runtime ports now sit in `packages/core/src/engine/runtimePorts.ts`, `DataModel` / `ColumnModel` / `CellAccessModel` no longer depend on `GridEngine`, and client/server row models no longer reach through `store.engine.*`.
 - Plan 014 leaves `store.ts` under the active intermediate guard (`< 900`, currently 891 lines) but not yet at the aspirational `850` target. Treat that as deferred cleanup rather than a hidden failure.
+- Plan 015 targets the next pre-renderer hardening step: narrow `@open-grid/core/internal` from a broad export barrel into the explicit adapter host contract used by React and future renderers.
+- Plan 015 is implemented and verified on 2026-06-12: `@open-grid/core/internal` now exports only the adapter host contract and `hasImperativeRendererCapability`; React no longer imports `InternalColumnDef`; boundary and architecture guards prevent broad internal barrels and raw implementation exports from returning.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

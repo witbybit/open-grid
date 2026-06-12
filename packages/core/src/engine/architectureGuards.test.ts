@@ -53,6 +53,41 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('@open-grid/core/internal');
 	});
 
+	it('internal adapter entrypoint does not use broad export barrels', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'internal.ts'), 'utf-8');
+		expect(content).not.toContain('export * from');
+	});
+
+	it('internal adapter entrypoint does not export raw implementation classes', () => {
+		const forbiddenExports = [
+			'./store.js',
+			'./engine/GridEngine.js',
+			'./state/StateManager.js',
+			'./commands/CommandHistory.js',
+			'./events/EventBus.js',
+			'./renderer/renderEngine.js',
+			'./renderer/rowRenderer.js',
+		];
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'internal.ts'), 'utf-8');
+		for (const forbidden of forbiddenExports) {
+			expect(content, `internal.ts must not export ${forbidden}`).not.toContain(forbidden);
+		}
+	});
+
+	it('React adapter does not import raw core internals', () => {
+		const files = ['OpenGrid.tsx', 'GridPortal.tsx'];
+		const forbidden = ['GridStore', 'GridEngine', 'RenderEngine', 'RowRenderer', 'getStoreFromApi', 'InternalGridApi', 'InternalColumnDef'];
+		for (const file of files) {
+			const content = readFileSync(resolve(REACT_ROOT, 'src', file), 'utf-8');
+			for (const token of forbidden) {
+				expect(content, `${file} must not import ${token} from @open-grid/core/internal`).not.toMatch(
+					new RegExp(`import[\\s\\S]*\\b${token}\\b[\\s\\S]*from ['"]@open-grid/core/internal['"]`)
+				);
+			}
+			expect(content, `${file} must not import raw renderer files`).not.toMatch(/from ['"]@open-grid\/core\/internal\/renderer\//);
+		}
+	});
+
 	it('SpreadsheetFillEngine does not call engine.data.setCellValue directly', () => {
 		const hasDirectCall = coreFileContains('spreadsheet/fillRange.ts', 'engine.data.setCellValue');
 		expect(hasDirectCall, 'fillRange.ts must route all cell writes through dataMutation.applyCellValueChange').toBe(false);

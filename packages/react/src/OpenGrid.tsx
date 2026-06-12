@@ -13,7 +13,7 @@ import {
 } from '@open-grid/core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 import type { StyleRule } from './styleRules.js';
-import { InternalColumnDef, GridHostWithAdapter, GridAdapterHandle, mountGridHost } from '@open-grid/core/internal';
+import { GridHostWithAdapter, GridAdapterHandle, hasImperativeRendererCapability, mountGridHost } from '@open-grid/core/internal';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { useClientGrid } from './useGrid.js';
 
@@ -223,7 +223,7 @@ function OpenGridInner<TRowData = unknown>({
 				mountCellContent: (mount) => {
 					// Imperative fast path — renderer exposes ref.current.update(), bypasses
 					// React scheduler entirely. Zero reconciler overhead for live price feeds.
-					if ((mount.col as InternalColumnDef)?.cellRendererCapabilities?.imperativeUpdate && !mount.isEditing) {
+					if (hasImperativeRendererCapability(mount.col) && !mount.isEditing) {
 						if (
 							portalStore.tryImperativeUpdate(
 								mount.cellKey,

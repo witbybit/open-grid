@@ -10,6 +10,11 @@ import type {
 	GridHeaderMenuUnmount,
 } from './renderer/IGridRenderer.js';
 import type { GridApi } from './store.js';
+import type { ColumnDef, InternalColumnDef } from './columnDef.js';
+
+export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
+	return (column as InternalColumnDef<TRowData>).cellRendererCapabilities?.imperativeUpdate === true;
+}
 
 export interface GridCellContentAdapter<TRowData = unknown> {
 	mountCellContent?: (mount: GridCellContentMount<TRowData>) => void;
@@ -128,9 +133,7 @@ export function mountGridHost<TRowData>(
 			return store.getRowModel()?.getGroupMeta?.(groupId)?.visibleDescendantRowIds ?? [];
 		},
 		isImperativeRendererColumn(column) {
-			// Columns processed by ColumnModel have cellRendererCapabilities attached.
-			const col = column as import('./columnDef.js').InternalColumnDef<TRowData>;
-			return col.cellRendererCapabilities?.imperativeUpdate === true;
+			return hasImperativeRendererCapability(column);
 		},
 	};
 

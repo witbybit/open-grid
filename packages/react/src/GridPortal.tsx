@@ -22,7 +22,7 @@ import {
 	type ImperativeCellHandle,
 	isDomCellRenderer,
 } from '@open-grid/core';
-import type { InternalColumnDef } from '@open-grid/core/internal';
+import { hasImperativeRendererCapability } from '@open-grid/core/internal';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import { useGridApi } from './hooks.js';
@@ -130,7 +130,9 @@ function PortalCellInner<TRowData = unknown>({
 
 	const CustomEditor = col?.cellEditor as ComponentType<Record<string, unknown>> | undefined;
 	// DomCellRenderer is an object ({mount}), memo/forwardRef are exotic objects — use isDomCellRenderer guard
-	const iCol = col as InternalColumnDef | undefined;
+	const iCol = col as ColumnDef<TRowData> & {
+		cellRenderer?: unknown;
+	};
 	const CustomRenderer =
 		iCol?.cellRenderer && !isDomCellRenderer(iCol.cellRenderer)
 			? (iCol.cellRenderer as unknown as ComponentType<Record<string, unknown>>)
@@ -855,7 +857,9 @@ function ImperativePortalCellWrapperInner<TRowData = unknown>({ cellKey, store }
 	const effectiveData = data ?? lastKnownRef.current;
 	if (!effectiveData) return null;
 
-	const iColData = effectiveData.col as InternalColumnDef;
+	const iColData = effectiveData.col as ColumnDef<TRowData> & {
+		cellRenderer?: unknown;
+	};
 	const CustomRenderer = iColData.cellRenderer as unknown as React.ForwardRefExoticComponent<
 		Record<string, unknown> & React.RefAttributes<unknown>
 	>;
@@ -908,7 +912,7 @@ function CellPortalPoolInner<TRowData = unknown>({ store }: CellPortalPoolProps<
 	return (
 		<>
 			{cellPortalList.map((p) => {
-				const useImperative = !!(p.col as InternalColumnDef).cellRendererCapabilities?.imperativeUpdate;
+				const useImperative = hasImperativeRendererCapability(p.col);
 				// Key MUST be createPortal's third argument: the pool reconciles an array of
 				// portal objects, and a portal whose containerInfo differs is never reused.
 				// Without it React matches by index and one structural change remounts every

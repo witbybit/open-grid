@@ -60,19 +60,29 @@ describe('Public/internal boundary', () => {
 			expect(typeof (internalApi as Record<string, unknown>)['mountGridHost']).toBe('function');
 		});
 
-		it('exports getStoreFromApi', () => {
-			expect(typeof (internalApi as Record<string, unknown>)['getStoreFromApi']).toBe('function');
+		it('exports the imperative renderer capability helper', () => {
+			expect(typeof (internalApi as Record<string, unknown>)['hasImperativeRendererCapability']).toBe('function');
 		});
 
 		it('does not export getInternalApiFromApi (removed with ApiBridge)', () => {
 			expect((internalApi as Record<string, unknown>)['getInternalApiFromApi']).toBeUndefined();
 		});
 
-		it('exports renderer classes', () => {
-			const rendererClasses = [
+		it('does not export raw store, engine, model, or renderer classes', () => {
+			const rawInternals = [
+				'GridStore',
+				'GridEngine',
+				'StateManager',
+				'CommandHistory',
+				'EventBus',
+				'DataModel',
+				'ColumnModel',
+				'ViewportModel',
+				'CellAccessModel',
 				'GeometryController',
 				'InvalidationManager',
 				'PortalMountManager',
+				'RenderEngine',
 				'RenderOrchestrator',
 				'RenderScheduler',
 				'CellRenderer',
@@ -81,9 +91,10 @@ describe('Public/internal boundary', () => {
 				'OverlayRenderer',
 				'RowRenderer',
 				'ViewportRenderer',
+				'getStoreFromApi',
 			];
-			for (const name of rendererClasses) {
-				expect((internalApi as Record<string, unknown>)[name], `${name} must be in internal entry`).toBeDefined();
+			for (const name of rawInternals) {
+				expect((internalApi as Record<string, unknown>)[name], `${name} must not be in internal entry`).toBeUndefined();
 			}
 		});
 	});
