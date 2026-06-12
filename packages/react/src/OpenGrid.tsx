@@ -13,7 +13,7 @@ import {
 } from '@open-grid/core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 import type { StyleRule } from './styleRules.js';
-import { InternalColumnDef, GridHost, mountGridHost, getStoreFromApi } from '@open-grid/core/internal';
+import { InternalColumnDef, GridHostWithAdapter, GridAdapterHandle, mountGridHost } from '@open-grid/core/internal';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { useClientGrid } from './useGrid.js';
 
@@ -26,6 +26,7 @@ import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
 import { GridChartOverlay } from './chart/GridChartOverlay.js';
 
 export const GridApiContext = createContext<GridApi<unknown> | null>(null);
+export const GridAdapterContext = createContext<GridAdapterHandle<unknown> | null>(null);
 
 export interface GridProviderProps<TRowData = unknown> {
 	api: GridApi<TRowData>;
@@ -176,7 +177,8 @@ function OpenGridInner<TRowData = unknown>({
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
-	const hostRef = useRef<GridHost | null>(null);
+	const hostRef = useRef<GridHostWithAdapter<TRowData> | null>(null);
+	const [adapterHandle, setAdapterHandle] = useState<GridAdapterHandle<unknown> | null>(null);
 	const isGridActiveRef = useRef(false);
 
 	// Only push pin values when they are explicitly provided as props.
@@ -277,9 +279,11 @@ function OpenGridInner<TRowData = unknown>({
 			},
 		});
 		hostRef.current = host;
+		setAdapterHandle(host.adapterHandle as GridAdapterHandle<unknown>);
 
 		return () => {
 			hostRef.current = null;
+			setAdapterHandle(null);
 			host.destroy();
 			portalStore.clear();
 		};
@@ -369,25 +373,18 @@ function OpenGridInner<TRowData = unknown>({
 		};
 	}, [navigation, enableNavigation]);
 
-	const getCellPointerFromEvent = useCallback(
-		(e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
-			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-			if (!cellEl) return null;
-			if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
-			const colField = cellEl.dataset.colField;
-			const rowEl = cellEl.closest('.og-row') as HTMLElement;
-			const rowIndex = Number(rowEl?.dataset.rowIndex);
-			const visualRow = Number.isFinite(rowIndex) ? getStoreFromApi(api).getVisualRow(rowIndex) : null;
-			const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
-			if (!colField || !rowId) return null;
-			return { cellEl, pointer: { rowId, colField } };
-		},
-		[api]
-	);
+	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
+		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
+		if (!cellEl) return null;
+		if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
+		const pointer = hostRef.current?.adapterHandle.getCellPointerFromElement(cellEl) ?? null;
+		if (!pointer) return null;
+		return { cellEl, pointer };
+	}, []);
 
 	const getCellClickParams = useCallback(
 		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {
-			const access = getStoreFromApi(api).getCellAccess(pointer.rowId, pointer.colField);
+			const access = hostRef.current?.adapterHandle.getCellAccess(pointer.rowId, pointer.colField) ?? null;
 			if (!access) return null;
 			return {
 				rowId: access.rowId,
@@ -558,7 +555,7 @@ function OpenGridInner<TRowData = unknown>({
 	);
 
 	return (
-		<>
+		<GridAdapterContext.Provider value={adapterHandle}>
 			{hasSidebar ? (
 				<div
 					style={{
@@ -575,6 +572,6 @@ function OpenGridInner<TRowData = unknown>({
 				gridPane
 			)}
 			{enableChart && <GridChartOverlay api={api} />}
-		</>
+		</GridAdapterContext.Provider>
 	);
 }

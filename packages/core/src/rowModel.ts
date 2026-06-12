@@ -1,17 +1,14 @@
 import {
 	GridStore,
-	GridEventName,
 	ColumnDef,
-	RowModel,
 	RowNode,
 	setValueByPath,
 	compilePathGetter,
 	type VisualRow,
-	type RowRefreshReason,
-	type RowModelRefreshResult,
 	type RowDataTransaction,
 	type RowNodeTransaction,
 } from './store.js';
+import { GridEventName } from './api/GridEvents.js';
 import { getFieldRoot } from './ids.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
 import { RowDataStore } from './rows/RowDataStore.js';
@@ -40,6 +37,49 @@ export interface ClientRowModelOptions<TData = unknown> {
 }
 
 export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
+
+// ── Row model contract types ──────────────────────────────────────────────────
+// Defined here to avoid a circular import with store.ts. store.ts re-exports these.
+
+export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit';
+
+export interface RowModelRefreshResult {
+	changed: boolean;
+	reason?: RowRefreshReason;
+	previousRowCount?: number;
+	nextRowCount?: number;
+	changedStartIndex?: number;
+	changedEndIndex?: number;
+	groupId?: string;
+}
+
+export interface RowModel<TRowData = unknown> {
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	getVisualRowCount(): number;
+	getDataRowCount?(): number;
+	getVisualRowIndexById(id: string): number;
+	getVisualIndexById(visualRowId: string): number;
+	getVisualIndexByRowId(rowId: string): number;
+	getRowNodeById(rowId: string): RowNode<TRowData> | null;
+	getRawRowById(rowId: string): TRowData | null;
+	toggleGroupExpanded?(groupId: string): RowModelRefreshResult | void;
+	toggleDetailExpanded?(rowId: string): RowModelRefreshResult | void;
+	isGroupExpanded?(groupId: string): boolean;
+	isDetailExpanded?(rowId: string): boolean;
+	expandAllGroups?(): RowModelRefreshResult | void;
+	collapseAllGroups?(): RowModelRefreshResult | void;
+	getStickyGroupMeta?(): Map<number, number>;
+	getGroupMeta?(groupId: string): GroupRowMeta | null;
+	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
+	setRows?(rows: TRowData[]): void;
+	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
+	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
+	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
+	purgeCache?(): void;
+	setDatasource?(datasource: import('./serverRowModel.js').IGridDatasource, blockSize?: number): void;
+	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
+	loadVisibleBlocks?(startRow: number, endRow: number): void;
+}
 
 export interface GroupRowMeta {
 	groupId: string;

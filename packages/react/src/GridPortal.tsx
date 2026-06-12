@@ -1,5 +1,6 @@
 import {
 	useCallback,
+	useContext,
 	useEffect,
 	useRef,
 	useState,
@@ -21,11 +22,11 @@ import {
 	type ImperativeCellHandle,
 	isDomCellRenderer,
 } from '@open-grid/core';
-import type { InternalColumnDef, InternalGridApi } from '@open-grid/core/internal';
+import type { InternalColumnDef } from '@open-grid/core/internal';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import { useGridApi } from './hooks.js';
-import { GridProvider } from './OpenGrid.js';
+import { GridProvider, GridAdapterContext } from './OpenGrid.js';
 import type { ReactNode } from 'react';
 
 export interface PortalCellProps<TRowData = unknown> {
@@ -262,8 +263,8 @@ function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { 
 		() => api.getState().selectedRowIds,
 		() => api.getState().selectedRowIds
 	);
-	const descendantIds =
-		(api as unknown as InternalGridApi<TRowData>).getRowModel()?.getGroupMeta?.(visualRow.groupId)?.visibleDescendantRowIds ?? [];
+	const adapterHandle = useContext(GridAdapterContext);
+	const descendantIds = adapterHandle?.getGroupVisibleDescendantRowIds(visualRow.groupId) ?? [];
 	const selectedSet = new Set(selectedRowIds);
 	const selectedDescendantCount = descendantIds.reduce((count, rowId) => count + (selectedSet.has(rowId) ? 1 : 0), 0);
 	const allDescendantsSelected = descendantIds.length > 0 && selectedDescendantCount === descendantIds.length;

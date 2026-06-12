@@ -42,6 +42,26 @@ export function createCellSubscriptionKey(row: number, col: number): string {
 	return `cell:${createCellCoordKey(row, col)}`;
 }
 
+/**
+ * Validates row IDs produced by getRowId before they are inserted into the grid.
+ * Throws on empty or duplicate IDs, which would otherwise cause silent identity corruption.
+ */
+export function validateRowIds(ids: string[], context = 'setRows'): void {
+	const seen = new Set<string>();
+
+	for (const id of ids) {
+		if (!id) {
+			throw new Error(`Open Grid [${context}]: getRowId returned an empty string. Every row must have a non-empty ID.`);
+		}
+
+		if (seen.has(id)) {
+			throw new Error(`Open Grid [${context}]: duplicate row ID "${id}". Each row must have a unique ID.`);
+		}
+
+		seen.add(id);
+	}
+}
+
 export function getRowId<TData = unknown>(row: TData, index: number, getUserRowId?: GetRowId<TData>): string {
 	return normalizeGridId(getUserRowId ? getUserRowId(row, index) : createRowId(index));
 }

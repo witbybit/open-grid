@@ -329,3 +329,29 @@ export function compilePathGetter(path: string): (data: unknown) => unknown {
 	pathGetterCache.set(path, getter);
 	return getter;
 }
+
+/**
+ * Validates column definitions before they are applied to the grid.
+ * Throws early with a clear message rather than silently producing broken layout.
+ */
+export function validateColumns<TRowData>(columns: ColumnDef<TRowData>[]): void {
+	const seen = new Set<string>();
+
+	for (const column of columns) {
+		const id = column.field;
+
+		if (!id) {
+			throw new Error('Open Grid: every column must have a non-empty field.');
+		}
+
+		if (seen.has(id)) {
+			throw new Error(`Open Grid: duplicate column field "${id}". Each column must have a unique field.`);
+		}
+
+		seen.add(id);
+
+		if (column.width != null && (!Number.isFinite(column.width) || column.width <= 0)) {
+			throw new Error(`Open Grid: invalid width for column "${id}". Width must be a positive finite number, got ${column.width}.`);
+		}
+	}
+}

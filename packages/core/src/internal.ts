@@ -45,7 +45,14 @@ export { computeScrollTarget } from './renderer/scrollIntoView.js';
 export type { ScrollTarget, ScrollIntoViewParams } from './renderer/scrollIntoView.js';
 
 // Grid host — low-level DOM mounting used by framework adapters, not application code.
-export { mountGridHost, type GridCellContentAdapter, type GridHost, type GridHostOptions } from './gridHost.js';
+export {
+	mountGridHost,
+	type GridCellContentAdapter,
+	type GridHost,
+	type GridHostOptions,
+	type GridAdapterHandle,
+	type GridHostWithAdapter,
+} from './gridHost.js';
 
 // WeakMap-based store reverse-lookup — the canonical way to access GridStore from a public GridApi.
 export { getStoreFromApi } from './createGrid.js';

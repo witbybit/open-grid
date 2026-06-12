@@ -29,6 +29,11 @@ import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { InvalidationManager } from '../renderer/invalidationManager.js';
 import type { RenderStats } from '../renderer/renderOrchestrator.js';
+import { GridChangeApplier } from './GridChangeApplier.js';
+import { ColumnFeatureController } from '../features/ColumnFeatureController.js';
+import { GroupingFeatureController } from '../features/GroupingFeatureController.js';
+import { EditingFeatureController } from '../features/EditingFeatureController.js';
+import { RowSelectionFeatureController } from '../features/RowSelectionFeatureController.js';
 
 export class GridEngine<TRowData = unknown> {
 	// Models
@@ -45,6 +50,11 @@ export class GridEngine<TRowData = unknown> {
 	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus<TRowData>;
 	public readonly invalidation: InvalidationManager;
+	public readonly changeApplier: GridChangeApplier<TRowData>;
+	public readonly columnFeature: ColumnFeatureController<TRowData>;
+	public readonly groupingFeature: GroupingFeatureController<TRowData>;
+	public readonly editingFeature: EditingFeatureController<TRowData>;
+	public readonly rowSelectionFeature: RowSelectionFeatureController<TRowData>;
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 
@@ -145,6 +155,36 @@ export class GridEngine<TRowData = unknown> {
 		// Construct StateManager with coordinate state update bridging
 		this.stateManager = new StateManager<TRowData>(initialState, this.handleStateChanges);
 
+		// Initialize changeApplier after stateManager is available
+		this.changeApplier = new GridChangeApplier<TRowData>({
+			stateManager: this.stateManager,
+			invalidation: this.invalidation,
+			eventBus: this.eventBus,
+			commandHistory: this.commandHistory,
+			requestRender: (reason) => this.requestRender(reason),
+		});
+
+		// Initialize feature controllers (columns model will be linked after sub-models init)
+		const featureContext = {
+			stateManager: this.stateManager,
+			columns: this.columns,
+			invalidation: this.invalidation,
+			eventBus: this.eventBus,
+			changeApplier: this.changeApplier,
+			commandHistory: this.commandHistory,
+			requestRender: (reason: string) => this.requestRender(reason),
+		};
+		this.columnFeature = new ColumnFeatureController<TRowData>(featureContext);
+		this.groupingFeature = new GroupingFeatureController<TRowData>(featureContext, () => this.rowModel);
+		this.editingFeature = new EditingFeatureController<TRowData>({
+			ctx: featureContext,
+			getRowModel: () => this.rowModel,
+			data: this.data,
+			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
+			setCellValue: (rowId, colField, value, undoable) => this.setCellValue(rowId, colField, value, undoable),
+		});
+		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
+
 		// Link sub-models back to this engine context
 		this.data.init(this);
 		this.columns.init(this);
@@ -191,58 +231,19 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public resizeColumn(colField: string, width: number, undoable = true): void {
-		const oldWidth = this.stateManager.getState().columnWidths[colField] ?? this.stateManager.getState().defaultColWidth;
-		if (oldWidth === width) return;
-
-		this.applyColumnWidth(colField, width);
-
-		if (undoable) {
-			this.commandHistory.add({
-				undo: () => this.applyColumnWidth(colField, oldWidth),
-				redo: () => this.applyColumnWidth(colField, width),
-			});
-		}
+		this.columnFeature.resizeColumn(colField, width, undoable);
 	}
 
 	public moveColumn(colField: string, toIndex: number): void {
-		const state = this.stateManager.getState();
-		const displayedColumns = this.columns.getDisplayedColumns();
-		const fromIndex = displayedColumns.findIndex((column) => column.field === colField);
-		if (fromIndex === -1 || !Number.isFinite(toIndex)) return;
-
-		const boundedToIndex = Math.max(0, Math.min(displayedColumns.length - 1, Math.trunc(toIndex)));
-		if (fromIndex === boundedToIndex) return;
-
-		const nextDisplayed = this.moveColumnInList(displayedColumns, fromIndex, boundedToIndex);
-		const hiddenColumns = state.columns.filter((column) => column.hide === true);
-		this.applyColumnOrder([...nextDisplayed, ...hiddenColumns]);
+		this.columnFeature.moveColumn(colField, toIndex);
 	}
 
 	public setColumnOrderByFields(colFields: string[]): void {
-		const state = this.stateManager.getState();
-		const orderedFieldSet = new Set<string>();
-		const orderedFields = colFields.filter((field) => {
-			if (orderedFieldSet.has(field)) return false;
-			orderedFieldSet.add(field);
-			return true;
-		});
-		const columnByField = new Map(state.columns.map((column) => [column.field, column]));
-		const nextColumns = orderedFields.map((field) => columnByField.get(field)).filter((column): column is ColumnDef<TRowData> => !!column);
-
-		for (const column of state.columns) {
-			if (!orderedFieldSet.has(column.field)) {
-				nextColumns.push(column);
-			}
-		}
-
-		this.applyColumnOrder(nextColumns);
+		this.columnFeature.setColumnOrderByFields(colFields);
 	}
 
 	public setColumnReorderEnabled(enabled: boolean): void {
-		this.stateManager.setState({ enableColumnReorder: enabled });
-		this.invalidation.invalidateHeaders('column reorder toggle');
-		this.eventBus.dispatchEvent(GridEventName.columnReorderToggled, { enabled });
-		this.requestRender('column reorder toggle');
+		this.columnFeature.setColumnReorderEnabled(enabled);
 	}
 
 	public setStyleSlots(styleSlots: GridState<TRowData>['styleSlots']): void {
@@ -297,72 +298,35 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public setGroupBy(colIds: string[]): void {
-		const state = this.stateManager.getState();
-		// Clear stale group expansion state when grouping columns change
-		const newExpansion = { ...state.expansion, groups: {} as Record<string, true> };
-		this.stateManager.setState({ groupBy: colIds, expansion: newExpansion });
-		this.invalidation.invalidateGeometry('groupBy');
-		this.invalidation.invalidateViewport('groupBy');
-		this.invalidation.invalidateHeaders('groupBy');
-		this.invalidation.invalidateOverlay('groupBy');
-		this.requestRender('groupBy');
+		this.groupingFeature.setGroupBy(colIds);
 	}
 
 	public addGroupBy(colId: string, atIndex?: number): void {
-		const current = this.stateManager.getState().groupBy ?? [];
-		if (current.includes(colId)) return;
-		const next = [...current];
-		const insertAt = atIndex !== undefined ? Math.max(0, Math.min(next.length, atIndex)) : next.length;
-		next.splice(insertAt, 0, colId);
-		this.setGroupBy(next);
-		this.eventBus.dispatchEvent(GridEventName.groupColumnAdded, { colId, index: insertAt, groupBy: next });
+		this.groupingFeature.addGroupBy(colId, atIndex);
 	}
 
 	public removeGroupBy(colId: string): void {
-		const current = this.stateManager.getState().groupBy ?? [];
-		if (!current.includes(colId)) return;
-		const next = current.filter((id) => id !== colId);
-		this.setGroupBy(next);
-		this.eventBus.dispatchEvent(GridEventName.groupColumnRemoved, { colId, groupBy: next });
+		this.groupingFeature.removeGroupBy(colId);
 	}
 
 	public moveGroupBy(colId: string, toIndex: number): void {
-		const current = this.stateManager.getState().groupBy ?? [];
-		const fromIndex = current.indexOf(colId);
-		if (fromIndex === -1) return;
-		const next = [...current];
-		next.splice(fromIndex, 1);
-		const boundedTo = Math.max(0, Math.min(next.length, toIndex));
-		next.splice(boundedTo, 0, colId);
-		if (boundedTo === fromIndex) return;
-		this.setGroupBy(next);
-		this.eventBus.dispatchEvent(GridEventName.groupColumnMoved, { colId, fromIndex, toIndex: boundedTo, groupBy: next });
+		this.groupingFeature.moveGroupBy(colId, toIndex);
 	}
 
 	public setShowGroupPanel(enabled: boolean): void {
-		this.stateManager.setState({ showGroupPanel: enabled });
-		this.requestRender('showGroupPanel');
+		this.groupingFeature.setShowGroupPanel(enabled);
 	}
 
 	public setAggDefs(defs: import('../rows/stages/aggregateStage.js').AggregationDef<any>[]): void {
-		this.stateManager.setState({ aggDefs: defs });
-		this.invalidation.invalidateViewport('aggDefs');
-		this.invalidation.invalidateOverlay('aggDefs');
-		this.requestRender('aggDefs');
+		this.groupingFeature.setAggDefs(defs as any);
 	}
 
 	public setShowGroupFooter(enabled: boolean): void {
-		this.stateManager.setState({ showGroupFooter: enabled });
-		this.invalidation.invalidateGeometry('showGroupFooter');
-		this.invalidation.invalidateViewport('showGroupFooter');
-		this.invalidation.invalidateOverlay('showGroupFooter');
-		this.requestRender('showGroupFooter');
+		this.groupingFeature.setShowGroupFooter(enabled);
 	}
 
 	public setStickyGroupRows(enabled: boolean): void {
-		this.stateManager.setState({ enableStickyGroupRows: enabled });
-		this.invalidation.invalidateViewport('enableStickyGroupRows');
-		this.requestRender('enableStickyGroupRows');
+		this.groupingFeature.setStickyGroupRows(enabled);
 	}
 
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
@@ -383,28 +347,11 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public startEdit(rowId: string, colField: string): void {
-		if (!this.canEditCell(rowId, colField)) return;
-		this.stateManager.setState({
-			activeEdit: { rowId, colField },
-		});
-		this.invalidation.invalidateCell(rowId, colField, 'edit started');
-		this.invalidation.invalidateOverlay('edit started');
-		this.notifyCellChange(rowId, colField);
-		this.eventBus.dispatchEvent(GridEventName.editStarted, { rowId, colField });
-		this.requestRender('edit started');
+		this.editingFeature.startEdit(rowId, colField);
 	}
 
 	public stopEdit(cancel = false): void {
-		const activeEdit = this.stateManager.getState().activeEdit;
-		if (!activeEdit) return;
-
-		const { rowId, colField } = activeEdit;
-		this.stateManager.setState({ activeEdit: null });
-		this.invalidation.invalidateCell(rowId, colField, 'edit stopped');
-		this.invalidation.invalidateOverlay('edit stopped');
-		this.notifyCellChange(rowId, colField);
-		this.eventBus.dispatchEvent(GridEventName.editStopped, { rowId, colField, cancel });
-		this.requestRender('edit stopped');
+		this.editingFeature.stopEdit(cancel);
 	}
 
 	public registerRowModel(rowModel: RowModel<TRowData>): void {
@@ -649,107 +596,28 @@ export class GridEngine<TRowData = unknown> {
 
 	// ── Row node selection ─────────────────────────────────────────────────────
 
-	private getAllSelectableDataRowIds(): string[] {
-		const allIds: string[] = [];
-		if (!this.rowModel) return allIds;
-		const count = this.rowModel.getVisualRowCount();
-		for (let i = 0; i < count; i++) {
-			const vr = this.rowModel.getVisualRow(i);
-			if (vr?.kind === 'data') allIds.push(vr.rowId);
-		}
-		return allIds;
-	}
-
-	private reduceRowSelection(gesture: RowSelectionGesture): RowSelectionChangeResult | null {
-		const current = this.stateManager.getState();
-		const currentSet = new Set(current.selectedRowIds);
-		const rowIds = gesture.rowIds ?? [];
-		let newIds: string[];
-
-		switch (gesture.kind) {
-			case 'replace': {
-				const nextSet = new Set(rowIds);
-				newIds = [...nextSet];
-				break;
-			}
-			case 'select': {
-				rowIds.forEach((id) => currentSet.add(id));
-				newIds = [...currentSet];
-				break;
-			}
-			case 'deselect': {
-				const toRemove = new Set(rowIds);
-				newIds = current.selectedRowIds.filter((id) => !toRemove.has(id));
-				break;
-			}
-			case 'toggle': {
-				const id = rowIds[0];
-				if (!id) return null;
-				if (currentSet.has(id)) currentSet.delete(id);
-				else currentSet.add(id);
-				newIds = [...currentSet];
-				break;
-			}
-			case 'selectAll': {
-				newIds = this.getAllSelectableDataRowIds();
-				break;
-			}
-			case 'clear': {
-				newIds = [];
-				break;
-			}
-			default:
-				return null;
-		}
-
-		const prevSet = new Set(current.selectedRowIds);
-		const newSet = new Set(newIds);
-		const addedRowIds = newIds.filter((id) => !prevSet.has(id));
-		const removedRowIds = current.selectedRowIds.filter((id) => !newSet.has(id));
-		const changedRowIds = addedRowIds.concat(removedRowIds);
-		if (changedRowIds.length === 0) return null;
-
-		return {
-			selectedRowIds: newIds,
-			changedRowIds,
-			addedRowIds,
-			removedRowIds,
-			source: gesture.source ?? 'api',
-		};
-	}
-
 	public applyRowSelectionGesture(gesture: RowSelectionGesture): RowSelectionChangeResult | null {
-		const result = this.reduceRowSelection(gesture);
-		if (!result) return null;
-
-		this.stateManager.setState({ selectedRowIds: result.selectedRowIds });
-		for (const rowId of result.changedRowIds) {
-			this.invalidation.invalidateRow(rowId, 'selection');
-		}
-		this.invalidation.invalidateHeaders('selection');
-		this.eventBus.dispatchEvent(GridEventName.rowSelectionChanged, result);
-		this.requestRender('selection');
-		return result;
+		return this.rowSelectionFeature.applyRowSelectionGesture(gesture);
 	}
 
 	public selectRowIds(rowIds: string[], source: RowSelectionGestureSource = 'api'): void {
-		this.applyRowSelectionGesture({ kind: 'select', rowIds, source });
+		this.rowSelectionFeature.selectRowIds(rowIds, source);
 	}
 
 	public deselectRowIds(rowIds: string[], source: RowSelectionGestureSource = 'api'): void {
-		this.applyRowSelectionGesture({ kind: 'deselect', rowIds, source });
+		this.rowSelectionFeature.deselectRowIds(rowIds, source);
 	}
 
 	public toggleRowId(rowId: string, source: RowSelectionGestureSource = 'api'): void {
-		this.applyRowSelectionGesture({ kind: 'toggle', rowIds: [rowId], source });
+		this.rowSelectionFeature.toggleRowId(rowId, source);
 	}
 
 	public selectAllDataRows(source: RowSelectionGestureSource = 'api'): void {
-		this.applyRowSelectionGesture({ kind: 'selectAll', source });
+		this.rowSelectionFeature.selectAllDataRows(source);
 	}
 
 	public clearRowSelection(source: RowSelectionGestureSource = 'api'): void {
-		this.applyRowSelectionGesture({ kind: 'clear', source });
+		this.rowSelectionFeature.clearRowSelection(source);
 	}
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
@@ -787,92 +655,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {
-		const state = this.stateManager.getState();
-
-		const prevColumns = state.columns;
-		const prevWidths = state.columnWidths;
-
-		const nextWidths = columns.reduce<Record<string, number>>((acc, column) => {
-			const existingWidth = prevWidths[column.field];
-
-			if (existingWidth !== undefined) {
-				acc[column.field] = existingWidth;
-			} else if (column.width !== undefined) {
-				acc[column.field] = column.width;
-			}
-
-			return acc;
-		}, {});
-
-		this.stateManager.setState({
-			columns,
-			columnWidths: nextWidths,
-		});
-		this.invalidation.invalidateFull('columns');
-		this.requestRender('columns');
-
-		this.eventBus.dispatchEvent(GridEventName.columnsChanged, {
-			columns,
-			columnFields: columns.map((column) => column.field),
-		});
-
-		if (undoable) {
-			this.commandHistory.add({
-				undo: () => {
-					this.stateManager.setState({
-						columns: prevColumns,
-						columnWidths: prevWidths,
-					});
-				},
-				redo: () => {
-					this.stateManager.setState({
-						columns,
-						columnWidths: nextWidths,
-					});
-				},
-			});
-		}
-	}
-
-	private applyColumnWidth = (colField: string, width: number): void => {
-		this.stateManager.setState((state) => ({
-			columnWidths: {
-				...state.columnWidths,
-				[colField]: width,
-			},
-		}));
-		this.invalidation.invalidateGeometry('column resize');
-		this.invalidation.invalidateColumn(colField, 'column resize');
-		this.invalidation.invalidateHeaders('column resize');
-
-		this.eventBus.dispatchEvent(GridEventName.columnResized, {
-			colField,
-			width,
-		});
-		this.requestRender('column resize');
-	};
-
-	private applyColumnOrder(columns: ColumnDef<TRowData>[]): void {
-		const prevFields = this.stateManager.getState().columns.map((column) => column.field);
-		const nextFields = columns.map((column) => column.field);
-		if (prevFields.length === nextFields.length && prevFields.every((field, index) => field === nextFields[index])) {
-			return;
-		}
-
-		this.stateManager.setState({ columns });
-		this.invalidation.invalidateFull('column order');
-		this.eventBus.dispatchEvent(GridEventName.columnOrderChanged, {
-			columns,
-			columnFields: nextFields,
-		});
-		this.requestRender('column order');
-	}
-
-	private moveColumnInList(columns: ColumnDef<TRowData>[], fromIndex: number, toIndex: number): ColumnDef<TRowData>[] {
-		const nextColumns = [...columns];
-		const [column] = nextColumns.splice(fromIndex, 1);
-		nextColumns.splice(toIndex, 0, column);
-		return nextColumns;
+		this.columnFeature.setColumns(columns, undoable);
 	}
 
 	private applyRowHeight = (rowId: string, height: number): void => {
