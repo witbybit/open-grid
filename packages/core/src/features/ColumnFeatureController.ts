@@ -117,8 +117,18 @@ export class ColumnFeatureController<TRowData = unknown> {
 			events: [{ type: GridEventName.columnsChanged, payload: { columns, columnFields: columns.map((c) => c.field) } as never }],
 			...(undoable
 				? {
-						undo: { reason: 'columns', state: { columns: prevColumns, columnWidths: prevWidths }, invalidations: [{ kind: 'full' }], requestRender: true },
-						redo: { reason: 'columns', state: { columns, columnWidths: nextWidths }, invalidations: [{ kind: 'full' }], requestRender: true },
+						undo: {
+							reason: 'columns',
+							state: { columns: prevColumns, columnWidths: prevWidths },
+							invalidations: [{ kind: 'full' }],
+							requestRender: true,
+						},
+						redo: {
+							reason: 'columns',
+							state: { columns, columnWidths: nextWidths },
+							invalidations: [{ kind: 'full' }],
+							requestRender: true,
+						},
 					}
 				: {}),
 		});
