@@ -756,8 +756,13 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const HookHarness = ({ label }: { label: string }) => {
 			const api = useClientGrid<TestRow>({
-				rows: [{ id: '1', name: label }],
-				columns: [{ field: 'name', header: 'Name', width: 100 }],
+				initial: {
+					getRowId: (row) => row.id,
+				},
+				live: {
+					rows: [{ id: '1', name: label }],
+					columns: [{ field: 'name', header: 'Name', width: 100 }],
+				},
 			});
 			apis.push(api);
 			return <span data-testid='api-count'>{apis.length}</span>;
@@ -785,9 +790,19 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const StrictServerHarness = () => {
 			const api = useServerGrid<TestRow>({
-				datasource,
-				blockSize: 20,
-				columns: [{ field: 'name', header: 'Name', width: 140 }],
+				initial: {
+					getRowId: (row) => row.id,
+					initialState: { masterDetailEnabled: false },
+					persistence: undefined,
+					rowOverscanPx: 20,
+					colBuffer: 1,
+					overscanAdaptive: true,
+				},
+				live: {
+					datasource,
+					blockSize: 20,
+					columns: [{ field: 'name', header: 'Name', width: 140 }],
+				},
 			});
 
 			return (
@@ -926,7 +941,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 						api={grid.api}
 						enableNavigation={false}
 						detailRowRenderer={({ visualRow }) =>
-							visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+							visualRow.kind === 'detail' ? (
+								<div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div>
+							) : null
 						}
 					/>
 				</GridProvider>
@@ -984,7 +1001,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 						api={grid.api}
 						enableNavigation={false}
 						detailRowRenderer={({ visualRow }) =>
-							visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+							visualRow.kind === 'detail' ? (
+								<div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div>
+							) : null
 						}
 					/>
 				</GridProvider>
@@ -1044,7 +1063,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 						api={grid.api}
 						enableNavigation={false}
 						detailRowRenderer={({ visualRow }) =>
-							visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+							visualRow.kind === 'detail' ? (
+								<div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div>
+							) : null
 						}
 					/>
 				</GridProvider>
@@ -1497,6 +1518,58 @@ describe('explicit React entrypoints', () => {
 
 		await act(async () => {});
 		grid.api.destroy();
+	});
+
+	it('useClientGrid accepts an explicit lifecycle shape without initial-only warnings', async () => {
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const cols: ColumnDef<TestRow>[] = [{ field: 'name', header: 'Name', width: 100 }];
+
+		const Harness = ({ rows }: { rows: TestRow[] }) => {
+			const api = useClientGrid<TestRow>({
+				initial: {
+					getRowId: (row) => row.id,
+					initialState: { masterDetailEnabled: false },
+					persistence: undefined,
+					rowOverscanPx: 24,
+					colBuffer: 1,
+					overscanAdaptive: true,
+				},
+				live: {
+					rows,
+					columns: cols,
+				},
+			});
+
+			return (
+				<GridProvider api={api}>
+					<GridView api={api} enableNavigation={false} />
+				</GridProvider>
+			);
+		};
+
+		const { rerender } = render(
+			<div style={{ width: 400, height: 300 }}>
+				<Harness rows={[{ id: '1', name: 'Alice' }]} />
+			</div>
+		);
+
+		await act(async () => {});
+
+		rerender(
+			<div style={{ width: 400, height: 300 }}>
+				<Harness
+					rows={[
+						{ id: '1', name: 'Alice' },
+						{ id: '2', name: 'Bob' },
+					]}
+				/>
+			</div>
+		);
+
+		await act(async () => {});
+
+		expect(warnSpy).not.toHaveBeenCalled();
+		warnSpy.mockRestore();
 	});
 
 	it('ClientGrid can own its api directly', async () => {

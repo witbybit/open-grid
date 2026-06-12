@@ -141,3 +141,49 @@ export interface ServerGridOptions<TRowData> extends GridRenderOptions<TRowData>
 	/** Declarative style rules, same as ClientGridOptions.styleRules. */
 	styleRules?: StyleRule<TRowData>[];
 }
+
+export interface ClientGridInitialOptions<TRowData> {
+	getRowId?: (row: TRowData) => string;
+	initialState?: Partial<GridState<TRowData>>;
+	rowSelection?: 'single' | 'multiple';
+	persistence?: GridPersistenceAdapter;
+	rowOverscanPx?: number;
+	colBuffer?: number;
+	overscanAdaptive?: boolean;
+	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
+}
+
+export interface ClientGridLiveOptions<TRowData> {
+	rows: TRowData[];
+	columns: ColumnDef<TRowData>[];
+	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
+	styleRules?: StyleRule<TRowData>[];
+}
+
+export interface ClientGridLifecycleOptions<TRowData> {
+	initial: ClientGridInitialOptions<TRowData>;
+	live: ClientGridLiveOptions<TRowData>;
+}
+
+export interface ServerGridInitialOptions<TRowData> {
+	getRowId?: (row: TRowData) => string;
+	initialState?: Partial<GridState<TRowData>>;
+	persistence?: GridPersistenceAdapter;
+	rowOverscanPx?: number;
+	colBuffer?: number;
+	overscanAdaptive?: boolean;
+	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
+}
+
+export interface ServerGridLiveOptions<TRowData> {
+	datasource: IGridDatasource;
+	columns: ColumnDef<TRowData>[];
+	blockSize?: number;
+	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
+	styleRules?: StyleRule<TRowData>[];
+}
+
+export interface ServerGridLifecycleOptions<TRowData> {
+	initial: ServerGridInitialOptions<TRowData>;
+	live: ServerGridLiveOptions<TRowData>;
+}

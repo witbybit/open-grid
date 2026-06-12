@@ -80,6 +80,12 @@ export type {
 	DomCellRendererHandle,
 	DomCellRendererParams,
 	ImperativeCellHandle,
+	ClientGridInitialOptions,
+	ClientGridLiveOptions,
+	ClientGridLifecycleOptions,
+	ServerGridInitialOptions,
+	ServerGridLiveOptions,
+	ServerGridLifecycleOptions,
 } from './types.js';
 
 export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';

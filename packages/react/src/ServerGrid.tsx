@@ -21,18 +21,22 @@ export function ServerGrid<TRowData = unknown>({
 	...viewProps
 }: ServerGridProps<TRowData>) {
 	const api = useServerGrid<TRowData>({
-		datasource,
-		columns,
-		columnTypes,
-		blockSize,
-		getRowId,
-		initialState,
-		persistence,
-		styleRules,
-		rowOverscanPx,
-		colBuffer,
-		overscanAdaptive,
-		runtimeLimits,
+		initial: {
+			getRowId,
+			initialState,
+			persistence,
+			rowOverscanPx,
+			colBuffer,
+			overscanAdaptive,
+			runtimeLimits,
+		},
+		live: {
+			datasource,
+			columns,
+			blockSize,
+			columnTypes,
+			styleRules,
+		},
 	});
 
 	return (

@@ -2,6 +2,8 @@
 
 > Planned after plan 028. This is the next React-layer slice after the public surface split.
 
+> Status: implemented and verified on 2026-06-13.
+
 ## Goal
 
 Make the React hook contract as explicit as the component contract:
@@ -42,3 +44,9 @@ That works, but it still makes the API feel like a negotiation. AG Grid-level st
 - The overloaded React surface is gone; only explicit entrypoints remain.
 - The demo continues to use the preferred API entrypoints.
 - React build/test and demo build stay green.
+
+## Verification
+
+- `pnpm --filter @open-grid/react build`
+- `pnpm --filter @open-grid/react test`
+- `pnpm --filter demo-app build`

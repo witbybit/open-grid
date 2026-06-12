@@ -127,7 +127,7 @@
 - Plan 022 is implemented in the working tree and verified on 2026-06-12: the live lane path now routes per-cell policy through `rowCellBinder.ts`, architecture guards assert the binder boundary through `rowCellBindingLanes.ts`, and core/React/demo verification passed. `RowRenderer` is still 1599 lines because legacy wrapper bodies remain, so the next slice should delete the dead wrappers and continue shrinking toward a true slot-lifecycle shell.
 - Plan 027 is implemented in the working tree and verified on 2026-06-13: viewport/layout orchestration and scroll-into-view targeting now live in `renderViewportCoordinator.ts`, and `RenderEngine` delegates the last layout bridge.
 - Plan 028 is the next API lock-in step: split the React surface into explicit ownership/view entrypoints and migrate the demo to the better contract before go-live.
-- Plan 029 is the next React hardening step: split the hook lifecycle contract so initial-only config no longer hides inside the same bag as live updates.
+- Plan 029 is implemented and verified on 2026-06-13: the React hook lifecycle now has explicit initial/live entrypoints, the wrapper components use that split internally, and the demo plus React package still build and test cleanly.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

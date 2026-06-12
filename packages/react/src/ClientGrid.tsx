@@ -25,17 +25,21 @@ export function ClientGrid<TRowData = unknown>({
 }: ClientGridProps<TRowData>) {
 	const mergedInitialState = detailRowHeight != null ? { detailRowHeight, ...initialState } : initialState;
 	const api = useClientGrid<TRowData>({
-		rows,
-		columns,
-		columnTypes,
-		styleRules,
-		getRowId,
-		initialState: mergedInitialState,
-		persistence,
-		rowOverscanPx,
-		colBuffer,
-		overscanAdaptive,
-		runtimeLimits,
+		initial: {
+			getRowId,
+			initialState: mergedInitialState,
+			persistence,
+			rowOverscanPx,
+			colBuffer,
+			overscanAdaptive,
+			runtimeLimits,
+		},
+		live: {
+			rows,
+			columns,
+			columnTypes,
+			styleRules,
+		},
 	});
 
 	return (
