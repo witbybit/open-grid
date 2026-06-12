@@ -10,6 +10,7 @@ import {
 	GridEventName,
 	Grid,
 	GridView,
+	GridStatusBar,
 	PortalCell,
 	PortalManager,
 	useGridKeySelector,
@@ -1489,5 +1490,36 @@ describe('explicit React entrypoints', () => {
 		);
 
 		await act(async () => {});
+	});
+
+	it('GridStatusBar reflects selection and edit state from context', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: '1', name: 'Alice' },
+				{ id: '2', name: 'Bob' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		const { container } = render(
+			<GridProvider api={grid.api}>
+				<GridStatusBar />
+			</GridProvider>
+		);
+
+		expect(container.textContent).toContain('2 rows');
+		expect(container.textContent).toContain('2 visible');
+		expect(container.textContent).toContain('0 selected');
+		expect(container.textContent).toContain('Ready');
+
+		act(() => {
+			grid.api.selectRows(['1']);
+			grid.api.startEditing('1', 'name');
+		});
+
+		expect(container.textContent).toContain('1 selected');
+		expect(container.textContent).toContain('Editing 1:name');
+
+		grid.api.destroy();
 	});
 });

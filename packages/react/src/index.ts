@@ -3,13 +3,14 @@ export type { GridProps, GridClientProps, GridServerProps } from './Grid.js';
 export { GridView } from './GridView.js';
 export type { GridViewProps } from './GridView.js';
 export { GridProvider } from './gridContext.js';
+export { GridStatusBar } from './GridStatusBar.js';
 export { GridPagination, useClientGridPagination } from './pagination.js';
 export type { GridPaginationProps, ClientGridPaginationResult } from './pagination.js';
 export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
+export { useOwnedClientGrid, useOwnedServerGrid } from './ownedGrid.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
-export { createClientGrid, createServerGrid } from '@open-grid/core';
 
 // ─── Built-in cell renderers & editors ───────────────────────────────────────
 export {

@@ -9,7 +9,7 @@
  *   - rowSelectionChanged event →  reactive event log
  */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { GridView, GridProvider, GridEventName, useGridKeySelector, useGridApi } from '@open-grid/react';
+import { GridView, GridProvider, GridEventName, GridStatusBar, useGridKeySelector, useGridApi } from '@open-grid/react';
 import type { ColumnDef, GridApi } from '@open-grid/react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
 import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
@@ -268,7 +268,10 @@ export default function RowMultiSelectDemo() {
 
 				{/* ── Toolbar ────────────────────────────────────────────────── */}
 				<div className='flex items-center gap-3 shrink-0 bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-2.5'>
-					<SelectionStatusBar totalCount={rows.length} />
+					<div className='flex items-center gap-2 text-[11px] text-slate-500 font-medium'>
+						<Info className='w-3.5 h-3.5 shrink-0' />
+						Select rows above, then use the footer status bar for live totals and edit state.
+					</div>
 					<div className='flex-1' />
 					<BulkActions
 						onDelete={handleDeleteSelected}
@@ -280,8 +283,11 @@ export default function RowMultiSelectDemo() {
 				</div>
 
 				{/* ── Grid ───────────────────────────────────────────────────── */}
-				<div className='flex-1 min-h-0 border border-slate-800 rounded-xl overflow-hidden bg-slate-950 shadow-2xl'>
-					<GridView api={api as GridApi<OrderRow>} enableNavigation={true} navigationOptions={{ editTrigger: 'doubleClick' }} />
+				<div className='flex-1 min-h-0 border border-slate-800 rounded-xl overflow-hidden bg-slate-950 shadow-2xl flex flex-col'>
+					<div className='flex-1 min-h-0'>
+						<GridView api={api as GridApi<OrderRow>} enableNavigation={true} navigationOptions={{ editTrigger: 'doubleClick' }} />
+					</div>
+					<GridStatusBar />
 				</div>
 
 				{/* ── Event log ──────────────────────────────────────────────── */}
