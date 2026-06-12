@@ -508,7 +508,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			}
 
 			this.renderStats.postScrollDecorationChunks++;
-			// One release transaction per chunk: portal releases triggered by _bindCellFull
+			// One release transaction per chunk: portal releases triggered by row cell rebinding
 			// batch into a single flush instead of one synchronous React commit per cell.
 			this.portalMountManager.beginCellReleaseTransaction();
 			let result;

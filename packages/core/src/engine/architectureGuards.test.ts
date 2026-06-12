@@ -43,9 +43,9 @@ describe('Architecture guardrails', () => {
 		expect(lines, `renderEngine.ts has ${lines} lines; intermediate budget is 1000 and target is 900`).toBeLessThan(1000);
 	});
 
-	it('rowRenderer.ts is below 1550 lines (intermediate budget, target 1300)', () => {
+	it('rowRenderer.ts is below 1000 lines (intermediate budget, target 800)', () => {
 		const lines = countLines('renderer/rowRenderer.ts');
-		expect(lines, `rowRenderer.ts has ${lines} lines; intermediate budget is 1550 and target is 1300`).toBeLessThan(1550);
+		expect(lines, `rowRenderer.ts has ${lines} lines; intermediate budget is 1000 and target is 800`).toBeLessThan(1000);
 	});
 
 	it('renderEngine.ts does not inline renderer subscription wiring', () => {
@@ -64,6 +64,31 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderMaintenance.ts'), 'utf-8');
 		expect(content).toContain('export function repaintInvalidatedRowsAndCells');
 		expect(content).toContain('export function decorateDirtyCellsAfterScroll');
+	});
+
+	it('rowCellBindingLanes owns row lane binding orchestration', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBindingLanes.ts'), 'utf-8');
+		expect(content).toContain('export function bindAllDataCells');
+		expect(content).toContain('export function bindAllLoadingCells');
+	});
+
+	it('rowRenderer live row/data binding delegates lane orchestration', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderer.ts'), 'utf-8');
+		expect(content).toContain('bindAllDataCells(this.getCellBindingLaneDeps()');
+		expect(content).toContain('bindAllLoadingCells(this.getCellBindingLaneDeps()');
+	});
+
+	it('rowCellBinder owns extracted live cell-binding policy', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
+		expect(content).toContain('export function bindCellFull');
+		expect(content).toContain('export function bindCellDuringScroll');
+	});
+
+	it('rowCellBindingLanes routes live cell binding through rowCellBinder', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBindingLanes.ts'), 'utf-8');
+		expect(content).toContain("from './rowCellBinder.js'");
+		expect(content).toContain('bindCellFull(deps.cellBinderDeps');
+		expect(content).toContain('bindCellDuringScroll(deps.cellBinderDeps');
 	});
 
 	it('row renderer style hook paths report faults through runtime diagnostics', () => {

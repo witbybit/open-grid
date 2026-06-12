@@ -22,6 +22,8 @@
 | 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)     | REVIEW | bb60b76 |
 | 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md) | REVIEW | bb60b76 |
 | 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)       | REVIEW | bb60b76 |
+| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)             | REVIEW | bb60b76 |
+| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                         | REVIEW | bb60b76 |
 
 ## Execution order
 
@@ -45,6 +47,8 @@
 18. `018-runtime-fault-diagnostics-boundary.md` - P0 runtime hardening after 017; normalizes fault capture across event/state/plugin/server paths so the core has one owned diagnostic surface before renderer refactors
 19. `019-render-engine-orchestration-boundary.md` - P0 renderer hardening after 018; extracts invalidation wiring and gated paint scheduling so `RenderEngine` becomes a coordinator before deeper row-slot decomposition
 20. `020-row-renderer-maintenance-boundary.md` - P0 renderer hardening after 019; extracts invalidation repaint and scroll-idle repair so `RowRenderer` is more focused before deeper slot and cell decomposition
+21. `021-row-cell-binding-lane-boundary.md` - P0 renderer hardening after 020; routes left/center/right lane binding through a dedicated helper before extracting hotter per-cell binding logic
+22. `022-row-cell-binder-boundary.md` - P0 renderer hardening after 021; routes the live cell-binding path through a dedicated binder before retiring leftover RowRenderer wrappers
 
 ## Dependency graph
 
@@ -69,6 +73,8 @@
 018  (runtime fault diagnostics)    - follows 017; required before renderer refactors so async/listener/plugin/server failures report through one core-owned path
 019  (render-engine orchestration)  - follows 018; first renderer decomposition pass so render orchestration policy moves out of the main engine class before rowRenderer work
 020  (row-renderer maintenance)     - follows 019; moves repaint and scroll-idle repair out of RowRenderer before row-slot and cell-binding decomposition
+021  (row-cell binding lanes)       - follows 020; moves lane-level left/center/right binding orchestration out of the main renderer path before per-cell binder extraction
+022  (row-cell binder)              - follows 021; moves live per-cell binding policy out of RowRenderer before wrapper cleanup and final slot-lifecycle narrowing
 ```
 
 ## Notes
@@ -95,6 +101,10 @@
 - Plan 019 is implemented in the working tree and verified on 2026-06-12: renderer invalidation wiring now lives in `RenderInvalidationCoordinator.ts`, render stat snapshot/reset logic lives in `renderTelemetry.ts`, `renderEngine.ts` is down to 903 lines, and core/React/demo verification passed. React tests still emit the known `OpenGrid requires one of...` validation error during an intentional misuse test, but the suite exits green.
 - Plan 020 is the next renderer hardening step: move invalidation repaint and post-scroll dirty repair into a dedicated maintenance helper so `RowRenderer` can concentrate on slot lifecycle and hot-path cell binding.
 - Plan 020 is implemented in the working tree and verified on 2026-06-12: invalidation repaint and scroll-idle repair now live in `rowRenderMaintenance.ts`, renderer style-hook faults in the row path report through `rendererFaults.ts`, `rowRenderer.ts` is down to 1531 lines, and core/React/demo verification passed. As before, React tests emit the known `OpenGrid requires one of...` validation error during an intentional misuse test, but the suite exits green.
+- Plan 021 is the next renderer slice: move live left/center/right lane orchestration into a dedicated helper so the remaining `RowRenderer` mass is concentrated in per-cell binding and slot lifecycle.
+- Plan 021 is implemented in the working tree and verified on 2026-06-12: the live row/data and loading lane path now routes through `rowCellBindingLanes.ts`, architecture guards assert the lane helper boundary, and core/React/demo verification passed. `RowRenderer` still retains wrapper mass and dead-size pressure, so the next slice should remove the leftover lane wrappers and extract hotter per-cell binding policy.
+- Plan 022 is the next renderer slice: move the live per-cell binding path through `rowCellBinder.ts` so the remaining RowRenderer pressure is mostly wrapper cleanup and slot-lifecycle ownership.
+- Plan 022 is implemented in the working tree and verified on 2026-06-12: the live lane path now routes per-cell policy through `rowCellBinder.ts`, architecture guards assert the binder boundary through `rowCellBindingLanes.ts`, and core/React/demo verification passed. `RowRenderer` is still 1599 lines because legacy wrapper bodies remain, so the next slice should delete the dead wrappers and continue shrinking toward a true slot-lifecycle shell.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected
