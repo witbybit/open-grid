@@ -37,6 +37,7 @@ import { RowSelectionFeatureController } from '../features/RowSelectionFeatureCo
 import { DataMutationController } from '../features/DataMutationController.js';
 import { GridStateFeatureController } from '../features/GridStateFeatureController.js';
 import { CellNotificationController } from './CellNotificationController.js';
+import { GridStateReactionController } from './GridStateReactionController.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -60,6 +61,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly stateFeature: GridStateFeatureController<TRowData>;
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
+	private readonly stateReactions: GridStateReactionController<TRowData>;
 
 	private rowModel: RowModel<TRowData> | null = null;
 
@@ -110,6 +112,30 @@ export class GridEngine<TRowData = unknown> {
 			requestRender: (reason) => this.requestRender(reason),
 			rowVersions: this.rowVersions,
 		});
+		this.stateReactions = new GridStateReactionController<TRowData>({
+			getStateManager: () => this.stateManager,
+			data: this.data,
+			columns: this.columns,
+			geometry: this.geometry,
+			viewport: this.viewport,
+			selection: this.selection,
+			invalidation: this.invalidation,
+			eventBus: this.eventBus,
+			cellNotifications: this.cellNotifications,
+			getRowModel: () => this.rowModel,
+			getRowHeightsList: (rowModel, rowHeightsRecord, defaultRowHeight) => this.getRowHeightsList(rowModel, rowHeightsRecord, defaultRowHeight),
+			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
+			requestRender: (reason) => this.requestRender(reason),
+			incrementColumnVersion: () => {
+				this.columnVersion++;
+			},
+			incrementGeometryVersion: () => {
+				this.geometryVersion++;
+			},
+			incrementRowModelVersion: () => {
+				this.rowModelVersion++;
+			},
+		});
 
 		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
 
@@ -153,7 +179,7 @@ export class GridEngine<TRowData = unknown> {
 		};
 
 		// Construct StateManager with coordinate state update bridging
-		this.stateManager = new StateManager<TRowData>(initialState, this.handleStateChanges);
+		this.stateManager = new StateManager<TRowData>(initialState, this.stateReactions.handleStateChanges);
 
 		// Initialize changeApplier after stateManager is available
 		this.changeApplier = new GridChangeApplier<TRowData>({
@@ -514,206 +540,6 @@ export class GridEngine<TRowData = unknown> {
 		this.columnFeature.setColumns(columns, undoable);
 	}
 
-	// State-to-coordinate change mapping bridge callback
-	private handleStateChanges = (prevState: GridState<TRowData>, updatedKeys: string[]): void => {
-		let currState = this.stateManager.getState();
-		const updatedSet = new Set(updatedKeys);
-
-		// Synchronize sub-models
-		if (updatedSet.has('columns') || updatedSet.has('columnWidths') || updatedSet.has('defaultColWidth')) {
-			this.columns.updateColumns(currState.columns, currState.columnWidths, currState.defaultColWidth);
-			this.columnVersion++;
-			this.geometryVersion++;
-		}
-
-		if (updatedSet.has('globalVersion')) {
-			this.data.clearValueGetterCache();
-		}
-
-		if (updatedSet.has('globalVersion') || updatedSet.has('sortModel') || updatedSet.has('filterModel')) {
-			this.rowModelVersion++;
-		}
-
-		const rowCountChanged = this.rowModel ? this.rowModel.getVisualRowCount() !== this.geometry.getRowCount() : false;
-		if (
-			this.rowModel &&
-			(updatedSet.has('rowHeights') ||
-				updatedSet.has('defaultRowHeight') ||
-				updatedSet.has('loading') ||
-				updatedSet.has('globalVersion') ||
-				rowCountChanged)
-		) {
-			this.geometry.updateRows(
-				this.getRowHeightsList(this.rowModel, currState.rowHeights, currState.defaultRowHeight),
-				currState.defaultRowHeight
-			);
-			this.geometryVersion++;
-		}
-
-		if (
-			updatedSet.has('selection') ||
-			updatedSet.has('columns') ||
-			// Any change that reshuffles visual row indices invalidates visual-index bounds
-			updatedSet.has('sortModel') ||
-			updatedSet.has('filterModel') ||
-			updatedSet.has('globalVersion') ||
-			updatedSet.has('expansion') ||
-			updatedSet.has('groupBy')
-		) {
-			const rangeBounds = this.selection.calculateRangeBounds(
-				currState.selection.range,
-				(id) => (this.rowModel ? this.rowModel.getVisualIndexByRowId(id) : -1),
-				(field) => this.columns.getColumnIndex(field)
-			);
-			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds) ? currState.selection.bounds : rangeBounds;
-			const selection = this.selection.setSelection({
-				...currState.selection,
-				bounds: nextBounds,
-			});
-			if (currState.selection !== selection) {
-				for (const key of this.stateManager.setDerivedState({ selection }, prevState)) {
-					const wasAlreadyUpdated = updatedSet.has(key);
-					updatedSet.add(key);
-					updatedKeys.push(key);
-					if (!wasAlreadyUpdated) {
-						this.stateManager.triggerKeyChange(key, prevState);
-					}
-				}
-				currState = this.stateManager.getState();
-			}
-		}
-
-		if (updatedSet.has('selection')) {
-			this.selection.setSelection(currState.selection);
-			this.invalidation.invalidateOverlay('selection');
-		}
-
-		const needsRangeUpdate =
-			updatedSet.has('columns') ||
-			updatedSet.has('columnWidths') ||
-			updatedSet.has('rowHeights') ||
-			updatedSet.has('globalVersion') ||
-			updatedSet.has('defaultRowHeight') ||
-			updatedSet.has('defaultColWidth') ||
-			updatedSet.has('loading') ||
-			updatedSet.has('rowOverscanPx');
-
-		if (needsRangeUpdate) {
-			const nextRowRange = this.viewport.getVisibleRowRange(this.rowModel ? this.rowModel.getVisualRowCount() : 0);
-			const nextColRange = this.viewport.getVisibleColumnRange(this.columns.getDisplayedColumnCount());
-
-			const rowRangeChanged =
-				!currState.visibleRowRange ||
-				currState.visibleRowRange.startIdx !== nextRowRange.startIdx ||
-				currState.visibleRowRange.endIdx !== nextRowRange.endIdx;
-			const colRangeChanged =
-				!currState.visibleColRange ||
-				currState.visibleColRange.startIdx !== nextColRange.startIdx ||
-				currState.visibleColRange.endIdx !== nextColRange.endIdx;
-
-			if (rowRangeChanged || colRangeChanged) {
-				for (const key of this.stateManager.setDerivedState({ visibleRowRange: nextRowRange, visibleColRange: nextColRange }, prevState)) {
-					const wasAlreadyUpdated = updatedSet.has(key);
-					updatedSet.add(key);
-					updatedKeys.push(key);
-					if (!wasAlreadyUpdated) {
-						this.stateManager.triggerKeyChange(key, prevState);
-					}
-				}
-				currState = this.stateManager.getState();
-			}
-		}
-
-		const notifiedCells = new Set<string>();
-		const notifyCellOnce = (rowId: string, colField: string) => {
-			const key = `${rowId}:${colField}`;
-			if (notifiedCells.has(key)) return;
-			notifiedCells.add(key);
-			this.notifyCellChange(rowId, colField);
-		};
-
-		// Notify coordinate cell subscriptions
-		if (updatedSet.has('selection')) {
-			if (prevState.selection.focus) notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
-			if (currState.selection.focus) notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
-			if (prevState.selection.focus)
-				this.invalidation.invalidateCell(prevState.selection.focus.rowId, prevState.selection.focus.colField, 'focus');
-			if (currState.selection.focus)
-				this.invalidation.invalidateCell(currState.selection.focus.rowId, currState.selection.focus.colField, 'focus');
-		}
-
-		if (updatedSet.has('activeEdit')) {
-			if (prevState.activeEdit) notifyCellOnce(prevState.activeEdit.rowId, prevState.activeEdit.colField);
-			if (currState.activeEdit) notifyCellOnce(currState.activeEdit.rowId, currState.activeEdit.colField);
-		}
-
-		if (updatedSet.has('selection')) {
-			const rowModel = this.rowModel;
-			if (rowModel) {
-				const viewport = this.getSelectionNotificationViewport();
-				const displayedColumns = this.columns.getDisplayedColumns();
-				this.selection.forEachDirtyCoordinateInViewport(
-					prevState.selection.bounds,
-					currState.selection.bounds,
-					viewport,
-					(rowIdx, colIdx) => {
-						const visualRow = rowModel.getVisualRow(rowIdx);
-						const col = displayedColumns[colIdx];
-						if (visualRow?.kind === 'data' && col) {
-							notifyCellOnce(visualRow.rowId, col.field);
-							this.invalidation.invalidateCell(visualRow.rowId, col.field, 'selection');
-						}
-					}
-				);
-			}
-		}
-
-		if (updatedSet.has('columnWidths')) {
-			const prevWidths = prevState.columnWidths;
-			const currWidths = currState.columnWidths;
-			const allCols = new Set([...Object.keys(prevWidths), ...Object.keys(currWidths)]);
-			allCols.forEach((colField) => {
-				if (prevWidths[colField] !== currWidths[colField]) {
-					this.cellNotifications.notifyColumnSubscribers(colField);
-				}
-			});
-		}
-
-		if (updatedSet.has('globalVersion')) {
-			this.cellNotifications.notifyAllCellSubscribers();
-		}
-
-		// Propagate structured events
-		if (updatedSet.has('selection') && prevState.selection.focus !== currState.selection.focus) {
-			this.eventBus.dispatchEvent(GridEventName.focusChanged, { focus: currState.selection.focus, selection: currState.selection });
-		}
-		if (updatedSet.has('selection')) {
-			this.eventBus.dispatchEvent(GridEventName.selectionChanged, {
-				selection: currState.selection,
-				result: this.selection.describeChange(prevState.selection, currState.selection, this.rowModel, currState.columns),
-			});
-			this.requestRender('selection');
-		}
-		if (updatedSet.has('sortModel')) {
-			this.eventBus.dispatchEvent(GridEventName.sortChanged, { sortModel: currState.sortModel });
-		}
-		if (updatedSet.has('filterModel')) {
-			this.eventBus.dispatchEvent(GridEventName.filterChanged, { filterModel: currState.filterModel });
-		}
-		if (updatedSet.has('groupBy')) {
-			this.eventBus.dispatchEvent(GridEventName.groupByChanged, { groupBy: currState.groupBy });
-		}
-		if (updatedSet.has('aggDefs')) {
-			this.eventBus.dispatchEvent(GridEventName.aggDefsChanged, { aggDefs: currState.aggDefs });
-		}
-		if (updatedSet.has('showGroupFooter')) {
-			this.eventBus.dispatchEvent(GridEventName.showGroupFooterChanged, { showGroupFooter: currState.showGroupFooter });
-		}
-		if (updatedSet.has('enableStickyGroupRows')) {
-			this.eventBus.dispatchEvent(GridEventName.enableStickyGroupRowsChanged, { enableStickyGroupRows: currState.enableStickyGroupRows });
-		}
-	};
-
 	private requestRender(reason: string): void {
 		if (this.renderTransactionDepth > 0) {
 			this.pendingRenderReason = this.pendingRenderReason ? `${this.pendingRenderReason}+${reason}` : reason;
@@ -735,47 +561,6 @@ export class GridEngine<TRowData = unknown> {
 		if (reason) {
 			this.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason });
 		}
-	}
-
-	private areRangeBoundsEqual(
-		left: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null,
-		right: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null
-	): boolean {
-		return (
-			left === right ||
-			(!!left &&
-				!!right &&
-				left.minRow === right.minRow &&
-				left.maxRow === right.maxRow &&
-				left.minCol === right.minCol &&
-				left.maxCol === right.maxCol)
-		);
-	}
-
-	private getSelectionNotificationViewport(): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
-		const state = this.stateManager.getState();
-		const rowCount = this.rowModel ? this.rowModel.getVisualRowCount() : 0;
-		const colCount = this.columns.getDisplayedColumnCount();
-
-		if (rowCount === 0 || colCount === 0) {
-			return { minRow: 1, maxRow: 0, minCol: 1, maxCol: 0 };
-		}
-
-		const rowStart = Math.max(0, Math.min(state.visibleRowRange.startIdx, rowCount - 1));
-		const rowEnd = Math.max(rowStart, Math.min(state.visibleRowRange.endIdx, rowCount - 1));
-		const colStart = Math.max(0, Math.min(state.visibleColRange.startIdx, colCount - 1));
-		const colEnd = Math.max(colStart, Math.min(state.visibleColRange.endIdx, colCount - 1));
-		const topEnd = this.viewport.pinTopRows > 0 ? Math.min(rowCount - 1, this.viewport.pinTopRows - 1) : rowStart;
-		const bottomStart = this.viewport.pinBottomRows > 0 ? Math.max(0, rowCount - this.viewport.pinBottomRows) : rowEnd;
-		const leftEnd = this.viewport.pinLeftColumns > 0 ? Math.min(colCount - 1, this.viewport.pinLeftColumns - 1) : colStart;
-		const rightStart = this.viewport.pinRightColumns > 0 ? Math.max(0, colCount - this.viewport.pinRightColumns) : colEnd;
-
-		return {
-			minRow: Math.min(rowStart, topEnd, bottomStart),
-			maxRow: Math.max(rowEnd, topEnd, bottomStart),
-			minCol: Math.min(colStart, leftEnd, rightStart),
-			maxCol: Math.max(colEnd, leftEnd, rightStart),
-		};
 	}
 
 	public undo(): void {

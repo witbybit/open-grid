@@ -14,7 +14,7 @@
 | 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)               | DONE   | 53fe61f |
 | 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)           | REVIEW | 39c83e3 |
 | 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)         | DONE   | 39c83e3 |
-| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)             | TODO   | 94c9453 |
+| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)             | DONE   | 94c9453 |
 | 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                         | TODO   | 94c9453 |
 
 ## Execution order
@@ -61,7 +61,7 @@
 - Plan 010 was implemented in the recent architecture hardening commits and should be treated as the baseline for future plans.
 - Plan 011 was implemented at `39c83e3` and reviewed. It improved file boundaries, but core tests are red in `fillRange.test.ts`, `GridEngine.ts < 800` is still skipped, and feature controllers do not yet consistently use `GridChangeApplier`.
 - Plan 012 is implemented and verified on 2026-06-12: core build/test, React build/test, and sequential demo build pass. It fixed the formula fill regression and established the data mutation kernel.
-- Plan 013 is the next required architecture lock-in before feature work: reduce `GridEngine.ts` below the real 800-line guard, extract subscription/state-reaction responsibilities, close remaining raw feature side-effect access, type `GridChange.reason`, and remove React's remaining `@open-grid/core/internal` chart seam.
+- Plan 013 is implemented and verified on 2026-06-12: `GridEngine.ts` is now below the active 800-line guard, subscription batching and state-reaction logic are extracted, feature controllers route through the narrowed effect boundary, and React's chart overlay no longer imports `@open-grid/core/internal`.
 - Plan 014 should follow immediately after 013. Its goal is to remove the remaining concrete runtime cycle between `GridStore`, `GridEngine`, `models`, and `rowModel`, which is the biggest remaining reason feature work still fans out across multiple files.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
