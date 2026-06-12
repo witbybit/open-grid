@@ -187,50 +187,6 @@ export function applyPersistedState<TRowData>(
 	return result;
 }
 
-/**
- * Apply a loaded PersistedGridState to a live grid via its API.
- * Used for async adapters that resolve after the grid is already mounted.
- */
-export function applyPersistedStateViaApi<TRowData>(
-	api: import('../store.js').GridApi<TRowData>,
-	saved: PersistedGridState,
-	columns: ColumnDef<TRowData>[]
-): void {
-	const knownFields = new Set((columns as ColumnDef<unknown>[]).map((c) => c.field));
-
-	if (saved.columnOrder) {
-		const validOrder = saved.columnOrder.filter((f) => knownFields.has(f));
-		if (validOrder.length === columns.length) api.setColumnOrder(validOrder);
-	}
-	if (saved.columnVisibility) {
-		const hidden = Object.entries(saved.columnVisibility)
-			.filter(([, v]) => v === false)
-			.map(([f]) => f)
-			.filter((f) => knownFields.has(f));
-		const visible = Object.entries(saved.columnVisibility)
-			.filter(([, v]) => v === true)
-			.map(([f]) => f)
-			.filter((f) => knownFields.has(f));
-		if (hidden.length > 0) api.setColumnsVisible(hidden, false);
-		if (visible.length > 0) api.setColumnsVisible(visible, true);
-	}
-	if (saved.columnWidths) {
-		for (const [field, width] of Object.entries(saved.columnWidths)) {
-			if (knownFields.has(field)) api.setColumnWidth(field, width);
-		}
-	}
-	if (saved.sortModel !== undefined) {
-		if (saved.sortModel === null || (Array.isArray(saved.sortModel) && saved.sortModel.every((s) => knownFields.has(s.colId)))) {
-			api.setSortModel(saved.sortModel);
-		}
-	}
-	if (saved.filterModel !== undefined) api.setFilterModel(saved.filterModel);
-	if (saved.groupBy !== undefined) api.setGroupBy(saved.groupBy.filter((f) => knownFields.has(f)));
-	if (saved.showGroupFooter !== undefined) api.setShowGroupFooter(saved.showGroupFooter);
-	if (saved.enableStickyGroupRows !== undefined) api.setStickyGroupRows(saved.enableStickyGroupRows);
-	if (saved.pinnedColumns !== undefined) api.setPinnedColumns(saved.pinnedColumns);
-}
-
 function debounce(fn: () => void, ms: number): (() => void) & { flush(): void; cancel(): void } {
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	const debounced = () => {
@@ -276,10 +232,10 @@ const PERSISTENCE_KEYS = [
  * Wire persistence to the grid via key-specific subscriptions.
  * Returns a controller that exposes auto-save toggle and save status.
  */
-export function createPersistenceSubscription<TRowData>(
+export function createPersistenceSubscription(
 	adapter: GridPersistenceAdapter,
 	subscribeToKey: (key: string, listener: () => void) => () => void,
-	getState: () => GridState<TRowData>,
+	getGridState: () => PersistedGridState,
 	debounceMs = 500
 ): PersistenceController {
 	let autoSave = true;
@@ -293,7 +249,7 @@ export function createPersistenceSubscription<TRowData>(
 
 	function performSave(): void {
 		if (!autoSave) return;
-		const snapshot = extractPersistedState(getState() as GridState);
+		const snapshot = getGridState();
 		setStatus({ status: 'saving', autoSave, lastSavedAt: currentStatus.lastSavedAt });
 		try {
 			const result = adapter.save(snapshot);

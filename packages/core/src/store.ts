@@ -5,7 +5,8 @@ import { GridEngine } from './engine/GridEngine.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
-import type { PersistenceStatus } from './persistence/statePersistence.js';
+import type { PersistenceStatus, PersistedGridState } from './persistence/statePersistence.js';
+import { extractPersistedState } from './persistence/statePersistence.js';
 
 // ── Focused sub-modules — re-export so callers of store.ts continue to work ──
 export { RowNode } from './rowNode.js';
@@ -15,6 +16,8 @@ export type {
 	CellCopyParams,
 	CellPasteParams,
 	ValueGetterParams,
+	ValueValidatorParams,
+	ValueSetterParams,
 	CellRendererPhase,
 	CellRendererCapabilities,
 	ImperativeCellHandle,
@@ -44,6 +47,7 @@ export {
 export type { DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow, VisualRow } from './visualRow.js';
 
 export type { PersistenceStatus };
+export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';
 
 // ── Internal imports (for use by definitions in this file) ───────────────────
 import { RowNode } from './rowNode.js';
@@ -61,6 +65,12 @@ export interface CellSubscription {
 export interface GridCellPointer {
 	rowId: string;
 	colField: string;
+}
+
+/** Extended pointer used for the active edit slot — carries optional validation state. */
+export interface ActiveEditState extends GridCellPointer {
+	/** Non-null when validation has failed; shown below the cell editor. */
+	validationError?: string | null;
 }
 
 export interface CellPointer {
@@ -354,68 +364,50 @@ export interface HeaderMenuRendererProps<TRowData = unknown> {
 
 // ── Grid state ────────────────────────────────────────────────────────────────
 
-export interface GridState<TRowData = unknown> {
+/**
+ * User-configured and persisted fields.
+ * Serialize this slice to localStorage / server for state restoration.
+ * All fields either come from the user at construction time or are mutated
+ * by explicit user actions (sort, filter, column resize, etc.).
+ */
+export interface GridModelState<TRowData = unknown> {
 	getRowId?: (row: TRowData) => string;
 	columns: ColumnDef<TRowData>[];
-	loading?: boolean;
-	loadingSkeletonCount?: number;
-
-	selection: GridSelectionState;
-
-	// Row-level multi-select (independent of cell range selection)
-	selectedRowIds: string[];
-
-	rowHeights: Record<string, number>; // rowId -> height in px
-	columnWidths: Record<string, number>; // colField -> width in px
 	defaultRowHeight: number;
 	defaultColWidth: number;
 	enableColumnReorder: boolean;
 
-	// Active edit state registers
-	activeEdit: GridCellPointer | null;
+	rowHeights: Record<string, number>; // rowId -> height in px
+	columnWidths: Record<string, number>; // colField -> width in px
 
-	// Sorting & Filtering State
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
 
-	// Sidebar UI state
-	sidebarOpenPanel?: string | null;
-
-	// Chart overlay UI state
-	chartOpen?: boolean;
-
-	// Tree / Grouping / Master-Detail State
 	groupBy?: string[];
 	aggDefs?: AggregationDef<TRowData>[];
 	showGroupFooter?: boolean;
 	enableStickyGroupRows?: boolean;
 	showGroupPanel?: boolean;
 	pinnedColumns?: { left: number; right: number };
-	getParentId?: (row: TRowData) => string | null | undefined;
-	masterDetailEnabled?: boolean;
-	groupRowHeight?: number;
-	detailRowHeight?: number;
-	detailRenderer?: unknown;
-	rowModelConfig?: import('./rowModel.js').RowModelConfig<TRowData>;
+
+	selectedRowIds: string[];
+
 	expansion: {
 		groups: Record<string, true>;
 		treeRows: Record<string, true>;
 		details: Record<string, true>;
 	};
 
-	// Incremented on any change that restructures the visual row set (sort, filter, group, row add/remove).
-	// Used by the renderer to detect when all frozen portals need thawing.
-	globalVersion: number;
+	// Row model configuration — structural, not persisted for serialization
+	getParentId?: (row: TRowData) => string | null | undefined;
+	masterDetailEnabled?: boolean;
+	groupRowHeight?: number;
+	detailRowHeight?: number;
+	detailRenderer?: unknown;
+	rowModelConfig?: import('./rowModel.js').RowModelConfig<TRowData>;
 
-	// 2D Recycled Viewport Range states
-	visibleRowRange: ViewportRange;
-	visibleColRange: ViewportRange;
-
+	// Render tuning config
 	styleSlots?: GridStyleSlots<TRowData>;
-	/**
-	 * Pixel height of the pre-render buffer above and below the visible viewport.
-	 * Default: 400px (roughly 10 rows at the default 40px row height).
-	 */
 	rowOverscanPx?: number;
 	colBuffer?: number;
 	runtimeLimits?: {
@@ -423,12 +415,48 @@ export interface GridState<TRowData = unknown> {
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
 	};
-	/**
-	 * When true, the overscan buffer automatically expands in the scroll direction proportional
-	 * to scroll velocity, reducing blank-band flashes during fast scrolling.
-	 * Default: false.
-	 */
 	overscanAdaptive?: boolean;
+}
+
+/**
+ * Derived, ephemeral runtime state.
+ * Never persist this slice — it is recomputed on every render cycle.
+ */
+export interface GridRuntimeState {
+	// Incremented on any change that restructures the visual row set (sort, filter, group, row add/remove).
+	globalVersion: number;
+	// 2D recycled viewport range states
+	visibleRowRange: ViewportRange;
+	visibleColRange: ViewportRange;
+	// Cell range selection (focus, anchor, range, bounds)
+	selection: GridSelectionState;
+}
+
+/**
+ * Transient UI state — session-only, not persisted by default.
+ * Controls loading indicators, open panels, active editor, etc.
+ */
+export interface GridUIState {
+	loading?: boolean;
+	loadingSkeletonCount?: number;
+	activeEdit: ActiveEditState | null;
+	sidebarOpenPanel?: string | null;
+	chartOpen?: boolean;
+}
+
+/**
+ * Full grid state: intersection of model, runtime, and UI slices.
+ * Preserved as a single type for backward compat — all existing code that
+ * reads or writes `GridState` fields continues to compile unchanged.
+ * Future: callers will migrate to reading from the specific slice they need.
+ */
+export type GridState<TRowData = unknown> = GridModelState<TRowData> & GridRuntimeState & GridUIState;
+
+/** Serializable snapshot of a single column's user-configurable state. */
+export interface ColumnState {
+	field: string;
+	width?: number;
+	hide?: boolean;
 }
 
 export interface GridCellRangeBounds {
@@ -616,6 +644,22 @@ export interface GridApi<TRowData = unknown> {
 	dispatchEvent<K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void;
 	startEditing(rowId: string, colField: string): void;
 	stopEditing(cancel?: boolean): void;
+	/**
+	 * Async commit of an in-progress edit.
+	 * Runs `valueValidator` first (if defined). If validation passes, optimistically applies the
+	 * value, then runs `valueSetter` (if defined). If the setter rejects, rolls back and surfaces
+	 * a validation error on `activeEdit.validationError`.
+	 * Returns true when the commit succeeded and `stopEditing` was called.
+	 */
+	commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean>;
+	/** Returns a per-column snapshot of the current user-configurable state (width, visibility) in display order. */
+	getColumnState(): ColumnState[];
+	/** Apply a partial column state array. Only fields present in `states` are updated; others are unchanged. */
+	applyColumnState(states: ColumnState[]): void;
+	/** Returns a full serializable snapshot of the current grid state (columns, sort, filter, grouping, pinning). */
+	getGridState(): import('./persistence/statePersistence.js').PersistedGridState;
+	/** Apply a serializable grid state snapshot, updating all covered fields. Unknown fields are ignored. */
+	applyGridState(state: import('./persistence/statePersistence.js').PersistedGridState): void;
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
 	getColumnIndex(colField: string): number;
@@ -1151,6 +1195,120 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public stopEditing = (cancel: boolean = false): void => {
 		this.engine.stopEdit(cancel);
+	};
+
+	public commitEdit = async (rowId: string, colField: string, value: unknown): Promise<boolean> => {
+		const col = this.engine.columns.getColumnDef(colField);
+		const oldValue = this.engine.data.getRawCellValue(rowId, colField);
+		const node = this.engine.getRowModel()?.getRowNodeById(rowId);
+		const row = node?.data ?? ({} as TRowData);
+
+		// Step 1: validate
+		if (col?.valueValidator) {
+			let error: string | null = null;
+			try {
+				error = await col.valueValidator({ value, oldValue, row, colField });
+			} catch {
+				error = 'Validation failed';
+			}
+			if (error) {
+				const activeEdit = this.engine.stateManager.getState().activeEdit;
+				if (activeEdit?.rowId === rowId && activeEdit?.colField === colField) {
+					this.engine.stateManager.setState({ activeEdit: { ...activeEdit, validationError: error } });
+					this.engine.notifyCellChange(rowId, colField);
+				}
+				return false;
+			}
+		}
+
+		// Step 2: optimistic update
+		this.engine.setCellValue(rowId, colField, value);
+
+		// Step 3: async valueSetter (server-side confirm)
+		if (col?.valueSetter) {
+			let didAbort = false;
+			const abort = () => {
+				didAbort = true;
+			};
+			let success = true;
+			try {
+				success = await col.valueSetter({ value, oldValue, row, colField, abort });
+			} catch {
+				success = false;
+			}
+			if (!success || didAbort) {
+				// Roll back the optimistic update
+				this.engine.setCellValue(rowId, colField, oldValue, false);
+				const activeEdit = this.engine.stateManager.getState().activeEdit;
+				if (activeEdit?.rowId === rowId && activeEdit?.colField === colField) {
+					this.engine.stateManager.setState({ activeEdit: { ...activeEdit, validationError: 'Save failed' } });
+					this.engine.notifyCellChange(rowId, colField);
+				}
+				return false;
+			}
+		}
+
+		// Step 4: close the editor
+		this.engine.stopEdit(false);
+		return true;
+	};
+
+	public getColumnState = (): ColumnState[] => {
+		const state = this.engine.stateManager.getState();
+		return state.columns.map((col) => {
+			const cs: ColumnState = { field: col.field };
+			const width = state.columnWidths[col.field];
+			if (width !== undefined) cs.width = width;
+			if (col.hide) cs.hide = true;
+			return cs;
+		});
+	};
+
+	public applyColumnState = (states: ColumnState[]): void => {
+		for (const cs of states) {
+			if (cs.width !== undefined) this.setColumnWidth(cs.field, cs.width);
+			if (cs.hide !== undefined) this.setColumnVisible(cs.field, !cs.hide);
+		}
+	};
+
+	public getGridState = (): PersistedGridState => {
+		return extractPersistedState(this.engine.stateManager.getState() as GridState);
+	};
+
+	public applyGridState = (state: PersistedGridState): void => {
+		const columns = this.engine.stateManager.getState().columns;
+		const knownFields = new Set(columns.map((c) => c.field));
+		if (state.columnOrder) {
+			const validOrder = state.columnOrder.filter((f) => knownFields.has(f));
+			if (validOrder.length === columns.length) this.setColumnOrder(validOrder);
+		}
+		if (state.columnVisibility) {
+			const hidden = Object.entries(state.columnVisibility)
+				.filter(([, v]) => v === false)
+				.map(([f]) => f)
+				.filter((f) => knownFields.has(f));
+			const visible = Object.entries(state.columnVisibility)
+				.filter(([, v]) => v === true)
+				.map(([f]) => f)
+				.filter((f) => knownFields.has(f));
+			if (hidden.length > 0) this.setColumnsVisible(hidden, false);
+			if (visible.length > 0) this.setColumnsVisible(visible, true);
+		}
+		if (state.columnWidths) {
+			for (const [field, width] of Object.entries(state.columnWidths)) {
+				if (knownFields.has(field)) this.setColumnWidth(field, width);
+			}
+		}
+		if (state.sortModel !== undefined) {
+			if (state.sortModel === null || (Array.isArray(state.sortModel) && state.sortModel.every((s) => knownFields.has(s.colId)))) {
+				this.setSortModel(state.sortModel);
+			}
+		}
+		if (state.filterModel !== undefined) this.setFilterModel(state.filterModel);
+		if (state.groupBy !== undefined) this.setGroupBy(state.groupBy.filter((f) => knownFields.has(f)));
+		if (state.showGroupFooter !== undefined) this.setShowGroupFooter(state.showGroupFooter);
+		if (state.enableStickyGroupRows !== undefined) this.setStickyGroupRows(state.enableStickyGroupRows);
+		if (state.pinnedColumns !== undefined) this.setPinnedColumns(state.pinnedColumns);
 	};
 
 	public registerRowModel = (rowModel: RowModel<TRowData>): void => {

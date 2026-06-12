@@ -3,6 +3,7 @@ import { ServerRowModelController, type IGridDatasource, type ServerRowModelOpti
 import {
 	GridStore,
 	type ColumnDef,
+	type ColumnState,
 	type CsvExportOptions,
 	type GridApi,
 	type GridCellPointer,
@@ -43,7 +44,6 @@ import {
 	type PersistenceStatus,
 	createLocalStorageAdapter,
 	applyPersistedState,
-	applyPersistedStateViaApi,
 	createPersistenceSubscription,
 } from './persistence/statePersistence.js';
 
@@ -155,6 +155,11 @@ export function createApiFacade<TRowData>(
 		dispatchEvent: store.dispatchEvent,
 		startEditing: (rowId: string, colField: string) => store.startEditing(rowId, colField),
 		stopEditing: (cancel?: boolean) => store.stopEditing(cancel),
+		commitEdit: (rowId: string, colField: string, value: unknown) => store.commitEdit(rowId, colField, value),
+		getColumnState: () => store.getColumnState(),
+		applyColumnState: (states: ColumnState[]) => store.applyColumnState(states),
+		getGridState: () => store.getGridState(),
+		applyGridState: (state: PersistedGridState) => store.applyGridState(state),
 		toggleGroupExpanded: (groupId: string) => store.toggleGroupExpanded(groupId),
 		toggleDetailExpanded: (rowId: string) => store.toggleDetailExpanded(rowId),
 		isGroupExpanded: (groupId: string) => store.isGroupExpanded(groupId),
@@ -211,7 +216,7 @@ function wireGridPersistence<TRowData>(
 		adapter,
 		// Wrap subscribeToKey — persistence listener only needs () => void, extra args are ignored at runtime
 		(key, cb) => store.subscribeToKey(key, cb as Parameters<typeof store.subscribeToKey>[1]),
-		() => store.getState(),
+		() => store.getGridState(),
 		adapter.debounceMs ?? 500
 	);
 }
@@ -280,7 +285,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 	if (asyncLoad) {
 		asyncLoad
 			.then((saved) => {
-				if (saved) applyPersistedStateViaApi(api as GridApi<TRowData>, saved, options.columns);
+				if (saved) api.applyGridState(saved);
 			})
 			.catch(() => {
 				/* load failure — grid stays in default state */
@@ -330,7 +335,7 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 	if (asyncLoad) {
 		asyncLoad
 			.then((saved) => {
-				if (saved) applyPersistedStateViaApi(api as GridApi<TRowData>, saved, options.columns);
+				if (saved) api.applyGridState(saved);
 			})
 			.catch(() => {
 				/* load failure — grid stays in default state */

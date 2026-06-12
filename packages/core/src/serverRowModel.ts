@@ -182,9 +182,11 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		if (!node) return false;
 
 		const col = this.store.getColumnDef(colField);
+		const oldValue = this.store.getCellValue(rowId, colField);
 		const updatedRow = { ...node.data };
 		if (col?.valueSetter) {
-			if (!col.valueSetter(updatedRow, value)) return false;
+			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
+			if (!(result instanceof Promise) && !result) return false;
 		} else {
 			setValueByPath(updatedRow, colField, value);
 		}

@@ -8,12 +8,28 @@ import type { RowNode } from './rowNode.js';
 import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState, GridCellAccess } from './store.js';
 import type { GroupVisualRow, DetailVisualRow } from './visualRow.js';
 
-// ─── Value getter params ──────────────────────────────────────────────────────
+// ─── Value getter / setter / validator params ─────────────────────────────────
 
 export interface ValueGetterParams<TRowData = unknown> {
 	node: RowNode<TRowData>;
 	row: TRowData;
 	colField: string;
+}
+
+export interface ValueValidatorParams<TRowData = unknown> {
+	value: unknown;
+	oldValue: unknown;
+	row: TRowData;
+	colField: string;
+}
+
+export interface ValueSetterParams<TRowData = unknown> {
+	value: unknown;
+	oldValue: unknown;
+	row: TRowData;
+	colField: string;
+	/** Call to signal that the server rejected the value and the grid should roll back. */
+	abort: () => void;
 }
 
 // ─── Cell renderer phase + capabilities ──────────────────────────────────────
@@ -171,7 +187,19 @@ export interface ColumnDef<TRowData = unknown> {
 	loading?: boolean;
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
 	valueGetterDependencies?: string[];
-	valueSetter?: (row: TRowData, value: unknown) => boolean;
+	/**
+	 * Called before committing an edit to validate the new value.
+	 * Return a non-empty string to block the commit and surface an error message.
+	 * Supports async (return a Promise) for server-side checks.
+	 */
+	valueValidator?: (params: ValueValidatorParams<TRowData>) => string | null | Promise<string | null>;
+	/**
+	 * Called during commit to apply the value to the row's data object.
+	 * Sync: return false to reject. Async: return Promise<false> to reject after optimistic update.
+	 * Call params.abort() to trigger an immediate rollback.
+	 * Breaking change from v1: params object replaces the old (row, value) signature.
+	 */
+	valueSetter?: (params: ValueSetterParams<TRowData>) => boolean | Promise<boolean>;
 	renderer?: ColumnRendererSpec<TRowData>;
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
 	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;

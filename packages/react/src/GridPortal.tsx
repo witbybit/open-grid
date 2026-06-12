@@ -16,6 +16,7 @@ import {
 	GridEventName,
 	RowNode,
 	VisualRow,
+	type ActiveEditState,
 	type CellRendererPhase,
 	type ImperativeCellHandle,
 	isDomCellRenderer,
@@ -67,6 +68,14 @@ function PortalCellInner<TRowData = unknown>({
 	const isCancelledRef = useRef(false);
 	const isCommittedRef = useRef(!isEditing);
 
+	// Subscribe to activeEdit to get live validationError from the store
+	const activeEditState = useSyncExternalStore(
+		(cb) => api.subscribeToKey('activeEdit', () => cb()),
+		() => api.getState().activeEdit as ActiveEditState | null
+	);
+	const validationError =
+		activeEditState?.rowId === rowId && activeEditState?.colField === colField ? (activeEditState.validationError ?? null) : null;
+
 	useEffect(() => {
 		if (isEditing) {
 			isCancelledRef.current = false;
@@ -81,6 +90,7 @@ function PortalCellInner<TRowData = unknown>({
 				if (event.payload.cancel) {
 					isCancelledRef.current = true;
 				} else if (isEditing && !isCommittedRef.current) {
+					// Fallback: stopEditing was called externally (e.g. navigation) without commitEdit
 					isCommittedRef.current = true;
 					api.setCellValue(rowId, colField, localValueRef.current);
 				}
@@ -96,8 +106,8 @@ function PortalCellInner<TRowData = unknown>({
 			isCommittedRef.current = true;
 			const isEvent = finalValue && typeof finalValue === 'object' && ('nativeEvent' in finalValue || 'target' in finalValue);
 			const valToCommit = finalValue !== undefined && !isEvent ? finalValue : localValueRef.current;
-			api.setCellValue(rowId, colField, valToCommit);
-			api.stopEditing();
+			// Use commitEdit so validation and async valueSetter run before the edit closes
+			void api.commitEdit(rowId, colField, valToCommit);
 		},
 		[api, rowId, colField]
 	);
@@ -126,60 +136,87 @@ function PortalCellInner<TRowData = unknown>({
 			: undefined;
 
 	return (
-		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
+		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', position: 'relative' }}>
 			{isEditing ? (
-				CustomEditor ? (
-					<div
-						style={{ width: '100%', height: '100%' }}
-						onMouseDown={(e) => e.stopPropagation()}
-						onDoubleClick={(e) => e.stopPropagation()}
-						onKeyDown={(e) => {
-							if (e.defaultPrevented) return;
-							if (e.key === 'Enter') {
-								e.stopPropagation();
-								handleCommit();
-							} else if (e.key === 'Escape') {
-								e.stopPropagation();
-								handleCancel();
-							}
-						}}
-					>
-						{createElement(CustomEditor, {
-							rowId,
-							colField,
-							value: localValue,
-							onChange: (val: unknown) => {
-								setLocalValue(val);
-								localValueRef.current = val;
-							},
-							api,
-							onCommit: handleCommit,
-							onCancel: handleCancel,
-						})}
-					</div>
-				) : (
-					<input
-						autoFocus
-						className='og-cell-editor'
-						value={typeof localValue === 'string' || typeof localValue === 'number' ? String(localValue) : ''}
-						onChange={(e) => {
-							setLocalValue(e.target.value);
-							localValueRef.current = e.target.value;
-						}}
-						onMouseDown={(e) => e.stopPropagation()}
-						onDoubleClick={(e) => e.stopPropagation()}
-						onBlur={() => handleCommit()}
-						onKeyDown={(e) => {
-							if (e.key === 'Enter') {
-								e.stopPropagation();
-								handleCommit();
-							} else if (e.key === 'Escape') {
-								e.stopPropagation();
-								handleCancel();
-							}
-						}}
-					/>
-				)
+				<>
+					{CustomEditor ? (
+						<div
+							style={{ width: '100%', height: '100%' }}
+							onMouseDown={(e) => e.stopPropagation()}
+							onDoubleClick={(e) => e.stopPropagation()}
+							onKeyDown={(e) => {
+								if (e.defaultPrevented) return;
+								if (e.key === 'Enter') {
+									e.stopPropagation();
+									handleCommit();
+								} else if (e.key === 'Escape') {
+									e.stopPropagation();
+									handleCancel();
+								}
+							}}
+						>
+							{createElement(CustomEditor, {
+								rowId,
+								colField,
+								value: localValue,
+								onChange: (val: unknown) => {
+									setLocalValue(val);
+									localValueRef.current = val;
+								},
+								api,
+								onCommit: handleCommit,
+								onCancel: handleCancel,
+							})}
+						</div>
+					) : (
+						<input
+							autoFocus
+							className='og-cell-editor'
+							value={typeof localValue === 'string' || typeof localValue === 'number' ? String(localValue) : ''}
+							onChange={(e) => {
+								setLocalValue(e.target.value);
+								localValueRef.current = e.target.value;
+							}}
+							onMouseDown={(e) => e.stopPropagation()}
+							onDoubleClick={(e) => e.stopPropagation()}
+							onBlur={() => handleCommit()}
+							onKeyDown={(e) => {
+								if (e.key === 'Enter') {
+									e.stopPropagation();
+									handleCommit();
+								} else if (e.key === 'Escape') {
+									e.stopPropagation();
+									handleCancel();
+								}
+							}}
+						/>
+					)}
+					{validationError && (
+						<div
+							className='og-cell-validation-error'
+							style={{
+								position: 'absolute',
+								top: '100%',
+								left: 0,
+								right: 0,
+								zIndex: 10,
+								background: 'var(--og-validation-error-bg, #fff0f0)',
+								color: 'var(--og-validation-error-color, #c00)',
+								fontSize: '11px',
+								padding: '2px 6px',
+								border: '1px solid var(--og-validation-error-border, #f5a5a5)',
+								borderTop: 'none',
+								borderRadius: '0 0 4px 4px',
+								whiteSpace: 'nowrap',
+								overflow: 'hidden',
+								textOverflow: 'ellipsis',
+							}}
+							role='alert'
+						>
+							{validationError}
+						</div>
+					)}
+				</>
 			) : CustomRenderer && rowData ? (
 				createElement(CustomRenderer, {
 					value,

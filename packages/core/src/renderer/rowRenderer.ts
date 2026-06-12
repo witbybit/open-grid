@@ -3,6 +3,7 @@ import type { GeometryController } from './geometryController.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { InvalidationFrame } from './invalidationManager.js';
+import { SelectionPaintManager } from './selectionPaintManager.js';
 import {
 	type CellRendererPhase,
 	type ColumnDef,
@@ -11,7 +12,6 @@ import {
 	type GridState,
 	type RowNode,
 	type GridCellPointer,
-	type GridRowClassParams,
 	type GridCellClassParams,
 } from '../store.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
@@ -81,7 +81,13 @@ export class RowRenderer<TRowData = unknown> {
 	public styleVersion = 0;
 	public selectionVersion = 0;
 	public loadingVersion = 0;
-	public hoveredRowIndex: number | null = null;
+	/** Forwarded to SelectionPaintManager — renderEngine.ts accesses this directly. */
+	public get hoveredRowIndex(): number | null {
+		return this.selectionPaint.hoveredRowIndex;
+	}
+	public set hoveredRowIndex(v: number | null) {
+		this.selectionPaint.hoveredRowIndex = v;
+	}
 	public deferredFocusCell: HTMLDivElement | null = null;
 	public programmaticScrollCell: GridCellPointer | null = null;
 	public renderStats: any = null;
@@ -129,17 +135,9 @@ export class RowRenderer<TRowData = unknown> {
 	// Reusable scratch for diffRenderWindow() — avoids six array allocations per frame.
 	private readonly _deltaScratch = createEmptyViewportDelta();
 
-	// Pre-allocated scratch objects for styleSlot callbacks — mutated in place before each call
+	// Pre-allocated scratch object for cell styleSlot callbacks — mutated in place before each call
 	// to eliminate per-cell object literal allocation during decoration passes.
-	private readonly _rowClassScratch: GridRowClassParams<TRowData> = {
-		row: null as unknown as TRowData,
-		rowId: '',
-		rowIndex: 0,
-		isFocused: false,
-		isSelected: false,
-		isLoading: false,
-		selection: null as unknown,
-	} as GridRowClassParams<TRowData>;
+	// Row class scratch is owned by SelectionPaintManager.
 	private readonly _cellClassScratch: GridCellClassParams<TRowData> = {
 		row: null as unknown as TRowData,
 		rowId: '',
@@ -160,10 +158,8 @@ export class RowRenderer<TRowData = unknown> {
 
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 
-	// Cached Set for O(1) row-selection checks — rebuilt each recycleViewport frame from selectedRowIds.
-	private _selectedRowIdSet: Set<string> | null = null;
-	private _rowCheckboxAnchorId: string | null = null;
-	private readonly _rowSelectionClickCells = new WeakSet<HTMLElement>();
+	/** Manages row selection paint state, row class building, and row click handling. */
+	public readonly selectionPaint: SelectionPaintManager<TRowData>;
 
 	// Stable slot assigner — single implementation shared with tests.
 	// Internal scratch buffers are reused per call: zero per-frame allocations.
@@ -183,6 +179,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.portalMountManager = portalMountManager;
 		this.cellRenderer = cellRenderer;
 		this.viewportRenderer = viewportRenderer;
+		this.selectionPaint = new SelectionPaintManager<TRowData>(engine);
 	}
 
 	public mount(_estRows: number): void {
@@ -286,7 +283,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.isScrolling = isScrollFrameActive || this.engine.isScrolling;
 
 		const state = ctx?.state ?? this.engine.stateManager.getState();
-		this._selectedRowIdSet = state.selectedRowIds.length > 0 ? new Set(state.selectedRowIds) : null;
+		this.selectionPaint.rebuildSelection(state.selectedRowIds);
 		const nextWindow =
 			precomputedWindow ??
 			applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits, () => {
@@ -508,17 +505,17 @@ export class RowRenderer<TRowData = unknown> {
 				if (r < pinTopRows) rowClassName += ' og-row-pinned-top';
 				else if (r >= nextWindow.rowCount - pinBottomRows) rowClassName += ' og-row-pinned-bottom';
 
-				if (this.hoveredRowIndex === r) rowClassName += ' og-row-hovered';
+				if (this.selectionPaint.hoveredRowIndex === r) rowClassName += ' og-row-hovered';
 				if (isSelectedRow || isFocusedRow) rowClassName += ' og-row-selected';
 				if (isFocusedRow) rowClassName += ' og-row-focused';
-				if (this._selectedRowIdSet?.has(node.id)) rowClassName += ' og-row-node-selected';
+				if (this.selectionPaint.selectedRowIdSet?.has(node.id)) rowClassName += ' og-row-node-selected';
 				if (isLoadingRow) rowClassName += ' og-row-loading';
 
 				if (isScrollFrameActive && state.styleSlots?.rowClass && node.data) {
 					this.dirtyRowsAfterScroll.add(r);
 				} else if (state.styleSlots?.rowClass && node.data) {
 					try {
-						const rs = this._rowClassScratch;
+						const rs = this.selectionPaint.rowClassScratchRef;
 						rs.row = node.data;
 						rs.rowId = node.id;
 						rs.rowIndex = r;
@@ -600,10 +597,7 @@ export class RowRenderer<TRowData = unknown> {
 	// in a new closure on every row bind — the hot path calls these once per lane per row.
 	private readonly _initCell = (el: HTMLDivElement): void => {
 		this.cellRenderer.initializeCell(el);
-		if (!this._rowSelectionClickCells.has(el)) {
-			this._rowSelectionClickCells.add(el);
-			el.addEventListener('click', this.onDataCellClickForRowSelection);
-		}
+		this.selectionPaint.attachClickListenerIfNeeded(el);
 	};
 	private readonly _releaseCellFn = (cell: CellSlot<TRowData>): void => {
 		if (cell.lastPortalKey) this.releaseCellPortal(cell.element, false, 'destroyed');
@@ -1049,7 +1043,7 @@ export class RowRenderer<TRowData = unknown> {
 		if (col.checkboxSelection) {
 			const cell = cellSlot.contentElement;
 			const rowId = node.id;
-			const isChecked = (this._selectedRowIdSet ?? new Set(state.selectedRowIds)).has(rowId);
+			const isChecked = (this.selectionPaint.selectedRowIdSet ?? new Set(state.selectedRowIds)).has(rowId);
 			cellClassName += ' og-cell-row-selector';
 			let checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
 			if (!checkbox) {
@@ -1062,8 +1056,8 @@ export class RowRenderer<TRowData = unknown> {
 					const id = input.dataset.rowId;
 					if (!id) return;
 					const shouldSelect = input.checked;
-					if ((e as MouseEvent).shiftKey && this._rowCheckboxAnchorId) {
-						const rangeIds = this.getDataRowIdsBetween(this._rowCheckboxAnchorId, id);
+					if ((e as MouseEvent).shiftKey && this.selectionPaint.rowCheckboxAnchorId) {
+						const rangeIds = this.selectionPaint.getDataRowIdsBetween(this.selectionPaint.rowCheckboxAnchorId, id);
 						if (rangeIds.length > 0) {
 							if (shouldSelect) this.engine.selectRowIds(rangeIds, 'checkbox');
 							else this.engine.deselectRowIds(rangeIds, 'checkbox');
@@ -1071,7 +1065,7 @@ export class RowRenderer<TRowData = unknown> {
 					} else {
 						this.engine.toggleRowId(id, 'checkbox');
 					}
-					this._rowCheckboxAnchorId = id;
+					this.selectionPaint.rowCheckboxAnchorId = id;
 				});
 				cell.textContent = '';
 				cell.appendChild(checkbox);
@@ -1178,7 +1172,7 @@ export class RowRenderer<TRowData = unknown> {
 		const pinRightBaseLeft = plan.pinRightBaseLeft;
 
 		// Refresh the selection set so any checkbox cells repainted here see the current state.
-		this._selectedRowIdSet = state.selectedRowIds.length > 0 ? new Set(state.selectedRowIds) : null;
+		this.selectionPaint.rebuildSelection(state.selectedRowIds);
 
 		// Repaint rows
 		for (const rowId of frame.rows) {
@@ -1186,7 +1180,7 @@ export class RowRenderer<TRowData = unknown> {
 			const slot = rowIndex >= 0 ? this.activeRows.get(rowIndex) : undefined;
 			const row = rowIndex >= 0 ? rowModel.getVisualRow(rowIndex) : null;
 			if (slot && row?.kind === 'data') {
-				this.updateRowClassNameSlot(slot, row.node, rowIndex, state);
+				this.selectionPaint.updateRowClassNameSlot(slot, row.node, rowIndex, state);
 				// Rebind checkbox cells so their checked state reflects the new selection.
 				for (let c = 0; c < colCount; c++) {
 					if (!columns[c].checkboxSelection) continue;
@@ -1483,67 +1477,6 @@ export class RowRenderer<TRowData = unknown> {
 		}
 	}
 
-	// ── Row class name helper ────────────────────────────────────────────────────────
-
-	private updateRowClassNameSlot(
-		slot: RowSlot<TRowData>,
-		node: RowNode<TRowData>,
-		rowIndex: number,
-		state = this.engine.stateManager.getState()
-	): void {
-		const rowModel = this.engine.getRowModel();
-		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
-		const pinTopRows = this.engine.viewport.pinTopRows;
-		const pinBottomRows = this.engine.viewport.pinBottomRows;
-
-		const isFocusedRow = state.selection.focus?.rowId === node.id;
-		const isSelectedRow = !!state.selection.bounds && rowIndex >= state.selection.bounds.minRow && rowIndex <= state.selection.bounds.maxRow;
-		const isLoadingRow = this.engine.data.isRowLoading(node.id);
-		let rowClassName = 'og-row';
-		if (rowIndex < pinTopRows) {
-			rowClassName += ' og-row-pinned-top';
-		} else if (rowIndex >= rowCount - pinBottomRows) {
-			rowClassName += ' og-row-pinned-bottom';
-		}
-		if (this.hoveredRowIndex === rowIndex) {
-			rowClassName += ' og-row-hovered';
-		}
-		if (isSelectedRow || isFocusedRow) {
-			rowClassName += ' og-row-selected';
-		}
-		if (isFocusedRow) {
-			rowClassName += ' og-row-focused';
-		}
-		if (this._selectedRowIdSet?.has(node.id)) {
-			rowClassName += ' og-row-node-selected';
-		}
-		if (isLoadingRow) {
-			rowClassName += ' og-row-loading';
-		}
-		if (this.isScrollFrameActive && state.styleSlots?.rowClass && node.data) {
-			this.dirtyRowsAfterScroll.add(rowIndex);
-		} else if (state.styleSlots?.rowClass && node.data) {
-			try {
-				const rs = this._rowClassScratch;
-				rs.row = node.data;
-				rs.rowId = node.id;
-				rs.rowIndex = rowIndex;
-				rs.isFocused = isFocusedRow;
-				rs.isSelected = isSelectedRow || isFocusedRow;
-				rs.isLoading = isLoadingRow;
-				rs.selection = state.selection;
-				const customRowClass = state.styleSlots.rowClass(node.data, rs);
-				if (customRowClass) {
-					rowClassName += ' ' + customRowClass;
-				}
-			} catch (e) {
-				console.error('RenderEngine: Error in rowClass styleSlot', e);
-			}
-		}
-
-		slot.update(rowIndex, slot.visualRowId, 'data', slot.rowTop, slot.rowHeight, rowClassName);
-	}
-
 	// ── Misc helpers ─────────────────────────────────────────────────────────────────
 
 	private getScrollMountValue(node: RowNode<TRowData>, col: ColumnDef<TRowData>, cellSlot?: CellSlot<TRowData>): unknown {
@@ -1577,66 +1510,6 @@ export class RowRenderer<TRowData = unknown> {
 			this.dirtyCellsAfterScroll.add(cell);
 			this.dirtyCellsMarkedDuringScroll++;
 		}
-	}
-
-	private readonly onDataCellClickForRowSelection = (e: MouseEvent): void => {
-		if (e.defaultPrevented || e.button !== 0) return;
-		const target = e.target as HTMLElement | null;
-		if (this.isRowSelectionIgnoredTarget(target)) return;
-
-		const cellSlot = CellSlot.fromElement(e.currentTarget as HTMLDivElement);
-		if (!cellSlot.rowId || !cellSlot.colField) return;
-
-		const state = this.engine.stateManager.getState();
-		if (!state.columns.some((col) => col.checkboxSelection)) return;
-		const col = this.engine.columns.getColumnDef(cellSlot.colField);
-		if (col?.checkboxSelection) return;
-
-		const rowModel = this.engine.getRowModel();
-		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(cellSlot.rowId) : -1;
-		const row = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
-		if (row?.kind !== 'data') return;
-
-		if (e.shiftKey && this._rowCheckboxAnchorId) {
-			const rangeIds = this.getDataRowIdsBetween(this._rowCheckboxAnchorId, cellSlot.rowId);
-			if (rangeIds.length > 0) {
-				this.engine.applyRowSelectionGesture({ kind: 'select', rowIds: rangeIds, source: 'pointer' });
-				e.preventDefault();
-				return;
-			}
-		}
-
-		if (e.ctrlKey || e.metaKey) {
-			this.engine.toggleRowId(cellSlot.rowId, 'pointer');
-		} else {
-			this.engine.applyRowSelectionGesture({ kind: 'replace', rowIds: [cellSlot.rowId], source: 'pointer' });
-		}
-		this._rowCheckboxAnchorId = cellSlot.rowId;
-	};
-
-	private isRowSelectionIgnoredTarget(el: Element | null): boolean {
-		if (!el) return false;
-		return (
-			el.closest('button, input, select, textarea, a, [role="button"], [contenteditable="true"]') !== null ||
-			el.closest('.og-cell-editor') !== null ||
-			el.closest('.og-context-menu') !== null
-		);
-	}
-
-	private getDataRowIdsBetween(anchorRowId: string, targetRowId: string): string[] {
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) return [];
-		const anchorIndex = rowModel.getVisualIndexByRowId(anchorRowId);
-		const targetIndex = rowModel.getVisualIndexByRowId(targetRowId);
-		if (anchorIndex < 0 || targetIndex < 0) return [];
-		const start = Math.min(anchorIndex, targetIndex);
-		const end = Math.max(anchorIndex, targetIndex);
-		const rowIds: string[] = [];
-		for (let i = start; i <= end; i++) {
-			const row = rowModel.getVisualRow(i);
-			if (row?.kind === 'data') rowIds.push(row.rowId);
-		}
-		return rowIds;
 	}
 
 	public releaseCellPortal(
@@ -1832,7 +1705,7 @@ export class RowRenderer<TRowData = unknown> {
 				const slot = this.activeRows.get(r);
 				const visualRow = rowModel.getVisualRow(r);
 				if (slot && visualRow?.kind === 'data') {
-					this.updateRowClassNameSlot(slot, visualRow.node, r, state);
+					this.selectionPaint.updateRowClassNameSlot(slot, visualRow.node, r, state);
 				}
 			}
 			this.dirtyRowsAfterScroll.clear();

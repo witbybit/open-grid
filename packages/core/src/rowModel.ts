@@ -618,9 +618,14 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (!node) return false;
 
 		const col = this.store.getColumnDef(colField);
+		const oldValue = this.store.getCellValue(rowId, colField);
 		const updatedRow = col?.valueSetter ? { ...node.data } : node.data;
 		if (col?.valueSetter) {
-			if (!col.valueSetter(updatedRow, value)) return false;
+			// Sync path: call valueSetter with params. Async setters are handled by commitEdit.
+			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
+			if (result === false || (result instanceof Promise && false)) return false;
+			// For sync-returning false, bail out. Async setters proceed optimistically here.
+			if (!(result instanceof Promise) && !result) return false;
 		} else {
 			setValueByPath(updatedRow, colField, value);
 		}

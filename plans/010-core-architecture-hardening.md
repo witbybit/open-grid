@@ -14,7 +14,7 @@
 - **Depends on**: Plan 009 phases 1–6 (complete ✅)
 - **Category**: correctness, performance, architecture
 - **Planned at**: 2026-06-12
-- **Progress**: Phase 0 complete (selection bounds staleness fixed in GridEngine.ts:922).
+- **Progress**: Phases 0–5 complete ✅
 
 ## Problem statement
 
