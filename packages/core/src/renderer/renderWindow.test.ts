@@ -172,7 +172,7 @@ describe('RenderWindow & ViewportDelta calculations', () => {
 				},
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', category: 'Hardware', product: 'Workstation' },
 				{ id: '2', category: 'Hardware', product: 'Workstation' },
@@ -269,7 +269,7 @@ describe('RenderWindow & ViewportDelta calculations', () => {
 				},
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', category: 'Hardware', product: 'Workstation' },
 				{ id: '2', category: 'Hardware', product: 'Laptop' },

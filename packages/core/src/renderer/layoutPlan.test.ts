@@ -12,7 +12,7 @@ describe('GridLayoutPlan', () => {
 			defaultRowHeight: 40,
 			showGroupPanel: true,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'One' }],
 			columns: store.getState().columns,
 		});
@@ -39,7 +39,7 @@ describe('GridLayoutPlan', () => {
 			defaultRowHeight: 40,
 			showGroupPanel: false,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'One' }],
 			columns: store.getState().columns,
 		});
@@ -66,7 +66,7 @@ describe('GridLayoutPlan', () => {
 			],
 			defaultRowHeight: 30,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', a: 'a1', b: 'b1', c: 'c1' },
 				{ id: '2', a: 'a2', b: 'b2', c: 'c2' },
@@ -99,7 +99,7 @@ describe('GridLayoutPlan', () => {
 			],
 			defaultRowHeight: 30,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', a: 'a1', b: 'b1', c: 'c1' }],
 			columns: store.getState().columns,
 		});
@@ -125,7 +125,7 @@ describe('GridLayoutPlan', () => {
 			getRowId: (r) => r.id,
 			columns: [{ field: 'a', header: 'A', width: 100 }],
 		});
-		const ctrl = new ClientRowModelController(store, { rows: [], columns: store.getState().columns });
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
 		store.setViewportSize(200, 300);
 		const plan = computeGridLayoutPlan(store.engine);
 
@@ -148,7 +148,7 @@ describe('GridLayoutPlan', () => {
 				{ field: 'c', header: 'C', width: 80 },
 			],
 		});
-		const ctrl = new ClientRowModelController(store, { rows: [], columns: store.getState().columns });
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
 		store.setViewportSize(300, 300);
 		const plan = computeGridLayoutPlan(store.engine);
 
@@ -183,7 +183,7 @@ describe('GridLayoutPlan', () => {
 				{ field: 'b', header: 'B', width: 100, headerGroup: ['Financials', 'Revenue'] },
 			],
 		});
-		const ctrl = new ClientRowModelController(store, { rows: [], columns: store.getState().columns });
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
 		store.setViewportSize(300, 300);
 		const plan = computeGridLayoutPlan(store.engine);
 
@@ -207,7 +207,7 @@ describe('GridLayoutPlan', () => {
 				{ field: 'b', header: 'B', width: 100, headerGroup: 'Revenue' },
 			],
 		});
-		const ctrl = new ClientRowModelController(store, { rows: [], columns: store.getState().columns });
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
 		store.setViewportSize(300, 300);
 		store.setViewportPins({ left: 1, right: 0 });
 		const plan = computeGridLayoutPlan(store.engine);

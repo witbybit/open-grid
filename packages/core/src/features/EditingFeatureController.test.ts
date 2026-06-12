@@ -23,7 +23,7 @@ function makeStore(columnOverrides?: Parameters<typeof GridStore>[0]['columns'])
 }
 
 function makeController(store: GridStore<TestRow>): ClientRowModelController<TestRow> {
-	return new ClientRowModelController<TestRow>(store, {
+	return new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 		rows: [
 			{ id: '1', name: 'Product A', price: 10 },
 			{ id: '2', name: 'Product B', price: 20 },

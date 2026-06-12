@@ -1,18 +1,12 @@
-import {
-	GridStore,
-	ColumnDef,
-	RowNode,
-	setValueByPath,
-	compilePathGetter,
-	type VisualRow,
-	type RowDataTransaction,
-	type RowNodeTransaction,
-} from './store.js';
+import { type ColumnDef, setValueByPath, compilePathGetter } from './columnDef.js';
 import { GridEventName } from './api/GridEvents.js';
-import type { RowModelMutationRuntime } from './engine/runtimePorts.js';
+import type { RowDataTransaction, RowNodeTransaction } from './api/GridApi.js';
+import type { ClientRowModelRuntime } from './engine/runtimePorts.js';
 import { getFieldRoot } from './ids.js';
+import { RowNode } from './rowNode.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
 import { RowDataStore } from './rows/RowDataStore.js';
+import type { VisualRow } from './visualRow.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -341,8 +335,7 @@ export function applyClientSortAndFilter<TData>(
 }
 
 export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
-	private store: GridStore<TData>;
-	private readonly runtime: RowModelMutationRuntime<TData>;
+	private readonly runtime: ClientRowModelRuntime<TData>;
 	private dataStore: RowDataStore<TData>;
 	private visualRows: Array<VisualRow<TData>> = [];
 	private visualRowIdToIndex = new Map<string, number>();
@@ -364,7 +357,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	public getDataRowCount = (): number => this.dataRowCount;
 
 	public toggleGroupExpanded = (groupId: string): RowModelRefreshResult => {
-		const expansion = this.store.getState().expansion;
+		const expansion = this.runtime.getState().expansion;
 		if (groupId.startsWith('group:')) {
 			const groups = { ...expansion.groups };
 			if (groups[groupId]) {
@@ -372,7 +365,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			} else {
 				groups[groupId] = true;
 			}
-			this.store.setState({ expansion: { ...expansion, groups } });
+			this.runtime.updateExpansion(() => ({ ...expansion, groups }));
 		} else {
 			const treeRows = { ...expansion.treeRows };
 			if (treeRows[groupId]) {
@@ -380,34 +373,34 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			} else {
 				treeRows[groupId] = true;
 			}
-			this.store.setState({ expansion: { ...expansion, treeRows } });
+			this.runtime.updateExpansion(() => ({ ...expansion, treeRows }));
 		}
 		return this.refresh('expansion', groupId);
 	};
 
 	public toggleDetailExpanded = (rowId: string): RowModelRefreshResult => {
-		const expansion = this.store.getState().expansion;
+		const expansion = this.runtime.getState().expansion;
 		const details = { ...expansion.details };
 		if (details[rowId]) {
 			delete details[rowId];
 		} else {
 			details[rowId] = true;
 		}
-		this.store.setState({ expansion: { ...expansion, details } });
+		this.runtime.updateExpansion(() => ({ ...expansion, details }));
 		return this.refresh('detail');
 	};
 
 	public isGroupExpanded = (groupId: string): boolean => {
-		const expansion = this.store.getState().expansion;
+		const expansion = this.runtime.getState().expansion;
 		return groupId.startsWith('group:') ? !!expansion.groups[groupId] : !!expansion.treeRows[groupId];
 	};
 
 	public isDetailExpanded = (rowId: string): boolean => {
-		return !!this.store.getState().expansion.details[rowId];
+		return !!this.runtime.getState().expansion.details[rowId];
 	};
 
 	public expandAllGroups = (): RowModelRefreshResult => {
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const allIds = this.pipeline.collectAllGroupIds({
 			nodes: this.dataStore.getAllNodes(),
 			columns: state.columns,
@@ -417,35 +410,32 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		});
 		const groups: Record<string, true> = {};
 		for (const id of allIds) groups[id] = true;
-		this.store.setState({ expansion: { ...state.expansion, groups } });
+		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups }));
 		return this.refresh('expansion');
 	};
 
 	public collapseAllGroups = (): RowModelRefreshResult => {
-		const state = this.store.getState();
-		this.store.setState({ expansion: { ...state.expansion, groups: {} } });
+		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups: {} }));
 		return this.refresh('expansion');
 	};
 
-	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
-		this.store = store;
-		this.runtime = store.getRowModelMutationRuntime();
-		this.dataStore = new RowDataStore<TData>((row) => this.store.getRowId(row));
+	constructor(runtime: ClientRowModelRuntime<TData>, options: ClientRowModelOptions<TData>) {
+		this.runtime = runtime;
+		this.dataStore = new RowDataStore<TData>((row) => this.runtime.getRowId(row));
 
-		// Set base columns and config in store
-		this.store.setState({
+		this.runtime.initializeModel({
 			columns: options.columns,
 		});
 
-		this.store.registerRowModel(this);
+		this.runtime.registerRowModel(this);
 
 		this.unsubscribers.push(
-			this.store.addEventListener(GridEventName.sortChanged, () => this.refresh()),
-			this.store.addEventListener(GridEventName.filterChanged, () => this.refresh()),
-			this.store.addEventListener(GridEventName.groupByChanged, () => this.refresh()),
-			this.store.addEventListener(GridEventName.aggDefsChanged, () => this.refresh()),
-			this.store.addEventListener(GridEventName.showGroupFooterChanged, () => this.refresh()),
-			this.store.addEventListener(GridEventName.enableStickyGroupRowsChanged, () => this.refresh())
+			this.runtime.addEventListener(GridEventName.sortChanged, () => this.refresh()),
+			this.runtime.addEventListener(GridEventName.filterChanged, () => this.refresh()),
+			this.runtime.addEventListener(GridEventName.groupByChanged, () => this.refresh()),
+			this.runtime.addEventListener(GridEventName.aggDefsChanged, () => this.refresh()),
+			this.runtime.addEventListener(GridEventName.showGroupFooterChanged, () => this.refresh()),
+			this.runtime.addEventListener(GridEventName.enableStickyGroupRowsChanged, () => this.refresh())
 		);
 		this.setRows(options.rows);
 	}
@@ -500,7 +490,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		// Check if any of the changed fields are part of the active sort or filter models
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		let needsFullRefresh = false;
 
 		if (state.sortModel && state.sortModel.length > 0) {
@@ -660,8 +650,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		const node = this.getRowNodeById(rowId);
 		if (!node) return false;
 
-		const col = this.store.getColumnDef(colField);
-		const oldValue = this.store.getCellValue(rowId, colField);
+		const col = this.runtime.getColumnDef(colField);
+		const oldValue = this.runtime.getCellValue(rowId, colField);
 		const updatedRow = col?.valueSetter ? { ...node.data } : node.data;
 		if (col?.valueSetter) {
 			// Sync path: call valueSetter with params. Async setters are handled by commitEdit.
@@ -681,7 +671,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		// If the edited cell field affects active sorting, filtering, grouping, or aggregates,
 		// we must re-run the pipeline to update the row positions, visibility, or computed aggregates.
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		let needsRefresh = false;
 
 		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
@@ -710,7 +700,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	};
 
 	public refresh(reason?: RowRefreshReason, groupId?: string): RowModelRefreshResult {
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const previousRows = this.visualRows;
 
 		const expansion = state.expansion;
@@ -765,9 +755,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this._groupMetaByVisualIndex = result.groupMetaByVisualIndex;
 		this.dataRowCount = result.stats.totalDataRows;
 
-		this.store.setState({
-			globalVersion: state.globalVersion + 1,
-		});
+		this.runtime.bumpGlobalVersion();
 
 		return refreshResult;
 	}

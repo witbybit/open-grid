@@ -147,6 +147,28 @@ describe('Architecture guardrails', () => {
 		}
 	});
 
+	it('row models do not depend on the concrete GridStore type', () => {
+		const files = ['rowModel.ts', 'serverRowModel.ts'];
+		for (const file of files) {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
+			expect(content, `${file} must not reference GridStore`).not.toContain('GridStore<');
+			expect(content, `${file} must not keep a private store field`).not.toContain('private store:');
+			expect(content, `${file} must not accept constructor(store: GridStore...)`).not.toContain('constructor(store: GridStore');
+		}
+	});
+
+	it('row-model runtimes are defined in runtimePorts and used from factory wiring', () => {
+		const runtimePorts = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'runtimePorts.ts'), 'utf-8');
+		expect(runtimePorts).toContain('export interface ClientRowModelRuntime');
+		expect(runtimePorts).toContain('export interface ServerRowModelRuntime');
+
+		const createGrid = readFileSync(resolve(CORE_ROOT, 'src', 'createGrid.ts'), 'utf-8');
+		expect(createGrid).toContain('store.getClientRowModelRuntime()');
+		expect(createGrid).toContain('store.getServerRowModelRuntime()');
+		expect(createGrid).not.toContain('new ClientRowModelController<TRowData>(store,');
+		expect(createGrid).not.toContain('new ServerRowModelController<TRowData>(store,');
+	});
+
 	it('navigation and contextMenu plugins do not depend on GridStore downcasts', () => {
 		const files = ['navigation.ts', 'contextMenu.ts'];
 		for (const file of files) {

@@ -274,7 +274,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 		...mergedInitial,
 	});
 
-	const controller = new ClientRowModelController<TRowData>(store, { ...options, columns: resolvedColumns });
+	const controller = new ClientRowModelController<TRowData>(store.getClientRowModelRuntime(), { ...options, columns: resolvedColumns });
 	const persistenceController = wireGridPersistence(options, store);
 	const api = createApiFacade(
 		store,
@@ -324,7 +324,7 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 		...mergedInitial,
 	});
 
-	const controller = new ServerRowModelController<TRowData>(store, options);
+	const controller = new ServerRowModelController<TRowData>(store.getServerRowModelRuntime(), options);
 	const persistenceController = wireGridPersistence(options, store);
 	const api = createApiFacade(
 		store,

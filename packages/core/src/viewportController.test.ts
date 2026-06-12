@@ -6,7 +6,7 @@ function createStore(rowCount: number, colCount: number): GridStore<{ id: string
 	const store = new GridStore<{ id: string }>({
 		columns: Array.from({ length: colCount }, (_, i) => ({ field: `C${i}`, header: `Col ${i}` })),
 	});
-	new ClientRowModelController<{ id: string }>(store, {
+	new ClientRowModelController<{ id: string }>(store.getClientRowModelRuntime(), {
 		rows: Array.from({ length: rowCount }, (_, i) => ({ id: `row-${i}` })),
 		columns: store.getState().columns,
 	});
@@ -36,7 +36,7 @@ describe('ViewportController scrolling range computations', () => {
 			overscanAdaptive: true,
 			rowOverscanPx: 480, // 12 rows × 40px
 		});
-		new ClientRowModelController<{ id: string }>(store, {
+		new ClientRowModelController<{ id: string }>(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}` })),
 			columns: store.getState().columns,
 		});
@@ -58,7 +58,7 @@ describe('ViewportController scrolling range computations', () => {
 			columns: Array.from({ length: 10 }, (_, i) => ({ field: `C${i}`, header: `Col ${i}` })),
 			colBuffer: 8,
 		});
-		new ClientRowModelController<{ id: string }>(store, {
+		new ClientRowModelController<{ id: string }>(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 5 }, (_, i) => ({ id: `row-${i}` })),
 			columns: store.getState().columns,
 		});

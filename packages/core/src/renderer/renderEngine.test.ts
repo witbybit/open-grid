@@ -25,7 +25,7 @@ describe('RenderEngine', () => {
 			id: `row-${index}`,
 			name: `Row ${index}`,
 		}));
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows,
 			columns: store.getState().columns,
 		});
@@ -73,7 +73,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', risk: 'LOW', filler: 'Filler', col_999: 'Val 999' }],
 			columns: wideColumns,
 		});
@@ -123,7 +123,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 100,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' }],
 			columns,
 		});
@@ -193,7 +193,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'Hidden Name', price: 42 }],
 			columns,
 		});
@@ -241,7 +241,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			styleSlots: { rowClass },
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row-1', name: 'One' },
 				{ id: 'row-2', name: 'Two' },
@@ -296,7 +296,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', status: 'Active' }],
 			columns,
 		});
@@ -356,7 +356,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'Before' }],
 			columns: store.getState().columns,
 		});
@@ -406,7 +406,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row:0', name: 'Before', status: 'Open' },
 				{ id: 'row:1', name: 'Other', status: 'Closed' },
@@ -515,7 +515,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row-1', name: 'One' },
 				{ id: 'row-2', name: 'Two' },
@@ -579,7 +579,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 30 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns: store.getState().columns,
 		});
@@ -634,7 +634,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'One' }],
 			columns: store.getState().columns,
 		});
@@ -682,7 +682,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'One' }],
 			columns: store.getState().columns,
 		});
@@ -736,7 +736,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'One' }],
 			columns: store.getState().columns,
 		});
@@ -797,7 +797,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			columns: store.getState().columns,
 			blockSize: 50,
 			datasource: {
@@ -869,7 +869,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 150 }, (_, index) => ({ id: `row-${index}`, a: `A${index}`, b: `B${index}` })),
 			columns,
 		});
@@ -924,7 +924,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -977,7 +977,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1023,7 +1023,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 100,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 20 }, (_, rowIndex) => {
 				const row: Record<string, string> = { id: `row-${rowIndex}` };
 				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
@@ -1081,7 +1081,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1142,7 +1142,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({
 				id: `row-${index}`,
 				a: `A${index}`,
@@ -1209,7 +1209,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1273,7 +1273,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1334,7 +1334,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}`, b: `B${index}` })),
 			columns,
 		});
@@ -1390,7 +1390,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}`, b: `B${index}` })),
 			columns,
 		});
@@ -1470,7 +1470,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1539,7 +1539,7 @@ describe('RenderEngine', () => {
 				afterCellRender,
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1618,7 +1618,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			styleSlots: { rowClass },
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1681,7 +1681,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `__loading_${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1745,7 +1745,7 @@ describe('RenderEngine', () => {
 				details: Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`row-${index}`, true])),
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1819,7 +1819,7 @@ describe('RenderEngine', () => {
 				details: { 'row-0': true },
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 30 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1887,7 +1887,7 @@ describe('RenderEngine', () => {
 				details: Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`row-${index}`, true])),
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1942,7 +1942,7 @@ describe('RenderEngine', () => {
 				},
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row-0', name: 'Zero' },
 				{ id: 'row-1', name: 'One' },
@@ -2001,7 +2001,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 100,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 12 }, (_, rowIndex) => {
 				const row: Record<string, string> = { id: `row-${rowIndex}` };
 				for (let colIndex = 0; colIndex < columns.length; colIndex++) {
@@ -2067,7 +2067,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-0', a: 'A0' }],
 			columns,
 		});
@@ -2118,7 +2118,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			loading: true,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [],
 			columns,
 		});
@@ -2174,7 +2174,7 @@ describe('RenderEngine', () => {
 			masterDetailEnabled: true,
 			detailRowHeight: 40,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-0', name: 'Row 0' }],
 			columns,
 		});
@@ -2238,7 +2238,7 @@ describe('RenderEngine', () => {
 			rowOverscanPx: 80,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 50 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -2330,7 +2330,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, index) => ({
 				id: `row-${index}`,
 				col1: `Val 1-${index}`,
@@ -2430,7 +2430,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, index) => ({
 				id: `row-${index}`,
 				live: `Live ${index}`,
@@ -2513,7 +2513,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, defer: `Defer ${index}` })),
 			columns,
 		});
@@ -2576,7 +2576,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			rowOverscanPx: 80,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 200 }, (_, i) => ({ id: `row-${i}`, v: `V${i}` })),
 			columns,
 		});
@@ -2659,7 +2659,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			rowOverscanPx: 0, // zero overscan → exactly 4 rows visible in 160px viewport
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
 			columns,
 		});
@@ -2726,7 +2726,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			rowOverscanPx: 80,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, x: `X${i}` })),
 			columns,
 		});
@@ -2796,7 +2796,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			rowOverscanPx: 0,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
 			columns,
 		});

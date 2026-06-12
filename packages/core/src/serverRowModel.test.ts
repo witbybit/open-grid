@@ -29,7 +29,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -67,7 +67,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -103,7 +103,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 100,
 			columns: store.getState().columns,
@@ -147,7 +147,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 100,
 			columns: store.getState().columns,
@@ -195,7 +195,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -231,7 +231,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -276,7 +276,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController<TestRow>(store, {
+		const controller = new ServerRowModelController<TestRow>(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -309,7 +309,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: firstDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,

@@ -17,7 +17,7 @@ describe('GridStore generic row-store functionality', () => {
 				{ field: 'name', header: 'Name', width: 150 },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Product A', price: 10 },
 				{ id: '2', name: 'Product B', price: 20 },
@@ -43,7 +43,7 @@ describe('GridStore generic row-store functionality', () => {
 			],
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Product A', price: 10 },
 				{ id: '2', name: 'Product B', price: 20 },
@@ -95,7 +95,7 @@ describe('GridStore generic row-store functionality', () => {
 			columns: [{ field: 'name', header: 'Name', width: 150 }],
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Product A', price: 10 },
 				{ id: '2', name: 'Product B', price: 20 },
@@ -141,7 +141,7 @@ describe('GridStore generic row-store functionality', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 150 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
 			columns: store.getState().columns,
 		});
@@ -175,7 +175,7 @@ describe('GridStore generic row-store functionality', () => {
 				{ field: 'name', header: 'Name', width: 150 },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Product A', price: 10 },
 				{ id: '2', name: 'Product B', price: 20 },
@@ -205,7 +205,7 @@ describe('GridStore generic row-store functionality', () => {
 				{ field: 'name', header: 'Name', width: 150 },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Bravo', price: 10 },
 				{ id: '2', name: 'Alpha', price: 20 },
@@ -246,7 +246,7 @@ describe('GridStore generic row-store functionality', () => {
 				{ field: 'name', header: 'Name', width: 150 },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'remove', price: 10 },
 				{ id: '2', name: 'keep-first', price: 20 },
@@ -278,7 +278,7 @@ describe('GridStore generic row-store functionality', () => {
 			],
 			groupBy: ['name'],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'GroupA', price: 10 },
 				{ id: '2', name: 'GroupB', price: 20 },
@@ -324,7 +324,7 @@ describe('GridStore generic row-store functionality', () => {
 				},
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Keyboard', price: 45 }],
 			columns: store.getState().columns,
 		});
@@ -359,7 +359,7 @@ describe('GridStore generic row-store functionality', () => {
 				},
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Keyboard', price: 45 }],
 			columns: store.getState().columns,
 		});
@@ -394,7 +394,7 @@ describe('GridStore generic row-store functionality', () => {
 				},
 			],
 		});
-		const controller = new ClientRowModelController<StatusRow>(store, {
+		const controller = new ClientRowModelController<StatusRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10, status: 'Active' }],
 			columns: store.getState().columns,
 		});
@@ -419,7 +419,7 @@ describe('GridStore generic row-store functionality', () => {
 				{ field: 'price', header: 'Price', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Product A', price: 10 },
 				{ id: '2', name: 'Product B', price: 20 },
@@ -460,7 +460,7 @@ describe('GridStore generic row-store functionality', () => {
 				{ field: 'formula', header: 'Formula' },
 			],
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'r1', val: 10, formula: '' }],
 			columns: store.getState().columns,
 		});
@@ -483,7 +483,7 @@ describe('GridStore generic row-store functionality', () => {
 				{ field: 'formula', header: 'Formula' },
 			],
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'r1', val: 5, formula: '' }],
 			columns: store.getState().columns,
 		});
@@ -505,7 +505,7 @@ describe('GridStore generic row-store functionality', () => {
 				{ field: 'formula', header: 'Formula' },
 			],
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'r1', val: 10, formula: '' }],
 			columns: store.getState().columns,
 		});
@@ -528,7 +528,7 @@ describe('GridStore generic row-store functionality', () => {
 				{ field: 'b', header: 'B' },
 			],
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', a: 5, b: '=[1:a]*2' }],
 			columns: store.getState().columns,
 		});
@@ -548,7 +548,7 @@ describe('GridStore generic row-store functionality', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Keyboard', price: 45 }],
 			columns: store.getState().columns,
 		});
@@ -720,7 +720,7 @@ describe('GridStore generic row-store functionality', () => {
 			},
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Apex', price: 10 },
 				{ id: '2', name: 'Beta', price: 20 },
@@ -762,7 +762,7 @@ describe('GridStore generic row-store functionality', () => {
 describe('ClientRowModelController sorting and filtering', () => {
 	it('should apply client sort and filter correctly', () => {
 		const store = new GridStore<TestRow>();
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'c', name: 'Cherry', price: 5 },
 				{ id: 'a', name: 'Apple', price: 15 },
@@ -806,7 +806,7 @@ describe('ClientRowModelController sorting and filtering', () => {
 			name: `Product ${i}`,
 			price: i,
 		}));
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: largeRows,
 			columns: store.getState().columns,
 		});
@@ -837,7 +837,7 @@ describe('ServerRowModelController paginated lazily populated row-patching', () 
 			},
 		};
 
-		const controller = new ServerRowModelController<TestRow>(store, {
+		const controller = new ServerRowModelController<TestRow>(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 2,
 			columns: [
@@ -870,7 +870,7 @@ describe('RowNode path getters and state batching', () => {
 				{ field: 'price', header: 'Price' },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
 			columns: store.getState().columns,
 		});
@@ -910,7 +910,7 @@ describe('RowNode path getters and state batching', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name' }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
 			columns: store.getState().columns,
 		});
@@ -965,7 +965,7 @@ describe('Phase 2 Engine Scalability Subsystems', () => {
 				{ field: 'name', header: 'Name', width: 150 },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row-a', name: 'Product A', price: 10 },
 				{ id: 'row-b', name: 'Product B', price: 20 },
@@ -1003,7 +1003,7 @@ describe('GridStore auto-batching and dirty cell fanout', () => {
 				{ field: 'price', header: 'Price' },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
 			columns: store.getState().columns,
 		});
@@ -1031,7 +1031,7 @@ describe('GridStore auto-batching and dirty cell fanout', () => {
 				{ field: 'price', header: 'Price' },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
 			columns: store.getState().columns,
 		});
@@ -1065,7 +1065,7 @@ describe('GridStore auto-batching and dirty cell fanout', () => {
 				{ field: 'price', header: 'Price' },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
 			columns: store.getState().columns,
 		});
@@ -1094,7 +1094,7 @@ describe('GridStore auto-batching and dirty cell fanout', () => {
 				{ field: 'price', header: 'Price' },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
 			columns: store.getState().columns,
 		});
@@ -1125,7 +1125,7 @@ describe('GridStore auto-batching and dirty cell fanout', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 100,
 		});
-		const controller = new ClientRowModelController<WideRow>(store, {
+		const controller = new ClientRowModelController<WideRow>(store.getClientRowModelRuntime(), {
 			rows,
 			columns,
 		});
@@ -1156,7 +1156,7 @@ describe('GridStore undo and redo functionality', () => {
 				{ field: 'price', header: 'Price' },
 			],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
 			columns: store.getState().columns,
 		});
@@ -1190,7 +1190,7 @@ describe('GridStore undo and redo functionality', () => {
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 			defaultRowHeight: 40,
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A', price: 10 }],
 			columns: store.getState().columns,
 		});
@@ -1223,7 +1223,7 @@ describe('GridStore undo and redo functionality', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name' }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Banana', price: 10 },
 				{ id: '2', name: 'Apple', price: 20 },
@@ -1286,7 +1286,7 @@ describe('GridStore undo and redo functionality', () => {
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Product A', price: 10 },
 				{ id: '2', name: 'Product B', price: 20 },
@@ -1423,7 +1423,7 @@ describe('GridStore undo and redo functionality', () => {
 			],
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Product A', price: 10 },
 				{ id: '2', name: 'Product B', price: 20 },
@@ -1467,7 +1467,7 @@ describe('GridStore undo and redo functionality', () => {
 			defaultRowHeight: 40,
 			rowHeights: { '1': 60 },
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: store.getState().columns,
 		});
@@ -1581,7 +1581,7 @@ describe('row multi-select', () => {
 			],
 			getRowId: (r) => r.id,
 		});
-		const controller = new ClientRowModelController<TestRow>(store, {
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row-1', name: 'Alice', price: 10 },
 				{ id: 'row-2', name: 'Bob', price: 20 },

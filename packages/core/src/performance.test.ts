@@ -41,7 +41,7 @@ describe('Performance Benchmarks', () => {
 				});
 			}
 
-			const controller = new ClientRowModelController<PerfTestRow>(store, {
+			const controller = new ClientRowModelController<PerfTestRow>(store.getClientRowModelRuntime(), {
 				rows,
 				columns: store.getState().columns,
 			});
@@ -95,7 +95,7 @@ describe('Performance Benchmarks', () => {
 				});
 			}
 
-			const controller = new ClientRowModelController<PerfTestRow>(store, {
+			const controller = new ClientRowModelController<PerfTestRow>(store.getClientRowModelRuntime(), {
 				rows,
 				columns: store.getState().columns,
 			});
@@ -153,7 +153,7 @@ describe('Performance Benchmarks', () => {
 				quantity: 10,
 				status: 'Active',
 			}));
-			const controller = new ClientRowModelController<PerfTestRow>(store, {
+			const controller = new ClientRowModelController<PerfTestRow>(store.getClientRowModelRuntime(), {
 				rows,
 				columns,
 			});
@@ -197,7 +197,7 @@ describe('Performance Benchmarks', () => {
 				});
 			}
 
-			const controller = new ClientRowModelController<PerfTestRow>(store, {
+			const controller = new ClientRowModelController<PerfTestRow>(store.getClientRowModelRuntime(), {
 				rows,
 				columns: store.getState().columns,
 			});
@@ -243,7 +243,7 @@ describe('Performance Benchmarks', () => {
 				});
 			}
 
-			const controller = new ClientRowModelController<PerfTestRow>(store, {
+			const controller = new ClientRowModelController<PerfTestRow>(store.getClientRowModelRuntime(), {
 				rows,
 				columns: store.getState().columns,
 			});
@@ -295,7 +295,7 @@ describe('Performance Benchmarks', () => {
 			const perf = performance as PerformanceWithMemory;
 			const memBefore = perf.memory?.usedJSHeapSize || 0;
 
-			const controller = new ClientRowModelController<PerfTestRow>(store, {
+			const controller = new ClientRowModelController<PerfTestRow>(store.getClientRowModelRuntime(), {
 				rows,
 				columns: store.getState().columns,
 			});
@@ -334,7 +334,7 @@ describe('Performance Benchmarks', () => {
 				});
 			}
 
-			const controller = new ClientRowModelController<PerfTestRow>(store, {
+			const controller = new ClientRowModelController<PerfTestRow>(store.getClientRowModelRuntime(), {
 				rows,
 				columns: store.getState().columns,
 			});
@@ -380,7 +380,7 @@ describe('Performance Benchmarks', () => {
 				});
 			}
 
-			const controller = new ClientRowModelController<PerfTestRow>(store, {
+			const controller = new ClientRowModelController<PerfTestRow>(store.getClientRowModelRuntime(), {
 				rows,
 				columns: store.getState().columns,
 			});

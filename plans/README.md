@@ -18,6 +18,7 @@
 | 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                         | DONE   | 94c9453 |
 | 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                   | DONE   | 0f93724 |
 | 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)               | DONE   | 6b3ecc5 |
+| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                 | REVIEW | eecb571 |
 
 ## Execution order
 
@@ -37,6 +38,7 @@
 14. `014-runtime-port-inversion.md` - P0 boundary hardening after 013; breaks the `GridStore -> GridEngine -> models -> rowModel` cycle so row/data/formula features stop requiring cross-file protocol patches
 15. `015-internal-adapter-boundary.md` - P0 adapter-boundary hardening after 014; seals `@open-grid/core/internal` into an explicit host/adapter contract before deeper renderer decomposition
 16. `016-store-runtime-decomposition.md` - P0 runtime hardening after 015; splits `InternalGridApi` by audience, removes plugin `GridStore` downcasts, and makes `GridStore` a true facade before pre-renderer cleanup continues
+17. `017-row-model-runtime-boundary.md` - P0 runtime hardening after 016; removes concrete `GridStore` coupling from client/server row models so visual-row producers depend on explicit runtime ports before renderer work
 
 ## Dependency graph
 
@@ -57,6 +59,7 @@
 014  (runtime port inversion)       - follows 013; required before deeper row-model, formula, and store-surface feature work so internal modules depend on ports instead of concrete engine/store reach-through
 015  (internal adapter boundary)    - follows 014; required before renderer refactors so framework adapters depend on a narrow host contract instead of broad engine/store/renderer internals
 016  (store runtime decomposition)  - follows 015; required before renderer refactors so plugins, store facades, and host/runtime contracts stop sharing one oversized internal surface
+017  (row-model runtime boundary)   - follows 016; required before renderer refactors so visual-row producers stop depending on the concrete store facade
 ```
 
 ## Notes
@@ -74,6 +77,9 @@
 - Plan 015 is implemented and verified on 2026-06-12: `@open-grid/core/internal` now exports only the adapter host contract and `hasImperativeRendererCapability`; React no longer imports `InternalColumnDef`; boundary and architecture guards prevent broad internal barrels and raw implementation exports from returning.
 - Plan 016 is implemented and verified on 2026-06-12: plugins now initialize against `GridPluginRuntime` instead of `InternalGridApi`, plugin lifecycle is owned by `GridPluginRegistry`, `gridPlugins.ts` registers through a dedicated plugin controller, and `navigation.ts` / `contextMenu.ts` no longer reference `GridStore` or cast `api as GridStore`.
 - Plan 016 leaves `store.ts` below the active intermediate guard (`< 875`, currently 870 lines) but not yet at the aspirational `850` target. Treat that final shrink as follow-on cleanup rather than a hidden failure.
+- Plan 017 is the next pre-renderer hardening step: move client/server row models onto explicit runtime contracts so grouping, transactions, and server loading stop depending on the concrete `GridStore` facade.
+- Plan 017 is implemented in the working tree and verified on 2026-06-12: client and server row models now initialize against explicit row-model runtimes, `createGrid.ts` composes them through `store.getClientRowModelRuntime()` / `store.getServerRowModelRuntime()`, architecture guards prevent concrete `GridStore` creep from returning, and core/React/demo verification passed after aliasing the demo to source entrypoints for local workspace package resolution.
+- After Plan 017, the main remaining pre-renderer hardening plan should be runtime fault/diagnostic normalization so async, listener, and server failures stop scattering local `console.error` behavior across the core.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

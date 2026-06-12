@@ -196,7 +196,11 @@ async function createServerAuditGrid(options: { rows?: number; cols?: number; bl
 		getRowId: (row) => row.id,
 		runtimeLimits: { maxRenderedRows: 28, maxRenderedCells: 360 },
 	});
-	const controller = new ServerRowModelController<AuditPerfRow>(store, { datasource, blockSize: options.blockSize ?? 100, columns });
+	const controller = new ServerRowModelController<AuditPerfRow>(store.getServerRowModelRuntime(), {
+		datasource,
+		blockSize: options.blockSize ?? 100,
+		columns,
+	});
 	const container = createContainer();
 	const renderer = new RenderEngine(store.engine, store);
 	renderer.onMountCellContent = ({ cellKey, container: host }) => {
@@ -709,7 +713,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 				};
 			},
 		};
-		const controller = new ServerRowModelController<AuditPerfRow>(store, { datasource, blockSize: 50, columns: cols });
+		const controller = new ServerRowModelController<AuditPerfRow>(store.getServerRowModelRuntime(), { datasource, blockSize: 50, columns: cols });
 		const container = createContainer();
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);

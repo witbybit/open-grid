@@ -1,4 +1,4 @@
-import type { GridEventPayloadMap } from '../api/GridEvents.js';
+import type { GridEventListener, GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
 import type { ColumnDef, CompiledGridPlan } from '../columnDef.js';
 import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
@@ -42,6 +42,20 @@ export interface CellAccessRuntime<TRowData = unknown> {
 
 export type RowsUpdatedPayload<TRowData = unknown> = GridEventPayloadMap<TRowData>[GridEventName.rowsUpdated];
 
+export interface RowModelRuntimeBase<TRowData = unknown> {
+	getState: () => GridState<TRowData>;
+	initializeModel: (model: { columns?: ColumnDef<TRowData>[]; getRowId?: ((row: TRowData) => string) | undefined }) => void;
+	registerRowModel: (rowModel: RowModel<TRowData>) => void;
+	addEventListener: <K extends keyof GridEventPayloadMap<TRowData>>(
+		type: K,
+		callback: GridEventListener<GridEventPayloadMap<TRowData>[K]>
+	) => () => void;
+	getRowId: (row: TRowData) => string;
+	getColumnDef: (colField: string) => ColumnDef<TRowData> | undefined;
+	getCellValue: (rowId: string, colField: string) => unknown;
+	bumpGlobalVersion: () => void;
+}
+
 export interface RowModelMutationRuntime<TRowData = unknown> {
 	clearFormulas: () => void;
 	syncFormulaForCell: (rowId: string, colField: string, value: unknown) => void;
@@ -52,8 +66,15 @@ export interface RowModelMutationRuntime<TRowData = unknown> {
 	dispatchRowsUpdated: (payload: RowsUpdatedPayload<TRowData>) => void;
 }
 
-export interface ServerRowModelRuntime {
+export interface ClientRowModelRuntime<TRowData = unknown> extends RowModelRuntimeBase<TRowData>, RowModelMutationRuntime<TRowData> {
+	updateExpansion: (updater: (expansion: GridState<TRowData>['expansion']) => GridState<TRowData>['expansion']) => void;
+}
+
+export interface ServerRowModelRuntime<TRowData = unknown> extends RowModelRuntimeBase<TRowData> {
 	clearFormulas: () => void;
 	isScrollingFast: () => boolean;
 	getScrollVelocity: () => { vx: number; vy: number };
+	setLoadingState: (loading: boolean) => void;
+	dispatchServerBlockLoaded: (payload: GridEventPayloadMap<TRowData>[GridEventName.serverBlockLoaded]) => void;
+	reportBlockLoadFailure: (blockIndex: number, error: unknown) => void;
 }

@@ -30,7 +30,7 @@ describe('HeaderPopoverMenu', () => {
 			],
 		});
 
-		rowController = new ClientRowModelController<TestRow>(store, {
+		rowController = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'r1', name: 'Product C', price: 300 },
 				{ id: 'r2', name: 'Product A', price: 100 },

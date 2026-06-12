@@ -18,7 +18,7 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 				{ field: 'value', header: 'Value', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<FillRangeRow>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'r1', value: 10 },
 				{ id: 'r2', value: 20 },
@@ -54,7 +54,7 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 				{ field: 'text', header: 'Text', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<FillRangeRow>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'r1', text: 'A' },
 				{ id: 'r2', text: 'B' },
@@ -91,7 +91,7 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 				{ field: 'formula', header: 'Formula', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<FillRangeRow>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'r1', val: 5, formula: '' },
 				{ id: 'r2', val: 10, formula: '' },
@@ -136,7 +136,7 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 				{ field: 'val', header: 'Val', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<FillRangeRow>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'r1', val: 10 },
 				{ id: 'r2', val: 20 },
@@ -179,7 +179,7 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 				{ field: 'c4', header: 'C4', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<FillRangeRow>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'r1', c1: 10, c2: 20, c3: 0, c4: 0 } as any],
 			columns: store.getState().columns,
 		});
@@ -213,7 +213,7 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 				{ field: 'formula3', header: 'Formula3', width: 100 },
 			],
 		});
-		const controller = new ClientRowModelController<FillRangeRow>(store, {
+		const controller = new ClientRowModelController<FillRangeRow>(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'r1', val1: 5, val2: 10, val3: 15, formula1: '', formula2: '', formula3: '' } as any],
 			columns: store.getState().columns,
 		});

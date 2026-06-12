@@ -33,7 +33,7 @@ describe('ClientRowModelController', () => {
 			{ id: '2', name: 'Bob' },
 		];
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows,
 			columns: store.getState().columns,
 		});
@@ -58,7 +58,7 @@ describe('ClientRowModelController', () => {
 		});
 
 		const rows = [{ id: '1', name: 'Alice' }];
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows,
 			columns: store.getState().columns,
 		});
@@ -75,7 +75,7 @@ describe('ClientRowModelController', () => {
 			sortModel: [{ colId: 'user.name', sort: 'asc' }],
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'One', user: { name: 'Alice' } },
 				{ id: '2', name: 'Two', user: { name: 'Bob' } },
@@ -95,7 +95,7 @@ describe('ClientRowModelController', () => {
 			sortModel: [{ colId: 'name', sort: 'asc' }],
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Bob' },
 				{ id: '2', name: 'Charlie' },
@@ -128,7 +128,7 @@ describe('ClientRowModelController', () => {
 			{ id: '2', name: 'Bob' },
 		];
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows,
 			columns: store.getState().columns,
 		});
@@ -149,7 +149,7 @@ describe('ClientRowModelController', () => {
 			columns: [{ field: 'name', header: 'Name' }],
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'group:name:Alice', name: 'Alice' }],
 			columns: store.getState().columns,
 		});
@@ -170,7 +170,7 @@ describe('ClientRowModelController', () => {
 			sortModel: [{ colId: 'name', sort: 'desc' }],
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'Ada' },
 				{ id: '2', name: 'Bob' },
@@ -196,7 +196,7 @@ describe('ClientRowModelController', () => {
 			},
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'One', category: 'A', amount: 5 },
 				{ id: '2', name: 'Two', category: 'A', amount: 7 },
@@ -254,7 +254,7 @@ describe('ClientRowModelController', () => {
 			},
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'keep alpha', category: 'A' },
 				{ id: '2', name: 'drop beta', category: 'A' },
@@ -281,7 +281,7 @@ describe('ClientRowModelController', () => {
 			rowModelConfig: { type: 'client', grouping: { model: [{ colId: 'category' }] } },
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'One', category: 'A' },
 				{ id: '2', name: 'Two', category: 'A' },
@@ -311,7 +311,7 @@ describe('ClientRowModelController', () => {
 			rowModelConfig: { type: 'client', grouping: { model: [{ colId: 'category' }] } },
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'One', category: 'A' },
 				{ id: '2', name: 'Two', category: 'A' },
@@ -340,7 +340,7 @@ describe('ClientRowModelController', () => {
 			columns: [{ field: 'category', header: 'Category' }],
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', name: 'One', category: 'A' },
 				{ id: '2', name: 'Two', category: 'B' },
@@ -381,7 +381,7 @@ describe('ClientRowModelController', () => {
 			},
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'p', name: 'Parent', parentId: null },
 				{ id: 'c', name: 'Child', parentId: 'p' },
@@ -410,7 +410,7 @@ describe('ClientRowModelController', () => {
 			},
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'p', name: 'Parent', parentId: null },
 				{ id: 'c', name: 'Child', parentId: 'p' },
@@ -437,7 +437,7 @@ describe('ClientRowModelController', () => {
 			},
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Alice' }],
 			columns: store.getState().columns,
 		});
@@ -467,13 +467,16 @@ describe('GroupRowMeta', () => {
 
 	it('returns null for unknown groupId', () => {
 		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
-		const ctrl = new ClientRowModelController(store, { rows: [{ id: '1', category: 'A' }], columns: store.getState().columns });
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', category: 'A' }],
+			columns: store.getState().columns,
+		});
 		expect(ctrl.getGroupMeta('no-such-id')).toBeNull();
 	});
 
 	it('collapsed group: firstChildIndex and lastChildIndex are -1, visibleDescendantRowIds is empty', () => {
 		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
-		const ctrl = new ClientRowModelController(store, {
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', category: 'A' },
 				{ id: '2', category: 'A' },
@@ -491,7 +494,7 @@ describe('GroupRowMeta', () => {
 
 	it('expanded group: firstChildIndex, lastChildIndex, and visibleDescendantRowIds are correct', () => {
 		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
-		const ctrl = new ClientRowModelController(store, {
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', category: 'A' },
 				{ id: '2', category: 'A' },
@@ -513,7 +516,7 @@ describe('GroupRowMeta', () => {
 
 	it('getGroupMetaByVisualIndex returns same object as getGroupMeta', () => {
 		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
-		const ctrl = new ClientRowModelController(store, {
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', category: 'A' }],
 			columns: store.getState().columns,
 		});
@@ -528,7 +531,7 @@ describe('GroupRowMeta', () => {
 
 	it('multiple sibling groups each have correct descendant ids', () => {
 		const store = new GridStore<GRow>({ getRowId: (r) => r.id, columns: [{ field: 'category', header: 'Category' }], groupBy: ['category'] });
-		const ctrl = new ClientRowModelController(store, {
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', category: 'A' },
 				{ id: '2', category: 'B' },
@@ -558,7 +561,7 @@ describe('GroupRowMeta', () => {
 			],
 			groupBy: ['category', 'sub'],
 		});
-		const ctrl = new ClientRowModelController(store, {
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', category: 'A', sub: 'x' },
 				{ id: '2', category: 'A', sub: 'x' },
@@ -588,7 +591,7 @@ describe('GroupRowMeta', () => {
 			groupBy: ['category'],
 			showGroupFooter: true,
 		});
-		const ctrl = new ClientRowModelController(store, {
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: '1', category: 'A' },
 				{ id: '2', category: 'A' },

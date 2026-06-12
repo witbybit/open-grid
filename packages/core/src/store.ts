@@ -3,7 +3,8 @@ export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowMod
 import type { IGridDatasource } from './serverRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
-import type { RowModelMutationRuntime, ServerRowModelRuntime } from './engine/runtimePorts.js';
+import type { ClientRowModelRuntime, ServerRowModelRuntime } from './engine/runtimePorts.js';
+import { createClientRowModelRuntime, createServerRowModelRuntime } from './engine/createRowModelRuntimes.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
 import { createEmptyRenderStats } from './renderer/renderOrchestrator.js';
 import { createRowsAccessor } from './rowsAccessor.js';
@@ -547,21 +548,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.getRowModel();
 	};
 
-	public getRowModelMutationRuntime = (): RowModelMutationRuntime<TRowData> => ({
-		clearFormulas: () => this.engine.clearFormulas(),
-		syncFormulaForCell: (rowId, colField, value) => this.engine.syncFormulaForCell(rowId, colField, value),
-		invalidateFormulaCell: (rowId, colField) => this.engine.invalidateFormulaCell(rowId, colField),
-		getValueGetterDependents: (colField) => this.engine.getValueGetterDependents(colField),
-		hasValueGetter: (colField) => this.engine.hasValueGetter(colField),
-		notifyBulkCellChange: (changes) => this.engine.notifyBulkCellChange(changes),
-		dispatchRowsUpdated: (payload) => this.dispatchEvent(GridEventName.rowsUpdated, payload),
-	});
+	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);
 
-	public getServerRowModelRuntime = (): ServerRowModelRuntime => ({
-		clearFormulas: () => this.engine.clearFormulas(),
-		isScrollingFast: () => this.engine.isScrollingFast(),
-		getScrollVelocity: () => this.engine.getScrollVelocity(),
-	});
+	public getServerRowModelRuntime = (): ServerRowModelRuntime<TRowData> => createServerRowModelRuntime(this);
 
 	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
 		const vr = this.getVisualRow(index);

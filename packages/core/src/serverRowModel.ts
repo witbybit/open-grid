@@ -1,16 +1,10 @@
-import {
-	GridStore,
-	GridEventName,
-	ColumnDef,
-	RowModel,
-	RowNode,
-	setValueByPath,
-	type VisualRow,
-	type RowRefreshReason,
-	type RowModelRefreshResult,
-} from './store.js';
+import { type ColumnDef, setValueByPath } from './columnDef.js';
+import { GridEventName } from './api/GridEvents.js';
 import type { ServerRowModelRuntime } from './engine/runtimePorts.js';
+import type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
+import { RowNode } from './rowNode.js';
 import { toDataVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
+import type { VisualRow } from './visualRow.js';
 
 export interface GetRowsParams {
 	startRow: number;
@@ -31,8 +25,7 @@ export interface ServerRowModelOptions<TData = unknown> {
 }
 
 export class ServerRowModelController<TData = unknown> implements RowModel<TData> {
-	private store: GridStore<TData>;
-	private readonly runtime: ServerRowModelRuntime;
+	private readonly runtime: ServerRowModelRuntime<TData>;
 	private datasource: IGridDatasource;
 	private blockSize: number;
 	private activeNodes: Array<RowNode<TData> | null> = [];
@@ -46,23 +39,21 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	private disposed = false;
 	private requestGeneration = 0;
 
-	constructor(store: GridStore<TData>, options: ServerRowModelOptions<TData>) {
-		this.store = store;
-		this.runtime = store.getServerRowModelRuntime();
+	constructor(runtime: ServerRowModelRuntime<TData>, options: ServerRowModelOptions<TData>) {
+		this.runtime = runtime;
 		this.datasource = options.datasource;
 		this.blockSize = options.blockSize ?? 100;
 
-		// Set base columns and config in store
-		this.store.setState({
+		this.runtime.initializeModel({
 			columns: options.columns,
 			getRowId: options.getRowId,
 		});
 
-		this.store.registerRowModel(this);
+		this.runtime.registerRowModel(this);
 
 		this.unsubscribers.push(
-			this.store.addEventListener(GridEventName.sortChanged, () => this.purgeCache()),
-			this.store.addEventListener(GridEventName.filterChanged, () => this.purgeCache())
+			this.runtime.addEventListener(GridEventName.sortChanged, () => this.purgeCache()),
+			this.runtime.addEventListener(GridEventName.filterChanged, () => this.purgeCache())
 		);
 
 		// Trigger initial fetch of block 0 to obtain totalCount and sparse placeholders
@@ -184,8 +175,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		const node = this.getRowNodeById(rowId);
 		if (!node) return false;
 
-		const col = this.store.getColumnDef(colField);
-		const oldValue = this.store.getCellValue(rowId, colField);
+		const col = this.runtime.getColumnDef(colField);
+		const oldValue = this.runtime.getCellValue(rowId, colField);
 		const updatedRow = { ...node.data };
 		if (col?.valueSetter) {
 			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
@@ -198,7 +189,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 		// If the edited cell field is currently part of active sort or filter models,
 		// we must purge the cache and refetch from server to restore correct order/filters.
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		let needsPurge = false;
 		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
 			needsPurge = true;
@@ -225,16 +216,13 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 		// Set initial mount loading state and schedule immediate repaint only if fetching block 0
 		if (blockIndex === 0) {
-			this.store.setState((s) => ({
-				loading: true,
-				globalVersion: s.globalVersion + 1,
-			}));
+			this.runtime.setLoadingState(true);
 		}
 
 		const startRow = blockIndex * this.blockSize;
 		const endRow = startRow + this.blockSize;
 
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const requestSortModel = state.sortModel;
 		const requestFilterModel = state.filterModel;
 
@@ -265,7 +253,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				const globalIdx = startRow + idx;
 				const typedRow = row as TData;
 				if (typedRow) {
-					const id = this.store.getRowId(typedRow);
+					const id = this.runtime.getRowId(typedRow);
 					let node = this.nodeMap.get(id);
 					if (node) {
 						node.setData(typedRow);
@@ -305,13 +293,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			// Layout geometry will be updated by GridEngine using GeometryModel
 			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
 			const hasActiveFetches = this.loadingBlockCount > 0;
-			this.store.setState((s) => ({
-				loading: hasActiveFetches,
-				globalVersion: s.globalVersion + 1,
-			}));
+			this.runtime.setLoadingState(hasActiveFetches);
 
 			const requestFinishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-			this.store.dispatchEvent(GridEventName.serverBlockLoaded, {
+			this.runtime.dispatchServerBlockLoaded({
 				blockIndex,
 				loadedBlockStart: startRow,
 				loadedBlockEnd: startRow + response.rows.length - 1,
@@ -322,14 +307,11 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			if (this.disposed || generation !== this.requestGeneration) {
 				return;
 			}
-			console.error(`GridEngine: Failed to fetch row block ${blockIndex}`, error);
+			this.runtime.reportBlockLoadFailure(blockIndex, error);
 			delete this.loadingBlocks[blockIndex];
 			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
 			const hasActiveFetches = this.loadingBlockCount > 0;
-			this.store.setState({
-				loading: hasActiveFetches,
-				globalVersion: this.store.getState().globalVersion + 1,
-			});
+			this.runtime.setLoadingState(hasActiveFetches);
 		}
 	};
 
@@ -344,10 +326,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.visualRowIdToIndex.clear();
 		this.rowIdToVisualIndex.clear();
 		this.runtime.clearFormulas();
-		this.store.setState({
-			loading: true,
-			globalVersion: this.store.getState().globalVersion + 1,
-		});
+		this.runtime.setLoadingState(true);
 		this.fetchBlock(0);
 	};
 

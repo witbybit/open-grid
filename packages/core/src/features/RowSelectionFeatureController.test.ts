@@ -20,7 +20,7 @@ function makeStore(): GridStore<TestRow> {
 }
 
 function makeController(store: GridStore<TestRow>): ClientRowModelController<TestRow> {
-	return new ClientRowModelController<TestRow>(store, {
+	return new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 		rows: [
 			{ id: '1', name: 'Alpha' },
 			{ id: '2', name: 'Beta' },

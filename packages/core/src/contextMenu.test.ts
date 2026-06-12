@@ -48,7 +48,7 @@ describe('GridContextMenuPlugin', () => {
 			],
 		});
 
-		rowController = new ClientRowModelController<TestRow>(store, {
+		rowController = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'r1', name: 'Product A', price: 100 },
 				{ id: 'r2', name: 'Product B', price: 200 },

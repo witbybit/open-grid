@@ -77,7 +77,7 @@ function createWideGrid(options: { rows?: number; cols?: number; custom?: boolea
 		getRowId: (row) => row.id,
 		runtimeLimits: { maxRenderedRows: 20, maxRenderedCells: 220 },
 	});
-	const controller = new ClientRowModelController(store, { rows, columns });
+	const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns });
 	const container = createContainer();
 	const renderer = new RenderEngine(store.engine, store);
 	renderer.mount(container);
@@ -127,7 +127,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 			getRowId: (row) => row.id,
 		});
 		const rows = Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows,
 			columns: store.getState().columns,
 		});
@@ -189,7 +189,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 			getRowId: (row) => row.id,
 		});
 		const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows,
 			columns: store.getState().columns,
 		});
