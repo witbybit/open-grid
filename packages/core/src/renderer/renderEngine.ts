@@ -38,8 +38,10 @@ import { SortAnimationController } from './sortAnimationController.js';
 import { GroupPanelRenderer } from './groupPanelRenderer.js';
 import { computeGridLayoutPlan, type GridLayoutPlan } from './layoutPlan.js';
 import { StickyGroupRenderer } from './stickyGroupRenderer.js';
+import { RenderInvalidationCoordinator } from './RenderInvalidationCoordinator.js';
+import { collectRenderStats, createRenderRuntimeStats, resetRenderTelemetry } from './renderTelemetry.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import { GridEventName, type GridApi, type InternalGridApi, type SelectionChangeResult } from '../store.js';
+import type { GridApi, InternalGridApi } from '../store.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -64,8 +66,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly overlayRenderer: OverlayRenderer<TRowData>;
 	public readonly groupPanelRenderer: GroupPanelRenderer<TRowData>;
 	public readonly stickyGroupRenderer: StickyGroupRenderer<TRowData>;
-
-	private unsubscribers: Array<() => void> = [];
+	private readonly invalidationCoordinator: RenderInvalidationCoordinator<TRowData>;
 	private readonly headerMenu: HeaderMenuController<TRowData>;
 
 	private readonly sortAnimation: SortAnimationController<TRowData>;
@@ -106,43 +107,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly portalFlushBudget = 24;
 	private readonly postScrollDecorationBudget = 32;
 
-	private renderStats = {
-		scrollFrames: 0,
-		viewportRecycles: 0,
-		headerPaintsDuringScroll: 0,
-		headerRangeSyncsDuringScroll: 0,
-		overlayPaintsDuringScroll: 0,
-		overlayCheapSyncsDuringScroll: 0,
-		cellsPatchedPerScrollFrame: [] as number[],
-		rowsRecycledPerScrollFrame: [] as number[],
-
-		stateReadsDuringScroll: 0,
-		focusCallsDuringScroll: 0,
-		rootTextContentWritesOnPortalCells: 0,
-		rowsVisitedDuringScroll: 0,
-		rowsReboundDuringScroll: 0,
-		cellsVisitedDuringScroll: 0,
-		cellsWrittenDuringScroll: 0,
-		portalOpsDuringScroll: 0,
-		cellAccessReadsDuringScroll: 0,
-		cellClassComputesDuringScroll: 0,
-		reusableCellsSkippedDuringScroll: 0,
-		styleHookCallsDuringScroll: 0,
-		portalFlushChunks: 0,
-		maxPortalOpsFlushedInOneChunk: 0,
-		postScrollDecorationChunks: 0,
-		maxCellsDecoratedInOneChunk: 0,
-		cellsDecoratedAfterScroll: 0,
-		rowsEnteredDuringScroll: 0,
-		rowsExitedDuringScroll: 0,
-		rowsStayedDuringScroll: 0,
-		colsEnteredDuringScroll: 0,
-		colsExitedDuringScroll: 0,
-		colsStayedDuringScroll: 0,
-		cellsSkippedDuringScroll: 0,
-		sameWindowBailouts: 0,
-		cellsBoundDuringScroll: 0,
-	};
+	private renderStats = createRenderRuntimeStats();
 
 	public get onMountCellContent(): ((mount: GridCellContentMount<TRowData>) => void) | undefined {
 		return this.portalMountManager.onMountCellContent;
@@ -281,6 +246,26 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// Group panel renderer — mounts when showGroupPanel is true
 		this.groupPanelRenderer = new GroupPanelRenderer<TRowData>(engine);
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
+		this.invalidationCoordinator = new RenderInvalidationCoordinator<TRowData>({
+			engine,
+			geometryController: this.geometryController,
+			portalMountManager: this.portalMountManager,
+			sortAnimation: this.sortAnimation,
+			scheduler: this.scheduler,
+			syncLayoutPlan: () => {
+				this.syncLayoutPlan();
+			},
+			scrollCellIntoView: (rowId, colField) => this.scrollCellIntoView(rowId, colField),
+			updateCachedGeometryBounds: () => this.updateCachedGeometryBounds(),
+			getIsScrolling: () => this.isScrolling,
+			getIsScrollFrameActive: () => this.isScrollFrameActive,
+			markFlushPendingAfterScroll: () => {
+				this.flushPendingAfterScroll = true;
+			},
+			markViewportDirtyAfterScroll: () => {
+				this.viewportDirtyAfterScroll = true;
+			},
+		});
 	}
 
 	/**
@@ -324,7 +309,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// Set viewport dimensions in model
 		this.engine.viewport.setViewportSize(rect.width || 800, rect.height || 500);
 
-		this.bindInvalidationSources();
+		this.invalidationCoordinator.bind();
 
 		// Prime the max-scroll cache so the first scroll events don't see a stale 0
 		this.updateCachedGeometryBounds();
@@ -340,9 +325,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public unmount(): void {
 		this.headerMenu.hide();
 
-		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
-		this.unsubscribers = [];
-
+		this.invalidationCoordinator.destroy();
 		this.scrollEngine.unbind();
 		const scrollViewport = this.viewportRenderer.scrollViewport;
 		if (scrollViewport) {
@@ -716,196 +699,40 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
 	}
 
-	/**
-	 * Scroll-gated flush request. While a scroll (or scroll frame) is active, a paint
-	 * flush competes with flushScrollFrame for the same frame budget — the single
-	 * biggest source of dropped frames with live data/selection during scroll.
-	 * Invalidation records accumulate in InvalidationManager regardless, so deferring
-	 * the flush to finishScrolling() loses nothing: one flushPaint consumes them all.
-	 * Scroll frames themselves keep visuals correct meanwhile (geometry/column version
-	 * bumps change the render window, which forces a full recycle on the scroll path).
-	 */
-	private requestFlushGated(reason: string): void {
-		if (this.isScrolling || this.engine.isScrolling || this.isScrollFrameActive || this.engine.isScrollFrameActive) {
-			this.flushPendingAfterScroll = true;
-			return;
-		}
-		this.scheduler.requestFlush(reason);
-	}
-
-	private bindInvalidationSources(): void {
-		const invalidateFull = () => {
-			this.engine.invalidation.invalidateFull('state');
-			this.requestFlushGated('state');
-		};
-		const invalidateHeaders = () => {
-			this.engine.invalidation.invalidateHeaders('headers');
-			this.requestFlushGated('headers');
-		};
-		const invalidateOverlay = () => {
-			this.engine.invalidation.invalidateOverlay('overlay');
-			this.requestFlushGated('overlay');
-		};
-		const invalidateViewport = () => {
-			this.engine.invalidation.invalidateViewport('viewport');
-			if (this.isScrolling || this.engine.isScrolling || this.isScrollFrameActive || this.engine.isScrollFrameActive) {
-				this.viewportDirtyAfterScroll = true;
-				return;
-			}
-			this.scheduler.requestFlush('viewport');
-		};
-		const invalidateData = () => {
-			this.engine.invalidation.invalidateViewport('data');
-			if (this.isScrolling || this.engine.isScrolling || this.isScrollFrameActive || this.engine.isScrollFrameActive) {
-				this.viewportDirtyAfterScroll = true;
-				return;
-			}
-			this.scheduler.requestFlush('data');
-		};
-		const invalidateDefaultColumnGeometry = () => {
-			this.geometryController.invalidateAll();
-			this.engine.invalidation.invalidateGeometry('columns');
-			this.engine.invalidation.invalidateViewport('columns');
-			this.engine.invalidation.invalidateHeaders('columns');
-			this.updateCachedGeometryBounds();
-			this.requestFlushGated('columns');
-		};
-		const invalidateGeometryFull = () => {
-			this.geometryController.invalidateAll();
-			this.engine.invalidation.invalidateGeometry('geometry');
-			this.engine.invalidation.invalidateViewport('geometry');
-			this.updateCachedGeometryBounds();
-			this.requestFlushGated('geometry');
-		};
-
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('defaultRowHeight', invalidateGeometryFull));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('defaultColWidth', invalidateDefaultColumnGeometry));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('globalVersion', invalidateData));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('loading', invalidateViewport));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleRowRange', invalidateViewport));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('visibleColRange', invalidateViewport));
-
-		this.unsubscribers.push(
-			this.engine.stateManager.subscribeToKey('columns', () => {
-				// Release all custom renderer instances before the column-change repaint.
-				// Without this a DOM renderer mounted in portalHostElement stays visible even
-				// after a column switches to text mode, because text writes to contentElement
-				// (a sibling div) and never clears portalHostElement.
-				this.portalMountManager.releaseAll();
-				invalidateFull();
-			})
-		);
-		this.unsubscribers.push(
-			this.engine.stateManager.subscribeToKey('columnWidths', () => {
-				invalidateGeometryFull();
-			})
-		);
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('rowHeights', invalidateGeometryFull));
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('enableColumnReorder', invalidateHeaders));
-		this.unsubscribers.push(
-			this.engine.stateManager.subscribeToKey('sortModel', () => {
-				this.sortAnimation.captureSnapshot();
-			})
-		);
-		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));
-		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener(GridEventName.selectionChanged, (event) => {
-				const { result, selection } = event.payload;
-				for (const cell of result.invalidatedCells) {
-					this.engine.invalidation.invalidateCell(cell.rowId, cell.colField, 'selection');
-				}
-				for (const rowId of result.invalidatedRows) {
-					this.engine.invalidation.invalidateRow(rowId, 'selection');
-				}
-				if (result.overlayChanged) {
-					this.engine.invalidation.invalidateOverlay('selection');
-				}
-				if (selection?.focus && selection.source !== 'pointer') {
-					this.scrollCellIntoView(selection.focus.rowId, selection.focus.colField);
-				}
-				this.requestFlushGated('selection');
-			})
-		);
-		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener(GridEventName.rowSelectionChanged, () => {
-				this.requestFlushGated('selection');
-			})
-		);
-		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener(GridEventName.cellInvalidated, () => {
-				this.requestFlushGated('cell');
-			})
-		);
-		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener(GridEventName.columnResized, (event) => {
-				this.geometryController.invalidateColumns([event.payload.colField]);
-				this.requestFlushGated('column resize');
-			})
-		);
-		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener(GridEventName.rowResized, (event) => {
-				this.geometryController.invalidateRows([event.payload.rowId]);
-				this.requestFlushGated('row resize');
-			})
-		);
-		this.unsubscribers.push(
-			this.engine.eventBus.addEventListener(GridEventName.renderInvalidated, (event) => {
-				this.requestFlushGated(event.payload.reason);
-			})
-		);
-		this.unsubscribers.push(
-			this.engine.stateManager.subscribeToKey('showGroupPanel', () => {
-				this.syncLayoutPlan();
-				this.scheduleGeometryPaint('showGroupPanel');
-			})
-		);
-	}
-
 	public schedulePaint(): void {
-		this.scheduleFullPaint('api');
+		this.invalidationCoordinator.schedulePaint();
 	}
 
 	public scheduleFullPaint(reason = 'api'): void {
-		this.engine.invalidation.invalidateFull(reason);
-		this.requestFlushGated(reason);
+		this.invalidationCoordinator.scheduleFullPaint(reason);
 	}
 
 	public scheduleViewportPaint(reason = 'viewport'): void {
-		this.engine.invalidation.invalidateViewport(reason);
-		this.requestFlushGated(reason);
+		this.invalidationCoordinator.scheduleViewportPaint(reason);
 	}
 
 	public scheduleHeaderPaint(reason = 'headers'): void {
-		this.engine.invalidation.invalidateHeaders(reason);
-		this.requestFlushGated(reason);
+		this.invalidationCoordinator.scheduleHeaderPaint(reason);
 	}
 
 	public scheduleOverlayPaint(reason = 'overlay'): void {
-		this.engine.invalidation.invalidateOverlay(reason);
-		this.requestFlushGated(reason);
+		this.invalidationCoordinator.scheduleOverlayPaint(reason);
 	}
 
 	public scheduleCellPaint(rowId: string, colId: string, reason = 'cell'): void {
-		this.engine.invalidation.invalidateCell(rowId, colId, reason);
-		this.requestFlushGated(reason);
+		this.invalidationCoordinator.scheduleCellPaint(rowId, colId, reason);
 	}
 
 	public scheduleRowPaint(rowId: string, reason = 'row'): void {
-		this.engine.invalidation.invalidateRow(rowId, reason);
-		this.requestFlushGated(reason);
+		this.invalidationCoordinator.scheduleRowPaint(rowId, reason);
 	}
 
 	public scheduleColumnPaint(colId: string, reason = 'column'): void {
-		this.engine.invalidation.invalidateColumn(colId, reason);
-		this.requestFlushGated(reason);
+		this.invalidationCoordinator.scheduleColumnPaint(colId, reason);
 	}
 
 	public scheduleGeometryPaint(reason = 'geometry'): void {
-		this.geometryController.invalidateAll();
-		this.engine.invalidation.invalidateGeometry(reason);
-		this.engine.invalidation.invalidateViewport(reason);
-		this.engine.invalidation.invalidateHeaders(reason);
-		this.requestFlushGated(reason);
+		this.invalidationCoordinator.scheduleGeometryPaint(reason);
 	}
 
 	private flushPaint(): void {
@@ -935,112 +762,17 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	}
 
 	public getRenderStats(): RenderStats {
-		const stats = this.orchestrator.getStats();
-		const portalScrollStats = this.portalMountManager.getScrollStats();
-		return {
-			...stats,
-			scrollFrames: this.renderStats.scrollFrames,
-			viewportRecycles: this.renderStats.viewportRecycles,
-			headerPaintsDuringScroll: this.renderStats.headerPaintsDuringScroll,
-			headerRangeSyncsDuringScroll: this.renderStats.headerRangeSyncsDuringScroll,
-			overlayPaintsDuringScroll: this.renderStats.overlayPaintsDuringScroll,
-			overlayCheapSyncsDuringScroll: this.renderStats.overlayCheapSyncsDuringScroll,
-			focusCallsDuringScroll: this.renderStats.focusCallsDuringScroll,
-			rootTextContentWritesOnPortalCells: this.renderStats.rootTextContentWritesOnPortalCells,
-			cellsBoundDuringScroll: this.rowRenderer.currentScrollCellsPatched,
-			rowsVisitedDuringScroll: this.rowRenderer.currentScrollRowsVisited,
-			rowsReboundDuringScroll: this.rowRenderer.currentScrollRowsRebound,
-			cellsVisitedDuringScroll: this.rowRenderer.currentScrollCellsVisited,
-			cellsWrittenDuringScroll: this.rowRenderer.currentScrollCellsWritten,
-			portalOpsDuringScroll:
-				this.rowRenderer.currentScrollPortalOps + portalScrollStats.portalMountsDuringScroll + portalScrollStats.portalReleasesDuringScroll,
-			cellsDecoratedAfterScroll: this.renderStats.cellsDecoratedAfterScroll,
-			cellAccessReadsDuringScroll: this.renderStats.cellAccessReadsDuringScroll,
-			cellClassComputesDuringScroll: this.renderStats.cellClassComputesDuringScroll,
-			dirtyCellsMarkedDuringScroll: this.rowRenderer.dirtyCellsMarkedDuringScroll,
-			postScrollDirtyCellsDecorated: this.rowRenderer.postScrollDirtyCellsDecorated,
-			reusableCellsSkippedDuringScroll: this.renderStats.reusableCellsSkippedDuringScroll,
-			styleHookCallsDuringScroll: this.renderStats.styleHookCallsDuringScroll,
-			rowsEnteredDuringScroll: this.renderStats.rowsEnteredDuringScroll,
-			rowsExitedDuringScroll: this.renderStats.rowsExitedDuringScroll,
-			rowsStayedDuringScroll: this.renderStats.rowsStayedDuringScroll,
-			colsEnteredDuringScroll: this.renderStats.colsEnteredDuringScroll,
-			colsExitedDuringScroll: this.renderStats.colsExitedDuringScroll,
-			colsStayedDuringScroll: this.renderStats.colsStayedDuringScroll,
-			cellsSkippedDuringScroll: this.renderStats.cellsSkippedDuringScroll,
-			sameWindowBailouts: this.renderStats.sameWindowBailouts,
-			stateReadsDuringScroll: this.renderStats.stateReadsDuringScroll,
-			compiledPlanVersion: this.engine.columns.getCompiledPlanVersion(),
-			getCellValueCallsDuringScroll: this.engine.getCellValueCallsDuringScroll,
-			valueGetterCallsDuringScroll: this.engine.valueGetterCallsDuringScroll,
-			formulaCallsDuringScroll: this.engine.formulaCallsDuringScroll,
-			customRendererMountsDuringScroll: this.engine.customRendererMountsDuringScroll,
-			customRendererHydrationChunks: this.engine.customRendererHydrationChunks,
-			customRendererWarmHits: this.engine.customRendererWarmHits,
-			customRendererWarmMisses: this.engine.customRendererWarmMisses,
-			...portalScrollStats,
-			hotDomReleases: this.renderStats.rowsRecycledPerScrollFrame.reduce((a: number, b: number) => a + b, 0),
-			coldDomReleases: 0,
-			cellsPatchedPerScrollFrame: this.renderStats.cellsPatchedPerScrollFrame.slice(),
-			rowsRecycledPerScrollFrame: this.renderStats.rowsRecycledPerScrollFrame.slice(),
-			portalMounts: {
-				...this.portalMountManager.getStats(),
-				custom: this.portalMountManager.customRendererManager.getStats(),
-			},
-		};
+		return collectRenderStats({
+			engine: this.engine,
+			orchestrator: this.orchestrator,
+			portalMountManager: this.portalMountManager,
+			rowRenderer: this.rowRenderer,
+			runtimeStats: this.renderStats,
+		});
 	}
 
 	public resetRenderStats(): void {
-		this.orchestrator.resetStats();
-		this.portalMountManager.resetStats();
-		this.rowRenderer.dirtyCellsMarkedDuringScroll = 0;
-		this.rowRenderer.postScrollDirtyCellsDecorated = 0;
-		this.rowRenderer.currentScrollCellsPatched = 0;
-		this.rowRenderer.currentScrollRowsRecycled = 0;
-		this.rowRenderer.currentScrollRowsVisited = 0;
-		this.rowRenderer.currentScrollRowsRebound = 0;
-		this.rowRenderer.currentScrollCellsVisited = 0;
-		this.rowRenderer.currentScrollCellsWritten = 0;
-		this.rowRenderer.currentScrollPortalOps = 0;
-		this.renderStats.scrollFrames = 0;
-		this.renderStats.viewportRecycles = 0;
-		this.renderStats.headerPaintsDuringScroll = 0;
-		this.renderStats.headerRangeSyncsDuringScroll = 0;
-		this.renderStats.overlayPaintsDuringScroll = 0;
-		this.renderStats.overlayCheapSyncsDuringScroll = 0;
-		this.renderStats.cellsPatchedPerScrollFrame = [];
-		this.renderStats.rowsRecycledPerScrollFrame = [];
-		this.renderStats.stateReadsDuringScroll = 0;
-		this.renderStats.focusCallsDuringScroll = 0;
-		this.renderStats.cellsDecoratedAfterScroll = 0;
-		this.renderStats.rootTextContentWritesOnPortalCells = 0;
-		this.renderStats.rowsVisitedDuringScroll = 0;
-		this.renderStats.rowsReboundDuringScroll = 0;
-		this.renderStats.cellsVisitedDuringScroll = 0;
-		this.renderStats.cellsWrittenDuringScroll = 0;
-		this.renderStats.portalOpsDuringScroll = 0;
-		this.renderStats.cellAccessReadsDuringScroll = 0;
-		this.renderStats.cellClassComputesDuringScroll = 0;
-		this.renderStats.reusableCellsSkippedDuringScroll = 0;
-		this.renderStats.styleHookCallsDuringScroll = 0;
-		this.renderStats.rowsEnteredDuringScroll = 0;
-		this.renderStats.rowsExitedDuringScroll = 0;
-		this.renderStats.rowsStayedDuringScroll = 0;
-		this.renderStats.colsEnteredDuringScroll = 0;
-		this.renderStats.colsExitedDuringScroll = 0;
-		this.renderStats.colsStayedDuringScroll = 0;
-		this.renderStats.cellsSkippedDuringScroll = 0;
-		this.renderStats.sameWindowBailouts = 0;
-		this.renderStats.postScrollDecorationChunks = 0;
-		this.renderStats.maxCellsDecoratedInOneChunk = 0;
-
-		this.engine.getCellValueCallsDuringScroll = 0;
-		this.engine.valueGetterCallsDuringScroll = 0;
-		this.engine.formulaCallsDuringScroll = 0;
-		this.engine.customRendererMountsDuringScroll = 0;
-		this.engine.customRendererHydrationChunks = 0;
-		this.engine.customRendererWarmHits = 0;
-		this.engine.customRendererWarmMisses = 0;
+		resetRenderTelemetry(this.engine, this.orchestrator, this.portalMountManager, this.rowRenderer, this.renderStats);
 	}
 
 	public fullPaint(): void {

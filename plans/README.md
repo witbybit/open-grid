@@ -1,25 +1,26 @@
 # Plans
 
-| #   | Plan                                                                              | Status | Commit  |
-| --- | --------------------------------------------------------------------------------- | ------ | ------- |
-| 001 | [Row Multi-Select](./001-row-multiselect.md)                                      | TODO   | 3d32692 |
-| 002 | [ColumnType Registry](./002-column-type-registry.md)                              | DONE   | 970c777 |
-| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                 | DONE   | 970c777 |
-| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                       | DONE   | 970c777 |
-| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                       | DONE   | 66c92c2 |
-| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)               | DONE   | 66c92c2 |
-| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md) | DONE   | 66c92c2 |
-| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)   | DONE   | 66c92c2 |
-| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)           | TODO   | 78e8122 |
-| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)               | DONE   | 53fe61f |
-| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)           | REVIEW | 39c83e3 |
-| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)         | DONE   | 39c83e3 |
-| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)             | DONE   | 94c9453 |
-| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                         | DONE   | 94c9453 |
-| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                   | DONE   | 0f93724 |
-| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)               | DONE   | 6b3ecc5 |
-| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                 | REVIEW | eecb571 |
-| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md) | REVIEW | bb60b76 |
+| #   | Plan                                                                                  | Status | Commit  |
+| --- | ------------------------------------------------------------------------------------- | ------ | ------- |
+| 001 | [Row Multi-Select](./001-row-multiselect.md)                                          | TODO   | 3d32692 |
+| 002 | [ColumnType Registry](./002-column-type-registry.md)                                  | DONE   | 970c777 |
+| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                     | DONE   | 970c777 |
+| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                           | DONE   | 970c777 |
+| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                           | DONE   | 66c92c2 |
+| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                   | DONE   | 66c92c2 |
+| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)     | DONE   | 66c92c2 |
+| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)       | DONE   | 66c92c2 |
+| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)               | TODO   | 78e8122 |
+| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                   | DONE   | 53fe61f |
+| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)               | REVIEW | 39c83e3 |
+| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)             | DONE   | 39c83e3 |
+| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                 | DONE   | 94c9453 |
+| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                             | DONE   | 94c9453 |
+| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                       | DONE   | 0f93724 |
+| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                   | DONE   | 6b3ecc5 |
+| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                     | REVIEW | eecb571 |
+| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)     | REVIEW | bb60b76 |
+| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md) | REVIEW | bb60b76 |
 
 ## Execution order
 
@@ -41,6 +42,7 @@
 16. `016-store-runtime-decomposition.md` - P0 runtime hardening after 015; splits `InternalGridApi` by audience, removes plugin `GridStore` downcasts, and makes `GridStore` a true facade before pre-renderer cleanup continues
 17. `017-row-model-runtime-boundary.md` - P0 runtime hardening after 016; removes concrete `GridStore` coupling from client/server row models so visual-row producers depend on explicit runtime ports before renderer work
 18. `018-runtime-fault-diagnostics-boundary.md` - P0 runtime hardening after 017; normalizes fault capture across event/state/plugin/server paths so the core has one owned diagnostic surface before renderer refactors
+19. `019-render-engine-orchestration-boundary.md` - P0 renderer hardening after 018; extracts invalidation wiring and gated paint scheduling so `RenderEngine` becomes a coordinator before deeper row-slot decomposition
 
 ## Dependency graph
 
@@ -63,6 +65,7 @@
 016  (store runtime decomposition)  - follows 015; required before renderer refactors so plugins, store facades, and host/runtime contracts stop sharing one oversized internal surface
 017  (row-model runtime boundary)   - follows 016; required before renderer refactors so visual-row producers stop depending on the concrete store facade
 018  (runtime fault diagnostics)    - follows 017; required before renderer refactors so async/listener/plugin/server failures report through one core-owned path
+019  (render-engine orchestration)  - follows 018; first renderer decomposition pass so render orchestration policy moves out of the main engine class before rowRenderer work
 ```
 
 ## Notes
@@ -85,6 +88,8 @@
 - After Plan 017, the main remaining pre-renderer hardening plan should be runtime fault/diagnostic normalization so async, listener, and server failures stop scattering local `console.error` behavior across the core.
 - Plan 018 is the last major pre-renderer core hardening pass: unify runtime fault capture across event dispatch, state listeners, undo/redo, plugins, cell notifications, and server row-model loading so the core exposes one bounded diagnostic path before renderer decomposition begins.
 - Plan 018 is implemented in the working tree and verified on 2026-06-12: runtime faults now flow through a shared reporter, `runtimeFault` is a typed grid event, recent core faults can be inspected/cleared via the API boundary, and the targeted pre-renderer core files no longer use scattered local `console.error` calls.
+- Plan 019 starts the renderer refactor proper by splitting `RenderEngine` orchestration away from subscription and invalidation policy. The goal is to make `RenderEngine` a composition root before cutting into `rowRenderer.ts`.
+- Plan 019 is implemented in the working tree and verified on 2026-06-12: renderer invalidation wiring now lives in `RenderInvalidationCoordinator.ts`, render stat snapshot/reset logic lives in `renderTelemetry.ts`, `renderEngine.ts` is down to 903 lines, and core/React/demo verification passed. React tests still emit the known `OpenGrid requires one of...` validation error during an intentional misuse test, but the suite exits green.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

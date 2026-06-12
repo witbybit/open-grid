@@ -38,6 +38,23 @@ describe('Architecture guardrails', () => {
 		expect(lines, `GridEngine.ts has ${lines} lines and must be below 800`).toBeLessThan(800);
 	});
 
+	it('renderEngine.ts is below 1000 lines (intermediate budget, target 900)', () => {
+		const lines = countLines('renderer/renderEngine.ts');
+		expect(lines, `renderEngine.ts has ${lines} lines; intermediate budget is 1000 and target is 900`).toBeLessThan(1000);
+	});
+
+	it('renderEngine.ts does not inline renderer subscription wiring', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
+		expect(content).not.toContain('stateManager.subscribeToKey');
+		expect(content).not.toContain('eventBus.addEventListener');
+	});
+
+	it('RenderInvalidationCoordinator owns renderer subscription wiring', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
+		expect(content).toContain('stateManager.subscribeToKey');
+		expect(content).toContain('eventBus.addEventListener');
+	});
+
 	it('OpenGrid.tsx does not call getStoreFromApi', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'OpenGrid.tsx'), 'utf-8');
 		expect(content).not.toContain('getStoreFromApi');
