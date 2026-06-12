@@ -1,4 +1,5 @@
 import type { GridState, GridStateUpdater, Listener } from '../store.js';
+import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 
 export class StateManager<TRowData = unknown> {
 	private state: GridState<TRowData>;
@@ -9,10 +10,16 @@ export class StateManager<TRowData = unknown> {
 	private batchedStateUpdates: Partial<GridState<TRowData>> = {};
 	private preTransactionState: GridState<TRowData> | null = null;
 	private onChangesCallback?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void;
+	private readonly faultReporter?: RuntimeFaultReporter<TRowData>;
 
-	constructor(initialState: GridState<TRowData>, onChanges?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void) {
+	constructor(
+		initialState: GridState<TRowData>,
+		onChanges?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void,
+		faultReporter?: RuntimeFaultReporter<TRowData>
+	) {
 		this.state = initialState;
 		this.onChangesCallback = onChanges;
+		this.faultReporter = faultReporter;
 	}
 
 	public debugGetStateCount = 0;
@@ -83,7 +90,12 @@ export class StateManager<TRowData = unknown> {
 			try {
 				this.onChangesCallback(prevState, updatedKeysArray);
 			} catch (e) {
-				console.error('StateManager: Error in onChangesCallback', e);
+				this.faultReporter?.report({
+					source: 'state-manager',
+					operation: 'onChangesCallback',
+					error: e,
+					context: { affectedKeys: updatedKeysArray },
+				});
 			}
 		}
 
@@ -92,7 +104,12 @@ export class StateManager<TRowData = unknown> {
 			try {
 				listener(this.state);
 			} catch (e) {
-				console.error('StateManager: Error in global store listener', e);
+				this.faultReporter?.report({
+					source: 'state-manager',
+					operation: 'global-listener',
+					error: e,
+					context: { affectedKeys: updatedKeysArray },
+				});
 			}
 		});
 
@@ -104,7 +121,7 @@ export class StateManager<TRowData = unknown> {
 					try {
 						listener(this.state);
 					} catch (e) {
-						console.error(`StateManager: Error in targeted key listener for ${key}`, e);
+						this.faultReporter?.report({ source: 'state-manager', operation: 'key-listener', error: e, context: { key } });
 					}
 				});
 			}
@@ -141,7 +158,7 @@ export class StateManager<TRowData = unknown> {
 				try {
 					listener(this.state);
 				} catch (e) {
-					console.error(`StateManager: Error in custom triggered key listener for ${key}`, e);
+					this.faultReporter?.report({ source: 'state-manager', operation: 'triggered-key-listener', error: e, context: { key } });
 				}
 			});
 		}

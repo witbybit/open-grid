@@ -3,6 +3,7 @@ import type { FilterModel, SortModel } from '../rowModel.js';
 import type { RowNode } from '../rowNode.js';
 import type { GridCellPointer, GridSelectionState, SelectionChangeResult, RowSelectionChangeResult, GridCellClickParams } from './GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
+import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
 
 export interface GridEvent<T = unknown> {
 	type: string;
@@ -34,6 +35,7 @@ export enum GridEventName {
 	rowResized = 'rowResized',
 	rowSelectionChanged = 'rowSelectionChanged',
 	rowsUpdated = 'rowsUpdated',
+	runtimeFault = 'runtimeFault',
 	selectionChanged = 'selectionChanged',
 	serverBlockLoaded = 'serverBlockLoaded',
 	showGroupFooterChanged = 'showGroupFooterChanged',
@@ -68,6 +70,7 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 		addedNodes?: RowNode<TRowData>[];
 		removedNodes?: RowNode<TRowData>[];
 	};
+	[GridEventName.runtimeFault]: RuntimeFault;
 	[GridEventName.selectionChanged]: { selection: GridSelectionState; result: SelectionChangeResult };
 	[GridEventName.serverBlockLoaded]: {
 		blockIndex: number;

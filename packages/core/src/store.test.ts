@@ -1461,6 +1461,74 @@ describe('GridStore undo and redo functionality', () => {
 		controller.dispose();
 	});
 
+	it('captures event-listener faults as runtime diagnostics instead of throwing through the bus', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+		const runtimeFault = vi.fn();
+		store.addEventListener(GridEventName.runtimeFault, runtimeFault);
+		store.addEventListener(GridEventName.selectionChanged, () => {
+			throw new Error('selection listener exploded');
+		});
+
+		expect(() => store.selectCell({ rowId: '1', colField: 'name' })).not.toThrow();
+
+		expect(runtimeFault).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'event-bus',
+					operation: GridEventName.selectionChanged,
+					message: 'selection listener exploded',
+				}),
+			})
+		);
+		expect(store.getRuntimeFaults()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					source: 'event-bus',
+					operation: GridEventName.selectionChanged,
+				}),
+			])
+		);
+
+		store.clearRuntimeFaults();
+		expect(store.getRuntimeFaults()).toEqual([]);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('captures plugin lifecycle faults through the runtime fault reporter', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const runtimeFault = vi.fn();
+		store.addEventListener(GridEventName.runtimeFault, runtimeFault);
+
+		store.registerPlugin({
+			name: 'broken-plugin',
+			onInit() {
+				throw new Error('plugin init failed');
+			},
+		});
+
+		expect(runtimeFault).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'plugin-registry',
+					operation: 'onInit',
+					message: 'plugin init failed',
+					context: { pluginName: 'broken-plugin' },
+				}),
+			})
+		);
+	});
+
 	it('avoids redundant state updates and geometry version increments on setRowHeights and setDefaultRowHeight', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],

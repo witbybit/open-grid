@@ -1,5 +1,6 @@
 import { GridEventName, type CellSubscription } from '../store.js';
 import type { DataModel } from '../models/DataModel.js';
+import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import type { EventBus } from '../events/EventBus.js';
 import type { InvalidationManager } from '../renderer/invalidationManager.js';
 import { defaultGridScheduler } from '../renderer/gridScheduler.js';
@@ -10,6 +11,7 @@ export interface CellNotificationControllerDeps<TRowData = unknown> {
 	invalidation: InvalidationManager;
 	requestRender: (reason: string) => void;
 	rowVersions: Map<string, number>;
+	faultReporter?: RuntimeFaultReporter<TRowData>;
 }
 
 export class CellNotificationController<TRowData = unknown> {
@@ -195,7 +197,7 @@ export class CellNotificationController<TRowData = unknown> {
 			try {
 				sub.onStoreChange();
 			} catch (e) {
-				console.error(errorMessage, e);
+				this.deps.faultReporter?.report({ source: 'cell-notifications', operation: errorMessage, error: e });
 			}
 		});
 	}

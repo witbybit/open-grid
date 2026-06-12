@@ -9,9 +9,11 @@ import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { PersistenceStatus, PersistedGridState } from '../persistence/statePersistence.js';
 import type { CsvExportOptions } from '../export/csvExport.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
+import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridState, GridStateUpdater, Listener, ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 
 export type { CsvExportOptions };
+export type { RuntimeFault };
 
 // ── Cell / selection types ────────────────────────────────────────────────────
 
@@ -385,6 +387,10 @@ export interface GridApi<TRowData = unknown> {
 	subscribeToPersistenceStatus(listener: (status: PersistenceStatus) => void): () => void;
 	/** Immediately save current state, bypassing the debounce timer. No-op when no adapter is set. */
 	saveNow(): void;
+	/** Returns a bounded snapshot of recent runtime faults captured by the grid core. */
+	getRuntimeFaults(): RuntimeFault[];
+	/** Clears the captured runtime fault history. */
+	clearRuntimeFaults(): void;
 	destroy(): void;
 }
 

@@ -96,6 +96,8 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		getPersistenceStatus: source.getPersistenceStatus,
 		subscribeToPersistenceStatus: source.subscribeToPersistenceStatus,
 		saveNow: source.saveNow,
+		getRuntimeFaults: source.getRuntimeFaults,
+		clearRuntimeFaults: source.clearRuntimeFaults,
 		destroy: source.destroy,
 		getCellState: source.getCellState,
 		getCheapDisplayValue: source.getCheapDisplayValue,

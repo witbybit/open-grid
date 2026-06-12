@@ -42,6 +42,7 @@ import { DataMutationController } from '../features/DataMutationController.js';
 import { GridStateFeatureController } from '../features/GridStateFeatureController.js';
 import { CellNotificationController } from './CellNotificationController.js';
 import { GridStateReactionController } from './GridStateReactionController.js';
+import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -55,6 +56,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly stateManager: StateManager<TRowData>;
 	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus<TRowData>;
+	public readonly runtimeFaults: RuntimeFaultReporter<TRowData>;
 	public readonly invalidation: InvalidationManager;
 	public readonly changeApplier: GridChangeApplier<TRowData>;
 	public readonly columnFeature: ColumnFeatureController<TRowData>;
@@ -95,8 +97,12 @@ export class GridEngine<TRowData = unknown> {
 	public getRenderStats?: () => RenderStats;
 	public resetRenderStats?: () => void;
 	constructor(config: GridEngineConfig<TRowData>) {
-		this.commandHistory = new CommandHistory();
 		this.eventBus = new EventBus<TRowData>();
+		this.runtimeFaults = new RuntimeFaultReporter<TRowData>({
+			emit: (fault) => this.eventBus.dispatchEvent(GridEventName.runtimeFault, fault),
+		});
+		this.eventBus.setRuntimeFaultReporter(this.runtimeFaults);
+		this.commandHistory = new CommandHistory(this.runtimeFaults);
 		this.invalidation = new InvalidationManager();
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
@@ -152,6 +158,7 @@ export class GridEngine<TRowData = unknown> {
 			invalidation: this.invalidation,
 			requestRender: (reason) => this.requestRender(reason),
 			rowVersions: this.rowVersions,
+			faultReporter: this.runtimeFaults,
 		});
 		this.stateReactions = new GridStateReactionController<TRowData>({
 			getStateManager: () => this.stateManager,
@@ -220,7 +227,7 @@ export class GridEngine<TRowData = unknown> {
 		};
 
 		// Construct StateManager with coordinate state update bridging
-		this.stateManager = new StateManager<TRowData>(initialState, this.stateReactions.handleStateChanges);
+		this.stateManager = new StateManager<TRowData>(initialState, this.stateReactions.handleStateChanges, this.runtimeFaults);
 
 		// Initialize changeApplier after stateManager is available
 		this.changeApplier = new GridChangeApplier<TRowData>({

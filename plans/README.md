@@ -19,6 +19,7 @@
 | 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                   | DONE   | 0f93724 |
 | 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)               | DONE   | 6b3ecc5 |
 | 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                 | REVIEW | eecb571 |
+| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md) | REVIEW | bb60b76 |
 
 ## Execution order
 
@@ -39,6 +40,7 @@
 15. `015-internal-adapter-boundary.md` - P0 adapter-boundary hardening after 014; seals `@open-grid/core/internal` into an explicit host/adapter contract before deeper renderer decomposition
 16. `016-store-runtime-decomposition.md` - P0 runtime hardening after 015; splits `InternalGridApi` by audience, removes plugin `GridStore` downcasts, and makes `GridStore` a true facade before pre-renderer cleanup continues
 17. `017-row-model-runtime-boundary.md` - P0 runtime hardening after 016; removes concrete `GridStore` coupling from client/server row models so visual-row producers depend on explicit runtime ports before renderer work
+18. `018-runtime-fault-diagnostics-boundary.md` - P0 runtime hardening after 017; normalizes fault capture across event/state/plugin/server paths so the core has one owned diagnostic surface before renderer refactors
 
 ## Dependency graph
 
@@ -60,6 +62,7 @@
 015  (internal adapter boundary)    - follows 014; required before renderer refactors so framework adapters depend on a narrow host contract instead of broad engine/store/renderer internals
 016  (store runtime decomposition)  - follows 015; required before renderer refactors so plugins, store facades, and host/runtime contracts stop sharing one oversized internal surface
 017  (row-model runtime boundary)   - follows 016; required before renderer refactors so visual-row producers stop depending on the concrete store facade
+018  (runtime fault diagnostics)    - follows 017; required before renderer refactors so async/listener/plugin/server failures report through one core-owned path
 ```
 
 ## Notes
@@ -80,6 +83,8 @@
 - Plan 017 is the next pre-renderer hardening step: move client/server row models onto explicit runtime contracts so grouping, transactions, and server loading stop depending on the concrete `GridStore` facade.
 - Plan 017 is implemented in the working tree and verified on 2026-06-12: client and server row models now initialize against explicit row-model runtimes, `createGrid.ts` composes them through `store.getClientRowModelRuntime()` / `store.getServerRowModelRuntime()`, architecture guards prevent concrete `GridStore` creep from returning, and core/React/demo verification passed after aliasing the demo to source entrypoints for local workspace package resolution.
 - After Plan 017, the main remaining pre-renderer hardening plan should be runtime fault/diagnostic normalization so async, listener, and server failures stop scattering local `console.error` behavior across the core.
+- Plan 018 is the last major pre-renderer core hardening pass: unify runtime fault capture across event dispatch, state listeners, undo/redo, plugins, cell notifications, and server row-model loading so the core exposes one bounded diagnostic path before renderer decomposition begins.
+- Plan 018 is implemented in the working tree and verified on 2026-06-12: runtime faults now flow through a shared reporter, `runtimeFault` is a typed grid event, recent core faults can be inspected/cleared via the API boundary, and the targeted pre-renderer core files no longer use scattered local `console.error` calls.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

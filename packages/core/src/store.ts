@@ -139,7 +139,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
 		this.pluginRuntime = createGridPluginRuntime(this as unknown as GridPluginRuntime<TRowData>);
-		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime);
+		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime, this.engine.runtimeFaults);
 
 		// Apply persisted pin counts at construction time before any renders occur
 		if (initialState.pinnedColumns) {
@@ -850,6 +850,16 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public resetRenderStats = (): void => {
 		this.engine.resetRenderStats?.();
+	};
+
+	public getRuntimeFaults = () => this.engine.runtimeFaults.snapshot();
+
+	public clearRuntimeFaults = (): void => {
+		this.engine.runtimeFaults.clear();
+	};
+
+	public reportRuntimeFault = (fault: import('./diagnostics/RuntimeFaultReporter.js').RuntimeFaultInput) => {
+		return this.engine.runtimeFaults.report(fault);
 	};
 
 	public destroy = (): void => {

@@ -157,6 +157,22 @@ describe('Architecture guardrails', () => {
 		}
 	});
 
+	it('core runtime fault paths do not use scattered console.error calls', () => {
+		const files = [
+			'events/EventBus.ts',
+			'state/StateManager.ts',
+			'commands/CommandHistory.ts',
+			'plugins/GridPluginRegistry.ts',
+			'engine/CellNotificationController.ts',
+			'engine/createRowModelRuntimes.ts',
+			'serverRowModel.ts',
+		];
+		for (const file of files) {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
+			expect(content, `${file} must report faults through RuntimeFaultReporter`).not.toContain('console.error');
+		}
+	});
+
 	it('row-model runtimes are defined in runtimePorts and used from factory wiring', () => {
 		const runtimePorts = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'runtimePorts.ts'), 'utf-8');
 		expect(runtimePorts).toContain('export interface ClientRowModelRuntime');

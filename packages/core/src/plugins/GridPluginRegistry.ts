@@ -1,17 +1,25 @@
 import type { GridPlugin, GridPluginController, GridPluginRuntime } from '../api/GridApi.js';
+import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import type { ViewportRange } from '../viewportController.js';
 
 export class GridPluginRegistry<TRowData = unknown> implements GridPluginController<TRowData> {
 	private readonly plugins = new Map<string, GridPlugin<TRowData>>();
 
-	constructor(private readonly runtime: GridPluginRuntime<TRowData>) {}
+	constructor(
+		private readonly runtime: GridPluginRuntime<TRowData>,
+		private readonly faultReporter?: RuntimeFaultReporter<TRowData>
+	) {}
 
 	public registerPlugin(plugin: GridPlugin<TRowData>): void {
 		if (this.plugins.has(plugin.name)) {
 			this.unregisterPlugin(plugin.name);
 		}
 		this.plugins.set(plugin.name, plugin);
-		plugin.onInit?.(this.runtime);
+		try {
+			plugin.onInit?.(this.runtime);
+		} catch (error) {
+			this.faultReporter?.report({ source: 'plugin-registry', operation: 'onInit', error, context: { pluginName: plugin.name } });
+		}
 	}
 
 	public getPlugin<T = unknown>(name: string): T | null {
@@ -25,7 +33,7 @@ export class GridPluginRegistry<TRowData = unknown> implements GridPluginControl
 		try {
 			plugin.onDestroy?.();
 		} catch (error) {
-			console.error(error);
+			this.faultReporter?.report({ source: 'plugin-registry', operation: 'onDestroy', error, context: { pluginName: plugin.name } });
 		}
 
 		this.plugins.delete(name);
@@ -33,7 +41,11 @@ export class GridPluginRegistry<TRowData = unknown> implements GridPluginControl
 
 	public notifyViewportChange(range: ViewportRange): void {
 		for (const plugin of this.plugins.values()) {
-			plugin.onViewportChange?.(range);
+			try {
+				plugin.onViewportChange?.(range);
+			} catch (error) {
+				this.faultReporter?.report({ source: 'plugin-registry', operation: 'onViewportChange', error, context: { pluginName: plugin.name } });
+			}
 		}
 	}
 

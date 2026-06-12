@@ -49,6 +49,12 @@ export function createServerRowModelRuntime<TRowData>(store: GridStore<TRowData>
 		getScrollVelocity: () => store.engine.getScrollVelocity(),
 		setLoadingState: (loading) => store.setState((s) => ({ loading, globalVersion: s.globalVersion + 1 })),
 		dispatchServerBlockLoaded: (payload) => store.dispatchEvent(GridEventName.serverBlockLoaded, payload),
-		reportBlockLoadFailure: (blockIndex, error) => console.error(`GridEngine: Failed to fetch row block ${blockIndex}`, error),
+		reportBlockLoadFailure: (blockIndex, error) =>
+			store.reportRuntimeFault({
+				source: 'server-row-model',
+				operation: 'fetch-block',
+				error,
+				context: { blockIndex },
+			}),
 	};
 }

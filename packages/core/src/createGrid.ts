@@ -203,6 +203,8 @@ export function createApiFacade<TRowData>(
 		subscribeToPersistenceStatus: (listener: (status: PersistenceStatus) => void): (() => void) =>
 			persistenceController?.onStatusChange(listener) ?? (() => {}),
 		saveNow: (): void => persistenceController?.saveNow(),
+		getRuntimeFaults: () => store.getRuntimeFaults(),
+		clearRuntimeFaults: () => store.clearRuntimeFaults(),
 		destroy,
 	};
 

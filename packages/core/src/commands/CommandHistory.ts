@@ -3,10 +3,14 @@ export interface CommandUndoEntry {
 	redo(): void;
 }
 
+import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
+
 export class CommandHistory {
 	private undoStack: CommandUndoEntry[] = [];
 	private redoStack: CommandUndoEntry[] = [];
 	private maxHistory = 100;
+
+	constructor(private readonly faultReporter?: RuntimeFaultReporter) {}
 
 	public add(entry: CommandUndoEntry): void {
 		this.undoStack.push(entry);
@@ -23,7 +27,7 @@ export class CommandHistory {
 				entry.undo();
 				this.redoStack.push(entry);
 			} catch (e) {
-				console.error('CommandHistory: Error executing undo', e);
+				this.faultReporter?.report({ source: 'command-history', operation: 'undo', error: e });
 			}
 		}
 	}
@@ -35,7 +39,7 @@ export class CommandHistory {
 				entry.redo();
 				this.undoStack.push(entry);
 			} catch (e) {
-				console.error('CommandHistory: Error executing redo', e);
+				this.faultReporter?.report({ source: 'command-history', operation: 'redo', error: e });
 			}
 		}
 	}

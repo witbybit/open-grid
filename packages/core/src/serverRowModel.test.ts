@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GridStore } from './store.js';
+import { GridEventName, GridStore } from './store.js';
 import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
 
 interface TestRow {
@@ -324,5 +324,47 @@ describe('ServerRowModelController', () => {
 		expect(secondDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 0, endRow: 25 }));
 		expect(controller.getVisualRowIndexById('1')).toBe(-1);
 		expect(getRowNode(controller, 0)?.data.name).toBe('Bob');
+	});
+
+	it('captures datasource fetch failures as runtime faults', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const runtimeFault = vi.fn();
+		store.addEventListener(GridEventName.runtimeFault, runtimeFault);
+
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+			datasource: {
+				getRows: vi.fn().mockRejectedValue(new Error('network down')),
+			},
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(runtimeFault).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'server-row-model',
+					operation: 'fetch-block',
+					message: 'network down',
+					context: { blockIndex: 0 },
+				}),
+			})
+		);
+		expect(store.getRuntimeFaults()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					source: 'server-row-model',
+					operation: 'fetch-block',
+				}),
+			])
+		);
+		expect(store.getState().loading).toBe(false);
+
+		controller.dispose();
+		store.destroy();
 	});
 });
