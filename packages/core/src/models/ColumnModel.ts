@@ -6,11 +6,10 @@
 	type ColumnRenderMode,
 	type CompiledGridPlan,
 } from '../store.js';
-import type { GridEngine } from '../engine/GridEngine.js';
+import type { ColumnModelRuntime } from '../engine/runtimePorts.js';
 import { IndexMapper } from './IndexMapper.js';
 
 export class ColumnModel<TRowData = unknown> {
-	private engine!: GridEngine<TRowData>;
 	private columnMap = new Map<string, InternalColumnDef<TRowData>>();
 	private displayedColumns: InternalColumnDef<TRowData>[] = [];
 	private valueGetterDependents = new Map<string, string[]>();
@@ -23,9 +22,7 @@ export class ColumnModel<TRowData = unknown> {
 	private compiledPlanPinRight = -1;
 	private compiledPlanGeometryVersion = -1;
 
-	public init(engine: GridEngine<TRowData>): void {
-		this.engine = engine;
-	}
+	constructor(private readonly runtime: ColumnModelRuntime<TRowData>) {}
 
 	public updateColumns(columns: ColumnDef<TRowData>[], columnWidths: Record<string, number>, defaultColWidth?: number): void {
 		if (defaultColWidth !== undefined) {
@@ -61,8 +58,8 @@ export class ColumnModel<TRowData = unknown> {
 		});
 		this.displayedColumns = normalizedColumns.filter((column) => column.hide !== true);
 
-		this.engine.geometry.updateColumns(widths, this.defaultColWidth);
-		this.engine.data.updateCompiledGetters(normalizedColumns);
+		this.runtime.geometry.updateColumns(widths, this.defaultColWidth);
+		this.runtime.updateCompiledGetters(normalizedColumns);
 
 		// Compute ColumnRenderPlans
 		this.columnPlans.clear();
@@ -146,9 +143,10 @@ export class ColumnModel<TRowData = unknown> {
 	}
 
 	public getCompiledPlan(): CompiledGridPlan<TRowData> {
-		const pinLeftCount = Math.min(this.engine.viewport.pinLeftColumns, this.displayedColumns.length);
-		const pinRightCount = Math.min(this.engine.viewport.pinRightColumns, Math.max(0, this.displayedColumns.length - pinLeftCount));
-		const geometryVersion = this.engine.geometryVersion;
+		const pinCounts = this.runtime.getPinnedColumnCounts();
+		const pinLeftCount = Math.min(pinCounts.left, this.displayedColumns.length);
+		const pinRightCount = Math.min(pinCounts.right, Math.max(0, this.displayedColumns.length - pinLeftCount));
+		const geometryVersion = this.runtime.getGeometryVersion();
 		if (
 			this.compiledPlan &&
 			this.compiledPlanPinLeft === pinLeftCount &&
@@ -160,9 +158,9 @@ export class ColumnModel<TRowData = unknown> {
 
 		const displayedColumns = this.displayedColumns;
 		const columnPlans = displayedColumns.map((column) => this.columnPlans.get(column.field)!);
-		const totalWidth = this.engine.geometry.getTotalWidth(this.defaultColWidth);
-		const colLefts = this.engine.geometry.colLefts.slice(0, displayedColumns.length);
-		const colWidths = this.engine.geometry.colWidths.slice(0, displayedColumns.length);
+		const totalWidth = this.runtime.geometry.getTotalWidth(this.defaultColWidth);
+		const colLefts = this.runtime.geometry.colLefts.slice(0, displayedColumns.length);
+		const colWidths = this.runtime.geometry.colWidths.slice(0, displayedColumns.length);
 		const pinRightStart = Math.max(pinLeftCount, displayedColumns.length - pinRightCount);
 		const pinLeftWidth = pinLeftCount > 0 ? (colLefts[Math.min(pinLeftCount, displayedColumns.length)] ?? 0) : 0;
 		const pinRightBaseLeft = pinRightStart < displayedColumns.length ? (colLefts[pinRightStart] ?? totalWidth) : totalWidth;
@@ -252,14 +250,14 @@ export class ColumnModel<TRowData = unknown> {
 	}
 
 	public getColLeft(colIdx: number): number {
-		return this.engine.geometry.getColLeft(colIdx, this.defaultColWidth);
+		return this.runtime.geometry.getColLeft(colIdx, this.defaultColWidth);
 	}
 
 	public getColWidth(colIdx: number): number {
-		return this.engine.geometry.getColWidth(colIdx, this.defaultColWidth);
+		return this.runtime.geometry.getColWidth(colIdx, this.defaultColWidth);
 	}
 
 	public getTotalWidth(): number {
-		return this.engine.geometry.getTotalWidth(this.defaultColWidth);
+		return this.runtime.geometry.getTotalWidth(this.defaultColWidth);
 	}
 }

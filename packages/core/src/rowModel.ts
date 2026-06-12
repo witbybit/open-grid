@@ -9,6 +9,7 @@ import {
 	type RowNodeTransaction,
 } from './store.js';
 import { GridEventName } from './api/GridEvents.js';
+import type { RowModelMutationRuntime } from './engine/runtimePorts.js';
 import { getFieldRoot } from './ids.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
 import { RowDataStore } from './rows/RowDataStore.js';
@@ -341,6 +342,7 @@ export function applyClientSortAndFilter<TData>(
 
 export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
 	private store: GridStore<TData>;
+	private readonly runtime: RowModelMutationRuntime<TData>;
 	private dataStore: RowDataStore<TData>;
 	private visualRows: Array<VisualRow<TData>> = [];
 	private visualRowIdToIndex = new Map<string, number>();
@@ -427,6 +429,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
 		this.store = store;
+		this.runtime = store.getRowModelMutationRuntime();
 		this.dataStore = new RowDataStore<TData>((row) => this.store.getRowId(row));
 
 		// Set base columns and config in store
@@ -454,7 +457,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	public setRows(rows: TData[]): void {
 		this.dataStore.setRows(rows);
-		this.store.engine.clearFormulas();
+		this.runtime.clearFormulas();
 		this.refresh();
 	}
 
@@ -486,10 +489,10 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				const node = this.dataStore.getNode(rowId);
 				if (node) {
 					const nextVal = (node.data as Record<string, unknown>)[field];
-					this.store.engine.syncFormulaForCell(rowId, field, nextVal);
+					this.runtime.syncFormulaForCell(rowId, field, nextVal);
 				}
 
-				const invalidated = this.store.engine.invalidateFormulaCell(rowId, field);
+				const invalidated = this.runtime.invalidateFormulaCell(rowId, field);
 				for (const cell of invalidated) {
 					addInvalidatedCell(cell.rowId, cell.colField);
 				}
@@ -546,7 +549,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				if (changedFields) {
 					for (const field of changedFields) {
 						addNotifyCell(node.id, field);
-						for (const dependentField of this.store.engine.columns.getValueGetterDependents(field)) {
+						for (const dependentField of this.runtime.getValueGetterDependents(field)) {
 							if (dependentField !== field) {
 								addNotifyCell(node.id, dependentField);
 							}
@@ -555,10 +558,10 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				}
 			}
 
-			this.store.engine.notifyBulkCellChange(notifyCells);
+			this.runtime.notifyBulkCellChange(notifyCells);
 
 			if (result.changedValuesByRow.size > 0) {
-				this.store.dispatchEvent(GridEventName.rowsUpdated, {
+				this.runtime.dispatchRowsUpdated({
 					changedValuesByRow: result.changedValuesByRow,
 					changedNodes: result.changedNodes,
 				});
@@ -575,13 +578,13 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				const cellSet = new Set<string>();
 				for (const field of fields) {
 					cellSet.add(field);
-					for (const dep of this.store.engine.columns.getValueGetterDependents(field)) {
+					for (const dep of this.runtime.getValueGetterDependents(field)) {
 						if (dep !== field) cellSet.add(dep);
 					}
 				}
 				notifyCells.set(rowId, cellSet);
 			}
-			this.store.engine.notifyBulkCellChange(notifyCells);
+			this.runtime.notifyBulkCellChange(notifyCells);
 		}
 
 		if (result.added.length > 0 || result.removed.length > 0) {
@@ -589,7 +592,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {
-			this.store.dispatchEvent(GridEventName.rowsUpdated, {
+			this.runtime.dispatchRowsUpdated({
 				changedValuesByRow: result.changedValuesByRow,
 				changedNodes: result.updated,
 				addedNodes: result.added,
@@ -687,7 +690,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			needsRefresh = true;
 		} else if (state.groupBy && state.groupBy.includes(colField)) {
 			needsRefresh = true;
-		} else if (this.store.engine.columns.hasValueGetter(colField)) {
+		} else if (this.runtime.hasValueGetter(colField)) {
 			needsRefresh = true;
 		} else {
 			// If grouping or custom row models (e.g. parentId tree) are active, any cell edit

@@ -3,7 +3,7 @@
  *
  * These tests enforce structural constraints that keep the codebase from
  * drifting back into the cross-file protocol and god-object patterns called
- * out in Plans 011-013.
+ * out in Plans 011-014.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -23,9 +23,9 @@ function coreFileContains(relPath: string, substring: string): boolean {
 }
 
 describe('Architecture guardrails', () => {
-	it('store.ts is below 900 lines', () => {
+	it('store.ts is below 900 lines (intermediate budget, target 850)', () => {
 		const lines = countLines('store.ts');
-		expect(lines, `store.ts has ${lines} lines and must stay below 900`).toBeLessThan(900);
+		expect(lines, `store.ts has ${lines} lines; intermediate budget is 900 and target is 850`).toBeLessThan(900);
 	});
 
 	it('GridEngine.ts is below 1000 lines (intermediate budget, target 800)', () => {
@@ -92,5 +92,23 @@ describe('Architecture guardrails', () => {
 	it('GridChange.reason is not typed as string', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
 		expect(content).not.toContain('reason: string;');
+	});
+
+	it('core models do not depend on the concrete GridEngine type', () => {
+		const files = ['models/DataModel.ts', 'models/ColumnModel.ts', 'models/CellAccess.ts'];
+		for (const file of files) {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
+			expect(content, `${file} must not reference GridEngine`).not.toContain('GridEngine<');
+			expect(content, `${file} must not store a private engine field`).not.toContain('private engine!');
+			expect(content, `${file} must not expose init(engine)`).not.toContain('init(engine');
+		}
+	});
+
+	it('row models do not reach through store.engine', () => {
+		const files = ['rowModel.ts', 'serverRowModel.ts'];
+		for (const file of files) {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
+			expect(content, `${file} must not use store.engine reach-through`).not.toContain('store.engine.');
+		}
 	});
 });

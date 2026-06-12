@@ -1,18 +1,15 @@
-import type { GridEngine } from '../engine/GridEngine.js';
+import type { GridState } from '../state/GridState.js';
+import type { CellAccessRuntime } from '../engine/runtimePorts.js';
 import type { ColumnDef, GridCellAccess, RowNode } from '../store.js';
 
 export class CellAccessModel<TRowData = unknown> {
-	private engine!: GridEngine<TRowData>;
-
-	public init(engine: GridEngine<TRowData>): void {
-		this.engine = engine;
-	}
+	constructor(private readonly runtime: CellAccessRuntime<TRowData>) {}
 
 	public getByPointer(rowId: string, colField: string, event?: Event): GridCellAccess<TRowData> | null {
-		const rowModel = this.engine.getRowModel();
+		const rowModel = this.runtime.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
-		const colIndex = this.engine.columns.getColumnIndex(colField);
-		const column = this.engine.columns.getColumnDef(colField);
+		const colIndex = this.runtime.getColumnIndex(colField);
+		const column = this.runtime.getColumnDef(colField);
 
 		if (!column) return null;
 
@@ -30,11 +27,11 @@ export class CellAccessModel<TRowData = unknown> {
 		colIndex: number,
 		column: ColumnDef<TRowData>,
 		event?: Event,
-		hoistedState?: ReturnType<typeof this.engine.stateManager.getState>
+		hoistedState?: GridState<TRowData>
 	): GridCellAccess<TRowData> {
-		const value = this.engine.data.getCellValue(rowId, column.field);
-		const rawValue = this.engine.data.getRawCellValue(rowId, column.field);
-		const state = hoistedState ?? this.engine.stateManager.getState();
+		const value = this.runtime.getCellValue(rowId, column.field);
+		const rawValue = this.runtime.getRawCellValue(rowId, column.field);
+		const state = hoistedState ?? this.runtime.getState();
 		const focusedCell = state.selection.focus;
 		const selectedBounds = state.selection.bounds;
 		const isFocused = focusedCell?.rowId === rowId && focusedCell?.colField === column.field;
@@ -45,9 +42,9 @@ export class CellAccessModel<TRowData = unknown> {
 			rowIndex <= selectedBounds.maxRow &&
 			colIndex >= selectedBounds.minCol &&
 			colIndex <= selectedBounds.maxCol;
-		const isRowSelected = this.engine.selection.isRowSelected(rowIndex);
+		const isRowSelected = this.runtime.isRowSelected(rowIndex);
 		const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === column.field;
-		const isLoading = this.engine.data.isRowLoading(rowId) || !!column.loading;
+		const isLoading = this.runtime.isRowLoading(rowId) || !!column.loading;
 
 		return {
 			rowId,

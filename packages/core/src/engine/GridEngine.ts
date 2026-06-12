@@ -8,7 +8,11 @@ import {
 	type ColumnDef,
 	type GridCellRange,
 	type GridCellPointer,
+	type GridEventListener,
+	type GridEventPayloadMap,
 	type GridSelectionSource,
+	type GridStateUpdater,
+	type Listener,
 	type RowSelectionChangeResult,
 	type RowSelectionGesture,
 	type RowSelectionGestureSource,
@@ -98,13 +102,50 @@ export class GridEngine<TRowData = unknown> {
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
 		// Construct sub-models
-		this.data = new DataModel<TRowData>();
-		this.columns = new ColumnModel<TRowData>();
-		this.viewport = new ViewportModel<TRowData>();
 		this.geometry = new GeometryModel();
+		this.data = new DataModel<TRowData>({
+			getState: () => this.stateManager.getState(),
+			getRowModel: () => this.rowModel,
+			getColumnDef: (colField) => this.columns.getColumnDef(colField),
+			hasFormula: (rowId, colField) => this.hasFormula(rowId, colField),
+			getFormula: (rowId, colField) => this.getFormula(rowId, colField),
+			getCachedFormulaValue: (rowId, colField) => this.getCachedFormulaValue(rowId, colField),
+			evaluateFormulaCell: (rowId, colField, getRawValue) => this.evaluateFormulaCell(rowId, colField, getRawValue),
+			syncFormulaForCell: (rowId, colField, value) => this.syncFormulaForCell(rowId, colField, value),
+			isScrolling: () => this.isScrolling,
+			isScrollFrameActive: () => this.isScrollFrameActive,
+			recordGetCellValueDuringScroll: () => {
+				this.getCellValueCallsDuringScroll++;
+			},
+			recordValueGetterDuringScroll: () => {
+				this.valueGetterCallsDuringScroll++;
+			},
+			recordFormulaDuringScroll: () => {
+				this.formulaCallsDuringScroll++;
+			},
+		});
+		this.columns = new ColumnModel<TRowData>({
+			geometry: this.geometry,
+			updateCompiledGetters: (columns) => this.data.updateCompiledGetters(columns),
+			getPinnedColumnCounts: () => ({
+				left: this.viewport.pinLeftColumns,
+				right: this.viewport.pinRightColumns,
+			}),
+			getGeometryVersion: () => this.geometryVersion,
+		});
+		this.viewport = new ViewportModel<TRowData>();
 		this.selection = new SelectionModel();
 		this.edit = new EditModel();
-		this.cellAccess = new CellAccessModel<TRowData>();
+		this.cellAccess = new CellAccessModel<TRowData>({
+			getRowModel: () => this.rowModel,
+			getColumnIndex: (colField) => this.columns.getColumnIndex(colField),
+			getColumnDef: (colField) => this.columns.getColumnDef(colField),
+			getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),
+			getRawCellValue: (rowId, colField) => this.data.getRawCellValue(rowId, colField),
+			getState: () => this.stateManager.getState(),
+			isRowSelected: (rowIndex) => this.selection.isRowSelected(rowIndex),
+			isRowLoading: (rowId) => this.data.isRowLoading(rowId),
+		});
 		this.cellNotifications = new CellNotificationController<TRowData>({
 			data: this.data,
 			eventBus: this.eventBus,
@@ -232,13 +273,10 @@ export class GridEngine<TRowData = unknown> {
 		});
 
 		// Link sub-models back to this engine context
-		this.data.init(this);
-		this.columns.init(this);
 		this.viewport.init(this);
 		this.geometry.init();
 		this.selection.init();
 		this.edit.init();
-		this.cellAccess.init(this);
 
 		// Setup columns if they are passed in config
 		if (config.columns) {
@@ -254,6 +292,104 @@ export class GridEngine<TRowData = unknown> {
 		this.invalidation.invalidateFull('set data');
 		this.requestRender('set data');
 		this.commandHistory.clear();
+	}
+
+	public getState(): GridState<TRowData> {
+		return this.stateManager.getState();
+	}
+
+	public setState(updater: GridStateUpdater<TRowData>): void {
+		this.stateManager.setState(updater);
+	}
+
+	public subscribe(listener: Listener<TRowData>): () => void {
+		return this.stateManager.subscribe(listener);
+	}
+
+	public subscribeToKey(key: string, listener: Listener<TRowData>): () => void {
+		return this.stateManager.subscribeToKey(key, listener);
+	}
+
+	public addEventListener<K extends keyof GridEventPayloadMap<TRowData>>(
+		type: K,
+		callback: GridEventListener<GridEventPayloadMap<TRowData>[K]>
+	): () => void {
+		return this.eventBus.addEventListener(type, callback);
+	}
+
+	public dispatchEvent<K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void {
+		this.eventBus.dispatchEvent(type, payload);
+	}
+
+	public getRowId(row: TRowData): string {
+		return this.data.getRowId(row);
+	}
+
+	public isRowLoading(rowId: string): boolean {
+		return this.data.isRowLoading(rowId);
+	}
+
+	public getCellDisplayValue(rowId: string, colField: string): unknown {
+		return this.data.getCellValue(rowId, colField);
+	}
+
+	public getCachedDisplayValue(rowId: string, colField: string): string | undefined {
+		return this.data.getCachedDisplayValue(rowId, colField);
+	}
+
+	public getCheapDisplayValue(rowId: string, colField: string): string {
+		return this.data.getCheapDisplayValue(rowId, colField);
+	}
+
+	public getComputedCellValue(rowId: string, colField: string): unknown {
+		return this.data.getComputedCellValue(rowId, colField);
+	}
+
+	public getRawCellValue(rowId: string, colField: string): unknown {
+		return this.data.getRawCellValue(rowId, colField);
+	}
+
+	public getDisplayedColumns(): ColumnDef<TRowData>[] {
+		return this.columns.getDisplayedColumns().slice();
+	}
+
+	public getPinnedColumns(): { left: number; right: number } {
+		return {
+			left: this.viewport.pinLeftColumns,
+			right: this.viewport.pinRightColumns,
+		};
+	}
+
+	public getColumnIndex(colField: string): number {
+		return this.columns.getColumnIndex(colField);
+	}
+
+	public getColumnField(colIndex: number): string | null {
+		return this.columns.getColumnField(colIndex);
+	}
+
+	public getColumnDef(colField: string): ColumnDef<TRowData> | undefined {
+		return this.columns.getColumnDef(colField);
+	}
+
+	public getValueGetterDependents(colField: string): string[] {
+		return this.columns.getValueGetterDependents(colField);
+	}
+
+	public hasValueGetter(colField: string): boolean {
+		return this.columns.hasValueGetter(colField);
+	}
+
+	public getCompiledPlanVersion(): number {
+		return this.columns.getCompiledPlanVersion();
+	}
+
+	public isScrollingFast(): boolean {
+		return this.viewport.isScrollingFast;
+	}
+
+	public getScrollVelocity(): { vx: number; vy: number } {
+		return this.viewport.getVelocity();
 	}
 
 	public getRowOverscanPx(): number {

@@ -3,6 +3,7 @@ export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowMod
 import type { IGridDatasource } from './serverRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
+import type { RowModelMutationRuntime, ServerRowModelRuntime } from './engine/runtimePorts.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
 import { createEmptyRenderStats } from './renderer/renderOrchestrator.js';
 import { createRowsAccessor } from './rowsAccessor.js';
@@ -139,7 +140,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		}
 
 		// Notify plugins of viewport shifts
-		this.engine.stateManager.subscribeToKey('visibleRowRange', () => {
+		this.engine.subscribeToKey('visibleRowRange', () => {
 			const range = this.state.visibleRowRange;
 			this.plugins.forEach((plugin) => {
 				if (plugin.onViewportChange) plugin.onViewportChange(range);
@@ -148,44 +149,28 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	}
 
 	private get state(): GridState<TRowData> {
-		return this.engine.stateManager.getState();
+		return this.engine.getState();
 	}
 
 	private set state(val: GridState<TRowData>) {
-		this.engine.stateManager.setState(val);
+		this.engine.setState(val);
 	}
 
-	public getState = (): GridState<TRowData> => {
-		return this.engine.stateManager.getState();
-	};
+	public getState = (): GridState<TRowData> => this.engine.getState();
 
-	public setState = (updater: GridStateUpdater<TRowData>): void => {
-		this.engine.stateManager.setState(updater);
-	};
+	public setState = (updater: GridStateUpdater<TRowData>): void => this.engine.setState(updater);
 
-	public getRowId = (row: TRowData): string => {
-		return this.engine.data.getRowId(row);
-	};
+	public getRowId = (row: TRowData): string => this.engine.getRowId(row);
 
-	public isRowLoading = (rowId: string): boolean => {
-		return this.engine.data.isRowLoading(rowId);
-	};
+	public isRowLoading = (rowId: string): boolean => this.engine.isRowLoading(rowId);
 
-	public getCellValue = (rowId: string, colField: string): unknown => {
-		return this.engine.data.getCellValue(rowId, colField);
-	};
+	public getCellValue = (rowId: string, colField: string): unknown => this.engine.getCellDisplayValue(rowId, colField);
 
-	public getCachedDisplayValue = (rowId: string, colField: string): string | undefined => {
-		return this.engine.data.getCachedDisplayValue(rowId, colField);
-	};
+	public getCachedDisplayValue = (rowId: string, colField: string): string | undefined => this.engine.getCachedDisplayValue(rowId, colField);
 
-	public getCheapDisplayValue = (rowId: string, colField: string): string => {
-		return this.engine.data.getCheapDisplayValue(rowId, colField);
-	};
+	public getCheapDisplayValue = (rowId: string, colField: string): string => this.engine.getCheapDisplayValue(rowId, colField);
 
-	public getComputedCellValue = (rowId: string, colField: string): unknown => {
-		return this.engine.data.getComputedCellValue(rowId, colField);
-	};
+	public getComputedCellValue = (rowId: string, colField: string): unknown => this.engine.getComputedCellValue(rowId, colField);
 
 	public getRowOverscanPx = (): number => {
 		return this.state.rowOverscanPx ?? 400;
@@ -207,7 +192,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		if (this.engine.hasFormula(rowId, colField)) {
 			value = this.engine.getFormula(rowId, colField);
 		} else {
-			value = this.engine.data.getRawCellValue(rowId, colField);
+			value = this.engine.getRawCellValue(rowId, colField);
 		}
 
 		return {
@@ -295,7 +280,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getDisplayedColumns = (): ColumnDef<TRowData>[] => {
-		return this.engine.columns.getDisplayedColumns().slice();
+		return this.engine.getDisplayedColumns();
 	};
 
 	public setPinnedColumns = (pins: { left?: number; right?: number }): void => {
@@ -303,10 +288,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getPinnedColumns = (): { left: number; right: number } => {
-		return {
-			left: this.engine.viewport.pinLeftColumns,
-			right: this.engine.viewport.pinRightColumns,
-		};
+		return this.engine.getPinnedColumns();
 	};
 
 	public moveColumn = (colField: string, toIndex: number): void => {
@@ -483,11 +465,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		type: K,
 		callback: GridEventListener<GridEventPayloadMap<TRowData>[K]>
 	): (() => void) => {
-		return this.engine.eventBus.addEventListener(type, callback);
+		return this.engine.addEventListener(type, callback);
 	};
 
 	public dispatchEvent = <K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void => {
-		this.engine.eventBus.dispatchEvent(type, payload);
+		this.engine.dispatchEvent(type, payload);
 	};
 
 	public startEditing = (rowId: string, colField: string): void => {
@@ -511,11 +493,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getGridState = (): PersistedGridState => {
-		return extractPersistedState(this.engine.stateManager.getState() as GridState);
+		return extractPersistedState(this.engine.getState() as GridState);
 	};
 
 	public applyGridState = (state: PersistedGridState): void => {
-		const columns = this.engine.stateManager.getState().columns;
+		const columns = this.engine.getState().columns;
 		const knownFields = new Set(columns.map((c) => c.field));
 		if (state.columnOrder) {
 			const validOrder = state.columnOrder.filter((f) => knownFields.has(f));
@@ -557,6 +539,22 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getRowModel = (): RowModel<TRowData> | null => {
 		return this.engine.getRowModel();
 	};
+
+	public getRowModelMutationRuntime = (): RowModelMutationRuntime<TRowData> => ({
+		clearFormulas: () => this.engine.clearFormulas(),
+		syncFormulaForCell: (rowId, colField, value) => this.engine.syncFormulaForCell(rowId, colField, value),
+		invalidateFormulaCell: (rowId, colField) => this.engine.invalidateFormulaCell(rowId, colField),
+		getValueGetterDependents: (colField) => this.engine.getValueGetterDependents(colField),
+		hasValueGetter: (colField) => this.engine.hasValueGetter(colField),
+		notifyBulkCellChange: (changes) => this.engine.notifyBulkCellChange(changes),
+		dispatchRowsUpdated: (payload) => this.dispatchEvent(GridEventName.rowsUpdated, payload),
+	});
+
+	public getServerRowModelRuntime = (): ServerRowModelRuntime => ({
+		clearFormulas: () => this.engine.clearFormulas(),
+		isScrollingFast: () => this.engine.isScrollingFast(),
+		getScrollVelocity: () => this.engine.getScrollVelocity(),
+	});
 
 	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
 		const vr = this.getVisualRow(index);
@@ -633,13 +631,13 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			}
 			if (equal) return;
 		}
-		this.engine.stateManager.setState({ rowHeights: next });
+		this.engine.setState({ rowHeights: next });
 	};
 
 	public setDefaultRowHeight = (defaultRowHeight?: number | undefined): void => {
 		if (defaultRowHeight === undefined) return;
 		if (this.state.defaultRowHeight === defaultRowHeight) return;
-		this.engine.stateManager.setState({ defaultRowHeight });
+		this.engine.setState({ defaultRowHeight });
 	};
 
 	public purgeCache = (): void => {
@@ -657,7 +655,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		if (pins.bottom !== undefined) this.viewportController.pinBottomRows = pins.bottom;
 		// Sync column pin counts into state so they can be subscribed to and persisted
 		if (pins.left !== undefined || pins.right !== undefined) {
-			this.engine.stateManager.setState({
+			this.engine.setState({
 				pinnedColumns: {
 					left: this.viewportController.pinLeftColumns,
 					right: this.viewportController.pinRightColumns,
@@ -691,11 +689,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public subscribe = (listener: Listener<TRowData>): (() => void) => {
-		return this.engine.stateManager.subscribe(listener);
+		return this.engine.subscribe(listener);
 	};
 
 	public subscribeToKey = (key: string, listener: Listener<TRowData>): (() => void) => {
-		return this.engine.stateManager.subscribeToKey(key, listener);
+		return this.engine.subscribeToKey(key, listener);
 	};
 
 	public subscribeToViewport = (listener: Listener<TRowData>): (() => void) => {
@@ -774,15 +772,15 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getColumnIndex = (colField: string): number => {
-		return this.engine.columns.getColumnIndex(colField);
+		return this.engine.getColumnIndex(colField);
 	};
 
 	public getColumnField = (colIndex: number): string | null => {
-		return this.engine.columns.getColumnField(colIndex);
+		return this.engine.getColumnField(colIndex);
 	};
 
 	public getColumnDef = (colField: string): ColumnDef<TRowData> | undefined => {
-		return this.engine.columns.getColumnDef(colField);
+		return this.engine.getColumnDef(colField);
 	};
 
 	public getCellAccess = (rowId: string, colField: string): GridCellAccess<TRowData> | null => {
@@ -868,7 +866,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			return this.engine.getRenderStats();
 		}
 		const empty = createEmptyRenderStats();
-		empty.compiledPlanVersion = this.engine.columns.getCompiledPlanVersion();
+		empty.compiledPlanVersion = this.engine.getCompiledPlanVersion();
 		return empty;
 	};
 

@@ -9,6 +9,7 @@ import {
 	type RowRefreshReason,
 	type RowModelRefreshResult,
 } from './store.js';
+import type { ServerRowModelRuntime } from './engine/runtimePorts.js';
 import { toDataVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
 
 export interface GetRowsParams {
@@ -31,6 +32,7 @@ export interface ServerRowModelOptions<TData = unknown> {
 
 export class ServerRowModelController<TData = unknown> implements RowModel<TData> {
 	private store: GridStore<TData>;
+	private readonly runtime: ServerRowModelRuntime;
 	private datasource: IGridDatasource;
 	private blockSize: number;
 	private activeNodes: Array<RowNode<TData> | null> = [];
@@ -46,6 +48,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 	constructor(store: GridStore<TData>, options: ServerRowModelOptions<TData>) {
 		this.store = store;
+		this.runtime = store.getServerRowModelRuntime();
 		this.datasource = options.datasource;
 		this.blockSize = options.blockSize ?? 100;
 
@@ -102,7 +105,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 		// If the user is flicking or dragging the scrollbar extremely fast, skip loading intermediate blocks.
 		// When the scrolling stops, the scroll-stop pipeline resets velocity to 0 and triggers the resting block load.
-		if (this.store.engine.viewport.isScrollingFast) {
+		if (this.runtime.isScrollingFast()) {
 			return;
 		}
 
@@ -118,7 +121,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		// Dynamic predictive pre-fetching based on scrolling velocity
-		const velocity = this.store.engine.viewport.getVelocity();
+		const velocity = this.runtime.getScrollVelocity();
 		const vy = velocity.vy; // px/ms
 		const totalBlocks = Math.ceil(this.getVisualRowCount() / this.blockSize);
 
@@ -297,7 +300,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 				}
 			}
 
-			this.store.engine.clearFormulas();
+			this.runtime.clearFormulas();
 
 			// Layout geometry will be updated by GridEngine using GeometryModel
 			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
@@ -340,7 +343,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.nodeMap.clear();
 		this.visualRowIdToIndex.clear();
 		this.rowIdToVisualIndex.clear();
-		this.store.engine.clearFormulas();
+		this.runtime.clearFormulas();
 		this.store.setState({
 			loading: true,
 			globalVersion: this.store.getState().globalVersion + 1,

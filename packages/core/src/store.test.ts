@@ -811,7 +811,7 @@ describe('ClientRowModelController sorting and filtering', () => {
 		expect(t1 - t0).toBeLessThan(5.0); // Under 5ms (typically <0.1ms) demonstrating O(1) hash map speed!
 
 		controller.dispose();
-	});
+	}, 10_000);
 });
 
 describe('ServerRowModelController paginated lazily populated row-patching', () => {

@@ -15,7 +15,7 @@
 | 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)           | REVIEW | 39c83e3 |
 | 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)         | DONE   | 39c83e3 |
 | 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)             | DONE   | 94c9453 |
-| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                         | TODO   | 94c9453 |
+| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                         | DONE   | 94c9453 |
 
 ## Execution order
 
@@ -62,7 +62,8 @@
 - Plan 011 was implemented at `39c83e3` and reviewed. It improved file boundaries, but core tests are red in `fillRange.test.ts`, `GridEngine.ts < 800` is still skipped, and feature controllers do not yet consistently use `GridChangeApplier`.
 - Plan 012 is implemented and verified on 2026-06-12: core build/test, React build/test, and sequential demo build pass. It fixed the formula fill regression and established the data mutation kernel.
 - Plan 013 is implemented and verified on 2026-06-12: `GridEngine.ts` is now below the active 800-line guard, subscription batching and state-reaction logic are extracted, feature controllers route through the narrowed effect boundary, and React's chart overlay no longer imports `@open-grid/core/internal`.
-- Plan 014 should follow immediately after 013. Its goal is to remove the remaining concrete runtime cycle between `GridStore`, `GridEngine`, `models`, and `rowModel`, which is the biggest remaining reason feature work still fans out across multiple files.
+- Plan 014 is implemented and verified on 2026-06-12: shared runtime ports now sit in `packages/core/src/engine/runtimePorts.ts`, `DataModel` / `ColumnModel` / `CellAccessModel` no longer depend on `GridEngine`, and client/server row models no longer reach through `store.engine.*`.
+- Plan 014 leaves `store.ts` under the active intermediate guard (`< 900`, currently 891 lines) but not yet at the aspirational `850` target. Treat that as deferred cleanup rather than a hidden failure.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

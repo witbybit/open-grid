@@ -1,19 +1,16 @@
-import { RowNode, GridEventName, compilePathGetter, type ColumnDef, type GridCellPointer } from '../store.js';
-import type { GridEngine } from '../engine/GridEngine.js';
+import { RowNode, compilePathGetter, type ColumnDef } from '../store.js';
+import type { DataModelRuntime } from '../engine/runtimePorts.js';
 
 export class DataModel<TRowData = unknown> {
-	private engine!: GridEngine<TRowData>;
 	private autoRowIdMap = new WeakMap<object, string>();
 	private autoRowIdCounter = 0;
 	private compiledGetters = new Map<string, (data: TRowData) => unknown>();
 	private valueGetterCache = new Map<string, Map<string, unknown>>();
 
-	public init(engine: GridEngine<TRowData>): void {
-		this.engine = engine;
-	}
+	constructor(private readonly runtime: DataModelRuntime<TRowData>) {}
 
 	public getRowId = (row: TRowData): string => {
-		const state = this.engine.stateManager.getState();
+		const state = this.runtime.getState();
 		if (state.getRowId) {
 			return state.getRowId(row);
 		}
@@ -68,8 +65,8 @@ export class DataModel<TRowData = unknown> {
 	}
 
 	private getValueGetterValue(rowId: string, colField: string, col: ColumnDef<TRowData>, node: RowNode<TRowData>): unknown {
-		if (this.engine.isScrolling || this.engine.isScrollFrameActive) {
-			this.engine.valueGetterCallsDuringScroll++;
+		if (this.runtime.isScrolling() || this.runtime.isScrollFrameActive()) {
+			this.runtime.recordValueGetterDuringScroll();
 		}
 		if (!col.valueGetterDependencies) {
 			return col.valueGetter!({ node, row: node.data, colField });
@@ -94,9 +91,9 @@ export class DataModel<TRowData = unknown> {
 			return '';
 		}
 
-		const rowModel = this.engine.getRowModel();
+		const rowModel = this.runtime.getRowModel();
 		if (!rowModel) return '';
-		const col = this.engine.columns.getColumnDef(colField);
+		const col = this.runtime.getColumnDef(colField);
 		if (!col) return '';
 
 		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
@@ -126,9 +123,9 @@ export class DataModel<TRowData = unknown> {
 			return '';
 		}
 
-		const rowModel = this.engine.getRowModel();
+		const rowModel = this.runtime.getRowModel();
 		if (!rowModel) return '';
-		const col = this.engine.columns.getColumnDef(colField);
+		const col = this.runtime.getColumnDef(colField);
 		if (!col) return '';
 
 		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
@@ -151,15 +148,15 @@ export class DataModel<TRowData = unknown> {
 			return '';
 		}
 
-		if (this.engine.hasFormula(rowId, colField)) {
-			const res = this.engine.getCachedFormulaValue(rowId, colField);
+		if (this.runtime.hasFormula(rowId, colField)) {
+			const res = this.runtime.getCachedFormulaValue(rowId, colField);
 			if (res.hasCached) {
 				return res.value == null ? '' : String(res.value);
 			}
 			return undefined;
 		}
 
-		const col = this.engine.columns.getColumnDef(colField);
+		const col = this.runtime.getColumnDef(colField);
 		if (col?.valueGetter) {
 			const rowCache = this.valueGetterCache.get(rowId);
 			if (rowCache && rowCache.has(colField)) {
@@ -178,17 +175,17 @@ export class DataModel<TRowData = unknown> {
 			return '';
 		}
 
-		const col = this.engine.columns.getColumnDef(colField);
+		const col = this.runtime.getColumnDef(colField);
 		if (!col) return '';
 
-		if (col.valueGetter || this.engine.hasFormula(rowId, colField)) {
+		if (col.valueGetter || this.runtime.hasFormula(rowId, colField)) {
 			const rowCache = this.valueGetterCache.get(rowId);
 			if (rowCache && rowCache.has(colField)) {
 				const val = rowCache.get(colField);
 				return val == null ? '' : String(val);
 			}
-			if (this.engine.hasFormula(rowId, colField)) {
-				const res = this.engine.getCachedFormulaValue(rowId, colField);
+			if (this.runtime.hasFormula(rowId, colField)) {
+				const res = this.runtime.getCachedFormulaValue(rowId, colField);
 				if (res.hasCached) {
 					return res.value == null ? '' : String(res.value);
 				}
@@ -196,7 +193,7 @@ export class DataModel<TRowData = unknown> {
 			return '';
 		}
 
-		const rowModel = this.engine.getRowModel();
+		const rowModel = this.runtime.getRowModel();
 		if (!rowModel) return '';
 
 		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
@@ -213,120 +210,27 @@ export class DataModel<TRowData = unknown> {
 	}
 
 	public getCellValue = (rowId: string, colField: string): unknown => {
-		if (this.engine.isScrolling || this.engine.isScrollFrameActive) {
-			this.engine.getCellValueCallsDuringScroll++;
+		if (this.runtime.isScrolling() || this.runtime.isScrollFrameActive()) {
+			this.runtime.recordGetCellValueDuringScroll();
 		}
 		const rawVal = this.getRawCellValue(rowId, colField);
 		if (typeof rawVal === 'string' && rawVal.startsWith('=')) {
-			if (!this.engine.hasFormula(rowId, colField) || this.engine.getFormula(rowId, colField) !== rawVal) {
-				this.engine.syncFormulaForCell(rowId, colField, rawVal);
+			if (!this.runtime.hasFormula(rowId, colField) || this.runtime.getFormula(rowId, colField) !== rawVal) {
+				this.runtime.syncFormulaForCell(rowId, colField, rawVal);
 			}
 		} else {
-			if (this.engine.hasFormula(rowId, colField)) {
-				this.engine.syncFormulaForCell(rowId, colField, rawVal);
+			if (this.runtime.hasFormula(rowId, colField)) {
+				this.runtime.syncFormulaForCell(rowId, colField, rawVal);
 			}
 		}
 
-		if (this.engine.hasFormula(rowId, colField)) {
-			if (this.engine.isScrolling || this.engine.isScrollFrameActive) {
-				this.engine.formulaCallsDuringScroll++;
+		if (this.runtime.hasFormula(rowId, colField)) {
+			if (this.runtime.isScrolling() || this.runtime.isScrollFrameActive()) {
+				this.runtime.recordFormulaDuringScroll();
 			}
-			return this.engine.evaluateFormulaCell(rowId, colField, (rId, cField) => this.getRawCellValue(rId, cField));
+			return this.runtime.evaluateFormulaCell(rowId, colField, (rId, cField) => this.getRawCellValue(rId, cField));
 		}
 
 		return rawVal;
 	};
-
-	public setCellValue = (rowId: string, colField: string, value: unknown, knownOldStoredValue?: unknown): boolean => {
-		const shouldEmitValueChanged = this.engine.eventBus.hasListeners(GridEventName.cellValueChanged);
-		const oldValue = shouldEmitValueChanged ? this.getCellValue(rowId, colField) : undefined;
-		const oldStoredValue = knownOldStoredValue !== undefined ? knownOldStoredValue : this.getStoredCellValue(rowId, colField);
-		if (oldStoredValue === value) return false;
-
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel?.setCellValue) {
-			return false;
-		}
-
-		const applied = rowModel.setCellValue(rowId, colField, value);
-		if (!applied) return false;
-
-		this.engine.syncFormulaForCell(rowId, colField, value);
-
-		// Invalidate this cell and any formula dependents.
-		const invalidatedFormulaCells = this.engine.invalidateFormulaCell(rowId, colField);
-		const dependentFields = this.engine.columns.getValueGetterDependents(colField).filter((dependentField) => dependentField !== colField);
-
-		if (invalidatedFormulaCells.length <= 1 && dependentFields.length === 0) {
-			this.clearValueGetterCache(rowId, colField);
-
-			if (this.engine.batchedUpdates) {
-				this.engine.enqueueCellUpdate(rowId, colField);
-				this.scheduleBatchFlush();
-			} else {
-				this.engine.notifyCellChange(rowId, colField);
-			}
-			if (shouldEmitValueChanged) {
-				this.engine.eventBus.dispatchEvent(GridEventName.cellValueChanged, {
-					rowId,
-					colField,
-					oldValue,
-					newValue: value,
-				});
-			}
-			return true;
-		}
-
-		const invalidatedCells: GridCellPointer[] = [{ rowId, colField }];
-		const seenInvalidatedCells = new Set<string>([`${rowId}\u0000${colField}`]);
-		const addInvalidatedCell = (rId: string, cField: string) => {
-			const key = `${rId}\u0000${cField}`;
-			if (seenInvalidatedCells.has(key)) return;
-			seenInvalidatedCells.add(key);
-			invalidatedCells.push({ rowId: rId, colField: cField });
-		};
-
-		// Also invalidate explicitly declared dynamic valueGetter dependents on this same row.
-		// Uses the column reverse index so wide grids pay O(actual dependents), not O(total columns).
-		for (const dependentField of dependentFields) {
-			addInvalidatedCell(rowId, dependentField);
-		}
-
-		for (const cell of invalidatedFormulaCells) {
-			addInvalidatedCell(cell.rowId, cell.colField);
-		}
-
-		for (const cell of invalidatedCells) {
-			this.clearValueGetterCache(cell.rowId, cell.colField);
-		}
-
-		if (this.engine.batchedUpdates) {
-			// Batch cell notifications for better performance
-			for (const cell of invalidatedCells) {
-				this.engine.enqueueCellUpdate(cell.rowId, cell.colField);
-			}
-
-			// Schedule batched flush if not already scheduled
-			this.scheduleBatchFlush();
-		} else {
-			// Immediate mode: notify synchronously
-			for (const cell of invalidatedCells) {
-				this.engine.notifyCellChange(cell.rowId, cell.colField);
-			}
-		}
-
-		if (shouldEmitValueChanged) {
-			this.engine.eventBus.dispatchEvent(GridEventName.cellValueChanged, {
-				rowId,
-				colField,
-				oldValue,
-				newValue: value,
-			});
-		}
-		return true;
-	};
-
-	private scheduleBatchFlush(): void {
-		this.engine.scheduleBatchFlush();
-	}
 }
