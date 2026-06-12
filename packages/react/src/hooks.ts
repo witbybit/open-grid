@@ -1,6 +1,6 @@
 import { GridApi, GridNavigationHandle, GridNavigationOptions, GridState, registerGridNavigation } from '@open-grid/core';
 import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { GridApiContext } from './OpenGrid';
+import { GridApiContext } from './gridContext.js';
 
 export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
 	const context = useContext(GridApiContext);

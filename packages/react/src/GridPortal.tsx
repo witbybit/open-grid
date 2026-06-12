@@ -22,11 +22,11 @@ import {
 	type ImperativeCellHandle,
 	isDomCellRenderer,
 } from '@open-grid/core';
-import { hasImperativeRendererCapability } from '@open-grid/core/internal';
+import { hasImperativeRendererCapability } from './reactHostBridge.js';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import { useGridApi } from './hooks.js';
-import { GridProvider, GridAdapterContext } from './OpenGrid.js';
+import { GridProvider, GridAdapterContext } from './gridContext.js';
 import type { ReactNode } from 'react';
 
 export interface PortalCellProps<TRowData = unknown> {

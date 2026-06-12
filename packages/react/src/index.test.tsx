@@ -8,6 +8,8 @@ import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-
 import {
 	GridProvider,
 	GridEventName,
+	GridView,
+	ClientGrid,
 	PortalCell,
 	PortalManager,
 	OpenGrid,
@@ -1522,5 +1524,35 @@ describe('OpenGrid inline mode (rows + columns props)', () => {
 		await act(async () => {});
 		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[open-grid]'));
 		warnSpy.mockRestore();
+	});
+});
+
+describe('explicit React entrypoints', () => {
+	it('GridView renders against an explicit api', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Alice' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<GridProvider api={grid.api}>
+					<GridView api={grid.api} enableNavigation={false} />
+				</GridProvider>
+			</div>
+		);
+
+		await act(async () => {});
+		grid.api.destroy();
+	});
+
+	it('ClientGrid can own its api without OpenGrid sugar', async () => {
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<ClientGrid rows={[{ id: '1', name: 'Alice' }]} columns={[{ field: 'name', header: 'Name', width: 100 }]} enableNavigation={false} />
+			</div>
+		);
+
+		await act(async () => {});
 	});
 });

@@ -29,6 +29,7 @@
 | 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md)       | DONE   | working tree |
 | 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)          | DONE   | working tree |
 | 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md) | DONE   | working tree |
+| 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                       | TODO   | 1015f23      |
 
 ## Execution order
 
@@ -59,6 +60,7 @@
 25. `025-render-engine-scroll-frame-coordinator.md` - P0 renderer hardening after 024; extracts scroll-frame orchestration and cheap-path fan-out so `RenderEngine` becomes a narrower composition root before deeper render-pipeline cuts
 26. `026-render-paint-pipeline-coordinator.md` - P0 renderer hardening after 025; extracts paint lifecycle orchestration and full-paint fan-out so `RenderEngine` becomes a slimmer composition root before the next pipeline cut
 27. `027-render-engine-viewport-layout-coordinator.md` - P0 renderer hardening after 026; extracts viewport/layout orchestration and scroll-into-view targeting so `RenderEngine` can step back further before deeper pipeline cuts
+28. `028-public-react-surface-hardening.md` - P0 React/public API hardening after 027; splits the overloaded OpenGrid surface into explicit entrypoints and migrates the demo onto the recommended contract before the API hardens further
 
 ## Dependency graph
 
@@ -90,6 +92,7 @@
 025  (render-engine scroll coordinator) - follows 024; isolates scroll-frame orchestration and cheap-path synchronization before deeper render-pipeline work
 026  (render-engine paint coordinator) - follows 025; moves paint lifecycle orchestration and full-paint fan-out out of RenderEngine
 027  (render-engine viewport/layout coordinator) - follows 026; moves viewport layout computation, recycling, and scroll-targeting out of RenderEngine
+028  (public react surface hardening) - follows 027; splits the overloaded public React surface into explicit entrypoints before the API becomes sticky in demos and docs
 ```
 
 ## Notes
@@ -121,6 +124,7 @@
 - Plan 022 is the next renderer slice: move the live per-cell binding path through `rowCellBinder.ts` so the remaining RowRenderer pressure is mostly wrapper cleanup and slot-lifecycle ownership.
 - Plan 022 is implemented in the working tree and verified on 2026-06-12: the live lane path now routes per-cell policy through `rowCellBinder.ts`, architecture guards assert the binder boundary through `rowCellBindingLanes.ts`, and core/React/demo verification passed. `RowRenderer` is still 1599 lines because legacy wrapper bodies remain, so the next slice should delete the dead wrappers and continue shrinking toward a true slot-lifecycle shell.
 - Plan 027 is implemented in the working tree and verified on 2026-06-13: viewport/layout orchestration and scroll-into-view targeting now live in `renderViewportCoordinator.ts`, and `RenderEngine` delegates the last layout bridge.
+- Plan 028 is the next API lock-in step: split the React surface into explicit ownership/view entrypoints, keep `OpenGrid` as compatibility sugar only, and migrate the demo to the better contract before go-live.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

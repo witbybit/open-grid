@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { GridProvider, OpenGrid, useClientGrid } from '@open-grid/react';
+import { GridProvider, GridView, useClientGrid } from '@open-grid/react';
 import type { ColumnDef, CellRendererProps } from '@open-grid/react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
@@ -205,7 +205,7 @@ function SidebarPanelsDemoInner({ api }: { api: ReturnType<typeof useClientGrid<
 
 			{/* Grid with integrated sidebar — api.openPanel() / closePanel() / getOpenPanel() */}
 			<div className='flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-800 shadow-2xl'>
-				<OpenGrid<HoldingRow>
+				<GridView<HoldingRow>
 					api={api}
 					pinLeftColumns={1}
 					enableContextMenu={true}

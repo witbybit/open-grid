@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { GridProvider, OpenGrid, useClientGrid, createLocalStorageAdapter } from '@open-grid/react';
+import { GridProvider, GridView, useClientGrid, createLocalStorageAdapter } from '@open-grid/react';
 import type { AggregationDef, ColumnDef, CellRendererProps, GroupVisualRow } from '@open-grid/react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
@@ -370,7 +370,7 @@ function RealtimeGroupingDemoInner({ api }: { api: ReturnType<typeof useClientGr
 
 			{/* Grid */}
 			<div className='flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-800 shadow-2xl'>
-				<OpenGrid<SalesRow>
+				<GridView<SalesRow>
 					api={api}
 					pinLeftColumns={1}
 					enableContextMenu={true}

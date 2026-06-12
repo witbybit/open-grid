@@ -13,9 +13,10 @@ import {
 } from '@open-grid/core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 import type { StyleRule } from './styleRules.js';
-import { GridHostWithAdapter, GridAdapterHandle, hasImperativeRendererCapability, mountGridHost } from '@open-grid/core/internal';
-import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, useMemo, type ReactNode } from 'react';
 import { useClientGrid } from './useGrid.js';
+import { GridProvider, GridApiContext, GridAdapterContext } from './gridContext.js';
+import { GridHostWithAdapter, GridAdapterHandle, hasImperativeRendererCapability, mountGridHost } from './reactHostBridge.js';
 
 declare const process: { env: { NODE_ENV: string } } | undefined;
 const DEV = typeof process === 'undefined' || process.env.NODE_ENV !== 'production';
@@ -24,18 +25,6 @@ import { flashCopiedCells } from './cellFlash.js';
 import { useGridNavigationController } from './hooks.js';
 import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
 import { GridChartOverlay } from './chart/GridChartOverlay.js';
-
-export const GridApiContext = createContext<GridApi<unknown> | null>(null);
-export const GridAdapterContext = createContext<GridAdapterHandle<unknown> | null>(null);
-
-export interface GridProviderProps<TRowData = unknown> {
-	api: GridApi<TRowData>;
-	children: React.ReactNode;
-}
-
-export function GridProvider<TRowData = unknown>({ api, children }: GridProviderProps<TRowData>) {
-	return <GridApiContext.Provider value={api as unknown as GridApi<unknown>}>{children}</GridApiContext.Provider>;
-}
 export interface OpenGridProps<TRowData = unknown> {
 	// ─── Inline data mode ────────────────────────────────────────────────────
 	// Pass rows + columns directly — no separate hook needed for simple client grids.
@@ -79,9 +68,9 @@ export interface OpenGridProps<TRowData = unknown> {
 		arrowKeyNavigationEdit?: boolean;
 		onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	};
-	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
-	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
-	footerRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => ReactNode;
+	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => ReactNode;
+	footerRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => ReactNode;
 	/** Attach a built-in animated sidebar panel strip inside the grid. */
 	sidebar?: GridSidebarConfig<TRowData>;
 	/**
@@ -90,6 +79,25 @@ export interface OpenGridProps<TRowData = unknown> {
 	 */
 	enableChart?: boolean;
 }
+
+export type GridViewProps<TRowData = unknown> = Omit<
+	OpenGridProps<TRowData>,
+	| 'rows'
+	| 'columns'
+	| 'getRowId'
+	| 'initialState'
+	| 'persistence'
+	| 'rowOverscanPx'
+	| 'colBuffer'
+	| 'overscanAdaptive'
+	| 'runtimeLimits'
+	| 'detailRowHeight'
+	| 'columnTypes'
+	| 'styleRules'
+	| 'api'
+> & {
+	api: GridApi<TRowData>;
+};
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
 	const contextApi = useContext(GridApiContext) as GridApi<TRowData> | null;
@@ -110,7 +118,7 @@ export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
 
 	return (
 		<GridProvider api={api}>
-			<OpenGridInner {...props} api={api} />
+			<GridView {...props} api={api} />
 		</GridProvider>
 	);
 }
@@ -152,12 +160,12 @@ function OpenGridManagedClient<TRowData = unknown>({
 	});
 	return (
 		<GridProvider api={api}>
-			<OpenGridInner {...rest} api={api} />
+			<GridView {...rest} api={api} />
 		</GridProvider>
 	);
 }
 
-function OpenGridInner<TRowData = unknown>({
+export function GridView<TRowData = unknown>({
 	api,
 	pinLeftColumns,
 	pinRightColumns,
@@ -174,7 +182,7 @@ function OpenGridInner<TRowData = unknown>({
 	footerRowRenderer,
 	sidebar,
 	enableChart = false,
-}: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
+}: GridViewProps<TRowData>) {
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const hostRef = useRef<GridHostWithAdapter<TRowData> | null>(null);

@@ -193,6 +193,17 @@ describe('Architecture guardrails', () => {
 		}
 	});
 
+	it('reactHostBridge.ts is the only React-side file that imports @open-grid/core/internal', () => {
+		const bridge = readFileSync(resolve(REACT_ROOT, 'src', 'reactHostBridge.ts'), 'utf-8');
+		expect(bridge).toContain("from '@open-grid/core/internal'");
+
+		const files = ['OpenGrid.tsx', 'GridPortal.tsx', 'hooks.ts', 'ClientGrid.tsx', 'ServerGrid.tsx', 'gridContext.tsx'];
+		for (const file of files) {
+			const content = readFileSync(resolve(REACT_ROOT, 'src', file), 'utf-8');
+			expect(content, `${file} must not import @open-grid/core/internal directly`).not.toContain('@open-grid/core/internal');
+		}
+	});
+
 	it('SpreadsheetFillEngine does not call engine.data.setCellValue directly', () => {
 		const hasDirectCall = coreFileContains('spreadsheet/fillRange.ts', 'engine.data.setCellValue');
 		expect(hasDirectCall, 'fillRange.ts must route all cell writes through dataMutation.applyCellValueChange').toBe(false);

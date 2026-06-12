@@ -1,5 +1,13 @@
 import React, { useEffect } from 'react';
-import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi, GridContextMenuOptions } from '@open-grid/react';
+import {
+	GridView as ReactGridView,
+	CellRendererProps,
+	CellEditorProps,
+	GridApi,
+	GridCellClickParams,
+	useGridApi,
+	GridContextMenuOptions,
+} from '@open-grid/react';
 
 export type GridPageType =
 	| 'lab'
@@ -495,7 +503,8 @@ export function GridView({
 					<span className='text-slate-500'>cell --</span>
 				)}
 			</div>
-			<OpenGrid
+			<ReactGridView
+				api={activeApi}
 				pinLeftColumns={pinLeftColumns}
 				pinRightColumns={pinRightColumns}
 				pinTopRows={pinTopRows}

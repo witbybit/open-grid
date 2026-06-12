@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps, type GridApi, type VisualRow } from '@open-grid/react';
+import { GridView, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps, type GridApi, type VisualRow } from '@open-grid/react';
 import {
 	Layers,
 	FolderTree,
@@ -286,7 +286,8 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 			</div>
 			<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-950/70 shadow-inner'>
 				<GridProvider api={detailApi}>
-					<OpenGrid
+					<GridView
+						api={detailApi}
 						enableNavigation={true}
 						navigationOptions={{
 							editTrigger: 'singleClick',
@@ -549,7 +550,8 @@ export default function NestedTablesGrouping() {
 				<div className='flex-1 min-h-0 min-w-0 border border-slate-900 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative'>
 					{activeTab === 'group' && (
 						<GridProvider api={groupApi} key={`group-${gridVersion}`}>
-							<OpenGrid
+							<GridView
+								api={groupApi}
 								enableNavigation={true}
 								groupRowRenderer={handleGroupRowRender}
 								navigationOptions={{
@@ -561,7 +563,8 @@ export default function NestedTablesGrouping() {
 
 					{activeTab === 'tree' && (
 						<GridProvider api={treeApi} key={`tree-${gridVersion}`}>
-							<OpenGrid
+							<GridView
+								api={treeApi}
 								enableNavigation={true}
 								navigationOptions={{
 									editTrigger: 'doubleClick',
@@ -572,7 +575,8 @@ export default function NestedTablesGrouping() {
 
 					{activeTab === 'detail' && (
 						<GridProvider api={masterApi} key={`detail-${gridVersion}`}>
-							<OpenGrid
+							<GridView
+								api={masterApi}
 								enableNavigation={true}
 								detailRowRenderer={handleDetailRowRender}
 								navigationOptions={{

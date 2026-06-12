@@ -9,7 +9,7 @@
  *   - rowSelectionChanged event →  reactive event log
  */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { OpenGrid, GridProvider, GridEventName, useClientGrid, useGridKeySelector, useGridApi } from '@open-grid/react';
+import { GridView, GridProvider, GridEventName, useClientGrid, useGridKeySelector, useGridApi } from '@open-grid/react';
 import type { ColumnDef, GridApi } from '@open-grid/react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
 
@@ -280,7 +280,7 @@ export default function RowMultiSelectDemo() {
 
 				{/* ── Grid ───────────────────────────────────────────────────── */}
 				<div className='flex-1 min-h-0 border border-slate-800 rounded-xl overflow-hidden bg-slate-950 shadow-2xl'>
-					<OpenGrid api={api as GridApi<OrderRow>} enableNavigation={true} navigationOptions={{ editTrigger: 'doubleClick' }} />
+					<GridView api={api as GridApi<OrderRow>} enableNavigation={true} navigationOptions={{ editTrigger: 'doubleClick' }} />
 				</div>
 
 				{/* ── Event log ──────────────────────────────────────────────── */}
