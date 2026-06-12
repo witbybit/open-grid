@@ -1,6 +1,19 @@
-import { GridStore, ColumnDef, RowModel, RowNode, setValueByPath, compilePathGetter, type VisualRow } from './store.js';
-import { createCellKey, getFieldRoot } from './ids.js';
-import { RowPipeline } from './rows/RowPipeline.js';
+import {
+	GridStore,
+	ColumnDef,
+	RowModel,
+	RowNode,
+	setValueByPath,
+	compilePathGetter,
+	type VisualRow,
+	type RowRefreshReason,
+	type RowModelRefreshResult,
+	type RowDataTransaction,
+	type RowNodeTransaction,
+} from './store.js';
+import { getFieldRoot } from './ids.js';
+import { RowPipeline, type RowModelConfig } from './rows/RowPipeline.js';
+import { RowDataStore } from './rows/RowDataStore.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -24,6 +37,8 @@ export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
 	columns: Array<ColumnDef<TData>>;
 }
+
+export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
 
 function getFilterItemValue(item: FilterModelItem | unknown): { operator: FilterOperator; filter: unknown } {
 	if (item && typeof item === 'object' && 'filter' in item) {
@@ -204,44 +219,86 @@ export function applyClientSortAndFilter<TData>(
 
 export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
 	private store: GridStore<TData>;
-	private allNodes: RowNode<TData>[] = [];
+	private dataStore: RowDataStore<TData>;
 	private visualRows: Array<VisualRow<TData>> = [];
-	private nodeMap = new Map<string, RowNode<TData>>();
-	private visualRowIdMap = new Map<string, number>();
+	private visualRowIdToIndex = new Map<string, number>();
+	private rowIdToVisualIndex = new Map<string, number>();
+	private rowIdToVisualRowId = new Map<string, string>();
+	private rowIdToVisualRowIds: Map<string, string[]> | undefined;
 	private unsubscribers: Array<() => void> = [];
 
 	private pipeline = new RowPipeline<TData>();
-	private expandedGroupIds = new Set<string>();
-	private expandedDetailRowIds = new Set<string>();
+	private _stickyGroupMeta = new Map<number, number>();
+
+	public getStickyGroupMeta = (): Map<number, number> => this._stickyGroupMeta;
 
 	public toggleGroupExpanded = (groupId: string): void => {
-		if (this.expandedGroupIds.has(groupId)) {
-			this.expandedGroupIds.delete(groupId);
+		const expansion = this.store.getState().expansion;
+		if (groupId.startsWith('group:')) {
+			const groups = { ...expansion.groups };
+			if (groups[groupId]) {
+				delete groups[groupId];
+			} else {
+				groups[groupId] = true;
+			}
+			this.store.setState({ expansion: { ...expansion, groups } });
 		} else {
-			this.expandedGroupIds.add(groupId);
+			const treeRows = { ...expansion.treeRows };
+			if (treeRows[groupId]) {
+				delete treeRows[groupId];
+			} else {
+				treeRows[groupId] = true;
+			}
+			this.store.setState({ expansion: { ...expansion, treeRows } });
 		}
 		this.refresh();
 	};
 
 	public toggleDetailExpanded = (rowId: string): void => {
-		if (this.expandedDetailRowIds.has(rowId)) {
-			this.expandedDetailRowIds.delete(rowId);
+		const expansion = this.store.getState().expansion;
+		const details = { ...expansion.details };
+		if (details[rowId]) {
+			delete details[rowId];
 		} else {
-			this.expandedDetailRowIds.add(rowId);
+			details[rowId] = true;
 		}
+		this.store.setState({ expansion: { ...expansion, details } });
 		this.refresh();
 	};
 
 	public isGroupExpanded = (groupId: string): boolean => {
-		return this.expandedGroupIds.has(groupId);
+		const expansion = this.store.getState().expansion;
+		return groupId.startsWith('group:') ? !!expansion.groups[groupId] : !!expansion.treeRows[groupId];
 	};
 
 	public isDetailExpanded = (rowId: string): boolean => {
-		return this.expandedDetailRowIds.has(rowId);
+		return !!this.store.getState().expansion.details[rowId];
+	};
+
+	public expandAllGroups = (): void => {
+		const state = this.store.getState();
+		const allIds = this.pipeline.collectAllGroupIds({
+			nodes: this.dataStore.getAllNodes(),
+			columns: state.columns,
+			groupBy: state.groupBy,
+			rowModelConfig: state.rowModelConfig,
+			filterModel: state.filterModel,
+		});
+		const groups: Record<string, true> = {};
+		for (const id of allIds) groups[id] = true;
+		this.store.setState({ expansion: { ...state.expansion, groups } });
+		this.refresh();
+	};
+
+	public collapseAllGroups = (): void => {
+		const state = this.store.getState();
+		this.store.setState({ expansion: { ...state.expansion, groups: {} } });
+		this.refresh();
 	};
 
 	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
 		this.store = store;
+		this.dataStore = new RowDataStore<TData>((row) => this.store.getRowId(row));
 
 		// Set base columns and config in store
 		this.store.setState({
@@ -252,7 +309,11 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		this.unsubscribers.push(
 			this.store.addEventListener('sortChanged', () => this.refresh()),
-			this.store.addEventListener('filterChanged', () => this.refresh())
+			this.store.addEventListener('filterChanged', () => this.refresh()),
+			this.store.addEventListener('groupByChanged', () => this.refresh()),
+			this.store.addEventListener('aggDefsChanged', () => this.refresh()),
+			this.store.addEventListener('showGroupFooterChanged', () => this.refresh()),
+			this.store.addEventListener('enableStickyGroupRowsChanged', () => this.refresh())
 		);
 		this.setRows(options.rows);
 	}
@@ -263,96 +324,45 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	}
 
 	public setRows(rows: TData[]): void {
-		const nextNodeMap = new Map<string, RowNode<TData>>();
-
-		this.allNodes = rows.map((row) => {
-			const id = this.store.getRowId(row);
-			let node = this.nodeMap.get(id);
-			if (node) {
-				node.setData(row);
-			} else {
-				node = new RowNode<TData>(id, row);
-			}
-			nextNodeMap.set(id, node);
-			return node;
-		});
-
-		this.nodeMap = nextNodeMap;
+		this.dataStore.setRows(rows);
 		this.store.engine.clearFormulas();
 		this.refresh();
 	}
 
 	public updateRows(updater: (rows: TData[]) => TData[]): void {
-		const currentRows = this.allNodes.map((n) => n.data);
-		const nextRows = updater(currentRows);
+		const result = this.dataStore.updateRows(updater);
 
-		if (nextRows.length !== this.allNodes.length) {
-			this.setRows(nextRows);
+		if (result.mismatch) {
+			const currentRows = this.dataStore.getAllNodes().map((n) => n.data);
+			this.setRows(updater(currentRows));
 			return;
 		}
 
-		const changedNodes: RowNode<TData>[] = [];
-		const changedFieldsByRow = new Map<string, Set<string>>();
-		const changedValuesByRow = new Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>();
-
-		for (let i = 0; i < this.allNodes.length; i++) {
-			const node = this.allNodes[i];
-			const nextRow = nextRows[i];
-			if (!nextRow) continue;
-
-			// Verify that the row ID is the same
-			const nextId = this.store.getRowId(nextRow);
-			if (node.id !== nextId) {
-				// Structural mismatch of row IDs, fallback to full setRows
-				this.setRows(nextRows);
-				return;
-			}
-
-			const prevRow = node.data;
-			if (prevRow !== nextRow) {
-				// Find which fields actually changed
-				const changedFields = new Set<string>();
-				const changedValues = new Map<string, { oldValue: unknown; newValue: unknown }>();
-				const prevKeys = Object.keys(prevRow as object);
-				const nextKeys = Object.keys(nextRow as object);
-				const allKeys = new Set([...prevKeys, ...nextKeys]);
-
-				for (const key of allKeys) {
-					const oldValue = (prevRow as Record<string, unknown>)[key];
-					const newValue = (nextRow as Record<string, unknown>)[key];
-					if (oldValue !== newValue) {
-						changedFields.add(key);
-						changedValues.set(key, { oldValue, newValue });
-					}
-				}
-
-				if (changedFields.size > 0) {
-					node.setData(nextRow);
-					changedNodes.push(node);
-					changedFieldsByRow.set(node.id, changedFields);
-					changedValuesByRow.set(node.id, changedValues);
-				}
-			}
-		}
-
-		if (changedNodes.length === 0) return;
+		if (result.changedNodes.length === 0) return;
 
 		// Invalidate changed cells and gather affected formula dependents.
-		const allInvalidatedKeys = new Set<string>();
-		for (const [rowId, fields] of changedFieldsByRow) {
+		const allInvalidatedCells = new Map<string, Set<string>>();
+		const addInvalidatedCell = (rowId: string, field: string) => {
+			let fields = allInvalidatedCells.get(rowId);
+			if (!fields) {
+				fields = new Set<string>();
+				allInvalidatedCells.set(rowId, fields);
+			}
+			fields.add(field);
+		};
+		for (const [rowId, fields] of result.changedFieldsByRow) {
 			for (const field of fields) {
-				const cellKey = createCellKey(rowId, field);
-				allInvalidatedKeys.add(cellKey);
+				addInvalidatedCell(rowId, field);
 
-				const node = this.nodeMap.get(rowId);
+				const node = this.dataStore.getNode(rowId);
 				if (node) {
 					const nextVal = (node.data as Record<string, unknown>)[field];
 					this.store.engine.syncFormulaForCell(rowId, field, nextVal);
 				}
 
 				const invalidated = this.store.engine.invalidateFormulaCell(rowId, field);
-				for (const k of invalidated) {
-					allInvalidatedKeys.add(k);
+				for (const cell of invalidated) {
+					addInvalidatedCell(cell.rowId, cell.colField);
 				}
 			}
 		}
@@ -363,7 +373,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		if (state.sortModel && state.sortModel.length > 0) {
 			for (const sortItem of state.sortModel) {
-				for (const [_, fields] of changedFieldsByRow) {
+				for (const [_, fields] of result.changedFieldsByRow) {
 					if (fieldsAffectColumn(fields, sortItem.colId)) {
 						needsFullRefresh = true;
 						break;
@@ -375,7 +385,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		if (!needsFullRefresh && state.filterModel && Object.keys(state.filterModel).length > 0) {
 			for (const filterColId of Object.keys(state.filterModel)) {
-				for (const [_, fields] of changedFieldsByRow) {
+				for (const [_, fields] of result.changedFieldsByRow) {
 					if (fieldsAffectColumn(fields, filterColId)) {
 						needsFullRefresh = true;
 						break;
@@ -390,40 +400,80 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		} else {
 			// No sorting or filtering is affected. Notify only changed cells, formula dependents,
 			// and explicitly declared valueGetter dependents.
-			const notifyKeys = new Set<string>(allInvalidatedKeys);
-			for (const node of changedNodes) {
-				const changedFields = changedFieldsByRow.get(node.id);
+			const notifyCells = new Map<string, Set<string>>();
+			const addNotifyCell = (rowId: string, field: string) => {
+				let fields = notifyCells.get(rowId);
+				if (!fields) {
+					fields = new Set<string>();
+					notifyCells.set(rowId, fields);
+				}
+				fields.add(field);
+			};
+			for (const [rowId, fields] of allInvalidatedCells) {
+				for (const field of fields) addNotifyCell(rowId, field);
+			}
+			for (const node of result.changedNodes) {
+				const changedFields = result.changedFieldsByRow.get(node.id);
 				if (changedFields) {
 					for (const field of changedFields) {
-						notifyKeys.add(createCellKey(node.id, field));
+						addNotifyCell(node.id, field);
 						for (const dependentField of this.store.engine.columns.getValueGetterDependents(field)) {
 							if (dependentField !== field) {
-								notifyKeys.add(createCellKey(node.id, dependentField));
+								addNotifyCell(node.id, dependentField);
 							}
 						}
 					}
 				}
 			}
 
-			for (const key of notifyKeys) {
-				const colonIdx = key.indexOf(':');
-				const rId = colonIdx === -1 ? key : key.substring(0, colonIdx);
-				const cField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
-				this.store.engine.notifyCellChange(rId, cField);
-			}
+			this.store.engine.notifyBulkCellChange(notifyCells);
 
-			for (const [rowId, values] of changedValuesByRow) {
-				for (const [colField, change] of values) {
-					this.store.dispatchEvent('cellValueChanged', {
-						rowId,
-						colField,
-						oldValue: change.oldValue,
-						newValue: change.newValue,
-					});
-				}
+			if (result.changedValuesByRow.size > 0) {
+				this.store.dispatchEvent('rowsUpdated', {
+					changedValuesByRow: result.changedValuesByRow,
+					changedNodes: result.changedNodes,
+				});
 			}
 		}
 	}
+
+	public applyTransaction = (transaction: RowDataTransaction<TData>): RowNodeTransaction<TData> => {
+		const result = this.dataStore.applyTransaction(transaction);
+
+		if (result.updated.length > 0) {
+			const notifyCells = new Map<string, Set<string>>();
+			for (const [rowId, fields] of result.changedFieldsByRow) {
+				const cellSet = new Set<string>();
+				for (const field of fields) {
+					cellSet.add(field);
+					for (const dep of this.store.engine.columns.getValueGetterDependents(field)) {
+						if (dep !== field) cellSet.add(dep);
+					}
+				}
+				notifyCells.set(rowId, cellSet);
+			}
+			this.store.engine.notifyBulkCellChange(notifyCells);
+		}
+
+		if (result.added.length > 0 || result.removed.length > 0) {
+			this.refresh('bulk');
+		}
+
+		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {
+			this.store.dispatchEvent('rowsUpdated', {
+				changedValuesByRow: result.changedValuesByRow,
+				changedNodes: result.updated,
+				addedNodes: result.added,
+				removedNodes: result.removed,
+			});
+		}
+
+		return {
+			add: result.added,
+			remove: result.removed,
+			update: result.updated,
+		};
+	};
 
 	public getVisualRow = (index: number): VisualRow<TData> | null => {
 		return this.visualRows[index] ?? null;
@@ -434,7 +484,17 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	};
 
 	public getVisualRowIndexById = (id: string): number => {
-		const idx = this.visualRowIdMap.get(id);
+		const idx = this.visualRowIdToIndex.get(id) ?? this.rowIdToVisualIndex.get(id);
+		return idx !== undefined ? idx : -1;
+	};
+
+	public getVisualIndexById = (visualRowId: string): number => {
+		const idx = this.visualRowIdToIndex.get(visualRowId);
+		return idx !== undefined ? idx : -1;
+	};
+
+	public getVisualIndexByRowId = (rowId: string): number => {
+		const idx = this.rowIdToVisualIndex.get(rowId);
 		return idx !== undefined ? idx : -1;
 	};
 
@@ -448,16 +508,20 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return row?.kind === 'data' ? row.node : null;
 	};
 
-	public getRowCount = (): number => {
-		return this.getVisualRowCount();
+	public getRowIndexById = (rowId: string): number => {
+		return this.getVisualIndexByRowId(rowId);
 	};
 
-	public getRowIndexById = (rowId: string): number => {
-		return this.getVisualRowIndexById(rowId);
+	public getDataRowById = (rowId: string): TData | null => {
+		return this.getRawRowById(rowId);
 	};
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
-		return this.nodeMap.get(rowId) ?? null;
+		return this.dataStore.getNode(rowId);
+	};
+
+	public getRawRowById = (rowId: string): TData | null => {
+		return this.dataStore.getNode(rowId)?.data ?? null;
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
@@ -465,14 +529,18 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (!node) return false;
 
 		const col = this.store.getColumnDef(colField);
-		const updatedRow = { ...node.data };
+		const updatedRow = col?.valueSetter ? { ...node.data } : node.data;
 		if (col?.valueSetter) {
 			if (!col.valueSetter(updatedRow, value)) return false;
 		} else {
 			setValueByPath(updatedRow, colField, value);
 		}
 
-		node.setData(updatedRow);
+		if (updatedRow !== node.data) {
+			node.setData(updatedRow);
+		} else {
+			node.clearValueCache();
+		}
 
 		// If the edited cell field affects active sorting, filtering, grouping, or aggregates,
 		// we must re-run the pipeline to update the row positions, visibility, or computed aggregates.
@@ -485,7 +553,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			needsRefresh = true;
 		} else if (state.groupBy && state.groupBy.includes(colField)) {
 			needsRefresh = true;
-		} else if (state.columns.some((c) => c.field === colField && c.valueGetter)) {
+		} else if (this.store.engine.columns.hasValueGetter(colField)) {
 			needsRefresh = true;
 		} else {
 			// If grouping or custom row models (e.g. parentId tree) are active, any cell edit
@@ -504,18 +572,41 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return true;
 	};
 
-	public refresh(): void {
+	public refresh(reason?: RowRefreshReason): RowModelRefreshResult {
 		const state = this.store.getState();
 
-		const { visualRows, visualRowIdMap } = this.pipeline.run({
-			nodes: this.allNodes,
+		const expansion = state.expansion;
+		const rowModelConfig: RowModelConfig<TData> | undefined =
+			state.rowModelConfig ??
+			(state.groupBy?.length || state.getParentId || state.masterDetailEnabled
+				? {
+						type: 'client',
+						grouping: state.groupBy?.length
+							? { model: state.groupBy.map((colId) => ({ colId })), includeFooter: !!state.showGroupFooter }
+							: undefined,
+						treeData: state.getParentId ? { enabled: true, getParentId: state.getParentId } : undefined,
+						masterDetail: state.masterDetailEnabled
+							? {
+									enabled: true,
+									expandedRowIds: expansion.details,
+									defaultDetailHeight: state.detailRowHeight,
+								}
+							: undefined,
+					}
+				: undefined);
+
+		const result = this.pipeline.run({
+			nodes: this.dataStore.getAllNodes(),
 			columns: state.columns,
 			sortModel: state.sortModel,
 			filterModel: state.filterModel,
 			groupBy: state.groupBy,
+			rowModelConfig,
 			getParentId: state.getParentId,
-			expandedGroupIds: this.expandedGroupIds,
-			expandedDetailRowIds: this.expandedDetailRowIds,
+			aggDefs: state.aggDefs ?? [],
+			expandedGroupIds: new Set(Object.keys(expansion.groups)),
+			expandedTreeRowIds: new Set(Object.keys(expansion.treeRows)),
+			expandedDetailRowIds: new Set(Object.keys(expansion.details)),
 			defaultRowHeight: state.defaultRowHeight,
 			rowHeightsRecord: state.rowHeights,
 			groupRowHeight: state.groupRowHeight,
@@ -523,12 +614,21 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			masterDetailEnabled: state.masterDetailEnabled,
 			detailRenderer: state.detailRenderer,
 		});
+		const { visualRows } = result;
+
+		const changed = visualRows.length !== this.visualRows.length || visualRows.some((row, idx) => row !== this.visualRows[idx]);
 
 		this.visualRows = visualRows;
-		this.visualRowIdMap = visualRowIdMap;
+		this.visualRowIdToIndex = result.visualRowIdToIndex;
+		this.rowIdToVisualIndex = result.rowIdToVisualIndex;
+		this.rowIdToVisualRowId = result.rowIdToVisualRowId;
+		this.rowIdToVisualRowIds = result.rowIdToVisualRowIds;
+		this._stickyGroupMeta = result.stickyGroupMeta;
 
 		this.store.setState({
 			dataVersion: state.dataVersion + 1,
 		});
+
+		return { changed };
 	}
 }

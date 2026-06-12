@@ -8,13 +8,13 @@ export function treeStage<TData>(nodes: RowNode<TData>[], getParentId: (data: TD
 
 	// Build raw leaf nodes and analyze hierarchy
 	for (const node of nodes) {
-		const leaf: RowTreeNode<TData> = {
-			kind: 'leaf',
+		const dataNode: RowTreeNode<TData> = {
+			kind: 'data',
 			rowId: node.id,
 			node,
 			depth: 0,
 		};
-		nodeMap.set(node.id, leaf);
+		nodeMap.set(node.id, dataNode);
 
 		const pId = node.data ? getParentId(node.data) : null;
 		if (pId != null && pId !== '') {
@@ -43,29 +43,14 @@ export function treeStage<TData>(nodes: RowNode<TData>[], getParentId: (data: TD
 	const buildSubtree = (nodeId: string, depth: number): RowTreeNode<TData> => {
 		const current = nodeMap.get(nodeId)!;
 		const childIds = parentRelations.get(nodeId);
+		current.depth = depth;
 
 		if (!childIds || childIds.length === 0) {
-			current.depth = depth;
 			return current;
 		}
 
-		// If it has children, it becomes a "group" node in the tree structure
-		const childTreeNodes = childIds.map((cId) => buildSubtree(cId, depth + 1));
-
-		const leafCount = childTreeNodes.reduce((acc, child) => {
-			return acc + (child.kind === 'leaf' ? 1 : child.childCount);
-		}, 0);
-
-		return {
-			kind: 'group',
-			id: `tree:${nodeId}`,
-			field: 'tree',
-			key: nodeId,
-			depth,
-			children: childTreeNodes,
-			childCount: leafCount,
-			aggregateValues: {},
-		};
+		current.children = childIds.map((cId) => buildSubtree(cId, depth + 1));
+		return current;
 	};
 
 	return uniqueRoots.map((rootId) => buildSubtree(rootId, 0));

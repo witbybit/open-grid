@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { GridProvider, useClientGrid } from '@open-grid/react';
 import { DashboardStockRow } from '../hooks/useShowroomStores';
 import { GridView } from '../components/GridShared';
-import { TrendingUp, BarChart3, Activity, RefreshCw } from 'lucide-react';
+import { TrendingUp, BarChart3, Activity, RefreshCw, Zap, Code2 } from 'lucide-react';
 
 type ClientApi = ReturnType<typeof useClientGrid<DashboardStockRow>>;
 interface RealtimeDashboardProps {
@@ -28,6 +28,12 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 
 	// Real-time Event Logger state
 	const [eventLogs, setEventLogs] = useState<Array<{ time: string; msg: string; type: string }>>([]);
+
+	// Auto-volatility ticker
+	const [autoFire, setAutoFire] = useState(false);
+	const autoFireRef = useRef(false);
+	autoFireRef.current = autoFire;
+	const autoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 	// Dynamic styleSlots for live-updating dashboard cells & rows
 	useEffect(() => {
@@ -82,23 +88,15 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 			// A. Recalculate selection math
 			const range = state.selection.range;
 			if (range) {
-				const startIdx = api.getRowIndexById(range.start.rowId) ?? -1;
-				const endIdx = api.getRowIndexById(range.end.rowId) ?? -1;
+				const rowIds = api.rows().inRange(range).getIds();
 				const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
 				const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
 
-				if (startIdx !== -1 && endIdx !== -1 && startColIdx !== -1 && endColIdx !== -1) {
-					const minRow = Math.min(startIdx, endIdx);
-					const maxRow = Math.max(startIdx, endIdx);
+				if (rowIds.length > 0 && startColIdx !== -1 && endColIdx !== -1) {
 					const minCol = Math.min(startColIdx, endColIdx);
 					const maxCol = Math.max(startColIdx, endColIdx);
 
 					const cols = state.columns.slice(minCol, maxCol + 1).map((c) => c.field);
-					const rowIds: string[] = [];
-					for (let i = minRow; i <= maxRow; i++) {
-						const node = api.getRowNode(i);
-						if (node) rowIds.push(node.id);
-					}
 
 					let numericValues: number[] = [];
 					for (const rowId of rowIds) {
@@ -129,12 +127,7 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 			}
 
 			// B. Extract prices for live SVG Sparkline chart
-			const count = api.getRowCount();
-			const currentRows: DashboardStockRow[] = [];
-			for (let i = 0; i < count; i++) {
-				const r = api.getRow(i);
-				if (r) currentRows.push(r);
-			}
+			const currentRows = api.rows().getAll();
 			if (currentRows.length > 0) {
 				const allPrices = currentRows.map((r) => parseFloat(String(r.price)) || 0);
 				const allTickers = currentRows.map((r) => r.id);
@@ -157,9 +150,16 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 			logEvent('selectionChanged', `Selected range details updated.`, 'selection');
 		});
 
+		// cellValueChanged fires for individual cell edits (e.g. user typing in a cell)
 		const unsubValue = api.addEventListener<{ rowId: string; colField: string; value: unknown }>('cellValueChanged', (e) => {
 			updateStatsAndChart();
 			logEvent('cellValueChanged', `${e.payload.rowId}:${e.payload.colField} => ${e.payload.value}`, 'edit');
+		});
+
+		// rowsUpdated fires for bulk operations (updateRows / applyTransaction)
+		const unsubRowsUpdated = api.addEventListener<{ changedNodes: unknown[] }>('rowsUpdated', (e) => {
+			updateStatsAndChart();
+			logEvent('rowsUpdated', `${e.payload.changedNodes?.length ?? 0} rows updated in batch`, 'info');
 		});
 
 		const unsubFocus = api.addEventListener<{ focus: { rowId: string; colField: string } | null }>('focusChanged', (e) => {
@@ -170,6 +170,7 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 		return () => {
 			unsubSelect();
 			unsubValue();
+			unsubRowsUpdated();
 			unsubFocus();
 		};
 	}, [api]);
@@ -216,25 +217,49 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 		return `M ${startX},${bottomY} L ${points.join(' L ')} L ${endX},${bottomY} Z`;
 	}, [prices]);
 
-	// Simulate bulk stock volatility
-	const triggerVolatility = () => {
+	// Simulate bulk stock volatility — fires all 10 rows at once
+	const triggerVolatility = useCallback(() => {
 		api.updateRows((rows) =>
 			rows.map((row) => {
 				const priceNum = parseFloat(row.price) || 0;
-				const volatility = (Math.random() - 0.5) * 5; // up to 2.5% volatility
+				const volatility = (Math.random() - 0.5) * 8;
 				const nextPrice = Math.max(1, priceNum * (1 + volatility / 100));
 				const priceDiff = nextPrice - priceNum;
 				const changeNum = parseFloat(row.change) || 0;
 				const nextChange = changeNum + (priceDiff / priceNum) * 100;
+				const volumeNum = parseFloat(row.volume) || 0;
+				const nextVolume = Math.max(0.1, volumeNum * (1 + (Math.random() - 0.5) * 0.3));
 
 				return {
 					...row,
 					price: nextPrice.toFixed(2),
 					change: `${nextChange >= 0 ? '+' : ''}${nextChange.toFixed(1)}`,
+					volume: nextVolume.toFixed(1),
 				};
 			})
 		);
-	};
+	}, [api]);
+
+	// Toggle 100ms continuous auto-fire to stress-test the renderers
+	const toggleAutoFire = useCallback(() => {
+		const next = !autoFireRef.current;
+		setAutoFire(next);
+		if (next) {
+			autoIntervalRef.current = setInterval(triggerVolatility, 100);
+		} else {
+			if (autoIntervalRef.current) {
+				clearInterval(autoIntervalRef.current);
+				autoIntervalRef.current = null;
+			}
+		}
+	}, [triggerVolatility]);
+
+	useEffect(
+		() => () => {
+			if (autoIntervalRef.current) clearInterval(autoIntervalRef.current);
+		},
+		[]
+	);
 
 	return (
 		<div className='flex flex-col xl:flex-row h-full w-full gap-5 overflow-hidden'>
@@ -249,6 +274,17 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 							Real-Time Option Greeks & Market Feeds
 						</span>
 					</div>
+					<button
+						onClick={toggleAutoFire}
+						className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg font-bold text-[10px] border shadow-lg transition-all cursor-pointer ${
+							autoFire
+								? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500/20 shadow-rose-900/20'
+								: 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
+						}`}
+					>
+						<Zap className={`w-3 h-3 ${autoFire ? 'animate-pulse' : ''}`} />
+						{autoFire ? 'Auto 10hz ON' : 'Auto 10hz'}
+					</button>
 					<button
 						onClick={triggerVolatility}
 						className='flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 font-bold text-[10px] text-white border border-emerald-500/20 shadow-lg hover:shadow-emerald-900/20 transition-all cursor-pointer'
@@ -448,6 +484,63 @@ export default function RealtimeDashboard({ api, editTrigger, arrowKeyNavigation
 								);
 							})
 						)}
+					</div>
+				</div>
+
+				{/* 4. RENDERER PROTOCOL SHOWCASE */}
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden'>
+					<div className='absolute right-0 top-0 translate-x-12 -translate-y-12 w-24 h-24 bg-cyan-600/5 rounded-full blur-2xl pointer-events-none' />
+					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+						<Code2 className='w-4 h-4 text-cyan-400' />
+						Renderer Protocols
+					</h3>
+
+					<div className='flex flex-col gap-2'>
+						{/* DOM Renderer */}
+						<div className='p-2.5 rounded-lg border border-emerald-900/40 bg-emerald-950/10'>
+							<div className='flex items-center gap-1.5 mb-1'>
+								<span className='w-1.5 h-1.5 rounded-full bg-emerald-400' />
+								<span className='text-[9px] font-bold text-emerald-400 uppercase tracking-wider'>DOM Renderer</span>
+								<span className='ml-auto text-[8px] text-emerald-600 font-mono'>Price col</span>
+							</div>
+							<p className='text-[9px] text-slate-500 leading-relaxed'>
+								<code className='text-emerald-400/80'>DomCellRenderer.mount()</code> → returns handle. Grid calls{' '}
+								<code className='text-emerald-400/80'>handle.update()</code> directly. Zero React — canvas sparkline drawn in the
+								paint loop.
+							</p>
+						</div>
+
+						{/* Imperative React */}
+						<div className='p-2.5 rounded-lg border border-cyan-900/40 bg-cyan-950/10'>
+							<div className='flex items-center gap-1.5 mb-1'>
+								<span className='w-1.5 h-1.5 rounded-full bg-cyan-400' />
+								<span className='text-[9px] font-bold text-cyan-400 uppercase tracking-wider'>Imperative React</span>
+								<span className='ml-auto text-[8px] text-cyan-600 font-mono'>Change col</span>
+							</div>
+							<p className='text-[9px] text-slate-500 leading-relaxed'>
+								<code className='text-cyan-400/80'>forwardRef + useImperativeHandle</code>. Grid calls{' '}
+								<code className='text-cyan-400/80'>ref.current.update()</code> — bypasses React scheduler. Flash animation is direct
+								DOM mutation.
+							</p>
+						</div>
+
+						{/* Standard React */}
+						<div className='p-2.5 rounded-lg border border-slate-800 bg-slate-950/30'>
+							<div className='flex items-center gap-1.5 mb-1'>
+								<span className='w-1.5 h-1.5 rounded-full bg-slate-400' />
+								<span className='text-[9px] font-bold text-slate-400 uppercase tracking-wider'>Standard React</span>
+								<span className='ml-auto text-[8px] text-slate-600 font-mono'>Vol/Analytics col</span>
+							</div>
+							<p className='text-[9px] text-slate-500 leading-relaxed'>
+								<code className='text-slate-400/80'>React.memo</code> +{' '}
+								<code className='text-slate-400/80'>useSyncExternalStore</code>. Full reconciler path per update. Compare jitter vs
+								the other two columns at 10hz.
+							</p>
+						</div>
+
+						<div className='text-[8px] text-slate-600 italic text-center pt-1'>
+							Hit "Auto 10hz" and watch all three columns update simultaneously
+						</div>
 					</div>
 				</div>
 			</div>

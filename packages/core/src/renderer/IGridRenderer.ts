@@ -1,4 +1,17 @@
-import type { ColumnDef, RowNode, VisualRow } from '../store.js';
+import type { CellRendererPhase, ColumnDef, RowNode, VisualRow } from '../store.js';
+
+/**
+ * Explicit renderer lifecycle operation type (Phase 6).
+ * Adapters can use this to distinguish first mount from updates, rebinds, and warm restores.
+ *
+ *   mount   — first render of this renderer for this slot
+ *   update  — same renderer, same slot, different props (value/focus/selection changed)
+ *   rebind  — same renderer key, but slot was recycled to a new row; props entirely new
+ *   restore — renderer was warm (scrolled out) and is being scrolled back into view
+ *   unmount — renderer is leaving the viewport (not destroyed, may warm-cache)
+ *   destroy — renderer is being permanently destroyed and removed
+ */
+export type RendererLifecycleOperation = 'mount' | 'update' | 'rebind' | 'restore' | 'unmount' | 'destroy';
 
 export interface GridCellContentMount<TRowData = unknown> {
 	cellKey: string;
@@ -6,13 +19,28 @@ export interface GridCellContentMount<TRowData = unknown> {
 	value: unknown;
 	node: RowNode<TRowData>;
 	col: ColumnDef<TRowData>;
+	rowIndex?: number;
+	colIndex?: number;
+	/** Stable physical slot ID — bypasses the stale activeRows resolver during the binding loop. */
+	rowSlotId?: string;
 	isEditing: boolean;
 	isLoading: boolean;
+	phase?: CellRendererPhase;
+	isScrolling?: boolean;
+	isFocused?: boolean;
+	isSelected?: boolean;
+	/** Phase 6: explicit lifecycle operation so adapters skip reconciliation when not needed. */
+	lifecycleOperation?: RendererLifecycleOperation;
 }
 
 export interface GridCellContentUnmount {
 	cellKey: string;
 	container?: HTMLElement;
+	flushSync?: boolean;
+	reason?: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated';
+}
+
+export interface GridCellContentFlush {
 	flushSync?: boolean;
 }
 
@@ -45,6 +73,15 @@ export interface IGridRenderer<TRowData = unknown> {
 	 * Requests an asynchronous paint during the next animation frame.
 	 */
 	schedulePaint(): void;
+
+	scheduleFullPaint(reason?: string): void;
+	scheduleViewportPaint(reason?: string): void;
+	scheduleHeaderPaint(reason?: string): void;
+	scheduleOverlayPaint(reason?: string): void;
+	scheduleCellPaint(rowId: string, colId: string, reason?: string): void;
+	scheduleRowPaint(rowId: string, reason?: string): void;
+	scheduleColumnPaint(colId: string, reason?: string): void;
+	scheduleGeometryPaint(reason?: string): void;
 
 	/**
 	 * Requests a synchronous, immediate full paint of the grid viewport.

@@ -12,6 +12,10 @@ import {
 	Sparkles,
 	Calendar,
 	FolderTree,
+	Gauge,
+	PanelRight,
+	Boxes,
+	Layers,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -77,6 +81,30 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Hierarchical Desk',
 			subtitle: 'Tree • Group • Detail',
 			icon: FolderTree,
+		},
+		{
+			id: 'lab',
+			label: 'Performance Lab',
+			subtitle: '100k x 1k Glide',
+			icon: Gauge,
+		},
+		{
+			id: 'panels',
+			label: 'Sidebar Panels',
+			subtitle: 'Columns · Filters · Sort',
+			icon: PanelRight,
+		},
+		{
+			id: 'native',
+			label: 'Native Cell Types',
+			subtitle: 'Checkbox · Tags · Date · More',
+			icon: Boxes,
+		},
+		{
+			id: 'grouping',
+			label: 'Live Grouping',
+			subtitle: 'Drag · Drop · Reorder Groups',
+			icon: Layers,
 		},
 	] as const;
 

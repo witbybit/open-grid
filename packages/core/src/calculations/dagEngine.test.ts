@@ -73,6 +73,24 @@ describe('DagEngine Formula calculations', () => {
 		expect(engine.getCellValue('C1', 'value', getRawValue)).toBe(30);
 	});
 
+	it('should return structured invalidated cells for row ids containing colons', () => {
+		const engine = new DagEngine();
+		const storeValues: Record<string, unknown> = {
+			'row:1:price': 5,
+		};
+		const getRawValue = (rId: string, cField: string) => storeValues[`${rId}:${cField}`];
+
+		engine.registerFormula('summary:row', 'total', '=[row:1:price] * 2');
+		expect(engine.getCellValue('summary:row', 'total', getRawValue)).toBe(10);
+
+		storeValues['row:1:price'] = 9;
+		const invalidated = engine.invalidateCell('row:1', 'price');
+
+		expect(invalidated).toContainEqual({ rowId: 'row:1', colField: 'price' });
+		expect(invalidated).toContainEqual({ rowId: 'summary:row', colField: 'total' });
+		expect(engine.getCellValue('summary:row', 'total', getRawValue)).toBe(18);
+	});
+
 	it('should prevent circular dependencies by throwing an validation error upon formula registration', () => {
 		const engine = new DagEngine();
 

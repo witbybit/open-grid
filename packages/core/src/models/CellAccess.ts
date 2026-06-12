@@ -10,14 +10,15 @@ export class CellAccessModel<TRowData = unknown> {
 
 	public getByPointer(rowId: string, colField: string, event?: Event): GridCellAccess<TRowData> | null {
 		const rowModel = this.engine.getRowModel();
-		const rowIndex = rowModel ? rowModel.getRowIndexById(rowId) : -1;
+		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
 		const colIndex = this.engine.columns.getColumnIndex(colField);
 		const column = this.engine.columns.getColumnDef(colField);
 
 		if (!column) return null;
 
-		const row = rowIndex >= 0 && rowModel ? rowModel.getRow(rowIndex) : null;
-		const node = rowIndex >= 0 && rowModel ? rowModel.getRowNode(rowIndex) : null;
+		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
+		const row = visualRow?.kind === 'data' ? visualRow.node.data : null;
+		const node = visualRow?.kind === 'data' ? visualRow.node : null;
 		return this.get(rowId, rowIndex, node, row, colIndex, column, event);
 	}
 
@@ -28,11 +29,12 @@ export class CellAccessModel<TRowData = unknown> {
 		row: TRowData | null,
 		colIndex: number,
 		column: ColumnDef<TRowData>,
-		event?: Event
+		event?: Event,
+		hoistedState?: ReturnType<typeof this.engine.stateManager.getState>
 	): GridCellAccess<TRowData> {
 		const value = this.engine.data.getCellValue(rowId, column.field);
 		const rawValue = this.engine.data.getRawCellValue(rowId, column.field);
-		const state = this.engine.stateManager.getState();
+		const state = hoistedState ?? this.engine.stateManager.getState();
 		const focusedCell = state.selection.focus;
 		const selectedBounds = state.selection.bounds;
 		const isFocused = focusedCell?.rowId === rowId && focusedCell?.colField === column.field;

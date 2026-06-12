@@ -1,5 +1,6 @@
-import { RowNode, compilePathGetter, type ColumnDef } from '../store.js';
+import { RowNode, compilePathGetter, type ColumnDef, type GridCellPointer } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { defaultGridScheduler } from '../renderer/gridScheduler.js';
 
 export class DataModel<TRowData = unknown> {
 	private engine!: GridEngine<TRowData>;
@@ -68,6 +69,9 @@ export class DataModel<TRowData = unknown> {
 	}
 
 	private getValueGetterValue(rowId: string, colField: string, col: ColumnDef<TRowData>, node: RowNode<TRowData>): unknown {
+		if (this.engine.isScrolling || this.engine.isScrollFrameActive) {
+			this.engine.valueGetterCallsDuringScroll++;
+		}
 		if (!col.valueGetterDependencies) {
 			return col.valueGetter!({ node, row: node.data, colField });
 		}
@@ -98,9 +102,10 @@ export class DataModel<TRowData = unknown> {
 
 		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
 		if (!node) {
-			const idx = rowModel.getRowIndexById(rowId);
+			const idx = rowModel.getVisualIndexByRowId(rowId);
 			if (idx === -1) return '';
-			const row = rowModel.getRow(idx);
+			const visualRow = rowModel.getVisualRow(idx);
+			const row = visualRow?.kind === 'data' ? visualRow.node.data : null;
 			if (!row) return '';
 			if (col.valueGetter) {
 				const dummyNode = new RowNode<TRowData>(rowId, row);
@@ -131,8 +136,10 @@ export class DataModel<TRowData = unknown> {
 		const row =
 			node?.data ??
 			(() => {
-				const idx = rowModel.getRowIndexById(rowId);
-				return idx === -1 ? null : rowModel.getRow(idx);
+				const idx = rowModel.getVisualIndexByRowId(rowId);
+				if (idx === -1) return null;
+				const visualRow = rowModel.getVisualRow(idx);
+				return visualRow?.kind === 'data' ? visualRow.node.data : null;
 			})();
 		if (!row) return '';
 
@@ -140,7 +147,76 @@ export class DataModel<TRowData = unknown> {
 		return getter(row);
 	};
 
+	public getCachedDisplayValue(rowId: string, colField: string): string | undefined {
+		if (this.isRowLoading(rowId)) {
+			return '';
+		}
+
+		if (this.engine.hasFormula(rowId, colField)) {
+			const res = this.engine.getCachedFormulaValue(rowId, colField);
+			if (res.hasCached) {
+				return res.value == null ? '' : String(res.value);
+			}
+			return undefined;
+		}
+
+		const col = this.engine.columns.getColumnDef(colField);
+		if (col?.valueGetter) {
+			const rowCache = this.valueGetterCache.get(rowId);
+			if (rowCache && rowCache.has(colField)) {
+				const val = rowCache.get(colField);
+				return val == null ? '' : String(val);
+			}
+			return undefined;
+		}
+
+		const cheapVal = this.getCheapDisplayValue(rowId, colField);
+		return cheapVal;
+	}
+
+	public getCheapDisplayValue(rowId: string, colField: string): string {
+		if (this.isRowLoading(rowId)) {
+			return '';
+		}
+
+		const col = this.engine.columns.getColumnDef(colField);
+		if (!col) return '';
+
+		if (col.valueGetter || this.engine.hasFormula(rowId, colField)) {
+			const rowCache = this.valueGetterCache.get(rowId);
+			if (rowCache && rowCache.has(colField)) {
+				const val = rowCache.get(colField);
+				return val == null ? '' : String(val);
+			}
+			if (this.engine.hasFormula(rowId, colField)) {
+				const res = this.engine.getCachedFormulaValue(rowId, colField);
+				if (res.hasCached) {
+					return res.value == null ? '' : String(res.value);
+				}
+			}
+			return '';
+		}
+
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return '';
+
+		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
+		const row = node ? node.data : rowModel.getRawRowById ? rowModel.getRawRowById(rowId) : null;
+		if (!row) return '';
+
+		const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
+		const rawVal = getter(row);
+		return rawVal == null ? '' : String(rawVal);
+	}
+
+	public getComputedCellValue(rowId: string, colField: string): unknown {
+		return this.getCellValue(rowId, colField);
+	}
+
 	public getCellValue = (rowId: string, colField: string): unknown => {
+		if (this.engine.isScrolling || this.engine.isScrollFrameActive) {
+			this.engine.getCellValueCallsDuringScroll++;
+		}
 		const rawVal = this.getRawCellValue(rowId, colField);
 		if (typeof rawVal === 'string' && rawVal.startsWith('=')) {
 			if (!this.engine.hasFormula(rowId, colField) || this.engine.getFormula(rowId, colField) !== rawVal) {
@@ -153,15 +229,19 @@ export class DataModel<TRowData = unknown> {
 		}
 
 		if (this.engine.hasFormula(rowId, colField)) {
+			if (this.engine.isScrolling || this.engine.isScrollFrameActive) {
+				this.engine.formulaCallsDuringScroll++;
+			}
 			return this.engine.evaluateFormulaCell(rowId, colField, (rId, cField) => this.getRawCellValue(rId, cField));
 		}
 
 		return rawVal;
 	};
 
-	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
-		const oldValue = this.getCellValue(rowId, colField);
-		const oldStoredValue = this.getStoredCellValue(rowId, colField);
+	public setCellValue = (rowId: string, colField: string, value: unknown, knownOldStoredValue?: unknown): boolean => {
+		const shouldEmitValueChanged = this.engine.eventBus.hasListeners('cellValueChanged');
+		const oldValue = shouldEmitValueChanged ? this.getCellValue(rowId, colField) : undefined;
+		const oldStoredValue = knownOldStoredValue !== undefined ? knownOldStoredValue : this.getStoredCellValue(rowId, colField);
 		if (oldStoredValue === value) return false;
 
 		const rowModel = this.engine.getRowModel();
@@ -185,60 +265,84 @@ export class DataModel<TRowData = unknown> {
 		}
 
 		// Invalidate this cell and any formula dependents.
-		const invalidatedKeys = this.engine.invalidateFormulaCell(rowId, colField);
+		const invalidatedFormulaCells = this.engine.invalidateFormulaCell(rowId, colField);
+		const dependentFields = this.engine.columns.getValueGetterDependents(colField).filter((dependentField) => dependentField !== colField);
+
+		if (invalidatedFormulaCells.length <= 1 && dependentFields.length === 0) {
+			this.clearValueGetterCache(rowId, colField);
+
+			if (this.engine.batchedUpdates) {
+				this.engine.enqueueCellUpdate(rowId, colField);
+				this.scheduleBatchFlush();
+			} else {
+				this.engine.notifyCellChange(rowId, colField);
+			}
+			if (shouldEmitValueChanged) {
+				this.engine.eventBus.dispatchEvent('cellValueChanged', {
+					rowId,
+					colField,
+					oldValue,
+					newValue: value,
+				});
+			}
+			return true;
+		}
+
+		const invalidatedCells: GridCellPointer[] = [{ rowId, colField }];
+		const seenInvalidatedCells = new Set<string>([`${rowId}\u0000${colField}`]);
+		const addInvalidatedCell = (rId: string, cField: string) => {
+			const key = `${rId}\u0000${cField}`;
+			if (seenInvalidatedCells.has(key)) return;
+			seenInvalidatedCells.add(key);
+			invalidatedCells.push({ rowId: rId, colField: cField });
+		};
 
 		// Also invalidate explicitly declared dynamic valueGetter dependents on this same row.
 		// Uses the column reverse index so wide grids pay O(actual dependents), not O(total columns).
-		for (const dependentField of this.engine.columns.getValueGetterDependents(colField)) {
-			if (dependentField !== colField) {
-				const key = `${rowId}:${dependentField}`;
-				if (!invalidatedKeys.includes(key)) invalidatedKeys.push(key);
-			}
+		for (const dependentField of dependentFields) {
+			addInvalidatedCell(rowId, dependentField);
 		}
 
-		for (const key of invalidatedKeys) {
-			const colonIdx = key.indexOf(':');
-			const rId = colonIdx === -1 ? key : key.substring(0, colonIdx);
-			const cField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
-			this.clearValueGetterCache(rId, cField);
+		for (const cell of invalidatedFormulaCells) {
+			addInvalidatedCell(cell.rowId, cell.colField);
+		}
+
+		for (const cell of invalidatedCells) {
+			this.clearValueGetterCache(cell.rowId, cell.colField);
 		}
 
 		if (this.engine.batchedUpdates) {
 			// Batch cell notifications for better performance
-			for (const key of invalidatedKeys) {
-				this.engine.cellUpdateBatch.add(key);
+			for (const cell of invalidatedCells) {
+				this.engine.enqueueCellUpdate(cell.rowId, cell.colField);
 			}
 
 			// Schedule batched flush if not already scheduled
-			if (!this.engine.batchFlushScheduled) {
-				this.engine.batchFlushScheduled = true;
-				if (typeof requestAnimationFrame !== 'undefined') {
-					requestAnimationFrame(() => {
-						this.engine.flushCellUpdates();
-					});
-				} else {
-					Promise.resolve().then(() => {
-						this.engine.flushCellUpdates();
-					});
-				}
-			}
+			this.scheduleBatchFlush();
 		} else {
 			// Immediate mode: notify synchronously
-			for (const key of invalidatedKeys) {
-				const colonIdx = key.indexOf(':');
-				const rId = colonIdx === -1 ? key : key.substring(0, colonIdx);
-				const cField = colonIdx === -1 ? '' : key.substring(colonIdx + 1);
-				this.engine.notifyCellChange(rId, cField);
+			for (const cell of invalidatedCells) {
+				this.engine.notifyCellChange(cell.rowId, cell.colField);
 			}
 		}
 
-		// Trigger cellValueChanged event
-		this.engine.eventBus.dispatchEvent('cellValueChanged', {
-			rowId,
-			colField,
-			oldValue,
-			newValue: value,
-		});
+		if (shouldEmitValueChanged) {
+			this.engine.eventBus.dispatchEvent('cellValueChanged', {
+				rowId,
+				colField,
+				oldValue,
+				newValue: value,
+			});
+		}
 		return true;
 	};
+
+	private scheduleBatchFlush(): void {
+		if (!this.engine.batchFlushScheduled) {
+			this.engine.batchFlushScheduled = true;
+			defaultGridScheduler.microtask(() => {
+				this.engine.flushCellUpdates();
+			});
+		}
+	}
 }

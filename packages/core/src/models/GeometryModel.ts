@@ -10,8 +10,51 @@ export class GeometryModel {
 	public colWidths = new Float64Array(0);
 	private colCapacity = 0;
 	private colCount = 0;
+	private allInvalid = false;
+	private invalidRows = new Set<string>();
+	private invalidColumns = new Set<string>();
 
 	public init(): void {}
+
+	public invalidateAll(): void {
+		this.allInvalid = true;
+	}
+
+	public invalidateRows(rowIds: string[]): void {
+		for (const rowId of rowIds) {
+			this.invalidRows.add(rowId);
+		}
+	}
+
+	public invalidateColumns(colIds: string[]): void {
+		for (const colId of colIds) {
+			this.invalidColumns.add(colId);
+		}
+	}
+
+	public updateRowHeight(rowId: string, height: number): void {
+		const rowIdx = Number(rowId);
+		if (Number.isInteger(rowIdx) && rowIdx >= 0 && rowIdx < this.rowCount) {
+			this.rowHeights[rowIdx] = height;
+		}
+		this.invalidateRows([rowId]);
+	}
+
+	public updateColumnWidth(colId: string, width: number): void {
+		const colIdx = Number(colId);
+		if (Number.isInteger(colIdx) && colIdx >= 0 && colIdx < this.colCount) {
+			this.colWidths[colIdx] = width;
+		}
+		this.invalidateColumns([colId]);
+	}
+
+	public recomputeIfNeeded(): boolean {
+		const changed = this.allInvalid || this.invalidRows.size > 0 || this.invalidColumns.size > 0;
+		this.allInvalid = false;
+		this.invalidRows.clear();
+		this.invalidColumns.clear();
+		return changed;
+	}
 
 	public updateColumns(widths: number[], defaultColWidth: number): void {
 		const len = widths.length;
@@ -63,10 +106,27 @@ export class GeometryModel {
 		return defaultRowHeight;
 	}
 
+	/** Phase 9: returns the pixel offset of the bottom edge of a row. */
+	public getRowBottom(rowIdx: number, defaultRowHeight: number): number {
+		if (rowIdx >= 0 && rowIdx < this.rowCount) {
+			return this.rowTops[rowIdx] + this.rowHeights[rowIdx];
+		}
+		return (rowIdx + 1) * defaultRowHeight;
+	}
+
+	/** Phase 9: alias for getRowTop for pixel-first API consistency. */
+	public getRowOffset(rowIdx: number, defaultRowHeight: number): number {
+		return this.getRowTop(rowIdx, defaultRowHeight);
+	}
+
 	public getTotalHeight(defaultRowHeight: number): number {
 		if (this.rowCount === 0) return 0;
 		const lastIdx = this.rowCount - 1;
 		return this.rowTops[lastIdx] + this.rowHeights[lastIdx];
+	}
+
+	public getRowCount(): number {
+		return this.rowCount;
 	}
 
 	public getColLeft(colIdx: number, defaultColWidth: number): number {
@@ -87,6 +147,10 @@ export class GeometryModel {
 		if (this.colCount === 0) return 0;
 		const lastIdx = this.colCount - 1;
 		return this.colLefts[lastIdx] + this.colWidths[lastIdx];
+	}
+
+	public getColumnCount(): number {
+		return this.colCount;
 	}
 
 	/**

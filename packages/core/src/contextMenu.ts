@@ -1,4 +1,5 @@
 import { GridStore, GridCellPointer, GridPlugin, GridApi, InternalGridApi, GridSelectionState } from './store.js';
+import { exportToCsv } from './export/csvExport.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
@@ -20,7 +21,7 @@ export interface GridContextMenuItem<TRowData = unknown> {
 export interface GridContextMenuOptions<TRowData = unknown> {
 	disabled?: boolean;
 	disableDefaults?: boolean;
-	excludeDefaults?: Array<'copy' | 'cut' | 'paste' | 'clear' | 'selectAll' | 'divider'>;
+	excludeDefaults?: Array<'copy' | 'cut' | 'paste' | 'clear' | 'selectAll' | 'exportAll' | 'exportSelected' | 'divider'>;
 	customItems?: Array<GridContextMenuItem<TRowData>>;
 }
 
@@ -53,7 +54,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		if (state.selection.bounds) {
 			const rowModel = this.store.getRowModel();
 			if (rowModel) {
-				const clickedRowIdx = rowModel.getRowIndexById(rowId);
+				const clickedRowIdx = rowModel.getVisualRowIndexById(rowId);
 				const clickedColIdx = state.columns.findIndex((c) => c.field === colField);
 				const bounds = state.selection.bounds;
 				if (
@@ -155,6 +156,20 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				label: 'Select All',
 				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4"></rect></svg>`,
 				action: (p) => this.selectAll(p),
+			},
+			{ id: 'divider', isDivider: true },
+			{
+				id: 'exportAll',
+				label: 'Export All as CSV',
+				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+				action: (p) => exportToCsv(this.store, { fileName: 'export.csv' }),
+			},
+			{
+				id: 'exportSelected',
+				label: 'Export Selection as CSV',
+				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+				hidden: (p) => !p.selection.bounds,
+				action: (p) => this.exportSelectionAsCsv(p),
 			},
 		];
 
@@ -266,14 +281,13 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 	private copySelectedRange(params: ContextMenuParams<TRowData>): void {
 		const bounds = params.selection.bounds;
-		const rowModel = this.store.getRowModel();
-		if (!bounds || !rowModel) return;
+		if (!bounds) return;
 
 		const rows: string[] = [];
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const row = rowModel.getRow(r);
-			if (!row) continue;
-			const rowId = this.store.getRowId(row);
+			const visualRow = this.store.getVisualRow(r);
+			if (visualRow?.kind !== 'data') continue;
+			const rowId = visualRow.rowId;
 			const rowVals: string[] = [];
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
 				const col = params.api.getState().columns[c];
@@ -313,31 +327,35 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 	private async pasteSelectedRange(params: ContextMenuParams<TRowData>): Promise<void> {
 		const bounds = params.selection.bounds;
-		const rowModel = this.store.getRowModel();
-		if (!bounds || !rowModel) return;
+		if (!bounds) return;
 
 		try {
 			const text = await navigator.clipboard.readText();
 			if (!text) return;
 
 			const lines = text.split(/\r?\n/);
-			this.store.batch(() => {
-				for (let r = 0; r < lines.length; r++) {
-					const rowIndex = bounds.minRow + r;
-					if (rowIndex > bounds.maxRow) break;
-					const row = rowModel.getRow(rowIndex);
-					if (!row) continue;
-					const rowId = this.store.getRowId(row);
-					const cells = lines[r].split('\t');
-					for (let c = 0; c < cells.length; c++) {
-						const colIndex = bounds.minCol + c;
-						if (colIndex > bounds.maxCol) break;
-						const col = params.api.getState().columns[colIndex];
-						if (!col) continue;
-						this.store.setCellValue(rowId, col.field, cells[c]);
+			for (let r = 0; r < lines.length; r++) {
+				const rowIndex = bounds.minRow + r;
+				if (rowIndex > bounds.maxRow) break;
+				const visualRow = this.store.getVisualRow(rowIndex);
+				if (visualRow?.kind !== 'data') continue;
+				const rowId = visualRow.rowId;
+				const cells = lines[r].split('\t');
+				for (let c = 0; c < cells.length; c++) {
+					const colIndex = bounds.minCol + c;
+					if (colIndex > bounds.maxCol) break;
+					const col = params.api.getState().columns[colIndex];
+					if (!col) continue;
+					let value: unknown = cells[c];
+					if (col.onPaste) {
+						const row = params.api.getRawRowById(rowId);
+						if (row !== null) {
+							value = col.onPaste({ row, rowId, colField: col.field, pastedText: cells[c] });
+						}
 					}
+					this.store.setCellValue(rowId, col.field, value);
 				}
-			});
+			}
 		} catch (err) {
 			console.error('Failed to paste selected range: ', err);
 		}
@@ -345,36 +363,51 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 	private clearSelection(params: ContextMenuParams<TRowData>): void {
 		const bounds = params.selection.bounds;
-		const rowModel = this.store.getRowModel();
-		if (!bounds || !rowModel) return;
+		if (!bounds) return;
 
-		this.store.batch(() => {
-			for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-				const row = rowModel.getRow(r);
-				if (!row) continue;
-				const rowId = this.store.getRowId(row);
-				for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-					const col = params.api.getState().columns[c];
-					if (!col) continue;
-					this.store.setCellValue(rowId, col.field, '');
-				}
+		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+			const visualRow = this.store.getVisualRow(r);
+			if (visualRow?.kind !== 'data') continue;
+			const rowId = visualRow.rowId;
+			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+				const col = params.api.getState().columns[c];
+				if (!col) continue;
+				this.store.setCellValue(rowId, col.field, '');
 			}
-		});
+		}
 	}
 
 	private selectAll(params: ContextMenuParams<TRowData>): void {
 		const state = params.api.getState();
 		const columns = state.columns;
-		const rowCount = params.api.getRowCount();
+		const rowCount = this.store.getVisualRowCount();
 		if (columns.length === 0 || rowCount === 0) return;
 
-		const firstRow = params.api.getRow(0);
-		const lastRow = params.api.getRow(rowCount - 1);
-		if (!firstRow || !lastRow) return;
+		const firstRow = this.store.getVisualRow(0);
+		const lastRow = this.store.getVisualRow(rowCount - 1);
+		if (firstRow?.kind !== 'data' || lastRow?.kind !== 'data') return;
 
-		const firstRowId = params.api.getRowId(firstRow);
-		const lastRowId = params.api.getRowId(lastRow);
+		const firstRowId = firstRow.rowId;
+		const lastRowId = lastRow.rowId;
 
 		params.api.selectRange({ rowId: firstRowId, colField: columns[0].field }, { rowId: lastRowId, colField: columns[columns.length - 1].field });
+	}
+
+	private exportSelectionAsCsv(params: ContextMenuParams<TRowData>): void {
+		const bounds = params.selection.bounds;
+		if (!bounds) return;
+
+		const rowIds: string[] = [];
+		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+			const visualRow = this.store.getVisualRow(r);
+			if (visualRow?.kind !== 'data') continue;
+			rowIds.push(visualRow.rowId);
+		}
+		if (rowIds.length === 0) return;
+
+		const state = params.api.getState();
+		const colFields = state.columns.slice(bounds.minCol, bounds.maxCol + 1).map((c) => c.field);
+
+		exportToCsv(this.store, { fileName: 'export-selection.csv', rowIds, columns: colFields });
 	}
 }

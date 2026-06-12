@@ -2,18 +2,25 @@ import {
 	GridApi,
 	GridCellClickParams,
 	GridCellPointer,
-	ColumnDef,
-	RowNode,
 	GridContextMenuOptions,
 	GridContextMenuHandle,
-	GridHost,
-	mountGridHost,
 	registerGridContextMenu,
 	VisualRow,
+	ColumnDef,
+	GridState,
+	GridPersistenceAdapter,
 } from '@open-grid/core';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { PortalData, PortalManager } from './GridPortal.js';
+import { InternalColumnDef, GridHost, mountGridHost, getStoreFromApi } from '@open-grid/core/internal';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
+import { useClientGrid } from './useGrid.js';
+
+declare const process: { env: { NODE_ENV: string } } | undefined;
+const DEV = typeof process === 'undefined' || process.env.NODE_ENV !== 'production';
+import { PortalManager, createPortalStore } from './GridPortal.js';
+import { flashCopiedCells } from './cellFlash.js';
 import { useGridNavigationController } from './hooks.js';
+import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
+import { GridChartOverlay } from './chart/GridChartOverlay.js';
 
 export const GridApiContext = createContext<GridApi<unknown> | null>(null);
 
@@ -26,7 +33,30 @@ export function GridProvider<TRowData = unknown>({ api, children }: GridProvider
 	return <GridApiContext.Provider value={api as unknown as GridApi<unknown>}>{children}</GridApiContext.Provider>;
 }
 export interface OpenGridProps<TRowData = unknown> {
+	// ─── Inline data mode ────────────────────────────────────────────────────
+	// Pass rows + columns directly — no separate hook needed for simple client grids.
+	// OpenGrid creates and owns the grid instance internally.
+	// For server grids or when you need the api object from sibling/parent components,
+	// use `useClientGrid` / `useServerGrid` and pass the resulting `api` instead.
+	rows?: TRowData[];
+	columns?: ColumnDef<TRowData>[];
+	getRowId?: (row: TRowData) => string;
+	initialState?: Partial<GridState<TRowData>>;
+	persistence?: GridPersistenceAdapter;
+	rowOverscanPx?: number;
+	colBuffer?: number;
+	overscanAdaptive?: boolean;
+	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
+	/** Shortcut for `initialState.detailRowHeight`. Height in px for expanded master-detail rows. */
+	detailRowHeight?: number;
+
+	// ─── External api mode ───────────────────────────────────────────────────
+	// Pass a pre-created GridApi from `useClientGrid()` or `useServerGrid()`.
+	// Required for server grids; also use when multiple components share the same grid.
+	// Alternatively, wrap in `<GridProvider api={api}>` and omit this prop entirely.
 	api?: GridApi<TRowData>;
+
+	// ─── Display / behaviour ─────────────────────────────────────────────────
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 	pinTopRows?: number;
@@ -43,19 +73,74 @@ export interface OpenGridProps<TRowData = unknown> {
 	};
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	footerRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => React.ReactNode;
+	/** Attach a built-in animated sidebar panel strip inside the grid. */
+	sidebar?: GridSidebarConfig<TRowData>;
+	/**
+	 * Enable the built-in chart overlay (triggered via `api.openChart()` or the
+	 * default "Chart Selection" context-menu item).  Default: false.
+	 */
+	enableChart?: boolean;
 }
 
 export function OpenGrid<TRowData = unknown>(props: OpenGridProps<TRowData>) {
-	const contextApi = useContext(GridApiContext);
-	const api = props.api ?? (contextApi as GridApi<TRowData> | null);
+	const contextApi = useContext(GridApiContext) as GridApi<TRowData> | null;
 
+	// Inline mode: rows provided without a pre-created api — create and own the grid internally.
+	if (!props.api && props.rows !== undefined) {
+		return <OpenGridManagedClient {...props} rows={props.rows} />;
+	}
+
+	const api = props.api ?? contextApi;
 	if (!api) {
-		throw new Error('OpenGrid must be provided an api either via props or GridProvider context.');
+		throw new Error(
+			'OpenGrid requires one of: (1) `rows` + `columns` props for a self-contained grid, ' +
+				'(2) an `api` prop from `useClientGrid` / `useServerGrid`, or ' +
+				'(3) a parent `<GridProvider api={...}>` wrapper.'
+		);
 	}
 
 	return (
 		<GridProvider api={api}>
 			<OpenGridInner {...props} api={api} />
+		</GridProvider>
+	);
+}
+
+// Internal: manages the grid lifecycle when rows/columns are passed directly to <OpenGrid>.
+function OpenGridManagedClient<TRowData = unknown>({
+	rows,
+	columns,
+	getRowId,
+	initialState,
+	persistence,
+	rowOverscanPx,
+	colBuffer,
+	overscanAdaptive,
+	runtimeLimits,
+	detailRowHeight,
+	...rest
+}: OpenGridProps<TRowData> & { rows: TRowData[] }) {
+	if (DEV && (!columns || columns.length === 0)) {
+		console.warn(
+			'[open-grid] <OpenGrid> received `rows` but no `columns`. ' + 'Pass a `columns` prop alongside `rows`, or the grid will render empty.'
+		);
+	}
+	const mergedInitialState = detailRowHeight != null ? { detailRowHeight, ...initialState } : initialState;
+	const api = useClientGrid<TRowData>({
+		rows: rows!,
+		columns: columns ?? [],
+		getRowId,
+		initialState: mergedInitialState,
+		persistence,
+		rowOverscanPx,
+		colBuffer,
+		overscanAdaptive,
+		runtimeLimits,
+	});
+	return (
+		<GridProvider api={api}>
+			<OpenGridInner {...rest} api={api} />
 		</GridProvider>
 	);
 }
@@ -74,184 +159,14 @@ function OpenGridInner<TRowData = unknown>({
 	navigationOptions = {},
 	groupRowRenderer,
 	detailRowRenderer,
+	footerRowRenderer,
+	sidebar,
+	enableChart = false,
 }: OpenGridProps<TRowData> & { api: GridApi<TRowData> }) {
-	const portalsRef = useRef<Map<string, PortalData<TRowData>>>(new Map());
-	const rowPortalsRef = useRef<Map<string, { rowKey: string; container: HTMLElement; visualRow: VisualRow<TRowData> }>>(new Map());
-	const menuPortalsRef = useRef<Map<string, { colField: string; container: HTMLElement; column: ColumnDef<TRowData>; close: () => void }>>(
-		new Map()
-	);
-	const portalFlushScheduledRef = useRef(false);
-	const [, setPortalVersion] = useState(0);
+	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const hostRef = useRef<GridHost | null>(null);
 	const isGridActiveRef = useRef(false);
-
-	const schedulePortalFlush = useCallback(() => {
-		if (portalFlushScheduledRef.current) return;
-		portalFlushScheduledRef.current = true;
-		queueMicrotask(() => {
-			portalFlushScheduledRef.current = false;
-			setPortalVersion((version) => version + 1);
-		});
-	}, []);
-
-	const mountPortal = useCallback(
-		(
-			cellKey: string,
-			container: HTMLElement,
-			value: unknown,
-			node: RowNode<TRowData>,
-			col: ColumnDef<TRowData>,
-			isEditing: boolean,
-			isLoading: boolean
-		) => {
-			const existing = portalsRef.current.get(cellKey);
-			if (
-				existing &&
-				existing.container === container &&
-				existing.isEditing === isEditing &&
-				existing.isLoading === isLoading &&
-				existing.value === value &&
-				existing.node === node &&
-				existing.col === col
-			) {
-				return;
-			}
-
-			// Workaround for React Portal unmount race conditions:
-			// The core engine recycles virtualized container elements synchronously (via textContent = '') to optimize performance.
-			// However, React DOM cleans up portal fiber structures asynchronously on unmount, which eventually invokes
-			// `container.removeChild(child)`. If the virtualization layer has already synchronously cleared the container,
-			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
-			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
-			// rather than allowing it to crash the React tree.
-			interface PatchedHTMLElement extends HTMLElement {
-				__patchedRemoveChild?: boolean;
-			}
-			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
-				(container as PatchedHTMLElement).__patchedRemoveChild = true;
-				const originalRemove = container.removeChild;
-				container.removeChild = function <T extends Node>(child: T): T {
-					if (child.parentNode === container) {
-						return originalRemove.call(this, child) as T;
-					}
-					return child;
-				};
-			}
-
-			portalsRef.current.set(cellKey, {
-				cellKey,
-				container,
-				value,
-				node,
-				col,
-				isEditing,
-				isLoading,
-			});
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
-
-	const unmountPortal = useCallback(
-		(cellKey: string, container?: HTMLElement) => {
-			const existing = portalsRef.current.get(cellKey);
-			if (!existing || (container && existing.container !== container)) return;
-			portalsRef.current.delete(cellKey);
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
-
-	const mountRowPortal = useCallback(
-		(rowKey: string, container: HTMLElement, visualRow: VisualRow<TRowData>) => {
-			const existing = rowPortalsRef.current.get(rowKey);
-			if (existing && existing.container === container && existing.visualRow === visualRow) {
-				return;
-			}
-
-			// Workaround for React Portal unmount race conditions:
-			// The core engine recycles virtualized container elements synchronously (via textContent = '') to optimize performance.
-			// However, React DOM cleans up portal fiber structures asynchronously on unmount, which eventually invokes
-			// `container.removeChild(child)`. If the virtualization layer has already synchronously cleared the container,
-			// this results in a fatal DOMException (NotFoundError). By intercepting and patching `removeChild`, we ensure
-			// that if the child is no longer physically present inside the container, we safely treat the unmount as a no-op
-			// rather than allowing it to crash the React tree.
-			interface PatchedHTMLElement extends HTMLElement {
-				__patchedRemoveChild?: boolean;
-			}
-			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
-				(container as PatchedHTMLElement).__patchedRemoveChild = true;
-				const originalRemove = container.removeChild;
-				container.removeChild = function <T extends Node>(child: T): T {
-					if (child.parentNode === container) {
-						return originalRemove.call(this, child) as T;
-					}
-					return child;
-				};
-			}
-
-			rowPortalsRef.current.set(rowKey, {
-				rowKey,
-				container,
-				visualRow,
-			});
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
-
-	const unmountRowPortal = useCallback(
-		(rowKey: string, container?: HTMLElement) => {
-			const existing = rowPortalsRef.current.get(rowKey);
-			if (!existing || (container && existing.container !== container)) return;
-			rowPortalsRef.current.delete(rowKey);
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
-
-	const mountMenuPortal = useCallback(
-		(colField: string, container: HTMLElement, column: ColumnDef<TRowData>, close: () => void) => {
-			const existing = menuPortalsRef.current.get(colField);
-			if (existing && existing.container === container && existing.column === column) {
-				return;
-			}
-
-			interface PatchedHTMLElement extends HTMLElement {
-				__patchedRemoveChild?: boolean;
-			}
-			if (container && !(container as PatchedHTMLElement).__patchedRemoveChild) {
-				(container as PatchedHTMLElement).__patchedRemoveChild = true;
-				const originalRemove = container.removeChild;
-				container.removeChild = function <T extends Node>(child: T): T {
-					if (child.parentNode === container) {
-						return originalRemove.call(this, child) as T;
-					}
-					return child;
-				};
-			}
-
-			menuPortalsRef.current.set(colField, {
-				colField,
-				container,
-				column,
-				close,
-			});
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
-
-	const unmountMenuPortal = useCallback(
-		(colField: string, container?: HTMLElement) => {
-			const existing = menuPortalsRef.current.get(colField);
-			if (!existing || (container && existing.container !== container)) return;
-			menuPortalsRef.current.delete(colField);
-			schedulePortalFlush();
-		},
-		[schedulePortalFlush]
-	);
 
 	useEffect(() => {
 		hostRef.current?.setViewportPins({
@@ -280,41 +195,76 @@ function OpenGridInner<TRowData = unknown>({
 				bottom: pinBottomRows,
 			},
 			cellContent: {
+				// All custom cell mounts flow through the shared portal store.
+				// CellPortalPool renders portals into the cell containers; PortalCellWrapper
+				// subscribes per-cell so only the changed cell re-renders on data updates.
+				// No N separate React roots — one shared tree, one React scheduler task.
 				mountCellContent: (mount) => {
-					mountPortal(mount.cellKey, mount.container, mount.value, mount.node, mount.col, mount.isEditing, mount.isLoading);
+					// Imperative fast path — renderer exposes ref.current.update(), bypasses
+					// React scheduler entirely. Zero reconciler overhead for live price feeds.
+					if ((mount.col as InternalColumnDef)?.cellRendererCapabilities?.imperativeUpdate && !mount.isEditing) {
+						if (
+							portalStore.tryImperativeUpdate(
+								mount.cellKey,
+								mount.value,
+								mount.node,
+								mount.col,
+								mount.isEditing,
+								mount.isLoading,
+								mount.phase,
+								mount.isScrolling,
+								mount.isFocused,
+								mount.isSelected
+							)
+						)
+							return;
+					}
+					portalStore.mountCell(
+						mount.cellKey,
+						mount.container,
+						mount.value,
+						mount.node,
+						mount.col,
+						mount.isEditing,
+						mount.isLoading,
+						mount.phase,
+						mount.isScrolling,
+						mount.isFocused,
+						mount.isSelected
+					);
 				},
 				unmountCellContent: (unmount) => {
-					unmountPortal(unmount.cellKey, unmount.container);
+					portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync ?? false);
+				},
+				flushCellContent: () => {
+					// portalStore coalesces notifications internally via queueMicrotask
 				},
 			},
 			rowContent: {
 				mountRowContent: (mount) => {
-					mountRowPortal(mount.rowKey, mount.container, mount.visualRow);
+					portalStore.mountRow(mount.rowKey, mount.container, mount.visualRow);
 				},
 				unmountRowContent: (unmount) => {
-					unmountRowPortal(unmount.rowKey, unmount.container);
+					portalStore.unmountRow(unmount.rowKey, unmount.container);
 				},
 			},
 			headerMenu: {
 				mountHeaderMenu: (mount) => {
-					mountMenuPortal(mount.colField, mount.container, mount.column, mount.close);
+					portalStore.mountMenu(mount.colField, mount.container, mount.column, mount.close);
 				},
 				unmountHeaderMenu: (unmount) => {
-					unmountMenuPortal(unmount.colField, unmount.container);
+					portalStore.unmountMenu(unmount.colField, unmount.container);
 				},
 			},
 		});
 		hostRef.current = host;
 
 		return () => {
-			host.destroy();
 			hostRef.current = null;
-			portalsRef.current.clear();
-			rowPortalsRef.current.clear();
-			menuPortalsRef.current.clear();
-			setPortalVersion((version) => version + 1);
+			host.destroy();
+			portalStore.clear();
 		};
-	}, [api, mountPortal, unmountPortal, mountRowPortal, unmountRowPortal, mountMenuPortal, unmountMenuPortal]);
+	}, [api, portalStore]);
 
 	// Context Menu plugin controller
 	const [contextMenu, setContextMenu] = useState<GridContextMenuHandle<TRowData> | null>(null);
@@ -355,18 +305,37 @@ function OpenGridInner<TRowData = unknown>({
 
 	useEffect(() => {
 		if (!enableNavigation) return;
+		const isWithinThisGrid = (target: EventTarget | null): boolean => {
+			const container = containerRef.current;
+			if (!container || !(target instanceof HTMLElement)) return false;
+			return target.closest('.og-grid-container') === container;
+		};
 		const handleGlobalKeyDown = (e: KeyboardEvent) => {
 			const activeEl = document.activeElement;
-			const container = containerRef.current;
-			const isInside = !!container && (container.contains(activeEl) || isGridActiveRef.current);
+			const isInside = isWithinThisGrid(activeEl) || isGridActiveRef.current;
 			if (isInside && navigation) {
 				navigation.handleKeyDown(e);
 			}
 		};
 		const handlePointerDown = (e: MouseEvent) => {
-			const container = containerRef.current;
-			isGridActiveRef.current = !!container && container.contains(e.target as Node);
+			isGridActiveRef.current = isWithinThisGrid(e.target);
 		};
+		const handleFocusIn = (e: FocusEvent) => {
+			if (isWithinThisGrid(e.target)) {
+				isGridActiveRef.current = true;
+			}
+		};
+		const handleFocusOut = (e: FocusEvent) => {
+			const related = e.relatedTarget;
+			if (related instanceof HTMLElement && !isWithinThisGrid(related)) {
+				isGridActiveRef.current = false;
+			}
+		};
+		const container = containerRef.current;
+		if (container) {
+			container.addEventListener('focusin', handleFocusIn);
+			container.addEventListener('focusout', handleFocusOut);
+		}
 		window.addEventListener('keydown', handleGlobalKeyDown);
 		if (navigation) window.addEventListener('mouseup', navigation.handleMouseUp);
 		document.addEventListener('mousedown', handlePointerDown, true);
@@ -374,22 +343,32 @@ function OpenGridInner<TRowData = unknown>({
 			window.removeEventListener('keydown', handleGlobalKeyDown);
 			if (navigation) window.removeEventListener('mouseup', navigation.handleMouseUp);
 			document.removeEventListener('mousedown', handlePointerDown, true);
+			if (container) {
+				container.removeEventListener('focusin', handleFocusIn);
+				container.removeEventListener('focusout', handleFocusOut);
+			}
 		};
 	}, [navigation, enableNavigation]);
 
-	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
-		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-		if (!cellEl) return null;
-		const colField = cellEl.dataset.colField;
-		const rowEl = cellEl.closest('.og-row') as HTMLElement;
-		const rowId = rowEl?.dataset.rowId;
-		if (!colField || !rowId) return null;
-		return { cellEl, pointer: { rowId, colField } };
-	}, []);
+	const getCellPointerFromEvent = useCallback(
+		(e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
+			const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
+			if (!cellEl) return null;
+			if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
+			const colField = cellEl.dataset.colField;
+			const rowEl = cellEl.closest('.og-row') as HTMLElement;
+			const rowIndex = Number(rowEl?.dataset.rowIndex);
+			const visualRow = Number.isFinite(rowIndex) ? getStoreFromApi(api).getVisualRow(rowIndex) : null;
+			const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
+			if (!colField || !rowId) return null;
+			return { cellEl, pointer: { rowId, colField } };
+		},
+		[api]
+	);
 
 	const getCellClickParams = useCallback(
 		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {
-			const access = api.getCellAccess(pointer.rowId, pointer.colField);
+			const access = getStoreFromApi(api).getCellAccess(pointer.rowId, pointer.colField);
 			if (!access) return null;
 			return {
 				rowId: access.rowId,
@@ -419,6 +398,7 @@ function OpenGridInner<TRowData = unknown>({
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
+			cellEl.tabIndex = -1;
 			cellEl.focus();
 			navigation.handleMouseDown(pointer.rowId, pointer.colField, e);
 		},
@@ -511,16 +491,71 @@ function OpenGridInner<TRowData = unknown>({
 		};
 	}, [handleMouseDown, handleMouseOver, handleClick, handleDoubleClick, handleContextMenu]);
 
-	return (
-		<div ref={containerRef} tabIndex={-1} style={{ width: '100%', height: '100%', position: 'relative' }}>
+	// Flash copied cells when a copy event fires. cancelFlash holds the active
+	// cleanup so a rapid second copy cancels the first timer before starting a new one.
+	useEffect(() => {
+		let cancelFlash: (() => void) | undefined;
+		const unsub = api.addEventListener<{ cells: Array<{ rowId: string; colField: string }> }>('cellsCopied', ({ payload }) => {
+			const container = containerRef.current;
+			if (!container) return;
+			cancelFlash?.();
+			cancelFlash = flashCopiedCells(container, payload.cells);
+		});
+		return () => {
+			unsub();
+			cancelFlash?.();
+		};
+	}, [api]);
+
+	// Initialize sidebar default open panel on mount
+	const sidebarDefaultOpenRef = useRef(sidebar?.defaultOpen);
+	useEffect(() => {
+		if (sidebarDefaultOpenRef.current != null) api.openPanel(sidebarDefaultOpenRef.current);
+	}, []); // intentional: mount-only
+
+	const hasSidebar = sidebar != null;
+	const sidebarPosition = sidebar?.position ?? 'right';
+
+	const gridPane = (
+		<div
+			ref={containerRef}
+			tabIndex={-1}
+			style={{
+				flex: hasSidebar ? 1 : undefined,
+				width: hasSidebar ? undefined : '100%',
+				height: '100%',
+				position: 'relative',
+				minWidth: hasSidebar ? 0 : undefined,
+			}}
+		>
 			<PortalManager
-				portals={portalsRef.current}
-				rowPortals={rowPortalsRef.current}
-				menuPortals={menuPortalsRef.current}
+				store={portalStore}
 				api={api}
 				groupRowRenderer={groupRowRenderer}
 				detailRowRenderer={detailRowRenderer}
+				footerRowRenderer={footerRowRenderer}
 			/>
 		</div>
+	);
+
+	return (
+		<>
+			{hasSidebar ? (
+				<div
+					style={{
+						width: '100%',
+						height: '100%',
+						display: 'flex',
+						flexDirection: sidebarPosition === 'left' ? 'row-reverse' : 'row',
+					}}
+				>
+					{gridPane}
+					<GridSidebar<TRowData> api={api} config={sidebar!} />
+				</div>
+			) : (
+				gridPane
+			)}
+			{enableChart && <GridChartOverlay api={api} />}
+		</>
 	);
 }

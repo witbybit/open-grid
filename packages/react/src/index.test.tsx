@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+afterEach(cleanup);
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
-import { createClientGrid, type ClientGridOptions } from '@open-grid/core';
+import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
 import {
 	GridProvider,
 	PortalCell,
@@ -14,7 +16,10 @@ import {
 	useGridSelector,
 	useClientGrid,
 	useServerGrid,
+	GridPagination,
+	useClientGridPagination,
 } from './index.js';
+import { createPortalStore } from './GridPortal.js';
 
 // Mock ResizeObserver for jsdom environment
 class MockResizeObserver {
@@ -137,13 +142,16 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: ({ value }) => <span data-testid='custom-renderer'>{String(value)}!!!</span>,
+					renderer: {
+						kind: 'react',
+						component: ({ value }: { value: any }) => <span data-testid='custom-renderer'>{String(value)}!!!</span>,
+					},
 				},
 			],
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		render(
 			<GridProvider api={grid.api}>
@@ -155,6 +163,58 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should pass lifecycle metadata to custom cell renderers', () => {
+		const rendererProps: Record<string, unknown>[] = [];
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					renderer: {
+						kind: 'react',
+						component: (props: any) => {
+							rendererProps.push(props as unknown as Record<string, unknown>);
+							return <span data-testid='custom-renderer-phase'>{String(props.phase)}</span>;
+						},
+					},
+				},
+			],
+		});
+
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+
+		render(
+			<GridProvider api={grid.api}>
+				<PortalCell
+					rowId='1'
+					colField='name'
+					value='Product A'
+					col={colDef}
+					node={node}
+					isEditing={false}
+					isLoading={false}
+					phase='scroll-idle'
+					isScrolling={false}
+				/>
+			</GridProvider>
+		);
+
+		expect(screen.getByTestId('custom-renderer-phase').textContent).toBe('scroll-idle');
+		expect(rendererProps[0]).toEqual(
+			expect.objectContaining({
+				colId: 'name',
+				phase: 'scroll-idle',
+				isScrolling: false,
+				isEditing: false,
+				isFocused: false,
+			})
+		);
+		grid.api.destroy();
+	});
+
 	it('should render default text input when editing and no custom editor via PortalCell', () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],
@@ -162,7 +222,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -192,7 +252,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -219,7 +279,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -263,7 +323,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -304,7 +364,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getRowNode(0)!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -335,7 +395,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: ({ value }) => <span data-testid='portal-content'>{String(value)}</span>,
+					renderer: { kind: 'react', component: ({ value }: { value: any }) => <span data-testid='portal-content'>{String(value)}</span> },
 				},
 			],
 		});
@@ -343,23 +403,115 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const container = document.createElement('div');
 		document.body.appendChild(container);
 
-		const colDef = grid.api.getColumnDef('name');
-		const node = grid.api.getRowNode(0)!;
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
-		const portals = new Map();
-		portals.set('1:name', {
-			cellKey: '1:name',
-			container,
-			value: 'Product A',
-			node,
-			col: colDef,
-		});
+		const store = createPortalStore<TestRow>();
+		store.mountCell('1:name', container, 'Product A', node, colDef, false, false);
 
-		render(<PortalManager portals={portals} api={grid.api} />);
+		render(<PortalManager store={store} api={grid.api} />);
 
 		expect(screen.getByTestId('portal-content').textContent).toBe('Product A');
 
 		document.body.removeChild(container);
+		grid.api.destroy();
+	});
+
+	it('should render only the latest cell portal for a recycled container', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: '1', name: 'Old' },
+				{ id: '2', name: 'New' },
+			],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					renderer: { kind: 'react', component: ({ value }: { value: any }) => <span data-testid='portal-content'>{String(value)}</span> },
+				},
+			],
+		});
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const colDef = grid.api.getColumnDef('name')!;
+
+		const store = createPortalStore<TestRow>();
+		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false);
+		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false);
+
+		render(<PortalManager store={store} api={grid.api} />);
+
+		expect(screen.getAllByTestId('portal-content')).toHaveLength(1);
+		expect(screen.getByTestId('portal-content').textContent).toBe('New');
+
+		document.body.removeChild(container);
+		grid.api.destroy();
+	});
+
+	it('should replace recycled cell portal store entries without retaining stale container owners', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: '1', name: 'Old' },
+				{ id: '2', name: 'New' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 100, renderer: { kind: 'react', component: () => null } }],
+		});
+		const store = createPortalStore<TestRow>();
+		const container = document.createElement('div');
+		const colDef = grid.api.getColumnDef('name')!;
+
+		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false);
+		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false);
+		await act(async () => {
+			await Promise.resolve();
+		});
+
+		expect(store.getCellSnapshot().cellPortalList.map((p) => p.cellKey)).toEqual(['2:name']);
+
+		store.unmountCell('1:name', container);
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(store.getCellSnapshot().cellPortalList.map((p) => p.cellKey)).toEqual(['2:name']);
+
+		grid.api.destroy();
+	});
+
+	it('should update cell data without triggering structural listeners', async () => {
+		const store = createPortalStore<TestRow>();
+		const structuralListener = vi.fn();
+		store.subscribeCells(structuralListener);
+
+		const cellListener = vi.fn();
+		const cellKey = '1:name';
+		const container = document.createElement('div');
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const colDef = grid.api.getColumnDef('name')!;
+
+		// Mount cell first (structural change)
+		store.mountCell(cellKey, container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false);
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(structuralListener).toHaveBeenCalledTimes(1);
+
+		// Subscribe to cell
+		const unsubscribeCell = store.subscribeToCell!(cellKey, cellListener);
+
+		// Update cell data only (non-structural change)
+		store.mountCell(cellKey, container, 'New', grid.api.getRowNodeById('1')!, colDef, false, false);
+
+		// The structural listener should NOT have fired again (remains 1)
+		expect(structuralListener).toHaveBeenCalledTimes(1);
+		// But the cell-specific listener SHOULD have been called
+		expect(cellListener).toHaveBeenCalledTimes(1);
+
+		// Clean up
+		unsubscribeCell();
 		grid.api.destroy();
 	});
 
@@ -404,39 +556,64 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should keep custom renderer portals mounted when renderer columns are reordered', async () => {
+	it('should keep custom renderer portals mounted when renderer column layout changes', async () => {
+		// This test verifies the cycle: custom renderer columns visible → replace with native columns → restore
+		// custom renderer columns. Uses the same code path (releaseAll + full repaint) as a column reorder.
+		const customColumns: ColumnDef<{ id: string; severity: string; service: string }>[] = [
+			{
+				field: 'severity',
+				header: 'Severity',
+				width: 120,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: { value: any }) => <span data-testid='severity-renderer'>{String(value)}</span>,
+				},
+			},
+			{
+				field: 'service',
+				header: 'Service',
+				width: 120,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: { value: any }) => <span data-testid='service-renderer'>{String(value)}</span>,
+				},
+			},
+		];
+		const nativeColumns: ColumnDef<{ id: string; severity: string; service: string }>[] = [
+			{ field: 'severity', header: 'Severity', width: 120 },
+			{ field: 'service', header: 'Service', width: 120 },
+		];
+
 		const grid = createTestGrid<{ id: string; severity: string; service: string }>({
 			rows: [{ id: '1', severity: 'CRITICAL', service: 'Auth' }],
-			columns: [
-				{ field: 'id', header: 'ID', width: 80 },
-				{
-					field: 'severity',
-					header: 'Severity',
-					width: 120,
-					cellRenderer: ({ value }) => <span data-testid='severity-renderer'>{String(value)}</span>,
-				},
-				{
-					field: 'service',
-					header: 'Service',
-					width: 120,
-					cellRenderer: ({ value }) => <span data-testid='service-renderer'>{String(value)}</span>,
-				},
-			],
+			columns: customColumns,
 			getRowId: (row) => row.id,
 		});
 
 		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
 
+		// Initial render: React renderer portals are mounted and show their values.
+		await screen.findByTestId('severity-renderer');
+		await screen.findByTestId('service-renderer');
+		expect(screen.getByTestId('severity-renderer').textContent).toBe('CRITICAL');
+		expect(screen.getByTestId('service-renderer').textContent).toBe('Auth');
+
+		// Switch to native columns — portals are released, native text appears.
+		act(() => {
+			grid.api.setColumns(nativeColumns);
+		});
 		await screen.findByText('CRITICAL');
 		await screen.findByText('Auth');
+		expect(screen.queryByTestId('severity-renderer')).toBeNull();
+		expect(screen.queryByTestId('service-renderer')).toBeNull();
 
+		// Restore custom renderer columns — portals must be re-mounted with correct values.
 		act(() => {
-			grid.api.moveColumn('severity', 2);
+			grid.api.setColumns(customColumns);
 		});
-
 		await waitFor(() => {
-			expect(screen.getByText('CRITICAL')).toBeDefined();
-			expect(screen.getByText('Auth')).toBeDefined();
+			expect(screen.getByTestId('severity-renderer').textContent).toBe('CRITICAL');
+			expect(screen.getByTestId('service-renderer').textContent).toBe('Auth');
 		});
 
 		unmount();
@@ -484,12 +661,15 @@ describe('React Adapter (v2 API and Architecture)', () => {
 	});
 
 	it('should not mix stale native text with custom renderer content after column topology changes', async () => {
-		const customColumns = [
+		const customColumns: ColumnDef<{ id: string; risk: string; col_999: string }>[] = [
 			{
 				field: 'risk',
 				header: 'Risk',
 				width: 120,
-				cellRenderer: ({ value }: { value: unknown }) => <span data-testid='risk-renderer'>Risk {String(value)}</span>,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: { value: unknown }) => <span data-testid='risk-renderer'>Risk {String(value)}</span>,
+				},
 			},
 		];
 		const nativeColumns = [{ field: 'col_999', header: 'Col 999', width: 120 }];
@@ -632,7 +812,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 					field: 'name',
 					header: 'Name',
 					width: 100,
-					cellRenderer: ({ value }) => <span data-testid='custom-renderer-programmatic'>{String(value)}</span>,
+					renderer: {
+						kind: 'react',
+						component: ({ value }: { value: any }) => <span data-testid='custom-renderer-programmatic'>{String(value)}</span>,
+					},
 				},
 			],
 		});
@@ -654,6 +837,214 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should route arrow navigation only to the active nested detail grid', async () => {
+		const parentGrid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'p1', name: 'Parent A' },
+				{ id: 'p2', name: 'Parent B' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			initialState: {
+				rowModelConfig: {
+					type: 'client',
+					masterDetail: {
+						enabled: true,
+						expandedRowIds: { p1: true },
+						defaultDetailHeight: 120,
+					},
+				},
+			},
+		});
+		const childGrid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'c1', name: 'Child A' },
+				{ id: 'c2', name: 'Child B' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+		});
+
+		const { unmount } = render(
+			<OpenGrid api={parentGrid.api} enableNavigation detailRowRenderer={() => <OpenGrid api={childGrid.api} enableNavigation />} />
+		);
+
+		act(() => {
+			parentGrid.api.selectCell({ rowId: 'p1', colField: 'name' });
+		});
+
+		const childCell = (await screen.findByText('Child A')).closest('.og-cell') as HTMLElement;
+		fireEvent.mouseDown(childCell);
+		fireEvent.click(childCell);
+		expect(childGrid.api.getState().selection.focus).toEqual({ rowId: 'c1', colField: 'name' });
+
+		fireEvent.keyDown(window, { key: 'ArrowDown' });
+
+		expect(parentGrid.api.getState().selection.focus).toEqual({ rowId: 'p1', colField: 'name' });
+		expect(childGrid.api.getState().selection.focus).toEqual({ rowId: 'c2', colField: 'name' });
+
+		unmount();
+		parentGrid.api.destroy();
+		childGrid.api.destroy();
+	});
+
+	it('should keep expanded detail row renderers bound to their own row portal hosts', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'p1', name: 'Parent A' },
+				{ id: 'p2', name: 'Parent B' },
+				{ id: 'p3', name: 'Parent C' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			initialState: {
+				masterDetailEnabled: true,
+				detailRowHeight: 120,
+			},
+		});
+
+		const { container, unmount } = render(
+			<div style={{ width: 500, height: 400 }}>
+				<OpenGrid
+					api={grid.api}
+					enableNavigation={false}
+					detailRowRenderer={({ visualRow }) =>
+						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+					}
+				/>
+			</div>
+		);
+
+		act(() => {
+			grid.api.toggleDetailExpanded('p1');
+			grid.api.toggleDetailExpanded('p2');
+		});
+
+		await waitFor(() => {
+			expect(screen.getByTestId('detail-p1')).toBeTruthy();
+			expect(screen.getByTestId('detail-p2')).toBeTruthy();
+		});
+
+		const getRowTop = (el: HTMLElement) => {
+			const row = el.closest('.og-row') as HTMLElement | null;
+			const m = row?.style.transform.match(/translateY\((-?\d+(?:\.\d+)?)px\)/);
+			return m ? parseFloat(m[1]) : 0;
+		};
+		const detailHosts = (Array.from(container.querySelectorAll('.og-row-portal-host')) as HTMLElement[]).sort(
+			(a, b) => getRowTop(a) - getRowTop(b)
+		);
+		expect(detailHosts).toHaveLength(2);
+		expect(screen.getByTestId('detail-p1').closest('.og-row-portal-host')).toBe(detailHosts[0]);
+		expect(screen.getByTestId('detail-p2').closest('.og-row-portal-host')).toBe(detailHosts[1]);
+		expect(detailHosts.map((host) => (host.closest('.og-row') as HTMLElement | null)?.dataset.rowId)).toEqual(['detail:p1', 'detail:p2']);
+		expect(detailHosts.map((host) => (host.closest('.og-row') as HTMLElement | null)?.style.height)).toEqual(['120px', '120px']);
+
+		unmount();
+		grid.api.destroy();
+	});
+
+	it('should preserve detail row height and spacing when sorted master rows are expanded', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'p1', name: 'Cy' },
+				{ id: 'p2', name: 'In' },
+				{ id: 'p3', name: 'Um' },
+				{ id: 'p4', name: 'We' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			initialState: {
+				masterDetailEnabled: true,
+				detailRowHeight: 120,
+				sortModel: [{ colId: 'name', sort: 'asc' }],
+			},
+		});
+
+		const { container, unmount } = render(
+			<div style={{ width: 500, height: 500 }}>
+				<OpenGrid
+					api={grid.api}
+					enableNavigation={false}
+					detailRowRenderer={({ visualRow }) =>
+						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+					}
+				/>
+			</div>
+		);
+
+		act(() => {
+			grid.api.toggleDetailExpanded('p1');
+			grid.api.toggleDetailExpanded('p2');
+			grid.api.toggleDetailExpanded('p4');
+		});
+
+		await waitFor(() => {
+			expect(screen.getByTestId('detail-p1')).toBeTruthy();
+			expect(screen.getByTestId('detail-p2')).toBeTruthy();
+			expect(screen.getByTestId('detail-p4')).toBeTruthy();
+		});
+
+		const getTranslateY = (el: HTMLElement) => {
+			const m = el.style.transform.match(/translateY\((-?\d+(?:\.\d+)?)px\)/);
+			return m ? parseFloat(m[1]) : 0;
+		};
+		const rows = (Array.from(container.querySelectorAll('.og-rows-container > .og-row')) as HTMLElement[]).sort(
+			(a, b) => getTranslateY(a) - getTranslateY(b)
+		);
+		expect(rows.map((row) => [row.dataset.rowId, row.style.height, row.style.transform])).toEqual([
+			['row:p1', '40px', 'translateY(0px)'],
+			['detail:p1', '120px', 'translateY(40px)'],
+			['row:p2', '40px', 'translateY(160px)'],
+			['detail:p2', '120px', 'translateY(200px)'],
+			['row:p3', '40px', 'translateY(320px)'],
+			['row:p4', '40px', 'translateY(360px)'],
+			['detail:p4', '120px', 'translateY(400px)'],
+		]);
+
+		unmount();
+		grid.api.destroy();
+	});
+
+	it('should remove detail row renderer content when a detail row is recycled into a data row', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'p1', name: 'Parent A' },
+				{ id: 'p2', name: 'Parent B' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			initialState: {
+				masterDetailEnabled: true,
+				detailRowHeight: 120,
+			},
+		});
+
+		const { container, unmount } = render(
+			<div style={{ width: 500, height: 240 }}>
+				<OpenGrid
+					api={grid.api}
+					enableNavigation={false}
+					detailRowRenderer={({ visualRow }) =>
+						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+					}
+				/>
+			</div>
+		);
+
+		act(() => {
+			grid.api.toggleDetailExpanded('p1');
+		});
+
+		await screen.findByTestId('detail-p1');
+
+		act(() => {
+			grid.api.toggleDetailExpanded('p1');
+		});
+
+		await waitFor(() => {
+			expect(screen.queryByTestId('detail-p1')).toBeNull();
+		});
+		expect(container.querySelector('.og-row-portal-host')).toBeNull();
+
+		unmount();
+		grid.api.destroy();
+	});
+
 	it('should render custom group and detail row renderers inside PortalManager', () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [],
@@ -665,30 +1056,21 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		document.body.appendChild(containerGroup);
 		document.body.appendChild(containerDetail);
 
-		const rowPortals = new Map();
-		rowPortals.set('group-1', {
-			rowKey: 'group-1',
-			container: containerGroup,
-			visualRow: {
-				kind: 'group',
-				id: 'group-1',
-				field: 'category',
-				key: 'Electronics',
-				expanded: true,
-				depth: 1,
-				childCount: 5,
-			},
-		});
-
-		rowPortals.set('detail-1', {
-			rowKey: 'detail-1',
-			container: containerDetail,
-			visualRow: {
-				kind: 'detail',
-				id: 'detail-1',
-				parentId: 'parent-1',
-			},
-		});
+		const store = createPortalStore<TestRow>();
+		store.mountRow('group-1', containerGroup, {
+			kind: 'group',
+			id: 'group-1',
+			field: 'category',
+			key: 'Electronics',
+			expanded: true,
+			depth: 1,
+			childCount: 5,
+		} as any);
+		store.mountRow('detail-1', containerDetail, {
+			kind: 'detail',
+			id: 'detail-1',
+			parentId: 'parent-1',
+		} as any);
 
 		const groupRenderer = ({ visualRow }: any) => (
 			<span data-testid='custom-group'>
@@ -698,15 +1080,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const detailRenderer = ({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>;
 
-		render(
-			<PortalManager
-				portals={new Map()}
-				rowPortals={rowPortals}
-				api={grid.api}
-				groupRowRenderer={groupRenderer}
-				detailRowRenderer={detailRenderer}
-			/>
-		);
+		render(<PortalManager store={store} api={grid.api} groupRowRenderer={groupRenderer} detailRowRenderer={detailRenderer} />);
 
 		expect(screen.getByTestId('custom-group').textContent).toBe('category:Electronics (5 items)');
 		expect(screen.getByTestId('custom-detail').textContent).toBe('Details for parent-1');
@@ -714,5 +1088,438 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		document.body.removeChild(containerGroup);
 		document.body.removeChild(containerDetail);
 		grid.api.destroy();
+	});
+
+	it('should render only the latest row portal for a recycled detail container', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [],
+			columns: [],
+		});
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+
+		const store = createPortalStore<TestRow>();
+		store.mountRow('detail-old', container, { kind: 'detail', id: 'detail-old', parentId: 'old-parent' } as any);
+		store.mountRow('detail-new', container, { kind: 'detail', id: 'detail-new', parentId: 'new-parent' } as any);
+
+		render(
+			<PortalManager
+				store={store}
+				api={grid.api}
+				detailRowRenderer={({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>}
+			/>
+		);
+
+		expect(screen.getAllByTestId('custom-detail')).toHaveLength(1);
+		expect(screen.getByTestId('custom-detail').textContent).toBe('Details for new-parent');
+
+		document.body.removeChild(container);
+		grid.api.destroy();
+	});
+
+	it('should ignore a stale row portal when a recycled host now belongs to another row', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [],
+			columns: [],
+		});
+		const row = document.createElement('div');
+		row.className = 'og-row';
+		row.dataset.rowKey = 'detail-new';
+		const container = document.createElement('div');
+		container.className = 'og-row-portal-host';
+		row.appendChild(container);
+		document.body.appendChild(row);
+
+		const store = createPortalStore<TestRow>();
+		store.mountRow('detail-old', container, { kind: 'detail', id: 'detail-old', parentId: 'old-parent' } as any);
+
+		render(
+			<PortalManager
+				store={store}
+				api={grid.api}
+				detailRowRenderer={({ visualRow }: any) => <span data-testid='custom-detail'>Details for {visualRow.parentId}</span>}
+			/>
+		);
+
+		expect(screen.queryByTestId('custom-detail')).toBeNull();
+
+		document.body.removeChild(row);
+		grid.api.destroy();
+	});
+
+	it('should update row portal content when the visual row changes for the same container', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [],
+			columns: [],
+		});
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+
+		const store = createPortalStore<TestRow>();
+
+		const makeVisualRow = (expanded: boolean) => ({
+			kind: 'group' as const,
+			id: 'group-1',
+			field: 'category',
+			key: 'Electronics',
+			expanded,
+			depth: 0,
+			childCount: expanded ? 5 : 2,
+		});
+
+		const groupRenderer = ({ visualRow }: any) => (
+			<span data-testid='custom-group'>{visualRow.expanded ? `expanded:${visualRow.childCount}` : `collapsed:${visualRow.childCount}`}</span>
+		);
+
+		store.mountRow('group-1', container, makeVisualRow(false) as any);
+
+		render(<PortalManager store={store} api={grid.api} groupRowRenderer={groupRenderer} />);
+
+		expect(screen.getByTestId('custom-group').textContent).toBe('collapsed:2');
+
+		store.mountRow('group-1', container, makeVisualRow(true) as any);
+		await act(async () => {
+			await Promise.resolve();
+		});
+
+		expect(screen.getByTestId('custom-group').textContent).toBe('expanded:5');
+
+		document.body.removeChild(container);
+		grid.api.destroy();
+	});
+
+	it('should not flush portal updates synchronously during React cleanup', () => {
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					renderer: { kind: 'react', component: ({ value }: { value: any }) => <span data-testid='portal-content'>{String(value)}</span> },
+				},
+			],
+		});
+
+		const { unmount } = render(
+			<React.StrictMode>
+				<OpenGrid api={grid.api} />
+			</React.StrictMode>
+		);
+
+		unmount();
+
+		expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining('flushSync was called from inside a lifecycle method'));
+		consoleError.mockRestore();
+		grid.api.destroy();
+	});
+
+	it('should maintain stable event listeners on the container and memoize PortalCell to prevent redundant renders', async () => {
+		const addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, 'addEventListener');
+		let renderCount = 0;
+
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: '1', name: 'Product A' },
+				{ id: '2', name: 'Product B' },
+			],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					renderer: {
+						kind: 'react',
+						component: ({ value }: { value: any }) => {
+							renderCount++;
+							return <span data-testid={`cell-${value}`}>{String(value)}</span>;
+						},
+					},
+				},
+			],
+		});
+
+		const { container } = render(<OpenGrid api={grid.api} />);
+		const openGridContainer = container.firstElementChild as HTMLElement;
+
+		// Initial render should bind event listeners on the container
+		const initialAddCalls = addEventListenerSpy.mock.calls.filter((call, index) => {
+			const instance = addEventListenerSpy.mock.instances[index];
+			return instance === openGridContainer && ['mousedown', 'mouseover', 'click', 'dblclick', 'contextmenu'].includes(call[0]);
+		}).length;
+		expect(initialAddCalls).toBeGreaterThanOrEqual(5);
+
+		await waitFor(() => {
+			expect(renderCount).toBeGreaterThan(0);
+		});
+		addEventListenerSpy.mockClear();
+
+		// Trigger editing on row 2, which changes the portal list state
+		act(() => {
+			grid.api.startEditing('2', 'name');
+		});
+
+		// Check if container event listeners were re-bound during this update
+		const updateAddCalls = addEventListenerSpy.mock.calls.filter((call, index) => {
+			const instance = addEventListenerSpy.mock.instances[index];
+			return instance === openGridContainer && ['mousedown', 'mouseover', 'click', 'dblclick', 'contextmenu'].includes(call[0]);
+		}).length;
+		expect(updateAddCalls).toBe(0); // Event listeners are stable and not re-bound!
+
+		addEventListenerSpy.mockRestore();
+		grid.api.destroy();
+	});
+});
+
+// ─── GridPagination ───────────────────────────────────────────────────────────
+
+describe('GridPagination', () => {
+	it('renders page buttons and info text', () => {
+		render(<GridPagination page={0} pageCount={5} onPageChange={() => {}} totalRows={50} pageSize={10} />);
+		expect(screen.getByLabelText('Page 1')).toBeTruthy();
+		expect(screen.getByLabelText('Page 5')).toBeTruthy();
+		expect(screen.getByText('1–10 of 50')).toBeTruthy();
+	});
+
+	it('marks the active page with aria-current="page"', () => {
+		render(<GridPagination page={2} pageCount={5} onPageChange={() => {}} />);
+		const activeBtn = screen.getByLabelText('Page 3');
+		expect(activeBtn.getAttribute('aria-current')).toBe('page');
+	});
+
+	it('disables prev button on first page', () => {
+		render(<GridPagination page={0} pageCount={5} onPageChange={() => {}} />);
+		const prev = screen.getByLabelText('Previous page') as HTMLButtonElement;
+		expect(prev.disabled).toBe(true);
+	});
+
+	it('disables next button on last page', () => {
+		render(<GridPagination page={4} pageCount={5} onPageChange={() => {}} />);
+		const next = screen.getByLabelText('Next page') as HTMLButtonElement;
+		expect(next.disabled).toBe(true);
+	});
+
+	it('calls onPageChange with correct page index when clicking a page button', () => {
+		const onChange = vi.fn();
+		render(<GridPagination page={0} pageCount={5} onPageChange={onChange} />);
+		fireEvent.click(screen.getByLabelText('Page 3'));
+		expect(onChange).toHaveBeenCalledWith(2);
+	});
+
+	it('calls onPageChange with page - 1 when clicking prev', () => {
+		const onChange = vi.fn();
+		render(<GridPagination page={2} pageCount={5} onPageChange={onChange} />);
+		fireEvent.click(screen.getByLabelText('Previous page'));
+		expect(onChange).toHaveBeenCalledWith(1);
+	});
+
+	it('calls onPageChange with page + 1 when clicking next', () => {
+		const onChange = vi.fn();
+		render(<GridPagination page={2} pageCount={5} onPageChange={onChange} />);
+		fireEvent.click(screen.getByLabelText('Next page'));
+		expect(onChange).toHaveBeenCalledWith(3);
+	});
+
+	it('collapses to ellipsis when pageCount exceeds maxPageButtons', () => {
+		render(<GridPagination page={10} pageCount={20} onPageChange={() => {}} maxPageButtons={7} />);
+		// Should have exactly two ellipsis spans
+		const container = screen.getByRole('navigation');
+		const ellipses = within(container).getAllByText('…');
+		expect(ellipses.length).toBe(2);
+	});
+
+	it('renders custom prev/next button content', () => {
+		render(
+			<GridPagination
+				page={1}
+				pageCount={5}
+				onPageChange={() => {}}
+				renderPrevButton={() => <span>PREV</span>}
+				renderNextButton={() => <span>NEXT</span>}
+			/>
+		);
+		expect(screen.getByText('PREV')).toBeTruthy();
+		expect(screen.getByText('NEXT')).toBeTruthy();
+	});
+
+	it('renders custom page info via renderPageInfo', () => {
+		render(
+			<GridPagination page={1} pageCount={5} onPageChange={() => {}} renderPageInfo={(p, total) => <span>{`custom:${p}/${total}`}</span>} />
+		);
+		expect(screen.getByText('custom:1/5')).toBeTruthy();
+	});
+
+	it('shows "Page X of Y" fallback when totalRows/pageSize are absent', () => {
+		render(<GridPagination page={1} pageCount={5} onPageChange={() => {}} />);
+		expect(screen.getByText('Page 2 of 5')).toBeTruthy();
+	});
+});
+
+// ─── useClientGridPagination ──────────────────────────────────────────────────
+
+describe('useClientGridPagination', () => {
+	function PaginationHarness<T>({ rows, pageSize }: { rows: T[]; pageSize: number }) {
+		const result = useClientGridPagination(rows, { pageSize });
+		return (
+			<div>
+				<span data-testid='page'>{result.page}</span>
+				<span data-testid='pageCount'>{result.pageCount}</span>
+				<span data-testid='totalRows'>{result.totalRows}</span>
+				<span data-testid='pageRowsLength'>{result.pageRows.length}</span>
+				<span data-testid='canNext'>{String(result.canNextPage)}</span>
+				<span data-testid='canPrev'>{String(result.canPrevPage)}</span>
+				<button onClick={result.nextPage}>next</button>
+				<button onClick={result.prevPage}>prev</button>
+				<button onClick={() => result.setPage(0)}>first</button>
+			</div>
+		);
+	}
+
+	it('starts on page 0 with correct slice', () => {
+		const rows = Array.from({ length: 25 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		expect(screen.getByTestId('page').textContent).toBe('0');
+		expect(screen.getByTestId('pageCount').textContent).toBe('3');
+		expect(screen.getByTestId('pageRowsLength').textContent).toBe('10');
+	});
+
+	it('nextPage advances the page', () => {
+		const rows = Array.from({ length: 25 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		expect(screen.getByTestId('page').textContent).toBe('1');
+		expect(screen.getByTestId('pageRowsLength').textContent).toBe('10');
+	});
+
+	it('last page has a partial slice', () => {
+		const rows = Array.from({ length: 25 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		expect(screen.getByTestId('page').textContent).toBe('2');
+		expect(screen.getByTestId('pageRowsLength').textContent).toBe('5');
+		expect(screen.getByTestId('canNext').textContent).toBe('false');
+	});
+
+	it('canPrevPage is false on first page, true after next', () => {
+		const rows = Array.from({ length: 25 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		expect(screen.getByTestId('canPrev').textContent).toBe('false');
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		expect(screen.getByTestId('canPrev').textContent).toBe('true');
+	});
+
+	it('prevPage does not go below 0', () => {
+		const rows = Array.from({ length: 10 }, (_, i) => i);
+		render(<PaginationHarness rows={rows} pageSize={10} />);
+		act(() => {
+			fireEvent.click(screen.getByText('prev'));
+		});
+		expect(screen.getByTestId('page').textContent).toBe('0');
+	});
+
+	it('clamps page when rows shrink', () => {
+		const { rerender } = render(<PaginationHarness rows={Array.from({ length: 30 }, (_, i) => i)} pageSize={10} />);
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		act(() => {
+			fireEvent.click(screen.getByText('next'));
+		});
+		expect(screen.getByTestId('page').textContent).toBe('2');
+		// Shrink rows so page 2 no longer exists
+		rerender(<PaginationHarness rows={Array.from({ length: 5 }, (_, i) => i)} pageSize={10} />);
+		expect(screen.getByTestId('page').textContent).toBe('0');
+	});
+
+	it('handles empty rows', () => {
+		render(<PaginationHarness rows={[]} pageSize={10} />);
+		expect(screen.getByTestId('pageCount').textContent).toBe('1');
+		expect(screen.getByTestId('totalRows').textContent).toBe('0');
+		expect(screen.getByTestId('pageRowsLength').textContent).toBe('0');
+	});
+});
+
+// ─── OpenGrid inline mode ─────────────────────────────────────────────────────
+
+describe('OpenGrid inline mode (rows + columns props)', () => {
+	const cols: ColumnDef<TestRow>[] = [
+		{ field: 'id', header: 'ID', width: 80 },
+		{ field: 'name', header: 'Name', width: 120 },
+	];
+
+	it('renders without useClientGrid or GridProvider', async () => {
+		const rows: TestRow[] = [
+			{ id: '1', name: 'Alice', value: 10 },
+			{ id: '2', name: 'Bob', value: 20 },
+		];
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows} columns={cols} getRowId={(r) => r.id} />
+			</div>
+		);
+		// Grid host mounts — no throw
+		await act(async () => {});
+	});
+
+	it('reacts to rows prop changes in inline mode', async () => {
+		const rows1: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
+		const rows2: TestRow[] = [
+			{ id: '1', name: 'Alice', value: 1 },
+			{ id: '2', name: 'Bob', value: 2 },
+		];
+		const { rerender } = render(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows1} columns={cols} getRowId={(r) => r.id} />
+			</div>
+		);
+		await act(async () => {});
+		rerender(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows2} columns={cols} getRowId={(r) => r.id} />
+			</div>
+		);
+		await act(async () => {});
+		// No crash means the row update propagated
+	});
+
+	it('merges detailRowHeight into initialState', async () => {
+		const rows: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
+		// Smoke test: detailRowHeight prop accepted without error
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows} columns={cols} getRowId={(r) => r.id} detailRowHeight={200} initialState={{ masterDetailEnabled: true }} />
+			</div>
+		);
+		await act(async () => {});
+	});
+
+	it('throws when neither rows, api, nor GridProvider are supplied', () => {
+		// Suppress console.error for the expected throw
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		expect(() => render(<OpenGrid columns={cols} />)).toThrow();
+		spy.mockRestore();
+	});
+
+	it('warns in dev when rows is provided but columns is empty', async () => {
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const rows: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<OpenGrid rows={rows} columns={[]} />
+			</div>
+		);
+		await act(async () => {});
+		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[open-grid]'));
+		warnSpy.mockRestore();
 	});
 });

@@ -78,48 +78,38 @@ function GanttSchedulingWorkspaceInner({
 
 	// Quantitative team analytics calculations
 	const stats = useMemo(() => {
-		const rowsCount = api.getRowCount();
+		let total = 0;
 		let doneCount = 0;
 		let blockedCount = 0;
 		let progressSum = 0;
 		let durationSum = 0;
 
-		for (let i = 0; i < rowsCount; i++) {
-			const node = api.getRowNode(i);
-			if (node) {
-				const r = node.data as GanttRow;
-				if (r.status === 'Done') doneCount++;
-				if (r.status === 'Blocked') blockedCount++;
-				progressSum += Number(r.progress) || 0;
-				durationSum += Number(r.durationDays) || 0;
-			}
-		}
+		api.rows().forEach((r) => {
+			total++;
+			if (r.status === 'Done') doneCount++;
+			if (r.status === 'Blocked') blockedCount++;
+			progressSum += Number(r.progress) || 0;
+			durationSum += Number(r.durationDays) || 0;
+		});
 
 		return {
-			total: rowsCount,
+			total,
 			done: doneCount,
 			blocked: blockedCount,
-			progressAvg: rowsCount > 0 ? progressSum / rowsCount : 0,
+			progressAvg: total > 0 ? progressSum / total : 0,
 			totalDuration: durationSum,
 		};
 	}, [api, selectedRange]);
 
 	const handleAutoSolveConflicts = () => {
 		const start = performance.now();
-		const count = api.getRowCount();
-
 		let currentDay = 1;
 
-		for (let i = 0; i < count; i++) {
-			const row = api.getRow(i);
-			if (!row) continue;
-
+		api.rows().forEach((row) => {
 			const duration = Number(row.durationDays) || 2;
-
 			api.setCellValue(row.id, 'sprintDay', currentDay);
-
 			currentDay += duration;
-		}
+		});
 
 		const durationMs = performance.now() - start;
 
@@ -133,20 +123,10 @@ function GanttSchedulingWorkspaceInner({
 			return;
 		}
 
-		const startIdx = api.getRowIndexById(selectedRange.start.rowId) ?? 0;
-		const endIdx = api.getRowIndexById(selectedRange.end.rowId) ?? 0;
-
-		if (startIdx === -1 || endIdx === -1) return;
-
-		const minRow = Math.min(startIdx, endIdx);
-		const maxRow = Math.max(startIdx, endIdx);
-
-		for (let i = minRow; i <= maxRow; i++) {
-			const node = api.getRowNode(i);
-			if (!node) continue;
-
-			api.setCellValue(node.id, 'progress', 100);
-			api.setCellValue(node.id, 'status', 'Done');
+		const rowIds = api.rows().inRange(selectedRange).getIds();
+		for (const id of rowIds) {
+			api.setCellValue(id, 'progress', 100);
+			api.setCellValue(id, 'status', 'Done');
 		}
 	};
 

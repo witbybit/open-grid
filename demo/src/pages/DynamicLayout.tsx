@@ -46,7 +46,7 @@ function DynamicLayoutInner({
 	const layoutStats = useMemo(() => {
 		const colsCount = columns.length;
 		const rowHeight = rowHeightsMap[compactLayout];
-		const totalRows = api.getRowCount();
+		const totalRows = api.rows().getAll().length;
 		// Simulate memory load: ~1.2KB per visible grid node
 		const estimatedMemoryKb = (totalRows * colsCount * 1.2).toFixed(1);
 

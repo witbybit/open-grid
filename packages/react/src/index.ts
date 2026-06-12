@@ -1,4 +1,8 @@
 export { OpenGrid, GridProvider } from './OpenGrid.js';
+export type { OpenGridProps } from './OpenGrid.js';
+export { GridPagination, useClientGridPagination } from './pagination.js';
+export type { GridPaginationProps, ClientGridPaginationResult } from './pagination.js';
+export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
 export { useClientGrid, useServerGrid } from './useGrid.js';
 export {
@@ -9,7 +13,33 @@ export {
 	useGridKeySelectorWithEquality,
 	useGridNavigationController,
 } from './hooks.js';
+export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
 
+// ─── Built-in cell renderers & editors ───────────────────────────────────────
+export {
+	// Checkbox
+	CheckboxCellRenderer,
+	// Multi-select
+	MultiSelectCellRenderer,
+	createMultiSelectCellRenderer,
+	createMultiSelectCellEditor,
+	// Date
+	DateCellRenderer,
+	DateCellEditor,
+	// Dropdown / enum badge
+	createDropdownCellRenderer,
+	createDropdownCellEditor,
+	// Number
+	createNumberCellRenderer,
+	createNumberCellEditor,
+	// Utilities
+	parseMultiValue,
+	TagsCellRenderer,
+} from './renderers/CellTypes.js';
+export type { DropdownOption, DropdownOptionColor, NumberCellRendererOptions, NumberCellEditorOptions } from './renderers/CellTypes.js';
+
+export { isDomCellRenderer, createLocalStorageAdapter } from './types.js';
+export type { GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
 export type {
 	ColumnDef,
 	CellEditorProps,
@@ -24,6 +54,20 @@ export type {
 	ServerGridOptions,
 	FilterModelItem,
 	VisualRow,
+	DataVisualRow,
+	GroupVisualRow,
+	DetailVisualRow,
+	FooterVisualRow,
+	LoadingVisualRow,
+	GroupDef,
+	AggregationDef,
+	CsvExportOptions,
+	CellRendererCapabilities,
+	CellRendererPhase,
+	DomCellRenderer,
+	DomCellRendererHandle,
+	DomCellRendererParams,
+	ImperativeCellHandle,
 } from './types.js';
 
 export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';

@@ -44,19 +44,20 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
 		const state = this.store.getState();
-		const row = this.store.getRow(rowIdx);
+		const visualRow = this.store.getVisualRow(rowIdx);
 		const col = state.columns[colIdx];
-		if (!row || !col) return null;
+		if (!visualRow || !col) return null;
+		if (visualRow.kind !== 'data') return null;
 
 		return {
-			rowId: this.store.getRowId(row),
+			rowId: visualRow.rowId,
 			colField: col.field,
 		};
 	}
 
 	private getCoordsFromPointer(pointer: GridCellPointer | null): { rowIdx: number; colIdx: number } | null {
 		if (!pointer) return null;
-		const rowIdx = this.store.getRowIndexById(pointer.rowId) ?? -1;
+		const rowIdx = this.store.getVisualIndexByRowId(pointer.rowId) ?? -1;
 		const colIdx = this.store.getColumnIndex(pointer.colField);
 		if (rowIdx === -1 || colIdx === -1) return null;
 		return { rowIdx, colIdx };
@@ -90,7 +91,6 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		if (!coords) return;
 
 		const { rowIdx: row, colIdx: col } = coords;
-		const maxRow = this.store.getRowCount() - 1;
 		const maxCol = state.columns.length - 1;
 
 		const cellState = this.store.getCellState(active.rowId, active.colField);
@@ -98,6 +98,20 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 		// 1. Navigation logic when NOT in cell editing mode
 		if (!isEditing) {
+			// Ctrl+C / Cmd+C — copy selection to clipboard
+			if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+				event.preventDefault();
+				this.copySelectionToClipboard();
+				return;
+			}
+
+			// Ctrl+V / Cmd+V — paste from clipboard
+			if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+				event.preventDefault();
+				void this.pasteFromClipboard();
+				return;
+			}
+
 			let nextRow = row;
 			let nextCol = col;
 			let handled = false;
@@ -148,7 +162,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					event.preventDefault();
 					const rowModel = this.store.getRowModel();
 					if (rowModel) {
-						const currentIdx = this.store.getRowIndexById(active.rowId);
+						const currentIdx = this.store.getVisualIndexByRowId(active.rowId);
 						if (currentIdx !== null && currentIdx !== -1) {
 							const currentVisualRow = rowModel.getVisualRow(currentIdx);
 							if (currentVisualRow) {
@@ -425,5 +439,126 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 	public cancelEdit(): void {
 		this.store.stopEditing(true);
+	}
+
+	/**
+	 * Copy the current selection to the clipboard as tab-separated values (TSV).
+	 * Single-cell selection copies the display value; multi-cell copies a TSV block
+	 * that pastes correctly into Excel and Google Sheets.
+	 * Fires a `cellsCopied` event so the renderer can flash the copied cells.
+	 */
+	private copySelectionToClipboard(): void {
+		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+		const state = this.store.getState();
+		const selection = state.selection;
+		const bounds = selection.bounds;
+		const copiedCells: Array<{ rowId: string; colField: string }> = [];
+
+		if (!bounds) {
+			const focus = selection.focus;
+			if (!focus) return;
+			const colDef = state.columns.find((c) => c.field === focus.colField);
+			let text: string;
+			if (colDef?.onCopy) {
+				const row = this.store.getRawRowById(focus.rowId);
+				text =
+					row !== null
+						? colDef.onCopy({
+								row,
+								rowId: focus.rowId,
+								colField: focus.colField,
+								value: this.store.getCellValue(focus.rowId, focus.colField),
+							})
+						: this.store.getCheapDisplayValue(focus.rowId, focus.colField);
+			} else {
+				text = this.store.getCheapDisplayValue(focus.rowId, focus.colField);
+			}
+			navigator.clipboard.writeText(text).catch(() => {});
+			copiedCells.push({ rowId: focus.rowId, colField: focus.colField });
+			this.store.dispatchEvent('cellsCopied', { cells: copiedCells });
+			return;
+		}
+
+		const rowModel = this.store.getRowModel();
+		if (!rowModel) return;
+
+		const rows: string[] = [];
+		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+			const visualRow = rowModel.getVisualRow(r);
+			if (!visualRow || visualRow.kind !== 'data') continue;
+			const cells: string[] = [];
+			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+				const colField = this.store.getColumnField(c);
+				if (colField === null) continue;
+				const colDef = state.columns.find((col) => col.field === colField);
+				let cellText: string;
+				if (colDef?.onCopy) {
+					const row = this.store.getRawRowById(visualRow.rowId);
+					cellText =
+						row !== null
+							? colDef.onCopy({ row, rowId: visualRow.rowId, colField, value: this.store.getCellValue(visualRow.rowId, colField) })
+							: this.store.getCheapDisplayValue(visualRow.rowId, colField);
+				} else {
+					cellText = this.store.getCheapDisplayValue(visualRow.rowId, colField);
+				}
+				cells.push(cellText);
+				copiedCells.push({ rowId: visualRow.rowId, colField });
+			}
+			rows.push(cells.join('\t'));
+		}
+
+		if (rows.length === 0) return;
+		navigator.clipboard.writeText(rows.join('\n')).catch(() => {});
+		this.store.dispatchEvent('cellsCopied', { cells: copiedCells });
+	}
+
+	private async pasteFromClipboard(): Promise<void> {
+		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+		const state = this.store.getState();
+		const selection = state.selection;
+		const focus = selection.focus;
+		if (!focus) return;
+
+		const focusCoords = this.getCoordsFromPointer(focus);
+		if (!focusCoords) return;
+
+		const startRow = selection.bounds ? selection.bounds.minRow : focusCoords.rowIdx;
+		const startCol = selection.bounds ? selection.bounds.minCol : focusCoords.colIdx;
+
+		try {
+			const text = await navigator.clipboard.readText();
+			if (!text) return;
+
+			const rowModel = this.store.getRowModel();
+			if (!rowModel) return;
+			const maxRow = this.store.getVisualRowCount();
+			const lines = text.split(/\r?\n/);
+
+			for (let r = 0; r < lines.length; r++) {
+				if (!lines[r] && r === lines.length - 1) break; // skip trailing newline
+				const rowIndex = startRow + r;
+				if (rowIndex >= maxRow) break;
+				const visualRow = rowModel.getVisualRow(rowIndex);
+				if (!visualRow || visualRow.kind !== 'data') continue;
+				const rowId = visualRow.rowId;
+				const cells = lines[r].split('\t');
+				for (let c = 0; c < cells.length; c++) {
+					const colIndex = startCol + c;
+					if (colIndex >= state.columns.length) break;
+					const colDef = state.columns[colIndex];
+					if (!colDef) continue;
+					let value: unknown = cells[c];
+					if (colDef.onPaste) {
+						const row = this.store.getRawRowById(rowId);
+						if (row !== null) {
+							value = colDef.onPaste({ row, rowId, colField: colDef.field, pastedText: cells[c] });
+						}
+					}
+					this.store.setCellValue(rowId, colDef.field, value);
+				}
+			}
+		} catch {
+			// Clipboard access denied — silently ignore
+		}
 	}
 }

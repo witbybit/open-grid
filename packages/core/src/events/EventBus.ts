@@ -31,6 +31,10 @@ export class EventBus {
 		}
 	};
 
+	public hasListeners(type: string): boolean {
+		return (this.eventListeners.get(type)?.size ?? 0) > 0;
+	}
+
 	public clear(): void {
 		this.eventListeners.clear();
 	}

@@ -74,39 +74,37 @@ export default function CalculationsArena({
 
 	useEffect(() => {
 		const calculateTelemetry = () => {
-			const count = api.getRowCount();
 			let volSum = 0;
 			let deltaSum = 0;
 			let maxG = 0;
 			let vegaSum = 0;
 			let highRisk = 0;
+			let count = 0;
 
-			for (let i = 0; i < count; i++) {
-				const r = api.getRow(i);
-				if (r) {
-					const vol = parseFloat(r.quantity) || 0;
-					volSum += vol;
+			api.rows().forEach((r) => {
+				count++;
+				const vol = parseFloat(r.quantity) || 0;
+				volSum += vol;
 
-					// Compute Delta approximation inline for telemetry matching the valueGetter
-					const strike = parseFloat(r.price) || 100;
-					const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
-					const delta = 0.5 + 0.5 * Math.tanh(d1);
-					deltaSum += delta;
+				// Compute Delta approximation inline for telemetry matching the valueGetter
+				const strike = parseFloat(r.price) || 100;
+				const d1 = (Math.log(100 / strike) + (0.05 + (vol * vol) / 20000)) / (vol / 100 || 0.01);
+				const delta = 0.5 + 0.5 * Math.tanh(d1);
+				deltaSum += delta;
 
-					// Compute Gamma approximation
-					const gamma = Math.exp((-d1 * d1) / 2) / (100 * (vol / 100) * Math.sqrt(2 * Math.PI));
-					if (gamma > maxG) maxG = gamma;
+				// Compute Gamma approximation
+				const gamma = Math.exp((-d1 * d1) / 2) / (100 * (vol / 100) * Math.sqrt(2 * Math.PI));
+				if (gamma > maxG) maxG = gamma;
 
-					// Compute Vega
-					const vega = (100 * Math.exp((-d1 * d1) / 2)) / Math.sqrt(2 * Math.PI);
-					vegaSum += vega / 100;
+				// Compute Vega
+				const vega = (100 * Math.exp((-d1 * d1) / 2)) / Math.sqrt(2 * Math.PI);
+				vegaSum += vega / 100;
 
-					if (r.status === 'Inactive') {
-						// Represents 'HIGH' risk in our valueGetter
-						highRisk++;
-					}
+				if (r.status === 'Inactive') {
+					// Represents 'HIGH' risk in our valueGetter
+					highRisk++;
 				}
-			}
+			});
 
 			setTelemetry({
 				totalContracts: count,
@@ -200,6 +198,27 @@ export default function CalculationsArena({
 								className={`h-full rounded-full transition-all duration-500 ${stressScore > 60 ? 'bg-rose-500' : stressScore > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`}
 								style={{ width: `${stressScore}%` }}
 							/>
+						</div>
+					</div>
+				</div>
+
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden'>
+					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+						<Activity className='w-4 h-4 text-cyan-400' />
+						Custom Renderer Scroll Strategy
+					</h3>
+					<div className='grid grid-cols-1 gap-2 text-[9px] font-mono'>
+						<div className='flex items-center justify-between rounded border border-rose-950/50 bg-rose-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Delta / Gamma / Theta</span>
+							<span className='text-rose-300 uppercase tracking-wider'>defer</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-emerald-950/50 bg-emerald-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Vega</span>
+							<span className='text-emerald-300 uppercase tracking-wider'>live cheap</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-indigo-950/50 bg-indigo-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Risk Rating</span>
+							<span className='text-indigo-300 uppercase tracking-wider'>defer</span>
 						</div>
 					</div>
 				</div>

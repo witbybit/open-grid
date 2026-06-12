@@ -12,9 +12,11 @@ import type { GridEngine } from '../engine/GridEngine.js';
 export class ScrollEngine<TRowData = unknown> {
 	private engine: GridEngine<TRowData>;
 	private scrollContainer: HTMLElement | null = null;
-	private onScrollCallback: ((scrollTop: number, scrollLeft: number) => void) | null = null;
+	private onScrollCallback: ((scrollTop: number, scrollLeft: number, timestamp?: number) => void) | null = null;
 
 	private scrollEndTimer: any = null;
+	// Feature-detected once in bind() — the per-event `in` checks showed up in profiles.
+	private supportsScrollEnd = false;
 
 	// High-resolution velocity tracking state
 	private lastScrollTop = 0;
@@ -30,7 +32,7 @@ export class ScrollEngine<TRowData = unknown> {
 	/**
 	 * Bind the scroll engine to the scrollable viewport container.
 	 */
-	public bind(scrollContainer: HTMLElement, onScroll: (scrollTop: number, scrollLeft: number) => void): void {
+	public bind(scrollContainer: HTMLElement, onScroll: (scrollTop: number, scrollLeft: number, timestamp?: number) => void): void {
 		this.unbind();
 		this.scrollContainer = scrollContainer;
 		this.onScrollCallback = onScroll;
@@ -45,7 +47,8 @@ export class ScrollEngine<TRowData = unknown> {
 		scrollContainer.addEventListener('scroll', this.handleScroll, { passive: true });
 
 		// Bind native scrollend event if supported by the browser
-		if (typeof window !== 'undefined' && ('onscrollend' in window || 'onscrollend' in HTMLElement.prototype)) {
+		this.supportsScrollEnd = typeof window !== 'undefined' && ('onscrollend' in window || 'onscrollend' in HTMLElement.prototype);
+		if (this.supportsScrollEnd) {
 			scrollContainer.addEventListener('scrollend', this.handleScrollEnd);
 		}
 	}
@@ -90,15 +93,17 @@ export class ScrollEngine<TRowData = unknown> {
 		this.lastTimestamp = now;
 
 		// Fallback scroll-stop detection for browsers without native 'scrollend'
-		if (typeof window !== 'undefined' && !('onscrollend' in window || 'onscrollend' in HTMLElement.prototype)) {
+		if (!this.supportsScrollEnd) {
 			if (this.scrollEndTimer) {
 				clearTimeout(this.scrollEndTimer);
 			}
 			this.scrollEndTimer = setTimeout(this.handleScrollEnd, 50);
 		}
 
-		// Delegate callback (which will update ViewportModel and trigger transforms)
-		this.onScrollCallback(scrollTop, scrollLeft);
+		// Delegate callback (which will update ViewportModel and trigger transforms).
+		// `now` is passed through so ViewportModel reuses this timestamp instead of
+		// calling performance.now() and recomputing velocity a second time.
+		this.onScrollCallback(scrollTop, scrollLeft, now);
 	};
 
 	/**

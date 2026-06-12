@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { GridProvider, useServerGrid } from '@open-grid/react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { GridProvider, useServerGrid, GridPagination } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Terminal, Server, Activity, ShieldAlert, Cpu, Network, Clock } from 'lucide-react';
 
@@ -19,6 +19,9 @@ type SeverityStats = {
 	infoDebug: number;
 };
 
+const SERVER_PAGE_SIZE = 5000;
+const SERVER_ROW_HEIGHT = 40;
+
 export default function InfiniteServerScroll({
 	api,
 	editTrigger,
@@ -26,6 +29,7 @@ export default function InfiniteServerScroll({
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: InfiniteServerScrollProps) {
+	const gridHostRef = useRef<HTMLDivElement>(null);
 	const [blockStats, setBlockStats] = useState({
 		loadedBlockStart: 0,
 		loadedBlockEnd: 0,
@@ -33,6 +37,7 @@ export default function InfiniteServerScroll({
 		durationMs: 0,
 	});
 
+	const [serverPage, setServerPage] = useState(0);
 	const [latencyHistory, setLatencyHistory] = useState<number[]>([45, 80, 55, 120, 95, 60, 110, 85]);
 	const [severityStats, setSeverityStats] = useState<SeverityStats>({
 		totalLoaded: 0,
@@ -42,16 +47,12 @@ export default function InfiniteServerScroll({
 	});
 
 	const refreshSeverityStats = useCallback(() => {
-		const totalRows = api.getRowCount();
 		let totalLoaded = 0;
 		let criticalError = 0;
 		let warning = 0;
 		let infoDebug = 0;
 
-		for (let rowIndex = 0; rowIndex < totalRows; rowIndex++) {
-			const row = api.getRow(rowIndex) as { severity?: string } | null;
-			if (!row) continue;
-
+		api.rows().forEach((row: any) => {
 			totalLoaded++;
 			const severity = String(row.severity ?? '').toUpperCase();
 
@@ -62,7 +63,7 @@ export default function InfiniteServerScroll({
 			} else if (severity === 'INFO' || severity === 'DEBUG') {
 				infoDebug++;
 			}
-		}
+		});
 
 		setSeverityStats({ totalLoaded, criticalError, warning, infoDebug });
 	}, [api]);
@@ -151,7 +152,7 @@ export default function InfiniteServerScroll({
 					</div>
 				</div>
 
-				<div className='flex-1 min-h-0 min-w-0'>
+				<div ref={gridHostRef} className='flex-1 min-h-0 min-w-0'>
 					<GridProvider api={api}>
 						<GridView
 							api={api}
@@ -163,6 +164,24 @@ export default function InfiniteServerScroll({
 						/>
 					</GridProvider>
 				</div>
+				<GridPagination
+					page={serverPage}
+					pageCount={Math.ceil(blockStats.totalRecords / SERVER_PAGE_SIZE)}
+					totalRows={blockStats.totalRecords}
+					pageSize={SERVER_PAGE_SIZE}
+					onPageChange={(p) => {
+						setServerPage(p);
+						const viewport = gridHostRef.current?.querySelector<HTMLElement>('.og-scroll-viewport');
+						if (viewport) viewport.scrollTop = p * SERVER_PAGE_SIZE * SERVER_ROW_HEIGHT;
+					}}
+					style={{
+						background: 'rgba(15,23,42,0.6)',
+						border: '1px solid #1e293b',
+						borderRadius: '8px',
+						color: '#94a3b8',
+						flexShrink: 0,
+					}}
+				/>
 			</div>
 
 			{/* Right Column: Auditor Telemetry Sidebar */}
@@ -240,6 +259,31 @@ export default function InfiniteServerScroll({
 							<div className='w-full bg-slate-950 border border-slate-900 rounded-full h-1.5 overflow-hidden'>
 								<div className='h-full bg-emerald-500 rounded-full' style={{ width: `${severityDistribution.infoDebugPercent}%` }} />
 							</div>
+						</div>
+					</div>
+				</div>
+
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden'>
+					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+						<Cpu className='w-4 h-4 text-cyan-400' />
+						Custom Renderer Lifecycle Lab
+					</h3>
+					<div className='grid grid-cols-1 gap-2 text-[9px] font-mono'>
+						<div className='flex items-center justify-between rounded border border-emerald-950/50 bg-emerald-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Live Rebind</span>
+							<span className='text-emerald-300 uppercase tracking-wider'>phase=scroll</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-indigo-950/50 bg-indigo-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Defer Stable</span>
+							<span className='text-indigo-300 uppercase tracking-wider'>snapshot then idle</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-amber-950/50 bg-amber-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Fallback Cache</span>
+							<span className='text-amber-300 uppercase tracking-wider'>cached text</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-rose-950/50 bg-rose-950/15 px-2.5 py-2'>
+							<span className='text-slate-300 font-bold'>Destroy Recycle</span>
+							<span className='text-rose-300 uppercase tracking-wider'>no warm cache</span>
 						</div>
 					</div>
 				</div>
