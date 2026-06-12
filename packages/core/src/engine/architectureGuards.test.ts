@@ -143,8 +143,8 @@ describe('Architecture guardrails', () => {
 		}
 	});
 
-	it('OpenGrid.tsx does not call getStoreFromApi', () => {
-		const content = readFileSync(resolve(REACT_ROOT, 'src', 'OpenGrid.tsx'), 'utf-8');
+	it('GridView.tsx does not call getStoreFromApi', () => {
+		const content = readFileSync(resolve(REACT_ROOT, 'src', 'GridView.tsx'), 'utf-8');
 		expect(content).not.toContain('getStoreFromApi');
 	});
 
@@ -180,7 +180,7 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('React adapter does not import raw core internals', () => {
-		const files = ['OpenGrid.tsx', 'GridPortal.tsx'];
+		const files = ['GridView.tsx', 'GridPortal.tsx'];
 		const forbidden = ['GridStore', 'GridEngine', 'RenderEngine', 'RowRenderer', 'getStoreFromApi', 'InternalGridApi', 'InternalColumnDef'];
 		for (const file of files) {
 			const content = readFileSync(resolve(REACT_ROOT, 'src', file), 'utf-8');
@@ -197,7 +197,7 @@ describe('Architecture guardrails', () => {
 		const bridge = readFileSync(resolve(REACT_ROOT, 'src', 'reactHostBridge.ts'), 'utf-8');
 		expect(bridge).toContain("from '@open-grid/core/internal'");
 
-		const files = ['OpenGrid.tsx', 'GridPortal.tsx', 'hooks.ts', 'ClientGrid.tsx', 'ServerGrid.tsx', 'gridContext.tsx'];
+		const files = ['GridView.tsx', 'GridPortal.tsx', 'hooks.ts', 'ClientGrid.tsx', 'ServerGrid.tsx', 'gridContext.tsx'];
 		for (const file of files) {
 			const content = readFileSync(resolve(REACT_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not import @open-grid/core/internal directly`).not.toContain('@open-grid/core/internal');

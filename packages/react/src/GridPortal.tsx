@@ -379,7 +379,7 @@ export interface RowMenuPortalSnapshot<TRowData = unknown> {
 	menuPortalList: MenuPortalData<TRowData>[];
 }
 
-// Imperative updater fn type — registered by ImperativePortalCellWrapper, called from OpenGrid
+// Imperative updater fn type — registered by ImperativePortalCellWrapper, called from the grid view layer
 type ImperativeUpdaterFn<TRowData> = (
 	value: unknown,
 	node: RowNode<TRowData>,
@@ -827,7 +827,7 @@ function ImperativePortalCellWrapperInner<TRowData = unknown>({ cellKey, store }
 		return store.subscribeToCell(cellKey, () => setData(store.getCellData?.(cellKey)));
 	}, [cellKey, store]);
 
-	// Register imperative updater — called by OpenGrid instead of mountCell on data-only updates
+	// Register imperative updater — called by the grid view instead of mountCell on data-only updates
 	useEffect(() => {
 		if (!store.registerImperativeUpdater) return;
 		store.registerImperativeUpdater(cellKey, (value, node, col, isEditing, _isLoading, phase, isScrolling, isFocused, isSelected) => {
@@ -1020,7 +1020,7 @@ export function PortalManager<TRowData = unknown>({
 	store,
 }: PortalManagerProps<TRowData>) {
 	if (!store?.subscribeCells || !store?.subscribeRowsMenus) {
-		// Store is required — OpenGrid always provides createPortalStore()
+		// Store is required — the grid view always provides createPortalStore()
 		return null;
 	}
 	const concreteStore = store as ConcretePortalStore<TRowData>;

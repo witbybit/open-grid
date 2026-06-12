@@ -84,7 +84,7 @@ const treeRows: FileNodeRow[] = [
 
 	{ id: 'react', name: 'react', type: 'folder', parentId: 'packages' },
 	{ id: 'react-src', name: 'src', type: 'folder', parentId: 'react' },
-	{ id: 'opengrid-tsx', name: 'OpenGrid.tsx', type: 'tsx', size: '17.1 KB', modifiedAt: '5 mins ago', parentId: 'react-src' },
+	{ id: 'gridview-tsx', name: 'GridView.tsx', type: 'tsx', size: '17.1 KB', modifiedAt: '5 mins ago', parentId: 'react-src' },
 	{ id: 'gridportal-tsx', name: 'GridPortal.tsx', type: 'tsx', size: '8.4 KB', modifiedAt: '2 hours ago', parentId: 'react-src' },
 
 	{ id: 'demo', name: 'demo', type: 'folder', parentId: 'root' },
@@ -660,7 +660,7 @@ export default function NestedTablesGrouping() {
 					{activeTab === 'detail' && (
 						<div className='text-xs text-slate-300 flex flex-col gap-2 leading-relaxed'>
 							<span className='text-[10px] font-extrabold text-pink-400 uppercase tracking-wide'>🔍 Master-Detail Mode</span>
-							<p>Renders completely separate **nested interactive &lt;OpenGrid&gt; grids** inside order detail portals!</p>
+							<p>Renders completely separate **nested interactive grids** inside order detail portals!</p>
 							<p>
 								Try editing the <span className='font-mono text-pink-300 text-[10px]'>Qty</span> column in the nested grids. It
 								updates subtotal values and dynamically propagates totals up to the parent ledger cells!

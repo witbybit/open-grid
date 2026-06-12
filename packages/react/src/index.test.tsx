@@ -12,7 +12,6 @@ import {
 	ClientGrid,
 	PortalCell,
 	PortalManager,
-	OpenGrid,
 	useGridKeySelector,
 	useGridApi,
 	useGridSelector,
@@ -542,23 +541,6 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should mount OpenGrid component and setup rendering container', () => {
-		const grid = createTestGrid<TestRow>({
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: [{ field: 'name', header: 'Name', width: 100 }],
-		});
-
-		const { container, unmount } = render(<OpenGrid api={grid.api} pinLeftColumns={1} enableNavigation={true} />);
-
-		// Verify that a div element with relative position has been rendered inside OpenGrid
-		const openGridDiv = container.firstElementChild as HTMLElement;
-		expect(openGridDiv).toBeDefined();
-		expect(openGridDiv.style.position).toBe('relative');
-
-		unmount();
-		grid.api.destroy();
-	});
-
 	it('should keep custom renderer portals mounted when renderer column layout changes', async () => {
 		// This test verifies the cycle: custom renderer columns visible → replace with native columns → restore
 		// custom renderer columns. Uses the same code path (releaseAll + full repaint) as a column reorder.
@@ -593,7 +575,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+		const { unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} />
+			</GridProvider>
+		);
 
 		// Initial render: React renderer portals are mounted and show their values.
 		await screen.findByTestId('severity-renderer');
@@ -632,7 +618,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const eventListener = vi.fn();
 		const unsubscribe = grid.api.addEventListener(GridEventName.cellClicked, eventListener);
 
-		const { container, unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} onCellClick={onCellClick} />);
+		const { container, unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} onCellClick={onCellClick} />
+			</GridProvider>
+		);
 
 		await waitFor(() => {
 			expect(container.querySelector('.og-cell[data-col-field="name"]')).not.toBeNull();
@@ -682,7 +672,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+		const { unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} />
+			</GridProvider>
+		);
 
 		await screen.findByText('Risk LOW');
 
@@ -711,7 +705,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
 
-		const { container, unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+		const { container, unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} />
+			</GridProvider>
+		);
 
 		fireEvent.mouseDown(container.querySelector('.og-cell[data-col-field="name"]')!);
 		expect(grid.api.getState().selection.focus).toBeNull();
@@ -792,7 +790,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 				columns: [{ field: 'name', header: 'Name', width: 140 }],
 			});
 
-			return <OpenGrid api={api} enableNavigation={false} />;
+			return (
+				<GridProvider api={api}>
+					<GridView api={api} enableNavigation={false} />
+				</GridProvider>
+			);
 		};
 
 		const { unmount } = render(
@@ -823,7 +825,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			],
 		});
 
-		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+		const { unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} />
+			</GridProvider>
+		);
 
 		await screen.findByText('Product A');
 		expect(screen.getByTestId('custom-renderer-programmatic').textContent).toBe('Product A');
@@ -867,7 +873,17 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const { unmount } = render(
-			<OpenGrid api={parentGrid.api} enableNavigation detailRowRenderer={() => <OpenGrid api={childGrid.api} enableNavigation />} />
+			<GridProvider api={parentGrid.api}>
+				<GridView
+					api={parentGrid.api}
+					enableNavigation
+					detailRowRenderer={() => (
+						<GridProvider api={childGrid.api}>
+							<GridView api={childGrid.api} enableNavigation />
+						</GridProvider>
+					)}
+				/>
+			</GridProvider>
 		);
 
 		act(() => {
@@ -905,13 +921,15 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const { container, unmount } = render(
 			<div style={{ width: 500, height: 400 }}>
-				<OpenGrid
-					api={grid.api}
-					enableNavigation={false}
-					detailRowRenderer={({ visualRow }) =>
-						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
-					}
-				/>
+				<GridProvider api={grid.api}>
+					<GridView
+						api={grid.api}
+						enableNavigation={false}
+						detailRowRenderer={({ visualRow }) =>
+							visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+						}
+					/>
+				</GridProvider>
 			</div>
 		);
 
@@ -961,13 +979,15 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const { container, unmount } = render(
 			<div style={{ width: 500, height: 500 }}>
-				<OpenGrid
-					api={grid.api}
-					enableNavigation={false}
-					detailRowRenderer={({ visualRow }) =>
-						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
-					}
-				/>
+				<GridProvider api={grid.api}>
+					<GridView
+						api={grid.api}
+						enableNavigation={false}
+						detailRowRenderer={({ visualRow }) =>
+							visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+						}
+					/>
+				</GridProvider>
 			</div>
 		);
 
@@ -1019,13 +1039,15 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const { container, unmount } = render(
 			<div style={{ width: 500, height: 240 }}>
-				<OpenGrid
-					api={grid.api}
-					enableNavigation={false}
-					detailRowRenderer={({ visualRow }) =>
-						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
-					}
-				/>
+				<GridProvider api={grid.api}>
+					<GridView
+						api={grid.api}
+						enableNavigation={false}
+						detailRowRenderer={({ visualRow }) =>
+							visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
+						}
+					/>
+				</GridProvider>
 			</div>
 		);
 
@@ -1207,7 +1229,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const { unmount } = render(
 			<React.StrictMode>
-				<OpenGrid api={grid.api} />
+				<GridProvider api={grid.api}>
+					<GridView api={grid.api} />
+				</GridProvider>
 			</React.StrictMode>
 		);
 
@@ -1243,7 +1267,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			],
 		});
 
-		const { container } = render(<OpenGrid api={grid.api} />);
+		const { container } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} />
+			</GridProvider>
+		);
 		const openGridContainer = container.firstElementChild as HTMLElement;
 
 		// Initial render should bind event listeners on the container
@@ -1452,81 +1480,6 @@ describe('useClientGridPagination', () => {
 	});
 });
 
-// ─── OpenGrid inline mode ─────────────────────────────────────────────────────
-
-describe('OpenGrid inline mode (rows + columns props)', () => {
-	const cols: ColumnDef<TestRow>[] = [
-		{ field: 'id', header: 'ID', width: 80 },
-		{ field: 'name', header: 'Name', width: 120 },
-	];
-
-	it('renders without useClientGrid or GridProvider', async () => {
-		const rows: TestRow[] = [
-			{ id: '1', name: 'Alice', value: 10 },
-			{ id: '2', name: 'Bob', value: 20 },
-		];
-		render(
-			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows} columns={cols} getRowId={(r) => r.id} />
-			</div>
-		);
-		// Grid host mounts — no throw
-		await act(async () => {});
-	});
-
-	it('reacts to rows prop changes in inline mode', async () => {
-		const rows1: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
-		const rows2: TestRow[] = [
-			{ id: '1', name: 'Alice', value: 1 },
-			{ id: '2', name: 'Bob', value: 2 },
-		];
-		const { rerender } = render(
-			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows1} columns={cols} getRowId={(r) => r.id} />
-			</div>
-		);
-		await act(async () => {});
-		rerender(
-			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows2} columns={cols} getRowId={(r) => r.id} />
-			</div>
-		);
-		await act(async () => {});
-		// No crash means the row update propagated
-	});
-
-	it('merges detailRowHeight into initialState', async () => {
-		const rows: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
-		// Smoke test: detailRowHeight prop accepted without error
-		render(
-			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows} columns={cols} getRowId={(r) => r.id} detailRowHeight={200} initialState={{ masterDetailEnabled: true }} />
-			</div>
-		);
-		await act(async () => {});
-	});
-
-	it('throws when neither rows, api, nor GridProvider are supplied', () => {
-		// Suppress console.error for the expected throw
-		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		expect(() => render(<OpenGrid columns={cols} />)).toThrow();
-		spy.mockRestore();
-	});
-
-	it('warns in dev when rows is provided but columns is empty', async () => {
-		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const rows: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
-		render(
-			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows} columns={[]} />
-			</div>
-		);
-		await act(async () => {});
-		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[open-grid]'));
-		warnSpy.mockRestore();
-	});
-});
-
 describe('explicit React entrypoints', () => {
 	it('GridView renders against an explicit api', async () => {
 		const grid = createTestGrid<TestRow>({
@@ -1546,7 +1499,7 @@ describe('explicit React entrypoints', () => {
 		grid.api.destroy();
 	});
 
-	it('ClientGrid can own its api without OpenGrid sugar', async () => {
+	it('ClientGrid can own its api directly', async () => {
 		render(
 			<div style={{ width: 400, height: 300 }}>
 				<ClientGrid rows={[{ id: '1', name: 'Alice' }]} columns={[{ field: 'name', header: 'Name', width: 100 }]} enableNavigation={false} />

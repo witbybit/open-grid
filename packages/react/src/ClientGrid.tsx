@@ -1,5 +1,5 @@
 import { GridProvider } from './gridContext.js';
-import { GridView, type GridViewProps } from './OpenGrid.js';
+import { GridView, type GridViewProps } from './GridView.js';
 import { useClientGrid } from './useGrid.js';
 import type { ClientGridOptions } from './types.js';
 

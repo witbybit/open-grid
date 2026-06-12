@@ -1,5 +1,5 @@
-export { OpenGrid, GridView } from './OpenGrid.js';
-export type { OpenGridProps, GridViewProps } from './OpenGrid.js';
+export { GridView } from './GridView.js';
+export type { GridViewProps } from './GridView.js';
 export { ClientGrid } from './ClientGrid.js';
 export type { ClientGridProps } from './ClientGrid.js';
 export { ServerGrid } from './ServerGrid.js';
