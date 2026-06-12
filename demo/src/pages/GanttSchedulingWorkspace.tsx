@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, useGridKeySelector, type GridApi } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { Sparkles, Clock, Users, Zap, RefreshCw, Layers, CheckSquare, TrendingUp } from 'lucide-react';
 
@@ -13,10 +13,8 @@ export interface GanttRow {
 	status: 'Done' | 'In Progress' | 'Pending' | 'Blocked';
 }
 
-type ClientApi = ReturnType<typeof useClientGrid<GanttRow>>;
-
 interface GanttSchedulingWorkspaceProps {
-	api: ClientApi;
+	api: GridApi<GanttRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;

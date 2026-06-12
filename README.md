@@ -72,11 +72,11 @@ pnpm install @open-grid/core @open-grid/react
 
 ### 2. Basic Setup Example
 
-The simplest way to use Open Grid — pass `rows` and `columns` directly to `<OpenGrid>`. No separate hook required.
+The simplest way to use Open Grid is the single public `<Grid>` component. Pick `mode="client"` or `mode="server"` explicitly, and use `onGridReady` when you need the `GridApi` handle outside the grid tree.
 
 ```tsx
 import React, { useMemo } from 'react';
-import { OpenGrid, type ColumnDef } from '@open-grid/react';
+import { Grid, type ColumnDef } from '@open-grid/react';
 
 interface BookRow {
 	id: string;
@@ -112,7 +112,8 @@ export default function BookInventoryGrid() {
 
 	return (
 		<div style={{ width: '100%', height: '500px' }}>
-			<OpenGrid
+			<Grid
+				mode='client'
 				rows={rows}
 				columns={columns}
 				getRowId={(row) => row.id}
@@ -125,27 +126,29 @@ export default function BookInventoryGrid() {
 }
 ```
 
-#### When to use `useClientGrid` instead
+#### When to use `onGridReady` and `useGridApi`
 
-Use the `useClientGrid` hook (and `GridProvider`) when you need the `GridApi` handle outside of `<OpenGrid>` — for example, to add a toolbar, a custom pagination bar, or access the api in a sibling component:
+Use `onGridReady` when a parent component needs the `GridApi` handle, and `useGridApi` when a descendant inside the grid tree needs access to the same instance:
 
 ```tsx
-import { GridProvider, OpenGrid, useClientGrid, useGridApi } from '@open-grid/react';
+import { useState } from 'react';
+import { Grid, type GridApi } from '@open-grid/react';
 
-function Toolbar() {
-	const api = useGridApi<BookRow>(); // reads api from nearest GridProvider
-	return <button onClick={() => api.exportCsv()}>Export CSV</button>;
+function Toolbar({ api }: { api: GridApi<BookRow> | null }) {
+	return (
+		<button disabled={!api} onClick={() => api?.exportCsv()}>
+			Export CSV
+		</button>
+	);
 }
 
 export function BookGrid({ rows, columns }) {
-	const api = useClientGrid({ rows, columns });
+	const [api, setApi] = useState<GridApi<BookRow> | null>(null);
 	return (
-		<GridProvider api={api}>
-			<Toolbar />
-			<div style={{ height: '500px' }}>
-				<OpenGrid pinLeftColumns={1} />
-			</div>
-		</GridProvider>
+		<>
+			<Toolbar api={api} />
+			<Grid mode='client' rows={rows} columns={columns} onGridReady={({ api }) => setApi(api)} />
+		</>
 	);
 }
 ```
@@ -164,7 +167,7 @@ To enable row grouping, pass the `groupBy` fields inside the `initialState` conf
 
 ```tsx
 import React, { useMemo, useCallback } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type VisualRow, type GridApi } from '@open-grid/react';
+import { Grid, type ColumnDef, type VisualRow, type GridApi } from '@open-grid/react';
 
 interface EmployeeRow {
 	id: string;
@@ -214,7 +217,8 @@ export function GroupedEmployeesGrid({ data }: { data: EmployeeRow[] }) {
 
 	return (
 		<div style={{ height: '500px' }}>
-			<OpenGrid
+			<Grid
+				mode='client'
 				rows={data}
 				columns={columns}
 				initialState={{ groupBy: ['department'], groupRowHeight: 42 }}
@@ -619,12 +623,12 @@ function DashboardGrid({ api }: { api: GridApi<StockRow> }) {
 
 ### 7. Pagination
 
-Open Grid ships a built-in `GridPagination` component and a `useClientGridPagination` hook. Both are headless-first and fully styleable via CSS custom properties or className overrides.
+Open Grid ships a built-in `GridPagination` component and a `useClientGridPagination` hook for slice-level paging. The grid instance itself is now owned by `<Grid>` and surfaced through `onGridReady` / `useGridApi`.
 
 #### Client-side pagination
 
 ```tsx
-import { OpenGrid, GridPagination, useClientGridPagination, type ColumnDef } from '@open-grid/react';
+import { Grid, GridPagination, useClientGridPagination, type ColumnDef } from '@open-grid/react';
 
 export function PaginatedGrid({ allRows, columns }: { allRows: MyRow[]; columns: ColumnDef<MyRow>[] }) {
 	const { pageRows, page, pageCount, setPage, totalRows, pageSize } = useClientGridPagination(allRows, {
@@ -634,7 +638,7 @@ export function PaginatedGrid({ allRows, columns }: { allRows: MyRow[]; columns:
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
 			<div style={{ flex: 1, minHeight: 0 }}>
-				<OpenGrid rows={pageRows} columns={columns} />
+				<Grid mode='client' rows={pageRows} columns={columns} />
 			</div>
 			<GridPagination page={page} pageCount={pageCount} totalRows={totalRows} pageSize={pageSize} onPageChange={setPage} />
 		</div>
@@ -647,7 +651,7 @@ export function PaginatedGrid({ allRows, columns }: { allRows: MyRow[]; columns:
 For server grids you manage the page state yourself — just drive your datasource and pass page metadata to `<GridPagination>`:
 
 ```tsx
-import { GridProvider, OpenGrid, GridPagination, useServerGrid, type ColumnDef } from '@open-grid/react';
+import { Grid, GridPagination, type ColumnDef } from '@open-grid/react';
 
 const PAGE_SIZE = 100;
 
@@ -655,23 +659,19 @@ export function ServerPaginatedGrid({ columns }: { columns: ColumnDef<MyRow>[] }
 	const [page, setPage] = useState(0);
 	const { datasource, totalRows } = useMyServerDatasource({ page, pageSize: PAGE_SIZE });
 
-	const api = useServerGrid({ datasource, columns });
-
 	return (
-		<GridProvider api={api}>
-			<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
-				<div style={{ flex: 1, minHeight: 0 }}>
-					<OpenGrid />
-				</div>
-				<GridPagination
-					page={page}
-					pageCount={Math.ceil(totalRows / PAGE_SIZE)}
-					totalRows={totalRows}
-					pageSize={PAGE_SIZE}
-					onPageChange={setPage}
-				/>
+		<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
+			<div style={{ flex: 1, minHeight: 0 }}>
+				<Grid mode='server' datasource={datasource} columns={columns} />
 			</div>
-		</GridProvider>
+			<GridPagination
+				page={page}
+				pageCount={Math.ceil(totalRows / PAGE_SIZE)}
+				totalRows={totalRows}
+				pageSize={PAGE_SIZE}
+				onPageChange={setPage}
+			/>
+		</div>
 	);
 }
 ```

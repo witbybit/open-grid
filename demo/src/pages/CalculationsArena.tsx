@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GridEventName, GridProvider, useClientGrid, useStyleRules, type StyleRule } from '@open-grid/react';
+import { GridEventName, GridProvider, useStyleRules, type GridApi, type StyleRule } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Activity, ShieldAlert, BadgePercent } from 'lucide-react';
 
-type ClientApi = ReturnType<typeof useClientGrid<PerformanceRow>>;
 interface CalculationsArenaProps {
-	api: ClientApi;
+	api: GridApi<PerformanceRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;

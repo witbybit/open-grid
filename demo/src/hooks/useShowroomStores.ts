@@ -23,15 +23,8 @@ import {
 	GanttTimelineRenderer,
 } from '../components/GridShared';
 import { SparklineRenderer, LivePriceRenderer, HeavyAnalyticsCell } from '../components/FastRenderers';
-import {
-	useClientGrid,
-	useServerGrid,
-	type ColumnDef,
-	type GridDatasource,
-	type FilterModel,
-	type SortModel,
-	type FilterModelItem,
-} from '@open-grid/react';
+import { type ColumnDef, type GridDatasource, type FilterModel, type SortModel, type FilterModelItem } from '@open-grid/react';
+import { useOwnedClientGrid, useOwnedServerGrid } from './useOwnedGrid';
 
 export interface DashboardStockRow {
 	id: string;
@@ -289,7 +282,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, [massiveColumns]);
 
 	const perfRows = useMemo(() => generatePerformanceRows(10000, 'R'), []);
-	const perfApi = useClientGrid<PerformanceRow>({ rows: perfRows, columns: clientColumns });
+	const perfApi = useOwnedClientGrid<PerformanceRow>({ rows: perfRows, columns: clientColumns });
 
 	const handlePerfCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
@@ -472,7 +465,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		};
 	}, [serverRows]);
 
-	const serverApi = useServerGrid<ServerAuditRow>({ datasource: mockDatasource, blockSize: 100, columns: serverColumns });
+	const serverApi = useOwnedServerGrid<ServerAuditRow>({ datasource: mockDatasource, blockSize: 100, columns: serverColumns });
 
 	// --------------------------------------------------------------------------
 	// C. PAGE 3: SPREADSHEET RANGE MULTI-SELECT WORKSPACE (Quantitative Financial Sheet)
@@ -529,7 +522,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		return rows;
 	}, []);
 
-	const spreadsheetApi = useClientGrid<SpreadsheetRow>({ rows: spreadsheetRows, columns: spreadsheetColumns });
+	const spreadsheetApi = useOwnedClientGrid<SpreadsheetRow>({ rows: spreadsheetRows, columns: spreadsheetColumns });
 
 	const handleSpreadsheetCellValueChanged = useCallback((_rowId: string, _colField: string, _val: unknown) => {
 		// Cell edits are already committed by the grid editor pipeline.
@@ -624,7 +617,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	);
 
 	const customRows = useMemo(() => generateCustomShowcaseRows(50), []);
-	const customApi = useClientGrid<CustomShowcaseRow>({ rows: customRows, columns: customColumns });
+	const customApi = useOwnedClientGrid<CustomShowcaseRow>({ rows: customRows, columns: customColumns });
 
 	const handleCustomCellValueChanged = useCallback((_rowId: string, _colField: string, _val: unknown) => {
 		// Cell edits are already committed by the grid editor pipeline.
@@ -674,7 +667,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, [layoutColumnsFull, visibleColumns]);
 
 	const layoutRows = useMemo(() => generatePerformanceRows(100, 'R'), []);
-	const layoutApi = useClientGrid<PerformanceRow>({ rows: layoutRows, columns: layoutColumns });
+	const layoutApi = useOwnedClientGrid<PerformanceRow>({ rows: layoutRows, columns: layoutColumns });
 
 	const handleLayoutCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
@@ -708,7 +701,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 	}, []);
 
 	const skinsRows = useMemo(() => generatePerformanceRows(50, 'SR'), []);
-	const skinsApi = useClientGrid<PerformanceRow>({ rows: skinsRows, columns: skinsColumns });
+	const skinsApi = useOwnedClientGrid<PerformanceRow>({ rows: skinsRows, columns: skinsColumns });
 
 	const handleSkinsCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {
@@ -775,7 +768,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 
 	const dashboardRows = useMemo<DashboardStockRow[]>(() => generateDashboardRows(), []);
 
-	const dashboardApi = useClientGrid<DashboardStockRow>({ rows: dashboardRows, columns: dashboardColumns });
+	const dashboardApi = useOwnedClientGrid<DashboardStockRow>({ rows: dashboardRows, columns: dashboardColumns });
 
 	const handleDashboardCellValueChanged = useCallback((_rowId: string, _colField: string, _val: unknown) => {
 		// Cell edits are already committed by the grid editor pipeline.
@@ -858,7 +851,7 @@ export function useShowroomStores({ massiveColumns, visibleColumns }: UseShowroo
 		});
 	}, []);
 
-	const ganttApi = useClientGrid<GanttRow>({ rows: ganttRows, columns: ganttColumns });
+	const ganttApi = useOwnedClientGrid<GanttRow>({ rows: ganttRows, columns: ganttColumns });
 
 	const handleGanttCellValueChanged = useCallback(
 		(rowId: string, colField: string, val: unknown) => {

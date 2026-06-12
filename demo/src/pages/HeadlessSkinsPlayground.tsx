@@ -1,12 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { GridProvider, useClientGrid } from '@open-grid/react';
+import { GridProvider, type GridApi } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Palette, Sparkles, Terminal, ShieldAlert, Code, Copy, Check } from 'lucide-react';
 
-type ClientApi = ReturnType<typeof useClientGrid<PerformanceRow>>;
-
 interface HeadlessSkinsPlaygroundProps {
-	api: ClientApi;
+	api: GridApi<PerformanceRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;

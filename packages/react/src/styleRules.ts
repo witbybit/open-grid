@@ -87,7 +87,7 @@ export function compileStyleRules<TRowData>(rules: StyleRule<TRowData>[]): GridS
 
 /**
  * Applies declarative style rules to a grid API instance.
- * Use this when you receive `api` as a prop rather than owning it via `useClientGrid`.
+ * Use this when you receive `api` as a prop rather than owning it via `Grid` / `onGridReady`.
  *
  * Memoize the `rules` array with `useMemo` to avoid unnecessary re-applications.
  *

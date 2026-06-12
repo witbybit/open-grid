@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Gauge, Play } from 'lucide-react';
 import {
 	GridProvider,
-	useClientGrid,
 	useClientGridPagination,
 	GridPagination,
 	type ColumnDef,
@@ -11,6 +10,7 @@ import {
 	type CellRendererProps,
 } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
+import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
 
 type RendererMode = 'text' | 'dom' | 'imperativeReact' | 'deferredReact';
 
@@ -210,7 +210,7 @@ export default function PerformanceLab() {
 
 	const { pageRows, page, pageCount, setPage, totalRows } = useClientGridPagination(allRows, { pageSize: PAGE_SIZE });
 
-	const api = useClientGrid<LabRow>({
+	const api = useOwnedClientGrid<LabRow>({
 		rows: pageRows,
 		columns,
 		rowOverscanPx: 100,

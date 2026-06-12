@@ -1,17 +1,15 @@
+export { Grid } from './Grid.js';
+export type { GridProps, GridClientProps, GridServerProps } from './Grid.js';
 export { GridView } from './GridView.js';
 export type { GridViewProps } from './GridView.js';
-export { ClientGrid } from './ClientGrid.js';
-export type { ClientGridProps } from './ClientGrid.js';
-export { ServerGrid } from './ServerGrid.js';
-export type { ServerGridProps } from './ServerGrid.js';
 export { GridProvider } from './gridContext.js';
 export { GridPagination, useClientGridPagination } from './pagination.js';
 export type { GridPaginationProps, ClientGridPaginationResult } from './pagination.js';
 export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
-export { useClientGrid, useServerGrid } from './useGrid.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
+export { createClientGrid, createServerGrid } from '@open-grid/core';
 
 // ─── Built-in cell renderers & editors ───────────────────────────────────────
 export {
@@ -62,8 +60,6 @@ export type {
 	GridApi,
 	GridCellClickParams,
 	GridState,
-	ClientGridOptions,
-	ServerGridOptions,
 	FilterModelItem,
 	VisualRow,
 	DataVisualRow,
@@ -80,12 +76,7 @@ export type {
 	DomCellRendererHandle,
 	DomCellRendererParams,
 	ImperativeCellHandle,
-	ClientGridInitialOptions,
-	ClientGridLiveOptions,
-	ClientGridLifecycleOptions,
-	ServerGridInitialOptions,
-	ServerGridLiveOptions,
-	ServerGridLifecycleOptions,
+	GridReadyEvent,
 } from './types.js';
 
-export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';
+export type { ClientGridOptions, ServerGridOptions, GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';

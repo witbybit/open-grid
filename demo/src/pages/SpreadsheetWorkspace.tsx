@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { GridEventName, GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
+import { GridEventName, GridProvider, useGridKeySelector, type GridApi } from '@open-grid/react';
 import { SpreadsheetRow, GridView } from '../components/GridShared';
-import { Calculator, Sparkles, TrendingUp, Layers, BookOpen, Sigma, RefreshCw } from 'lucide-react';
-
-type ClientApi = ReturnType<typeof useClientGrid<SpreadsheetRow>>;
+import { Calculator, Sparkles, TrendingUp, BookOpen, Sigma, RefreshCw } from 'lucide-react';
 
 interface SpreadsheetWorkspaceProps {
-	api: ClientApi;
+	api: GridApi<SpreadsheetRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;

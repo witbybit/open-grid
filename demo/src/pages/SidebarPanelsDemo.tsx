@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { GridProvider, GridView, useClientGrid } from '@open-grid/react';
+import { GridProvider, GridView } from '@open-grid/react';
 import type { ColumnDef, CellRendererProps } from '@open-grid/react';
+import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ const ROWS = generateHoldings(200);
 
 // ── Inner component (inside GridProvider) ─────────────────────────────────────
 
-function SidebarPanelsDemoInner({ api }: { api: ReturnType<typeof useClientGrid<HoldingRow>> }) {
+function SidebarPanelsDemoInner({ api }: { api: ReturnType<typeof useOwnedClientGrid<HoldingRow>> }) {
 	useEffect(() => {
 		api.setRows(ROWS);
 	}, [api]);
@@ -225,7 +226,7 @@ function SidebarPanelsDemoInner({ api }: { api: ReturnType<typeof useClientGrid<
 // ── Page export ───────────────────────────────────────────────────────────────
 
 export default function SidebarPanelsDemo() {
-	const api = useClientGrid<HoldingRow>({
+	const api = useOwnedClientGrid<HoldingRow>({
 		columns: COLUMNS,
 		rows: ROWS,
 	});

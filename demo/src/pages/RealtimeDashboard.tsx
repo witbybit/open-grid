@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { GridEventName, GridProvider, useClientGrid, useStyleRules, type StyleRule } from '@open-grid/react';
+import { GridEventName, GridProvider, useStyleRules, type GridApi, type StyleRule } from '@open-grid/react';
 import { DashboardStockRow } from '../hooks/useShowroomStores';
 import { GridView } from '../components/GridShared';
 import { TrendingUp, BarChart3, Activity, RefreshCw, Zap, Code2 } from 'lucide-react';
 
-type ClientApi = ReturnType<typeof useClientGrid<DashboardStockRow>>;
 interface RealtimeDashboardProps {
-	api: ClientApi;
+	api: GridApi<DashboardStockRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;

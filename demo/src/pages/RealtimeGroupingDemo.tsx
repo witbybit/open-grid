@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { GridProvider, GridView, useClientGrid, createLocalStorageAdapter } from '@open-grid/react';
+import { GridProvider, GridView, createLocalStorageAdapter } from '@open-grid/react';
 import type { AggregationDef, ColumnDef, CellRendererProps, GroupVisualRow } from '@open-grid/react';
+import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@ const ROWS = generateRows(500);
 
 // ── Group row renderer ────────────────────────────────────────────────────────
 
-function GroupRowRenderer({ visualRow, api }: { visualRow: GroupVisualRow<SalesRow>; api: ReturnType<typeof useClientGrid<SalesRow>> }) {
+function GroupRowRenderer({ visualRow, api }: { visualRow: GroupVisualRow<SalesRow>; api: ReturnType<typeof useOwnedClientGrid<SalesRow>> }) {
 	const isExpanded = api.isGroupExpanded(visualRow.groupId);
 	const agg = visualRow.aggregateValues;
 
@@ -289,7 +290,7 @@ function Toolbar({
 	showPanel,
 	onTogglePanel,
 }: {
-	api: ReturnType<typeof useClientGrid<SalesRow>>;
+	api: ReturnType<typeof useOwnedClientGrid<SalesRow>>;
 	showPanel: boolean;
 	onTogglePanel: () => void;
 }) {
@@ -340,7 +341,7 @@ function ToolBtn({ children, onClick, title, accent }: { children: React.ReactNo
 
 // ── Inner component ───────────────────────────────────────────────────────────
 
-function RealtimeGroupingDemoInner({ api }: { api: ReturnType<typeof useClientGrid<SalesRow>> }) {
+function RealtimeGroupingDemoInner({ api }: { api: ReturnType<typeof useOwnedClientGrid<SalesRow>> }) {
 	const [showPanel, setShowPanel] = useState(true);
 
 	useEffect(() => {
@@ -390,7 +391,7 @@ function RealtimeGroupingDemoInner({ api }: { api: ReturnType<typeof useClientGr
 // ── Page export ───────────────────────────────────────────────────────────────
 
 export default function RealtimeGroupingDemo() {
-	const api = useClientGrid<SalesRow>({
+	const api = useOwnedClientGrid<SalesRow>({
 		columns: COLUMNS,
 		rows: ROWS,
 		persistence: createLocalStorageAdapter('open-grid-sales-demo'),

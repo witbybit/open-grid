@@ -9,9 +9,10 @@
  *   - rowSelectionChanged event →  reactive event log
  */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { GridView, GridProvider, GridEventName, useClientGrid, useGridKeySelector, useGridApi } from '@open-grid/react';
+import { GridView, GridProvider, GridEventName, useGridKeySelector, useGridApi } from '@open-grid/react';
 import type { ColumnDef, GridApi } from '@open-grid/react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
+import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
@@ -192,7 +193,7 @@ export default function RowMultiSelectDemo() {
 	const [lastEvent, setLastEvent] = useState<string>('—');
 	const [bulkTag, setBulkTag] = useState<string>('');
 
-	const api = useClientGrid<OrderRow>({
+	const api = useOwnedClientGrid<OrderRow>({
 		rows,
 		columns: COLUMNS,
 		getRowId: (r) => r.id,
@@ -249,8 +250,8 @@ export default function RowMultiSelectDemo() {
 						</div>
 						<p className='text-[11px] text-slate-400 leading-snug'>
 							Pass <code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>rowSelection: 'multiple'</code> to{' '}
-							<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>useClientGrid</code>. A checkbox column
-							is auto-injected and pinned — no manual column def needed.
+							<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>Grid</code>. A checkbox column is
+							auto-injected and pinned — no manual column def needed.
 						</p>
 					</div>
 					<div className='flex-1 bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5'>

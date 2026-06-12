@@ -20,7 +20,7 @@ export interface ClientGridPaginationResult<TRowData> {
  * const { pageRows, page, pageCount, setPage } = useClientGridPagination(allRows, { pageSize: 50 });
  * return (
  *   <div>
- *     <ClientGrid rows={pageRows} columns={cols} />
+ *     <Grid mode="client" rows={pageRows} columns={cols} />
  *     <GridPagination page={page} pageCount={pageCount} onPageChange={setPage} />
  *   </div>
  * );

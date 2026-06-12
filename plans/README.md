@@ -62,6 +62,7 @@
 27. `027-render-engine-viewport-layout-coordinator.md` - P0 renderer hardening after 026; extracts viewport/layout orchestration and scroll-into-view targeting so `RenderEngine` can step back further before deeper pipeline cuts
 28. `028-public-react-surface-hardening.md` - P0 React/public API hardening after 027; splits the overloaded OpenGrid surface into explicit entrypoints and migrates the demo onto the recommended contract before the API hardens further
 29. `029-react-hook-lifecycle-contract-hardening.md` - P0 React hook hardening after 028; separates initial-only lifecycle config from live updates so the hook contract becomes as explicit as the component surface
+30. `030-single-grid-entrypoint-migration.md` - P1 React API consolidation after 029; replaces the remaining public grid variants with one discriminated-union `Grid` entrypoint and migrates the demo to it
 
 ## Dependency graph
 
@@ -95,6 +96,7 @@
 027  (render-engine viewport/layout coordinator) - follows 026; moves viewport layout computation, recycling, and scroll-targeting out of RenderEngine
 028  (public react surface hardening) - follows 027; splits the overloaded public React surface into explicit entrypoints before the API becomes sticky in demos and docs
 029  (react hook lifecycle contract hardening) - follows 028; splits initial-only hook config from live inputs so warnings stop carrying the contract
+030  (single grid entrypoint migration) - follows 029; collapses the remaining public React grid variants into one discriminated-union `Grid` component
 ```
 
 ## Notes
@@ -128,6 +130,7 @@
 - Plan 027 is implemented in the working tree and verified on 2026-06-13: viewport/layout orchestration and scroll-into-view targeting now live in `renderViewportCoordinator.ts`, and `RenderEngine` delegates the last layout bridge.
 - Plan 028 is the next API lock-in step: split the React surface into explicit ownership/view entrypoints and migrate the demo to the better contract before go-live.
 - Plan 029 is implemented and verified on 2026-06-13: the React hook lifecycle now has explicit initial/live entrypoints, the wrapper components use that split internally, and the demo plus React package still build and test cleanly.
+- Plan 030 is the next API consolidation step: replace the remaining public grid variants with one discriminated-union `Grid` entrypoint and migrate the demo to it.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

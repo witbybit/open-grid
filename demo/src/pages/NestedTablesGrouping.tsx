@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { GridView, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps, type GridApi, type VisualRow } from '@open-grid/react';
+import { GridView, GridProvider, type ColumnDef, type CellRendererProps, type GridApi, type VisualRow } from '@open-grid/react';
+import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
 import {
 	Layers,
 	FolderTree,
@@ -235,7 +236,7 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 	);
 
 	// Initialize local child grid store hook
-	const detailApi = useClientGrid<OrderItemRow>({
+	const detailApi = useOwnedClientGrid<OrderItemRow>({
 		rows: items,
 		columns: detailColumns,
 	});
@@ -358,7 +359,7 @@ export default function NestedTablesGrouping() {
 		[]
 	);
 
-	const groupApi = useClientGrid<EmployeeRow>({
+	const groupApi = useOwnedClientGrid<EmployeeRow>({
 		rows: groupRows,
 		columns: groupingColumns,
 		initialState: {
@@ -437,7 +438,7 @@ export default function NestedTablesGrouping() {
 		[]
 	);
 
-	const treeApi = useClientGrid<FileNodeRow>({
+	const treeApi = useOwnedClientGrid<FileNodeRow>({
 		rows: treeRows,
 		columns: treeColumns,
 		initialState: {
@@ -477,7 +478,7 @@ export default function NestedTablesGrouping() {
 		[]
 	);
 
-	const masterApi = useClientGrid<OrderRow>({
+	const masterApi = useOwnedClientGrid<OrderRow>({
 		rows: masterRows,
 		columns: masterColumns,
 		initialState: {

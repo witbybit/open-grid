@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { GridEventName, GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
+import React, { useState, useEffect } from 'react';
+import { GridEventName, GridProvider, useGridKeySelector, type GridApi } from '@open-grid/react';
 import { CustomShowcaseRow, GridView } from '../components/GridShared';
 import { ShieldCheck, BarChart3, Star, AlertTriangle, Play, RefreshCw, Gauge } from 'lucide-react';
 
-type ClientApi = ReturnType<typeof useClientGrid<CustomShowcaseRow>>;
-
 interface CustomEditorRendererProps {
-	api: ClientApi;
+	api: GridApi<CustomShowcaseRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;

@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { GridProvider, useClientGrid, useGridKeySelector } from '@open-grid/react';
+import { GridProvider, useGridKeySelector, type GridApi } from '@open-grid/react';
 import { PerformanceRow, GridView } from '../components/GridShared';
 import { Layout, Maximize2, Cpu, Compass, CheckCircle2 } from 'lucide-react';
 
-type DynamiclayoutApi = ReturnType<typeof useClientGrid<PerformanceRow>>;
+type DynamiclayoutApi = GridApi<PerformanceRow>;
 interface DynamicLayoutProps {
 	api: DynamiclayoutApi;
 	editTrigger: 'singleClick' | 'doubleClick';

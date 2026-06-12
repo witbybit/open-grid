@@ -5,10 +5,11 @@
  * they ship inside the package, not here in the demo.
  */
 import React, { useMemo, useState } from 'react';
-import { GridProvider, useClientGrid, multiSelectColumnType, dropdownColumnType, numberColumnType } from '@open-grid/react';
+import { GridProvider, multiSelectColumnType, dropdownColumnType, numberColumnType } from '@open-grid/react';
 import type { ColumnDef, ColumnTypeDefinition, DropdownOption } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
 import { CheckSquare, Tag, Calendar, List, Hash, Film, Sparkles, Code2, ChevronRight, Box } from 'lucide-react';
+import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
@@ -361,7 +362,7 @@ const columns: ColumnDef<Row>[] = [
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
-function NativeCellTypesDemoInner({ api }: { api: ReturnType<typeof useClientGrid<SkaterRow>> }) {
+function NativeCellTypesDemoInner({ api }: { api: ReturnType<typeof useOwnedClientGrid<SkaterRow>> }) {
 	const [activeType, setActiveType] = useState<number | null>(null);
 	const [showSnippet, setShowSnippet] = useState(false);
 
@@ -511,7 +512,7 @@ function NativeCellTypesDemoInner({ api }: { api: ReturnType<typeof useClientGri
 
 export default function NativeCellTypesDemo() {
 	const rows = useMemo(() => generateSkaterRows(50), []);
-	const api = useClientGrid<SkaterRow>({ rows, columns: SKATER_COLUMNS, columnTypes: SKATER_COLUMN_TYPES });
+	const api = useOwnedClientGrid<SkaterRow>({ rows, columns: SKATER_COLUMNS, columnTypes: SKATER_COLUMN_TYPES });
 
 	return (
 		<GridProvider api={api}>

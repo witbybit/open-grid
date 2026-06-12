@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { GridEventName, GridProvider, useServerGrid, GridPagination } from '@open-grid/react';
+import { GridEventName, GridProvider, GridPagination } from '@open-grid/react';
 import { GridView } from '../components/GridShared';
-import { Terminal, Server, Activity, ShieldAlert, Cpu, Network, Clock } from 'lucide-react';
+import { Terminal, Server, Activity, ShieldAlert, Cpu } from 'lucide-react';
+import { useOwnedServerGrid } from '../hooks/useOwnedGrid';
 
-type ServerApi = ReturnType<typeof useServerGrid<any>>;
+type ServerApi = ReturnType<typeof useOwnedServerGrid<any>>;
 interface InfiniteServerScrollProps {
 	api: ServerApi;
 	editTrigger: 'singleClick' | 'doubleClick';

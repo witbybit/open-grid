@@ -8,15 +8,13 @@ import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-
 import {
 	GridProvider,
 	GridEventName,
+	Grid,
 	GridView,
-	ClientGrid,
 	PortalCell,
 	PortalManager,
 	useGridKeySelector,
 	useGridApi,
 	useGridSelector,
-	useClientGrid,
-	useServerGrid,
 	GridPagination,
 	useClientGridPagination,
 } from './index.js';
@@ -751,79 +749,6 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should keep useClientGrid api stable when callers pass inline columns', () => {
-		const apis: Array<ReturnType<typeof useClientGrid<TestRow>>> = [];
-
-		const HookHarness = ({ label }: { label: string }) => {
-			const api = useClientGrid<TestRow>({
-				initial: {
-					getRowId: (row) => row.id,
-				},
-				live: {
-					rows: [{ id: '1', name: label }],
-					columns: [{ field: 'name', header: 'Name', width: 100 }],
-				},
-			});
-			apis.push(api);
-			return <span data-testid='api-count'>{apis.length}</span>;
-		};
-
-		const { rerender, unmount } = render(<HookHarness label='Product A' />);
-		rerender(<HookHarness label='Product B' />);
-
-		expect(apis.length).toBeGreaterThanOrEqual(2);
-		expect(apis[0]).toBe(apis[apis.length - 1]);
-
-		unmount();
-	});
-
-	it('should keep hook-created server grids alive through React StrictMode effect replay', async () => {
-		const datasource = {
-			getRows: vi.fn(async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
-				rows: Array.from({ length: endRow - startRow }, (_, index) => ({
-					id: `${startRow + index}`,
-					name: `Server Row ${startRow + index}`,
-				})),
-				totalCount: 100,
-			})),
-		};
-
-		const StrictServerHarness = () => {
-			const api = useServerGrid<TestRow>({
-				initial: {
-					getRowId: (row) => row.id,
-					initialState: { masterDetailEnabled: false },
-					persistence: undefined,
-					rowOverscanPx: 20,
-					colBuffer: 1,
-					overscanAdaptive: true,
-				},
-				live: {
-					datasource,
-					blockSize: 20,
-					columns: [{ field: 'name', header: 'Name', width: 140 }],
-				},
-			});
-
-			return (
-				<GridProvider api={api}>
-					<GridView api={api} enableNavigation={false} />
-				</GridProvider>
-			);
-		};
-
-		const { unmount } = render(
-			<React.StrictMode>
-				<StrictServerHarness />
-			</React.StrictMode>
-		);
-
-		await screen.findByText('Server Row 0');
-		expect(datasource.getRows).toHaveBeenCalled();
-
-		unmount();
-	});
-
 	it('should rerender custom cell renderer when cell value is programmatically updated', async () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],
@@ -1502,6 +1427,37 @@ describe('useClientGridPagination', () => {
 });
 
 describe('explicit React entrypoints', () => {
+	it('Grid owns the api and fires onGridReady while descendants can still read useGridApi', async () => {
+		const onGridReady = vi.fn();
+		const HookRenderer = () => {
+			const api = useGridApi<TestRow>();
+			return <span data-testid='api-hook'>{api ? 'yes' : 'no'}</span>;
+		};
+
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid
+					mode='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[
+						{
+							field: 'name',
+							header: 'Name',
+							width: 100,
+							renderer: { kind: 'react', component: HookRenderer },
+						},
+					]}
+					enableNavigation={false}
+					onGridReady={onGridReady}
+				/>
+			</div>
+		);
+
+		await waitFor(() => expect(onGridReady).toHaveBeenCalledTimes(1));
+		expect(onGridReady.mock.calls[0][0]).toEqual(expect.objectContaining({ mode: 'client' }));
+		expect(screen.getByTestId('api-hook').textContent).toBe('yes');
+	});
+
 	it('GridView renders against an explicit api', async () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Alice' }],
@@ -1520,62 +1476,15 @@ describe('explicit React entrypoints', () => {
 		grid.api.destroy();
 	});
 
-	it('useClientGrid accepts an explicit lifecycle shape without initial-only warnings', async () => {
-		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const cols: ColumnDef<TestRow>[] = [{ field: 'name', header: 'Name', width: 100 }];
-
-		const Harness = ({ rows }: { rows: TestRow[] }) => {
-			const api = useClientGrid<TestRow>({
-				initial: {
-					getRowId: (row) => row.id,
-					initialState: { masterDetailEnabled: false },
-					persistence: undefined,
-					rowOverscanPx: 24,
-					colBuffer: 1,
-					overscanAdaptive: true,
-				},
-				live: {
-					rows,
-					columns: cols,
-				},
-			});
-
-			return (
-				<GridProvider api={api}>
-					<GridView api={api} enableNavigation={false} />
-				</GridProvider>
-			);
-		};
-
-		const { rerender } = render(
-			<div style={{ width: 400, height: 300 }}>
-				<Harness rows={[{ id: '1', name: 'Alice' }]} />
-			</div>
-		);
-
-		await act(async () => {});
-
-		rerender(
-			<div style={{ width: 400, height: 300 }}>
-				<Harness
-					rows={[
-						{ id: '1', name: 'Alice' },
-						{ id: '2', name: 'Bob' },
-					]}
-				/>
-			</div>
-		);
-
-		await act(async () => {});
-
-		expect(warnSpy).not.toHaveBeenCalled();
-		warnSpy.mockRestore();
-	});
-
-	it('ClientGrid can own its api directly', async () => {
+	it('Grid can own its api directly', async () => {
 		render(
 			<div style={{ width: 400, height: 300 }}>
-				<ClientGrid rows={[{ id: '1', name: 'Alice' }]} columns={[{ field: 'name', header: 'Name', width: 100 }]} enableNavigation={false} />
+				<Grid
+					mode='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[{ field: 'name', header: 'Name', width: 100 }]}
+					enableNavigation={false}
+				/>
 			</div>
 		);
 
