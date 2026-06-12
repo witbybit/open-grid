@@ -14,6 +14,8 @@
 | 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)               | DONE   | 53fe61f |
 | 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)           | REVIEW | 39c83e3 |
 | 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)         | DONE   | 39c83e3 |
+| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)             | TODO   | 94c9453 |
+| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                         | TODO   | 94c9453 |
 
 ## Execution order
 
@@ -29,6 +31,8 @@
 10. `010-core-architecture-hardening.md` - implemented after 009; per-row versions, state split, renderer decomposition, editing lifecycle, and persistence API
 11. `011-feature-boundary-architecture.md` - next P0 architecture plan; establishes feature controllers, mutation effects, and adapter boundaries so new features stop requiring cross-file patches
 12. `012-data-mutation-kernel-hardening.md` - P0 correctness and architecture follow-up; fixes formula fill regression and makes cell data mutation a single owned pipeline
+13. `013-thin-engine-effects-boundary.md` - P0 architecture lock-in; makes `GridEngine` a thin kernel, completes typed feature effect routing, and activates the skipped engine-size guard
+14. `014-runtime-port-inversion.md` - P0 boundary hardening after 013; breaks the `GridStore -> GridEngine -> models -> rowModel` cycle so row/data/formula features stop requiring cross-file protocol patches
 
 ## Dependency graph
 
@@ -45,6 +49,8 @@
 010  (core architecture hardening)   - follows 009
 011  (feature boundary architecture) - follows 009/010
 012  (data mutation kernel)         - follows 011; required before new edit/fill/formula/paste features
+013  (thin engine effects boundary) - follows 012; required before the next feature wave so feature side effects and engine ownership are enforceable
+014  (runtime port inversion)       - follows 013; required before deeper row-model, formula, and store-surface feature work so internal modules depend on ports instead of concrete engine/store reach-through
 ```
 
 ## Notes
@@ -54,7 +60,9 @@
 - Plan 009 captures the AG Grid-level rendering architecture vision for grouping, sticky grouping, column grouping, layout layers, and layout-plan-driven rendering. Treat it as the north-star plan before adding deeper grouping features.
 - Plan 010 was implemented in the recent architecture hardening commits and should be treated as the baseline for future plans.
 - Plan 011 was implemented at `39c83e3` and reviewed. It improved file boundaries, but core tests are red in `fillRange.test.ts`, `GridEngine.ts < 800` is still skipped, and feature controllers do not yet consistently use `GridChangeApplier`.
-- Plan 012 is the required next step before feature work: make data/formula cell mutation one coherent kernel and complete the mutation/effects boundary started in Plan 011.
+- Plan 012 is implemented and verified on 2026-06-12: core build/test, React build/test, and sequential demo build pass. It fixed the formula fill regression and established the data mutation kernel.
+- Plan 013 is the next required architecture lock-in before feature work: reduce `GridEngine.ts` below the real 800-line guard, extract subscription/state-reaction responsibilities, close remaining raw feature side-effect access, type `GridChange.reason`, and remove React's remaining `@open-grid/core/internal` chart seam.
+- Plan 014 should follow immediately after 013. Its goal is to remove the remaining concrete runtime cycle between `GridStore`, `GridEngine`, `models`, and `rowModel`, which is the biggest remaining reason feature work still fans out across multiple files.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

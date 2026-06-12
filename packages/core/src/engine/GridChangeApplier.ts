@@ -4,8 +4,27 @@ import type { InvalidationManager, GridInvalidation } from '../renderer/invalida
 import type { EventBus } from '../events/EventBus.js';
 import type { CommandHistory } from '../commands/CommandHistory.js';
 
+export type GridChangeReason =
+	| 'columns:resize'
+	| 'columns:order'
+	| 'columns:reorder-toggle'
+	| 'columns:set'
+	| 'grouping:set-group-by'
+	| 'grouping:add-group-by'
+	| 'grouping:remove-group-by'
+	| 'grouping:move-group-by'
+	| 'grouping:set-agg-defs'
+	| 'grouping:set-footer'
+	| 'grouping:set-sticky-rows'
+	| 'grouping:set-panel'
+	| 'selection:rows'
+	| 'editing:start'
+	| 'editing:stop'
+	| 'editing:validation'
+	| 'editing:save-failed';
+
 export interface GridChange<TRowData = unknown> {
-	reason: string;
+	reason: GridChangeReason;
 	state?: GridStateUpdater<TRowData>;
 	invalidations?: GridInvalidation[];
 	events?: Array<{

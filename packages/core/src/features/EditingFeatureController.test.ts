@@ -35,13 +35,9 @@ function makeController(store: GridStore<TestRow>): ClientRowModelController<Tes
 function getFeatureContext(store: GridStore<TestRow>): GridFeatureContext<TestRow> {
 	const engine = (store as any).engine;
 	return {
-		stateManager: engine.stateManager,
 		columns: engine.columns,
-		invalidation: engine.invalidation,
-		eventBus: engine.eventBus,
-		changeApplier: engine.changeApplier,
-		commandHistory: engine.commandHistory,
-		requestRender: (reason: string) => engine.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason }),
+		getState: () => engine.stateManager.getState(),
+		applyChange: (change) => engine.changeApplier.apply(change),
 	};
 }
 

@@ -285,14 +285,13 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const ctrl = makeController(store);
 			const engine = (store as any).engine;
 
-			const spyRow = vi.spyOn(engine.invalidation, 'invalidateRow');
-			const spyHeaders = vi.spyOn(engine.invalidation, 'invalidateHeaders');
+			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
 
 			store.applyRowSelectionGesture({ kind: 'replace', rowIds: ['1', '3'] });
 
-			expect(spyRow).toHaveBeenCalledWith('1', expect.anything());
-			expect(spyRow).toHaveBeenCalledWith('3', expect.anything());
-			expect(spyHeaders).toHaveBeenCalled();
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'row', rowId: '1' }));
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'row', rowId: '3' }));
+			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
 
 			ctrl.dispose();
 			store.destroy();

@@ -4,25 +4,14 @@ import type { GridFeatureContext } from './GridFeatureContext.js';
 export class ColumnFeatureController<TRowData = unknown> {
 	constructor(private readonly ctx: GridFeatureContext<TRowData>) {}
 
-	// ─── private helpers ──────────────────────────────────────────────────────
-
-	private applyColumnWidth(colField: string, width: number): void {
-		this.ctx.changeApplier.apply({
-			reason: 'column resize',
-			state: (state) => ({ columnWidths: { ...state.columnWidths, [colField]: width } }),
-			invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
-			events: [{ type: GridEventName.columnResized, payload: { colField, width } as never }],
-		});
-	}
-
 	private applyColumnOrder(columns: ColumnDef<TRowData>[]): void {
-		const prevFields = this.ctx.stateManager.getState().columns.map((column) => column.field);
+		const prevFields = this.ctx.getState().columns.map((column) => column.field);
 		const nextFields = columns.map((column) => column.field);
 		if (prevFields.length === nextFields.length && prevFields.every((field, index) => field === nextFields[index])) {
 			return;
 		}
-		this.ctx.changeApplier.apply({
-			reason: 'column order',
+		this.ctx.applyChange({
+			reason: 'columns:order',
 			state: { columns },
 			invalidations: [{ kind: 'full' }],
 			events: [{ type: GridEventName.columnOrderChanged, payload: { columns, columnFields: nextFields } as never }],
@@ -36,24 +25,37 @@ export class ColumnFeatureController<TRowData = unknown> {
 		return nextColumns;
 	}
 
-	// ─── public API ───────────────────────────────────────────────────────────
-
 	public resizeColumn(colField: string, width: number, undoable = true): void {
-		const oldWidth = this.ctx.stateManager.getState().columnWidths[colField] ?? this.ctx.stateManager.getState().defaultColWidth;
+		const state = this.ctx.getState();
+		const oldWidth = state.columnWidths[colField] ?? state.defaultColWidth;
 		if (oldWidth === width) return;
 
-		this.applyColumnWidth(colField, width);
-
-		if (undoable) {
-			this.ctx.commandHistory.add({
-				undo: () => this.applyColumnWidth(colField, oldWidth),
-				redo: () => this.applyColumnWidth(colField, width),
-			});
-		}
+		this.ctx.applyChange({
+			reason: 'columns:resize',
+			state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: width } }),
+			invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+			events: [{ type: GridEventName.columnResized, payload: { colField, width } as never }],
+			...(undoable
+				? {
+						undo: {
+							reason: 'columns:resize',
+							state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: oldWidth } }),
+							invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+							events: [{ type: GridEventName.columnResized, payload: { colField, width: oldWidth } as never }],
+						},
+						redo: {
+							reason: 'columns:resize',
+							state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: width } }),
+							invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+							events: [{ type: GridEventName.columnResized, payload: { colField, width } as never }],
+						},
+					}
+				: {}),
+		});
 	}
 
 	public moveColumn(colField: string, toIndex: number): void {
-		const state = this.ctx.stateManager.getState();
+		const state = this.ctx.getState();
 		const displayedColumns = this.ctx.columns.getDisplayedColumns();
 		const fromIndex = displayedColumns.findIndex((column) => column.field === colField);
 		if (fromIndex === -1 || !Number.isFinite(toIndex)) return;
@@ -67,7 +69,7 @@ export class ColumnFeatureController<TRowData = unknown> {
 	}
 
 	public setColumnOrderByFields(colFields: string[]): void {
-		const state = this.ctx.stateManager.getState();
+		const state = this.ctx.getState();
 		const orderedFieldSet = new Set<string>();
 		const orderedFields = colFields.filter((field) => {
 			if (orderedFieldSet.has(field)) return false;
@@ -87,8 +89,8 @@ export class ColumnFeatureController<TRowData = unknown> {
 	}
 
 	public setColumnReorderEnabled(enabled: boolean): void {
-		this.ctx.changeApplier.apply({
-			reason: 'column reorder toggle',
+		this.ctx.applyChange({
+			reason: 'columns:reorder-toggle',
 			state: { enableColumnReorder: enabled },
 			invalidations: [{ kind: 'headers' }],
 			events: [{ type: GridEventName.columnReorderToggled, payload: { enabled } as never }],
@@ -96,7 +98,7 @@ export class ColumnFeatureController<TRowData = unknown> {
 	}
 
 	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {
-		const state = this.ctx.stateManager.getState();
+		const state = this.ctx.getState();
 		const prevColumns = state.columns;
 		const prevWidths = state.columnWidths;
 
@@ -110,21 +112,21 @@ export class ColumnFeatureController<TRowData = unknown> {
 			return acc;
 		}, {});
 
-		this.ctx.changeApplier.apply({
-			reason: 'columns',
+		this.ctx.applyChange({
+			reason: 'columns:set',
 			state: { columns, columnWidths: nextWidths },
 			invalidations: [{ kind: 'full' }],
 			events: [{ type: GridEventName.columnsChanged, payload: { columns, columnFields: columns.map((c) => c.field) } as never }],
 			...(undoable
 				? {
 						undo: {
-							reason: 'columns',
+							reason: 'columns:set',
 							state: { columns: prevColumns, columnWidths: prevWidths },
 							invalidations: [{ kind: 'full' }],
 							requestRender: true,
 						},
 						redo: {
-							reason: 'columns',
+							reason: 'columns:set',
 							state: { columns, columnWidths: nextWidths },
 							invalidations: [{ kind: 'full' }],
 							requestRender: true,
@@ -135,7 +137,7 @@ export class ColumnFeatureController<TRowData = unknown> {
 	}
 
 	public getColumnState(): ColumnState[] {
-		const state = this.ctx.stateManager.getState();
+		const state = this.ctx.getState();
 		return state.columns.map((col) => {
 			const cs: ColumnState = { field: col.field };
 			const width = state.columnWidths[col.field];
@@ -149,7 +151,7 @@ export class ColumnFeatureController<TRowData = unknown> {
 		for (const cs of states) {
 			if (cs.width !== undefined) this.resizeColumn(cs.field, cs.width, false);
 			if (cs.hide !== undefined) {
-				const columns = this.ctx.stateManager.getState().columns;
+				const columns = this.ctx.getState().columns;
 				const column = columns.find((candidate) => candidate.field === cs.field);
 				if (column && column.hide !== cs.hide) {
 					this.setColumns(

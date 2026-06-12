@@ -35,10 +35,10 @@ import { GroupingFeatureController } from '../features/GroupingFeatureController
 import { EditingFeatureController } from '../features/EditingFeatureController.js';
 import { RowSelectionFeatureController } from '../features/RowSelectionFeatureController.js';
 import { DataMutationController } from '../features/DataMutationController.js';
-import { defaultGridScheduler } from '../renderer/gridScheduler.js';
+import { GridStateFeatureController } from '../features/GridStateFeatureController.js';
+import { CellNotificationController } from './CellNotificationController.js';
 
 export class GridEngine<TRowData = unknown> {
-	// Models
 	public readonly data: DataModel<TRowData>;
 	public readonly columns: ColumnModel<TRowData>;
 	public readonly viewport: ViewportModel<TRowData>;
@@ -47,7 +47,6 @@ export class GridEngine<TRowData = unknown> {
 	public readonly edit: EditModel;
 	public readonly cellAccess: CellAccessModel<TRowData>;
 
-	// Infrastructure
 	public readonly stateManager: StateManager<TRowData>;
 	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus<TRowData>;
@@ -58,12 +57,12 @@ export class GridEngine<TRowData = unknown> {
 	public readonly editingFeature: EditingFeatureController<TRowData>;
 	public readonly rowSelectionFeature: RowSelectionFeatureController<TRowData>;
 	public readonly dataMutation: DataMutationController<TRowData>;
+	public readonly stateFeature: GridStateFeatureController<TRowData>;
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 
 	private rowModel: RowModel<TRowData> | null = null;
 
-	// Monotonic change tracking versions
 	public geometryVersion = 0;
 	public rowModelVersion = 0;
 	public columnVersion = 0;
@@ -72,11 +71,9 @@ export class GridEngine<TRowData = unknown> {
 	// Keyed directly on the engine (not in GridState) so updates are zero-allocation.
 	public readonly rowVersions = new Map<string, number>();
 
-	// Scrolling states
 	public isScrolling = false;
 	public isScrollFrameActive = false;
 
-	// Performance counters
 	public getCellValueCallsDuringScroll = 0;
 	public valueGetterCallsDuringScroll = 0;
 	public formulaCallsDuringScroll = 0;
@@ -85,19 +82,12 @@ export class GridEngine<TRowData = unknown> {
 	public customRendererWarmHits = 0;
 	public customRendererWarmMisses = 0;
 
-	// Cell subscriptions are keyed by visible row id and column field.
-	public readonly cellSubscriptions = new Map<string, Set<CellSubscription>>();
-	public readonly colSubscriptions = new Map<string, Set<CellSubscription>>();
-	public readonly cellUpdateBatch = new Map<string, Set<string>>();
-	public batchFlushScheduled = false;
-	private _batchedUpdates = true;
+	private readonly cellNotifications: CellNotificationController<TRowData>;
 	private renderTransactionDepth = 0;
 	private pendingRenderReason: string | null = null;
 
-	// RenderEngine callbacks to bridge rendering stats
 	public getRenderStats?: () => RenderStats;
 	public resetRenderStats?: () => void;
-
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.commandHistory = new CommandHistory();
 		this.eventBus = new EventBus<TRowData>();
@@ -113,6 +103,13 @@ export class GridEngine<TRowData = unknown> {
 		this.selection = new SelectionModel();
 		this.edit = new EditModel();
 		this.cellAccess = new CellAccessModel<TRowData>();
+		this.cellNotifications = new CellNotificationController<TRowData>({
+			data: this.data,
+			eventBus: this.eventBus,
+			invalidation: this.invalidation,
+			requestRender: (reason) => this.requestRender(reason),
+			rowVersions: this.rowVersions,
+		});
 
 		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
 
@@ -169,16 +166,16 @@ export class GridEngine<TRowData = unknown> {
 
 		// Initialize feature controllers (columns model will be linked after sub-models init)
 		const featureContext = {
-			stateManager: this.stateManager,
 			columns: this.columns,
-			invalidation: this.invalidation,
-			eventBus: this.eventBus,
-			changeApplier: this.changeApplier,
-			commandHistory: this.commandHistory,
-			requestRender: (reason: string) => this.requestRender(reason),
+			getState: () => this.stateManager.getState(),
+			applyChange: (change: import('./GridChangeApplier.js').GridChange<TRowData>) => this.changeApplier.apply(change),
 		};
 		this.columnFeature = new ColumnFeatureController<TRowData>(featureContext);
-		this.groupingFeature = new GroupingFeatureController<TRowData>(featureContext, () => this.rowModel);
+		this.groupingFeature = new GroupingFeatureController<TRowData>({
+			ctx: featureContext,
+			getRowModel: () => this.rowModel,
+			invalidation: this.invalidation,
+		});
 		this.editingFeature = new EditingFeatureController<TRowData>({
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
@@ -187,6 +184,13 @@ export class GridEngine<TRowData = unknown> {
 			setCellValue: (rowId, colField, value, undoable) => this.setCellValue(rowId, colField, value, undoable),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
+		this.stateFeature = new GridStateFeatureController<TRowData>({
+			stateManager: this.stateManager,
+			invalidation: this.invalidation,
+			commandHistory: this.commandHistory,
+			eventBus: this.eventBus,
+			requestRender: (reason) => this.requestRender(reason),
+		});
 		this.dataMutation = new DataMutationController<TRowData>({
 			data: this.data,
 			columns: this.columns,
@@ -195,7 +199,7 @@ export class GridEngine<TRowData = unknown> {
 			getRowModel: () => this.rowModel,
 			syncFormulaForCell: (rowId, colField, value) => this.syncFormulaForCell(rowId, colField, value),
 			invalidateFormulaCell: (rowId, colField) => this.invalidateFormulaCell(rowId, colField),
-			getBatchedUpdates: () => this._batchedUpdates,
+			getBatchedUpdates: () => this.batchedUpdates,
 			enqueueCellUpdate: (rowId, colField) => this.enqueueCellUpdate(rowId, colField),
 			scheduleBatchFlush: () => this.scheduleBatchFlush(),
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
@@ -227,19 +231,19 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public getRowOverscanPx(): number {
-		return this.stateManager.getState().rowOverscanPx ?? 400;
+		return this.stateFeature.getRowOverscanPx();
 	}
 
 	public setRowOverscanPx(px: number): void {
-		this.stateManager.setState({ rowOverscanPx: px });
+		this.stateFeature.setRowOverscanPx(px);
 	}
 
 	public getColBuffer(): number {
-		return this.stateManager.getState().colBuffer ?? 1;
+		return this.stateFeature.getColBuffer();
 	}
 
 	public setColBuffer(colBuffer: number): void {
-		this.stateManager.setState({ colBuffer });
+		this.stateFeature.setColBuffer(colBuffer);
 	}
 
 	public selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'api'): void {
@@ -263,54 +267,19 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public setStyleSlots(styleSlots: GridState<TRowData>['styleSlots']): void {
-		this.stateManager.setState({ styleSlots });
-		this.invalidation.invalidateViewport('style slots');
-		this.invalidation.invalidateHeaders('style slots');
-		this.invalidation.invalidateOverlay('style slots');
-		this.requestRender('style slots');
+		this.stateFeature.setStyleSlots(styleSlots);
 	}
 
 	public resizeRow(rowId: string, height: number, undoable = true): void {
-		const oldHeight = this.stateManager.getState().rowHeights[rowId] ?? this.stateManager.getState().defaultRowHeight;
-		if (oldHeight === height) return;
-
-		this.applyRowHeight(rowId, height);
-
-		if (undoable) {
-			this.commandHistory.add({
-				undo: () => this.applyRowHeight(rowId, oldHeight),
-				redo: () => this.applyRowHeight(rowId, height),
-			});
-		}
+		this.stateFeature.resizeRow(rowId, height, undoable);
 	}
 
 	public setSortModel(sortModel: SortModel | null, undoable = true): void {
-		const oldSort = this.stateManager.getState().sortModel;
-		this.stateManager.setState({ sortModel });
-		this.invalidation.invalidateHeaders('sort');
-		this.invalidation.invalidateFull('sort');
-		this.requestRender('sort');
-
-		if (undoable) {
-			this.commandHistory.add({
-				undo: () => this.stateManager.setState({ sortModel: oldSort }),
-				redo: () => this.stateManager.setState({ sortModel }),
-			});
-		}
+		this.stateFeature.setSortModel(sortModel, undoable);
 	}
 
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
-		const oldFilter = this.stateManager.getState().filterModel;
-		this.stateManager.setState({ filterModel });
-		this.invalidation.invalidateFull('filter');
-		this.requestRender('filter');
-
-		if (undoable) {
-			this.commandHistory.add({
-				undo: () => this.stateManager.setState({ filterModel: oldFilter }),
-				redo: () => this.stateManager.setState({ filterModel }),
-			});
-		}
+		this.stateFeature.setFilterModel(filterModel, undoable);
 	}
 
 	public setGroupBy(colIds: string[]): void {
@@ -426,14 +395,11 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public get batchedUpdates(): boolean {
-		return this._batchedUpdates;
+		return this.cellNotifications.batchedUpdates;
 	}
 
 	public set batchedUpdates(enabled: boolean) {
-		this._batchedUpdates = enabled;
-		if (!enabled && this.cellUpdateBatch.size > 0) {
-			this.flushCellUpdates();
-		}
+		this.cellNotifications.batchedUpdates = enabled;
 	}
 
 	public batch = (callback: () => void): void => {
@@ -449,159 +415,39 @@ export class GridEngine<TRowData = unknown> {
 	};
 
 	public scheduleBatchFlush(): void {
-		if (!this.batchFlushScheduled) {
-			this.batchFlushScheduled = true;
-			defaultGridScheduler.microtask(() => this.flushCellUpdates());
-		}
+		this.cellNotifications.scheduleBatchFlush();
 	}
 
 	public flushCellUpdates(): void {
-		if (this.cellUpdateBatch.size === 0) {
-			this.batchFlushScheduled = false;
-			return;
-		}
-		const batch = new Map(this.cellUpdateBatch);
-		this.cellUpdateBatch.clear();
-		this.batchFlushScheduled = false;
-		this.notifyBulkCellChange(batch);
+		this.cellNotifications.flushCellUpdates();
 	}
 
 	public enqueueCellUpdate(rowId: string, colField: string): void {
-		let fields = this.cellUpdateBatch.get(rowId);
-		if (!fields) {
-			fields = new Set<string>();
-			this.cellUpdateBatch.set(rowId, fields);
-		}
-		fields.add(colField);
+		this.cellNotifications.enqueueCellUpdate(rowId, colField);
 	}
 
 	public flushCellUpdatesSync(): void {
-		if (this.cellUpdateBatch.size > 0) {
-			this.flushCellUpdates();
-		}
+		this.cellNotifications.flushCellUpdatesSync();
 	}
 
 	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
-		// Bump per-row versions so the renderer freeze check can thaw only affected rows
-		for (const rowId of changes.keys()) {
-			this.rowVersions.set(rowId, (this.rowVersions.get(rowId) ?? 0) + 1);
-		}
-		// Clear caches and notify subscriptions for each changed cell
-		for (const [rowId, fields] of changes) {
-			for (const colField of fields) {
-				this.data.clearValueGetterCache(rowId, colField);
-				const cellKey = `${rowId}:${colField}`;
-				const cellSubs = this.cellSubscriptions.get(cellKey);
-				if (cellSubs) {
-					cellSubs.forEach((sub) => {
-						try {
-							sub.onStoreChange();
-						} catch (e) {
-							console.error(`GridEngine: Error in cell subscription notification`, e);
-						}
-					});
-				}
-			}
-		}
-		// Accumulate all invalidations, then fire ONE render event instead of N cellInvalidated events
-		const hasRenderConsumer =
-			this.eventBus.hasListeners(GridEventName.cellInvalidated) || this.eventBus.hasListeners(GridEventName.renderInvalidated);
-		if (hasRenderConsumer) {
-			for (const [rowId, fields] of changes) {
-				for (const colField of fields) {
-					this.invalidation.invalidateCell(rowId, colField, 'cell');
-				}
-				this.invalidation.invalidateRow(rowId, 'cell');
-			}
-			this.requestRender('bulk-cell-change');
-		}
+		this.cellNotifications.notifyBulkCellChange(changes);
 	}
 
 	public notifyCellChange(rowId: string, colField: string): void {
-		this.rowVersions.set(rowId, (this.rowVersions.get(rowId) ?? 0) + 1);
-		this.data.clearValueGetterCache(rowId, colField);
-		const cellKey = `${rowId}:${colField}`;
-		const cellSubs = this.cellSubscriptions.get(cellKey);
-		if (cellSubs) {
-			cellSubs.forEach((sub) => {
-				try {
-					sub.onStoreChange();
-				} catch (e) {
-					console.error(`GridEngine: Error in cell subscription notification`, e);
-				}
-			});
-		}
-		const hasRenderConsumer =
-			this.eventBus.hasListeners(GridEventName.cellInvalidated) || this.eventBus.hasListeners(GridEventName.renderInvalidated);
-		if (hasRenderConsumer) {
-			this.invalidation.invalidateCell(rowId, colField, 'cell');
-			this.invalidation.invalidateRow(rowId, 'cell');
-			this.eventBus.dispatchEvent(GridEventName.cellInvalidated, { rowId, colField });
-		}
+		this.cellNotifications.notifyCellChange(rowId, colField);
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
-		const cellKey = `${sub.rowId}:${sub.colField}`;
-		if (!this.cellSubscriptions.has(cellKey)) {
-			this.cellSubscriptions.set(cellKey, new Set());
-		}
-		this.cellSubscriptions.get(cellKey)!.add(sub);
-
-		if (!this.colSubscriptions.has(sub.colField)) {
-			this.colSubscriptions.set(sub.colField, new Set());
-		}
-		this.colSubscriptions.get(sub.colField)!.add(sub);
+		this.cellNotifications.registerCellSubscription(sub);
 	};
 
 	public unregisterCellSubscription = (sub: CellSubscription): void => {
-		const cellKey = `${sub.rowId}:${sub.colField}`;
-		const cellSet = this.cellSubscriptions.get(cellKey);
-		if (cellSet) {
-			cellSet.delete(sub);
-			if (cellSet.size === 0) {
-				this.cellSubscriptions.delete(cellKey);
-			}
-		}
-
-		const colSet = this.colSubscriptions.get(sub.colField);
-		if (colSet) {
-			colSet.delete(sub);
-			if (colSet.size === 0) {
-				this.colSubscriptions.delete(sub.colField);
-			}
-		}
+		this.cellNotifications.unregisterCellSubscription(sub);
 	};
 
 	public updateCellSubscription = (sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void => {
-		const oldCellKey = `${oldRowId}:${oldColField}`;
-		const oldCellSet = this.cellSubscriptions.get(oldCellKey);
-		if (oldCellSet) {
-			oldCellSet.delete(sub);
-			if (oldCellSet.size === 0) {
-				this.cellSubscriptions.delete(oldCellKey);
-			}
-		}
-
-		const newCellKey = `${newRowId}:${newColField}`;
-		if (!this.cellSubscriptions.has(newCellKey)) {
-			this.cellSubscriptions.set(newCellKey, new Set());
-		}
-		this.cellSubscriptions.get(newCellKey)!.add(sub);
-
-		if (oldColField !== newColField) {
-			const oldColSet = this.colSubscriptions.get(oldColField);
-			if (oldColSet) {
-				oldColSet.delete(sub);
-				if (oldColSet.size === 0) {
-					this.colSubscriptions.delete(oldColField);
-				}
-			}
-
-			if (!this.colSubscriptions.has(newColField)) {
-				this.colSubscriptions.set(newColField, new Set());
-			}
-			this.colSubscriptions.get(newColField)!.add(sub);
-		}
+		this.cellNotifications.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
 	};
 
 	// ── Row node selection ─────────────────────────────────────────────────────
@@ -667,23 +513,6 @@ export class GridEngine<TRowData = unknown> {
 	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {
 		this.columnFeature.setColumns(columns, undoable);
 	}
-
-	private applyRowHeight = (rowId: string, height: number): void => {
-		this.stateManager.setState((state) => ({
-			rowHeights: {
-				...state.rowHeights,
-				[rowId]: height,
-			},
-		}));
-		this.invalidation.invalidateGeometry('row resize');
-		this.invalidation.invalidateRow(rowId, 'row resize');
-
-		this.eventBus.dispatchEvent(GridEventName.rowResized, {
-			rowId,
-			height,
-		});
-		this.requestRender('row resize');
-	};
 
 	// State-to-coordinate change mapping bridge callback
 	private handleStateChanges = (prevState: GridState<TRowData>, updatedKeys: string[]): void => {
@@ -845,30 +674,13 @@ export class GridEngine<TRowData = unknown> {
 			const allCols = new Set([...Object.keys(prevWidths), ...Object.keys(currWidths)]);
 			allCols.forEach((colField) => {
 				if (prevWidths[colField] !== currWidths[colField]) {
-					const colSubs = this.colSubscriptions.get(colField);
-					if (colSubs) {
-						colSubs.forEach((sub) => {
-							try {
-								sub.onStoreChange();
-							} catch (e) {
-								console.error(`GridEngine: Error in column subscription notification`, e);
-							}
-						});
-					}
+					this.cellNotifications.notifyColumnSubscribers(colField);
 				}
 			});
 		}
 
 		if (updatedSet.has('globalVersion')) {
-			this.cellSubscriptions.forEach((subs) => {
-				subs.forEach((sub) => {
-					try {
-						sub.onStoreChange();
-					} catch (e) {
-						console.error(`GridEngine: Error in data refresh subscription notification`, e);
-					}
-				});
-			});
+			this.cellNotifications.notifyAllCellSubscribers();
 		}
 
 		// Propagate structured events
@@ -979,9 +791,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public destroy(): void {
-		this.cellSubscriptions.clear();
-		this.colSubscriptions.clear();
-		this.cellUpdateBatch.clear();
+		this.cellNotifications.clear();
 		this.eventBus.clear();
 		this.stateManager.destroy();
 	}

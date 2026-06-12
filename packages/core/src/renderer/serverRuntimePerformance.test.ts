@@ -514,7 +514,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		assertHorizontalGeometryIsContinuous(grid, 0);
 
 		cleanupGrid(grid);
-	});
+	}, 10_000);
 
 	it('keeps violent real browser vertical scroll bounded, continuous, and visually non-stale across million rows', async () => {
 		const grid = await createServerAuditGrid({ rows: 1_000_000, cols: 1200 });

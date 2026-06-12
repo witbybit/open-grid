@@ -7,15 +7,7 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
-	/**
-	 * Called after a cell value is changed to notify subscribers.
-	 * Maps to GridEngine.notifyCellChange.
-	 */
 	notifyCellChange: (rowId: string, colField: string) => void;
-	/**
-	 * Apply a cell value mutation.
-	 * Maps to GridEngine.setCellValue (with undoable=false for rollback case).
-	 */
 	setCellValue: (rowId: string, colField: string, value: unknown, undoable?: boolean) => void;
 }
 
@@ -34,8 +26,6 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.setCellValue = deps.setCellValue;
 	}
 
-	// ─── private helpers ──────────────────────────────────────────────────────
-
 	private canEditCell(rowId: string, colField: string): boolean {
 		const rowModel = this.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
@@ -43,29 +33,35 @@ export class EditingFeatureController<TRowData = unknown> {
 		return canEditCell(visualRow, this.ctx.columns.getColumnDef(colField));
 	}
 
-	// ─── public API ───────────────────────────────────────────────────────────
-
 	public startEdit(rowId: string, colField: string): void {
 		if (!this.canEditCell(rowId, colField)) return;
-		this.ctx.stateManager.setState({ activeEdit: { rowId, colField } });
-		this.ctx.invalidation.invalidateCell(rowId, colField, 'edit started');
-		this.ctx.invalidation.invalidateOverlay('edit started');
+		this.ctx.applyChange({
+			reason: 'editing:start',
+			state: { activeEdit: { rowId, colField } },
+			invalidations: [
+				{ kind: 'cell', rowId, colId: colField, reason: 'edit started' },
+				{ kind: 'overlay', reason: 'edit started' },
+			],
+			events: [{ type: GridEventName.editStarted, payload: { rowId, colField } as never }],
+		});
 		this.notifyCellChange(rowId, colField);
-		this.ctx.eventBus.dispatchEvent(GridEventName.editStarted, { rowId, colField });
-		this.ctx.requestRender('edit started');
 	}
 
 	public stopEdit(cancel = false): void {
-		const activeEdit = this.ctx.stateManager.getState().activeEdit;
+		const activeEdit = this.ctx.getState().activeEdit;
 		if (!activeEdit) return;
 
 		const { rowId, colField } = activeEdit;
-		this.ctx.stateManager.setState({ activeEdit: null });
-		this.ctx.invalidation.invalidateCell(rowId, colField, 'edit stopped');
-		this.ctx.invalidation.invalidateOverlay('edit stopped');
+		this.ctx.applyChange({
+			reason: 'editing:stop',
+			state: { activeEdit: null },
+			invalidations: [
+				{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
+				{ kind: 'overlay', reason: 'edit stopped' },
+			],
+			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel } as never }],
+		});
 		this.notifyCellChange(rowId, colField);
-		this.ctx.eventBus.dispatchEvent(GridEventName.editStopped, { rowId, colField, cancel });
-		this.ctx.requestRender('edit stopped');
 	}
 
 	public async commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean> {
@@ -74,7 +70,6 @@ export class EditingFeatureController<TRowData = unknown> {
 		const node = this.getRowModel()?.getRowNodeById(rowId);
 		const row = node?.data ?? ({} as TRowData);
 
-		// Step 1: validate
 		if (col?.valueValidator) {
 			let error: string | null = null;
 			try {
@@ -83,19 +78,21 @@ export class EditingFeatureController<TRowData = unknown> {
 				error = 'Validation failed';
 			}
 			if (error) {
-				const activeEdit = this.ctx.stateManager.getState().activeEdit;
+				const activeEdit = this.ctx.getState().activeEdit;
 				if (activeEdit?.rowId === rowId && activeEdit?.colField === colField) {
-					this.ctx.stateManager.setState({ activeEdit: { ...activeEdit, validationError: error } });
+					this.ctx.applyChange({
+						reason: 'editing:validation',
+						state: { activeEdit: { ...activeEdit, validationError: error } },
+						requestRender: false,
+					});
 					this.notifyCellChange(rowId, colField);
 				}
 				return false;
 			}
 		}
 
-		// Step 2: optimistic update
 		this.setCellValue(rowId, colField, value);
 
-		// Step 3: async valueSetter (server-side confirm)
 		if (col?.valueSetter) {
 			let didAbort = false;
 			const abort = () => {
@@ -108,18 +105,20 @@ export class EditingFeatureController<TRowData = unknown> {
 				success = false;
 			}
 			if (!success || didAbort) {
-				// Roll back the optimistic update
 				this.setCellValue(rowId, colField, oldValue, false);
-				const activeEdit = this.ctx.stateManager.getState().activeEdit;
+				const activeEdit = this.ctx.getState().activeEdit;
 				if (activeEdit?.rowId === rowId && activeEdit?.colField === colField) {
-					this.ctx.stateManager.setState({ activeEdit: { ...activeEdit, validationError: 'Save failed' } });
+					this.ctx.applyChange({
+						reason: 'editing:save-failed',
+						state: { activeEdit: { ...activeEdit, validationError: 'Save failed' } },
+						requestRender: false,
+					});
 					this.notifyCellChange(rowId, colField);
 				}
 				return false;
 			}
 		}
 
-		// Step 4: close the editor
 		this.stopEdit(false);
 		return true;
 	}

@@ -8,8 +8,6 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 		private readonly getRowModel: () => RowModel<TRowData> | null
 	) {}
 
-	// ─── private helpers ──────────────────────────────────────────────────────
-
 	private getAllSelectableDataRowIds(): string[] {
 		const allIds: string[] = [];
 		const rowModel = this.getRowModel();
@@ -30,7 +28,7 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 	}
 
 	private reduceRowSelection(gesture: RowSelectionGesture): RowSelectionChangeResult | null {
-		const current = this.ctx.stateManager.getState();
+		const current = this.ctx.getState();
 		const currentSet = new Set(current.selectedRowIds);
 		const rowIds = gesture.rowIds ?? [];
 		let newIds: string[];
@@ -87,19 +85,19 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 		};
 	}
 
-	// ─── public API ───────────────────────────────────────────────────────────
-
 	public applyRowSelectionGesture(gesture: RowSelectionGesture): RowSelectionChangeResult | null {
 		const result = this.reduceRowSelection(gesture);
 		if (!result) return null;
 
-		this.ctx.stateManager.setState({ selectedRowIds: result.selectedRowIds });
-		for (const rowId of result.changedRowIds) {
-			this.ctx.invalidation.invalidateRow(rowId, 'selection');
-		}
-		this.ctx.invalidation.invalidateHeaders('selection');
-		this.ctx.eventBus.dispatchEvent(GridEventName.rowSelectionChanged, result);
-		this.ctx.requestRender('selection');
+		this.ctx.applyChange({
+			reason: 'selection:rows',
+			state: { selectedRowIds: result.selectedRowIds },
+			invalidations: [
+				...result.changedRowIds.map((rowId) => ({ kind: 'row' as const, rowId, reason: 'selection' })),
+				{ kind: 'headers', reason: 'selection' },
+			],
+			events: [{ type: GridEventName.rowSelectionChanged, payload: result as never }],
+		});
 		return result;
 	}
 

@@ -34,13 +34,9 @@ function makeController(store: GridStore<TestRow>): ClientRowModelController<Tes
 function getFeatureContext(store: GridStore<TestRow>): GridFeatureContext<TestRow> {
 	const engine = (store as any).engine;
 	return {
-		stateManager: engine.stateManager,
 		columns: engine.columns,
-		invalidation: engine.invalidation,
-		eventBus: engine.eventBus,
-		changeApplier: engine.changeApplier,
-		commandHistory: engine.commandHistory,
-		requestRender: (reason: string) => engine.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason }),
+		getState: () => engine.stateManager.getState(),
+		applyChange: (change) => engine.changeApplier.apply(change),
 	};
 }
 
@@ -52,7 +48,11 @@ describe('GroupingFeatureController', () => {
 				...s,
 				expansion: { groups: { 'group-1': true as const }, treeRows: {}, details: {} },
 			}));
-			const feature = new GroupingFeatureController(getFeatureContext(store), () => store.getRowModel());
+			const feature = new GroupingFeatureController({
+				ctx: getFeatureContext(store),
+				getRowModel: () => store.getRowModel(),
+				invalidation: (store as any).engine.invalidation,
+			});
 
 			feature.setGroupBy(['name']);
 
@@ -62,7 +62,11 @@ describe('GroupingFeatureController', () => {
 
 		it('updates groupBy in state', () => {
 			const store = makeStore();
-			const feature = new GroupingFeatureController(getFeatureContext(store), () => store.getRowModel());
+			const feature = new GroupingFeatureController({
+				ctx: getFeatureContext(store),
+				getRowModel: () => store.getRowModel(),
+				invalidation: (store as any).engine.invalidation,
+			});
 
 			feature.setGroupBy(['category']);
 
@@ -73,7 +77,11 @@ describe('GroupingFeatureController', () => {
 		it('invalidates geometry, viewport, headers, overlay', () => {
 			const store = makeStore();
 			const engine = (store as any).engine;
-			const feature = new GroupingFeatureController(getFeatureContext(store), () => store.getRowModel());
+			const feature = new GroupingFeatureController({
+				ctx: getFeatureContext(store),
+				getRowModel: () => store.getRowModel(),
+				invalidation: (store as any).engine.invalidation,
+			});
 
 			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
 
@@ -90,7 +98,11 @@ describe('GroupingFeatureController', () => {
 			const store = makeStore();
 			const listener = vi.fn();
 			store.addEventListener(GridEventName.groupByChanged, listener);
-			const feature = new GroupingFeatureController(getFeatureContext(store), () => store.getRowModel());
+			const feature = new GroupingFeatureController({
+				ctx: getFeatureContext(store),
+				getRowModel: () => store.getRowModel(),
+				invalidation: (store as any).engine.invalidation,
+			});
 
 			feature.setGroupBy(['category']);
 
@@ -105,7 +117,11 @@ describe('GroupingFeatureController', () => {
 			const store = makeStore();
 			const listener = vi.fn();
 			store.addEventListener(GridEventName.groupColumnAdded, listener);
-			const feature = new GroupingFeatureController(getFeatureContext(store), () => store.getRowModel());
+			const feature = new GroupingFeatureController({
+				ctx: getFeatureContext(store),
+				getRowModel: () => store.getRowModel(),
+				invalidation: (store as any).engine.invalidation,
+			});
 
 			feature.addGroupBy('name');
 
@@ -117,7 +133,11 @@ describe('GroupingFeatureController', () => {
 
 		it('does not duplicate already-added colId', () => {
 			const store = makeStore();
-			const feature = new GroupingFeatureController(getFeatureContext(store), () => store.getRowModel());
+			const feature = new GroupingFeatureController({
+				ctx: getFeatureContext(store),
+				getRowModel: () => store.getRowModel(),
+				invalidation: (store as any).engine.invalidation,
+			});
 
 			feature.addGroupBy('name');
 			feature.addGroupBy('name');
@@ -132,7 +152,11 @@ describe('GroupingFeatureController', () => {
 			const store = makeStore();
 			const listener = vi.fn();
 			store.addEventListener(GridEventName.groupColumnRemoved, listener);
-			const feature = new GroupingFeatureController(getFeatureContext(store), () => store.getRowModel());
+			const feature = new GroupingFeatureController({
+				ctx: getFeatureContext(store),
+				getRowModel: () => store.getRowModel(),
+				invalidation: (store as any).engine.invalidation,
+			});
 
 			feature.addGroupBy('name');
 			listener.mockClear();
@@ -150,7 +174,11 @@ describe('GroupingFeatureController', () => {
 			const store = makeStore();
 			const ctrl = makeController(store);
 			const engine = (store as any).engine;
-			const feature = new GroupingFeatureController(getFeatureContext(store), () => store.getRowModel());
+			const feature = new GroupingFeatureController({
+				ctx: getFeatureContext(store),
+				getRowModel: () => store.getRowModel(),
+				invalidation: (store as any).engine.invalidation,
+			});
 			const listener = vi.fn();
 			store.addEventListener(GridEventName.aggDefsChanged, listener);
 
@@ -168,7 +196,11 @@ describe('GroupingFeatureController', () => {
 
 		it('updates aggDefs in state', () => {
 			const store = makeStore();
-			const feature = new GroupingFeatureController(getFeatureContext(store), () => store.getRowModel());
+			const feature = new GroupingFeatureController({
+				ctx: getFeatureContext(store),
+				getRowModel: () => store.getRowModel(),
+				invalidation: (store as any).engine.invalidation,
+			});
 			const defs = [{ colField: 'id', type: 'count' as const }] as any[];
 
 			feature.setAggDefs(defs);
