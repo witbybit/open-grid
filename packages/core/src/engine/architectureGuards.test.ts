@@ -43,6 +43,11 @@ describe('Architecture guardrails', () => {
 		expect(lines, `renderEngine.ts has ${lines} lines; intermediate budget is 1000 and target is 900`).toBeLessThan(1000);
 	});
 
+	it('rowRenderer.ts is below 1550 lines (intermediate budget, target 1300)', () => {
+		const lines = countLines('renderer/rowRenderer.ts');
+		expect(lines, `rowRenderer.ts has ${lines} lines; intermediate budget is 1550 and target is 1300`).toBeLessThan(1550);
+	});
+
 	it('renderEngine.ts does not inline renderer subscription wiring', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
 		expect(content).not.toContain('stateManager.subscribeToKey');
@@ -53,6 +58,21 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
 		expect(content).toContain('stateManager.subscribeToKey');
 		expect(content).toContain('eventBus.addEventListener');
+	});
+
+	it('rowRenderMaintenance owns scroll-idle repair and invalidation repaint orchestration', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderMaintenance.ts'), 'utf-8');
+		expect(content).toContain('export function repaintInvalidatedRowsAndCells');
+		expect(content).toContain('export function decorateDirtyCellsAfterScroll');
+	});
+
+	it('row renderer style hook paths report faults through runtime diagnostics', () => {
+		const files = ['renderer/rowRenderer.ts', 'renderer/selectionPaintManager.ts'];
+		for (const file of files) {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
+			expect(content, `${file} must not use console.error for renderer style hooks`).not.toContain('console.error');
+			expect(content, `${file} should route renderer faults through reportRendererFault`).toContain('reportRendererFault');
+		}
 	});
 
 	it('OpenGrid.tsx does not call getStoreFromApi', () => {

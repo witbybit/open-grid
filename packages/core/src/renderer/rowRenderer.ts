@@ -21,6 +21,12 @@ import { RowSlot } from './rowSlot.js';
 import { RowSlotPool } from './rowSlotPool.js';
 import { CellSlot, type CellContentMode } from './cellSlot.js';
 import { StableSlotAssigner } from './stableSlotAssigner.js';
+import { reportRendererFault } from './rendererFaults.js';
+import {
+	decorateDirtyCellsAfterScroll as decorateDirtyCellsAfterScrollMaintenance,
+	repaintInvalidatedRowsAndCells as repaintInvalidatedRowsAndCellsMaintenance,
+	type RowCellBindRequest,
+} from './rowRenderMaintenance.js';
 
 // Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
 const ROW_KIND_BASE: Record<string, string> = {
@@ -484,7 +490,7 @@ export class RowRenderer<TRowData = unknown> {
 						const customClass = state.styleSlots.groupRowClass(visualRow);
 						if (customClass) rowClassName += ' ' + customClass;
 					} catch (e) {
-						console.error('RenderEngine: Error in groupRowClass styleSlot', e);
+						reportRendererFault(this.engine, 'group-row-class', e, { rowId: visualRow.id, rowIndex: r });
 					}
 				}
 			} else if (visualRow.kind === 'detail') {
@@ -493,7 +499,7 @@ export class RowRenderer<TRowData = unknown> {
 						const customClass = state.styleSlots.detailRowClass(visualRow);
 						if (customClass) rowClassName += ' ' + customClass;
 					} catch (e) {
-						console.error('RenderEngine: Error in detailRowClass styleSlot', e);
+						reportRendererFault(this.engine, 'detail-row-class', e, { rowId: visualRow.id, rowIndex: r });
 					}
 				}
 			} else if (visualRow.kind === 'data') {
@@ -526,7 +532,7 @@ export class RowRenderer<TRowData = unknown> {
 						const customRowClass = state.styleSlots.rowClass(node.data, rs);
 						if (customRowClass) rowClassName += ' ' + customRowClass;
 					} catch (e) {
-						console.error('RenderEngine: Error in rowClass styleSlot', e);
+						reportRendererFault(this.engine, 'row-class', e, { rowId: node.id, rowIndex: r });
 					}
 				}
 			}
@@ -1021,7 +1027,7 @@ export class RowRenderer<TRowData = unknown> {
 				const customCellClass = state.styleSlots.cellClass(col, node.data, s);
 				if (customCellClass) cellClassName += ' ' + customCellClass;
 			} catch (e) {
-				console.error('RenderEngine: Error in cellClass styleSlot', e);
+				reportRendererFault(this.engine, 'cell-class', e, { rowId: node.id, rowIndex, colField: col.field, colIndex });
 			}
 		}
 
@@ -1029,7 +1035,7 @@ export class RowRenderer<TRowData = unknown> {
 			try {
 				state.styleSlots.beforeCellRender(access, cellSlot.element);
 			} catch (e) {
-				console.error('RenderEngine: Error in beforeCellRender styleSlot', e);
+				reportRendererFault(this.engine, 'before-cell-render', e, { rowId: node.id, rowIndex, colField: col.field, colIndex });
 			}
 		}
 
@@ -1149,7 +1155,7 @@ export class RowRenderer<TRowData = unknown> {
 			try {
 				state.styleSlots.afterCellRender(access, cellSlot.element);
 			} catch (e) {
-				console.error('RenderEngine: Error in afterCellRender styleSlot', e);
+				reportRendererFault(this.engine, 'after-cell-render', e, { rowId: node.id, rowIndex, colField: col.field, colIndex });
 			}
 		}
 	}
@@ -1157,118 +1163,7 @@ export class RowRenderer<TRowData = unknown> {
 	// ── Repaint helpers ──────────────────────────────────────────────────────────────
 
 	public repaintInvalidatedRowsAndCells(frame: InvalidationFrame): void {
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) return;
-
-		const state = this.engine.stateManager.getState();
-		const columns = this.engine.columns.getDisplayedColumns();
-		const plan = this.engine.columns.getCompiledPlan();
-		const w = this.currentWindow;
-
-		const pinLeftColumns = w?.pinLeftCols ?? this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = w?.pinRightCols ?? this.engine.viewport.pinRightColumns;
-		const colCount = columns.length;
-		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
-		const pinRightBaseLeft = plan.pinRightBaseLeft;
-
-		// Refresh the selection set so any checkbox cells repainted here see the current state.
-		this.selectionPaint.rebuildSelection(state.selectedRowIds);
-
-		// Repaint rows
-		for (const rowId of frame.rows) {
-			const rowIndex = rowModel.getVisualIndexByRowId(rowId);
-			const slot = rowIndex >= 0 ? this.activeRows.get(rowIndex) : undefined;
-			const row = rowIndex >= 0 ? rowModel.getVisualRow(rowIndex) : null;
-			if (slot && row?.kind === 'data') {
-				this.selectionPaint.updateRowClassNameSlot(slot, row.node, rowIndex, state);
-				// Rebind checkbox cells so their checked state reflects the new selection.
-				for (let c = 0; c < colCount; c++) {
-					if (!columns[c].checkboxSelection) continue;
-					const cellSlot = slot.getCellForCol(c);
-					if (!cellSlot) continue;
-					this._bindCellFull(
-						cellSlot,
-						slot.id,
-						row.node,
-						rowIndex,
-						c,
-						columns[c],
-						pinLeftColumns,
-						pinRightColumns,
-						pinRightStart,
-						pinRightBaseLeft,
-						plan,
-						state,
-						false,
-						undefined,
-						'initial'
-					);
-				}
-			}
-		}
-
-		// Repaint specific cells
-		for (const [rowId, colFields] of frame.cellsByRowId) {
-			const rowIndex = rowModel.getVisualIndexByRowId(rowId);
-			if (rowIndex < 0) continue;
-			const slot = this.activeRows.get(rowIndex);
-			const row = rowModel.getVisualRow(rowIndex);
-			if (!slot || row?.kind !== 'data') continue;
-
-			for (const colField of colFields) {
-				const colIndex = this.engine.columns.getColumnIndex(colField);
-				if (colIndex < 0) continue;
-				const cellSlot = slot.getCellForCol(colIndex);
-				if (!cellSlot) continue;
-				this._bindCellFull(
-					cellSlot,
-					slot.id,
-					row.node,
-					rowIndex,
-					colIndex,
-					columns[colIndex],
-					pinLeftColumns,
-					pinRightColumns,
-					pinRightStart,
-					pinRightBaseLeft,
-					plan,
-					state,
-					false,
-					undefined,
-					'initial'
-				);
-			}
-		}
-
-		// Repaint column changes
-		for (const colField of frame.columns) {
-			const colIndex = this.engine.columns.getColumnIndex(colField);
-			if (colIndex < 0) continue;
-			for (const [rowIndex, slot] of this.activeRows) {
-				const row = rowModel.getVisualRow(rowIndex);
-				if (row?.kind === 'data') {
-					const cellSlot = slot.getCellForCol(colIndex);
-					if (!cellSlot) continue;
-					this._bindCellFull(
-						cellSlot,
-						slot.id,
-						row.node,
-						rowIndex,
-						colIndex,
-						columns[colIndex],
-						pinLeftColumns,
-						pinRightColumns,
-						pinRightStart,
-						pinRightBaseLeft,
-						plan,
-						state,
-						false,
-						undefined,
-						'initial'
-					);
-				}
-			}
-		}
+		repaintInvalidatedRowsAndCellsMaintenance(this.getMaintenanceDeps(), frame);
 	}
 
 	// ── Scroll-path fast cell binding ────────────────────────────────────────────────
@@ -1579,139 +1474,44 @@ export class RowRenderer<TRowData = unknown> {
 	// ── Post-scroll decoration ────────────────────────────────────────────────────────
 
 	public decorateDirtyCellsAfterScroll(options?: { maxCells?: number }): { remaining: number; processed: number } {
-		const maxCells = options?.maxCells ?? Infinity;
-		if (this.dirtyCellsAfterScroll.size === 0 && this.dirtyRowsAfterScroll.size === 0) {
-			return { remaining: 0, processed: 0 };
-		}
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) {
-			this.dirtyCellsAfterScroll.clear();
-			this.dirtyRowsAfterScroll.clear();
-			return { remaining: 0, processed: 0 };
-		}
-		const state = this.engine.stateManager.getState();
-		const columns = this.engine.columns.getDisplayedColumns();
-		const plan = this.engine.columns.getCompiledPlan();
-		const w = this.currentWindow;
-		const pinLeftColumns = w?.pinLeftCols ?? this.engine.viewport.pinLeftColumns;
-		const pinRightColumns = w?.pinRightCols ?? this.engine.viewport.pinRightColumns;
-		const colCount = columns.length;
-		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
-		const pinRightBaseLeft = plan.pinRightBaseLeft;
+		return decorateDirtyCellsAfterScrollMaintenance(this.getMaintenanceDeps(), options);
+	}
 
-		const rowCount = rowModel.getVisualRowCount();
-		const colRange = this.engine.viewport.getVisibleColumnRange(colCount);
-		const rowRange = this.engine.viewport.getVisibleRowRange(rowCount);
-		const rowCenter = (rowRange.startIdx + rowRange.endIdx) / 2;
-		const colCenter = (colRange.startIdx + colRange.endIdx) / 2;
-		const activeEdit = state.activeEdit;
-		const focusedCell = state.selection.focus;
+	private bindCellFullFromRequest(request: RowCellBindRequest<TRowData>): void {
+		this._bindCellFull(
+			request.cellSlot as CellSlot<TRowData>,
+			request.slotId,
+			request.node,
+			request.rowIndex,
+			request.colIndex,
+			request.col,
+			request.pinLeftColumns,
+			request.pinRightColumns,
+			request.pinRightStart,
+			request.pinRightBaseLeft,
+			request.plan,
+			request.state,
+			request.isScrollFrameActive,
+			request.ctx,
+			request.phase
+		);
+	}
 
-		// Read identity from the JS-side CellSlot mirror — no dataset attribute reads
-		// or string→number parsing per cell.
-		const getCellPriority = (cell: HTMLDivElement): number => {
-			const cs = (cell as unknown as { __cellSlot?: CellSlot<TRowData> }).__cellSlot;
-			if (!cs || cs.rowIndex < 0 || !cs.colField) return 0;
-			const rowIndex = cs.rowIndex;
-			const colField = cs.colField;
-
-			if (activeEdit && cs.rowId === activeEdit.rowId && colField === activeEdit.colField) return 6;
-			if (focusedCell && cs.rowId === focusedCell.rowId && colField === focusedCell.colField) return 5;
-
-			const colIndex = cs.colIndex;
-			const isRowVisible = rowIndex >= rowRange.startIdx && rowIndex <= rowRange.endIdx;
-			const isColVisible = colIndex >= colRange.startIdx && colIndex <= colRange.endIdx;
-			if (!isRowVisible || !isColVisible) return 1;
-
-			const normDist = Math.abs(rowIndex - rowCenter) + Math.abs(colIndex - colCenter);
-			return 4 - normDist * 0.01;
+	private getMaintenanceDeps() {
+		return {
+			engine: this.engine,
+			selectionPaint: this.selectionPaint,
+			cellRenderer: this.cellRenderer,
+			activeRows: this.activeRows,
+			getCurrentWindow: () => this.currentWindow,
+			dirtyCellsAfterScroll: this.dirtyCellsAfterScroll,
+			dirtyRowsAfterScroll: this.dirtyRowsAfterScroll,
+			dirtyBuckets: this._dirtyBuckets,
+			incrementPostScrollDirtyCellsDecorated: () => {
+				this.postScrollDirtyCellsDecorated++;
+			},
+			bindCellFull: (request: RowCellBindRequest<TRowData>) => this.bindCellFullFromRequest(request),
 		};
-
-		// Classify dirty cells into priority buckets — O(N) with zero per-cell allocation.
-		// Buckets: [0] active edit, [1] focused, [2] visible range, [3] off-screen/unknown.
-		const b0 = this._dirtyBuckets[0];
-		b0.length = 0;
-		const b1 = this._dirtyBuckets[1];
-		b1.length = 0;
-		const b2 = this._dirtyBuckets[2];
-		b2.length = 0;
-		const b3 = this._dirtyBuckets[3];
-		b3.length = 0;
-		for (const cell of this.dirtyCellsAfterScroll) {
-			const p = getCellPriority(cell);
-			if (p >= 6) b0.push(cell);
-			else if (p >= 5) b1.push(cell);
-			else if (p > 1) b2.push(cell);
-			else b3.push(cell);
-		}
-
-		let processed = 0;
-		for (let bi = 0; bi < 4 && processed < maxCells; bi++) {
-			const bucket = this._dirtyBuckets[bi];
-			for (let i = 0; i < bucket.length; i++) {
-				if (processed >= maxCells) break;
-				const cell = bucket[i];
-				this.dirtyCellsAfterScroll.delete(cell);
-				const cs = (cell as unknown as { __cellSlot?: CellSlot<TRowData> }).__cellSlot;
-				if (!cs || cs.rowIndex < 0 || !cs.colField) continue;
-
-				const rowIndex = cs.rowIndex;
-				const visualRow = rowModel.getVisualRow(rowIndex);
-				const colIndex = cs.colIndex;
-
-				if (visualRow?.kind === 'data' && colIndex >= 0) {
-					const slot = this.activeRows.get(rowIndex);
-					if (slot) {
-						const cellSlot = slot.getCellForCol(colIndex);
-						if (cellSlot && cellSlot.element === cell) {
-							this._bindCellFull(
-								cellSlot,
-								slot.id,
-								visualRow.node,
-								rowIndex,
-								colIndex,
-								columns[colIndex],
-								pinLeftColumns,
-								pinRightColumns,
-								pinRightStart,
-								pinRightBaseLeft,
-								plan,
-								state,
-								false,
-								undefined,
-								'scroll-idle'
-							);
-							this.postScrollDirtyCellsDecorated++;
-							processed++;
-						}
-					}
-				} else if (visualRow?.kind === 'loading' && colIndex >= 0) {
-					const slot = this.activeRows.get(rowIndex);
-					if (slot) {
-						const cellSlot = slot.getCellForCol(colIndex);
-						if (cellSlot && cellSlot.element === cell) {
-							this.cellRenderer.ensureLoadingSkeleton(cell);
-							this.postScrollDirtyCellsDecorated++;
-							processed++;
-						}
-					}
-				}
-			}
-		}
-
-		const remaining = this.dirtyCellsAfterScroll.size;
-		if (remaining === 0) {
-			for (const r of this.dirtyRowsAfterScroll) {
-				const slot = this.activeRows.get(r);
-				const visualRow = rowModel.getVisualRow(r);
-				if (slot && visualRow?.kind === 'data') {
-					this.selectionPaint.updateRowClassNameSlot(slot, visualRow.node, r, state);
-				}
-			}
-			this.dirtyRowsAfterScroll.clear();
-		}
-
-		return { remaining, processed };
 	}
 
 	public applyFocus(cell: HTMLDivElement): void {

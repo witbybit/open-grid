@@ -2,6 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridState, GridRowClassParams, RowNode } from '../store.js';
 import { CellSlot } from './cellSlot.js';
 import type { RowSlot } from './rowSlot.js';
+import { reportRendererFault } from './rendererFaults.js';
 
 /**
  * Owns all row-selection UI state and row class painting logic.
@@ -154,7 +155,7 @@ export class SelectionPaintManager<TRowData> {
 					rowClassName += ' ' + customRowClass;
 				}
 			} catch (e) {
-				console.error('RenderEngine: Error in rowClass styleSlot', e);
+				reportRendererFault(this.engine, 'row-style-class', e, { rowId: node.id, rowIndex });
 			}
 		}
 

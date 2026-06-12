@@ -21,6 +21,7 @@
 | 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                     | REVIEW | eecb571 |
 | 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)     | REVIEW | bb60b76 |
 | 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md) | REVIEW | bb60b76 |
+| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)       | REVIEW | bb60b76 |
 
 ## Execution order
 
@@ -43,6 +44,7 @@
 17. `017-row-model-runtime-boundary.md` - P0 runtime hardening after 016; removes concrete `GridStore` coupling from client/server row models so visual-row producers depend on explicit runtime ports before renderer work
 18. `018-runtime-fault-diagnostics-boundary.md` - P0 runtime hardening after 017; normalizes fault capture across event/state/plugin/server paths so the core has one owned diagnostic surface before renderer refactors
 19. `019-render-engine-orchestration-boundary.md` - P0 renderer hardening after 018; extracts invalidation wiring and gated paint scheduling so `RenderEngine` becomes a coordinator before deeper row-slot decomposition
+20. `020-row-renderer-maintenance-boundary.md` - P0 renderer hardening after 019; extracts invalidation repaint and scroll-idle repair so `RowRenderer` is more focused before deeper slot and cell decomposition
 
 ## Dependency graph
 
@@ -66,6 +68,7 @@
 017  (row-model runtime boundary)   - follows 016; required before renderer refactors so visual-row producers stop depending on the concrete store facade
 018  (runtime fault diagnostics)    - follows 017; required before renderer refactors so async/listener/plugin/server failures report through one core-owned path
 019  (render-engine orchestration)  - follows 018; first renderer decomposition pass so render orchestration policy moves out of the main engine class before rowRenderer work
+020  (row-renderer maintenance)     - follows 019; moves repaint and scroll-idle repair out of RowRenderer before row-slot and cell-binding decomposition
 ```
 
 ## Notes
@@ -90,6 +93,8 @@
 - Plan 018 is implemented in the working tree and verified on 2026-06-12: runtime faults now flow through a shared reporter, `runtimeFault` is a typed grid event, recent core faults can be inspected/cleared via the API boundary, and the targeted pre-renderer core files no longer use scattered local `console.error` calls.
 - Plan 019 starts the renderer refactor proper by splitting `RenderEngine` orchestration away from subscription and invalidation policy. The goal is to make `RenderEngine` a composition root before cutting into `rowRenderer.ts`.
 - Plan 019 is implemented in the working tree and verified on 2026-06-12: renderer invalidation wiring now lives in `RenderInvalidationCoordinator.ts`, render stat snapshot/reset logic lives in `renderTelemetry.ts`, `renderEngine.ts` is down to 903 lines, and core/React/demo verification passed. React tests still emit the known `OpenGrid requires one of...` validation error during an intentional misuse test, but the suite exits green.
+- Plan 020 is the next renderer hardening step: move invalidation repaint and post-scroll dirty repair into a dedicated maintenance helper so `RowRenderer` can concentrate on slot lifecycle and hot-path cell binding.
+- Plan 020 is implemented in the working tree and verified on 2026-06-12: invalidation repaint and scroll-idle repair now live in `rowRenderMaintenance.ts`, renderer style-hook faults in the row path report through `rendererFaults.ts`, `rowRenderer.ts` is down to 1531 lines, and core/React/demo verification passed. As before, React tests emit the known `OpenGrid requires one of...` validation error during an intentional misuse test, but the suite exits green.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

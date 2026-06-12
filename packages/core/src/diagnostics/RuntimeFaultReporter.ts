@@ -1,6 +1,13 @@
 import { GridEventName, type GridEventPayloadMap } from '../api/GridEvents.js';
 
-export type RuntimeFaultSource = 'event-bus' | 'state-manager' | 'command-history' | 'plugin-registry' | 'cell-notifications' | 'server-row-model';
+export type RuntimeFaultSource =
+	| 'event-bus'
+	| 'state-manager'
+	| 'command-history'
+	| 'plugin-registry'
+	| 'cell-notifications'
+	| 'server-row-model'
+	| 'renderer';
 
 export interface RuntimeFault {
 	id: number;
