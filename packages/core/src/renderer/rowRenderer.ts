@@ -13,13 +13,14 @@ import { RowSlotPool } from './rowSlotPool.js';
 import { CellSlot } from './cellSlot.js';
 import { StableSlotAssigner } from './stableSlotAssigner.js';
 import { reportRendererFault } from './rendererFaults.js';
-import { bindCellFull } from './rowCellBinder.js';
 import {
-	decorateDirtyCellsAfterScroll as decorateDirtyCellsAfterScrollMaintenance,
-	repaintInvalidatedRowsAndCells as repaintInvalidatedRowsAndCellsMaintenance,
-	type RowCellBindRequest,
-} from './rowRenderMaintenance.js';
-import { bindAllDataCells, bindAllLoadingCells } from './rowCellBindingLanes.js';
+	bindAllDataCellsRuntime,
+	bindAllLoadingCellsRuntime,
+	bindFullWidthRow,
+	decorateDirtyCellsAfterScroll as decorateDirtyCellsAfterScrollRuntime,
+	repaintInvalidatedRowsAndCells as repaintInvalidatedRowsAndCellsRuntime,
+	type RowRendererRuntimeArgs,
+} from './rowRendererRuntime.js';
 
 // Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
 const ROW_KIND_BASE: Record<string, string> = {
@@ -529,7 +530,7 @@ export class RowRenderer<TRowData = unknown> {
 			// ── Bind cells based on row kind ──────────────────────────────────────────
 			if (visualRow.kind === 'loading') {
 				this.releaseRowPortal(slot);
-				bindAllLoadingCells(this.getCellBindingLaneDeps(), {
+				bindAllLoadingCellsRuntime(this.getRowRendererRuntimeArgs(), {
 					slot,
 					rowIndex: r,
 					pinLeftColumns,
@@ -543,7 +544,7 @@ export class RowRenderer<TRowData = unknown> {
 				});
 			} else if (visualRow.kind === 'data') {
 				this.releaseRowPortal(slot);
-				bindAllDataCells(this.getCellBindingLaneDeps(), {
+				bindAllDataCellsRuntime(this.getRowRendererRuntimeArgs(), {
 					slot,
 					node: visualRow.node,
 					rowIndex: r,
@@ -561,7 +562,7 @@ export class RowRenderer<TRowData = unknown> {
 				});
 			} else {
 				// Full-width row (group / detail / footer)
-				this._bindFullWidthRow(slot, visualRow, columns);
+				bindFullWidthRow(this.getRowRendererRuntimeArgs(), slot, visualRow);
 			}
 		}
 
@@ -582,40 +583,79 @@ export class RowRenderer<TRowData = unknown> {
 
 	// Arrow properties so these can be passed directly as callbacks without wrapping
 	// in a new closure on every row bind — the hot path calls these once per lane per row.
-	private readonly _initCell = (el: HTMLDivElement): void => {
+	public readonly initCell = (el: HTMLDivElement): void => {
 		this.cellRenderer.initializeCell(el);
 		this.selectionPaint.attachClickListenerIfNeeded(el);
 	};
-	private readonly _releaseCellFn = (cell: CellSlot<TRowData>): void => {
+	public readonly releaseCellFn = (cell: CellSlot<TRowData>): void => {
 		if (cell.lastPortalKey) this.releaseCellPortal(cell.element, false, 'destroyed');
 		cell.unbindCold();
 	};
 
-	/**
-	 * Phase 7: Full-width row (group / detail / footer).
-	 * Delegates to FullWidthRowRenderer which owns the row portal host lifecycle.
-	 * Collapses cell lanes before mounting the full-width portal.
-	 */
-	private _bindFullWidthRow(slot: RowSlot<TRowData>, visualRow: VisualRow<TRowData>, _columns: ColumnDef<TRowData>[]): void {
-		this.fullWidthRenderer.bind(
-			slot,
-			visualRow,
-			(s) => {
-				// Collapse all lanes — cell portals released via releaseCellFn
-				s.ensureLeftCells(0, null, this._initCell, this._releaseCellFn);
-				s.ensureCenterCells(0, this._initCell, this._releaseCellFn);
-				s.ensureRightCells(0, null, this._initCell, this._releaseCellFn);
-				this.ensurePinnedContainer(s, 'left', 0);
-				this.ensurePinnedContainer(s, 'right', 0);
+	private getRowRendererRuntimeArgs(): RowRendererRuntimeArgs<TRowData> {
+		return {
+			engine: this.engine,
+			cellRenderer: this.cellRenderer,
+			portalMountManager: this.portalMountManager,
+			viewportContainer: this.viewportRenderer.container,
+			selectionPaint: this.selectionPaint,
+			cellClassScratch: this._cellClassScratch,
+			fullWidthRenderer: this.fullWidthRenderer,
+			currentWindow: this.currentWindow,
+			dirtyCellsAfterScroll: this.dirtyCellsAfterScroll,
+			dirtyRowsAfterScroll: this.dirtyRowsAfterScroll,
+			dirtyBuckets: this._dirtyBuckets,
+			activeRows: this.activeRows,
+			initCell: this.initCell,
+			releaseCellFn: this.releaseCellFn,
+			ensurePinnedContainer: (slot: RowSlot<TRowData>, side: 'left' | 'right', width: number) => this.ensurePinnedContainer(slot, side, width),
+			releaseRowPortal: (slot: RowSlot<TRowData>) => this.releaseRowPortal(slot),
+			ensureCellPortalHost: (cell: HTMLDivElement) => this.ensureCellPortalHost(cell),
+			getCellPortalHost: (cell: HTMLDivElement) => this.getCellPortalHost(cell),
+			markCellDirtyAfterScroll: (cell: HTMLDivElement) => this.markCellDirtyAfterScroll(cell),
+			releaseCellPortal: (
+				cell: HTMLDivElement,
+				forceDeferred?: boolean,
+				reason: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated' = 'scrolled-out'
+			) => this.releaseCellPortal(cell, forceDeferred, reason),
+			cancelPendingPortalRelease: (cellKey: string) => this.cancelPendingPortalRelease(cellKey),
+			applyFocus: (cell: HTMLDivElement) => this.applyFocus(cell),
+			isEditorInteractiveElement: (el: Element | null) => this.isEditorInteractiveElement(el),
+			isScrolling: this.isScrolling,
+			isScrollFrameActive: this.isScrollFrameActive,
+			renderStats: this.renderStats,
+			getProgrammaticScrollCell: () => this.programmaticScrollCell,
+			clearProgrammaticScrollCell: () => {
+				this.programmaticScrollCell = null;
 			},
-			(s) => this.releaseRowPortal(s)
-		);
+			setDeferredFocusCell: (cell: HTMLDivElement) => {
+				this.deferredFocusCell = cell;
+			},
+			incrementStyleHookCallsDuringScroll: () => {
+				if (this.renderStats) this.renderStats.styleHookCallsDuringScroll++;
+			},
+			incrementCellsBoundDuringScroll: () => {
+				if (this.renderStats) this.renderStats.cellsBoundDuringScroll = (this.renderStats.cellsBoundDuringScroll || 0) + 1;
+			},
+			incrementCurrentScrollCellsVisited: () => {
+				this.currentScrollCellsVisited++;
+			},
+			incrementCurrentScrollCellsPatched: () => {
+				this.currentScrollCellsPatched++;
+			},
+			incrementCurrentScrollCellsWritten: () => {
+				this.currentScrollCellsWritten++;
+			},
+			incrementPostScrollDirtyCellsDecorated: () => {
+				this.postScrollDirtyCellsDecorated++;
+			},
+		};
 	}
 
 	// ── Repaint helpers ──────────────────────────────────────────────────────────────
 
 	public repaintInvalidatedRowsAndCells(frame: InvalidationFrame): void {
-		repaintInvalidatedRowsAndCellsMaintenance(this.getMaintenanceDeps(), frame);
+		repaintInvalidatedRowsAndCellsRuntime(this.getRowRendererRuntimeArgs(), frame);
 	}
 
 	// ── Misc helpers ─────────────────────────────────────────────────────────────────
@@ -694,106 +734,7 @@ export class RowRenderer<TRowData = unknown> {
 	// ── Post-scroll decoration ────────────────────────────────────────────────────────
 
 	public decorateDirtyCellsAfterScroll(options?: { maxCells?: number }): { remaining: number; processed: number } {
-		return decorateDirtyCellsAfterScrollMaintenance(this.getMaintenanceDeps(), options);
-	}
-
-	private getMaintenanceDeps() {
-		return {
-			engine: this.engine,
-			selectionPaint: this.selectionPaint,
-			cellRenderer: this.cellRenderer,
-			activeRows: this.activeRows,
-			getCurrentWindow: () => this.currentWindow,
-			dirtyCellsAfterScroll: this.dirtyCellsAfterScroll,
-			dirtyRowsAfterScroll: this.dirtyRowsAfterScroll,
-			dirtyBuckets: this._dirtyBuckets,
-			incrementPostScrollDirtyCellsDecorated: () => {
-				this.postScrollDirtyCellsDecorated++;
-			},
-			bindCellFull: (request: RowCellBindRequest<TRowData>) =>
-				bindCellFull(this.getCellBinderDeps(), {
-					cellSlot: request.cellSlot as CellSlot<TRowData>,
-					slotId: request.slotId,
-					node: request.node,
-					rowIndex: request.rowIndex,
-					colIndex: request.colIndex,
-					col: request.col,
-					pinLeftColumns: request.pinLeftColumns,
-					pinRightColumns: request.pinRightColumns,
-					pinRightStart: request.pinRightStart,
-					pinRightBaseLeft: request.pinRightBaseLeft,
-					plan: request.plan,
-					state: request.state,
-					ctx: request.ctx,
-					phase: request.phase,
-				}),
-		};
-	}
-
-	private getCellBindingLaneDeps() {
-		return {
-			engine: this.engine,
-			initCell: this._initCell,
-			releaseCellFn: this._releaseCellFn,
-			ensurePinnedContainer: (slot: RowSlot<TRowData>, side: 'left' | 'right', width: number) => this.ensurePinnedContainer(slot, side, width),
-			cellBinderDeps: this.getCellBinderDeps(),
-			markCellDirtyAfterScroll: (cell: HTMLDivElement) => this.markCellDirtyAfterScroll(cell),
-			releaseCellPortal: (
-				cell: HTMLDivElement,
-				forceDeferred?: boolean,
-				reason: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated' = 'scrolled-out'
-			) => this.releaseCellPortal(cell, forceDeferred, reason),
-			ensureLoadingSkeleton: (cell: HTMLDivElement) => this.cellRenderer.ensureLoadingSkeleton(cell),
-			onScrollCellVisited: () => {
-				this.currentScrollCellsVisited++;
-			},
-			onScrollCellPatched: () => {
-				this.currentScrollCellsPatched++;
-			},
-			onScrollCellWritten: () => {
-				this.currentScrollCellsWritten++;
-			},
-		};
-	}
-
-	private getCellBinderDeps() {
-		return {
-			engine: this.engine,
-			cellRenderer: this.cellRenderer,
-			portalMountManager: this.portalMountManager,
-			selectionPaint: this.selectionPaint,
-			cellClassScratch: this._cellClassScratch,
-			getViewportContainer: () => this.viewportRenderer.container,
-			getIsScrolling: () => this.isScrolling,
-			getIsScrollFrameActive: () => this.isScrollFrameActive,
-			getProgrammaticScrollCell: () => this.programmaticScrollCell,
-			clearProgrammaticScrollCell: () => {
-				this.programmaticScrollCell = null;
-			},
-			setDeferredFocusCell: (cell: HTMLDivElement) => {
-				this.deferredFocusCell = cell;
-			},
-			applyFocus: (cell: HTMLDivElement) => this.applyFocus(cell),
-			isEditorInteractiveElement: (el: Element | null) => this.isEditorInteractiveElement(el),
-			ensureCellPortalHost: (cell: HTMLDivElement) => this.ensureCellPortalHost(cell),
-			getCellPortalHost: (cell: HTMLDivElement) => this.getCellPortalHost(cell),
-			markCellDirtyAfterScroll: (cell: HTMLDivElement) => this.markCellDirtyAfterScroll(cell),
-			releaseCellPortal: (
-				cell: HTMLDivElement,
-				forceDeferred?: boolean,
-				reason: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated' = 'scrolled-out'
-			) => this.releaseCellPortal(cell, forceDeferred, reason),
-			cancelPendingPortalRelease: (cellKey: string) => this.cancelPendingPortalRelease(cellKey),
-			incrementStyleHookCallsDuringScroll: () => {
-				if (this.renderStats) this.renderStats.styleHookCallsDuringScroll++;
-			},
-			incrementCellsBoundDuringScroll: () => {
-				if (this.renderStats) this.renderStats.cellsBoundDuringScroll = (this.renderStats.cellsBoundDuringScroll || 0) + 1;
-			},
-			incrementCurrentScrollCellsWritten: () => {
-				this.currentScrollCellsWritten++;
-			},
-		};
+		return decorateDirtyCellsAfterScrollRuntime(this.getRowRendererRuntimeArgs(), options);
 	}
 
 	public applyFocus(cell: HTMLDivElement): void {

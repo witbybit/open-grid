@@ -1,29 +1,30 @@
 # Plans
 
-| #   | Plan                                                                                  | Status | Commit  |
-| --- | ------------------------------------------------------------------------------------- | ------ | ------- |
-| 001 | [Row Multi-Select](./001-row-multiselect.md)                                          | TODO   | 3d32692 |
-| 002 | [ColumnType Registry](./002-column-type-registry.md)                                  | DONE   | 970c777 |
-| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                     | DONE   | 970c777 |
-| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                           | DONE   | 970c777 |
-| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                           | DONE   | 66c92c2 |
-| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                   | DONE   | 66c92c2 |
-| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)     | DONE   | 66c92c2 |
-| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)       | DONE   | 66c92c2 |
-| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)               | TODO   | 78e8122 |
-| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                   | DONE   | 53fe61f |
-| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)               | REVIEW | 39c83e3 |
-| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)             | DONE   | 39c83e3 |
-| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                 | DONE   | 94c9453 |
-| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                             | DONE   | 94c9453 |
-| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                       | DONE   | 0f93724 |
-| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                   | DONE   | 6b3ecc5 |
-| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                     | REVIEW | eecb571 |
-| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)     | REVIEW | bb60b76 |
-| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md) | REVIEW | bb60b76 |
-| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)       | REVIEW | bb60b76 |
-| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)             | REVIEW | bb60b76 |
-| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                         | REVIEW | bb60b76 |
+| #   | Plan                                                                                    | Status | Commit       |
+| --- | --------------------------------------------------------------------------------------- | ------ | ------------ |
+| 001 | [Row Multi-Select](./001-row-multiselect.md)                                            | TODO   | 3d32692      |
+| 002 | [ColumnType Registry](./002-column-type-registry.md)                                    | DONE   | 970c777      |
+| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                       | DONE   | 970c777      |
+| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                             | DONE   | 970c777      |
+| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                             | DONE   | 66c92c2      |
+| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                     | DONE   | 66c92c2      |
+| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)       | DONE   | 66c92c2      |
+| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)         | DONE   | 66c92c2      |
+| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                 | TODO   | 78e8122      |
+| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                     | DONE   | 53fe61f      |
+| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                 | REVIEW | 39c83e3      |
+| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)               | DONE   | 39c83e3      |
+| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                   | DONE   | 94c9453      |
+| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                               | DONE   | 94c9453      |
+| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                         | DONE   | 0f93724      |
+| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                     | DONE   | 6b3ecc5      |
+| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                       | REVIEW | eecb571      |
+| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)       | REVIEW | bb60b76      |
+| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md)   | REVIEW | bb60b76      |
+| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)         | REVIEW | bb60b76      |
+| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)               | REVIEW | bb60b76      |
+| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                           | REVIEW | bb60b76      |
+| 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md) | DONE   | working tree |
 
 ## Execution order
 
@@ -49,6 +50,7 @@
 20. `020-row-renderer-maintenance-boundary.md` - P0 renderer hardening after 019; extracts invalidation repaint and scroll-idle repair so `RowRenderer` is more focused before deeper slot and cell decomposition
 21. `021-row-cell-binding-lane-boundary.md` - P0 renderer hardening after 020; routes left/center/right lane binding through a dedicated helper before extracting hotter per-cell binding logic
 22. `022-row-cell-binder-boundary.md` - P0 renderer hardening after 021; routes the live cell-binding path through a dedicated binder before retiring leftover RowRenderer wrappers
+23. `023-row-renderer-runtime-adapter-boundary.md` - P0 renderer hardening after 022; moves full-width orchestration and post-scroll coordination adapters into a dedicated runtime module so the shell is mostly viewport ownership plus delegation
 
 ## Dependency graph
 
@@ -75,6 +77,7 @@
 020  (row-renderer maintenance)     - follows 019; moves repaint and scroll-idle repair out of RowRenderer before row-slot and cell-binding decomposition
 021  (row-cell binding lanes)       - follows 020; moves lane-level left/center/right binding orchestration out of the main renderer path before per-cell binder extraction
 022  (row-cell binder)              - follows 021; moves live per-cell binding policy out of RowRenderer before wrapper cleanup and final slot-lifecycle narrowing
+023  (row-renderer runtime adapter) - follows 022; moves runtime adapter construction for full-width orchestration and post-scroll coordination out of RowRenderer
 ```
 
 ## Notes

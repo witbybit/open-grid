@@ -43,9 +43,9 @@ describe('Architecture guardrails', () => {
 		expect(lines, `renderEngine.ts has ${lines} lines; intermediate budget is 1000 and target is 900`).toBeLessThan(1000);
 	});
 
-	it('rowRenderer.ts is below 1000 lines (intermediate budget, target 800)', () => {
+	it('rowRenderer.ts is below 800 lines (intermediate budget, target 750)', () => {
 		const lines = countLines('renderer/rowRenderer.ts');
-		expect(lines, `rowRenderer.ts has ${lines} lines; intermediate budget is 1000 and target is 800`).toBeLessThan(1000);
+		expect(lines, `rowRenderer.ts has ${lines} lines; intermediate budget is 800 and target is 750`).toBeLessThan(800);
 	});
 
 	it('renderEngine.ts does not inline renderer subscription wiring', () => {
@@ -74,8 +74,8 @@ describe('Architecture guardrails', () => {
 
 	it('rowRenderer live row/data binding delegates lane orchestration', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderer.ts'), 'utf-8');
-		expect(content).toContain('bindAllDataCells(this.getCellBindingLaneDeps()');
-		expect(content).toContain('bindAllLoadingCells(this.getCellBindingLaneDeps()');
+		expect(content).toContain('bindAllDataCellsRuntime(this.getRowRendererRuntimeArgs()');
+		expect(content).toContain('bindAllLoadingCellsRuntime(this.getRowRendererRuntimeArgs()');
 	});
 
 	it('rowCellBinder owns extracted live cell-binding policy', () => {
