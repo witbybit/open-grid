@@ -1,40 +1,40 @@
 # Plans
 
-| #   | Plan                                                                                            | Status   | Commit       |
-| --- | ----------------------------------------------------------------------------------------------- | -------- | ------------ |
-| 001 | [Row Multi-Select](./001-row-multiselect.md)                                                    | DONE     | 3d32692      |
-| 002 | [ColumnType Registry](./002-column-type-registry.md)                                            | DONE     | 970c777      |
-| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                               | DONE     | 970c777      |
-| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                                     | DONE     | 970c777      |
-| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                                     | DONE     | 66c92c2      |
-| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                             | DONE     | 66c92c2      |
-| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)               | DONE     | 66c92c2      |
-| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)                 | DONE     | 66c92c2      |
-| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                         | TODO     | 78e8122      |
-| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                             | DONE     | 53fe61f      |
-| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                         | DONE     | 39c83e3      |
-| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)                       | DONE     | 39c83e3      |
-| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                           | DONE     | 94c9453      |
-| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                                       | DONE     | 94c9453      |
-| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                                 | DONE     | 0f93724      |
-| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                             | DONE     | 6b3ecc5      |
-| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                               | DONE     | eecb571      |
-| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)               | DONE     | bb60b76      |
-| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md)           | DONE     | bb60b76      |
-| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)                 | DONE     | bb60b76      |
-| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)                       | DONE     | bb60b76      |
-| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                                   | DONE     | bb60b76      |
-| 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md)         | DONE     | working tree |
-| 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)               | DONE     | working tree |
-| 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md)       | DONE     | working tree |
-| 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)          | DONE     | working tree |
-| 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md) | DONE     | working tree |
-| 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                       | REJECTED | 1015f23      |
-| 029 | [React Hook Lifecycle Contract Hardening](./029-react-hook-lifecycle-contract-hardening.md)     | DONE     | working tree |
-| 030 | [Single Grid Entrypoint Migration](./030-single-grid-entrypoint-migration.md)                   | DONE     | working tree |
-| 031 | [Runtime Fault Surface Completion](./031-runtime-fault-surface-completion.md)                   | DONE     | working tree |
-| 032 | [Single Grid Entrypoint Lockdown](./032-single-grid-entrypoint-lockdown.md)                     | DONE     | 4d3b9fc      |
-| 033 | [Plan Reconciliation And Release Hardening](./033-plan-reconciliation-and-release-hardening.md) | DONE     | 54d4803      |
+| #   | Plan                                                                                            | Status   | Commit  |
+| --- | ----------------------------------------------------------------------------------------------- | -------- | ------- |
+| 001 | [Row Multi-Select](./001-row-multiselect.md)                                                    | DONE     | 3d32692 |
+| 002 | [ColumnType Registry](./002-column-type-registry.md)                                            | DONE     | 970c777 |
+| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                               | DONE     | 970c777 |
+| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                                     | DONE     | 970c777 |
+| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                                     | DONE     | 66c92c2 |
+| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                             | DONE     | 66c92c2 |
+| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)               | DONE     | 66c92c2 |
+| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)                 | DONE     | 66c92c2 |
+| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                         | TODO     | 78e8122 |
+| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                             | DONE     | 53fe61f |
+| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                         | DONE     | 39c83e3 |
+| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)                       | DONE     | 39c83e3 |
+| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                           | DONE     | 94c9453 |
+| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                                       | DONE     | 94c9453 |
+| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                                 | DONE     | 0f93724 |
+| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                             | DONE     | 6b3ecc5 |
+| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                               | DONE     | bb60b76 |
+| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)               | DONE     | 4ee5ea4 |
+| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md)           | DONE     | 37a3494 |
+| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)                 | DONE     | e530b52 |
+| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)                       | DONE     | 15e4809 |
+| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                                   | DONE     | 15e4809 |
+| 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md)         | DONE     | 05f3eed |
+| 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)               | DONE     | 9a1b82a |
+| 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md)       | DONE     | 04b846d |
+| 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)          | DONE     | 10ef28a |
+| 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md) | DONE     | 1015f23 |
+| 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                       | REJECTED | e86e886 |
+| 029 | [React Hook Lifecycle Contract Hardening](./029-react-hook-lifecycle-contract-hardening.md)     | DONE     | d79c342 |
+| 030 | [Single Grid Entrypoint Migration](./030-single-grid-entrypoint-migration.md)                   | DONE     | 4fd7cff |
+| 031 | [Runtime Fault Surface Completion](./031-runtime-fault-surface-completion.md)                   | DONE     | 4d3b9fc |
+| 032 | [Single Grid Entrypoint Lockdown](./032-single-grid-entrypoint-lockdown.md)                     | DONE     | c5903df |
+| 033 | [Plan Reconciliation And Release Hardening](./033-plan-reconciliation-and-release-hardening.md) | DONE     | 54d4803 |
 
 ## Execution order
 
@@ -122,21 +122,21 @@
 - Plan 016 is implemented and verified on 2026-06-12: plugins now initialize against `GridPluginRuntime` instead of `InternalGridApi`, plugin lifecycle is owned by `GridPluginRegistry`, `gridPlugins.ts` registers through a dedicated plugin controller, and `navigation.ts` / `contextMenu.ts` no longer reference `GridStore` or cast `api as GridStore`.
 - Plan 016 leaves `store.ts` below the active intermediate guard (`< 875`, currently 870 lines) but not yet at the aspirational `850` target. Treat that final shrink as follow-on cleanup rather than a hidden failure.
 - Plan 017 is the next pre-renderer hardening step: move client/server row models onto explicit runtime contracts so grouping, transactions, and server loading stop depending on the concrete `GridStore` facade.
-- Plan 017 is implemented in the working tree and verified on 2026-06-12: client and server row models now initialize against explicit row-model runtimes, `createGrid.ts` composes them through `store.getClientRowModelRuntime()` / `store.getServerRowModelRuntime()`, architecture guards prevent concrete `GridStore` creep from returning, and core/React/demo verification passed after aliasing the demo to source entrypoints for local workspace package resolution.
+- Plan 017 is implemented and verified on 2026-06-12: client and server row models now initialize against explicit row-model runtimes, `createGrid.ts` composes them through `store.getClientRowModelRuntime()` / `store.getServerRowModelRuntime()`, architecture guards prevent concrete `GridStore` creep from returning, and core/React/demo verification passed after aliasing the demo to source entrypoints for local workspace package resolution.
 - After Plan 017, the main remaining pre-renderer hardening plan should be runtime fault/diagnostic normalization so async, listener, and server failures stop scattering local `console.error` behavior across the core.
 - Plan 018 is the last major pre-renderer core hardening pass: unify runtime fault capture across event dispatch, state listeners, undo/redo, plugins, cell notifications, and server row-model loading so the core exposes one bounded diagnostic path before renderer decomposition begins.
-- Plan 018 is implemented in the working tree and verified on 2026-06-12: runtime faults now flow through a shared reporter, `runtimeFault` is a typed grid event, recent core faults can be inspected/cleared via the API boundary, and the targeted pre-renderer core files no longer use scattered local `console.error` calls.
+- Plan 018 is implemented and verified on 2026-06-12: runtime faults now flow through a shared reporter, `runtimeFault` is a typed grid event, recent core faults can be inspected/cleared via the API boundary, and the targeted pre-renderer core files no longer use scattered local `console.error` calls.
 - Plan 019 starts the renderer refactor proper by splitting `RenderEngine` orchestration away from subscription and invalidation policy. The goal is to make `RenderEngine` a composition root before cutting into `rowRenderer.ts`.
-- Plan 019 is implemented in the working tree and verified on 2026-06-12: renderer invalidation wiring now lives in `RenderInvalidationCoordinator.ts`, render stat snapshot/reset logic lives in `renderTelemetry.ts`, `renderEngine.ts` is down to 903 lines, and core/React/demo verification passed. React tests still emit the known `OpenGrid requires one of...` validation error during an intentional misuse test, but the suite exits green.
+- Plan 019 is implemented and verified on 2026-06-12: renderer invalidation wiring now lives in `RenderInvalidationCoordinator.ts`, render stat snapshot/reset logic lives in `renderTelemetry.ts`, `renderEngine.ts` is down to 903 lines, and core/React/demo verification passed. React tests still emit the known `OpenGrid requires one of...` validation error during an intentional misuse test, but the suite exits green.
 - Plan 020 is the next renderer hardening step: move invalidation repaint and post-scroll dirty repair into a dedicated maintenance helper so `RowRenderer` can concentrate on slot lifecycle and hot-path cell binding.
-- Plan 020 is implemented in the working tree and verified on 2026-06-12: invalidation repaint and scroll-idle repair now live in `rowRenderMaintenance.ts`, renderer style-hook faults in the row path report through `rendererFaults.ts`, `rowRenderer.ts` is down to 1531 lines, and core/React/demo verification passed. As before, React tests emit the known `OpenGrid requires one of...` validation error during an intentional misuse test, but the suite exits green.
+- Plan 020 is implemented and verified on 2026-06-12: invalidation repaint and scroll-idle repair now live in `rowRenderMaintenance.ts`, renderer style-hook faults in the row path report through `rendererFaults.ts`, `rowRenderer.ts` is down to 1531 lines, and core/React/demo verification passed. As before, React tests emit the known `OpenGrid requires one of...` validation error during an intentional misuse test, but the suite exits green.
 - Plan 021 is the next renderer slice: move live left/center/right lane orchestration into a dedicated helper so the remaining `RowRenderer` mass is concentrated in per-cell binding and slot lifecycle.
-- Plan 021 is implemented in the working tree and verified on 2026-06-12: the live row/data and loading lane path now routes through `rowCellBindingLanes.ts`, architecture guards assert the lane helper boundary, and core/React/demo verification passed. `RowRenderer` still retains wrapper mass and dead-size pressure, so the next slice should remove the leftover lane wrappers and extract hotter per-cell binding policy.
+- Plan 021 is implemented and verified on 2026-06-12: the live row/data and loading lane path now routes through `rowCellBindingLanes.ts`, architecture guards assert the lane helper boundary, and core/React/demo verification passed. `RowRenderer` still retains wrapper mass and dead-size pressure, so the next slice should remove the leftover lane wrappers and extract hotter per-cell binding policy.
 - Plan 022 is the next renderer slice: move the live per-cell binding path through `rowCellBinder.ts` so the remaining RowRenderer pressure is mostly wrapper cleanup and slot-lifecycle ownership.
 - Plan 022 is implemented and fully wrapped through the follow-on runtime extraction on 2026-06-13: the live lane path routes per-cell policy through `rowCellBinder.ts`, runtime bridge assembly now lives in `rowRendererRuntime.ts`, `RowRenderer` is down to 680 lines as a true slot-lifecycle shell, and full workspace verification (`corepack pnpm run test`, `corepack pnpm run build`) passed.
 - Plan 024 is implemented and verified on 2026-06-13: `rowRendererRuntime.ts` now consumes a live runtime state host instead of a getter-heavy pseudo-host contract, `rowCellBinder.ts` reads the programmatic scroll pointer once per bind path via plain runtime args, and the focused plus full core/React/demo verification commands all passed.
 - Plans 017-022 were reconciled from `REVIEW` to `DONE` on 2026-06-13 after confirming the runtime/renderer guardrails in `packages/core/src/engine/architectureGuards.test.ts` and re-running full workspace verification (`corepack pnpm run test`, `corepack pnpm run build`) successfully.
-- Plan 027 is implemented in the working tree and verified on 2026-06-13: viewport/layout orchestration and scroll-into-view targeting now live in `renderViewportCoordinator.ts`, and `RenderEngine` delegates the last layout bridge.
+- Plan 027 is implemented and verified on 2026-06-13: viewport/layout orchestration and scroll-into-view targeting now live in `renderViewportCoordinator.ts`, and `RenderEngine` delegates the last layout bridge.
 - Plan 028 was superseded by the later `029` + `030` + `032` sequence and reconciled on 2026-06-13. Do not execute it independently; the public-surface goals it described were absorbed by the single-`Grid` rollout.
 - Plan 029 is implemented and verified on 2026-06-13: the React hook lifecycle now has explicit initial/live entrypoints, the wrapper components use that split internally, and the demo plus React package still build and test cleanly.
 - Plan 030 is the next API consolidation step: replace the remaining public grid variants with one discriminated-union `Grid` entrypoint and migrate the demo to it.
