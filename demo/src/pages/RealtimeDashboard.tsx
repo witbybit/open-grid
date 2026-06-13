@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Grid, GridEventName, type GridApi, type GridReadyEvent, type StyleRule } from '@open-grid/react';
+import { Grid, GridEventName, type GridApi, type GridContextMenuOptions, type GridReadyEvent, type StyleRule } from '@open-grid/react';
 import { Activity, BarChart3, Code2, RefreshCw, TrendingUp, Zap } from 'lucide-react';
 import { createDashboardColumns, createDashboardRows, type DashboardStockRow } from './demoGridConfigs';
 
@@ -140,6 +140,22 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		[]
 	);
 
+	const contextMenuOptions = useMemo<GridContextMenuOptions<DashboardStockRow>>(
+		() => ({
+			customItems: [
+				{ isDivider: true },
+				{
+					id: 'chart',
+					icon: '📊',
+					label: 'Show Chart',
+					action: ({ api }) => api.openChart(),
+					disabled: (params: any) => !params.selection.bounds,
+				},
+			],
+		}),
+		[]
+	);
+
 	const svgPoints = useMemo(() => {
 		if (prices.length < 2) return '';
 		const max = Math.max(...prices, 1);
@@ -178,6 +194,8 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 						columns={columns}
 						styleRules={styleRules}
 						enableContextMenu
+						contextMenuOptions={contextMenuOptions}
+						enableChart
 						pinLeftColumns={2}
 						enableNavigation
 						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
