@@ -54,6 +54,18 @@ export interface GridHost {
 	scheduleGeometryPaint(reason?: string): void;
 	getRenderStats(): RenderStats;
 	resetRenderStats(): void;
+	/** Set a custom theme immediately. */
+	setTheme(theme: import('./renderer/themes.js').ThemeTokens): void;
+	/** Switch to a built-in theme by name. */
+	switchTheme(themeName: string): void;
+	/** Get the currently active theme. */
+	getTheme(): import('./renderer/themes.js').ThemeTokens;
+	/** Get the active built-in theme name, or null for a custom theme. */
+	getThemeName(): import('./renderer/themes.js').BuiltInThemeName | null;
+	/** List supported built-in theme names. */
+	getAvailableThemes(): import('./renderer/themes.js').BuiltInThemeName[];
+	/** Subscribe to theme changes. Returns an unsubscribe function. */
+	onThemeChange(listener: (theme: import('./renderer/themes.js').ThemeTokens) => void): () => void;
 	destroy(): void;
 }
 
@@ -92,6 +104,11 @@ export function mountGridHost<TRowData>(
 
 	engine.getRenderStats = () => renderEngine.getRenderStats();
 	engine.resetRenderStats = () => renderEngine.resetRenderStats();
+	engine.getTheme = () => renderEngine.viewportRenderer.getTheme();
+	engine.getThemeName = () => renderEngine.viewportRenderer.getThemeName();
+	engine.getAvailableThemes = () => renderEngine.viewportRenderer.getThemeManager()?.getAvailableThemes() ?? [];
+	engine.switchTheme = (themeName) => renderEngine.viewportRenderer.switchTheme(themeName);
+	engine.onThemeChange = (listener) => renderEngine.viewportRenderer.onThemeChange(listener);
 
 	if (options.pins) {
 		internalApi.setViewportPins(options.pins);
@@ -168,11 +185,34 @@ export function mountGridHost<TRowData>(
 		resetRenderStats() {
 			renderEngine.resetRenderStats();
 		},
+		setTheme(theme) {
+			renderEngine.viewportRenderer.setTheme(theme);
+		},
+		switchTheme(themeName) {
+			store.switchTheme(themeName);
+		},
+		getTheme() {
+			return renderEngine.viewportRenderer.getTheme();
+		},
+		getThemeName() {
+			return renderEngine.viewportRenderer.getThemeName();
+		},
+		getAvailableThemes() {
+			return renderEngine.viewportRenderer.getThemeManager()?.getAvailableThemes() ?? [];
+		},
+		onThemeChange(listener) {
+			return renderEngine.viewportRenderer.onThemeChange(listener);
+		},
 		destroy() {
 			observer.disconnect();
 			renderEngine.unmount();
 			engine.getRenderStats = undefined;
 			engine.resetRenderStats = undefined;
+			engine.getTheme = undefined;
+			engine.getThemeName = undefined;
+			engine.getAvailableThemes = undefined;
+			engine.switchTheme = undefined;
+			engine.onThemeChange = undefined;
 		},
 		adapterHandle,
 	};

@@ -23,6 +23,8 @@ import type {
 	DomCellRendererParams,
 	ImperativeCellHandle,
 	GridPersistenceAdapter,
+	BuiltInThemeName,
+	ThemeTokens,
 } from '@open-grid/core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 import type { StyleRule } from './styleRules.js';
@@ -64,6 +66,8 @@ export type {
 	DomCellRendererHandle,
 	DomCellRendererParams,
 	ImperativeCellHandle,
+	BuiltInThemeName,
+	ThemeTokens,
 };
 
 /**

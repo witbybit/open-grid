@@ -43,6 +43,7 @@ import { GridStateFeatureController } from '../features/GridStateFeatureControll
 import { CellNotificationController } from './CellNotificationController.js';
 import { GridStateReactionController } from './GridStateReactionController.js';
 import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
+import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -96,6 +97,12 @@ export class GridEngine<TRowData = unknown> {
 
 	public getRenderStats?: () => RenderStats;
 	public resetRenderStats?: () => void;
+	public getTheme?: () => ThemeTokens;
+	public getThemeName?: () => BuiltInThemeName | null;
+	public getAvailableThemes?: () => BuiltInThemeName[];
+	public switchTheme?: (themeName: string) => void;
+	public onThemeChange?: (listener: (theme: ThemeTokens) => void) => () => void;
+
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.eventBus = new EventBus<TRowData>();
 		this.runtimeFaults = new RuntimeFaultReporter<TRowData>({
@@ -200,6 +207,7 @@ export class GridEngine<TRowData = unknown> {
 			activeEdit: config.activeEdit || null,
 			sortModel: config.sortModel || null,
 			filterModel: config.filterModel || null,
+			themeName: config.themeName ?? 'dark',
 			globalVersion: 0,
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
 			visibleColRange: { startIdx: 0, endIdx: 0 },

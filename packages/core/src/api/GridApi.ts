@@ -11,6 +11,7 @@ import type { CsvExportOptions } from '../export/csvExport.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridState, GridStateUpdater, Listener, ColumnState, GridCellRangeBounds } from '../state/GridState.js';
+import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 
 export type { CsvExportOptions };
 export type { RuntimeFault };
@@ -394,6 +395,19 @@ export interface GridApi<TRowData = unknown> {
 	clearRuntimeFaults(): void;
 	/** Synchronously flushes all pending cell update notifications. Use when you need to ensure repaints happen before the next frame. */
 	flushCellUpdatesSync(): void;
+
+	// ── Theme API ──────────────────────────────────────────────────────────────
+	/** Returns the currently active theme tokens. */
+	getTheme(): ThemeTokens;
+	/** Returns the active built-in theme name, or null when a custom theme is active. */
+	getThemeName(): BuiltInThemeName | null;
+	/** Returns the built-in themes supported by this build. */
+	getAvailableThemes(): BuiltInThemeName[];
+	/** Switch to a built-in theme by name ('light', 'dark', 'cool-blue', etc). */
+	switchTheme(themeName: string): void;
+	/** Subscribe to theme changes. Returns an unsubscribe function. */
+	onThemeChange(listener: (theme: ThemeTokens) => void): () => void;
+
 	destroy(): void;
 }
 

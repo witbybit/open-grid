@@ -51,6 +51,7 @@ import {
 	applyPersistedState,
 	createPersistenceSubscription,
 } from './persistence/statePersistence.js';
+import type { ThemeTokens } from './renderer/themes.js';
 
 export type { GridPersistenceAdapter, PersistedGridState };
 export { createLocalStorageAdapter };
@@ -207,6 +208,11 @@ export function createApiFacade<TRowData>(
 		getRuntimeFaults: () => store.getRuntimeFaults(),
 		clearRuntimeFaults: () => store.clearRuntimeFaults(),
 		flushCellUpdatesSync: () => store.flushCellUpdatesSync(),
+		getTheme: () => store.getTheme(),
+		getThemeName: () => store.getThemeName(),
+		getAvailableThemes: () => store.getAvailableThemes(),
+		switchTheme: (themeName: string) => store.switchTheme(themeName),
+		onThemeChange: (listener: (theme: ThemeTokens) => void) => store.onThemeChange(listener),
 		destroy,
 	};
 

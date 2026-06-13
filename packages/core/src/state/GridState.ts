@@ -1,6 +1,7 @@
 import type { FilterModel, SortModel } from '../rowModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { ColumnDef, GridStyleSlots } from '../columnDef.js';
+import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { GridSelectionState, ActiveEditState } from '../api/GridApi.js';
 
@@ -22,6 +23,7 @@ export interface GridModelState<TRowData = unknown> {
 
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
+	themeName: BuiltInThemeName;
 
 	groupBy?: string[];
 	aggDefs?: AggregationDef<TRowData>[];

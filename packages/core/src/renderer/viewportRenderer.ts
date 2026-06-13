@@ -3,6 +3,8 @@ import type { GeometryController } from './geometryController.js';
 import { CORE_STYLES } from './styles.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import { LAYER_REGISTRY } from './layerRegistry.js';
+import type { BuiltInThemeName, ThemeTokens } from './themes.js';
+import { ThemeManager, DARK_THEME, getBuiltInTheme, isBuiltInThemeName } from './themes.js';
 
 export class ViewportRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -30,6 +32,9 @@ export class ViewportRenderer<TRowData = unknown> {
 
 	private styleTag: HTMLStyleElement | null = null;
 	private layoutPlan: GridLayoutPlan | null = null;
+	private themeManager: ThemeManager | null = null;
+	private themeSelector = '';
+	private static nextThemeScopeId = 0;
 
 	// All registry-built layers, keyed by descriptor id. Named fields above are
 	// assigned from this map after mount for the renderers that hold references.
@@ -44,6 +49,16 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.container = container;
 		this.injectStyles();
 		this.container.classList.add('og-grid-container');
+
+		const stateThemeName = this.engine.getState().themeName;
+		const initialThemeName: BuiltInThemeName = isBuiltInThemeName(stateThemeName ?? '') ? stateThemeName : 'dark';
+		const themeScopeId = ++ViewportRenderer.nextThemeScopeId;
+		this.container.dataset.ogThemeScope = String(themeScopeId);
+		this.themeSelector = `[data-og-theme-scope="${themeScopeId}"]`;
+
+		// Initialize theme manager with grid-scoped CSS variables.
+		this.themeManager = new ThemeManager(getBuiltInTheme(initialThemeName), initialThemeName);
+		this.themeManager.mount(this.themeSelector);
 
 		// Single scroll container — the only element that has overflow:auto. This and the
 		// grid container are the two DOM roots the layer registry parents layers onto.
@@ -103,8 +118,12 @@ export class ViewportRenderer<TRowData = unknown> {
 	}
 
 	public unmount(): void {
+		this.themeManager?.unmount();
+		this.themeManager = null;
+
 		if (this.container) {
 			this.container.classList.remove('og-grid-container');
+			delete this.container.dataset.ogThemeScope;
 			this.container.textContent = '';
 		}
 		if (this.styleTag && this.styleTag.parentNode) {
@@ -158,6 +177,48 @@ export class ViewportRenderer<TRowData = unknown> {
 
 	public getLayoutPlan(): GridLayoutPlan | null {
 		return this.layoutPlan;
+	}
+
+	/**
+	 * Get the theme manager instance for runtime theme switching.
+	 * Useful for exposing theme control to the application.
+	 */
+	public getThemeManager(): ThemeManager | null {
+		return this.themeManager;
+	}
+
+	/**
+	 * Set a custom theme immediately.
+	 */
+	public setTheme(theme: ThemeTokens): void {
+		this.themeManager?.setTheme(theme, this.themeSelector);
+	}
+
+	/**
+	 * Switch to a built-in theme by name (e.g., 'light', 'dark', 'cool-blue').
+	 */
+	public switchTheme(themeName: string): void {
+		if (!isBuiltInThemeName(themeName)) return;
+		this.themeManager?.switchTheme(themeName, this.themeSelector);
+	}
+
+	/**
+	 * Get the currently active theme.
+	 */
+	public getTheme(): ThemeTokens {
+		return this.themeManager?.getTheme() ?? DARK_THEME;
+	}
+
+	public getThemeName(): BuiltInThemeName | null {
+		return this.themeManager?.getThemeName() ?? null;
+	}
+
+	/**
+	 * Subscribe to theme changes.
+	 * Returns an unsubscribe function.
+	 */
+	public onThemeChange(listener: (theme: ThemeTokens) => void): () => void {
+		return this.themeManager?.onThemeChange(listener) ?? (() => {});
 	}
 
 	private injectStyles(): void {

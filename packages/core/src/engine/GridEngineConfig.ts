@@ -1,4 +1,5 @@
 import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleSlots } from '../store.js';
+import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
@@ -15,6 +16,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	selectedRowIds?: string[];
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
+	themeName?: BuiltInThemeName;
 	activeEdit?: GridCellPointer | null;
 	loadingSkeletonCount?: number;
 	styleSlots?: GridStyleSlots<TRowData>;

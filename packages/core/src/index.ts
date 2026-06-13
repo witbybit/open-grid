@@ -76,3 +76,22 @@ export type { IGridDatasource } from './serverRowModel.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
 export type { GridNavigationOptions } from './navigation.js';
+
+export {
+	LIGHT_THEME,
+	DARK_THEME,
+	HIGH_CONTRAST_LIGHT_THEME,
+	HIGH_CONTRAST_DARK_THEME,
+	COOL_BLUE_THEME,
+	WARM_ORANGE_THEME,
+	MINIMAL_MONOCHROME_THEME,
+	BUILT_IN_THEMES,
+	BUILT_IN_THEME_ORDER,
+	BUILT_IN_THEME_METADATA,
+	ThemeManager,
+	getBuiltInTheme,
+	isBuiltInThemeName,
+	themeToCSSVariables,
+	createTheme,
+} from './renderer/themes.js';
+export type { ThemeTokens, BuiltInThemeName } from './renderer/themes.js';

@@ -4,6 +4,15 @@ export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverla
 export { PortalCell, PortalManager } from './GridPortal.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
+export {
+	BUILT_IN_THEMES,
+	BUILT_IN_THEME_ORDER,
+	BUILT_IN_THEME_METADATA,
+	getBuiltInTheme,
+	isBuiltInThemeName,
+	createTheme,
+	themeToCSSVariables,
+} from '@open-grid/core';
 
 // ─── Built-in cell renderers & editors ───────────────────────────────────────
 export {
@@ -71,6 +80,8 @@ export type {
 	DomCellRendererParams,
 	ImperativeCellHandle,
 	GridReadyEvent,
+	BuiltInThemeName,
+	ThemeTokens,
 } from './types.js';
 
 export type { GridContextMenuOptions, GridContextMenuItem, GridCellPointer, HeaderMenuRendererProps } from '@open-grid/core';

@@ -211,7 +211,7 @@ export default function SidebarPanelsDemo({ onGridReady }: SidebarPanelsDemoProp
 					enableContextMenu={true}
 					enableChart
 					sidebar={{
-						panels: ['columns', 'filters', 'sort'],
+						panels: ['columns', 'filters', 'sort', 'themes'],
 						defaultOpen: 'columns',
 						position: 'right',
 						width: 300,

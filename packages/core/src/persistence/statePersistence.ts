@@ -1,5 +1,6 @@
 import type { GridState, ColumnDef } from '../store.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import { isBuiltInThemeName, type BuiltInThemeName } from '../renderer/themes.js';
 
 export interface PersistedGridState {
 	columnWidths?: Record<string, number>;
@@ -8,6 +9,7 @@ export interface PersistedGridState {
 	columnVisibility?: Record<string, boolean>;
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
+	themeName?: BuiltInThemeName;
 	groupBy?: string[];
 	showGroupFooter?: boolean;
 	enableStickyGroupRows?: boolean;
@@ -109,6 +111,7 @@ export function extractPersistedState(state: GridState): PersistedGridState {
 		columnVisibility: Object.keys(columnVisibility).length > 0 ? columnVisibility : undefined,
 		sortModel: state.sortModel,
 		filterModel: state.filterModel,
+		themeName: state.themeName,
 		groupBy: state.groupBy,
 		showGroupFooter: state.showGroupFooter,
 		enableStickyGroupRows: state.enableStickyGroupRows,
@@ -172,6 +175,10 @@ export function applyPersistedState<TRowData>(
 		result.filterModel = saved.filterModel as GridState<TRowData>['filterModel'];
 	}
 
+	if (saved.themeName !== undefined && isBuiltInThemeName(saved.themeName)) {
+		result.themeName = saved.themeName as GridState<TRowData>['themeName'];
+	}
+
 	// Group by — only restore fields that still exist in schema
 	if (saved.groupBy !== undefined) {
 		result.groupBy = saved.groupBy.filter((f) => knownFields.has(f));
@@ -222,6 +229,7 @@ const PERSISTENCE_KEYS = [
 	'columnWidths',
 	'sortModel',
 	'filterModel',
+	'themeName',
 	'groupBy',
 	'showGroupFooter',
 	'enableStickyGroupRows',

@@ -8,7 +8,7 @@
  *   - api.rows().getChecked()   →  drive bulk actions from the selection
  *   - rowSelectionChanged event →  reactive event log
  */
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Grid, GridEventName } from '@open-grid/react';
 import type { ColumnDef, GridApi, GridReadyEvent } from '@open-grid/react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
@@ -77,34 +77,6 @@ const COLUMNS: ColumnDef<OrderRow>[] = [
 	},
 	{ field: 'region', header: 'Region', width: 90 },
 ];
-
-function SelectionStatusBar({ totalCount, count }: { totalCount: number; count: number }) {
-	if (count === 0) {
-		return (
-			<div className='flex items-center gap-2 text-[11px] text-slate-500 font-medium'>
-				<Info className='w-3.5 h-3.5 shrink-0' />
-				No rows selected — use the checkboxes or{' '}
-				<kbd className='px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px]'>Ctrl/⌘+Click</kbd> any cell
-			</div>
-		);
-	}
-
-	return (
-		<div className='flex items-center gap-2 text-[11px] font-semibold'>
-			<CheckSquare className='w-3.5 h-3.5 text-indigo-400' />
-			<span className='tabular-nums'>
-				<span className='text-white'>{count}</span>
-				<span className='text-slate-400'> / {totalCount}</span>
-				<span className='text-slate-500'> rows selected</span>
-			</span>
-			{count === totalCount && (
-				<span className='px-2 py-0.5 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-[9px] font-bold uppercase tracking-wider'>
-					All
-				</span>
-			)}
-		</div>
-	);
-}
 
 function BulkActions({
 	onDelete,

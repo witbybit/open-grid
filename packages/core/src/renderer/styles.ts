@@ -1,53 +1,26 @@
+import { DARK_THEME, themeToCSSVariables } from './themes.js';
+
 /**
  * Structural and Visual CSS Styles for Open Grid.
- * Decoupled from core RenderEngine to allow direct customization slots.
+ *
+ * Theme variables are injected by ThemeManager at runtime.
+ * Default (dark theme) is defined here for quick load before ThemeManager.mount().
+ *
+ * CSS variable hierarchy:
+ * 1. theme variables (--og-*) injected by ThemeManager
+ * 2. structural classes (.og-*) that use those variables
+ * 3. state classes (.og-*-active, .og-*-hover, etc.) that override or augment
+ *
+ * Users can override theme variables by:
+ * - Using ThemeManager.setTheme() / .switchTheme()
+ * - Passing styleSlots with custom CSS variables
+ * - Directly setting CSS variables on .og-grid-container
  */
 export const CORE_STYLES = `
+  ${themeToCSSVariables(DARK_THEME, ':root, .og-grid-container')}
+
   :root, .og-grid-container {
-    --og-font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
-    --og-bg-color: #0d0f12;
-    --og-text-color: #e2e8f0;
-    --og-border-color: #1e293b;
-    --og-header-bg: #090a0f;
-    --og-header-text: #94a3b8;
-    --og-row-hover-bg: #161b22;
-    --og-cell-border: rgba(30, 41, 59, 0.5);
-    --og-selection-border: rgba(59, 130, 246, 0.6);
-    --og-selection-bg: rgba(59, 130, 246, 0.04);
-    --og-focus-ring: #3b82f6;
-    --og-leaf-header-height: 40px;
-    --og-group-panel-height: 42px;
     --og-overlay-top: var(--og-leaf-header-height);
-
-    /* Pin column boundary — border and shadow on the dividing edge.
-       Override these vars to customise or disable the pin boundary visual. */
-    --og-pin-left-border-color: rgba(255, 255, 255, 0.07);
-    --og-pin-right-border-color: rgba(255, 255, 255, 0.07);
-    --og-pin-left-shadow: 4px 0 14px rgba(0, 0, 0, 0.45);
-    --og-pin-right-shadow: -4px 0 14px rgba(0, 0, 0, 0.45);
-
-    /* Skeletons Styling */
-    --og-skeleton-start: #1e293b;
-    --og-skeleton-mid: #334155;
-    --og-skeleton-end: #1e293b;
-    --og-skeleton-width: 75%;
-    --og-skeleton-height: 14px;
-    --og-skeleton-border-radius: 4px;
-    --og-skeleton-animation-duration: 1.5s;
-
-    /* Group & Detail Rows Styling */
-    --og-group-row-bg: rgba(15, 23, 42, 0.4);
-    --og-group-row-hover-bg: rgba(30, 41, 59, 0.6);
-    --og-group-row-text: #e2e8f0;
-    --og-group-row-font-size: 13px;
-    --og-group-row-font-weight: 600;
-    --og-group-badge-bg: rgba(59, 130, 246, 0.2);
-    --og-group-badge-border: rgba(59, 130, 246, 0.4);
-    --og-group-badge-text: #60a5fa;
-    --og-detail-row-bg: rgba(255, 255, 255, 0.02);
-    --og-detail-row-border: rgba(255, 255, 255, 0.05);
-    --og-detail-row-text: #a0aec0;
-    --og-detail-row-font-size: 12px;
   }
 
   @keyframes og-cell-flash {

@@ -12,6 +12,7 @@ import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 import type { PersistenceStatus, PersistedGridState } from './persistence/statePersistence.js';
 import { extractPersistedState } from './persistence/statePersistence.js';
+import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltInThemeName, type ThemeTokens } from './renderer/themes.js';
 
 // ── Focused sub-modules — re-export so callers of store.ts continue to work ──
 export { RowNode } from './rowNode.js';
@@ -536,6 +537,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			}
 		}
 		if (state.filterModel !== undefined) this.setFilterModel(state.filterModel);
+		if (state.themeName !== undefined && isBuiltInThemeName(state.themeName)) this.switchTheme(state.themeName);
 		if (state.groupBy !== undefined) this.setGroupBy(state.groupBy.filter((f) => knownFields.has(f)));
 		if (state.showGroupFooter !== undefined) this.setShowGroupFooter(state.showGroupFooter);
 		if (state.enableStickyGroupRows !== undefined) this.setStickyGroupRows(state.enableStickyGroupRows);
@@ -798,49 +800,49 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	}
 
 	public batch = (callback: () => void): void => this.engine.batch(callback);
-
 	public flushCellUpdatesSync = (): void => this.engine.flushCellUpdatesSync();
-
 	public registerPlugin = (plugin: GridPlugin<TRowData>): void => this.pluginRegistry.registerPlugin(plugin);
-
 	public unregisterPlugin = (name: string): void => this.pluginRegistry.unregisterPlugin(name);
-
 	public getPlugin = <T = unknown>(name: string): T | null => this.pluginRegistry.getPlugin<T>(name);
-
 	public undo = (): void => this.engine.undo();
-
 	public redo = (): void => this.engine.redo();
 
-	public canUndo = (): boolean => {
-		return this.engine.commandHistory.canUndo();
-	};
+	public canUndo = (): boolean => this.engine.commandHistory.canUndo();
 
-	public canRedo = (): boolean => {
-		return this.engine.commandHistory.canRedo();
-	};
+	public canRedo = (): boolean => this.engine.commandHistory.canRedo();
 
 	public getRenderStats = (): RenderStats => {
-		if (this.engine.getRenderStats) {
-			return this.engine.getRenderStats();
-		}
+		if (this.engine.getRenderStats) return this.engine.getRenderStats();
 		const empty = createEmptyRenderStats();
 		empty.compiledPlanVersion = this.engine.getCompiledPlanVersion();
 		return empty;
 	};
 
-	public resetRenderStats = (): void => {
-		this.engine.resetRenderStats?.();
-	};
+	public resetRenderStats = (): void => this.engine.resetRenderStats?.();
 
 	public getRuntimeFaults = () => this.engine.runtimeFaults.snapshot();
 
-	public clearRuntimeFaults = (): void => {
-		this.engine.runtimeFaults.clear();
+	public clearRuntimeFaults = (): void => this.engine.runtimeFaults.clear();
+
+	public reportRuntimeFault = (fault: import('./diagnostics/RuntimeFaultReporter.js').RuntimeFaultInput) => this.engine.runtimeFaults.report(fault);
+
+	public getTheme = (): ThemeTokens => this.engine.getTheme?.() ?? getBuiltInTheme(this.getThemeName() ?? 'dark');
+
+	public getThemeName = (): BuiltInThemeName | null => {
+		if (this.engine.getThemeName) return this.engine.getThemeName();
+		const themeName = this.state.themeName;
+		return isBuiltInThemeName(themeName) ? themeName : null;
 	};
 
-	public reportRuntimeFault = (fault: import('./diagnostics/RuntimeFaultReporter.js').RuntimeFaultInput) => {
-		return this.engine.runtimeFaults.report(fault);
+	public getAvailableThemes = (): BuiltInThemeName[] => this.engine.getAvailableThemes?.() ?? BUILT_IN_THEME_ORDER.slice();
+
+	public switchTheme = (themeName: string): void => {
+		if (!isBuiltInThemeName(themeName) || this.state.themeName === themeName) return;
+		this.setState({ themeName });
+		this.engine.switchTheme?.(themeName);
 	};
+
+	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.engine.onThemeChange?.(listener) ?? (() => {});
 
 	public destroy = (): void => {
 		this.pluginRegistry.destroy();

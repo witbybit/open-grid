@@ -17,7 +17,7 @@
     - `Grid.tsx` no longer slices rows (`pagedClientRows` gone) — forwards plain `rows`; `pagination`/`showStatusBar` props now seed core config (`initialState.pagination` + `showStatusBar`). Server still passes `pagination` to `createServerGrid` for block loading. Removed the React `<GridPagination>` render + `serverPaginationState` subscription. Kept a thin `pagination?: boolean | GridPaginationConfig` + `showStatusBar?` prop (config forwarding only — no UI, no slicing; like `rowSelection`). **Deviation from the original "delete the prop" step**: a thin forwarding prop is idiomatic and preserves ergonomics while still removing the React _implementation_ (slicing + components).
     - Core pagination bar made mode-aware: `getModel()` reads `serverPagination` (server) → `getPageWindow()` (client) → fallback; `goToPage()` calls `rowModel.goToPage` (server block load) else state+event (client). Bar also subscribes to the `serverPagination` state key (robust to load-before-mount timing).
     - **Capability note**: P0 custom status-bar panel config was NOT needed — the demos used the default `<GridStatusBar/>` (rows/selected), which the core status bar already covers. Migrated via `showStatusBar`. The React status bar's extra "visible"/"editing" panels are dropped (minor, documented); a core status-bar panel API remains a future option.
-    - Demos migrated: RowMultiSelectDemo (`showStatusBar`), PerformanceLab + InfiniteServerScroll (`pagination={{ pageSize }}`, dropped React-only `style`). Dead `SelectionStatusBar` left as-is (never rendered).
+    - Demos migrated: RowMultiSelectDemo (`showStatusBar`), PerformanceLab + InfiniteServerScroll (`pagination={{ pageSize }}`, dropped React-only `style`).
     - Guard: `packages/react/src/adapterBoundary.test.ts` — Grid.tsx has no `pagedClientRows`/row reshaping; public surface no longer exports the removed APIs; source files gone.
     - **Breaking change**: removed the above exports + rich `GridPaginationOptions`. Migration: core `pagination`/`showStatusBar` config + built-in bars.
 
@@ -53,7 +53,7 @@ Delete the React layer's pagination and status-bar implementations entirely. Aft
 
 **Demos to migrate:**
 
-- `demo/src/pages/RowMultiSelectDemo.tsx` (import + `<GridStatusBar/>` at line ~12, ~307; custom `SelectionStatusBar`).
+- `demo/src/pages/RowMultiSelectDemo.tsx` (import + `<GridStatusBar/>` at line ~12).
 - `demo/src/pages/PerformanceLab.tsx` (`pagination={{ pageSize: PAGE_SIZE }}` ~256).
 - `demo/src/pages/InfiniteServerScroll.tsx` (`pagination={{ pageSize: 1000 }}` ~209).
 
@@ -61,7 +61,7 @@ Delete the React layer's pagination and status-bar implementations entirely. Aft
 
 The React components expose capabilities the fixed core bars don't yet have. To avoid a silent regression, re-expose them as **core config** first:
 
-1. **Status-bar custom panels.** `GridStatusBar` allowed custom `left`/`right` content (e.g. `SelectionStatusBar`). Add a core `statusBar` config — e.g. `showStatusBar: boolean | { panels?: StatusBarPanelDef[] }` where a panel is `{ id, align: 'left'|'right', render(api): string | HTMLElement }`. `statusBarRenderer` renders configured panels; default panels = today's Rows/Selected. This keeps the RowMultiSelectDemo's selection display possible without a React component.
+1. **Status-bar custom panels.** `GridStatusBar` allowed custom `left`/`right` . Add a core `statusBar` config — e.g. `showStatusBar: boolean | { panels?: StatusBarPanelDef[] }` where a panel is `{ id, align: 'left'|'right', render(api): string | HTMLElement }`. `statusBarRenderer` renders configured panels; default panels = today's Rows/Selected. This keeps the RowMultiSelectDemo's selection display possible without a React component.
 2. **Pagination config.** Client pagination is now core (`state.pagination` + Plan 041 slicing); the demos' `pagination={{ pageSize }}` maps to the core `pagination` config (already on `GridEngineConfig`/`GridState`). The React `pagination` prop is removed; users set it via the grid options the adapter already forwards.
 3. **Page-info / button customization** (the React `renderPrevButton`/`renderPageInfo`/`maxPageButtons`) is dropped in v1. If needed later, expose via core pagination config — note as follow-up, do not reintroduce a React component.
 
