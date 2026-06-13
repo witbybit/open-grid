@@ -12,6 +12,7 @@ import type { HeaderRenderer } from './headerRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
+import { compileStyleRules } from '../styling/styleRules.js';
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	isScrolling: boolean;
@@ -141,7 +142,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			scrollCtx.styleVersion = this.deps.rowRenderer.styleVersion;
 			scrollCtx.loadingVersion = this.deps.rowRenderer.loadingVersion;
 			scrollCtx.activeEdit = state.activeEdit;
-			scrollCtx.hasStyleHooks = !!(state.styleSlots?.cellClass || state.styleSlots?.beforeCellRender || state.styleSlots?.afterCellRender);
+			scrollCtx.hasDeferredCellStyleRules = compileStyleRules(state.styleRules).hasCellRules;
 			scrollCtx.hasCustomRenderers = plan.hasCustomRenderers;
 			scrollCtx.plan = plan;
 			scrollCtx.visibleColRange.startIdx = nextWindow.colStart;

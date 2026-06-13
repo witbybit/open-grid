@@ -16,7 +16,7 @@ export interface ScrollRenderContext<TRowData = unknown> {
 
 	activeEdit: GridCellPointer | null;
 
-	hasStyleHooks: boolean;
+	hasDeferredCellStyleRules: boolean;
 	hasCustomRenderers: boolean;
 
 	plan: CompiledGridPlan<TRowData>;

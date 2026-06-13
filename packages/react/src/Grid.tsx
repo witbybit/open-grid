@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useInsertionEffect, type PropsWithChildren 
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
 import { resolveColumnTypes } from './resolveColumnTypes.js';
-import { compileStyleRules } from './styleRules.js';
 import type { ColumnDef, GridState, GridPersistenceAdapter, GridDatasource } from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
 
@@ -155,11 +154,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	}, []);
 
 	useEffect(() => {
-		if (!styleRules || styleRules.length === 0) {
-			api.setStyleSlots(undefined);
-			return;
-		}
-		api.setStyleSlots(compileStyleRules(styleRules));
+		api.setStyleRules(styleRules && styleRules.length > 0 ? styleRules : undefined);
 	}, [api, styleRules]);
 
 	useEffect(() => {

@@ -214,7 +214,7 @@ export class GridEngine<TRowData = unknown> {
 			getRowId: config.getRowId,
 			loading: config.loading,
 			loadingSkeletonCount: config.loadingSkeletonCount,
-			styleSlots: config.styleSlots,
+			styleRules: config.styleRules,
 
 			// Tree / Grouping / Master-Detail State
 			groupBy: config.groupBy,
@@ -445,8 +445,8 @@ export class GridEngine<TRowData = unknown> {
 		this.columnFeature.setColumnReorderEnabled(enabled);
 	}
 
-	public setStyleSlots(styleSlots: GridState<TRowData>['styleSlots']): void {
-		this.stateFeature.setStyleSlots(styleSlots);
+	public setStyleRules(styleRules: GridState<TRowData>['styleRules']): void {
+		this.stateFeature.setStyleRules(styleRules);
 	}
 
 	public resizeRow(rowId: string, height: number, undoable = true): void {

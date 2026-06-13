@@ -7,6 +7,7 @@ import type { CellRenderer } from './cellRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
+import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
 
 function buildCellPinClass(colIndex: number, pinLeftColumns: number, pinRightStart: number): string {
 	if (colIndex < pinLeftColumns) return 'og-cell og-cell-pinned-left';
@@ -151,7 +152,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	if (access.isSelected) cellClassName += ' og-cell-selected';
 	if (access.isLoading) cellClassName += ' og-cell-loading';
 
-	if (state.styleSlots?.cellClass && node.data) {
+	const compiledStyleRules = compileStyleRules(state.styleRules);
+	if (compiledStyleRules.hasCellRules && node.data) {
 		try {
 			const s = deps.cellClassScratch;
 			s.row = node.data;
@@ -169,18 +171,10 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			s.rawValue = access.rawValue;
 			s.isLoading = access.isLoading;
 			s.selection = state.selection;
-			const customCellClass = state.styleSlots.cellClass(col, node.data, s);
+			const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, node.data, s);
 			if (customCellClass) cellClassName += ' ' + customCellClass;
 		} catch (e) {
 			reportRendererFault(deps.engine, 'cell-class', e, { rowId: node.id, rowIndex, colField: col.field, colIndex });
-		}
-	}
-
-	if (state.styleSlots?.beforeCellRender) {
-		try {
-			state.styleSlots.beforeCellRender(access, cellSlot.element);
-		} catch (e) {
-			reportRendererFault(deps.engine, 'before-cell-render', e, { rowId: node.id, rowIndex, colField: col.field, colIndex });
 		}
 	}
 
@@ -285,14 +279,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		formattedValue,
 		contentMode === 'portal' ? stableKey : undefined
 	);
-
-	if (state.styleSlots?.afterCellRender) {
-		try {
-			state.styleSlots.afterCellRender(access, cellSlot.element);
-		} catch (e) {
-			reportRendererFault(deps.engine, 'after-cell-render', e, { rowId: node.id, rowIndex, colField: col.field, colIndex });
-		}
-	}
 }
 
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
@@ -336,7 +322,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (isProgrammatic) deps.clearProgrammaticScrollCell();
 	}
 
-	if (ctx.hasStyleHooks) {
+	if (ctx.hasDeferredCellStyleRules) {
 		deps.markCellDirtyAfterScroll(cellSlot.element);
 		deps.incrementStyleHookCallsDuringScroll();
 	}

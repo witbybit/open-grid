@@ -96,7 +96,7 @@ function makeScrollCtx(store: GridStore<RuntimePerfRow>) {
 		styleVersion: 0,
 		loadingVersion: 0,
 		activeEdit: state.activeEdit,
-		hasStyleHooks: !!state.styleSlots,
+		hasDeferredCellStyleRules: !!state.styleRules?.length,
 		hasCustomRenderers: plan.hasCustomRenderers,
 		plan,
 		visibleColRange: store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),
@@ -165,7 +165,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 			dataVersion: store.getState().dataVersion,
 			styleVersion: 0,
 			loadingVersion: 0,
-			hasStyleHooks: false,
+			hasDeferredCellStyleRules: false,
 			plan,
 		} as any);
 

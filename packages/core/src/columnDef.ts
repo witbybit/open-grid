@@ -5,7 +5,7 @@
  * erased at build time and TypeScript resolves them lazily.
  */
 import type { RowNode } from './rowNode.js';
-import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState, GridCellAccess } from './store.js';
+import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState } from './store.js';
 import type { GroupVisualRow, DetailVisualRow } from './visualRow.js';
 
 // ─── Value getter / setter / validator params ─────────────────────────────────
@@ -262,15 +262,44 @@ export interface GridCellClassParams<TRowData = unknown> {
 	selection: GridSelectionState;
 }
 
-export interface GridStyleSlots<TRowData = unknown> {
-	rowClass?: (row: TRowData, params: GridRowClassParams<TRowData>) => string;
-	cellClass?: (col: ColumnDef<TRowData>, row: TRowData, params: GridCellClassParams<TRowData>) => string;
-	headerCellClass?: (col: ColumnDef<TRowData>) => string;
-	beforeCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
-	afterCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
-	groupRowClass?: (visualRow: GroupVisualRow<TRowData>) => string;
-	detailRowClass?: (visualRow: DetailVisualRow<TRowData>) => string;
+export interface RowStyleRule<TRowData = unknown> {
+	kind: 'row';
+	when: (row: TRowData, params: GridRowClassParams<TRowData>) => boolean;
+	rowClass: string;
 }
+
+export interface GroupRowStyleRule<TRowData = unknown> {
+	kind: 'groupRow';
+	when?: (visualRow: GroupVisualRow<TRowData>) => boolean;
+	rowClass: string;
+}
+
+export interface DetailRowStyleRule<TRowData = unknown> {
+	kind: 'detailRow';
+	when?: (visualRow: DetailVisualRow<TRowData>) => boolean;
+	rowClass: string;
+}
+
+export interface CellStyleRule<TRowData = unknown> {
+	kind: 'cell';
+	field?: string;
+	when: (row: TRowData, col: ColumnDef<TRowData>, params: GridCellClassParams<TRowData>) => boolean;
+	cellClass: string;
+}
+
+export interface HeaderCellStyleRule<TRowData = unknown> {
+	kind: 'headerCell';
+	field?: string;
+	when: (col: ColumnDef<TRowData>) => boolean;
+	headerCellClass: string;
+}
+
+export type GridStyleRule<TRowData = unknown> =
+	| RowStyleRule<TRowData>
+	| GroupRowStyleRule<TRowData>
+	| DetailRowStyleRule<TRowData>
+	| CellStyleRule<TRowData>
+	| HeaderCellStyleRule<TRowData>;
 
 // ─── Path utilities ───────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleSlots } from '../store.js';
+import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleRule } from '../store.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 
@@ -19,7 +19,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	themeName?: BuiltInThemeName;
 	activeEdit?: GridCellPointer | null;
 	loadingSkeletonCount?: number;
-	styleSlots?: GridStyleSlots<TRowData>;
+	styleRules?: GridStyleRule<TRowData>[];
 	loading?: boolean;
 
 	// Tree / Grouping / Master-Detail State Configuration

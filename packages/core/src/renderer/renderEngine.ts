@@ -85,7 +85,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private postScrollDecorationScheduled = false;
 	private postScrollDecorationTimer: number | null = null;
 
-	private lastStyleSlots: unknown = undefined;
+	private lastStyleRules: unknown = undefined;
 	private lastLoading: unknown = undefined;
 
 	// Cached geometry values so the raw DOM scroll handler (120/sec on high-refresh
@@ -169,7 +169,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			styleVersion: 0,
 			loadingVersion: 0,
 			activeEdit: null,
-			hasStyleHooks: false,
+			hasDeferredCellStyleRules: false,
 			hasCustomRenderers: false,
 			plan: this.engine.columns.getCompiledPlan(),
 			visibleColRange: { startIdx: 0, endIdx: 0 },
@@ -309,7 +309,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		});
 		const paintState: RenderPaintCoordinatorState = {
 			pendingTransition: this._pendingTransition,
-			lastStyleSlots: this.lastStyleSlots,
+			lastStyleRules: this.lastStyleRules,
 			lastLoading: this.lastLoading,
 		};
 		this.paintCoordinator = new RenderPaintCoordinator<TRowData>(

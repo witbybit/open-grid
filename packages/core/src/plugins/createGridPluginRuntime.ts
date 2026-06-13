@@ -43,7 +43,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		setRowHeight: source.setRowHeight,
 		setSortModel: source.setSortModel,
 		setFilterModel: source.setFilterModel,
-		setStyleSlots: source.setStyleSlots,
+		setStyleRules: source.setStyleRules,
 		setGroupBy: source.setGroupBy,
 		getGroupBy: source.getGroupBy,
 		addGroupBy: source.addGroupBy,

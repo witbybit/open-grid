@@ -30,7 +30,7 @@ import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 import type { StyleRule } from './styleRules.js';
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@open-grid/core';
 export type { ColumnTypeDefinition } from './renderers/CellTypes.js';
-export type { StyleRule, RowStyleRule, CellStyleRule, HeaderCellStyleRule } from './styleRules.js';
+export type { StyleRule, RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from './styleRules.js';
 export type {
 	GroupDef,
 	AggregationDef,

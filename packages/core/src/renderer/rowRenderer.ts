@@ -13,6 +13,7 @@ import { RowSlotPool } from './rowSlotPool.js';
 import { StableSlotAssigner } from './stableSlotAssigner.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
+import { compileStyleRules, evaluateDetailRowStyleRules, evaluateGroupRowStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
 
 // Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
 const ROW_KIND_BASE: Record<string, string> = {
@@ -402,7 +403,8 @@ export class RowRenderer<TRowData = unknown> {
 		const rowTops = this.engine.geometry.rowTops;
 		const rowHeights = this.engine.geometry.rowHeights;
 
-		const hasRowClassHook = !!state.styleSlots?.rowClass;
+		const compiledStyleRules = compileStyleRules(state.styleRules);
+		const hasRowClassHook = compiledStyleRules.hasRowRules;
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
 		// Each slot[i] binds to allRows[i]. Stable-slot assignment keeps staying rows
@@ -489,18 +491,18 @@ export class RowRenderer<TRowData = unknown> {
 			// ── Row class name ────────────────────────────────────────────────────────
 			let rowClassName = ROW_KIND_BASE[visualRow.kind] ?? 'og-row';
 			if (visualRow.kind === 'group') {
-				if (state.styleSlots?.groupRowClass) {
+				if (compiledStyleRules.hasGroupRowRules) {
 					try {
-						const customClass = state.styleSlots.groupRowClass(visualRow);
+						const customClass = evaluateGroupRowStyleRules(compiledStyleRules, visualRow);
 						if (customClass) rowClassName += ' ' + customClass;
 					} catch (e) {
 						reportRendererFault(this.engine, 'group-row-class', e, { rowId: visualRow.id, rowIndex: r });
 					}
 				}
 			} else if (visualRow.kind === 'detail') {
-				if (state.styleSlots?.detailRowClass) {
+				if (compiledStyleRules.hasDetailRowRules) {
 					try {
-						const customClass = state.styleSlots.detailRowClass(visualRow);
+						const customClass = evaluateDetailRowStyleRules(compiledStyleRules, visualRow);
 						if (customClass) rowClassName += ' ' + customClass;
 					} catch (e) {
 						reportRendererFault(this.engine, 'detail-row-class', e, { rowId: visualRow.id, rowIndex: r });
@@ -521,9 +523,9 @@ export class RowRenderer<TRowData = unknown> {
 				if (this.selectionPaint.selectedRowIdSet?.has(node.id)) rowClassName += ' og-row-node-selected';
 				if (isLoadingRow) rowClassName += ' og-row-loading';
 
-				if (isScrollFrameActive && state.styleSlots?.rowClass && node.data) {
+				if (isScrollFrameActive && compiledStyleRules.hasRowRules && node.data) {
 					this.dirtyRowsAfterScroll.add(r);
-				} else if (state.styleSlots?.rowClass && node.data) {
+				} else if (compiledStyleRules.hasRowRules && node.data) {
 					try {
 						const rs = this.selectionPaint.rowClassScratchRef;
 						rs.row = node.data;
@@ -533,7 +535,7 @@ export class RowRenderer<TRowData = unknown> {
 						rs.isSelected = isSelectedRow || isFocusedRow;
 						rs.isLoading = isLoadingRow;
 						rs.selection = state.selection;
-						const customRowClass = state.styleSlots.rowClass(node.data, rs);
+						const customRowClass = evaluateRowStyleRules(compiledStyleRules, node.data, rs);
 						if (customRowClass) rowClassName += ' ' + customRowClass;
 					} catch (e) {
 						reportRendererFault(this.engine, 'row-class', e, { rowId: node.id, rowIndex: r });

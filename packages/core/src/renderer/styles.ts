@@ -13,7 +13,7 @@ import { DARK_THEME, themeToCSSVariables } from './themes.js';
  *
  * Users can override theme variables by:
  * - Using ThemeManager.setTheme() / .switchTheme()
- * - Passing styleSlots with custom CSS variables
+ * - Switching or extending the core theme token set
  * - Directly setting CSS variables on .og-grid-container
  */
 export const CORE_STYLES = `

@@ -1,6 +1,6 @@
 import type { FilterModel, SortModel } from '../rowModel.js';
 import type { IGridDatasource } from '../serverRowModel.js';
-import type { ColumnDef, GridStyleSlots, CellRendererPhase } from '../columnDef.js';
+import type { ColumnDef, GridStyleRule, CellRendererPhase } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
 import type { RowNode } from '../rowNode.js';
 import type { ViewportRange } from '../viewportController.js';
@@ -186,7 +186,7 @@ export interface GridTransaction<TRowData = unknown> {
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
 	pins?: { left?: number; right?: number; top?: number; bottom?: number };
-	styleSlots?: GridStyleSlots<TRowData>;
+	styleRules?: GridStyleRule<TRowData>[];
 }
 
 // Re-export state types so importers of GridApi.ts also get them
@@ -312,7 +312,7 @@ export interface GridApi<TRowData = unknown> {
 	setRowHeight(rowId: string, height: number): void;
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
-	setStyleSlots(styleSlots: GridStyleSlots<TRowData> | undefined): void;
+	setStyleRules(styleRules: GridStyleRule<TRowData>[] | undefined): void;
 	setGroupBy(colIds: string[]): void;
 	getGroupBy(): string[];
 	addGroupBy(colId: string, atIndex?: number): void;

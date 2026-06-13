@@ -248,7 +248,7 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			styleSlots: { rowClass },
+			styleRules: [{ kind: 'row', when: (...args) => !!rowClass(...args), rowClass: 'custom-focused-row custom-selected-row' }],
 		});
 		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
@@ -1535,18 +1535,12 @@ describe('RenderEngine', () => {
 		});
 		const columns = [{ field: 'a', header: 'A', width: 120 }];
 		const cellClass = vi.fn(() => 'custom-cell');
-		const beforeCellRender = vi.fn();
-		const afterCellRender = vi.fn();
 		const store = new GridStore<{ id: string; a: string }>({
 			columns,
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			styleSlots: {
-				cellClass,
-				beforeCellRender,
-				afterCellRender,
-			},
+			styleRules: [{ kind: 'cell', when: () => !!cellClass(), cellClass: 'custom-cell' }],
 		});
 		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
@@ -1569,8 +1563,6 @@ describe('RenderEngine', () => {
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
 		cellClass.mockClear();
-		beforeCellRender.mockClear();
-		afterCellRender.mockClear();
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 2400;
@@ -1579,8 +1571,6 @@ describe('RenderEngine', () => {
 		// Run scroll frame — cell hooks must not fire yet
 		callbacks[0](0);
 		expect(cellClass).not.toHaveBeenCalled();
-		expect(beforeCellRender).not.toHaveBeenCalled();
-		expect(afterCellRender).not.toHaveBeenCalled();
 		const statsDuringScroll = renderer.getRenderStats();
 		expect(statsDuringScroll.cellAccessReadsDuringScroll).toBe(0);
 		expect(statsDuringScroll.cellClassComputesDuringScroll).toBe(0);
@@ -1600,8 +1590,6 @@ describe('RenderEngine', () => {
 		}
 
 		expect(cellClass).toHaveBeenCalled();
-		expect(beforeCellRender).toHaveBeenCalled();
-		expect(afterCellRender).toHaveBeenCalled();
 		expect(renderer.getRenderStats().postScrollDirtyCellsDecorated).toBeGreaterThan(0);
 
 		renderer.unmount();
@@ -1625,7 +1613,7 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			styleSlots: { rowClass },
+			styleRules: [{ kind: 'row', when: (...args) => !!rowClass(...args), rowClass: 'custom-row' }],
 		});
 		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
@@ -1881,7 +1869,6 @@ describe('RenderEngine', () => {
 			return 1;
 		});
 		const columns = [{ field: 'name', header: 'Name', width: 180 }];
-		const detailRowClass = vi.fn(() => 'custom-detail-row');
 		const store = new GridStore<{ id: string; name: string }>({
 			columns,
 			defaultRowHeight: 40,
@@ -1889,7 +1876,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			masterDetailEnabled: true,
 			detailRowHeight: 40,
-			styleSlots: { detailRowClass },
+			styleRules: [{ kind: 'detailRow', rowClass: 'custom-detail-row' }],
 			expansion: {
 				groups: {},
 				treeRows: {},
@@ -1916,13 +1903,12 @@ describe('RenderEngine', () => {
 
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
-		detailRowClass.mockClear();
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		expect(detailRowClass).toHaveBeenCalled();
+		expect(container.querySelector('.og-row-detail.custom-detail-row')).not.toBeNull();
 
 		renderer.unmount();
 		controller.dispose();

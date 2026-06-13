@@ -5,7 +5,7 @@
  * Supports runtime theme switching via ThemeManager and custom theme injection.
  *
  * Design: shadcn-style tokens organized by semantic purpose (colors, sizing, typography).
- * Users can extend or override via styleSlots with their own CSS variables.
+ * Users can extend the token set or switch built-in themes through the core theme API.
  */
 
 export interface ThemeTokens {

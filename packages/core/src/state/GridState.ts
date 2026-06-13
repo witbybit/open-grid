@@ -1,6 +1,6 @@
 import type { FilterModel, SortModel } from '../rowModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
-import type { ColumnDef, GridStyleSlots } from '../columnDef.js';
+import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { GridSelectionState, ActiveEditState } from '../api/GridApi.js';
@@ -54,7 +54,7 @@ export interface GridModelState<TRowData = unknown> {
 	rowModelConfig?: import('../rowModel.js').RowModelConfig<TRowData>;
 
 	// Render tuning config
-	styleSlots?: GridStyleSlots<TRowData>;
+	styleRules?: GridStyleRule<TRowData>[];
 	rowOverscanPx?: number;
 	colBuffer?: number;
 	runtimeLimits?: {

@@ -32,12 +32,12 @@ export class GridStateFeatureController<TRowData = unknown> {
 		this.deps.stateManager.setState({ colBuffer });
 	}
 
-	public setStyleSlots(styleSlots: GridState<TRowData>['styleSlots']): void {
-		this.deps.stateManager.setState({ styleSlots });
-		this.deps.invalidation.invalidateViewport('style slots');
-		this.deps.invalidation.invalidateHeaders('style slots');
-		this.deps.invalidation.invalidateOverlay('style slots');
-		this.deps.requestRender('style slots');
+	public setStyleRules(styleRules: GridState<TRowData>['styleRules']): void {
+		this.deps.stateManager.setState({ styleRules });
+		this.deps.invalidation.invalidateViewport('style rules');
+		this.deps.invalidation.invalidateHeaders('style rules');
+		this.deps.invalidation.invalidateOverlay('style rules');
+		this.deps.requestRender('style rules');
 	}
 
 	public resizeRow(rowId: string, height: number, undoable = true): void {

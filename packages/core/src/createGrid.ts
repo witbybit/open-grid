@@ -157,7 +157,7 @@ export function createApiFacade<TRowData>(
 		setStickyGroupRows: (enabled: boolean) => store.setStickyGroupRows(enabled),
 		setShowGroupPanel: (enabled: boolean) => store.setShowGroupPanel(enabled),
 		exportCsv: (options?: CsvExportOptions) => exportToCsv(store, options),
-		setStyleSlots: (styleSlots: GridState<TRowData>['styleSlots']) => store.setStyleSlots(styleSlots),
+		setStyleRules: (styleRules: GridState<TRowData>['styleRules']) => store.setStyleRules(styleRules),
 		addEventListener: store.addEventListener,
 		dispatchEvent: store.dispatchEvent,
 		startEditing: (rowId: string, colField: string) => store.startEditing(rowId, colField),

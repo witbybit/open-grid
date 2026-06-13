@@ -13,7 +13,7 @@ import type { LayoutTransitionController } from './layoutTransitionController.js
 
 export interface RenderPaintCoordinatorState {
 	pendingTransition: boolean;
-	lastStyleSlots: unknown;
+	lastStyleRules: unknown;
 	lastLoading: unknown;
 }
 
@@ -72,8 +72,8 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 
 	public refreshRendererEpochs(): void {
 		const state = this.deps.engine.stateManager.getState();
-		if (this.state.lastStyleSlots !== state.styleSlots) {
-			this.state.lastStyleSlots = state.styleSlots;
+		if (this.state.lastStyleRules !== state.styleRules) {
+			this.state.lastStyleRules = state.styleRules;
 			this.deps.rowRenderer.styleVersion++;
 		}
 		if (this.state.lastLoading !== state.loading) {

@@ -3,6 +3,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
 import { computeGridLayoutPlan, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
 import { reportRendererFault } from './rendererFaults.js';
+import { compileStyleRules, evaluateHeaderCellStyleRules } from '../styling/styleRules.js';
 
 export class HeaderRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -145,6 +146,7 @@ export class HeaderRenderer<TRowData = unknown> {
 		}
 
 		const state = this.engine.stateManager.getState();
+		const compiledStyleRules = compileStyleRules(state.styleRules);
 		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
 		const colCount = leafBand.cells.length;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
@@ -191,11 +193,11 @@ export class HeaderRenderer<TRowData = unknown> {
 			}
 
 			if (cell.isLeaf) {
-				if (state.styleSlots?.headerCellClass) {
+				if (compiledStyleRules.hasHeaderRules) {
 					try {
 						const col = this.engine.columns.getCompiledPlan().displayedColumns[cell.colStart];
 						if (!col) return;
-						const customHeaderClass = state.styleSlots.headerCellClass(col);
+						const customHeaderClass = evaluateHeaderCellStyleRules(compiledStyleRules, col);
 						if (customHeaderClass) className += ' ' + customHeaderClass;
 					} catch (e) {
 						reportRendererFault(this.engine, 'header-cell-class', e, { colField: cell.field, colIndex: cell.colStart });

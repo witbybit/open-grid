@@ -18,6 +18,7 @@ import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltIn
 export { RowNode } from './rowNode.js';
 
 export { isDomCellRenderer, getValueByPath, setValueByPath, compilePathGetter, validateColumns } from './columnDef.js';
+export { compileStyleRules } from './styling/styleRules.js';
 export type {
 	CellCopyParams,
 	CellPasteParams,
@@ -38,7 +39,12 @@ export type {
 	InternalColumnDef,
 	GridRowClassParams,
 	GridCellClassParams,
-	GridStyleSlots,
+	RowStyleRule,
+	GroupRowStyleRule,
+	DetailRowStyleRule,
+	CellStyleRule,
+	HeaderCellStyleRule,
+	GridStyleRule,
 } from './columnDef.js';
 
 export {
@@ -61,7 +67,7 @@ export * from './api/GridEvents.js';
 export * from './state/GridState.js';
 // ── Internal imports (for use by definitions in this file) ───────────────────
 import { RowNode } from './rowNode.js';
-import type { ColumnDef, GridStyleSlots } from './columnDef.js';
+import type { ColumnDef, GridStyleRule } from './columnDef.js';
 import { validateColumns } from './columnDef.js';
 import type { VisualRow } from './visualRow.js';
 import type {
@@ -114,7 +120,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			getRowId: initialState.getRowId,
 			loading: initialState.loading,
 			loadingSkeletonCount: initialState.loadingSkeletonCount,
-			styleSlots: initialState.styleSlots,
+			styleRules: initialState.styleRules,
 			groupBy: initialState.groupBy,
 			getParentId: initialState.getParentId,
 			masterDetailEnabled: initialState.masterDetailEnabled,
@@ -422,8 +428,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.state.chartOpen ?? false;
 	};
 
-	public setStyleSlots = (styleSlots: GridStyleSlots<TRowData> | undefined): void => {
-		this.engine.setStyleSlots(styleSlots);
+	public setStyleRules = (styleRules: GridStyleRule<TRowData>[] | undefined): void => {
+		this.engine.setStyleRules(styleRules);
 	};
 
 	public toggleGroupExpanded = (groupId: string): void => {
@@ -498,15 +504,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getColumnState = (): ColumnState[] => {
 		return this.engine.columnFeature.getColumnState();
 	};
-
 	public applyColumnState = (states: ColumnState[]): void => {
 		this.engine.columnFeature.applyColumnState(states);
 	};
-
 	public getGridState = (): PersistedGridState => {
 		return extractPersistedState(this.engine.getState() as GridState);
 	};
-
 	public applyGridState = (state: PersistedGridState): void => {
 		const columns = this.engine.getState().columns;
 		const knownFields = new Set(columns.map((c) => c.field));
@@ -553,7 +556,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);
-
 	public getServerRowModelRuntime = (): ServerRowModelRuntime<TRowData> => createServerRowModelRuntime(this);
 
 	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
@@ -605,8 +607,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			if (transaction.pins) {
 				this.setViewportPins(transaction.pins);
 			}
-			if ('styleSlots' in transaction) {
-				this.setStyleSlots(transaction.styleSlots);
+			if ('styleRules' in transaction) {
+				this.setStyleRules(transaction.styleRules);
 			}
 		});
 		return rowResult;

@@ -7,14 +7,14 @@ const SENTINEL_B = { tag: 'B' };
 function makeState(overrides?: Partial<RenderPaintCoordinatorState>): RenderPaintCoordinatorState {
 	return {
 		pendingTransition: false,
-		lastStyleSlots: undefined,
+		lastStyleRules: undefined,
 		lastLoading: undefined,
 		...overrides,
 	};
 }
 
 interface FakeGridState {
-	styleSlots: unknown;
+	styleRules: unknown;
 	loading: unknown;
 	defaultColWidth: number;
 	defaultRowHeight: number;
@@ -25,7 +25,7 @@ function makeDeps(
 	overrides: Partial<RenderPaintCoordinatorDeps<unknown>> = {}
 ): RenderPaintCoordinatorDeps<unknown> {
 	const state: FakeGridState = {
-		styleSlots: undefined,
+		styleRules: undefined,
 		loading: undefined,
 		defaultColWidth: 100,
 		defaultRowHeight: 40,
@@ -58,20 +58,20 @@ function makeDeps(
 // ─── refreshRendererEpochs ────────────────────────────────────────────────────
 
 describe('RenderPaintCoordinator – refreshRendererEpochs', () => {
-	it('increments styleVersion when styleSlots reference changes', () => {
-		const deps = makeDeps({ styleSlots: SENTINEL_A });
-		const state = makeState({ lastStyleSlots: undefined });
+	it('increments styleVersion when styleRules reference changes', () => {
+		const deps = makeDeps({ styleRules: SENTINEL_A });
+		const state = makeState({ lastStyleRules: undefined });
 		const coord = new RenderPaintCoordinator(deps, state);
 
 		coord.refreshRendererEpochs();
 
 		expect((deps.rowRenderer as any).styleVersion).toBe(1);
-		expect(state.lastStyleSlots).toBe(SENTINEL_A);
+		expect(state.lastStyleRules).toBe(SENTINEL_A);
 	});
 
-	it('does NOT increment styleVersion when styleSlots is unchanged', () => {
-		const deps = makeDeps({ styleSlots: SENTINEL_A });
-		const state = makeState({ lastStyleSlots: SENTINEL_A });
+	it('does NOT increment styleVersion when styleRules is unchanged', () => {
+		const deps = makeDeps({ styleRules: SENTINEL_A });
+		const state = makeState({ lastStyleRules: SENTINEL_A });
 		const coord = new RenderPaintCoordinator(deps, state);
 
 		coord.refreshRendererEpochs();
@@ -101,8 +101,8 @@ describe('RenderPaintCoordinator – refreshRendererEpochs', () => {
 	});
 
 	it('increments both versions when both change simultaneously', () => {
-		const deps = makeDeps({ styleSlots: SENTINEL_B, loading: false });
-		const state = makeState({ lastStyleSlots: SENTINEL_A, lastLoading: true });
+		const deps = makeDeps({ styleRules: SENTINEL_B, loading: false });
+		const state = makeState({ lastStyleRules: SENTINEL_A, lastLoading: true });
 		const coord = new RenderPaintCoordinator(deps, state);
 
 		coord.refreshRendererEpochs();
@@ -120,7 +120,7 @@ describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
 			{},
 			{
 				engine: {
-					stateManager: { getState: () => ({ styleSlots: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
+					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
 					invalidation: { consume: vi.fn(() => ({ reasons: ['sort'] })) },
 				} as any,
 				scrollCoordinator: { getIsScrolling: () => false },
@@ -139,7 +139,7 @@ describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
 			{},
 			{
 				engine: {
-					stateManager: { getState: () => ({ styleSlots: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
+					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
 					invalidation: { consume: vi.fn(() => ({ reasons: ['sort'] })) },
 				} as any,
 				scrollCoordinator: { getIsScrolling: () => true },
@@ -158,7 +158,7 @@ describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
 			{},
 			{
 				engine: {
-					stateManager: { getState: () => ({ styleSlots: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
+					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
 					invalidation: { consume: vi.fn(() => ({ reasons: ['group expansion'] })) },
 				} as any,
 				scrollCoordinator: { getIsScrolling: () => false },
@@ -174,7 +174,7 @@ describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
 			{},
 			{
 				engine: {
-					stateManager: { getState: () => ({ styleSlots: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
+					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
 					invalidation: { consume: vi.fn(() => ({ reasons: ['detail'] })) },
 				} as any,
 				scrollCoordinator: { getIsScrolling: () => false },
@@ -190,7 +190,7 @@ describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
 			{},
 			{
 				engine: {
-					stateManager: { getState: () => ({ styleSlots: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
+					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
 					invalidation: { consume: vi.fn(() => ({ reasons: ['filter'] })) },
 				} as any,
 				scrollCoordinator: { getIsScrolling: () => false },
@@ -215,7 +215,7 @@ describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
 			{},
 			{
 				engine: {
-					stateManager: { getState: () => ({ styleSlots: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
+					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
 					invalidation: { consume: vi.fn(() => ({ reasons: [] })) },
 				} as any,
 				portalMountManager: { beginCellReleaseTransaction: begin, endCellReleaseTransaction: end } as any,

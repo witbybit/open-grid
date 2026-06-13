@@ -1,13 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-	Grid,
-	type ColumnDef,
-	type CellRendererProps,
-	type GridApi,
-	type GridReadyEvent,
-	type GroupVisualRow,
-	type VisualRow,
-} from '@open-grid/react';
+import { Grid, type ColumnDef, type CellRendererProps, type GridApi, type GridReadyEvent, type VisualRow } from '@open-grid/react';
 import {
 	Layers,
 	FolderTree,
@@ -370,11 +362,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 		() => ({
 			groupBy: ['department'],
 			groupRowHeight: 42,
-			styleSlots: {
-				groupRowClass: (_visualRow: GroupVisualRow<EmployeeRow>) => {
-					return 'border-l-[3px] border-purple-500 bg-purple-950/5';
-				},
-			},
+			styleRules: [{ kind: 'groupRow', rowClass: 'border-l-[3px] border-purple-500 bg-purple-950/5' }],
 		}),
 		[]
 	);
@@ -461,11 +449,13 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 				}, {}),
 				details: {},
 			},
-			styleSlots: {
-				rowClass: (row: FileNodeRow) => {
-					return row.type === 'folder' ? 'border-l-[3px] border-amber-500 bg-amber-950/5' : '';
+			styleRules: [
+				{
+					kind: 'row',
+					when: (row: FileNodeRow) => row.type === 'folder',
+					rowClass: 'border-l-[3px] border-amber-500 bg-amber-950/5',
 				},
-			},
+			],
 		}),
 		[]
 	);

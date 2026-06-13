@@ -162,7 +162,7 @@ function getScrollContext(grid: AuditGrid) {
 		styleVersion: 0,
 		loadingVersion: 0,
 		activeEdit: state.activeEdit,
-		hasStyleHooks: !!state.styleSlots,
+		hasDeferredCellStyleRules: !!state.styleRules?.length,
 		hasCustomRenderers: plan.hasCustomRenderers,
 		plan,
 		visibleColRange: grid.store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),

@@ -127,14 +127,14 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
-	it('should preserve initial style slots in grid state', () => {
-		const rowClass = (row: TestRow) => (row.price > 10 ? 'expensive' : 'standard');
+	it('should preserve initial style rules in grid state', () => {
+		const rowClass = { kind: 'row' as const, when: (row: TestRow) => row.price > 10, rowClass: 'expensive' };
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 150 }],
-			styleSlots: { rowClass },
+			styleRules: [rowClass],
 		});
 
-		expect(store.getState().styleSlots?.rowClass).toBe(rowClass);
+		expect(store.getState().styleRules).toEqual([rowClass]);
 	});
 
 	it('should notify targeted key-subscribers only when that specific key is mutated', () => {

@@ -3,6 +3,7 @@ import type { GridState, GridRowClassParams, RowNode } from '../store.js';
 import { CellSlot } from './cellSlot.js';
 import type { RowSlot } from './rowSlot.js';
 import { reportRendererFault } from './rendererFaults.js';
+import { compileStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
 
 /**
  * Owns all row-selection UI state and row class painting logic.
@@ -140,7 +141,8 @@ export class SelectionPaintManager<TRowData> {
 		if (isLoadingRow) {
 			rowClassName += ' og-row-loading';
 		}
-		if (state.styleSlots?.rowClass && node.data) {
+		const compiledStyleRules = compileStyleRules(state.styleRules);
+		if (compiledStyleRules.hasRowRules && node.data) {
 			try {
 				const rs = this.rowClassScratch;
 				rs.row = node.data;
@@ -150,7 +152,7 @@ export class SelectionPaintManager<TRowData> {
 				rs.isSelected = isSelectedRow || isFocusedRow;
 				rs.isLoading = isLoadingRow;
 				rs.selection = state.selection;
-				const customRowClass = state.styleSlots.rowClass(node.data, rs);
+				const customRowClass = evaluateRowStyleRules(compiledStyleRules, node.data, rs);
 				if (customRowClass) {
 					rowClassName += ' ' + customRowClass;
 				}
