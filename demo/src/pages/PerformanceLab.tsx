@@ -1,16 +1,15 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Gauge, Play } from 'lucide-react';
 import {
-	GridProvider,
+	Grid,
 	useClientGridPagination,
 	GridPagination,
 	type ColumnDef,
 	type DomCellRenderer,
 	type ImperativeCellHandle,
 	type CellRendererProps,
+	type GridReadyEvent,
 } from '@open-grid/react';
-import { GridView } from '../components/GridShared';
-import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
 
 type RendererMode = 'text' | 'dom' | 'imperativeReact' | 'deferredReact';
 
@@ -203,21 +202,17 @@ function makeColumns(mode: RendererMode): ColumnDef<LabRow>[] {
 
 const PAGE_SIZE = 5000;
 
-export default function PerformanceLab() {
+interface PerformanceLabProps {
+	onGridReady?: (event: GridReadyEvent<LabRow>) => void;
+}
+
+export default function PerformanceLab({ onGridReady }: PerformanceLabProps) {
 	const [mode, setMode] = useState<RendererMode>('dom');
 	const allRows = useMemo(() => makeRows(100000), []);
 	const columns = useMemo(() => makeColumns(mode), [mode]);
 
 	const { pageRows, page, pageCount, setPage, totalRows } = useClientGridPagination(allRows, { pageSize: PAGE_SIZE });
 
-	const api = useOwnedClientGrid<LabRow>({
-		rows: pageRows,
-		columns,
-		rowOverscanPx: 100,
-		colBuffer: 1,
-		runtimeLimits: { maxRenderedRows: 36, maxRenderedCells: 900 },
-		getRowId: (row) => row.id,
-	});
 	const hostRef = useRef<HTMLDivElement>(null);
 
 	const runGlide = useCallback(() => {
@@ -265,9 +260,19 @@ export default function PerformanceLab() {
 			</div>
 
 			<div ref={hostRef} className='min-h-0 flex-1'>
-				<GridProvider api={api}>
-					<GridView api={api} pinLeftColumns={2} pinRightColumns={1} defaultHeight={34} enableContextMenu={false} />
-				</GridProvider>
+				<Grid
+					mode='client'
+					rows={pageRows}
+					columns={columns}
+					rowOverscanPx={100}
+					colBuffer={1}
+					runtimeLimits={{ maxRenderedRows: 36, maxRenderedCells: 900 }}
+					getRowId={(row) => row.id}
+					pinLeftColumns={2}
+					pinRightColumns={1}
+					enableContextMenu={false}
+					onGridReady={onGridReady}
+				/>
 			</div>
 			<GridPagination
 				page={page}

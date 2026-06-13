@@ -9,10 +9,9 @@
  *   - rowSelectionChanged event →  reactive event log
  */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { GridView, GridProvider, GridEventName, GridStatusBar, useGridKeySelector, useGridApi } from '@open-grid/react';
-import type { ColumnDef, GridApi } from '@open-grid/react';
+import { Grid, GridEventName, GridStatusBar } from '@open-grid/react';
+import type { ColumnDef, GridApi, GridReadyEvent } from '@open-grid/react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
-import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
@@ -79,12 +78,7 @@ const COLUMNS: ColumnDef<OrderRow>[] = [
 	{ field: 'region', header: 'Region', width: 90 },
 ];
 
-// ─── Selection status bar (reactive via useGridKeySelector) ───────────────────
-
-function SelectionStatusBar({ totalCount }: { totalCount: number }) {
-	const selectedIds = useGridKeySelector('selectedRowIds', (s) => s.selectedRowIds);
-	const count = selectedIds.length;
-
+function SelectionStatusBar({ totalCount, count }: { totalCount: number; count: number }) {
 	if (count === 0) {
 		return (
 			<div className='flex items-center gap-2 text-[11px] text-slate-500 font-medium'>
@@ -112,23 +106,23 @@ function SelectionStatusBar({ totalCount }: { totalCount: number }) {
 	);
 }
 
-// ─── Bulk action buttons (live-disabled via useGridKeySelector) ───────────────
-
 function BulkActions({
 	onDelete,
 	onExport,
 	onTag,
 	bulkTag,
 	setBulkTag,
+	api,
+	selectedCount,
 }: {
 	onDelete: () => void;
 	onExport: () => void;
 	onTag: () => void;
 	bulkTag: string;
 	setBulkTag: (v: string) => void;
+	api: GridApi<OrderRow> | null;
+	selectedCount: number;
 }) {
-	const api = useGridApi<OrderRow>();
-	const selectedCount = useGridKeySelector('selectedRowIds', (s) => s.selectedRowIds.length);
 	const hasSelection = selectedCount > 0;
 
 	return (
@@ -169,14 +163,14 @@ function BulkActions({
 			</button>
 
 			<button
-				onClick={() => api.selectAllRows()}
+				onClick={() => api?.selectAllRows()}
 				className='px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-900/40 hover:bg-indigo-800/50 text-indigo-300 transition border border-indigo-800/50'
 			>
 				Select All
 			</button>
 
 			<button
-				onClick={() => api.clearRowSelection()}
+				onClick={() => api?.clearRowSelection()}
 				disabled={!hasSelection}
 				className='px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-400 disabled:opacity-40 disabled:cursor-not-allowed transition border border-slate-700'
 			>
@@ -188,27 +182,36 @@ function BulkActions({
 
 // ─── Main demo ────────────────────────────────────────────────────────────────
 
-export default function RowMultiSelectDemo() {
+interface RowMultiSelectDemoProps {
+	onGridReady?: (event: GridReadyEvent<OrderRow>) => void;
+}
+
+export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoProps) {
 	const [rows, setRows] = useState<OrderRow[]>(() => generateOrders(120));
 	const [lastEvent, setLastEvent] = useState<string>('—');
 	const [bulkTag, setBulkTag] = useState<string>('');
-
-	const api = useOwnedClientGrid<OrderRow>({
-		rows,
-		columns: COLUMNS,
-		getRowId: (r) => r.id,
-		rowSelection: 'multiple',
-	});
+	const [api, setApi] = useState<GridApi<OrderRow> | null>(null);
+	const [selectedCount, setSelectedCount] = useState(0);
 
 	// Subscribe to rowSelectionChanged for the event log
 	useEffect(() => {
-		return api.addEventListener(GridEventName.rowSelectionChanged, (event) => {
+		if (!api) return;
+		const readSelection = () => setSelectedCount(api.getState().selectedRowIds.length);
+		readSelection();
+		const unsubKey = api.subscribeToKey('selectedRowIds', readSelection);
+		const unsubEvent = api.addEventListener(GridEventName.rowSelectionChanged, (event) => {
 			const { selectedRowIds, changedRowIds } = event.payload;
 			setLastEvent(`${changedRowIds.length} row(s) toggled → ${selectedRowIds.length} total selected`);
+			setSelectedCount(selectedRowIds.length);
 		});
+		return () => {
+			unsubKey();
+			unsubEvent();
+		};
 	}, [api]);
 
 	const handleDeleteSelected = useCallback(() => {
+		if (!api) return;
 		const ids = new Set<string>(api.rows().getCheckedIds());
 		if (ids.size === 0) return;
 		setRows((prev: OrderRow[]) => prev.filter((r) => !ids.has(r.id)));
@@ -216,6 +219,7 @@ export default function RowMultiSelectDemo() {
 	}, [api]);
 
 	const handleExportCSV = useCallback(() => {
+		if (!api) return;
 		const checked: OrderRow[] = api.rows().getChecked();
 		if (checked.length === 0) return;
 		const header = 'Order ID,Customer,Product,Qty,Unit Price,Status,Region';
@@ -231,6 +235,7 @@ export default function RowMultiSelectDemo() {
 	}, [api]);
 
 	const handleTagSelected = useCallback(() => {
+		if (!api) return;
 		const tag = bulkTag.trim();
 		if (!tag) return;
 		const checkedIds = new Set<string>(api.rows().getCheckedIds());
@@ -240,62 +245,75 @@ export default function RowMultiSelectDemo() {
 	}, [api, bulkTag]);
 
 	return (
-		<GridProvider api={api as GridApi<OrderRow>}>
-			<div className='flex flex-col gap-4 h-full min-h-0'>
-				{/* ── Feature callout cards ──────────────────────────────────── */}
-				<div className='flex gap-3 shrink-0'>
-					<div className='flex-1 bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5'>
-						<div className='flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-400'>
-							<CheckSquare className='w-3.5 h-3.5' /> First-Class Row Selection
-						</div>
-						<p className='text-[11px] text-slate-400 leading-snug'>
-							Pass <code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>rowSelection: 'multiple'</code> to{' '}
-							<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>Grid</code>. A checkbox column is
-							auto-injected and pinned — no manual column def needed.
-						</p>
+		<div className='flex flex-col gap-4 h-full min-h-0'>
+			{/* ── Feature callout cards ──────────────────────────────────── */}
+			<div className='flex gap-3 shrink-0'>
+				<div className='flex-1 bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5'>
+					<div className='flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-400'>
+						<CheckSquare className='w-3.5 h-3.5' /> First-Class Row Selection
 					</div>
-					<div className='flex-1 bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5'>
-						<div className='flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-400'>
-							<MousePointerClick className='w-3.5 h-3.5' /> Ctrl / ⌘ + Click
-						</div>
-						<p className='text-[11px] text-slate-400 leading-snug'>
-							Hold <kbd className='bg-slate-800 border border-slate-700 px-1.5 rounded font-mono text-[10px]'>Ctrl</kbd> or{' '}
-							<kbd className='bg-slate-800 border border-slate-700 px-1.5 rounded font-mono text-[10px]'>⌘</kbd> and click any cell to
-							toggle that row's selection without moving the cell cursor.
-						</p>
-					</div>
+					<p className='text-[11px] text-slate-400 leading-snug'>
+						Pass <code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>rowSelection: 'multiple'</code> to{' '}
+						<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>Grid</code>. A checkbox column is
+						auto-injected and pinned — no manual column def needed.
+					</p>
 				</div>
-
-				{/* ── Toolbar ────────────────────────────────────────────────── */}
-				<div className='flex items-center gap-3 shrink-0 bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-2.5'>
-					<div className='flex items-center gap-2 text-[11px] text-slate-500 font-medium'>
-						<Info className='w-3.5 h-3.5 shrink-0' />
-						Select rows above, then use the footer status bar for live totals and edit state.
+				<div className='flex-1 bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5'>
+					<div className='flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-400'>
+						<MousePointerClick className='w-3.5 h-3.5' /> Ctrl / ⌘ + Click
 					</div>
-					<div className='flex-1' />
-					<BulkActions
-						onDelete={handleDeleteSelected}
-						onExport={handleExportCSV}
-						onTag={handleTagSelected}
-						bulkTag={bulkTag}
-						setBulkTag={setBulkTag}
-					/>
-				</div>
-
-				{/* ── Grid ───────────────────────────────────────────────────── */}
-				<div className='flex-1 min-h-0 border border-slate-800 rounded-xl overflow-hidden bg-slate-950 shadow-2xl flex flex-col'>
-					<div className='flex-1 min-h-0'>
-						<GridView api={api as GridApi<OrderRow>} enableNavigation={true} navigationOptions={{ editTrigger: 'doubleClick' }} />
-					</div>
-					<GridStatusBar />
-				</div>
-
-				{/* ── Event log ──────────────────────────────────────────────── */}
-				<div className='shrink-0 flex items-center gap-2 text-[10px] font-mono'>
-					<span className='text-slate-600'>rowSelectionChanged →</span>
-					<span className='text-slate-400'>{lastEvent}</span>
+					<p className='text-[11px] text-slate-400 leading-snug'>
+						Hold <kbd className='bg-slate-800 border border-slate-700 px-1.5 rounded font-mono text-[10px]'>Ctrl</kbd> or{' '}
+						<kbd className='bg-slate-800 border border-slate-700 px-1.5 rounded font-mono text-[10px]'>⌘</kbd> and click any cell to
+						toggle that row's selection without moving the cell cursor.
+					</p>
 				</div>
 			</div>
-		</GridProvider>
+
+			{/* ── Toolbar ────────────────────────────────────────────────── */}
+			<div className='flex items-center gap-3 shrink-0 bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-2.5'>
+				<div className='flex items-center gap-2 text-[11px] text-slate-500 font-medium'>
+					<Info className='w-3.5 h-3.5 shrink-0' />
+					Select rows above, then use the footer status bar for live totals and edit state.
+				</div>
+				<div className='flex-1' />
+				<BulkActions
+					api={api}
+					selectedCount={selectedCount}
+					onDelete={handleDeleteSelected}
+					onExport={handleExportCSV}
+					onTag={handleTagSelected}
+					bulkTag={bulkTag}
+					setBulkTag={setBulkTag}
+				/>
+			</div>
+
+			{/* ── Grid ───────────────────────────────────────────────────── */}
+			<div className='flex-1 min-h-0 border border-slate-800 rounded-xl overflow-hidden bg-slate-950 shadow-2xl flex flex-col'>
+				<div className='flex-1 min-h-0'>
+					<Grid
+						mode='client'
+						rows={rows}
+						columns={COLUMNS}
+						getRowId={(row) => row.id}
+						rowSelection='multiple'
+						enableNavigation={true}
+						navigationOptions={{ editTrigger: 'doubleClick' }}
+						onGridReady={(event) => {
+							setApi(event.api);
+							onGridReady?.(event);
+						}}
+					>
+						<GridStatusBar />
+					</Grid>
+				</div>
+			</div>
+
+			{/* ── Event log ──────────────────────────────────────────────── */}
+			<div className='shrink-0 flex items-center gap-2 text-[10px] font-mono'>
+				<span className='text-slate-600'>rowSelectionChanged →</span>
+				<span className='text-slate-400'>{lastEvent}</span>
+			</div>
+		</div>
 	);
 }

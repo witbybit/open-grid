@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { GridEventName, GridProvider, GridPagination } from '@open-grid/react';
-import { GridView } from '../components/GridShared';
+import { Grid, GridEventName, GridPagination } from '@open-grid/react';
+import type { GridApi, GridReadyEvent } from '@open-grid/react';
 import { Terminal, Server, Activity, ShieldAlert, Cpu } from 'lucide-react';
-import { useOwnedServerGrid } from '../hooks/useOwnedGrid';
+import { createServerColumns, createServerDatasource, createServerRows, type ServerAuditRow } from './demoGridConfigs';
 
-type ServerApi = ReturnType<typeof useOwnedServerGrid<any>>;
 interface InfiniteServerScrollProps {
-	api: ServerApi;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
+	onGridReady?: (event: GridReadyEvent<ServerAuditRow>) => void;
 }
 
 type SeverityStats = {
@@ -24,13 +23,17 @@ const SERVER_PAGE_SIZE = 5000;
 const SERVER_ROW_HEIGHT = 40;
 
 export default function InfiniteServerScroll({
-	api,
 	editTrigger,
 	arrowKeyNavigationEdit,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
+	onGridReady,
 }: InfiniteServerScrollProps) {
 	const gridHostRef = useRef<HTMLDivElement>(null);
+	const [api, setApi] = useState<GridApi<ServerAuditRow> | null>(null);
+	const rows = useMemo(() => createServerRows(), []);
+	const columns = useMemo(() => createServerColumns(), []);
+	const datasource = useMemo(() => createServerDatasource(rows), [rows]);
 	const [blockStats, setBlockStats] = useState({
 		loadedBlockStart: 0,
 		loadedBlockEnd: 0,
@@ -48,6 +51,7 @@ export default function InfiniteServerScroll({
 	});
 
 	const refreshSeverityStats = useCallback(() => {
+		if (!api) return;
 		let totalLoaded = 0;
 		let criticalError = 0;
 		let warning = 0;
@@ -70,6 +74,7 @@ export default function InfiniteServerScroll({
 	}, [api]);
 
 	useEffect(() => {
+		if (!api) return;
 		const handleBlockLoaded = (event: {
 			payload: {
 				loadedBlockStart?: number;
@@ -154,16 +159,21 @@ export default function InfiniteServerScroll({
 				</div>
 
 				<div ref={gridHostRef} className='flex-1 min-h-0 min-w-0'>
-					<GridProvider api={api}>
-						<GridView
-							api={api}
-							pinLeftColumns={pinLeftColumns}
-							pinRightColumns={pinRightColumns}
-							onCellValueChanged={() => {}}
-							editTrigger={editTrigger}
-							arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-						/>
-					</GridProvider>
+					<Grid
+						mode='server'
+						columns={columns}
+						datasource={datasource}
+						blockSize={100}
+						getRowId={(row) => row.id}
+						pinLeftColumns={pinLeftColumns}
+						pinRightColumns={pinRightColumns}
+						enableNavigation
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged: () => {} }}
+						onGridReady={(event) => {
+							setApi(event.api);
+							onGridReady?.(event);
+						}}
+					/>
 				</div>
 				<GridPagination
 					page={serverPage}

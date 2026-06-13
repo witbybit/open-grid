@@ -7,8 +7,6 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			'@open-grid/react': resolve(__dirname, '../packages/react/src/index.ts'),
-			'@open-grid/core/internal': resolve(__dirname, '../packages/core/src/internal.ts'),
-			'@open-grid/core': resolve(__dirname, '../packages/core/src/index.ts'),
 		},
 		dedupe: ['react', 'react-dom'],
 	},

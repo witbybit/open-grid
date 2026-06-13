@@ -5,11 +5,12 @@ import { cleanup } from '@testing-library/react';
 afterEach(cleanup);
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
 import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
+import * as ReactPackage from './index.js';
+import { GridProvider } from './gridContext.js';
+import { GridView } from './GridView.js';
 import {
-	GridProvider,
 	GridEventName,
 	Grid,
-	GridView,
 	GridStatusBar,
 	PortalCell,
 	PortalManager,
@@ -1428,6 +1429,14 @@ describe('useClientGridPagination', () => {
 });
 
 describe('explicit React entrypoints', () => {
+	it('exposes Grid as the only public grid entrypoint', () => {
+		expect(ReactPackage.Grid).toBeDefined();
+		expect((ReactPackage as Record<string, unknown>).GridView).toBeUndefined();
+		expect((ReactPackage as Record<string, unknown>).GridProvider).toBeUndefined();
+		expect((ReactPackage as Record<string, unknown>).useOwnedClientGrid).toBeUndefined();
+		expect((ReactPackage as Record<string, unknown>).useOwnedServerGrid).toBeUndefined();
+	});
+
 	it('Grid owns the api and fires onGridReady while descendants can still read useGridApi', async () => {
 		const onGridReady = vi.fn();
 		const HookRenderer = () => {

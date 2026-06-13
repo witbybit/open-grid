@@ -1,5 +1,5 @@
 import { createClientGrid, createServerGrid } from '@open-grid/core';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
 import { resolveColumnTypes } from './resolveColumnTypes.js';
@@ -37,6 +37,7 @@ export interface GridServerProps<TRowData = unknown> extends GridCommonProps<TRo
 }
 
 export type GridProps<TRowData = unknown> = GridClientProps<TRowData> | GridServerProps<TRowData>;
+export type GridRootProps<TRowData = unknown> = PropsWithChildren<GridProps<TRowData>>;
 
 function createInitialState<TRowData>(base: GridCommonProps<TRowData>, detailRowHeight?: number) {
 	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits } = base;
@@ -50,7 +51,7 @@ function createInitialState<TRowData>(base: GridCommonProps<TRowData>, detailRow
 	return detailRowHeight != null ? { detailRowHeight, ...merged } : merged;
 }
 
-export function Grid<TRowData = unknown>(props: GridProps<TRowData>) {
+export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	const {
 		mode,
 		onGridReady,
@@ -69,8 +70,9 @@ export function Grid<TRowData = unknown>(props: GridProps<TRowData>) {
 		datasource,
 		blockSize,
 		rowSelection,
+		children,
 		...viewProps
-	} = props as GridProps<TRowData> &
+	} = props as GridRootProps<TRowData> &
 		GridShellProps<TRowData> & {
 			rows?: TRowData[];
 			datasource?: GridDatasource;
@@ -153,7 +155,12 @@ export function Grid<TRowData = unknown>(props: GridProps<TRowData>) {
 
 	return (
 		<GridProvider api={api}>
-			<GridView<TRowData> {...viewProps} api={api} />
+			<div className='flex h-full w-full flex-col'>
+				<div className='min-h-0 flex-1'>
+					<GridView<TRowData> {...viewProps} api={api} />
+				</div>
+				{children ? <div className='shrink-0'>{children}</div> : null}
+			</div>
 		</GridProvider>
 	);
 }

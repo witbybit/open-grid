@@ -1,15 +1,11 @@
 export { Grid } from './Grid.js';
 export type { GridProps, GridClientProps, GridServerProps } from './Grid.js';
-export { GridView } from './GridView.js';
-export type { GridViewProps } from './GridView.js';
-export { GridProvider } from './gridContext.js';
 export { GridStatusBar } from './GridStatusBar.js';
 export { GridPagination, useClientGridPagination } from './pagination.js';
 export type { GridPaginationProps, ClientGridPaginationResult } from './pagination.js';
 export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
-export { useOwnedClientGrid, useOwnedServerGrid } from './ownedGrid.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
 
 // ─── Built-in cell renderers & editors ───────────────────────────────────────
@@ -80,4 +76,4 @@ export type {
 	GridReadyEvent,
 } from './types.js';
 
-export type { ClientGridOptions, ServerGridOptions, GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';
+export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';

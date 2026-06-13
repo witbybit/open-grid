@@ -6,11 +6,12 @@
  * out in Plans 011-014.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { resolve } from 'path';
 
 const CORE_ROOT = resolve(__dirname, '../..');
 const REACT_ROOT = resolve(__dirname, '../../../../packages/react');
+const DEMO_ROOT = resolve(__dirname, '../../../../demo');
 
 function countLines(relPath: string): number {
 	const abs = resolve(CORE_ROOT, 'src', relPath);
@@ -20,6 +21,23 @@ function countLines(relPath: string): number {
 function coreFileContains(relPath: string, substring: string): boolean {
 	const abs = resolve(CORE_ROOT, 'src', relPath);
 	return readFileSync(abs, 'utf-8').includes(substring);
+}
+
+function collectSourceFiles(root: string): string[] {
+	const entries = readdirSync(root);
+	const files: string[] = [];
+	for (const entry of entries) {
+		const abs = resolve(root, entry);
+		const stat = statSync(abs);
+		if (stat.isDirectory()) {
+			files.push(...collectSourceFiles(abs));
+			continue;
+		}
+		if (/\.(tsx?|jsx?)$/.test(entry)) {
+			files.push(abs);
+		}
+	}
+	return files;
 }
 
 describe('Architecture guardrails', () => {
@@ -319,5 +337,38 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
 		expect(content).not.toContain('onInit?(api: InternalGridApi');
 		expect(content).toContain('onInit?(api: GridPluginRuntime');
+	});
+
+	it('react exposes Grid as the only public grid entrypoint', () => {
+		const indexContent = readFileSync(resolve(REACT_ROOT, 'src', 'index.ts'), 'utf-8');
+		expect(indexContent).toContain("export { Grid } from './Grid.js';");
+
+		const forbiddenExports = ['GridView', 'GridProvider', 'useOwnedClientGrid', 'useOwnedServerGrid', 'ClientGridOptions', 'ServerGridOptions'];
+		for (const token of forbiddenExports) {
+			expect(indexContent, `React public index must not export ${token}`).not.toContain(token);
+		}
+
+		expect(existsSync(resolve(REACT_ROOT, 'src', 'ownedGrid.ts')), 'ownedGrid.ts must not exist').toBe(false);
+	});
+
+	it('demo code depends on the React Grid entrypoint instead of core or owned-grid internals', () => {
+		const files = [...collectSourceFiles(resolve(DEMO_ROOT, 'src')), resolve(DEMO_ROOT, 'vite.config.ts'), resolve(DEMO_ROOT, 'package.json')];
+		const forbiddenTokens = [
+			'@open-grid/core',
+			'useOwnedClientGrid',
+			'useOwnedServerGrid',
+			'useOwnedGrid',
+			'useShowroomStores',
+			'GridProvider',
+			'GridView',
+			'ownedGrid',
+		];
+
+		for (const file of files) {
+			const content = readFileSync(file, 'utf-8');
+			for (const token of forbiddenTokens) {
+				expect(content, `${file} must not contain ${token}`).not.toContain(token);
+			}
+		}
 	});
 });

@@ -1,20 +1,27 @@
 import React, { useState, useMemo } from 'react';
-import { GridProvider, type GridApi } from '@open-grid/react';
-import { PerformanceRow, GridView } from '../components/GridShared';
+import { Grid, type GridReadyEvent } from '@open-grid/react';
 import { Palette, Sparkles, Terminal, ShieldAlert, Code, Copy, Check } from 'lucide-react';
+import { createSkinsColumns, generatePerformanceRows } from './demoGridConfigs';
 
 interface HeadlessSkinsPlaygroundProps {
-	api: GridApi<PerformanceRow>;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onGridReady?: (event: GridReadyEvent<any>) => void;
 }
 
 type SkinTheme = 'cyberpunk' | 'glassmorphic' | 'obsidian' | 'retro' | 'slate';
 
-export default function HeadlessSkinsPlayground({ api, editTrigger, arrowKeyNavigationEdit, onCellValueChanged }: HeadlessSkinsPlaygroundProps) {
+export default function HeadlessSkinsPlayground({
+	editTrigger,
+	arrowKeyNavigationEdit,
+	onCellValueChanged,
+	onGridReady,
+}: HeadlessSkinsPlaygroundProps) {
 	const [activeTheme, setActiveTheme] = useState<SkinTheme>('slate');
 	const [copied, setCopied] = useState(false);
+	const rows = useMemo(() => generatePerformanceRows(1000), []);
+	const columns = useMemo(() => createSkinsColumns(), []);
 
 	const themesInfo = {
 		slate: {
@@ -378,17 +385,19 @@ export default function HeadlessSkinsPlayground({ api, editTrigger, arrowKeyNavi
 						<div className='absolute inset-0 w-full h-full pointer-events-none z-30 bg-scanlines opacity-10 border border-emerald-950/20' />
 					)}
 
-					<GridProvider api={api}>
-						<GridView
-							api={api}
-							pinLeftColumns={1}
-							pinRightColumns={1}
-							onCellValueChanged={onCellValueChanged}
-							editTrigger={editTrigger}
-							arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-							className='!border-0 !rounded-none !bg-transparent !shadow-none'
-						/>
-					</GridProvider>
+					<Grid
+						mode='client'
+						rows={rows}
+						columns={columns}
+						getRowId={(row) => row.id}
+						pinLeftColumns={1}
+						pinRightColumns={1}
+						onCellValueChanged={onCellValueChanged}
+						editTrigger={editTrigger}
+						arrowKeyNavigationEdit={arrowKeyNavigationEdit}
+						className='!border-0 !rounded-none !bg-transparent !shadow-none'
+						onGridReady={onGridReady}
+					/>
 				</div>
 
 				{/* Headless architectural annotation footer */}

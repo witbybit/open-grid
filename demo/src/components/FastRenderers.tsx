@@ -8,7 +8,16 @@
  */
 import React, { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import type { DomCellRenderer, ImperativeCellHandle, CellRendererProps } from '@open-grid/react';
-import type { DashboardStockRow } from '../hooks/useShowroomStores';
+
+export interface DashboardStockRow {
+	id: string;
+	symbol: string;
+	name: string;
+	price: number;
+	change: number;
+	volume: number;
+	risk: 'low' | 'medium' | 'high';
+}
 
 // ─── 1. Sparkline DOM Renderer ────────────────────────────────────────────────
 

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { GridProvider, GridView, createLocalStorageAdapter } from '@open-grid/react';
-import type { AggregationDef, ColumnDef, CellRendererProps, GroupVisualRow } from '@open-grid/react';
-import { useOwnedClientGrid } from '../hooks/useOwnedGrid';
+import { Grid, createLocalStorageAdapter } from '@open-grid/react';
+import type { AggregationDef, ColumnDef, CellRendererProps, GroupVisualRow, GridApi, GridReadyEvent } from '@open-grid/react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -145,7 +144,7 @@ const ROWS = generateRows(500);
 
 // ── Group row renderer ────────────────────────────────────────────────────────
 
-function GroupRowRenderer({ visualRow, api }: { visualRow: GroupVisualRow<SalesRow>; api: ReturnType<typeof useOwnedClientGrid<SalesRow>> }) {
+function GroupRowRenderer({ visualRow, api }: { visualRow: GroupVisualRow<SalesRow>; api: GridApi<SalesRow> }) {
 	const isExpanded = api.isGroupExpanded(visualRow.groupId);
 	const agg = visualRow.aggregateValues;
 
@@ -285,21 +284,13 @@ function aggChip(color: string): React.CSSProperties {
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
-function Toolbar({
-	api,
-	showPanel,
-	onTogglePanel,
-}: {
-	api: ReturnType<typeof useOwnedClientGrid<SalesRow>>;
-	showPanel: boolean;
-	onTogglePanel: () => void;
-}) {
+function Toolbar({ api, showPanel, onTogglePanel }: { api: GridApi<SalesRow> | null; showPanel: boolean; onTogglePanel: () => void }) {
 	return (
 		<div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-			<ToolBtn onClick={() => api.expandAllGroups()} title='Expand all groups'>
+			<ToolBtn onClick={() => api?.expandAllGroups()} title='Expand all groups'>
 				Expand All
 			</ToolBtn>
-			<ToolBtn onClick={() => api.collapseAllGroups()} title='Collapse all groups'>
+			<ToolBtn onClick={() => api?.collapseAllGroups()} title='Collapse all groups'>
 				Collapse All
 			</ToolBtn>
 			<div style={{ width: 1, height: 16, background: 'rgba(100,116,139,0.3)', margin: '0 2px' }} />
@@ -307,7 +298,7 @@ function Toolbar({
 				{showPanel ? 'Hide Group Panel' : 'Group Panel'}
 			</ToolBtn>
 			<div style={{ width: 1, height: 16, background: 'rgba(100,116,139,0.3)', margin: '0 2px' }} />
-			<ToolBtn onClick={() => api.exportCsv({ fileName: 'sales-pipeline.csv' })} title='Download as CSV (Excel-compatible)' accent>
+			<ToolBtn onClick={() => api?.exportCsv({ fileName: 'sales-pipeline.csv' })} title='Download as CSV (Excel-compatible)' accent>
 				Export CSV
 			</ToolBtn>
 		</div>
@@ -341,15 +332,17 @@ function ToolBtn({ children, onClick, title, accent }: { children: React.ReactNo
 
 // ── Inner component ───────────────────────────────────────────────────────────
 
-function RealtimeGroupingDemoInner({ api }: { api: ReturnType<typeof useOwnedClientGrid<SalesRow>> }) {
+function RealtimeGroupingDemoInner({ api, onGridReady }: { api: GridApi<SalesRow> | null; onGridReady?: (event: GridReadyEvent<SalesRow>) => void }) {
 	const [showPanel, setShowPanel] = useState(true);
 
 	useEffect(() => {
+		if (!api) return;
 		api.setRows(ROWS);
 		api.setAggDefs(AGG_DEFS);
 	}, [api]);
 
 	useEffect(() => {
+		if (!api) return;
 		api.setShowGroupPanel(showPanel);
 	}, [api, showPanel]);
 
@@ -371,17 +364,28 @@ function RealtimeGroupingDemoInner({ api }: { api: ReturnType<typeof useOwnedCli
 
 			{/* Grid */}
 			<div className='flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-800 shadow-2xl'>
-				<GridView<SalesRow>
-					api={api}
+				<Grid<SalesRow>
+					mode='client'
+					columns={COLUMNS}
+					rows={ROWS}
+					persistence={createLocalStorageAdapter('open-grid-sales-demo')}
+					initialState={{
+						groupBy: ['region', 'category'],
+						groupRowHeight: 44,
+						showGroupFooter: true,
+						enableStickyGroupRows: true,
+						showGroupPanel: true,
+					}}
 					pinLeftColumns={1}
 					enableContextMenu={true}
-					groupRowRenderer={(props) => <GroupRowRenderer visualRow={props.visualRow as GroupVisualRow<SalesRow>} api={api} />}
+					groupRowRenderer={(props) => <GroupRowRenderer visualRow={props.visualRow as GroupVisualRow<SalesRow>} api={props.api} />}
 					sidebar={{
 						panels: ['columns', 'filters', 'sort'],
 						defaultOpen: 'columns',
 						position: 'right',
 						width: 280,
 					}}
+					onGridReady={onGridReady}
 				/>
 			</div>
 		</div>
@@ -390,23 +394,20 @@ function RealtimeGroupingDemoInner({ api }: { api: ReturnType<typeof useOwnedCli
 
 // ── Page export ───────────────────────────────────────────────────────────────
 
-export default function RealtimeGroupingDemo() {
-	const api = useOwnedClientGrid<SalesRow>({
-		columns: COLUMNS,
-		rows: ROWS,
-		persistence: createLocalStorageAdapter('open-grid-sales-demo'),
-		initialState: {
-			groupBy: ['region', 'category'],
-			groupRowHeight: 44,
-			showGroupFooter: true,
-			enableStickyGroupRows: true,
-			showGroupPanel: true,
-		},
-	});
+interface RealtimeGroupingDemoProps {
+	onGridReady?: (event: GridReadyEvent<SalesRow>) => void;
+}
+
+export default function RealtimeGroupingDemo({ onGridReady }: RealtimeGroupingDemoProps) {
+	const [api, setApi] = useState<GridApi<SalesRow> | null>(null);
 
 	return (
-		<GridProvider api={api}>
-			<RealtimeGroupingDemoInner api={api} />
-		</GridProvider>
+		<RealtimeGroupingDemoInner
+			api={api}
+			onGridReady={(event) => {
+				setApi(event.api);
+				onGridReady?.(event);
+			}}
+		/>
 	);
 }
