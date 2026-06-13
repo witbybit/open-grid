@@ -105,6 +105,16 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 			el.style.width = `${plan.dimensions.contentWidth}px`;
 		},
 	},
+	// Exit-animation overlay (Plan 043) — holds short-lived clone "ghosts" of rows that
+	// left the model (e.g. collapsed group children) while they fade out. Lives in the
+	// rows' content coordinate space (ghosts carry their own translateY), is pointer-inert,
+	// and is purely a CSS overlay — no plan-driven positioning, so no apply().
+	{
+		id: 'exiting',
+		className: 'og-layer-exiting',
+		parent: 'rows',
+		order: 0,
+	},
 	{
 		id: 'overlay',
 		className: 'og-layer-overlay',

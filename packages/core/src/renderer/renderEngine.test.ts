@@ -6,6 +6,15 @@ import { GridStore, type RowModel, type VisualRow, type RowModelRefreshResult } 
 import { RenderEngine } from './renderEngine.js';
 import { ServerRowModelController } from '../serverRowModel.js';
 
+/**
+ * Count the row-slot DOM children of the rows container, excluding the `.og-layer-exiting`
+ * overlay (Plan 043) which is a deliberate non-slot sibling for fade-out ghosts. The
+ * stable-slot invariant is about slot elements, not this overlay.
+ */
+function slotDomCount(rowsContainer: HTMLElement): number {
+	return Array.from(rowsContainer.children).filter((c) => !c.classList.contains('og-layer-exiting')).length;
+}
+
 describe('RenderEngine', () => {
 	afterEach(() => {
 		document.body.textContent = '';
@@ -2612,7 +2621,7 @@ describe('RenderEngine', () => {
 
 		// Record the steady-state slot count (full overscan both ways).
 		const slotCountAtSteadyState = renderer.rowRenderer.rowSlotPool.count;
-		const domChildCountAtSteadyState = rowsContainer.children.length;
+		const domChildCountAtSteadyState = slotDomCount(rowsContainer);
 		expect(slotCountAtSteadyState).toBeGreaterThan(0);
 		expect(domChildCountAtSteadyState).toBe(slotCountAtSteadyState);
 
@@ -2628,7 +2637,7 @@ describe('RenderEngine', () => {
 
 		// Slot count and DOM child count must be identical after steady-state scroll.
 		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotCountAtSteadyState);
-		expect(rowsContainer.children.length).toBe(domChildCountAtSteadyState);
+		expect(slotDomCount(rowsContainer)).toBe(domChildCountAtSteadyState);
 
 		// Some rows were recycled, confirming the scroll did real work.
 		const stats = renderer.getRenderStats();
@@ -2751,7 +2760,7 @@ describe('RenderEngine', () => {
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 
 		// Invariant at mount: slot count matches DOM children.
-		expect(renderer.rowRenderer.rowSlotPool.count).toBe(rowsContainer.children.length);
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotDomCount(rowsContainer));
 
 		// Scroll to a middle position and run one scroll frame.
 		scrollViewport.scrollTop = 1200;
@@ -2761,7 +2770,7 @@ describe('RenderEngine', () => {
 
 		// Invariant after scroll: slot count still matches DOM children.
 		// This confirms the stable-slot model doesn't leave orphaned slots or DOM nodes.
-		expect(renderer.rowRenderer.rowSlotPool.count).toBe(rowsContainer.children.length);
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotDomCount(rowsContainer));
 
 		// Scroll further and verify again.
 		scrollViewport.scrollTop = 2400;
@@ -2770,7 +2779,7 @@ describe('RenderEngine', () => {
 		callbacks.length = 0;
 
 		// Invariant still holds.
-		expect(renderer.rowRenderer.rowSlotPool.count).toBe(rowsContainer.children.length);
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotDomCount(rowsContainer));
 
 		// Confirm rows were recycled (the scrolls did real work).
 		const stats = renderer.getRenderStats();

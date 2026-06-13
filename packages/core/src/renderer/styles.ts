@@ -114,6 +114,27 @@ export const CORE_STYLES = `
     z-index: 10;
   }
 
+  /* ── Exit-animation overlay (Plan 043) ──────────────────────────────────── */
+  /* Sits in the rows' content coordinate space; ghosts carry their own translateY.
+     Pointer-inert and above normal rows so fade-outs read on top of rows sliding up. */
+  .og-layer-exiting {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 0;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .og-layer-exiting > .og-row {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+  }
+
   /* ── Bottom chrome: status bar + pagination (Plan 039 Phase 5) ───────────── */
 
   .og-layer-status-bar,

@@ -12,6 +12,13 @@
 - **Depends on**: Plan 039 Phase 2 (`LayoutTransitionController` move+enter), Phase 3 (expand/collapse arming)
 - **Category**: rendering, animation
 - **Planned at**: 2026-06-14
+- **Status**: **Phases 1–2 DONE (2026-06-14, branch rendering-architecture-v2-wip-3)**; Phase 3 (detail/group height animation) deferred. core 580/580, react 85/85, demo build clean.
+  - **Approach chosen — clone-ghost (not a slot-pool exit lane).** Touching the slot recycle path was avoided entirely. At `captureSnapshot` the controller deep-clones each visible row (cheap, discrete-action only); at `beginAnimation` it fades out (WAAPI opacity 1→0) the clones of rows that left, into a dedicated `.og-layer-exiting` overlay. This sidesteps the Phase-2 STOP risk: full-width/portal rows fade as static ghosts too, with no portal-manager changes.
+  - **True-exit gate**: a captured row ghosts only if it's no longer rendered AND no longer in the model (`isRowIdLive` → `RowModel.getVisualIndexById(visualRowId) >= 0`). Rows that merely scrolled out of the window are not faded. Pagination/sort don't trigger exits (capture is wired to sort+expansion; collapse is the producer).
+  - **Files**: `layoutTransitionController.ts` (clone snapshot + `playExits` + ghost teardown in `cancel`), `LayoutTransitionOptions` ({getExitLayer, isRowIdLive}); `layerRegistry.ts` (`exiting` static overlay layer, child of `rows`); `styles.ts` (`.og-layer-exiting`); `renderEngine.ts` wires the options. Guard test updated for the static overlay.
+  - **Hot-path**: ghosts only exist during a discrete fade; `cancel()` (scroll start) removes them all — none survive a scroll frame. Stable-slot DOM invariant preserved (the overlay is a non-slot sibling; tests count slot children via `slotDomCount`).
+  - Tests: 4 exit cases in `layoutTransitionController.test.ts` (fade on true exit; no fade on scroll-out; cancel removes ghosts; no-op without exit layer).
+  - **Deferred — Phase 3**: detail-row/group height grow/shrink animation (needs an inner content wrapper). Separate, lower-priority polish.
 
 ## Problem
 

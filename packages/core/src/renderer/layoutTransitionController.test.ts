@@ -103,3 +103,88 @@ describe('LayoutTransitionController', () => {
 		c.destroy();
 	});
 });
+
+describe('LayoutTransitionController — exit ghosts (Plan 043)', () => {
+	const originalAnimate = (HTMLElement.prototype as any).animate;
+	afterEach(() => {
+		(HTMLElement.prototype as any).animate = originalAnimate;
+	});
+
+	function stubAnimate(record?: Keyframe[][]) {
+		(HTMLElement.prototype as any).animate = function (kf: Keyframe[]) {
+			record?.push(kf);
+			return { cancel: vi.fn(), onfinish: null, oncancel: null } as unknown as Animation;
+		};
+	}
+
+	it('fades out a captured row that left the model into the exit layer', () => {
+		const kfs: Keyframe[][] = [];
+		stubAnimate(kfs);
+		const exitLayer = document.createElement('div');
+		const a = slot('data:a', 0);
+		const b = slot('data:b', 40);
+		const active = new Map<number, any>([
+			[0, a],
+			[1, b],
+		]);
+		// 'data:b' is gone from the model after the change (e.g. collapsed away).
+		const c = new LayoutTransitionController(() => active, { getExitLayer: () => exitLayer, isRowIdLive: (id) => id === 'data:a' });
+
+		c.captureSnapshot(); // clones a + b
+		active.delete(1); // b no longer rendered
+		c.beginAnimation();
+
+		expect(exitLayer.children.length).toBe(1); // one ghost (for b)
+		const fade = kfs.find((kf) => kf[0].opacity === 1 && kf[1].opacity === 0);
+		expect(fade).toBeDefined();
+		c.destroy();
+	});
+
+	it('does NOT fade a captured row that merely scrolled out but is still in the model', () => {
+		stubAnimate();
+		const exitLayer = document.createElement('div');
+		const a = slot('data:a', 0);
+		const b = slot('data:b', 40);
+		const active = new Map<number, any>([
+			[0, a],
+			[1, b],
+		]);
+		// Both rows are still live in the model; b just isn't rendered this frame.
+		const c = new LayoutTransitionController(() => active, { getExitLayer: () => exitLayer, isRowIdLive: () => true });
+		c.captureSnapshot();
+		active.delete(1);
+		c.beginAnimation();
+		expect(exitLayer.children.length).toBe(0);
+		c.destroy();
+	});
+
+	it('cancel() removes in-flight exit ghosts (no ghost survives a scroll)', () => {
+		stubAnimate();
+		const exitLayer = document.createElement('div');
+		const a = slot('data:a', 0);
+		const b = slot('data:b', 40);
+		const active = new Map<number, any>([
+			[0, a],
+			[1, b],
+		]);
+		const c = new LayoutTransitionController(() => active, { getExitLayer: () => exitLayer, isRowIdLive: (id) => id === 'data:a' });
+		c.captureSnapshot();
+		active.delete(1);
+		c.beginAnimation();
+		expect(exitLayer.children.length).toBe(1);
+		c.cancel();
+		expect(exitLayer.children.length).toBe(0);
+		c.destroy();
+	});
+
+	it('does not clone or ghost when no exit layer is configured', () => {
+		stubAnimate();
+		const a = slot('data:a', 0);
+		const active = new Map<number, any>([[0, a]]);
+		const c = new LayoutTransitionController(() => active, { isRowIdLive: () => false });
+		c.captureSnapshot();
+		active.delete(0);
+		expect(() => c.beginAnimation()).not.toThrow();
+		c.destroy();
+	});
+});

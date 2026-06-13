@@ -199,7 +199,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		);
 		this.rowRenderer.renderStats = this.renderStats;
 		this.portalMountManager.setPhysicalRowSlotIdResolver((rowIndex) => this.rowRenderer.activeRows.get(rowIndex)?.id);
-		this.layoutTransition = new LayoutTransitionController(() => this.rowRenderer.activeRows);
+		this.layoutTransition = new LayoutTransitionController(() => this.rowRenderer.activeRows, {
+			getExitLayer: () => this.viewportRenderer.getLayer('exiting'),
+			// A visual row that vanished from the model truly left (e.g. a collapsed group's
+			// children) → fade it out; one that merely scrolled out of the window stays live.
+			isRowIdLive: (visualRowId) => {
+				const model = this.engine.getRowModel();
+				return model ? model.getVisualIndexById(visualRowId) >= 0 : false;
+			},
+		});
 
 		this.headerRenderer = new HeaderRenderer<TRowData>(
 			engine,

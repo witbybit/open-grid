@@ -38,10 +38,17 @@ describe('layer registry (Plan 039)', () => {
 		}
 	});
 
-	it('every layer with structural positioning exposes an apply()', () => {
-		// group-panel/header/rows/etc. are all positioned from the plan, so they must
-		// carry an apply. (A future purely-static layer may legitimately omit it.)
-		const positioned = LAYER_REGISTRY.filter((d) => d.id !== '__none__');
-		expect(positioned.every((d) => typeof d.apply === 'function')).toBe(true);
+	it('plan-positioned layers expose an apply(); static overlays may omit it', () => {
+		// Most layers (group-panel/header/rows/chrome) derive geometry from the plan and
+		// MUST carry an apply. Pure CSS overlays positioned by content coordinates (the exit
+		// ghost layer) legitimately have none.
+		const STATIC_OVERLAYS = new Set(['exiting']);
+		for (const d of LAYER_REGISTRY) {
+			if (STATIC_OVERLAYS.has(d.id)) {
+				expect(d.apply, `static overlay "${d.id}" should not have apply`).toBeUndefined();
+			} else {
+				expect(typeof d.apply, `layer "${d.id}" must position from the plan via apply`).toBe('function');
+			}
+		}
 	});
 });
