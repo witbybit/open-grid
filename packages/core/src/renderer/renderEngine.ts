@@ -27,6 +27,8 @@ import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { LayoutTransitionController } from './layoutTransitionController.js';
 import { GroupPanelRenderer } from './groupPanelRenderer.js';
+import { StatusBarRenderer } from './statusBarRenderer.js';
+import { PaginationBarRenderer } from './paginationBarRenderer.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import { RenderInvalidationCoordinator } from './RenderInvalidationCoordinator.js';
@@ -62,6 +64,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly headerRenderer: HeaderRenderer<TRowData>;
 	public readonly overlayRenderer: OverlayRenderer<TRowData>;
 	public readonly groupPanelRenderer: GroupPanelRenderer<TRowData>;
+	public readonly statusBarRenderer: StatusBarRenderer<TRowData>;
+	public readonly paginationBarRenderer: PaginationBarRenderer<TRowData>;
 	public readonly stickyGroupRenderer: StickyGroupRenderer<TRowData>;
 	private readonly invalidationCoordinator: RenderInvalidationCoordinator<TRowData>;
 	private readonly headerMenu: HeaderMenuController<TRowData>;
@@ -243,6 +247,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Group panel renderer — mounts when showGroupPanel is true
 		this.groupPanelRenderer = new GroupPanelRenderer<TRowData>(engine);
+		this.statusBarRenderer = new StatusBarRenderer<TRowData>(engine);
+		this.paginationBarRenderer = new PaginationBarRenderer<TRowData>(engine);
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
 		const scrollState: RenderScrollCoordinatorState<TRowData> = {
 			isScrolling: this.isScrolling,
@@ -371,6 +377,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.columnInteractions.setGroupPanel(this.groupPanelRenderer);
 		}
 
+		// Bottom chrome: status bar + pagination. The layers always exist (the registry
+		// builds them); their `apply()` hides them with display:none until configured, so
+		// mounting the content unconditionally is safe and lets config toggle at runtime.
+		const statusBarLayer = this.viewportRenderer.getLayer('status-bar');
+		if (statusBarLayer) this.statusBarRenderer.mount(statusBarLayer);
+		const paginationLayer = this.viewportRenderer.getLayer('pagination');
+		if (paginationLayer) this.paginationBarRenderer.mount(paginationLayer);
+
 		this.overlayRenderer.mount();
 
 		// Pre-warm DOM recycling pools
@@ -408,6 +422,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.columnInteractions.setGroupPanel(null);
 		this.fillDrag.cleanup();
 		this.groupPanelRenderer.unmount();
+		this.statusBarRenderer.unmount();
+		this.paginationBarRenderer.unmount();
 		this.stickyGroupRenderer.unmount();
 		this.layoutTransition.destroy();
 		this.scheduler.destroy();

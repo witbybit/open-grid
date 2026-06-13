@@ -114,4 +114,31 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 			el.style.top = `${plan.origins.overlayTop}px`;
 		},
 	},
+	// Bottom chrome (Plan 039 Phase 5) — fixed bars docked below the scroll viewport,
+	// parented to the grid container (not the scroll viewport) so they never scroll.
+	// They occupy the space the scroll viewport gives up via --og-bottom-chrome-height.
+	{
+		id: 'status-bar',
+		className: 'og-layer-status-bar',
+		parent: 'container',
+		order: 2,
+		apply(el, plan) {
+			const visible = plan.chrome.statusBarHeight > 0;
+			el.style.display = visible ? 'flex' : 'none';
+			el.style.top = `${plan.origins.statusBarTop}px`;
+			el.style.height = `${plan.chrome.statusBarHeight}px`;
+		},
+	},
+	{
+		id: 'pagination',
+		className: 'og-layer-pagination',
+		parent: 'container',
+		order: 3,
+		apply(el, plan) {
+			const visible = plan.chrome.paginationHeight > 0;
+			el.style.display = visible ? 'flex' : 'none';
+			el.style.top = `${plan.origins.paginationTop}px`;
+			el.style.height = `${plan.chrome.paginationHeight}px`;
+		},
+	},
 ];

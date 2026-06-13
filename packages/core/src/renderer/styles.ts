@@ -106,9 +106,99 @@ export const CORE_STYLES = `
     top: 0;
     left: 0;
     right: 0;
-    bottom: 0;
+    /* Bottom chrome (status bar / pagination) is docked below the scroll viewport.
+       The viewport gives up exactly that much height so content never sits under it.
+       Default 0 → flush to the container bottom when no bottom chrome is configured. */
+    bottom: var(--og-bottom-chrome-height, 0px);
     overflow: auto;
     z-index: 10;
+  }
+
+  /* ── Bottom chrome: status bar + pagination (Plan 039 Phase 5) ───────────── */
+
+  .og-layer-status-bar,
+  .og-layer-pagination {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 12;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    background-color: var(--og-header-bg);
+    color: var(--og-text-color);
+    font-size: 12px;
+    user-select: none;
+  }
+
+  .og-layer-status-bar {
+    gap: 16px;
+    padding: 0 12px;
+    border-top: 1px solid var(--og-border-color);
+  }
+
+  .og-status-bar-panel {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .og-status-bar-panel-label {
+    opacity: 0.7;
+  }
+
+  .og-status-bar-panel-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  .og-status-bar-spacer {
+    flex: 1 1 auto;
+  }
+
+  .og-layer-pagination {
+    gap: 6px;
+    padding: 0 12px;
+    justify-content: flex-end;
+    border-top: 1px solid var(--og-border-color);
+  }
+
+  .og-pagination-summary {
+    margin-right: auto;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+  }
+
+  .og-pagination-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--og-border-color);
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+  }
+
+  .og-pagination-btn:hover:not(:disabled) {
+    background-color: var(--og-row-hover-bg);
+  }
+
+  .og-pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .og-pagination-page-info {
+    margin: 0 8px;
+    font-variant-numeric: tabular-nums;
   }
 
   /* ── Group panel ─────────────────────────────────────────────────────── */
