@@ -631,7 +631,7 @@ function DashboardGrid({ rows, columns }: { rows: StockRow[]; columns: ColumnDef
 | `'cell'`       | `cellClass`, optional `field`       | `(row, col, params) => boolean` | Single cell; if `field` is set, only that column |
 | `'headerCell'` | `headerCellClass`, optional `field` | `(col) => boolean`              | Header cell; if `field` is set, only that column |
 
-`styleRules` is the supported conditional styling surface. Imperative style-slot APIs and lifecycle styling hooks are no longer part of Open Grid.
+`styleRules` is the supported conditional styling surface. Use the `styleRules` prop for declarative configuration, `useStyleRules` inside React grid trees, or `api.setStyleRules(...)` when you need an imperative public API.
 
 ---
 

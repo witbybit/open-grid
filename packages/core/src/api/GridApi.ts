@@ -311,6 +311,7 @@ export interface GridApi<TRowData = unknown> {
 	setRowHeight(rowId: string, height: number): void;
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
+	setStyleRules(styleRules: GridStyleRule<TRowData>[] | undefined): void;
 	setGroupBy(colIds: string[]): void;
 	getGroupBy(): string[];
 	addGroupBy(colId: string, atIndex?: number): void;

@@ -15,7 +15,7 @@ This migration is now landed:
 
 - `setStyleSlots`, `styleSlots`, `beforeCellRender`, and `afterCellRender` are removed from runtime code.
 - `styleRules` remains as the single declarative conditional styling model.
-- public `api.setStyleRules` has been removed; adapter sync now goes through the internal adapter bridge.
+- public `api.setStyleRules` is available again as a thin entrypoint into the same core-owned `styleRules` state.
 - built-in theme selection stays core-owned and persistence-owned.
 
 ## Goal
