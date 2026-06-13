@@ -82,6 +82,12 @@ export interface GridUIState {
 	activeEdit: ActiveEditState | null;
 	sidebarOpenPanel?: string | null;
 	chartOpen?: boolean;
+	serverPagination?: {
+		page: number;
+		pageCount: number;
+		totalRows: number;
+		pageSize: number;
+	};
 }
 
 /**

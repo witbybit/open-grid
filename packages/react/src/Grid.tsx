@@ -94,54 +94,29 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	const didMountServerRef = useRef(false);
 	const paginationConfig = useMemo(() => normalizePagination(pagination), [pagination]);
 	const pageSize = paginationConfig?.pageSize ?? DEFAULT_PAGE_SIZE;
-	const [page, setPage] = useState(paginationConfig?.initialPage ?? 0);
-	const [serverTotalRows, setServerTotalRows] = useState(0);
+
+	// Client-side pagination: slice rows in React before passing to the grid.
+	const [clientPage, setClientPage] = useState(paginationConfig?.initialPage ?? 0);
 	const clientTotalRows = rows?.length ?? 0;
-	const totalRows = mode === 'client' ? clientTotalRows : serverTotalRows;
-	const pageCount = paginationConfig ? Math.max(1, Math.ceil(totalRows / pageSize)) : 1;
-	const clampedPage = Math.max(0, Math.min(page, pageCount - 1));
+	const clientPageCount = paginationConfig && mode === 'client' ? Math.max(1, Math.ceil(clientTotalRows / pageSize)) : 1;
+	const clampedClientPage = Math.max(0, Math.min(clientPage, clientPageCount - 1));
 
 	const pagedClientRows = useMemo(() => {
 		if (mode !== 'client' || !paginationConfig) return rows as TRowData[] | undefined;
 		const sourceRows = rows as TRowData[] | undefined;
 		if (!sourceRows) return sourceRows;
-		return sourceRows.slice(clampedPage * pageSize, (clampedPage + 1) * pageSize);
-	}, [mode, paginationConfig, rows, clampedPage, pageSize]);
-
-	const pagedServerDatasource = useMemo(() => {
-		if (mode !== 'server' || !paginationConfig || !datasource) return datasource as GridDatasource<TRowData> | undefined;
-		const pageOffset = clampedPage * pageSize;
-		return {
-			getRows: async (params) => {
-				const localStart = Math.max(0, params.startRow);
-				const localEndExclusive = Math.max(localStart, Math.min(pageSize, params.endRow));
-				const response = await datasource.getRows({
-					...params,
-					startRow: pageOffset + localStart,
-					endRow: pageOffset + localEndExclusive,
-				});
-				if (typeof response.totalCount === 'number') {
-					setServerTotalRows(response.totalCount);
-					return {
-						rows: response.rows,
-						totalCount: Math.min(pageSize, Math.max(0, response.totalCount - pageOffset)),
-					};
-				}
-				setServerTotalRows((prev) => Math.max(prev, pageOffset + response.rows.length));
-				return {
-					rows: response.rows,
-					totalCount: response.rows.length,
-				};
-			},
-		} satisfies GridDatasource<TRowData>;
-	}, [mode, paginationConfig, datasource, clampedPage, pageSize]);
-
-	const effectiveServerBlockSize = mode === 'server' && paginationConfig ? Math.max(1, Math.min(blockSize ?? pageSize, pageSize)) : blockSize;
+		return sourceRows.slice(clampedClientPage * pageSize, (clampedClientPage + 1) * pageSize);
+	}, [mode, paginationConfig, rows, clampedClientPage, pageSize]);
 
 	useEffect(() => {
-		if (!paginationConfig) return;
-		setPage((prev) => Math.max(0, Math.min(prev, pageCount - 1)));
-	}, [paginationConfig, pageCount]);
+		if (mode !== 'client' || !paginationConfig) return;
+		setClientPage((prev) => Math.max(0, Math.min(prev, clientPageCount - 1)));
+	}, [paginationConfig, clientPageCount, mode]);
+
+	// Server-side pagination: owned by core. React only reads serverPagination state.
+	const [serverPaginationState, setServerPaginationState] = useState(() =>
+		mode === 'server' ? (null as { page: number; pageCount: number; totalRows: number; pageSize: number } | null) : null
+	);
 
 	const api = useMemo(() => {
 		const initial = createInitialState(
@@ -171,12 +146,13 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		}
 
 		return createServerGrid({
-			datasource: (pagedServerDatasource ?? datasource) as GridDatasource<TRowData>,
+			datasource: datasource as GridDatasource<TRowData>,
 			columns: resolveColumnTypes(columns, columnTypes),
-			blockSize: effectiveServerBlockSize,
+			blockSize,
 			getRowId,
 			persistence,
 			initialState: initial,
+			pagination: paginationConfig ? { pageSize, initialPage: paginationConfig.initialPage } : undefined,
 		});
 		// The grid instance is intentionally created once; live changes are handled by the dedicated hooks below.
 	}, []);
@@ -200,15 +176,18 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			didMountServerRef.current = true;
 			return;
 		}
-		api.setServerDatasource((pagedServerDatasource ?? datasource) as GridDatasource<TRowData>, effectiveServerBlockSize);
-	}, [api, mode, datasource, pagedServerDatasource, effectiveServerBlockSize]);
+		api.setServerDatasource(datasource as GridDatasource<TRowData>, blockSize);
+	}, [api, mode, datasource, blockSize]);
 
+	// Subscribe to server pagination state changes so the UI updates without React state cascades.
 	useEffect(() => {
 		if (mode !== 'server' || !paginationConfig) return;
-		const unsubscribe = api.addEventListener(GridEventName.serverBlockLoaded, (event) => {
-			setServerTotalRows((prev) => Math.max(prev, event.payload.totalRecords));
+		const initial = api.getState().serverPagination;
+		if (initial) setServerPaginationState(initial);
+		return api.subscribeToKey('serverPagination', () => {
+			const next = api.getState().serverPagination;
+			if (next) setServerPaginationState(next);
 		});
-		return unsubscribe;
 	}, [api, mode, paginationConfig]);
 
 	useEffect(() => {
@@ -230,6 +209,12 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		};
 	}, [api]);
 
+	// Resolve which pagination props to pass to the UI component.
+	const activePaginationPage = mode === 'server' ? (serverPaginationState?.page ?? 0) : clampedClientPage;
+	const activePaginationCount = mode === 'server' ? (serverPaginationState?.pageCount ?? 1) : clientPageCount;
+	const activePaginationTotalRows = mode === 'server' ? (serverPaginationState?.totalRows ?? 0) : clientTotalRows;
+	const activePaginationPageSize = mode === 'server' ? (serverPaginationState?.pageSize ?? pageSize) : pageSize;
+
 	return (
 		<GridProvider api={api}>
 			<div className='flex h-full w-full flex-col'>
@@ -239,11 +224,11 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				{paginationConfig ? (
 					<div className='shrink-0'>
 						<GridPagination
-							page={clampedPage}
-							pageCount={pageCount}
-							onPageChange={setPage}
-							totalRows={totalRows}
-							pageSize={pageSize}
+							page={activePaginationPage}
+							pageCount={activePaginationCount}
+							onPageChange={mode === 'server' ? (n) => api.goToPage(n) : setClientPage}
+							totalRows={activePaginationTotalRows}
+							pageSize={activePaginationPageSize}
 							className={paginationConfig.className}
 							style={paginationConfig.style}
 							maxPageButtons={paginationConfig.maxPageButtons}

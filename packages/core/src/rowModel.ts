@@ -72,6 +72,7 @@ export interface RowModel<TRowData = unknown> {
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
 	purgeCache?(): void;
 	setDatasource?(datasource: import('./serverRowModel.js').IGridDatasource<TRowData>, blockSize?: number): void;
+	goToPage?(page: number): void;
 	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
 	loadVisibleBlocks?(startRow: number, endRow: number): void;
 }

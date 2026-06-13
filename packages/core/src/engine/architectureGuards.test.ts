@@ -365,6 +365,11 @@ describe('Architecture guardrails', () => {
 		expect(existsSync(resolve(REACT_ROOT, 'src', 'ownedGrid.ts')), 'ownedGrid.ts must not exist').toBe(false);
 	});
 
+	it('Grid.tsx does not contain the pagedServerDatasource wrapper', () => {
+		const gridContent = readFileSync(resolve(REACT_ROOT, 'src', 'Grid.tsx'), 'utf-8');
+		expect(gridContent, 'pagedServerDatasource wrapper must not exist in Grid.tsx').not.toContain('pagedServerDatasource');
+	});
+
 	it('demo code depends on the React Grid entrypoint instead of core or owned-grid internals', () => {
 		const files = [...collectSourceFiles(resolve(DEMO_ROOT, 'src')), resolve(DEMO_ROOT, 'vite.config.ts'), resolve(DEMO_ROOT, 'package.json')];
 		const forbiddenTokens = [

@@ -37,6 +37,7 @@ export enum GridEventName {
 	rowsUpdated = 'rowsUpdated',
 	runtimeFault = 'runtimeFault',
 	selectionChanged = 'selectionChanged',
+	paginationChanged = 'paginationChanged',
 	serverBlockLoaded = 'serverBlockLoaded',
 	serverBlockLoadFailed = 'serverBlockLoadFailed',
 	showGroupFooterChanged = 'showGroupFooterChanged',
@@ -70,6 +71,12 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 		changedNodes: RowNode<TRowData>[];
 		addedNodes?: RowNode<TRowData>[];
 		removedNodes?: RowNode<TRowData>[];
+	};
+	[GridEventName.paginationChanged]: {
+		page: number;
+		pageCount: number;
+		totalRows: number;
+		pageSize: number;
 	};
 	[GridEventName.runtimeFault]: RuntimeFault;
 	[GridEventName.selectionChanged]: { selection: GridSelectionState; result: SelectionChangeResult };

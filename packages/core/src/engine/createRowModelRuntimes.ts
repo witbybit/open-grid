@@ -64,6 +64,10 @@ export function createServerRowModelRuntime<TRowData>(store: GridStore<TRowData>
 		setLoadingState: (loading) => store.setState((s) => ({ loading, globalVersion: s.globalVersion + 1 })),
 		dispatchServerBlockLoaded: (payload) => store.dispatchEvent(GridEventName.serverBlockLoaded, payload),
 		dispatchServerBlockLoadFailed: (payload) => store.dispatchEvent(GridEventName.serverBlockLoadFailed, payload),
+		dispatchPaginationChanged: (payload) => {
+			store.setState({ serverPagination: payload });
+			store.dispatchEvent(GridEventName.paginationChanged, payload);
+		},
 		reportBlockLoadFailure: (blockIndex, error) =>
 			store.reportRuntimeFault({
 				source: 'server-row-model',

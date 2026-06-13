@@ -15,6 +15,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		setDefaultRowHeight: source.setDefaultRowHeight,
 		purgeCache: source.purgeCache,
 		setServerDatasource: source.setServerDatasource,
+		goToPage: source.goToPage,
 		getCellValue: source.getCellValue,
 		setCellValue: source.setCellValue,
 		selectCell: source.selectCell,

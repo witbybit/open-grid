@@ -282,6 +282,7 @@ export interface GridApi<TRowData = unknown> {
 	setDefaultRowHeight: (defaultRowHeight?: number | undefined) => void;
 	purgeCache(): void;
 	setServerDatasource(datasource: IGridDatasource<TRowData>, blockSize?: number): void;
+	goToPage(page: number): void;
 	getCellValue(rowId: string, colField: string): unknown;
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;

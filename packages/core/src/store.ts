@@ -644,6 +644,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.getRowModel()?.setDatasource?.(datasource, blockSize);
 	};
 
+	public goToPage = (page: number): void => {
+		this.getRowModel()?.goToPage?.(page);
+	};
+
 	public setViewportPins = (pins: { left?: number; right?: number; top?: number; bottom?: number }): void => {
 		if (pins.left !== undefined) this.viewportController.pinLeftColumns = pins.left;
 		if (pins.right !== undefined) this.viewportController.pinRightColumns = pins.right;

@@ -32,7 +32,6 @@ type SelectionStats = {
 	unloadedSelectedRows: number;
 };
 
-const SERVER_PAGE_SIZE = 5000;
 export default function InfiniteServerScroll({
 	editTrigger,
 	arrowKeyNavigationEdit,
@@ -207,16 +206,16 @@ export default function InfiniteServerScroll({
 						columns={columns}
 						datasource={datasource}
 						blockSize={100}
-						// pagination={{
-						// 	pageSize: SERVER_PAGE_SIZE,
-						// 	style: {
-						// 		background: 'rgba(15,23,42,0.6)',
-						// 		border: '1px solid #1e293b',
-						// 		borderRadius: '8px',
-						// 		color: '#94a3b8',
-						// 		flexShrink: 0,
-						// 	},
-						// }}
+						pagination={{
+							pageSize: 1000,
+							style: {
+								background: 'rgba(15,23,42,0.6)',
+								border: '1px solid #1e293b',
+								borderRadius: '8px',
+								color: '#94a3b8',
+								flexShrink: 0,
+							},
+						}}
 						getRowId={(row) => row.id}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}

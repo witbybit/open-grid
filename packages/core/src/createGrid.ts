@@ -122,6 +122,7 @@ export function createApiFacade<TRowData>(
 		setDefaultRowHeight: (defaultRowHeight?: number | undefined) => store.setDefaultRowHeight(defaultRowHeight),
 		purgeCache: () => store.purgeCache(),
 		setServerDatasource: (datasource: IGridDatasource<TRowData>, blockSize?: number) => store.setServerDatasource(datasource, blockSize),
+		goToPage: (page: number) => store.goToPage(page),
 		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
 		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
 		selectCell: (pointer: GridCellPointer | null, source?: GridSelectionSource) => store.selectCell(pointer, source),
