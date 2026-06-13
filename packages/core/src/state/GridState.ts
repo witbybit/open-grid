@@ -30,6 +30,11 @@ export interface GridModelState<TRowData = unknown> {
 	showGroupPanel?: boolean;
 	pinnedColumns?: { left: number; right: number };
 
+	// Bottom chrome (Plan 039 Phase 5). Presence gates the bottom-chrome height in the
+	// layout plan; full panel/page config is filled in when the feature lands.
+	showStatusBar?: boolean;
+	pagination?: { pageSize: number; page?: number };
+
 	selectedRowIds: string[];
 
 	expansion: {

@@ -3,13 +3,13 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { GeometryController } from './geometryController.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { RenderScheduler } from './renderScheduler.js';
-import type { SortAnimationController } from './sortAnimationController.js';
+import type { LayoutTransitionController } from './layoutTransitionController.js';
 
 export interface RenderInvalidationCoordinatorDeps<TRowData = unknown> {
 	engine: GridEngine<TRowData>;
 	geometryController: GeometryController<TRowData>;
 	portalMountManager: PortalMountManager<TRowData>;
-	sortAnimation: SortAnimationController<TRowData>;
+	layoutTransition: LayoutTransitionController<TRowData>;
 	scheduler: RenderScheduler;
 	syncLayoutPlan: () => void;
 	scrollCellIntoView: (rowId: string, colField: string) => void;
@@ -82,7 +82,15 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('enableColumnReorder', invalidateHeaders));
 		this.unsubscribers.push(
 			this.deps.engine.stateManager.subscribeToKey('sortModel', () => {
-				this.deps.sortAnimation.captureSnapshot();
+				this.deps.layoutTransition.captureSnapshot();
+			})
+		);
+		// Expansion (group, tree, and master-detail all mutate state.expansion) — snapshot
+		// the pre-toggle row positions so the resulting reveal/hide animates. Fires before
+		// the toggle's invalidation flush, so slot.lastTop still holds the old layout.
+		this.unsubscribers.push(
+			this.deps.engine.stateManager.subscribeToKey('expansion', () => {
+				this.deps.layoutTransition.captureSnapshot();
 			})
 		);
 		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));

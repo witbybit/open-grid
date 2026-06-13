@@ -124,6 +124,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			showGroupFooter: initialState.showGroupFooter,
 			enableStickyGroupRows: initialState.enableStickyGroupRows,
 			showGroupPanel: initialState.showGroupPanel,
+			showStatusBar: initialState.showStatusBar,
+			pagination: initialState.pagination,
 			expansion: initialState.expansion,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 1,

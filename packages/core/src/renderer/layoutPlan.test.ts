@@ -221,4 +221,111 @@ describe('GridLayoutPlan', () => {
 		ctrl.dispose();
 		store.destroy();
 	});
+
+	describe('pin lanes (Plan 039 Phase 4)', () => {
+		it('exposes one lane geometry that matches the compiled column plan (no drift)', () => {
+			const store = new GridStore<{ id: string; a: string; b: string; c: string; d: string }>({
+				getRowId: (row) => row.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 100 },
+					{ field: 'b', header: 'B', width: 100 },
+					{ field: 'c', header: 'C', width: 100 },
+					{ field: 'd', header: 'D', width: 100 },
+				],
+				defaultRowHeight: 40,
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(250, 300);
+			store.setViewportPins({ left: 1, right: 1 });
+			const plan = computeGridLayoutPlan(store.engine);
+			const compiled = store.engine.columns.getCompiledPlan();
+
+			// The right-lane origin used by the header is the same value the body binder
+			// reads from the compiled plan — header and body cannot drift.
+			expect(plan.columns.lanes.right.baseLeft).toBe(compiled.pinRightBaseLeft);
+			expect(plan.columns.lanes.right.baseLeft).toBe(plan.dimensions.totalColumnsWidth - plan.columns.pinRightWidth);
+			expect(plan.columns.lanes.left.baseLeft).toBe(0);
+			expect(plan.columns.lanes.left.width).toBe(plan.columns.pinLeftWidth);
+			expect(plan.columns.lanes.center.baseLeft).toBe(plan.columns.pinLeftWidth);
+			expect(plan.columns.lanes.right.width).toBe(plan.columns.pinRightWidth);
+
+			// Lane column ranges partition the 4 displayed columns: [0] | [1,2] | [3].
+			expect(plan.columns.lanes.left).toMatchObject({ colStart: 0, colEnd: 0 });
+			expect(plan.columns.lanes.center).toMatchObject({ colStart: 1, colEnd: 2 });
+			expect(plan.columns.lanes.right).toMatchObject({ colStart: 3, colEnd: 3 });
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('marks empty lanes with -1 column ranges when nothing is pinned', () => {
+			const store = new GridStore<{ id: string; a: string }>({
+				getRowId: (row) => row.id,
+				columns: [{ field: 'a', header: 'A', width: 100 }],
+				defaultRowHeight: 40,
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(300, 300);
+			const plan = computeGridLayoutPlan(store.engine);
+
+			expect(plan.columns.lanes.left).toMatchObject({ colStart: -1, colEnd: -1, width: 0 });
+			expect(plan.columns.lanes.right).toMatchObject({ colStart: -1, colEnd: -1, width: 0 });
+			expect(plan.columns.lanes.center).toMatchObject({ colStart: 0, colEnd: 0 });
+
+			ctrl.dispose();
+			store.destroy();
+		});
+	});
+
+	describe('bottom chrome (Plan 039)', () => {
+		it('has zero bottom chrome by default; origins anchor to the viewport bottom', () => {
+			const store = new GridStore<{ id: string; name: string }>({
+				getRowId: (row) => row.id,
+				columns: [{ field: 'name', header: 'Name', width: 120 }],
+				defaultRowHeight: 40,
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(500, 300);
+			const plan = computeGridLayoutPlan(store.engine);
+
+			expect(plan.chrome.statusBarHeight).toBe(0);
+			expect(plan.chrome.paginationHeight).toBe(0);
+			expect(plan.chrome.bottomChromeHeight).toBe(0);
+			// With no bottom chrome the docked-bar origins sit flush at the viewport bottom.
+			expect(plan.origins.bottomChromeTop).toBe(300);
+			expect(plan.origins.statusBarTop).toBe(300);
+			expect(plan.origins.paginationTop).toBe(300);
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('reserves bottom chrome and stacks status bar above pagination when configured', () => {
+			const store = new GridStore<{ id: string; name: string }>({
+				getRowId: (row) => row.id,
+				columns: [{ field: 'name', header: 'Name', width: 120 }],
+				defaultRowHeight: 40,
+				showStatusBar: true,
+				pagination: { pageSize: 25 },
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(500, 300);
+			const plan = computeGridLayoutPlan(store.engine);
+
+			const { statusBarHeight, paginationHeight, bottomChromeHeight } = plan.chrome;
+			expect(statusBarHeight).toBeGreaterThan(0);
+			expect(paginationHeight).toBeGreaterThan(0);
+			expect(bottomChromeHeight).toBe(statusBarHeight + paginationHeight);
+
+			// bottomChromeTop = viewport bottom - bottom chrome; status bar sits above pagination.
+			expect(plan.origins.bottomChromeTop).toBe(300 - bottomChromeHeight);
+			expect(plan.origins.statusBarTop).toBe(plan.origins.bottomChromeTop);
+			expect(plan.origins.paginationTop).toBe(plan.origins.bottomChromeTop + statusBarHeight);
+			// Top chrome is unaffected by bottom chrome.
+			expect(plan.origins.overlayTop).toBe(plan.chrome.topChromeHeight);
+
+			ctrl.dispose();
+			store.destroy();
+		});
+	});
 });

@@ -83,8 +83,8 @@ export class HeaderRenderer<TRowData = unknown> {
 		const { pinLeftCount, pinRightCount, pinLeftWidth, pinRightWidth } = layoutPlan.columns;
 		const scrollLeft = layoutPlan.viewport.scrollLeft;
 		const viewportWidth = layoutPlan.viewport.width;
-		// pinRightBaseLeft = totalColumnsWidth - pinRightWidth
-		const pinRightBaseLeft = layoutPlan.dimensions.totalColumnsWidth - pinRightWidth;
+		// Single source of truth for the right-lane origin (Plan 039 Phase 4).
+		const pinRightBaseLeft = layoutPlan.columns.lanes.right.baseLeft;
 
 		if (this.headerLeftLayer) {
 			const transform = pinLeftCount > 0 ? `translate3d(${scrollLeft}px, 0, 0)` : '';
@@ -149,7 +149,7 @@ export class HeaderRenderer<TRowData = unknown> {
 		const colCount = leafBand.cells.length;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
 		const colEnd = range?.endIdx ?? layoutPlan.columns.colEnd;
-		const pinRightBaseLeft = layoutPlan.dimensions.totalColumnsWidth - layoutPlan.columns.pinRightWidth;
+		const pinRightBaseLeft = layoutPlan.columns.lanes.right.baseLeft;
 
 		this.syncPinnedLayerPositions(layoutPlan);
 

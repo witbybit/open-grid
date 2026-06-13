@@ -25,7 +25,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { CellRenderer } from './cellRenderer.js';
 import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
-import { SortAnimationController } from './sortAnimationController.js';
+import { LayoutTransitionController } from './layoutTransitionController.js';
 import { GroupPanelRenderer } from './groupPanelRenderer.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import { StickyGroupRenderer } from './stickyGroupRenderer.js';
@@ -66,8 +66,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly invalidationCoordinator: RenderInvalidationCoordinator<TRowData>;
 	private readonly headerMenu: HeaderMenuController<TRowData>;
 
-	private readonly sortAnimation: SortAnimationController<TRowData>;
-	private _pendingSortAnimation = false;
+	private readonly layoutTransition: LayoutTransitionController<TRowData>;
+	private _pendingTransition = false;
 
 	private isScrolling = false;
 	private scrollEndRafId: number | null = null;
@@ -195,7 +195,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		);
 		this.rowRenderer.renderStats = this.renderStats;
 		this.portalMountManager.setPhysicalRowSlotIdResolver((rowIndex) => this.rowRenderer.activeRows.get(rowIndex)?.id);
-		this.sortAnimation = new SortAnimationController(() => this.rowRenderer.activeRows);
+		this.layoutTransition = new LayoutTransitionController(() => this.rowRenderer.activeRows);
 
 		this.headerRenderer = new HeaderRenderer<TRowData>(
 			engine,
@@ -278,7 +278,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				portalMountManager: this.portalMountManager,
 				scheduler: this.scheduler,
 				requestScrollFrame: () => this.scrollScheduler.requestFrame(),
-				sortAnimation: this.sortAnimation,
+				layoutTransition: this.layoutTransition,
 				renderStats: this.renderStats,
 				recycleViewport: (isScrollFrameActive, ctx, precomputedWindow) =>
 					this.viewportCoordinator.recycleViewport(isScrollFrameActive, ctx, precomputedWindow),
@@ -294,7 +294,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			renderStats: this.renderStats,
 		});
 		const paintState: RenderPaintCoordinatorState = {
-			pendingSortAnimation: this._pendingSortAnimation,
+			pendingTransition: this._pendingTransition,
 			lastStyleSlots: this.lastStyleSlots,
 			lastLoading: this.lastLoading,
 		};
@@ -309,7 +309,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				portalMountManager: this.portalMountManager,
 				orchestrator: this.orchestrator,
 				scrollCoordinator: this.scrollCoordinator,
-				sortAnimation: this.sortAnimation,
+				layoutTransition: this.layoutTransition,
 				recycleViewport: (isScrollFrameActive, ctx, precomputedWindow) =>
 					this.viewportCoordinator.recycleViewport(isScrollFrameActive, ctx, precomputedWindow),
 				syncLayoutPlan: (renderWindow) => this.viewportCoordinator.syncLayoutPlan(renderWindow),
@@ -322,7 +322,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			engine,
 			geometryController: this.geometryController,
 			portalMountManager: this.portalMountManager,
-			sortAnimation: this.sortAnimation,
+			layoutTransition: this.layoutTransition,
 			scheduler: this.scheduler,
 			syncLayoutPlan: () => {
 				this.viewportCoordinator.syncLayoutPlan();
@@ -409,7 +409,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.fillDrag.cleanup();
 		this.groupPanelRenderer.unmount();
 		this.stickyGroupRenderer.unmount();
-		this.sortAnimation.destroy();
+		this.layoutTransition.destroy();
 		this.scheduler.destroy();
 		this.scrollScheduler.destroy();
 		this.clearScrollEndTimer();

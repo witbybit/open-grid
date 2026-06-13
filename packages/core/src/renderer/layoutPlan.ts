@@ -5,6 +5,8 @@ import type { InternalColumnDef } from '../columnDef.js';
 export const LEAF_HEADER_HEIGHT = 40;
 export const GROUP_PANEL_HEIGHT = 42;
 export const GROUP_BAND_HEIGHT = 32;
+export const STATUS_BAR_HEIGHT = 32;
+export const PAGINATION_HEIGHT = 44;
 
 export interface HeaderCellLayout {
 	id: string;
@@ -31,6 +33,26 @@ export interface HeaderBandLayout {
 	cells: HeaderCellLayout[];
 }
 
+/**
+ * One horizontal pin lane (Plan 039 Phase 4). `baseLeft` is the absolute X (in content
+ * coordinates) where the lane's columns begin — the single value used to convert an
+ * absolute `colLefts[c]` into a lane-relative offset. Header and body both read this so
+ * they cannot drift, and a pin/unpin animation has one geometry to interpolate.
+ */
+export interface ColumnLane {
+	width: number;
+	baseLeft: number;
+	/** First/last displayed column index in this lane, or -1 when the lane is empty. */
+	colStart: number;
+	colEnd: number;
+}
+
+export interface ColumnLanes {
+	left: ColumnLane;
+	center: ColumnLane;
+	right: ColumnLane;
+}
+
 export interface GridLayoutPlan {
 	viewport: {
 		width: number;
@@ -50,6 +72,11 @@ export interface GridLayoutPlan {
 		leafHeaderHeight: number;
 		totalHeaderHeight: number;
 		topChromeHeight: number;
+		// Bottom chrome — fixed bars docked below the scroll viewport. Default 0 when
+		// no status bar / pagination is configured (no layout change vs. top-only era).
+		statusBarHeight: number;
+		paginationHeight: number;
+		bottomChromeHeight: number;
 	};
 	rows: {
 		rowStart: number;
@@ -71,12 +98,18 @@ export interface GridLayoutPlan {
 		pinLeftWidth: number;
 		pinRightWidth: number;
 		centerWidth: number;
+		lanes: ColumnLanes;
 	};
 	origins: {
 		headerTop: number;
 		rowLayerTop: number;
 		stickyGroupLayerTop: number;
 		overlayTop: number;
+		// Bottom chrome origins, measured from the top of the grid container.
+		// bottomChromeTop = viewport.height - bottomChromeHeight.
+		bottomChromeTop: number;
+		statusBarTop: number;
+		paginationTop: number;
 	};
 	headerBands: HeaderBandLayout[];
 	stickyGroups: StickyGroupStackItem[];
@@ -241,6 +274,17 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const columnGroupHeaderHeight = totalHeaderHeight - leafHeaderHeight;
 	const topChromeHeight = groupPanelHeight + totalHeaderHeight;
 
+	// Bottom chrome — status bar + pagination bar. These are config-gated; until the
+	// config lands (Plan 039 Phase 5) both heights resolve to 0 and the layout is
+	// identical to the top-only era. Heights come from constants, never magic literals.
+	const statusBarHeight = state.showStatusBar ? STATUS_BAR_HEIGHT : 0;
+	const paginationHeight = state.pagination ? PAGINATION_HEIGHT : 0;
+	const bottomChromeHeight = statusBarHeight + paginationHeight;
+	const bottomChromeTop = Math.max(0, viewportHeight - bottomChromeHeight);
+	// Pagination sits below the status bar within the bottom chrome stack.
+	const statusBarTop = bottomChromeTop;
+	const paginationTop = bottomChromeTop + statusBarHeight;
+
 	let pinnedTopHeight = 0;
 	for (let i = 0; i < renderWindow.pinTopRows && i < renderWindow.rowCount; i++) {
 		pinnedTopHeight += engine.geometry.getRowHeight(i, state.defaultRowHeight);
@@ -269,6 +313,9 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			leafHeaderHeight,
 			totalHeaderHeight,
 			topChromeHeight,
+			statusBarHeight,
+			paginationHeight,
+			bottomChromeHeight,
 		},
 		rows: {
 			rowStart: renderWindow.rowStart,
@@ -290,12 +337,37 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			pinLeftWidth,
 			pinRightWidth,
 			centerWidth: Math.max(0, viewportWidth - pinLeftWidth - pinRightWidth),
+			lanes: {
+				left: {
+					width: pinLeftWidth,
+					baseLeft: 0,
+					colStart: pinLeftCount > 0 ? 0 : -1,
+					colEnd: pinLeftCount > 0 ? pinLeftCount - 1 : -1,
+				},
+				center: {
+					width: Math.max(0, viewportWidth - pinLeftWidth - pinRightWidth),
+					baseLeft: pinLeftWidth,
+					colStart: firstRightPinColIdx > pinLeftCount ? pinLeftCount : -1,
+					colEnd: firstRightPinColIdx > pinLeftCount ? firstRightPinColIdx - 1 : -1,
+				},
+				right: {
+					width: pinRightWidth,
+					// Absolute X where right-pinned columns begin. The sole source for the
+					// `colLefts[c] - baseLeft` lane-relative conversion done by header + body.
+					baseLeft: totalColumnsWidth - pinRightWidth,
+					colStart: pinRightCount > 0 ? firstRightPinColIdx : -1,
+					colEnd: pinRightCount > 0 ? renderWindow.colCount - 1 : -1,
+				},
+			},
 		},
 		origins: {
 			headerTop: groupPanelHeight,
 			rowLayerTop: topChromeHeight,
 			stickyGroupLayerTop: topChromeHeight,
 			overlayTop: topChromeHeight,
+			bottomChromeTop,
+			statusBarTop,
+			paginationTop,
 		},
 		headerBands,
 		stickyGroups: renderWindow.stickyGroupStack ?? [],

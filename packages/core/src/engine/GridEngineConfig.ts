@@ -31,6 +31,8 @@ export interface GridEngineConfig<TRowData = unknown> {
 	showGroupFooter?: boolean;
 	enableStickyGroupRows?: boolean;
 	showGroupPanel?: boolean;
+	showStatusBar?: boolean;
+	pagination?: { pageSize: number; page?: number };
 	expansion?: {
 		groups: Record<string, true>;
 		treeRows: Record<string, true>;

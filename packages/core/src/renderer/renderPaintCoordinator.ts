@@ -9,10 +9,10 @@ import type { HeaderRenderer } from './headerRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { RenderWindow } from './renderWindow.js';
-import type { SortAnimationController } from './sortAnimationController.js';
+import type { LayoutTransitionController } from './layoutTransitionController.js';
 
 export interface RenderPaintCoordinatorState {
-	pendingSortAnimation: boolean;
+	pendingTransition: boolean;
 	lastStyleSlots: unknown;
 	lastLoading: unknown;
 }
@@ -27,7 +27,7 @@ export interface RenderPaintCoordinatorDeps<TRowData = unknown> {
 	portalMountManager: PortalMountManager<TRowData>;
 	orchestrator: RenderOrchestrator;
 	scrollCoordinator: ScrollCoordinatorLike;
-	sortAnimation: SortAnimationController<TRowData>;
+	layoutTransition: LayoutTransitionController<TRowData>;
 	recycleViewport: (isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow) => void;
 	syncLayoutPlan: (renderWindow?: RenderWindow) => GridLayoutPlan;
 	updateCachedGeometryBoundsFromState: (defaultColWidth: number, defaultRowHeight: number) => void;
@@ -42,8 +42,16 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 	public flushPaint = (): void => {
 		this.refreshRendererEpochs();
 		const frame = this.deps.engine.invalidation.consume();
-		if (!this.deps.scrollCoordinator.getIsScrolling() && frame.reasons.includes('sort')) {
-			this.state.pendingSortAnimation = true;
+		// Arm a layout transition for discrete structural changes only — never while
+		// scrolling. Sort reorders rows; group/tree expansion ('group expansion') and
+		// master-detail ('detail') reveal/hide them. All animate via the
+		// LayoutTransitionController; scroll/data-tick frames are excluded so the hot path
+		// never sets an animation.
+		if (
+			!this.deps.scrollCoordinator.getIsScrolling() &&
+			(frame.reasons.includes('sort') || frame.reasons.includes('group expansion') || frame.reasons.includes('detail'))
+		) {
+			this.state.pendingTransition = true;
 		}
 		this.deps.portalMountManager.beginCellReleaseTransaction();
 		try {
@@ -86,9 +94,9 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		const layoutPlan = this.deps.syncLayoutPlan();
 		this.deps.recycleViewport(false, undefined, layoutPlan.renderWindow);
 		this.deps.stickyGroupRenderer.sync(layoutPlan);
-		if (this.state.pendingSortAnimation) {
-			this.state.pendingSortAnimation = false;
-			this.deps.sortAnimation.beginAnimation();
+		if (this.state.pendingTransition) {
+			this.state.pendingTransition = false;
+			this.deps.layoutTransition.beginAnimation();
 		}
 		this.deps.headerRenderer.repaintHeaders(layoutPlan);
 		this.deps.overlayRenderer.repaintOverlay();

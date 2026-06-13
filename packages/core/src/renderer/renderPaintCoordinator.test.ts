@@ -6,7 +6,7 @@ const SENTINEL_B = { tag: 'B' };
 
 function makeState(overrides?: Partial<RenderPaintCoordinatorState>): RenderPaintCoordinatorState {
 	return {
-		pendingSortAnimation: false,
+		pendingTransition: false,
 		lastStyleSlots: undefined,
 		lastLoading: undefined,
 		...overrides,
@@ -47,7 +47,7 @@ function makeDeps(
 		} as any,
 		orchestrator: { flush: vi.fn() } as any,
 		scrollCoordinator: { getIsScrolling: () => false },
-		sortAnimation: { beginAnimation: vi.fn() } as any,
+		layoutTransition: { beginAnimation: vi.fn() } as any,
 		recycleViewport: vi.fn(),
 		syncLayoutPlan: vi.fn(() => ({ renderWindow: {} })) as any,
 		updateCachedGeometryBoundsFromState: vi.fn(),
@@ -115,7 +115,7 @@ describe('RenderPaintCoordinator – refreshRendererEpochs', () => {
 // ─── flushPaint – sort animation gate ────────────────────────────────────────
 
 describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
-	it('sets pendingSortAnimation when a sort frame arrives while not scrolling', () => {
+	it('sets pendingTransition when a sort frame arrives while not scrolling', () => {
 		const deps = makeDeps(
 			{},
 			{
@@ -131,10 +131,10 @@ describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
 
 		coord.flushPaint();
 
-		expect(state.pendingSortAnimation).toBe(true);
+		expect(state.pendingTransition).toBe(true);
 	});
 
-	it('does NOT set pendingSortAnimation when a sort frame arrives while scrolling', () => {
+	it('does NOT set pendingTransition when a sort frame arrives while scrolling', () => {
 		const deps = makeDeps(
 			{},
 			{
@@ -150,10 +150,42 @@ describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
 
 		coord.flushPaint();
 
-		expect(state.pendingSortAnimation).toBe(false);
+		expect(state.pendingTransition).toBe(false);
 	});
 
-	it('does NOT set pendingSortAnimation for non-sort frames', () => {
+	it('sets pendingTransition for a group/tree expansion frame', () => {
+		const deps = makeDeps(
+			{},
+			{
+				engine: {
+					stateManager: { getState: () => ({ styleSlots: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
+					invalidation: { consume: vi.fn(() => ({ reasons: ['group expansion'] })) },
+				} as any,
+				scrollCoordinator: { getIsScrolling: () => false },
+			}
+		);
+		const state = makeState();
+		new RenderPaintCoordinator(deps, state).flushPaint();
+		expect(state.pendingTransition).toBe(true);
+	});
+
+	it('sets pendingTransition for a master-detail frame', () => {
+		const deps = makeDeps(
+			{},
+			{
+				engine: {
+					stateManager: { getState: () => ({ styleSlots: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
+					invalidation: { consume: vi.fn(() => ({ reasons: ['detail'] })) },
+				} as any,
+				scrollCoordinator: { getIsScrolling: () => false },
+			}
+		);
+		const state = makeState();
+		new RenderPaintCoordinator(deps, state).flushPaint();
+		expect(state.pendingTransition).toBe(true);
+	});
+
+	it('does NOT set pendingTransition for non-sort frames', () => {
 		const deps = makeDeps(
 			{},
 			{
@@ -169,7 +201,7 @@ describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
 
 		coord.flushPaint();
 
-		expect(state.pendingSortAnimation).toBe(false);
+		expect(state.pendingTransition).toBe(false);
 	});
 
 	it('wraps orchestrator.flush in a portal release transaction', () => {

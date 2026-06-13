@@ -11,7 +11,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { HeaderRenderer } from './headerRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
-import type { SortAnimationController } from './sortAnimationController.js';
+import type { LayoutTransitionController } from './layoutTransitionController.js';
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	isScrolling: boolean;
@@ -47,7 +47,7 @@ export interface RenderScrollCoordinatorDeps<TRowData = unknown> {
 	portalMountManager: PortalMountManager<TRowData>;
 	scheduler: RenderScheduler;
 	requestScrollFrame: () => void;
-	sortAnimation: SortAnimationController<TRowData>;
+	layoutTransition: LayoutTransitionController<TRowData>;
 	renderStats: RenderRuntimeStats;
 	recycleViewport: (isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow) => void;
 	syncLayoutPlan: (renderWindow?: RenderWindow) => GridLayoutPlan;
@@ -186,7 +186,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.deps.rowRenderer.isScrolling = true;
 		this.deps.portalMountManager.setScrolling(true);
 		this.clearPostScrollDecorationTimer();
-		this.deps.sortAnimation.cancel();
+		this.deps.layoutTransition.cancel();
 		this.deps.rowRenderer.hoveredRowIndex = null;
 	}
 

@@ -2,6 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { GeometryController } from './geometryController.js';
 import { CORE_STYLES } from './styles.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
+import { LAYER_REGISTRY } from './layerRegistry.js';
 
 export class ViewportRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -30,6 +31,10 @@ export class ViewportRenderer<TRowData = unknown> {
 	private styleTag: HTMLStyleElement | null = null;
 	private layoutPlan: GridLayoutPlan | null = null;
 
+	// All registry-built layers, keyed by descriptor id. Named fields above are
+	// assigned from this map after mount for the renderers that hold references.
+	private readonly layers = new Map<string, HTMLDivElement>();
+
 	constructor(engine: GridEngine<TRowData>, geometryController: GeometryController<TRowData>) {
 		this.engine = engine;
 		this.geometryController = geometryController;
@@ -40,50 +45,61 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.injectStyles();
 		this.container.classList.add('og-grid-container');
 
-		// Single scroll container — the only element that has overflow:auto
+		// Single scroll container — the only element that has overflow:auto. This and the
+		// grid container are the two DOM roots the layer registry parents layers onto.
 		this.scrollViewport = document.createElement('div');
 		this.scrollViewport.className = 'og-scroll-viewport';
-
-		// ── Group panel (sticky, above header, hidden by default) ────────────
-		this.groupPanel = document.createElement('div');
-		this.groupPanel.className = 'og-group-panel';
-		this.groupPanel.style.display = 'none';
-		this.scrollViewport.appendChild(this.groupPanel);
-
-		// ── Header (sticky top, three overlapping absolute divs) ────────────
-		const headerWrapper = document.createElement('div');
-		headerWrapper.className = 'og-layer-header-wrapper';
-		this.headerWrapper = headerWrapper;
-
-		this.headerLayer = document.createElement('div');
-		this.headerLayer.className = 'og-layer-header';
-
-		this.headerLeftLayer = document.createElement('div');
-		this.headerLeftLayer.className = 'og-layer-header-left';
-
-		this.headerRightLayer = document.createElement('div');
-		this.headerRightLayer.className = 'og-layer-header-right';
-
-		headerWrapper.appendChild(this.headerLayer);
-		headerWrapper.appendChild(this.headerLeftLayer);
-		headerWrapper.appendChild(this.headerRightLayer);
-
-		// ── Rows container (single compositor layer, no per-row will-change) ─
-		this.rowsContainer = document.createElement('div');
-		this.rowsContainer.className = 'og-rows-container';
-		this.stickyGroupLayer = document.createElement('div');
-		this.stickyGroupLayer.className = 'og-layer-sticky-groups';
-
-		this.scrollViewport.appendChild(headerWrapper);
-		this.scrollViewport.appendChild(this.stickyGroupLayer);
-		this.scrollViewport.appendChild(this.rowsContainer);
-
-		// ── Overlay (outside scroll container, absolute over grid) ────────────
-		this.overlayLayer = document.createElement('div');
-		this.overlayLayer.className = 'og-layer-overlay';
-
 		this.container.appendChild(this.scrollViewport);
-		this.container.appendChild(this.overlayLayer);
+
+		this.buildLayers();
+	}
+
+	/**
+	 * Build every structural layer from LAYER_REGISTRY. Layers are created first, then
+	 * appended parent-before-child so a layer can parent onto another layer's id. Within
+	 * a parent, siblings append in ascending `order`. Named fields (rowsContainer,
+	 * headerLayer, …) are bound from the resulting map for renderers that hold refs.
+	 */
+	private buildLayers(): void {
+		this.layers.clear();
+		for (const d of LAYER_REGISTRY) {
+			const el = document.createElement('div');
+			el.className = d.className;
+			d.init?.(el);
+			this.layers.set(d.id, el);
+		}
+
+		const ordered = [...LAYER_REGISTRY].sort((a, b) => a.order - b.order);
+		const placed = new Set<string>(['scroll-viewport', 'container']);
+		let remaining = ordered.length;
+		// Resolve in passes: append a layer only once its parent exists in the DOM.
+		while (remaining > 0) {
+			let progressed = false;
+			for (const d of ordered) {
+				if (placed.has(d.id) || !placed.has(d.parent)) continue;
+				const parent =
+					d.parent === 'scroll-viewport' ? this.scrollViewport : d.parent === 'container' ? this.container : this.layers.get(d.parent);
+				parent?.appendChild(this.layers.get(d.id)!);
+				placed.add(d.id);
+				progressed = true;
+				remaining--;
+			}
+			if (!progressed) break; // guards against a descriptor referencing an unknown parent
+		}
+
+		this.groupPanel = this.layers.get('group-panel') ?? null;
+		this.headerWrapper = this.layers.get('header-wrapper') ?? null;
+		this.headerLayer = this.layers.get('header') ?? null;
+		this.headerLeftLayer = this.layers.get('header-left') ?? null;
+		this.headerRightLayer = this.layers.get('header-right') ?? null;
+		this.stickyGroupLayer = this.layers.get('sticky-groups') ?? null;
+		this.rowsContainer = this.layers.get('rows') ?? null;
+		this.overlayLayer = this.layers.get('overlay') ?? null;
+	}
+
+	/** Look up a registry-built layer element by descriptor id. */
+	public getLayer(id: string): HTMLDivElement | null {
+		return this.layers.get(id) ?? null;
 	}
 
 	public unmount(): void {
@@ -105,6 +121,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.stickyGroupLayer = null;
 		this.overlayLayer = null;
 		this.styleTag = null;
+		this.layers.clear();
 	}
 
 	public syncViewportScrollFromDom(): void {
@@ -123,48 +140,19 @@ export class ViewportRenderer<TRowData = unknown> {
 
 	public syncLayoutPlan(plan: GridLayoutPlan): void {
 		this.layoutPlan = plan;
+
+		// Container-level CSS custom properties (consumed by stylesheet rules, not a layer).
 		this.container?.style.setProperty('--og-leaf-header-height', `${plan.chrome.leafHeaderHeight}px`);
 		this.container?.style.setProperty('--og-total-header-height', `${plan.chrome.totalHeaderHeight}px`);
 		this.container?.style.setProperty('--og-group-panel-height', `${plan.chrome.groupPanelHeight}px`);
 		this.container?.style.setProperty('--og-overlay-top', `${plan.origins.overlayTop}px`);
-		const visible = plan.chrome.groupPanelHeight > 0;
-		if (this.groupPanel) {
-			this.groupPanel.style.display = visible ? 'flex' : 'none';
-			this.groupPanel.style.height = visible ? `${plan.chrome.groupPanelHeight}px` : '0';
-		}
-		if (this.headerWrapper) {
-			this.headerWrapper.style.top = `${plan.origins.headerTop}px`;
-			this.headerWrapper.style.height = `${plan.chrome.totalHeaderHeight}px`;
-		}
-		if (this.overlayLayer) {
-			this.overlayLayer.style.top = `${plan.origins.overlayTop}px`;
-		}
+		this.container?.style.setProperty('--og-bottom-chrome-height', `${plan.chrome.bottomChromeHeight}px`);
 
-		const totalWidth = plan.dimensions.totalColumnsWidth;
-		const contentWidth = plan.dimensions.contentWidth;
-		const colCount = plan.renderWindow.colCount;
-
-		if (this.rowsContainer) {
-			this.rowsContainer.style.height = `${plan.dimensions.contentHeight}px`;
-			this.rowsContainer.style.width = `${contentWidth}px`;
-		}
-
-		if (this.headerWrapper) {
-			this.headerWrapper.style.width = `${contentWidth}px`;
-		}
-		if (this.headerLayer) {
-			this.headerLayer.style.width = `${contentWidth}px`;
-		}
-		if (this.stickyGroupLayer) {
-			this.stickyGroupLayer.style.width = `${contentWidth}px`;
-			this.stickyGroupLayer.style.transform = `translate3d(0, ${plan.origins.stickyGroupLayerTop}px, 0)`;
-		}
-
-		if (this.headerLeftLayer) {
-			this.headerLeftLayer.style.width = `${plan.columns.pinLeftWidth}px`;
-		}
-		if (this.headerRightLayer) {
-			this.headerRightLayer.style.width = `${plan.columns.pinRightWidth}px`;
+		// Every structural layer positions itself from the plan via its descriptor.
+		for (const d of LAYER_REGISTRY) {
+			if (!d.apply) continue;
+			const el = this.layers.get(d.id);
+			if (el) d.apply(el, plan);
 		}
 	}
 
