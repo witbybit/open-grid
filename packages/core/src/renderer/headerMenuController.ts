@@ -2,6 +2,7 @@ import { defaultGridScheduler } from './gridScheduler.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi } from '../store.js';
+import { reportRendererFault } from './rendererFaults.js';
 
 /**
  * Manages the column header context menu/popover lifecycle.
@@ -50,7 +51,7 @@ export class HeaderMenuController<TRowData = unknown> {
 				this._bindDismissListeners();
 				return;
 			} catch (err) {
-				console.error('HeaderMenuController: Error mounting custom React header menu', err);
+				reportRendererFault(this.engine, 'header-menu-component-mount', err, { colField });
 			}
 		}
 
@@ -69,7 +70,7 @@ export class HeaderMenuController<TRowData = unknown> {
 				this._bindDismissListeners();
 				return;
 			} catch (err) {
-				console.error('HeaderMenuController: Error rendering custom header menu', err);
+				reportRendererFault(this.engine, 'header-menu-renderer', err, { colField });
 			}
 		}
 

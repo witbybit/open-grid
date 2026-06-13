@@ -2,6 +2,7 @@ import type { InvalidationFrame } from './invalidationManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
 import { computeGridLayoutPlan, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
+import { reportRendererFault } from './rendererFaults.js';
 
 export class HeaderRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -197,7 +198,7 @@ export class HeaderRenderer<TRowData = unknown> {
 						const customHeaderClass = state.styleSlots.headerCellClass(col);
 						if (customHeaderClass) className += ' ' + customHeaderClass;
 					} catch (e) {
-						console.error('HeaderRenderer: Error in headerCellClass styleSlot', e);
+						reportRendererFault(this.engine, 'header-cell-class', e, { colField: cell.field, colIndex: cell.colStart });
 					}
 				}
 				if (cell.movable) className += ' og-header-cell-movable';

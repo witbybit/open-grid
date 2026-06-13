@@ -181,6 +181,36 @@ describe('GridContextMenuPlugin', () => {
 		expect(store.getCellValue('r2', 'price')).toBe('888');
 	});
 
+	it('should report clipboard failures through runtime diagnostics', async () => {
+		const copyError = new Error('copy denied');
+		Object.defineProperty(navigator, 'clipboard', {
+			value: {
+				readText: vi.fn().mockRejectedValue(new Error('paste denied')),
+				writeText: vi.fn().mockRejectedValue(copyError),
+			},
+			writable: true,
+			configurable: true,
+		});
+
+		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r1', colField: 'price' });
+		const state = store.getState();
+		const params = {
+			rowId: 'r1',
+			colField: 'name',
+			api: store,
+			selection: state.selection,
+		};
+
+		testPlugin.copySelectedRange(params);
+		await Promise.resolve();
+		await testPlugin.pasteSelectedRange(params);
+
+		const faults = store.getRuntimeFaults();
+		expect(faults.map((fault) => fault.operation)).toEqual(['context-menu-copy', 'context-menu-paste']);
+		expect(faults[0].source).toBe('plugin');
+		expect(faults[0].context).toEqual({ plugin: 'contextMenu' });
+	});
+
 	it('should select all cells in the grid', () => {
 		const state = store.getState();
 		const params = {

@@ -23,6 +23,13 @@ export function createClientRowModelRuntime<TRowData>(store: GridStore<TRowData>
 		getColumnDef: store.getColumnDef,
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.setState((s) => ({ globalVersion: s.globalVersion + 1 })),
+		reportRowPipelineFault: (operation, error, context) =>
+			store.reportRuntimeFault({
+				source: 'row-pipeline',
+				operation,
+				error,
+				context,
+			}),
 		updateExpansion: (updater) => store.setState((s) => ({ expansion: updater(s.expansion) })),
 		clearFormulas: () => store.engine.clearFormulas(),
 		syncFormulaForCell: (rowId, colField, value) => store.engine.syncFormulaForCell(rowId, colField, value),
@@ -44,6 +51,13 @@ export function createServerRowModelRuntime<TRowData>(store: GridStore<TRowData>
 		getColumnDef: store.getColumnDef,
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.setState((s) => ({ globalVersion: s.globalVersion + 1 })),
+		reportRowPipelineFault: (operation, error, context) =>
+			store.reportRuntimeFault({
+				source: 'row-pipeline',
+				operation,
+				error,
+				context,
+			}),
 		clearFormulas: () => store.engine.clearFormulas(),
 		isScrollingFast: () => store.engine.isScrollingFast(),
 		getScrollVelocity: () => store.engine.getScrollVelocity(),

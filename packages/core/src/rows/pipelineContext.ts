@@ -14,7 +14,11 @@ export function getCellValueForPipeline<TData>(node: RowNode<TData>, column: Col
 	return node.getCellValue(column.field, getter);
 }
 
-export function createRowPipelineContext<TData>(columns: ColumnDef<TData>[], expansion: RowPipelineExpansion): RowPipelineContext<TData> {
+export function createRowPipelineContext<TData>(
+	columns: ColumnDef<TData>[],
+	expansion: RowPipelineExpansion,
+	reportFault?: RowPipelineContext<TData>['reportFault']
+): RowPipelineContext<TData> {
 	const columnsById = new Map<string, ColumnDef<TData>>();
 	for (const column of columns) {
 		columnsById.set(column.field, column);
@@ -23,6 +27,7 @@ export function createRowPipelineContext<TData>(columns: ColumnDef<TData>[], exp
 	return {
 		columnsById,
 		expansion,
+		reportFault,
 		getValue: (node, colId) => getCellValueForPipeline(node, columnsById.get(colId), colId),
 		getGroupKey: (node, groupDef: GroupDef<TData>) => {
 			const value = getCellValueForPipeline(node, columnsById.get(groupDef.colId), groupDef.colId);

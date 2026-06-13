@@ -94,6 +94,15 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		this.hide();
 	}
 
+	private reportFault(operation: string, error: unknown, context?: Record<string, unknown>): void {
+		this.runtime.reportRuntimeFault({
+			source: 'plugin',
+			operation,
+			error,
+			context: { plugin: this.name, ...context },
+		});
+	}
+
 	private handleOutsideClick = (e: MouseEvent): void => {
 		if (this.menuElement && !this.menuElement.contains(e.target as Node)) {
 			this.hide();
@@ -302,7 +311,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		if (navigator.clipboard && navigator.clipboard.writeText) {
 			navigator.clipboard.writeText(tsvString).catch((err) => {
-				console.error('Failed to copy selected range: ', err);
+				this.reportFault('context-menu-copy', err);
 			});
 		} else {
 			const textarea = document.createElement('textarea');
@@ -314,7 +323,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			try {
 				document.execCommand('copy');
 			} catch (err) {
-				console.error('Fallback copy failed: ', err);
+				this.reportFault('context-menu-copy-fallback', err);
 			}
 			document.body.removeChild(textarea);
 		}
@@ -357,7 +366,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				}
 			}
 		} catch (err) {
-			console.error('Failed to paste selected range: ', err);
+			this.reportFault('context-menu-paste', err);
 		}
 	}
 

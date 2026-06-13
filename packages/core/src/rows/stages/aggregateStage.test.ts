@@ -186,23 +186,25 @@ describe('aggregateStage', () => {
 	});
 
 	it('custom function that throws is caught and sets value to undefined', () => {
-		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const nodes = [makeNode('1', { category: 'A', amount: 10 })];
 		const { roots, ctx } = buildGroups(nodes);
+		const reportFault = vi.fn();
+		ctx.reportFault = reportFault;
+		const error = new Error('boom');
 		aggregateStage(
 			roots,
 			[
 				{
 					field: 'amount',
 					aggFunc: () => {
-						throw new Error('boom');
+						throw error;
 					},
 				},
 			],
 			ctx
 		);
 		expect((roots[0] as any).aggregateValues['amount']).toBeUndefined();
-		consoleSpy.mockRestore();
+		expect(reportFault).toHaveBeenCalledWith('custom-aggregation', error, { field: 'amount' });
 	});
 
 	it('nested groups propagate aggregates up — outer group sums inner sums', () => {

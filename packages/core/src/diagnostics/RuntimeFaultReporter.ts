@@ -5,6 +5,8 @@ export type RuntimeFaultSource =
 	| 'state-manager'
 	| 'command-history'
 	| 'plugin-registry'
+	| 'plugin'
+	| 'row-pipeline'
 	| 'cell-notifications'
 	| 'server-row-model'
 	| 'renderer';

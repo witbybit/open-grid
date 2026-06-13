@@ -275,6 +275,7 @@ describe('Architecture guardrails', () => {
 
 	it('core runtime fault paths do not use scattered console.error calls', () => {
 		const files = [
+			'contextMenu.ts',
 			'events/EventBus.ts',
 			'state/StateManager.ts',
 			'commands/CommandHistory.ts',
@@ -282,6 +283,10 @@ describe('Architecture guardrails', () => {
 			'engine/CellNotificationController.ts',
 			'engine/createRowModelRuntimes.ts',
 			'serverRowModel.ts',
+			'rows/stages/aggregateStage.ts',
+			'renderer/fillDragController.ts',
+			'renderer/headerMenuController.ts',
+			'renderer/headerRenderer.ts',
 		];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');

@@ -741,6 +741,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			detailRowHeight: state.detailRowHeight,
 			masterDetailEnabled: state.masterDetailEnabled,
 			detailRenderer: state.detailRenderer,
+			reportFault: this.runtime.reportRowPipelineFault,
 		});
 		const { visualRows } = result;
 		const refreshResult = describeVisualRowDiff(previousRows, visualRows, reason, groupId);

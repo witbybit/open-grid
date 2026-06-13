@@ -107,7 +107,7 @@ function aggregateNodeRecursively<TData>(
 			try {
 				aggregateValues[field] = aggFunc(leafNodes ?? []);
 			} catch (e) {
-				console.error(`aggregation failed for custom fn on field ${field}`, e);
+				context.reportFault?.('custom-aggregation', e, { field });
 				aggregateValues[field] = undefined;
 			}
 			continue;

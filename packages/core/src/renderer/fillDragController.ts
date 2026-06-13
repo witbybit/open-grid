@@ -1,5 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridCellRange } from '../store.js';
+import { reportRendererFault } from './rendererFaults.js';
 
 export type FillDirection = 'DOWN' | 'UP' | 'RIGHT' | 'LEFT';
 
@@ -158,7 +159,7 @@ export class FillDragController<TRowData = unknown> {
 			this.setPreviewFromPointer(currRow, currCol);
 			this.updateFillPreview();
 		} catch (err) {
-			console.error('RenderEngine: Error in fill drag move', err);
+			reportRendererFault(this.engine, 'fill-drag-move', err);
 			this.onFillDragMouseUp();
 		}
 	};
@@ -253,7 +254,7 @@ export class FillDragController<TRowData = unknown> {
 				const { minRow, maxRow, minCol, maxCol, direction } = this.currentFillPreview;
 				this.extrapolateAndFillRange(minRow, maxRow, minCol, maxCol, direction!);
 			} catch (err) {
-				console.error('RenderEngine: Error during fill drag commit', err);
+				reportRendererFault(this.engine, 'fill-drag-commit', err);
 			}
 		}
 

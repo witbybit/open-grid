@@ -30,6 +30,9 @@
 | 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)          | DONE   | working tree |
 | 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md) | DONE   | working tree |
 | 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                       | TODO   | 1015f23      |
+| 029 | [React Hook Lifecycle Contract Hardening](./029-react-hook-lifecycle-contract-hardening.md)     | DONE   | working tree |
+| 030 | [Single Grid Entrypoint Migration](./030-single-grid-entrypoint-migration.md)                   | DONE   | working tree |
+| 031 | [Runtime Fault Surface Completion](./031-runtime-fault-surface-completion.md)                   | DONE   | working tree |
 
 ## Execution order
 
@@ -63,6 +66,7 @@
 28. `028-public-react-surface-hardening.md` - P0 React/public API hardening after 027; splits the overloaded OpenGrid surface into explicit entrypoints and migrates the demo onto the recommended contract before the API hardens further
 29. `029-react-hook-lifecycle-contract-hardening.md` - P0 React hook hardening after 028; separates initial-only lifecycle config from live updates so the hook contract becomes as explicit as the component surface
 30. `030-single-grid-entrypoint-migration.md` - P1 React API consolidation after 029; replaces the remaining public grid variants with one discriminated-union `Grid` entrypoint and migrates the demo to it
+31. `031-runtime-fault-surface-completion.md` - P0 core diagnostics follow-up after 018/030; completes runtime fault routing for remaining renderer, plugin, and row-pipeline callback surfaces
 
 ## Dependency graph
 
@@ -97,6 +101,7 @@
 028  (public react surface hardening) - follows 027; splits the overloaded public React surface into explicit entrypoints before the API becomes sticky in demos and docs
 029  (react hook lifecycle contract hardening) - follows 028; splits initial-only hook config from live inputs so warnings stop carrying the contract
 030  (single grid entrypoint migration) - follows 029; collapses the remaining public React grid variants into one discriminated-union `Grid` component
+031  (runtime fault surface completion) - follows 018 and current hardening; finishes routing remaining callback failures through the core diagnostics boundary
 ```
 
 ## Notes
@@ -131,6 +136,7 @@
 - Plan 028 is the next API lock-in step: split the React surface into explicit ownership/view entrypoints and migrate the demo to the better contract before go-live.
 - Plan 029 is implemented and verified on 2026-06-13: the React hook lifecycle now has explicit initial/live entrypoints, the wrapper components use that split internally, and the demo plus React package still build and test cleanly.
 - Plan 030 is the next API consolidation step: replace the remaining public grid variants with one discriminated-union `Grid` entrypoint and migrate the demo to it.
+- Plan 031 is implemented and verified on 2026-06-13: context-menu clipboard failures, custom aggregation failures, fill-drag failures, and header callback failures now route through runtime diagnostics instead of scattered production `console.error` calls. The typed plugin runtime now exposes `reportRuntimeFault`, and architecture guards cover the newly normalized paths.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

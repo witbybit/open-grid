@@ -9,7 +9,7 @@ import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { PersistenceStatus, PersistedGridState } from '../persistence/statePersistence.js';
 import type { CsvExportOptions } from '../export/csvExport.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
-import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
+import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridState, GridStateUpdater, Listener, ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 
 export type { CsvExportOptions };
@@ -403,6 +403,7 @@ export interface GridPluginRuntime<TRowData = unknown> extends GridApi<TRowData>
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getRowModel(): import('../store.js').RowModel<TRowData> | null;
+	reportRuntimeFault(fault: RuntimeFaultInput): RuntimeFault;
 }
 
 export interface GridPluginController<TRowData = unknown> {

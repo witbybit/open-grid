@@ -62,6 +62,7 @@ export interface RowPipelineInput<TData = unknown> {
 	getDetailHeight?: (params: { row: TData; rowId: string }) => number;
 	masterDetailEnabled?: boolean;
 	detailRenderer?: unknown;
+	reportFault?: (operation: string, error: unknown, context?: Record<string, unknown>) => void;
 }
 
 export interface RowPipelineOutput<TData = unknown> {
@@ -111,6 +112,7 @@ export class RowPipeline<TData = unknown> {
 			getDetailHeight,
 			masterDetailEnabled,
 			detailRenderer,
+			reportFault,
 		} = input;
 
 		const groupingConfig = rowModelConfig?.grouping;
@@ -118,11 +120,15 @@ export class RowPipeline<TData = unknown> {
 		const detailConfig = rowModelConfig?.masterDetail;
 		const groupDefs: GroupDef<TData>[] = groupingConfig?.model ?? (groupBy ?? []).map((colId) => ({ colId }));
 		const effectiveGetParentId = treeConfig?.getParentId ?? getParentId;
-		const context = createRowPipelineContext(columns, {
-			groups: new Set([...expandedGroupIds, ...Object.keys(groupingConfig?.expandedGroupIds ?? {})]),
-			treeRows: new Set([...expandedTreeRowIds, ...Object.keys(treeConfig?.expandedRowIds ?? {})]),
-			details: new Set([...expandedDetailRowIds, ...Object.keys(detailConfig?.expandedRowIds ?? {})]),
-		});
+		const context = createRowPipelineContext(
+			columns,
+			{
+				groups: new Set([...expandedGroupIds, ...Object.keys(groupingConfig?.expandedGroupIds ?? {})]),
+				treeRows: new Set([...expandedTreeRowIds, ...Object.keys(treeConfig?.expandedRowIds ?? {})]),
+				details: new Set([...expandedDetailRowIds, ...Object.keys(detailConfig?.expandedRowIds ?? {})]),
+			},
+			reportFault
+		);
 
 		let roots: RowTreeNode<TData>[] | null = null;
 		let visualRows: VisualRow<TData>[] | null = null;
