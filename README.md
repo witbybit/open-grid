@@ -477,7 +477,15 @@ const columns: ColumnDef<Row>[] = [
 Types that need runtime config (options list, formatting, bounds) are registered in the `columnTypes` prop using the helper factories. The type name is then referenced in `ColumnDef.type` exactly like a built-in.
 
 ```tsx
-import { Grid, multiSelectColumnType, dropdownColumnType, numberColumnType, type ColumnDef, type ColumnTypeDefinition, type DropdownOption } from '@open-grid/react';
+import {
+	Grid,
+	multiSelectColumnType,
+	dropdownColumnType,
+	numberColumnType,
+	type ColumnDef,
+	type ColumnTypeDefinition,
+	type DropdownOption,
+} from '@open-grid/react';
 
 const STATUS_OPTIONS: DropdownOption[] = [
 	{ value: 'Active', color: 'emerald' },
@@ -1018,19 +1026,18 @@ export function ServerLogGrid() {
 		[]
 	);
 
-
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
 			<div style={{ flex: 1, minHeight: 0 }}>
 				<Grid mode='server' datasource={datasource} columns={columns} blockSize={100} />
 			</div>
 			<GridPagination
-					page={page}
-					pageCount={200} // totalCount / PAGE_SIZE — update from first getRows response
-					totalRows={100_000}
-					pageSize={PAGE_SIZE}
-					onPageChange={setPage}
-				/>
+				page={page}
+				pageCount={200} // totalCount / PAGE_SIZE — update from first getRows response
+				totalRows={100_000}
+				pageSize={PAGE_SIZE}
+				onPageChange={setPage}
+			/>
 		</div>
 	);
 }

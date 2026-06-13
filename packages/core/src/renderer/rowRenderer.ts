@@ -56,6 +56,12 @@ export class RowRenderer<TRowData = unknown> {
 	public get visualIndexToSlot(): Map<number, RowSlot<TRowData>> {
 		return this.activeRows;
 	}
+	public get cellClassScratch(): GridCellClassParams<TRowData> {
+		return this._cellClassScratch;
+	}
+	public get dirtyBuckets(): [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]] {
+		return this._dirtyBuckets;
+	}
 	public currentWindow: RenderWindow | null = null;
 
 	public dirtyCellsAfterScroll = new Set<HTMLDivElement>();
@@ -171,13 +177,8 @@ export class RowRenderer<TRowData = unknown> {
 			portalMountManager: this.portalMountManager,
 			getViewportContainer: () => this.viewportRenderer.container,
 			selectionPaint: this.selectionPaint,
-			cellClassScratch: this._cellClassScratch,
 			getFullWidthRenderer: () => this.fullWidthRenderer,
-			getCurrentWindow: () => this.currentWindow,
-			dirtyCellsAfterScroll: this.dirtyCellsAfterScroll,
-			dirtyRowsAfterScroll: this.dirtyRowsAfterScroll,
-			dirtyBuckets: this._dirtyBuckets,
-			activeRows: this.activeRows,
+			stateHost: this,
 			initCell: (el) => {
 				this.cellRenderer.initializeCell(el);
 				this.selectionPaint.attachClickListenerIfNeeded(el);
@@ -188,41 +189,6 @@ export class RowRenderer<TRowData = unknown> {
 			},
 			ensurePinnedContainer: (slot, side, width) => this.ensurePinnedContainer(slot, side, width),
 			releaseRowPortal: (slot) => this.releaseRowPortal(slot),
-			getIsScrolling: () => this.isScrolling,
-			getIsScrollFrameActive: () => this.isScrollFrameActive,
-			getRenderStats: () => this.renderStats,
-			getProgrammaticScrollCell: () => this.programmaticScrollCell,
-			clearProgrammaticScrollCell: () => {
-				this.programmaticScrollCell = null;
-			},
-			setDeferredFocusCell: (cell) => {
-				this.deferredFocusCell = cell;
-			},
-			incrementStyleHookCallsDuringScroll: () => {
-				if (this.renderStats) this.renderStats.styleHookCallsDuringScroll++;
-			},
-			incrementCellsBoundDuringScroll: () => {
-				if (this.renderStats) this.renderStats.cellsBoundDuringScroll = (this.renderStats.cellsBoundDuringScroll || 0) + 1;
-			},
-			incrementCurrentScrollCellsVisited: () => {
-				this.currentScrollCellsVisited++;
-			},
-			incrementCurrentScrollCellsPatched: () => {
-				this.currentScrollCellsPatched++;
-			},
-			incrementCurrentScrollCellsWritten: () => {
-				this.currentScrollCellsWritten++;
-			},
-			incrementPostScrollDirtyCellsDecorated: () => {
-				this.postScrollDirtyCellsDecorated++;
-			},
-			incrementDirtyCellsMarkedDuringScroll: () => {
-				this.dirtyCellsMarkedDuringScroll++;
-			},
-			incrementCurrentScrollPortalOps: () => {
-				this.currentScrollPortalOps++;
-			},
-			pendingPortalReleasesAfterScroll: this.pendingPortalReleasesAfterScroll,
 		});
 	}
 

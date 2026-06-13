@@ -208,14 +208,7 @@ export default function App() {
 		if (activePage === 'ranges') return <SpreadsheetWorkspace {...commonGridProps} />;
 		if (activePage === 'editors') return <CustomEditorRenderer {...commonGridProps} />;
 		if (activePage === 'layout') {
-			return (
-				<DynamicLayout
-					{...commonGridProps}
-					rowHeightsMap={rowHeightsMap}
-					compactLayout={compactLayout}
-					visibleColumns={visibleColumns}
-				/>
-			);
+			return <DynamicLayout {...commonGridProps} rowHeightsMap={rowHeightsMap} compactLayout={compactLayout} visibleColumns={visibleColumns} />;
 		}
 		if (activePage === 'skins') return <HeadlessSkinsPlayground {...commonGridProps} />;
 		if (activePage === 'dashboard') return <RealtimeDashboard {...commonGridProps} />;

@@ -23,7 +23,7 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	getViewportContainer: () => HTMLElement | null | undefined;
 	getIsScrolling: () => boolean;
 	getIsScrollFrameActive: () => boolean;
-	getProgrammaticScrollCell: () => GridCellPointer | null;
+	programmaticScrollCell: GridCellPointer | null;
 	clearProgrammaticScrollCell: () => void;
 	setDeferredFocusCell: (cell: HTMLDivElement) => void;
 	applyFocus: (cell: HTMLDivElement) => void;
@@ -330,7 +330,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {
 		cellSlot.element.tabIndex = -1;
 		cellSlot.hasTabIndex = true;
-		const programmaticScrollCell = deps.getProgrammaticScrollCell();
+		const programmaticScrollCell = deps.programmaticScrollCell;
 		const isProgrammatic = programmaticScrollCell && programmaticScrollCell.rowId === node.id && programmaticScrollCell.colField === col.field;
 		deps.setDeferredFocusCell(cellSlot.element);
 		if (isProgrammatic) deps.clearProgrammaticScrollCell();

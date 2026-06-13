@@ -143,6 +143,8 @@ describe('Architecture guardrails', () => {
 	it('rowRendererRuntime owns runtime bridge assembly and coordination adapters', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRendererRuntime.ts'), 'utf-8');
 		expect(content).toContain('export class RowRendererRuntimeBridge');
+		expect(content).toContain('stateHost.programmaticScrollCell');
+		expect(content).toContain('stateHost.currentScrollCellsVisited++');
 		expect(content).toContain('public bindAllDataCells(');
 		expect(content).toContain('public bindAllLoadingCells(');
 		expect(content).toContain('public bindFullWidthRow(');
@@ -154,6 +156,7 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
 		expect(content).toContain('export function bindCellFull');
 		expect(content).toContain('export function bindCellDuringScroll');
+		expect(content).toContain('const programmaticScrollCell = deps.programmaticScrollCell;');
 	});
 
 	it('rowCellBindingLanes routes live cell binding through rowCellBinder', () => {

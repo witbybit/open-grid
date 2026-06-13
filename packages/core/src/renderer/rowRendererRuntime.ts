@@ -61,38 +61,39 @@ export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	incrementPostScrollDirtyCellsDecorated: () => void;
 }
 
+export interface RowRendererRuntimeStateHost<TRowData = unknown> {
+	cellClassScratch: GridCellClassParams<TRowData>;
+	currentWindow: RenderWindow | null;
+	dirtyCellsAfterScroll: Set<HTMLDivElement>;
+	dirtyRowsAfterScroll: Set<number>;
+	dirtyBuckets: [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]];
+	activeRows: Map<number, RowSlot<TRowData>>;
+	pendingPortalReleasesAfterScroll: Map<string, unknown>;
+	programmaticScrollCell: GridCellPointer | null;
+	deferredFocusCell: HTMLDivElement | null;
+	isScrolling: boolean;
+	isScrollFrameActive: boolean;
+	renderStats: any;
+	currentScrollCellsVisited: number;
+	currentScrollCellsPatched: number;
+	currentScrollCellsWritten: number;
+	currentScrollPortalOps: number;
+	postScrollDirtyCellsDecorated: number;
+	dirtyCellsMarkedDuringScroll: number;
+}
+
 export interface RowRendererRuntimeBridgeDeps<TRowData = unknown> {
 	engine: GridEngine<TRowData>;
 	cellRenderer: CellRenderer;
 	portalMountManager: PortalMountManager<TRowData>;
 	getViewportContainer: () => HTMLElement | null | undefined;
 	selectionPaint: SelectionPaintManager<TRowData>;
-	cellClassScratch: GridCellClassParams<TRowData>;
 	getFullWidthRenderer: () => FullWidthRowRenderer<TRowData>;
-	getCurrentWindow: () => RenderWindow | null;
-	dirtyCellsAfterScroll: Set<HTMLDivElement>;
-	dirtyRowsAfterScroll: Set<number>;
-	dirtyBuckets: [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]];
-	activeRows: Map<number, RowSlot<TRowData>>;
+	stateHost: RowRendererRuntimeStateHost<TRowData>;
 	initCell: (el: HTMLDivElement) => void;
 	releaseCellFn: (cell: CellSlot<TRowData>) => void;
 	ensurePinnedContainer: (slot: RowSlot<TRowData>, side: 'left' | 'right', width: number) => HTMLDivElement | null;
 	releaseRowPortal: (slot: RowSlot<TRowData>) => boolean;
-	getIsScrolling: () => boolean;
-	getIsScrollFrameActive: () => boolean;
-	getRenderStats: () => any;
-	getProgrammaticScrollCell: () => GridCellPointer | null;
-	clearProgrammaticScrollCell: () => void;
-	setDeferredFocusCell: (cell: HTMLDivElement | null) => void;
-	incrementStyleHookCallsDuringScroll: () => void;
-	incrementCellsBoundDuringScroll: () => void;
-	incrementCurrentScrollCellsVisited: () => void;
-	incrementCurrentScrollCellsPatched: () => void;
-	incrementCurrentScrollCellsWritten: () => void;
-	incrementPostScrollDirtyCellsDecorated: () => void;
-	incrementDirtyCellsMarkedDuringScroll: () => void;
-	incrementCurrentScrollPortalOps: () => void;
-	pendingPortalReleasesAfterScroll: Map<string, unknown>;
 }
 
 function createRowCellBinderDeps<TRowData>(args: RowRendererRuntimeArgs<TRowData>): RowCellBinderDeps<TRowData> {
@@ -105,7 +106,7 @@ function createRowCellBinderDeps<TRowData>(args: RowRendererRuntimeArgs<TRowData
 		getViewportContainer: () => args.viewportContainer,
 		getIsScrolling: () => args.isScrolling,
 		getIsScrollFrameActive: () => args.isScrollFrameActive,
-		getProgrammaticScrollCell: () => args.programmaticScrollCell,
+		programmaticScrollCell: args.programmaticScrollCell,
 		clearProgrammaticScrollCell: args.clearProgrammaticScrollCell,
 		setDeferredFocusCell: args.setDeferredFocusCell,
 		applyFocus: args.applyFocus,
@@ -206,9 +207,9 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 	}
 
 	public markCellDirtyAfterScroll(cell: HTMLDivElement): void {
-		if (!this.deps.dirtyCellsAfterScroll.has(cell)) {
-			this.deps.dirtyCellsAfterScroll.add(cell);
-			this.deps.incrementDirtyCellsMarkedDuringScroll();
+		if (!this.deps.stateHost.dirtyCellsAfterScroll.has(cell)) {
+			this.deps.stateHost.dirtyCellsAfterScroll.add(cell);
+			this.deps.stateHost.dirtyCellsMarkedDuringScroll++;
 		}
 	}
 
@@ -221,10 +222,10 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 		const cellKey = cellSlot.binding?.cellKey ?? cell.dataset.cellKey;
 		if (!cellKey) return;
 		const container = this.getCellPortalHost(cell) ?? cell;
-		const isDeferred = forceDeferred ?? (this.deps.getIsScrollFrameActive() || this.deps.getIsScrolling());
+		const isDeferred = forceDeferred ?? (this.deps.stateHost.isScrollFrameActive || this.deps.stateHost.isScrolling);
 
 		if (isDeferred) {
-			this.deps.incrementCurrentScrollPortalOps();
+			this.deps.stateHost.currentScrollPortalOps++;
 			this.deps.portalMountManager.releaseCellForScroll({
 				cellKey,
 				container,
@@ -241,13 +242,13 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 	}
 
 	public cancelPendingPortalRelease(cellKey: string): void {
-		this.deps.pendingPortalReleasesAfterScroll.delete(cellKey);
+		this.deps.stateHost.pendingPortalReleasesAfterScroll.delete(cellKey);
 	}
 
 	public applyFocus(cell: HTMLDivElement): void {
-		if (this.deps.getIsScrollFrameActive() || this.deps.getIsScrolling()) {
-			this.deps.setDeferredFocusCell(cell);
-			const renderStats = this.deps.getRenderStats();
+		if (this.deps.stateHost.isScrollFrameActive || this.deps.stateHost.isScrolling) {
+			this.deps.stateHost.deferredFocusCell = cell;
+			const renderStats = this.deps.stateHost.renderStats;
 			if (renderStats) {
 				renderStats.focusCallsDuringScroll++;
 			}
@@ -263,13 +264,13 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 			portalMountManager: this.deps.portalMountManager,
 			viewportContainer: this.deps.getViewportContainer(),
 			selectionPaint: this.deps.selectionPaint,
-			cellClassScratch: this.deps.cellClassScratch,
+			cellClassScratch: this.deps.stateHost.cellClassScratch,
 			fullWidthRenderer: this.deps.getFullWidthRenderer(),
-			currentWindow: this.deps.getCurrentWindow(),
-			dirtyCellsAfterScroll: this.deps.dirtyCellsAfterScroll,
-			dirtyRowsAfterScroll: this.deps.dirtyRowsAfterScroll,
-			dirtyBuckets: this.deps.dirtyBuckets,
-			activeRows: this.deps.activeRows,
+			currentWindow: this.deps.stateHost.currentWindow,
+			dirtyCellsAfterScroll: this.deps.stateHost.dirtyCellsAfterScroll,
+			dirtyRowsAfterScroll: this.deps.stateHost.dirtyRowsAfterScroll,
+			dirtyBuckets: this.deps.stateHost.dirtyBuckets,
+			activeRows: this.deps.stateHost.activeRows,
 			initCell: this.deps.initCell,
 			releaseCellFn: this.deps.releaseCellFn,
 			ensurePinnedContainer: this.deps.ensurePinnedContainer,
@@ -281,18 +282,36 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 			cancelPendingPortalRelease: (cellKey) => this.cancelPendingPortalRelease(cellKey),
 			applyFocus: (cell) => this.applyFocus(cell),
 			isEditorInteractiveElement: (el) => this.isEditorInteractiveElement(el),
-			isScrolling: this.deps.getIsScrolling(),
-			isScrollFrameActive: this.deps.getIsScrollFrameActive(),
-			renderStats: this.deps.getRenderStats(),
-			programmaticScrollCell: this.deps.getProgrammaticScrollCell(),
-			clearProgrammaticScrollCell: this.deps.clearProgrammaticScrollCell,
-			setDeferredFocusCell: (cell) => this.deps.setDeferredFocusCell(cell),
-			incrementStyleHookCallsDuringScroll: this.deps.incrementStyleHookCallsDuringScroll,
-			incrementCellsBoundDuringScroll: this.deps.incrementCellsBoundDuringScroll,
-			incrementCurrentScrollCellsVisited: this.deps.incrementCurrentScrollCellsVisited,
-			incrementCurrentScrollCellsPatched: this.deps.incrementCurrentScrollCellsPatched,
-			incrementCurrentScrollCellsWritten: this.deps.incrementCurrentScrollCellsWritten,
-			incrementPostScrollDirtyCellsDecorated: this.deps.incrementPostScrollDirtyCellsDecorated,
+			isScrolling: this.deps.stateHost.isScrolling,
+			isScrollFrameActive: this.deps.stateHost.isScrollFrameActive,
+			renderStats: this.deps.stateHost.renderStats,
+			programmaticScrollCell: this.deps.stateHost.programmaticScrollCell,
+			clearProgrammaticScrollCell: () => {
+				this.deps.stateHost.programmaticScrollCell = null;
+			},
+			setDeferredFocusCell: (cell) => {
+				this.deps.stateHost.deferredFocusCell = cell;
+			},
+			incrementStyleHookCallsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) this.deps.stateHost.renderStats.styleHookCallsDuringScroll++;
+			},
+			incrementCellsBoundDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.cellsBoundDuringScroll = (this.deps.stateHost.renderStats.cellsBoundDuringScroll || 0) + 1;
+				}
+			},
+			incrementCurrentScrollCellsVisited: () => {
+				this.deps.stateHost.currentScrollCellsVisited++;
+			},
+			incrementCurrentScrollCellsPatched: () => {
+				this.deps.stateHost.currentScrollCellsPatched++;
+			},
+			incrementCurrentScrollCellsWritten: () => {
+				this.deps.stateHost.currentScrollCellsWritten++;
+			},
+			incrementPostScrollDirtyCellsDecorated: () => {
+				this.deps.stateHost.postScrollDirtyCellsDecorated++;
+			},
 		};
 	}
 
