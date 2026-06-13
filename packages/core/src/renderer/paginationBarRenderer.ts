@@ -43,9 +43,15 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		const state = this.engine.stateManager.getState();
 		const pageSize = Math.max(1, state.pagination?.pageSize ?? 100);
 		const rowModel = this.engine.getRowModel();
-		const totalRows = rowModel?.getDataRowCount?.() ?? rowModel?.getVisualRowCount?.() ?? 0;
+		// Prefer the authoritative page window the row pipeline computed (Plan 041) — its
+		// total is the post-filter/post-group visible count, the correct denominator. Fall
+		// back to a local computation only before the model has produced a window.
+		const pageWindow = rowModel?.getPageWindow?.();
+		if (pageWindow) {
+			return { page: pageWindow.page, pageSize: pageWindow.pageSize, totalRows: pageWindow.totalRows, pageCount: pageWindow.pageCount };
+		}
+		const totalRows = rowModel?.getVisualRowCount?.() ?? rowModel?.getDataRowCount?.() ?? 0;
 		const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
-		// Clamp the stored page into range (data may have shrunk since it was set).
 		const page = Math.min(Math.max(0, state.pagination?.page ?? 0), pageCount - 1);
 		return { page, pageSize, totalRows, pageCount };
 	}

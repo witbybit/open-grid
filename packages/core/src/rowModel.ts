@@ -5,6 +5,7 @@ import type { ClientRowModelRuntime } from './engine/runtimePorts.js';
 import { getFieldRoot } from './ids.js';
 import { RowNode } from './rowNode.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
+import type { PageWindow } from './rows/pageModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
 import type { VisualRow } from './visualRow.js';
 
@@ -64,6 +65,8 @@ export interface RowModel<TRowData = unknown> {
 	expandAllGroups?(): RowModelRefreshResult | void;
 	collapseAllGroups?(): RowModelRefreshResult | void;
 	getStickyGroupMeta?(): Map<number, number>;
+	/** The active client page-window (Plan 041), or null when pagination is off. */
+	getPageWindow?(): PageWindow | null;
 	getGroupMeta?(groupId: string): GroupRowMeta | null;
 	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
 	setRows?(rows: TRowData[]): void;
@@ -350,8 +353,10 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	private _stickyGroupMeta = new Map<number, number>();
 	private _groupMeta = new Map<string, GroupRowMeta>();
 	private _groupMetaByVisualIndex = new Map<number, GroupRowMeta>();
+	private _pageWindow: PageWindow | null = null;
 
 	public getStickyGroupMeta = (): Map<number, number> => this._stickyGroupMeta;
+	public getPageWindow = (): PageWindow | null => this._pageWindow;
 	public getGroupMeta = (groupId: string): GroupRowMeta | null => this._groupMeta.get(groupId) ?? null;
 	public getGroupMetaByVisualIndex = (visualIndex: number): GroupRowMeta | null => this._groupMetaByVisualIndex.get(visualIndex) ?? null;
 
@@ -436,7 +441,9 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			this.runtime.addEventListener(GridEventName.groupByChanged, () => this.refresh()),
 			this.runtime.addEventListener(GridEventName.aggDefsChanged, () => this.refresh()),
 			this.runtime.addEventListener(GridEventName.showGroupFooterChanged, () => this.refresh()),
-			this.runtime.addEventListener(GridEventName.enableStickyGroupRowsChanged, () => this.refresh())
+			this.runtime.addEventListener(GridEventName.enableStickyGroupRowsChanged, () => this.refresh()),
+			// Client pagination page change → re-run the pipeline with the new page window.
+			this.runtime.addEventListener(GridEventName.paginationChanged, () => this.refresh('flatten'))
 		);
 		this.setRows(options.rows);
 	}
@@ -743,11 +750,15 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			masterDetailEnabled: state.masterDetailEnabled,
 			detailRenderer: state.detailRenderer,
 			reportFault: this.runtime.reportRowPipelineFault,
+			// Client pagination (Plan 041): slice happens inside the pipeline so every
+			// derived map/meta/geometry stays page-consistent. Undefined → full list.
+			pagination: state.pagination ? { pageSize: state.pagination.pageSize, page: state.pagination.page ?? 0 } : undefined,
 		});
 		const { visualRows } = result;
 		const refreshResult = describeVisualRowDiff(previousRows, visualRows, reason, groupId);
 
 		this.visualRows = visualRows;
+		this._pageWindow = result.pageWindow ?? null;
 		this.visualRowIdToIndex = result.visualRowIdToIndex;
 		this.rowIdToVisualIndex = result.rowIdToVisualIndex;
 		this.rowIdToVisualRowId = result.rowIdToVisualRowId;

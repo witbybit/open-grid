@@ -9,6 +9,7 @@ import { aggregateStage, type AggregationDef } from './stages/aggregateStage.js'
 import { flattenStage } from './stages/flattenStage.js';
 import type { RowTreeNode } from './stages/types.js';
 import { toDataVisualRowId, toGroupVisualRowId } from './visualRowIds.js';
+import { computePageWindow, type PageWindow } from './pageModel.js';
 
 export interface GroupDef<TData = unknown> {
 	colId: string;
@@ -63,6 +64,11 @@ export interface RowPipelineInput<TData = unknown> {
 	masterDetailEnabled?: boolean;
 	detailRenderer?: unknown;
 	reportFault?: (operation: string, error: unknown, context?: Record<string, unknown>) => void;
+
+	// Client pagination (Plan 041). When set, the final flattened visual rows are sliced
+	// to this page window before any index maps / sticky / group meta are built, so the
+	// whole output is page-relative. Omit for no pagination (full list).
+	pagination?: { pageSize: number; page: number };
 }
 
 export interface RowPipelineOutput<TData = unknown> {
@@ -77,6 +83,8 @@ export interface RowPipelineOutput<TData = unknown> {
 	groupMeta: Map<string, GroupRowMeta>;
 	/** Rich metadata for each group row, keyed by visual index. */
 	groupMetaByVisualIndex: Map<number, GroupRowMeta>;
+	/** Present when client pagination is active — the slice applied to the visual rows. */
+	pageWindow?: PageWindow;
 	version: number;
 	stats: {
 		totalDataRows: number;
@@ -194,6 +202,23 @@ export class RowPipeline<TData = unknown> {
 			stickyGroupMeta
 		);
 
+		// Client pagination page-window (Plan 041). Slice the fully-flattened visual rows to
+		// the requested page BEFORE building any derived structure, so the index maps and
+		// group meta below — and the geometry/render-window/sticky/selection that read them —
+		// are all page-relative with zero extra work. The total (pre-slice) count is the
+		// pagination denominator and is preserved on `pageWindow.totalRows`.
+		let pageWindow: PageWindow | undefined;
+		if (input.pagination) {
+			pageWindow = computePageWindow(visualRows.length, input.pagination.pageSize, input.pagination.page);
+			if (pageWindow.startIndex !== 0 || pageWindow.endIndex !== visualRows.length) {
+				visualRows = visualRows.slice(pageWindow.startIndex, pageWindow.endIndex);
+			}
+			// `stickyGroupMeta` was populated inside flattenStage with full-array indices, so
+			// rebuild it from the sliced rows (faithful to flattenStage: last descendant before
+			// the group's footer; footer shares the group's depth and terminates the subtree).
+			rebuildStickyGroupMeta(visualRows, stickyGroupMeta);
+		}
+
 		const visualRowIdToIndex = new Map<string, number>();
 		const rowIdToVisualIndex = new Map<string, number>();
 		const rowIdToVisualRowId = new Map<string, string>();
@@ -237,6 +262,7 @@ export class RowPipeline<TData = unknown> {
 			stickyGroupMeta,
 			groupMeta,
 			groupMetaByVisualIndex,
+			pageWindow,
 			version: ++this.version,
 			stats: {
 				totalDataRows: nodes.length,
@@ -296,6 +322,36 @@ export class RowPipeline<TData = unknown> {
 			return { ...node, children: children.length > 0 ? children : undefined };
 		};
 		return roots.map(includeNode).filter((node): node is RowTreeNode<TData> => !!node);
+	}
+}
+
+/**
+ * Rebuild `stickyGroupMeta` (expanded-group visual index → last descendant index) from a
+ * flat visual-row array. Used after a pagination slice, where flattenStage's original
+ * meta holds stale full-array indices.
+ *
+ * Faithful to flattenStage: a group's sticky boundary is its last *content* descendant,
+ * which sits before the group's footer. Footers (and sibling/shallower groups) share or
+ * undercut the group's depth, so the first row at depth <= the group's depth terminates
+ * the descendant range — the row just before it is the boundary.
+ */
+function rebuildStickyGroupMeta<TData>(visualRows: VisualRow<TData>[], out: Map<number, number>): void {
+	out.clear();
+	const stack: Array<{ idx: number; depth: number }> = [];
+	for (let i = 0; i < visualRows.length; i++) {
+		const row = visualRows[i];
+		const depth = 'depth' in row ? ((row as { depth?: number }).depth ?? 0) : 0;
+		while (stack.length > 0 && depth <= stack[stack.length - 1].depth) {
+			const g = stack.pop()!;
+			if (i - 1 > g.idx) out.set(g.idx, i - 1);
+		}
+		if (row.kind === 'group' && row.expanded) {
+			stack.push({ idx: i, depth });
+		}
+	}
+	while (stack.length > 0) {
+		const g = stack.pop()!;
+		if (visualRows.length - 1 > g.idx) out.set(g.idx, visualRows.length - 1);
 	}
 }
 

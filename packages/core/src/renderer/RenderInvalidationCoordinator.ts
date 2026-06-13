@@ -13,6 +13,7 @@ export interface RenderInvalidationCoordinatorDeps<TRowData = unknown> {
 	scheduler: RenderScheduler;
 	syncLayoutPlan: () => void;
 	scrollCellIntoView: (rowId: string, colField: string) => void;
+	resetScroll: () => void;
 	updateCachedGeometryBounds: () => void;
 	getIsScrolling: () => boolean;
 	getIsScrollFrameActive: () => boolean;
@@ -93,6 +94,10 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 				this.deps.layoutTransition.captureSnapshot();
 			})
 		);
+		// Client pagination page change — reset scroll to the top of the new page. The row
+		// model re-runs the pipeline with the new window on the same event; this just keeps
+		// the viewport from showing the middle of the freshly-sliced page.
+		this.unsubscribers.push(this.deps.engine.eventBus.addEventListener(GridEventName.paginationChanged, () => this.deps.resetScroll()));
 		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));
 		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.selectionChanged, (event) => {

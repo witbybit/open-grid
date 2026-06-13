@@ -334,6 +334,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				this.viewportCoordinator.syncLayoutPlan();
 			},
 			scrollCellIntoView: (rowId, colField) => this.viewportCoordinator.scrollCellIntoView(rowId, colField),
+			resetScroll: () => this.scrollEngine.scrollTo(0, this.engine.viewport.scrollLeft),
 			updateCachedGeometryBounds: () => this.updateCachedGeometryBounds(),
 			getIsScrolling: () => this.scrollCoordinator.getIsScrolling(),
 			getIsScrollFrameActive: () => this.scrollCoordinator.getIsScrollFrameActive(),
