@@ -99,6 +99,28 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		};
 	}, [api, updateStatsAndChart]);
 
+	const triggerVolatility = useCallback(() => {
+		if (!api) return;
+		api.updateRows((rows) =>
+			rows.map((row) => {
+				const priceNum = parseFloat(String(row.price)) || 100;
+				const volatility = (Math.random() - 0.5) * 8;
+				const nextPrice = Math.max(1, priceNum * (1 + volatility / 100));
+				const priceDiff = nextPrice - priceNum;
+				const changeNum = parseFloat(String(row.change)) || 0;
+				const nextChange = changeNum + (priceDiff / priceNum) * 100;
+				const volumeNum = parseFloat(String(row.volume)) || 0;
+				const nextVolume = Math.max(0.1, volumeNum * (1 + (Math.random() - 0.5) * 0.3));
+				return {
+					...row,
+					price: nextPrice.toFixed(2),
+					change: `${nextChange >= 0 ? '+' : ''}${nextChange.toFixed(1)}`,
+					volume: nextVolume.toFixed(1),
+				};
+			})
+		);
+	}, [api]);
+
 	const toggleAutoFire = useCallback(() => {
 		if (!api) return;
 		const next = !autoFireRef.current;
@@ -108,16 +130,8 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 			autoIntervalRef.current = null;
 		}
 		if (!next) return;
-		autoIntervalRef.current = setInterval(() => {
-			const allRows = api.rows().getAll();
-			const row = allRows[Math.floor(Math.random() * allRows.length)];
-			if (!row) return;
-			const current = parseFloat(String(row.price)) || 100;
-			const nextPrice = Math.max(1, current + (Math.random() - 0.5) * 2).toFixed(2);
-			api.setCellValue(row.id, 'price', nextPrice);
-			api.setCellValue(row.id, 'change', (parseFloat(nextPrice) - current).toFixed(2));
-		}, 100);
-	}, [api]);
+		autoIntervalRef.current = setInterval(triggerVolatility, 100);
+	}, [api, triggerVolatility]);
 
 	useEffect(
 		() => () => {
@@ -163,6 +177,7 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 						rows={rows}
 						columns={columns}
 						styleRules={styleRules}
+						enableContextMenu
 						pinLeftColumns={2}
 						enableNavigation
 						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
