@@ -135,8 +135,19 @@ describe('Architecture guardrails', () => {
 
 	it('rowRenderer live row/data binding delegates lane orchestration', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderer.ts'), 'utf-8');
-		expect(content).toContain('bindAllDataCellsRuntime(createRowRendererRuntimeArgs(');
-		expect(content).toContain('bindAllLoadingCellsRuntime(createRowRendererRuntimeArgs(');
+		expect(content).toContain('this.runtime.bindAllDataCells(');
+		expect(content).toContain('this.runtime.bindAllLoadingCells(');
+		expect(content).toContain('this.runtime.bindFullWidthRow(');
+	});
+
+	it('rowRendererRuntime owns runtime bridge assembly and coordination adapters', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRendererRuntime.ts'), 'utf-8');
+		expect(content).toContain('export class RowRendererRuntimeBridge');
+		expect(content).toContain('public bindAllDataCells(');
+		expect(content).toContain('public bindAllLoadingCells(');
+		expect(content).toContain('public bindFullWidthRow(');
+		expect(content).toContain('public repaintInvalidatedRowsAndCells(');
+		expect(content).toContain('public decorateDirtyCellsAfterScroll(');
 	});
 
 	it('rowCellBinder owns extracted live cell-binding policy', () => {
