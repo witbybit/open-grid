@@ -1,5 +1,5 @@
 import { createClientGrid, createServerGrid } from '@open-grid/core';
-import { useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
+import { useEffect, useInsertionEffect, useMemo, useRef, type PropsWithChildren } from 'react';
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
 import { resolveColumnTypes } from './resolveColumnTypes.js';
@@ -80,6 +80,9 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			rowSelection?: 'single' | 'multiple';
 		};
 	const readyFiredRef = useRef(false);
+	const lastColumnsRef = useRef(columns);
+	const lastColumnTypesRef = useRef(columnTypes);
+	const didMountServerRef = useRef(false);
 
 	const api = useMemo(() => {
 		const initial = createInitialState(
@@ -134,10 +137,17 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 
 	useEffect(() => {
 		if (mode !== 'server') return;
+		if (!didMountServerRef.current) {
+			didMountServerRef.current = true;
+			return;
+		}
 		api.setServerDatasource(datasource as GridDatasource, blockSize);
 	}, [api, mode, datasource, blockSize]);
 
 	useEffect(() => {
+		if (columns === lastColumnsRef.current && columnTypes === lastColumnTypesRef.current) return;
+		lastColumnsRef.current = columns;
+		lastColumnTypesRef.current = columnTypes;
 		api.setColumns(resolveColumnTypes(columns, columnTypes));
 	}, [api, columns, columnTypes]);
 
@@ -147,7 +157,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		onGridReady?.({ api, mode });
 	}, [api, mode, onGridReady]);
 
-	useEffect(() => {
+	useInsertionEffect(() => {
 		return () => {
 			api.destroy();
 		};
