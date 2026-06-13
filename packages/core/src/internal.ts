@@ -5,6 +5,7 @@
 export {
 	hasImperativeRendererCapability,
 	mountGridHost,
+	updateGridStyleRules,
 	type GridAdapterHandle,
 	type GridCellContentAdapter,
 	type GridHeaderMenuAdapter,

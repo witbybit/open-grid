@@ -532,7 +532,7 @@ Column-level `renderer` / `cellEditor` always override a type — so you can use
 
 ### 6. Declarative Style Rules
 
-`styleRules` is the recommended way to conditionally style rows, cells, and header cells. It replaces the imperative `api.setStyleSlots()` call with a plain array of rule objects that the grid compiles internally — no import of a compiler function needed.
+`styleRules` is the recommended way to conditionally style rows, cells, and header cells. It is the grid's declarative styling API: pass a plain array of rule objects and the core styling pipeline applies them directly.
 
 #### Passing rules as a prop
 
@@ -581,7 +581,7 @@ All matching rules contribute their class strings (space-joined), so rules are c
 
 #### `useStyleRules` — for components that receive `api` as a prop
 
-When a component needs to apply rules from inside the grid tree, use `useGridApi` + `useStyleRules` rather than touching `api.setStyleSlots` directly:
+When a component needs to apply rules from inside the grid tree, use `useGridApi` + `useStyleRules`:
 
 ```tsx
 import { Grid, useGridApi, useStyleRules, type ColumnDef, type StyleRule } from '@open-grid/react';
@@ -610,7 +610,7 @@ function DashboardRules() {
 		[]
 	);
 
-	useStyleRules(api, styleRules); // compiles and applies; re-applies when rules reference changes
+	useStyleRules(api, styleRules); // applies declarative rules; re-applies when rules reference changes
 	return null;
 }
 
@@ -631,7 +631,7 @@ function DashboardGrid({ rows, columns }: { rows: StockRow[]; columns: ColumnDef
 | `'cell'`       | `cellClass`, optional `field`       | `(row, col, params) => boolean` | Single cell; if `field` is set, only that column |
 | `'headerCell'` | `headerCellClass`, optional `field` | `(col) => boolean`              | Header cell; if `field` is set, only that column |
 
-`api.setStyleSlots()` remains available for full imperative control when you need to set slots not covered by `styleRules` (e.g. `beforeCellRender`, `afterCellRender`).
+`styleRules` is the supported conditional styling surface. Imperative style-slot APIs and lifecycle styling hooks are no longer part of Open Grid.
 
 ---
 
@@ -809,7 +809,7 @@ export function ProductGrid({ rows, columns }: { rows: ProductRow[]; columns: Co
 
 For components that receive `api` as a prop, use the `useStyleRules` hook instead — see [Declarative Style Rules](#6-declarative-style-rules) for the full guide.
 
-For imperative control (e.g. `beforeCellRender`), `api.setStyleSlots()` remains available.
+For grid-owned styling, use `styleRules` for conditional decoration and the built-in theme API for token-level visuals.
 
 ### 3. Highly Granular Cell-Level Pub-Sub Subscriptions
 

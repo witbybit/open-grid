@@ -1,4 +1,10 @@
-import { hasImperativeRendererCapability, mountGridHost, type GridAdapterHandle, type GridHostWithAdapter } from '@open-grid/core/internal';
+import {
+	hasImperativeRendererCapability,
+	mountGridHost,
+	updateGridStyleRules,
+	type GridAdapterHandle,
+	type GridHostWithAdapter,
+} from '@open-grid/core/internal';
 
-export { hasImperativeRendererCapability, mountGridHost };
+export { hasImperativeRendererCapability, mountGridHost, updateGridStyleRules };
 export type { GridAdapterHandle, GridHostWithAdapter };

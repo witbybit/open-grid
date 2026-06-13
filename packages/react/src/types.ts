@@ -25,12 +25,17 @@ import type {
 	GridPersistenceAdapter,
 	BuiltInThemeName,
 	ThemeTokens,
+	GridStyleRule,
+	RowStyleRule,
+	GroupRowStyleRule,
+	DetailRowStyleRule,
+	CellStyleRule,
+	HeaderCellStyleRule,
 } from '@open-grid/core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
-import type { StyleRule } from './styleRules.js';
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@open-grid/core';
 export type { ColumnTypeDefinition } from './renderers/CellTypes.js';
-export type { StyleRule, RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from './styleRules.js';
+export type { RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from '@open-grid/core';
 export type {
 	GroupDef,
 	AggregationDef,
@@ -69,6 +74,8 @@ export type {
 	BuiltInThemeName,
 	ThemeTokens,
 };
+
+export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;
 
 /**
  * Fields from GridState that can be configured as top-level props on the public

@@ -607,9 +607,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			if (transaction.pins) {
 				this.setViewportPins(transaction.pins);
 			}
-			if ('styleRules' in transaction) {
-				this.setStyleRules(transaction.styleRules);
-			}
 		});
 		return rowResult;
 	};

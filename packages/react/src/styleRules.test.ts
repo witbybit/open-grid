@@ -1,6 +1,5 @@
+import { compileStyleRules, type GridStyleRule } from '@open-grid/core';
 import { describe, expect, it } from 'vitest';
-import { compileStyleRules } from './styleRules.js';
-import type { StyleRule } from './styleRules.js';
 
 interface Row {
 	id: string;
@@ -19,7 +18,7 @@ describe('compileStyleRules', () => {
 	});
 
 	it('categorizes each supported rule kind', () => {
-		const rules: StyleRule<Row>[] = [
+		const rules: GridStyleRule<Row>[] = [
 			{ kind: 'row', when: () => true, rowClass: 'row-class' },
 			{ kind: 'groupRow', rowClass: 'group-class' },
 			{ kind: 'detailRow', rowClass: 'detail-class' },
@@ -37,7 +36,7 @@ describe('compileStyleRules', () => {
 	});
 
 	it('indexes field-scoped cell and header rules', () => {
-		const rules: StyleRule<Row>[] = [
+		const rules: GridStyleRule<Row>[] = [
 			{ kind: 'cell', field: 'risk', when: () => true, cellClass: 'cell-class' },
 			{ kind: 'headerCell', field: 'risk', when: () => true, headerCellClass: 'header-class' },
 		];
@@ -49,7 +48,7 @@ describe('compileStyleRules', () => {
 	});
 
 	it('reuses compiled output for the same array reference', () => {
-		const rules: StyleRule<Row>[] = [{ kind: 'row', when: (row) => row.risk === 'high', rowClass: 'danger' }];
+		const rules: GridStyleRule<Row>[] = [{ kind: 'row', when: (row) => row.risk === 'high', rowClass: 'danger' }];
 		expect(compileStyleRules(rules)).toBe(compileStyleRules(rules));
 	});
 });

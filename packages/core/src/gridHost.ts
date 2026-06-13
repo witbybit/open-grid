@@ -10,10 +10,14 @@ import type {
 	GridHeaderMenuUnmount,
 } from './renderer/IGridRenderer.js';
 import type { GridApi } from './store.js';
-import type { ColumnDef, InternalColumnDef } from './columnDef.js';
+import type { ColumnDef, GridStyleRule, InternalColumnDef } from './columnDef.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
 	return (column as InternalColumnDef<TRowData>).cellRendererCapabilities?.imperativeUpdate === true;
+}
+
+export function updateGridStyleRules<TRowData>(api: GridApi<TRowData>, styleRules: GridStyleRule<TRowData>[] | undefined): void {
+	getStoreFromApi(api).setStyleRules(styleRules);
 }
 
 export interface GridCellContentAdapter<TRowData = unknown> {
