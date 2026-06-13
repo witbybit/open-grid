@@ -37,6 +37,7 @@
 | 033 | [Plan Reconciliation And Release Hardening](./033-plan-reconciliation-and-release-hardening.md) | DONE     | 54d4803      |
 | 034 | [Server Grid Polish Foundation](./034-server-grid-polish-foundation.md)                         | DONE     | working tree |
 | 035 | [Phase 6 Legacy Layout Cleanup](./035-phase6-legacy-layout-cleanup.md)                          | DONE     | working tree |
+| 037 | [Coordinator Unit Tests](./037-coordinator-unit-tests.md)                                       | DONE     | working tree |
 | 038 | [store.ts Line Budget](./038-store-ts-line-budget.md)                                           | DONE     | working tree |
 
 ## Execution order
