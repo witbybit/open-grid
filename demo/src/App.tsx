@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Layout } from 'lucide-react';
-import type { FilterModel, GridApi, GridReadyEvent, SortModel } from '@open-grid/react';
+import type { FilterModel, GridApi, GridReadyEvent } from '@open-grid/react';
 import { DemoGridApiScope } from './DemoGridContext';
 import ShowroomHeader from './components/ShowroomHeader';
 import ShowroomLeftSidebar from './components/ShowroomLeftSidebar';
@@ -72,6 +72,9 @@ export default function App() {
 		const handleHashChange = () => {
 			setActivePage(readActivePage());
 			setActiveApi(null);
+			setSortField('id');
+			setSortDirection('asc');
+			setStatusFilter('All');
 		};
 		window.addEventListener('hashchange', handleHashChange);
 		if (window.location.hash) handleHashChange();
@@ -80,15 +83,10 @@ export default function App() {
 	}, []);
 
 	const rowHeightsMap = useMemo(() => ({ compact: 30, normal: 38, spacious: 48 }), []);
-	const sortModel = useMemo<SortModel>(() => [{ colId: sortField, sort: sortDirection }], [sortField, sortDirection]);
 	const filterModel = useMemo<FilterModel | null>(
 		() => (statusFilter === 'All' ? null : { status: { type: 'equals', filter: statusFilter } }),
 		[statusFilter]
 	);
-
-	useEffect(() => {
-		activeApi?.setSortModel(sortModel);
-	}, [activeApi, sortModel]);
 
 	useEffect(() => {
 		activeApi?.setFilterModel(filterModel);
@@ -163,7 +161,7 @@ export default function App() {
 			for (const rowId of rowIds) {
 				for (const colField of columns) {
 					if (action === 'fill') activeApi.setCellValue(rowId, colField, '100');
-					else if (action === 'clear') activeApi.setCellValue(rowId, colField, '');
+					else if (action === 'clear') activeApi.setCellValue(rowId, colField, 0);
 					else
 						activeApi.setCellValue(
 							rowId,
