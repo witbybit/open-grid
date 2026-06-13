@@ -1,8 +1,5 @@
 export { Grid } from './Grid.js';
-export type { GridProps, GridClientProps, GridServerProps } from './Grid.js';
-export { GridStatusBar } from './GridStatusBar.js';
-export { GridPagination, useClientGridPagination } from './pagination.js';
-export type { GridPaginationProps, ClientGridPaginationResult } from './pagination.js';
+export type { GridProps, GridClientProps, GridServerProps, GridPaginationConfig } from './Grid.js';
 export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
@@ -74,7 +71,6 @@ export type {
 	DomCellRendererParams,
 	ImperativeCellHandle,
 	GridReadyEvent,
-	GridPaginationOptions,
 } from './types.js';
 
 export type { GridContextMenuOptions, GridContextMenuItem, GridCellPointer, HeaderMenuRendererProps } from '@open-grid/core';

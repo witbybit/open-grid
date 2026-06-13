@@ -9,7 +9,7 @@
  *   - rowSelectionChanged event →  reactive event log
  */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { Grid, GridEventName, GridStatusBar } from '@open-grid/react';
+import { Grid, GridEventName } from '@open-grid/react';
 import type { ColumnDef, GridApi, GridReadyEvent } from '@open-grid/react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
 
@@ -297,15 +297,14 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 						columns={COLUMNS}
 						getRowId={(row) => row.id}
 						rowSelection='multiple'
+						showStatusBar
 						enableNavigation={true}
 						navigationOptions={{ editTrigger: 'doubleClick' }}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);
 						}}
-					>
-						<GridStatusBar />
-					</Grid>
+					/>
 				</div>
 			</div>
 

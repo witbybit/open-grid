@@ -13,6 +13,7 @@ function fakeEngine(opts: { totalRows: number; pageSize: number; page?: number }
 			stateManager: {
 				getState: () => state,
 				setState: (patch: any) => Object.assign(state, patch),
+				subscribeToKey: () => () => {},
 			},
 			eventBus: {
 				addEventListener: () => () => {},

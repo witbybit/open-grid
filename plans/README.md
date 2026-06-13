@@ -42,7 +42,7 @@
 | 039 | [Grid Layout Animation + Chrome Hardening](./039-grid-layout-animation-chrome-hardening.md)     | PARTIAL  | working tree |
 | 040 | [Core-Owned Architecture North-Star](./040-core-owned-architecture-north-star.md)               | TODO     | working tree |
 | 041 | [Core Client Pagination (pipeline window)](./041-core-client-pagination-pipeline-window.md)     | DONE     | working tree |
-| 042 | [React Pagination + Status Bar Teardown](./042-react-pagination-statusbar-teardown.md)          | TODO     | working tree |
+| 042 | [React Pagination + Status Bar Teardown](./042-react-pagination-statusbar-teardown.md)          | DONE     | working tree |
 | 043 | [Row Lifecycle Exit Animation](./043-row-lifecycle-exit-animation.md)                           | TODO     | working tree |
 | 044 | [Animated Column Pinning](./044-animated-column-pinning.md)                                     | TODO     | working tree |
 

@@ -253,16 +253,7 @@ export default function PerformanceLab({ onGridReady }: PerformanceLabProps) {
 					mode='client'
 					rows={allRows}
 					columns={columns}
-					pagination={{
-						pageSize: PAGE_SIZE,
-						style: {
-							background: 'rgba(15,23,42,0.6)',
-							border: '1px solid #1e293b',
-							borderRadius: '8px',
-							color: '#94a3b8',
-							flexShrink: 0,
-						},
-					}}
+					pagination={{ pageSize: PAGE_SIZE }}
 					rowOverscanPx={100}
 					colBuffer={1}
 					runtimeLimits={{ maxRenderedRows: 36, maxRenderedCells: 900 }}
