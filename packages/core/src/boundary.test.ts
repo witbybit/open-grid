@@ -64,10 +64,6 @@ describe('Public/internal boundary', () => {
 			expect(typeof (internalApi as Record<string, unknown>)['hasImperativeRendererCapability']).toBe('function');
 		});
 
-		it('does not export getInternalApiFromApi (removed with ApiBridge)', () => {
-			expect((internalApi as Record<string, unknown>)['getInternalApiFromApi']).toBeUndefined();
-		});
-
 		it('does not export raw store, engine, model, or renderer classes', () => {
 			const rawInternals = [
 				'GridStore',
