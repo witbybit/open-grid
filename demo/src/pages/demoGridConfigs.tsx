@@ -384,9 +384,9 @@ export function createDashboardRows(): DashboardStockRow[] {
 			id: `${stock.id}${index >= SEED_STOCKS.length ? `.${Math.floor(index / SEED_STOCKS.length)}` : ''}`,
 			symbol: stock.id,
 			name: stock.name,
-			price: Number((stock.price * (0.75 + ((index * 7) % 50) / 100)).toFixed(2)),
-			change: Number(change.toFixed(1)),
-			volume,
+			price: (stock.price * (0.75 + ((index * 7) % 50) / 100)).toFixed(2),
+			change: `${change >= 0 ? '+' : ''}${change.toFixed(1)}`,
+			volume: volume.toFixed(1),
 			risk: stock.price > 500 || Math.abs(change) > 4 ? 'high' : Math.abs(change) > 2 ? 'medium' : 'low',
 		};
 	});

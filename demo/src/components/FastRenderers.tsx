@@ -13,9 +13,9 @@ export interface DashboardStockRow {
 	id: string;
 	symbol: string;
 	name: string;
-	price: number;
-	change: number;
-	volume: number;
+	price: string;
+	change: string;
+	volume: string;
 	risk: 'low' | 'medium' | 'high';
 }
 

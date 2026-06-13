@@ -121,7 +121,7 @@ export function createApiFacade<TRowData>(
 		setRowHeights: (rowHeights: Record<string, number> | undefined) => store.setRowHeights(rowHeights),
 		setDefaultRowHeight: (defaultRowHeight?: number | undefined) => store.setDefaultRowHeight(defaultRowHeight),
 		purgeCache: () => store.purgeCache(),
-		setServerDatasource: (datasource: IGridDatasource, blockSize?: number) => store.setServerDatasource(datasource, blockSize),
+		setServerDatasource: (datasource: IGridDatasource<TRowData>, blockSize?: number) => store.setServerDatasource(datasource, blockSize),
 		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
 		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
 		selectCell: (pointer: GridCellPointer | null, source?: GridSelectionSource) => store.selectCell(pointer, source),
@@ -205,6 +205,7 @@ export function createApiFacade<TRowData>(
 		saveNow: (): void => persistenceController?.saveNow(),
 		getRuntimeFaults: () => store.getRuntimeFaults(),
 		clearRuntimeFaults: () => store.clearRuntimeFaults(),
+		flushCellUpdatesSync: () => store.flushCellUpdatesSync(),
 		destroy,
 	};
 

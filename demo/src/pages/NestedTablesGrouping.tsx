@@ -1,5 +1,13 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Grid, type ColumnDef, type CellRendererProps, type GridApi, type GridReadyEvent, type VisualRow } from '@open-grid/react';
+import {
+	Grid,
+	type ColumnDef,
+	type CellRendererProps,
+	type GridApi,
+	type GridReadyEvent,
+	type GroupVisualRow,
+	type VisualRow,
+} from '@open-grid/react';
 import {
 	Layers,
 	FolderTree,
@@ -363,7 +371,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 			groupBy: ['department'],
 			groupRowHeight: 42,
 			styleSlots: {
-				groupRowClass: (visualRow) => {
+				groupRowClass: (_visualRow: GroupVisualRow<EmployeeRow>) => {
 					return 'border-l-[3px] border-purple-500 bg-purple-950/5';
 				},
 			},
@@ -442,7 +450,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 				type: 'client',
 				treeData: {
 					enabled: true,
-					getParentId: (row) => row.parentId,
+					getParentId: (row: FileNodeRow) => row.parentId,
 				},
 			},
 			expansion: {
@@ -454,7 +462,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 				details: {},
 			},
 			styleSlots: {
-				rowClass: (row) => {
+				rowClass: (row: FileNodeRow) => {
 					return row.type === 'folder' ? 'border-l-[3px] border-amber-500 bg-amber-950/5' : '';
 				},
 			},

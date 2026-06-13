@@ -71,7 +71,7 @@ export interface RowModel<TRowData = unknown> {
 	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
 	purgeCache?(): void;
-	setDatasource?(datasource: import('./serverRowModel.js').IGridDatasource, blockSize?: number): void;
+	setDatasource?(datasource: import('./serverRowModel.js').IGridDatasource<TRowData>, blockSize?: number): void;
 	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
 	loadVisibleBlocks?(startRow: number, endRow: number): void;
 }

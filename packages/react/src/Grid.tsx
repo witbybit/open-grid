@@ -32,7 +32,7 @@ export interface GridClientProps<TRowData = unknown> extends GridCommonProps<TRo
 
 export interface GridServerProps<TRowData = unknown> extends GridCommonProps<TRowData> {
 	mode: 'server';
-	datasource: GridDatasource;
+	datasource: GridDatasource<TRowData>;
 	blockSize?: number;
 }
 
@@ -75,7 +75,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	} = props as GridRootProps<TRowData> &
 		GridShellProps<TRowData> & {
 			rows?: TRowData[];
-			datasource?: GridDatasource;
+			datasource?: GridDatasource<TRowData>;
 			blockSize?: number;
 			rowSelection?: 'single' | 'multiple';
 		};
@@ -112,7 +112,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		}
 
 		return createServerGrid({
-			datasource: datasource as GridDatasource,
+			datasource: datasource as GridDatasource<TRowData>,
 			columns: resolveColumnTypes(columns, columnTypes),
 			blockSize,
 			getRowId,
@@ -141,7 +141,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			didMountServerRef.current = true;
 			return;
 		}
-		api.setServerDatasource(datasource as GridDatasource, blockSize);
+		api.setServerDatasource(datasource as GridDatasource<TRowData>, blockSize);
 	}, [api, mode, datasource, blockSize]);
 
 	useEffect(() => {

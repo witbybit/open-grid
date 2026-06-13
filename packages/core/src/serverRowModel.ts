@@ -13,20 +13,20 @@ export interface GetRowsParams {
 	filterModel: unknown;
 }
 
-export interface IGridDatasource {
-	getRows(params: GetRowsParams): Promise<{ rows: unknown[]; totalCount?: number }>;
+export interface IGridDatasource<TRowData = unknown> {
+	getRows(params: GetRowsParams): Promise<{ rows: TRowData[]; totalCount?: number }>;
 }
 
 export interface ServerRowModelOptions<TData = unknown> {
 	blockSize?: number;
-	datasource: IGridDatasource;
+	datasource: IGridDatasource<TData>;
 	columns: Array<ColumnDef<TData>>;
 	getRowId?: (row: TData) => string;
 }
 
 export class ServerRowModelController<TData = unknown> implements RowModel<TData> {
 	private readonly runtime: ServerRowModelRuntime<TData>;
-	private datasource: IGridDatasource;
+	private datasource: IGridDatasource<TData>;
 	private blockSize: number;
 	private activeNodes: Array<RowNode<TData> | null> = [];
 	private visualRows: Array<VisualRow<TData> | null> = [];
@@ -60,7 +60,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.fetchBlock(0);
 	}
 
-	public setDatasource(datasource: IGridDatasource, blockSize: number = this.blockSize): void {
+	public setDatasource(datasource: IGridDatasource<TData>, blockSize: number = this.blockSize): void {
 		this.datasource = datasource;
 		this.blockSize = blockSize;
 		this.purgeCache();

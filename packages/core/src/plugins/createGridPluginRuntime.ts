@@ -98,6 +98,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		saveNow: source.saveNow,
 		getRuntimeFaults: source.getRuntimeFaults,
 		clearRuntimeFaults: source.clearRuntimeFaults,
+		flushCellUpdatesSync: source.flushCellUpdatesSync,
 		reportRuntimeFault: source.reportRuntimeFault,
 		destroy: source.destroy,
 		getCellState: source.getCellState,

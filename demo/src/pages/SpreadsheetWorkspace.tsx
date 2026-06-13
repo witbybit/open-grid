@@ -65,10 +65,10 @@ export default function SpreadsheetWorkspace({
 		readSelection();
 		const unsubSelection = api.subscribeToKey('selection', readSelection);
 		const unsubCell = api.addEventListener(GridEventName.cellValueChanged, (event) => {
-			const { rowId, colField, val } = event.detail || {};
+			const { rowId, colField, newValue } = event.payload;
 			setFormulaText((current) => {
 				if (!focusedCell || focusedCell.rowId !== rowId || focusedCell.colField !== colField || isEditingRef.current) return current;
-				return String(val ?? '');
+				return String(newValue ?? '');
 			});
 		});
 		return () => {
@@ -235,9 +235,7 @@ export default function SpreadsheetWorkspace({
 						getRowId={(row) => row.id}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
-						onCellValueChanged={onCellValueChanged}
-						editTrigger={editTrigger}
-						arrowKeyNavigationEdit={arrowKeyNavigationEdit}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
 						enableContextMenu={contextMenuEnabled}
 						contextMenuOptions={customContextMenuOptions}
 						onGridReady={(event) => {

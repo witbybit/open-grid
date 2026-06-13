@@ -20,7 +20,7 @@ export default function HeadlessSkinsPlayground({
 }: HeadlessSkinsPlaygroundProps) {
 	const [activeTheme, setActiveTheme] = useState<SkinTheme>('slate');
 	const [copied, setCopied] = useState(false);
-	const rows = useMemo(() => generatePerformanceRows(1000), []);
+	const rows = useMemo(() => generatePerformanceRows(1000, 'R'), []);
 	const columns = useMemo(() => createSkinsColumns(), []);
 
 	const themesInfo = {
@@ -392,10 +392,7 @@ export default function HeadlessSkinsPlayground({
 						getRowId={(row) => row.id}
 						pinLeftColumns={1}
 						pinRightColumns={1}
-						onCellValueChanged={onCellValueChanged}
-						editTrigger={editTrigger}
-						arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-						className='!border-0 !rounded-none !bg-transparent !shadow-none'
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
 						onGridReady={onGridReady}
 					/>
 				</div>

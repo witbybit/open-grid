@@ -281,7 +281,7 @@ export interface GridApi<TRowData = unknown> {
 	setRowHeights: (rowHeights: Record<string, number> | undefined) => void;
 	setDefaultRowHeight: (defaultRowHeight?: number | undefined) => void;
 	purgeCache(): void;
-	setServerDatasource(datasource: IGridDatasource, blockSize?: number): void;
+	setServerDatasource(datasource: IGridDatasource<TRowData>, blockSize?: number): void;
 	getCellValue(rowId: string, colField: string): unknown;
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
@@ -391,6 +391,8 @@ export interface GridApi<TRowData = unknown> {
 	getRuntimeFaults(): RuntimeFault[];
 	/** Clears the captured runtime fault history. */
 	clearRuntimeFaults(): void;
+	/** Synchronously flushes all pending cell update notifications. Use when you need to ensure repaints happen before the next frame. */
+	flushCellUpdatesSync(): void;
 	destroy(): void;
 }
 

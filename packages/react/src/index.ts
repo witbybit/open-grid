@@ -76,4 +76,4 @@ export type {
 	GridReadyEvent,
 } from './types.js';
 
-export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';
+export type { GridContextMenuOptions, GridContextMenuItem, GridCellPointer, HeaderMenuRendererProps } from '@open-grid/core';

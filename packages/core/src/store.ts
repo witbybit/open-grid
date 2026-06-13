@@ -640,7 +640,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.getRowModel()?.purgeCache?.();
 	};
 
-	public setServerDatasource = (datasource: IGridDatasource, blockSize?: number): void => {
+	public setServerDatasource = (datasource: IGridDatasource<TRowData>, blockSize?: number): void => {
 		this.getRowModel()?.setDatasource?.(datasource, blockSize);
 	};
 

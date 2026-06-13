@@ -132,7 +132,7 @@ export default function App() {
 			activeApi.setCellValue(row.id, 'price', (Math.floor(Math.random() * 150) + 10).toString());
 			activeApi.setCellValue(row.id, 'quantity', (Math.floor(Math.random() * 60) + 15).toString());
 		});
-		activeApi.refreshCells();
+		activeApi.flushCellUpdatesSync();
 		performance.measure('open-grid-demo-bulk-calculation', { start, end: performance.now() });
 		performance.mark('open-grid-demo-grid-action');
 	}, [activeApi]);

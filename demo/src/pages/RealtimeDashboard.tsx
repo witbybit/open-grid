@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Grid, GridEventName, type GridApi, type GridContextMenuOptions, type GridReadyEvent, type StyleRule } from '@open-grid/react';
 import { Activity, BarChart3, Code2, RefreshCw, TrendingUp, Zap } from 'lucide-react';
-import { createDashboardColumns, createDashboardRows, type DashboardStockRow } from './demoGridConfigs';
+import { createDashboardColumns, createDashboardRows } from './demoGridConfigs';
+import type { DashboardStockRow } from '../components/FastRenderers';
 
 interface RealtimeDashboardProps {
 	editTrigger: 'singleClick' | 'doubleClick';
