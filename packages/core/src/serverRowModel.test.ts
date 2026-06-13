@@ -332,7 +332,9 @@ describe('ServerRowModelController', () => {
 			columns: [{ field: 'name', header: 'Name' }],
 		});
 		const runtimeFault = vi.fn();
+		const blockLoadFailed = vi.fn();
 		store.addEventListener(GridEventName.runtimeFault, runtimeFault);
+		store.addEventListener(GridEventName.serverBlockLoadFailed, blockLoadFailed);
 
 		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: {
@@ -361,6 +363,16 @@ describe('ServerRowModelController', () => {
 					operation: 'fetch-block',
 				}),
 			])
+		);
+		expect(blockLoadFailed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					blockIndex: 0,
+					startRow: 0,
+					endRow: 49,
+					message: 'network down',
+				}),
+			})
 		);
 		expect(store.getState().loading).toBe(false);
 

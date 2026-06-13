@@ -1,40 +1,41 @@
 # Plans
 
-| #   | Plan                                                                                            | Status   | Commit  |
-| --- | ----------------------------------------------------------------------------------------------- | -------- | ------- |
-| 001 | [Row Multi-Select](./001-row-multiselect.md)                                                    | DONE     | 3d32692 |
-| 002 | [ColumnType Registry](./002-column-type-registry.md)                                            | DONE     | 970c777 |
-| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                               | DONE     | 970c777 |
-| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                                     | DONE     | 970c777 |
-| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                                     | DONE     | 66c92c2 |
-| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                             | DONE     | 66c92c2 |
-| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)               | DONE     | 66c92c2 |
-| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)                 | DONE     | 66c92c2 |
-| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                         | TODO     | 78e8122 |
-| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                             | DONE     | 53fe61f |
-| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                         | DONE     | 39c83e3 |
-| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)                       | DONE     | 39c83e3 |
-| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                           | DONE     | 94c9453 |
-| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                                       | DONE     | 94c9453 |
-| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                                 | DONE     | 0f93724 |
-| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                             | DONE     | 6b3ecc5 |
-| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                               | DONE     | bb60b76 |
-| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)               | DONE     | 4ee5ea4 |
-| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md)           | DONE     | 37a3494 |
-| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)                 | DONE     | e530b52 |
-| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)                       | DONE     | 15e4809 |
-| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                                   | DONE     | 15e4809 |
-| 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md)         | DONE     | 05f3eed |
-| 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)               | DONE     | 9a1b82a |
-| 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md)       | DONE     | 04b846d |
-| 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)          | DONE     | 10ef28a |
-| 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md) | DONE     | 1015f23 |
-| 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                       | REJECTED | e86e886 |
-| 029 | [React Hook Lifecycle Contract Hardening](./029-react-hook-lifecycle-contract-hardening.md)     | DONE     | d79c342 |
-| 030 | [Single Grid Entrypoint Migration](./030-single-grid-entrypoint-migration.md)                   | DONE     | 4fd7cff |
-| 031 | [Runtime Fault Surface Completion](./031-runtime-fault-surface-completion.md)                   | DONE     | 4d3b9fc |
-| 032 | [Single Grid Entrypoint Lockdown](./032-single-grid-entrypoint-lockdown.md)                     | DONE     | c5903df |
-| 033 | [Plan Reconciliation And Release Hardening](./033-plan-reconciliation-and-release-hardening.md) | DONE     | 54d4803 |
+| #   | Plan                                                                                            | Status   | Commit       |
+| --- | ----------------------------------------------------------------------------------------------- | -------- | ------------ |
+| 001 | [Row Multi-Select](./001-row-multiselect.md)                                                    | DONE     | 3d32692      |
+| 002 | [ColumnType Registry](./002-column-type-registry.md)                                            | DONE     | 970c777      |
+| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                               | DONE     | 970c777      |
+| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                                     | DONE     | 970c777      |
+| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                                     | DONE     | 66c92c2      |
+| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                             | DONE     | 66c92c2      |
+| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)               | DONE     | 66c92c2      |
+| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)                 | DONE     | 66c92c2      |
+| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                         | TODO     | 78e8122      |
+| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                             | DONE     | 53fe61f      |
+| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                         | DONE     | 39c83e3      |
+| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)                       | DONE     | 39c83e3      |
+| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                           | DONE     | 94c9453      |
+| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                                       | DONE     | 94c9453      |
+| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                                 | DONE     | 0f93724      |
+| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                             | DONE     | 6b3ecc5      |
+| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                               | DONE     | bb60b76      |
+| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)               | DONE     | 4ee5ea4      |
+| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md)           | DONE     | 37a3494      |
+| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)                 | DONE     | e530b52      |
+| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)                       | DONE     | 15e4809      |
+| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                                   | DONE     | 15e4809      |
+| 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md)         | DONE     | 05f3eed      |
+| 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)               | DONE     | 9a1b82a      |
+| 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md)       | DONE     | 04b846d      |
+| 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)          | DONE     | 10ef28a      |
+| 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md) | DONE     | 1015f23      |
+| 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                       | REJECTED | e86e886      |
+| 029 | [React Hook Lifecycle Contract Hardening](./029-react-hook-lifecycle-contract-hardening.md)     | DONE     | d79c342      |
+| 030 | [Single Grid Entrypoint Migration](./030-single-grid-entrypoint-migration.md)                   | DONE     | 4fd7cff      |
+| 031 | [Runtime Fault Surface Completion](./031-runtime-fault-surface-completion.md)                   | DONE     | 4d3b9fc      |
+| 032 | [Single Grid Entrypoint Lockdown](./032-single-grid-entrypoint-lockdown.md)                     | DONE     | c5903df      |
+| 033 | [Plan Reconciliation And Release Hardening](./033-plan-reconciliation-and-release-hardening.md) | DONE     | 54d4803      |
+| 034 | [Server Grid Polish Foundation](./034-server-grid-polish-foundation.md)                         | DONE     | working tree |
 
 ## Execution order
 
@@ -143,6 +144,7 @@
 - Plan 031 is implemented and verified on 2026-06-13: context-menu clipboard failures, custom aggregation failures, fill-drag failures, and header callback failures now route through runtime diagnostics instead of scattered production `console.error` calls. The typed plugin runtime now exposes `reportRuntimeFault`, and architecture guards cover the newly normalized paths.
 - Plan 032 is implemented and verified on 2026-06-13: the React package now exposes `Grid` as the only public grid entrypoint, `ownedGrid.ts` is gone, architecture guards fail if the demo imports core or owned-grid internals, and the core/React/demo verification gates passed.
 - Plan 033 reconciled stale backlog statuses on 2026-06-13 after verifying live row multi-select evidence, single-`Grid` architecture guards, and green core/React/demo build and test gates.
+- Plan 034 is implemented and verified on 2026-06-13: server block fetch failures now emit a first-class grid event, the server demo shows active loading plus retryable failure telemetry, built-in `Grid` pagination now drives server page fetches without scroll-jump wiring, and the sidebar distinguishes total selected ids from currently loaded selected rows.
 - Plan 001 is implemented and verified on 2026-06-13: row multi-select state/tests live in `packages/core/src/store.test.ts`, the public API is exercised by `demo/src/pages/RowMultiSelectDemo.tsx`, and the core/React/demo verification gates passed.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 

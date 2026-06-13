@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Grid, GridEventName, GridPagination } from '@open-grid/react';
+import { Grid, GridEventName } from '@open-grid/react';
 import type { GridApi, GridReadyEvent } from '@open-grid/react';
 import { Terminal, Server, Activity, ShieldAlert, Cpu } from 'lucide-react';
 import { createServerColumns, createServerDatasource, createServerRows, type ServerAuditRow } from './demoGridConfigs';
@@ -19,9 +19,20 @@ type SeverityStats = {
 	infoDebug: number;
 };
 
-const SERVER_PAGE_SIZE = 5000;
-const SERVER_ROW_HEIGHT = 40;
+type ServerFailure = {
+	blockIndex: number;
+	startRow: number;
+	endRow: number;
+	message: string;
+} | null;
 
+type SelectionStats = {
+	totalSelectedIds: number;
+	loadedSelectedRows: number;
+	unloadedSelectedRows: number;
+};
+
+const SERVER_PAGE_SIZE = 5000;
 export default function InfiniteServerScroll({
 	editTrigger,
 	arrowKeyNavigationEdit,
@@ -37,17 +48,23 @@ export default function InfiniteServerScroll({
 	const [blockStats, setBlockStats] = useState({
 		loadedBlockStart: 0,
 		loadedBlockEnd: 0,
-		totalRecords: 100000,
+		totalRecords: rows.length,
 		durationMs: 0,
 	});
 
-	const [serverPage, setServerPage] = useState(0);
+	const [isLoading, setIsLoading] = useState(false);
+	const [lastFailure, setLastFailure] = useState<ServerFailure>(null);
 	const [latencyHistory, setLatencyHistory] = useState<number[]>([45, 80, 55, 120, 95, 60, 110, 85]);
 	const [severityStats, setSeverityStats] = useState<SeverityStats>({
 		totalLoaded: 0,
 		criticalError: 0,
 		warning: 0,
 		infoDebug: 0,
+	});
+	const [selectionStats, setSelectionStats] = useState<SelectionStats>({
+		totalSelectedIds: 0,
+		loadedSelectedRows: 0,
+		unloadedSelectedRows: 0,
 	});
 
 	const refreshSeverityStats = useCallback(() => {
@@ -73,6 +90,17 @@ export default function InfiniteServerScroll({
 		setSeverityStats({ totalLoaded, criticalError, warning, infoDebug });
 	}, [api]);
 
+	const refreshSelectionStats = useCallback(() => {
+		if (!api) return;
+		const totalSelectedIds = api.rows().getCheckedIds().length;
+		const loadedSelectedRows = api.rows().getChecked().length;
+		setSelectionStats({
+			totalSelectedIds,
+			loadedSelectedRows,
+			unloadedSelectedRows: Math.max(0, totalSelectedIds - loadedSelectedRows),
+		});
+	}, [api]);
+
 	useEffect(() => {
 		if (!api) return;
 		const handleBlockLoaded = (event: {
@@ -84,36 +112,51 @@ export default function InfiniteServerScroll({
 			};
 		}) => {
 			const { loadedBlockStart, loadedBlockEnd, totalRecords, durationMs } = event.payload || {};
-			setBlockStats({
+			setBlockStats((prev) => ({
 				loadedBlockStart: loadedBlockStart ?? 0,
 				loadedBlockEnd: loadedBlockEnd ?? 0,
-				totalRecords: totalRecords ?? 100000,
+				totalRecords: Math.max(prev.totalRecords, totalRecords ?? 0, rows.length),
 				durationMs: durationMs ?? 0,
-			});
+			}));
 
 			if (durationMs !== undefined) {
 				setLatencyHistory((prev) => [...prev.slice(-9), Math.round(durationMs)]);
 			}
 
 			refreshSeverityStats();
+			refreshSelectionStats();
+		};
+		const handleBlockLoadFailed = (event: { payload: { blockIndex: number; startRow: number; endRow: number; message: string } }) => {
+			setLastFailure(event.payload);
 		};
 
 		const clearSeverityStats = () => {
 			setSeverityStats({ totalLoaded: 0, criticalError: 0, warning: 0, infoDebug: 0 });
 		};
+		const syncLoading = () => {
+			setIsLoading(!!api.getState().loading);
+		};
 
 		refreshSeverityStats();
+		refreshSelectionStats();
+		syncLoading();
 		const unsubBlockLoaded = api.addEventListener(GridEventName.serverBlockLoaded, handleBlockLoaded);
+		const unsubBlockLoadFailed = api.addEventListener(GridEventName.serverBlockLoadFailed, handleBlockLoadFailed);
 		const unsubCellValueChanged = api.addEventListener(GridEventName.cellValueChanged, refreshSeverityStats);
+		const unsubSelectionChanged = api.addEventListener(GridEventName.rowSelectionChanged, refreshSelectionStats);
 		const unsubSortChanged = api.addEventListener(GridEventName.sortChanged, clearSeverityStats);
 		const unsubFilterChanged = api.addEventListener(GridEventName.filterChanged, clearSeverityStats);
+		const unsubLoading = api.subscribeToKey('loading', syncLoading);
 		return () => {
 			unsubBlockLoaded();
+			unsubBlockLoadFailed();
 			unsubCellValueChanged();
+			unsubSelectionChanged();
 			unsubSortChanged();
 			unsubFilterChanged();
+			unsubLoading();
 		};
-	}, [api, refreshSeverityStats]);
+	}, [api, refreshSeverityStats, refreshSelectionStats]);
 
 	const severityDistribution = useMemo(() => {
 		const total = severityStats.totalLoaded;
@@ -164,6 +207,16 @@ export default function InfiniteServerScroll({
 						columns={columns}
 						datasource={datasource}
 						blockSize={100}
+						// pagination={{
+						// 	pageSize: SERVER_PAGE_SIZE,
+						// 	style: {
+						// 		background: 'rgba(15,23,42,0.6)',
+						// 		border: '1px solid #1e293b',
+						// 		borderRadius: '8px',
+						// 		color: '#94a3b8',
+						// 		flexShrink: 0,
+						// 	},
+						// }}
 						getRowId={(row) => row.id}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
@@ -171,28 +224,30 @@ export default function InfiniteServerScroll({
 						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged: () => {} }}
 						onGridReady={(event) => {
 							setApi(event.api);
+							setIsLoading(!!event.api.getState().loading);
 							onGridReady?.(event);
 						}}
 					/>
 				</div>
-				<GridPagination
-					page={serverPage}
-					pageCount={Math.ceil(blockStats.totalRecords / SERVER_PAGE_SIZE)}
-					totalRows={blockStats.totalRecords}
-					pageSize={SERVER_PAGE_SIZE}
-					onPageChange={(p) => {
-						setServerPage(p);
-						const viewport = gridHostRef.current?.querySelector<HTMLElement>('.og-scroll-viewport');
-						if (viewport) viewport.scrollTop = p * SERVER_PAGE_SIZE * SERVER_ROW_HEIGHT;
-					}}
-					style={{
-						background: 'rgba(15,23,42,0.6)',
-						border: '1px solid #1e293b',
-						borderRadius: '8px',
-						color: '#94a3b8',
-						flexShrink: 0,
-					}}
-				/>
+				<div className='flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-[10px] font-mono text-slate-300'>
+					<div className='flex items-center gap-2'>
+						<span className={`h-2 w-2 rounded-full ${isLoading ? 'bg-cyan-400 animate-pulse' : 'bg-emerald-400'}`} />
+						<span>{isLoading ? 'Loading server blocks' : 'Server blocks idle'}</span>
+						{lastFailure ? <span className='rounded bg-rose-950/60 px-2 py-0.5 text-rose-300'>Last fetch failed</span> : null}
+					</div>
+					{lastFailure ? (
+						<button
+							type='button'
+							onClick={() => {
+								setLastFailure(null);
+								api?.purgeCache();
+							}}
+							className='rounded border border-rose-700/60 bg-rose-950/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-rose-200'
+						>
+							Retry Block Load
+						</button>
+					) : null}
+				</div>
 			</div>
 
 			{/* Right Column: Auditor Telemetry Sidebar */}
@@ -228,6 +283,14 @@ export default function InfiniteServerScroll({
 								<span className='font-mono text-xs font-bold text-slate-200'>{blockStats.totalRecords.toLocaleString()}</span>
 							</div>
 						</div>
+						{lastFailure ? (
+							<div className='rounded-lg border border-rose-900/70 bg-rose-950/25 p-2.5 text-[9px] text-rose-200'>
+								<div className='font-extrabold uppercase tracking-wider text-rose-300'>Block fetch failure</div>
+								<div className='mt-1 font-mono'>
+									Block {lastFailure.blockIndex} ({lastFailure.startRow}-{lastFailure.endRow}): {lastFailure.message}
+								</div>
+							</div>
+						) : null}
 					</div>
 
 					<div className='border-t border-slate-900/60 pt-3 mt-1 flex flex-col gap-2.5'>
@@ -272,6 +335,31 @@ export default function InfiniteServerScroll({
 							</div>
 						</div>
 					</div>
+				</div>
+
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden'>
+					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+						<Server className='w-4 h-4 text-violet-400' />
+						Selection Persistence Monitor
+					</h3>
+					<div className='grid grid-cols-1 gap-2 text-[9px] font-mono'>
+						<div className='flex items-center justify-between rounded border border-slate-900 bg-slate-950/60 px-2.5 py-2'>
+							<span className='text-slate-400 uppercase tracking-wider'>Selected Row IDs</span>
+							<span className='text-slate-100 font-bold'>{selectionStats.totalSelectedIds}</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-emerald-950/50 bg-emerald-950/15 px-2.5 py-2'>
+							<span className='text-emerald-300 uppercase tracking-wider'>Loaded Selected Rows</span>
+							<span className='text-emerald-100 font-bold'>{selectionStats.loadedSelectedRows}</span>
+						</div>
+						<div className='flex items-center justify-between rounded border border-amber-950/50 bg-amber-950/15 px-2.5 py-2'>
+							<span className='text-amber-300 uppercase tracking-wider'>Pending Unloaded Selection</span>
+							<span className='text-amber-100 font-bold'>{selectionStats.unloadedSelectedRows}</span>
+						</div>
+					</div>
+					<p className='text-[9px] text-slate-500 leading-relaxed font-medium mt-1'>
+						Checked row ids persist even when their blocks are not mounted. The loaded count catches back up as those blocks stream back
+						in.
+					</p>
 				</div>
 
 				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3 glass-card relative overflow-hidden'>

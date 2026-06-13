@@ -38,6 +38,7 @@ export enum GridEventName {
 	runtimeFault = 'runtimeFault',
 	selectionChanged = 'selectionChanged',
 	serverBlockLoaded = 'serverBlockLoaded',
+	serverBlockLoadFailed = 'serverBlockLoadFailed',
 	showGroupFooterChanged = 'showGroupFooterChanged',
 	sortChanged = 'sortChanged',
 }
@@ -78,6 +79,12 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 		loadedBlockEnd: number;
 		totalRecords: number;
 		durationMs: number;
+	};
+	[GridEventName.serverBlockLoadFailed]: {
+		blockIndex: number;
+		startRow: number;
+		endRow: number;
+		message: string;
 	};
 	[GridEventName.showGroupFooterChanged]: { showGroupFooter: boolean | undefined };
 	[GridEventName.sortChanged]: { sortModel: SortModel | null };

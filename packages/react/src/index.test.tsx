@@ -1428,6 +1428,79 @@ describe('useClientGridPagination', () => {
 	});
 });
 
+describe('Grid pagination prop', () => {
+	it('paginates client rows without requiring a separate pagination component', async () => {
+		const rows: TestRow[] = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Cara' },
+			{ id: '4', name: 'Dane' },
+			{ id: '5', name: 'Elle' },
+		];
+
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid
+					mode='client'
+					rows={rows}
+					columns={[{ field: 'name', header: 'Name', width: 120 }]}
+					getRowId={(row: TestRow) => row.id}
+					enableNavigation={false}
+					pagination={{ pageSize: 2 }}
+				/>
+			</div>
+		);
+
+		await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
+		expect(screen.getByRole('navigation', { name: 'Pagination' })).toBeTruthy();
+		expect(screen.queryByText('Cara')).toBeNull();
+
+		fireEvent.click(screen.getByLabelText('Page 2'));
+
+		await waitFor(() => expect(screen.getByText('Cara')).toBeTruthy());
+		expect(screen.queryByText('Alice')).toBeNull();
+		expect(screen.getByText((content) => content.includes('of 5'))).toBeTruthy();
+	});
+
+	it('paginates server rows and shifts datasource fetches by page automatically', async () => {
+		const rows: TestRow[] = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Cara' },
+			{ id: '4', name: 'Dane' },
+			{ id: '5', name: 'Elle' },
+		];
+		const getRows = vi.fn(async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
+			rows: rows.slice(startRow, endRow),
+			totalCount: rows.length,
+		}));
+
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid
+					mode='server'
+					columns={[{ field: 'name', header: 'Name', width: 120 }]}
+					datasource={{ getRows }}
+					getRowId={(row: TestRow) => row.id}
+					blockSize={2}
+					enableNavigation={false}
+					pagination={{ pageSize: 2 }}
+				/>
+			</div>
+		);
+
+		await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
+		expect(getRows.mock.calls.some(([params]) => params.startRow === 0 && params.endRow === 2)).toBe(true);
+
+		await waitFor(() => expect(screen.getByLabelText('Page 2')).toBeTruthy());
+		fireEvent.click(screen.getByLabelText('Page 2'));
+
+		await waitFor(() => expect(getRows.mock.calls.some(([params]) => params.startRow === 2 && params.endRow === 4)).toBe(true));
+		await waitFor(() => expect(screen.getByText('Cara')).toBeTruthy());
+		expect(screen.queryByText('Alice')).toBeNull();
+	});
+});
+
 describe('explicit React entrypoints', () => {
 	it('exposes Grid as the only public grid entrypoint', () => {
 		expect(ReactPackage.Grid).toBeDefined();

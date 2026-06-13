@@ -74,6 +74,7 @@ export type {
 	DomCellRendererParams,
 	ImperativeCellHandle,
 	GridReadyEvent,
+	GridPaginationOptions,
 } from './types.js';
 
 export type { GridContextMenuOptions, GridContextMenuItem, GridCellPointer, HeaderMenuRendererProps } from '@open-grid/core';

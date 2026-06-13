@@ -78,5 +78,6 @@ export interface ServerRowModelRuntime<TRowData = unknown> extends RowModelRunti
 	getScrollVelocity: () => { vx: number; vy: number };
 	setLoadingState: (loading: boolean) => void;
 	dispatchServerBlockLoaded: (payload: GridEventPayloadMap<TRowData>[GridEventName.serverBlockLoaded]) => void;
+	dispatchServerBlockLoadFailed: (payload: GridEventPayloadMap<TRowData>[GridEventName.serverBlockLoadFailed]) => void;
 	reportBlockLoadFailure: (blockIndex: number, error: unknown) => void;
 }

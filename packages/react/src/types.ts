@@ -1,3 +1,4 @@
+import type { CSSProperties, ReactNode } from 'react';
 import type {
 	ColumnDef,
 	CellEditorProps,
@@ -74,6 +75,17 @@ export type {
 type GridRenderOptions<TRowData> = Pick<GridState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;
 
 export type GridMode = 'client' | 'server';
+
+export interface GridPaginationOptions {
+	pageSize?: number;
+	initialPage?: number;
+	maxPageButtons?: number;
+	className?: string;
+	style?: CSSProperties;
+	renderPrevButton?: (disabled: boolean) => ReactNode;
+	renderNextButton?: (disabled: boolean) => ReactNode;
+	renderPageInfo?: (page: number, pageCount: number, totalRows?: number) => ReactNode;
+}
 
 export interface GridReadyEvent<TRowData = unknown> {
 	api: GridApi<TRowData>;

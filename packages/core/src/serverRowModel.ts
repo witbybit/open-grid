@@ -6,6 +6,12 @@ import { RowNode } from './rowNode.js';
 import { toDataVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
 
+function toErrorMessage(error: unknown): string {
+	if (error instanceof Error && error.message) return error.message;
+	if (typeof error === 'string' && error.length > 0) return error;
+	return 'Unknown server block load failure';
+}
+
 export interface GetRowsParams {
 	startRow: number;
 	endRow: number;
@@ -307,6 +313,12 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 			if (this.disposed || generation !== this.requestGeneration) {
 				return;
 			}
+			this.runtime.dispatchServerBlockLoadFailed({
+				blockIndex,
+				startRow,
+				endRow: endRow - 1,
+				message: toErrorMessage(error),
+			});
 			this.runtime.reportBlockLoadFailure(blockIndex, error);
 			delete this.loadingBlocks[blockIndex];
 			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
