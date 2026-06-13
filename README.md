@@ -241,7 +241,7 @@ To configure tree data, specify the `getParentId` function inside `initialState`
 
 ```tsx
 import React, { useMemo } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps } from '@open-grid/react';
+import { Grid, type ColumnDef, type CellRendererProps } from '@open-grid/react';
 
 interface FileNode {
 	id: string;
@@ -275,7 +275,7 @@ export function FileDirectoryGrid({ nodes }: { nodes: FileNode[] }) {
 
 	return (
 		<div style={{ height: '400px' }}>
-			<OpenGrid rows={nodes} columns={columns} initialState={{ getParentId: (row) => row.parentId, groupRowHeight: 38 }} />
+			<Grid mode='client' rows={nodes} columns={columns} initialState={{ getParentId: (row) => row.parentId, groupRowHeight: 38 }} />
 		</div>
 	);
 }
@@ -293,7 +293,7 @@ Enable master-detail by setting `masterDetailEnabled: true` in your options, and
 
 ```tsx
 import React, { useMemo, useCallback } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type VisualRow, type GridApi, type CellRendererProps } from '@open-grid/react';
+import { Grid, type ColumnDef, type VisualRow, type GridApi, type CellRendererProps } from '@open-grid/react';
 
 interface OrderRow {
 	id: string;
@@ -340,18 +340,11 @@ const NestedItemsGrid = ({ visualRow, parentApi }: { visualRow: VisualRow<OrderR
 		[]
 	);
 
-	const detailApi = useClientGrid<OrderItemRow>({
-		rows: items,
-		columns: detailColumns,
-	});
-
 	return (
 		<div className='w-full h-full p-4 pl-12 bg-slate-950/90 border-b border-slate-900 flex flex-col gap-2 relative'>
 			<div className='text-[10px] text-purple-400 uppercase tracking-widest font-extrabold'>Order Line Items (Parent ID: {parentOrderId})</div>
 			<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-900'>
-				<GridProvider api={detailApi}>
-					<OpenGrid enableNavigation={true} />
-				</GridProvider>
+				<Grid mode='client' rows={items} columns={detailColumns} enableNavigation={true} />
 			</div>
 		</div>
 	);
@@ -374,7 +367,8 @@ export function MasterOrdersGrid({ orders }: { orders: OrderRow[] }) {
 
 	return (
 		<div style={{ height: '600px' }}>
-			<OpenGrid
+			<Grid
+				mode='client'
 				rows={orders}
 				columns={masterColumns}
 				initialState={{ masterDetailEnabled: true }}
@@ -483,7 +477,7 @@ const columns: ColumnDef<Row>[] = [
 Types that need runtime config (options list, formatting, bounds) are registered in the `columnTypes` prop using the helper factories. The type name is then referenced in `ColumnDef.type` exactly like a built-in.
 
 ```tsx
-import { multiSelectColumnType, dropdownColumnType, numberColumnType, type ColumnTypeDefinition, type DropdownOption } from '@open-grid/react';
+import { Grid, multiSelectColumnType, dropdownColumnType, numberColumnType, type ColumnDef, type ColumnTypeDefinition, type DropdownOption } from '@open-grid/react';
 
 const STATUS_OPTIONS: DropdownOption[] = [
 	{ value: 'Active', color: 'emerald' },
@@ -511,7 +505,9 @@ const columns: ColumnDef<EmployeeRow>[] = [
 	{ field: 'isPro', header: 'Pro', width: 68, type: 'checkbox' },
 ];
 
-const api = useClientGrid<EmployeeRow>({ rows, columns, columnTypes: MY_COLUMN_TYPES });
+export function EmployeesGrid({ rows }: { rows: EmployeeRow[] }) {
+	return <Grid mode='client' rows={rows} columns={columns} columnTypes={MY_COLUMN_TYPES} />;
+}
 ```
 
 Column-level `renderer` / `cellEditor` always override a type — so you can use a type as a default and override on specific columns.
@@ -532,10 +528,10 @@ Column-level `renderer` / `cellEditor` always override a type — so you can use
 
 #### Passing rules as a prop
 
-When you own the grid via `useClientGrid` or `<OpenGrid>`, pass `styleRules` directly:
+When you own the grid via `<Grid>`, pass `styleRules` directly:
 
 ```tsx
-import { useClientGrid, type StyleRule } from '@open-grid/react';
+import { Grid, type ColumnDef, type StyleRule } from '@open-grid/react';
 
 const styleRules = useMemo<StyleRule<OrderRow>[]>(
 	() => [
@@ -568,19 +564,22 @@ const styleRules = useMemo<StyleRule<OrderRow>[]>(
 	[]
 );
 
-const api = useClientGrid<OrderRow>({ rows, columns, styleRules });
+export function OrdersGrid({ rows, columns }: { rows: OrderRow[]; columns: ColumnDef<OrderRow>[] }) {
+	return <Grid mode='client' rows={rows} columns={columns} styleRules={styleRules} />;
+}
 ```
 
 All matching rules contribute their class strings (space-joined), so rules are composable. Evaluate order follows array order — later rules can override earlier ones via the CSS cascade.
 
 #### `useStyleRules` — for components that receive `api` as a prop
 
-When a component receives an API handle from a parent (rather than owning it via `useClientGrid`), use the `useStyleRules` hook to apply rules without touching `api.setStyleSlots` directly:
+When a component needs to apply rules from inside the grid tree, use `useGridApi` + `useStyleRules` rather than touching `api.setStyleSlots` directly:
 
 ```tsx
-import { useStyleRules, type StyleRule } from '@open-grid/react';
+import { Grid, useGridApi, useStyleRules, type ColumnDef, type StyleRule } from '@open-grid/react';
 
-function DashboardGrid({ api }: { api: GridApi<StockRow> }) {
+function DashboardRules() {
+	const api = useGridApi<StockRow>();
 	const styleRules = useMemo<StyleRule<StockRow>[]>(
 		() => [
 			{
@@ -604,8 +603,15 @@ function DashboardGrid({ api }: { api: GridApi<StockRow> }) {
 	);
 
 	useStyleRules(api, styleRules); // compiles and applies; re-applies when rules reference changes
+	return null;
+}
 
-	return <GridView api={api} />;
+function DashboardGrid({ rows, columns }: { rows: StockRow[]; columns: ColumnDef<StockRow>[] }) {
+	return (
+		<Grid mode='client' rows={rows} columns={columns}>
+			<DashboardRules />
+		</Grid>
+	);
 }
 ```
 
@@ -763,7 +769,7 @@ api.batch(() => {
 Style rows, cells, and header cells declaratively using an array of rule objects. The grid compiles them internally — no separate compiler call needed:
 
 ```tsx
-import { useClientGrid, type StyleRule } from '@open-grid/react';
+import { Grid, type ColumnDef, type StyleRule } from '@open-grid/react';
 
 const styleRules = useMemo<StyleRule<ProductRow>[]>(
 	() => [
@@ -788,7 +794,9 @@ const styleRules = useMemo<StyleRule<ProductRow>[]>(
 	[]
 );
 
-const api = useClientGrid<ProductRow>({ rows, columns, styleRules });
+export function ProductGrid({ rows, columns }: { rows: ProductRow[]; columns: ColumnDef<ProductRow>[] }) {
+	return <Grid mode='client' rows={rows} columns={columns} styleRules={styleRules} />;
+}
 ```
 
 For components that receive `api` as a prop, use the `useStyleRules` hook instead — see [Declarative Style Rules](#6-declarative-style-rules) for the full guide.
@@ -947,7 +955,7 @@ const PriceEditor = ({ value, rowId, colField, api, onCommit, onCancel }: CellEd
 The `GridDatasource` interface has a single `getRows` method. Open Grid calls it as the user scrolls into un-loaded blocks, passing the row range and the current sort/filter models.
 
 ```tsx
-import { useServerGrid, GridPagination, GridProvider, OpenGrid, type GridDatasource, type SortModel, type FilterModel } from '@open-grid/react';
+import { Grid, GridPagination, type GridDatasource, type SortModel, type FilterModel } from '@open-grid/react';
 
 interface LogRow {
 	id: string;
@@ -1010,23 +1018,20 @@ export function ServerLogGrid() {
 		[]
 	);
 
-	const api = useServerGrid<LogRow>({ datasource, columns, blockSize: 100 });
 
 	return (
-		<GridProvider api={api}>
-			<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
-				<div style={{ flex: 1, minHeight: 0 }}>
-					<OpenGrid />
-				</div>
-				<GridPagination
+		<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
+			<div style={{ flex: 1, minHeight: 0 }}>
+				<Grid mode='server' datasource={datasource} columns={columns} blockSize={100} />
+			</div>
+			<GridPagination
 					page={page}
 					pageCount={200} // totalCount / PAGE_SIZE — update from first getRows response
 					totalRows={100_000}
 					pageSize={PAGE_SIZE}
 					onPageChange={setPage}
 				/>
-			</div>
-		</GridProvider>
+		</div>
 	);
 }
 ```
@@ -1065,14 +1070,14 @@ const columns: ColumnDef<LogRow>[] = [
 
 ## 🛠️ Toolbar & Bulk Actions
 
-Use `useGridApi()` inside any component wrapped by `<GridProvider>` to access the grid api for bulk operations.
+Use `useGridApi()` inside any component rendered beneath `<Grid>` to access the grid api for bulk operations.
 
 ### Selection-based bulk actions
 
 Open Grid's selection model tracks focused cell and range bounds. Read `state.selection` to derive which rows are selected:
 
 ```tsx
-import { useGridApi, useGridSelector, GridProvider, OpenGrid, useClientGrid } from '@open-grid/react';
+import { Grid, useGridApi, useGridSelector } from '@open-grid/react';
 
 function GridToolbar<TRowData extends { id: string }>() {
 	const api = useGridApi<TRowData>();
@@ -1118,16 +1123,12 @@ function GridToolbar<TRowData extends { id: string }>() {
 	);
 }
 
-// Usage: wrap in GridProvider so Toolbar can call useGridApi()
+// Usage: render the toolbar as a child so it shares the Grid api context
 export function MyGrid({ rows, columns }) {
-	const api = useClientGrid({ rows, columns });
 	return (
-		<GridProvider api={api}>
+		<Grid mode='client' rows={rows} columns={columns}>
 			<GridToolbar />
-			<div style={{ height: '500px' }}>
-				<OpenGrid />
-			</div>
-		</GridProvider>
+		</Grid>
 	);
 }
 ```
@@ -1167,7 +1168,8 @@ Open Grid ships full keyboard navigation out of the box when `enableNavigation` 
 Configure the edit trigger:
 
 ```tsx
-<OpenGrid
+<Grid
+	mode='client'
 	rows={rows}
 	columns={columns}
 	navigationOptions={{
@@ -1187,7 +1189,7 @@ The grid container renders with `tabIndex={-1}` to be focusable but removed from
 	<p id='grid-instructions' className='sr-only'>
 		Use arrow keys to navigate cells. Press Enter to edit. Press Escape to cancel editing. Hold Shift and use arrow keys to extend the selection.
 	</p>
-	<OpenGrid rows={rows} columns={columns} />
+	<Grid mode='client' rows={rows} columns={columns} />
 </div>
 ```
 

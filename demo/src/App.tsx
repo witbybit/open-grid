@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Layout } from 'lucide-react';
 import type { FilterModel, GridApi, GridReadyEvent } from '@open-grid/react';
 import { DemoGridApiScope } from './DemoGridContext';
@@ -7,21 +7,22 @@ import ShowroomLeftSidebar from './components/ShowroomLeftSidebar';
 import ShowroomTitleBanner from './components/ShowroomTitleBanner';
 import ShowroomRightSidebar from './components/ShowroomRightSidebar';
 import type { GridPageType } from './components/GridShared';
-import CalculationsArena from './pages/CalculationsArena';
-import InfiniteServerScroll from './pages/InfiniteServerScroll';
-import SpreadsheetWorkspace from './pages/SpreadsheetWorkspace';
-import CustomEditorRenderer from './pages/CustomEditorRenderer';
-import DynamicLayout from './pages/DynamicLayout';
-import HeadlessSkinsPlayground from './pages/HeadlessSkinsPlayground';
-import RealtimeDashboard from './pages/RealtimeDashboard';
-import GanttSchedulingWorkspace from './pages/GanttSchedulingWorkspace';
-import NestedTablesGrouping from './pages/NestedTablesGrouping';
-import PerformanceLab from './pages/PerformanceLab';
-import SidebarPanelsDemo from './pages/SidebarPanelsDemo';
-import NativeCellTypesDemo from './pages/NativeCellTypesDemo';
-import RealtimeGroupingDemo from './pages/RealtimeGroupingDemo';
-import RowMultiSelectDemo from './pages/RowMultiSelectDemo';
 import { layoutColumnsFull, setInactiveRiskSideEffects } from './pages/demoGridConfigs';
+
+const CalculationsArena = lazy(() => import('./pages/CalculationsArena'));
+const InfiniteServerScroll = lazy(() => import('./pages/InfiniteServerScroll'));
+const SpreadsheetWorkspace = lazy(() => import('./pages/SpreadsheetWorkspace'));
+const CustomEditorRenderer = lazy(() => import('./pages/CustomEditorRenderer'));
+const DynamicLayout = lazy(() => import('./pages/DynamicLayout'));
+const HeadlessSkinsPlayground = lazy(() => import('./pages/HeadlessSkinsPlayground'));
+const RealtimeDashboard = lazy(() => import('./pages/RealtimeDashboard'));
+const GanttSchedulingWorkspace = lazy(() => import('./pages/GanttSchedulingWorkspace'));
+const NestedTablesGrouping = lazy(() => import('./pages/NestedTablesGrouping'));
+const PerformanceLab = lazy(() => import('./pages/PerformanceLab'));
+const SidebarPanelsDemo = lazy(() => import('./pages/SidebarPanelsDemo'));
+const NativeCellTypesDemo = lazy(() => import('./pages/NativeCellTypesDemo'));
+const RealtimeGroupingDemo = lazy(() => import('./pages/RealtimeGroupingDemo'));
+const RowMultiSelectDemo = lazy(() => import('./pages/RowMultiSelectDemo'));
 
 const PAGES: readonly GridPageType[] = [
 	'perf',
@@ -39,6 +40,17 @@ const PAGES: readonly GridPageType[] = [
 	'grouping',
 	'multiselect',
 ];
+
+function GridPageFallback() {
+	return (
+		<div className='flex h-full min-h-0 flex-1 items-center justify-center rounded-xl border border-slate-900 bg-slate-950/40'>
+			<div className='flex flex-col items-center gap-2 text-center'>
+				<div className='h-10 w-10 animate-pulse rounded-full border border-slate-800 bg-slate-900/80' />
+				<p className='text-[11px] font-semibold uppercase tracking-wider text-slate-500'>Loading showroom</p>
+			</div>
+		</div>
+	);
+}
 
 function readActivePage(): GridPageType {
 	const hash = window.location.hash.slice(1);
@@ -190,6 +202,32 @@ export default function App() {
 		pinRightColumns,
 	};
 
+	const activePageContent = (() => {
+		if (activePage === 'perf') return <CalculationsArena {...commonGridProps} massiveColumns={massiveColumns} />;
+		if (activePage === 'server') return <InfiniteServerScroll {...commonGridProps} />;
+		if (activePage === 'ranges') return <SpreadsheetWorkspace {...commonGridProps} />;
+		if (activePage === 'editors') return <CustomEditorRenderer {...commonGridProps} />;
+		if (activePage === 'layout') {
+			return (
+				<DynamicLayout
+					{...commonGridProps}
+					rowHeightsMap={rowHeightsMap}
+					compactLayout={compactLayout}
+					visibleColumns={visibleColumns}
+				/>
+			);
+		}
+		if (activePage === 'skins') return <HeadlessSkinsPlayground {...commonGridProps} />;
+		if (activePage === 'dashboard') return <RealtimeDashboard {...commonGridProps} />;
+		if (activePage === 'gantt') return <GanttSchedulingWorkspace {...commonGridProps} />;
+		if (activePage === 'lab') return <PerformanceLab {...commonGridProps} />;
+		if (activePage === 'nested') return <NestedTablesGrouping {...commonGridProps} />;
+		if (activePage === 'panels') return <SidebarPanelsDemo {...commonGridProps} />;
+		if (activePage === 'native') return <NativeCellTypesDemo {...commonGridProps} />;
+		if (activePage === 'grouping') return <RealtimeGroupingDemo {...commonGridProps} />;
+		return <RowMultiSelectDemo {...commonGridProps} />;
+	})();
+
 	return (
 		<DemoGridApiScope value={contextValue}>
 			<div className='flex h-full w-full select-none flex-col overflow-hidden bg-slate-950 p-6 font-sans text-slate-100'>
@@ -233,27 +271,7 @@ export default function App() {
 							</div>
 						)}
 						<div className='flex min-h-0 flex-1 flex-col'>
-							{activePage === 'perf' && <CalculationsArena {...commonGridProps} massiveColumns={massiveColumns} />}
-							{activePage === 'server' && <InfiniteServerScroll {...commonGridProps} />}
-							{activePage === 'ranges' && <SpreadsheetWorkspace {...commonGridProps} />}
-							{activePage === 'editors' && <CustomEditorRenderer {...commonGridProps} />}
-							{activePage === 'layout' && (
-								<DynamicLayout
-									{...commonGridProps}
-									rowHeightsMap={rowHeightsMap}
-									compactLayout={compactLayout}
-									visibleColumns={visibleColumns}
-								/>
-							)}
-							{activePage === 'skins' && <HeadlessSkinsPlayground {...commonGridProps} />}
-							{activePage === 'dashboard' && <RealtimeDashboard {...commonGridProps} />}
-							{activePage === 'gantt' && <GanttSchedulingWorkspace {...commonGridProps} />}
-							{activePage === 'lab' && <PerformanceLab {...commonGridProps} />}
-							{activePage === 'nested' && <NestedTablesGrouping {...commonGridProps} />}
-							{activePage === 'panels' && <SidebarPanelsDemo {...commonGridProps} />}
-							{activePage === 'native' && <NativeCellTypesDemo {...commonGridProps} />}
-							{activePage === 'grouping' && <RealtimeGroupingDemo {...commonGridProps} />}
-							{activePage === 'multiselect' && <RowMultiSelectDemo {...commonGridProps} />}
+							<Suspense fallback={<GridPageFallback />}>{activePageContent}</Suspense>
 						</div>
 					</div>
 					{activeApi && (

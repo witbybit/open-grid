@@ -2,7 +2,7 @@
 
 | #   | Plan                                                                                            | Status | Commit       |
 | --- | ----------------------------------------------------------------------------------------------- | ------ | ------------ |
-| 001 | [Row Multi-Select](./001-row-multiselect.md)                                                    | TODO   | 3d32692      |
+| 001 | [Row Multi-Select](./001-row-multiselect.md)                                                    | DONE   | 3d32692      |
 | 002 | [ColumnType Registry](./002-column-type-registry.md)                                            | DONE   | 970c777      |
 | 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                               | DONE   | 970c777      |
 | 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                                     | DONE   | 970c777      |
@@ -29,11 +29,12 @@
 | 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md)       | DONE   | working tree |
 | 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)          | DONE   | working tree |
 | 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md) | DONE   | working tree |
-| 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                       | TODO   | 1015f23      |
+| 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                       | REJECTED | 1015f23    |
 | 029 | [React Hook Lifecycle Contract Hardening](./029-react-hook-lifecycle-contract-hardening.md)     | DONE   | working tree |
 | 030 | [Single Grid Entrypoint Migration](./030-single-grid-entrypoint-migration.md)                   | DONE   | working tree |
 | 031 | [Runtime Fault Surface Completion](./031-runtime-fault-surface-completion.md)                   | DONE   | working tree |
-| 032 | [Single Grid Entrypoint Lockdown](./032-single-grid-entrypoint-lockdown.md)                     | TODO   | 4d3b9fc      |
+| 032 | [Single Grid Entrypoint Lockdown](./032-single-grid-entrypoint-lockdown.md)                     | DONE   | 4d3b9fc      |
+| 033 | [Plan Reconciliation And Release Hardening](./033-plan-reconciliation-and-release-hardening.md) | DONE   | 54d4803      |
 
 ## Execution order
 
@@ -134,11 +135,13 @@
 - Plan 022 is the next renderer slice: move the live per-cell binding path through `rowCellBinder.ts` so the remaining RowRenderer pressure is mostly wrapper cleanup and slot-lifecycle ownership.
 - Plan 022 is implemented in the working tree and verified on 2026-06-12: the live lane path now routes per-cell policy through `rowCellBinder.ts`, architecture guards assert the binder boundary through `rowCellBindingLanes.ts`, and core/React/demo verification passed. `RowRenderer` is still 1599 lines because legacy wrapper bodies remain, so the next slice should delete the dead wrappers and continue shrinking toward a true slot-lifecycle shell.
 - Plan 027 is implemented in the working tree and verified on 2026-06-13: viewport/layout orchestration and scroll-into-view targeting now live in `renderViewportCoordinator.ts`, and `RenderEngine` delegates the last layout bridge.
-- Plan 028 is the next API lock-in step: split the React surface into explicit ownership/view entrypoints and migrate the demo to the better contract before go-live.
+- Plan 028 was superseded by the later `029` + `030` + `032` sequence and reconciled on 2026-06-13. Do not execute it independently; the public-surface goals it described were absorbed by the single-`Grid` rollout.
 - Plan 029 is implemented and verified on 2026-06-13: the React hook lifecycle now has explicit initial/live entrypoints, the wrapper components use that split internally, and the demo plus React package still build and test cleanly.
 - Plan 030 is the next API consolidation step: replace the remaining public grid variants with one discriminated-union `Grid` entrypoint and migrate the demo to it.
 - Plan 031 is implemented and verified on 2026-06-13: context-menu clipboard failures, custom aggregation failures, fill-drag failures, and header callback failures now route through runtime diagnostics instead of scattered production `console.error` calls. The typed plugin runtime now exposes `reportRuntimeFault`, and architecture guards cover the newly normalized paths.
-- Plan 032 is the follow-up cleanup that finishes the single-grid story for the demo: the React package should only present `Grid` as the public grid entrypoint, and the demo should stop using showroom ownership helpers or direct core imports.
+- Plan 032 is implemented and verified on 2026-06-13: the React package now exposes `Grid` as the only public grid entrypoint, `ownedGrid.ts` is gone, architecture guards fail if the demo imports core or owned-grid internals, and the core/React/demo verification gates passed.
+- Plan 033 reconciled stale backlog statuses on 2026-06-13 after verifying live row multi-select evidence, single-`Grid` architecture guards, and green core/React/demo build and test gates.
+- Plan 001 is implemented and verified on 2026-06-13: row multi-select state/tests live in `packages/core/src/store.test.ts`, the public API is exercised by `demo/src/pages/RowMultiSelectDemo.tsx`, and the core/React/demo verification gates passed.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected
