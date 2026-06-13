@@ -23,6 +23,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private columnDragField: string | null = null;
 	private columnDropInsertionIndex = -1;
 	private columnDropIndicator: HTMLDivElement | null = null;
+	private indicatorShown = false;
 	private columnDragGhost: HTMLDivElement | null = null;
 
 	// Group panel reference — set by RenderEngine when panel is mounted.
@@ -232,6 +233,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private removeColumnDropIndicator(): void {
 		this.columnDropIndicator?.remove();
 		this.columnDropIndicator = null;
+		this.indicatorShown = false;
 	}
 
 	private ensureColumnDragGhost(): void {
@@ -291,8 +293,21 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const indicatorViewportLeft = indicatorContentLeft - scrollViewport.scrollLeft;
 
 		this.columnDropIndicator.style.display = 'block';
-		this.columnDropIndicator.style.transform = `translate3d(${indicatorViewportLeft}px, 0, 0)`;
 		const topChromeHeight = this.getLayoutPlan()?.chrome.topChromeHeight ?? 0;
 		this.columnDropIndicator.style.height = `${Math.max(0, this.engine.viewport.viewportHeight - topChromeHeight)}px`;
+
+		const transform = `translate3d(${indicatorViewportLeft}px, 0, 0)`;
+		if (!this.indicatorShown) {
+			// First placement: position instantly (no fly-in from the left edge), then enable
+			// the CSS glide + fade so it slides smoothly between insertion points afterwards.
+			this.indicatorShown = true;
+			this.columnDropIndicator.style.transition = 'none';
+			this.columnDropIndicator.style.transform = transform;
+			void this.columnDropIndicator.offsetWidth; // commit position before transitions run
+			this.columnDropIndicator.style.transition = '';
+			this.columnDropIndicator.classList.add('og-indicator-ready');
+		} else {
+			this.columnDropIndicator.style.transform = transform; // glides via CSS transition
+		}
 	}
 }

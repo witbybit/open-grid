@@ -886,6 +886,13 @@ export const CORE_STYLES = `
     box-shadow: 0 0 8px var(--og-focus-ring), 0 0 2px rgba(255, 255, 255, 0.25);
     pointer-events: none;
     z-index: 60;
+    opacity: 0;
+  }
+  /* Enabled after the first placement (set by the controller) so the indicator glides
+     between insertion points and fades in, instead of flying in from the left edge. */
+  .og-column-drop-indicator.og-indicator-ready {
+    opacity: 1;
+    transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.14s ease;
   }
 
   /* White-fill circle caps with blue ring — crisp insertion-point markers */
@@ -935,6 +942,13 @@ export const CORE_STYLES = `
     display: flex;
     align-items: center;
     gap: 7px;
+    /* Fluid pickup — fade in as the ghost appears (position itself is JS-driven via
+       transform, so the entrance only touches opacity to avoid fighting it). */
+    animation: og-drag-ghost-in 0.14s ease;
+  }
+  @keyframes og-drag-ghost-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   /* SVG drag-handle icon injected by JS */
@@ -1001,72 +1015,101 @@ export const CORE_STYLES = `
     background-color: var(--og-focus-ring);
   }
 
-  /* Premium Glassmorphic Context Menu styles */
+  /* Context menu — modern (shadcn-style): solid surface, subtle border + ring, soft
+     shadow, rounded inset items with a muted accent hover, origin-aware entrance. */
   .og-context-menu {
     position: fixed;
     z-index: 1000;
-    background: rgba(15, 23, 42, 0.93);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.6), 0 8px 16px -8px rgba(0, 0, 0, 0.6);
-    padding: 6px 0;
+    background: var(--og-popover-bg, rgba(17, 20, 28, 0.97));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--og-popover-border, rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    box-shadow:
+      0 10px 38px -10px rgba(0, 0, 0, 0.55),
+      0 2px 8px -2px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.04);
+    padding: 4px;
     min-width: 200px;
     font-family: var(--og-font-family), inherit;
-    color: #f1f5f9;
+    color: var(--og-popover-text, #e7e9ee);
     opacity: 0;
-    transform: scale(0.96);
-    transition: opacity 0.12s cubic-bezier(0.16, 1, 0.3, 1), transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateY(-4px) scale(0.96);
+    transform-origin: top center;
+    transition:
+      opacity 0.15s ease,
+      transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
     pointer-events: none;
+  }
+  .og-context-menu.og-placement-top {
+    transform: translateY(4px) scale(0.96);
+    transform-origin: bottom center;
+  }
+  .og-context-menu.og-placement-left {
+    transform-origin: top right;
+  }
+  .og-context-menu.og-placement-top.og-placement-left {
+    transform-origin: bottom right;
   }
   .og-context-menu.og-visible {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0) scale(1);
     pointer-events: auto;
   }
   .og-context-menu-item {
     display: flex;
     align-items: center;
-    padding: 8px 14px;
+    padding: 7px 8px;
+    margin: 1px 0;
+    border-radius: 6px;
     font-size: 13px;
+    line-height: 1.1;
     cursor: pointer;
-    transition: background-color 0.12s ease, color 0.12s ease;
+    transition: background-color 0.11s ease, color 0.11s ease;
     user-select: none;
+    color: var(--og-popover-text, #e7e9ee);
   }
   .og-context-menu-item:hover {
-    background-color: var(--og-focus-ring, #3b82f6);
+    background-color: var(--og-popover-item-hover-bg, rgba(255, 255, 255, 0.07));
     color: #ffffff;
   }
   .og-context-menu-item.og-disabled {
-    opacity: 0.35;
+    opacity: 0.4;
     cursor: not-allowed;
-    color: #94a3b8;
+    color: #8b93a3;
   }
   .og-context-menu-item.og-disabled:hover {
     background-color: transparent;
-    color: #94a3b8;
+    color: #8b93a3;
   }
   .og-context-menu-item-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
-    margin-right: 10px;
+    width: 15px;
+    height: 15px;
+    margin-right: 9px;
     font-size: 14px;
     flex-shrink: 0;
     color: inherit;
-    opacity: 0.85;
+    opacity: 0.7;
   }
   .og-context-menu-item-label {
     flex-grow: 1;
     font-weight: 500;
   }
+  .og-context-menu-item-shortcut {
+    margin-left: auto;
+    padding-left: 18px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.4px;
+    opacity: 0.5;
+  }
   .og-context-menu-divider {
     height: 1px;
-    background-color: rgba(255, 255, 255, 0.08);
-    margin: 5px 0;
+    background-color: var(--og-popover-divider, rgba(255, 255, 255, 0.07));
+    margin: 4px 6px;
   }
 
   /* Column Header Popover Styles & Developer Themeable CSS Variables */
@@ -1107,27 +1150,37 @@ export const CORE_STYLES = `
   .og-header-popover {
     position: fixed;
     z-index: 1100;
-    background: var(--og-popover-bg, rgba(15, 23, 42, 0.95));
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--og-popover-border, rgba(255, 255, 255, 0.1));
-    border-radius: 10px;
-    box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.6), 0 8px 16px -8px rgba(0, 0, 0, 0.6);
-    padding: 8px;
+    background: var(--og-popover-bg, rgba(17, 20, 28, 0.97));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--og-popover-border, rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    box-shadow:
+      0 10px 38px -10px rgba(0, 0, 0, 0.55),
+      0 2px 8px -2px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.04);
+    padding: 5px;
     width: 220px;
     font-family: var(--og-font-family), inherit;
-    color: var(--og-popover-text, #f1f5f9);
+    color: var(--og-popover-text, #e7e9ee);
     opacity: 0;
-    transform: scale(0.96);
-    transition: opacity 0.12s cubic-bezier(0.16, 1, 0.3, 1), transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateY(-4px) scale(0.96);
+    transform-origin: top center;
+    transition:
+      opacity 0.15s ease,
+      transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
     pointer-events: none;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+  }
+  .og-header-popover.og-placement-top {
+    transform: translateY(4px) scale(0.96);
+    transform-origin: bottom center;
   }
   .og-header-popover.og-visible {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0) scale(1);
     pointer-events: auto;
   }
   .og-popover-sort-section {
@@ -1173,8 +1226,8 @@ export const CORE_STYLES = `
   }
   .og-popover-divider {
     height: 1px;
-    background-color: rgba(255, 255, 255, 0.08);
-    margin: 4px 0;
+    background-color: var(--og-popover-divider, rgba(255, 255, 255, 0.07));
+    margin: 4px 2px;
   }
   .og-popover-filter-section {
     display: flex;

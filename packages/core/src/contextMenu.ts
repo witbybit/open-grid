@@ -266,16 +266,23 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		let left = clientX;
 		let top = clientY;
+		let flippedUp = false;
+		let flippedLeft = false;
 
 		if (clientX + menuWidth > window.innerWidth) {
 			left = window.innerWidth - menuWidth - 8;
+			flippedLeft = true;
 		}
 		if (clientY + menuHeight > window.innerHeight) {
 			top = window.innerHeight - menuHeight - 8;
+			flippedUp = true;
 		}
 
 		menu.style.left = `${left}px`;
 		menu.style.top = `${top}px`;
+		// Origin-aware entrance — grow from the corner nearest the pointer (shadcn-style).
+		menu.classList.add(flippedUp ? 'og-placement-top' : 'og-placement-bottom');
+		if (flippedLeft) menu.classList.add('og-placement-left');
 
 		if (typeof requestAnimationFrame !== 'undefined') {
 			requestAnimationFrame(() => {

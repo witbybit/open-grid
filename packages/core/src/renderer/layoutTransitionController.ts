@@ -38,6 +38,10 @@ export interface LayoutTransitionOptions {
 
 interface SnapshotEntry {
 	top: number;
+	/** Row height at capture — used to height-shrink an exiting detail row's ghost. */
+	height: number;
+	/** Row kind at capture — detail rows get a height grow/shrink instead of a plain fade. */
+	kind: string;
 	/** Deep clone of the row element at capture, used as a fade-out ghost if it exits. */
 	clone: HTMLElement;
 }
@@ -80,7 +84,7 @@ export class LayoutTransitionController<TRowData = unknown> {
 				// to have left the model can fade out as a static ghost. Cheap + off the hot
 				// path (capture only runs on discrete actions). Skipped when exits can't render.
 				const clone = canExit ? (slot.element.cloneNode(true) as HTMLElement) : (null as unknown as HTMLElement);
-				this.snapshot.set(slot.visualRowId, { top: slot.lastTop, clone });
+				this.snapshot.set(slot.visualRowId, { top: slot.lastTop, height: slot.lastHeight, kind: slot.rowKind, clone });
 			}
 		}
 	}
@@ -108,10 +112,29 @@ export class LayoutTransitionController<TRowData = unknown> {
 				// ENTER — only animate reveals that accompany a real structural change, so a
 				// first paint (empty snapshot) does not fade every row in.
 				if (!hadSnapshot) continue;
-				this.run(el, [
-					{ transform: `translateY(${slot.lastTop}px)`, opacity: 0 },
-					{ transform: `translateY(${slot.lastTop}px)`, opacity: 1 },
-				]);
+				if (slot.rowKind === 'detail' && slot.lastHeight > 0) {
+					// Detail rows grow from 0 → full height (content clipped) so the rows below —
+					// which slide down by the same amount via MOVE — stay glued to the detail's
+					// growing bottom edge. Restore overflow when the animation settles.
+					const finalHeight = slot.lastHeight;
+					const prevOverflow = el.style.overflow;
+					el.style.overflow = 'hidden';
+					this.run(
+						el,
+						[
+							{ height: '0px', opacity: 0 },
+							{ height: `${finalHeight}px`, opacity: 1 },
+						],
+						() => {
+							el.style.overflow = prevOverflow;
+						}
+					);
+				} else {
+					this.run(el, [
+						{ transform: `translateY(${slot.lastTop}px)`, opacity: 0 },
+						{ transform: `translateY(${slot.lastTop}px)`, opacity: 1 },
+					]);
+				}
 			} else if (entry.top !== slot.lastTop) {
 				// MOVE — keyframe from the old top to the live (already-written) new top.
 				this.run(el, [{ transform: `translateY(${entry.top}px)` }, { transform: `translateY(${slot.lastTop}px)` }]);
@@ -136,15 +159,31 @@ export class LayoutTransitionController<TRowData = unknown> {
 			if (isLive && isLive(rowId)) continue; // still in the model → scrolled out, not removed
 			const ghost = entry.clone;
 			ghost.style.transition = 'none';
-			ghost.style.willChange = 'opacity';
 			ghost.style.pointerEvents = 'none';
 			ghost.style.transform = `translateY(${entry.top}px)`;
 			exitLayer.appendChild(ghost);
 			this.exitGhosts.add(ghost);
-			const anim = (ghost as unknown as { animate: (k: Keyframe[], o: KeyframeAnimationOptions) => Animation }).animate(
-				[{ opacity: 1 }, { opacity: 0 }],
-				{ duration: DURATION, easing: EASING, fill: 'forwards' }
-			);
+			// Detail rows collapse by shrinking their height to 0 (content clipped) while
+			// fading — the rows below slide up by the same amount via MOVE, so the ghost's
+			// bottom edge stays glued to them. Other rows just fade out in place.
+			const keyframes: Keyframe[] =
+				entry.kind === 'detail' && entry.height > 0
+					? [
+							{ height: `${entry.height}px`, opacity: 1 },
+							{ height: '0px', opacity: 0 },
+						]
+					: [{ opacity: 1 }, { opacity: 0 }];
+			if (entry.kind === 'detail') {
+				ghost.style.overflow = 'hidden';
+				ghost.style.willChange = 'height, opacity';
+			} else {
+				ghost.style.willChange = 'opacity';
+			}
+			const anim = (ghost as unknown as { animate: (k: Keyframe[], o: KeyframeAnimationOptions) => Animation }).animate(keyframes, {
+				duration: DURATION,
+				easing: EASING,
+				fill: 'forwards',
+			});
 			const done = () => this.removeGhost(ghost);
 			anim.onfinish = done;
 			anim.oncancel = done;
@@ -156,7 +195,7 @@ export class LayoutTransitionController<TRowData = unknown> {
 		this.exitGhosts.delete(ghost);
 	}
 
-	private run(el: HTMLElement, keyframes: Keyframe[]): void {
+	private run(el: HTMLElement, keyframes: Keyframe[], onSettle?: () => void): void {
 		const existing = this.animations.get(el);
 		if (existing) existing.cancel();
 		const anim = (el as unknown as { animate: (k: Keyframe[], o: KeyframeAnimationOptions) => Animation }).animate(keyframes, {
@@ -167,6 +206,7 @@ export class LayoutTransitionController<TRowData = unknown> {
 		this.animations.set(el, anim);
 		const done = () => {
 			if (this.animations.get(el) === anim) this.animations.delete(el);
+			onSettle?.();
 		};
 		anim.onfinish = done;
 		anim.oncancel = done;

@@ -257,16 +257,20 @@ export class HeaderMenuController<TRowData = unknown> {
 
 		let left = rect.left;
 		let top = rect.bottom + 4;
+		let flippedAbove = false;
 
 		if (left + popoverWidth > window.innerWidth) {
 			left = window.innerWidth - popoverWidth - 8;
 		}
 		if (top + popoverHeight > window.innerHeight) {
 			top = rect.top - popoverHeight - 4;
+			flippedAbove = true;
 		}
 
 		popover.style.left = `${left}px`;
 		popover.style.top = `${top}px`;
+		// Origin-aware entrance: grow/slide from the edge nearest the trigger (shadcn-style).
+		popover.classList.add(flippedAbove ? 'og-placement-top' : 'og-placement-bottom');
 
 		defaultGridScheduler.raf(() => {
 			popover.classList.add('og-visible');

@@ -13,13 +13,13 @@
 - **Category**: data model, feature correctness, architecture
 - **Planned at**: 2026-06-14
 - **Status**: **DONE (2026-06-14, branch rendering-architecture-v2-wip-3)**. core 576/576, react 100/100, demo build clean.
-  - Phase 1: `rows/pageModel.ts` `computePageWindow` + `pageModel.test.ts` (9).
-  - Phase 2: `RowPipelineInput.pagination` + post-flatten/pre-index-map slice; `pageWindow` on output; `rebuildStickyGroupMeta` rebuilds page-relative sticky indices (faithful to flattenStage: last descendant before footer, via a depth-stack). `RowPipeline.pagination.test.ts` (8: flat/middle/partial/clamp/empty + page-relative maps + grouped sticky-meta bounds).
-  - Phase 3: `ClientRowModelController.refresh()` passes `state.pagination`; subscribes to `paginationChanged` → refresh; `getPageWindow()` added to `RowModel`. Scroll-to-top on page change wired via `RenderInvalidationCoordinator` (`resetScroll` dep → `scrollEngine.scrollTo(0, scrollLeft)`).
-  - Phase 4: `paginationBarRenderer.getModel()` reads `getPageWindow()` (authoritative post-filter/group total) with a local fallback.
-  - Phase 5: `rowModel.pagination.test.ts` (4) — end-to-end: `getVisualRowCount()`/`getVisualRow()`/`getPageWindow()` reflect the page, proving geometry/window/sticky/selection see the sliced view (they read those). Cross-page semantics documented in `pageModel.ts`.
-  - Server pagination untouched (this is the client controller path only).
-  - **Unblocks Plan 042** (React pagination teardown — core now owns client slicing).
+    - Phase 1: `rows/pageModel.ts` `computePageWindow` + `pageModel.test.ts` (9).
+    - Phase 2: `RowPipelineInput.pagination` + post-flatten/pre-index-map slice; `pageWindow` on output; `rebuildStickyGroupMeta` rebuilds page-relative sticky indices (faithful to flattenStage: last descendant before footer, via a depth-stack). `RowPipeline.pagination.test.ts` (8: flat/middle/partial/clamp/empty + page-relative maps + grouped sticky-meta bounds).
+    - Phase 3: `ClientRowModelController.refresh()` passes `state.pagination`; subscribes to `paginationChanged` → refresh; `getPageWindow()` added to `RowModel`. Scroll-to-top on page change wired via `RenderInvalidationCoordinator` (`resetScroll` dep → `scrollEngine.scrollTo(0, scrollLeft)`).
+    - Phase 4: `paginationBarRenderer.getModel()` reads `getPageWindow()` (authoritative post-filter/group total) with a local fallback.
+    - Phase 5: `rowModel.pagination.test.ts` (4) — end-to-end: `getVisualRowCount()`/`getVisualRow()`/`getPageWindow()` reflect the page, proving geometry/window/sticky/selection see the sliced view (they read those). Cross-page semantics documented in `pageModel.ts`.
+    - Server pagination untouched (this is the client controller path only).
+    - **Unblocks Plan 042** (React pagination teardown — core now owns client slicing).
 
 ## Problem (the quoted gap)
 

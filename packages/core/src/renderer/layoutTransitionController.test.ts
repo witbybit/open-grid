@@ -188,3 +188,56 @@ describe('LayoutTransitionController — exit ghosts (Plan 043)', () => {
 		c.destroy();
 	});
 });
+
+describe('LayoutTransitionController — detail height animation (Plan 045)', () => {
+	const originalAnimate = (HTMLElement.prototype as any).animate;
+	afterEach(() => {
+		(HTMLElement.prototype as any).animate = originalAnimate;
+	});
+
+	function detailSlot(id: string, top: number, height: number): any {
+		const s: any = slot(id, top);
+		s.rowKind = 'detail';
+		s.lastHeight = height;
+		return s;
+	}
+
+	it('grows an entering detail row from height 0 to its full height', () => {
+		const kfs: Keyframe[][] = [];
+		(HTMLElement.prototype as any).animate = function (kf: Keyframe[]) {
+			kfs.push(kf);
+			return { cancel: vi.fn(), onfinish: null, oncancel: null } as unknown as Animation;
+		};
+		const a = slot('data:a', 0);
+		const active = new Map<number, any>([[0, a]]);
+		const c = new LayoutTransitionController(() => active);
+		c.captureSnapshot(); // non-empty snapshot so enter animates
+		const detail = detailSlot('detail:a', 40, 200);
+		active.set(1, detail);
+		c.beginAnimation();
+
+		const grow = kfs.find((kf) => kf[0].height === '0px' && kf[1].height === '200px');
+		expect(grow).toBeDefined();
+		c.destroy();
+	});
+
+	it('shrinks an exiting detail row ghost from full height to 0', () => {
+		const kfs: Keyframe[][] = [];
+		(HTMLElement.prototype as any).animate = function (kf: Keyframe[]) {
+			kfs.push(kf);
+			return { cancel: vi.fn(), onfinish: null, oncancel: null } as unknown as Animation;
+		};
+		const exitLayer = document.createElement('div');
+		const detail = detailSlot('detail:a', 40, 200);
+		const active = new Map<number, any>([[0, detail]]);
+		const c = new LayoutTransitionController(() => active, { getExitLayer: () => exitLayer, isRowIdLive: () => false });
+		c.captureSnapshot();
+		active.delete(0);
+		c.beginAnimation();
+
+		expect(exitLayer.children.length).toBe(1);
+		const shrink = kfs.find((kf) => kf[0].height === '200px' && kf[1].height === '0px');
+		expect(shrink).toBeDefined();
+		c.destroy();
+	});
+});
