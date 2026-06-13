@@ -471,8 +471,8 @@ export class GridEngine<TRowData = unknown> {
 		this.groupingFeature.setShowGroupPanel(enabled);
 	}
 
-	public setAggDefs(defs: import('../rows/stages/aggregateStage.js').AggregationDef<any>[]): void {
-		this.groupingFeature.setAggDefs(defs as any);
+	public setAggDefs(defs: import('../rows/stages/aggregateStage.js').AggregationDef<TRowData>[]): void {
+		this.groupingFeature.setAggDefs(defs);
 	}
 
 	public setShowGroupFooter(enabled: boolean): void {

@@ -238,6 +238,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			getOverlayBox: (minRow, maxRow, minCol, maxCol) => this.overlayRenderer.getClampedOverlayBox(minRow, maxRow, minCol, maxCol),
 			scrollTo: (scrollTop, scrollLeft) => this.scrollEngine.scrollTo(scrollTop, scrollLeft),
 			schedulePaint: () => this.scheduleOverlayPaint('fill drag'),
+			getLayoutPlan: () => this.viewportRenderer.getLayoutPlan(),
 		});
 
 		// Group panel renderer — mounts when showGroupPanel is true

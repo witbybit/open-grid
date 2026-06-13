@@ -1,5 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridCellRange } from '../store.js';
+import { LEAF_HEADER_HEIGHT } from './layoutPlan.js';
+import type { GridLayoutPlan } from './layoutPlan.js';
 import { reportRendererFault } from './rendererFaults.js';
 
 export type FillDirection = 'DOWN' | 'UP' | 'RIGHT' | 'LEFT';
@@ -18,6 +20,7 @@ export interface FillDragControllerOptions<TRowData> {
 	getOverlayBox: (minRow: number, maxRow: number, minCol: number, maxCol: number) => OverlayBox | null;
 	scrollTo: (scrollTop: number, scrollLeft: number) => void;
 	schedulePaint: () => void;
+	getLayoutPlan?: () => GridLayoutPlan | null;
 }
 
 export class FillDragController<TRowData = unknown> {
@@ -27,6 +30,7 @@ export class FillDragController<TRowData = unknown> {
 	private getOverlayBox: (minRow: number, maxRow: number, minCol: number, maxCol: number) => OverlayBox | null;
 	private scrollTo: (scrollTop: number, scrollLeft: number) => void;
 	private schedulePaint: () => void;
+	private getLayoutPlan: (() => GridLayoutPlan | null) | undefined;
 	private isFilling = false;
 	private fillStartRow = -1;
 	private fillEndRow = -1;
@@ -49,6 +53,7 @@ export class FillDragController<TRowData = unknown> {
 		this.getOverlayBox = options.getOverlayBox;
 		this.scrollTo = options.scrollTo;
 		this.schedulePaint = options.schedulePaint;
+		this.getLayoutPlan = options.getLayoutPlan;
 	}
 
 	public start(e: MouseEvent, minRow: number, maxRow: number, minCol: number, maxCol: number): void {
@@ -101,7 +106,8 @@ export class FillDragController<TRowData = unknown> {
 
 			const scrollRect = scrollViewport.getBoundingClientRect();
 			const mouseX = e.clientX - scrollRect.left + scrollViewport.scrollLeft;
-			const mouseY = e.clientY - scrollRect.top + scrollViewport.scrollTop - 40;
+			const topChrome = this.getLayoutPlan?.()?.chrome.topChromeHeight ?? LEAF_HEADER_HEIGHT;
+			const mouseY = e.clientY - scrollRect.top + scrollViewport.scrollTop - topChrome;
 
 			const currRow = this.engine.geometry.getRowIndexAtOffset(mouseY);
 			const currCol = this.engine.geometry.getColIndexAtOffset(mouseX);

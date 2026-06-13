@@ -41,9 +41,9 @@ function collectSourceFiles(root: string): string[] {
 }
 
 describe('Architecture guardrails', () => {
-	it('store.ts is below 875 lines (intermediate budget, target 850)', () => {
+	it('store.ts is below 855 lines (target 850)', () => {
 		const lines = countLines('store.ts');
-		expect(lines, `store.ts has ${lines} lines; intermediate budget is 875 and target is 850`).toBeLessThan(875);
+		expect(lines, `store.ts has ${lines} lines; budget is 855 and target is 850`).toBeLessThan(855);
 	});
 
 	it('GridEngine.ts is below 1000 lines (intermediate budget, target 800)', () => {

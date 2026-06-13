@@ -771,29 +771,17 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.setColumns(columns);
 	};
 
-	public getColumnIndex = (colField: string): number => {
-		return this.engine.getColumnIndex(colField);
-	};
+	public getColumnIndex = (colField: string): number => this.engine.getColumnIndex(colField);
 
-	public getColumnField = (colIndex: number): string | null => {
-		return this.engine.getColumnField(colIndex);
-	};
+	public getColumnField = (colIndex: number): string | null => this.engine.getColumnField(colIndex);
 
-	public getColumnDef = (colField: string): ColumnDef<TRowData> | undefined => {
-		return this.engine.getColumnDef(colField);
-	};
+	public getColumnDef = (colField: string): ColumnDef<TRowData> | undefined => this.engine.getColumnDef(colField);
 
-	public getCellAccess = (rowId: string, colField: string): GridCellAccess<TRowData> | null => {
-		return this.engine.cellAccess.getByPointer(rowId, colField);
-	};
+	public getCellAccess = (rowId: string, colField: string): GridCellAccess<TRowData> | null => this.engine.cellAccess.getByPointer(rowId, colField);
 
-	public registerCellSubscription = (sub: CellSubscription): void => {
-		this.engine.registerCellSubscription(sub);
-	};
+	public registerCellSubscription = (sub: CellSubscription): void => this.engine.registerCellSubscription(sub);
 
-	public unregisterCellSubscription = (sub: CellSubscription): void => {
-		this.engine.unregisterCellSubscription(sub);
-	};
+	public unregisterCellSubscription = (sub: CellSubscription): void => this.engine.unregisterCellSubscription(sub);
 
 	public updateCellSubscription = (sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void => {
 		this.engine.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
@@ -807,33 +795,19 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.batchedUpdates = enabled;
 	}
 
-	public batch = (callback: () => void): void => {
-		this.engine.batch(callback);
-	};
+	public batch = (callback: () => void): void => this.engine.batch(callback);
 
-	public flushCellUpdatesSync = (): void => {
-		this.engine.flushCellUpdatesSync();
-	};
+	public flushCellUpdatesSync = (): void => this.engine.flushCellUpdatesSync();
 
-	public registerPlugin = (plugin: GridPlugin<TRowData>): void => {
-		this.pluginRegistry.registerPlugin(plugin);
-	};
+	public registerPlugin = (plugin: GridPlugin<TRowData>): void => this.pluginRegistry.registerPlugin(plugin);
 
-	public unregisterPlugin = (name: string): void => {
-		this.pluginRegistry.unregisterPlugin(name);
-	};
+	public unregisterPlugin = (name: string): void => this.pluginRegistry.unregisterPlugin(name);
 
-	public getPlugin = <T = unknown>(name: string): T | null => {
-		return this.pluginRegistry.getPlugin<T>(name);
-	};
+	public getPlugin = <T = unknown>(name: string): T | null => this.pluginRegistry.getPlugin<T>(name);
 
-	public undo = (): void => {
-		this.engine.undo();
-	};
+	public undo = (): void => this.engine.undo();
 
-	public redo = (): void => {
-		this.engine.redo();
-	};
+	public redo = (): void => this.engine.redo();
 
 	public canUndo = (): boolean => {
 		return this.engine.commandHistory.canUndo();

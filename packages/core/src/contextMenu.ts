@@ -183,7 +183,9 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		];
 
 		const exclude = this.options.excludeDefaults || [];
-		const activeDefaults = this.options.disableDefaults ? [] : defaultItems.filter((item) => !item.id || !exclude.includes(item.id as any));
+		const activeDefaults = this.options.disableDefaults
+			? []
+			: defaultItems.filter((item) => !item.id || !exclude.includes(item.id as DefaultContextMenuItemId));
 		const custom = this.options.customItems || [];
 
 		const items = [...activeDefaults, ...custom];
