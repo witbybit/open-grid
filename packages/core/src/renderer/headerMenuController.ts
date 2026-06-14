@@ -12,6 +12,7 @@ import { reportRendererFault } from './rendererFaults.js';
 export class HeaderMenuController<TRowData = unknown> {
 	private activePopover: HTMLDivElement | null = null;
 	private activeHeaderCell: HTMLElement | null = null;
+	private filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(
 		private readonly engine: GridEngine<TRowData>,
@@ -314,6 +315,13 @@ export class HeaderMenuController<TRowData = unknown> {
 			input.addEventListener('keydown', (e) => {
 				if (e.key === 'Enter') applyBtn.click();
 			});
+			input.addEventListener('input', () => {
+				if (this.filterDebounceTimer !== null) clearTimeout(this.filterDebounceTimer);
+				this.filterDebounceTimer = setTimeout(() => {
+					this.filterDebounceTimer = null;
+					applyBtn.click();
+				}, 300);
+			});
 			filterContainer.appendChild(input);
 
 			const btnGroup = document.createElement('div');
@@ -374,6 +382,10 @@ export class HeaderMenuController<TRowData = unknown> {
 	}
 
 	public hide = (): void => {
+		if (this.filterDebounceTimer !== null) {
+			clearTimeout(this.filterDebounceTimer);
+			this.filterDebounceTimer = null;
+		}
 		if (this.activePopover) {
 			this.activePopover.classList.remove('og-visible');
 			const el = this.activePopover;

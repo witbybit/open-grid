@@ -76,6 +76,19 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		return -1;
 	}
 
+	/** Returns the destination {row, col} for Tab/Shift+Tab, wrapping to the next/prev data row at the edges. */
+	private getTabTarget(row: number, col: number, maxCol: number, forward: boolean): { row: number; col: number } | null {
+		if (forward) {
+			if (col < maxCol) return { row, col: col + 1 };
+			const nextRow = this.getNextDataRowIndex(row, 'down');
+			return nextRow === -1 ? null : { row: nextRow, col: 0 };
+		} else {
+			if (col > 0) return { row, col: col - 1 };
+			const prevRow = this.getNextDataRowIndex(row, 'up');
+			return prevRow === -1 ? null : { row: prevRow, col: maxCol };
+		}
+	}
+
 	/** Clamp an index into range and snap to the nearest data row (preferring `preferDir`). */
 	private clampToDataRow(idx: number, preferDir: 'up' | 'down'): number {
 		const rowModel = this.runtime.getRowModel();
@@ -152,15 +165,18 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					nextCol = Math.min(maxCol, col + 1);
 					handled = true;
 					break;
-				case 'Tab':
+				case 'Tab': {
 					event.preventDefault();
-					if (event.shiftKey) {
-						nextCol = Math.max(0, col - 1);
-					} else {
-						nextCol = Math.min(maxCol, col + 1);
+					const tabDest = this.getTabTarget(row, col, maxCol, !event.shiftKey);
+					if (tabDest) {
+						const ptr = this.getPointerFromCoords(tabDest.row, tabDest.col);
+						if (ptr) {
+							this.rangeStart = ptr;
+							this.runtime.selectCell(ptr, 'keyboard');
+						}
 					}
-					handled = true;
-					break;
+					return;
+				}
 				case 'Home':
 					// Ctrl+Home → first cell of the grid; Home → start of the row.
 					nextCol = 0;
@@ -217,10 +233,15 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					}
 					return;
 				}
+				case 'F2':
 				case 'Enter':
 					event.preventDefault();
-					// Enter edit mode
 					this.setCellEditing(active.rowId, active.colField, true);
+					return;
+				case 'Delete':
+				case 'Backspace':
+					event.preventDefault();
+					this.runtime.setCellValue(active.rowId, active.colField, null);
 					return;
 				case 'Escape':
 					event.preventDefault();
@@ -334,7 +355,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 				}
 				case 'Enter': {
 					event.preventDefault();
-					// Commit and move down
+					// Commit and move to the next row; always start editing there
 					this.commitEdit();
 					const nextRowIdx = this.getNextDataRowIndex(row, 'down');
 					if (nextRowIdx !== -1) {
@@ -342,28 +363,22 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 						if (target) {
 							this.rangeStart = target;
 							this.runtime.selectCell(target, 'keyboard');
-							if (this.options.arrowKeyNavigationEdit) {
-								if (target.rowId !== active.rowId || target.colField !== active.colField) {
-									this.setCellEditing(target.rowId, target.colField, true);
-								}
-							}
+							this.setCellEditing(target.rowId, target.colField, true);
 						}
 					}
 					break;
 				}
 				case 'Tab': {
 					event.preventDefault();
-					// Commit and move right
+					// Commit and move to the next tab stop (with row-wrap); always start editing there
 					this.commitEdit();
-					const nextCol = event.shiftKey ? Math.max(0, col - 1) : Math.min(maxCol, col + 1);
-					const target = this.getPointerFromCoords(row, nextCol);
-					if (target) {
-						this.rangeStart = target;
-						this.runtime.selectCell(target, 'keyboard');
-						if (this.options.arrowKeyNavigationEdit) {
-							if (target.rowId !== active.rowId || target.colField !== active.colField) {
-								this.setCellEditing(target.rowId, target.colField, true);
-							}
+					const tabDest = this.getTabTarget(row, col, maxCol, !event.shiftKey);
+					if (tabDest) {
+						const target = this.getPointerFromCoords(tabDest.row, tabDest.col);
+						if (target) {
+							this.rangeStart = target;
+							this.runtime.selectCell(target, 'keyboard');
+							this.setCellEditing(target.rowId, target.colField, true);
 						}
 					}
 					break;

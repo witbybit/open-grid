@@ -323,6 +323,11 @@ export class HeaderRenderer<TRowData = unknown> {
 						sortIndicator.style.display = 'none';
 					}
 				}
+				const filterIndicator = headerCell.querySelector('.og-header-filter-indicator') as HTMLDivElement | null;
+				if (filterIndicator) {
+					const isFiltered = !!(state.filterModel && state.filterModel[cell.field]);
+					filterIndicator.style.display = isFiltered ? 'flex' : 'none';
+				}
 				// ARIA sort state (none unless this column is sorted, and only for sortable columns).
 				const nextSort = currentSort ? (currentSort.sort === 'asc' ? 'ascending' : 'descending') : cell.sortable === false ? null : 'none';
 				if (nextSort === null) headerCell.removeAttribute('aria-sort');
@@ -450,6 +455,13 @@ export class HeaderRenderer<TRowData = unknown> {
 		sortIndicator.appendChild(svgAsc);
 		sortIndicator.appendChild(svgDesc);
 		headerCell.appendChild(sortIndicator);
+
+		const filterIndicator = document.createElement('div');
+		filterIndicator.className = 'og-header-filter-indicator';
+		filterIndicator.style.display = 'none';
+		// Funnel icon
+		filterIndicator.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`;
+		headerCell.appendChild(filterIndicator);
 
 		const menuButton = document.createElement('div');
 		menuButton.className = 'og-header-menu-button';

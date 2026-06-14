@@ -27,6 +27,7 @@ import { HeaderRenderer } from './headerRenderer.js';
 import { OverlayRenderer } from './overlayRenderer.js';
 import { LayoutTransitionController } from './layoutTransitionController.js';
 import { GroupPanelRenderer } from './groupPanelRenderer.js';
+import { FilterChipBarRenderer } from './filterChipBarRenderer.js';
 import { StatusBarRenderer } from './statusBarRenderer.js';
 import { PaginationBarRenderer } from './paginationBarRenderer.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
@@ -67,6 +68,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly headerRenderer: HeaderRenderer<TRowData>;
 	public readonly overlayRenderer: OverlayRenderer<TRowData>;
 	public readonly groupPanelRenderer: GroupPanelRenderer<TRowData>;
+	public readonly filterChipBarRenderer: FilterChipBarRenderer<TRowData>;
 	public readonly statusBarRenderer: StatusBarRenderer<TRowData>;
 	public readonly paginationBarRenderer: PaginationBarRenderer<TRowData>;
 	public readonly stickyGroupRenderer: StickyGroupRenderer<TRowData>;
@@ -269,6 +271,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Group panel renderer — mounts when showGroupPanel is true
 		this.groupPanelRenderer = new GroupPanelRenderer<TRowData>(engine);
+		this.filterChipBarRenderer = new FilterChipBarRenderer<TRowData>(engine);
 		this.statusBarRenderer = new StatusBarRenderer<TRowData>(engine);
 		this.paginationBarRenderer = new PaginationBarRenderer<TRowData>(engine);
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
@@ -401,6 +404,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.columnInteractions.setGroupPanel(this.groupPanelRenderer);
 		}
 
+		// Filter chip bar — always mounted; shown/hidden reactively by filterModel changes
+		if (this.viewportRenderer.filterChipBar) {
+			this.filterChipBarRenderer.mount(this.viewportRenderer.filterChipBar);
+		}
+
 		// Bottom chrome: status bar + pagination. The layers always exist (the registry
 		// builds them); their `apply()` hides them with display:none until configured, so
 		// mounting the content unconditionally is safe and lets config toggle at runtime.
@@ -451,6 +459,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.columnInteractions.setGroupPanel(null);
 		this.fillDrag.cleanup();
 		this.groupPanelRenderer.unmount();
+		this.filterChipBarRenderer.unmount();
 		this.statusBarRenderer.unmount();
 		this.paginationBarRenderer.unmount();
 		this.stickyGroupRenderer.unmount();

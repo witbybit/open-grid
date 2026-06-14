@@ -22,6 +22,9 @@ export class ViewportRenderer<TRowData = unknown> {
 	// Only present in the DOM; shown/hidden by syncLayoutPlan().
 	public groupPanel: HTMLDivElement | null = null;
 
+	// Filter chip bar — shown when any filterModel entries are active.
+	public filterChipBar: HTMLDivElement | null = null;
+
 	// Header layers — kept as three overlapping absolute divs inside a sticky wrapper
 	public headerWrapper: HTMLDivElement | null = null;
 	public headerLayer: HTMLDivElement | null = null;
@@ -108,6 +111,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		}
 
 		this.groupPanel = this.layers.get('group-panel') ?? null;
+		this.filterChipBar = this.layers.get('filter-chip-bar') ?? null;
 		this.headerWrapper = this.layers.get('header-wrapper') ?? null;
 		this.headerLayer = this.layers.get('header') ?? null;
 		this.headerLeftLayer = this.layers.get('header-left') ?? null;
@@ -144,6 +148,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.scrollViewport = null;
 		this.rowsContainer = null;
 		this.groupPanel = null;
+		this.filterChipBar = null;
 		this.headerWrapper = null;
 		this.headerLayer = null;
 		this.headerLeftLayer = null;

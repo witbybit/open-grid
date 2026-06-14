@@ -195,6 +195,92 @@ export const CORE_STYLES = `
     font-variant-numeric: tabular-nums;
   }
 
+  /* ── Filter chip bar ─────────────────────────────────────────────────── */
+
+  .og-filter-chip-bar {
+    position: absolute;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    background: var(--og-filter-chip-bar-bg, rgba(15, 23, 42, 0.92));
+    border-bottom: 1px solid var(--og-border, rgba(255, 255, 255, 0.07));
+    overflow: hidden;
+  }
+
+  .og-filter-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 8px 0 10px;
+    border-radius: 11px;
+    background: var(--og-filter-chip-bg, rgba(59, 130, 246, 0.18));
+    border: 1px solid var(--og-filter-chip-border, rgba(59, 130, 246, 0.35));
+    color: var(--og-filter-chip-color, #93c5fd);
+    font-size: 11px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .og-filter-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }
+
+  .og-filter-chip-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .og-filter-chip-remove:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .og-filter-clear-all {
+    margin-left: auto;
+    padding: 3px 10px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid var(--og-border, rgba(255, 255, 255, 0.12));
+    background: none;
+    color: var(--og-text-secondary, rgba(255, 255, 255, 0.45));
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .og-filter-clear-all:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--og-text, rgba(255, 255, 255, 0.7));
+  }
+
+  /* ── Filter indicator on header cell ─────────────────────────────────── */
+
+  .og-header-filter-indicator {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--og-accent, #3b82f6);
+    opacity: 0.85;
+  }
+
   /* ── Group panel ─────────────────────────────────────────────────────── */
 
   .og-group-panel {

@@ -49,10 +49,26 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 		},
 	},
 	{
+		id: 'filter-chip-bar',
+		className: 'og-filter-chip-bar',
+		parent: 'scroll-viewport',
+		order: 1,
+		init(el) {
+			el.style.display = 'none';
+		},
+		apply(el, plan) {
+			const visible = plan.chrome.filterChipBarHeight > 0;
+			el.style.display = visible ? 'flex' : 'none';
+			el.style.top = `${plan.chrome.groupPanelHeight}px`;
+			el.style.height = visible ? `${plan.chrome.filterChipBarHeight}px` : '0';
+			el.style.width = `${plan.dimensions.contentWidth}px`;
+		},
+	},
+	{
 		id: 'header-wrapper',
 		className: 'og-layer-header-wrapper',
 		parent: 'scroll-viewport',
-		order: 1,
+		order: 2,
 		apply(el, plan) {
 			el.style.top = `${plan.origins.headerTop}px`;
 			el.style.height = `${plan.chrome.totalHeaderHeight}px`;
@@ -90,7 +106,7 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 		id: 'sticky-groups',
 		className: 'og-layer-sticky-groups',
 		parent: 'scroll-viewport',
-		order: 2,
+		order: 3,
 		apply(el, plan) {
 			el.style.width = `${plan.dimensions.contentWidth}px`;
 			el.style.transform = `translate3d(0, ${plan.origins.stickyGroupLayerTop}px, 0)`;
@@ -100,7 +116,7 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 		id: 'rows',
 		className: 'og-rows-container',
 		parent: 'scroll-viewport',
-		order: 3,
+		order: 4,
 		apply(el, plan) {
 			el.style.height = `${plan.dimensions.contentHeight}px`;
 			el.style.width = `${plan.dimensions.contentWidth}px`;

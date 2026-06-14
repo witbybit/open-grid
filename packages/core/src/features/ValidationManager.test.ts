@@ -293,6 +293,112 @@ describe('ValidationManager', () => {
 		});
 	});
 
+	describe('rowValidator', () => {
+		it('runs after column validator and sets cross-field errors on validateCell', async () => {
+			const store = makeStore();
+			const ctrl = makeController(store);
+			const engine = (store as any).engine;
+			const vm = new ValidationManager<TestRow>({
+				ctx: {
+					columns: engine.columns,
+					getState: () => engine.stateManager.getState(),
+					applyChange: (c: any) => engine.changeApplier.apply(c),
+				},
+				getRowModel: () => engine.getRowModel(),
+				data: engine.data,
+				rowValidator: ({ row }) => ({
+					email: (row as TestRow).name === '' ? 'Email required when name is empty' : null,
+				}),
+			});
+
+			// row 2: name='' triggers the row validator to flag email too
+			await vm.validateCell('2', 'name');
+			const errs = store.getState().validationErrors ?? {};
+			expect(errs['2:name']).toBe('Name is required');
+			expect(errs['2:email']).toBe('Email required when name is empty');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('column validator error takes precedence over row validator for the same field', async () => {
+			const store = makeStore();
+			const ctrl = makeController(store);
+			const engine = (store as any).engine;
+			const vm = new ValidationManager<TestRow>({
+				ctx: {
+					columns: engine.columns,
+					getState: () => engine.stateManager.getState(),
+					applyChange: (c: any) => engine.changeApplier.apply(c),
+				},
+				getRowModel: () => engine.getRowModel(),
+				data: engine.data,
+				rowValidator: () => ({ name: 'Row-level name error' }),
+			});
+
+			const error = await vm.validateCell('2', 'name');
+			expect(error).toBe('Name is required');
+			expect(store.getState().validationErrors?.['2:name']).toBe('Name is required');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('row validator result applies to triggered field when column validator passes', async () => {
+			const store = makeStore();
+			const ctrl = makeController(store);
+			const engine = (store as any).engine;
+			const vm = new ValidationManager<TestRow>({
+				ctx: {
+					columns: engine.columns,
+					getState: () => engine.stateManager.getState(),
+					applyChange: (c: any) => engine.changeApplier.apply(c),
+				},
+				getRowModel: () => engine.getRowModel(),
+				data: engine.data,
+				rowValidator: ({ row }) => ({ age: (row as TestRow).name === 'Alice' ? 'Alice age policy violation' : null }),
+			});
+
+			const error = await vm.validateCell('1', 'name');
+			expect(error).toBeNull();
+			expect(store.getState().validationErrors?.['1:age']).toBe('Alice age policy violation');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('validateGrid runs row validator in phase 2 and merges results', async () => {
+			const store = makeStore();
+			const ctrl = makeController(store);
+			const engine = (store as any).engine;
+			const vm = new ValidationManager<TestRow>({
+				ctx: {
+					columns: engine.columns,
+					getState: () => engine.stateManager.getState(),
+					applyChange: (c: any) => engine.changeApplier.apply(c),
+				},
+				getRowModel: () => engine.getRowModel(),
+				data: engine.data,
+				rowValidator: ({ row }) => ({ email: (row as TestRow).age > 20 ? 'Email audit required' : null }),
+			});
+
+			const failures = await vm.validateGrid();
+			const errs = store.getState().validationErrors ?? {};
+
+			expect(errs['2:name']).toBeTruthy();
+			expect(errs['2:age']).toBeTruthy();
+			expect(errs['1:email']).toBe('Email audit required');
+			expect(errs['3:email']).toBe('Email audit required');
+
+			const failureKeys = failures.map((f) => `${f.rowId}:${f.colField}`).sort();
+			expect(failureKeys).toContain('1:email');
+			expect(failureKeys).toContain('3:email');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+	});
+
 	describe('getCellValidationError / hasValidationErrors', () => {
 		it('getCellValidationError returns the error for a failing cell', async () => {
 			const store = makeStore();

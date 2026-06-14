@@ -4,6 +4,7 @@ import type { InternalColumnDef } from '../columnDef.js';
 
 export const LEAF_HEADER_HEIGHT = 40;
 export const GROUP_PANEL_HEIGHT = 42;
+export const FILTER_CHIP_BAR_HEIGHT = 32;
 export const GROUP_BAND_HEIGHT = 32;
 export const STATUS_BAR_HEIGHT = 32;
 export const PAGINATION_HEIGHT = 44;
@@ -70,6 +71,7 @@ export interface GridLayoutPlan {
 	};
 	chrome: {
 		groupPanelHeight: number;
+		filterChipBarHeight: number;
 		columnGroupHeaderHeight: number;
 		leafHeaderHeight: number;
 		totalHeaderHeight: number;
@@ -255,6 +257,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const totalColumnsWidth = columnPlan.totalWidth;
 	const contentWidth = Math.max(totalColumnsWidth, viewportWidth);
 	const groupPanelHeight = state.showGroupPanel ? GROUP_PANEL_HEIGHT : 0;
+	const filterChipBarHeight = state.filterModel && Object.keys(state.filterModel).length > 0 ? FILTER_CHIP_BAR_HEIGHT : 0;
 	const leafHeaderHeight = LEAF_HEADER_HEIGHT;
 	const pinLeftCount = Math.min(engine.viewport.pinLeftColumns, renderWindow.colCount);
 	const pinRightCount = Math.min(engine.viewport.pinRightColumns, Math.max(0, renderWindow.colCount - pinLeftCount));
@@ -281,7 +284,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const lastBand = headerBands[headerBands.length - 1];
 	const totalHeaderHeight = lastBand ? lastBand.top + lastBand.height : leafHeaderHeight;
 	const columnGroupHeaderHeight = totalHeaderHeight - leafHeaderHeight;
-	const topChromeHeight = groupPanelHeight + totalHeaderHeight;
+	const topChromeHeight = groupPanelHeight + filterChipBarHeight + totalHeaderHeight;
 
 	// Bottom chrome — status bar + pagination bar. These are config-gated; until the
 	// config lands (Plan 039 Phase 5) both heights resolve to 0 and the layout is
@@ -319,6 +322,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 		},
 		chrome: {
 			groupPanelHeight,
+			filterChipBarHeight,
 			columnGroupHeaderHeight,
 			leafHeaderHeight,
 			totalHeaderHeight,
@@ -371,7 +375,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			},
 		},
 		origins: {
-			headerTop: groupPanelHeight,
+			headerTop: groupPanelHeight + filterChipBarHeight,
 			rowLayerTop: topChromeHeight,
 			stickyGroupLayerTop: topChromeHeight,
 			overlayTop: topChromeHeight,
