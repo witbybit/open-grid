@@ -380,7 +380,7 @@ function RealtimeGroupingDemoInner({ api, onGridReady }: { api: GridApi<SalesRow
 					enableContextMenu={true}
 					groupRowRenderer={(props) => <GroupRowRenderer visualRow={props.visualRow as GroupVisualRow<SalesRow>} api={props.api} />}
 					sidebar={{
-						panels: ['columns', 'filters', 'sort'],
+						panels: ['columns', 'filters', 'sort', 'themes'],
 						defaultOpen: 'columns',
 						position: 'right',
 						width: 280,
