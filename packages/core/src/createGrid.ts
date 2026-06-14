@@ -86,7 +86,7 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 	 *   async clear() { await fetch('/api/grid-prefs', { method: 'DELETE' }); },
 	 * }
 	 */
-	persistence?: GridPersistenceAdapter;
+	persistence?: string | GridPersistenceAdapter;
 }
 
 export interface ServerGridOptions<TRowData> extends ServerRowModelOptions<TRowData> {
@@ -98,7 +98,7 @@ export interface ServerGridOptions<TRowData> extends ServerRowModelOptions<TRowD
 	 * showGroupFooter, and enableStickyGroupRows are persisted.
 	 * Row data is not persisted (fetched from the server datasource on load).
 	 */
-	persistence?: GridPersistenceAdapter;
+	persistence?: string | GridPersistenceAdapter;
 }
 
 function buildColumnWidths<TRowData>(columns: Array<ColumnDef<TRowData>>): Record<string, number> {
@@ -269,11 +269,12 @@ export function createApiFacade<TRowData>(
 }
 
 function wireGridPersistence<TRowData>(
-	options: { columns: ColumnDef<TRowData>[]; initialState?: Partial<GridState<TRowData>>; persistence?: GridPersistenceAdapter },
+	options: { columns: ColumnDef<TRowData>[]; initialState?: Partial<GridState<TRowData>>; persistence?: string | GridPersistenceAdapter },
 	store: GridStore<TRowData>
 ): PersistenceController | undefined {
-	const { persistence: adapter } = options;
-	if (!adapter) return undefined;
+	const { persistence: rawPersistence } = options;
+	if (!rawPersistence) return undefined;
+	const adapter = typeof rawPersistence === 'string' ? createLocalStorageAdapter(rawPersistence) : rawPersistence;
 	return createPersistenceSubscription(
 		adapter,
 		// Wrap subscribeToKey — persistence listener only needs () => void, extra args are ignored at runtime
@@ -284,7 +285,8 @@ function wireGridPersistence<TRowData>(
 }
 
 export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>): GridApi<TRowData> {
-	const { persistence: adapter } = options;
+	const { persistence: rawPersistence } = options;
+	const adapter = typeof rawPersistence === 'string' ? createLocalStorageAdapter(rawPersistence) : rawPersistence;
 
 	let columns = options.columns;
 	let mergedInitial: Partial<GridState<TRowData>> = options.initialState ?? {};
@@ -314,7 +316,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 	});
 
 	const controller = new ClientRowModelController<TRowData>(store.getClientRowModelRuntime(), { ...options, columns: resolvedColumns });
-	const persistenceController = wireGridPersistence(options, store);
+	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, store);
 	const api = createApiFacade(
 		store,
 		() => {
@@ -340,7 +342,8 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 }
 
 export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>): GridApi<TRowData> {
-	const { persistence: adapter } = options;
+	const { persistence: rawPersistence } = options;
+	const adapter = typeof rawPersistence === 'string' ? createLocalStorageAdapter(rawPersistence) : rawPersistence;
 
 	let mergedInitial: Partial<GridState<TRowData>> = options.initialState ?? {};
 	let asyncLoad: Promise<PersistedGridState | null> | undefined;
@@ -366,7 +369,7 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 	});
 
 	const controller = new ServerRowModelController<TRowData>(store.getServerRowModelRuntime(), { ...options, columns: selected.columns });
-	const persistenceController = wireGridPersistence(options, store);
+	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, store);
 	const api = createApiFacade(
 		store,
 		() => {

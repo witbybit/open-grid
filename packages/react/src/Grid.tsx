@@ -1,4 +1,4 @@
-import { createClientGrid, createServerGrid } from '@open-grid/core';
+import { createClientGrid, createServerGrid, createLocalStorageAdapter } from '@open-grid/core';
 import { useEffect, useMemo, useRef, useInsertionEffect, type PropsWithChildren } from 'react';
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
@@ -23,7 +23,7 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	columns: ColumnDef<TRowData>[];
 	getRowId?: (row: TRowData) => string;
 	initialState?: Partial<GridState<TRowData>>;
-	persistence?: GridPersistenceAdapter;
+	persistence?: string | GridPersistenceAdapter;
 	rowOverscanPx?: number;
 	colBuffer?: number;
 	overscanAdaptive?: boolean;
@@ -115,6 +115,8 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	const paginationConfig = useMemo(() => normalizePagination(pagination), [pagination]);
 
 	const api = useMemo(() => {
+		// Normalize string persistence key to a GridPersistenceAdapter so core always receives the adapter type.
+		const resolvedPersistence = typeof persistence === 'string' ? createLocalStorageAdapter(persistence) : persistence;
 		const initial = createInitialState(
 			{
 				columns,
@@ -135,7 +137,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				rows: rows as TRowData[],
 				columns: resolveColumnTypes(columns, columnTypes),
 				getRowId,
-				persistence,
+				persistence: resolvedPersistence,
 				rowSelection,
 				initialState: initial,
 			});
@@ -146,7 +148,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			columns: resolveColumnTypes(columns, columnTypes),
 			blockSize,
 			getRowId,
-			persistence,
+			persistence: resolvedPersistence,
 			rowSelection,
 			initialState: initial,
 			pagination: paginationConfig ? { pageSize: paginationConfig.pageSize, initialPage: paginationConfig.initialPage } : undefined,

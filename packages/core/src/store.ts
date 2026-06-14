@@ -140,6 +140,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			showStatusBar: initialState.showStatusBar,
 			pagination: initialState.pagination,
 			expansion: initialState.expansion,
+			themeName: initialState.themeName,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 1,
 			// Phase 2: always normalize runtimeLimits so all callers can assume it exists

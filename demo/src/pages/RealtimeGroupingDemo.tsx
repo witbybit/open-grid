@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Grid, createLocalStorageAdapter } from '@open-grid/react';
+import { Grid } from '@open-grid/react';
 import type { AggregationDef, ColumnDef, CellRendererProps, GroupVisualRow, GridApi, GridReadyEvent } from '@open-grid/react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
@@ -368,7 +368,7 @@ function RealtimeGroupingDemoInner({ api, onGridReady }: { api: GridApi<SalesRow
 					mode='client'
 					columns={COLUMNS}
 					rows={ROWS}
-					persistence={createLocalStorageAdapter('open-grid-sales-demo')}
+					persistence='open-grid-sales-demo'
 					initialState={{
 						groupBy: ['region', 'category'],
 						groupRowHeight: 44,
