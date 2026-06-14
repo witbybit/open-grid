@@ -16,6 +16,7 @@ import {
 	type RowSelectionChangeResult,
 	type RowSelectionGesture,
 	type RowSelectionGestureSource,
+	type RowSelectionScope,
 } from '../store.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
@@ -199,6 +200,7 @@ export class GridEngine<TRowData = unknown> {
 			columns: config.columns || [],
 			selection: initialSelection,
 			selectedRowIds: config.selectedRowIds ?? [],
+			rowSelection: config.rowSelection,
 			rowHeights: config.rowHeights || {},
 			columnWidths: config.columnWidths || {},
 			defaultRowHeight: config.defaultRowHeight || 40,
@@ -639,6 +641,10 @@ export class GridEngine<TRowData = unknown> {
 		this.rowSelectionFeature.selectRowIds(rowIds, source);
 	}
 
+	public replaceRowIds(rowIds: string[], source: RowSelectionGestureSource = 'api'): void {
+		this.rowSelectionFeature.replaceRowIds(rowIds, source);
+	}
+
 	public deselectRowIds(rowIds: string[], source: RowSelectionGestureSource = 'api'): void {
 		this.rowSelectionFeature.deselectRowIds(rowIds, source);
 	}
@@ -647,8 +653,8 @@ export class GridEngine<TRowData = unknown> {
 		this.rowSelectionFeature.toggleRowId(rowId, source);
 	}
 
-	public selectAllDataRows(source: RowSelectionGestureSource = 'api'): void {
-		this.rowSelectionFeature.selectAllDataRows(source);
+	public selectAllDataRows(source: RowSelectionGestureSource = 'api', scope?: RowSelectionScope, mode?: 'add' | 'replace'): void {
+		this.rowSelectionFeature.selectAllDataRows(source, scope, mode);
 	}
 
 	public clearRowSelection(source: RowSelectionGestureSource = 'api'): void {

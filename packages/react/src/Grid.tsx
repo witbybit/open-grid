@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useInsertionEffect, type PropsWithChildren 
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
 import { resolveColumnTypes } from './resolveColumnTypes.js';
-import type { ColumnDef, GridState, GridPersistenceAdapter, GridDatasource } from './types.js';
+import type { ColumnDef, GridState, GridPersistenceAdapter, GridDatasource, RowSelectionMode, RowSelectionOptions } from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
 
 type GridShellProps<TRowData> = Omit<GridViewProps<TRowData>, 'api'>;
@@ -33,6 +33,7 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	detailRowHeight?: number;
 	/** Enable the core pagination bar (and, in client mode, page-window row slicing). */
 	pagination?: boolean | GridPaginationConfig;
+	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	/** Show the core status bar (row + selection counts). */
 	showStatusBar?: boolean;
 	onGridReady?: (event: GridReadyEvent<TRowData>) => void;
@@ -41,7 +42,6 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 export interface GridClientProps<TRowData = unknown> extends GridCommonProps<TRowData> {
 	mode: 'client';
 	rows: TRowData[];
-	rowSelection?: 'single' | 'multiple';
 }
 
 export interface GridServerProps<TRowData = unknown> extends GridCommonProps<TRowData> {
@@ -106,7 +106,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			rows?: TRowData[];
 			datasource?: GridDatasource<TRowData>;
 			blockSize?: number;
-			rowSelection?: 'single' | 'multiple';
+			rowSelection?: RowSelectionMode | RowSelectionOptions;
 		};
 	const readyFiredRef = useRef(false);
 	const lastColumnsRef = useRef(columns);
@@ -147,6 +147,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			blockSize,
 			getRowId,
 			persistence,
+			rowSelection,
 			initialState: initial,
 			pagination: paginationConfig ? { pageSize: paginationConfig.pageSize, initialPage: paginationConfig.initialPage } : undefined,
 		});

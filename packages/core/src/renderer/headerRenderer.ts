@@ -242,30 +242,36 @@ export class HeaderRenderer<TRowData = unknown> {
 						checkbox.className = 'og-header-checkbox';
 						checkbox.addEventListener('change', (e) => {
 							e.stopPropagation();
+							const state = this.engine.stateManager.getState();
+							const scope = state.rowSelection?.selectAllScope ?? 'page';
 							if ((e.target as HTMLInputElement).checked) {
-								this.engine.selectAllDataRows('headerCheckbox');
+								this.engine.selectAllDataRows('headerCheckbox', scope);
 							} else {
-								this.engine.clearRowSelection('headerCheckbox');
+								const ids = this.engine.getRowModel()?.getSelectableDataRowIds?.(scope) ?? [];
+								if (ids.length > 0) this.engine.deselectRowIds(ids, 'headerCheckbox');
+								else this.engine.clearRowSelection('headerCheckbox');
 							}
 						});
 						if (textSpan) textSpan.textContent = '';
 						headerCell.insertBefore(checkbox, textSpan);
 					}
 					const rowModel = this.engine.getRowModel();
-					const totalDataRows =
-						rowModel?.getDataRowCount?.() ??
+					const scope = state.rowSelection?.selectAllScope ?? 'page';
+					const scopedIds =
+						rowModel?.getSelectableDataRowIds?.(scope) ??
 						(() => {
-							if (!rowModel) return 0;
-							let count = 0;
+							const ids: string[] = [];
+							if (!rowModel) return ids;
 							const vCount = rowModel.getVisualRowCount();
 							for (let i = 0; i < vCount; i++) {
-								if (rowModel.getVisualRow(i)?.kind === 'data') count++;
+								const row = rowModel.getVisualRow(i);
+								if (row?.kind === 'data') ids.push(row.rowId);
 							}
-							return count;
+							return ids;
 						})();
-					const selectedCount = rowModel
-						? state.selectedRowIds.filter((rowId) => rowModel.getVisualIndexByRowId(rowId) >= 0).length
-						: state.selectedRowIds.length;
+					const totalDataRows = scopedIds.length;
+					const scopedSet = new Set(scopedIds);
+					const selectedCount = state.selectedRowIds.filter((rowId) => scopedSet.has(rowId)).length;
 					const newChecked = selectedCount > 0 && selectedCount >= totalDataRows;
 					const newIndeterminate = selectedCount > 0 && selectedCount < totalDataRows;
 					checkbox.title = selectedCount > 0 ? `${selectedCount} of ${totalDataRows} rows selected` : `Select all ${totalDataRows} rows`;

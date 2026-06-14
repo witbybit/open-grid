@@ -27,6 +27,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		toggleRowSelection: source.toggleRowSelection,
 		selectAllRows: source.selectAllRows,
 		clearRowSelection: source.clearRowSelection,
+		getSelectedRowIds: source.getSelectedRowIds,
 		isRowNodeSelected: source.isRowNodeSelected,
 		getSelectedRowCount: source.getSelectedRowCount,
 		setColumns: source.setColumns,

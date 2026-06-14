@@ -48,8 +48,17 @@ interface SnapshotEntry {
 	clone: HTMLElement;
 }
 
+type LayoutTransitionReason = 'sort' | 'expansion' | 'detail' | 'other';
+
+interface SnapshotBounds {
+	top: number;
+	bottom: number;
+}
+
 export class LayoutTransitionController<TRowData = unknown> {
 	private snapshot = new Map<string, SnapshotEntry>(); // rowId → {top, clone} at capture
+	private snapshotReason: LayoutTransitionReason = 'other';
+	private snapshotBounds: SnapshotBounds | null = null;
 	private animations = new Map<HTMLElement, Animation>();
 	private exitGhosts = new Set<HTMLElement>();
 	private pinEffectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -77,9 +86,11 @@ export class LayoutTransitionController<TRowData = unknown> {
 	 * Step 1 — record current row positions before the structural state change renders.
 	 * Called synchronously from the invalidation hook (sortModel/expansion/etc.).
 	 */
-	public captureSnapshot(): void {
+	public captureSnapshot(reason: LayoutTransitionReason = 'other'): void {
 		this.cancel(); // snap any in-flight animation + clear ghosts so the snapshot is clean
 		this.snapshot.clear();
+		this.snapshotReason = reason;
+		this.snapshotBounds = null;
 		const canExit = !!this.options.getExitLayer && this.animationsEnabled();
 		for (const [, slot] of this.getActiveRows()) {
 			if (slot.visualRowId && slot.lastTop >= 0) {
@@ -88,6 +99,11 @@ export class LayoutTransitionController<TRowData = unknown> {
 				// path (capture only runs on discrete actions). Skipped when exits can't render.
 				const clone = canExit ? (slot.element.cloneNode(true) as HTMLElement) : (null as unknown as HTMLElement);
 				this.snapshot.set(slot.visualRowId, { top: slot.lastTop, height: slot.lastHeight, kind: slot.rowKind, clone });
+				const bottom = slot.lastTop + slot.lastHeight;
+				this.snapshotBounds =
+					this.snapshotBounds === null
+						? { top: slot.lastTop, bottom }
+						: { top: Math.min(this.snapshotBounds.top, slot.lastTop), bottom: Math.max(this.snapshotBounds.bottom, bottom) };
 			}
 		}
 	}
@@ -102,6 +118,8 @@ export class LayoutTransitionController<TRowData = unknown> {
 		const hadSnapshot = this.snapshot.size > 0;
 		if (!this.animationsEnabled()) {
 			this.snapshot.clear();
+			this.snapshotBounds = null;
+			this.snapshotReason = 'other';
 			return;
 		}
 
@@ -133,8 +151,9 @@ export class LayoutTransitionController<TRowData = unknown> {
 						}
 					);
 				} else {
+					const fromTop = this.getEnterTop(slot.lastTop, slot.lastHeight ?? 0);
 					this.run(el, [
-						{ transform: `translateY(${slot.lastTop}px)`, opacity: 0 },
+						{ transform: `translateY(${fromTop}px)`, opacity: 0 },
 						{ transform: `translateY(${slot.lastTop}px)`, opacity: 1 },
 					]);
 				}
@@ -150,6 +169,15 @@ export class LayoutTransitionController<TRowData = unknown> {
 		this.playExits(activeRowIds);
 
 		this.snapshot.clear();
+		this.snapshotBounds = null;
+		this.snapshotReason = 'other';
+	}
+
+	private getEnterTop(finalTop: number, height: number): number {
+		if (this.snapshotReason !== 'sort' || this.snapshotBounds === null) return finalTop;
+		const midpoint = (this.snapshotBounds.top + this.snapshotBounds.bottom) / 2;
+		if (finalTop < midpoint) return this.snapshotBounds.top - Math.max(1, height);
+		return this.snapshotBounds.bottom;
 	}
 
 	private playExits(activeRowIds: Set<string>): void {
@@ -252,5 +280,7 @@ export class LayoutTransitionController<TRowData = unknown> {
 	public destroy(): void {
 		this.cancel();
 		this.snapshot.clear();
+		this.snapshotBounds = null;
+		this.snapshotReason = 'other';
 	}
 }

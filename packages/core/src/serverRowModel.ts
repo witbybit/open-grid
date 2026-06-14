@@ -2,6 +2,7 @@ import { type ColumnDef, setValueByPath } from './columnDef.js';
 import { GridEventName } from './api/GridEvents.js';
 import type { ServerRowModelRuntime } from './engine/runtimePorts.js';
 import type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
+import type { RowSelectionScope } from './api/GridApi.js';
 import { RowNode } from './rowNode.js';
 import { toDataVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
@@ -197,6 +198,14 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 	public getRawRowById = (rowId: string): TData | null => {
 		return this.nodeMap.get(rowId)?.data ?? null;
+	};
+
+	public getSelectableDataRowIds = (_scope: RowSelectionScope = 'loaded'): string[] => {
+		const ids: string[] = [];
+		for (const node of this.activeNodes) {
+			if (node) ids.push(node.id);
+		}
+		return ids;
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {

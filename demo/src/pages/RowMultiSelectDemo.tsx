@@ -8,9 +8,9 @@
  *   - api.rows().getChecked()   →  drive bulk actions from the selection
  *   - rowSelectionChanged event →  reactive event log
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Grid, GridEventName } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent } from '@open-grid/react';
+import type { ColumnDef, GridApi, GridReadyEvent, RowSelectionScope } from '@open-grid/react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
@@ -86,6 +86,8 @@ function BulkActions({
 	setBulkTag,
 	api,
 	selectedCount,
+	selectAllScope,
+	setSelectAllScope,
 }: {
 	onDelete: () => void;
 	onExport: () => void;
@@ -94,6 +96,8 @@ function BulkActions({
 	setBulkTag: (v: string) => void;
 	api: GridApi<OrderRow> | null;
 	selectedCount: number;
+	selectAllScope: RowSelectionScope;
+	setSelectAllScope: (scope: RowSelectionScope) => void;
 }) {
 	const hasSelection = selectedCount > 0;
 
@@ -135,11 +139,25 @@ function BulkActions({
 			</button>
 
 			<button
-				onClick={() => api?.selectAllRows()}
+				onClick={() => api?.selectAllRows({ scope: selectAllScope })}
 				className='px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-900/40 hover:bg-indigo-800/50 text-indigo-300 transition border border-indigo-800/50'
 			>
 				Select All
 			</button>
+
+			<div className='flex rounded-lg overflow-hidden border border-slate-700'>
+				{(['page', 'filtered', 'all'] as RowSelectionScope[]).map((scope) => (
+					<button
+						key={scope}
+						onClick={() => setSelectAllScope(scope)}
+						className={`px-2.5 py-1.5 text-[10px] font-semibold capitalize transition ${
+							selectAllScope === scope ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'
+						}`}
+					>
+						{scope}
+					</button>
+				))}
+			</div>
 
 			<button
 				onClick={() => api?.clearRowSelection()}
@@ -164,6 +182,17 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 	const [bulkTag, setBulkTag] = useState<string>('');
 	const [api, setApi] = useState<GridApi<OrderRow> | null>(null);
 	const [selectedCount, setSelectedCount] = useState(0);
+	const [selectAllScope, setSelectAllScope] = useState<RowSelectionScope>('page');
+	const [gridMode, setGridMode] = useState<'client' | 'server'>('client');
+	const datasource = useMemo(
+		() => ({
+			getRows: async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
+				rows: rows.slice(startRow, endRow),
+				totalCount: rows.length,
+			}),
+		}),
+		[rows]
+	);
 
 	// Subscribe to rowSelectionChanged for the event log
 	useEffect(() => {
@@ -249,6 +278,22 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 					Select rows above, then use the footer status bar for live totals and edit state.
 				</div>
 				<div className='flex-1' />
+				<div className='flex rounded-lg overflow-hidden border border-slate-700'>
+					{(['client', 'server'] as const).map((mode) => (
+						<button
+							key={mode}
+							onClick={() => {
+								setGridMode(mode);
+								api?.clearRowSelection();
+							}}
+							className={`px-3 py-1.5 text-[10px] font-semibold capitalize transition ${
+								gridMode === mode ? 'bg-slate-200 text-slate-950' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'
+							}`}
+						>
+							{mode}
+						</button>
+					))}
+				</div>
 				<BulkActions
 					api={api}
 					selectedCount={selectedCount}
@@ -257,26 +302,49 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 					onTag={handleTagSelected}
 					bulkTag={bulkTag}
 					setBulkTag={setBulkTag}
+					selectAllScope={selectAllScope}
+					setSelectAllScope={setSelectAllScope}
 				/>
 			</div>
 
 			{/* ── Grid ───────────────────────────────────────────────────── */}
 			<div className='flex-1 min-h-0 border border-slate-800 rounded-xl overflow-hidden bg-slate-950 shadow-2xl flex flex-col'>
 				<div className='flex-1 min-h-0'>
-					<Grid
-						mode='client'
-						rows={rows}
-						columns={COLUMNS}
-						getRowId={(row) => row.id}
-						rowSelection='multiple'
-						showStatusBar
-						enableNavigation={true}
-						navigationOptions={{ editTrigger: 'doubleClick' }}
-						onGridReady={(event) => {
-							setApi(event.api);
-							onGridReady?.(event);
-						}}
-					/>
+					{gridMode === 'client' ? (
+						<Grid
+							key='client'
+							mode='client'
+							rows={rows}
+							columns={COLUMNS}
+							getRowId={(row) => row.id}
+							rowSelection={{ mode: 'multiple', selectAllScope }}
+							pagination={{ pageSize: 25 }}
+							showStatusBar
+							enableNavigation={true}
+							navigationOptions={{ editTrigger: 'doubleClick' }}
+							onGridReady={(event) => {
+								setApi(event.api);
+								onGridReady?.(event);
+							}}
+						/>
+					) : (
+						<Grid
+							key='server'
+							mode='server'
+							datasource={datasource}
+							columns={COLUMNS}
+							getRowId={(row) => row.id}
+							rowSelection={{ mode: 'multiple', selectAllScope }}
+							pagination={{ pageSize: 25 }}
+							showStatusBar
+							enableNavigation={true}
+							navigationOptions={{ editTrigger: 'doubleClick' }}
+							onGridReady={(event) => {
+								setApi(event.api);
+								onGridReady?.(event);
+							}}
+						/>
+					)}
 				</div>
 			</div>
 

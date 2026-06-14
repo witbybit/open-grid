@@ -13,7 +13,11 @@ import {
 	type Listener,
 	type RowDataTransaction,
 	type RowNodeTransaction,
+	type RowSelectionMode,
+	type RowSelectionOptions,
 	type RowSelectionGesture,
+	type SelectRowsOptions,
+	type SelectAllRowsOptions,
 } from './store.js';
 
 // WeakMap reverse-lookup: maps a public GridApi to the internal GridStore that backs it.
@@ -67,7 +71,7 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 	 * @example
 	 * useClientGrid({ rows, columns, rowSelection: 'multiple' })
 	 */
-	rowSelection?: 'single' | 'multiple';
+	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	/**
 	 * Persistence adapter. Pass `createLocalStorageAdapter(key)` for the built-in
 	 * localStorage implementation, or supply your own for remote/API-backed storage.
@@ -87,6 +91,7 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 
 export interface ServerGridOptions<TRowData> extends ServerRowModelOptions<TRowData> {
 	initialState?: Partial<GridState<TRowData>>;
+	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	/**
 	 * Persistence adapter — same interface as client grid.
 	 * Column order, visibility, widths, sort model, filter model,
@@ -101,6 +106,46 @@ function buildColumnWidths<TRowData>(columns: Array<ColumnDef<TRowData>>): Recor
 		if (column.width !== undefined) acc[column.field] = column.width;
 		return acc;
 	}, {});
+}
+
+function normalizeRowSelection(rowSelection?: RowSelectionMode | RowSelectionOptions): RowSelectionOptions | undefined {
+	if (!rowSelection) return undefined;
+	if (typeof rowSelection === 'string') return { mode: rowSelection, selectAllScope: 'page' };
+	return { selectAllScope: 'page', ...rowSelection };
+}
+
+function withRowSelectionColumn<TRowData>(
+	columns: Array<ColumnDef<TRowData>>,
+	initialState: Partial<GridState<TRowData>>,
+	rowSelection?: RowSelectionMode | RowSelectionOptions
+): { columns: Array<ColumnDef<TRowData>>; initialState: Partial<GridState<TRowData>> } {
+	const normalized = normalizeRowSelection(rowSelection);
+	if (!normalized) return { columns, initialState };
+
+	let nextColumns = columns;
+	let nextInitial: Partial<GridState<TRowData>> = { ...initialState, rowSelection: normalized };
+	if (normalized.mode === 'multiple' && !columns.some((column) => column.checkboxSelection)) {
+		const checkboxCol = {
+			field: '__rowSelect__',
+			header: '',
+			width: 40,
+			checkboxSelection: true,
+			sortable: false,
+			movable: false,
+		} as unknown as ColumnDef<TRowData>;
+		nextColumns = [checkboxCol, ...columns];
+		nextInitial = {
+			...nextInitial,
+			pinnedColumns: {
+				left: (nextInitial.pinnedColumns?.left ?? 0) + 1,
+				right: nextInitial.pinnedColumns?.right ?? 0,
+			},
+		};
+	}
+	if (normalized.mode === 'multiple') {
+		nextInitial = { ...nextInitial, columns: nextColumns };
+	}
+	return { columns: nextColumns, initialState: nextInitial };
 }
 
 export function createApiFacade<TRowData>(
@@ -174,11 +219,12 @@ export function createApiFacade<TRowData>(
 		getRowNodeById: (rowId: string) => store.getRowNodeById(rowId),
 		getRawRowById: (rowId: string) => store.getRawRowById(rowId),
 		applyRowSelectionGesture: (gesture: RowSelectionGesture) => store.applyRowSelectionGesture(gesture),
-		selectRows: (rowIds: string[]) => store.selectRows(rowIds),
+		selectRows: (rowIds: string[], options?: SelectRowsOptions) => store.selectRows(rowIds, options),
 		deselectRows: (rowIds: string[]) => store.deselectRows(rowIds),
 		toggleRowSelection: (rowId: string) => store.toggleRowSelection(rowId),
-		selectAllRows: () => store.selectAllRows(),
+		selectAllRows: (options?: SelectAllRowsOptions) => store.selectAllRows(options),
 		clearRowSelection: () => store.clearRowSelection(),
+		getSelectedRowIds: () => store.getSelectedRowIds(),
 		rows: () => store.rows(),
 		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
 		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
@@ -243,28 +289,6 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 	let mergedInitial: Partial<GridState<TRowData>> = options.initialState ?? {};
 	let asyncLoad: Promise<PersistedGridState | null> | undefined;
 
-	// First-class row selection: auto-inject the built-in checkbox column at position 0
-	// and auto-pin it left — users configure `rowSelection: 'multiple'` instead of a manual column def.
-	if (options.rowSelection === 'multiple') {
-		const checkboxCol = {
-			field: '__rowSelect__',
-			header: '',
-			width: 40,
-			checkboxSelection: true,
-			sortable: false,
-			movable: false,
-		} as unknown as ColumnDef<TRowData>;
-		columns = [checkboxCol, ...columns];
-		// Auto-bump the left pin count so the checkbox column is always visible
-		mergedInitial = {
-			...mergedInitial,
-			pinnedColumns: {
-				left: (mergedInitial.pinnedColumns?.left ?? 0) + 1,
-				right: mergedInitial.pinnedColumns?.right ?? 0,
-			},
-		};
-	}
-
 	if (adapter) {
 		const loaded = adapter.load();
 		if (loaded instanceof Promise) {
@@ -275,6 +299,10 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 			>;
 		}
 	}
+	// Apply row selection after persistence so restored column state cannot hide the built-in selector.
+	const selected = withRowSelectionColumn(mergedInitial.columns ?? columns, mergedInitial, options.rowSelection);
+	columns = selected.columns;
+	mergedInitial = selected.initialState;
 
 	const resolvedColumns = mergedInitial.columns ?? columns;
 	const store = new GridStore<TRowData>({
@@ -326,15 +354,17 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 			>;
 		}
 	}
+	const selected = withRowSelectionColumn(options.columns, mergedInitial, options.rowSelection);
+	mergedInitial = selected.initialState;
 
 	const store = new GridStore<TRowData>({
-		columns: mergedInitial.columns ?? options.columns,
+		columns: mergedInitial.columns ?? selected.columns,
 		getRowId: options.getRowId,
-		columnWidths: buildColumnWidths(mergedInitial.columns ?? options.columns),
+		columnWidths: buildColumnWidths(mergedInitial.columns ?? selected.columns),
 		...mergedInitial,
 	});
 
-	const controller = new ServerRowModelController<TRowData>(store.getServerRowModelRuntime(), options);
+	const controller = new ServerRowModelController<TRowData>(store.getServerRowModelRuntime(), { ...options, columns: selected.columns });
 	const persistenceController = wireGridPersistence(options, store);
 	const api = createApiFacade(
 		store,

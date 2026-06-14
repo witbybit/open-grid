@@ -206,12 +206,16 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 				const id = input.dataset.rowId;
 				if (!id) return;
 				const shouldSelect = input.checked;
-				if ((e as MouseEvent).shiftKey && deps.selectionPaint.rowCheckboxAnchorId) {
+				const currentState = deps.engine.stateManager.getState();
+				const isMultiple = currentState.rowSelection?.mode !== 'single';
+				if (isMultiple && (e as MouseEvent).shiftKey && deps.selectionPaint.rowCheckboxAnchorId) {
 					const rangeIds = deps.selectionPaint.getDataRowIdsBetween(deps.selectionPaint.rowCheckboxAnchorId, id);
 					if (rangeIds.length > 0) {
 						if (shouldSelect) deps.engine.selectRowIds(rangeIds, 'checkbox');
 						else deps.engine.deselectRowIds(rangeIds, 'checkbox');
 					}
+				} else if (!isMultiple && shouldSelect) {
+					deps.engine.replaceRowIds([id], 'checkbox');
 				} else {
 					deps.engine.toggleRowId(id, 'checkbox');
 				}

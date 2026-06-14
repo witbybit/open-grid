@@ -86,6 +86,37 @@ describe('LayoutTransitionController', () => {
 		c.destroy();
 	});
 
+	it('slides rows entering after sort from the captured viewport edge', () => {
+		const calls: { kf: Keyframe[]; el: HTMLElement }[] = [];
+		(HTMLElement.prototype as any).animate = function (kf: Keyframe[]) {
+			calls.push({ kf, el: this });
+			return { cancel: vi.fn(), onfinish: null, oncancel: null } as unknown as Animation;
+		};
+
+		const a = slot('a', 0);
+		(a as any).lastHeight = 40;
+		const b = slot('b', 40);
+		(b as any).lastHeight = 40;
+		const active = new Map<number, any>([
+			[0, a],
+			[1, b],
+		]);
+		const c = new LayoutTransitionController(() => active);
+		c.captureSnapshot('sort');
+
+		const z = slot('z', 0);
+		(z as any).lastHeight = 40;
+		active.clear();
+		active.set(0, z);
+		c.beginAnimation();
+
+		const enter = calls.find((call) => call.el === z.element);
+		expect(enter).toBeDefined();
+		expect(enter!.kf[0].transform).toBe('translateY(-40px)');
+		expect(enter!.kf[1].transform).toBe('translateY(0px)');
+		c.destroy();
+	});
+
 	it('cancel() tears down in-flight animations', () => {
 		const cancels: Array<() => void> = [];
 		(HTMLElement.prototype as any).animate = function () {

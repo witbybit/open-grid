@@ -1,11 +1,11 @@
-import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleRule } from '../store.js';
+import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleRule, RowSelectionOptions } from '../store.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
 	columns: ColumnDef<TRowData>[];
-	/** When 'multiple', a built-in checkbox column is auto-injected at position 0 and pinned left. */
-	rowSelection?: 'single' | 'multiple';
+	/** Enables first-class row node selection and configures built-in checkbox behavior. */
+	rowSelection?: RowSelectionOptions;
 	getRowId?: (row: TRowData) => string;
 	rowHeights?: Record<string, number>;
 	columnWidths?: Record<string, number>;

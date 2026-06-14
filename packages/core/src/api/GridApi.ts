@@ -52,11 +52,30 @@ export interface SelectionChangeResult {
 
 export type RowSelectionGestureSource = 'api' | 'checkbox' | 'headerCheckbox' | 'pointer' | 'keyboard';
 export type RowSelectionGestureKind = 'replace' | 'select' | 'deselect' | 'toggle' | 'selectAll' | 'clear';
+export type RowSelectionMode = 'single' | 'multiple';
+export type RowSelectionScope = 'page' | 'loaded' | 'filtered' | 'all';
+
+export interface RowSelectionOptions {
+	mode: RowSelectionMode;
+	/** Scope used by the built-in header checkbox and api.selectAllRows() when no scope is passed. */
+	selectAllScope?: RowSelectionScope;
+}
+
+export interface SelectRowsOptions {
+	mode?: 'add' | 'replace';
+}
+
+export interface SelectAllRowsOptions {
+	scope?: RowSelectionScope;
+	mode?: 'add' | 'replace';
+}
 
 export interface RowSelectionGesture {
 	kind: RowSelectionGestureKind;
 	rowIds?: string[];
 	source?: RowSelectionGestureSource;
+	scope?: RowSelectionScope;
+	mode?: 'add' | 'replace';
 }
 
 export interface RowSelectionChangeResult {
@@ -290,11 +309,12 @@ export interface GridApi<TRowData = unknown> {
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
 	// Row node multi-select
 	applyRowSelectionGesture(gesture: RowSelectionGesture): RowSelectionChangeResult | null;
-	selectRows(rowIds: string[]): void;
+	selectRows(rowIds: string[], options?: SelectRowsOptions): void;
 	deselectRows(rowIds: string[]): void;
 	toggleRowSelection(rowId: string): void;
-	selectAllRows(): void;
+	selectAllRows(options?: SelectAllRowsOptions): void;
 	clearRowSelection(): void;
+	getSelectedRowIds(): string[];
 	isRowNodeSelected(rowId: string): boolean;
 	getSelectedRowCount(): number;
 	setColumns(columns: ColumnDef<TRowData>[]): void;

@@ -81,6 +81,11 @@ export type {
 	GridReadyEvent,
 	BuiltInThemeName,
 	ThemeTokens,
+	RowSelectionMode,
+	RowSelectionOptions,
+	RowSelectionScope,
+	SelectRowsOptions,
+	SelectAllRowsOptions,
 } from './types.js';
 
 export type { GridContextMenuOptions, GridContextMenuItem, GridCellPointer, HeaderMenuRendererProps } from '@open-grid/core';

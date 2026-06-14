@@ -31,6 +31,11 @@ import type {
 	DetailRowStyleRule,
 	CellStyleRule,
 	HeaderCellStyleRule,
+	RowSelectionMode,
+	RowSelectionOptions,
+	RowSelectionScope,
+	SelectRowsOptions,
+	SelectAllRowsOptions,
 } from '@open-grid/core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@open-grid/core';
@@ -73,6 +78,11 @@ export type {
 	ImperativeCellHandle,
 	BuiltInThemeName,
 	ThemeTokens,
+	RowSelectionMode,
+	RowSelectionOptions,
+	RowSelectionScope,
+	SelectRowsOptions,
+	SelectAllRowsOptions,
 };
 
 export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;

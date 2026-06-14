@@ -83,7 +83,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('enableColumnReorder', invalidateHeaders));
 		this.unsubscribers.push(
 			this.deps.engine.stateManager.subscribeToKey('sortModel', () => {
-				this.deps.layoutTransition.captureSnapshot();
+				this.deps.layoutTransition.captureSnapshot('sort');
 			})
 		);
 		// Expansion (group, tree, and master-detail all mutate state.expansion) — snapshot
@@ -91,7 +91,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		// the toggle's invalidation flush, so slot.lastTop still holds the old layout.
 		this.unsubscribers.push(
 			this.deps.engine.stateManager.subscribeToKey('expansion', () => {
-				this.deps.layoutTransition.captureSnapshot();
+				this.deps.layoutTransition.captureSnapshot('expansion');
 			})
 		);
 		// Column pin/unpin — geometry owns the layout change; paint may add a subtle

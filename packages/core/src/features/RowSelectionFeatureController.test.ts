@@ -9,13 +9,14 @@ interface TestRow {
 	name: string;
 }
 
-function makeStore(): GridStore<TestRow> {
+function makeStore(initial: Partial<ReturnType<GridStore<TestRow>['getState']>> = {}): GridStore<TestRow> {
 	return new GridStore<TestRow>({
 		columns: [
 			{ field: 'id', header: 'ID', width: 50 },
 			{ field: 'name', header: 'Name', width: 150 },
 		],
 		getRowId: (row) => row.id,
+		...initial,
 	});
 }
 
@@ -141,6 +142,68 @@ describe('RowSelectionFeatureController', () => {
 			expect(store.getState().selectedRowIds).toContain('1');
 			expect(store.getState().selectedRowIds).toContain('2');
 			expect(store.getState().selectedRowIds).toContain('3');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('selects only the active client page by default and filtered rows when requested', () => {
+			const store = makeStore({ pagination: { pageSize: 2, page: 0 }, rowSelection: { mode: 'multiple', selectAllScope: 'page' } });
+			const ctrl = makeController(store);
+			const feature = new RowSelectionFeatureController(getFeatureContext(store), () => store.getRowModel());
+
+			feature.applyRowSelectionGesture({ kind: 'selectAll' });
+			expect(store.getState().selectedRowIds).toEqual(['1', '2']);
+
+			feature.applyRowSelectionGesture({ kind: 'selectAll', scope: 'filtered' });
+			expect(store.getState().selectedRowIds).toEqual(['1', '2', '3']);
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('selects all client rows when all scope is requested', () => {
+			const store = makeStore({ pagination: { pageSize: 1, page: 1 }, rowSelection: { mode: 'multiple', selectAllScope: 'page' } });
+			const ctrl = makeController(store);
+			const feature = new RowSelectionFeatureController(getFeatureContext(store), () => store.getRowModel());
+
+			feature.applyRowSelectionGesture({ kind: 'selectAll', scope: 'all' });
+
+			expect(store.getState().selectedRowIds).toEqual(['1', '2', '3']);
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('does not select all in single-selection mode', () => {
+			const store = makeStore({ rowSelection: { mode: 'single', selectAllScope: 'page' } });
+			const ctrl = makeController(store);
+			const feature = new RowSelectionFeatureController(getFeatureContext(store), () => store.getRowModel());
+
+			const result = feature.applyRowSelectionGesture({ kind: 'selectAll' });
+
+			expect(result).toBeNull();
+			expect(store.getState().selectedRowIds).toEqual([]);
+
+			ctrl.dispose();
+			store.destroy();
+		});
+	});
+
+	describe('single mode', () => {
+		it('keeps only one row selected for select, replace, and toggle gestures', () => {
+			const store = makeStore({ rowSelection: { mode: 'single' } });
+			const ctrl = makeController(store);
+			const feature = new RowSelectionFeatureController(getFeatureContext(store), () => store.getRowModel());
+
+			feature.applyRowSelectionGesture({ kind: 'replace', rowIds: ['1', '2'] });
+			expect(store.getState().selectedRowIds).toEqual(['1']);
+
+			feature.applyRowSelectionGesture({ kind: 'select', rowIds: ['3'] });
+			expect(store.getState().selectedRowIds).toEqual(['3']);
+
+			feature.applyRowSelectionGesture({ kind: 'toggle', rowIds: ['2'] });
+			expect(store.getState().selectedRowIds).toEqual(['2']);
 
 			ctrl.dispose();
 			store.destroy();

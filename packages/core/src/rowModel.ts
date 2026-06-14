@@ -1,6 +1,6 @@
 import { type ColumnDef, setValueByPath, compilePathGetter } from './columnDef.js';
 import { GridEventName } from './api/GridEvents.js';
-import type { RowDataTransaction, RowNodeTransaction } from './api/GridApi.js';
+import type { RowDataTransaction, RowNodeTransaction, RowSelectionScope } from './api/GridApi.js';
 import type { ClientRowModelRuntime } from './engine/runtimePorts.js';
 import { getFieldRoot } from './ids.js';
 import { RowNode } from './rowNode.js';
@@ -58,6 +58,7 @@ export interface RowModel<TRowData = unknown> {
 	getVisualIndexByRowId(rowId: string): number;
 	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRawRowById(rowId: string): TRowData | null;
+	getSelectableDataRowIds?(scope?: RowSelectionScope): string[];
 	toggleGroupExpanded?(groupId: string): RowModelRefreshResult | void;
 	toggleDetailExpanded?(rowId: string): RowModelRefreshResult | void;
 	isGroupExpanded?(groupId: string): boolean;
@@ -652,6 +653,60 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	public getRawRowById = (rowId: string): TData | null => {
 		return this.dataStore.getNode(rowId)?.data ?? null;
+	};
+
+	public getSelectableDataRowIds = (scope: RowSelectionScope = 'page'): string[] => {
+		if (scope === 'all') {
+			return this.dataStore.getAllNodes().map((node) => node.id);
+		}
+		if (scope === 'filtered') {
+			const state = this.runtime.getState();
+			const expansion = state.expansion;
+			const rowModelConfig: RowModelConfig<TData> | undefined =
+				state.rowModelConfig ??
+				(state.groupBy?.length || state.getParentId || state.masterDetailEnabled
+					? {
+							type: 'client',
+							grouping: state.groupBy?.length
+								? { model: state.groupBy.map((colId) => ({ colId })), includeFooter: !!state.showGroupFooter }
+								: undefined,
+							treeData: state.getParentId ? { enabled: true, getParentId: state.getParentId } : undefined,
+							masterDetail: state.masterDetailEnabled
+								? {
+										enabled: true,
+										expandedRowIds: expansion.details,
+										defaultDetailHeight: state.detailRowHeight,
+									}
+								: undefined,
+						}
+					: undefined);
+			const result = this.pipeline.run({
+				nodes: this.dataStore.getAllNodes(),
+				columns: state.columns,
+				sortModel: state.sortModel,
+				filterModel: state.filterModel,
+				groupBy: state.groupBy,
+				rowModelConfig,
+				getParentId: state.getParentId,
+				aggDefs: state.aggDefs ?? [],
+				expandedGroupIds: new Set(Object.keys(expansion.groups)),
+				expandedTreeRowIds: new Set(Object.keys(expansion.treeRows)),
+				expandedDetailRowIds: new Set(Object.keys(expansion.details)),
+				defaultRowHeight: state.defaultRowHeight,
+				rowHeightsRecord: state.rowHeights,
+				groupRowHeight: state.groupRowHeight,
+				detailRowHeight: state.detailRowHeight,
+				masterDetailEnabled: state.masterDetailEnabled,
+				detailRenderer: state.detailRenderer,
+				reportFault: this.runtime.reportRowPipelineFault,
+			});
+			return result.visualRows.flatMap((row) => (row.kind === 'data' ? [row.rowId] : []));
+		}
+		const ids: string[] = [];
+		for (const row of this.visualRows) {
+			if (row?.kind === 'data') ids.push(row.rowId);
+		}
+		return ids;
 	};
 
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {

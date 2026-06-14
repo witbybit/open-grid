@@ -3,7 +3,7 @@ import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { ViewportRange } from '../viewportController.js';
-import type { GridSelectionState, ActiveEditState } from '../api/GridApi.js';
+import type { GridSelectionState, ActiveEditState, RowSelectionOptions } from '../api/GridApi.js';
 
 /**
  * User-configured and persisted fields.
@@ -38,6 +38,7 @@ export interface GridModelState<TRowData = unknown> {
 	pagination?: { pageSize: number; page?: number };
 
 	selectedRowIds: string[];
+	rowSelection?: RowSelectionOptions;
 
 	expansion: {
 		groups: Record<string, true>;

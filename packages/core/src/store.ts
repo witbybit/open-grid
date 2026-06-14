@@ -85,6 +85,8 @@ import type {
 	GridTransaction,
 	RowSelectionGesture,
 	RowSelectionChangeResult,
+	SelectRowsOptions,
+	SelectAllRowsOptions,
 	InternalGridApi,
 	GridApi,
 } from './api/GridApi.js';
@@ -109,6 +111,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			columns: initialState.columns || [],
 			selection: initialState.selection,
 			selectedRowIds: initialState.selectedRowIds ?? [],
+			rowSelection: initialState.rowSelection,
 			rowHeights: initialState.rowHeights || {},
 			columnWidths: initialState.columnWidths || {},
 			defaultRowHeight: initialState.defaultRowHeight || 40,
@@ -236,33 +239,24 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.applyRowSelectionGesture(gesture);
 	};
 
-	public selectRows = (rowIds: string[]): void => {
-		this.engine.selectRowIds(rowIds, 'api');
-	};
+	public selectRows = (rowIds: string[], options?: SelectRowsOptions): void =>
+		options?.mode === 'replace' ? this.engine.replaceRowIds(rowIds, 'api') : this.engine.selectRowIds(rowIds, 'api');
 
-	public deselectRows = (rowIds: string[]): void => {
-		this.engine.deselectRowIds(rowIds, 'api');
-	};
+	public deselectRows = (rowIds: string[]): void => this.engine.deselectRowIds(rowIds, 'api');
 
-	public toggleRowSelection = (rowId: string): void => {
-		this.engine.toggleRowId(rowId, 'api');
-	};
+	public toggleRowSelection = (rowId: string): void => this.engine.toggleRowId(rowId, 'api');
 
-	public selectAllRows = (): void => {
-		this.engine.selectAllDataRows('api');
-	};
+	public selectAllRows = (options?: SelectAllRowsOptions): void => this.engine.selectAllDataRows('api', options?.scope, options?.mode);
 
-	public clearRowSelection = (): void => {
-		this.engine.clearRowSelection('api');
-	};
+	public clearRowSelection = (): void => this.engine.clearRowSelection('api');
 
 	public isRowNodeSelected = (rowId: string): boolean => {
 		return this.state.selectedRowIds.includes(rowId);
 	};
 
-	public getSelectedRowCount = (): number => {
-		return this.state.selectedRowIds.length;
-	};
+	public getSelectedRowCount = (): number => this.state.selectedRowIds.length;
+
+	public getSelectedRowIds = (): string[] => this.state.selectedRowIds.slice();
 
 	public setColumnWidth = (colField: string, width: number): void => {
 		this.engine.resizeColumn(colField, width);

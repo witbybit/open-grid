@@ -1,5 +1,5 @@
 import { isDataCellSelectable, GridEventName } from '../store.js';
-import type { RowModel, RowSelectionGesture, RowSelectionGestureSource, RowSelectionChangeResult } from '../store.js';
+import type { RowModel, RowSelectionGesture, RowSelectionGestureSource, RowSelectionChangeResult, RowSelectionScope } from '../store.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
 
 export class RowSelectionFeatureController<TRowData = unknown> {
@@ -8,10 +8,13 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 		private readonly getRowModel: () => RowModel<TRowData> | null
 	) {}
 
-	private getAllSelectableDataRowIds(): string[] {
+	private getAllSelectableDataRowIds(scope?: RowSelectionScope): string[] {
 		const allIds: string[] = [];
 		const rowModel = this.getRowModel();
 		if (!rowModel) return allIds;
+		if (rowModel.getSelectableDataRowIds) {
+			return rowModel.getSelectableDataRowIds(scope ?? this.ctx.getState().rowSelection?.selectAllScope ?? 'page');
+		}
 		const count = rowModel.getVisualRowCount();
 		for (let i = 0; i < count; i++) {
 			const vr = rowModel.getVisualRow(i);
@@ -27,21 +30,32 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 		return isDataCellSelectable(visualRow, this.ctx.columns.getColumnDef(colField));
 	}
 
+	private normalizeIdsForMode(rowIds: string[]): string[] {
+		const deduped = [...new Set(rowIds)];
+		return this.ctx.getState().rowSelection?.mode === 'single' ? deduped.slice(0, 1) : deduped;
+	}
+
 	private reduceRowSelection(gesture: RowSelectionGesture): RowSelectionChangeResult | null {
 		const current = this.ctx.getState();
 		const currentSet = new Set(current.selectedRowIds);
-		const rowIds = gesture.rowIds ?? [];
+		const rowIds = this.normalizeIdsForMode(gesture.rowIds ?? []);
+		const isSingle = current.rowSelection?.mode === 'single';
 		let newIds: string[];
 
 		switch (gesture.kind) {
 			case 'replace': {
-				const nextSet = new Set(rowIds);
-				newIds = [...nextSet];
+				newIds = rowIds;
 				break;
 			}
 			case 'select': {
-				rowIds.forEach((id) => currentSet.add(id));
-				newIds = [...currentSet];
+				if (isSingle) {
+					newIds = rowIds.length > 0 ? [rowIds[0]] : current.selectedRowIds.slice(0, 1);
+				} else if (gesture.mode === 'replace') {
+					newIds = rowIds;
+				} else {
+					rowIds.forEach((id) => currentSet.add(id));
+					newIds = [...currentSet];
+				}
 				break;
 			}
 			case 'deselect': {
@@ -53,12 +67,22 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 				const id = rowIds[0];
 				if (!id) return null;
 				if (currentSet.has(id)) currentSet.delete(id);
-				else currentSet.add(id);
+				else {
+					if (isSingle) currentSet.clear();
+					currentSet.add(id);
+				}
 				newIds = [...currentSet];
 				break;
 			}
 			case 'selectAll': {
-				newIds = this.getAllSelectableDataRowIds();
+				if (isSingle) return null;
+				const scopedIds = this.getAllSelectableDataRowIds(gesture.scope);
+				if (gesture.mode === 'add') {
+					scopedIds.forEach((id) => currentSet.add(id));
+					newIds = [...currentSet];
+				} else {
+					newIds = scopedIds;
+				}
 				break;
 			}
 			case 'clear': {
@@ -105,6 +129,10 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 		this.applyRowSelectionGesture({ kind: 'select', rowIds, source });
 	}
 
+	public replaceRowIds(rowIds: string[], source: RowSelectionGestureSource = 'api'): void {
+		this.applyRowSelectionGesture({ kind: 'replace', rowIds, source });
+	}
+
 	public deselectRowIds(rowIds: string[], source: RowSelectionGestureSource = 'api'): void {
 		this.applyRowSelectionGesture({ kind: 'deselect', rowIds, source });
 	}
@@ -113,8 +141,8 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 		this.applyRowSelectionGesture({ kind: 'toggle', rowIds: [rowId], source });
 	}
 
-	public selectAllDataRows(source: RowSelectionGestureSource = 'api'): void {
-		this.applyRowSelectionGesture({ kind: 'selectAll', source });
+	public selectAllDataRows(source: RowSelectionGestureSource = 'api', scope?: RowSelectionScope, mode?: 'add' | 'replace'): void {
+		this.applyRowSelectionGesture({ kind: 'selectAll', source, scope, mode });
 	}
 
 	public clearRowSelection(source: RowSelectionGestureSource = 'api'): void {

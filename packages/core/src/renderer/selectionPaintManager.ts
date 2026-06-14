@@ -43,6 +43,7 @@ export class SelectionPaintManager<TRowData> {
 
 		const state = this.engine.stateManager.getState();
 		if (!state.columns.some((col) => col.checkboxSelection)) return;
+		const isMultiple = state.rowSelection?.mode !== 'single';
 		const col = this.engine.columns.getColumnDef(cellSlot.colField);
 		if (col?.checkboxSelection) return;
 
@@ -51,7 +52,7 @@ export class SelectionPaintManager<TRowData> {
 		const row = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
 		if (row?.kind !== 'data') return;
 
-		if (e.shiftKey && this.rowCheckboxAnchorId) {
+		if (isMultiple && e.shiftKey && this.rowCheckboxAnchorId) {
 			const rangeIds = this.getDataRowIdsBetween(this.rowCheckboxAnchorId, cellSlot.rowId);
 			if (rangeIds.length > 0) {
 				this.engine.applyRowSelectionGesture({ kind: 'select', rowIds: rangeIds, source: 'pointer' });
@@ -60,7 +61,7 @@ export class SelectionPaintManager<TRowData> {
 			}
 		}
 
-		if (e.ctrlKey || e.metaKey) {
+		if (isMultiple && (e.ctrlKey || e.metaKey)) {
 			this.engine.toggleRowId(cellSlot.rowId, 'pointer');
 		} else {
 			this.engine.applyRowSelectionGesture({ kind: 'replace', rowIds: [cellSlot.rowId], source: 'pointer' });
