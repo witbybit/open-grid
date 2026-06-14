@@ -204,6 +204,13 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.setState({ rowOverscanPx: px });
 	};
 
+	/**
+	 * Updates a single cell value. Triggers valueSetter, undo history, and formula recalculation.
+	 *
+	 * For bulk mutations prefer `updateRows` (functional mapper) or `applyTransaction`
+	 * (structured add/remove/update). Calling this in a loop fires O(N) individual
+	 * invalidations instead of one coalesced batch.
+	 */
 	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
 		this.engine.setCellValue(rowId, colField, value);
 	};

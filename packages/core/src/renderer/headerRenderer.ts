@@ -153,7 +153,7 @@ export class HeaderRenderer<TRowData = unknown> {
 
 		const state = this.engine.stateManager.getState();
 		const compiledStyleRules = compileStyleRules(state.styleRules);
-		const focusedColField = state.selection.focus?.colField ?? null;
+		const selBounds = state.selection.bounds;
 		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
 		const colCount = leafBand.cells.length;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
@@ -216,7 +216,8 @@ export class HeaderRenderer<TRowData = unknown> {
 				const columnInteractions = this.columnInteractionsGetter();
 				const isDraggingThis = columnInteractions.isDraggingColumn(cell.field);
 				if (isDraggingThis) className += ' og-header-cell-dragging';
-				if (focusedColField !== null && cell.field === focusedColField) className += ' og-header-cell-col-focus';
+				if (selBounds !== null && cell.colStart >= selBounds.minCol && cell.colStart <= selBounds.maxCol)
+					className += ' og-header-cell-col-focus';
 
 				if (headerCell.className !== className) headerCell.className = className;
 				// Live column-reorder preview (Plan 047): slide this header to its previewed

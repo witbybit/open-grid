@@ -113,11 +113,12 @@ export default function GanttSchedulingWorkspace({
 		if (!api) return;
 		const start = performance.now();
 		let currentDay = 1;
+		const updates: GanttRow[] = [];
 		api.rows().forEach((row) => {
-			const duration = Number(row.durationDays) || 2;
-			api.setCellValue(row.id, 'sprintDay', currentDay);
-			currentDay += duration;
+			updates.push({ ...row, sprintDay: currentDay });
+			currentDay += Number(row.durationDays) || 2;
 		});
+		api.applyTransaction({ update: updates });
 		setRevision((value) => value + 1);
 		alert(`Sprint Scheduling Overlaps Auto-Resolved! (Shifted coordinate dates sequentially in ${(performance.now() - start).toFixed(2)}ms)`);
 	}, [api]);
@@ -129,10 +130,8 @@ export default function GanttSchedulingWorkspace({
 			alert('Please select a range of cells using drag selection first.');
 			return;
 		}
-		for (const id of api.rows().inRange(range).getIds()) {
-			api.setCellValue(id, 'progress', 100);
-			api.setCellValue(id, 'status', 'Done');
-		}
+		const rowIdSet = new Set(api.rows().inRange(range).getIds());
+		api.updateRows((rows) => rows.map((row) => (rowIdSet.has(row.id) ? { ...row, progress: 100, status: 'Done' } : row)));
 		setRevision((value) => value + 1);
 	}, [api]);
 

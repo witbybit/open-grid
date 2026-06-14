@@ -137,12 +137,16 @@ export default function App() {
 	const runBulkCalculationTest = useCallback(() => {
 		if (!activeApi) return;
 		const start = performance.now();
+		const updates: any[] = [];
 		activeApi.rows().forEach((row, index) => {
 			if (index % 10 !== 0) return;
-			activeApi.setCellValue(row.id, 'price', (Math.floor(Math.random() * 150) + 10).toString());
-			activeApi.setCellValue(row.id, 'quantity', (Math.floor(Math.random() * 60) + 15).toString());
+			updates.push({
+				...row,
+				price: (Math.floor(Math.random() * 150) + 10).toString(),
+				quantity: (Math.floor(Math.random() * 60) + 15).toString(),
+			});
 		});
-		activeApi.flushCellUpdatesSync();
+		activeApi.applyTransaction({ update: updates });
 		performance.measure('open-grid-demo-bulk-calculation', { start, end: performance.now() });
 		performance.mark('open-grid-demo-grid-action');
 	}, [activeApi]);
@@ -170,18 +174,19 @@ export default function App() {
 				window.alert(`Calculated Selection Range Sum: ${total.toFixed(2)}`);
 				return;
 			}
-			for (const rowId of rowIds) {
-				for (const colField of columns) {
-					if (action === 'fill') activeApi.setCellValue(rowId, colField, '100');
-					else if (action === 'clear') activeApi.setCellValue(rowId, colField, 0);
-					else
-						activeApi.setCellValue(
-							rowId,
-							colField,
-							((parseFloat(String(activeApi.getCellValue(rowId, colField))) || 0) * 1.1).toFixed(0)
-						);
-				}
-			}
+			const rowIdSet = new Set(rowIds);
+			activeApi.updateRows((currentRows) =>
+				currentRows.map((row) => {
+					if (!rowIdSet.has(row.id)) return row;
+					const next = { ...row } as any;
+					for (const field of columns) {
+						if (action === 'fill') next[field] = '100';
+						else if (action === 'clear') next[field] = 0;
+						else next[field] = ((parseFloat(String((row as any)[field])) || 0) * 1.1).toFixed(0);
+					}
+					return next;
+				})
+			);
 			performance.mark('open-grid-demo-range-action');
 		},
 		[activeApi]

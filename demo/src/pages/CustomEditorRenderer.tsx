@@ -82,16 +82,19 @@ export default function CustomEditorRenderer({
 
 	const handleBatchActivate = () => {
 		if (!api || !selectedRange) return alert('Please select a range of cells or rows first.');
-		for (const rowId of api.rows().inRange(selectedRange).getIds()) api.setCellValue(rowId, 'status', 'Active');
+		const rowIdSet = new Set(api.rows().inRange(selectedRange).getIds());
+		api.updateRows((rows) => rows.map((row) => (rowIdSet.has(row.id) ? { ...row, status: 'Active' } : row)));
 	};
 
 	const handleBatchBoostProgress = () => {
 		if (!api || !selectedRange) return alert('Please select a range of cells or rows first.');
-		for (const rowId of api.rows().inRange(selectedRange).getIds()) {
-			const row = api.rows().getById(rowId);
-			if (!row) continue;
-			api.setCellValue(rowId, 'progress', Math.min(100, (parseFloat(String(row.progress)) || 0) + 10).toString());
-		}
+		const rowIdSet = new Set(api.rows().inRange(selectedRange).getIds());
+		api.updateRows((rows) =>
+			rows.map((row) => {
+				if (!rowIdSet.has(row.id)) return row;
+				return { ...row, progress: Math.min(100, (parseFloat(String(row.progress)) || 0) + 10).toString() };
+			})
+		);
 	};
 
 	return (

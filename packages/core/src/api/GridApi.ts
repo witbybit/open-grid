@@ -303,6 +303,13 @@ export interface GridApi<TRowData = unknown> {
 	setServerDatasource(datasource: IGridDatasource<TRowData>, blockSize?: number): void;
 	goToPage(page: number): void;
 	getCellValue(rowId: string, colField: string): unknown;
+	/**
+	 * Updates a single cell value. Triggers valueSetter, undo history, and formula recalculation.
+	 *
+	 * For bulk mutations prefer `updateRows` (functional mapper) or `applyTransaction`
+	 * (structured add/remove/update). Calling this in a loop fires O(N) individual
+	 * invalidations instead of one coalesced batch.
+	 */
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
 	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
