@@ -863,6 +863,12 @@ export const CORE_STYLES = `
     cursor: default;
   }
 
+  .og-header-cell-col-focus {
+    background-color: color-mix(in srgb, var(--og-focus-ring) 10%, var(--og-header-bg));
+    color: var(--og-focus-ring);
+    box-shadow: inset 0 -2px 0 var(--og-focus-ring);
+  }
+
   .og-header-cell-movable {
     cursor: grab;
     /* Transitions apply to pickup (class added) and drop (class removed).

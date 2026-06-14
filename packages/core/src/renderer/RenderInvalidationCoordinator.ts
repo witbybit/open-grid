@@ -123,6 +123,8 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 				if (result.overlayChanged) {
 					this.deps.engine.invalidation.invalidateOverlay('selection');
 				}
+				// Focused column changed — repaint headers so og-header-cell-col-focus updates.
+				this.deps.engine.invalidation.invalidateHeaders('selection');
 				if (selection?.focus && selection.source !== 'pointer') {
 					this.deps.scrollCellIntoView(selection.focus.rowId, selection.focus.colField);
 				}

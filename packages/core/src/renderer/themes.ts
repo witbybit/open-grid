@@ -294,6 +294,70 @@ export const WARM_ORANGE_THEME: ThemeTokens = {
 };
 
 /**
+ * Spreadsheet theme - Microsoft Excel / Google Sheets aesthetic
+ * Clean white body, light-gray headers, blue accent, hairline borders
+ */
+export const SPREADSHEET_THEME: ThemeTokens = {
+	fontFamily: "'Roboto', 'Segoe UI', -apple-system, sans-serif",
+
+	bgColor: '#ffffff',
+	textColor: '#202124',
+	borderColor: '#d0d0d0',
+	borderColorAccent: '#bdbdbd',
+
+	headerBg: '#f2f2f2',
+	headerText: '#444444',
+
+	rowHoverBg: '#f5f5f5',
+	cellBorder: 'rgba(0, 0, 0, 0.08)',
+
+	selectionBorder: 'rgba(15, 157, 88, 0.7)',
+	selectionBg: 'rgba(15, 157, 88, 0.12)',
+	focusRing: '#0f9d58',
+
+	pinLeftBorderColor: '#d0d0d0',
+	pinRightBorderColor: '#d0d0d0',
+	pinLeftShadow: '2px 0 6px rgba(0, 0, 0, 0.1)',
+	pinRightShadow: '-2px 0 6px rgba(0, 0, 0, 0.1)',
+
+	skeletonStart: '#f5f5f5',
+	skeletonMid: '#e8e8e8',
+	skeletonEnd: '#f5f5f5',
+	skeletonWidth: '75%',
+	skeletonHeight: '14px',
+	skeletonBorderRadius: '2px',
+	skeletonAnimationDuration: '1.5s',
+
+	groupRowBg: 'rgba(15, 157, 88, 0.04)',
+	groupRowHoverBg: 'rgba(15, 157, 88, 0.08)',
+	groupRowText: '#202124',
+	groupRowFontSize: '12px',
+	groupRowFontWeight: '600',
+	groupBadgeBg: 'rgba(15, 157, 88, 0.12)',
+	groupBadgeBorder: 'rgba(15, 157, 88, 0.3)',
+	groupBadgeText: '#0f9d58',
+
+	detailRowBg: '#fafafa',
+	detailRowBorder: '#e0e0e0',
+	detailRowText: '#5f6368',
+	detailRowFontSize: '12px',
+
+	popoverBg: '#ffffff',
+	popoverBorder: 'rgba(0, 0, 0, 0.12)',
+	popoverText: '#202124',
+	popoverItemHoverBg: 'rgba(15, 157, 88, 0.08)',
+	popoverItemActiveBg: '#0f9d58',
+	popoverDivider: '#e0e0e0',
+	popoverInputBg: '#ffffff',
+	popoverInputBorder: '#d0d0d0',
+
+	leafHeaderHeight: '40px',
+	groupPanelHeight: '42px',
+	bottomChromeHeight: '0px',
+	totalHeaderHeight: '40px',
+};
+
+/**
  * Minimal monochrome theme - ultra-clean aesthetic
  */
 export const MINIMAL_MONOCHROME_THEME: ThemeTokens = {
@@ -321,11 +385,21 @@ export const BUILT_IN_THEMES = {
 	'cool-blue': COOL_BLUE_THEME,
 	'warm-orange': WARM_ORANGE_THEME,
 	'minimal-monochrome': MINIMAL_MONOCHROME_THEME,
+	spreadsheet: SPREADSHEET_THEME,
 } as const;
 
 export type BuiltInThemeName = keyof typeof BUILT_IN_THEMES;
 
-export const BUILT_IN_THEME_ORDER: BuiltInThemeName[] = ['dark', 'light', 'dark-hc', 'light-hc', 'cool-blue', 'warm-orange', 'minimal-monochrome'];
+export const BUILT_IN_THEME_ORDER: BuiltInThemeName[] = [
+	'dark',
+	'light',
+	'dark-hc',
+	'light-hc',
+	'cool-blue',
+	'warm-orange',
+	'minimal-monochrome',
+	'spreadsheet',
+];
 
 export const BUILT_IN_THEME_METADATA: Record<BuiltInThemeName, { label: string; description: string; appearance: 'light' | 'dark' }> = {
 	dark: {
@@ -362,6 +436,11 @@ export const BUILT_IN_THEME_METADATA: Record<BuiltInThemeName, { label: string; 
 		label: 'Mono',
 		description: 'Minimal grayscale presentation.',
 		appearance: 'dark',
+	},
+	spreadsheet: {
+		label: 'Spreadsheet',
+		description: 'Excel / Google Sheets-style daylight theme.',
+		appearance: 'light',
 	},
 };
 

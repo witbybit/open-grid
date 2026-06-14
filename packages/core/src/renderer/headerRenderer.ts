@@ -15,6 +15,7 @@ export class HeaderRenderer<TRowData = unknown> {
 	private headerLayer: HTMLDivElement | null = null;
 	private headerLeftLayer: HTMLDivElement | null = null;
 	private headerRightLayer: HTMLDivElement | null = null;
+	private lastLayoutPlan: GridLayoutPlan | null = null;
 
 	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
 	private lastHeaderScrollLeft = 0;
@@ -61,12 +62,17 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.lastHeaderRightTransform = '';
 	}
 
-	public sync(_frame: InvalidationFrame): void {
-		this.repaintHeaders();
+	public sync(frame: InvalidationFrame): void {
+		// Reuse the cached plan from the last full/geometry paint when geometry is unchanged.
+		// When frame.geometry=true, recomputeGeometry() already ran before this call, so
+		// the cached plan is stale (old viewport size, column widths, etc.) — recompute.
+		this.repaintHeaders(frame.geometry ? undefined : (this.lastLayoutPlan ?? undefined));
 	}
 
 	public repaintHeaders(layoutPlan?: GridLayoutPlan): void {
-		this.syncVisibleHeaders(true, layoutPlan ?? computeGridLayoutPlan(this.engine));
+		const plan = layoutPlan ?? computeGridLayoutPlan(this.engine);
+		this.lastLayoutPlan = plan;
+		this.syncVisibleHeaders(true, plan);
 	}
 
 	public syncScrollLeft(layoutPlan: GridLayoutPlan): void {
@@ -147,6 +153,7 @@ export class HeaderRenderer<TRowData = unknown> {
 
 		const state = this.engine.stateManager.getState();
 		const compiledStyleRules = compileStyleRules(state.styleRules);
+		const focusedColField = state.selection.focus?.colField ?? null;
 		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
 		const colCount = leafBand.cells.length;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
@@ -209,6 +216,7 @@ export class HeaderRenderer<TRowData = unknown> {
 				const columnInteractions = this.columnInteractionsGetter();
 				const isDraggingThis = columnInteractions.isDraggingColumn(cell.field);
 				if (isDraggingThis) className += ' og-header-cell-dragging';
+				if (focusedColField !== null && cell.field === focusedColField) className += ' og-header-cell-col-focus';
 
 				if (headerCell.className !== className) headerCell.className = className;
 				// Live column-reorder preview (Plan 047): slide this header to its previewed
