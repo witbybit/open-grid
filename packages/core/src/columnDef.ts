@@ -207,6 +207,12 @@ export interface ColumnDef<TRowData = unknown> {
 	sortable?: boolean;
 	/** When false, this column cannot be added to the row grouping. Defaults to true. */
 	enableRowGroup?: boolean;
+	/** Set to true to hide/disable the header menu for this column. Defaults to false. */
+	suppressHeaderMenu?: boolean;
+	/** Set to false to disable column pinning for this column. Defaults to true. */
+	pinnable?: boolean;
+	/** Set to false to disable filtering for this column. Defaults to true. */
+	filterable?: boolean;
 	/** Override the clipboard text for this cell on copy. Return the string to write. */
 	onCopy?: (params: CellCopyParams<TRowData>) => string;
 	/** Transform pasted text before setting the cell value. Return the value to write. */

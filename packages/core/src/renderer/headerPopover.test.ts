@@ -223,4 +223,74 @@ describe('HeaderPopoverMenu', () => {
 		window.dispatchEvent(mouseupEvent);
 		expect(store.getState().sortModel).toBeNull();
 	});
+
+	it('should hide the menu button when suppressHeaderMenu is true', () => {
+		store.setColumns([
+			{ field: 'id', header: 'ID', suppressHeaderMenu: true },
+			{ field: 'name', header: 'Name' },
+			{ field: 'price', header: 'Price' },
+		]);
+
+		engine.unmount();
+		engine.mount(container);
+
+		const idCell = Array.from(container.querySelectorAll('.og-header-cell')).find(
+			(el) => (el as HTMLElement).dataset.colField === 'id'
+		) as HTMLElement;
+		const idMenuBtn = idCell.querySelector('.og-header-menu-button') as HTMLDivElement;
+		expect(idMenuBtn.style.display).toBe('none');
+
+		const nameCell = Array.from(container.querySelectorAll('.og-header-cell')).find(
+			(el) => (el as HTMLElement).dataset.colField === 'name'
+		) as HTMLElement;
+		const nameMenuBtn = nameCell.querySelector('.og-header-menu-button') as HTMLDivElement;
+		expect(nameMenuBtn.style.display).toBe('');
+	});
+
+	it('should respect ColumnDef options to conditionally hide menu sections and render dividers correctly', () => {
+		store.setColumns([
+			{ field: 'id', header: 'ID', pinnable: false, filterable: false, enableRowGroup: false },
+			{ field: 'name', header: 'Name', sortable: false, enableRowGroup: false },
+			{ field: 'price', header: 'Price' },
+		]);
+
+		engine.unmount();
+		engine.mount(container);
+
+		// 1. Click menu button on "id" cell (only sort is visible, pin/group and filter sections hidden)
+		const idCell = Array.from(container.querySelectorAll('.og-header-cell')).find(
+			(el) => (el as HTMLElement).dataset.colField === 'id'
+		) as HTMLElement;
+		const idMenuBtn = idCell.querySelector('.og-header-menu-button') as HTMLDivElement;
+		idMenuBtn.click();
+
+		let popover = document.querySelector('.og-header-popover') as HTMLDivElement;
+		expect(popover).not.toBeNull();
+
+		expect(popover.querySelector('.og-popover-sort-section')).not.toBeNull();
+		expect(popover.querySelector('.og-popover-filter-section')).toBeNull();
+		expect(popover.querySelectorAll('.og-popover-divider').length).toBe(0);
+
+		// Dismiss
+		idMenuBtn.click();
+		document.querySelectorAll('.og-header-popover').forEach((el) => el.remove());
+
+		// 2. Click menu button on "name" cell (sort is hidden, pin/group and filter sections visible)
+		const nameCell = Array.from(container.querySelectorAll('.og-header-cell')).find(
+			(el) => (el as HTMLElement).dataset.colField === 'name'
+		) as HTMLElement;
+		const nameMenuBtn = nameCell.querySelector('.og-header-menu-button') as HTMLDivElement;
+		nameMenuBtn.click();
+
+		popover = document.querySelector('.og-header-popover') as HTMLDivElement;
+		expect(popover).not.toBeNull();
+
+		const sortItems = Array.from(popover.querySelectorAll('.og-popover-item')).filter((el) => el.textContent?.includes('Sort Ascending'));
+		expect(sortItems.length).toBe(0);
+		// pin/group is present (because pinnable is true) and filter section is present
+		expect(popover.querySelector('.og-popover-filter-section')).not.toBeNull();
+		expect(popover.querySelectorAll('.og-popover-divider').length).toBe(1);
+
+		nameMenuBtn.click();
+	});
 });

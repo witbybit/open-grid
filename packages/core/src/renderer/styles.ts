@@ -1189,7 +1189,7 @@ export const CORE_STYLES = `
     height: 20px;
     border-radius: 4px;
     cursor: pointer;
-    color: #94a3b8;
+    color: var(--og-header-text, #94a3b8);
     opacity: 0;
     transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
     margin-right: 4px;
@@ -1199,8 +1199,8 @@ export const CORE_STYLES = `
     opacity: 1;
   }
   .og-header-menu-button:hover {
-    color: #ffffff;
-    background-color: rgba(255, 255, 255, 0.08);
+    color: var(--og-focus-ring, #ffffff);
+    background-color: var(--og-popover-item-hover-bg, rgba(255, 255, 255, 0.08));
   }
   
   .og-header-popover {

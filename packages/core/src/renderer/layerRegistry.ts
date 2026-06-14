@@ -45,6 +45,7 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 			const visible = plan.chrome.groupPanelHeight > 0;
 			el.style.display = visible ? 'flex' : 'none';
 			el.style.height = visible ? `${plan.chrome.groupPanelHeight}px` : '0';
+			el.style.width = `${plan.dimensions.contentWidth}px`;
 		},
 	},
 	{

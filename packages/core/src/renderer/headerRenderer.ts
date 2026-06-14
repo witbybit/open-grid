@@ -225,13 +225,32 @@ export class HeaderRenderer<TRowData = unknown> {
 				if (headerCell.style.height !== nextHeight) headerCell.style.height = nextHeight;
 
 				const textSpan = headerCell.firstElementChild as HTMLSpanElement | null;
-				if (cell.checkboxSelection) {
+				if (cell.isLeaf) {
+					const col = this.engine.columns.getCompiledPlan().displayedColumns[cell.colStart];
 					const menuBtnEl = headerCell.querySelector<HTMLDivElement>('.og-header-menu-button');
-					if (menuBtnEl) menuBtnEl.style.display = 'none';
+					if (menuBtnEl) {
+						if (cell.checkboxSelection || (col && col.suppressHeaderMenu === true)) {
+							menuBtnEl.style.display = 'none';
+						} else {
+							menuBtnEl.style.display = '';
+						}
+					}
 					const resizeEl = headerCell.querySelector<HTMLDivElement>('.og-header-resize-handle');
-					if (resizeEl) resizeEl.style.display = 'none';
+					if (resizeEl) {
+						if (cell.checkboxSelection) {
+							resizeEl.style.display = 'none';
+						} else {
+							resizeEl.style.display = '';
+						}
+					}
 					const sortEl = headerCell.querySelector<HTMLDivElement>('.og-header-sort-indicator');
-					if (sortEl) sortEl.style.display = 'none';
+					if (sortEl) {
+						if (cell.checkboxSelection) {
+							sortEl.style.display = 'none';
+						} else {
+							sortEl.style.display = '';
+						}
+					}
 				}
 
 				if (cell.checkboxSelection) {
