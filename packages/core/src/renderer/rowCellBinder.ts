@@ -162,6 +162,22 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	const validationError = state.validationErrors?.[validationKey(node.id, col.field)];
 	if (validationError) cellClassName += ' og-cell-invalid';
 
+	// Sync badge dot and tooltip data attribute — badge is only in the DOM when an error exists.
+	const prevError = cellSlot.element.dataset.validationError;
+	if (validationError) {
+		if (prevError !== validationError) {
+			cellSlot.element.dataset.validationError = validationError;
+			if (!prevError) {
+				const badge = document.createElement('div');
+				badge.className = 'og-cell-error-badge';
+				cellSlot.element.appendChild(badge);
+			}
+		}
+	} else if (prevError) {
+		delete cellSlot.element.dataset.validationError;
+		cellSlot.element.querySelector('.og-cell-error-badge')?.remove();
+	}
+
 	const compiledStyleRules = compileStyleRules(state.styleRules);
 	if (compiledStyleRules.hasCellRules && node.data) {
 		try {

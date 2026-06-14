@@ -1,4 +1,5 @@
 import type { FilterModel, SortModel, RowModel } from './rowModel.js';
+import type { RowValidator } from './features/ValidationManager.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
 import type { IGridDatasource } from './serverRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
@@ -108,9 +109,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	private containerElement: HTMLElement | null = null;
 
-	constructor(initialState: Partial<GridState<TRowData>> = {}) {
+	constructor(initialState: Partial<GridState<TRowData>> = {}, engineOptions?: { rowValidator?: RowValidator<TRowData> }) {
 		validateColumns(initialState.columns || []);
 		this.engine = new GridEngine<TRowData>({
+			rowValidator: engineOptions?.rowValidator,
 			columns: initialState.columns || [],
 			selection: initialState.selection,
 			selectedRowIds: initialState.selectedRowIds ?? [],

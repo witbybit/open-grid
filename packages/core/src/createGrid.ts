@@ -1,4 +1,5 @@
 import { ClientRowModelController, type ClientRowModelOptions, type FilterModel, type SortModel } from './rowModel.js';
+import type { RowValidator } from './features/ValidationManager.js';
 import { ServerRowModelController, type IGridDatasource, type ServerRowModelOptions } from './serverRowModel.js';
 import {
 	GridStore,
@@ -87,6 +88,8 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 	 * }
 	 */
 	persistence?: string | GridPersistenceAdapter;
+	/** Grid-level cross-field validator — see RowValidator for details. */
+	rowValidator?: RowValidator<TRowData>;
 }
 
 export interface ServerGridOptions<TRowData> extends ServerRowModelOptions<TRowData> {
@@ -99,6 +102,8 @@ export interface ServerGridOptions<TRowData> extends ServerRowModelOptions<TRowD
 	 * Row data is not persisted (fetched from the server datasource on load).
 	 */
 	persistence?: string | GridPersistenceAdapter;
+	/** Grid-level cross-field validator — see RowValidator for details. */
+	rowValidator?: RowValidator<TRowData>;
 }
 
 function buildColumnWidths<TRowData>(columns: Array<ColumnDef<TRowData>>): Record<string, number> {
@@ -316,12 +321,15 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 	mergedInitial = selected.initialState;
 
 	const resolvedColumns = mergedInitial.columns ?? columns;
-	const store = new GridStore<TRowData>({
-		columns: resolvedColumns,
-		getRowId: options.getRowId,
-		columnWidths: buildColumnWidths(resolvedColumns),
-		...mergedInitial,
-	});
+	const store = new GridStore<TRowData>(
+		{
+			columns: resolvedColumns,
+			getRowId: options.getRowId,
+			columnWidths: buildColumnWidths(resolvedColumns),
+			...mergedInitial,
+		},
+		{ rowValidator: options.rowValidator }
+	);
 
 	const controller = new ClientRowModelController<TRowData>(store.getClientRowModelRuntime(), { ...options, columns: resolvedColumns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, store);
@@ -369,12 +377,15 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 	const selected = withRowSelectionColumn(options.columns, mergedInitial, options.rowSelection);
 	mergedInitial = selected.initialState;
 
-	const store = new GridStore<TRowData>({
-		columns: mergedInitial.columns ?? selected.columns,
-		getRowId: options.getRowId,
-		columnWidths: buildColumnWidths(mergedInitial.columns ?? selected.columns),
-		...mergedInitial,
-	});
+	const store = new GridStore<TRowData>(
+		{
+			columns: mergedInitial.columns ?? selected.columns,
+			getRowId: options.getRowId,
+			columnWidths: buildColumnWidths(mergedInitial.columns ?? selected.columns),
+			...mergedInitial,
+		},
+		{ rowValidator: options.rowValidator }
+	);
 
 	const controller = new ServerRowModelController<TRowData>(store.getServerRowModelRuntime(), { ...options, columns: selected.columns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, store);

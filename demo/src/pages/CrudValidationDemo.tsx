@@ -12,7 +12,7 @@
  */
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { Grid } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent, CellValidationError, SidebarPanelDef } from '@open-grid/react';
+import type { ColumnDef, GridApi, GridReadyEvent, CellValidationError, SidebarPanelDef, RowValidator } from '@open-grid/react';
 import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
@@ -116,6 +116,31 @@ const COLUMNS: ColumnDef<Employee>[] = [
 		},
 	},
 ];
+
+// ─── Cross-field row validator ────────────────────────────────────────────────
+
+const DEPT_MIN_SALARY: Record<string, number> = {
+	Engineering: 70000,
+	Finance: 65000,
+	Legal: 80000,
+	Design: 55000,
+	Marketing: 50000,
+	Sales: 45000,
+	HR: 45000,
+};
+
+const employeeRowValidator: RowValidator<Employee> = ({ row }) => {
+	const errors: Record<string, string | null> = {};
+	const salary = Number(row.salary);
+	const dept = row.department;
+	const minSalary = DEPT_MIN_SALARY[dept];
+	if (minSalary !== undefined && !isNaN(salary) && salary >= 0 && salary < minSalary) {
+		errors.salary = `${dept} minimum salary is $${minSalary.toLocaleString()}`;
+	} else {
+		errors.salary = null; // clear any stale row-level salary error
+	}
+	return errors;
+};
 
 // ─── Submit state type ────────────────────────────────────────────────────────
 
@@ -406,6 +431,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					columns={COLUMNS}
 					rows={rows}
 					getRowId={(r) => r.id}
+					rowValidator={employeeRowValidator}
 					navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
 					pinLeftColumns={pinLeftColumns}
 					pinRightColumns={pinRightColumns}
@@ -424,7 +450,9 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				<span className='font-semibold uppercase tracking-wider'>How to use:</span>
 				<span>Double-click any cell to edit</span>
 				<span>·</span>
-				<span>Red borders mark cells failing validation — errors persist after the editor closes</span>
+				<span>Hover a red cell to see the error tooltip</span>
+				<span>·</span>
+				<span>Row validator enforces per-department salary minimums</span>
 				<span>·</span>
 				<span>
 					<strong className='text-slate-400'>Validate All</strong> or <strong className='text-slate-400'>Submit Changes</strong> opens the

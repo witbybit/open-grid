@@ -32,6 +32,7 @@ import { PaginationBarRenderer } from './paginationBarRenderer.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import { RenderInvalidationCoordinator } from './RenderInvalidationCoordinator.js';
+import { ValidationTooltipController } from './ValidationTooltipController.js';
 import { collectRenderStats, createRenderRuntimeStats, resetRenderTelemetry } from './renderTelemetry.js';
 import { RenderPaintCoordinator, type RenderPaintCoordinatorState } from './renderPaintCoordinator.js';
 import { RenderScrollCoordinator, type RenderScrollCoordinatorState } from './renderScrollCoordinator.js';
@@ -45,6 +46,8 @@ import type { GridApi, InternalGridApi } from '../store.js';
 export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData> {
 	private readonly engine: GridEngine<TRowData>;
 	private readonly api?: InternalGridApi<TRowData>;
+
+	private validationTooltip: ValidationTooltipController | null = null;
 
 	private readonly geometryController: GeometryController<TRowData>;
 	private readonly scrollEngine: ScrollEngine<TRowData>;
@@ -416,6 +419,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// Set viewport dimensions in model
 		this.engine.viewport.setViewportSize(rect.width || 800, rect.height || 500);
 
+		this.validationTooltip = new ValidationTooltipController(container);
+
 		this.invalidationCoordinator.bind();
 
 		// Prime the max-scroll cache so the first scroll events don't see a stale 0
@@ -431,6 +436,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	 */
 	public unmount(): void {
 		this.headerMenu.hide();
+
+		this.validationTooltip?.destroy();
+		this.validationTooltip = null;
 
 		this.invalidationCoordinator.destroy();
 		this.scrollEngine.unbind();

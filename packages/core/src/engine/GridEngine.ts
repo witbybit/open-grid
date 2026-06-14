@@ -268,6 +268,7 @@ export class GridEngine<TRowData = unknown> {
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			data: this.data,
+			rowValidator: config.rowValidator,
 		});
 		this.editingFeature = new EditingFeatureController<TRowData>({
 			ctx: featureContext,

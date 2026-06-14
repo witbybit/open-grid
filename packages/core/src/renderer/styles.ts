@@ -865,6 +865,11 @@ export const CORE_STYLES = `
     border-color: var(--og-error);
   }
 
+  /* Hide badge while the editor is open — the red editor border already signals the error */
+  .og-cell:has(.og-cell-editor) .og-cell-error-badge {
+    display: none;
+  }
+
   /* Validation error badge — shown inside the cell via og-cell-error-badge */
   .og-cell-error-badge {
     position: absolute;

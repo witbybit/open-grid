@@ -5,6 +5,7 @@ import { GridView, type GridViewProps } from './GridView.js';
 import { resolveColumnTypes } from './resolveColumnTypes.js';
 import type { ColumnDef, GridState, GridPersistenceAdapter, GridDatasource, RowSelectionMode, RowSelectionOptions } from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
+import type { RowValidator } from '@open-grid/core';
 
 type GridShellProps<TRowData> = Omit<GridViewProps<TRowData>, 'api'>;
 const DEFAULT_PAGE_SIZE = 100;
@@ -30,6 +31,8 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
 	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
 	styleRules?: StyleRule<TRowData>[];
+	/** Grid-level cross-field validator. Runs after per-column valueValidators. */
+	rowValidator?: RowValidator<TRowData>;
 	detailRowHeight?: number;
 	/** Enable the core pagination bar (and, in client mode, page-window row slicing). */
 	pagination?: boolean | GridPaginationConfig;
@@ -86,6 +89,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		columns,
 		columnTypes,
 		styleRules,
+		rowValidator,
 		getRowId,
 		initialState,
 		persistence,
@@ -139,6 +143,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				getRowId,
 				persistence: resolvedPersistence,
 				rowSelection,
+				rowValidator,
 				initialState: initial,
 			});
 		}
@@ -150,6 +155,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			getRowId,
 			persistence: resolvedPersistence,
 			rowSelection,
+			rowValidator,
 			initialState: initial,
 			pagination: paginationConfig ? { pageSize: paginationConfig.pageSize, initialPage: paginationConfig.initialPage } : undefined,
 		});

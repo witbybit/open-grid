@@ -1,4 +1,5 @@
 import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleRule, RowSelectionOptions } from '../store.js';
+import type { RowValidator } from '../features/ValidationManager.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 
@@ -21,6 +22,12 @@ export interface GridEngineConfig<TRowData = unknown> {
 	loadingSkeletonCount?: number;
 	styleRules?: GridStyleRule<TRowData>[];
 	loading?: boolean;
+	/**
+	 * Grid-level cross-field validator. Runs after per-column valueValidators on every
+	 * validateCell / validateGrid call. Return a map of colField → error string to set
+	 * cross-field errors; return null/empty string for a field to clear its row-level error.
+	 */
+	rowValidator?: RowValidator<TRowData>;
 
 	// Tree / Grouping / Master-Detail State Configuration
 	groupBy?: string[];

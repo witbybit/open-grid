@@ -9,10 +9,31 @@ export interface CellValidationError {
 	error: string;
 }
 
+/** Parameters passed to a grid-level row validator. */
+export interface RowValidatorParams<TRowData = unknown> {
+	/** Current row data snapshot. */
+	row: TRowData;
+	/**
+	 * Which column triggered this validation call (set during single-cell validation,
+	 * undefined during a full grid validateGrid() sweep).
+	 */
+	changedColField?: string;
+}
+
+/**
+ * Grid-level cross-field validator. Return a map of colField → error string (or null/empty
+ * to clear a row-level error for that field). Runs after per-column valueValidators so it can
+ * override or supplement them.
+ */
+export type RowValidator<TRowData = unknown> = (
+	params: RowValidatorParams<TRowData>
+) => Record<string, string | null> | Promise<Record<string, string | null>>;
+
 export interface ValidationManagerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
+	rowValidator?: RowValidator<TRowData>;
 }
 
 export function validationKey(rowId: string, colField: string): string {
@@ -23,32 +44,50 @@ export class ValidationManager<TRowData = unknown> {
 	private readonly ctx: GridFeatureContext<TRowData>;
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
+	private readonly rowValidator?: RowValidator<TRowData>;
 
 	constructor(deps: ValidationManagerDeps<TRowData>) {
 		this.ctx = deps.ctx;
 		this.getRowModel = deps.getRowModel;
 		this.data = deps.data;
+		this.rowValidator = deps.rowValidator;
 	}
 
 	/** Run the column's valueValidator with the cell's current value. Updates state on failure. */
 	public async validateCell(rowId: string, colField: string): Promise<string | null> {
 		const col = this.ctx.columns.getColumnDef(colField);
-		if (!col?.valueValidator) return null;
-
 		const rowModel = this.getRowModel();
 		const node = rowModel?.getRowNodeById(rowId) ?? null;
 		const row = node?.data ?? ({} as TRowData);
-		const value = this.data.getRawCellValue(rowId, colField);
 
-		let error: string | null = null;
-		try {
-			error = await col.valueValidator({ value, oldValue: value, row, colField });
-		} catch {
-			error = 'Validation failed';
+		let colError: string | null = null;
+		if (col?.valueValidator) {
+			const value = this.data.getRawCellValue(rowId, colField);
+			try {
+				colError = await col.valueValidator({ value, oldValue: value, row, colField });
+			} catch {
+				colError = 'Validation failed';
+			}
+			this._setCellError(rowId, colField, colError ?? null);
 		}
 
-		this._setCellError(rowId, colField, error ?? null);
-		return error ?? null;
+		// Run grid-level row validator — may set/clear errors on any field in the row.
+		if (this.rowValidator) {
+			let rowErrors: Record<string, string | null> = {};
+			try {
+				rowErrors = await this.rowValidator({ row, changedColField: colField });
+			} catch {
+				// row validator exceptions don't block the column error result
+			}
+			for (const [field, err] of Object.entries(rowErrors)) {
+				// Skip the field already handled by the column validator above —
+				// that result takes precedence for the triggered cell.
+				if (field === colField) continue;
+				this._setCellError(rowId, field, err ?? null);
+			}
+		}
+
+		return colError ?? null;
 	}
 
 	/** Run all column validators across all data rows. Returns the list of failures. */
@@ -56,17 +95,14 @@ export class ValidationManager<TRowData = unknown> {
 		const rowModel = this.getRowModel();
 		if (!rowModel) return [];
 
-		// Read columns from state (source of truth for all columns), but resolve validators
-		// through getColumnDef which is the same path validateCell uses.
 		const colFields = this.ctx.getState().columns.map((c) => c.field);
 		const validatableCols = colFields.map((f) => this.ctx.columns.getColumnDef(f)).filter((c): c is NonNullable<typeof c> => !!c?.valueValidator);
-		if (validatableCols.length === 0) return [];
-
-		// Collect all validation promises
-		const tasks: Array<Promise<{ rowId: string; colField: string; error: string | null }>> = [];
 
 		const state = this.ctx.getState();
 		const rowCount = rowModel.getVisualRowCount();
+
+		// ── Phase 1: column validators ────────────────────────────────────────────
+		const colTasks: Array<Promise<{ rowId: string; colField: string; error: string | null }>> = [];
 		for (let i = 0; i < rowCount; i++) {
 			const vr = rowModel.getVisualRow(i);
 			if (!vr || vr.kind !== 'data') continue;
@@ -76,7 +112,7 @@ export class ValidationManager<TRowData = unknown> {
 			for (const col of validatableCols) {
 				const colField = col.field;
 				const value = this.data.getRawCellValue(node.id, colField);
-				tasks.push(
+				colTasks.push(
 					(async () => {
 						let error: string | null = null;
 						try {
@@ -90,40 +126,75 @@ export class ValidationManager<TRowData = unknown> {
 			}
 		}
 
-		const results = await Promise.all(tasks);
+		const colResults = await Promise.all(colTasks);
 
-		// Build new sparse errors map from scratch (replace previous validation pass)
-		const nextErrors: Record<string, string> = {};
-		const failures: CellValidationError[] = [];
-
-		// Preserve errors that were set outside this grid-level pass (cell-level api.validateCell)
-		// — don't wipe them; only update the cells we just validated.
+		// Build sparse errors map — preserve cell-level errors from outside this pass.
 		const existingErrors = state.validationErrors ?? {};
 		const validatedKeys = new Set<string>();
 		for (const col of validatableCols) {
-			// we'll overwrite all keys for validated columns; gather which cells we touched
 			for (let i = 0; i < rowCount; i++) {
 				const vr = rowModel.getVisualRow(i);
 				if (!vr || vr.kind !== 'data') continue;
 				validatedKeys.add(validationKey(vr.node.id, col.field));
 			}
 		}
-
-		// Start from existing, remove re-validated keys, then re-add failures
+		const nextErrors: Record<string, string> = {};
 		for (const [k, v] of Object.entries(existingErrors)) {
 			if (!validatedKeys.has(k)) nextErrors[k] = v;
 		}
-		for (const r of results) {
-			if (r.error) {
-				nextErrors[validationKey(r.rowId, r.colField)] = r.error;
-				failures.push({ rowId: r.rowId, colField: r.colField, error: r.error });
+		for (const r of colResults) {
+			if (r.error) nextErrors[validationKey(r.rowId, r.colField)] = r.error;
+		}
+
+		// ── Phase 2: row validator (cross-field rules) ────────────────────────────
+		if (this.rowValidator) {
+			const rowTasks: Array<Promise<{ rowId: string; errors: Record<string, string | null> }>> = [];
+			for (let i = 0; i < rowCount; i++) {
+				const vr = rowModel.getVisualRow(i);
+				if (!vr || vr.kind !== 'data') continue;
+				const node = vr.node;
+				const row = node.data ?? ({} as TRowData);
+				rowTasks.push(
+					(async () => {
+						let errors: Record<string, string | null> = {};
+						try {
+							errors = await this.rowValidator!({ row, changedColField: undefined });
+						} catch {
+							// row validator exceptions don't block column results
+						}
+						return { rowId: node.id, errors };
+					})()
+				);
 			}
+			const rowResults = await Promise.all(rowTasks);
+			for (const { rowId, errors } of rowResults) {
+				for (const [field, err] of Object.entries(errors)) {
+					const key = validationKey(rowId, field);
+					if (err) {
+						nextErrors[key] = err;
+						validatedKeys.add(key);
+					} else {
+						// null/empty = row validator clears this field's error
+						delete nextErrors[key];
+						validatedKeys.add(key);
+					}
+				}
+			}
+		}
+
+		// ── Build final failures list and fire state change ───────────────────────
+		const failures: CellValidationError[] = [];
+		for (const [key, err] of Object.entries(nextErrors)) {
+			const colonIdx = key.indexOf(':');
+			if (colonIdx === -1) continue;
+			failures.push({ rowId: key.slice(0, colonIdx), colField: key.slice(colonIdx + 1), error: err });
 		}
 
 		const invalidations: Array<{ kind: 'cell'; rowId: string; colId: string; reason: string }> = [];
 		for (const k of validatedKeys) {
-			const [rowId, colField] = k.split(':');
-			invalidations.push({ kind: 'cell', rowId, colId: colField, reason: 'validation' });
+			const colonIdx = k.indexOf(':');
+			if (colonIdx === -1) continue;
+			invalidations.push({ kind: 'cell', rowId: k.slice(0, colonIdx), colId: k.slice(colonIdx + 1), reason: 'validation' });
 		}
 
 		this.ctx.applyChange({
