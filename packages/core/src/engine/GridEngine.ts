@@ -278,6 +278,7 @@ export class GridEngine<TRowData = unknown> {
 			setCellValue: (rowId, colField, value, undoable) => this.setCellValue(rowId, colField, value, undoable),
 			clearValidationError: (rowId, colField) => this.validationFeature._setCellError(rowId, colField, null),
 			setValidationError: (rowId, colField, error) => this.validationFeature._setCellError(rowId, colField, error),
+			validateCellPostCommit: (rowId, colField) => this.validationFeature.validateCell(rowId, colField).then(() => undefined),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
 		this.stateFeature = new GridStateFeatureController<TRowData>({

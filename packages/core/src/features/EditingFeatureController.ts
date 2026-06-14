@@ -13,6 +13,8 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	clearValidationError?: (rowId: string, colField: string) => void;
 	/** Called when an edit fails validation — persists the error indicator even after the editor closes. */
 	setValidationError?: (rowId: string, colField: string, error: string) => void;
+	/** Runs full validation (column + row) after the new value has been written to the data model. */
+	validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
 }
 
 export class EditingFeatureController<TRowData = unknown> {
@@ -23,6 +25,7 @@ export class EditingFeatureController<TRowData = unknown> {
 	private readonly setCellValue: (rowId: string, colField: string, value: unknown, undoable?: boolean) => void;
 	private readonly clearValidationError?: (rowId: string, colField: string) => void;
 	private readonly setValidationError?: (rowId: string, colField: string, error: string) => void;
+	private readonly validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
 
 	constructor(deps: EditingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
@@ -32,6 +35,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.setCellValue = deps.setCellValue;
 		this.clearValidationError = deps.clearValidationError;
 		this.setValidationError = deps.setValidationError;
+		this.validateCellPostCommit = deps.validateCellPostCommit;
 	}
 
 	private canEditCell(rowId: string, colField: string): boolean {
@@ -130,8 +134,12 @@ export class EditingFeatureController<TRowData = unknown> {
 		}
 
 		this.stopEdit(false);
-		// Clear any persistent validation indicator now that the value is valid
-		this.clearValidationError?.(rowId, colField);
+		// Run full validation (column + row) against the committed value, or just clear if no validator.
+		if (this.validateCellPostCommit) {
+			await this.validateCellPostCommit(rowId, colField);
+		} else {
+			this.clearValidationError?.(rowId, colField);
+		}
 		return true;
 	}
 }

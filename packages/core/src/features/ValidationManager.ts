@@ -80,9 +80,9 @@ export class ValidationManager<TRowData = unknown> {
 				// row validator exceptions don't block the column error result
 			}
 			for (const [field, err] of Object.entries(rowErrors)) {
-				// Skip the field already handled by the column validator above —
-				// that result takes precedence for the triggered cell.
-				if (field === colField) continue;
+				// If the column validator already flagged this cell, keep that error;
+				// otherwise apply the row validator result (including clearing stale errors).
+				if (field === colField && colError !== null) continue;
 				this._setCellError(rowId, field, err ?? null);
 			}
 		}

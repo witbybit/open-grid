@@ -6,6 +6,7 @@
 export class ValidationTooltipController {
 	private tooltipEl: HTMLDivElement | null = null;
 	private currentTarget: HTMLElement | null = null;
+	private observer: MutationObserver | null = null;
 
 	private readonly onMouseMove: (e: MouseEvent) => void;
 	private readonly onMouseLeave: () => void;
@@ -31,7 +32,6 @@ export class ValidationTooltipController {
 	}
 
 	private handleMouseMove(e: MouseEvent): void {
-		// Don't show during scroll — the container gets og-is-scrolling
 		if (this.container.classList.contains('og-is-scrolling')) {
 			this.hide();
 			return;
@@ -39,6 +39,12 @@ export class ValidationTooltipController {
 
 		const cell = (e.target as Element).closest('[data-validation-error]') as HTMLElement | null;
 		if (!cell) {
+			this.hide();
+			return;
+		}
+
+		// Hide while an editor is active in this cell
+		if (cell.querySelector('.og-cell-editor')) {
 			this.hide();
 			return;
 		}
@@ -51,8 +57,11 @@ export class ValidationTooltipController {
 
 		const tooltip = this.getOrCreateTooltip();
 
-		if (this.currentTarget !== cell || tooltip.textContent !== error) {
+		if (this.currentTarget !== cell) {
 			this.currentTarget = cell;
+			this.watchTarget(cell);
+		}
+		if (tooltip.textContent !== error) {
 			tooltip.textContent = error;
 		}
 
@@ -60,13 +69,29 @@ export class ValidationTooltipController {
 		const x = e.clientX + 12;
 		let y = e.clientY + 16;
 		const viewportH = window.innerHeight;
-		const tooltipH = 32; // approximate before layout
+		const tooltipH = 32;
 		if (y + tooltipH > viewportH - 8) {
 			y = e.clientY - tooltipH - 8;
 		}
 		tooltip.style.left = `${x}px`;
 		tooltip.style.top = `${y}px`;
 		tooltip.style.display = 'block';
+	}
+
+	/** Observe the current target cell so the tooltip hides immediately when the error clears or editing starts. */
+	private watchTarget(cell: HTMLElement): void {
+		this.observer?.disconnect();
+		this.observer = new MutationObserver(() => {
+			if (!cell.dataset.validationError || cell.querySelector('.og-cell-editor')) {
+				this.hide();
+			}
+		});
+		this.observer.observe(cell, {
+			attributes: true,
+			attributeFilter: ['data-validation-error'],
+			childList: true,
+			subtree: true,
+		});
 	}
 
 	private handleMouseLeave(): void {
@@ -76,12 +101,16 @@ export class ValidationTooltipController {
 	public hide(): void {
 		if (this.tooltipEl) this.tooltipEl.style.display = 'none';
 		this.currentTarget = null;
+		this.observer?.disconnect();
+		this.observer = null;
 	}
 
 	public destroy(): void {
 		this.container.removeEventListener('mousemove', this.onMouseMove);
 		this.container.removeEventListener('mouseleave', this.onMouseLeave);
 		this.container.removeEventListener('scroll', this.onScroll, { capture: true });
+		this.observer?.disconnect();
+		this.observer = null;
 		this.tooltipEl?.remove();
 		this.tooltipEl = null;
 		this.currentTarget = null;
