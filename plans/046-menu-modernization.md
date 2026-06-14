@@ -6,7 +6,7 @@
 - **Effort**: S–M (mostly CSS + small positioning hooks)
 - **Risk**: LOW (presentation only; no behavior change)
 - **Planned at**: 2026-06-14
-- **Status**: **DONE (2026-06-14, branch rendering-architecture-v2-wip-3)**. core 582/582, react 85/85, demo build clean.
+- **Status**: **DONE (2026-06-14, branch rendering-architecture-v2-wip-3)**. core 582/582, react 85/85, demo build clean. **Keyboard navigation follow-up landed 2026-06-14 — see end.**
 
 ## Goal
 
@@ -27,3 +27,11 @@ Make the column header popover and the row context menu look modern (shadcn/ui a
 - Header popover sort/filter controls kept; only surface + item + animation styling changed.
 - No DOM-structure or behavior changes → existing `headerPopover.test.ts` (6) stays green.
 - Verify visually in the dev server (menus only appear on interaction; not asserted pixel-wise).
+
+## Keyboard navigation follow-up (DONE 2026-06-14)
+
+- **Shared helper** `menuKeyboardNav.ts` → `attachRovingMenuKeyboard({container, items, activeClass, onActivate, onClose})`: ARIA vertical-menu pattern via roving focus — ArrowUp/Down (wrap), Home/End, Enter/Space activate, Escape/Tab close. Returns a cleanup fn. Pure DOM, framework-free. 9 unit tests in `menuKeyboardNav.test.ts`.
+- **Context menu** (`contextMenu.ts`, a pure list): collects enabled item els, attaches the roving helper (`activeClass: 'og-menu-active'`, `onActivate: el => el.click()`, `onClose: hide`); cleanup stored + run in `hide()`. Added `role=menu`/`menuitem`/`separator` + `aria-disabled`.
+- **Header popover** (`headerMenuController.ts`, a form): NOT roving (would break Tab into the filter). Instead: document `keydown` Escape → close (covers custom menus too, returns focus to the header cell); built-in sort rows made keyboard-activatable (`_makeActivatable`: `tabindex=0` + `role=menuitem` + Enter/Space → click) so they sit in the natural Tab order before the native select/input/buttons; first sort row autofocused on open; `role=menu` on the popover.
+- **CSS** (`styles.ts`): `.og-context-menu-item.og-menu-active` mirrors hover + suppresses the focused-item outline; `.og-popover-item:focus-visible` gets a focus ring.
+- Green: core 601/601 (9 new), react 70/70, builds clean. NOT browser-verified (hidden preview tab); behavior is DOM-level and unit-tested.

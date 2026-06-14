@@ -1053,9 +1053,16 @@ export const CORE_STYLES = `
     user-select: none;
     color: var(--og-popover-text, #e7e9ee);
   }
-  .og-context-menu-item:hover {
+  .og-context-menu-item:hover,
+  .og-context-menu-item.og-menu-active {
     background-color: var(--og-popover-item-hover-bg, rgba(255, 255, 255, 0.07));
     color: #ffffff;
+  }
+  /* Keyboard navigation highlights via .og-menu-active; the focused item shows that
+     state rather than a separate browser outline. */
+  .og-context-menu-item:focus,
+  .og-context-menu-item:focus-visible {
+    outline: none;
   }
   .og-context-menu-item.og-disabled {
     opacity: 0.4;
@@ -1190,6 +1197,14 @@ export const CORE_STYLES = `
   }
   .og-popover-item:hover {
     background-color: var(--og-popover-item-hover-bg, rgba(255, 255, 255, 0.06));
+    color: #ffffff;
+    opacity: 1;
+  }
+  /* Keyboard focus ring for the (non-native) sort rows; native filter controls keep
+     their own focus styling. */
+  .og-popover-item:focus-visible {
+    outline: 2px solid var(--og-focus-ring, #3b82f6);
+    outline-offset: -2px;
     color: #ffffff;
     opacity: 1;
   }

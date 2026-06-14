@@ -90,6 +90,7 @@ export class HeaderMenuController<TRowData = unknown> {
 			this.engine.setSortModel([{ colId: colField, sort: 'asc' }]);
 			this.hide();
 		});
+		this._makeActivatable(sortAsc);
 		sortContainer.appendChild(sortAsc);
 
 		const sortDesc = document.createElement('div');
@@ -102,6 +103,7 @@ export class HeaderMenuController<TRowData = unknown> {
 			this.engine.setSortModel([{ colId: colField, sort: 'desc' }]);
 			this.hide();
 		});
+		this._makeActivatable(sortDesc);
 		sortContainer.appendChild(sortDesc);
 
 		if (currentSort) {
@@ -115,6 +117,7 @@ export class HeaderMenuController<TRowData = unknown> {
 				this.engine.setSortModel(null);
 				this.hide();
 			});
+			this._makeActivatable(clearSort);
 			sortContainer.appendChild(clearSort);
 		}
 
@@ -211,9 +214,13 @@ export class HeaderMenuController<TRowData = unknown> {
 		filterContainer.appendChild(btnGroup);
 		popover.appendChild(filterContainer);
 
+		popover.setAttribute('role', 'menu');
 		document.body.appendChild(popover);
 		this._position(popover, rect);
 		this._bindDismissListeners();
+		// Move focus into the popover so keyboard users land on the first action and
+		// Tab flows through the sort items into the native filter controls.
+		sortAsc.focus({ preventScroll: true });
 	}
 
 	public hide = (): void => {
@@ -231,6 +238,7 @@ export class HeaderMenuController<TRowData = unknown> {
 		}
 		this.activeHeaderCell = null;
 		document.removeEventListener('mousedown', this._handleOutsideClick);
+		document.removeEventListener('keydown', this._handleKeyDown);
 		window.removeEventListener('scroll', this.hide, { capture: true });
 		window.removeEventListener('resize', this.hide);
 	};
@@ -245,8 +253,31 @@ export class HeaderMenuController<TRowData = unknown> {
 		}
 	};
 
+	// Escape closes the popover from anywhere (built-in form controls or a custom menu).
+	private _handleKeyDown = (e: KeyboardEvent): void => {
+		if (e.key === 'Escape' && this.activePopover) {
+			e.preventDefault();
+			this.hide();
+			this.activeHeaderCell?.focus?.({ preventScroll: true });
+		}
+	};
+
+	/** Make a non-native popover row (a div) keyboard-focusable + Enter/Space-activatable,
+	 *  so it sits in the natural Tab order alongside the filter's native controls. */
+	private _makeActivatable(el: HTMLElement): void {
+		el.tabIndex = 0;
+		el.setAttribute('role', 'menuitem');
+		el.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				el.click();
+			}
+		});
+	}
+
 	private _bindDismissListeners(): void {
 		document.addEventListener('mousedown', this._handleOutsideClick);
+		document.addEventListener('keydown', this._handleKeyDown);
 		window.addEventListener('scroll', this.hide, { capture: true, passive: true });
 		window.addEventListener('resize', this.hide);
 	}

@@ -1,5 +1,6 @@
 import { GridCellPointer, GridPlugin, GridApi, GridPluginRuntime, GridSelectionState } from './store.js';
 import { exportToCsv } from './export/csvExport.js';
+import { attachRovingMenuKeyboard } from './menuKeyboardNav.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
@@ -31,6 +32,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	readonly name = 'contextMenu';
 	private runtime!: GridPluginRuntime<TRowData>;
 	private menuElement: HTMLDivElement | null = null;
+	private detachKeyboardNav: (() => void) | null = null;
 	private activePointer: GridCellPointer | null = null;
 	private options: GridContextMenuOptions<TRowData>;
 
@@ -77,6 +79,10 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	public hide = (): void => {
+		if (this.detachKeyboardNav) {
+			this.detachKeyboardNav();
+			this.detachKeyboardNav = null;
+		}
 		if (this.menuElement) {
 			this.menuElement.classList.remove('og-visible');
 			const el = this.menuElement;
@@ -199,14 +205,19 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 
 		const hasAnyIcon = visibleItems.some((item) => item.icon !== undefined);
 
+		// Enabled, activatable item elements collected for keyboard navigation.
+		const navItems: HTMLElement[] = [];
+
 		visibleItems.forEach((item) => {
 			if (item.isDivider) {
 				const divider = document.createElement('div');
 				divider.className = 'og-context-menu-divider';
+				divider.setAttribute('role', 'separator');
 				menu.appendChild(divider);
 			} else if (item.label) {
 				const el = document.createElement('div');
 				el.className = 'og-context-menu-item';
+				el.setAttribute('role', 'menuitem');
 
 				let isItemDisabled = false;
 				if (typeof item.disabled === 'function') {
@@ -249,7 +260,9 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 						}
 						this.hide();
 					});
+					navItems.push(el);
 				} else if (isItemDisabled) {
+					el.setAttribute('aria-disabled', 'true');
 					el.addEventListener('click', (e) => {
 						e.stopPropagation();
 						e.preventDefault();
@@ -278,11 +291,21 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			flippedUp = true;
 		}
 
+		menu.setAttribute('role', 'menu');
 		menu.style.left = `${left}px`;
 		menu.style.top = `${top}px`;
 		// Origin-aware entrance — grow from the corner nearest the pointer (shadcn-style).
 		menu.classList.add(flippedUp ? 'og-placement-top' : 'og-placement-bottom');
 		if (flippedLeft) menu.classList.add('og-placement-left');
+
+		// Keyboard navigation: arrows move, Enter/Space activate, Escape/Tab close.
+		this.detachKeyboardNav = attachRovingMenuKeyboard({
+			container: menu,
+			items: navItems,
+			activeClass: 'og-menu-active',
+			onActivate: (el) => el.click(),
+			onClose: this.hide,
+		});
 
 		if (typeof requestAnimationFrame !== 'undefined') {
 			requestAnimationFrame(() => {
