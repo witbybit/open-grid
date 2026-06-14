@@ -17,11 +17,17 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 	const [api, setApi] = useState<GridApi<DashboardStockRow> | null>(null);
 	const [stats, setStats] = useState({ sum: 0, avg: 0, min: 0, max: 0, count: 0 });
 	const [prices, setPrices] = useState<number[]>([]);
+	const [companyCount, setCompanyCount] = useState(0);
 	const [eventLogs, setEventLogs] = useState<Array<{ time: string; msg: string; type: string }>>([]);
 	const [autoFire, setAutoFire] = useState(false);
 	const autoFireRef = useRef(false);
 	const autoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	autoFireRef.current = autoFire;
+	// Stable set of rowIds captured when selection changes. Recomputed on explicit
+	// sort/filter/selection changes but NOT on live data updates — so the chart always
+	// shows the same companies even as their values stream in.
+	const selectedRowIdsRef = useRef<string[]>([]);
+	const selectedColsRef = useRef<string[]>([]);
 
 	const styleRules = useMemo<StyleRule<DashboardStockRow>[]>(
 		() => [
@@ -47,24 +53,18 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		[]
 	);
 
-	const updateStatsAndChart = useCallback(() => {
+	// Re-reads stats + sparkline for the currently captured rowIds/cols.
+	// Called both on selection change (after re-capturing) and on live data updates.
+	const refreshStats = useCallback(() => {
 		if (!api) return;
-		const state = api.getState();
-		const range = state.selection.range;
+		const rowIds = selectedRowIdsRef.current;
+		const cols = selectedColsRef.current;
 		const numericValues: number[] = [];
-		if (range) {
-			const rowIds = api.rows().inRange(range).getIds();
-			const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
-			const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
-			if (startColIdx !== -1 && endColIdx !== -1) {
-				const cols = state.columns.slice(Math.min(startColIdx, endColIdx), Math.max(startColIdx, endColIdx) + 1).map((c) => c.field);
-				for (const rowId of rowIds)
-					for (const col of cols) {
-						const num = parseFloat(String(api.getCellValue(rowId, col)));
-						if (!Number.isNaN(num)) numericValues.push(num);
-					}
+		for (const rowId of rowIds)
+			for (const col of cols) {
+				const num = parseFloat(String(api.getCellValue(rowId, col)));
+				if (!Number.isNaN(num)) numericValues.push(num);
 			}
-		}
 		if (numericValues.length) {
 			const sum = numericValues.reduce((a, b) => a + b, 0);
 			setStats({
@@ -74,31 +74,71 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 				max: Math.max(...numericValues),
 				count: numericValues.length,
 			});
-		} else setStats({ sum: 0, avg: 0, min: 0, max: 0, count: 0 });
-		setPrices(
-			api
-				.rows()
-				.getAll()
-				.slice(0, 18)
-				.map((row) => parseFloat(String(row.price)) || 0)
-		);
+		} else {
+			setStats({ sum: 0, avg: 0, min: 0, max: 0, count: 0 });
+		}
+		// Sparkline: prices for selected companies, falling back to first 18 rows
+		if (rowIds.length > 0) {
+			setPrices(rowIds.map((id) => parseFloat(String(api.getCellValue(id, 'price'))) || 0));
+		} else {
+			setPrices(
+				api
+					.rows()
+					.getAll()
+					.slice(0, 18)
+					.map((row: any) => parseFloat(String(row.price)) || 0)
+			);
+		}
+		setCompanyCount(rowIds.length);
 	}, [api]);
+
+	// Called only when the selection changes. Re-evaluates which rows are in the range
+	// using the current sort order, then refreshes stats. Triggered by explicit user
+	// interactions (cell click, drag, sort/filter model change) but NOT by live data.
+	const updateStatsAndChart = useCallback(() => {
+		if (!api) return;
+		const state = api.getState();
+		const range = state.selection.range;
+		if (range) {
+			selectedRowIdsRef.current = api.rows().inRange(range).getIds();
+			const startColIdx = state.columns.findIndex((c) => c.field === range.start.colField);
+			const endColIdx = state.columns.findIndex((c) => c.field === range.end.colField);
+			selectedColsRef.current =
+				startColIdx !== -1 && endColIdx !== -1
+					? state.columns.slice(Math.min(startColIdx, endColIdx), Math.max(startColIdx, endColIdx) + 1).map((c) => c.field)
+					: [];
+		} else {
+			selectedRowIdsRef.current = [];
+			selectedColsRef.current = [];
+		}
+		refreshStats();
+	}, [api, refreshStats]);
 
 	useEffect(() => {
 		if (!api) return;
 		updateStatsAndChart();
 		const log = (msg: string, type = 'info') =>
 			setEventLogs((prev) => [{ time: new Date().toLocaleTimeString(), msg, type }, ...prev].slice(0, 10));
+		// Selection change: re-evaluate which rows are in range, then refresh values.
 		const unsubSelection = api.subscribeToKey('selection', updateStatsAndChart);
+		// Live data from updateRows fires rowsUpdated (not cellValueChanged).
+		// We only refresh values for the already-captured rowIds — no re-evaluation
+		// of which rows are selected, so the chart stays locked to the same companies.
+		const unsubRows = api.addEventListener(GridEventName.rowsUpdated, () => {
+			log('rowsUpdated');
+			refreshStats();
+		});
+		// Individual cell edits still fire cellValueChanged.
 		const unsubValue = api.addEventListener(GridEventName.cellValueChanged, () => {
 			log('cellValueChanged');
-			updateStatsAndChart();
+			refreshStats();
 		});
 		return () => {
 			unsubSelection();
+			unsubRows();
 			unsubValue();
 		};
-	}, [api, updateStatsAndChart]);
+	}, [api, updateStatsAndChart, refreshStats]);
 
 	const triggerVolatility = useCallback(() => {
 		if (!api) return;
@@ -161,8 +201,8 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		if (prices.length < 2) return '';
 		const max = Math.max(...prices, 1);
 		const min = Math.min(...prices, 0);
-		const range = max - min || 1;
-		return prices.map((value, index) => `${(index / (prices.length - 1)) * 100},${40 - ((value - min) / range) * 30}`).join(' ');
+		const span = max - min || 1;
+		return prices.map((value, index) => `${(index / (prices.length - 1)) * 100},${40 - ((value - min) / span) * 30}`).join(' ');
 	}, [prices]);
 
 	return (
@@ -212,6 +252,11 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 						<BarChart3 className='w-4 h-4 text-emerald-400' />
 						Selection Analytics
+						{companyCount > 0 && (
+							<span className='ml-auto text-[9px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-900/60 px-1.5 py-0.5 rounded'>
+								{companyCount} {companyCount === 1 ? 'co.' : 'cos.'}
+							</span>
+						)}
 					</h3>
 					<div className='grid grid-cols-2 gap-2'>
 						{[
@@ -231,6 +276,7 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 						<Activity className='w-4 h-4 text-cyan-400' />
 						Live Price Sparkline
+						<span className='ml-auto text-[9px] text-slate-500'>{companyCount > 0 ? 'selection' : 'all rows'}</span>
 					</h3>
 					<svg className='h-20 w-full rounded-lg border border-slate-900 bg-slate-950/80' viewBox='0 0 100 40' preserveAspectRatio='none'>
 						<polyline fill='none' stroke='#10b981' strokeWidth='1.5' points={svgPoints} />

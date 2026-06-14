@@ -38,6 +38,13 @@ export interface GridStateReactionControllerDeps<TRowData = unknown> {
 export class GridStateReactionController<TRowData = unknown> {
 	constructor(private readonly deps: GridStateReactionControllerDeps<TRowData>) {}
 
+	// True when a structural change (sort/filter/groupBy/expansion) has occurred that
+	// causes rows to reorder. The row model refreshes asynchronously via its event
+	// listeners (sortChanged → refresh() → bumpGlobalVersion()), so we defer bounds
+	// recalculation to the subsequent 'globalVersion' reaction when the model is current.
+	// Live data updates (updateRows) also bump globalVersion but must NOT shift bounds.
+	private pendingStructuralBoundsUpdate = false;
+
 	public handleStateChanges = (prevState: GridState<TRowData>, updatedKeys: string[]): void => {
 		const stateManager = this.deps.getStateManager();
 		let currState = stateManager.getState();
@@ -74,15 +81,22 @@ export class GridStateReactionController<TRowData = unknown> {
 			this.deps.incrementGeometryVersion();
 		}
 
+		// Flag structural row-order changes so the subsequent globalVersion reaction
+		// (fired by rowModel.refresh() → bumpGlobalVersion()) knows to recompute bounds.
+		if (updatedSet.has('sortModel') || updatedSet.has('filterModel') || updatedSet.has('groupBy') || updatedSet.has('expansion')) {
+			this.pendingStructuralBoundsUpdate = true;
+		}
+
 		if (
 			updatedSet.has('selection') ||
 			updatedSet.has('columns') ||
-			updatedSet.has('sortModel') ||
-			updatedSet.has('filterModel') ||
-			updatedSet.has('globalVersion') ||
-			updatedSet.has('expansion') ||
-			updatedSet.has('groupBy')
+			// globalVersion only triggers bounds recalculation when a structural change
+			// (sort/filter/group/expansion) is pending. Plain data updates (updateRows at
+			// 10 hz) also bump globalVersion but must NOT shift the selection bounds —
+			// they carry no row-order change that the user initiated.
+			(updatedSet.has('globalVersion') && this.pendingStructuralBoundsUpdate)
 		) {
+			if (updatedSet.has('globalVersion')) this.pendingStructuralBoundsUpdate = false;
 			const rangeBounds = this.deps.selection.calculateRangeBounds(
 				currState.selection.range,
 				(id) => {
