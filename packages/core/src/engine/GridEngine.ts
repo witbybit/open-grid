@@ -499,6 +499,10 @@ export class GridEngine<TRowData = unknown> {
 		this.dataMutation.applyCellValueChange(rowId, colField, value, { undoable });
 	}
 
+	public batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill' = 'api'): void {
+		this.dataMutation.applyBatchCellValues(updates, { undoable: true, source });
+	}
+
 	public startEdit(rowId: string, colField: string): void {
 		this.editingFeature.startEdit(rowId, colField);
 	}

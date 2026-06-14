@@ -379,6 +379,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			const text = await navigator.clipboard.readText();
 			if (!text) return;
 
+			const pasteUpdates: { rowId: string; colField: string; value: unknown }[] = [];
 			const lines = text.split(/\r?\n/);
 			for (let r = 0; r < lines.length; r++) {
 				const rowIndex = bounds.minRow + r;
@@ -399,9 +400,10 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 							value = col.onPaste({ row, rowId, colField: col.field, pastedText: cells[c] });
 						}
 					}
-					this.runtime.setCellValue(rowId, col.field, value);
+					pasteUpdates.push({ rowId, colField: col.field, value });
 				}
 			}
+			if (pasteUpdates.length > 0) this.runtime.batchCellValues(pasteUpdates, 'paste');
 		} catch (err) {
 			this.reportFault('context-menu-paste', err);
 		}
@@ -411,16 +413,19 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const bounds = params.selection.bounds;
 		if (!bounds) return;
 
+		const updates: { rowId: string; colField: string; value: unknown }[] = [];
+		const columns = params.api.getState().columns;
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
 			const visualRow = this.runtime.getVisualRow(r);
 			if (visualRow?.kind !== 'data') continue;
 			const rowId = visualRow.rowId;
 			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-				const col = params.api.getState().columns[c];
+				const col = columns[c];
 				if (!col) continue;
-				this.runtime.setCellValue(rowId, col.field, '');
+				updates.push({ rowId, colField: col.field, value: '' });
 			}
 		}
+		if (updates.length > 0) this.runtime.batchCellValues(updates, 'api');
 	}
 
 	private selectAll(params: ContextMenuParams<TRowData>): void {

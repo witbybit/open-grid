@@ -12,6 +12,12 @@ export interface CellValueChangeOptions {
 	source?: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo' | 'transaction';
 }
 
+export interface BatchCellValueUpdate {
+	rowId: string;
+	colField: string;
+	value: unknown;
+}
+
 export interface CellValueChangeResult {
 	applied: boolean;
 	rowId: string;
@@ -129,5 +135,71 @@ export class DataMutationController<TRowData = unknown> {
 			newComputedValue,
 			invalidatedCells,
 		};
+	}
+
+	applyBatchCellValues(updates: BatchCellValueUpdate[], options: Pick<CellValueChangeOptions, 'undoable' | 'source'> = {}): void {
+		if (updates.length === 0) return;
+		const { undoable = true, source } = options;
+
+		// Snapshot old computed values before any writes so cellValueChanged events
+		// carry stable before/after pairs even when formula deps cross cells.
+		const hasEventListeners = this.deps.eventBus.hasListeners(GridEventName.cellValueChanged);
+		const oldComputedSnapshot = hasEventListeners ? updates.map((u) => this.deps.data.getCellValue(u.rowId, u.colField)) : null;
+
+		// Apply each write silently: valueSetter + formula sync run per-cell,
+		// but notifications, events, and undo are suppressed until the batch is done.
+		const results = updates.map((u) =>
+			this.applyCellValueChange(u.rowId, u.colField, u.value, {
+				undoable: false,
+				emitEvent: false,
+				notify: false,
+				source,
+			})
+		);
+
+		// Deduplicate and notify once for all invalidated cells.
+		const allInvalidated = new Map<string, GridCellPointer>();
+		for (const result of results) {
+			if (!result.applied) continue;
+			for (const cell of result.invalidatedCells) {
+				allInvalidated.set(`${cell.rowId}:${cell.colField}`, cell);
+			}
+		}
+		const cells = Array.from(allInvalidated.values());
+		if (cells.length > 0) {
+			if (this.deps.getBatchedUpdates()) {
+				for (const c of cells) this.deps.enqueueCellUpdate(c.rowId, c.colField);
+				this.deps.scheduleBatchFlush();
+			} else {
+				for (const c of cells) this.deps.notifyCellChange(c.rowId, c.colField);
+			}
+		}
+
+		// Fire cellValueChanged events after all writes so computed values are stable.
+		if (hasEventListeners && oldComputedSnapshot) {
+			for (let i = 0; i < results.length; i++) {
+				const result = results[i];
+				if (!result.applied) continue;
+				this.deps.eventBus.dispatchEvent(GridEventName.cellValueChanged, {
+					rowId: result.rowId,
+					colField: result.colField,
+					oldValue: oldComputedSnapshot[i],
+					newValue: this.deps.data.getCellValue(result.rowId, result.colField),
+				});
+			}
+		}
+
+		// Single undo entry that restores every cell atomically.
+		if (undoable) {
+			const applied = results.filter((r) => r.applied);
+			if (applied.length > 0) {
+				const undoUpdates = applied.map((r) => ({ rowId: r.rowId, colField: r.colField, value: r.oldRawValue }));
+				const redoUpdates = applied.map((r) => ({ rowId: r.rowId, colField: r.colField, value: r.newRawValue }));
+				this.deps.commandHistory.add({
+					undo: () => this.applyBatchCellValues(undoUpdates, { undoable: false, source: 'undo' }),
+					redo: () => this.applyBatchCellValues(redoUpdates, { undoable: false, source: 'redo' }),
+				});
+			}
+		}
 	}
 }

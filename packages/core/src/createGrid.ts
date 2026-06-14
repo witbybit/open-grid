@@ -171,6 +171,8 @@ export function createApiFacade<TRowData>(
 		goToPage: (page: number) => store.goToPage(page),
 		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
 		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
+		batchCellValues: (updates: { rowId: string; colField: string; value: unknown }[], source?: 'paste' | 'api' | 'fill') =>
+			store.batchCellValues(updates, source),
 		selectCell: (pointer: GridCellPointer | null, source?: GridSelectionSource) => store.selectCell(pointer, source),
 		selectRange: (start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource) =>
 			store.selectRange(start, end, source),

@@ -215,6 +215,16 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.setCellValue(rowId, colField, value);
 	};
 
+	/**
+	 * Applies multiple cell value writes as a single atomic operation.
+	 * valueSetter runs per-cell, but notifications, cellValueChanged events, and undo
+	 * are coalesced — one RAF flush and one undo entry for the entire batch.
+	 * Use this instead of looping setCellValue for paste, clear, and programmatic bulk edits.
+	 */
+	public batchCellValues = (updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill' = 'api'): void => {
+		this.engine.batchCellValues(updates, source);
+	};
+
 	public getCellState = (rowId: string, colField: string): CellState => {
 		const computedValue = this.getCellValue(rowId, colField);
 		const isEditing = this.state.activeEdit?.rowId === rowId && this.state.activeEdit?.colField === colField;

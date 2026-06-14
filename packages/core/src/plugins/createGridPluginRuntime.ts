@@ -18,6 +18,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		goToPage: source.goToPage,
 		getCellValue: source.getCellValue,
 		setCellValue: source.setCellValue,
+		batchCellValues: source.batchCellValues,
 		selectCell: source.selectCell,
 		selectRange: source.selectRange,
 		extendSelection: source.extendSelection,

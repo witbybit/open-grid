@@ -1561,6 +1561,63 @@ describe('GridStore undo and redo functionality', () => {
 
 		controller.dispose();
 	});
+
+	it('batchCellValues — single undo entry restores all cells atomically', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alpha', price: 10 },
+				{ id: '2', name: 'Beta', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.batchCellValues([
+			{ rowId: '1', colField: 'name', value: 'Alpha Updated' },
+			{ rowId: '1', colField: 'price', value: 99 },
+			{ rowId: '2', colField: 'name', value: 'Beta Updated' },
+		]);
+
+		expect(store.getCellValue('1', 'name')).toBe('Alpha Updated');
+		expect(store.getCellValue('1', 'price')).toBe(99);
+		expect(store.getCellValue('2', 'name')).toBe('Beta Updated');
+		expect(store.canUndo()).toBe(true);
+
+		// One undo call restores all three cells — not just the last one
+		store.undo();
+		expect(store.getCellValue('1', 'name')).toBe('Alpha');
+		expect(store.getCellValue('1', 'price')).toBe(10);
+		expect(store.getCellValue('2', 'name')).toBe('Beta');
+		expect(store.canUndo()).toBe(false);
+
+		// Redo reapplies all three cells at once
+		store.redo();
+		expect(store.getCellValue('1', 'name')).toBe('Alpha Updated');
+		expect(store.getCellValue('1', 'price')).toBe(99);
+		expect(store.getCellValue('2', 'name')).toBe('Beta Updated');
+
+		controller.dispose();
+	});
+
+	it('batchCellValues — no-ops when no values change', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Alpha', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.batchCellValues([{ rowId: '1', colField: 'name', value: 'Alpha' }]);
+		expect(store.canUndo()).toBe(false);
+
+		controller.dispose();
+	});
 });
 
 describe('Column and row validation', () => {

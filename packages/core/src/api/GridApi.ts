@@ -311,6 +311,13 @@ export interface GridApi<TRowData = unknown> {
 	 * invalidations instead of one coalesced batch.
 	 */
 	setCellValue(rowId: string, colField: string, value: unknown): void;
+	/**
+	 * Applies multiple cell value writes as a single atomic operation.
+	 * valueSetter runs per-cell, but notifications, cellValueChanged events, and undo
+	 * are coalesced — one RAF flush and one undo entry for the entire batch.
+	 * Use this instead of looping setCellValue for paste, clear, and programmatic bulk edits.
+	 */
+	batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source?: 'paste' | 'api' | 'fill'): void;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
 	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;
