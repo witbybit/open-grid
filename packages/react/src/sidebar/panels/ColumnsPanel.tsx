@@ -441,48 +441,66 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 						<div
 							style={{
 								display: 'flex',
-								alignItems: 'center',
+								alignItems: 'flex-start',
 								justifyContent: 'space-between',
 								padding: '8px 12px 4px',
+								flexDirection: 'column',
 							}}
 						>
-							<span
+							<div
 								style={{
-									fontSize: 10,
-									fontWeight: 700,
-									letterSpacing: '0.08em',
-									textTransform: 'uppercase',
-									color: GROUP_ACCENT,
+									width: '100%',
 									display: 'flex',
 									alignItems: 'center',
-									gap: 5,
+									justifyContent: 'space-between',
 								}}
 							>
-								<GroupIcon />
-								Row Groups
-							</span>
-							<span style={{ fontSize: 10, color: TEXT_MUTED, fontWeight: 700 }}>
-								{groupBy.length} active / {ungroupedGroupableCount} available
-							</span>
+								<span
+									style={{
+										fontSize: 10,
+										fontWeight: 700,
+										letterSpacing: '0.08em',
+										textTransform: 'uppercase',
+										color: GROUP_ACCENT,
+										display: 'flex',
+										alignItems: 'center',
+										gap: 5,
+									}}
+								>
+									<GroupIcon />
+									Row Groups
+								</span>
+								<span style={{ fontSize: 10, color: TEXT_MUTED, fontWeight: 700 }}>
+									{groupBy.length} active / {ungroupedGroupableCount} available
+								</span>
+							</div>
+
 							{hasGroups && (
-								<div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+								<div
+									style={{
+										width: '100%',
+										display: 'flex',
+										alignItems: 'center',
+										justifyContent: 'space-between',
+									}}
+								>
 									<button
 										onClick={() => api.expandAllGroups?.()}
-										style={{ ...iconBtnStyle, fontSize: 9, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
+										style={{ ...iconBtnStyle, fontSize: 11, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
 										title='Expand all groups'
 									>
 										Expand
 									</button>
 									<button
 										onClick={() => api.collapseAllGroups?.()}
-										style={{ ...iconBtnStyle, fontSize: 9, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
+										style={{ ...iconBtnStyle, fontSize: 11, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
 										title='Collapse all groups'
 									>
 										Collapse
 									</button>
 									<button
 										onClick={clearAllGroups}
-										style={{ ...iconBtnStyle, fontSize: 9, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
+										style={{ ...iconBtnStyle, fontSize: 11, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
 										title='Clear all groups'
 									>
 										Clear
@@ -670,27 +688,6 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 								>
 									{col.header || col.field}
 								</span>
-								{(col.type || groupable || grouped) && (
-									<span
-										style={{
-											maxWidth: 72,
-											overflow: 'hidden',
-											textOverflow: 'ellipsis',
-											whiteSpace: 'nowrap',
-											fontSize: 9,
-											fontWeight: 800,
-											color: grouped ? GROUP_ACCENT : groupable ? '#38bdf8' : TEXT_MUTED,
-											border: `1px solid ${grouped ? GROUP_ACCENT_BORDER : 'rgba(51,65,85,0.8)'}`,
-											background: grouped ? GROUP_ACCENT_BG : 'rgba(15,23,42,0.55)',
-											borderRadius: 4,
-											padding: '2px 4px',
-											textTransform: 'uppercase',
-										}}
-										title={col.type ? `Type: ${String(col.type)}` : groupable ? 'Groupable column' : undefined}
-									>
-										{grouped ? 'Grouped' : col.type ? String(col.type) : 'Group'}
-									</span>
-								)}
 								{groupable && (
 									<button
 										onClick={() => toggleGroup(col.field)}
