@@ -227,6 +227,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.orchestrator = new RenderOrchestrator({
 			recomputeGeometry: () => this.geometryController.recomputeIfNeeded(),
 			syncViewport: (_frame) => {
+				// Sync DOM-measured scroll viewport width before computing layout — ensures
+				// scrollViewportClientWidth is fresh after container resizes (e.g. sidebar open/close)
+				// without needing a full paint cycle.
+				this.viewportRenderer.syncViewportScrollFromDom();
 				const layoutPlan = this.viewportCoordinator.syncLayoutPlan();
 				this.viewportCoordinator.recycleViewport(false, undefined, layoutPlan.renderWindow);
 				this.stickyGroupRenderer.sync(layoutPlan);
