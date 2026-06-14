@@ -13,8 +13,6 @@ import type { LayoutTransitionController } from './layoutTransitionController.js
 
 export interface RenderPaintCoordinatorState {
 	pendingTransition: boolean;
-	/** Column pin/unpin semantic effect armed this flush; played after relayout. */
-	pendingPinEffect: boolean;
 	lastStyleRules: unknown;
 	lastLoading: unknown;
 }
@@ -53,10 +51,6 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		if (notScrolling && (frame.reasons.includes('sort') || frame.reasons.includes('group expansion') || frame.reasons.includes('detail'))) {
 			this.state.pendingTransition = true;
 		}
-		// Column pin/unpin gets a subtle semantic effect after the real layout commits.
-		if (notScrolling && frame.reasons.includes('pin')) {
-			this.state.pendingPinEffect = true;
-		}
 		this.deps.portalMountManager.beginCellReleaseTransaction();
 		try {
 			this.deps.orchestrator.flush(frame);
@@ -71,10 +65,6 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		if (this.state.pendingTransition) {
 			this.state.pendingTransition = false;
 			this.deps.layoutTransition.beginAnimation();
-		}
-		if (this.state.pendingPinEffect) {
-			this.state.pendingPinEffect = false;
-			this.deps.layoutTransition.playColumnPinEffect();
 		}
 	};
 

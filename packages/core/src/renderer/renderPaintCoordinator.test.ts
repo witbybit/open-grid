@@ -7,7 +7,6 @@ const SENTINEL_B = { tag: 'B' };
 function makeState(overrides?: Partial<RenderPaintCoordinatorState>): RenderPaintCoordinatorState {
 	return {
 		pendingTransition: false,
-		pendingPinEffect: false,
 		lastStyleRules: undefined,
 		lastLoading: undefined,
 		...overrides,
@@ -48,7 +47,7 @@ function makeDeps(
 		} as any,
 		orchestrator: { flush: vi.fn() } as any,
 		scrollCoordinator: { getIsScrolling: () => false },
-		layoutTransition: { beginAnimation: vi.fn(), playColumnPinEffect: vi.fn() } as any,
+		layoutTransition: { beginAnimation: vi.fn() } as any,
 		recycleViewport: vi.fn(),
 		syncLayoutPlan: vi.fn(() => ({ renderWindow: {} })) as any,
 		updateCachedGeometryBoundsFromState: vi.fn(),
@@ -184,35 +183,6 @@ describe('RenderPaintCoordinator – flushPaint transition gate', () => {
 		new RenderPaintCoordinator(deps, makeState()).flushPaint();
 
 		expect(order).toEqual(['flush', 'beginAnimation']);
-	});
-
-	it('plays the semantic column-pin effect for a pin frame after relayout', () => {
-		const deps = depsForReason('pin');
-		const state = makeState();
-		new RenderPaintCoordinator(deps, state).flushPaint();
-
-		expect((deps.layoutTransition as any).playColumnPinEffect).toHaveBeenCalledTimes(1);
-		expect((deps.layoutTransition as any).beginAnimation).not.toHaveBeenCalled();
-		expect(state.pendingPinEffect).toBe(false);
-	});
-
-	it('plays the semantic column-pin effect AFTER orchestrator.flush has committed the layout', () => {
-		const deps = depsForReason('pin');
-		const order: string[] = [];
-		(deps.orchestrator as any).flush = vi.fn(() => order.push('flush'));
-		(deps.layoutTransition as any).playColumnPinEffect = vi.fn(() => order.push('pinEffect'));
-		new RenderPaintCoordinator(deps, makeState()).flushPaint();
-
-		expect(order).toEqual(['flush', 'pinEffect']);
-	});
-
-	it('does NOT play the semantic column-pin effect while scrolling', () => {
-		const deps = depsForReason('pin', true);
-		const state = makeState();
-		new RenderPaintCoordinator(deps, state).flushPaint();
-
-		expect((deps.layoutTransition as any).playColumnPinEffect).not.toHaveBeenCalled();
-		expect(state.pendingPinEffect).toBe(false);
 	});
 
 	it('wraps orchestrator.flush in a portal release transaction', () => {

@@ -61,8 +61,6 @@ export class LayoutTransitionController<TRowData = unknown> {
 	private snapshotBounds: SnapshotBounds | null = null;
 	private animations = new Map<HTMLElement, Animation>();
 	private exitGhosts = new Set<HTMLElement>();
-	private pinEffectTimer: ReturnType<typeof setTimeout> | null = null;
-
 	constructor(
 		private readonly getActiveRows: () => ReadonlyMap<number, RowSlot<TRowData>>,
 		private readonly options: LayoutTransitionOptions = {}
@@ -226,26 +224,6 @@ export class LayoutTransitionController<TRowData = unknown> {
 		this.exitGhosts.delete(ghost);
 	}
 
-	public playColumnPinEffect(): void {
-		if (!this.animationsEnabled()) return;
-		const root = this.options.getGridRoot?.();
-		if (!root) return;
-		this.clearColumnPinEffect();
-		root.classList.add('og-pin-transition');
-		this.pinEffectTimer = setTimeout(() => {
-			root.classList.remove('og-pin-transition');
-			this.pinEffectTimer = null;
-		}, DURATION);
-	}
-
-	private clearColumnPinEffect(): void {
-		if (this.pinEffectTimer !== null) {
-			clearTimeout(this.pinEffectTimer);
-			this.pinEffectTimer = null;
-		}
-		this.options.getGridRoot?.()?.classList.remove('og-pin-transition');
-	}
-
 	private run(el: HTMLElement, keyframes: Keyframe[], onSettle?: () => void): void {
 		const existing = this.animations.get(el);
 		if (existing) existing.cancel();
@@ -274,7 +252,6 @@ export class LayoutTransitionController<TRowData = unknown> {
 			if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
 		}
 		this.exitGhosts.clear();
-		this.clearColumnPinEffect();
 	}
 
 	public destroy(): void {

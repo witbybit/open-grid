@@ -41,18 +41,6 @@ export const CORE_STYLES = `
     }
   }
 
-  @keyframes og-pin-lane-settle {
-    0% {
-      background-color: color-mix(in srgb, var(--og-selection-bg) 72%, transparent);
-      filter: saturate(1.18) brightness(1.08);
-    }
-    100% {
-      background-color: inherit;
-      filter: none;
-    }
-  }
-
-
   .og-cell-loading-skeleton {
     width: var(--og-skeleton-width);
     height: var(--og-skeleton-height);
@@ -719,16 +707,6 @@ export const CORE_STYLES = `
     border-left: 1px solid var(--og-pin-right-border-color);
     box-shadow: var(--og-pin-right-shadow);
   }
-
-  .og-pin-transition .og-row-pin-left,
-  .og-pin-transition .og-row-pin-right,
-  .og-pin-transition .og-cell-pinned-left,
-  .og-pin-transition .og-cell-pinned-right,
-  .og-pin-transition .og-header-cell-pinned-left,
-  .og-pin-transition .og-header-cell-pinned-right {
-    animation: og-pin-lane-settle 280ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
 
   .og-row-selected .og-row-pin-left,
   .og-row-selected .og-row-pin-right,

@@ -317,7 +317,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		});
 		const paintState: RenderPaintCoordinatorState = {
 			pendingTransition: this._pendingTransition,
-			pendingPinEffect: false,
 			lastStyleRules: this.lastStyleRules,
 			lastLoading: this.lastLoading,
 		};

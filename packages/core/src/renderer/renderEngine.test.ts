@@ -198,57 +198,6 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('plays the semantic column pin effect without creating clones or hiding real cells', () => {
-		vi.useFakeTimers();
-		(HTMLElement.prototype as unknown as { animate: unknown }).animate = function () {
-			return { cancel: () => {}, onfinish: null, oncancel: null } as unknown as Animation;
-		};
-		const store = new GridStore<{ id: string; name: string }>({
-			columns: [
-				{ field: 'a', header: 'A', width: 80 },
-				{ field: 'b', header: 'B', width: 80 },
-				{ field: 'c', header: 'C', width: 80 },
-				{ field: 'd', header: 'D', width: 80 },
-			],
-			defaultRowHeight: 24,
-			defaultColWidth: 80,
-			getRowId: (row) => row.id,
-		});
-		const rows = Array.from({ length: 10 }, (_, i) => ({ id: `row-${i}`, name: `R${i}` }));
-		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
-
-		const container = document.createElement('div');
-		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-			x: 0,
-			y: 0,
-			top: 0,
-			left: 0,
-			right: 600,
-			bottom: 300,
-			width: 600,
-			height: 300,
-			toJSON: () => ({}),
-		} as DOMRect);
-		document.body.appendChild(container);
-
-		const renderer = new RenderEngine(store.engine, store);
-		renderer.mount(container);
-		renderer.fullPaint();
-
-		store.setPinnedColumns({ right: 1 });
-		(renderer as unknown as { flushPaint: () => void }).flushPaint();
-
-		expect(container.classList.contains('og-pin-transition')).toBe(true);
-		expect(container.querySelector('.og-cell[style*="visibility: hidden"]')).toBeNull();
-		expect(container.querySelector('.og-header-cell[style*="visibility: hidden"]')).toBeNull();
-		vi.advanceTimersByTime(280);
-		expect(container.classList.contains('og-pin-transition')).toBe(false);
-
-		renderer.unmount();
-		controller.dispose();
-		store.destroy();
-	});
-
 	it('releases out-of-range cells when columns shrink with right pinning enabled', () => {
 		const wideColumns = [
 			{ field: 'risk', header: 'Risk', width: 120 },
