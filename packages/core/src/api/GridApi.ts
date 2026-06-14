@@ -366,10 +366,11 @@ export interface GridApi<TRowData = unknown> {
 	 * Returns true when the commit succeeded and `stopEditing` was called.
 	 */
 	commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean>;
-	/** Returns a per-column snapshot of the current user-configurable state (width, visibility) in display order. */
+	/** Returns a per-column snapshot of the current user-configurable state (width, visibility, pinning, sort) in column order. */
 	getColumnState(): ColumnState[];
-	/** Apply a partial column state array. Only fields present in `states` are updated; others are unchanged. */
-	applyColumnState(states: ColumnState[]): void;
+	/** Apply a partial column state array. Only fields present in `states` are updated; others are unchanged.
+	 *  Pass `{ applyOrder: true }` to also restore column order from the array. */
+	applyColumnState(states: ColumnState[], opts?: { applyOrder?: boolean }): void;
 	/** Returns a full serializable snapshot of the current grid state (columns, sort, filter, grouping, pinning). */
 	getGridState(): PersistedGridState;
 	/** Apply a serializable grid state snapshot, updating all covered fields. Unknown fields are ignored. */

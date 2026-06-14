@@ -165,6 +165,60 @@ describe('ColumnFeatureController', () => {
 
 			store.destroy();
 		});
+
+		it('captures left-pinned columns', () => {
+			const store = makeStore();
+			const feature = new ColumnFeatureController(getFeatureContext(store));
+			store.setPinnedColumns({ left: 1 });
+
+			const state = feature.getColumnState();
+			expect(state.find((c) => c.field === 'id')?.pinned).toBe('left');
+			expect(state.find((c) => c.field === 'name')?.pinned).toBe(false);
+			expect(state.find((c) => c.field === 'price')?.pinned).toBe(false);
+
+			store.destroy();
+		});
+
+		it('captures right-pinned columns', () => {
+			const store = makeStore();
+			const feature = new ColumnFeatureController(getFeatureContext(store));
+			store.setPinnedColumns({ right: 1 });
+
+			const state = feature.getColumnState();
+			expect(state.find((c) => c.field === 'price')?.pinned).toBe('right');
+			expect(state.find((c) => c.field === 'id')?.pinned).toBe(false);
+
+			store.destroy();
+		});
+
+		it('omits pinned for hidden columns', () => {
+			const store = makeStore();
+			const feature = new ColumnFeatureController(getFeatureContext(store));
+			store.setColumnVisible('name', false);
+
+			const state = feature.getColumnState();
+			const nameState = state.find((c) => c.field === 'name');
+			expect(nameState?.hide).toBe(true);
+			expect(nameState?.pinned).toBeUndefined();
+
+			store.destroy();
+		});
+
+		it('captures sort direction and sortIndex', () => {
+			const store = makeStore();
+			const feature = new ColumnFeatureController(getFeatureContext(store));
+			store.setSortModel([
+				{ colId: 'price', sort: 'desc' },
+				{ colId: 'name', sort: 'asc' },
+			]);
+
+			const state = feature.getColumnState();
+			expect(state.find((c) => c.field === 'price')).toMatchObject({ sort: 'desc', sortIndex: 0 });
+			expect(state.find((c) => c.field === 'name')).toMatchObject({ sort: 'asc', sortIndex: 1 });
+			expect(state.find((c) => c.field === 'id')?.sort).toBeUndefined();
+
+			store.destroy();
+		});
 	});
 
 	describe('applyColumnState', () => {
@@ -186,6 +240,76 @@ describe('ColumnFeatureController', () => {
 
 			const col = store.getState().columns.find((c) => c.field === 'price');
 			expect(col?.hide).toBe(true);
+			store.destroy();
+		});
+
+		it('reorders columns when applyOrder is true', () => {
+			const store = makeStore();
+			const feature = new ColumnFeatureController(getFeatureContext(store));
+
+			feature.applyColumnState([{ field: 'price' }, { field: 'name' }, { field: 'id' }], { applyOrder: true });
+
+			const fields = store.getState().columns.map((c) => c.field);
+			expect(fields.slice(0, 3)).toEqual(['price', 'name', 'id']);
+			store.destroy();
+		});
+
+		it('restores pinning via store.applyColumnState', () => {
+			const store = makeStore();
+
+			store.applyColumnState([
+				{ field: 'id', pinned: 'left' },
+				{ field: 'name', pinned: false },
+				{ field: 'price', pinned: false },
+			]);
+
+			expect(store.getState().pinnedColumns?.left).toBe(1);
+			expect(store.getState().pinnedColumns?.right).toBe(0);
+			store.destroy();
+		});
+
+		it('restores sort model via store.applyColumnState', () => {
+			const store = makeStore();
+
+			store.applyColumnState([{ field: 'price', sort: 'desc', sortIndex: 0 }, { field: 'name', sort: 'asc', sortIndex: 1 }, { field: 'id' }]);
+
+			expect(store.getState().sortModel).toEqual([
+				{ colId: 'price', sort: 'desc' },
+				{ colId: 'name', sort: 'asc' },
+			]);
+			store.destroy();
+		});
+
+		it('clears sort model when all sort fields are null', () => {
+			const store = makeStore();
+			store.setSortModel([{ colId: 'price', sort: 'asc' }]);
+
+			store.applyColumnState([{ field: 'price', sort: null }]);
+
+			expect(store.getState().sortModel).toBeNull();
+			store.destroy();
+		});
+
+		it('round-trips getColumnState → applyColumnState', () => {
+			const store = makeStore();
+			store.setPinnedColumns({ left: 1 });
+			store.setSortModel([{ colId: 'price', sort: 'desc' }]);
+			store.setColumnWidth('name', 250);
+
+			const snapshot = store.getColumnState();
+
+			// Mutate state
+			store.setPinnedColumns({ left: 0 });
+			store.setSortModel(null);
+			store.setColumnWidth('name', 100);
+
+			// Restore
+			store.applyColumnState(snapshot, { applyOrder: true });
+			const restored = store.getColumnState();
+
+			expect(restored.find((c) => c.field === 'id')?.pinned).toBe('left');
+			expect(restored.find((c) => c.field === 'price')?.sort).toBe('desc');
+			expect(restored.find((c) => c.field === 'name')?.width).toBe(250);
 			store.destroy();
 		});
 	});

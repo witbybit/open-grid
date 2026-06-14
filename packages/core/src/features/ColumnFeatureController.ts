@@ -138,16 +138,36 @@ export class ColumnFeatureController<TRowData = unknown> {
 
 	public getColumnState(): ColumnState[] {
 		const state = this.ctx.getState();
+		const { left = 0, right = 0 } = state.pinnedColumns ?? {};
+		const displayedCols = state.columns.filter((c) => !c.hide);
+		const displayedCount = displayedCols.length;
+		const displayedIndexMap = new Map(displayedCols.map((c, i) => [c.field, i]));
+		const sortMap = new Map((state.sortModel ?? []).map((s, i) => [s.colId, { sort: s.sort, sortIndex: i }]));
+
 		return state.columns.map((col) => {
 			const cs: ColumnState = { field: col.field };
 			const width = state.columnWidths[col.field];
 			if (width !== undefined) cs.width = width;
 			if (col.hide) cs.hide = true;
+
+			if (!col.hide) {
+				const di = displayedIndexMap.get(col.field)!;
+				if (di < left) cs.pinned = 'left';
+				else if (right > 0 && di >= displayedCount - right) cs.pinned = 'right';
+				else cs.pinned = false;
+			}
+
+			const sortEntry = sortMap.get(col.field);
+			if (sortEntry !== undefined) {
+				cs.sort = sortEntry.sort;
+				cs.sortIndex = sortEntry.sortIndex;
+			}
+
 			return cs;
 		});
 	}
 
-	public applyColumnState(states: ColumnState[]): void {
+	public applyColumnState(states: ColumnState[], opts?: { applyOrder?: boolean }): void {
 		for (const cs of states) {
 			if (cs.width !== undefined) this.resizeColumn(cs.field, cs.width, false);
 			if (cs.hide !== undefined) {
@@ -160,6 +180,9 @@ export class ColumnFeatureController<TRowData = unknown> {
 					);
 				}
 			}
+		}
+		if (opts?.applyOrder) {
+			this.setColumnOrderByFields(states.map((s) => s.field));
 		}
 	}
 }

@@ -209,7 +209,7 @@ export function createApiFacade<TRowData>(
 		stopEditing: (cancel?: boolean) => store.stopEditing(cancel),
 		commitEdit: (rowId: string, colField: string, value: unknown) => store.commitEdit(rowId, colField, value),
 		getColumnState: () => store.getColumnState(),
-		applyColumnState: (states: ColumnState[]) => store.applyColumnState(states),
+		applyColumnState: (states: ColumnState[], opts?: { applyOrder?: boolean }) => store.applyColumnState(states, opts),
 		getGridState: () => store.getGridState(),
 		applyGridState: (state: PersistedGridState) => store.applyGridState(state),
 		toggleGroupExpanded: (groupId: string) => store.toggleGroupExpanded(groupId),

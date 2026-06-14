@@ -496,8 +496,19 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getColumnState = (): ColumnState[] => {
 		return this.engine.columnFeature.getColumnState();
 	};
-	public applyColumnState = (states: ColumnState[]): void => {
-		this.engine.columnFeature.applyColumnState(states);
+	public applyColumnState = (states: ColumnState[], opts?: { applyOrder?: boolean }): void => {
+		this.engine.columnFeature.applyColumnState(states, opts);
+
+		if (states.some((s) => s.sort !== undefined)) {
+			const sorted = states.filter((s) => s.sort != null).sort((a, b) => (a.sortIndex ?? 999) - (b.sortIndex ?? 999));
+			this.engine.setSortModel(sorted.length ? sorted.map((s) => ({ colId: s.field, sort: s.sort! })) : null);
+		}
+
+		if (states.some((s) => s.pinned !== undefined)) {
+			const left = states.filter((s) => s.pinned === 'left').length;
+			const right = states.filter((s) => s.pinned === 'right').length;
+			this.setViewportPins({ left, right });
+		}
 	};
 	public getGridState = (): PersistedGridState => {
 		return extractPersistedState(this.engine.getState() as GridState);

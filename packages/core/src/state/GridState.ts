@@ -1,4 +1,4 @@
-import type { FilterModel, SortModel } from '../rowModel.js';
+import type { FilterModel, SortDirection, SortModel } from '../rowModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
@@ -111,6 +111,12 @@ export interface ColumnState {
 	field: string;
 	width?: number;
 	hide?: boolean;
+	/** Pin lane. Omitted for hidden columns. `false` means explicitly unpinned. */
+	pinned?: 'left' | 'right' | false;
+	/** Sort direction. `null` means explicitly no sort on this column. */
+	sort?: SortDirection | null;
+	/** Zero-based position in the multi-column sort order. */
+	sortIndex?: number;
 }
 
 export interface GridCellRangeBounds {
