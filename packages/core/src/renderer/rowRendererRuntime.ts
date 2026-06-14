@@ -59,6 +59,7 @@ export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	incrementCurrentScrollCellsPatched: () => void;
 	incrementCurrentScrollCellsWritten: () => void;
 	incrementPostScrollDirtyCellsDecorated: () => void;
+	getColumnShift?: (colIndex: number) => number;
 }
 
 export interface RowRendererRuntimeStateHost<TRowData = unknown> {
@@ -94,6 +95,7 @@ export interface RowRendererRuntimeBridgeDeps<TRowData = unknown> {
 	releaseCellFn: (cell: CellSlot<TRowData>) => void;
 	ensurePinnedContainer: (slot: RowSlot<TRowData>, side: 'left' | 'right', width: number) => HTMLDivElement | null;
 	releaseRowPortal: (slot: RowSlot<TRowData>) => boolean;
+	getColumnShift?: (colIndex: number) => number;
 }
 
 function createRowCellBinderDeps<TRowData>(args: RowRendererRuntimeArgs<TRowData>): RowCellBinderDeps<TRowData> {
@@ -125,6 +127,7 @@ function createRowCellBinderDeps<TRowData>(args: RowRendererRuntimeArgs<TRowData
 		incrementCurrentScrollCellsWritten: () => {
 			args.incrementCurrentScrollCellsWritten();
 		},
+		getColumnShift: args.getColumnShift,
 	};
 }
 
@@ -312,6 +315,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 			incrementPostScrollDirtyCellsDecorated: () => {
 				this.deps.stateHost.postScrollDirtyCellsDecorated++;
 			},
+			getColumnShift: this.deps.getColumnShift,
 		};
 	}
 

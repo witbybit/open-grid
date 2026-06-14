@@ -43,11 +43,11 @@
 | 040 | [Core-Owned Architecture North-Star](./040-core-owned-architecture-north-star.md)               | TODO     | working tree |
 | 041 | [Core Client Pagination (pipeline window)](./041-core-client-pagination-pipeline-window.md)     | DONE     | working tree |
 | 042 | [React Pagination + Status Bar Teardown](./042-react-pagination-statusbar-teardown.md)          | DONE     | working tree |
-| 043 | [Row Lifecycle Exit Animation](./043-row-lifecycle-exit-animation.md)                           | PARTIAL  | working tree |
+| 043 | [Row Lifecycle Exit Animation](./043-row-lifecycle-exit-animation.md)                           | DONE     | working tree |
 | 044 | [Animated Column Pinning](./044-animated-column-pinning.md)                                     | TODO     | working tree |
 | 045 | [Detail Height Animation](./045-detail-height-animation.md)                                     | DONE     | working tree |
 | 046 | [Menu Modernization (shadcn)](./046-menu-modernization.md)                                      | DONE     | working tree |
-| 047 | [Header-Drag Reorder Polish](./047-header-drag-reorder-polish.md)                               | PARTIAL  | working tree |
+| 047 | [Header-Drag Reorder Polish](./047-header-drag-reorder-polish.md)                               | DONE     | working tree |
 
 ## Execution order
 

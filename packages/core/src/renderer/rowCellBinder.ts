@@ -37,6 +37,9 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	incrementStyleHookCallsDuringScroll: () => void;
 	incrementCellsBoundDuringScroll: () => void;
 	incrementCurrentScrollCellsWritten: () => void;
+	/** Live column-reorder preview offset (px) for a displayed column index (Plan 047).
+	 *  0 outside an active header drag. Only consulted on the full-bind path. */
+	getColumnShift?: (colIndex: number) => number;
 }
 
 export interface BindCellFullRequest<TRowData = unknown> {
@@ -182,6 +185,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	const cellLeft = plan.colLefts[colIndex];
 	const leftArg = isPinRight ? cellLeft - pinRightBaseLeft : cellLeft;
 	const cellWidth = plan.colWidths[colIndex];
+	const dragShift = deps.getColumnShift ? deps.getColumnShift(colIndex) : 0;
 
 	if (col.checkboxSelection) {
 		const cell = cellSlot.contentElement;
@@ -217,7 +221,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		checkbox.setAttribute('aria-label', isChecked ? `Deselect row ${rowIndex + 1}` : `Select row ${rowIndex + 1}`);
 		checkbox.title = 'Select row. Shift-click selects a range.';
 		if (checkbox.checked !== isChecked) checkbox.checked = isChecked;
-		cellSlot.update(colIndex, col.field, rowIndex, node.id, leftArg, -1, cellWidth, cellClassName, 'custom', undefined, '', undefined);
+		cellSlot.update(colIndex, col.field, rowIndex, node.id, leftArg, -1, cellWidth, cellClassName, 'custom', undefined, '', undefined, dragShift);
 		return;
 	}
 
@@ -277,7 +281,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		contentMode,
 		access.rawValue,
 		formattedValue,
-		contentMode === 'portal' ? stableKey : undefined
+		contentMode === 'portal' ? stableKey : undefined,
+		dragShift
 	);
 }
 

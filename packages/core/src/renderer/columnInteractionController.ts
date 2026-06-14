@@ -2,6 +2,65 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { GroupPanelRenderer } from './groupPanelRenderer.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 
+/**
+ * Compute the per-column horizontal shift (px) that previews a reorder of `fromIndex`
+ * to the insertion gap `gapIndex`, while a header drag is in progress (Plan 047).
+ *
+ * The returned `shifts[i]` is the delta from column i's CURRENT left to the left it
+ * will occupy AFTER the move. Renderers add it to the column's positioning so every
+ * displaced column slides aside under the cursor — and, crucially, the previewed
+ * position is exactly the post-`moveColumn` position. That makes the drop seamless:
+ * when the drag ends the shifts go to 0 and the reorder repaint writes the same pixel
+ * positions, so nothing jumps and no FLIP pass is needed.
+ *
+ * Only center-lane (non-pinned) columns are previewed. If the dragged column or the
+ * insertion target falls outside the center lane the function returns all-zero shifts
+ * (reorder still happens on drop, just without the live preview).
+ */
+export function computeColumnReorderShifts(
+	colWidths: ArrayLike<number>,
+	fromIndex: number,
+	gapIndex: number,
+	pinLeftCount: number,
+	pinRightCount: number
+): number[] {
+	const n = colWidths.length;
+	const shifts = new Array<number>(n).fill(0);
+	if (n === 0) return shifts;
+
+	const centerStart = pinLeftCount;
+	const centerEnd = n - pinRightCount; // exclusive
+	if (fromIndex < centerStart || fromIndex >= centerEnd) return shifts;
+
+	// Clamp the insertion gap into the center lane and mirror the drop's gap→index rule.
+	let gap = gapIndex;
+	if (gap < centerStart) gap = centerStart;
+	if (gap > centerEnd) gap = centerEnd;
+	const toIndex = gap > fromIndex ? gap - 1 : gap;
+	if (toIndex === fromIndex) return shifts;
+
+	// Current center order and the order after moving `fromIndex` to `toIndex`.
+	const order: number[] = [];
+	for (let i = centerStart; i < centerEnd; i++) order.push(i);
+	const newOrder = order.slice();
+	const [moved] = newOrder.splice(fromIndex - centerStart, 1);
+	newOrder.splice(toIndex - centerStart, 0, moved);
+
+	// Relative lefts (the center lane base cancels out in the delta).
+	const curLeft = new Map<number, number>();
+	let acc = 0;
+	for (const ci of order) {
+		curLeft.set(ci, acc);
+		acc += colWidths[ci];
+	}
+	acc = 0;
+	for (const ci of newOrder) {
+		shifts[ci] = acc - (curLeft.get(ci) ?? 0);
+		acc += colWidths[ci];
+	}
+	return shifts;
+}
+
 export interface ColumnInteractionControllerOptions<TRowData> {
 	engine: GridEngine<TRowData>;
 	getOverlayLayer: () => HTMLDivElement | null;
@@ -25,6 +84,11 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private columnDropIndicator: HTMLDivElement | null = null;
 	private indicatorShown = false;
 	private columnDragGhost: HTMLDivElement | null = null;
+	// Live-reorder preview (Plan 047): per-column shift (px) for the current insertion
+	// point. Null when no preview is active. Recomputed only when the insertion index
+	// changes, then read by the header + body renderers via getColumnShift().
+	private dragShifts: number[] | null = null;
+	private shiftInsertionIndex = -2;
 
 	// Group panel reference — set by RenderEngine when panel is mounted.
 	private groupPanel: GroupPanelRenderer<TRowData> | null = null;
@@ -114,9 +178,21 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.columnDragFromIndex = -1;
 		this.columnDragField = null;
 		this.columnDropInsertionIndex = -1;
+		this.dragShifts = null;
+		this.shiftInsertionIndex = -2;
 		this.removeColumnDropIndicator();
 		this.removeColumnDragGhost();
 		this.getScrollViewport()?.closest('.og-grid-container')?.classList.remove('og-col-reordering');
+	}
+
+	/**
+	 * Live-reorder preview shift (px) for a displayed column index — added to the
+	 * column's positioning by the header and body renderers during a drag so columns
+	 * slide aside under the cursor. 0 when no drag/preview is active. See
+	 * {@link computeColumnReorderShifts}.
+	 */
+	public getColumnShift(colIndex: number): number {
+		return this.dragShifts ? (this.dragShifts[colIndex] ?? 0) : 0;
 	}
 
 	public reattachOverlays(): void {
@@ -158,6 +234,10 @@ export class ColumnInteractionController<TRowData = unknown> {
 				if (overPanel) {
 					this.groupPanel.onHeaderDragEnter(colField);
 					this.columnDropIndicator && (this.columnDropIndicator.style.display = 'none');
+					// Drop the live-reorder preview while over the panel; recompute on return.
+					this.dragShifts = null;
+					this.shiftInsertionIndex = -2;
+					this.schedulePaint();
 				} else {
 					this.groupPanel.onHeaderDragLeave();
 					this.columnDropIndicator && (this.columnDropIndicator.style.display = '');
@@ -285,6 +365,22 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const insertionIndex = Math.max(0, Math.min(state.columns.length, targetCol + (insertAfterTarget ? 1 : 0)));
 
 		this.columnDropInsertionIndex = insertionIndex;
+
+		// Recompute the live-reorder preview only when the insertion point actually
+		// changes, then force a full repaint so the header + body slide to the previewed
+		// positions. (schedulePaint is wired to a full paint during reorder.)
+		if (insertionIndex !== this.shiftInsertionIndex) {
+			this.shiftInsertionIndex = insertionIndex;
+			const layoutPlan = this.getLayoutPlan();
+			this.dragShifts = computeColumnReorderShifts(
+				this.engine.geometry.colWidths,
+				this.columnDragFromIndex,
+				insertionIndex,
+				layoutPlan?.columns.pinLeftCount ?? 0,
+				layoutPlan?.columns.pinRightCount ?? 0
+			);
+			this.schedulePaint();
+		}
 
 		const indicatorContentLeft =
 			insertionIndex >= state.columns.length

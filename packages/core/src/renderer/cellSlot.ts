@@ -58,6 +58,7 @@ export class CellSlot<TRowData = unknown> {
 	public lastLeft = -1; // absolute left px for center and pin-left cells
 	public lastRight = -1; // distance-from-right px for pin-right cells (-1 = not set)
 	public lastWidth = -1; // column width px
+	public lastShift = 0; // live column-reorder preview offset px (Plan 047); 0 = none
 	public lastClassName = '';
 	public lastContentMode: CellContentMode = 'empty';
 	public lastPortalKey: string | undefined = undefined;
@@ -110,6 +111,10 @@ export class CellSlot<TRowData = unknown> {
 		this.lastLeft = -1;
 		this.lastRight = -1;
 		this.lastWidth = -1;
+		if (this.lastShift !== 0) {
+			this.lastShift = 0;
+			this.element.style.transform = '';
+		}
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
@@ -140,7 +145,8 @@ export class CellSlot<TRowData = unknown> {
 		contentMode: CellContentMode,
 		rawValue: unknown,
 		formattedValue: string,
-		portalKey?: string
+		portalKey?: string,
+		dragShift = 0
 	): boolean {
 		let domUpdated = false;
 
@@ -188,6 +194,15 @@ export class CellSlot<TRowData = unknown> {
 			this.lastWidth = width;
 			this.element.style.width = toPx(width);
 			cellSlotWriteStats.cellWidthWrites++;
+			domUpdated = true;
+		}
+
+		// Live column-reorder preview offset (Plan 047). Composes on top of the `left`/`right`
+		// positioning above. Guarded by lastShift so steady-state binds (shift 0) never touch
+		// transform — the per-cell hot path stays write-free outside an active header drag.
+		if (dragShift !== this.lastShift) {
+			this.lastShift = dragShift;
+			this.element.style.transform = dragShift !== 0 ? `translateX(${toPx(dragShift)})` : '';
 			domUpdated = true;
 		}
 
@@ -302,6 +317,10 @@ export class CellSlot<TRowData = unknown> {
 		this.lastLeft = -1;
 		this.lastRight = -1;
 		this.lastWidth = -1;
+		if (this.lastShift !== 0) {
+			this.lastShift = 0;
+			this.element.style.transform = '';
+		}
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;

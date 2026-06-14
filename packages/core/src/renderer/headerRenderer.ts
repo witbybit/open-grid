@@ -211,7 +211,11 @@ export class HeaderRenderer<TRowData = unknown> {
 				if (isDraggingThis) className += ' og-header-cell-dragging';
 
 				if (headerCell.className !== className) headerCell.className = className;
-				const nextTransform = isDraggingThis ? `translate3d(${cellLeft}px, -2px, 0) scale(1.035)` : `translate3d(${cellLeft}px, 0, 0)`;
+				// Live column-reorder preview (Plan 047): slide this header to its previewed
+				// post-drop position. Folded into the positioning transform; the existing
+				// `.og-header-cell-movable { transition: transform }` makes it glide + settle.
+				const shiftedLeft = cellLeft + columnInteractions.getColumnShift(cell.colStart);
+				const nextTransform = isDraggingThis ? `translate3d(${shiftedLeft}px, -2px, 0) scale(1.035)` : `translate3d(${shiftedLeft}px, 0, 0)`;
 				if (headerCell.style.transform !== nextTransform) headerCell.style.transform = nextTransform;
 				const nextWidth = `${cell.width}px`;
 				if (headerCell.style.width !== nextWidth) headerCell.style.width = nextWidth;

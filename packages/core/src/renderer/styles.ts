@@ -838,10 +838,21 @@ export const CORE_STYLES = `
     z-index: 10;
   }
 
-  /* Dim all non-dragging header cells so the lifted column pops out visually */
+  /* Dim non-dragging header cells so the lifted column pops out — kept light enough
+     that the live-reorder shift (columns sliding aside) stays clearly visible. */
   .og-col-reordering .og-header-cell:not(.og-header-cell-dragging) {
-    opacity: 0.38;
-    transition: opacity 0.15s ease;
+    opacity: 0.55;
+    transition: opacity 0.15s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Live column-reorder preview (Plan 047): body cells slide to their previewed
+     post-drop position via a translateX composed on top of their left offset. The
+     glide transition is scoped to an active drag, so steady-state scroll/resize
+     frames — which never carry this class — never transition transform. On drop the
+     class is removed and the cell left already equals the previewed position, so
+     there is no jump and no separate FLIP pass is needed. */
+  .og-col-reordering .og-cell {
+    transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .og-column-drop-indicator {

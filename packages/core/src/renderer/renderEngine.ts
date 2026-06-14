@@ -241,8 +241,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			getOverlayLayer: () => this.viewportRenderer.overlayLayer,
 			getScrollViewport: () => this.viewportRenderer.scrollViewport,
 			getLayoutPlan: () => this.viewportRenderer.getLayoutPlan(),
-			schedulePaint: () => this.scheduleHeaderPaint('column interaction'),
+			// Full paint (not header-only): the live-reorder preview slides body cells too,
+			// so header + body must re-bind with the new per-column shifts on each insertion
+			// change. Bounded to discrete insertion changes during a drag, not per pixel.
+			schedulePaint: () => this.scheduleFullPaint('column interaction'),
 		});
+		// Feed the live column-reorder preview offset into the body bind path (Plan 047).
+		this.rowRenderer.columnShiftSource = (colIndex) => this.columnInteractions.getColumnShift(colIndex);
 		this.fillDrag = new FillDragController<TRowData>({
 			engine,
 			getOverlayLayer: () => this.viewportRenderer.overlayLayer,

@@ -1,0 +1,12 @@
+{
+	"version": "0.0.1",
+	"configurations": [
+		{
+			"name": "demo",
+			"runtimeExecutable": "pnpm",
+			"runtimeArgs": ["--filter", "demo-app", "dev"],
+			"port": 5173,
+			"autoPort": true
+		}
+	]
+}

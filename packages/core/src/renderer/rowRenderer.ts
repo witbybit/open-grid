@@ -149,6 +149,9 @@ export class RowRenderer<TRowData = unknown> {
 
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 	private readonly runtime: RowRendererRuntimeBridge<TRowData>;
+	/** Live column-reorder preview source (Plan 047), wired by RenderEngine to the
+	 *  ColumnInteractionController. Returns 0 outside an active header drag. */
+	public columnShiftSource: ((colIndex: number) => number) | null = null;
 
 	/** Manages row selection paint state, row class building, and row click handling. */
 	public readonly selectionPaint: SelectionPaintManager<TRowData>;
@@ -190,6 +193,7 @@ export class RowRenderer<TRowData = unknown> {
 			},
 			ensurePinnedContainer: (slot, side, width) => this.ensurePinnedContainer(slot, side, width),
 			releaseRowPortal: (slot) => this.releaseRowPortal(slot),
+			getColumnShift: (colIndex) => (this.columnShiftSource ? this.columnShiftSource(colIndex) : 0),
 		});
 	}
 
