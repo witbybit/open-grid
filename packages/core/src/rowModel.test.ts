@@ -608,3 +608,48 @@ describe('GroupRowMeta', () => {
 		expect(footerRow?.kind).toBe('footer');
 	});
 });
+
+describe('Numeric Filter Null Safety', () => {
+	interface NumericRow {
+		id: string;
+		value: number | null | undefined;
+	}
+
+	it('should not match null or undefined cell values in numeric comparisons', () => {
+		const store = new GridStore<NumericRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'value', header: 'Value' }],
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', value: 10 },
+				{ id: '2', value: null },
+				{ id: '3', value: undefined },
+				{ id: '4', value: '' as any },
+				{ id: '5', value: 3 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// 1. Filter: value < 5
+		store.setState({
+			filterModel: { value: { type: 'lt', filter: '5' } },
+		});
+		controller.refresh();
+		// Only '5' (value 3) should match. null/undefined/"" should NOT match (would have matched if coerced to 0)
+		expect(controller.getVisualRowCount()).toBe(1);
+		expect(controller.getVisualRow(0)?.rowId).toBe('5');
+
+		// 2. Filter: value >= 0
+		store.setState({
+			filterModel: { value: { type: 'gte', filter: '0' } },
+		});
+		controller.refresh();
+		// '1' (10) and '5' (3) should match. null/undefined/"" should not match
+		expect(controller.getVisualRowCount()).toBe(2);
+		const matchedIds = [controller.getVisualRow(0)?.rowId, controller.getVisualRow(1)?.rowId];
+		expect(matchedIds).toContain('1');
+		expect(matchedIds).toContain('5');
+	});
+});

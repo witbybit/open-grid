@@ -50,6 +50,7 @@
 | 047 | [Header-Drag Reorder Polish](./047-header-drag-reorder-polish.md)                               | DONE     | working tree |
 | 048 | [Unified Theme Styling Core Migration](./048-unified-theme-styling-core-migration.md)           | DONE     | working tree |
 | 049 | [Accessibility / ARIA Pass](./049-accessibility-aria-pass.md)                                   | DONE     | working tree |
+| 051 | [Numeric Filter Null Coercion](./051-numeric-filter-null-coercion.md)                           | TODO     | e89c1ec2     |
 
 ## Execution order
 
@@ -160,6 +161,7 @@
 - Plan 033 reconciled stale backlog statuses on 2026-06-13 after verifying live row multi-select evidence, single-`Grid` architecture guards, and green core/React/demo build and test gates.
 - Plan 034 is implemented and verified on 2026-06-13: pagination is now native to `ServerRowModelController` — page state (`currentPage`, `pageCount`, `totalRowsKnown`) lives in core, `goToPage(n)` is an explicit `GridApi` method, `paginationChanged` is a typed grid event, `GridState.serverPagination` is updated atomically, and the `pagedServerDatasource` React wrapper is deleted. The `InfiniteServerScroll` demo pagination is uncommented and uses the native path. Architecture guard asserts `pagedServerDatasource` cannot reappear in `Grid.tsx`. All 511 core tests, 100 React tests, and demo build pass.
 - Plan 001 is implemented and verified on 2026-06-13: row multi-select state/tests live in `packages/core/src/store.test.ts`, the public API is exercised by `demo/src/pages/RowMultiSelectDemo.tsx`, and the core/React/demo verification gates passed.
+- Plan 051 addresses the numeric comparison filter bug where `null` and `undefined` values were coerced to `0` and incorrectly matched less-than/greater-than boundaries.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
 
 ## Findings considered and rejected

@@ -149,7 +149,23 @@ interface PreparedFilter<TData> {
 
 function matchesPreparedFilter<TData>(value: unknown, pf: PreparedFilter<TData>): boolean {
 	const textValue = String(value ?? '').toLowerCase();
-	const numericValue = Number(value);
+
+	if (pf.operator === 'gt' || pf.operator === 'gte' || pf.operator === 'lt' || pf.operator === 'lte') {
+		if (value == null || value === '') return false;
+		const numericValue = Number(value);
+		if (Number.isNaN(numericValue)) return false;
+
+		switch (pf.operator) {
+			case 'gt':
+				return numericValue > pf.numericFilter;
+			case 'gte':
+				return numericValue >= pf.numericFilter;
+			case 'lt':
+				return numericValue < pf.numericFilter;
+			case 'lte':
+				return numericValue <= pf.numericFilter;
+		}
+	}
 
 	switch (pf.operator) {
 		case 'equals':
@@ -158,14 +174,6 @@ function matchesPreparedFilter<TData>(value: unknown, pf: PreparedFilter<TData>)
 			return textValue.startsWith(pf.textFilter);
 		case 'endsWith':
 			return textValue.endsWith(pf.textFilter);
-		case 'gt':
-			return numericValue > pf.numericFilter;
-		case 'gte':
-			return numericValue >= pf.numericFilter;
-		case 'lt':
-			return numericValue < pf.numericFilter;
-		case 'lte':
-			return numericValue <= pf.numericFilter;
 		case 'contains':
 		default:
 			return textValue.includes(pf.textFilter);
