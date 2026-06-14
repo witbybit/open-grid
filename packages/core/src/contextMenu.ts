@@ -272,6 +272,11 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			}
 		});
 
+		const container = this.runtime.getContainer();
+		if (container && container.dataset.ogThemeScope) {
+			menu.dataset.ogThemeScope = container.dataset.ogThemeScope;
+		}
+
 		document.body.appendChild(menu);
 
 		const menuWidth = 190;

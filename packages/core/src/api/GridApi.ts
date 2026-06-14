@@ -426,6 +426,8 @@ export interface GridApi<TRowData = unknown> {
 	switchTheme(themeName: string): void;
 	/** Subscribe to theme changes. Returns an unsubscribe function. */
 	onThemeChange(listener: (theme: ThemeTokens) => void): () => void;
+	/** Returns the grid container HTML element, or null if not mounted yet. */
+	getContainer(): HTMLElement | null;
 
 	destroy(): void;
 }

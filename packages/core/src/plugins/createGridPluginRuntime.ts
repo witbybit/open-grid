@@ -107,6 +107,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		getAvailableThemes: source.getAvailableThemes,
 		switchTheme: source.switchTheme,
 		onThemeChange: source.onThemeChange,
+		getContainer: source.getContainer,
 		destroy: source.destroy,
 		getCellState: source.getCellState,
 		getCheapDisplayValue: source.getCheapDisplayValue,

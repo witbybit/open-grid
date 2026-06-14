@@ -335,6 +335,13 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const labelSpan = document.createElement('span');
 		labelSpan.textContent = label;
 		this.columnDragGhost.appendChild(labelSpan);
+
+		const scrollViewport = this.getScrollViewport();
+		const container = scrollViewport?.closest('.og-grid-container') as HTMLElement | null;
+		if (container && container.dataset.ogThemeScope) {
+			this.columnDragGhost.dataset.ogThemeScope = container.dataset.ogThemeScope;
+		}
+
 		document.body.appendChild(this.columnDragGhost);
 	}
 

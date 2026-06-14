@@ -34,6 +34,10 @@ export class HeaderMenuController<TRowData = unknown> {
 
 		const popover = document.createElement('div');
 		popover.className = 'og-header-popover';
+		const container = headerCell.closest('.og-grid-container') as HTMLElement | null;
+		if (container && container.dataset.ogThemeScope) {
+			popover.dataset.ogThemeScope = container.dataset.ogThemeScope;
+		}
 		this.activePopover = popover;
 		this.activeHeaderCell = headerCell;
 
@@ -122,6 +126,135 @@ export class HeaderMenuController<TRowData = unknown> {
 		}
 
 		popover.appendChild(sortContainer);
+
+		// Pinning and Grouping Actions
+		const api = this.getApi();
+		const displayedCols = api.getDisplayedColumns();
+		const colIndex = displayedCols.findIndex((c) => c.field === colField);
+		const { left: currentLeft, right: currentRight } = api.getPinnedColumns();
+		const N = displayedCols.length;
+
+		const handlePinLeft = () => {
+			if (colIndex < 0) return;
+			if (colIndex < currentLeft) return;
+			api.moveColumn(colField, currentLeft);
+			const isPinnedRight = colIndex >= N - currentRight;
+			const nextRight = isPinnedRight ? Math.max(0, currentRight - 1) : currentRight;
+			api.setPinnedColumns({
+				left: currentLeft + 1,
+				right: nextRight,
+			});
+			this.hide();
+		};
+
+		const handlePinRight = () => {
+			if (colIndex < 0) return;
+			const isPinnedRight = colIndex >= N - currentRight;
+			if (isPinnedRight) return;
+			api.moveColumn(colField, N - currentRight - 1);
+			const isPinnedLeft = colIndex < currentLeft;
+			const nextLeft = isPinnedLeft ? Math.max(0, currentLeft - 1) : currentLeft;
+			api.setPinnedColumns({
+				left: nextLeft,
+				right: currentRight + 1,
+			});
+			this.hide();
+		};
+
+		const handleUnpin = () => {
+			if (colIndex < 0) return;
+			const isPinnedLeft = colIndex < currentLeft;
+			const isPinnedRight = colIndex >= N - currentRight;
+			if (isPinnedLeft) {
+				api.moveColumn(colField, currentLeft - 1);
+				api.setPinnedColumns({
+					left: Math.max(0, currentLeft - 1),
+					right: currentRight,
+				});
+			} else if (isPinnedRight) {
+				api.moveColumn(colField, N - currentRight);
+				api.setPinnedColumns({
+					left: currentLeft,
+					right: Math.max(0, currentRight - 1),
+				});
+			}
+			this.hide();
+		};
+
+		const dividerPinGroup = document.createElement('div');
+		dividerPinGroup.className = 'og-popover-divider';
+		popover.appendChild(dividerPinGroup);
+
+		const pinGroupContainer = document.createElement('div');
+		pinGroupContainer.className = 'og-popover-sort-section';
+
+		const isPinnedLeft = colIndex >= 0 && colIndex < currentLeft;
+		if (!isPinnedLeft) {
+			const pinLeft = document.createElement('div');
+			pinLeft.className = 'og-popover-item';
+			pinLeft.innerHTML = `
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4M16 12H8m4-4-4 4 4 4"/></svg>
+				<span>Pin Left</span>
+			`;
+			pinLeft.addEventListener('click', handlePinLeft);
+			this._makeActivatable(pinLeft);
+			pinGroupContainer.appendChild(pinLeft);
+		}
+
+		const isPinnedRight = colIndex >= 0 && colIndex >= N - currentRight;
+		if (!isPinnedRight) {
+			const pinRight = document.createElement('div');
+			pinRight.className = 'og-popover-item';
+			pinRight.innerHTML = `
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M8 12h8m-4-4 4 4-4 4"/></svg>
+				<span>Pin Right</span>
+			`;
+			pinRight.addEventListener('click', handlePinRight);
+			this._makeActivatable(pinRight);
+			pinGroupContainer.appendChild(pinRight);
+		}
+
+		if (isPinnedLeft || isPinnedRight) {
+			const unpin = document.createElement('div');
+			unpin.className = 'og-popover-item';
+			unpin.innerHTML = `
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				<span>Unpin Column</span>
+			`;
+			unpin.addEventListener('click', handleUnpin);
+			this._makeActivatable(unpin);
+			pinGroupContainer.appendChild(unpin);
+		}
+
+		if (column.enableRowGroup !== false) {
+			const groupBy = state.groupBy || [];
+			const isGrouped = groupBy.includes(colField);
+			const groupBtn = document.createElement('div');
+			groupBtn.className = 'og-popover-item';
+			if (isGrouped) {
+				groupBtn.innerHTML = `
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="8" y1="11" x2="16" y2="11"></line></svg>
+					<span>Remove Group By</span>
+				`;
+				groupBtn.addEventListener('click', () => {
+					api.removeGroupBy(colField);
+					this.hide();
+				});
+			} else {
+				groupBtn.innerHTML = `
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+					<span>Group by Column</span>
+				`;
+				groupBtn.addEventListener('click', () => {
+					api.addGroupBy(colField);
+					this.hide();
+				});
+			}
+			this._makeActivatable(groupBtn);
+			pinGroupContainer.appendChild(groupBtn);
+		}
+
+		popover.appendChild(pinGroupContainer);
 
 		const divider = document.createElement('div');
 		divider.className = 'og-popover-divider';

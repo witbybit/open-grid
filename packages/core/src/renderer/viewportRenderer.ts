@@ -178,6 +178,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.container?.style.setProperty('--og-group-panel-height', `${plan.chrome.groupPanelHeight}px`);
 		this.container?.style.setProperty('--og-overlay-top', `${plan.origins.overlayTop}px`);
 		this.container?.style.setProperty('--og-bottom-chrome-height', `${plan.chrome.bottomChromeHeight}px`);
+		this.container?.style.setProperty('--og-content-width', `${plan.dimensions.contentWidth}px`);
 
 		// ARIA counts — guarded so we only touch the DOM when they actually change.
 		if (this.container) {

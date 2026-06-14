@@ -106,7 +106,7 @@ export const CORE_STYLES = `
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
+    width: var(--og-content-width, 100%);
     height: 0;
     overflow: visible;
     pointer-events: none;
@@ -295,12 +295,12 @@ export const CORE_STYLES = `
     max-width: 190px;
     height: 26px;
     padding: 0 7px 0 6px;
-    background: linear-gradient(180deg, rgba(59, 130, 246, 0.18), rgba(59, 130, 246, 0.1));
-    border: 1px solid rgba(96, 165, 250, 0.38);
+    background: var(--og-group-badge-bg, rgba(59, 130, 246, 0.18));
+    border: 1px solid var(--og-group-badge-border, rgba(96, 165, 250, 0.38));
     border-radius: 6px;
     font-size: 12px;
     font-weight: 700;
-    color: #93c5fd;
+    color: var(--og-group-badge-text, #93c5fd);
     cursor: grab;
     user-select: none;
     white-space: nowrap;
@@ -310,8 +310,7 @@ export const CORE_STYLES = `
   }
 
   .og-group-chip:hover {
-    background: linear-gradient(180deg, rgba(59, 130, 246, 0.28), rgba(59, 130, 246, 0.14));
-    border-color: rgba(147, 197, 253, 0.62);
+    filter: brightness(1.15);
     box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.08) inset, 0 8px 18px rgba(0, 0, 0, 0.18);
   }
 
@@ -330,7 +329,7 @@ export const CORE_STYLES = `
     align-items: center;
     opacity: 0.62;
     flex-shrink: 0;
-    color: #93c5fd;
+    color: inherit;
   }
 
   .og-group-chip-handle svg {
@@ -356,7 +355,7 @@ export const CORE_STYLES = `
     border: none;
     padding: 0;
     cursor: pointer;
-    color: #93c5fd;
+    color: inherit;
     opacity: 0.55;
     border-radius: 3px;
     flex-shrink: 0;
@@ -365,7 +364,7 @@ export const CORE_STYLES = `
 
   .og-group-chip-remove:hover {
     opacity: 1;
-    background: rgba(59, 130, 246, 0.25);
+    background: var(--og-group-badge-border, rgba(59, 130, 246, 0.25));
   }
 
   .og-group-chip-remove svg {
@@ -455,6 +454,7 @@ export const CORE_STYLES = `
     position: relative;
     will-change: transform;
     pointer-events: auto;
+    width: var(--og-content-width, 100%);
   }
 
   .og-layer-sticky-groups {
@@ -1121,7 +1121,7 @@ export const CORE_STYLES = `
   .og-context-menu-item:hover,
   .og-context-menu-item.og-menu-active {
     background-color: var(--og-popover-item-hover-bg, rgba(255, 255, 255, 0.07));
-    color: #ffffff;
+    color: var(--og-popover-text, #ffffff);
   }
   /* Keyboard navigation highlights via .og-menu-active; the focused item shows that
      state rather than a separate browser outline. */
@@ -1262,7 +1262,7 @@ export const CORE_STYLES = `
   }
   .og-popover-item:hover {
     background-color: var(--og-popover-item-hover-bg, rgba(255, 255, 255, 0.06));
-    color: #ffffff;
+    color: var(--og-popover-text, #ffffff);
     opacity: 1;
   }
   /* Keyboard focus ring for the (non-native) sort rows; native filter controls keep
@@ -1319,8 +1319,8 @@ export const CORE_STYLES = `
     font-family: inherit;
   }
   .og-popover-select option {
-    background: #0f172a;
-    color: #f1f5f9;
+    background: var(--og-popover-input-bg, #0f172a);
+    color: var(--og-popover-text, #f1f5f9);
   }
   .og-popover-input {
     background: var(--og-popover-input-bg, rgba(30, 41, 59, 0.7));
@@ -1360,11 +1360,12 @@ export const CORE_STYLES = `
     opacity: 0.9;
   }
   .og-btn-secondary {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #e2e8f0;
+    background-color: var(--og-popover-input-bg, rgba(255, 255, 255, 0.08));
+    border: 1px solid var(--og-popover-input-border, transparent);
+    color: var(--og-popover-text, #e2e8f0);
   }
   .og-btn-secondary:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: var(--og-popover-item-hover-bg, rgba(255, 255, 255, 0.12));
   }
 
   /* Group and Detail Rows */
@@ -1376,7 +1377,7 @@ export const CORE_STYLES = `
     user-select: none;
     cursor: pointer;
     background:
-      linear-gradient(90deg, rgba(167, 139, 250, 0.13), rgba(59, 130, 246, 0.08) 44%, rgba(15, 23, 42, 0.02)),
+      linear-gradient(90deg, color-mix(in srgb, var(--og-focus-ring, #3b82f6) 13%, transparent), color-mix(in srgb, var(--og-selection-bg, rgba(59, 130, 246, 0.1)) 40%, transparent) 44%, transparent),
       var(--og-group-row-bg);
     color: var(--og-group-row-text);
     font-size: var(--og-group-row-font-size);
@@ -1389,7 +1390,7 @@ export const CORE_STYLES = `
 
   .og-group-row-content:hover {
     background:
-      linear-gradient(90deg, rgba(167, 139, 250, 0.18), rgba(59, 130, 246, 0.11) 44%, rgba(15, 23, 42, 0.04)),
+      linear-gradient(90deg, color-mix(in srgb, var(--og-focus-ring, #3b82f6) 18%, transparent), color-mix(in srgb, var(--og-selection-bg, rgba(59, 130, 246, 0.1)) 50%, transparent) 44%, transparent),
       var(--og-group-row-hover-bg);
   }
 
@@ -1403,9 +1404,9 @@ export const CORE_STYLES = `
     justify-content: center;
     flex: 0 0 auto;
     border-radius: 4px;
-    border: 1px solid rgba(167, 139, 250, 0.34);
-    background: rgba(167, 139, 250, 0.14);
-    color: #c4b5fd;
+    border: 1px solid var(--og-group-badge-border, rgba(167, 139, 250, 0.34));
+    background: var(--og-group-badge-bg, rgba(167, 139, 250, 0.14));
+    color: var(--og-group-badge-text, #c4b5fd);
     line-height: 1;
   }
 

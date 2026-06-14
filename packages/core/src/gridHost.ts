@@ -114,6 +114,7 @@ export function mountGridHost<TRowData>(
 		internalApi.setViewportPins(options.pins);
 	}
 
+	store.setContainerElement(container);
 	renderEngine.mount(container);
 
 	const observer = new ResizeObserver((entries) => {

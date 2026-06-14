@@ -319,6 +319,7 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 							getRowId={(row) => row.id}
 							rowSelection={{ mode: 'multiple', selectAllScope }}
 							pagination={{ pageSize: 25 }}
+							sidebar={{ panels: ['themes'] }}
 							showStatusBar
 							enableNavigation={true}
 							navigationOptions={{ editTrigger: 'doubleClick' }}

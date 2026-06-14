@@ -259,6 +259,7 @@ export function createApiFacade<TRowData>(
 		getAvailableThemes: () => store.getAvailableThemes(),
 		switchTheme: (themeName: string) => store.switchTheme(themeName),
 		onThemeChange: (listener: (theme: ThemeTokens) => void) => store.onThemeChange(listener),
+		getContainer: () => store.getContainerElement(),
 		destroy,
 	};
 

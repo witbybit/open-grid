@@ -1,4 +1,4 @@
-import type { FilterModel, SortModel, RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
+import type { FilterModel, SortModel, RowModel } from './rowModel.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
 import type { IGridDatasource } from './serverRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
@@ -104,6 +104,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private readonly viewportController: ViewportController<TRowData>;
 	private readonly pluginRuntime: GridPluginRuntime<TRowData>;
 	private readonly pluginRegistry: GridPluginRegistry<TRowData>;
+
+	private containerElement: HTMLElement | null = null;
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}) {
 		validateColumns(initialState.columns || []);
@@ -836,6 +838,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.engine.onThemeChange?.(listener) ?? (() => {});
+
+	public setContainerElement = (c: HTMLElement): void => {
+		this.containerElement = c;
+	};
+	public getContainerElement = (): HTMLElement | null => this.containerElement;
+	public getContainer = (): HTMLElement | null => this.containerElement;
 
 	public destroy = (): void => {
 		this.pluginRegistry.destroy();
