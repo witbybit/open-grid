@@ -20,6 +20,24 @@
     - Tests: 4 exit cases in `layoutTransitionController.test.ts` (fade on true exit; no fade on scroll-out; cancel removes ghosts; no-op without exit layer).
     - **Deferred — Phase 3**: detail-row/group height grow/shrink animation (needs an inner content wrapper). Separate, lower-priority polish.
 
+## Expand/collapse animation FIX (2026-06-14) — was silently broken
+
+A follow-up review found group/tree/master-detail expand-collapse **did not animate at
+all** (only sort did), despite the move/enter/exit/detail-height machinery being present.
+Root cause: `beginAnimation()` was only called inside `fullPaintInternal`. Sort uses
+`invalidateFull` (→ full-paint path → fires), but expand/collapse use
+`invalidateViewport('group expansion'|'detail')` (GroupingFeatureController) → the
+orchestrator routes a non-full frame to `syncViewport`, which repositioned rows but
+never called `beginAnimation`. `captureSnapshot` _was_ firing (toggle → `store.setState({expansion})`
+→ `subscribeToKey('expansion')`), so a snapshot existed but was never played.
+
+Fix: `renderPaintCoordinator.flushPaint` now plays the armed transition after
+`orchestrator.flush` when `pendingTransition` is still set — i.e. the viewport path.
+The full-paint path consumes the flag inside `fullPaintInternal` first, so no
+double-animation. Covered by `renderPaintCoordinator.test.ts` (viewport-frame fires
+beginAnimation; order: flush→beginAnimation) and an end-to-end `renderEngine.test.ts`
+test that toggles a real group and asserts WAAPI `animate()` is invoked. core 592/592.
+
 ## Phase 3 reconciliation (2026-06-14) — 043 closed as DONE
 
 Phase 3's substantive goal — detail-row height grow/shrink that does not fight the

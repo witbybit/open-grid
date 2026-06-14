@@ -70,6 +70,65 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	// Regression (Plan 043 / expand-collapse animation): group/tree/detail toggles
+	// invalidate the VIEWPORT (not full), so the transition must fire from flushPaint —
+	// not only the full-paint path. Before the fix, captureSnapshot ran on the `expansion`
+	// state change but beginAnimation was never reached on the viewport flush, so rows
+	// snapped. This drives the real chain (toggle → invalidateViewport('group expansion')
+	// → flushPaint) and asserts WAAPI animate() is actually invoked.
+	it('plays the expand/collapse transition (invokes WAAPI animate) on a group toggle', () => {
+		// jsdom has no WAAPI; stub it so LayoutTransitionController is feature-enabled.
+		const animateMock = vi.fn(() => ({ cancel: vi.fn(), finish: vi.fn(), onfinish: null, oncancel: null }) as unknown as Animation);
+		(HTMLElement.prototype as unknown as { animate: unknown }).animate = animateMock;
+
+		const store = new GridStore<{ id: string; name: string; category: string }>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 120 },
+				{ field: 'category', header: 'Category', width: 120, enableRowGroup: true },
+			],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 20 }, (_, index) => ({
+			id: `row-${index}`,
+			name: `Row ${index}`,
+			category: index % 2 === 0 ? 'A' : 'B',
+		}));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 400,
+			width: 500,
+			height: 400,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		store.engine.setGroupBy(['category']);
+		renderer.fullPaint(); // populate slots with their current positions
+
+		// A toggle changes state.expansion (→ captureSnapshot, sync) and invalidates the
+		// viewport with reason 'group expansion'. Running the gated flush then plays it.
+		animateMock.mockClear();
+		store.engine.groupingFeature.toggleGroupExpanded('group:category=A');
+		(renderer as unknown as { flushPaint: () => void }).flushPaint();
+
+		expect(animateMock).toHaveBeenCalled();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('releases out-of-range cells when columns shrink with right pinning enabled', () => {
 		const wideColumns = [
 			{ field: 'risk', header: 'Risk', width: 120 },

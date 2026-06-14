@@ -114,94 +114,75 @@ describe('RenderPaintCoordinator – refreshRendererEpochs', () => {
 
 // ─── flushPaint – sort animation gate ────────────────────────────────────────
 
-describe('RenderPaintCoordinator – flushPaint sort animation gate', () => {
-	it('sets pendingTransition when a sort frame arrives while not scrolling', () => {
-		const deps = makeDeps(
+describe('RenderPaintCoordinator – flushPaint transition gate', () => {
+	function depsForReason(reason: string, isScrolling = false) {
+		return makeDeps(
 			{},
 			{
 				engine: {
 					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
-					invalidation: { consume: vi.fn(() => ({ reasons: ['sort'] })) },
+					invalidation: { consume: vi.fn(() => ({ reasons: [reason] })) },
 				} as any,
-				scrollCoordinator: { getIsScrolling: () => false },
+				scrollCoordinator: { getIsScrolling: () => isScrolling },
 			}
 		);
+	}
+
+	it('plays the transition (and clears the flag) when a sort frame arrives while not scrolling', () => {
+		const deps = depsForReason('sort');
 		const state = makeState();
-		const coord = new RenderPaintCoordinator(deps, state);
+		new RenderPaintCoordinator(deps, state).flushPaint();
 
-		coord.flushPaint();
-
-		expect(state.pendingTransition).toBe(true);
-	});
-
-	it('does NOT set pendingTransition when a sort frame arrives while scrolling', () => {
-		const deps = makeDeps(
-			{},
-			{
-				engine: {
-					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
-					invalidation: { consume: vi.fn(() => ({ reasons: ['sort'] })) },
-				} as any,
-				scrollCoordinator: { getIsScrolling: () => true },
-			}
-		);
-		const state = makeState();
-		const coord = new RenderPaintCoordinator(deps, state);
-
-		coord.flushPaint();
-
+		expect((deps.layoutTransition as any).beginAnimation).toHaveBeenCalledTimes(1);
 		expect(state.pendingTransition).toBe(false);
 	});
 
-	it('sets pendingTransition for a group/tree expansion frame', () => {
-		const deps = makeDeps(
-			{},
-			{
-				engine: {
-					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
-					invalidation: { consume: vi.fn(() => ({ reasons: ['group expansion'] })) },
-				} as any,
-				scrollCoordinator: { getIsScrolling: () => false },
-			}
-		);
+	it('does NOT play the transition when a sort frame arrives while scrolling', () => {
+		const deps = depsForReason('sort', true);
 		const state = makeState();
 		new RenderPaintCoordinator(deps, state).flushPaint();
-		expect(state.pendingTransition).toBe(true);
-	});
 
-	it('sets pendingTransition for a master-detail frame', () => {
-		const deps = makeDeps(
-			{},
-			{
-				engine: {
-					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
-					invalidation: { consume: vi.fn(() => ({ reasons: ['detail'] })) },
-				} as any,
-				scrollCoordinator: { getIsScrolling: () => false },
-			}
-		);
-		const state = makeState();
-		new RenderPaintCoordinator(deps, state).flushPaint();
-		expect(state.pendingTransition).toBe(true);
-	});
-
-	it('does NOT set pendingTransition for non-sort frames', () => {
-		const deps = makeDeps(
-			{},
-			{
-				engine: {
-					stateManager: { getState: () => ({ styleRules: undefined, loading: undefined, defaultColWidth: 100, defaultRowHeight: 40 }) },
-					invalidation: { consume: vi.fn(() => ({ reasons: ['filter'] })) },
-				} as any,
-				scrollCoordinator: { getIsScrolling: () => false },
-			}
-		);
-		const state = makeState();
-		const coord = new RenderPaintCoordinator(deps, state);
-
-		coord.flushPaint();
-
+		expect((deps.layoutTransition as any).beginAnimation).not.toHaveBeenCalled();
 		expect(state.pendingTransition).toBe(false);
+	});
+
+	// Regression: group/tree expansion invalidates the VIEWPORT (not full), so the
+	// transition must still fire from flushPaint — not only the full-paint path.
+	it('plays the transition for a group/tree expansion (viewport) frame', () => {
+		const deps = depsForReason('group expansion');
+		const state = makeState();
+		new RenderPaintCoordinator(deps, state).flushPaint();
+
+		expect((deps.layoutTransition as any).beginAnimation).toHaveBeenCalledTimes(1);
+		expect(state.pendingTransition).toBe(false);
+	});
+
+	it('plays the transition for a master-detail (viewport) frame', () => {
+		const deps = depsForReason('detail');
+		const state = makeState();
+		new RenderPaintCoordinator(deps, state).flushPaint();
+
+		expect((deps.layoutTransition as any).beginAnimation).toHaveBeenCalledTimes(1);
+		expect(state.pendingTransition).toBe(false);
+	});
+
+	it('does NOT play the transition for non-transition frames', () => {
+		const deps = depsForReason('filter');
+		const state = makeState();
+		new RenderPaintCoordinator(deps, state).flushPaint();
+
+		expect((deps.layoutTransition as any).beginAnimation).not.toHaveBeenCalled();
+		expect(state.pendingTransition).toBe(false);
+	});
+
+	it('plays the transition AFTER orchestrator.flush has repositioned rows', () => {
+		const deps = depsForReason('group expansion');
+		const order: string[] = [];
+		(deps.orchestrator as any).flush = vi.fn(() => order.push('flush'));
+		(deps.layoutTransition as any).beginAnimation = vi.fn(() => order.push('beginAnimation'));
+		new RenderPaintCoordinator(deps, makeState()).flushPaint();
+
+		expect(order).toEqual(['flush', 'beginAnimation']);
 	});
 
 	it('wraps orchestrator.flush in a portal release transaction', () => {

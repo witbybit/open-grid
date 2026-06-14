@@ -59,6 +59,15 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		} finally {
 			this.deps.portalMountManager.endCellReleaseTransaction();
 		}
+		// Play the armed transition once the slots hold their NEW positions. A `full` frame
+		// (e.g. sort) is handled inside `fullPaintInternal`, which consumes the flag — so this
+		// only fires for the `viewport` path (group/tree/detail expansion → invalidateViewport),
+		// where `syncViewport` repositioned the rows but nothing called beginAnimation. Guarded
+		// by the flag so a full-paint flush does not double-animate.
+		if (this.state.pendingTransition) {
+			this.state.pendingTransition = false;
+			this.deps.layoutTransition.beginAnimation();
+		}
 	};
 
 	public fullPaint = (): void => {
