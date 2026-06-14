@@ -1,7 +1,7 @@
 import type { InvalidationFrame } from './invalidationManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
-import { computeGridLayoutPlan, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
+import { computeGridLayoutPlan, getRightPinnedLaneScreenLeft, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { compileStyleRules, evaluateHeaderCellStyleRules } from '../styling/styleRules.js';
 
@@ -71,19 +71,18 @@ export class HeaderRenderer<TRowData = unknown> {
 
 	public syncScrollLeft(layoutPlan: GridLayoutPlan): void {
 		const scrollLeft = layoutPlan.viewport.scrollLeft;
-		const viewportWidth = layoutPlan.viewport.width;
-		if (scrollLeft === this.lastHeaderScrollLeft && viewportWidth === this.lastSyncedViewportWidth) {
+		const viewportClientWidth = layoutPlan.viewport.clientWidth;
+		if (scrollLeft === this.lastHeaderScrollLeft && viewportClientWidth === this.lastSyncedViewportWidth) {
 			return;
 		}
 		this.lastHeaderScrollLeft = scrollLeft;
-		this.lastSyncedViewportWidth = viewportWidth;
+		this.lastSyncedViewportWidth = viewportClientWidth;
 		this.syncPinnedLayerPositions(layoutPlan);
 	}
 
 	private syncPinnedLayerPositions(layoutPlan: GridLayoutPlan): void {
-		const { pinLeftCount, pinRightCount, pinLeftWidth, pinRightWidth } = layoutPlan.columns;
+		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
 		const scrollLeft = layoutPlan.viewport.scrollLeft;
-		const viewportWidth = layoutPlan.viewport.width;
 		// Single source of truth for the right-lane origin (Plan 039 Phase 4).
 		const pinRightBaseLeft = layoutPlan.columns.lanes.right.baseLeft;
 
@@ -100,7 +99,8 @@ export class HeaderRenderer<TRowData = unknown> {
 				this.lastHeaderRightLeft = pinRightBaseLeft;
 				this.headerRightLayer.style.left = `${pinRightBaseLeft}px`;
 			}
-			const transform = `translate3d(${scrollLeft + Math.max(pinLeftWidth, viewportWidth - pinRightWidth) - pinRightBaseLeft}px, 0, 0)`;
+			const rightScreenLeft = getRightPinnedLaneScreenLeft(layoutPlan);
+			const transform = `translate3d(${scrollLeft + rightScreenLeft - pinRightBaseLeft}px, 0, 0)`;
 			if (this.lastHeaderRightTransform !== transform) {
 				this.lastHeaderRightTransform = transform;
 				this.headerRightLayer.style.transform = transform;
@@ -356,7 +356,7 @@ export class HeaderRenderer<TRowData = unknown> {
 		}
 
 		this.lastHeaderScrollLeft = layoutPlan.viewport.scrollLeft;
-		this.lastSyncedViewportWidth = layoutPlan.viewport.width;
+		this.lastSyncedViewportWidth = layoutPlan.viewport.clientWidth;
 		this.lastHeaderVisibleRange = {
 			startIdx: colStart,
 			endIdx: colEnd,

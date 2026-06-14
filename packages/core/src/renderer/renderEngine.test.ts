@@ -198,6 +198,72 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	// Plan 050: Plan 044's clone-and-swap FLIP remains implemented but gated off until
+	// pin geometry/recycler safety is browser-proven. Pinning must repaint instantly
+	// without creating clones or hiding real cells.
+	it('does not animate a column pin while the Plan 044 gate is off', () => {
+		(HTMLElement.prototype as unknown as { animate: unknown }).animate = function () {
+			return { cancel: () => {}, onfinish: null, oncancel: null } as unknown as Animation;
+		};
+		const realRect = Element.prototype.getBoundingClientRect;
+		Element.prototype.getBoundingClientRect = function (this: HTMLElement) {
+			let left = 0;
+			const t = this.style?.transform || '';
+			const m = /translate(?:3d)?\(\s*(-?[\d.]+)px/.exec(t);
+			if (m) left = parseFloat(m[1]);
+			else if (this.style?.left) left = parseFloat(this.style.left);
+			return { left, top: 0, width: 80, height: 24, right: left + 80, bottom: 24, x: left, y: 0, toJSON: () => ({}) } as DOMRect;
+		} as typeof realRect;
+
+		try {
+			const store = new GridStore<{ id: string; name: string }>({
+				columns: [
+					{ field: 'a', header: 'A', width: 80 },
+					{ field: 'b', header: 'B', width: 80 },
+					{ field: 'c', header: 'C', width: 80 },
+					{ field: 'd', header: 'D', width: 80 },
+				],
+				defaultRowHeight: 24,
+				defaultColWidth: 80,
+				getRowId: (row) => row.id,
+			});
+			const rows = Array.from({ length: 10 }, (_, i) => ({ id: `row-${i}`, name: `R${i}` }));
+			const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
+
+			const container = document.createElement('div');
+			vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+				x: 0,
+				y: 0,
+				top: 0,
+				left: 0,
+				right: 600,
+				bottom: 300,
+				width: 600,
+				height: 300,
+				toJSON: () => ({}),
+			} as DOMRect);
+			document.body.appendChild(container);
+
+			const renderer = new RenderEngine(store.engine, store);
+			renderer.mount(container);
+			renderer.fullPaint();
+
+			store.setPinnedColumns({ right: 1 });
+			(renderer as unknown as { flushPaint: () => void }).flushPaint();
+
+			const overlay = document.body.querySelector('.og-layer-pin-anim');
+			expect(overlay).toBeNull();
+			expect(container.querySelector('.og-cell[style*="visibility: hidden"]')).toBeNull();
+			expect(container.querySelector('.og-header-cell[style*="visibility: hidden"]')).toBeNull();
+
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		} finally {
+			Element.prototype.getBoundingClientRect = realRect;
+		}
+	});
+
 	it('releases out-of-range cells when columns shrink with right pinning enabled', () => {
 		const wideColumns = [
 			{ field: 'risk', header: 'Risk', width: 120 },

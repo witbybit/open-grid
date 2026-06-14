@@ -57,6 +57,7 @@ export interface ColumnLanes {
 export interface GridLayoutPlan {
 	viewport: {
 		width: number;
+		clientWidth: number;
 		height: number;
 		scrollTop: number;
 		scrollLeft: number;
@@ -115,6 +116,10 @@ export interface GridLayoutPlan {
 	headerBands: HeaderBandLayout[];
 	stickyGroups: StickyGroupStackItem[];
 	renderWindow: RenderWindow;
+}
+
+export function getRightPinnedLaneScreenLeft(layoutPlan: GridLayoutPlan): number {
+	return layoutPlan.viewport.clientWidth - layoutPlan.columns.lanes.right.width;
 }
 
 function normalizeHeaderGroups(headerGroup: string | string[] | undefined): string[] {
@@ -244,6 +249,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const state = engine.stateManager.getState();
 	const columnPlan = engine.columns.getCompiledPlan();
 	const viewportWidth = engine.viewport.viewportWidth;
+	const viewportClientWidth = engine.viewport.scrollViewportClientWidth || viewportWidth;
 	const viewportHeight = engine.viewport.viewportHeight;
 	const totalRowsHeight = engine.geometry.getTotalHeight(state.defaultRowHeight);
 	const totalColumnsWidth = columnPlan.totalWidth;
@@ -300,6 +306,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	return {
 		viewport: {
 			width: viewportWidth,
+			clientWidth: viewportClientWidth,
 			height: viewportHeight,
 			scrollTop: engine.viewport.scrollTop,
 			scrollLeft: engine.viewport.scrollLeft,
@@ -339,7 +346,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			pinRightCount,
 			pinLeftWidth,
 			pinRightWidth,
-			centerWidth: Math.max(0, viewportWidth - pinLeftWidth - pinRightWidth),
+			centerWidth: Math.max(0, viewportClientWidth - pinLeftWidth - pinRightWidth),
 			lanes: {
 				left: {
 					width: pinLeftWidth,
@@ -348,7 +355,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 					colEnd: pinLeftCount > 0 ? pinLeftCount - 1 : -1,
 				},
 				center: {
-					width: Math.max(0, viewportWidth - pinLeftWidth - pinRightWidth),
+					width: Math.max(0, viewportClientWidth - pinLeftWidth - pinRightWidth),
 					baseLeft: pinLeftWidth,
 					colStart: firstRightPinColIdx > pinLeftCount ? pinLeftCount : -1,
 					colEnd: firstRightPinColIdx > pinLeftCount ? firstRightPinColIdx - 1 : -1,

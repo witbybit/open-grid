@@ -7,6 +7,7 @@ const SENTINEL_B = { tag: 'B' };
 function makeState(overrides?: Partial<RenderPaintCoordinatorState>): RenderPaintCoordinatorState {
 	return {
 		pendingTransition: false,
+		pendingPinTransition: false,
 		lastStyleRules: undefined,
 		lastLoading: undefined,
 		...overrides,
@@ -47,7 +48,7 @@ function makeDeps(
 		} as any,
 		orchestrator: { flush: vi.fn() } as any,
 		scrollCoordinator: { getIsScrolling: () => false },
-		layoutTransition: { beginAnimation: vi.fn() } as any,
+		layoutTransition: { beginAnimation: vi.fn(), beginColumnPin: vi.fn(), isColumnPinTransitionEnabled: vi.fn(() => false) } as any,
 		recycleViewport: vi.fn(),
 		syncLayoutPlan: vi.fn(() => ({ renderWindow: {} })) as any,
 		updateCachedGeometryBoundsFromState: vi.fn(),
@@ -183,6 +184,36 @@ describe('RenderPaintCoordinator – flushPaint transition gate', () => {
 		new RenderPaintCoordinator(deps, makeState()).flushPaint();
 
 		expect(order).toEqual(['flush', 'beginAnimation']);
+	});
+
+	it('does NOT play the column-pin FLIP for a pin frame while the Plan 044 gate is off', () => {
+		const deps = depsForReason('pin');
+		const state = makeState();
+		new RenderPaintCoordinator(deps, state).flushPaint();
+
+		expect((deps.layoutTransition as any).beginColumnPin).not.toHaveBeenCalled();
+		expect((deps.layoutTransition as any).beginAnimation).not.toHaveBeenCalled();
+		expect(state.pendingPinTransition).toBe(false);
+	});
+
+	it('plays the column-pin FLIP only when the Plan 044 gate is explicitly enabled', () => {
+		const deps = depsForReason('pin');
+		(deps.layoutTransition as any).isColumnPinTransitionEnabled = vi.fn(() => true);
+		const state = makeState();
+		new RenderPaintCoordinator(deps, state).flushPaint();
+
+		expect((deps.layoutTransition as any).beginColumnPin).toHaveBeenCalledTimes(1);
+		expect((deps.layoutTransition as any).beginAnimation).not.toHaveBeenCalled();
+		expect(state.pendingPinTransition).toBe(false);
+	});
+
+	it('does NOT play the column-pin FLIP while scrolling', () => {
+		const deps = depsForReason('pin', true);
+		const state = makeState();
+		new RenderPaintCoordinator(deps, state).flushPaint();
+
+		expect((deps.layoutTransition as any).beginColumnPin).not.toHaveBeenCalled();
+		expect(state.pendingPinTransition).toBe(false);
 	});
 
 	it('wraps orchestrator.flush in a portal release transaction', () => {

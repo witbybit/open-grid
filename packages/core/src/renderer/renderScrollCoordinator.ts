@@ -92,7 +92,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.state.cachedTotalWidth = this.deps.engine.geometry.getTotalWidth(defaultColWidth);
 		this.state.cachedTotalHeight = this.deps.engine.geometry.getTotalHeight(defaultRowHeight);
 		this.state.cachedDefaultRowHeight = defaultRowHeight ?? 40;
-		this.state.cachedMaxScrollLeft = Math.max(0, this.state.cachedTotalWidth - this.deps.engine.viewport.viewportWidth);
+		const viewportWidth = this.deps.engine.viewport.scrollViewportClientWidth || this.deps.engine.viewport.viewportWidth;
+		this.state.cachedMaxScrollLeft = Math.max(0, this.state.cachedTotalWidth - viewportWidth);
 	}
 
 	public flushScrollFrame = (): void => {

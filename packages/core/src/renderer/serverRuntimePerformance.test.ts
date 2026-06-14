@@ -673,6 +673,12 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		expect(CORE_STYLES).toContain('.og-custom-renderer-container');
 	});
 
+	it('keeps pinned selected-row lanes opaque so center text cannot show through', () => {
+		expect(CORE_STYLES).toContain('.og-row-selected .og-row-pin-left');
+		expect(CORE_STYLES).toContain('.og-row-selected .og-cell-pinned-left');
+		expect(CORE_STYLES).toContain('linear-gradient(var(--og-selection-bg), var(--og-selection-bg)), var(--og-bg-color)');
+	});
+
 	it('preserves custom-live portals during scrolling without increasing warmMisses', async () => {
 		const grid = await createServerAuditGrid({ rows: 1000, cols: 50 });
 		await flushAnimationFrame();

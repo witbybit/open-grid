@@ -105,7 +105,10 @@ function getScrollMountValue<TRowData>(
 ): unknown {
 	const cachedVal = deps.engine.data.getCachedDisplayValue(node.id, col.field);
 	if (cachedVal !== undefined) return cachedVal;
-	return cellSlot?.lastFormattedValue ?? '';
+	if (col.valueGetter || deps.engine.hasFormula(node.id, col.field)) {
+		return '';
+	}
+	return node.data ? (node.data as Record<string, unknown>)[col.field] : (cellSlot?.lastFormattedValue ?? '');
 }
 
 export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellFullRequest<TRowData>): void {
@@ -431,6 +434,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (cellSlot.lastPortalKey && cellSlot.lastPortalKey !== cellKey) {
 			deps.releaseCellPortal(cellSlot.element, undefined, 'scrolled-out');
 		}
+		deps.markCellDirtyAfterScroll(cellSlot.element);
 		const portalHost = deps.ensureCellPortalHost(cellSlot.element);
 		deps.portalMountManager.mountCellImmediately({
 			cellKey,

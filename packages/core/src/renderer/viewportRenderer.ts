@@ -156,6 +156,7 @@ export class ViewportRenderer<TRowData = unknown> {
 
 	public syncViewportScrollFromDom(): void {
 		if (!this.scrollViewport) return;
+		this.engine.viewport.setScrollViewportClientWidth(this.scrollViewport.clientWidth || this.engine.viewport.viewportWidth);
 		this.engine.viewport.setScrollPosition(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
 	}
 

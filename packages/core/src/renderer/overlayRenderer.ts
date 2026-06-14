@@ -3,7 +3,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
 import type { FillDragController, OverlayBox } from './fillDragController.js';
-import { LEAF_HEADER_HEIGHT } from './layoutPlan.js';
+import { getRightPinnedLaneScreenLeft, LEAF_HEADER_HEIGHT } from './layoutPlan.js';
 
 export class OverlayRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -136,8 +136,10 @@ export class OverlayRenderer<TRowData = unknown> {
 		const scrollTop = this.engine.viewport.scrollTop;
 		const scrollLeft = this.engine.viewport.scrollLeft;
 		const viewportHeight = this.engine.viewport.viewportHeight;
-		const viewportWidth = this.engine.viewport.viewportWidth;
-		const topChromeHeight = this.viewportRenderer.getLayoutPlan()?.chrome.topChromeHeight ?? LEAF_HEADER_HEIGHT;
+		const layoutPlan = this.viewportRenderer.getLayoutPlan();
+		const viewportWidth =
+			layoutPlan?.viewport.clientWidth ?? (this.engine.viewport.scrollViewportClientWidth || this.engine.viewport.viewportWidth);
+		const topChromeHeight = layoutPlan?.chrome.topChromeHeight ?? LEAF_HEADER_HEIGHT;
 		const overlayViewportHeight = Math.max(0, viewportHeight - topChromeHeight);
 
 		let pinnedLeftWidth = 0;
@@ -170,7 +172,8 @@ export class OverlayRenderer<TRowData = unknown> {
 			if (c >= colCount - pinRightColumns) {
 				const firstRightPinColIdx = colCount - pinRightColumns;
 				const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
-				const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
+				const rightLaneLeft = layoutPlan ? getRightPinnedLaneScreenLeft(layoutPlan) : viewportWidth - pinnedRightWidth;
+				const left = rightLaneLeft + (cellLeft - firstRightPinColLeft);
 				return { left, right: left + cellWidth };
 			}
 

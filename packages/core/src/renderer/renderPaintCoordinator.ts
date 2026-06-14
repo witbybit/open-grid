@@ -13,6 +13,8 @@ import type { LayoutTransitionController } from './layoutTransitionController.js
 
 export interface RenderPaintCoordinatorState {
 	pendingTransition: boolean;
+	/** Column pin/unpin FLIP armed this flush (Plan 044); played via beginColumnPin after relayout. */
+	pendingPinTransition: boolean;
 	lastStyleRules: unknown;
 	lastLoading: unknown;
 }
@@ -47,11 +49,15 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		// master-detail ('detail') reveal/hide them. All animate via the
 		// LayoutTransitionController; scroll/data-tick frames are excluded so the hot path
 		// never sets an animation.
-		if (
-			!this.deps.scrollCoordinator.getIsScrolling() &&
-			(frame.reasons.includes('sort') || frame.reasons.includes('group expansion') || frame.reasons.includes('detail'))
-		) {
+		const notScrolling = !this.deps.scrollCoordinator.getIsScrolling();
+		if (notScrolling && (frame.reasons.includes('sort') || frame.reasons.includes('group expansion') || frame.reasons.includes('detail'))) {
 			this.state.pendingTransition = true;
+		}
+		// Column pin/unpin FLIP (Plan 044) is gated off by default until the pin
+		// geometry/recycler contracts are browser-proven. The pin frame still repaints
+		// geometry, viewport, and headers instantly.
+		if (notScrolling && frame.reasons.includes('pin') && this.deps.layoutTransition.isColumnPinTransitionEnabled()) {
+			this.state.pendingPinTransition = true;
 		}
 		this.deps.portalMountManager.beginCellReleaseTransaction();
 		try {
@@ -67,6 +73,11 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		if (this.state.pendingTransition) {
 			this.state.pendingTransition = false;
 			this.deps.layoutTransition.beginAnimation();
+		}
+		// Pin FLIP plays after the relayout has reparented the cells into their lanes.
+		if (this.state.pendingPinTransition) {
+			this.state.pendingPinTransition = false;
+			this.deps.layoutTransition.beginColumnPin();
 		}
 	};
 

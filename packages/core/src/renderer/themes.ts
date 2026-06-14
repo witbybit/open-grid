@@ -120,7 +120,7 @@ export const LIGHT_THEME: ThemeTokens = {
 	cellBorder: 'rgba(226, 232, 241, 0.5)',
 
 	selectionBorder: 'rgba(59, 130, 246, 0.6)',
-	selectionBg: 'rgba(59, 130, 246, 0.08)',
+	selectionBg: 'rgba(59, 130, 246, 0.1)',
 	focusRing: '#3b82f6',
 
 	pinLeftBorderColor: 'rgba(0, 0, 0, 0.08)',
@@ -184,7 +184,7 @@ export const DARK_THEME: ThemeTokens = {
 	cellBorder: 'rgba(30, 41, 59, 0.5)',
 
 	selectionBorder: 'rgba(59, 130, 246, 0.6)',
-	selectionBg: 'rgba(59, 130, 246, 0.04)',
+	selectionBg: 'rgba(59, 130, 246, 0.09)',
 	focusRing: '#3b82f6',
 
 	pinLeftBorderColor: 'rgba(255, 255, 255, 0.07)',

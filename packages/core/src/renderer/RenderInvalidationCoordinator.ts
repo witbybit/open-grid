@@ -94,6 +94,20 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 				this.deps.layoutTransition.captureSnapshot();
 			})
 		);
+		// Column pin/unpin (Plan 044) — capture each visible cell's screen position before the
+		// pin relayout, then invalidate geometry/viewport/headers with the 'pin' reason so the
+		// paint coordinator can play the clone-and-swap FLIP after the cells reparent.
+		this.unsubscribers.push(
+			this.deps.engine.stateManager.subscribeToKey('pinnedColumns', () => {
+				this.deps.layoutTransition.capturePinSnapshot();
+				this.deps.geometryController.invalidateAll();
+				this.deps.engine.invalidation.invalidateGeometry('pin');
+				this.deps.engine.invalidation.invalidateViewport('pin');
+				this.deps.engine.invalidation.invalidateHeaders('pin');
+				this.deps.updateCachedGeometryBounds();
+				this.requestFlushGated('pin');
+			})
+		);
 		// Client pagination page change — reset scroll to the top of the new page. The row
 		// model re-runs the pipeline with the new window on the same event; this just keeps
 		// the viewport from showing the middle of the freshly-sliced page.

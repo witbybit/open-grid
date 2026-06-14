@@ -665,12 +665,12 @@ export const CORE_STYLES = `
   }
 
   .og-cell-pinned-left {
-    z-index: 3;
+    z-index: 40;
     background-color: inherit;
   }
 
   .og-cell-pinned-right {
-    z-index: 3;
+    z-index: 40;
     background-color: inherit;
   }
 
@@ -690,7 +690,7 @@ export const CORE_STYLES = `
     top: 0;
     height: 100%;
     flex-shrink: 0;
-    z-index: 3;
+    z-index: 40;
     background-color: inherit;
     overflow: hidden;
   }
@@ -706,6 +706,39 @@ export const CORE_STYLES = `
     margin-left: auto;
     border-left: 1px solid var(--og-pin-right-border-color);
     box-shadow: var(--og-pin-right-shadow);
+  }
+
+  .og-row-selected .og-row-pin-left,
+  .og-row-selected .og-row-pin-right,
+  .og-row-selected .og-cell-pinned-left,
+  .og-row-selected .og-cell-pinned-right,
+  .og-row-focused .og-row-pin-left,
+  .og-row-focused .og-row-pin-right,
+  .og-row-focused .og-cell-pinned-left,
+  .og-row-focused .og-cell-pinned-right,
+  .og-cell-pinned-left.og-cell-selected,
+  .og-cell-pinned-right.og-cell-selected,
+  .og-cell-pinned-left.og-cell-focused,
+  .og-cell-pinned-right.og-cell-focused {
+    background: linear-gradient(var(--og-selection-bg), var(--og-selection-bg)), var(--og-bg-color);
+  }
+
+  .og-row-node-selected .og-row-pin-left,
+  .og-row-node-selected .og-row-pin-right,
+  .og-row-node-selected .og-cell-pinned-left,
+  .og-row-node-selected .og-cell-pinned-right {
+    background: linear-gradient(var(--og-row-selected-bg, rgba(59, 130, 246, 0.08)), var(--og-row-selected-bg, rgba(59, 130, 246, 0.08))), var(--og-bg-color);
+  }
+
+  .og-grid-container:not(.og-is-scrolling) .og-row:hover .og-row-pin-left,
+  .og-grid-container:not(.og-is-scrolling) .og-row:hover .og-row-pin-right,
+  .og-grid-container:not(.og-is-scrolling) .og-row:hover .og-cell-pinned-left,
+  .og-grid-container:not(.og-is-scrolling) .og-row:hover .og-cell-pinned-right,
+  .og-row-hovered .og-row-pin-left,
+  .og-row-hovered .og-row-pin-right,
+  .og-row-hovered .og-cell-pinned-left,
+  .og-row-hovered .og-cell-pinned-right {
+    background: linear-gradient(var(--og-row-hover-bg), var(--og-row-hover-bg)), var(--og-bg-color);
   }
 
   .og-cell-content {
@@ -783,7 +816,7 @@ export const CORE_STYLES = `
   .og-cell-editor {
     position: absolute;
     inset: 0;
-    z-index: 30;
+    z-index: 50;
     width: 100%;
     height: 100%;
     box-sizing: border-box;
@@ -793,6 +826,16 @@ export const CORE_STYLES = `
     background: var(--og-bg);
     color: var(--og-text);
     font: inherit;
+  }
+
+  .og-cell-pinned-left.og-cell-focused,
+  .og-cell-pinned-right.og-cell-focused {
+    z-index: 45;
+  }
+
+  .og-cell-pinned-left .og-cell-editor,
+  .og-cell-pinned-right .og-cell-editor {
+    z-index: 50;
   }
 
   .og-header-cell {

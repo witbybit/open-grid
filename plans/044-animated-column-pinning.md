@@ -12,6 +12,17 @@
 - **Depends on**: Plan 039 Phase 4a (`columns.lanes`), Phase 2 (`LayoutTransitionController`)
 - **Category**: rendering, animation
 - **Planned at**: 2026-06-14
+- **Status**: **RESTORED BUT PRODUCTION-GATED 2026-06-14.** The clone-and-swap implementation and opt-in tests remain, but Plan 050 disables the production trigger via `enableColumnPinTransition` until the hardened pin geometry and recycler-safety contracts are browser-confirmed. Pinning is instant + correct by default.
+
+## Known bug (under investigation)
+
+Symptom (user-reported): after pinning a column with the animation active, **the columns layout gets completely broken**. Not reproducible in jsdom tests (they assert clones are created + the gate fires, not live geometry). Browser-unverifiable here (preview hidden, Control_Chrome is macOS-only). Leading hypotheses, in order:
+
+1. **Hidden real cells not restored.** `beginColumnPin` sets `visibility:hidden` on each moved real cell and restores it on the clone's `animate().onfinish`. If a hidden cell is recycled/rebound before its clone finishes (e.g. a cascading pin invalidation triggers another `recycleViewport`), the new binding inherits `visibility:hidden` and the controller's `pinHiddenReals` reference goes stale → blank/missing columns. `cellSlot.reset()`/`update()` never touch `style.visibility`. **Likely culprit.**
+2. **Over-aggressive pin invalidation.** The new `pinnedColumns` subscription calls `geometryController.invalidateAll()` + `invalidateGeometry/viewport/headers('pin')` + `updateCachedGeometryBounds()`. Before 044 there was NO `pinnedColumns` subscription — so pinning previously repainted via a different path. The added geometry recompute (or its ordering vs `capturePinSnapshot`'s forced reflow) may corrupt the compiled plan / cached bounds.
+3. **capturePinSnapshot reflow timing** — `getBoundingClientRect` over all cells runs synchronously inside the state-change handler, before the relayout; if it reads mid-mutation geometry the "from" rects are wrong (visual only, shouldn't break layout — lower likelihood).
+
+Debug plan: (a) reproduce with reduced-motion ON (animations disabled) — if the layout still breaks, the cause is hypothesis #2 (invalidation), not the clone animation; (b) after a pin, inspect whether any real `.og-cell`/`.og-header-cell` is stuck at `visibility:hidden`; (c) compare `getCompiledPlan().colLefts` before vs after pin against the DOM cell positions.
 
 ## Problem
 

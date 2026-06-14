@@ -207,6 +207,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				const model = this.engine.getRowModel();
 				return model ? model.getVisualIndexById(visualRowId) >= 0 : false;
 			},
+			// Grid root for the column-pin clone-and-swap FLIP (Plan 044) — holds both the
+			// header layers and the body scroll viewport, so all visible cells are reachable.
+			getGridRoot: () => this.viewportRenderer.container,
 		});
 
 		this.headerRenderer = new HeaderRenderer<TRowData>(
@@ -311,9 +314,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			rowRenderer: this.rowRenderer,
 			scrollEngine: this.scrollEngine,
 			renderStats: this.renderStats,
+			requestScrollFrame: () => this.scrollScheduler.requestFrame(),
 		});
 		const paintState: RenderPaintCoordinatorState = {
 			pendingTransition: this._pendingTransition,
+			pendingPinTransition: false,
 			lastStyleRules: this.lastStyleRules,
 			lastLoading: this.lastLoading,
 		};

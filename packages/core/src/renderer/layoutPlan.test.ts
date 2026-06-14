@@ -258,6 +258,31 @@ describe('GridLayoutPlan', () => {
 			store.destroy();
 		});
 
+		it('uses the scroll viewport client width for right-lane screen placement', () => {
+			const store = new GridStore<{ id: string; a: string; b: string; c: string; d: string }>({
+				getRowId: (row) => row.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 100 },
+					{ field: 'b', header: 'B', width: 100 },
+					{ field: 'c', header: 'C', width: 100 },
+					{ field: 'd', header: 'D', width: 100 },
+				],
+				defaultRowHeight: 40,
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(250, 300);
+			store.engine.viewport.setScrollViewportClientWidth(233);
+			store.setViewportPins({ right: 1 });
+			const plan = computeGridLayoutPlan(store.engine);
+
+			expect(plan.viewport.width).toBe(250);
+			expect(plan.viewport.clientWidth).toBe(233);
+			expect(plan.columns.centerWidth).toBe(133);
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
 		it('marks empty lanes with -1 column ranges when nothing is pinned', () => {
 			const store = new GridStore<{ id: string; a: string }>({
 				getRowId: (row) => row.id,

@@ -18,6 +18,7 @@ export type GridInvalidationReason =
 	| 'group expansion'
 	| 'headers'
 	| 'overlay'
+	| 'pin'
 	| 'resize'
 	| 'row model registered'
 	| 'row resize'

@@ -14,6 +14,7 @@ export interface RenderViewportCoordinatorDeps<TRowData = unknown> {
 	rowRenderer: RowRenderer<TRowData>;
 	scrollEngine: ScrollEngine<TRowData>;
 	renderStats: RenderRuntimeStats;
+	requestScrollFrame: () => void;
 }
 
 export class RenderViewportCoordinator<TRowData = unknown> {
@@ -55,7 +56,7 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 			scrollTop: this.deps.engine.viewport.scrollTop,
 			scrollLeft: this.deps.engine.viewport.scrollLeft,
 			viewportHeight: this.deps.engine.viewport.viewportHeight,
-			viewportWidth: this.deps.engine.viewport.viewportWidth,
+			viewportWidth: this.deps.engine.viewport.scrollViewportClientWidth || this.deps.engine.viewport.viewportWidth,
 			topChromeHeight: layoutPlan.chrome.topChromeHeight,
 			rowTops: this.deps.engine.geometry.rowTops,
 			rowHeights: this.deps.engine.geometry.rowHeights,
@@ -69,7 +70,7 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 
 		if (target) {
 			this.deps.scrollEngine.scrollTo(target.top, target.left);
-			this.deps.engine.viewport.setScrollPosition(target.top, target.left);
+			this.deps.requestScrollFrame();
 		}
 	}
 }

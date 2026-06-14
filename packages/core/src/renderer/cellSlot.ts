@@ -123,6 +123,9 @@ export class CellSlot<TRowData = unknown> {
 			this.lastAriaSelected = undefined;
 			this.element.removeAttribute('aria-selected');
 		}
+		if (this.element.style.visibility) {
+			this.element.style.visibility = '';
+		}
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
@@ -248,6 +251,10 @@ export class CellSlot<TRowData = unknown> {
 			}
 			domUpdated = true;
 		}
+		if (this.element.style.visibility) {
+			this.element.style.visibility = '';
+			domUpdated = true;
+		}
 
 		this.lastRawValue = rawValue;
 
@@ -327,6 +334,9 @@ export class CellSlot<TRowData = unknown> {
 		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');
 			this.hasTabIndex = false;
+		}
+		if (this.element.style.visibility) {
+			this.element.style.visibility = '';
 		}
 	}
 
