@@ -8,11 +8,12 @@
  *   - Red border (og-cell-invalid) persists after the editor closes
  *   - Mock server response with simulated server-side rejection
  *   - api.clearValidationErrors() on a clean submit
+ *   - Sidebar "Submission Log" panel showing errors or success payload as JSON
  */
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { Grid } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent, CellValidationError } from '@open-grid/react';
-import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus } from 'lucide-react';
+import type { ColumnDef, GridApi, GridReadyEvent, CellValidationError, SidebarPanelDef } from '@open-grid/react';
+import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
@@ -120,6 +121,76 @@ const COLUMNS: ColumnDef<Employee>[] = [
 
 type SubmitStatus = 'idle' | 'validating' | 'submitting' | 'success' | 'error';
 
+type SubmissionLog = { kind: 'error'; errors: CellValidationError[] } | { kind: 'success'; rows: Employee[] } | null;
+
+// ─── JSON syntax highlight helper ────────────────────────────────────────────
+
+function JsonBlock({ value }: { value: unknown }) {
+	const text = JSON.stringify(value, null, 2);
+	// Minimal token colouring via regex replace on plain text
+	const html = text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+			let cls = 'text-sky-300'; // number
+			if (/^"/.test(match)) {
+				cls = /:$/.test(match) ? 'text-violet-300' : 'text-emerald-300'; // key vs string
+			} else if (/true|false/.test(match)) {
+				cls = 'text-amber-300';
+			} else if (/null/.test(match)) {
+				cls = 'text-rose-400';
+			}
+			return `<span class="${cls}">${match}</span>`;
+		});
+	return <pre className='overflow-auto text-[10.5px] leading-[1.6] text-slate-300' dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+// ─── Sidebar log panel content ────────────────────────────────────────────────
+
+function SubmissionLogPanel({ log }: { log: SubmissionLog }) {
+	if (!log) {
+		return (
+			<div className='flex h-full flex-col items-center justify-center gap-3 px-5 text-center'>
+				<FileJson className='h-8 w-8 text-slate-600' />
+				<p className='text-[11px] text-slate-500'>
+					Run <span className='font-semibold text-slate-400'>Validate All</span> or{' '}
+					<span className='font-semibold text-slate-400'>Submit Changes</span> to see the JSON payload here.
+				</p>
+			</div>
+		);
+	}
+
+	if (log.kind === 'error') {
+		return (
+			<div className='flex h-full flex-col gap-3 overflow-hidden p-3'>
+				<div className='flex items-center gap-2'>
+					<AlertTriangle className='h-3.5 w-3.5 shrink-0 text-rose-400' />
+					<span className='text-[10px] font-extrabold uppercase tracking-wider text-rose-400'>
+						{log.errors.length} validation error{log.errors.length !== 1 ? 's' : ''}
+					</span>
+				</div>
+				<div className='min-h-0 flex-1 overflow-auto rounded-lg bg-slate-950/60 p-3'>
+					<JsonBlock value={log.errors} />
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className='flex h-full flex-col gap-3 overflow-hidden p-3'>
+			<div className='flex items-center gap-2'>
+				<CheckCircle2 className='h-3.5 w-3.5 shrink-0 text-emerald-400' />
+				<span className='text-[10px] font-extrabold uppercase tracking-wider text-emerald-400'>
+					{log.rows.length} row{log.rows.length !== 1 ? 's' : ''} submitted
+				</span>
+			</div>
+			<div className='min-h-0 flex-1 overflow-auto rounded-lg bg-slate-950/60 p-3'>
+				<JsonBlock value={log.rows} />
+			</div>
+		</div>
+	);
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -135,6 +206,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 	const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
 	const [submitMessage, setSubmitMessage] = useState('');
 	const [validationSummary, setValidationSummary] = useState<CellValidationError[]>([]);
+	const [submissionLog, setSubmissionLog] = useState<SubmissionLog>(null);
 	const [rows] = useState<Employee[]>(INITIAL_ROWS);
 
 	const handleGridReady = useCallback(
@@ -155,9 +227,12 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		if (errors.length === 0) {
 			setSubmitStatus('idle');
 			setSubmitMessage('All cells passed validation!');
+			setSubmissionLog(null);
 		} else {
 			setSubmitStatus('error');
 			setSubmitMessage(`${errors.length} validation error${errors.length > 1 ? 's' : ''} found. Fix highlighted cells and retry.`);
+			setSubmissionLog({ kind: 'error', errors });
+			api.openPanel('submission-log');
 		}
 	}, []);
 
@@ -175,6 +250,8 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		if (errors.length > 0) {
 			setSubmitStatus('error');
 			setSubmitMessage(`${errors.length} error${errors.length > 1 ? 's' : ''} — fix highlighted cells before saving.`);
+			setSubmissionLog({ kind: 'error', errors });
+			api.openPanel('submission-log');
 			return;
 		}
 
@@ -192,14 +269,19 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 			setValidationSummary(serverErrors);
 			setSubmitStatus('error');
 			setSubmitMessage('Server rejected the request. See error below.');
+			setSubmissionLog({ kind: 'error', errors: serverErrors });
+			api.openPanel('submission-log');
 			return;
 		}
 
-		// Step 3: success
+		// Step 3: success — collect all rows from the grid and log them
+		const allRows = api.rows().getAll();
 		api.clearValidationErrors();
 		setValidationSummary([]);
 		setSubmitStatus('success');
 		setSubmitMessage('All changes saved successfully!');
+		setSubmissionLog({ kind: 'success', rows: allRows });
+		api.openPanel('submission-log');
 	}, []);
 
 	const handleAddRow = useCallback(() => {
@@ -214,7 +296,21 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		setValidationSummary([]);
 		setSubmitStatus('idle');
 		setSubmitMessage('');
+		setSubmissionLog(null);
 	}, []);
+
+	// Sidebar panel — recreated when submissionLog changes so the render closure captures the latest value
+	const sidebarPanels = useMemo(
+		(): SidebarPanelDef<Employee>[] => [
+			{
+				id: 'submission-log',
+				label: 'Log',
+				icon: <FileJson size={14} />,
+				render: () => <SubmissionLogPanel log={submissionLog} />,
+			},
+		],
+		[submissionLog]
+	);
 
 	return (
 		<div className='flex h-full min-h-0 flex-col gap-3'>
@@ -315,6 +411,11 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					pinRightColumns={pinRightColumns}
 					onGridReady={handleGridReady}
 					initialState={{ defaultColWidth: 140 }}
+					sidebar={{
+						panels: sidebarPanels,
+						position: 'right',
+						width: 320,
+					}}
 				/>
 			</div>
 
@@ -326,8 +427,8 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				<span>Red borders mark cells failing validation — errors persist after the editor closes</span>
 				<span>·</span>
 				<span>
-					<strong className='text-slate-400'>Validate All</strong> sweeps every cell,{' '}
-					<strong className='text-slate-400'>Submit Changes</strong> validates then sends to a mock server
+					<strong className='text-slate-400'>Validate All</strong> or <strong className='text-slate-400'>Submit Changes</strong> opens the
+					JSON log sidebar automatically
 				</span>
 			</div>
 		</div>
