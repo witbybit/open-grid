@@ -139,6 +139,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			showGroupFooter: initialState.showGroupFooter,
 			enableStickyGroupRows: initialState.enableStickyGroupRows,
 			showGroupPanel: initialState.showGroupPanel,
+			showFilterChipBar: initialState.showFilterChipBar,
 			showStatusBar: initialState.showStatusBar,
 			pagination: initialState.pagination,
 			expansion: initialState.expansion,

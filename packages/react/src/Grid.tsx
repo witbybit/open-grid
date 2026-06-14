@@ -39,6 +39,8 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	/** Show the core status bar (row + selection counts). */
 	showStatusBar?: boolean;
+	/** Show the filter chip bar above the header when filters are active. */
+	showFilterChipBar?: boolean;
 	onGridReady?: (event: GridReadyEvent<TRowData>) => void;
 }
 
@@ -64,7 +66,12 @@ function normalizePagination(pagination: boolean | GridPaginationConfig | undefi
 
 function createInitialState<TRowData>(
 	base: GridCommonProps<TRowData>,
-	extras: { detailRowHeight?: number; pagination: { pageSize: number; initialPage: number } | null; showStatusBar?: boolean }
+	extras: {
+		detailRowHeight?: number;
+		pagination: { pageSize: number; initialPage: number } | null;
+		showStatusBar?: boolean;
+		showFilterChipBar?: boolean;
+	}
 ) {
 	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits } = base;
 	const merged: Partial<GridState<TRowData>> = {
@@ -78,6 +85,7 @@ function createInitialState<TRowData>(
 	// Pagination + status bar are core concerns; the adapter just seeds the config.
 	if (extras.pagination) merged.pagination = { pageSize: extras.pagination.pageSize, page: extras.pagination.initialPage };
 	if (extras.showStatusBar) merged.showStatusBar = true;
+	if (extras.showFilterChipBar) merged.showFilterChipBar = true;
 	return merged;
 }
 
@@ -99,6 +107,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		runtimeLimits,
 		pagination,
 		showStatusBar,
+		showFilterChipBar,
 		rows,
 		datasource,
 		blockSize,
@@ -134,7 +143,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				columnTypes,
 				styleRules,
 			},
-			{ detailRowHeight, pagination: paginationConfig, showStatusBar }
+			{ detailRowHeight, pagination: paginationConfig, showStatusBar, showFilterChipBar }
 		);
 		if (mode === 'client') {
 			return createClientGrid({

@@ -170,6 +170,12 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 				this.scheduleGeometryPaint('showGroupPanel');
 			})
 		);
+		this.unsubscribers.push(
+			this.deps.engine.stateManager.subscribeToKey('showFilterChipBar', () => {
+				this.deps.syncLayoutPlan();
+				this.scheduleGeometryPaint('showFilterChipBar');
+			})
+		);
 	}
 
 	public destroy(): void {

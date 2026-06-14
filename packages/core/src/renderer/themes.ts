@@ -99,6 +99,20 @@ export interface ThemeTokens {
 	error: string;
 
 	/* ─────────────────────────────────────────────────────────────────────
+     Read-only Cell
+     ───────────────────────────────────────────────────────────────────── */
+	readonlyCellBg?: string;
+	readonlyCellOpacity?: string;
+
+	/* ─────────────────────────────────────────────────────────────────────
+     Filter Chip Bar
+     ───────────────────────────────────────────────────────────────────── */
+	filterChipBarBg?: string;
+	filterChipBg?: string;
+	filterChipBorder?: string;
+	filterChipColor?: string;
+
+	/* ─────────────────────────────────────────────────────────────────────
      Sizing Tokens (optional but commonly needed)
      ───────────────────────────────────────────────────────────────────── */
 	leafHeaderHeight?: string;
@@ -167,6 +181,14 @@ export const LIGHT_THEME: ThemeTokens = {
 
 	error: '#dc2626',
 
+	readonlyCellBg: 'rgba(0, 0, 0, 0.02)',
+	readonlyCellOpacity: '0.55',
+
+	filterChipBarBg: 'rgba(248, 250, 252, 0.98)',
+	filterChipBg: 'rgba(59, 130, 246, 0.08)',
+	filterChipBorder: 'rgba(59, 130, 246, 0.25)',
+	filterChipColor: '#2563eb',
+
 	leafHeaderHeight: '40px',
 	groupPanelHeight: '42px',
 	bottomChromeHeight: '0px',
@@ -232,6 +254,14 @@ export const DARK_THEME: ThemeTokens = {
 	popoverInputBorder: 'rgba(255, 255, 255, 0.08)',
 
 	error: '#ef4444',
+
+	readonlyCellBg: 'rgba(255, 255, 255, 0.02)',
+	readonlyCellOpacity: '0.65',
+
+	filterChipBarBg: 'rgba(15, 23, 42, 0.92)',
+	filterChipBg: 'rgba(59, 130, 246, 0.18)',
+	filterChipBorder: 'rgba(59, 130, 246, 0.35)',
+	filterChipColor: '#93c5fd',
 
 	leafHeaderHeight: '40px',
 	groupPanelHeight: '42px',

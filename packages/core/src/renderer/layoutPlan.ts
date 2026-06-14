@@ -257,7 +257,8 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const totalColumnsWidth = columnPlan.totalWidth;
 	const contentWidth = Math.max(totalColumnsWidth, viewportWidth);
 	const groupPanelHeight = state.showGroupPanel ? GROUP_PANEL_HEIGHT : 0;
-	const filterChipBarHeight = state.filterModel && Object.keys(state.filterModel).length > 0 ? FILTER_CHIP_BAR_HEIGHT : 0;
+	const filterChipBarHeight =
+		state.showFilterChipBar && state.filterModel && Object.keys(state.filterModel).length > 0 ? FILTER_CHIP_BAR_HEIGHT : 0;
 	const leafHeaderHeight = LEAF_HEADER_HEIGHT;
 	const pinLeftCount = Math.min(engine.viewport.pinLeftColumns, renderWindow.colCount);
 	const pinRightCount = Math.min(engine.viewport.pinRightColumns, Math.max(0, renderWindow.colCount - pinLeftCount));

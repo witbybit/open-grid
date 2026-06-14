@@ -97,4 +97,6 @@ export type {
 	RowValidatorParams,
 	RowValidator,
 	ValueValidatorParams,
+	EditableParams,
+	TooltipParams,
 } from '@open-grid/core';

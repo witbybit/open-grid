@@ -30,7 +30,12 @@ export class FilterChipBarRenderer<TRowData = unknown> {
 
 	public mount(bar: HTMLDivElement): void {
 		this.bar = bar;
-		this.unsubscribe = this.engine.stateManager.subscribeToKey('filterModel', () => this.render());
+		const unsub1 = this.engine.stateManager.subscribeToKey('filterModel', () => this.render());
+		const unsub2 = this.engine.stateManager.subscribeToKey('showFilterChipBar', () => this.render());
+		this.unsubscribe = () => {
+			unsub1();
+			unsub2();
+		};
 		this.render();
 	}
 
@@ -47,12 +52,11 @@ export class FilterChipBarRenderer<TRowData = unknown> {
 		const bar = this.bar;
 		if (!bar) return;
 
-		const filterModel = this.engine.stateManager.getState().filterModel;
+		const state = this.engine.stateManager.getState();
+		const filterModel = state.filterModel;
 		bar.innerHTML = '';
 
-		if (!filterModel || Object.keys(filterModel).length === 0) return;
-
-		const state = this.engine.stateManager.getState();
+		if (!state.showFilterChipBar || !filterModel || Object.keys(filterModel).length === 0) return;
 
 		for (const [colField, filterItem] of Object.entries(filterModel)) {
 			const col = state.columns.find((c) => c.field === colField);

@@ -30,6 +30,7 @@ export interface GridModelState<TRowData = unknown> {
 	showGroupFooter?: boolean;
 	enableStickyGroupRows?: boolean;
 	showGroupPanel?: boolean;
+	showFilterChipBar?: boolean;
 	pinnedColumns?: { left: number; right: number };
 
 	// Bottom chrome (Plan 039 Phase 5). Presence gates the bottom-chrome height in the

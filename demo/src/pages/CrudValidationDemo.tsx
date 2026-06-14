@@ -17,16 +17,21 @@ import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plu
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
+type EmployeeStatus = 'Active' | 'On Leave' | 'Terminated';
+
 interface Employee {
 	id: string;
 	name: string;
 	email: string;
 	department: string;
 	salary: number;
+	bonus: number | null;
+	status: EmployeeStatus;
 	startDate: string;
 }
 
 const DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Sales', 'Finance', 'HR', 'Legal'];
+const STATUSES: EmployeeStatus[] = ['Active', 'On Leave', 'Terminated'];
 
 let _nextId = 100;
 function nextId() {
@@ -41,17 +46,55 @@ function makeEmployee(overrides: Partial<Employee> = {}): Employee {
 		email: '',
 		department: 'Engineering',
 		salary: 60000,
+		bonus: null,
+		status: 'Active',
 		startDate: '2024-01-15',
 		...overrides,
 	};
 }
 
 const INITIAL_ROWS: Employee[] = [
-	{ id: '1', name: 'Alice Chen', email: 'alice@company.com', department: 'Engineering', salary: 95000, startDate: '2021-03-01' },
-	{ id: '2', name: 'Bob Smith', email: '', department: 'Design', salary: -5000, startDate: '2023-07-15' },
-	{ id: '3', name: '', email: 'carol@company.com', department: 'Marketing', salary: 72000, startDate: '2022-11-20' },
-	{ id: '4', name: 'David Park', email: 'david.park@company.com', department: 'Finance', salary: 88000, startDate: '2020-05-10' },
-	{ id: '5', name: 'Eva Torres', email: 'not-an-email', department: 'HR', salary: 200000000, startDate: '2024-02-28' },
+	{
+		id: '1',
+		name: 'Alice Chen',
+		email: 'alice@company.com',
+		department: 'Engineering',
+		salary: 95000,
+		bonus: 12000,
+		status: 'Active',
+		startDate: '2021-03-01',
+	},
+	{ id: '2', name: 'Bob Smith', email: '', department: 'Design', salary: -5000, bonus: null, status: 'Terminated', startDate: '2023-07-15' },
+	{
+		id: '3',
+		name: '',
+		email: 'carol@company.com',
+		department: 'Marketing',
+		salary: 72000,
+		bonus: null,
+		status: 'On Leave',
+		startDate: '2022-11-20',
+	},
+	{
+		id: '4',
+		name: 'David Park',
+		email: 'david.park@company.com',
+		department: 'Finance',
+		salary: 88000,
+		bonus: 9500,
+		status: 'Active',
+		startDate: '2020-05-10',
+	},
+	{
+		id: '5',
+		name: 'Eva Torres',
+		email: 'not-an-email',
+		department: 'HR',
+		salary: 200000000,
+		bonus: null,
+		status: 'Active',
+		startDate: '2024-02-28',
+	},
 ];
 
 // ─── Validators ───────────────────────────────────────────────────────────────
@@ -66,7 +109,10 @@ const COLUMNS: ColumnDef<Employee>[] = [
 	{
 		field: 'name',
 		header: 'Full Name',
-		width: 170,
+		width: 160,
+		minWidth: 100,
+		maxWidth: 300,
+		tooltip: ({ row }) => `ID: ${row.id}`,
 		valueValidator: async ({ value }) => {
 			const s = String(value ?? '').trim();
 			if (!s) return 'Name is required';
@@ -77,7 +123,8 @@ const COLUMNS: ColumnDef<Employee>[] = [
 	{
 		field: 'email',
 		header: 'Email',
-		width: 210,
+		width: 200,
+		minWidth: 120,
 		valueValidator: async ({ value }) => {
 			const s = String(value ?? '').trim();
 			if (!s) return 'Email is required';
@@ -88,15 +135,33 @@ const COLUMNS: ColumnDef<Employee>[] = [
 	{
 		field: 'department',
 		header: 'Department',
-		width: 140,
+		width: 130,
 		valueValidator: ({ value }) => {
 			return DEPARTMENTS.includes(String(value ?? '')) ? null : `Must be one of: ${DEPARTMENTS.join(', ')}`;
+		},
+	},
+	{
+		field: 'status',
+		header: 'Status',
+		width: 110,
+		tooltip: ({ row }) => {
+			if (row.status === 'Terminated') return 'Salary and bonus are locked for terminated employees';
+			if (row.status === 'On Leave') return 'Bonus is locked while on leave';
+			return null;
+		},
+		valueValidator: ({ value }) => {
+			return STATUSES.includes(value as EmployeeStatus) ? null : `Must be one of: ${STATUSES.join(', ')}`;
 		},
 	},
 	{
 		field: 'salary',
 		header: 'Salary ($)',
 		width: 120,
+		minWidth: 80,
+		maxWidth: 200,
+		// Salary is locked for terminated employees
+		editable: ({ row }) => row.status !== 'Terminated',
+		tooltip: ({ row }) => (row.status === 'Terminated' ? 'Salary locked — employee is terminated' : null),
 		valueValidator: ({ value }) => {
 			const n = Number(String(value ?? '').replace(/[$,]/g, ''));
 			if (isNaN(n)) return 'Must be a number';
@@ -106,9 +171,28 @@ const COLUMNS: ColumnDef<Employee>[] = [
 		},
 	},
 	{
+		field: 'bonus',
+		header: 'Bonus ($)',
+		width: 110,
+		// Bonus is only editable for Active employees
+		editable: ({ row }) => row.status === 'Active',
+		tooltip: ({ row }) => {
+			if (row.status === 'Active') return null;
+			return `Bonus not applicable — status is "${row.status}"`;
+		},
+		valueValidator: ({ value }) => {
+			if (value === null || value === '' || value === undefined) return null;
+			const n = Number(String(value).replace(/[$,]/g, ''));
+			if (isNaN(n)) return 'Must be a number';
+			if (n < 0) return 'Bonus cannot be negative';
+			if (n > 1_000_000) return 'Bonus exceeds maximum ($1M)';
+			return null;
+		},
+	},
+	{
 		field: 'startDate',
 		header: 'Start Date',
-		width: 120,
+		width: 115,
 		valueValidator: ({ value }) => {
 			const d = new Date(String(value ?? ''));
 			if (isNaN(d.getTime())) return 'Invalid date (YYYY-MM-DD)';
@@ -134,11 +218,21 @@ const employeeRowValidator: RowValidator<Employee> = ({ row }) => {
 	const salary = Number(row.salary);
 	const dept = row.department;
 	const minSalary = DEPT_MIN_SALARY[dept];
-	if (minSalary !== undefined && !isNaN(salary) && salary >= 0 && salary < minSalary) {
+
+	// Per-department salary minimum (skip for terminated — salary is locked)
+	if (row.status !== 'Terminated' && minSalary !== undefined && !isNaN(salary) && salary >= 0 && salary < minSalary) {
 		errors.salary = `${dept} minimum salary is $${minSalary.toLocaleString()}`;
 	} else {
-		errors.salary = null; // clear any stale row-level salary error
+		errors.salary = null;
 	}
+
+	// Bonus only allowed for Active employees
+	if (row.status !== 'Active' && row.bonus !== null && row.bonus !== undefined) {
+		errors.bonus = `Bonus not applicable for status "${row.status}"`;
+	} else {
+		errors.bonus = null;
+	}
+
 	return errors;
 };
 
@@ -436,9 +530,10 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					pinLeftColumns={pinLeftColumns}
 					pinRightColumns={pinRightColumns}
 					onGridReady={handleGridReady}
-					initialState={{ defaultColWidth: 140 }}
+					showFilterChipBar
+					initialState={{ defaultColWidth: 130 }}
 					sidebar={{
-						panels: sidebarPanels,
+						panels: [...sidebarPanels, 'themes'],
 						position: 'right',
 						width: 320,
 					}}
@@ -450,14 +545,16 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				<span className='font-semibold uppercase tracking-wider'>How to use:</span>
 				<span>Double-click any cell to edit</span>
 				<span>·</span>
-				<span>Hover a red cell to see the error tooltip</span>
+				<span>
+					<strong className='text-slate-400'>Salary</strong> is locked for <em>Terminated</em> employees —{' '}
+					<strong className='text-slate-400'>Bonus</strong> is locked unless <em>Active</em>
+				</span>
+				<span>·</span>
+				<span>Hover muted cells to see the reason they're read-only</span>
+				<span>·</span>
+				<span>Use the header filter menu to filter — active filters appear as chips above the headers</span>
 				<span>·</span>
 				<span>Row validator enforces per-department salary minimums</span>
-				<span>·</span>
-				<span>
-					<strong className='text-slate-400'>Validate All</strong> or <strong className='text-slate-400'>Submit Changes</strong> opens the
-					JSON log sidebar automatically
-				</span>
 			</div>
 		</div>
 	);

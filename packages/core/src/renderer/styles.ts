@@ -204,8 +204,8 @@ export const CORE_STYLES = `
     align-items: center;
     gap: 6px;
     padding: 0 10px;
-    background: var(--og-filter-chip-bar-bg, rgba(15, 23, 42, 0.92));
-    border-bottom: 1px solid var(--og-border, rgba(255, 255, 255, 0.07));
+    background: var(--og-filter-chip-bar-bg);
+    border-bottom: 1px solid var(--og-border-color);
     overflow: hidden;
   }
 
@@ -216,9 +216,9 @@ export const CORE_STYLES = `
     height: 22px;
     padding: 0 8px 0 10px;
     border-radius: 11px;
-    background: var(--og-filter-chip-bg, rgba(59, 130, 246, 0.18));
-    border: 1px solid var(--og-filter-chip-border, rgba(59, 130, 246, 0.35));
-    color: var(--og-filter-chip-color, #93c5fd);
+    background: var(--og-filter-chip-bg);
+    border: 1px solid var(--og-filter-chip-border);
+    color: var(--og-filter-chip-color);
     font-size: 11px;
     white-space: nowrap;
     flex-shrink: 0;
@@ -248,7 +248,7 @@ export const CORE_STYLES = `
 
   .og-filter-chip-remove:hover {
     opacity: 1;
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--og-filter-chip-border);
   }
 
   .og-filter-clear-all {
@@ -256,18 +256,19 @@ export const CORE_STYLES = `
     padding: 3px 10px;
     height: 22px;
     border-radius: 4px;
-    border: 1px solid var(--og-border, rgba(255, 255, 255, 0.12));
+    border: 1px solid var(--og-border-color);
     background: none;
-    color: var(--og-text-secondary, rgba(255, 255, 255, 0.45));
+    color: var(--og-header-text);
     font-size: 11px;
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
+    opacity: 0.7;
   }
 
   .og-filter-clear-all:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--og-text, rgba(255, 255, 255, 0.7));
+    background: var(--og-row-hover-bg);
+    opacity: 1;
   }
 
   /* ── Filter indicator on header cell ─────────────────────────────────── */
@@ -924,6 +925,16 @@ export const CORE_STYLES = `
   .og-cell-pinned-left.og-cell-focused,
   .og-cell-pinned-right.og-cell-focused {
     z-index: 45;
+  }
+
+  /* ── Read-only cell ──────────────────────────────────────────────────────── */
+  .og-cell-readonly {
+    cursor: default;
+    background-color: var(--og-readonly-cell-bg);
+  }
+
+  .og-cell-readonly .og-cell-content {
+    opacity: var(--og-readonly-cell-opacity, 0.65);
   }
 
   /* ── Cell validation error ────────────────────────────────────────────────── */

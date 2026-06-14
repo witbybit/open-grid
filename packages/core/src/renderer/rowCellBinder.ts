@@ -159,6 +159,13 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	if (access.isSelected) cellClassName += ' og-cell-selected';
 	if (access.isLoading) cellClassName += ' og-cell-loading';
 
+	// Readonly visual indicator
+	if (col.editable !== undefined && node.data !== null) {
+		const isEditable =
+			typeof col.editable === 'boolean' ? col.editable : col.editable({ row: node.data as TRowData, rowId: node.id, colField: col.field });
+		if (!isEditable) cellClassName += ' og-cell-readonly';
+	}
+
 	const validationError = state.validationErrors?.[validationKey(node.id, col.field)];
 	if (validationError) cellClassName += ' og-cell-invalid';
 
@@ -309,6 +316,21 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			formattedValue = getCheapCellText(deps, node, col, cellSlot, ctx);
 			contentMode = formattedValue === '' ? 'empty' : 'text';
 		}
+	}
+
+	// Cell tooltip (title attribute) — only for data rows with tooltip defined
+	if (col.tooltip !== undefined && node.data !== null) {
+		const tooltipText =
+			typeof col.tooltip === 'string'
+				? col.tooltip
+				: col.tooltip({ row: node.data as TRowData, rowId: node.id, colField: col.field, value: access.rawValue });
+		if (tooltipText) {
+			cellSlot.element.title = tooltipText;
+		} else if (cellSlot.element.title) {
+			cellSlot.element.removeAttribute('title');
+		}
+	} else if (col.tooltip === undefined && cellSlot.element.title) {
+		cellSlot.element.removeAttribute('title');
 	}
 
 	cellSlot.update(

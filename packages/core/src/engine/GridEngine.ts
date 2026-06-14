@@ -231,6 +231,7 @@ export class GridEngine<TRowData = unknown> {
 			showGroupFooter: config.showGroupFooter,
 			enableStickyGroupRows: config.enableStickyGroupRows,
 			showGroupPanel: config.showGroupPanel,
+			showFilterChipBar: config.showFilterChipBar,
 			showStatusBar: config.showStatusBar,
 			pagination: config.pagination,
 			expansion: config.expansion ?? { groups: {}, treeRows: {}, details: {} },

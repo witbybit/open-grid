@@ -28,7 +28,10 @@ export class ColumnFeatureController<TRowData = unknown> {
 	public resizeColumn(colField: string, width: number, undoable = true): void {
 		const state = this.ctx.getState();
 		const oldWidth = state.columnWidths[colField] ?? state.defaultColWidth;
-		if (oldWidth === width) return;
+		const col = state.columns.find((c) => c.field === colField);
+		const clampedWidth = Math.max(col?.minWidth ?? 20, Math.min(col?.maxWidth ?? Infinity, width));
+		if (oldWidth === clampedWidth) return;
+		width = clampedWidth;
 
 		this.ctx.applyChange({
 			reason: 'columns:resize',

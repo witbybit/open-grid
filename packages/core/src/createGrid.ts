@@ -320,7 +320,17 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 	columns = selected.columns;
 	mergedInitial = selected.initialState;
 
-	const resolvedColumns = mergedInitial.columns ?? columns;
+	let resolvedColumns = mergedInitial.columns ?? columns;
+	// Derive pinnedColumns from column.pinned when not explicitly provided.
+	if (!mergedInitial.pinnedColumns) {
+		const leftCols = resolvedColumns.filter((c) => c.pinned === 'left');
+		const rightCols = resolvedColumns.filter((c) => c.pinned === 'right');
+		if (leftCols.length > 0 || rightCols.length > 0) {
+			const centerCols = resolvedColumns.filter((c) => !c.pinned);
+			resolvedColumns = [...leftCols, ...centerCols, ...rightCols];
+			mergedInitial = { ...mergedInitial, pinnedColumns: { left: leftCols.length, right: rightCols.length } };
+		}
+	}
 	const store = new GridStore<TRowData>(
 		{
 			columns: resolvedColumns,
@@ -377,11 +387,22 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 	const selected = withRowSelectionColumn(options.columns, mergedInitial, options.rowSelection);
 	mergedInitial = selected.initialState;
 
+	let serverResolvedColumns = mergedInitial.columns ?? selected.columns;
+	// Derive pinnedColumns from column.pinned when not explicitly provided.
+	if (!mergedInitial.pinnedColumns) {
+		const leftCols = serverResolvedColumns.filter((c) => c.pinned === 'left');
+		const rightCols = serverResolvedColumns.filter((c) => c.pinned === 'right');
+		if (leftCols.length > 0 || rightCols.length > 0) {
+			const centerCols = serverResolvedColumns.filter((c) => !c.pinned);
+			serverResolvedColumns = [...leftCols, ...centerCols, ...rightCols];
+			mergedInitial = { ...mergedInitial, pinnedColumns: { left: leftCols.length, right: rightCols.length } };
+		}
+	}
 	const store = new GridStore<TRowData>(
 		{
-			columns: mergedInitial.columns ?? selected.columns,
+			columns: serverResolvedColumns,
 			getRowId: options.getRowId,
-			columnWidths: buildColumnWidths(mergedInitial.columns ?? selected.columns),
+			columnWidths: buildColumnWidths(serverResolvedColumns),
 			...mergedInitial,
 		},
 		{ rowValidator: options.rowValidator }

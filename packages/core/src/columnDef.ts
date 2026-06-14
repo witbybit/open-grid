@@ -23,6 +23,19 @@ export interface ValueValidatorParams<TRowData = unknown> {
 	colField: string;
 }
 
+export interface EditableParams<TRowData = unknown> {
+	row: TRowData;
+	rowId: string;
+	colField: string;
+}
+
+export interface TooltipParams<TRowData = unknown> {
+	row: TRowData;
+	rowId: string;
+	colField: string;
+	value: unknown;
+}
+
 export interface ValueSetterParams<TRowData = unknown> {
 	value: unknown;
 	oldValue: unknown;
@@ -213,6 +226,27 @@ export interface ColumnDef<TRowData = unknown> {
 	pinnable?: boolean;
 	/** Set to false to disable filtering for this column. Defaults to true. */
 	filterable?: boolean;
+	/**
+	 * Whether this cell is editable. Defaults to true.
+	 * Pass false to make the entire column read-only.
+	 * Pass a function for conditional editability (e.g., locked rows, permission checks).
+	 */
+	editable?: boolean | ((params: EditableParams<TRowData>) => boolean);
+	/** Minimum column width in pixels. Enforced during resize. */
+	minWidth?: number;
+	/** Maximum column width in pixels. Enforced during resize. */
+	maxWidth?: number;
+	/**
+	 * Cell tooltip. Shown as a native browser tooltip on hover.
+	 * Pass a string for a static tooltip, or a function for dynamic tooltips based on cell value/row data.
+	 */
+	tooltip?: string | ((params: TooltipParams<TRowData>) => string | null);
+	/**
+	 * Initial pin side for this column. Pinned-left columns should come first in the
+	 * columns array; pinned-right columns should come last.
+	 * Only applied at grid initialization — use api.setPinnedColumns() for runtime changes.
+	 */
+	pinned?: 'left' | 'right';
 	/** Override the clipboard text for this cell on copy. Return the string to write. */
 	onCopy?: (params: CellCopyParams<TRowData>) => string;
 	/** Transform pasted text before setting the cell value. Return the value to write. */
