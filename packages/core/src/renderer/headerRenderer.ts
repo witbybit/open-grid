@@ -290,10 +290,16 @@ export class HeaderRenderer<TRowData = unknown> {
 						sortIndicator.style.display = 'none';
 					}
 				}
+				// ARIA sort state (none unless this column is sorted, and only for sortable columns).
+				const nextSort = currentSort ? (currentSort.sort === 'asc' ? 'ascending' : 'descending') : cell.sortable === false ? null : 'none';
+				if (nextSort === null) headerCell.removeAttribute('aria-sort');
+				else if (headerCell.getAttribute('aria-sort') !== nextSort) headerCell.setAttribute('aria-sort', nextSort);
 
 				if (headerCell.dataset.colField !== cell.field) headerCell.dataset.colField = cell.field;
 				const colIndexText = String(cell.colStart);
 				if (headerCell.dataset.colIndex !== colIndexText) headerCell.dataset.colIndex = colIndexText;
+				const ariaCol = String(cell.colStart + 1);
+				if (headerCell.getAttribute('aria-colindex') !== ariaCol) headerCell.setAttribute('aria-colindex', ariaCol);
 			} else {
 				// Group header cell — simpler rendering: label only, no interactive chrome
 				if (headerCell.className !== className) headerCell.className = className;
@@ -362,6 +368,7 @@ export class HeaderRenderer<TRowData = unknown> {
 
 	private createHeaderCellElement(isLeaf = true): HTMLDivElement {
 		const headerCell = document.createElement('div');
+		headerCell.setAttribute('role', 'columnheader');
 
 		const textSpan = document.createElement('span');
 		textSpan.style.overflow = 'hidden';

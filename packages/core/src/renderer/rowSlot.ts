@@ -49,6 +49,7 @@ export class RowSlot<TRowData = unknown> {
 	constructor(id: string, element: HTMLDivElement) {
 		this.id = id;
 		this.element = element;
+		if (element.getAttribute('role') !== 'row') element.setAttribute('role', 'row');
 	}
 
 	// ── Lookup ───────────────────────────────────────────────────────────────────────
@@ -185,6 +186,7 @@ export class RowSlot<TRowData = unknown> {
 		if (this.lastVisualIndex !== visualIndex) {
 			this.lastVisualIndex = visualIndex;
 			this.element.dataset.rowIndex = String(visualIndex);
+			this.element.setAttribute('aria-rowindex', String(visualIndex + 1)); // ARIA: 1-based
 			domUpdated = true;
 		}
 		if (this.lastVisualRowId !== visualRowId) {

@@ -23,6 +23,7 @@ export interface HeaderCellLayout {
 	isLeaf: boolean;
 	movable: boolean;
 	resizable: boolean;
+	sortable: boolean;
 	checkboxSelection: boolean;
 }
 
@@ -162,6 +163,7 @@ function buildHeaderBands<TRowData>(
 			isLeaf: true,
 			movable: enableColumnReorder && column.movable !== false && !column.checkboxSelection,
 			resizable: true,
+			sortable: column.sortable !== false && !column.checkboxSelection,
 			checkboxSelection: !!column.checkboxSelection,
 		};
 	});
@@ -220,6 +222,7 @@ function buildHeaderBands<TRowData>(
 				isLeaf: false,
 				movable: false,
 				resizable: false,
+				sortable: false,
 				checkboxSelection: false,
 			});
 

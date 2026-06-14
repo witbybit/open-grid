@@ -48,6 +48,8 @@
 | 045 | [Detail Height Animation](./045-detail-height-animation.md)                                     | DONE     | working tree |
 | 046 | [Menu Modernization (shadcn)](./046-menu-modernization.md)                                      | DONE     | working tree |
 | 047 | [Header-Drag Reorder Polish](./047-header-drag-reorder-polish.md)                               | DONE     | working tree |
+| 048 | [Unified Theme Styling Core Migration](./048-unified-theme-styling-core-migration.md)           | DONE     | working tree |
+| 049 | [Accessibility / ARIA Pass](./049-accessibility-aria-pass.md)                                   | DONE     | working tree |
 
 ## Execution order
 

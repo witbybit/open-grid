@@ -76,6 +76,20 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		return -1;
 	}
 
+	/** Clamp an index into range and snap to the nearest data row (preferring `preferDir`). */
+	private clampToDataRow(idx: number, preferDir: 'up' | 'down'): number {
+		const rowModel = this.runtime.getRowModel();
+		if (!rowModel) return idx;
+		const count = rowModel.getVisualRowCount();
+		if (count === 0) return idx;
+		const clamped = Math.max(0, Math.min(count - 1, idx));
+		if (rowModel.getVisualRow(clamped)?.kind === 'data') return clamped;
+		const near = this.getNextDataRowIndex(clamped, preferDir);
+		if (near !== -1) return near;
+		const far = this.getNextDataRowIndex(clamped, preferDir === 'up' ? 'down' : 'up');
+		return far !== -1 ? far : clamped;
+	}
+
 	/**
 	 * Handle standard keyboard movements and selection expansions.
 	 */
@@ -148,13 +162,29 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					handled = true;
 					break;
 				case 'Home':
+					// Ctrl+Home → first cell of the grid; Home → start of the row.
 					nextCol = 0;
+					if (event.ctrlKey || event.metaKey) nextRow = this.clampToDataRow(0, 'down');
 					handled = true;
 					break;
 				case 'End':
+					// Ctrl+End → last cell of the grid; End → end of the row.
 					nextCol = maxCol;
+					if (event.ctrlKey || event.metaKey) {
+						const count = this.runtime.getRowModel()?.getVisualRowCount() ?? 0;
+						nextRow = this.clampToDataRow(count - 1, 'up');
+					}
 					handled = true;
 					break;
+				case 'PageUp':
+				case 'PageDown': {
+					const vr = state.visibleRowRange;
+					const page = Math.max(1, (vr ? vr.endIdx - vr.startIdx : 0) - 1 || 10);
+					if (event.key === 'PageUp') nextRow = this.clampToDataRow(row - page, 'down');
+					else nextRow = this.clampToDataRow(row + page, 'up');
+					handled = true;
+					break;
+				}
 				case ' ': {
 					event.preventDefault();
 					const rowModel = this.runtime.getRowModel();

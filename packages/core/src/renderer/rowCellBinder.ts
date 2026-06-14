@@ -221,7 +221,22 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		checkbox.setAttribute('aria-label', isChecked ? `Deselect row ${rowIndex + 1}` : `Select row ${rowIndex + 1}`);
 		checkbox.title = 'Select row. Shift-click selects a range.';
 		if (checkbox.checked !== isChecked) checkbox.checked = isChecked;
-		cellSlot.update(colIndex, col.field, rowIndex, node.id, leftArg, -1, cellWidth, cellClassName, 'custom', undefined, '', undefined, dragShift);
+		cellSlot.update(
+			colIndex,
+			col.field,
+			rowIndex,
+			node.id,
+			leftArg,
+			-1,
+			cellWidth,
+			cellClassName,
+			'custom',
+			undefined,
+			'',
+			undefined,
+			dragShift,
+			access.isSelected
+		);
 		return;
 	}
 
@@ -282,7 +297,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		access.rawValue,
 		formattedValue,
 		contentMode === 'portal' ? stableKey : undefined,
-		dragShift
+		dragShift,
+		access.isSelected
 	);
 }
 

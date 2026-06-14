@@ -129,6 +129,75 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('exposes ARIA grid semantics (roles, counts, indices, sort, selection)', () => {
+		const store = new GridStore<{ id: string; name: string; val: string }>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'val', header: 'Val', width: 100 },
+			],
+			defaultRowHeight: 30,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 8 }, (_, i) => ({ id: `row-${i}`, name: `N${i}`, val: `V${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 400,
+			bottom: 300,
+			width: 400,
+			height: 300,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		// Grid root
+		expect(container.getAttribute('role')).toBe('grid');
+		expect(container.getAttribute('aria-multiselectable')).toBe('true');
+		expect(container.getAttribute('aria-rowcount')).toBe('8');
+		expect(container.getAttribute('aria-colcount')).toBe('2');
+
+		// Row
+		const rowEl = container.querySelector('[data-row-index="0"]') as HTMLElement;
+		expect(rowEl.getAttribute('role')).toBe('row');
+		expect(rowEl.getAttribute('aria-rowindex')).toBe('1');
+
+		// Body cell
+		const cellEl = container.querySelector('.og-cell[data-col-field="name"]') as HTMLElement;
+		expect(cellEl.getAttribute('role')).toBe('gridcell');
+		expect(cellEl.getAttribute('aria-colindex')).toBe('1');
+
+		// Header cell + default aria-sort
+		const headerEl = container.querySelector('.og-header-cell[data-col-field="val"]') as HTMLElement;
+		expect(headerEl.getAttribute('role')).toBe('columnheader');
+		expect(headerEl.getAttribute('aria-colindex')).toBe('2');
+		expect(headerEl.getAttribute('aria-sort')).toBe('none');
+
+		// aria-sort tracks the sort model
+		store.setSortModel([{ colId: 'val', sort: 'desc' }]);
+		renderer.fullPaint();
+		expect((container.querySelector('.og-header-cell[data-col-field="val"]') as HTMLElement).getAttribute('aria-sort')).toBe('descending');
+
+		// aria-selected appears on a selected cell
+		store.selectCell({ rowId: 'row-0', colField: 'name' });
+		renderer.fullPaint();
+		const selCell = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="name"]') as HTMLElement;
+		expect(selCell.getAttribute('aria-selected')).toBe('true');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('releases out-of-range cells when columns shrink with right pinning enabled', () => {
 		const wideColumns = [
 			{ field: 'risk', header: 'Risk', width: 120 },
