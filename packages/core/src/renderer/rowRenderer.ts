@@ -625,10 +625,11 @@ export class RowRenderer<TRowData = unknown> {
 		if (this.fullWidthRenderer) {
 			return this.fullWidthRenderer.release(slot);
 		}
-		const rowKey = slot.element.dataset.rowKey;
+		const rowKey = slot.lastPortalRowKey;
 		if (!rowKey) return false;
 		const host = this.rowPortalHosts.get(slot.element);
 		if (!host) {
+			slot.lastPortalRowKey = undefined;
 			delete slot.element.dataset.rowKey;
 			return false;
 		}
@@ -636,6 +637,7 @@ export class RowRenderer<TRowData = unknown> {
 		host.hidden = true;
 		delete host.dataset.rowKey;
 		host.remove();
+		slot.lastPortalRowKey = undefined;
 		delete slot.element.dataset.rowKey;
 		return true;
 	}

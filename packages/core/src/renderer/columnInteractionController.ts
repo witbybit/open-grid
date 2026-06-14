@@ -94,6 +94,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private groupPanel: GroupPanelRenderer<TRowData> | null = null;
 	// Whether the current column drag is over the group panel.
 	private columnDragOverGroupPanel = false;
+	private cachedViewportRect: DOMRect | null = null;
 
 	constructor(options: ColumnInteractionControllerOptions<TRowData>) {
 		this.engine = options.engine;
@@ -154,6 +155,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.columnDragFromIndex = colIndex;
 		this.columnDragField = colField;
 		this.columnDropInsertionIndex = colIndex;
+		this.cachedViewportRect = this.getScrollViewport()?.getBoundingClientRect() ?? null;
 
 		window.addEventListener('mousemove', this.onHeaderColumnDragMove);
 		window.addEventListener('mouseup', this.onHeaderColumnDragMouseUp);
@@ -180,6 +182,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.columnDropInsertionIndex = -1;
 		this.dragShifts = null;
 		this.shiftInsertionIndex = -2;
+		this.cachedViewportRect = null;
 		this.removeColumnDropIndicator();
 		this.removeColumnDragGhost();
 		this.getScrollViewport()?.closest('.og-grid-container')?.classList.remove('og-col-reordering');
@@ -363,7 +366,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const state = this.engine.stateManager.getState();
 		if (state.columns.length === 0) return;
 
-		const scrollRect = scrollViewport.getBoundingClientRect();
+		const scrollRect = this.cachedViewportRect ?? scrollViewport.getBoundingClientRect();
 		const contentX = e.clientX - scrollRect.left + scrollViewport.scrollLeft;
 		const targetCol = Math.max(0, Math.min(state.columns.length - 1, this.engine.geometry.getColIndexAtOffset(contentX)));
 		const targetLeft = this.engine.geometry.colLefts[targetCol] || 0;

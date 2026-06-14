@@ -253,8 +253,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 
 	if (((col as InternalColumnDef<TRowData>).cellRenderer || access.isEditing) && !access.isLoading) {
 		contentMode = 'portal';
-		if (cellSlot.element.dataset.cellKey !== stableKey || !deps.portalMountManager.isCellMounted(stableKey)) {
-			if (cellSlot.element.dataset.cellKey) {
+		if (cellSlot.lastPortalKey !== stableKey || !deps.portalMountManager.isCellMounted(stableKey)) {
+			if (cellSlot.lastPortalKey) {
 				deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 			}
 			cellSlot.contentElement.textContent = '';
@@ -279,7 +279,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			isSelected: access.isSelected,
 		});
 	} else {
-		if (cellSlot.element.dataset.cellKey) {
+		if (cellSlot.lastPortalKey) {
 			deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		}
 		if (access.isLoading) {
@@ -370,7 +370,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			contentMode = 'text';
 			deps.markCellDirtyAfterScroll(cellSlot.element);
 		}
-		if (cellSlot.element.dataset.cellKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		const didWritePrimitive = cellSlot.update(
 			colIndex,
 			col.field,

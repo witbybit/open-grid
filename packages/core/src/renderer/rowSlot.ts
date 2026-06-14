@@ -18,6 +18,7 @@ export class RowSlot<TRowData = unknown> {
 	public lastVisualRowId = '\0'; // guaranteed != any real rowId on first update
 
 	public keepAlive = false;
+	public lastPortalRowKey: string | undefined = undefined;
 
 	public pinLeftContainer: HTMLDivElement | null = null;
 	public pinRightContainer: HTMLDivElement | null = null;
@@ -223,6 +224,7 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = -1;
 		this.rowHeight = -1;
 		this.keepAlive = false;
+		this.lastPortalRowKey = undefined;
 		// Cell slots remain mounted — they will be rebound on next renderViewport.
 	}
 
@@ -240,6 +242,7 @@ export class RowSlot<TRowData = unknown> {
 		this.lastTop = -1;
 		this.lastHeight = -1;
 		this.lastClassName = '';
+		this.lastPortalRowKey = undefined;
 		this.centerColStart = 0;
 		this.pinLeftCount = 0;
 		this.pinRightStart = Number.MAX_SAFE_INTEGER;

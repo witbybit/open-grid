@@ -50,7 +50,7 @@
 | 047 | [Header-Drag Reorder Polish](./047-header-drag-reorder-polish.md)                               | DONE     | working tree |
 | 048 | [Unified Theme Styling Core Migration](./048-unified-theme-styling-core-migration.md)           | DONE     | working tree |
 | 049 | [Accessibility / ARIA Pass](./049-accessibility-aria-pass.md)                                   | DONE     | working tree |
-| 051 | [Numeric Filter Null Coercion](./051-numeric-filter-null-coercion.md)                           | TODO     | e89c1ec2     |
+| 051 | [Numeric Filter Null Coercion](./051-numeric-filter-null-coercion.md)                           | DONE     | 5d702964     |
 
 ## Execution order
 

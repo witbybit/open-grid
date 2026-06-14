@@ -278,7 +278,7 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 		const col = columns[c];
 		if (!col || !cellSlot) return;
 		if (isScrollFrameActive) deps.onScrollCellVisited();
-		if (cellSlot.element.dataset.cellKey) deps.releaseCellPortal(cellSlot.element);
+		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element);
 		const cellWidth = plan.colWidths[c];
 		if (isScrollFrameActive) {
 			deps.onScrollCellPatched();

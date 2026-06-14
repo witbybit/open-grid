@@ -11,7 +11,8 @@ import { createRowsAccessor } from './rowsAccessor.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 import type { PersistenceStatus, PersistedGridState } from './persistence/statePersistence.js';
-import { extractPersistedState } from './persistence/statePersistence.js';
+import { extractPersistedState, applyPersistedStateToApi, areRowHeightsEqual } from './persistence/statePersistence.js';
+
 import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltInThemeName, type ThemeTokens } from './renderer/themes.js';
 
 // ── Focused sub-modules — re-export so callers of store.ts continue to work ──
@@ -265,13 +266,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setColumnVisible = (colField: string, visible: boolean): void => {
-		const columns = this.state.columns;
-		const column = columns.find((candidate) => candidate.field === colField);
-		if (!column || column.hide === !visible) return;
-		this.engine.setColumns(
-			columns.map((candidate) => (candidate.field === colField ? { ...candidate, hide: !visible } : candidate)),
-			false
-		);
+		this.setColumnsVisible([colField], visible);
 	};
 
 	public setColumnsVisible = (colFields: string[], visible: boolean): void => {
@@ -507,40 +502,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return extractPersistedState(this.engine.getState() as GridState);
 	};
 	public applyGridState = (state: PersistedGridState): void => {
-		const columns = this.engine.getState().columns;
-		const knownFields = new Set(columns.map((c) => c.field));
-		if (state.columnOrder) {
-			const validOrder = state.columnOrder.filter((f) => knownFields.has(f));
-			if (validOrder.length === columns.length) this.setColumnOrder(validOrder);
-		}
-		if (state.columnVisibility) {
-			const hidden = Object.entries(state.columnVisibility)
-				.filter(([, v]) => v === false)
-				.map(([f]) => f)
-				.filter((f) => knownFields.has(f));
-			const visible = Object.entries(state.columnVisibility)
-				.filter(([, v]) => v === true)
-				.map(([f]) => f)
-				.filter((f) => knownFields.has(f));
-			if (hidden.length > 0) this.setColumnsVisible(hidden, false);
-			if (visible.length > 0) this.setColumnsVisible(visible, true);
-		}
-		if (state.columnWidths) {
-			for (const [field, width] of Object.entries(state.columnWidths)) {
-				if (knownFields.has(field)) this.setColumnWidth(field, width);
-			}
-		}
-		if (state.sortModel !== undefined) {
-			if (state.sortModel === null || (Array.isArray(state.sortModel) && state.sortModel.every((s) => knownFields.has(s.colId)))) {
-				this.setSortModel(state.sortModel);
-			}
-		}
-		if (state.filterModel !== undefined) this.setFilterModel(state.filterModel);
-		if (state.themeName !== undefined && isBuiltInThemeName(state.themeName)) this.switchTheme(state.themeName);
-		if (state.groupBy !== undefined) this.setGroupBy(state.groupBy.filter((f) => knownFields.has(f)));
-		if (state.showGroupFooter !== undefined) this.setShowGroupFooter(state.showGroupFooter);
-		if (state.enableStickyGroupRows !== undefined) this.setStickyGroupRows(state.enableStickyGroupRows);
-		if (state.pinnedColumns !== undefined) this.setPinnedColumns(state.pinnedColumns);
+		applyPersistedStateToApi(this, state);
 	};
 
 	public registerRowModel = (rowModel: RowModel<TRowData>): void => {
@@ -614,18 +576,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public setRowHeights = (rowHeights: Record<string, number> | undefined): void => {
 		const current = this.state.rowHeights;
 		const next = rowHeights ?? {};
-		const currentKeys = Object.keys(current);
-		const nextKeys = Object.keys(next);
-		if (currentKeys.length === nextKeys.length) {
-			let equal = true;
-			for (const key of currentKeys) {
-				if (current[key] !== next[key]) {
-					equal = false;
-					break;
-				}
-			}
-			if (equal) return;
-		}
+		if (areRowHeightsEqual(current, next)) return;
 		this.engine.setState({ rowHeights: next });
 	};
 

@@ -940,8 +940,8 @@ describe('RowNode path getters and state batching', () => {
 
 describe('Phase 2 Engine Scalability Subsystems', () => {
 	it('should cache cumulative geometry and map offsets using binary search in O(log N) time', async () => {
-		const { ViewportGeometry } = await import('./viewportGeometry.js');
-		const geometry = new ViewportGeometry();
+		const { GeometryModel } = await import('./models/GeometryModel.js');
+		const geometry = new GeometryModel();
 
 		const widths = [100, 150, 200, 80]; // Cumulative offsets: 0, 100, 250, 450
 		geometry.updateColumns(widths, 100);
@@ -952,10 +952,10 @@ describe('Phase 2 Engine Scalability Subsystems', () => {
 		expect(geometry.colLefts[3]).toBe(450);
 
 		// Binary search index mappings at offsets
-		expect(geometry.getIndexAtOffset(50, geometry.colLefts)).toBe(0);
-		expect(geometry.getIndexAtOffset(150, geometry.colLefts)).toBe(1);
-		expect(geometry.getIndexAtOffset(300, geometry.colLefts)).toBe(2);
-		expect(geometry.getIndexAtOffset(500, geometry.colLefts)).toBe(3);
+		expect(geometry.getColIndexAtOffset(50)).toBe(0);
+		expect(geometry.getColIndexAtOffset(150)).toBe(1);
+		expect(geometry.getColIndexAtOffset(300)).toBe(2);
+		expect(geometry.getColIndexAtOffset(500)).toBe(3);
 	});
 
 	it('should pool and dispatch cell subscriptions using packed 32-bit composite binary keys with stable numeric IDs', () => {

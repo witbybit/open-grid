@@ -222,7 +222,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 		reason: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated' = 'scrolled-out'
 	): void {
 		const cellSlot = CellSlot.fromElement(cell);
-		const cellKey = cellSlot.binding?.cellKey ?? cell.dataset.cellKey;
+		const cellKey = cellSlot.binding?.cellKey ?? cellSlot.lastPortalKey ?? cell.dataset.cellKey;
 		if (!cellKey) return;
 		const container = this.getCellPortalHost(cell) ?? cell;
 		const isDeferred = forceDeferred ?? (this.deps.stateHost.isScrollFrameActive || this.deps.stateHost.isScrolling);

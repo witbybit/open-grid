@@ -308,3 +308,66 @@ export function createPersistenceSubscription(
 		},
 	};
 }
+
+export function areRowHeightsEqual(current: Record<string, number>, next: Record<string, number>): boolean {
+	const currentKeys = Object.keys(current);
+	const nextKeys = Object.keys(next);
+	if (currentKeys.length !== nextKeys.length) return false;
+	for (const key of currentKeys) {
+		if (current[key] !== next[key]) return false;
+	}
+	return true;
+}
+
+export function applyPersistedStateToApi<TRowData>(
+	api: {
+		getState(): any;
+		setColumnOrder(fields: string[]): void;
+		setColumnsVisible(fields: string[], visible: boolean): void;
+		setColumnWidth(field: string, width: number): void;
+		setSortModel(model: any): void;
+		setFilterModel(model: any): void;
+		switchTheme(theme: string): void;
+		setGroupBy(fields: string[]): void;
+		setShowGroupFooter(enabled: boolean): void;
+		setStickyGroupRows(enabled: boolean): void;
+		setPinnedColumns(pins: any): void;
+	},
+	state: PersistedGridState
+): void {
+	const columns = api.getState().columns;
+	const knownFields = new Set(columns.map((c: any) => c.field));
+	if (state.columnOrder) {
+		const validOrder = state.columnOrder.filter((f) => knownFields.has(f));
+		if (validOrder.length === columns.length) api.setColumnOrder(validOrder);
+	}
+	if (state.columnVisibility) {
+		const hidden = Object.entries(state.columnVisibility)
+			.filter(([, v]) => v === false)
+			.map(([f]) => f)
+			.filter((f) => knownFields.has(f));
+		const visible = Object.entries(state.columnVisibility)
+			.filter(([, v]) => v === true)
+			.map(([f]) => f)
+			.filter((f) => knownFields.has(f));
+		if (hidden.length > 0) api.setColumnsVisible(hidden, false);
+		if (visible.length > 0) api.setColumnsVisible(visible, true);
+	}
+	if (state.columnWidths) {
+		for (const [field, width] of Object.entries(state.columnWidths)) {
+			if (knownFields.has(field)) api.setColumnWidth(field, width);
+		}
+	}
+	if (state.sortModel !== undefined) {
+		const sm = state.sortModel;
+		if (sm === null || (Array.isArray(sm) && sm.every((s) => knownFields.has(s.colId)))) {
+			api.setSortModel(sm);
+		}
+	}
+	if (state.filterModel !== undefined) api.setFilterModel(state.filterModel);
+	if (state.themeName !== undefined && isBuiltInThemeName(state.themeName)) api.switchTheme(state.themeName);
+	if (state.groupBy !== undefined) api.setGroupBy(state.groupBy.filter((f) => knownFields.has(f)));
+	if (state.showGroupFooter !== undefined) api.setShowGroupFooter(state.showGroupFooter);
+	if (state.enableStickyGroupRows !== undefined) api.setStickyGroupRows(state.enableStickyGroupRows);
+	if (state.pinnedColumns !== undefined) api.setPinnedColumns(state.pinnedColumns);
+}
