@@ -679,6 +679,12 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		expect(CORE_STYLES).toContain('linear-gradient(var(--og-selection-bg), var(--og-selection-bg)), var(--og-bg-color)');
 	});
 
+	it('defines the semantic column pin transition without clone-specific CSS hooks', () => {
+		expect(CORE_STYLES).toContain('@keyframes og-pin-lane-settle');
+		expect(CORE_STYLES).toContain('.og-pin-transition .og-row-pin-left');
+		expect(CORE_STYLES).not.toContain('og-layer-pin-anim');
+	});
+
 	it('preserves custom-live portals during scrolling without increasing warmMisses', async () => {
 		const grid = await createServerAuditGrid({ rows: 1000, cols: 50 });
 		await flushAnimationFrame();

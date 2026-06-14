@@ -94,12 +94,10 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 				this.deps.layoutTransition.captureSnapshot();
 			})
 		);
-		// Column pin/unpin (Plan 044) — capture each visible cell's screen position before the
-		// pin relayout, then invalidate geometry/viewport/headers with the 'pin' reason so the
-		// paint coordinator can play the clone-and-swap FLIP after the cells reparent.
+		// Column pin/unpin — geometry owns the layout change; paint may add a subtle
+		// semantic transition after the new pinned lanes are already committed.
 		this.unsubscribers.push(
 			this.deps.engine.stateManager.subscribeToKey('pinnedColumns', () => {
-				this.deps.layoutTransition.capturePinSnapshot();
 				this.deps.geometryController.invalidateAll();
 				this.deps.engine.invalidation.invalidateGeometry('pin');
 				this.deps.engine.invalidation.invalidateViewport('pin');

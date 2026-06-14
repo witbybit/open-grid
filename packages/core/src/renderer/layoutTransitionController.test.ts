@@ -242,102 +242,57 @@ describe('LayoutTransitionController — detail height animation (Plan 045)', ()
 	});
 });
 
-describe('LayoutTransitionController — column pin FLIP (Plan 044)', () => {
+describe('LayoutTransitionController — semantic column pin effect (Plan 044)', () => {
 	const originalAnimate = (HTMLElement.prototype as any).animate;
-	const originalRect = Element.prototype.getBoundingClientRect;
 	afterEach(() => {
 		(HTMLElement.prototype as any).animate = originalAnimate;
-		Element.prototype.getBoundingClientRect = originalRect;
 		document.body.textContent = '';
+		vi.useRealTimers();
 	});
 
-	const rectFromMarker = function (this: Element) {
-		return ((this as any).__rect ?? originalRect.call(this)) as DOMRect;
-	};
-	function setRect(el: HTMLElement, left: number): void {
-		(el as any).__rect = { left, top: 0, width: 100, height: 30, right: left + 100, bottom: 30, x: left, y: 0, toJSON: () => ({}) };
-	}
-	function pinHarness() {
+	function pinHarness(): HTMLElement {
 		const root = document.createElement('div');
-		const mk = (cls: string, field: string, rowId?: string) => {
-			const el = document.createElement('div');
-			el.className = cls;
-			el.dataset.colField = field;
-			if (rowId) el.dataset.rowId = rowId;
-			root.appendChild(el);
-			return el;
-		};
-		const h1 = mk('og-header-cell', 'a');
-		const h2 = mk('og-header-cell', 'b');
-		const b1 = mk('og-cell', 'a', 'r1');
-		const b2 = mk('og-cell', 'b', 'r1');
 		document.body.appendChild(root);
-		return { root, h1, h2, b1, b2 };
+		return root;
 	}
 
-	it('clones + animates only the cells whose x changed, hiding the real cell while its clone travels', () => {
-		const finishers: Array<() => void> = [];
-		(HTMLElement.prototype as any).animate = function () {
-			const a: any = { cancel: vi.fn(), onfinish: null, oncancel: null };
-			finishers.push(() => a.onfinish && a.onfinish());
-			return a;
-		};
-		Element.prototype.getBoundingClientRect = rectFromMarker as any;
-
-		const { root, h1, h2, b1, b2 } = pinHarness();
-		setRect(h1, 0);
-		setRect(h2, 100);
-		setRect(b1, 0);
-		setRect(b2, 100);
-		const c = new LayoutTransitionController(() => new Map(), { getGridRoot: () => root, enableColumnPinTransition: true });
-		c.capturePinSnapshot();
-		// Pin column 'a': its header + body move right; 'b' stays put.
-		setRect(h1, 200);
-		setRect(b1, 200);
-		c.beginColumnPin();
-
-		const overlay = document.body.querySelector('.og-layer-pin-anim') as HTMLElement;
-		expect(overlay).not.toBeNull();
-		expect(overlay.children.length).toBe(2); // only h1 + b1 moved
-		expect(h1.style.visibility).toBe('hidden');
-		expect(b1.style.visibility).toBe('hidden');
-		expect(h2.style.visibility).not.toBe('hidden');
-
-		finishers.forEach((f) => f());
-		expect(overlay.children.length).toBe(0);
-		expect(h1.style.visibility).not.toBe('hidden');
-		c.destroy();
-	});
-
-	it('cancel() removes pin clones and restores hidden cells (scroll-start safety)', () => {
+	it('adds a transient root class for the committed pin layout', () => {
+		vi.useFakeTimers();
 		(HTMLElement.prototype as any).animate = function () {
 			return { cancel: vi.fn(), onfinish: null, oncancel: null } as unknown as Animation;
 		};
-		Element.prototype.getBoundingClientRect = rectFromMarker as any;
-		const { root, h1 } = pinHarness();
-		setRect(h1, 0);
-		const c = new LayoutTransitionController(() => new Map(), { getGridRoot: () => root, enableColumnPinTransition: true });
-		c.capturePinSnapshot();
-		setRect(h1, 150);
-		c.beginColumnPin();
-		expect(h1.style.visibility).toBe('hidden');
+		const root = pinHarness();
+		const c = new LayoutTransitionController(() => new Map(), { getGridRoot: () => root });
 
-		c.cancel();
-		expect(document.body.querySelector('.og-layer-pin-anim')?.children.length ?? 0).toBe(0);
-		expect(h1.style.visibility).not.toBe('hidden');
+		c.playColumnPinEffect();
+
+		expect(root.classList.contains('og-pin-transition')).toBe(true);
+		vi.advanceTimersByTime(280);
+		expect(root.classList.contains('og-pin-transition')).toBe(false);
 		c.destroy();
 	});
 
-	it('no-ops (no clones) when WAAPI is unavailable', () => {
+	it('cancel() clears the transient pin class (scroll-start safety)', () => {
+		vi.useFakeTimers();
+		(HTMLElement.prototype as any).animate = function () {
+			return { cancel: vi.fn(), onfinish: null, oncancel: null } as unknown as Animation;
+		};
+		const root = pinHarness();
+		const c = new LayoutTransitionController(() => new Map(), { getGridRoot: () => root });
+		c.playColumnPinEffect();
+		expect(root.classList.contains('og-pin-transition')).toBe(true);
+
+		c.cancel();
+		expect(root.classList.contains('og-pin-transition')).toBe(false);
+		c.destroy();
+	});
+
+	it('no-ops when WAAPI is unavailable', () => {
 		(HTMLElement.prototype as any).animate = undefined;
-		Element.prototype.getBoundingClientRect = rectFromMarker as any;
-		const { root, h1 } = pinHarness();
-		setRect(h1, 0);
-		const c = new LayoutTransitionController(() => new Map(), { getGridRoot: () => root, enableColumnPinTransition: true });
-		c.capturePinSnapshot();
-		setRect(h1, 150);
-		expect(() => c.beginColumnPin()).not.toThrow();
-		expect(document.body.querySelector('.og-layer-pin-anim')).toBeNull();
+		const root = pinHarness();
+		const c = new LayoutTransitionController(() => new Map(), { getGridRoot: () => root });
+		expect(() => c.playColumnPinEffect()).not.toThrow();
+		expect(root.classList.contains('og-pin-transition')).toBe(false);
 		c.destroy();
 	});
 });

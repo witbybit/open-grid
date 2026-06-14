@@ -68,9 +68,9 @@ Two defects:
 
 ### Phase 1 — Targeted correctness fixes
 
-Implementation note (2026-06-14): Phase 1 landed. Plan 044's clone-and-swap code remains in place but is production-gated behind `enableColumnPinTransition`; programmatic scroll now writes the DOM and explicitly schedules a scroll frame instead of pre-writing the model; horizontal-scroll portal mounts no longer reuse a previous column's value on cache miss and are marked dirty for post-scroll reconciliation; pinned lanes were moved into a higher z-band.
+Implementation note (2026-06-14): Phase 1 landed. The original Plan 044 clone-and-swap pin animation was removed and replaced with a semantic post-layout pin effect; programmatic scroll now writes the DOM and explicitly schedules a scroll frame instead of pre-writing the model; horizontal-scroll portal mounts no longer reuse a previous column's value on cache miss and are marked dirty for post-scroll reconciliation; pinned lanes were moved into a higher z-band.
 
-**1.1 Gate off the pin animation (Decision 1).** Add a single off-switch so `capturePinSnapshot()` and `beginColumnPin()` are inert, while the `pinnedColumns` subscription **keeps** its geometry/viewport/header invalidation (so pinning still repaints correctly, instantly). Keep all 044 code + tests; flip the flag back on in a later plan once geometry + recycler-safety land. This alone removes symptoms D (blank pinned area + header glitch).
+**1.1 Replace the brittle pin animation (Decision updated).** Remove the clone-and-swap FLIP path entirely. The `pinnedColumns` subscription keeps its geometry/viewport/header invalidation so pinning repaints correctly and instantly; Plan 044 now adds only a subtle semantic CSS effect after the committed layout.
 
 **1.2 Programmatic scroll single-source-of-truth (fixes #1 / A).** In `renderViewportCoordinator.scrollCellIntoView`, stop pre-writing the model scrollTop; let the DOM `scroll` event remain the single source that drives the recycle. Additionally guarantee a frame for the exact-position case (e.g. explicitly request a scroll frame / `invalidateViewport` after a programmatic jump) so Ctrl+Home (target 0) and any scroll-to-exact-row also recompute the window. Verify no synchronous reader depends on the model scrollTop being set in the same tick.
 
@@ -121,5 +121,5 @@ In: `renderer/renderViewportCoordinator.ts`, `renderer/renderScrollCoordinator.t
 
 ## Follow-up (separate plan)
 
-- Re-enable + harden the Plan 044 pin animation on top of the unified geometry + stuck-visibility safety (3.3), with recycler-cancel + re-pin debounce.
+- Tune the Plan 044 semantic pin effect if the foreground browser pass wants it slightly stronger or softer.
 - Consider collapsing the two pin coordinate systems entirely (header also sticky, or body also JS-positioned) so there is literally one positioning mechanism — larger, evaluate after 2.x.

@@ -34,11 +34,8 @@ export interface LayoutTransitionOptions {
 	/** True when a rowId still exists in the visual model — used to tell a true exit
 	 *  (row removed, e.g. collapsed) from a row that merely scrolled out of the window. */
 	isRowIdLive?: (rowId: string) => boolean;
-	/** The grid root element — used by the column-pin transition (Plan 044) to enumerate
-	 *  visible header/body cells for the clone-and-swap FLIP. */
+	/** The grid root element used for semantic, CSS-only layout effects such as pinning. */
 	getGridRoot?: () => HTMLElement | null;
-	/** Plan 044 is opt-in until the pin geometry/recycler contracts are fully browser-proven. */
-	enableColumnPinTransition?: boolean;
 }
 
 interface SnapshotEntry {
@@ -55,14 +52,7 @@ export class LayoutTransitionController<TRowData = unknown> {
 	private snapshot = new Map<string, SnapshotEntry>(); // rowId → {top, clone} at capture
 	private animations = new Map<HTMLElement, Animation>();
 	private exitGhosts = new Set<HTMLElement>();
-
-	// Column-pin transition (Plan 044). Keyed by a stable cell identity (data-* derived) so
-	// the snapshot survives the relayout's slot recycling. Each entry is the cell's screen
-	// rect BEFORE the pin relayout; beginColumnPin diffs against the post-relayout rect.
-	private pinSnapshot = new Map<string, { left: number; top: number; width: number; height: number }>();
-	private pinClones = new Set<HTMLElement>();
-	private pinHiddenReals = new Set<HTMLElement>();
-	private pinOverlay: HTMLElement | null = null;
+	private pinEffectTimer: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(
 		private readonly getActiveRows: () => ReadonlyMap<number, RowSlot<TRowData>>,
@@ -208,134 +198,24 @@ export class LayoutTransitionController<TRowData = unknown> {
 		this.exitGhosts.delete(ghost);
 	}
 
-	// ── Column pin transition (Plan 044) — clone-and-swap FLIP ─────────────────────
-	//
-	// Pin/unpin reparents a column's cells between the center lane and a `position: sticky`
-	// pinned lane. Animating a transform on a cell as it reparents into a sticky lane fights
-	// the compositor, so instead of moving the real cells we move CLONES over a fixed overlay
-	// (the real cell jumps to its final spot instantly but is hidden while its clone travels).
-	// The sticky cells are never transformed. Capture before the relayout, play after.
-
-	/** Enumerate the rendered (visible-window) header + body cells, keyed by a stable
-	 *  data-* identity so the same logical cell matches across the relayout's recycling. */
-	private _pinCells(root: HTMLElement): Array<{ key: string; el: HTMLElement }> {
-		const out: Array<{ key: string; el: HTMLElement }> = [];
-		root.querySelectorAll<HTMLElement>('.og-header-cell[data-col-field]').forEach((el) => {
-			out.push({ key: `h:${el.dataset.colField}`, el });
-		});
-		root.querySelectorAll<HTMLElement>('.og-cell[data-col-field][data-row-id]').forEach((el) => {
-			out.push({ key: `b:${el.dataset.rowId}:${el.dataset.colField}`, el });
-		});
-		return out;
-	}
-
-	public isColumnPinTransitionEnabled(): boolean {
-		return this.options.enableColumnPinTransition === true;
-	}
-
-	/** Step 1 — record each visible cell's screen rect before the pin relayout. */
-	public capturePinSnapshot(): void {
-		this.clearPinClones();
-		this.pinSnapshot.clear();
-		if (!this.isColumnPinTransitionEnabled()) return;
+	public playColumnPinEffect(): void {
 		if (!this.animationsEnabled()) return;
 		const root = this.options.getGridRoot?.();
 		if (!root) return;
-		for (const { key, el } of this._pinCells(root)) {
-			const r = el.getBoundingClientRect();
-			this.pinSnapshot.set(key, { left: r.left, top: r.top, width: r.width, height: r.height });
-		}
+		this.clearColumnPinEffect();
+		root.classList.add('og-pin-transition');
+		this.pinEffectTimer = setTimeout(() => {
+			root.classList.remove('og-pin-transition');
+			this.pinEffectTimer = null;
+		}, DURATION);
 	}
 
-	/** Step 2 — after the pin relayout, clone every cell whose x changed and glide the clone
-	 *  from its old screen position to the new one; the real (sticky) cell is hidden meanwhile. */
-	public beginColumnPin(): void {
-		if (!this.isColumnPinTransitionEnabled()) {
-			this.pinSnapshot.clear();
-			return;
+	private clearColumnPinEffect(): void {
+		if (this.pinEffectTimer !== null) {
+			clearTimeout(this.pinEffectTimer);
+			this.pinEffectTimer = null;
 		}
-		if (this.pinSnapshot.size === 0) return;
-		const root = this.options.getGridRoot?.();
-		if (!this.animationsEnabled() || !root) {
-			this.pinSnapshot.clear();
-			return;
-		}
-		const overlay = this._ensurePinOverlay();
-		if (!overlay) {
-			this.pinSnapshot.clear();
-			return;
-		}
-		for (const { key, el } of this._pinCells(root)) {
-			const from = this.pinSnapshot.get(key);
-			if (!from) continue;
-			const to = el.getBoundingClientRect();
-			const dx = to.left - from.left;
-			const dy = to.top - from.top;
-			if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue; // didn't move
-
-			const clone = el.cloneNode(true) as HTMLElement;
-			clone.style.position = 'fixed';
-			clone.style.left = `${from.left}px`;
-			clone.style.top = `${from.top}px`;
-			clone.style.width = `${from.width}px`;
-			clone.style.height = `${from.height}px`;
-			clone.style.margin = '0';
-			clone.style.pointerEvents = 'none';
-			clone.style.visibility = 'visible';
-			overlay.appendChild(clone);
-			this.pinClones.add(clone);
-
-			// Hide the real cell (now at its final position) so only the clone is seen moving.
-			(el as unknown as { __pinPrevVis?: string }).__pinPrevVis = el.style.visibility;
-			el.style.visibility = 'hidden';
-			this.pinHiddenReals.add(el);
-
-			const anim = (clone as unknown as { animate: (k: Keyframe[], o: KeyframeAnimationOptions) => Animation }).animate(
-				[{ transform: 'translate(0px, 0px)' }, { transform: `translate(${dx}px, ${dy}px)` }],
-				{ duration: DURATION, easing: EASING, fill: 'forwards' }
-			);
-			const done = () => {
-				this._restoreReal(el);
-				this._removePinClone(clone);
-			};
-			anim.onfinish = done;
-			anim.oncancel = done;
-		}
-		this.pinSnapshot.clear();
-	}
-
-	private _ensurePinOverlay(): HTMLElement | null {
-		if (typeof document === 'undefined') return null;
-		if (this.pinOverlay && this.pinOverlay.isConnected) return this.pinOverlay;
-		const el = document.createElement('div');
-		el.className = 'og-layer-pin-anim';
-		el.style.position = 'fixed';
-		el.style.inset = '0';
-		el.style.overflow = 'hidden';
-		el.style.pointerEvents = 'none';
-		el.style.zIndex = '40';
-		document.body.appendChild(el);
-		this.pinOverlay = el;
-		return el;
-	}
-
-	private _restoreReal(el: HTMLElement): void {
-		if (!this.pinHiddenReals.has(el)) return;
-		const holder = el as unknown as { __pinPrevVis?: string };
-		el.style.visibility = holder.__pinPrevVis ?? '';
-		delete holder.__pinPrevVis;
-		this.pinHiddenReals.delete(el);
-	}
-
-	private _removePinClone(clone: HTMLElement): void {
-		if (clone.parentNode) clone.parentNode.removeChild(clone);
-		this.pinClones.delete(clone);
-	}
-
-	/** Tear down all pin clones + restore hidden cells. Called on capture, scroll-start, destroy. */
-	private clearPinClones(): void {
-		for (const el of Array.from(this.pinHiddenReals)) this._restoreReal(el);
-		for (const clone of Array.from(this.pinClones)) this._removePinClone(clone);
+		this.options.getGridRoot?.()?.classList.remove('og-pin-transition');
 	}
 
 	private run(el: HTMLElement, keyframes: Keyframe[], onSettle?: () => void): void {
@@ -366,15 +246,11 @@ export class LayoutTransitionController<TRowData = unknown> {
 			if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
 		}
 		this.exitGhosts.clear();
-		// Column-pin clones must not survive a scroll frame either.
-		this.clearPinClones();
-		this.pinSnapshot.clear();
+		this.clearColumnPinEffect();
 	}
 
 	public destroy(): void {
 		this.cancel();
 		this.snapshot.clear();
-		if (this.pinOverlay && this.pinOverlay.parentNode) this.pinOverlay.parentNode.removeChild(this.pinOverlay);
-		this.pinOverlay = null;
 	}
 }

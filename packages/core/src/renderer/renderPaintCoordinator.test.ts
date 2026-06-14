@@ -7,7 +7,7 @@ const SENTINEL_B = { tag: 'B' };
 function makeState(overrides?: Partial<RenderPaintCoordinatorState>): RenderPaintCoordinatorState {
 	return {
 		pendingTransition: false,
-		pendingPinTransition: false,
+		pendingPinEffect: false,
 		lastStyleRules: undefined,
 		lastLoading: undefined,
 		...overrides,
@@ -48,7 +48,7 @@ function makeDeps(
 		} as any,
 		orchestrator: { flush: vi.fn() } as any,
 		scrollCoordinator: { getIsScrolling: () => false },
-		layoutTransition: { beginAnimation: vi.fn(), beginColumnPin: vi.fn(), isColumnPinTransitionEnabled: vi.fn(() => false) } as any,
+		layoutTransition: { beginAnimation: vi.fn(), playColumnPinEffect: vi.fn() } as any,
 		recycleViewport: vi.fn(),
 		syncLayoutPlan: vi.fn(() => ({ renderWindow: {} })) as any,
 		updateCachedGeometryBoundsFromState: vi.fn(),
@@ -186,34 +186,33 @@ describe('RenderPaintCoordinator – flushPaint transition gate', () => {
 		expect(order).toEqual(['flush', 'beginAnimation']);
 	});
 
-	it('does NOT play the column-pin FLIP for a pin frame while the Plan 044 gate is off', () => {
+	it('plays the semantic column-pin effect for a pin frame after relayout', () => {
 		const deps = depsForReason('pin');
 		const state = makeState();
 		new RenderPaintCoordinator(deps, state).flushPaint();
 
-		expect((deps.layoutTransition as any).beginColumnPin).not.toHaveBeenCalled();
+		expect((deps.layoutTransition as any).playColumnPinEffect).toHaveBeenCalledTimes(1);
 		expect((deps.layoutTransition as any).beginAnimation).not.toHaveBeenCalled();
-		expect(state.pendingPinTransition).toBe(false);
+		expect(state.pendingPinEffect).toBe(false);
 	});
 
-	it('plays the column-pin FLIP only when the Plan 044 gate is explicitly enabled', () => {
+	it('plays the semantic column-pin effect AFTER orchestrator.flush has committed the layout', () => {
 		const deps = depsForReason('pin');
-		(deps.layoutTransition as any).isColumnPinTransitionEnabled = vi.fn(() => true);
-		const state = makeState();
-		new RenderPaintCoordinator(deps, state).flushPaint();
+		const order: string[] = [];
+		(deps.orchestrator as any).flush = vi.fn(() => order.push('flush'));
+		(deps.layoutTransition as any).playColumnPinEffect = vi.fn(() => order.push('pinEffect'));
+		new RenderPaintCoordinator(deps, makeState()).flushPaint();
 
-		expect((deps.layoutTransition as any).beginColumnPin).toHaveBeenCalledTimes(1);
-		expect((deps.layoutTransition as any).beginAnimation).not.toHaveBeenCalled();
-		expect(state.pendingPinTransition).toBe(false);
+		expect(order).toEqual(['flush', 'pinEffect']);
 	});
 
-	it('does NOT play the column-pin FLIP while scrolling', () => {
+	it('does NOT play the semantic column-pin effect while scrolling', () => {
 		const deps = depsForReason('pin', true);
 		const state = makeState();
 		new RenderPaintCoordinator(deps, state).flushPaint();
 
-		expect((deps.layoutTransition as any).beginColumnPin).not.toHaveBeenCalled();
-		expect(state.pendingPinTransition).toBe(false);
+		expect((deps.layoutTransition as any).playColumnPinEffect).not.toHaveBeenCalled();
+		expect(state.pendingPinEffect).toBe(false);
 	});
 
 	it('wraps orchestrator.flush in a portal release transaction', () => {
