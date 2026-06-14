@@ -84,18 +84,6 @@ const SearchIcon = () => (
 );
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-
-const PANEL_BG = '#0b0d14';
-const HEADER_BG = '#090a0f';
-const SECTION_BG = 'rgba(15, 23, 42, 0.6)';
-const BORDER = 'rgba(30, 41, 59, 0.7)';
-const TEXT = '#cbd5e1';
-const TEXT_MUTED = '#64748b';
-const ACCENT = '#3b82f6';
-const ACCENT_LIGHT = '#60a5fa';
-const GROUP_ACCENT = '#a78bfa';
-const GROUP_ACCENT_BG = 'rgba(167,139,250,0.12)';
-const GROUP_ACCENT_BORDER = 'rgba(167,139,250,0.35)';
 const SUCCESS = '#22c55e';
 const WARN = '#f59e0b';
 type ColumnViewMode = 'all' | 'groupable' | 'hidden';
@@ -115,6 +103,9 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	const stateGroupBy = useGridKeySelector<string[] | undefined>('groupBy', (s) => s.groupBy);
 	const showGroupFooter = useGridKeySelector<boolean>('showGroupFooter', (s) => !!s.showGroupFooter);
 	const enableStickyGroupRows = useGridKeySelector<boolean>('enableStickyGroupRows', (s) => !!s.enableStickyGroupRows);
+	// Subscribe to themeName so the panel re-renders when the theme changes.
+	useGridKeySelector('themeName', (s) => s.themeName);
+	const theme = api.getTheme();
 
 	// hasPersistence is fixed at grid-creation time — not reactive state, plain call is correct.
 	const hasPersistence = api.hasPersistence();
@@ -341,7 +332,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	const hiddenCount = allCols.length - visibleCount;
 
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: PANEL_BG }}>
+		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: theme.bgColor }}>
 			{/* Header */}
 			<div
 				style={{
@@ -350,18 +341,18 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 					padding: '0 12px',
 					height: 44,
 					flexShrink: 0,
-					background: HEADER_BG,
-					borderBottom: `1px solid ${BORDER}`,
+					background: theme.headerBg,
+					borderBottom: `1px solid ${theme.borderColor}`,
 					gap: 8,
 				}}
 			>
-				<span style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: TEXT }}>
+				<span style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textColor }}>
 					Columns
 				</span>
-				<span style={{ fontSize: 10, color: TEXT_MUTED, fontWeight: 600 }}>
+				<span style={{ fontSize: 10, color: theme.headerText, fontWeight: 600 }}>
 					{visibleCount}/{allCols.length}
 				</span>
-				<button onClick={onClose} style={iconBtnStyle}>
+				<button onClick={onClose} style={makeIconBtnStyle(theme.headerText)}>
 					<CloseIcon />
 				</button>
 			</div>
@@ -372,19 +363,19 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 					display: 'flex',
 					gap: 6,
 					padding: '7px 12px',
-					borderBottom: `1px solid ${BORDER}`,
+					borderBottom: `1px solid ${theme.borderColor}`,
 					flexShrink: 0,
 				}}
 			>
-				<button onClick={handleShowAll} style={pillBtnStyle(false)}>
+				<button onClick={handleShowAll} style={pillBtnStyle(false, theme)}>
 					Show all
 				</button>
-				<button onClick={handleHideAll} style={pillBtnStyle(false)}>
+				<button onClick={handleHideAll} style={pillBtnStyle(false, theme)}>
 					Hide all
 				</button>
 			</div>
 
-			<div style={{ padding: '8px 12px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+			<div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.borderColor}`, flexShrink: 0 }}>
 				<label
 					style={{
 						height: 28,
@@ -393,9 +384,9 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 						gap: 7,
 						padding: '0 8px',
 						borderRadius: 6,
-						border: `1px solid rgba(30,41,59,0.9)`,
-						background: 'rgba(15,23,42,0.7)',
-						color: TEXT_MUTED,
+						border: `1px solid ${theme.borderColor}`,
+						background: theme.headerBg,
+						color: theme.headerText,
 					}}
 				>
 					<SearchIcon />
@@ -409,28 +400,38 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 							border: 'none',
 							outline: 'none',
 							background: 'transparent',
-							color: TEXT,
+							color: theme.textColor,
 							fontSize: 11,
 							fontWeight: 600,
 							letterSpacing: 0,
 						}}
 					/>
 					{columnQuery && (
-						<button onClick={() => setColumnQuery('')} style={{ ...iconBtnStyle, width: 18, height: 18 }} title='Clear search'>
+						<button
+							onClick={() => setColumnQuery('')}
+							style={{ ...makeIconBtnStyle(theme.headerText), width: 18, height: 18 }}
+							title='Clear search'
+						>
 							<CloseIcon />
 						</button>
 					)}
 				</label>
 			</div>
 
-			<div style={{ display: 'flex', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
-				<SegmentButton active={columnView === 'all'} label={`All ${allCols.length}`} onClick={() => setColumnView('all')} />
+			<div style={{ display: 'flex', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${theme.borderColor}`, flexShrink: 0 }}>
+				<SegmentButton active={columnView === 'all'} label={`All ${allCols.length}`} onClick={() => setColumnView('all')} theme={theme} />
 				<SegmentButton
 					active={columnView === 'groupable'}
 					label={`Groupable ${groupableCols.length}`}
 					onClick={() => setColumnView('groupable')}
+					theme={theme}
 				/>
-				<SegmentButton active={columnView === 'hidden'} label={`Hidden ${hiddenCount}`} onClick={() => setColumnView('hidden')} />
+				<SegmentButton
+					active={columnView === 'hidden'}
+					label={`Hidden ${hiddenCount}`}
+					onClick={() => setColumnView('hidden')}
+					theme={theme}
+				/>
 			</div>
 
 			{/* Scrollable body */}
@@ -461,7 +462,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 										fontWeight: 700,
 										letterSpacing: '0.08em',
 										textTransform: 'uppercase',
-										color: GROUP_ACCENT,
+										color: theme.focusRing,
 										display: 'flex',
 										alignItems: 'center',
 										gap: 5,
@@ -470,7 +471,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 									<GroupIcon />
 									Row Groups
 								</span>
-								<span style={{ fontSize: 10, color: TEXT_MUTED, fontWeight: 700 }}>
+								<span style={{ fontSize: 10, color: theme.headerText, fontWeight: 700 }}>
 									{groupBy.length} active / {ungroupedGroupableCount} available
 								</span>
 							</div>
@@ -486,21 +487,21 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 								>
 									<button
 										onClick={() => api.expandAllGroups?.()}
-										style={{ ...iconBtnStyle, fontSize: 11, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
+										style={{ ...makeIconBtnStyle(theme.headerText), fontSize: 11, width: 'auto', padding: '0 4px' }}
 										title='Expand all groups'
 									>
 										Expand
 									</button>
 									<button
 										onClick={() => api.collapseAllGroups?.()}
-										style={{ ...iconBtnStyle, fontSize: 11, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
+										style={{ ...makeIconBtnStyle(theme.headerText), fontSize: 11, width: 'auto', padding: '0 4px' }}
 										title='Collapse all groups'
 									>
 										Collapse
 									</button>
 									<button
 										onClick={clearAllGroups}
-										style={{ ...iconBtnStyle, fontSize: 11, color: TEXT_MUTED, width: 'auto', padding: '0 4px' }}
+										style={{ ...makeIconBtnStyle(theme.headerText), fontSize: 11, width: 'auto', padding: '0 4px' }}
 										title='Clear all groups'
 									>
 										Clear
@@ -520,11 +521,11 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 								padding: hasGroups ? '4px' : '6px 8px',
 								borderRadius: 6,
 								border: groupDropZoneActive
-									? `1.5px dashed ${GROUP_ACCENT}`
+									? `1.5px dashed ${theme.focusRing}`
 									: hasGroups
-										? `1px solid ${GROUP_ACCENT_BORDER}`
+										? `1px solid ${theme.selectionBorder}`
 										: `1.5px dashed rgba(167,139,250,0.2)`,
-								background: groupDropZoneActive ? GROUP_ACCENT_BG : hasGroups ? 'rgba(167,139,250,0.05)' : 'transparent',
+								background: groupDropZoneActive ? theme.selectionBg : hasGroups ? 'rgba(167,139,250,0.05)' : 'transparent',
 								transition: 'border-color 0.12s, background 0.12s',
 								display: 'flex',
 								flexWrap: 'wrap',
@@ -533,7 +534,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 							}}
 						>
 							{!hasGroups && !groupDropZoneActive && (
-								<span style={{ fontSize: 10, color: TEXT_MUTED, userSelect: 'none' }}>Drag a column here to group</span>
+								<span style={{ fontSize: 10, color: theme.headerText, userSelect: 'none' }}>Drag a column here to group</span>
 							)}
 							{groupBy.map((field, idx) => {
 								const col = allCols.find((c) => c.field === field);
@@ -557,7 +558,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 											padding: '3px 6px 3px 4px',
 											borderRadius: 4,
 											background: isDragTarget ? 'rgba(167,139,250,0.25)' : 'rgba(167,139,250,0.15)',
-											border: isDragTarget ? `1px solid ${GROUP_ACCENT}` : `1px solid ${GROUP_ACCENT_BORDER}`,
+											border: isDragTarget ? `1px solid ${theme.focusRing}` : `1px solid ${theme.selectionBorder}`,
 											cursor: 'grab',
 											userSelect: 'none',
 											transition: 'background 0.08s',
@@ -572,7 +573,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 												fontWeight: 600,
 												letterSpacing: '0.04em',
 												textTransform: 'uppercase',
-												color: GROUP_ACCENT,
+												color: theme.focusRing,
 												maxWidth: 80,
 												overflow: 'hidden',
 												textOverflow: 'ellipsis',
@@ -584,10 +585,9 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 										<button
 											onClick={() => removeGroup(field)}
 											style={{
-												...iconBtnStyle,
+												...makeIconBtnStyle(theme.focusRing),
 												width: 14,
 												height: 14,
-												color: GROUP_ACCENT,
 												opacity: 0.7,
 											}}
 											title={`Remove ${label} group`}
@@ -608,7 +608,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 										fontWeight: 700,
 										letterSpacing: '0.08em',
 										textTransform: 'uppercase',
-										color: TEXT_MUTED,
+										color: theme.headerText,
 										marginBottom: 5,
 									}}
 								>
@@ -621,6 +621,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 										description='Footer row with aggregates below each leaf group'
 										checked={showGroupFooter}
 										onChange={(v) => api.setShowGroupFooter(v)}
+										theme={theme}
 									/>
 									<ToggleRow
 										icon={<StickyIcon />}
@@ -628,12 +629,13 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 										description='Group header rows stay visible while scrolling'
 										checked={enableStickyGroupRows}
 										onChange={(v) => api.setStickyGroupRows(v)}
+										theme={theme}
 									/>
 								</div>
 							</div>
 						)}
 
-						<div style={{ height: 1, background: BORDER, margin: '0 0 4px' }} />
+						<div style={{ height: 1, background: theme.borderColor, margin: '0 0 4px' }} />
 					</div>
 				)}
 
@@ -665,12 +667,12 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 									cursor: 'grab',
 									userSelect: 'none',
 									opacity: isHidden ? 0.42 : 1,
-									background: isDragTarget ? 'rgba(59,130,246,0.07)' : grouped ? SECTION_BG : 'transparent',
-									borderTop: isDragTarget ? `1.5px solid rgba(59,130,246,0.5)` : '1.5px solid transparent',
+									background: isDragTarget ? theme.rowHoverBg : grouped ? theme.selectionBg : 'transparent',
+									borderTop: isDragTarget ? `1.5px solid ${theme.focusRing}` : '1.5px solid transparent',
 									transition: 'background 0.08s, opacity 0.1s',
 								}}
 							>
-								<span style={{ color: '#2d3f55', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+								<span style={{ color: theme.headerText, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
 									<GripIcon />
 								</span>
 								<span
@@ -680,7 +682,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 										fontWeight: 600,
 										letterSpacing: '0.04em',
 										textTransform: 'uppercase',
-										color: grouped ? GROUP_ACCENT : isHidden ? '#475569' : TEXT,
+										color: grouped ? theme.focusRing : isHidden ? theme.headerText : theme.textColor,
 										overflow: 'hidden',
 										textOverflow: 'ellipsis',
 										whiteSpace: 'nowrap',
@@ -693,11 +695,10 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 										onClick={() => toggleGroup(col.field)}
 										title={grouped ? `Remove "${col.header}" from groups` : `Group by "${col.header}"`}
 										style={{
-											...iconBtnStyle,
-											color: grouped ? GROUP_ACCENT : TEXT_MUTED,
-											background: grouped ? GROUP_ACCENT_BG : 'transparent',
+											...makeIconBtnStyle(grouped ? theme.focusRing : theme.headerText),
+											background: grouped ? theme.selectionBg : 'transparent',
 											borderRadius: 4,
-											border: grouped ? `1px solid ${GROUP_ACCENT_BORDER}` : '1px solid transparent',
+											border: grouped ? `1px solid ${theme.selectionBorder}` : '1px solid transparent',
 										}}
 									>
 										<GroupIcon />
@@ -707,8 +708,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 									onClick={() => !isHidden && handleTogglePinLeft(col.field)}
 									title={isHidden ? 'Show column to pin' : isPinnedLeft ? 'Unpin column' : 'Pin column left'}
 									style={{
-										...iconBtnStyle,
-										color: isPinnedLeft ? ACCENT_LIGHT : TEXT_MUTED,
+										...makeIconBtnStyle(isPinnedLeft ? theme.focusRing : theme.headerText),
 										opacity: isHidden ? 0.3 : 1,
 										cursor: isHidden ? 'default' : 'pointer',
 									}}
@@ -719,8 +719,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 									onClick={() => !isHidden && handleTogglePinRight(col.field)}
 									title={isHidden ? 'Show column to pin' : isPinnedRight ? 'Unpin right' : 'Pin column right'}
 									style={{
-										...iconBtnStyle,
-										color: isPinnedRight ? ACCENT_LIGHT : TEXT_MUTED,
+										...makeIconBtnStyle(isPinnedRight ? theme.focusRing : theme.headerText),
 										opacity: isHidden ? 0.3 : 1,
 										cursor: isHidden ? 'default' : 'pointer',
 										transform: 'scaleX(-1)',
@@ -732,8 +731,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 									onClick={() => handleToggle(col.field, isHidden)}
 									title={isHidden ? 'Show column' : 'Hide column'}
 									style={{
-										...iconBtnStyle,
-										color: isHidden ? '#334155' : ACCENT_LIGHT,
+										...makeIconBtnStyle(isHidden ? theme.headerText : theme.focusRing),
 									}}
 								>
 									{isHidden ? <EyeClosedIcon /> : <EyeOpenIcon />}
@@ -749,7 +747,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 						style={{
 							flexShrink: 0,
 							marginTop: 'auto',
-							borderTop: `1px solid ${BORDER}`,
+							borderTop: `1px solid ${theme.borderColor}`,
 							padding: '8px 12px 10px',
 						}}
 					>
@@ -762,7 +760,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 									fontWeight: 700,
 									letterSpacing: '0.08em',
 									textTransform: 'uppercase',
-									color: TEXT_MUTED,
+									color: theme.headerText,
 								}}
 							>
 								Saved Settings
@@ -777,9 +775,10 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 							description='Automatically save settings after each change'
 							checked={persistStatus.autoSave}
 							onChange={(v) => api.setAutoSave(v)}
+							theme={theme}
 						/>
 
-						<div style={{ fontSize: 10, color: TEXT_MUTED, margin: '6px 0 7px', lineHeight: 1.4 }}>
+						<div style={{ fontSize: 10, color: theme.headerText, margin: '6px 0 7px', lineHeight: 1.4 }}>
 							Column order, visibility, widths, sort, filters, grouping, and pinning are persisted across sessions.
 						</div>
 						<div style={{ display: 'flex', gap: 5 }}>
@@ -792,9 +791,9 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 									fontWeight: 600,
 									letterSpacing: '0.04em',
 									borderRadius: 5,
-									border: `1px solid rgba(59,130,246,0.4)`,
-									background: 'rgba(59,130,246,0.1)',
-									color: ACCENT_LIGHT,
+									border: `1px solid ${theme.selectionBorder}`,
+									background: theme.selectionBg,
+									color: theme.focusRing,
 									cursor: 'pointer',
 									transition: 'all 0.15s',
 								}}
@@ -811,8 +810,8 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 									letterSpacing: '0.04em',
 									borderRadius: 5,
 									border: clearConfirm ? `1px solid rgba(239,68,68,0.5)` : `1px solid rgba(30,41,59,0.8)`,
-									background: clearConfirm ? 'rgba(239,68,68,0.12)' : 'rgba(15,23,42,0.5)',
-									color: clearConfirm ? '#f87171' : WARN,
+									background: clearConfirm ? 'rgba(239,68,68,0.12)' : 'rgba(180, 190, 213, 0.5)',
+									color: clearConfirm ? '#f87171' : theme.focusRing,
 									cursor: 'pointer',
 									transition: 'all 0.15s',
 								}}
@@ -834,7 +833,7 @@ function PersistenceStatusBadge({ status }: { status: PersistenceStatus }) {
 	let label: string;
 
 	if (!status.autoSave) {
-		color = TEXT_MUTED;
+		color = '#64748b';
 		label = 'Off';
 	} else if (status.status === 'saving') {
 		color = WARN;
@@ -880,7 +879,7 @@ function PersistenceStatusBadge({ status }: { status: PersistenceStatus }) {
 
 // ── Toggle row component ──────────────────────────────────────────────────────
 
-function SegmentButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+function SegmentButton({ active, label, onClick, theme }: { active: boolean; label: string; onClick: () => void; theme: ThemeTokens }) {
 	return (
 		<button
 			onClick={onClick}
@@ -889,9 +888,9 @@ function SegmentButton({ active, label, onClick }: { active: boolean; label: str
 				minWidth: 0,
 				height: 24,
 				borderRadius: 5,
-				border: active ? `1px solid rgba(96,165,250,0.45)` : `1px solid rgba(30,41,59,0.8)`,
-				background: active ? 'rgba(59,130,246,0.13)' : 'rgba(15,23,42,0.45)',
-				color: active ? ACCENT_LIGHT : TEXT_MUTED,
+				border: active ? `1px solid ${theme.selectionBorder}` : `1px solid ${theme.borderColor}`,
+				background: active ? theme.selectionBg : theme.headerBg,
+				color: active ? theme.focusRing : theme.headerText,
 				cursor: 'pointer',
 				fontSize: 9,
 				fontWeight: 800,
@@ -914,12 +913,14 @@ function ToggleRow({
 	description,
 	checked,
 	onChange,
+	theme,
 }: {
 	icon: React.ReactNode;
 	label: string;
 	description: string;
 	checked: boolean;
 	onChange: (v: boolean) => void;
+	theme: ThemeTokens;
 }) {
 	return (
 		<div
@@ -932,19 +933,19 @@ function ToggleRow({
 				padding: '5px 6px',
 				borderRadius: 5,
 				cursor: 'pointer',
-				background: checked ? GROUP_ACCENT_BG : 'transparent',
-				border: checked ? `1px solid ${GROUP_ACCENT_BORDER}` : '1px solid transparent',
+				background: checked ? theme.selectionBg : 'transparent',
+				border: checked ? `1px solid ${theme.selectionBorder}` : '1px solid transparent',
 				transition: 'background 0.1s, border-color 0.1s',
 				userSelect: 'none',
 			}}
 		>
-			<span style={{ color: checked ? GROUP_ACCENT : TEXT_MUTED, display: 'flex', flexShrink: 0 }}>{icon}</span>
+			<span style={{ color: checked ? theme.focusRing : '#64748b', display: 'flex', flexShrink: 0 }}>{icon}</span>
 			<span
 				style={{
 					flex: 1,
 					fontSize: 10,
 					fontWeight: 600,
-					color: checked ? GROUP_ACCENT : TEXT_MUTED,
+					color: checked ? theme.focusRing : '#64748b',
 				}}
 			>
 				{label}
@@ -955,8 +956,8 @@ function ToggleRow({
 					width: 28,
 					height: 15,
 					borderRadius: 999,
-					background: checked ? GROUP_ACCENT : 'rgba(30,41,59,0.8)',
-					border: checked ? `1px solid ${GROUP_ACCENT}` : '1px solid rgba(51,65,85,0.8)',
+					background: checked ? theme.focusRing : 'rgba(30,41,59,0.8)',
+					border: checked ? `1px solid ${theme.focusRing}` : '1px solid rgba(51,65,85,0.8)',
 					position: 'relative',
 					flexShrink: 0,
 					transition: 'background 0.15s, border-color 0.15s',
@@ -981,22 +982,25 @@ function ToggleRow({
 
 // ── Shared mini-style helpers ─────────────────────────────────────────────────
 
-const iconBtnStyle: React.CSSProperties = {
-	width: 24,
-	height: 24,
-	display: 'flex',
-	alignItems: 'center',
-	justifyContent: 'center',
-	borderRadius: 5,
-	border: 'none',
-	background: 'transparent',
-	cursor: 'pointer',
-	color: TEXT_MUTED,
-	padding: 0,
-	flexShrink: 0,
-};
+import type { ThemeTokens } from '@open-grid/core';
+function makeIconBtnStyle(color: string): React.CSSProperties {
+	return {
+		width: 24,
+		height: 24,
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderRadius: 5,
+		border: 'none',
+		background: 'transparent',
+		cursor: 'pointer',
+		color,
+		padding: 0,
+		flexShrink: 0,
+	};
+}
 
-function pillBtnStyle(active: boolean): React.CSSProperties {
+function pillBtnStyle(active: boolean, theme: ThemeTokens): React.CSSProperties {
 	return {
 		flex: 1,
 		height: 26,
@@ -1005,9 +1009,9 @@ function pillBtnStyle(active: boolean): React.CSSProperties {
 		letterSpacing: '0.04em',
 		textTransform: 'uppercase',
 		borderRadius: 5,
-		border: active ? `1px solid rgba(59,130,246,0.5)` : '1px solid rgba(30,41,59,0.8)',
-		background: active ? 'rgba(59,130,246,0.12)' : 'rgba(15,23,42,0.5)',
-		color: active ? ACCENT_LIGHT : TEXT_MUTED,
+		border: active ? `1px solid ${theme.selectionBorder}` : `1px solid ${theme.borderColor}`,
+		background: active ? theme.selectionBg : theme.headerBg,
+		color: active ? theme.focusRing : theme.headerText,
 		cursor: 'pointer',
 		padding: 0,
 	};

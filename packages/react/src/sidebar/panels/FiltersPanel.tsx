@@ -18,17 +18,6 @@ const ClearIcon = () => (
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const PANEL_BG = '#0b0d14';
-const HEADER_BG = '#090a0f';
-const BORDER = 'rgba(30, 41, 59, 0.7)';
-const TEXT = '#cbd5e1';
-const TEXT_MUTED = '#64748b';
-const ACCENT = '#3b82f6';
-const ACCENT_LIGHT = '#60a5fa';
-const INPUT_BG = 'rgba(15, 23, 42, 0.8)';
-const INPUT_BORDER = 'rgba(30, 41, 59, 0.9)';
-const INPUT_BORDER_FOCUS = 'rgba(59, 130, 246, 0.6)';
-
 type FilterOp = 'contains' | 'equals' | 'startsWith' | 'gt' | 'lt';
 
 const OPS: { value: FilterOp; label: string }[] = [
@@ -50,6 +39,9 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 	// Subscribe to both columns (to know what to filter) and filterModel (to show active values)
 	const columns = useGridKeySelector<ColumnDef<any>[]>('columns', (s) => s.columns as ColumnDef<any>[]);
 	const filterModel = useGridKeySelector<FilterModel | null>('filterModel', (s) => s.filterModel);
+	// Subscribe to themeName so the panel re-renders when the theme changes.
+	useGridKeySelector('themeName', (s) => s.themeName);
+	const theme = api.getTheme();
 
 	const displayedCols = api.getDisplayedColumns();
 	// Show filters for displayed columns only (hidden columns aren't filterable in UI)
@@ -92,7 +84,7 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 	const clearAll = () => api.setFilterModel(null);
 
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: PANEL_BG }}>
+		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: theme.bgColor }}>
 			{/* Header */}
 			<div
 				style={{
@@ -101,12 +93,12 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 					padding: '0 12px',
 					height: 44,
 					flexShrink: 0,
-					background: HEADER_BG,
-					borderBottom: `1px solid ${BORDER}`,
+					background: theme.headerBg,
+					borderBottom: `1px solid ${theme.borderColor}`,
 					gap: 8,
 				}}
 			>
-				<span style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: TEXT }}>
+				<span style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textColor }}>
 					Filters
 				</span>
 				{activeCount > 0 && (
@@ -115,9 +107,9 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 						style={{
 							fontSize: 10,
 							fontWeight: 600,
-							color: ACCENT_LIGHT,
-							background: 'rgba(59,130,246,0.1)',
-							border: '1px solid rgba(59,130,246,0.3)',
+							color: theme.focusRing,
+							background: theme.selectionBg,
+							border: `1px solid ${theme.selectionBorder}`,
 							borderRadius: 4,
 							padding: '2px 7px',
 							cursor: 'pointer',
@@ -127,7 +119,7 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 						Clear {activeCount}
 					</button>
 				)}
-				<button onClick={onClose} style={iconBtnStyle}>
+				<button onClick={onClose} style={makeIconBtnStyle(theme.headerText)}>
 					<CloseIcon />
 				</button>
 			</div>
@@ -135,7 +127,7 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 			{/* Filter inputs list */}
 			<div style={{ flex: 1, overflowY: 'auto', padding: '8px 0 12px' }}>
 				{displayedCols.length === 0 && (
-					<div style={{ padding: '20px 12px', textAlign: 'center', fontSize: 11, color: TEXT_MUTED }}>No columns to filter</div>
+					<div style={{ padding: '20px 12px', textAlign: 'center', fontSize: 11, color: theme.headerText }}>No columns to filter</div>
 				)}
 				{displayedCols.map((col) => {
 					const value = getFilterValue(col.field);
@@ -150,7 +142,7 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 									fontWeight: 700,
 									letterSpacing: '0.06em',
 									textTransform: 'uppercase',
-									color: hasValue ? ACCENT_LIGHT : TEXT_MUTED,
+									color: hasValue ? theme.focusRing : theme.headerText,
 									marginBottom: 5,
 									display: 'flex',
 									alignItems: 'center',
@@ -164,7 +156,7 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 											width: 6,
 											height: 6,
 											borderRadius: '50%',
-											background: ACCENT,
+											background: theme.focusRing,
 											display: 'inline-block',
 											flexShrink: 0,
 										}}
@@ -183,24 +175,24 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 										height: 28,
 										fontSize: 10,
 										fontWeight: 600,
-										background: INPUT_BG,
-										border: `1px solid ${hasValue ? 'rgba(59,130,246,0.4)' : INPUT_BORDER}`,
+										background: theme.headerBg,
+										border: `1px solid ${hasValue ? theme.selectionBorder : theme.borderColor}`,
 										borderRadius: 5,
-										color: hasValue ? TEXT : TEXT_MUTED,
+										color: hasValue ? theme.textColor : theme.headerText,
 										padding: '0 4px',
 										outline: 'none',
 										cursor: 'pointer',
 									}}
 								>
 									{OPS.map((o) => (
-										<option key={o.value} value={o.value} style={{ background: '#0f172a', color: '#f1f5f9' }}>
+										<option key={o.value} value={o.value} style={{ background: theme.headerBg, color: theme.textColor }}>
 											{o.label}
 										</option>
 									))}
 								</select>
 
 								<div style={{ flex: 1, position: 'relative' }}>
-									<FilterInput value={value} hasValue={hasValue} onChange={(v) => setFilter(col.field, v, op)} />
+									<FilterInput value={value} hasValue={hasValue} onChange={(v) => setFilter(col.field, v, op)} theme={theme} />
 									{hasValue && (
 										<button
 											onClick={() => clearFilter(col.field)}
@@ -217,7 +209,7 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 												borderRadius: 3,
 												border: 'none',
 												background: 'transparent',
-												color: TEXT_MUTED,
+												color: theme.headerText,
 												cursor: 'pointer',
 												padding: 0,
 											}}
@@ -237,7 +229,8 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 
 // ── Sub-component: controlled input with focus ring ───────────────────────────
 
-function FilterInput({ value, hasValue, onChange }: { value: string; hasValue: boolean; onChange: (v: string) => void }) {
+import type { ThemeTokens } from '@open-grid/core';
+function FilterInput({ value, hasValue, onChange, theme }: { value: string; hasValue: boolean; onChange: (v: string) => void; theme: ThemeTokens }) {
 	const [focused, setFocused] = React.useState(false);
 	return (
 		<input
@@ -251,10 +244,10 @@ function FilterInput({ value, hasValue, onChange }: { value: string; hasValue: b
 				width: '100%',
 				height: 28,
 				fontSize: 11,
-				background: INPUT_BG,
-				border: `1px solid ${focused ? INPUT_BORDER_FOCUS : hasValue ? 'rgba(59,130,246,0.35)' : INPUT_BORDER}`,
+				background: theme.headerBg,
+				border: `1px solid ${focused ? theme.focusRing : hasValue ? theme.selectionBorder : theme.borderColor}`,
 				borderRadius: 5,
-				color: TEXT,
+				color: theme.textColor,
 				padding: '0 24px 0 8px',
 				outline: 'none',
 				boxSizing: 'border-box',
@@ -264,17 +257,19 @@ function FilterInput({ value, hasValue, onChange }: { value: string; hasValue: b
 	);
 }
 
-const iconBtnStyle: React.CSSProperties = {
-	width: 24,
-	height: 24,
-	display: 'flex',
-	alignItems: 'center',
-	justifyContent: 'center',
-	borderRadius: 5,
-	border: 'none',
-	background: 'transparent',
-	cursor: 'pointer',
-	color: TEXT_MUTED,
-	padding: 0,
-	flexShrink: 0,
-};
+function makeIconBtnStyle(color: string): React.CSSProperties {
+	return {
+		width: 24,
+		height: 24,
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderRadius: 5,
+		border: 'none',
+		background: 'transparent',
+		cursor: 'pointer',
+		color,
+		padding: 0,
+		flexShrink: 0,
+	};
+}
