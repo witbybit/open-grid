@@ -813,6 +813,12 @@ export const CORE_STYLES = `
     background-color: var(--og-selection-bg);
   }
 
+  /* When the editor is mounted the editor border IS the focus ring — suppress the cell outline */
+  .og-cell:has(.og-cell-editor) {
+    outline: none;
+    padding: 0px;
+  }
+
   .og-cell-editor {
     position: absolute;
     inset: 0;
@@ -820,17 +826,72 @@ export const CORE_STYLES = `
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    padding: 0 12px;
+    margin: 0;
+    padding: 0 10px;
     border: 2px solid var(--og-focus-ring);
     outline: none;
-    background: var(--og-bg);
-    color: var(--og-text);
+    background: var(--og-bg-color);
+    color: var(--og-text-color);
     font: inherit;
   }
 
   .og-cell-pinned-left.og-cell-focused,
   .og-cell-pinned-right.og-cell-focused {
     z-index: 45;
+  }
+
+  /* ── Cell validation error ────────────────────────────────────────────────── */
+  .og-cell-invalid {
+    outline: 2px solid var(--og-error);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-error) 6%, transparent);
+    z-index: 15;
+  }
+
+  /* Error wins over selection bg — blend error tint into selection colour */
+  .og-cell-invalid.og-cell-selected {
+    background-color: color-mix(in srgb, var(--og-error) 8%, var(--og-selection-bg));
+  }
+
+  /* Error wins over focus outline colour and bg */
+  .og-cell-invalid.og-cell-focused {
+    outline-color: var(--og-error);
+    background-color: color-mix(in srgb, var(--og-error) 8%, var(--og-selection-bg));
+    z-index: 20;
+  }
+
+  /* Error border on the inline editor input when the cell is invalid */
+  .og-cell-invalid .og-cell-editor {
+    border-color: var(--og-error);
+  }
+
+  /* Validation error badge — shown inside the cell via og-cell-error-badge */
+  .og-cell-error-badge {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--og-error);
+    pointer-events: none;
+    flex-shrink: 0;
+  }
+
+  /* Validation error tooltip — shown on hover/focus of invalid cells */
+  .og-validation-tooltip {
+    position: fixed;
+    z-index: 9999;
+    padding: 5px 10px;
+    background: color-mix(in srgb, var(--og-error) 12%, var(--og-bg-color));
+    color: var(--og-error);
+    border: 1px solid color-mix(in srgb, var(--og-error) 40%, transparent);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
   }
 
   .og-cell-pinned-left .og-cell-editor,

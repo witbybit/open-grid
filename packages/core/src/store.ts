@@ -510,6 +510,16 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.editingFeature.commitEdit(rowId, colField, value);
 	};
 
+	public validateCell = (rowId: string, colField: string): Promise<string | null> => this.engine.validationFeature.validateCell(rowId, colField);
+	public validateGrid = (): Promise<import('./features/ValidationManager.js').CellValidationError[]> =>
+		this.engine.validationFeature.validateGrid();
+	public clearCellValidationError = (rowId: string, colField: string): void =>
+		this.engine.validationFeature.clearCellValidationError(rowId, colField);
+	public clearValidationErrors = (): void => this.engine.validationFeature.clearValidationErrors();
+	public getCellValidationError = (rowId: string, colField: string): string | null =>
+		this.engine.validationFeature.getCellValidationError(rowId, colField);
+	public hasValidationErrors = (): boolean => this.engine.validationFeature.hasValidationErrors();
+
 	public getColumnState = (): ColumnState[] => {
 		return this.engine.columnFeature.getColumnState();
 	};

@@ -723,7 +723,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		const col = this.runtime.getColumnDef(colField);
 		const oldValue = this.runtime.getCellValue(rowId, colField);
-		const updatedRow = col?.valueSetter ? { ...node.data } : node.data;
+		const updatedRow = { ...node.data };
 		if (col?.valueSetter) {
 			// Sync path: call valueSetter with params. Async setters are handled by commitEdit.
 			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
@@ -734,11 +734,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			setValueByPath(updatedRow, colField, value);
 		}
 
-		if (updatedRow !== node.data) {
-			node.setData(updatedRow);
-		} else {
-			node.clearValueCache();
-		}
+		node.setData(updatedRow);
 
 		// If the edited cell field affects active sorting, filtering, grouping, or aggregates,
 		// we must re-run the pipeline to update the row positions, visibility, or computed aggregates.

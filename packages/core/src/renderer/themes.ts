@@ -93,6 +93,12 @@ export interface ThemeTokens {
 	popoverInputBorder: string;
 
 	/* ─────────────────────────────────────────────────────────────────────
+     Semantic Status Colors
+     ───────────────────────────────────────────────────────────────────── */
+	/** Color used for validation errors: cell outline, badge background, tooltip accent. */
+	error: string;
+
+	/* ─────────────────────────────────────────────────────────────────────
      Sizing Tokens (optional but commonly needed)
      ───────────────────────────────────────────────────────────────────── */
 	leafHeaderHeight?: string;
@@ -159,6 +165,8 @@ export const LIGHT_THEME: ThemeTokens = {
 	popoverInputBg: '#ffffff',
 	popoverInputBorder: 'rgba(226, 232, 241, 0.8)',
 
+	error: '#dc2626',
+
 	leafHeaderHeight: '40px',
 	groupPanelHeight: '42px',
 	bottomChromeHeight: '0px',
@@ -223,6 +231,8 @@ export const DARK_THEME: ThemeTokens = {
 	popoverInputBg: 'rgba(30, 41, 59, 0.7)',
 	popoverInputBorder: 'rgba(255, 255, 255, 0.08)',
 
+	error: '#ef4444',
+
 	leafHeaderHeight: '40px',
 	groupPanelHeight: '42px',
 	bottomChromeHeight: '0px',
@@ -241,6 +251,7 @@ export const HIGH_CONTRAST_LIGHT_THEME: ThemeTokens = {
 	groupBadgeText: '#003d99',
 	detailRowText: '#333333',
 	popoverText: '#000000',
+	error: '#b91c1c',
 };
 
 /**
@@ -257,6 +268,7 @@ export const HIGH_CONTRAST_DARK_THEME: ThemeTokens = {
 	detailRowText: '#b0bec5',
 	popoverText: '#ffffff',
 	popoverBg: 'rgba(0, 0, 0, 0.98)',
+	error: '#ff4444',
 };
 
 /**
@@ -274,6 +286,7 @@ export const COOL_BLUE_THEME: ThemeTokens = {
 	groupBadgeBg: 'rgba(33, 150, 243, 0.2)',
 	groupBadgeBorder: 'rgba(33, 150, 243, 0.4)',
 	groupBadgeText: '#64b5f6',
+	error: '#f87171',
 };
 
 /**
@@ -291,6 +304,7 @@ export const WARM_ORANGE_THEME: ThemeTokens = {
 	groupBadgeBg: 'rgba(255, 152, 0, 0.2)',
 	groupBadgeBorder: 'rgba(255, 152, 0, 0.4)',
 	groupBadgeText: '#ffb74d',
+	error: '#fb923c',
 };
 
 /**
@@ -351,6 +365,8 @@ export const SPREADSHEET_THEME: ThemeTokens = {
 	popoverInputBg: '#ffffff',
 	popoverInputBorder: '#d0d0d0',
 
+	error: '#c0392b',
+
 	leafHeaderHeight: '40px',
 	groupPanelHeight: '42px',
 	bottomChromeHeight: '0px',
@@ -372,6 +388,7 @@ export const MINIMAL_MONOCHROME_THEME: ThemeTokens = {
 	groupBadgeBg: 'rgba(128, 128, 128, 0.15)',
 	groupBadgeBorder: 'rgba(128, 128, 128, 0.3)',
 	groupBadgeText: '#b0b0b0',
+	error: '#c0504d',
 };
 
 /**

@@ -112,6 +112,12 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		this.unsubscribers.push(this.deps.engine.eventBus.addEventListener(GridEventName.paginationChanged, () => this.deps.resetScroll()));
 		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));
 		this.unsubscribers.push(
+			this.deps.engine.stateManager.subscribeToKey('validationErrors', () => {
+				this.deps.engine.invalidation.invalidateViewport('validation');
+				this.requestFlushGated('validation');
+			})
+		);
+		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.selectionChanged, (event) => {
 				const { result, selection } = event.payload;
 				for (const cell of result.invalidatedCells) {

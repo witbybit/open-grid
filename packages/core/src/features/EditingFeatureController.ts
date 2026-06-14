@@ -9,6 +9,10 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	data: DataModel<TRowData>;
 	notifyCellChange: (rowId: string, colField: string) => void;
 	setCellValue: (rowId: string, colField: string, value: unknown, undoable?: boolean) => void;
+	/** Called when an edit commits successfully — removes any persistent validation error for the cell. */
+	clearValidationError?: (rowId: string, colField: string) => void;
+	/** Called when an edit fails validation — persists the error indicator even after the editor closes. */
+	setValidationError?: (rowId: string, colField: string, error: string) => void;
 }
 
 export class EditingFeatureController<TRowData = unknown> {
@@ -17,6 +21,8 @@ export class EditingFeatureController<TRowData = unknown> {
 	private readonly data: DataModel<TRowData>;
 	private readonly notifyCellChange: (rowId: string, colField: string) => void;
 	private readonly setCellValue: (rowId: string, colField: string, value: unknown, undoable?: boolean) => void;
+	private readonly clearValidationError?: (rowId: string, colField: string) => void;
+	private readonly setValidationError?: (rowId: string, colField: string, error: string) => void;
 
 	constructor(deps: EditingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
@@ -24,6 +30,8 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.data = deps.data;
 		this.notifyCellChange = deps.notifyCellChange;
 		this.setCellValue = deps.setCellValue;
+		this.clearValidationError = deps.clearValidationError;
+		this.setValidationError = deps.setValidationError;
 	}
 
 	private canEditCell(rowId: string, colField: string): boolean {
@@ -87,6 +95,8 @@ export class EditingFeatureController<TRowData = unknown> {
 					});
 					this.notifyCellChange(rowId, colField);
 				}
+				// Persist the error so the red-border indicator survives after the editor closes
+				this.setValidationError?.(rowId, colField, error);
 				return false;
 			}
 		}
@@ -120,6 +130,8 @@ export class EditingFeatureController<TRowData = unknown> {
 		}
 
 		this.stopEdit(false);
+		// Clear any persistent validation indicator now that the value is valid
+		this.clearValidationError?.(rowId, colField);
 		return true;
 	}
 }

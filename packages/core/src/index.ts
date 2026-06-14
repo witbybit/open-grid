@@ -86,6 +86,7 @@ export type { GroupPathItem } from './rows/visualRowIds.js';
 export type { IGridDatasource } from './serverRowModel.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
 export type { BatchCellValueUpdate } from './features/DataMutationController.js';
+export type { CellValidationError } from './features/ValidationManager.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
 export type { GridNavigationOptions } from './navigation.js';
 

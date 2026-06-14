@@ -88,4 +88,4 @@ export type {
 	SelectAllRowsOptions,
 } from './types.js';
 
-export type { GridContextMenuOptions, GridContextMenuItem, GridCellPointer, HeaderMenuRendererProps } from '@open-grid/core';
+export type { GridContextMenuOptions, GridContextMenuItem, GridCellPointer, HeaderMenuRendererProps, CellValidationError } from '@open-grid/core';

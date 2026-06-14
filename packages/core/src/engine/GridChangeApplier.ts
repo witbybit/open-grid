@@ -21,7 +21,10 @@ export type GridChangeReason =
 	| 'editing:start'
 	| 'editing:stop'
 	| 'editing:validation'
-	| 'editing:save-failed';
+	| 'editing:save-failed'
+	| 'validation:cell'
+	| 'validation:grid'
+	| 'validation:clear-all';
 
 export interface GridChange<TRowData = unknown> {
 	reason: GridChangeReason;

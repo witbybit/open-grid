@@ -116,5 +116,11 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		getVisualRowCount: source.getVisualRowCount,
 		getVisualIndexByRowId: source.getVisualIndexByRowId,
 		getRowModel: source.getRowModel,
+		validateCell: source.validateCell,
+		validateGrid: source.validateGrid,
+		clearCellValidationError: source.clearCellValidationError,
+		clearValidationErrors: source.clearValidationErrors,
+		getCellValidationError: source.getCellValidationError,
+		hasValidationErrors: source.hasValidationErrors,
 	};
 }

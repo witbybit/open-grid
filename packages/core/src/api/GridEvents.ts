@@ -42,6 +42,8 @@ export enum GridEventName {
 	serverBlockLoadFailed = 'serverBlockLoadFailed',
 	showGroupFooterChanged = 'showGroupFooterChanged',
 	sortChanged = 'sortChanged',
+	cellValidationChanged = 'cellValidationChanged',
+	gridValidated = 'gridValidated',
 }
 
 export interface GridEventPayloadMap<TRowData = unknown> {
@@ -95,4 +97,6 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	};
 	[GridEventName.showGroupFooterChanged]: { showGroupFooter: boolean | undefined };
 	[GridEventName.sortChanged]: { sortModel: SortModel | null };
+	[GridEventName.cellValidationChanged]: { rowId: string; colField: string; error: string | null };
+	[GridEventName.gridValidated]: { errors: Array<{ rowId: string; colField: string; error: string }>; hasErrors: boolean };
 }

@@ -88,6 +88,12 @@ export interface GridUIState {
 	loading?: boolean;
 	loadingSkeletonCount?: number;
 	activeEdit: ActiveEditState | null;
+	/**
+	 * Sparse map of `rowId:colField` → error message for cells with active validation errors.
+	 * Set by `api.validateCell()` / `api.validateGrid()`, cleared by `api.clearValidationErrors()`.
+	 * Also populated when a cell edit fails validation and the editor is closed without fixing it.
+	 */
+	validationErrors?: Record<string, string>;
 	sidebarOpenPanel?: string | null;
 	chartOpen?: boolean;
 	serverPagination?: {

@@ -15,6 +15,8 @@ import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 
 export type { CsvExportOptions };
 export type { RuntimeFault };
+export type { CellValidationError } from '../features/ValidationManager.js';
+import type { CellValidationError } from '../features/ValidationManager.js';
 
 // ── Cell / selection types ────────────────────────────────────────────────────
 
@@ -380,6 +382,28 @@ export interface GridApi<TRowData = unknown> {
 	 * Returns true when the commit succeeded and `stopEditing` was called.
 	 */
 	commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean>;
+
+	// ── Validation API ────────────────────────────────────────────────────────
+	/**
+	 * Validate a single cell by running its column's `valueValidator` against the current value.
+	 * Sets a persistent red-border indicator on failure; clears it on pass.
+	 * Returns the error message string, or null when the cell is valid.
+	 */
+	validateCell(rowId: string, colField: string): Promise<string | null>;
+	/**
+	 * Run all column validators across every data row.
+	 * Returns the list of failures. Visual error indicators are applied to all failing cells
+	 * and `gridValidated` is fired with the full result.
+	 */
+	validateGrid(): Promise<CellValidationError[]>;
+	/** Clear the validation error for a single cell. */
+	clearCellValidationError(rowId: string, colField: string): void;
+	/** Clear all validation errors on the grid. */
+	clearValidationErrors(): void;
+	/** Returns the current validation error message for a cell, or null if none. */
+	getCellValidationError(rowId: string, colField: string): string | null;
+	/** Returns true when at least one cell has an active validation error. */
+	hasValidationErrors(): boolean;
 	/** Returns a per-column snapshot of the current user-configurable state (width, visibility, pinning, sort) in column order. */
 	getColumnState(): ColumnState[];
 	/** Apply a partial column state array. Only fields present in `states` are updated; others are unchanged.

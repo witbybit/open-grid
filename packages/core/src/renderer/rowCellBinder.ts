@@ -8,6 +8,7 @@ import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
+import { validationKey } from '../features/ValidationManager.js';
 
 function buildCellPinClass(colIndex: number, pinLeftColumns: number, pinRightStart: number): string {
 	if (colIndex < pinLeftColumns) return 'og-cell og-cell-pinned-left';
@@ -157,6 +158,9 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 
 	if (access.isSelected) cellClassName += ' og-cell-selected';
 	if (access.isLoading) cellClassName += ' og-cell-loading';
+
+	const validationError = state.validationErrors?.[validationKey(node.id, col.field)];
+	if (validationError) cellClassName += ' og-cell-invalid';
 
 	const compiledStyleRules = compileStyleRules(state.styleRules);
 	if (compiledStyleRules.hasCellRules && node.data) {

@@ -38,6 +38,7 @@ import { GridChangeApplier } from './GridChangeApplier.js';
 import { ColumnFeatureController } from '../features/ColumnFeatureController.js';
 import { GroupingFeatureController } from '../features/GroupingFeatureController.js';
 import { EditingFeatureController } from '../features/EditingFeatureController.js';
+import { ValidationManager } from '../features/ValidationManager.js';
 import { RowSelectionFeatureController } from '../features/RowSelectionFeatureController.js';
 import { DataMutationController } from '../features/DataMutationController.js';
 import { GridStateFeatureController } from '../features/GridStateFeatureController.js';
@@ -64,6 +65,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly columnFeature: ColumnFeatureController<TRowData>;
 	public readonly groupingFeature: GroupingFeatureController<TRowData>;
 	public readonly editingFeature: EditingFeatureController<TRowData>;
+	public readonly validationFeature: ValidationManager<TRowData>;
 	public readonly rowSelectionFeature: RowSelectionFeatureController<TRowData>;
 	public readonly dataMutation: DataMutationController<TRowData>;
 	public readonly stateFeature: GridStateFeatureController<TRowData>;
@@ -262,12 +264,19 @@ export class GridEngine<TRowData = unknown> {
 			getRowModel: () => this.rowModel,
 			invalidation: this.invalidation,
 		});
+		this.validationFeature = new ValidationManager<TRowData>({
+			ctx: featureContext,
+			getRowModel: () => this.rowModel,
+			data: this.data,
+		});
 		this.editingFeature = new EditingFeatureController<TRowData>({
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			data: this.data,
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
 			setCellValue: (rowId, colField, value, undoable) => this.setCellValue(rowId, colField, value, undoable),
+			clearValidationError: (rowId, colField) => this.validationFeature._setCellError(rowId, colField, null),
+			setValidationError: (rowId, colField, error) => this.validationFeature._setCellError(rowId, colField, error),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
 		this.stateFeature = new GridStateFeatureController<TRowData>({

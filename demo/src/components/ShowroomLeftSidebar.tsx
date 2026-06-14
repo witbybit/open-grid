@@ -17,6 +17,7 @@ import {
 	Boxes,
 	Layers,
 	CheckSquare,
+	ClipboardCheck,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -112,6 +113,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Row Multi-Select',
 			subtitle: 'Checkbox · Ctrl+Click · Bulk Ops',
 			icon: CheckSquare,
+		},
+		{
+			id: 'crud',
+			label: 'CRUD & Validation',
+			subtitle: 'Validate · Submit · Error Feedback',
+			icon: ClipboardCheck,
 		},
 	] as const;
 
