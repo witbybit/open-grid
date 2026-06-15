@@ -26,6 +26,7 @@ const RowMultiSelectDemo = lazy(() => import('./pages/RowMultiSelectDemo'));
 const CrudValidationDemo = lazy(() => import('./pages/CrudValidationDemo'));
 const WideGridDemo = lazy(() => import('./pages/WideGridDemo'));
 const ColumnGroupHeaderDemo = lazy(() => import('./pages/ColumnGroupHeaderDemo'));
+const ClipboardDemo = lazy(() => import('./pages/ClipboardDemo'));
 
 const PAGES: readonly GridPageType[] = [
 	'perf',
@@ -232,6 +233,7 @@ export default function App() {
 		if (activePage === 'multiselect') return <RowMultiSelectDemo {...commonGridProps} />;
 		if (activePage === 'wide') return <WideGridDemo {...commonGridProps} />;
 		if (activePage === 'colgroups') return <ColumnGroupHeaderDemo {...commonGridProps} />;
+		if (activePage === 'clipboard') return <ClipboardDemo />;
 		return <CrudValidationDemo {...commonGridProps} />;
 	})();
 

@@ -17,6 +17,7 @@ export enum GridEventName {
 	cellClicked = 'cellClicked',
 	cellInvalidated = 'cellInvalidated',
 	cellsCopied = 'cellsCopied',
+	cellsPasted = 'cellsPasted',
 	cellValueChanged = 'cellValueChanged',
 	columnOrderChanged = 'columnOrderChanged',
 	columnReorderToggled = 'columnReorderToggled',
@@ -50,7 +51,8 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.aggDefsChanged]: { aggDefs: AggregationDef<TRowData>[] | undefined };
 	[GridEventName.cellClicked]: GridCellClickParams<TRowData>;
 	[GridEventName.cellInvalidated]: { rowId: string; colField: string };
-	[GridEventName.cellsCopied]: { cells: Array<{ rowId: string; colField: string }> };
+	[GridEventName.cellsCopied]: { cells: Array<{ rowId: string; colField: string }>; rowCount: number; colCount: number; text: string };
+	[GridEventName.cellsPasted]: { rowCount: number; colCount: number };
 	[GridEventName.cellValueChanged]: { rowId: string; colField: string; oldValue: unknown; newValue: unknown };
 	[GridEventName.columnOrderChanged]: { columns: ColumnDef<TRowData>[]; columnFields: string[] };
 	[GridEventName.columnReorderToggled]: { enabled: boolean };

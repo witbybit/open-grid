@@ -18,7 +18,8 @@ export type GridPageType =
 	| 'multiselect'
 	| 'crud'
 	| 'wide'
-	| 'colgroups';
+	| 'colgroups'
+	| 'clipboard';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================

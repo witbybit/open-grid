@@ -287,6 +287,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public setColumnWidth = (colField: string, width: number): void => this.engine.resizeColumn(colField, width);
 	public autoSizeColumn = (colField: string, options?: AutoSizeColumnOptions): void => this.engine.autoSizeColumn(colField, options);
 	public autoSizeAllColumns = (options?: AutoSizeAllColumnsOptions): void => this.engine.autoSizeAllColumns(options);
+	public copySelectedRange = (): Promise<void> => this.engine.copySelectedRange();
+	public pasteFromClipboard = (): Promise<void> => this.engine.pasteFromClipboard();
+	public copyRange = (minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void> => this.engine.copyRange(minRow, maxRow, minCol, maxCol);
 	public setColumnVisible = (colField: string, visible: boolean): void => this.setColumnsVisible([colField], visible);
 
 	public setColumnsVisible = (colFields: string[], visible: boolean): void => {

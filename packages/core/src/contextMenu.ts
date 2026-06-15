@@ -325,45 +325,8 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		window.addEventListener('resize', this.hide);
 	}
 
-	private copySelectedRange(params: ContextMenuParams<TRowData>): void {
-		const bounds = params.selection.bounds;
-		if (!bounds) return;
-
-		const rows: string[] = [];
-		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-			const visualRow = this.runtime.getVisualRow(r);
-			if (visualRow?.kind !== 'data') continue;
-			const rowId = visualRow.rowId;
-			const rowVals: string[] = [];
-			for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-				const col = params.api.getState().columns[c];
-				if (!col) continue;
-				const val = this.runtime.getCellValue(rowId, col.field);
-				rowVals.push(val !== undefined && val !== null ? String(val) : '');
-			}
-			rows.push(rowVals.join('\t'));
-		}
-
-		const tsvString = rows.join('\n');
-
-		if (navigator.clipboard && navigator.clipboard.writeText) {
-			navigator.clipboard.writeText(tsvString).catch((err) => {
-				this.reportFault('context-menu-copy', err);
-			});
-		} else {
-			const textarea = document.createElement('textarea');
-			textarea.value = tsvString;
-			textarea.style.position = 'fixed';
-			document.body.appendChild(textarea);
-			textarea.focus();
-			textarea.select();
-			try {
-				document.execCommand('copy');
-			} catch (err) {
-				this.reportFault('context-menu-copy-fallback', err);
-			}
-			document.body.removeChild(textarea);
-		}
+	private copySelectedRange(_params: ContextMenuParams<TRowData>): void {
+		void this.runtime.copySelectedRange();
 	}
 
 	private cutSelectedRange(params: ContextMenuParams<TRowData>): void {
@@ -371,42 +334,8 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		this.clearSelection(params);
 	}
 
-	private async pasteSelectedRange(params: ContextMenuParams<TRowData>): Promise<void> {
-		const bounds = params.selection.bounds;
-		if (!bounds) return;
-
-		try {
-			const text = await navigator.clipboard.readText();
-			if (!text) return;
-
-			const pasteUpdates: { rowId: string; colField: string; value: unknown }[] = [];
-			const lines = text.split(/\r?\n/);
-			for (let r = 0; r < lines.length; r++) {
-				const rowIndex = bounds.minRow + r;
-				if (rowIndex > bounds.maxRow) break;
-				const visualRow = this.runtime.getVisualRow(rowIndex);
-				if (visualRow?.kind !== 'data') continue;
-				const rowId = visualRow.rowId;
-				const cells = lines[r].split('\t');
-				for (let c = 0; c < cells.length; c++) {
-					const colIndex = bounds.minCol + c;
-					if (colIndex > bounds.maxCol) break;
-					const col = params.api.getState().columns[colIndex];
-					if (!col) continue;
-					let value: unknown = cells[c];
-					if (col.onPaste) {
-						const row = params.api.getRawRowById(rowId);
-						if (row !== null) {
-							value = col.onPaste({ row, rowId, colField: col.field, pastedText: cells[c] });
-						}
-					}
-					pasteUpdates.push({ rowId, colField: col.field, value });
-				}
-			}
-			if (pasteUpdates.length > 0) this.runtime.batchCellValues(pasteUpdates, 'paste');
-		} catch (err) {
-			this.reportFault('context-menu-paste', err);
-		}
+	private async pasteSelectedRange(_params: ContextMenuParams<TRowData>): Promise<void> {
+		return this.runtime.pasteFromClipboard();
 	}
 
 	private clearSelection(params: ContextMenuParams<TRowData>): void {

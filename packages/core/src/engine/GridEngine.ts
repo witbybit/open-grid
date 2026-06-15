@@ -48,6 +48,7 @@ import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import { ColumnAutoSizeController } from '../features/ColumnAutoSizeController.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from '../features/ColumnAutoSizeController.js';
+import { ClipboardController } from '../features/ClipboardController.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -66,6 +67,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly changeApplier: GridChangeApplier<TRowData>;
 	public readonly columnFeature: ColumnFeatureController<TRowData>;
 	public readonly columnAutoSize: ColumnAutoSizeController<TRowData>;
+	public readonly clipboard: ClipboardController<TRowData>;
 	public readonly groupingFeature: GroupingFeatureController<TRowData>;
 	public readonly editingFeature: EditingFeatureController<TRowData>;
 	public readonly validationFeature: ValidationManager<TRowData>;
@@ -272,6 +274,17 @@ export class GridEngine<TRowData = unknown> {
 			getRowModel: () => this.rowModel,
 			getContainerElement: () => this.getContainerElement?.() ?? null,
 		});
+		this.clipboard = new ClipboardController<TRowData>({
+			getState: () => this.stateManager.getState(),
+			getVisualRow: (idx) => this.rowModel?.getVisualRow(idx) ?? null,
+			getVisualIndexByRowId: (id) => this.rowModel?.getVisualIndexByRowId(id) ?? null,
+			getColumnIndex: (f) => this.columns.getColumnIndex(f),
+			getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),
+			getCheapDisplayValue: (rowId, colField) => this.data.getCheapDisplayValue(rowId, colField),
+			getRawRowById: (rowId) => this.rowModel?.getRawRowById(rowId) ?? null,
+			batchCellValues: (updates, source) => this.batchCellValues(updates, source),
+			dispatchEvent: (type, payload) => this.eventBus.dispatchEvent(type, payload),
+		});
 		this.groupingFeature = new GroupingFeatureController<TRowData>({
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
@@ -466,6 +479,10 @@ export class GridEngine<TRowData = unknown> {
 	public autoSizeAllColumns(opts?: AutoSizeAllColumnsOptions): void {
 		this.columnAutoSize.autoSizeAllColumns(opts);
 	}
+
+	public copySelectedRange(): Promise<void> { return this.clipboard.copySelectedRange(); }
+	public pasteFromClipboard(): Promise<void> { return this.clipboard.pasteFromClipboard(); }
+	public copyRange(minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void> { return this.clipboard.copyRange(minRow, maxRow, minCol, maxCol); }
 
 	public moveColumn(colField: string, toIndex: number): void {
 		this.columnFeature.moveColumn(colField, toIndex);

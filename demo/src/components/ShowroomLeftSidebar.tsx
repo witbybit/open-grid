@@ -18,6 +18,7 @@ import {
 	Layers,
 	CheckSquare,
 	ClipboardCheck,
+	Clipboard,
 	TableProperties,
 	LayoutTemplate,
 } from 'lucide-react';
@@ -133,6 +134,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Column Groups',
 			subtitle: '1-Level & 2-Level Header Bands',
 			icon: LayoutTemplate,
+		},
+		{
+			id: 'clipboard',
+			label: 'Clipboard',
+			subtitle: 'Copy · Paste · TSV · Formatters',
+			icon: Clipboard,
 		},
 	] as const;
 

@@ -181,12 +181,11 @@ describe('GridContextMenuPlugin', () => {
 		expect(store.getCellValue('r2', 'price')).toBe('888');
 	});
 
-	it('should report clipboard failures through runtime diagnostics', async () => {
-		const copyError = new Error('copy denied');
+	it('should silently ignore clipboard permission errors (no runtime faults)', async () => {
 		Object.defineProperty(navigator, 'clipboard', {
 			value: {
 				readText: vi.fn().mockRejectedValue(new Error('paste denied')),
-				writeText: vi.fn().mockRejectedValue(copyError),
+				writeText: vi.fn().mockRejectedValue(new Error('copy denied')),
 			},
 			writable: true,
 			configurable: true,
@@ -201,14 +200,13 @@ describe('GridContextMenuPlugin', () => {
 			selection: state.selection,
 		};
 
+		// Copy and paste should not throw even when clipboard access is denied
 		testPlugin.copySelectedRange(params);
 		await Promise.resolve();
 		await testPlugin.pasteSelectedRange(params);
 
-		const faults = store.getRuntimeFaults();
-		expect(faults.map((fault) => fault.operation)).toEqual(['context-menu-copy', 'context-menu-paste']);
-		expect(faults[0].source).toBe('plugin');
-		expect(faults[0].context).toEqual({ plugin: 'contextMenu' });
+		// ClipboardController silently ignores clipboard errors (consistent with navigation plugin behavior)
+		expect(store.getRuntimeFaults()).toHaveLength(0);
 	});
 
 	it('should select all cells in the grid', () => {

@@ -356,6 +356,12 @@ export interface GridApi<TRowData = unknown> {
 	autoSizeColumn(colField: string, options?: AutoSizeColumnOptions): void;
 	/** Resize all visible columns to fit their content. */
 	autoSizeAllColumns(options?: AutoSizeAllColumnsOptions): void;
+	/** Copy the current cell selection to the clipboard as TSV. */
+	copySelectedRange(): Promise<void>;
+	/** Paste TSV text from clipboard into the grid starting at the current focus/selection. */
+	pasteFromClipboard(): Promise<void>;
+	/** Copy a specific visual row/column range to the clipboard as TSV. */
+	copyRange(minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void>;
 	setColumnVisible(colField: string, visible: boolean): void;
 	setColumnsVisible(colFields: string[], visible: boolean): void;
 	getColumns(): ColumnDef<TRowData>[];
