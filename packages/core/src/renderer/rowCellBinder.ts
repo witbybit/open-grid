@@ -77,6 +77,14 @@ export interface BindCellDuringScrollRequest<TRowData = unknown> {
 	isRowLoading: boolean;
 }
 
+function applyValueFormatter<TRowData>(col: ColumnDef<TRowData>, value: unknown, node: RowNode<TRowData>): string {
+	if (col.valueFormatter) {
+		return col.valueFormatter({ value, rowData: node.data as TRowData, colDef: col, rowId: node.id });
+	}
+	if (value == null) return '';
+	return String(value);
+}
+
 function getCheapCellText<TRowData>(
 	deps: RowCellBinderDeps<TRowData>,
 	node: RowNode<TRowData>,
@@ -87,15 +95,15 @@ function getCheapCellText<TRowData>(
 	const isScrolling = ctx ? ctx.isScrolling : deps.getIsScrollFrameActive() || deps.engine.isScrolling;
 	if (isScrolling) {
 		const cachedVal = deps.engine.data.getCachedDisplayValue(node.id, col.field);
-		if (cachedVal !== undefined) return cachedVal;
+		if (cachedVal !== undefined) return col.valueFormatter ? applyValueFormatter(col, cachedVal, node) : cachedVal;
 		return cellSlot?.lastFormattedValue ?? '';
 	}
 	if (col.valueGetter || deps.engine.hasFormula(node.id, col.field)) {
 		const val = deps.engine.data.getCellValue(node.id, col.field);
-		return val == null ? '' : String(val);
+		return applyValueFormatter(col, val, node);
 	}
 	const raw = node.data ? (node.data as Record<string, unknown>)[col.field] : undefined;
-	return raw == null ? '' : String(raw);
+	return applyValueFormatter(col, raw, node);
 }
 
 function getScrollMountValue<TRowData>(
@@ -293,6 +301,9 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			cellKey: stableKey,
 			container: portalHost,
 			value: access.value,
+			formattedValue: access.value != null && col.valueFormatter
+				? col.valueFormatter({ value: access.value, rowData: node.data as TRowData, colDef: col, rowId: node.id })
+				: access.value != null ? String(access.value) : '',
 			node,
 			col,
 			rowIndex,

@@ -189,6 +189,17 @@ export interface CellPasteParams<TRowData = unknown> {
 	row: TRowData;
 }
 
+export interface ValueFormatterParams<TRowData = unknown> {
+	/** The raw cell value (from field, valueGetter, or formula). */
+	value: unknown;
+	/** The complete row data object. */
+	rowData: TRowData;
+	/** The column definition. */
+	colDef: ColumnDef<TRowData>;
+	/** The row ID. */
+	rowId: string;
+}
+
 export interface ColumnDef<TRowData = unknown> {
 	field: string;
 	header: string;
@@ -200,6 +211,15 @@ export interface ColumnDef<TRowData = unknown> {
 	loading?: boolean;
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
 	valueGetterDependencies?: string[];
+	/**
+	 * Converts the raw cell value (from field, valueGetter, or formula) into a display string.
+	 * Used by: default text renderer, CSV export, tooltip (when no custom tooltip is set),
+	 * and the `formattedValue` prop passed to custom React cell renderers.
+	 *
+	 * @example
+	 * valueFormatter: ({ value }) => value != null ? `$${Number(value).toFixed(2)}` : ''
+	 */
+	valueFormatter?: (params: ValueFormatterParams<TRowData>) => string;
 	/**
 	 * Called before committing an edit to validate the new value.
 	 * Return a non-empty string to block the commit and surface an error message.

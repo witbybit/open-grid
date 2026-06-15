@@ -17,6 +17,12 @@ export interface GridCellContentMount<TRowData = unknown> {
 	cellKey: string;
 	container: HTMLElement;
 	value: unknown;
+	/**
+	 * The formatted string produced by the column's `valueFormatter`, or `String(value)` if none is set.
+	 * Custom React cell renderers can display this instead of formatting the raw value themselves.
+	 * Undefined when the mount is triggered by internal re-mount paths that don't have access to the value.
+	 */
+	formattedValue?: string;
 	node: RowNode<TRowData>;
 	col: ColumnDef<TRowData>;
 	rowIndex?: number;
