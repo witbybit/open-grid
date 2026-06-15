@@ -290,6 +290,12 @@ export interface ColumnDef<TRowData = unknown> {
 	 * When omitted, distinct values are derived from row data via `api.getColumnDistinctValues()`.
 	 */
 	filterValues?: (string | number | null)[];
+	/**
+	 * Custom floating filter renderer for this column (Plan 060).
+	 * Receives a `FloatingFilterRendererParams` object and must populate `eCell`.
+	 * When omitted, the default input (text / number / date / set badge) is used.
+	 */
+	floatingFilterRenderer?: (params: import('./renderer/floatingFilterRenderer.js').FloatingFilterRendererParams<TRowData>) => void;
 }
 
 /**

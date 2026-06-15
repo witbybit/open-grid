@@ -389,6 +389,8 @@ export interface GridApi<TRowData = unknown> {
 	setShowGroupFooter(enabled: boolean): void;
 	setStickyGroupRows(enabled: boolean): void;
 	setShowGroupPanel(enabled: boolean): void;
+	/** Toggle the floating filter row (always-visible inline filter inputs below column headers). */
+	setShowFloatingFilters(enabled: boolean): void;
 	toggleGroupExpanded(groupId: string): void;
 	toggleDetailExpanded(rowId: string): void;
 	isGroupExpanded(groupId: string): boolean;

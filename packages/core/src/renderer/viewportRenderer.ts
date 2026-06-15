@@ -30,6 +30,13 @@ export class ViewportRenderer<TRowData = unknown> {
 	public headerLayer: HTMLDivElement | null = null;
 	public headerLeftLayer: HTMLDivElement | null = null;
 	public headerRightLayer: HTMLDivElement | null = null;
+
+	// Floating filter layers (Plan 060) — mirror of the header's three-lane pattern
+	public floatingFilterWrapper: HTMLDivElement | null = null;
+	public floatingFilterLayer: HTMLDivElement | null = null;
+	public floatingFilterLeftLayer: HTMLDivElement | null = null;
+	public floatingFilterRightLayer: HTMLDivElement | null = null;
+
 	public stickyGroupLayer: HTMLDivElement | null = null;
 
 	// Overlay sits outside the scroll viewport so it covers the full grid without scrolling
@@ -116,6 +123,10 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.headerLayer = this.layers.get('header') ?? null;
 		this.headerLeftLayer = this.layers.get('header-left') ?? null;
 		this.headerRightLayer = this.layers.get('header-right') ?? null;
+		this.floatingFilterWrapper = this.layers.get('floating-filter-wrapper') ?? null;
+		this.floatingFilterLayer = this.layers.get('floating-filter') ?? null;
+		this.floatingFilterLeftLayer = this.layers.get('floating-filter-left') ?? null;
+		this.floatingFilterRightLayer = this.layers.get('floating-filter-right') ?? null;
 		this.stickyGroupLayer = this.layers.get('sticky-groups') ?? null;
 		this.rowsContainer = this.layers.get('rows') ?? null;
 		this.overlayLayer = this.layers.get('overlay') ?? null;
@@ -153,6 +164,10 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.headerLayer = null;
 		this.headerLeftLayer = null;
 		this.headerRightLayer = null;
+		this.floatingFilterWrapper = null;
+		this.floatingFilterLayer = null;
+		this.floatingFilterLeftLayer = null;
+		this.floatingFilterRightLayer = null;
 		this.stickyGroupLayer = null;
 		this.overlayLayer = null;
 		this.styleTag = null;
@@ -181,6 +196,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.container?.style.setProperty('--og-leaf-header-height', `${plan.chrome.leafHeaderHeight}px`);
 		this.container?.style.setProperty('--og-total-header-height', `${plan.chrome.totalHeaderHeight}px`);
 		this.container?.style.setProperty('--og-group-panel-height', `${plan.chrome.groupPanelHeight}px`);
+		this.container?.style.setProperty('--og-floating-filter-height', `${plan.chrome.floatingFilterHeight}px`);
 		this.container?.style.setProperty('--og-overlay-top', `${plan.origins.overlayTop}px`);
 		this.container?.style.setProperty('--og-bottom-chrome-height', `${plan.chrome.bottomChromeHeight}px`);
 		this.container?.style.setProperty('--og-content-width', `${plan.dimensions.contentWidth}px`);

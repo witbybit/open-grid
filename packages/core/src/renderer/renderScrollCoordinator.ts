@@ -9,6 +9,7 @@ import type { RenderRuntimeStats } from './renderTelemetry.js';
 import type { RowRenderer } from './rowRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { HeaderRenderer } from './headerRenderer.js';
+import type { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
@@ -43,6 +44,7 @@ export interface RenderScrollCoordinatorDeps<TRowData = unknown> {
 	viewportRenderer: ViewportRenderer<TRowData>;
 	rowRenderer: RowRenderer<TRowData>;
 	headerRenderer: HeaderRenderer<TRowData>;
+	floatingFilterRenderer: FloatingFilterRenderer<TRowData>;
 	overlayRenderer: OverlayRenderer<TRowData>;
 	stickyGroupRenderer: StickyGroupRenderer<TRowData>;
 	portalMountManager: PortalMountManager<TRowData>;
@@ -156,6 +158,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.deps.stickyGroupRenderer.sync(layoutPlan);
 
 			this.deps.headerRenderer.syncScrollLeft(layoutPlan);
+			this.deps.floatingFilterRenderer.syncScrollLeft(layoutPlan);
 			const didSyncRange = this.deps.headerRenderer.syncVisibleColumnRange(layoutPlan, visibleColRange);
 			if (didSyncRange) {
 				this.deps.renderStats.headerRangeSyncsDuringScroll++;
@@ -318,6 +321,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const scrollLeft = layoutPlan.viewport.scrollLeft;
 
 		this.deps.headerRenderer.syncScrollLeft(layoutPlan);
+		this.deps.floatingFilterRenderer.syncScrollLeft(layoutPlan);
 		this.deps.renderStats.overlayCheapSyncsDuringScroll++;
 		this.deps.overlayRenderer.syncScrollPosition(this.state.cachedHasSelectionOverlay);
 

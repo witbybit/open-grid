@@ -48,6 +48,7 @@ export type {
 	HeaderCellStyleRule,
 	GridStyleRule,
 } from './columnDef.js';
+export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
 
 export {
 	isDataVisualRow,
@@ -141,6 +142,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			enableStickyGroupRows: initialState.enableStickyGroupRows,
 			showGroupPanel: initialState.showGroupPanel,
 			showFilterChipBar: initialState.showFilterChipBar,
+			showFloatingFilters: initialState.showFloatingFilters,
 			showStatusBar: initialState.showStatusBar,
 			pagination: initialState.pagination,
 			expansion: initialState.expansion,
@@ -374,6 +376,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setShowGroupPanel = (enabled: boolean): void => {
 		this.engine.setShowGroupPanel(enabled);
+	};
+
+	public setShowFloatingFilters = (enabled: boolean): void => {
+		this.engine.stateManager.setState({ showFloatingFilters: enabled });
+		this.engine.invalidation.invalidateFull('showFloatingFilters');
 	};
 
 	public exportCsv = (options?: CsvExportOptions): void => {

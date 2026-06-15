@@ -100,4 +100,5 @@ export type {
 	TooltipParams,
 	AutoSizeColumnOptions,
 	AutoSizeAllColumnsOptions,
+	FloatingFilterRendererParams,
 } from '@open-grid/core';

@@ -214,6 +214,7 @@ export function createApiFacade<TRowData>(
 		setShowGroupFooter: (enabled: boolean) => store.setShowGroupFooter(enabled),
 		setStickyGroupRows: (enabled: boolean) => store.setStickyGroupRows(enabled),
 		setShowGroupPanel: (enabled: boolean) => store.setShowGroupPanel(enabled),
+		setShowFloatingFilters: (enabled: boolean) => store.setShowFloatingFilters(enabled),
 		exportCsv: (options?: CsvExportOptions) => exportToCsv(store, options),
 		setStyleRules: (styleRules: GridState<TRowData>['styleRules']) => store.setStyleRules(styleRules),
 		addEventListener: store.addEventListener,

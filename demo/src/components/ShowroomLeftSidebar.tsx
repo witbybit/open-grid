@@ -21,6 +21,7 @@ import {
 	Clipboard,
 	TableProperties,
 	LayoutTemplate,
+	SlidersHorizontal,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -140,6 +141,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Clipboard',
 			subtitle: 'Copy · Paste · TSV · Formatters',
 			icon: Clipboard,
+		},
+		{
+			id: 'floatingfilters',
+			label: 'Floating Filters',
+			subtitle: 'Inline Filters · Custom Renderer',
+			icon: SlidersHorizontal,
 		},
 	] as const;
 

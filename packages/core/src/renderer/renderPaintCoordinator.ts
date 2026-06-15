@@ -6,6 +6,7 @@ import type { RenderOrchestrator } from './renderOrchestrator.js';
 import type { RowRenderer } from './rowRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { HeaderRenderer } from './headerRenderer.js';
+import type { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { RenderWindow } from './renderWindow.js';
@@ -22,6 +23,7 @@ export interface RenderPaintCoordinatorDeps<TRowData = unknown> {
 	viewportRenderer: ViewportRenderer<TRowData>;
 	rowRenderer: RowRenderer<TRowData>;
 	headerRenderer: HeaderRenderer<TRowData>;
+	floatingFilterRenderer: FloatingFilterRenderer<TRowData>;
 	overlayRenderer: OverlayRenderer<TRowData>;
 	stickyGroupRenderer: StickyGroupRenderer<TRowData>;
 	portalMountManager: PortalMountManager<TRowData>;
@@ -106,6 +108,7 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 			this.deps.layoutTransition.beginAnimation();
 		}
 		this.deps.headerRenderer.repaintHeaders(layoutPlan);
+		this.deps.floatingFilterRenderer.repaint(layoutPlan);
 		this.deps.overlayRenderer.repaintOverlay();
 	}
 }

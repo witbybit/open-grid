@@ -41,6 +41,8 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	showStatusBar?: boolean;
 	/** Show the filter chip bar above the header when filters are active. */
 	showFilterChipBar?: boolean;
+	/** Show the floating filter row — always-visible inline filter inputs below column headers. */
+	showFloatingFilters?: boolean;
 	onGridReady?: (event: GridReadyEvent<TRowData>) => void;
 }
 
@@ -71,6 +73,7 @@ function createInitialState<TRowData>(
 		pagination: { pageSize: number; initialPage: number } | null;
 		showStatusBar?: boolean;
 		showFilterChipBar?: boolean;
+		showFloatingFilters?: boolean;
 	}
 ) {
 	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits } = base;
@@ -86,6 +89,7 @@ function createInitialState<TRowData>(
 	if (extras.pagination) merged.pagination = { pageSize: extras.pagination.pageSize, page: extras.pagination.initialPage };
 	if (extras.showStatusBar) merged.showStatusBar = true;
 	if (extras.showFilterChipBar) merged.showFilterChipBar = true;
+	if (extras.showFloatingFilters) merged.showFloatingFilters = true;
 	return merged;
 }
 
@@ -108,6 +112,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		pagination,
 		showStatusBar,
 		showFilterChipBar,
+		showFloatingFilters,
 		rows,
 		datasource,
 		blockSize,
@@ -143,7 +148,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				columnTypes,
 				styleRules,
 			},
-			{ detailRowHeight, pagination: paginationConfig, showStatusBar, showFilterChipBar }
+			{ detailRowHeight, pagination: paginationConfig, showStatusBar, showFilterChipBar, showFloatingFilters }
 		);
 		if (mode === 'client') {
 			return createClientGrid({

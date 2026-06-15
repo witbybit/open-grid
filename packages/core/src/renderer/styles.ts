@@ -108,6 +108,125 @@ export const CORE_STYLES = `
     pointer-events: none;
   }
 
+  /* ── Floating filter row (Plan 060) ─────────────────────────────────────── */
+
+  /* Wrapper: sticky horizontal stripe, same z-index as the header. */
+  .og-layer-floating-filter-wrapper {
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 11;
+    box-sizing: border-box;
+    background-color: var(--og-floating-filter-bg, var(--og-header-bg));
+    border-bottom: 1px solid var(--og-border-color);
+    overflow: visible;
+  }
+
+  /* Center lane — horizontally scrolls with the scroll viewport transform. */
+  .og-layer-floating-filter {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Left / right pinned lanes — absolutely positioned, always visible. */
+  .og-layer-floating-filter-left,
+  .og-layer-floating-filter-right {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    z-index: 2;
+    background-color: var(--og-floating-filter-bg, var(--og-header-bg));
+  }
+
+  .og-layer-floating-filter-left {
+    left: 0;
+    border-right: 1px solid var(--og-pin-left-border-color, var(--og-border-color));
+    box-shadow: var(--og-pin-left-shadow, none);
+  }
+
+  .og-layer-floating-filter-right {
+    right: 0;
+    border-left: 1px solid var(--og-pin-right-border-color, var(--og-border-color));
+    box-shadow: var(--og-pin-right-shadow, none);
+  }
+
+  /* Individual filter cell */
+  .og-floating-filter-cell {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    box-sizing: border-box;
+    border-right: 1px solid var(--og-border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    overflow: hidden;
+  }
+
+  /* Default text / number / date input inside a filter cell */
+  .og-floating-filter-input {
+    width: 100%;
+    height: 22px;
+    background: var(--og-floating-filter-input-bg, var(--og-popover-input-bg, var(--og-bg-color)));
+    border: 1px solid var(--og-floating-filter-input-border, var(--og-border-color));
+    border-radius: 4px;
+    color: var(--og-text-color);
+    font-family: var(--og-font-family);
+    font-size: 11px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+
+  .og-floating-filter-input:focus {
+    border-color: var(--og-focus-ring);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--og-focus-ring) 20%, transparent);
+  }
+
+  .og-floating-filter-input::placeholder {
+    color: var(--og-text-color);
+    opacity: 0.35;
+  }
+
+  /* Set filter badge — shows "N values" with a clear button */
+  .og-floating-filter-set-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--og-focus-ring) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--og-focus-ring) 35%, transparent);
+    color: var(--og-focus-ring);
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .og-floating-filter-set-badge:hover {
+    background: color-mix(in srgb, var(--og-focus-ring) 25%, transparent);
+  }
+
+  .og-floating-filter-empty {
+    width: 100%;
+    cursor: pointer;
+    opacity: 0.35;
+    font-size: 11px;
+    font-family: var(--og-font-family);
+    color: var(--og-text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* ── Bottom chrome: status bar + pagination (Plan 039 Phase 5) ───────────── */
 
   .og-layer-status-bar,
@@ -198,7 +317,7 @@ export const CORE_STYLES = `
   /* ── Filter chip bar ─────────────────────────────────────────────────── */
 
   .og-filter-chip-bar {
-    position: absolute;
+    position: sticky;
     z-index: 30;
     display: flex;
     align-items: center;

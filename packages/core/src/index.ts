@@ -105,6 +105,7 @@ export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.
 export type { BatchCellValueUpdate } from './features/DataMutationController.js';
 export type { CellValidationError, RowValidatorParams, RowValidator } from './features/ValidationManager.js';
 export type { ValueValidatorParams, EditableParams, TooltipParams, ValueFormatterParams } from './columnDef.js';
+export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
 export type { GridNavigationOptions } from './navigation.js';
 

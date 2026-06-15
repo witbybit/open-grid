@@ -113,6 +113,16 @@ export interface ThemeTokens {
 	filterChipColor?: string;
 
 	/* ─────────────────────────────────────────────────────────────────────
+     Floating Filter Row (Plan 060)
+     ───────────────────────────────────────────────────────────────────── */
+	/** Background of the floating filter row. Defaults to headerBg when unset. */
+	floatingFilterBg?: string;
+	/** Background of filter inputs inside the floating filter row. */
+	floatingFilterInputBg?: string;
+	/** Border color of filter inputs inside the floating filter row. */
+	floatingFilterInputBorder?: string;
+
+	/* ─────────────────────────────────────────────────────────────────────
      Outer Container Shape
      ───────────────────────────────────────────────────────────────────── */
 	/** Border radius of the grid's outer container (e.g. "8px", "0", "16px"). */
@@ -195,6 +205,10 @@ export const LIGHT_THEME: ThemeTokens = {
 	filterChipBorder: 'rgba(59, 130, 246, 0.25)',
 	filterChipColor: '#2563eb',
 
+	floatingFilterBg: '#f1f5f9',
+	floatingFilterInputBg: '#ffffff',
+	floatingFilterInputBorder: '#e2e8f0',
+
 	outerBorderRadius: '8px',
 
 	leafHeaderHeight: '40px',
@@ -270,6 +284,10 @@ export const DARK_THEME: ThemeTokens = {
 	filterChipBg: 'rgba(59, 130, 246, 0.18)',
 	filterChipBorder: 'rgba(59, 130, 246, 0.35)',
 	filterChipColor: '#93c5fd',
+
+	floatingFilterBg: '#0c0e13',
+	floatingFilterInputBg: 'rgba(30, 41, 59, 0.6)',
+	floatingFilterInputBorder: 'rgba(255, 255, 255, 0.08)',
 
 	outerBorderRadius: '8px',
 
@@ -406,6 +424,10 @@ export const SPREADSHEET_THEME: ThemeTokens = {
 	popoverInputBorder: '#d0d0d0',
 
 	error: '#c0392b',
+
+	floatingFilterBg: '#f8f9fa',
+	floatingFilterInputBg: '#ffffff',
+	floatingFilterInputBorder: '#d0d0d0',
 
 	outerBorderRadius: '0px',
 

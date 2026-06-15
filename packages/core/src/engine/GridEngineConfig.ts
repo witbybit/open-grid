@@ -41,6 +41,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	enableStickyGroupRows?: boolean;
 	showGroupPanel?: boolean;
 	showFilterChipBar?: boolean;
+	showFloatingFilters?: boolean;
 	showStatusBar?: boolean;
 	pagination?: { pageSize: number; page?: number };
 	expansion?: {

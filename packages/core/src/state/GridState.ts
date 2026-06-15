@@ -33,6 +33,9 @@ export interface GridModelState<TRowData = unknown> {
 	showFilterChipBar?: boolean;
 	pinnedColumns?: { left: number; right: number };
 
+	/** Show an always-visible inline filter row below the column headers (Plan 060). */
+	showFloatingFilters?: boolean;
+
 	// Bottom chrome (Plan 039 Phase 5). Presence gates the bottom-chrome height in the
 	// layout plan; full panel/page config is filled in when the feature lands.
 	showStatusBar?: boolean;

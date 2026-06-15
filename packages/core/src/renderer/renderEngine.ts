@@ -28,6 +28,7 @@ import { OverlayRenderer } from './overlayRenderer.js';
 import { LayoutTransitionController } from './layoutTransitionController.js';
 import { GroupPanelRenderer } from './groupPanelRenderer.js';
 import { FilterChipBarRenderer } from './filterChipBarRenderer.js';
+import { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import { StatusBarRenderer } from './statusBarRenderer.js';
 import { PaginationBarRenderer } from './paginationBarRenderer.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
@@ -69,6 +70,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly overlayRenderer: OverlayRenderer<TRowData>;
 	public readonly groupPanelRenderer: GroupPanelRenderer<TRowData>;
 	public readonly filterChipBarRenderer: FilterChipBarRenderer<TRowData>;
+	public readonly floatingFilterRenderer: FloatingFilterRenderer<TRowData>;
 	public readonly statusBarRenderer: StatusBarRenderer<TRowData>;
 	public readonly paginationBarRenderer: PaginationBarRenderer<TRowData>;
 	public readonly stickyGroupRenderer: StickyGroupRenderer<TRowData>;
@@ -272,6 +274,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		// Group panel renderer — mounts when showGroupPanel is true
 		this.groupPanelRenderer = new GroupPanelRenderer<TRowData>(engine);
 		this.filterChipBarRenderer = new FilterChipBarRenderer<TRowData>(engine, this.headerMenu);
+		this.floatingFilterRenderer = new FloatingFilterRenderer<TRowData>(engine);
 		this.statusBarRenderer = new StatusBarRenderer<TRowData>(engine);
 		this.paginationBarRenderer = new PaginationBarRenderer<TRowData>(engine);
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
@@ -304,6 +307,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				viewportRenderer: this.viewportRenderer,
 				rowRenderer: this.rowRenderer,
 				headerRenderer: this.headerRenderer,
+				floatingFilterRenderer: this.floatingFilterRenderer,
 				overlayRenderer: this.overlayRenderer,
 				stickyGroupRenderer: this.stickyGroupRenderer,
 				portalMountManager: this.portalMountManager,
@@ -336,6 +340,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				viewportRenderer: this.viewportRenderer,
 				rowRenderer: this.rowRenderer,
 				headerRenderer: this.headerRenderer,
+				floatingFilterRenderer: this.floatingFilterRenderer,
 				overlayRenderer: this.overlayRenderer,
 				stickyGroupRenderer: this.stickyGroupRenderer,
 				portalMountManager: this.portalMountManager,
@@ -409,6 +414,19 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.filterChipBarRenderer.mount(this.viewportRenderer.filterChipBar);
 		}
 
+		// Floating filter row — always mounted; layer visibility toggled via showFloatingFilters state
+		if (
+			this.viewportRenderer.floatingFilterLayer &&
+			this.viewportRenderer.floatingFilterLeftLayer &&
+			this.viewportRenderer.floatingFilterRightLayer
+		) {
+			this.floatingFilterRenderer.mount(
+				this.viewportRenderer.floatingFilterLayer,
+				this.viewportRenderer.floatingFilterLeftLayer,
+				this.viewportRenderer.floatingFilterRightLayer
+			);
+		}
+
 		// Bottom chrome: status bar + pagination. The layers always exist (the registry
 		// builds them); their `apply()` hides them with display:none until configured, so
 		// mounting the content unconditionally is safe and lets config toggle at runtime.
@@ -460,6 +478,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.fillDrag.cleanup();
 		this.groupPanelRenderer.unmount();
 		this.filterChipBarRenderer.unmount();
+		this.floatingFilterRenderer.unmount();
 		this.statusBarRenderer.unmount();
 		this.paginationBarRenderer.unmount();
 		this.stickyGroupRenderer.unmount();

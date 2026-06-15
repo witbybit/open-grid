@@ -8,6 +8,7 @@ export const FILTER_CHIP_BAR_HEIGHT = 32;
 export const GROUP_BAND_HEIGHT = 32;
 export const STATUS_BAR_HEIGHT = 32;
 export const PAGINATION_HEIGHT = 44;
+export const FLOATING_FILTER_HEIGHT = 36;
 
 export interface HeaderCellLayout {
 	id: string;
@@ -75,6 +76,8 @@ export interface GridLayoutPlan {
 		columnGroupHeaderHeight: number;
 		leafHeaderHeight: number;
 		totalHeaderHeight: number;
+		/** Height of the floating filter row in px. 0 when showFloatingFilters is false. */
+		floatingFilterHeight: number;
 		topChromeHeight: number;
 		// Bottom chrome — fixed bars docked below the scroll viewport. Default 0 when
 		// no status bar / pagination is configured (no layout change vs. top-only era).
@@ -285,7 +288,8 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const lastBand = headerBands[headerBands.length - 1];
 	const totalHeaderHeight = lastBand ? lastBand.top + lastBand.height : leafHeaderHeight;
 	const columnGroupHeaderHeight = totalHeaderHeight - leafHeaderHeight;
-	const topChromeHeight = groupPanelHeight + filterChipBarHeight + totalHeaderHeight;
+	const floatingFilterHeight = state.showFloatingFilters ? FLOATING_FILTER_HEIGHT : 0;
+	const topChromeHeight = groupPanelHeight + filterChipBarHeight + totalHeaderHeight + floatingFilterHeight;
 
 	// Bottom chrome — status bar + pagination bar. These are config-gated; until the
 	// config lands (Plan 039 Phase 5) both heights resolve to 0 and the layout is
@@ -327,6 +331,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			columnGroupHeaderHeight,
 			leafHeaderHeight,
 			totalHeaderHeight,
+			floatingFilterHeight,
 			topChromeHeight,
 			statusBarHeight,
 			paginationHeight,
