@@ -227,6 +227,64 @@ export const CORE_STYLES = `
     text-overflow: ellipsis;
   }
 
+  /* Operator picker button (Plan 059) */
+  .og-floating-filter-op-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    margin-right: 3px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--og-text-color);
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--og-font-family);
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.1s, border-color 0.1s, background 0.1s;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .og-floating-filter-op-btn:hover {
+    opacity: 1;
+    border-color: var(--og-border-color);
+    background: color-mix(in srgb, var(--og-text-color) 8%, transparent);
+  }
+
+  /* Label shown for blank/notBlank (no input needed) */
+  .og-floating-filter-no-value {
+    flex: 1;
+    font-size: 10px;
+    font-family: var(--og-font-family);
+    color: var(--og-text-color);
+    opacity: 0.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Range inputs take equal space */
+  .og-ff-input-range {
+    width: 0;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Dash separator between range inputs */
+  .og-ff-range-sep {
+    flex-shrink: 0;
+    padding: 0 2px;
+    font-size: 10px;
+    color: var(--og-text-color);
+    opacity: 0.4;
+  }
+
   /* ── Bottom chrome: status bar + pagination (Plan 039 Phase 5) ───────────── */
 
   .og-layer-status-bar,

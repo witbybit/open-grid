@@ -8,6 +8,9 @@ import type {
 	NumberFilterCondition,
 	DateFilterCondition,
 	SetFilterCondition,
+	TextFilterOperator,
+	NumberFilterOperator,
+	DateFilterOperator,
 } from '../filterModel.js';
 import type { InternalColumnDef } from '../columnDef.js';
 
@@ -23,7 +26,66 @@ export interface FloatingFilterRendererParams<TRowData = unknown> {
 	eCell: HTMLDivElement;
 }
 
-/** Debounce a function call by `ms` ms. */
+// ── Operator metadata ────────────────────────────────────────────────────────
+
+interface OpOption {
+	value: string;
+	label: string;
+	symbol: string;
+	noValue?: boolean;
+	range?: boolean;
+}
+
+const TEXT_OPS: OpOption[] = [
+	{ value: 'contains', label: 'Contains', symbol: '~' },
+	{ value: 'notContains', label: 'Not contains', symbol: '!~' },
+	{ value: 'equals', label: 'Equals', symbol: '=' },
+	{ value: 'notEquals', label: 'Not equals', symbol: '≠' },
+	{ value: 'startsWith', label: 'Starts with', symbol: '^' },
+	{ value: 'endsWith', label: 'Ends with', symbol: '$' },
+	{ value: 'blank', label: 'Is blank', symbol: '∅', noValue: true },
+	{ value: 'notBlank', label: 'Not blank', symbol: '!∅', noValue: true },
+];
+
+const NUMBER_OPS: OpOption[] = [
+	{ value: 'equals', label: 'Equals', symbol: '=' },
+	{ value: 'notEquals', label: 'Not equals', symbol: '≠' },
+	{ value: 'gt', label: 'Greater than', symbol: '>' },
+	{ value: 'gte', label: 'Greater or equal', symbol: '≥' },
+	{ value: 'lt', label: 'Less than', symbol: '<' },
+	{ value: 'lte', label: 'Less or equal', symbol: '≤' },
+	{ value: 'inRange', label: 'In range', symbol: '↔', range: true },
+	{ value: 'blank', label: 'Is blank', symbol: '∅', noValue: true },
+	{ value: 'notBlank', label: 'Not blank', symbol: '!∅', noValue: true },
+];
+
+const DATE_OPS: OpOption[] = [
+	{ value: 'equals', label: 'On date', symbol: '=' },
+	{ value: 'before', label: 'Before', symbol: '<' },
+	{ value: 'after', label: 'After', symbol: '>' },
+	{ value: 'inRange', label: 'In range', symbol: '↔', range: true },
+	{ value: 'blank', label: 'Is blank', symbol: '∅', noValue: true },
+	{ value: 'notBlank', label: 'Not blank', symbol: '!∅', noValue: true },
+];
+
+function getOpsForType(filterType: string): OpOption[] {
+	if (filterType === 'number') return NUMBER_OPS;
+	if (filterType === 'date') return DATE_OPS;
+	return TEXT_OPS;
+}
+
+function getOpMeta(filterType: string, operator: string): OpOption {
+	return getOpsForType(filterType).find((o) => o.value === operator) ?? { value: operator, label: operator, symbol: '~' };
+}
+
+function defaultOpForType(filterType: string): string {
+	if (filterType === 'number') return 'equals';
+	if (filterType === 'date') return 'equals';
+	return 'contains';
+}
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+
 function debounce(fn: (...args: unknown[]) => void, ms: number): (...args: unknown[]) => void {
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	return (...args) => {
@@ -31,6 +93,16 @@ function debounce(fn: (...args: unknown[]) => void, ms: number): (...args: unkno
 		timer = setTimeout(() => fn(...args), ms);
 	};
 }
+
+const DROPDOWN_ID = 'og-floating-set-dropdown';
+const OP_MENU_ID = 'og-floating-op-menu';
+
+function closeOpenMenus(): void {
+	document.getElementById(DROPDOWN_ID)?.remove();
+	document.getElementById(OP_MENU_ID)?.remove();
+}
+
+// ── Main class ───────────────────────────────────────────────────────────────
 
 export class FloatingFilterRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -70,6 +142,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 	public unmount(): void {
 		this.unsubscribers.forEach((u) => u());
 		this.unsubscribers = [];
+		closeOpenMenus();
 		this.clearCells();
 		this.filterLayer = null;
 		this.filterLeftLayer = null;
@@ -86,6 +159,8 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		if (scrollLeft === this.lastScrollLeft && clientWidth === this.lastSyncedViewportWidth) return;
 		this.lastScrollLeft = scrollLeft;
 		this.lastSyncedViewportWidth = clientWidth;
+		// Close the set-filter dropdown on horizontal scroll (it's fixed-position and won't track)
+		closeOpenMenus();
 		this.syncPinnedPositions(layoutPlan);
 	}
 
@@ -179,15 +254,15 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 				cell.style.left = `${left}px`;
 				cell.style.width = `${width}px`;
 				// Sync filter value if it changed
-				this.updateCellFilterValue(cell, currentFilter);
+				this.updateCellFilterValue(cell, currentFilter, col);
 			}
 		}
 
 		// Remove cells that are no longer in the visible range
-		for (const [c, cell] of this.cells) {
-			if (!seen.has(c)) {
+		for (const [field, cell] of this.cells) {
+			if (!seen.has(field)) {
 				cell.remove();
-				this.cells.delete(c);
+				this.cells.delete(field);
 			}
 		}
 
@@ -236,6 +311,8 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		return cell;
 	}
 
+	// ── Default input builder ──────────────────────────────────────────────────
+
 	private buildDefaultInput(
 		cell: HTMLDivElement,
 		col: InternalColumnDef<TRowData>,
@@ -250,24 +327,63 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 			return;
 		}
 
+		const ops = getOpsForType(filterType);
+		const currentOp = this.currentOperator(currentFilter, filterType);
+		const opMeta = getOpMeta(filterType, currentOp);
+
+		cell.dataset.inputType = filterType;
+		cell.dataset.filterOp = currentOp;
+
+		// Operator button
+		const opBtn = document.createElement('button');
+		opBtn.className = 'og-floating-filter-op-btn';
+		opBtn.title = `Operator: ${opMeta.label}`;
+		opBtn.textContent = opMeta.symbol;
+		opBtn.tabIndex = -1;
+		opBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.openOperatorMenu(opBtn, cell, ops, currentOp, filterType, setFilter);
+		});
+		cell.appendChild(opBtn);
+
+		if (opMeta.noValue) {
+			// blank / notBlank: no input needed
+			const noValLabel = document.createElement('span');
+			noValLabel.className = 'og-floating-filter-no-value';
+			noValLabel.textContent = opMeta.label;
+			cell.appendChild(noValLabel);
+		} else if (opMeta.range) {
+			this.buildRangeInputs(cell, filterType, currentFilter, setFilter, currentOp);
+		} else {
+			const input = this.buildSingleInput(cell, filterType, currentFilter, setFilter, currentOp);
+			this.setupTabNavigation(input);
+		}
+	}
+
+	private buildSingleInput(
+		cell: HTMLDivElement,
+		filterType: string,
+		currentFilter: ColumnFilter | null,
+		setFilter: (f: ColumnFilter | null) => void,
+		op: string
+	): HTMLInputElement {
 		const input = document.createElement('input');
-		input.className = 'og-floating-filter-input';
+		input.className = 'og-floating-filter-input og-ff-input-primary';
 
 		if (filterType === 'number') {
 			input.type = 'number';
 			input.placeholder = 'Filter…';
 			const numFilter = currentFilter?.type === 'number' ? (currentFilter as NumberFilterCondition) : null;
-			if (numFilter && numFilter.value != null) input.value = String(numFilter.value);
+			if (numFilter && numFilter.value != null && numFilter.operator === op) input.value = String(numFilter.value);
 		} else if (filterType === 'date') {
 			input.type = 'date';
 			const dateFilter = currentFilter?.type === 'date' ? (currentFilter as DateFilterCondition) : null;
-			if (dateFilter?.dateFrom) input.value = dateFilter.dateFrom;
+			if (dateFilter?.dateFrom && dateFilter.operator === op) input.value = dateFilter.dateFrom;
 		} else {
-			// text (default)
 			input.type = 'text';
 			input.placeholder = 'Filter…';
 			const textFilter = currentFilter?.type === 'text' ? (currentFilter as TextFilterCondition) : null;
-			if (textFilter?.value) input.value = textFilter.value;
+			if (textFilter?.value && textFilter.operator === op) input.value = textFilter.value;
 		}
 
 		const debouncedUpdate = debounce((...args: unknown[]) => {
@@ -278,11 +394,11 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 			}
 			if (filterType === 'number') {
 				const n = parseFloat(val);
-				if (!isNaN(n)) setFilter({ type: 'number', operator: 'equals', value: n });
+				if (!isNaN(n)) setFilter({ type: 'number', operator: op as NumberFilterOperator, value: n });
 			} else if (filterType === 'date') {
-				setFilter({ type: 'date', operator: 'equals', dateFrom: val });
+				setFilter({ type: 'date', operator: op as DateFilterOperator, dateFrom: val });
 			} else {
-				setFilter({ type: 'text', operator: 'contains', value: val });
+				setFilter({ type: 'text', operator: op as TextFilterOperator, value: val });
 			}
 		}, 200);
 
@@ -294,9 +410,238 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 			}
 		});
 
-		cell.dataset.inputType = filterType;
 		cell.appendChild(input);
+		return input;
 	}
+
+	private buildRangeInputs(
+		cell: HTMLDivElement,
+		filterType: string,
+		currentFilter: ColumnFilter | null,
+		setFilter: (f: ColumnFilter | null) => void,
+		op: string
+	): void {
+		const isNumber = filterType === 'number';
+		const from = document.createElement('input');
+		from.className = 'og-floating-filter-input og-ff-input-primary og-ff-input-range';
+		from.type = isNumber ? 'number' : 'date';
+		from.placeholder = 'From';
+		const to = document.createElement('input');
+		to.className = 'og-floating-filter-input og-ff-input-secondary og-ff-input-range';
+		to.type = isNumber ? 'number' : 'date';
+		to.placeholder = 'To';
+
+		if (isNumber) {
+			const nf = currentFilter?.type === 'number' && currentFilter.operator === 'inRange' ? (currentFilter as NumberFilterCondition) : null;
+			if (nf) {
+				from.value = String(nf.value);
+				if (nf.valueTo != null) to.value = String(nf.valueTo);
+			}
+		} else {
+			const df = currentFilter?.type === 'date' && currentFilter.operator === 'inRange' ? (currentFilter as DateFilterCondition) : null;
+			if (df) {
+				from.value = df.dateFrom ?? '';
+				to.value = df.dateTo ?? '';
+			}
+		}
+
+		const sep = document.createElement('span');
+		sep.className = 'og-ff-range-sep';
+		sep.textContent = '–';
+
+		const emitRange = debounce((): void => {
+			if (isNumber) {
+				const f = parseFloat(from.value),
+					t = parseFloat(to.value);
+				if (!isNaN(f)) setFilter({ type: 'number', operator: 'inRange', value: f, valueTo: !isNaN(t) ? t : undefined });
+				else setFilter(null);
+			} else {
+				if (from.value) setFilter({ type: 'date', operator: 'inRange', dateFrom: from.value, dateTo: to.value || undefined });
+				else setFilter(null);
+			}
+		}, 200);
+
+		from.addEventListener('input', () => emitRange());
+		to.addEventListener('input', () => emitRange());
+		from.addEventListener('keydown', (e) => {
+			if (e.key === 'Escape') {
+				from.value = '';
+				to.value = '';
+				setFilter(null);
+			}
+		});
+		to.addEventListener('keydown', (e) => {
+			if (e.key === 'Escape') {
+				from.value = '';
+				to.value = '';
+				setFilter(null);
+			}
+		});
+
+		this.setupTabNavigation(from);
+		this.setupTabNavigation(to);
+
+		cell.appendChild(from);
+		cell.appendChild(sep);
+		cell.appendChild(to);
+	}
+
+	// ── Operator picker menu ───────────────────────────────────────────────────
+
+	private openOperatorMenu(
+		anchor: HTMLElement,
+		cell: HTMLDivElement,
+		ops: OpOption[],
+		currentOp: string,
+		filterType: string,
+		setFilter: (f: ColumnFilter | null) => void
+	): void {
+		document.getElementById(OP_MENU_ID)?.remove();
+
+		const menu = document.createElement('div');
+		menu.id = OP_MENU_ID;
+		const rect = anchor.getBoundingClientRect();
+		menu.style.cssText = [
+			'position:fixed',
+			`top:${rect.bottom + 2}px`,
+			`left:${rect.left}px`,
+			'z-index:9001',
+			'min-width:140px',
+			'padding:4px 0',
+			'border-radius:8px',
+			`background:var(--og-popover-bg,#1e293b)`,
+			`border:1px solid var(--og-border-color)`,
+			`box-shadow:0 8px 24px rgba(0,0,0,0.5)`,
+			`font-family:var(--og-font-family)`,
+		].join(';');
+
+		// Inherit theme scope
+		const gridContainer = cell.closest('.og-grid-container') as HTMLElement | null;
+		if (gridContainer?.dataset.ogThemeScope) menu.dataset.ogThemeScope = gridContainer.dataset.ogThemeScope;
+
+		for (const op of ops) {
+			const row = document.createElement('div');
+			row.style.cssText = [
+				'display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer;font-size:11px;white-space:nowrap',
+				`color:var(--og-text-color)`,
+				op.value === currentOp ? `background:color-mix(in srgb,var(--og-focus-ring) 15%,transparent)` : '',
+			].join(';');
+			row.addEventListener('mouseenter', () => (row.style.background = 'var(--og-popover-item-hover-bg)'));
+			row.addEventListener(
+				'mouseleave',
+				() => (row.style.background = op.value === currentOp ? 'color-mix(in srgb,var(--og-focus-ring) 15%,transparent)' : '')
+			);
+
+			const sym = document.createElement('span');
+			sym.style.cssText = 'width:20px;text-align:center;font-weight:700;opacity:0.7;flex-shrink:0;font-size:12px';
+			sym.textContent = op.symbol;
+
+			const lbl = document.createElement('span');
+			lbl.textContent = op.label;
+
+			row.appendChild(sym);
+			row.appendChild(lbl);
+
+			row.addEventListener('click', () => {
+				menu.remove();
+				this.changeOperator(cell, op, filterType, setFilter);
+			});
+			menu.appendChild(row);
+		}
+
+		document.body.appendChild(menu);
+
+		const onOutside = (e: MouseEvent): void => {
+			if (!menu.contains(e.target as Node)) {
+				menu.remove();
+				document.removeEventListener('mousedown', onOutside, true);
+			}
+		};
+		const onEscape = (e: KeyboardEvent): void => {
+			if (e.key === 'Escape') {
+				menu.remove();
+				document.removeEventListener('keydown', onEscape, true);
+			}
+		};
+		setTimeout(() => {
+			document.addEventListener('mousedown', onOutside, true);
+			document.addEventListener('keydown', onEscape, true);
+		}, 0);
+	}
+
+	private changeOperator(cell: HTMLDivElement, op: OpOption, filterType: string, setFilter: (f: ColumnFilter | null) => void): void {
+		// Read current value from existing primary input (if any)
+		const primaryInput = cell.querySelector('.og-ff-input-primary') as HTMLInputElement | null;
+		const existingValue = primaryInput?.value ?? '';
+
+		// Rebuild input area: remove everything except the op-btn
+		const opBtn = cell.querySelector('.og-floating-filter-op-btn') as HTMLButtonElement;
+		while (cell.lastChild && cell.lastChild !== opBtn) cell.removeChild(cell.lastChild);
+
+		cell.dataset.filterOp = op.value;
+		opBtn.textContent = op.symbol;
+		opBtn.title = `Operator: ${op.label}`;
+
+		// Patch the click handler to use the new op
+		const newOpBtn = opBtn.cloneNode(true) as HTMLButtonElement;
+		const ops = getOpsForType(filterType);
+		newOpBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.openOperatorMenu(newOpBtn, cell, ops, op.value, filterType, setFilter);
+		});
+		opBtn.replaceWith(newOpBtn);
+
+		if (op.noValue) {
+			// Emit the blank/notBlank filter immediately; value fields are ignored by rowModel for these operators
+			const blankFilter: ColumnFilter =
+				filterType === 'number'
+					? { type: 'number', operator: op.value as NumberFilterOperator, value: 0 }
+					: filterType === 'date'
+						? { type: 'date', operator: op.value as DateFilterOperator, dateFrom: '' }
+						: { type: 'text', operator: op.value as TextFilterOperator, value: '' };
+			setFilter(blankFilter);
+			const noValLabel = document.createElement('span');
+			noValLabel.className = 'og-floating-filter-no-value';
+			noValLabel.textContent = op.label;
+			cell.appendChild(noValLabel);
+		} else if (op.range) {
+			// Clear current filter when switching to range (needs both bounds)
+			setFilter(null);
+			this.buildRangeInputs(cell, filterType, null, setFilter, op.value);
+		} else {
+			const input = this.buildSingleInput(cell, filterType, null, setFilter, op.value);
+			// Restore value from previous input
+			if (existingValue) {
+				input.value = existingValue;
+				input.dispatchEvent(new Event('input'));
+			}
+			this.setupTabNavigation(input);
+			input.focus();
+		}
+	}
+
+	// ── Tab navigation ─────────────────────────────────────────────────────────
+
+	private setupTabNavigation(input: HTMLInputElement): void {
+		input.addEventListener('keydown', (e) => {
+			if (e.key !== 'Tab') return;
+			e.preventDefault();
+
+			// Collect all focusable filter inputs/triggers sorted by screen position
+			const all = Array.from(
+				document.querySelectorAll<HTMLElement>('.og-floating-filter-input, .og-floating-filter-set-badge, .og-floating-filter-empty')
+			)
+				.filter((el) => !el.closest('.og-layer-floating-filter-wrapper')?.classList.contains('og-layer-floating-filter-wrapper') || true)
+				.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+
+			const idx = all.indexOf(input);
+			if (idx === -1) return;
+			const next = e.shiftKey ? all[idx - 1] : all[idx + 1];
+			if (next) (next as HTMLInputElement).focus();
+		});
+	}
+
+	// ── Set filter badge ───────────────────────────────────────────────────────
 
 	private buildSetBadge(
 		cell: HTMLDivElement,
@@ -334,7 +679,6 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		currentFilter: SetFilterCondition | null,
 		setFilter: (f: ColumnFilter | null) => void
 	): void {
-		const DROPDOWN_ID = 'og-floating-set-dropdown';
 		// Toggle: if already open for this cell, close it
 		const existing = document.getElementById(DROPDOWN_ID);
 		if (existing) {
@@ -449,10 +793,18 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		}, 0);
 	}
 
-	private updateCellFilterValue(cell: HTMLDivElement, currentFilter: ColumnFilter | null): void {
+	// ── Cell update ─────────────────────────────────────────────────────────────
+
+	private currentOperator(filter: ColumnFilter | null, filterType: string): string {
+		if (!filter || filter.type === 'compound' || filter.type === 'set') return defaultOpForType(filterType);
+		return (filter as TextFilterCondition | NumberFilterCondition | DateFilterCondition).operator ?? defaultOpForType(filterType);
+	}
+
+	private updateCellFilterValue(cell: HTMLDivElement, currentFilter: ColumnFilter | null, col?: InternalColumnDef<TRowData>): void {
 		const inputType = cell.dataset.inputType;
+
+		// Set filter: rebuild badge if active/inactive state changed
 		if (!inputType || inputType === 'set') {
-			// Re-build set badge if filter changed
 			const hasBadge = cell.querySelector('.og-floating-filter-set-badge');
 			const hasEmpty = cell.querySelector('.og-floating-filter-empty');
 			const setFilter = (newFilter: ColumnFilter | null): void => {
@@ -478,28 +830,62 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 			return;
 		}
 
-		const input = cell.querySelector('input') as HTMLInputElement | null;
-		if (!input) return;
+		// For text/number/date: if operator changed, rebuild the whole input area
+		const newOp = this.currentOperator(currentFilter, inputType);
+		const oldOp = cell.dataset.filterOp ?? defaultOpForType(inputType);
 
-		if (document.activeElement === input) return; // don't override while user types
+		if (newOp !== oldOp) {
+			// Operator changed externally (e.g. from header menu) — rebuild
+			cell.innerHTML = '';
+			if (col) {
+				const colField = cell.dataset.colField!;
+				const setFilter = (newFilter: ColumnFilter | null): void => {
+					const state = this.engine.stateManager.getState();
+					const newModel: FilterModel = { ...(state.filterModel ?? {}) };
+					if (newFilter == null) delete newModel[colField];
+					else newModel[colField] = newFilter;
+					this.engine.stateManager.setState({ filterModel: Object.keys(newModel).length > 0 ? newModel : null });
+					this.engine.invalidation.invalidateFull('floating-filter');
+				};
+				this.buildDefaultInput(cell, col, currentFilter, setFilter);
+			}
+			return;
+		}
+
+		const primaryInput = cell.querySelector('.og-ff-input-primary') as HTMLInputElement | null;
+		const secondaryInput = cell.querySelector('.og-ff-input-secondary') as HTMLInputElement | null;
+		if (!primaryInput) return;
+
+		if (document.activeElement === primaryInput || document.activeElement === secondaryInput) return;
 
 		if (!currentFilter) {
-			if (input.value !== '') input.value = '';
+			if (primaryInput.value !== '') primaryInput.value = '';
+			if (secondaryInput && secondaryInput.value !== '') secondaryInput.value = '';
 			return;
 		}
 
 		if (currentFilter.type === 'text' && inputType === 'text') {
 			const v = (currentFilter as TextFilterCondition).value ?? '';
-			if (input.value !== v) input.value = v;
+			if (primaryInput.value !== v) primaryInput.value = v;
 		} else if (currentFilter.type === 'number' && inputType === 'number') {
-			const v = (currentFilter as NumberFilterCondition).value;
-			const s = v != null ? String(v) : '';
-			if (input.value !== s) input.value = s;
+			const nf = currentFilter as NumberFilterCondition;
+			const v = nf.value != null ? String(nf.value) : '';
+			if (primaryInput.value !== v) primaryInput.value = v;
+			if (secondaryInput && nf.valueTo != null) {
+				const vt = String(nf.valueTo);
+				if (secondaryInput.value !== vt) secondaryInput.value = vt;
+			}
 		} else if (currentFilter.type === 'date' && inputType === 'date') {
-			const v = (currentFilter as DateFilterCondition).dateFrom ?? '';
-			if (input.value !== v) input.value = v;
+			const df = currentFilter as DateFilterCondition;
+			const v = df.dateFrom ?? '';
+			if (primaryInput.value !== v) primaryInput.value = v;
+			if (secondaryInput && df.dateTo) {
+				if (secondaryInput.value !== df.dateTo) secondaryInput.value = df.dateTo;
+			}
 		}
 	}
+
+	// ── Helpers ─────────────────────────────────────────────────────────────────
 
 	private clearCells(): void {
 		for (const cell of this.cells.values()) cell.remove();

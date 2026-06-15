@@ -307,6 +307,20 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		});
 		if (changed) {
 			this.engine.setColumns(columns, false);
+			// Clear filters for columns being hidden so stale filter state doesn't accumulate
+			if (!visible && this.state.filterModel) {
+				const newModel = { ...this.state.filterModel };
+				let filterChanged = false;
+				for (const field of fieldSet) {
+					if (field in newModel) {
+						delete newModel[field];
+						filterChanged = true;
+					}
+				}
+				if (filterChanged) {
+					this.engine.stateManager.setState({ filterModel: Object.keys(newModel).length > 0 ? newModel : null });
+				}
+			}
 		}
 	};
 
