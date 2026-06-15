@@ -66,7 +66,7 @@ export const CORE_STYLES = `
     background-color: var(--og-bg-color);
     color: var(--og-text-color);
     border: 1px solid var(--og-border-color);
-    border-radius: 8px;
+    border-radius: var(--og-outer-border-radius, 8px);
     box-sizing: border-box;
   }
 

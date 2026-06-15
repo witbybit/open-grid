@@ -823,6 +823,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.switchTheme?.(themeName);
 	};
 
+	public mergeTheme = (partial: Partial<ThemeTokens>): void => {
+		this.engine.mergeTheme?.(partial);
+	};
+
 	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.engine.onThemeChange?.(listener) ?? (() => {});
 
 	public setContainerElement = (c: HTMLElement): void => {

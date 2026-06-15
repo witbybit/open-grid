@@ -279,6 +279,7 @@ export function createApiFacade<TRowData>(
 		getThemeName: () => store.getThemeName(),
 		getAvailableThemes: () => store.getAvailableThemes(),
 		switchTheme: (themeName: string) => store.switchTheme(themeName),
+		mergeTheme: (partial: Partial<ThemeTokens>) => store.mergeTheme(partial),
 		onThemeChange: (listener: (theme: ThemeTokens) => void) => store.onThemeChange(listener),
 		getContainer: () => store.getContainerElement(),
 		destroy,

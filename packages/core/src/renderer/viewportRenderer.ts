@@ -249,6 +249,10 @@ export class ViewportRenderer<TRowData = unknown> {
 	 * Subscribe to theme changes.
 	 * Returns an unsubscribe function.
 	 */
+	public mergeTheme(partial: Partial<ThemeTokens>): void {
+		this.themeManager?.mergeTheme(partial, this.themeSelector);
+	}
+
 	public onThemeChange(listener: (theme: ThemeTokens) => void): () => void {
 		return this.themeManager?.onThemeChange(listener) ?? (() => {});
 	}

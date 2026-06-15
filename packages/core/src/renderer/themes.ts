@@ -113,6 +113,12 @@ export interface ThemeTokens {
 	filterChipColor?: string;
 
 	/* ─────────────────────────────────────────────────────────────────────
+     Outer Container Shape
+     ───────────────────────────────────────────────────────────────────── */
+	/** Border radius of the grid's outer container (e.g. "8px", "0", "16px"). */
+	outerBorderRadius?: string;
+
+	/* ─────────────────────────────────────────────────────────────────────
      Sizing Tokens (optional but commonly needed)
      ───────────────────────────────────────────────────────────────────── */
 	leafHeaderHeight?: string;
@@ -189,6 +195,8 @@ export const LIGHT_THEME: ThemeTokens = {
 	filterChipBorder: 'rgba(59, 130, 246, 0.25)',
 	filterChipColor: '#2563eb',
 
+	outerBorderRadius: '8px',
+
 	leafHeaderHeight: '40px',
 	groupPanelHeight: '42px',
 	bottomChromeHeight: '0px',
@@ -262,6 +270,8 @@ export const DARK_THEME: ThemeTokens = {
 	filterChipBg: 'rgba(59, 130, 246, 0.18)',
 	filterChipBorder: 'rgba(59, 130, 246, 0.35)',
 	filterChipColor: '#93c5fd',
+
+	outerBorderRadius: '8px',
 
 	leafHeaderHeight: '40px',
 	groupPanelHeight: '42px',
@@ -396,6 +406,8 @@ export const SPREADSHEET_THEME: ThemeTokens = {
 	popoverInputBorder: '#d0d0d0',
 
 	error: '#c0392b',
+
+	outerBorderRadius: '0px',
 
 	leafHeaderHeight: '40px',
 	groupPanelHeight: '42px',

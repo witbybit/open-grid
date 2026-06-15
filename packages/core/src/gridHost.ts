@@ -108,6 +108,7 @@ export function mountGridHost<TRowData>(
 	engine.getThemeName = () => renderEngine.viewportRenderer.getThemeName();
 	engine.getAvailableThemes = () => renderEngine.viewportRenderer.getThemeManager()?.getAvailableThemes() ?? [];
 	engine.switchTheme = (themeName) => renderEngine.viewportRenderer.switchTheme(themeName);
+	engine.mergeTheme = (partial) => renderEngine.viewportRenderer.mergeTheme(partial);
 	engine.onThemeChange = (listener) => renderEngine.viewportRenderer.onThemeChange(listener);
 
 	if (options.pins) {
@@ -213,6 +214,7 @@ export function mountGridHost<TRowData>(
 			engine.getThemeName = undefined;
 			engine.getAvailableThemes = undefined;
 			engine.switchTheme = undefined;
+			engine.mergeTheme = undefined;
 			engine.onThemeChange = undefined;
 		},
 		adapterHandle,

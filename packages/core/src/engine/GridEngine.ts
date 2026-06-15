@@ -110,6 +110,7 @@ export class GridEngine<TRowData = unknown> {
 	public getThemeName?: () => BuiltInThemeName | null;
 	public getAvailableThemes?: () => BuiltInThemeName[];
 	public switchTheme?: (themeName: string) => void;
+	public mergeTheme?: (partial: Partial<ThemeTokens>) => void;
 	public onThemeChange?: (listener: (theme: ThemeTokens) => void) => () => void;
 	public getContainerElement?: () => HTMLElement | null;
 

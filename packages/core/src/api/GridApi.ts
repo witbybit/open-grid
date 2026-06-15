@@ -501,6 +501,8 @@ export interface GridApi<TRowData = unknown> {
 	getAvailableThemes(): BuiltInThemeName[];
 	/** Switch to a built-in theme by name ('light', 'dark', 'cool-blue', etc). */
 	switchTheme(themeName: string): void;
+	/** Shallow-merge partial theme tokens into the current theme. Ideal for live tweaking without a full theme switch. */
+	mergeTheme(partial: Partial<ThemeTokens>): void;
 	/** Subscribe to theme changes. Returns an unsubscribe function. */
 	onThemeChange(listener: (theme: ThemeTokens) => void): () => void;
 	/** Returns the grid container HTML element, or null if not mounted yet. */
