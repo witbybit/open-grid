@@ -1019,11 +1019,22 @@ export const CORE_STYLES = `
   }
 
   .og-header-group-cell {
-    font-size: 12px;
-    letter-spacing: 0.03em;
+    background-color: var(--og-group-header-bg, color-mix(in srgb, var(--og-header-bg) 82%, var(--og-focus-ring) 18%));
+    color: var(--og-group-header-text, var(--og-header-text));
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     border-bottom: 1px solid var(--og-border-color);
+    border-right: 1px solid var(--og-border-color);
     justify-content: center;
     cursor: default;
+    pointer-events: none;
+  }
+
+  .og-header-group-cell.og-header-cell-pinned-left:last-child,
+  .og-header-group-cell.og-header-cell-pinned-right:first-child {
+    border-right: none;
   }
 
   .og-header-cell-col-focus {

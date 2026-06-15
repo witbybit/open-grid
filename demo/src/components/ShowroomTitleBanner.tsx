@@ -13,6 +13,7 @@ import {
 	Gauge,
 	Boxes,
 	TableProperties,
+	LayoutTemplate,
 } from 'lucide-react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
@@ -51,6 +52,7 @@ export default function ShowroomTitleBanner({
 					{activePage === 'gantt' && <Calendar className='w-4.5 h-4.5' />}
 					{activePage === 'native' && <Boxes className='w-4.5 h-4.5' />}
 					{activePage === 'wide' && <TableProperties className='w-4.5 h-4.5' />}
+					{activePage === 'colgroups' && <LayoutTemplate className='w-4.5 h-4.5' />}
 				</span>
 				<div>
 					<h2 className='text-sm font-extrabold text-slate-200 leading-tight uppercase tracking-wider flex items-center gap-2'>
@@ -66,6 +68,7 @@ export default function ShowroomTitleBanner({
 						{activePage === 'nested' && 'Nested and Group Grid Arena'}
 						{activePage === 'native' && 'Native Cell Types — Built into @open-grid/react'}
 						{activePage === 'wide' && 'Wide Grid — Column Virtualization Showcase'}
+						{activePage === 'colgroups' && 'Multi-Level Column Header Groups'}
 					</h2>
 					<p className='text-[10px] text-slate-400 leading-tight mt-0.5'>
 						{activePage === 'lab' &&
@@ -91,6 +94,8 @@ export default function ShowroomTitleBanner({
 							'Checkbox, multi-select tags, date picker, dropdown badge, and number stepper — all zero external deps, CSS-variable themed.'}
 						{activePage === 'wide' &&
 							'100 columns × 500 rows. Only the visible column slice is rendered — scroll horizontally to watch the live badge track colStart/colEnd in real time.'}
+						{activePage === 'colgroups' &&
+							'Header bands span related columns at one or two levels of depth. Resize a column and the group cell reflows. Pin columns and the group splits at the pin-zone boundary.'}
 					</p>
 				</div>
 			</div>

@@ -53,7 +53,7 @@
 | 051 | [Numeric Filter Null Coercion](./051-numeric-filter-null-coercion.md)                           | DONE     | 5d702964     |
 | 052 | [Grid UX and Architecture Hardening](./052-grid-ux-and-architecture-hardening.md)               | DONE     | working tree |
 | 053 | [Column Virtualization Verification](./053-column-virtualization-verification.md)               | DONE     | working tree |
-| 054 | [Multi-Level Column Headers](./054-multi-level-column-headers.md)                               | TODO     | working tree |
+| 054 | [Multi-Level Column Headers](./054-multi-level-column-headers.md)                               | DONE     | working tree |
 | 055 | [State Serialization Schema Versioning](./055-state-schema-versioning.md)                       | DONE     | ecbd712b     |
 | 056 | [valueFormatter Column Option](./056-value-formatter.md)                                        | DONE     | 507525e2     |
 | 057 | [Column Auto-Size](./057-column-auto-size.md)                                                   | TODO     | working tree |

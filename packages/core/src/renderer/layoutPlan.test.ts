@@ -222,6 +222,81 @@ describe('GridLayoutPlan', () => {
 		store.destroy();
 	});
 
+	describe('column group header resize reflow', () => {
+		it('group cell width updates when a child column is resized', () => {
+			const store = new GridStore<{ id: string; a: string; b: string }>({
+				getRowId: (r) => r.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 100, headerGroup: 'Revenue' },
+					{ field: 'b', header: 'B', width: 100, headerGroup: 'Revenue' },
+				],
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(300, 300);
+
+			const before = computeGridLayoutPlan(store.engine);
+			expect(before.headerBands[0].cells[0]).toMatchObject({ label: 'Revenue', width: 200 });
+
+			store.setColumnWidth('a', 200);
+
+			const after = computeGridLayoutPlan(store.engine);
+			// A(200) + B(100) = 300
+			expect(after.headerBands[0].cells[0]).toMatchObject({ label: 'Revenue', width: 300 });
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('group spanning pinned + center splits into two cells after pin changes', () => {
+			const store = new GridStore<{ id: string; a: string; b: string }>({
+				getRowId: (r) => r.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 100, headerGroup: 'Sales' },
+					{ field: 'b', header: 'B', width: 100, headerGroup: 'Sales' },
+				],
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(300, 300);
+
+			// No pins: one group cell spanning both columns
+			const unpinned = computeGridLayoutPlan(store.engine);
+			expect(unpinned.headerBands[0].cells).toHaveLength(1);
+			expect(unpinned.headerBands[0].cells[0]).toMatchObject({ label: 'Sales', colStart: 0, colEnd: 1 });
+
+			// Pin column A left: same group name but different pin zones → two cells
+			store.setViewportPins({ left: 1, right: 0 });
+			const pinned = computeGridLayoutPlan(store.engine);
+			expect(pinned.headerBands[0].cells).toHaveLength(2);
+			expect(pinned.headerBands[0].cells[0]).toMatchObject({ label: 'Sales', pinned: 'left', colStart: 0, colEnd: 0 });
+			expect(pinned.headerBands[0].cells[1]).toMatchObject({ label: 'Sales', pinned: 'center', colStart: 1, colEnd: 1 });
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('group header cells are not resizable, sortable, or movable', () => {
+			const store = new GridStore<{ id: string; a: string; b: string }>({
+				getRowId: (r) => r.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 100, headerGroup: 'Revenue' },
+					{ field: 'b', header: 'B', width: 100, headerGroup: 'Revenue' },
+				],
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(300, 300);
+			const plan = computeGridLayoutPlan(store.engine);
+
+			const groupCell = plan.headerBands[0].cells[0];
+			expect(groupCell.isLeaf).toBe(false);
+			expect(groupCell.resizable).toBe(false);
+			expect(groupCell.sortable).toBe(false);
+			expect(groupCell.movable).toBe(false);
+
+			ctrl.dispose();
+			store.destroy();
+		});
+	});
+
 	describe('pin lanes (Plan 039 Phase 4)', () => {
 		it('exposes one lane geometry that matches the compiled column plan (no drift)', () => {
 			const store = new GridStore<{ id: string; a: string; b: string; c: string; d: string }>({

@@ -19,6 +19,7 @@ import {
 	CheckSquare,
 	ClipboardCheck,
 	TableProperties,
+	LayoutTemplate,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -126,6 +127,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Wide Grid',
 			subtitle: '100 Columns · Column Virtualization',
 			icon: TableProperties,
+		},
+		{
+			id: 'colgroups',
+			label: 'Column Groups',
+			subtitle: '1-Level & 2-Level Header Bands',
+			icon: LayoutTemplate,
 		},
 	] as const;
 
