@@ -4,7 +4,6 @@ import {
 	numberColumnType,
 	type ColumnDef,
 	type FilterModel,
-	type FilterModelItem,
 	type GridApi,
 	type GridDatasource,
 	type SortModel,
@@ -244,11 +243,11 @@ export function createServerDatasource(serverRows: ServerAuditRow[]): GridDataso
 		cachedSortKey = sortKey;
 		cachedFilterKey = filterKey;
 		let rows = serverRows;
-		const statusFilter = filterModel?.status as FilterModelItem | undefined;
-		if (statusFilter?.filter) {
-			if (statusFilter.filter === 'Active') rows = rows.filter((row) => row.severity === 'CRITICAL' || row.severity === 'ERROR');
-			else if (statusFilter.filter === 'Pending') rows = rows.filter((row) => row.severity === 'WARNING');
-			else if (statusFilter.filter === 'Inactive') rows = rows.filter((row) => row.severity === 'INFO' || row.severity === 'DEBUG');
+		const statusFilter = filterModel?.status as any;
+		if (statusFilter?.value) {
+			if (statusFilter.value === 'Active') rows = rows.filter((row) => row.severity === 'CRITICAL' || row.severity === 'ERROR');
+			else if (statusFilter.value === 'Pending') rows = rows.filter((row) => row.severity === 'WARNING');
+			else if (statusFilter.value === 'Inactive') rows = rows.filter((row) => row.severity === 'INFO' || row.severity === 'DEBUG');
 		}
 		if (sortModel?.length) {
 			rows = [...rows].sort((leftRow, rightRow) => {

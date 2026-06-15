@@ -261,7 +261,7 @@ describe('GridStore generic row-store functionality', () => {
 		expect(store.getState().selection.bounds?.maxRow).toBe(2);
 
 		// Filter to rows containing 'keep' — removes id='1', shifts id='2'→0, id='3'→1
-		store.setFilterModel({ name: { type: 'text', filter: 'keep' } });
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'keep' } });
 
 		const bounds = store.getState().selection.bounds;
 		expect(bounds?.minRow).toBe(0);
@@ -790,7 +790,7 @@ describe('ClientRowModelController sorting and filtering', () => {
 		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Cherry');
 
 		// Apply filter by name contains 'an'
-		store.setFilterModel({ name: { type: 'contains', filter: 'an' } });
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'an' } });
 		expect(store.getVisualRowCount()).toBe(1);
 		expect(store.getDataRowAtVisualIndex(0)?.name).toBe('Banana');
 
@@ -1242,14 +1242,14 @@ describe('GridStore undo and redo functionality', () => {
 		expect(store.getState().sortModel).toEqual([{ colId: 'name', sort: 'asc' }]);
 
 		// 2. Filter Model Undo/Redo
-		store.setFilterModel({ name: { type: 'contains', filter: 'App' } });
-		expect(store.getState().filterModel).toEqual({ name: { type: 'contains', filter: 'App' } });
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'App' } });
+		expect(store.getState().filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'App' } });
 
 		store.undo();
 		expect(store.getState().filterModel).toBeNull();
 
 		store.redo();
-		expect(store.getState().filterModel).toEqual({ name: { type: 'contains', filter: 'App' } });
+		expect(store.getState().filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'App' } });
 
 		controller.dispose();
 	});
@@ -1450,13 +1450,13 @@ describe('GridStore undo and redo functionality', () => {
 				{ field: 'price', header: 'Price', width: 100 },
 			],
 			rowTransaction: { update: [{ id: '2', name: 'Product B+', price: 22 }] },
-			filterModel: { name: { type: 'contains', filter: 'Product' } },
+			filterModel: { name: { type: 'text', operator: 'contains', value: 'Product' } },
 			pins: { left: 1, right: 1 },
 		});
 
 		expect(renderInvalidated).toHaveBeenCalledTimes(1);
 		expect(store.getPinnedColumns()).toEqual({ left: 1, right: 1 });
-		expect(store.getState().filterModel).toEqual({ name: { type: 'contains', filter: 'Product' } });
+		expect(store.getState().filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'Product' } });
 
 		controller.dispose();
 	});

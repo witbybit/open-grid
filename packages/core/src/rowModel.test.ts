@@ -166,7 +166,7 @@ describe('ClientRowModelController', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
-			filterModel: { name: { type: 'contains', filter: 'a' } },
+			filterModel: { name: { type: 'text', operator: 'contains', value: 'a' } },
 			sortModel: [{ colId: 'name', sort: 'desc' }],
 		});
 
@@ -247,7 +247,7 @@ describe('ClientRowModelController', () => {
 				{ field: 'category', header: 'Category' },
 				{ field: 'name', header: 'Name' },
 			],
-			filterModel: { name: { type: 'contains', filter: 'keep' } },
+			filterModel: { name: { type: 'text', operator: 'contains', value: 'keep' } },
 			rowModelConfig: {
 				type: 'client',
 				grouping: { model: [{ colId: 'category' }], defaultExpanded: true },
@@ -369,7 +369,7 @@ describe('ClientRowModelController', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
-			filterModel: { name: { type: 'contains', filter: 'Child' } },
+			filterModel: { name: { type: 'text', operator: 'contains', value: 'Child' } },
 			rowModelConfig: {
 				type: 'client',
 				treeData: {
@@ -634,7 +634,7 @@ describe('Numeric Filter Null Safety', () => {
 
 		// 1. Filter: value < 5
 		store.setState({
-			filterModel: { value: { type: 'lt', filter: '5' } },
+			filterModel: { value: { type: 'number', operator: 'lt', value: 5 } },
 		});
 		controller.refresh();
 		// Only '5' (value 3) should match. null/undefined/"" should NOT match (would have matched if coerced to 0)
@@ -643,7 +643,7 @@ describe('Numeric Filter Null Safety', () => {
 
 		// 2. Filter: value >= 0
 		store.setState({
-			filterModel: { value: { type: 'gte', filter: '0' } },
+			filterModel: { value: { type: 'number', operator: 'gte', value: 0 } },
 		});
 		controller.refresh();
 		// '1' (10) and '5' (3) should match. null/undefined/"" should not match

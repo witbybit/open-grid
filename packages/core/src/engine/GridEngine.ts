@@ -788,15 +788,12 @@ export class GridEngine<TRowData = unknown> {
 	public undo(): void {
 		this.commandHistory.undo();
 	}
-
 	public redo(): void {
 		this.commandHistory.redo();
 	}
-
 	public fillRange(source: GridCellRange, target: GridCellRange): void {
 		this.spreadsheetFill.fillRange(source, target);
 	}
-
 	public destroy(): void {
 		this.cellNotifications.clear();
 		this.eventBus.clear();

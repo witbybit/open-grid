@@ -103,7 +103,7 @@ export default function App() {
 
 	const rowHeightsMap = useMemo(() => ({ compact: 30, normal: 38, spacious: 48 }), []);
 	const filterModel = useMemo<FilterModel | null>(
-		() => (statusFilter === 'All' ? null : { status: { type: 'equals', filter: statusFilter } }),
+		() => (statusFilter === 'All' ? null : { status: { type: 'text', operator: 'equals', value: statusFilter } }),
 		[statusFilter]
 	);
 

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GridStore } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
-import { legacyItemToColumnFilter, migrateFilterModelV1toV2 } from './filterModel.js';
 
 interface TestRow {
 	id: string;
@@ -280,45 +279,6 @@ describe('compound filter', () => {
 		// 10 (Apple) < 20, 120 (Cherry) > 100
 		expect(getVisibleNames(store)).toEqual(['Apple', 'Cherry']);
 		controller.dispose();
-	});
-});
-
-// ── Schema migration ──────────────────────────────────────────────────────────
-
-describe('schema migration', () => {
-	it('v1 legacy flat item migrates to TextFilterCondition', () => {
-		const result = legacyItemToColumnFilter({ type: 'contains', filter: 'apple' });
-		expect(result).toEqual({ type: 'text', operator: 'contains', value: 'apple' });
-	});
-
-	it('v1 numeric operator migrates to NumberFilterCondition', () => {
-		const result = legacyItemToColumnFilter({ type: 'gt', filter: '50' });
-		expect(result).toEqual({ type: 'number', operator: 'gt', value: 50 });
-	});
-
-	it('v1 item with type:text and filter key is treated as legacy contains', () => {
-		// Ambiguous legacy: type was 'text' (not a valid old FilterOperator) with filter key
-		const result = legacyItemToColumnFilter({ type: 'text', filter: 'keep' });
-		expect(result).toEqual({ type: 'text', operator: 'contains', value: 'keep' });
-	});
-
-	it('raw string value migrates to contains text filter', () => {
-		const result = legacyItemToColumnFilter('apple');
-		expect(result).toEqual({ type: 'text', operator: 'contains', value: 'apple' });
-	});
-
-	it('null returns null', () => {
-		expect(legacyItemToColumnFilter(null)).toBeNull();
-	});
-
-	it('migrateFilterModelV1toV2 converts entire model', () => {
-		const v1 = {
-			name: { type: 'contains', filter: 'Alice' },
-			price: { type: 'gt', filter: 100 },
-		};
-		const v2 = migrateFilterModelV1toV2(v1);
-		expect(v2.name).toEqual({ type: 'text', operator: 'contains', value: 'Alice' });
-		expect(v2.price).toEqual({ type: 'number', operator: 'gt', value: 100 });
 	});
 });
 

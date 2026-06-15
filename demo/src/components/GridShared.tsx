@@ -264,8 +264,9 @@ export const StatusHeaderFilter = ({ colField, api, close }: { colField: string;
 		const nextFilter = { ...(state.filterModel || {}) };
 		if (selectedValue) {
 			nextFilter[colField] = {
-				type: 'equals',
-				filter: selectedValue,
+				type: 'text',
+				value: selectedValue,
+				operator: 'contains',
 			};
 		} else {
 			delete nextFilter[colField];

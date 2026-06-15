@@ -17,7 +17,6 @@ import {
 	type FilterCondition,
 	type CompoundFilterCondition,
 	type ColumnFilter,
-	legacyItemToColumnFilter,
 } from './filterModel.js';
 
 export type {
@@ -40,15 +39,6 @@ export interface SortModelItem {
 }
 
 export type SortModel = SortModelItem[];
-
-/** @deprecated Use TextFilterCondition / NumberFilterCondition with explicit `type` field instead. */
-export type FilterOperator = 'contains' | 'equals' | 'startsWith' | 'endsWith' | 'gt' | 'gte' | 'lt' | 'lte';
-
-/** @deprecated Use ColumnFilter discriminated union instead. */
-export interface FilterModelItem {
-	type?: FilterOperator;
-	filter: unknown;
-}
 
 export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
@@ -411,7 +401,7 @@ function prepareFilters<TData>(columns: Array<ColumnDef<TData>>, filterModel: Fi
 	const columnById = createColumnLookup(columns);
 
 	for (const [colId, rawItem] of Object.entries(filterModel)) {
-		const item: ColumnFilter | null = legacyItemToColumnFilter(rawItem);
+		const item = rawItem as ColumnFilter;
 		if (!item) continue;
 		const column = columnById.get(colId);
 		if (!column) continue;

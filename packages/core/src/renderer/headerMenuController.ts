@@ -295,12 +295,10 @@ export class HeaderMenuController<TRowData = unknown> {
 			let currentOperator = 'contains';
 			let currentFilterVal = '';
 			if (state.filterModel && state.filterModel[colField] !== undefined) {
-				const filterObj = state.filterModel[colField];
-				if (filterObj && typeof filterObj === 'object' && 'filter' in filterObj) {
-					currentOperator = (filterObj as any).type ?? 'contains';
-					currentFilterVal = String((filterObj as any).filter ?? '');
-				} else {
-					currentFilterVal = String(filterObj ?? '');
+				const filterObj = state.filterModel[colField] as any;
+				if (filterObj && typeof filterObj === 'object') {
+					currentOperator = filterObj.operator ?? filterObj.type ?? 'contains';
+					currentFilterVal = filterObj.value != null ? String(filterObj.value) : (filterObj.dateFrom ?? '');
 				}
 			}
 

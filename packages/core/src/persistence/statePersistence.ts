@@ -1,6 +1,5 @@
 import type { GridState, ColumnDef } from '../store.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
-import { migrateFilterModelV1toV2 } from '../filterModel.js';
 import { isBuiltInThemeName, type BuiltInThemeName } from '../renderer/themes.js';
 
 /**
@@ -13,11 +12,6 @@ import { isBuiltInThemeName, type BuiltInThemeName } from '../renderer/themes.js
  * version-dispatch chain before incrementing this constant.
  */
 export const GRID_STATE_SCHEMA_VERSION = 2;
-
-function migrateV1toV2(state: PersistedGridState): PersistedGridState {
-	if (!state.filterModel) return state;
-	return { ...state, filterModel: migrateFilterModelV1toV2(state.filterModel as Record<string, unknown>) };
-}
 
 export interface PersistedGridState {
 	/**
@@ -54,8 +48,7 @@ export function validateSchemaVersion(state: PersistedGridState): string | null 
 		);
 		return null;
 	}
-	// v1 blobs are automatically migrated to v2 — not a hard error
-	if (state.v === 1 || state.v === GRID_STATE_SCHEMA_VERSION) return null;
+	if (state.v === GRID_STATE_SCHEMA_VERSION) return null;
 	return (
 		`[open-grid] applyPersistedState: schema version mismatch ` +
 		`(blob v=${state.v}, expected v=${GRID_STATE_SCHEMA_VERSION}). ` +
@@ -182,8 +175,6 @@ export function applyPersistedState<TRowData>(
 		console.error(versionError);
 		return null;
 	}
-	// Auto-migrate v1 blobs
-	if (saved.v === 1) saved = migrateV1toV2(saved);
 	const knownFields = new Set(columns.map((c) => c.field));
 	const result: Partial<GridState<TRowData>> = { ...initial };
 

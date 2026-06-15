@@ -75,7 +75,6 @@ export {
 } from './store.js';
 export type {
 	FilterModel,
-	FilterModelItem,
 	ColumnFilter,
 	FilterCondition,
 	TextFilterCondition,
