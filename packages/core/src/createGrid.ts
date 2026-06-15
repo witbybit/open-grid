@@ -312,9 +312,8 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 		if (loaded instanceof Promise) {
 			asyncLoad = loaded;
 		} else if (loaded) {
-			mergedInitial = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]) as Partial<
-				GridState<TRowData>
-			>;
+			const applied = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]);
+			if (applied !== null) mergedInitial = applied as Partial<GridState<TRowData>>;
 		}
 	}
 	// Apply row selection after persistence so restored column state cannot hide the built-in selector.
@@ -381,9 +380,8 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 		if (loaded instanceof Promise) {
 			asyncLoad = loaded;
 		} else if (loaded) {
-			mergedInitial = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]) as Partial<
-				GridState<TRowData>
-			>;
+			const applied = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]);
+			if (applied !== null) mergedInitial = applied as Partial<GridState<TRowData>>;
 		}
 	}
 	const selected = withRowSelectionColumn(options.columns, mergedInitial, options.rowSelection);

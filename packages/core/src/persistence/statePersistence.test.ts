@@ -6,11 +6,105 @@ import {
 	createPersistenceSubscription,
 	areRowHeightsEqual,
 	applyPersistedStateToApi,
+	validateSchemaVersion,
+	GRID_STATE_SCHEMA_VERSION,
 	type PersistedGridState,
 } from './statePersistence.js';
 import type { GridState, ColumnDef } from '../store.js';
 
 describe('statePersistence', () => {
+	describe('schema versioning', () => {
+		it('GRID_STATE_SCHEMA_VERSION is a positive integer', () => {
+			expect(GRID_STATE_SCHEMA_VERSION).toBeGreaterThan(0);
+			expect(Number.isInteger(GRID_STATE_SCHEMA_VERSION)).toBe(true);
+		});
+
+		it('validateSchemaVersion returns null for correct version', () => {
+			expect(validateSchemaVersion({ v: GRID_STATE_SCHEMA_VERSION })).toBeNull();
+		});
+
+		it('validateSchemaVersion returns null for missing version (legacy blob) with a warning', () => {
+			const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			expect(validateSchemaVersion({})).toBeNull();
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no schema version'));
+			warnSpy.mockRestore();
+		});
+
+		it('validateSchemaVersion returns error string for wrong version', () => {
+			const result = validateSchemaVersion({ v: 999 });
+			expect(result).not.toBeNull();
+			expect(result).toContain('version mismatch');
+		});
+
+		it('extractPersistedState stamps the current schema version', () => {
+			const state = {
+				columns: [{ field: 'id' }],
+				columnWidths: {},
+				pinnedColumns: { left: 0, right: 0 },
+			} as any;
+			const persisted = extractPersistedState(state);
+			expect(persisted.v).toBe(GRID_STATE_SCHEMA_VERSION);
+		});
+
+		it('applyPersistedState returns null for version-mismatched blob', () => {
+			const columns = [{ field: 'id' }] as any[];
+			const result = applyPersistedState({ v: 999, columnWidths: { id: 100 } }, {}, columns);
+			expect(result).toBeNull();
+		});
+
+		it('applyPersistedState returns state object for correct version', () => {
+			const columns = [{ field: 'id' }] as any[];
+			const result = applyPersistedState({ v: GRID_STATE_SCHEMA_VERSION }, {}, columns);
+			expect(result).not.toBeNull();
+		});
+
+		it('applyPersistedState accepts legacy blob (no v) with console.warn', () => {
+			const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const columns = [{ field: 'id' }] as any[];
+			const result = applyPersistedState({}, {}, columns);
+			expect(result).not.toBeNull();
+			expect(warnSpy).toHaveBeenCalled();
+			warnSpy.mockRestore();
+		});
+
+		it('applyPersistedStateToApi returns false for version-mismatched blob', () => {
+			const mockApi = {
+				getState: vi.fn(() => ({ columns: [{ field: 'id' }] })),
+				setColumnOrder: vi.fn(), setColumnsVisible: vi.fn(), setColumnWidth: vi.fn(),
+				setSortModel: vi.fn(), setFilterModel: vi.fn(), switchTheme: vi.fn(),
+				setGroupBy: vi.fn(), setShowGroupFooter: vi.fn(), setStickyGroupRows: vi.fn(),
+				setPinnedColumns: vi.fn(),
+			};
+			expect(applyPersistedStateToApi(mockApi, { v: 999 })).toBe(false);
+			expect(mockApi.setColumnOrder).not.toHaveBeenCalled();
+		});
+
+		it('applyPersistedStateToApi returns true for correct version', () => {
+			const mockApi = {
+				getState: vi.fn(() => ({ columns: [{ field: 'id' }] })),
+				setColumnOrder: vi.fn(), setColumnsVisible: vi.fn(), setColumnWidth: vi.fn(),
+				setSortModel: vi.fn(), setFilterModel: vi.fn(), switchTheme: vi.fn(),
+				setGroupBy: vi.fn(), setShowGroupFooter: vi.fn(), setStickyGroupRows: vi.fn(),
+				setPinnedColumns: vi.fn(),
+			};
+			expect(applyPersistedStateToApi(mockApi, { v: GRID_STATE_SCHEMA_VERSION })).toBe(true);
+		});
+
+		it('round-trip: extractPersistedState → applyPersistedState succeeds', () => {
+			const gridState = {
+				columns: [{ field: 'id', width: 100 }],
+				columnWidths: { id: 100 },
+				sortModel: [{ colId: 'id', sort: 'asc' }],
+				pinnedColumns: { left: 0, right: 0 },
+			} as any;
+			const persisted = extractPersistedState(gridState);
+			expect(persisted.v).toBe(GRID_STATE_SCHEMA_VERSION);
+			const result = applyPersistedState(persisted, {}, gridState.columns);
+			expect(result).not.toBeNull();
+			expect((result as any).columnWidths?.id).toBe(100);
+		});
+	});
+
 	describe('extractPersistedState', () => {
 		it('should extract correct subset of GridState for persistence', () => {
 			const dummyState = {
@@ -36,6 +130,7 @@ describe('statePersistence', () => {
 			const result = extractPersistedState(dummyState);
 
 			expect(result).toEqual({
+				v: GRID_STATE_SCHEMA_VERSION,
 				columnOrder: ['id', 'name', 'age'],
 				columnVisibility: { name: false },
 				columnWidths: { id: 50, name: 100, age: 85 },
@@ -187,7 +282,7 @@ describe('statePersistence', () => {
 
 		it('should save and load state', () => {
 			const adapter = createLocalStorageAdapter('test-key');
-			const testState: PersistedGridState = { themeName: 'light', showGroupFooter: true };
+			const testState: PersistedGridState = { v: GRID_STATE_SCHEMA_VERSION, themeName: 'light', showGroupFooter: true };
 			adapter.save(testState);
 
 			expect(localStorage.setItem).toHaveBeenCalledWith('test-key', JSON.stringify(testState));
@@ -410,6 +505,7 @@ describe('statePersistence', () => {
 			};
 
 			const saved: PersistedGridState = {
+				v: GRID_STATE_SCHEMA_VERSION,
 				columnOrder: ['name', 'id'],
 				columnVisibility: { name: true, id: false },
 				columnWidths: { id: 50 },

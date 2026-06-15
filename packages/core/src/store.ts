@@ -12,7 +12,7 @@ import { createRowsAccessor } from './rowsAccessor.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 import type { PersistenceStatus, PersistedGridState } from './persistence/statePersistence.js';
-import { extractPersistedState, applyPersistedStateToApi, areRowHeightsEqual } from './persistence/statePersistence.js';
+import { extractPersistedState, applyPersistedStateToApi, areRowHeightsEqual, GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 
 import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltInThemeName, type ThemeTokens } from './renderer/themes.js';
 
@@ -545,7 +545,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return extractPersistedState(this.engine.getState() as GridState);
 	};
 	public applyGridState = (state: PersistedGridState): void => {
-		applyPersistedStateToApi(this, state);
+		if (!applyPersistedStateToApi(this, state)) {
+			const blobV = (state as any).v ?? 'undefined';
+			this.reportRuntimeFault({ source: 'persistence', operation: 'applyGridState', error: new Error(`Schema version mismatch (blob v=${blobV}, expected v=${GRID_STATE_SCHEMA_VERSION}).`) });
+		}
 	};
 
 	public registerRowModel = (rowModel: RowModel<TRowData>): void => {

@@ -2,7 +2,24 @@ import type { GridState, ColumnDef } from '../store.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { isBuiltInThemeName, type BuiltInThemeName } from '../renderer/themes.js';
 
+/**
+ * Schema version for persisted grid state. Increment this when any field in
+ * `PersistedGridState` changes shape (e.g. filter model operators added/removed,
+ * field renamed). `applyPersistedState` and `applyPersistedStateToApi` reject
+ * blobs whose `v` does not match this value.
+ *
+ * Migration path: add a `migrateV{N}toV{N+1}` function and call it in the
+ * version-dispatch chain before incrementing this constant.
+ */
+export const GRID_STATE_SCHEMA_VERSION = 1;
+
 export interface PersistedGridState {
+	/**
+	 * Schema version. Set automatically by `extractPersistedState`. If absent,
+	 * the blob pre-dates versioning and is accepted with a console warning.
+	 * A mismatched version causes the blob to be silently rejected (no-op).
+	 */
+	v?: number;
 	columnWidths?: Record<string, number>;
 	columnOrder?: string[];
 	/** false = hidden. Omitted fields use column defaults. */
@@ -14,6 +31,32 @@ export interface PersistedGridState {
 	showGroupFooter?: boolean;
 	enableStickyGroupRows?: boolean;
 	pinnedColumns?: { left: number; right: number };
+}
+
+/**
+ * Validate the schema version of a persisted state blob.
+ * Returns null if the blob is compatible, or a human-readable error string if not.
+ * A missing version (`v === undefined`) is treated as a legacy pre-versioning blob
+ * and accepted with a warning rather than rejected.
+ */
+export function validateSchemaVersion(state: PersistedGridState): string | null {
+	if (state.v === undefined) {
+		// Pre-versioning blob — apply but warn so developers notice during testing.
+		console.warn(
+			`[open-grid] applyPersistedState: state blob has no schema version (v is undefined). ` +
+				`It predates versioning and will be applied as-is. ` +
+				`Future schema changes may break this. Save the grid state again to stamp v=${GRID_STATE_SCHEMA_VERSION}.`
+		);
+		return null;
+	}
+	if (state.v !== GRID_STATE_SCHEMA_VERSION) {
+		return (
+			`[open-grid] applyPersistedState: schema version mismatch ` +
+			`(blob v=${state.v}, expected v=${GRID_STATE_SCHEMA_VERSION}). ` +
+			`State was not applied. Clear the persisted state or provide a migration function.`
+		);
+	}
+	return null;
 }
 
 /**
@@ -106,6 +149,7 @@ export function extractPersistedState(state: GridState): PersistedGridState {
 	}
 	const pins = state.pinnedColumns;
 	return {
+		v: GRID_STATE_SCHEMA_VERSION,
 		columnWidths: Object.keys(state.columnWidths).length > 0 ? state.columnWidths : undefined,
 		columnOrder,
 		columnVisibility: Object.keys(columnVisibility).length > 0 ? columnVisibility : undefined,
@@ -119,11 +163,21 @@ export function extractPersistedState(state: GridState): PersistedGridState {
 	};
 }
 
+/**
+ * Apply a persisted state blob onto the initial grid state.
+ * Returns null if the blob's schema version is incompatible (mismatch — not legacy).
+ * A legacy blob (no `v` field) is accepted with a console warning.
+ */
 export function applyPersistedState<TRowData>(
 	saved: PersistedGridState,
 	initial: Partial<GridState<TRowData>>,
 	columns: ColumnDef<unknown>[]
-): Partial<GridState<TRowData>> {
+): Partial<GridState<TRowData>> | null {
+	const versionError = validateSchemaVersion(saved);
+	if (versionError !== null) {
+		console.error(versionError);
+		return null;
+	}
 	const knownFields = new Set(columns.map((c) => c.field));
 	const result: Partial<GridState<TRowData>> = { ...initial };
 
@@ -319,6 +373,11 @@ export function areRowHeightsEqual(current: Record<string, number>, next: Record
 	return true;
 }
 
+/**
+ * Apply a persisted state blob via GridApi method calls.
+ * Returns true on success, false if the schema version is incompatible.
+ * The caller should report a runtime fault when this returns false.
+ */
 export function applyPersistedStateToApi<TRowData>(
 	api: {
 		getState(): any;
@@ -334,7 +393,11 @@ export function applyPersistedStateToApi<TRowData>(
 		setPinnedColumns(pins: any): void;
 	},
 	state: PersistedGridState
-): void {
+): boolean {
+	const versionError = validateSchemaVersion(state);
+	if (versionError !== null) {
+		return false;
+	}
 	const columns = api.getState().columns;
 	const knownFields = new Set(columns.map((c: any) => c.field));
 	if (state.columnOrder) {
@@ -370,4 +433,5 @@ export function applyPersistedStateToApi<TRowData>(
 	if (state.showGroupFooter !== undefined) api.setShowGroupFooter(state.showGroupFooter);
 	if (state.enableStickyGroupRows !== undefined) api.setStickyGroupRows(state.enableStickyGroupRows);
 	if (state.pinnedColumns !== undefined) api.setPinnedColumns(state.pinnedColumns);
+	return true;
 }
