@@ -35,6 +35,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		setColumnWidth: source.setColumnWidth,
 		autoSizeColumn: source.autoSizeColumn,
 		autoSizeAllColumns: source.autoSizeAllColumns,
+		getColumnDistinctValues: source.getColumnDistinctValues,
 		copySelectedRange: source.copySelectedRange,
 		pasteFromClipboard: source.pasteFromClipboard,
 		copyRange: source.copyRange,

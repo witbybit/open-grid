@@ -280,6 +280,16 @@ export interface ColumnDef<TRowData = unknown> {
 	 * (e.g. `['Financials', 'Revenue']` → Financials > Revenue > this leaf).
 	 */
 	headerGroup?: string | string[];
+	/**
+	 * Filter UI type shown for this column in the sidebar and header menu.
+	 * Defaults to `'text'`. Use `'none'` to hide the filter UI for this column.
+	 */
+	filterType?: 'text' | 'number' | 'date' | 'set' | 'none';
+	/**
+	 * For set filter: explicit list of selectable values.
+	 * When omitted, distinct values are derived from row data via `api.getColumnDistinctValues()`.
+	 */
+	filterValues?: (string | number | null)[];
 }
 
 /**

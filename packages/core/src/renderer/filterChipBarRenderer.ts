@@ -1,17 +1,70 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { HeaderMenuController } from './headerMenuController.js';
-import type { FilterModelItem } from '../rowModel.js';
+import type { ColumnFilter } from '../filterModel.js';
 
-const OPERATOR_LABELS: Record<string, string> = {
+const TEXT_OP_LABELS: Record<string, string> = {
 	contains: 'contains',
+	notContains: '¬contains',
 	equals: '=',
+	notEquals: '≠',
 	startsWith: 'starts',
 	endsWith: 'ends',
+	blank: 'is blank',
+	notBlank: 'not blank',
+};
+
+const NUMBER_OP_LABELS: Record<string, string> = {
+	equals: '=',
+	notEquals: '≠',
 	gt: '>',
 	gte: '≥',
 	lt: '<',
 	lte: '≤',
+	inRange: 'in range',
+	blank: 'is blank',
+	notBlank: 'not blank',
 };
+
+const DATE_OP_LABELS: Record<string, string> = {
+	equals: 'on',
+	before: 'before',
+	after: 'after',
+	inRange: 'between',
+	blank: 'is blank',
+	notBlank: 'not blank',
+};
+
+function chipTextForFilter(item: ColumnFilter): string {
+	switch (item.type) {
+		case 'text': {
+			const op = TEXT_OP_LABELS[item.operator] ?? item.operator;
+			if (item.operator === 'blank' || item.operator === 'notBlank') return op;
+			return `${op} "${item.value}"`;
+		}
+		case 'number': {
+			const op = NUMBER_OP_LABELS[item.operator] ?? item.operator;
+			if (item.operator === 'blank' || item.operator === 'notBlank') return op;
+			if (item.operator === 'inRange') return `${item.value} – ${item.valueTo ?? '…'}`;
+			return `${op} ${item.value}`;
+		}
+		case 'date': {
+			const op = DATE_OP_LABELS[item.operator] ?? item.operator;
+			if (item.operator === 'blank' || item.operator === 'notBlank') return op;
+			if (item.operator === 'inRange') return `${item.dateFrom} – ${item.dateTo ?? '…'}`;
+			return `${op} ${item.dateFrom}`;
+		}
+		case 'set': {
+			if (item.values.length === 0) return '(none)';
+			const labels = item.values.slice(0, 3).map((v) => (v === null ? '(blank)' : String(v)));
+			const extra = item.values.length > 3 ? ` +${item.values.length - 3} more` : '';
+			return labels.join(', ') + extra;
+		}
+		case 'compound': {
+			const [c1, c2] = item.conditions;
+			return `${chipTextForFilter(c1)} ${item.operator} ${chipTextForFilter(c2)}`;
+		}
+	}
+}
 
 /**
  * Renders a horizontal chip strip below the group panel (above the column headers)
@@ -67,23 +120,14 @@ export class FilterChipBarRenderer<TRowData = unknown> {
 		for (const [colField, filterItem] of Object.entries(filterModel)) {
 			const col = state.columns.find((c) => c.field === colField);
 			const label = col?.header ?? colField;
-
-			let operatorLabel = 'contains';
-			let filterValue = '';
-			if (filterItem && typeof filterItem === 'object' && 'filter' in filterItem) {
-				const item = filterItem as FilterModelItem;
-				operatorLabel = OPERATOR_LABELS[item.type ?? 'contains'] ?? item.type ?? 'contains';
-				filterValue = String(item.filter ?? '');
-			} else {
-				filterValue = String(filterItem ?? '');
-			}
+			const chipText = chipTextForFilter(filterItem as ColumnFilter);
 
 			const chip = document.createElement('div');
 			chip.className = 'og-filter-chip';
 
 			const chipLabel = document.createElement('span');
 			chipLabel.className = 'og-filter-chip-label';
-			chipLabel.textContent = `${label}: ${operatorLabel} "${filterValue}"`;
+			chipLabel.textContent = `${label}: ${chipText}`;
 			chipLabel.style.cursor = 'pointer';
 			chipLabel.addEventListener('click', () => {
 				this.headerMenu.showForField(colField, chip);

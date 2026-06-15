@@ -186,6 +186,7 @@ export function createApiFacade<TRowData>(
 		setColumnWidth: (colField: string, width: number) => store.setColumnWidth(colField, width),
 		autoSizeColumn: (colField: string, options?: Parameters<typeof store.autoSizeColumn>[1]) => store.autoSizeColumn(colField, options),
 		autoSizeAllColumns: (options?: Parameters<typeof store.autoSizeAllColumns>[0]) => store.autoSizeAllColumns(options),
+		getColumnDistinctValues: (colField: string) => store.getColumnDistinctValues(colField),
 		copySelectedRange: () => store.copySelectedRange(),
 		pasteFromClipboard: () => store.pasteFromClipboard(),
 		copyRange: (minRow: number, maxRow: number, minCol: number, maxCol: number) => store.copyRange(minRow, maxRow, minCol, maxCol),

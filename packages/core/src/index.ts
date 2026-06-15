@@ -73,7 +73,23 @@ export {
 	isFullWidthVisualRow,
 	isSelectableVisualRow,
 } from './store.js';
-export type { FilterModel, FilterModelItem, GroupDef, RowModelConfig, SortModel } from './rowModel.js';
+export type {
+	FilterModel,
+	FilterModelItem,
+	ColumnFilter,
+	FilterCondition,
+	TextFilterCondition,
+	NumberFilterCondition,
+	DateFilterCondition,
+	SetFilterCondition,
+	CompoundFilterCondition,
+	TextFilterOperator,
+	NumberFilterOperator,
+	DateFilterOperator,
+	GroupDef,
+	RowModelConfig,
+	SortModel,
+} from './rowModel.js';
 export type { AggregationDef } from './rows/stages/aggregateStage.js';
 export type { CsvExportOptions } from './store.js';
 export {

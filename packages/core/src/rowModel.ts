@@ -8,6 +8,29 @@ import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows
 import type { PageWindow } from './rows/pageModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
 import type { VisualRow } from './visualRow.js';
+import {
+	type FilterModel,
+	type TextFilterCondition,
+	type NumberFilterCondition,
+	type DateFilterCondition,
+	type SetFilterCondition,
+	type FilterCondition,
+	type CompoundFilterCondition,
+	type ColumnFilter,
+	legacyItemToColumnFilter,
+} from './filterModel.js';
+
+export type {
+	FilterModel,
+	ColumnFilter,
+	FilterCondition,
+	CompoundFilterCondition,
+	TextFilterCondition,
+	NumberFilterCondition,
+	DateFilterCondition,
+	SetFilterCondition,
+};
+export type { TextFilterOperator, NumberFilterOperator, DateFilterOperator } from './filterModel.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -18,14 +41,14 @@ export interface SortModelItem {
 
 export type SortModel = SortModelItem[];
 
+/** @deprecated Use TextFilterCondition / NumberFilterCondition with explicit `type` field instead. */
 export type FilterOperator = 'contains' | 'equals' | 'startsWith' | 'endsWith' | 'gt' | 'gte' | 'lt' | 'lte';
 
+/** @deprecated Use ColumnFilter discriminated union instead. */
 export interface FilterModelItem {
 	type?: FilterOperator;
 	filter: unknown;
 }
-
-export type FilterModel = Record<string, FilterModelItem | unknown>;
 
 export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
@@ -68,6 +91,8 @@ export interface RowModel<TRowData = unknown> {
 	getStickyGroupMeta?(): Map<number, number>;
 	/** The active client page-window (Plan 041), or null when pagination is off. */
 	getPageWindow?(): PageWindow | null;
+	/** Returns all data nodes (unfiltered) for distinct-value computation. */
+	getAllDataNodes?(): RowNode<TRowData>[];
 	getGroupMeta?(groupId: string): GroupRowMeta | null;
 	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
 	setRows?(rows: TRowData[]): void;
@@ -102,12 +127,69 @@ export interface GroupRowMeta {
 	aggregateValues?: Record<string, unknown>;
 }
 
-function getFilterItemValue(item: FilterModelItem | unknown): { operator: FilterOperator; filter: unknown } {
-	if (item && typeof item === 'object' && 'filter' in item) {
-		const typedItem = item as FilterModelItem;
-		return { operator: typedItem.type ?? 'contains', filter: typedItem.filter };
+// ── Filter preparation ────────────────────────────────────────────────────────
+
+interface PreparedBase<TData> {
+	getter: (node: RowNode<TData>) => unknown;
+}
+
+interface PreparedTextFilter<TData> extends PreparedBase<TData> {
+	kind: 'text';
+	operator: TextFilterCondition['operator'];
+	textValue: string;
+}
+
+interface PreparedNumberFilter<TData> extends PreparedBase<TData> {
+	kind: 'number';
+	operator: NumberFilterCondition['operator'];
+	value: number;
+	valueTo?: number;
+}
+
+interface PreparedDateFilter<TData> extends PreparedBase<TData> {
+	kind: 'date';
+	operator: DateFilterCondition['operator'];
+	dateFrom: Date;
+	dateTo?: Date;
+}
+
+interface PreparedSetFilter<TData> extends PreparedBase<TData> {
+	kind: 'set';
+	valueSet: Set<string>;
+	includeNull: boolean;
+}
+
+interface PreparedCompoundFilter<TData> {
+	kind: 'compound';
+	logicalOp: 'AND' | 'OR';
+	left: PreparedColumnFilter<TData>;
+	right: PreparedColumnFilter<TData>;
+}
+
+type PreparedColumnFilter<TData> =
+	| PreparedTextFilter<TData>
+	| PreparedNumberFilter<TData>
+	| PreparedDateFilter<TData>
+	| PreparedSetFilter<TData>
+	| PreparedCompoundFilter<TData>;
+
+function parseFilterDate(raw: string): Date | null {
+	const d = new Date(raw);
+	return isNaN(d.getTime()) ? null : d;
+}
+
+function stripTime(d: Date): Date {
+	return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function parseCellDate(value: unknown): Date | null {
+	if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+	if (typeof value === 'number') return new Date(value);
+	if (typeof value === 'string') {
+		const d = new Date(value);
+		return isNaN(d.getTime()) ? null : d;
 	}
-	return { operator: 'contains', filter: item };
+	return null;
 }
 
 function compareValues(a: unknown, b: unknown): number {
@@ -139,44 +221,93 @@ export function getColumnValue<TData>(node: RowNode<TData>, column: ColumnDef<TD
 	return node.getCellValue(column.field, getter);
 }
 
-interface PreparedFilter<TData> {
-	column: ColumnDef<TData>;
-	getter: (node: RowNode<TData>) => unknown;
-	operator: FilterOperator;
-	textFilter: string;
-	numericFilter: number;
-}
-
-function matchesPreparedFilter<TData>(value: unknown, pf: PreparedFilter<TData>): boolean {
-	const textValue = String(value ?? '').toLowerCase();
-
-	if (pf.operator === 'gt' || pf.operator === 'gte' || pf.operator === 'lt' || pf.operator === 'lte') {
-		if (value == null || value === '') return false;
-		const numericValue = Number(value);
-		if (Number.isNaN(numericValue)) return false;
-
-		switch (pf.operator) {
-			case 'gt':
-				return numericValue > pf.numericFilter;
-			case 'gte':
-				return numericValue >= pf.numericFilter;
-			case 'lt':
-				return numericValue < pf.numericFilter;
-			case 'lte':
-				return numericValue <= pf.numericFilter;
-		}
-	}
-
+function matchTextFilter(value: unknown, pf: PreparedTextFilter<unknown>): boolean {
+	const isBlank = value == null || value === '';
+	if (pf.operator === 'blank') return isBlank;
+	if (pf.operator === 'notBlank') return !isBlank;
+	const text = String(value ?? '').toLowerCase();
 	switch (pf.operator) {
 		case 'equals':
-			return textValue === pf.textFilter;
+			return text === pf.textValue;
+		case 'notEquals':
+			return text !== pf.textValue;
 		case 'startsWith':
-			return textValue.startsWith(pf.textFilter);
+			return text.startsWith(pf.textValue);
 		case 'endsWith':
-			return textValue.endsWith(pf.textFilter);
+			return text.endsWith(pf.textValue);
+		case 'notContains':
+			return !text.includes(pf.textValue);
 		case 'contains':
 		default:
-			return textValue.includes(pf.textFilter);
+			return text.includes(pf.textValue);
+	}
+}
+
+function matchNumberFilter(value: unknown, pf: PreparedNumberFilter<unknown>): boolean {
+	const isBlank = value == null || value === '';
+	if (pf.operator === 'blank') return isBlank;
+	if (pf.operator === 'notBlank') return !isBlank;
+	if (isBlank) return false;
+	const n = Number(value);
+	if (isNaN(n)) return false;
+	switch (pf.operator) {
+		case 'equals':
+			return n === pf.value;
+		case 'notEquals':
+			return n !== pf.value;
+		case 'gt':
+			return n > pf.value;
+		case 'gte':
+			return n >= pf.value;
+		case 'lt':
+			return n < pf.value;
+		case 'lte':
+			return n <= pf.value;
+		case 'inRange':
+			return pf.valueTo !== undefined ? n >= pf.value && n <= pf.valueTo : n >= pf.value;
+	}
+}
+
+function matchDateFilter(value: unknown, pf: PreparedDateFilter<unknown>): boolean {
+	const isBlank = value == null || value === '';
+	if (pf.operator === 'blank') return isBlank;
+	if (pf.operator === 'notBlank') return !isBlank;
+	const cellDate = parseCellDate(value);
+	if (!cellDate) return false;
+	switch (pf.operator) {
+		case 'equals':
+			return stripTime(cellDate).getTime() === stripTime(pf.dateFrom).getTime();
+		case 'before':
+			return cellDate < pf.dateFrom;
+		case 'after':
+			return cellDate > pf.dateFrom;
+		case 'inRange':
+			return pf.dateTo !== undefined ? cellDate >= pf.dateFrom && cellDate <= pf.dateTo : cellDate >= pf.dateFrom;
+	}
+}
+
+function matchSetFilter(value: unknown, pf: PreparedSetFilter<unknown>): boolean {
+	if (pf.valueSet.size === 0 && !pf.includeNull) return false;
+	if (value == null || value === '') return pf.includeNull;
+	return pf.valueSet.has(String(value).toLowerCase());
+}
+
+function matchPreparedFilter<TData>(node: RowNode<TData>, pf: PreparedColumnFilter<TData>): boolean {
+	if (pf.kind === 'compound') {
+		const l = matchPreparedFilter(node, pf.left);
+		const r = matchPreparedFilter(node, pf.right);
+		return pf.logicalOp === 'AND' ? l && r : l || r;
+	}
+	const value = pf.getter(node);
+	switch (pf.kind) {
+		case 'text':
+			return matchTextFilter(value, pf as PreparedTextFilter<unknown>);
+		case 'number':
+			return matchNumberFilter(value, pf as PreparedNumberFilter<unknown>);
+		case 'date':
+			return matchDateFilter(value, pf as PreparedDateFilter<unknown>);
+		case 'set':
+			return matchSetFilter(value, pf as PreparedSetFilter<unknown>);
 	}
 }
 
@@ -230,49 +361,71 @@ function describeVisualRowDiff<TData>(
 	};
 }
 
-function prepareFilters<TData>(columns: Array<ColumnDef<TData>>, filterModel: FilterModel | null | undefined): PreparedFilter<TData>[] {
-	const preparedFilters: PreparedFilter<TData>[] = [];
-	if (!filterModel) return preparedFilters;
-
-	const columnById = createColumnLookup(columns);
-	for (const [colId, item] of Object.entries(filterModel)) {
-		const { operator, filter } = getFilterItemValue(item);
-		if (filter == null || filter === '') continue;
-
-		const column = columnById.get(colId);
-		if (!column) continue;
-
-		const textFilter = String(filter).toLowerCase();
-		const numericFilter = Number(filter);
-
-		let getter: (node: RowNode<TData>) => unknown;
-		if (column.valueGetter) {
-			const colValGetter = column.valueGetter;
-			getter = (node: RowNode<TData>) => colValGetter({ node, row: node.data, colField: column.field });
-		} else {
-			const pathGetter = compilePathGetter(column.field);
-			getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
-		}
-
-		preparedFilters.push({
-			column,
-			getter,
-			operator,
-			textFilter,
-			numericFilter,
-		});
+function makeGetter<TData>(column: ColumnDef<TData>): (node: RowNode<TData>) => unknown {
+	if (column.valueGetter) {
+		const vg = column.valueGetter;
+		return (node) => vg({ node, row: node.data, colField: column.field });
 	}
-
-	return preparedFilters;
+	const pg = compilePathGetter(column.field);
+	return (node) => node.getCellValue(column.field, pg);
 }
 
-function nodeMatchesPreparedFilters<TData>(node: RowNode<TData>, preparedFilters: PreparedFilter<TData>[]): boolean {
-	for (let i = 0; i < preparedFilters.length; i++) {
-		const pf = preparedFilters[i];
-		const val = pf.getter(node);
-		if (!matchesPreparedFilter(val, pf)) {
-			return false;
+function prepareCondition<TData>(condition: FilterCondition, getter: (node: RowNode<TData>) => unknown): PreparedColumnFilter<TData> | null {
+	if (condition.type === 'text') {
+		return { kind: 'text', getter, operator: condition.operator, textValue: condition.value.toLowerCase() };
+	}
+	if (condition.type === 'number') {
+		return { kind: 'number', getter, operator: condition.operator, value: condition.value, valueTo: condition.valueTo };
+	}
+	if (condition.type === 'date') {
+		if (condition.operator === 'blank' || condition.operator === 'notBlank') {
+			return { kind: 'date', getter, operator: condition.operator, dateFrom: new Date(0) };
 		}
+		const dateFrom = parseFilterDate(condition.dateFrom);
+		if (!dateFrom) return null;
+		const dateTo = condition.dateTo ? (parseFilterDate(condition.dateTo) ?? undefined) : undefined;
+		return { kind: 'date', getter, operator: condition.operator, dateFrom, dateTo };
+	}
+	if (condition.type === 'set') {
+		const hasNull = condition.values.includes(null);
+		const valueSet = new Set(condition.values.filter((v): v is string | number => v !== null).map((v) => String(v).toLowerCase()));
+		return { kind: 'set', getter, valueSet, includeNull: hasNull };
+	}
+	return null;
+}
+
+function prepareColumnFilter<TData>(columnFilter: ColumnFilter, getter: (node: RowNode<TData>) => unknown): PreparedColumnFilter<TData> | null {
+	if (columnFilter.type === 'compound') {
+		const [c1, c2] = columnFilter.conditions;
+		const left = prepareCondition<TData>(c1, getter);
+		const right = prepareCondition<TData>(c2, getter);
+		if (!left || !right) return null;
+		return { kind: 'compound', logicalOp: columnFilter.operator, left, right };
+	}
+	return prepareCondition(columnFilter, getter);
+}
+
+function prepareFilters<TData>(columns: Array<ColumnDef<TData>>, filterModel: FilterModel | null | undefined): PreparedColumnFilter<TData>[] {
+	const result: PreparedColumnFilter<TData>[] = [];
+	if (!filterModel) return result;
+	const columnById = createColumnLookup(columns);
+
+	for (const [colId, rawItem] of Object.entries(filterModel)) {
+		const item: ColumnFilter | null = legacyItemToColumnFilter(rawItem);
+		if (!item) continue;
+		const column = columnById.get(colId);
+		if (!column) continue;
+		const getter = makeGetter(column);
+		const prepared = prepareColumnFilter(item, getter);
+		if (prepared) result.push(prepared);
+	}
+
+	return result;
+}
+
+function nodeMatchesPreparedFilters<TData>(node: RowNode<TData>, preparedFilters: PreparedColumnFilter<TData>[]): boolean {
+	for (let i = 0; i < preparedFilters.length; i++) {
+		if (!matchPreparedFilter(node, preparedFilters[i])) return false;
 	}
 	return true;
 }
@@ -662,6 +815,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	public getRawRowById = (rowId: string): TData | null => {
 		return this.dataStore.getNode(rowId)?.data ?? null;
 	};
+
+	public getAllDataNodes = (): RowNode<TData>[] => this.dataStore.getAllNodes();
 
 	public getSelectableDataRowIds = (scope: RowSelectionScope = 'page'): string[] => {
 		if (scope === 'all') {

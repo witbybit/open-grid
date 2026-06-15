@@ -374,6 +374,8 @@ export interface GridApi<TRowData = unknown> {
 	setRowHeight(rowId: string, height: number): void;
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
+	/** Returns all distinct values for a column, scanning unfiltered row data. Used to populate set filter options. */
+	getColumnDistinctValues(colField: string): (string | number | null)[];
 	setStyleRules(styleRules: GridStyleRule<TRowData>[] | undefined): void;
 	setGroupBy(colIds: string[]): void;
 	getGroupBy(): string[];

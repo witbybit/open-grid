@@ -763,8 +763,8 @@ const columns: ColumnDef<FinancialRow>[] = [
 	{ field: 'q1Revenue', header: 'Q1', headerGroup: 'Revenue', headerGroupLevel: 0, width: 100 },
 	{ field: 'q2Revenue', header: 'Q2', headerGroup: 'Revenue', headerGroupLevel: 0, width: 100 },
 	{ field: 'q3Revenue', header: 'Q3', headerGroup: 'Revenue', headerGroupLevel: 0, width: 100 },
-	{ field: 'q1Cost',    header: 'Q1', headerGroup: 'Costs',   headerGroupLevel: 0, width: 100 },
-	{ field: 'q2Cost',    header: 'Q2', headerGroup: 'Costs',   headerGroupLevel: 0, width: 100 },
+	{ field: 'q1Cost', header: 'Q1', headerGroup: 'Costs', headerGroupLevel: 0, width: 100 },
+	{ field: 'q2Cost', header: 'Q2', headerGroup: 'Costs', headerGroupLevel: 0, width: 100 },
 ];
 ```
 
@@ -790,12 +790,12 @@ api.autoSizeAllColumns({ padding: 16, minWidth: 60, maxWidth: 400 });
 
 **`AutoSizeColumnOptions`**
 
-| Option | Type | Default | Description |
-| :----- | :--- | :------ | :---------- |
-| `padding` | `number` | `16` | Extra pixels added to the measured content width. |
-| `includeHeader` | `boolean` | `true` | Include the header cell text in the width measurement. |
-| `minWidth` | `number` | — | Clamp the result to at least this many pixels. |
-| `maxWidth` | `number` | — | Clamp the result to at most this many pixels. |
+| Option          | Type      | Default | Description                                            |
+| :-------------- | :-------- | :------ | :----------------------------------------------------- |
+| `padding`       | `number`  | `16`    | Extra pixels added to the measured content width.      |
+| `includeHeader` | `boolean` | `true`  | Include the header cell text in the width measurement. |
+| `minWidth`      | `number`  | —       | Clamp the result to at least this many pixels.         |
+| `maxWidth`      | `number`  | —       | Clamp the result to at most this many pixels.          |
 
 `autoSizeAllColumns` accepts the same options and applies them uniformly to every visible column.
 
@@ -848,35 +848,35 @@ Application code coordinates with the spreadsheet engine through the standard `G
 
 ### Core API Methods
 
-| Method                     | Type Signature                                              | Description                                                          |
-| :------------------------- | :---------------------------------------------------------- | :------------------------------------------------------------------- |
-| **`getState`**             | `() => GridState`                                           | Retrieves the entire synchronous state snapshot.                     |
-| **`getCellValue`**         | `(rowId: string, colField: string) => unknown`              | Retrieves the calculated cell value from the cellular cache.         |
-| **`setCellValue`**         | `(rowId: string, colField: string, value: unknown) => void` | Mutates a cell value and journals a new history event for undo/redo. |
-| **`getCellState`**         | `(rowId: string, colField: string) => CellState`            | Retrieves cell details (e.g. value, computedValue, isEditing).       |
-| **`selectCell`**           | `(pointer: GridCellPointer \| null) => void`                | Sets active cell focus and triggers `focusChanged` events.           |
-| **`selectRange`**          | `(start: Pointer \| null, end: Pointer \| null) => void`    | Highlight an Excel-like selection bounding box.                      |
-| **`setColumnWidth`**       | `(colField: string, width: number) => void`                 | Dynamically resizes a column's layout boundary in pixels.            |
-| **`setColumns`**           | `(columns: ColumnDef[]) => void`                            | Updates active grid schema and re-compiles path accessors.           |
-| **`setSortModel`**         | `(sortModel: SortModel \| null) => void`                    | Sets sorting schema (supports multi-column sort).                    |
-| **`setFilterModel`**       | `(filterModel: FilterModel \| null) => void`                | Sets filtering schema (supports custom operators per column).        |
-| **`toggleGroupExpanded`**  | `(groupId: string) => void`                                 | Toggles expanded/collapsed state of a grouped folder node.           |
-| **`isGroupExpanded`**      | `(groupId: string) => boolean`                              | Returns whether a group row is currently expanded.                   |
-| **`toggleDetailExpanded`** | `(rowId: string) => void`                                   | Toggles expansion of nested master-detail portals.                   |
-| **`isDetailExpanded`**     | `(rowId: string) => boolean`                                | Returns whether a detail row is currently expanded.                  |
-| **`expandAllGroups`**      | `() => void`                                                | Expands all group rows.                                              |
-| **`collapseAllGroups`**    | `() => void`                                                | Collapses all group rows.                                            |
-| **`getVisualRow`**         | `(index: number) => VisualRow \| null`                      | Resolves visual layout state at a specific visible index.            |
-| **`subscribeToKey`**       | `(key: string, listener: Listener) => () => void`           | Subscribes selectively to updates for a specific coordinate key.     |
-| **`addEventListener`**     | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).          |
-| **`undo` / `redo`**        | `() => void`                                                | Traverse through state mutation journal history.                     |
-| **`batchCellValues`**      | `(updates: BatchCellUpdate[], source?: string) => void`     | Applies multiple cell mutations atomically as a single undo entry.   |
-| **`setColumnVisible`**     | `(colField: string, visible: boolean) => void`              | Shows or hides a column without removing it from the schema.         |
-| **`autoSizeColumn`**       | `(colField: string, opts?: AutoSizeColumnOptions) => void`  | Resizes a column to fit its widest rendered cell content.            |
-| **`autoSizeAllColumns`**   | `(opts?: AutoSizeAllColumnsOptions) => void`                | Resizes all visible columns to fit their content simultaneously.     |
-| **`copySelectedRange`**    | `() => Promise<void>`                                       | Copies the current selection to the system clipboard as TSV.         |
-| **`pasteFromClipboard`**   | `() => Promise<void>`                                       | Reads TSV from the system clipboard and pastes at the selection anchor. |
-| **`copyRange`**            | `(minRow: number, maxRow: number, minCol: number, maxCol: number) => Promise<void>` | Copies an explicit row/column visual-index range to the clipboard. |
+| Method                     | Type Signature                                                                      | Description                                                             |
+| :------------------------- | :---------------------------------------------------------------------------------- | :---------------------------------------------------------------------- |
+| **`getState`**             | `() => GridState`                                                                   | Retrieves the entire synchronous state snapshot.                        |
+| **`getCellValue`**         | `(rowId: string, colField: string) => unknown`                                      | Retrieves the calculated cell value from the cellular cache.            |
+| **`setCellValue`**         | `(rowId: string, colField: string, value: unknown) => void`                         | Mutates a cell value and journals a new history event for undo/redo.    |
+| **`getCellState`**         | `(rowId: string, colField: string) => CellState`                                    | Retrieves cell details (e.g. value, computedValue, isEditing).          |
+| **`selectCell`**           | `(pointer: GridCellPointer \| null) => void`                                        | Sets active cell focus and triggers `focusChanged` events.              |
+| **`selectRange`**          | `(start: Pointer \| null, end: Pointer \| null) => void`                            | Highlight an Excel-like selection bounding box.                         |
+| **`setColumnWidth`**       | `(colField: string, width: number) => void`                                         | Dynamically resizes a column's layout boundary in pixels.               |
+| **`setColumns`**           | `(columns: ColumnDef[]) => void`                                                    | Updates active grid schema and re-compiles path accessors.              |
+| **`setSortModel`**         | `(sortModel: SortModel \| null) => void`                                            | Sets sorting schema (supports multi-column sort).                       |
+| **`setFilterModel`**       | `(filterModel: FilterModel \| null) => void`                                        | Sets filtering schema (supports custom operators per column).           |
+| **`toggleGroupExpanded`**  | `(groupId: string) => void`                                                         | Toggles expanded/collapsed state of a grouped folder node.              |
+| **`isGroupExpanded`**      | `(groupId: string) => boolean`                                                      | Returns whether a group row is currently expanded.                      |
+| **`toggleDetailExpanded`** | `(rowId: string) => void`                                                           | Toggles expansion of nested master-detail portals.                      |
+| **`isDetailExpanded`**     | `(rowId: string) => boolean`                                                        | Returns whether a detail row is currently expanded.                     |
+| **`expandAllGroups`**      | `() => void`                                                                        | Expands all group rows.                                                 |
+| **`collapseAllGroups`**    | `() => void`                                                                        | Collapses all group rows.                                               |
+| **`getVisualRow`**         | `(index: number) => VisualRow \| null`                                              | Resolves visual layout state at a specific visible index.               |
+| **`subscribeToKey`**       | `(key: string, listener: Listener) => () => void`                                   | Subscribes selectively to updates for a specific coordinate key.        |
+| **`addEventListener`**     | `(type: string, cb: GridEventListener) => () => void`                               | Registers grid-wide action hooks (e.g. `cellValueChanged`).             |
+| **`undo` / `redo`**        | `() => void`                                                                        | Traverse through state mutation journal history.                        |
+| **`batchCellValues`**      | `(updates: BatchCellUpdate[], source?: string) => void`                             | Applies multiple cell mutations atomically as a single undo entry.      |
+| **`setColumnVisible`**     | `(colField: string, visible: boolean) => void`                                      | Shows or hides a column without removing it from the schema.            |
+| **`autoSizeColumn`**       | `(colField: string, opts?: AutoSizeColumnOptions) => void`                          | Resizes a column to fit its widest rendered cell content.               |
+| **`autoSizeAllColumns`**   | `(opts?: AutoSizeAllColumnsOptions) => void`                                        | Resizes all visible columns to fit their content simultaneously.        |
+| **`copySelectedRange`**    | `() => Promise<void>`                                                               | Copies the current selection to the system clipboard as TSV.            |
+| **`pasteFromClipboard`**   | `() => Promise<void>`                                                               | Reads TSV from the system clipboard and pastes at the selection anchor. |
+| **`copyRange`**            | `(minRow: number, maxRow: number, minCol: number, maxCol: number) => Promise<void>` | Copies an explicit row/column visual-index range to the clipboard.      |
 
 ---
 

@@ -365,10 +365,11 @@ export class HeaderMenuController<TRowData = unknown> {
 				if (term === '') {
 					delete nextFilterModel[colField];
 				} else {
-					nextFilterModel[colField] = {
-						type: select.value as any,
-						filter: term,
-					};
+					const op = select.value as string;
+					const isNumericOp = op === 'gt' || op === 'gte' || op === 'lt' || op === 'lte';
+					nextFilterModel[colField] = isNumericOp
+						? { type: 'number', operator: op as import('../filterModel.js').NumberFilterOperator, value: Number(term) || 0 }
+						: { type: 'text', operator: op as import('../filterModel.js').TextFilterOperator, value: term };
 				}
 				this.engine.setFilterModel(Object.keys(nextFilterModel).length > 0 ? nextFilterModel : null);
 				this.hide();

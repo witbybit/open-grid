@@ -49,6 +49,7 @@ import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import { ColumnAutoSizeController } from '../features/ColumnAutoSizeController.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from '../features/ColumnAutoSizeController.js';
 import { ClipboardController } from '../features/ClipboardController.js';
+import { computeDistinctValues } from '../filterModel.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -480,9 +481,18 @@ export class GridEngine<TRowData = unknown> {
 		this.columnAutoSize.autoSizeAllColumns(opts);
 	}
 
-	public copySelectedRange(): Promise<void> { return this.clipboard.copySelectedRange(); }
-	public pasteFromClipboard(): Promise<void> { return this.clipboard.pasteFromClipboard(); }
-	public copyRange(minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void> { return this.clipboard.copyRange(minRow, maxRow, minCol, maxCol); }
+	public copySelectedRange(): Promise<void> {
+		return this.clipboard.copySelectedRange();
+	}
+	public pasteFromClipboard(): Promise<void> {
+		return this.clipboard.pasteFromClipboard();
+	}
+	public copyRange(minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void> {
+		return this.clipboard.copyRange(minRow, maxRow, minCol, maxCol);
+	}
+	public getColumnDistinctValues(colField: string): (string | number | null)[] {
+		return computeDistinctValues(this.rowModel?.getAllDataNodes?.() ?? [], colField);
+	}
 
 	public moveColumn(colField: string, toIndex: number): void {
 		this.columnFeature.moveColumn(colField, toIndex);

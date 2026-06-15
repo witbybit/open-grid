@@ -29,8 +29,7 @@ const COLUMNS = [
 		field: 'price',
 		header: 'Price',
 		width: 100,
-		valueFormatter: ({ value }: { value: unknown }) =>
-			value != null ? `$${Number(value).toFixed(2)}` : '',
+		valueFormatter: ({ value }: { value: unknown }) => (value != null ? `$${Number(value).toFixed(2)}` : ''),
 		onCopy: ({ value }: { value: unknown }) => String(Number(value).toFixed(2)),
 	},
 	{ field: 'stock', header: 'Stock', width: 90 },
@@ -39,9 +38,7 @@ const COLUMNS = [
 		header: 'Revenue',
 		width: 120,
 		valueFormatter: ({ value }: { value: unknown }) =>
-			value != null
-				? `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-				: '',
+			value != null ? `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '',
 	},
 ];
 
@@ -80,7 +77,7 @@ export default function ClipboardDemo() {
 				setStatus(`Pasted ${rowCount}×${colCount} cells`);
 			});
 		},
-		[addLog],
+		[addLog]
 	);
 
 	const handleCopyAll = useCallback(() => {
@@ -101,9 +98,7 @@ export default function ClipboardDemo() {
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 12, padding: 16 }}>
 			<div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-				<span style={{ fontSize: 13, fontWeight: 600, color: 'var(--og-header-fg, #555)', marginRight: 4 }}>
-					Clipboard
-				</span>
+				<span style={{ fontSize: 13, fontWeight: 600, color: 'var(--og-header-fg, #555)', marginRight: 4 }}>Clipboard</span>
 				<button
 					onClick={handleCopySelected}
 					style={{
@@ -147,13 +142,7 @@ export default function ClipboardDemo() {
 			</div>
 
 			<div style={{ flex: 1, minHeight: 0 }}>
-				<Grid<Product>
-					mode='client'
-					columns={COLUMNS}
-					rows={ROWS}
-					getRowId={(row) => row.id}
-					onGridReady={handleGridReady}
-				/>
+				<Grid<Product> mode='client' columns={COLUMNS} rows={ROWS} getRowId={(row) => row.id} onGridReady={handleGridReady} />
 			</div>
 
 			{log.length > 0 && (

@@ -35,20 +35,31 @@ function makeController(store: GridStore<TestRow>, rows?: TestRow[]): ClientRowM
 
 function mockClipboard() {
 	let stored = '';
-	const writeText = vi.fn(async (text: string) => { stored = text; });
+	const writeText = vi.fn(async (text: string) => {
+		stored = text;
+	});
 	const readText = vi.fn(async () => stored);
 	Object.defineProperty(navigator, 'clipboard', {
 		value: { writeText, readText },
 		configurable: true,
 		writable: true,
 	});
-	return { writeText, readText, getStored: () => stored, setStored: (v: string) => { stored = v; } };
+	return {
+		writeText,
+		readText,
+		getStored: () => stored,
+		setStored: (v: string) => {
+			stored = v;
+		},
+	};
 }
 
 describe('ClipboardController', () => {
 	let clip: ReturnType<typeof mockClipboard>;
 
-	beforeEach(() => { clip = mockClipboard(); });
+	beforeEach(() => {
+		clip = mockClipboard();
+	});
 	afterEach(() => vi.restoreAllMocks());
 
 	it('copySelectedRange writes single-cell value for focus-only selection', async () => {
@@ -80,9 +91,7 @@ describe('ClipboardController', () => {
 	});
 
 	it('copySelectedRange applies valueFormatter output', async () => {
-		const store = makeStore([
-			{ field: 'price', header: 'Price', width: 100, valueFormatter: ({ value }: { value: unknown }) => `$${value}` },
-		]);
+		const store = makeStore([{ field: 'price', header: 'Price', width: 100, valueFormatter: ({ value }: { value: unknown }) => `$${value}` }]);
 		const ctrl = makeController(store, [{ id: '1', name: 'A', price: 99 }]);
 
 		store.selectCell({ rowId: '1', colField: 'price' });
