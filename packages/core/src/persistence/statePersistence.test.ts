@@ -70,9 +70,15 @@ describe('statePersistence', () => {
 		it('applyPersistedStateToApi returns false for version-mismatched blob', () => {
 			const mockApi = {
 				getState: vi.fn(() => ({ columns: [{ field: 'id' }] })),
-				setColumnOrder: vi.fn(), setColumnsVisible: vi.fn(), setColumnWidth: vi.fn(),
-				setSortModel: vi.fn(), setFilterModel: vi.fn(), switchTheme: vi.fn(),
-				setGroupBy: vi.fn(), setShowGroupFooter: vi.fn(), setStickyGroupRows: vi.fn(),
+				setColumnOrder: vi.fn(),
+				setColumnsVisible: vi.fn(),
+				setColumnWidth: vi.fn(),
+				setSortModel: vi.fn(),
+				setFilterModel: vi.fn(),
+				switchTheme: vi.fn(),
+				setGroupBy: vi.fn(),
+				setShowGroupFooter: vi.fn(),
+				setStickyGroupRows: vi.fn(),
 				setPinnedColumns: vi.fn(),
 			};
 			expect(applyPersistedStateToApi(mockApi, { v: 999 })).toBe(false);
@@ -82,9 +88,15 @@ describe('statePersistence', () => {
 		it('applyPersistedStateToApi returns true for correct version', () => {
 			const mockApi = {
 				getState: vi.fn(() => ({ columns: [{ field: 'id' }] })),
-				setColumnOrder: vi.fn(), setColumnsVisible: vi.fn(), setColumnWidth: vi.fn(),
-				setSortModel: vi.fn(), setFilterModel: vi.fn(), switchTheme: vi.fn(),
-				setGroupBy: vi.fn(), setShowGroupFooter: vi.fn(), setStickyGroupRows: vi.fn(),
+				setColumnOrder: vi.fn(),
+				setColumnsVisible: vi.fn(),
+				setColumnWidth: vi.fn(),
+				setSortModel: vi.fn(),
+				setFilterModel: vi.fn(),
+				switchTheme: vi.fn(),
+				setGroupBy: vi.fn(),
+				setShowGroupFooter: vi.fn(),
+				setStickyGroupRows: vi.fn(),
 				setPinnedColumns: vi.fn(),
 			};
 			expect(applyPersistedStateToApi(mockApi, { v: GRID_STATE_SCHEMA_VERSION })).toBe(true);

@@ -547,7 +547,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public applyGridState = (state: PersistedGridState): void => {
 		if (!applyPersistedStateToApi(this, state)) {
 			const blobV = (state as any).v ?? 'undefined';
-			this.reportRuntimeFault({ source: 'persistence', operation: 'applyGridState', error: new Error(`Schema version mismatch (blob v=${blobV}, expected v=${GRID_STATE_SCHEMA_VERSION}).`) });
+			this.reportRuntimeFault({
+				source: 'persistence',
+				operation: 'applyGridState',
+				error: new Error(`Schema version mismatch (blob v=${blobV}, expected v=${GRID_STATE_SCHEMA_VERSION}).`),
+			});
 		}
 	};
 

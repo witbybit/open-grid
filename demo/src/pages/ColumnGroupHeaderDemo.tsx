@@ -22,7 +22,18 @@ interface FinancialRow {
 const REGIONS = ['APAC', 'EMEA', 'NA', 'LATAM'];
 const TICKERS = ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'GOOGL', 'META', 'NFLX', 'AMD', 'INTC'];
 const STATUSES: FinancialRow['status'][] = ['Active', 'Watchlist', 'Inactive'];
-const NAMES = ['Apple Inc', 'Microsoft Corp', 'NVIDIA Corp', 'Tesla Inc', 'Amazon.com', 'Alphabet Inc', 'Meta Platforms', 'Netflix Inc', 'Adv. Micro Devices', 'Intel Corp'];
+const NAMES = [
+	'Apple Inc',
+	'Microsoft Corp',
+	'NVIDIA Corp',
+	'Tesla Inc',
+	'Amazon.com',
+	'Alphabet Inc',
+	'Meta Platforms',
+	'Netflix Inc',
+	'Adv. Micro Devices',
+	'Intel Corp',
+];
 
 function generateRows(count: number): FinancialRow[] {
 	return Array.from({ length: count }, (_, i) => {

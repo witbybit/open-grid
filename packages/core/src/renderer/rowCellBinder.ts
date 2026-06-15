@@ -301,9 +301,12 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			cellKey: stableKey,
 			container: portalHost,
 			value: access.value,
-			formattedValue: access.value != null && col.valueFormatter
-				? col.valueFormatter({ value: access.value, rowData: node.data as TRowData, colDef: col, rowId: node.id })
-				: access.value != null ? String(access.value) : '',
+			formattedValue:
+				access.value != null && col.valueFormatter
+					? col.valueFormatter({ value: access.value, rowData: node.data as TRowData, colDef: col, rowId: node.id })
+					: access.value != null
+						? String(access.value)
+						: '',
 			node,
 			col,
 			rowIndex,

@@ -15,7 +15,11 @@ export interface CsvExportOptions {
 
 // Minimal duck-typed interface — avoids a circular import with store.ts
 interface Exportable<TRowData> {
-	getDisplayedColumns(): Array<{ field: string; header: string; valueFormatter?: (params: { value: unknown; rowData: TRowData; colDef: any; rowId: string }) => string }>;
+	getDisplayedColumns(): Array<{
+		field: string;
+		header: string;
+		valueFormatter?: (params: { value: unknown; rowData: TRowData; colDef: any; rowId: string }) => string;
+	}>;
 	rows(): { getAll(): TRowData[]; getSelected(): TRowData[] };
 	getRowId(row: TRowData): string;
 	getCellValue(rowId: string, field: string): unknown;
