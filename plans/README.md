@@ -54,6 +54,16 @@
 | 052 | [Grid UX and Architecture Hardening](./052-grid-ux-and-architecture-hardening.md)               | DONE     | working tree |
 | 053 | [Column Virtualization Verification](./053-column-virtualization-verification.md)               | DONE     | working tree |
 | 054 | [Multi-Level Column Headers](./054-multi-level-column-headers.md)                               | TODO     | working tree |
+| 055 | [State Serialization Schema Versioning](./055-state-schema-versioning.md)                       | TODO     | working tree |
+| 056 | [valueFormatter Column Option](./056-value-formatter.md)                                        | TODO     | working tree |
+| 057 | [Column Auto-Size](./057-column-auto-size.md)                                                   | TODO     | working tree |
+| 058 | [Grid-Level Clipboard](./058-grid-clipboard.md)                                                 | TODO     | working tree |
+| 059 | [Advanced Filter Types (Set + Date)](./059-advanced-filter-types.md)                            | TODO     | working tree |
+| 060 | [Floating Filters](./060-floating-filters.md)                                                   | TODO     | working tree |
+| 061 | [React Hook Surface](./061-react-hook-surface.md)                                               | TODO     | working tree |
+| 062 | [XLSX Export](./062-xlsx-export.md)                                                             | TODO     | working tree |
+| 063 | [Row Drag-and-Drop](./063-row-drag-drop.md)                                                     | TODO     | working tree |
+| 064 | [SSRM Server-Push Filter/Sort](./064-ssrm-server-push-filter-sort.md)                           | TODO     | working tree |
 
 ## Execution order
 
@@ -166,6 +176,29 @@
 - Plan 001 is implemented and verified on 2026-06-13: row multi-select state/tests live in `packages/core/src/store.test.ts`, the public API is exercised by `demo/src/pages/RowMultiSelectDemo.tsx`, and the core/React/demo verification gates passed.
 - Plan 051 addresses the numeric comparison filter bug where `null` and `undefined` values were coerced to `0` and incorrectly matched less-than/greater-than boundaries.
 - After each plan: `pnpm -F @open-grid/core build && pnpm -F @open-grid/react build && pnpm -F @open-grid/core test && pnpm -F @open-grid/react test`
+
+## Plans 055–064 execution order and rationale
+
+**Stability before features.** Plans 055 and 056 are architectural prerequisites:
+
+- `055` (schema versioning) must land **before** `059` changes the filter model shape. Without it, users who persist state get silent corruption on upgrade.
+- `056` (valueFormatter) must land **before** `058` (clipboard), `062` (XLSX), and `060` (floating filters) — all three consume formatted cell values.
+
+**Dependency chain:**
+
+```
+054  multi-level headers         (no deps, already in pipeline)
+055  schema versioning           (no deps — must be first)
+056  valueFormatter              (no deps — must precede 058, 062)
+057  column auto-size            (depends on 056 for correct measurement)
+058  clipboard                   (depends on 056 for formatted copy values)
+059  advanced filter types       (depends on 055 for schema bump)
+060  floating filters            (depends on 059 for filter type widgets)
+061  react hook surface          (no deps — can run in parallel with any of above)
+062  xlsx export                 (depends on 056 for typed cell values)
+063  row drag-and-drop           (no deps — independent)
+064  ssrm server-push            (depends on 059 for filter model shape)
+```
 
 ## Findings considered and rejected
 
