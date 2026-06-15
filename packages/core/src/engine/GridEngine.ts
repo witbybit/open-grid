@@ -46,6 +46,8 @@ import { CellNotificationController } from './CellNotificationController.js';
 import { GridStateReactionController } from './GridStateReactionController.js';
 import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
+import { ColumnAutoSizeController } from '../features/ColumnAutoSizeController.js';
+import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from '../features/ColumnAutoSizeController.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -63,6 +65,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly invalidation: InvalidationManager;
 	public readonly changeApplier: GridChangeApplier<TRowData>;
 	public readonly columnFeature: ColumnFeatureController<TRowData>;
+	public readonly columnAutoSize: ColumnAutoSizeController<TRowData>;
 	public readonly groupingFeature: GroupingFeatureController<TRowData>;
 	public readonly editingFeature: EditingFeatureController<TRowData>;
 	public readonly validationFeature: ValidationManager<TRowData>;
@@ -105,6 +108,7 @@ export class GridEngine<TRowData = unknown> {
 	public getAvailableThemes?: () => BuiltInThemeName[];
 	public switchTheme?: (themeName: string) => void;
 	public onThemeChange?: (listener: (theme: ThemeTokens) => void) => () => void;
+	public getContainerElement?: () => HTMLElement | null;
 
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.eventBus = new EventBus<TRowData>();
@@ -260,6 +264,14 @@ export class GridEngine<TRowData = unknown> {
 			applyChange: (change: import('./GridChangeApplier.js').GridChange<TRowData>) => this.changeApplier.apply(change),
 		};
 		this.columnFeature = new ColumnFeatureController<TRowData>(featureContext);
+		this.columnAutoSize = new ColumnAutoSizeController<TRowData>({
+			getState: () => this.stateManager.getState(),
+			columns: this.columns,
+			data: this.data,
+			columnFeature: this.columnFeature,
+			getRowModel: () => this.rowModel,
+			getContainerElement: () => this.getContainerElement?.() ?? null,
+		});
 		this.groupingFeature = new GroupingFeatureController<TRowData>({
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
@@ -445,6 +457,14 @@ export class GridEngine<TRowData = unknown> {
 
 	public resizeColumn(colField: string, width: number, undoable = true): void {
 		this.columnFeature.resizeColumn(colField, width, undoable);
+	}
+
+	public autoSizeColumn(colField: string, opts?: AutoSizeColumnOptions): void {
+		this.columnAutoSize.autoSizeColumn(colField, opts);
+	}
+
+	public autoSizeAllColumns(opts?: AutoSizeAllColumnsOptions): void {
+		this.columnAutoSize.autoSizeAllColumns(opts);
 	}
 
 	public moveColumn(colField: string, toIndex: number): void {

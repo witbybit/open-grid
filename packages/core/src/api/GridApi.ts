@@ -183,6 +183,20 @@ export interface GridRowsAccessor<TRowData = unknown> {
 	getCheckedIds(): string[];
 }
 
+export interface AutoSizeColumnOptions {
+	/** Include the header label in the measurement. Default: true */
+	includeHeader?: boolean;
+	/** Maximum number of rows to sample. Default: 500 */
+	maxRows?: number;
+	/** Extra pixels added to each side of the measured text width. Default: 8 */
+	padding?: number;
+}
+
+export interface AutoSizeAllColumnsOptions extends AutoSizeColumnOptions {
+	/** Skip pinned columns. Default: false */
+	skipPinned?: boolean;
+}
+
 export interface RowDataTransaction<TData = unknown> {
 	/** Rows to add. Optional `addIndex` controls insertion position (default: end). */
 	add?: TData[];
@@ -335,6 +349,13 @@ export interface GridApi<TRowData = unknown> {
 	getSelectedRowCount(): number;
 	setColumns(columns: ColumnDef<TRowData>[]): void;
 	setColumnWidth(colField: string, width: number): void;
+	/**
+	 * Resize a column to fit its content by measuring rendered text on an offscreen canvas.
+	 * Respects `minWidth` / `maxWidth` and `valueFormatter` output.
+	 */
+	autoSizeColumn(colField: string, options?: AutoSizeColumnOptions): void;
+	/** Resize all visible columns to fit their content. */
+	autoSizeAllColumns(options?: AutoSizeAllColumnsOptions): void;
 	setColumnVisible(colField: string, visible: boolean): void;
 	setColumnsVisible(colFields: string[], visible: boolean): void;
 	getColumns(): ColumnDef<TRowData>[];

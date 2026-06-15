@@ -33,6 +33,8 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		getSelectedRowCount: source.getSelectedRowCount,
 		setColumns: source.setColumns,
 		setColumnWidth: source.setColumnWidth,
+		autoSizeColumn: source.autoSizeColumn,
+		autoSizeAllColumns: source.autoSizeAllColumns,
 		setColumnVisible: source.setColumnVisible,
 		setColumnsVisible: source.setColumnsVisible,
 		getColumns: source.getColumns,

@@ -5,6 +5,7 @@ export { GRID_STATE_SCHEMA_VERSION, validateSchemaVersion } from './persistence/
 
 export { RowNode, GridEventName } from './store.js';
 export type { RowDataTransaction, RowNodeTransaction } from './store.js';
+export type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './api/GridApi.js';
 export type { GridEventPayloadMap } from './store.js';
 export type {
 	CellCopyParams,

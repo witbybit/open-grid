@@ -99,4 +99,6 @@ export type {
 	ValueValidatorParams,
 	EditableParams,
 	TooltipParams,
+	AutoSizeColumnOptions,
+	AutoSizeAllColumnsOptions,
 } from '@open-grid/core';

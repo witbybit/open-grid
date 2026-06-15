@@ -97,6 +97,7 @@ import type { GridEventPayloadMap, GridEventListener } from './api/GridEvents.js
 import { GridEventName } from './api/GridEvents.js';
 import { GridPluginRegistry } from './plugins/GridPluginRegistry.js';
 import { createGridPluginRuntime } from './plugins/createGridPluginRuntime.js';
+import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './features/ColumnAutoSizeController.js';
 
 export { validateRowIds } from './ids.js';
 
@@ -156,6 +157,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			overscanAdaptive: initialState.overscanAdaptive,
 		});
 
+		this.engine.getContainerElement = () => this.containerElement;
 		this.viewportController = new ViewportController<TRowData>(this.engine);
 		this.pluginRuntime = createGridPluginRuntime(this as unknown as GridPluginRuntime<TRowData>);
 		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime, this.engine.runtimeFaults);
@@ -282,13 +284,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getSelectedRowIds = (): string[] => this.state.selectedRowIds.slice();
 
-	public setColumnWidth = (colField: string, width: number): void => {
-		this.engine.resizeColumn(colField, width);
-	};
-
-	public setColumnVisible = (colField: string, visible: boolean): void => {
-		this.setColumnsVisible([colField], visible);
-	};
+	public setColumnWidth = (colField: string, width: number): void => this.engine.resizeColumn(colField, width);
+	public autoSizeColumn = (colField: string, options?: AutoSizeColumnOptions): void => this.engine.autoSizeColumn(colField, options);
+	public autoSizeAllColumns = (options?: AutoSizeAllColumnsOptions): void => this.engine.autoSizeAllColumns(options);
+	public setColumnVisible = (colField: string, visible: boolean): void => this.setColumnsVisible([colField], visible);
 
 	public setColumnsVisible = (colFields: string[], visible: boolean): void => {
 		const fieldSet = new Set(colFields);
@@ -308,33 +307,13 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.state.columns.slice();
 	};
 
-	public getDisplayedColumns = (): ColumnDef<TRowData>[] => {
-		return this.engine.getDisplayedColumns();
-	};
-
-	public setPinnedColumns = (pins: { left?: number; right?: number }): void => {
-		this.setViewportPins(pins);
-	};
-
-	public getPinnedColumns = (): { left: number; right: number } => {
-		return this.engine.getPinnedColumns();
-	};
-
-	public moveColumn = (colField: string, toIndex: number): void => {
-		this.engine.moveColumn(colField, toIndex);
-	};
-
-	public setColumnOrder = (colFields: string[]): void => {
-		this.engine.setColumnOrderByFields(colFields);
-	};
-
-	public setColumnReorderEnabled = (enabled: boolean): void => {
-		this.engine.setColumnReorderEnabled(enabled);
-	};
-
-	public setRowHeight = (rowId: string, height: number): void => {
-		this.engine.resizeRow(rowId, height);
-	};
+	public getDisplayedColumns = (): ColumnDef<TRowData>[] => this.engine.getDisplayedColumns();
+	public setPinnedColumns = (pins: { left?: number; right?: number }): void => this.setViewportPins(pins);
+	public getPinnedColumns = (): { left: number; right: number } => this.engine.getPinnedColumns();
+	public moveColumn = (colField: string, toIndex: number): void => this.engine.moveColumn(colField, toIndex);
+	public setColumnOrder = (colFields: string[]): void => this.engine.setColumnOrderByFields(colFields);
+	public setColumnReorderEnabled = (enabled: boolean): void => this.engine.setColumnReorderEnabled(enabled);
+	public setRowHeight = (rowId: string, height: number): void => this.engine.resizeRow(rowId, height);
 
 	public setSortModel = (sortModel: SortModel | null): void => {
 		this.engine.setSortModel(sortModel);

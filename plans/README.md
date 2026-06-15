@@ -56,7 +56,7 @@
 | 054 | [Multi-Level Column Headers](./054-multi-level-column-headers.md)                               | DONE     | working tree |
 | 055 | [State Serialization Schema Versioning](./055-state-schema-versioning.md)                       | DONE     | ecbd712b     |
 | 056 | [valueFormatter Column Option](./056-value-formatter.md)                                        | DONE     | 507525e2     |
-| 057 | [Column Auto-Size](./057-column-auto-size.md)                                                   | TODO     | working tree |
+| 057 | [Column Auto-Size](./057-column-auto-size.md)                                                   | DONE     | working tree |
 | 058 | [Grid-Level Clipboard](./058-grid-clipboard.md)                                                 | TODO     | working tree |
 | 059 | [Advanced Filter Types (Set + Date)](./059-advanced-filter-types.md)                            | TODO     | working tree |
 | 060 | [Floating Filters](./060-floating-filters.md)                                                   | TODO     | working tree |

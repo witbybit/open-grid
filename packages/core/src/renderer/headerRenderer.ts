@@ -482,6 +482,12 @@ export class HeaderRenderer<TRowData = unknown> {
 		const resizeHandle = document.createElement('div');
 		resizeHandle.className = 'og-header-resize-handle';
 		resizeHandle.addEventListener('mousedown', (e) => this.columnInteractionsGetter().onHeaderResizeMouseDown(e));
+		resizeHandle.addEventListener('dblclick', (e) => {
+			e.stopPropagation();
+			const cell = (e.currentTarget as HTMLElement).closest('.og-header-cell') as HTMLElement | null;
+			const colField = cell?.dataset.colField;
+			if (colField) this.engine.autoSizeColumn(colField);
+		});
 		headerCell.appendChild(resizeHandle);
 
 		return headerCell;
