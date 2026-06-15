@@ -725,6 +725,123 @@ export function ServerPaginatedGrid({ columns }: { columns: ColumnDef<MyRow>[] }
 
 ---
 
+### 8. Column Value Formatting
+
+`valueFormatter` formats cell text for display without affecting the underlying stored value. `onCopy` overrides what gets written to the clipboard. `onPaste` pre-processes incoming clipboard text before it's committed to the store.
+
+```tsx
+const columns: ColumnDef<OrderRow>[] = [
+	{
+		field: 'price',
+		header: 'Price',
+		// Shown in the cell: "$149.99"
+		valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
+		// Copied to clipboard: "149.99" (no symbol — stays numeric when pasted into Excel)
+		onCopy: ({ value }) => String(value),
+		// Pasted from clipboard: strip "$" before writing to the store
+		onPaste: ({ text }) => text.replace(/^\$/, ''),
+	},
+	{
+		field: 'createdAt',
+		header: 'Created',
+		valueFormatter: ({ value }) => new Date(value as string).toLocaleDateString(),
+	},
+];
+```
+
+`valueFormatter` receives `{ value, rowData, colDef, rowId }`. The formatted string is used in read-only cells and clipboard copy (fallback after `onCopy`). It does **not** affect `getCellValue()` — the raw value is always preserved.
+
+---
+
+### 9. Multi-Level Column Header Groups
+
+Group related columns under a shared spanning header label using `headerGroup` and `headerGroupLevel` on `ColumnDef`. Columns at the same level sharing the same `headerGroup` string are automatically merged into a single spanning cell.
+
+```tsx
+const columns: ColumnDef<FinancialRow>[] = [
+	{ field: 'symbol', header: 'Symbol', width: 80 },
+	{ field: 'q1Revenue', header: 'Q1', headerGroup: 'Revenue', headerGroupLevel: 0, width: 100 },
+	{ field: 'q2Revenue', header: 'Q2', headerGroup: 'Revenue', headerGroupLevel: 0, width: 100 },
+	{ field: 'q3Revenue', header: 'Q3', headerGroup: 'Revenue', headerGroupLevel: 0, width: 100 },
+	{ field: 'q1Cost',    header: 'Q1', headerGroup: 'Costs',   headerGroupLevel: 0, width: 100 },
+	{ field: 'q2Cost',    header: 'Q2', headerGroup: 'Costs',   headerGroupLevel: 0, width: 100 },
+];
+```
+
+Levels are zero-indexed. Add a `headerGroupLevel: 1` layer to nest groups within groups for deeper hierarchies.
+
+---
+
+### 10. Column Auto-Sizing
+
+Double-click a column resize handle to auto-size that column to fit its content. Programmatic control is available via the `GridApi`:
+
+```typescript
+// Resize a single column to fit its widest cell (header included by default)
+api.autoSizeColumn('price');
+
+// Resize all visible columns at once
+api.autoSizeAllColumns();
+
+// With options
+api.autoSizeColumn('name', { padding: 24, includeHeader: true });
+api.autoSizeAllColumns({ padding: 16, minWidth: 60, maxWidth: 400 });
+```
+
+**`AutoSizeColumnOptions`**
+
+| Option | Type | Default | Description |
+| :----- | :--- | :------ | :---------- |
+| `padding` | `number` | `16` | Extra pixels added to the measured content width. |
+| `includeHeader` | `boolean` | `true` | Include the header cell text in the width measurement. |
+| `minWidth` | `number` | — | Clamp the result to at least this many pixels. |
+| `maxWidth` | `number` | — | Clamp the result to at most this many pixels. |
+
+`autoSizeAllColumns` accepts the same options and applies them uniformly to every visible column.
+
+---
+
+### 11. Grid-Level Clipboard (Copy & Paste)
+
+Built-in clipboard controller. Keyboard shortcuts (`Ctrl+C` / `Ctrl+V`) work automatically on a focused grid. The programmatic API enables copy/paste from toolbar buttons or external triggers.
+
+#### Programmatic API
+
+```typescript
+// Copy whatever the user has currently selected
+await api.copySelectedRange();
+
+// Copy an explicit row/column range by visual index (rows 0–4, columns 1–3)
+await api.copyRange(0, 4, 1, 3);
+
+// Paste TSV from the system clipboard into the current selection anchor
+await api.pasteFromClipboard();
+```
+
+#### Copy format
+
+Copied data is TSV (tab-separated values), natively compatible with Excel and Google Sheets. Each cell is serialized using the first matching rule:
+
+1. `onCopy` column callback — custom/raw value
+2. `valueFormatter` column callback — formatted display string
+3. Raw cell value (fallback)
+
+#### Events
+
+```typescript
+api.addEventListener(GridEventName.cellsCopied, ({ payload }) => {
+	console.log(`Copied ${payload.rowCount}×${payload.colCount} cells`);
+	console.log('TSV text:', payload.text);
+	// payload.cells: Array<{ rowId: string; colField: string }>
+});
+
+api.addEventListener(GridEventName.cellsPasted, ({ payload }) => {
+	console.log(`Pasted ${payload.rowCount}×${payload.colCount} cells`);
+});
+```
+
+---
+
 ## 🛠️ Public API Reference (`GridApi`)
 
 Application code coordinates with the spreadsheet engine through the standard `GridApi` interface. In React, this handle can be retrieved anywhere inside the tree using the `useGridApi()` hook.
@@ -753,6 +870,13 @@ Application code coordinates with the spreadsheet engine through the standard `G
 | **`subscribeToKey`**       | `(key: string, listener: Listener) => () => void`           | Subscribes selectively to updates for a specific coordinate key.     |
 | **`addEventListener`**     | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).          |
 | **`undo` / `redo`**        | `() => void`                                                | Traverse through state mutation journal history.                     |
+| **`batchCellValues`**      | `(updates: BatchCellUpdate[], source?: string) => void`     | Applies multiple cell mutations atomically as a single undo entry.   |
+| **`setColumnVisible`**     | `(colField: string, visible: boolean) => void`              | Shows or hides a column without removing it from the schema.         |
+| **`autoSizeColumn`**       | `(colField: string, opts?: AutoSizeColumnOptions) => void`  | Resizes a column to fit its widest rendered cell content.            |
+| **`autoSizeAllColumns`**   | `(opts?: AutoSizeAllColumnsOptions) => void`                | Resizes all visible columns to fit their content simultaneously.     |
+| **`copySelectedRange`**    | `() => Promise<void>`                                       | Copies the current selection to the system clipboard as TSV.         |
+| **`pasteFromClipboard`**   | `() => Promise<void>`                                       | Reads TSV from the system clipboard and pastes at the selection anchor. |
+| **`copyRange`**            | `(minRow: number, maxRow: number, minCol: number, maxCol: number) => Promise<void>` | Copies an explicit row/column visual-index range to the clipboard. |
 
 ---
 
