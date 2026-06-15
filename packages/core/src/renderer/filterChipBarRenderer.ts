@@ -1,4 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { HeaderMenuController } from './headerMenuController.js';
 import type { FilterModelItem } from '../rowModel.js';
 
 const OPERATOR_LABELS: Record<string, string> = {
@@ -17,15 +18,20 @@ const OPERATOR_LABELS: Record<string, string> = {
  * showing one chip per active filter. Each chip has a × to clear that single filter;
  * a "Clear all" button clears the entire filterModel.
  *
+ * Clicking a chip (not the × button) re-opens the column's filter popover anchored
+ * to the chip element — no sidebar required.
+ *
  * The bar is hidden (and takes no space in the layout plan) when filterModel is empty.
  */
 export class FilterChipBarRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
+	private readonly headerMenu: HeaderMenuController<TRowData>;
 	private bar: HTMLDivElement | null = null;
 	private unsubscribe: (() => void) | null = null;
 
-	constructor(engine: GridEngine<TRowData>) {
+	constructor(engine: GridEngine<TRowData>, headerMenu: HeaderMenuController<TRowData>) {
 		this.engine = engine;
+		this.headerMenu = headerMenu;
 	}
 
 	public mount(bar: HTMLDivElement): void {
@@ -78,6 +84,10 @@ export class FilterChipBarRenderer<TRowData = unknown> {
 			const chipLabel = document.createElement('span');
 			chipLabel.className = 'og-filter-chip-label';
 			chipLabel.textContent = `${label}: ${operatorLabel} "${filterValue}"`;
+			chipLabel.style.cursor = 'pointer';
+			chipLabel.addEventListener('click', () => {
+				this.headerMenu.showForField(colField, chip);
+			});
 			chip.appendChild(chipLabel);
 
 			const removeBtn = document.createElement('button');

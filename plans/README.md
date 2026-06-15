@@ -51,6 +51,7 @@
 | 048 | [Unified Theme Styling Core Migration](./048-unified-theme-styling-core-migration.md)           | DONE     | working tree |
 | 049 | [Accessibility / ARIA Pass](./049-accessibility-aria-pass.md)                                   | DONE     | working tree |
 | 051 | [Numeric Filter Null Coercion](./051-numeric-filter-null-coercion.md)                           | DONE     | 5d702964     |
+| 052 | [Grid UX and Architecture Hardening](./052-grid-ux-and-architecture-hardening.md)               | DONE     | working tree |
 
 ## Execution order
 

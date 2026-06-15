@@ -14,6 +14,7 @@ import { StableSlotAssigner } from './stableSlotAssigner.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
 import { compileStyleRules, evaluateDetailRowStyleRules, evaluateGroupRowStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
+import { PinnedContainerManager } from './pinnedContainerManager.js';
 
 // Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
 const ROW_KIND_BASE: Record<string, string> = {
@@ -149,6 +150,7 @@ export class RowRenderer<TRowData = unknown> {
 
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 	private readonly runtime: RowRendererRuntimeBridge<TRowData>;
+	private readonly pinnedContainers = new PinnedContainerManager<TRowData>();
 	/** Live column-reorder preview source (Plan 047), wired by RenderEngine to the
 	 *  ColumnInteractionController. Returns 0 outside an active header drag. */
 	public columnShiftSource: ((colIndex: number) => number) | null = null;
@@ -238,50 +240,7 @@ export class RowRenderer<TRowData = unknown> {
 	// ── Pinned container management ──────────────────────────────────────────────────
 
 	private ensurePinnedContainer(slot: RowSlot<TRowData>, side: 'left' | 'right', width: number): HTMLDivElement | null {
-		if (width <= 0) {
-			const existing = side === 'left' ? slot.pinLeftContainer : slot.pinRightContainer;
-			if (existing) {
-				existing.remove();
-				if (side === 'left') {
-					slot.pinLeftContainer = null;
-					slot.pinLeftContainerWidth = -1;
-					slot.pinLeftContainerTransform = '';
-				} else {
-					slot.pinRightContainer = null;
-					slot.pinRightContainerWidth = -1;
-					slot.pinRightContainerLeft = -1;
-					slot.pinRightContainerTransform = '';
-				}
-			}
-			return null;
-		}
-
-		let container = side === 'left' ? slot.pinLeftContainer : slot.pinRightContainer;
-		if (!container || !slot.element.contains(container)) {
-			container = document.createElement('div');
-			container.className = side === 'left' ? 'og-row-pin-left' : 'og-row-pin-right';
-			slot.element.appendChild(container);
-			if (side === 'left') {
-				slot.pinLeftContainer = container;
-				slot.pinLeftContainerWidth = -1;
-				slot.pinLeftContainerTransform = '';
-			} else {
-				slot.pinRightContainer = container;
-				slot.pinRightContainerWidth = -1;
-				slot.pinRightContainerLeft = -1;
-				slot.pinRightContainerTransform = '';
-			}
-		}
-		const previousWidth = side === 'left' ? slot.pinLeftContainerWidth : slot.pinRightContainerWidth;
-		if (previousWidth !== width) {
-			if (side === 'left') {
-				slot.pinLeftContainerWidth = width;
-			} else {
-				slot.pinRightContainerWidth = width;
-			}
-			container.style.width = `${width}px`;
-		}
-		return container;
+		return this.pinnedContainers.ensure(slot, side, width);
 	}
 
 	// ── Slot-based viewport virtualization core ─────────────────────────────────────

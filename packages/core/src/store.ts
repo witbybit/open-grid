@@ -522,6 +522,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getCellValidationError = (rowId: string, colField: string): string | null =>
 		this.engine.validationFeature.getCellValidationError(rowId, colField);
 	public hasValidationErrors = (): boolean => this.engine.validationFeature.hasValidationErrors();
+	public getAllValidationErrors = (): import('./features/ValidationManager.js').CellValidationError[] =>
+		this.engine.validationFeature.getAllValidationErrors();
 
 	public getColumnState = (): ColumnState[] => {
 		return this.engine.columnFeature.getColumnState();

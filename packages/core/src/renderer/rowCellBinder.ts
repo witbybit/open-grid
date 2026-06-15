@@ -440,10 +440,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const isMounted = deps.portalMountManager.isCellMounted(cellKey);
 	const canFreezePortal = cellSlot.lastPortalKey === cellKey && isMounted;
 	const globalChanged = cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalVersion !== cellSlot.lastMountedGlobalVersion;
-	const rowChanged =
-		cellSlot.lastMountedRowVersion !== -1 &&
-		ctx.rowVersions.get(node.id) !== undefined &&
-		ctx.rowVersions.get(node.id) !== cellSlot.lastMountedRowVersion;
+	const rowVersion = ctx.rowVersions.get(node.id);
+	const rowChanged = cellSlot.lastMountedRowVersion !== -1 && rowVersion !== undefined && rowVersion !== cellSlot.lastMountedRowVersion;
 	const isDataStale = !isRowRebind && canFreezePortal && (globalChanged || rowChanged);
 	const isPortalFrozen = !isRowRebind && canFreezePortal && !isDataStale;
 	const isStaleFrozen = (isRowRebind || isDataStale) && canFreezePortal;

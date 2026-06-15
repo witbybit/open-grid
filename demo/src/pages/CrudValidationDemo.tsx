@@ -8,12 +8,13 @@
  *   - Red border (og-cell-invalid) persists after the editor closes
  *   - Mock server response with simulated server-side rejection
  *   - api.clearValidationErrors() on a clean submit
+ *   - api.getAllValidationErrors()  →  sync snapshot of current error state (no re-run)
  *   - Sidebar "Submission Log" panel showing errors or success payload as JSON
  */
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { Grid } from '@open-grid/react';
 import type { ColumnDef, GridApi, GridReadyEvent, CellValidationError, SidebarPanelDef, RowValidator } from '@open-grid/react';
-import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson } from 'lucide-react';
+import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson, Scan } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
@@ -326,6 +327,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 	const [submitMessage, setSubmitMessage] = useState('');
 	const [validationSummary, setValidationSummary] = useState<CellValidationError[]>([]);
 	const [submissionLog, setSubmissionLog] = useState<SubmissionLog>(null);
+	const [errorSnapshot, setErrorSnapshot] = useState<CellValidationError[] | null>(null);
 	const [rows] = useState<Employee[]>(INITIAL_ROWS);
 
 	const handleGridReady = useCallback(
@@ -416,6 +418,14 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		setSubmitStatus('idle');
 		setSubmitMessage('');
 		setSubmissionLog(null);
+		setErrorSnapshot(null);
+	}, []);
+
+	// Synchronous read — no validators run, just reads current error state
+	const handleSnapshotErrors = useCallback(() => {
+		const api = apiRef.current;
+		if (!api) return;
+		setErrorSnapshot(api.getAllValidationErrors());
 	}, []);
 
 	// Sidebar panel — recreated when submissionLog changes so the render closure captures the latest value
@@ -461,6 +471,15 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				>
 					<RefreshCw className='h-3.5 w-3.5' />
 					Clear Errors
+				</button>
+
+				<button
+					onClick={handleSnapshotErrors}
+					title='Calls api.getAllValidationErrors() — synchronous, no validators re-run'
+					className='flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-[11px] font-bold text-sky-300 transition-all hover:bg-sky-500/20'
+				>
+					<Scan className='h-3.5 w-3.5' />
+					Snapshot Errors
 				</button>
 
 				<div className='ml-auto'>
@@ -515,6 +534,45 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 							</li>
 						))}
 					</ul>
+				</div>
+			)}
+
+			{/* getAllValidationErrors snapshot panel */}
+			{errorSnapshot !== null && (
+				<div className='shrink-0 rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3'>
+					<div className='mb-2 flex items-center justify-between gap-2'>
+						<div className='flex items-center gap-2'>
+							<Scan className='h-3.5 w-3.5 text-sky-400' />
+							<p className='text-[10px] font-extrabold uppercase tracking-wider text-sky-400'>
+								getAllValidationErrors() snapshot — {errorSnapshot.length} error{errorSnapshot.length !== 1 ? 's' : ''}{' '}
+								<span className='ml-1 font-normal normal-case text-sky-600'>(sync read, no validators re-run)</span>
+							</p>
+						</div>
+						<button
+							onClick={() => setErrorSnapshot(null)}
+							className='text-[10px] text-sky-600 hover:text-sky-400'
+							aria-label='Dismiss snapshot'
+						>
+							✕
+						</button>
+					</div>
+					{errorSnapshot.length === 0 ? (
+						<p className='text-[11px] text-sky-600 italic'>No errors in current state — run Validate All first to populate errors.</p>
+					) : (
+						<ul className='flex flex-col gap-1'>
+							{errorSnapshot.map((e, i) => (
+								<li key={i} className='flex items-start gap-2 text-[11px] text-sky-300/80'>
+									<span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400' />
+									<span>
+										<span className='font-semibold text-sky-300'>
+											Row {e.rowId} / {e.colField}:
+										</span>{' '}
+										{e.error}
+									</span>
+								</li>
+							))}
+						</ul>
+					)}
 				</div>
 			)}
 

@@ -185,7 +185,7 @@ export class ValidationManager<TRowData = unknown> {
 		// ── Build final failures list and fire state change ───────────────────────
 		const failures: CellValidationError[] = [];
 		for (const [key, err] of Object.entries(nextErrors)) {
-			const colonIdx = key.indexOf(':');
+			const colonIdx = key.lastIndexOf(':');
 			if (colonIdx === -1) continue;
 			failures.push({ rowId: key.slice(0, colonIdx), colField: key.slice(colonIdx + 1), error: err });
 		}
@@ -224,7 +224,7 @@ export class ValidationManager<TRowData = unknown> {
 
 		const invalidations: Array<{ kind: 'cell'; rowId: string; colId: string; reason: string }> = [];
 		for (const key of Object.keys(state.validationErrors)) {
-			const colonIdx = key.indexOf(':');
+			const colonIdx = key.lastIndexOf(':');
 			if (colonIdx === -1) continue;
 			const rowId = key.slice(0, colonIdx);
 			const colField = key.slice(colonIdx + 1);
@@ -248,6 +248,15 @@ export class ValidationManager<TRowData = unknown> {
 	public hasValidationErrors(): boolean {
 		const errors = this.ctx.getState().validationErrors;
 		return !!errors && Object.keys(errors).length > 0;
+	}
+
+	/** Returns all current validation errors without re-running validation. */
+	public getAllValidationErrors(): CellValidationError[] {
+		const errors = this.ctx.getState().validationErrors ?? {};
+		return Object.entries(errors).map(([key, error]) => {
+			const colonIdx = key.lastIndexOf(':');
+			return { rowId: key.slice(0, colonIdx), colField: key.slice(colonIdx + 1), error };
+		});
 	}
 
 	/** Internal: set or clear an error for one cell and fire the event. */

@@ -271,7 +271,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		// Group panel renderer — mounts when showGroupPanel is true
 		this.groupPanelRenderer = new GroupPanelRenderer<TRowData>(engine);
-		this.filterChipBarRenderer = new FilterChipBarRenderer<TRowData>(engine);
+		this.filterChipBarRenderer = new FilterChipBarRenderer<TRowData>(engine, this.headerMenu);
 		this.statusBarRenderer = new StatusBarRenderer<TRowData>(engine);
 		this.paginationBarRenderer = new PaginationBarRenderer<TRowData>(engine);
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);

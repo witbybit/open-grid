@@ -122,5 +122,6 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		clearValidationErrors: source.clearValidationErrors,
 		getCellValidationError: source.getCellValidationError,
 		hasValidationErrors: source.hasValidationErrors,
+		getAllValidationErrors: source.getAllValidationErrors,
 	};
 }

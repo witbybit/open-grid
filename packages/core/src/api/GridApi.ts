@@ -404,6 +404,8 @@ export interface GridApi<TRowData = unknown> {
 	getCellValidationError(rowId: string, colField: string): string | null;
 	/** Returns true when at least one cell has an active validation error. */
 	hasValidationErrors(): boolean;
+	/** Returns all current validation errors without re-running validation. */
+	getAllValidationErrors(): CellValidationError[];
 	/** Returns a per-column snapshot of the current user-configurable state (width, visibility, pinning, sort) in column order. */
 	getColumnState(): ColumnState[];
 	/** Apply a partial column state array. Only fields present in `states` are updated; others are unchanged.

@@ -27,20 +27,38 @@ export class HeaderMenuController<TRowData = unknown> {
 			return;
 		}
 		this.hide();
+		this.activeHeaderCell = headerCell;
+		this._buildAndShowPopover(headerCell.getBoundingClientRect(), colField);
+	}
 
-		const rect = headerCell.getBoundingClientRect();
+	/** Open the filter/sort popover anchored to an arbitrary element (e.g. a filter chip).
+	 *  Works without a sidebar — uses the same built-in floating popover as the header button. */
+	public showForField(colField: string, anchorEl: HTMLElement): void {
+		// Toggle: clicking the same chip while the popover is open closes it.
+		if (this.activePopover && this._activeColField === colField) {
+			this.hide();
+			return;
+		}
+		this.hide();
+		this.activeHeaderCell = null;
+		this._buildAndShowPopover(anchorEl.getBoundingClientRect(), colField);
+	}
+
+	private _activeColField: string | null = null;
+
+	private _buildAndShowPopover(rect: DOMRect, colField: string): void {
+		this._activeColField = colField;
 		const state = this.engine.stateManager.getState();
 		const column = state.columns.find((c) => c.field === colField);
 		if (!column) return;
 
 		const popover = document.createElement('div');
 		popover.className = 'og-header-popover';
-		const container = headerCell.closest('.og-grid-container') as HTMLElement | null;
+		const container = (this.activeHeaderCell ?? document.body).closest('.og-grid-container') as HTMLElement | null;
 		if (container && container.dataset.ogThemeScope) {
 			popover.dataset.ogThemeScope = container.dataset.ogThemeScope;
 		}
 		this.activePopover = popover;
-		this.activeHeaderCell = headerCell;
 
 		// Custom React header menu (portal-mounted).
 		if (column.headerMenuComponent && this.portalMountManager.onMountHeaderMenu) {
@@ -399,6 +417,7 @@ export class HeaderMenuController<TRowData = unknown> {
 			this.activePopover = null;
 		}
 		this.activeHeaderCell = null;
+		this._activeColField = null;
 		document.removeEventListener('mousedown', this._handleOutsideClick);
 		document.removeEventListener('keydown', this._handleKeyDown);
 		window.removeEventListener('scroll', this.hide, { capture: true });
@@ -408,7 +427,7 @@ export class HeaderMenuController<TRowData = unknown> {
 	private _handleOutsideClick = (e: MouseEvent): void => {
 		if (this.activePopover && !this.activePopover.contains(e.target as Node)) {
 			const clickedMenuBtn = (e.target as HTMLElement).closest('.og-header-menu-button');
-			if (clickedMenuBtn && clickedMenuBtn.closest('.og-header-cell') === this.activeHeaderCell) {
+			if (clickedMenuBtn && this.activeHeaderCell !== null && clickedMenuBtn.closest('.og-header-cell') === this.activeHeaderCell) {
 				return;
 			}
 			this.hide();
