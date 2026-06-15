@@ -145,7 +145,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			expansion: initialState.expansion,
 			themeName: initialState.themeName,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
-			colBuffer: initialState.colBuffer ?? 1,
+			colBuffer: initialState.colBuffer ?? 2,
 			// Phase 2: always normalize runtimeLimits so all callers can assume it exists
 			runtimeLimits: {
 				maxRenderedRows: 500,
@@ -524,7 +524,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public hasValidationErrors = (): boolean => this.engine.validationFeature.hasValidationErrors();
 	public getAllValidationErrors = (): import('./features/ValidationManager.js').CellValidationError[] =>
 		this.engine.validationFeature.getAllValidationErrors();
-
 	public getColumnState = (): ColumnState[] => {
 		return this.engine.columnFeature.getColumnState();
 	};
@@ -674,8 +673,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.viewportController.getVisibleRowRange();
 	};
 
-	public getVisibleColumnRange = (): ViewportRange => {
-		return this.viewportController.getVisibleColumnRange();
+	public getVisibleColumnRange = (): { colStart: number; colEnd: number; total: number } => {
+		const r = this.viewportController.getVisibleColumnRange();
+		return { colStart: r.startIdx, colEnd: r.endIdx, total: this.engine.stateManager.getState().columns.length };
 	};
 
 	public updateVisibleRanges = (): boolean => {

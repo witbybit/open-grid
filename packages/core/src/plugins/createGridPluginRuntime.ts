@@ -123,5 +123,6 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		getCellValidationError: source.getCellValidationError,
 		hasValidationErrors: source.hasValidationErrors,
 		getAllValidationErrors: source.getAllValidationErrors,
+		getVisibleColumnRange: source.getVisibleColumnRange,
 	};
 }

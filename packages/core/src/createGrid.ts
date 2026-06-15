@@ -222,6 +222,7 @@ export function createApiFacade<TRowData>(
 		getCellValidationError: (rowId: string, colField: string) => store.getCellValidationError(rowId, colField),
 		hasValidationErrors: () => store.hasValidationErrors(),
 		getAllValidationErrors: () => store.getAllValidationErrors(),
+		getVisibleColumnRange: () => store.getVisibleColumnRange(),
 		getColumnState: () => store.getColumnState(),
 		applyColumnState: (states: ColumnState[], opts?: { applyOrder?: boolean }) => store.applyColumnState(states, opts),
 		getGridState: () => store.getGridState(),

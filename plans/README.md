@@ -10,7 +10,7 @@
 | 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                             | DONE     | 66c92c2      |
 | 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)               | DONE     | 66c92c2      |
 | 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)                 | DONE     | 66c92c2      |
-| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                         | TODO     | 78e8122      |
+| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                         | DONE     | working tree |
 | 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                             | DONE     | 53fe61f      |
 | 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                         | DONE     | 39c83e3      |
 | 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)                       | DONE     | 39c83e3      |
@@ -39,12 +39,12 @@
 | 035 | [Phase 6 Legacy Layout Cleanup](./035-phase6-legacy-layout-cleanup.md)                          | DONE     | working tree |
 | 037 | [Coordinator Unit Tests](./037-coordinator-unit-tests.md)                                       | DONE     | working tree |
 | 038 | [store.ts Line Budget](./038-store-ts-line-budget.md)                                           | DONE     | working tree |
-| 039 | [Grid Layout Animation + Chrome Hardening](./039-grid-layout-animation-chrome-hardening.md)     | PARTIAL  | working tree |
-| 040 | [Core-Owned Architecture North-Star](./040-core-owned-architecture-north-star.md)               | TODO     | working tree |
+| 039 | [Grid Layout Animation + Chrome Hardening](./039-grid-layout-animation-chrome-hardening.md)     | DONE     | working tree |
+| 040 | [Core-Owned Architecture North-Star](./040-core-owned-architecture-north-star.md)               | DONE     | working tree |
 | 041 | [Core Client Pagination (pipeline window)](./041-core-client-pagination-pipeline-window.md)     | DONE     | working tree |
 | 042 | [React Pagination + Status Bar Teardown](./042-react-pagination-statusbar-teardown.md)          | DONE     | working tree |
 | 043 | [Row Lifecycle Exit Animation](./043-row-lifecycle-exit-animation.md)                           | DONE     | working tree |
-| 044 | [Animated Column Pinning](./044-animated-column-pinning.md)                                     | TODO     | working tree |
+| 044 | [Animated Column Pinning](./044-animated-column-pinning.md)                                     | DONE     | working tree |
 | 045 | [Detail Height Animation](./045-detail-height-animation.md)                                     | DONE     | working tree |
 | 046 | [Menu Modernization (shadcn)](./046-menu-modernization.md)                                      | DONE     | working tree |
 | 047 | [Header-Drag Reorder Polish](./047-header-drag-reorder-polish.md)                               | DONE     | working tree |
@@ -52,6 +52,8 @@
 | 049 | [Accessibility / ARIA Pass](./049-accessibility-aria-pass.md)                                   | DONE     | working tree |
 | 051 | [Numeric Filter Null Coercion](./051-numeric-filter-null-coercion.md)                           | DONE     | 5d702964     |
 | 052 | [Grid UX and Architecture Hardening](./052-grid-ux-and-architecture-hardening.md)               | DONE     | working tree |
+| 053 | [Column Virtualization Verification](./053-column-virtualization-verification.md)               | DONE     | working tree |
+| 054 | [Multi-Level Column Headers](./054-multi-level-column-headers.md)                               | TODO     | working tree |
 
 ## Execution order
 

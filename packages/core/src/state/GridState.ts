@@ -58,6 +58,12 @@ export interface GridModelState<TRowData = unknown> {
 	// Render tuning config
 	styleRules?: GridStyleRule<TRowData>[];
 	rowOverscanPx?: number;
+	/**
+	 * Number of off-screen columns to pre-render on each side of the visible range.
+	 * Higher values smooth fast horizontal scrolls at the cost of extra DOM nodes.
+	 * Lower values maximise DOM savings but risk blank columns during rapid swipes.
+	 * Default: 2. Finance grids with narrow columns (80–120 px) benefit from at least 2.
+	 */
 	colBuffer?: number;
 	runtimeLimits?: {
 		maxRenderedRows?: number;

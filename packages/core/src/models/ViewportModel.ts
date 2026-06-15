@@ -217,7 +217,7 @@ export class ViewportModel<TRowData = unknown> {
 
 		// Predictive overscan
 		const state = this.engine.stateManager.getState();
-		const colBuffer = state.colBuffer ?? 1;
+		const colBuffer = state.colBuffer ?? 2;
 		let overscanLeft = colBuffer;
 		let overscanRight = colBuffer;
 

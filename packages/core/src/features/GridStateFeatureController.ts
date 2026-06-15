@@ -25,7 +25,7 @@ export class GridStateFeatureController<TRowData = unknown> {
 	}
 
 	public getColBuffer(): number {
-		return this.deps.stateManager.getState().colBuffer ?? 1;
+		return this.deps.stateManager.getState().colBuffer ?? 2;
 	}
 
 	public setColBuffer(colBuffer: number): void {

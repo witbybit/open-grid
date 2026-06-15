@@ -406,6 +406,13 @@ export interface GridApi<TRowData = unknown> {
 	hasValidationErrors(): boolean;
 	/** Returns all current validation errors without re-running validation. */
 	getAllValidationErrors(): CellValidationError[];
+	/**
+	 * Returns the currently rendered column range for the center (scrollable) lane.
+	 * `colStart` and `colEnd` are column indices; `total` is the total column count.
+	 * Useful for displaying a "Visible columns: X / Y" badge or driving custom overlays.
+	 * Returns `{colStart: 0, colEnd: 0, total: 0}` before the first render.
+	 */
+	getVisibleColumnRange(): { colStart: number; colEnd: number; total: number };
 	/** Returns a per-column snapshot of the current user-configurable state (width, visibility, pinning, sort) in column order. */
 	getColumnState(): ColumnState[];
 	/** Apply a partial column state array. Only fields present in `states` are updated; others are unchanged.

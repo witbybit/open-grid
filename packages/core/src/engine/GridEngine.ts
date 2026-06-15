@@ -236,7 +236,7 @@ export class GridEngine<TRowData = unknown> {
 			pagination: config.pagination,
 			expansion: config.expansion ?? { groups: {}, treeRows: {}, details: {} },
 			rowOverscanPx: config.rowOverscanPx ?? 400,
-			colBuffer: config.colBuffer ?? 1,
+			colBuffer: config.colBuffer ?? 2,
 			runtimeLimits: config.runtimeLimits,
 			overscanAdaptive: config.overscanAdaptive,
 		};

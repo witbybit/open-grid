@@ -18,6 +18,7 @@ import {
 	Layers,
 	CheckSquare,
 	ClipboardCheck,
+	TableProperties,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -119,6 +120,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'CRUD & Validation',
 			subtitle: 'Validate · Submit · Error Feedback',
 			icon: ClipboardCheck,
+		},
+		{
+			id: 'wide',
+			label: 'Wide Grid',
+			subtitle: '100 Columns · Column Virtualization',
+			icon: TableProperties,
 		},
 	] as const;
 

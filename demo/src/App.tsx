@@ -24,6 +24,7 @@ const NativeCellTypesDemo = lazy(() => import('./pages/NativeCellTypesDemo'));
 const RealtimeGroupingDemo = lazy(() => import('./pages/RealtimeGroupingDemo'));
 const RowMultiSelectDemo = lazy(() => import('./pages/RowMultiSelectDemo'));
 const CrudValidationDemo = lazy(() => import('./pages/CrudValidationDemo'));
+const WideGridDemo = lazy(() => import('./pages/WideGridDemo'));
 
 const PAGES: readonly GridPageType[] = [
 	'perf',
@@ -41,6 +42,7 @@ const PAGES: readonly GridPageType[] = [
 	'grouping',
 	'multiselect',
 	'crud',
+	'wide',
 ];
 
 function GridPageFallback() {
@@ -226,6 +228,7 @@ export default function App() {
 		if (activePage === 'native') return <NativeCellTypesDemo {...commonGridProps} />;
 		if (activePage === 'grouping') return <RealtimeGroupingDemo {...commonGridProps} />;
 		if (activePage === 'multiselect') return <RowMultiSelectDemo {...commonGridProps} />;
+		if (activePage === 'wide') return <WideGridDemo {...commonGridProps} />;
 		return <CrudValidationDemo {...commonGridProps} />;
 	})();
 
