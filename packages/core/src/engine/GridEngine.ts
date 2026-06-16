@@ -33,7 +33,6 @@ import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { InvalidationManager } from '../renderer/invalidationManager.js';
-import type { RenderStats } from '../renderer/renderOrchestrator.js';
 import { GridChangeApplier } from './GridChangeApplier.js';
 import { ColumnFeatureController } from '../features/ColumnFeatureController.js';
 import { GroupingFeatureController } from '../features/GroupingFeatureController.js';
@@ -45,7 +44,6 @@ import { GridStateFeatureController } from '../features/GridStateFeatureControll
 import { CellNotificationController } from './CellNotificationController.js';
 import { GridStateReactionController } from './GridStateReactionController.js';
 import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
-import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import { ColumnAutoSizeController } from '../features/ColumnAutoSizeController.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from '../features/ColumnAutoSizeController.js';
 import { ClipboardController } from '../features/ClipboardController.js';
@@ -143,17 +141,10 @@ export class GridEngine<TRowData = unknown> {
 	private renderTransactionDepth = 0;
 	private pendingRenderReason: string | null = null;
 
-	public getRenderStats?: () => RenderStats;
-	public resetRenderStats?: () => void;
-	public getTheme?: () => ThemeTokens;
-	public getThemeName?: () => BuiltInThemeName | null;
-	public getAvailableThemes?: () => BuiltInThemeName[];
-	public switchTheme?: (themeName: string) => void;
-	public mergeTheme?: (partial: Partial<ThemeTokens>) => void;
-	public onThemeChange?: (listener: (theme: ThemeTokens) => void) => () => void;
-	public getContainerElement?: () => HTMLElement | null;
+	private readonly getContainerElement: () => HTMLElement | null;
 
 	constructor(config: GridEngineConfig<TRowData>) {
+		this.getContainerElement = config.getContainerElement ?? (() => null);
 		this.eventBus = new EventBus<TRowData>();
 		this.runtimeFaults = new RuntimeFaultReporter<TRowData>({
 			emit: (fault) => this.eventBus.dispatchEvent(GridEventName.runtimeFault, fault),
@@ -317,7 +308,7 @@ export class GridEngine<TRowData = unknown> {
 			data: this.data,
 			columnFeature: this.columnFeature,
 			getRowModel: () => this.rowModel,
-			getContainerElement: () => this.getContainerElement?.() ?? null,
+			getContainerElement: () => this.getContainerElement(),
 		});
 		this.clipboard = new ClipboardController<TRowData>({
 			getState: () => this.stateManager.getState(),

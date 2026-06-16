@@ -1,6 +1,7 @@
 import { getStoreFromApi } from './createGrid.js';
 import { RenderEngine } from './renderer/renderEngine.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
+import { createHeadlessPorts } from './engine/rendererPorts.js';
 import type {
 	GridCellContentMount,
 	GridCellContentUnmount,
@@ -102,14 +103,23 @@ export function mountGridHost<TRowData>(
 	renderEngine.onMountHeaderMenu = options.headerMenu?.mountHeaderMenu;
 	renderEngine.onUnmountHeaderMenu = options.headerMenu?.unmountHeaderMenu;
 
-	engine.getRenderStats = () => renderEngine.getRenderStats();
-	engine.resetRenderStats = () => renderEngine.resetRenderStats();
-	engine.getTheme = () => renderEngine.viewportRenderer.getTheme();
-	engine.getThemeName = () => renderEngine.viewportRenderer.getThemeName();
-	engine.getAvailableThemes = () => renderEngine.viewportRenderer.getThemeManager()?.getAvailableThemes() ?? [];
-	engine.switchTheme = (themeName) => renderEngine.viewportRenderer.switchTheme(themeName);
-	engine.mergeTheme = (partial) => renderEngine.viewportRenderer.mergeTheme(partial);
-	engine.onThemeChange = (listener) => renderEngine.viewportRenderer.onThemeChange(listener);
+	// Supply runtime ports to the store — public API methods now delegate through these.
+	store.setRendererPorts({
+		renderer: {
+			requestRender: () => {},
+			getStats: () => renderEngine.getRenderStats(),
+			resetStats: () => renderEngine.resetRenderStats(),
+			getContainer: () => container,
+		},
+		theme: {
+			getTheme: () => renderEngine.viewportRenderer.getTheme(),
+			getThemeName: () => renderEngine.viewportRenderer.getThemeName(),
+			getAvailableThemes: () => renderEngine.viewportRenderer.getThemeManager()?.getAvailableThemes() ?? [],
+			switchTheme: (themeName) => renderEngine.viewportRenderer.switchTheme(themeName),
+			mergeTheme: (partial) => renderEngine.viewportRenderer.mergeTheme(partial),
+			onThemeChange: (listener) => renderEngine.viewportRenderer.onThemeChange(listener),
+		},
+	});
 
 	if (options.pins) {
 		internalApi.setViewportPins(options.pins);
@@ -208,14 +218,7 @@ export function mountGridHost<TRowData>(
 		destroy() {
 			observer.disconnect();
 			renderEngine.unmount();
-			engine.getRenderStats = undefined;
-			engine.resetRenderStats = undefined;
-			engine.getTheme = undefined;
-			engine.getThemeName = undefined;
-			engine.getAvailableThemes = undefined;
-			engine.switchTheme = undefined;
-			engine.mergeTheme = undefined;
-			engine.onThemeChange = undefined;
+			store.setRendererPorts(createHeadlessPorts());
 		},
 		adapterHandle,
 	};

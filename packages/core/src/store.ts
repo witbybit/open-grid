@@ -7,8 +7,9 @@ import { ViewportController, type ViewportRange } from './viewportController.js'
 import { GridEngine } from './engine/GridEngine.js';
 import type { ClientRowModelRuntime, ServerRowModelRuntime } from './engine/runtimePorts.js';
 import { createClientRowModelRuntime, createServerRowModelRuntime } from './engine/createRowModelRuntimes.js';
+import type { GridRuntimePorts } from './engine/rendererPorts.js';
+import { createHeadlessPorts } from './engine/rendererPorts.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
-import { createEmptyRenderStats } from './renderer/renderOrchestrator.js';
 import { createRowsAccessor } from './rowsAccessor.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
@@ -111,6 +112,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private readonly pluginRegistry: GridPluginRegistry<TRowData>;
 
 	private containerElement: HTMLElement | null = null;
+	private rendererPorts: GridRuntimePorts = createHeadlessPorts();
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}, engineOptions?: { rowValidator?: RowValidator<TRowData> }) {
 		validateColumns(initialState.columns || []);
@@ -158,9 +160,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				...initialState.runtimeLimits,
 			},
 			overscanAdaptive: initialState.overscanAdaptive,
+			getContainerElement: () => this.containerElement,
 		});
-
-		this.engine.getContainerElement = () => this.containerElement;
 		this.viewportController = new ViewportController<TRowData>(this.engine);
 		this.pluginRuntime = createGridPluginRuntime(this as unknown as GridPluginRuntime<TRowData>);
 		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime, this.engine.runtimeFaults);
@@ -823,14 +824,18 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public canRedo = (): boolean => this.engine.commandHistory.canRedo();
 
-	public getRenderStats = (): RenderStats => {
-		if (this.engine.getRenderStats) return this.engine.getRenderStats();
-		const empty = createEmptyRenderStats();
-		empty.compiledPlanVersion = this.engine.getCompiledPlanVersion();
-		return empty;
+	/** Supply live renderer and theme ports when a renderer mounts; reset to headless on unmount. */
+	public setRendererPorts = (ports: GridRuntimePorts): void => {
+		this.rendererPorts = ports;
 	};
 
-	public resetRenderStats = (): void => this.engine.resetRenderStats?.();
+	public getRenderStats = (): RenderStats => {
+		const stats = this.rendererPorts.renderer.getStats();
+		stats.compiledPlanVersion = this.engine.getCompiledPlanVersion();
+		return stats;
+	};
+
+	public resetRenderStats = (): void => this.rendererPorts.renderer.resetStats();
 
 	public getRuntimeFaults = () => this.engine.runtimeFaults.snapshot();
 
@@ -838,33 +843,37 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public reportRuntimeFault = (fault: import('./diagnostics/RuntimeFaultReporter.js').RuntimeFaultInput) => this.engine.runtimeFaults.report(fault);
 
-	public getTheme = (): ThemeTokens => this.engine.getTheme?.() ?? getBuiltInTheme(this.getThemeName() ?? 'dark');
+	public getTheme = (): ThemeTokens => this.rendererPorts.theme.getTheme();
 
 	public getThemeName = (): BuiltInThemeName | null => {
-		if (this.engine.getThemeName) return this.engine.getThemeName();
+		const portName = this.rendererPorts.theme.getThemeName();
+		if (portName !== null) return portName;
 		const themeName = this.state.themeName;
 		return isBuiltInThemeName(themeName) ? themeName : null;
 	};
 
-	public getAvailableThemes = (): BuiltInThemeName[] => this.engine.getAvailableThemes?.() ?? BUILT_IN_THEME_ORDER.slice();
+	public getAvailableThemes = (): BuiltInThemeName[] => {
+		const themes = this.rendererPorts.theme.getAvailableThemes();
+		return themes.length > 0 ? themes : BUILT_IN_THEME_ORDER.slice();
+	};
 
 	public switchTheme = (themeName: string): void => {
 		if (!isBuiltInThemeName(themeName) || this.state.themeName === themeName) return;
 		this.setState({ themeName });
-		this.engine.switchTheme?.(themeName);
+		this.rendererPorts.theme.switchTheme(themeName);
 	};
 
 	public mergeTheme = (partial: Partial<ThemeTokens>): void => {
-		this.engine.mergeTheme?.(partial);
+		this.rendererPorts.theme.mergeTheme(partial);
 	};
 
-	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.engine.onThemeChange?.(listener) ?? (() => {});
+	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.rendererPorts.theme.onThemeChange(listener);
 
 	public setContainerElement = (c: HTMLElement): void => {
 		this.containerElement = c;
 	};
-	public getContainerElement = (): HTMLElement | null => this.containerElement;
-	public getContainer = (): HTMLElement | null => this.containerElement;
+	public getContainerElement = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
+	public getContainer = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
 
 	public destroy = (): void => {
 		this.pluginRegistry.destroy();

@@ -68,4 +68,6 @@ export interface GridEngineConfig<TRowData = unknown> {
 	 * Default: false.
 	 */
 	overscanAdaptive?: boolean;
+	/** Returns the host container element. Used by auto-size and any feature that needs DOM measurements. */
+	getContainerElement?: () => HTMLElement | null;
 }
