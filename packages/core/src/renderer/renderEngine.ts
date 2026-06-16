@@ -16,8 +16,7 @@ import type {
 	GridHeaderMenuUnmount,
 } from './IGridRenderer.js';
 import { RenderOrchestrator, type RenderStats } from './renderOrchestrator.js';
-import { RenderScheduler } from './renderScheduler.js';
-import { ScrollFrameScheduler } from './scrollFrameScheduler.js';
+import { DefaultFrameCoordinator } from './frameCoordinator.js';
 import { PortalMountManager } from './portalMountManager.js';
 import { ViewportRenderer } from './viewportRenderer.js';
 import { RowRenderer } from './rowRenderer.js';
@@ -57,8 +56,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly scrollEngine: ScrollEngine<TRowData>;
 	private readonly columnInteractions: ColumnInteractionController<TRowData>;
 	private readonly fillDrag: FillDragController<TRowData>;
-	private readonly scheduler: RenderScheduler;
-	private readonly scrollScheduler: ScrollFrameScheduler;
+	private readonly frameCoordinator: DefaultFrameCoordinator;
 	private readonly orchestrator: RenderOrchestrator;
 	private readonly paintCoordinator!: RenderPaintCoordinator<TRowData>;
 	private readonly scrollCoordinator!: RenderScrollCoordinator<TRowData>;
@@ -190,8 +188,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		);
 		this.geometryController = new GeometryController(engine);
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
-		this.scheduler = new RenderScheduler(() => this.flushPaint());
-		this.scrollScheduler = new ScrollFrameScheduler(() => this.flushScrollFrame());
+		this.frameCoordinator = new DefaultFrameCoordinator({
+			onScrollFrame: () => this.flushScrollFrame(),
+			onPaintFrame: () => this.flushPaint(),
+		});
 
 		this.viewportRenderer = new ViewportRenderer<TRowData>(engine, this.geometryController);
 		this.cellRenderer = new CellRenderer((frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame));
@@ -312,8 +312,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				overlayRenderer: this.overlayRenderer,
 				stickyGroupRenderer: this.stickyGroupRenderer,
 				portalMountManager: this.portalMountManager,
-				scheduler: this.scheduler,
-				requestScrollFrame: () => this.scrollScheduler.requestFrame(),
+				frameCoordinator: this.frameCoordinator,
+				requestScrollFrame: () => this.frameCoordinator.requestScrollFrame(),
 				layoutTransition: this.layoutTransition,
 				renderStats: this.renderStats,
 				runtimeState: this.runtimeState,
@@ -329,7 +329,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			rowRenderer: this.rowRenderer,
 			scrollEngine: this.scrollEngine,
 			renderStats: this.renderStats,
-			requestScrollFrame: () => this.scrollScheduler.requestFrame(),
+			requestScrollFrame: () => this.frameCoordinator.requestScrollFrame(),
 		});
 		const paintState: RenderPaintCoordinatorState = {
 			pendingTransition: this._pendingTransition,
@@ -362,7 +362,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			geometryController: this.geometryController,
 			portalMountManager: this.portalMountManager,
 			layoutTransition: this.layoutTransition,
-			scheduler: this.scheduler,
+			frameCoordinator: this.frameCoordinator,
 			runtimeState: this.runtimeState,
 			syncLayoutPlan: () => {
 				this.viewportCoordinator.syncLayoutPlan();
@@ -490,8 +490,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.paginationBarRenderer.unmount();
 		this.stickyGroupRenderer.unmount();
 		this.layoutTransition.destroy();
-		this.scheduler.destroy();
-		this.scrollScheduler.destroy();
+		this.frameCoordinator.destroy();
 		this.clearScrollEndTimer();
 		this.clearPostScrollDecorationTimer();
 		this.portalMountManager.releaseAll();

@@ -4,7 +4,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import type { OverlayRenderer } from './overlayRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';
-import type { RenderScheduler } from './renderScheduler.js';
+import type { FrameCoordinator } from './frameCoordinator.js';
 import type { RenderRuntimeStats } from './renderTelemetry.js';
 import type { RowRenderer } from './rowRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
@@ -47,7 +47,7 @@ export interface RenderScrollCoordinatorDeps<TRowData = unknown> {
 	overlayRenderer: OverlayRenderer<TRowData>;
 	stickyGroupRenderer: StickyGroupRenderer<TRowData>;
 	portalMountManager: PortalMountManager<TRowData>;
-	scheduler: RenderScheduler;
+	frameCoordinator: FrameCoordinator;
 	requestScrollFrame: () => void;
 	layoutTransition: LayoutTransitionController<TRowData>;
 	renderStats: RenderRuntimeStats;
@@ -206,7 +206,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.restoreDeferredFocus();
 		if (this.state.flushPendingAfterScroll) {
 			this.state.flushPendingAfterScroll = false;
-			this.deps.scheduler.requestFlush('post-scroll');
+			this.deps.frameCoordinator.requestPostScrollWork();
 		}
 		if (
 			this.state.viewportDirtyAfterScroll ||

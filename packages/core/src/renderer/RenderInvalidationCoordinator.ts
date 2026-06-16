@@ -2,7 +2,7 @@ import { GridEventName } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GeometryController } from './geometryController.js';
 import type { PortalMountManager } from './portalMountManager.js';
-import type { RenderScheduler } from './renderScheduler.js';
+import type { FrameCoordinator } from './frameCoordinator.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 
@@ -11,7 +11,7 @@ export interface RenderInvalidationCoordinatorDeps<TRowData = unknown> {
 	geometryController: GeometryController<TRowData>;
 	portalMountManager: PortalMountManager<TRowData>;
 	layoutTransition: LayoutTransitionController<TRowData>;
-	scheduler: RenderScheduler;
+	frameCoordinator: FrameCoordinator;
 	runtimeState: RenderRuntimeState;
 	syncLayoutPlan: () => void;
 	scrollCellIntoView: (rowId: string, colField: string) => void;
@@ -241,7 +241,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 			this.deps.markViewportDirtyAfterScroll();
 			return;
 		}
-		this.deps.scheduler.requestFlush(reason);
+		this.deps.frameCoordinator.requestPaintFrame();
 	}
 
 	private requestFlushGated(reason: string): void {
@@ -249,7 +249,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 			this.deps.markFlushPendingAfterScroll();
 			return;
 		}
-		this.deps.scheduler.requestFlush(reason);
+		this.deps.frameCoordinator.requestPaintFrame();
 	}
 
 	private isScrollActive(): boolean {
