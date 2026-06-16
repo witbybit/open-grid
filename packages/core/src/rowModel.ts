@@ -5,6 +5,7 @@ import type { ClientRowModelRuntime } from './engine/runtimePorts.js';
 import { getFieldRoot } from './ids.js';
 import { RowNode } from './rowNode.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
+import { RowDependencyRegistry, classifyMutation } from './rows/rowMutationClassifier.js';
 import type { PageWindow } from './rows/pageModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
 import type { VisualRow } from './visualRow.js';
@@ -504,6 +505,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	private unsubscribers: Array<() => void> = [];
 
 	private pipeline = new RowPipeline<TData>();
+	readonly dependencyRegistry = new RowDependencyRegistry<TData>();
 	private _stickyGroupMeta = new Map<number, number>();
 	private _groupMeta = new Map<string, GroupRowMeta>();
 	private _groupMetaByVisualIndex = new Map<number, GroupRowMeta>();
@@ -590,21 +592,39 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.runtime.registerRowModel(this);
 
 		this.unsubscribers.push(
-			this.runtime.addEventListener(GridEventName.sortChanged, () => this.refresh()),
-			this.runtime.addEventListener(GridEventName.filterChanged, () => this.refresh()),
-			this.runtime.addEventListener(GridEventName.groupByChanged, () => this.refresh()),
-			this.runtime.addEventListener(GridEventName.aggDefsChanged, () => this.refresh()),
+			this.runtime.addEventListener(GridEventName.sortChanged, () => { this.rebuildDependencyRegistry(); this.refresh(); }),
+			this.runtime.addEventListener(GridEventName.filterChanged, () => { this.rebuildDependencyRegistry(); this.refresh(); }),
+			this.runtime.addEventListener(GridEventName.groupByChanged, () => { this.rebuildDependencyRegistry(); this.refresh(); }),
+			this.runtime.addEventListener(GridEventName.aggDefsChanged, () => { this.rebuildDependencyRegistry(); this.refresh(); }),
 			this.runtime.addEventListener(GridEventName.showGroupFooterChanged, () => this.refresh()),
 			this.runtime.addEventListener(GridEventName.enableStickyGroupRowsChanged, () => this.refresh()),
 			// Client pagination page change → re-run the pipeline with the new page window.
 			this.runtime.addEventListener(GridEventName.paginationChanged, () => this.refresh('flatten'))
 		);
+		this.rebuildDependencyRegistry();
 		this.setRows(options.rows);
 	}
 
 	public dispose(): void {
 		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
 		this.unsubscribers = [];
+	}
+
+	private rebuildDependencyRegistry(): void {
+		const state = this.runtime.getState();
+		this.dependencyRegistry.update({
+			columns: state.columns,
+			sortModel: state.sortModel,
+			filterModel: state.filterModel,
+			groupBy: state.groupBy,
+			aggDefs: state.aggDefs,
+			hasTreeParent: !!state.getParentId,
+		});
+	}
+
+	/** @internal Exposed for use by the incremental update path. */
+	public classifyFieldMutation(changedFields: ReadonlySet<string>) {
+		return classifyMutation(changedFields, this.dependencyRegistry);
 	}
 
 	public setRows(rows: TData[]): void {
