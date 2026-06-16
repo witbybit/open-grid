@@ -381,7 +381,7 @@ export const CORE_STYLES = `
     align-items: center;
     gap: 6px;
     padding: 0 10px;
-    background: var(--og-filter-chip-bar-bg);
+    background: var(--og-filter-chip-bar-bg, var(--og-header-bg));
     border-bottom: 1px solid var(--og-border-color);
     overflow: hidden;
   }
@@ -393,9 +393,9 @@ export const CORE_STYLES = `
     height: 22px;
     padding: 0 8px 0 10px;
     border-radius: 11px;
-    background: var(--og-filter-chip-bg);
-    border: 1px solid var(--og-filter-chip-border);
-    color: var(--og-filter-chip-color);
+    background: var(--og-filter-chip-bg, color-mix(in srgb, var(--og-focus-ring) 12%, transparent));
+    border: 1px solid var(--og-filter-chip-border, color-mix(in srgb, var(--og-focus-ring) 35%, transparent));
+    color: var(--og-filter-chip-color, var(--og-focus-ring));
     font-size: 11px;
     white-space: nowrap;
     flex-shrink: 0;
@@ -455,7 +455,7 @@ export const CORE_STYLES = `
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: var(--og-accent, #3b82f6);
+    color: var(--og-focus-ring);
     opacity: 0.85;
   }
 
