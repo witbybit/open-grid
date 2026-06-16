@@ -16,6 +16,7 @@
 Users who manage grids with many columns (20+) frequently switch between different "views" of the same data: a compact view (only key fields visible), a wide analytical view (all numeric columns), a presentation view (sorted, filtered, pinned). Today there is no mechanism to save and recall these configurations — users must manually re-apply column visibility, order, sort, and filter every time.
 
 The grid already has everything needed:
+
 - `getColumnState()` / `applyColumnState()` for column snapshots
 - `sortModel` / `filterModel` on `GridState`
 - `GridPersistenceAdapter` for durable storage
@@ -37,16 +38,16 @@ The grid already has everything needed:
 
 ```ts
 export interface ColumnViewSnapshot {
-  /** User-assigned name. Displayed in the panel and used as the save-key. */
-  name: string;
-  /** ISO timestamp of last save (for "last saved" display). */
-  savedAt: string;
-  /** Full column state snapshot at save time. */
-  columnState: ColumnState[];
-  /** Sort model at save time, or null if no sort applied. */
-  sortModel: SortModel | null;
-  /** Filter model at save time, or null if no filters active. */
-  filterModel: FilterModel | null;
+	/** User-assigned name. Displayed in the panel and used as the save-key. */
+	name: string;
+	/** ISO timestamp of last save (for "last saved" display). */
+	savedAt: string;
+	/** Full column state snapshot at save time. */
+	columnState: ColumnState[];
+	/** Sort model at save time, or null if no sort applied. */
+	sortModel: SortModel | null;
+	/** Filter model at save time, or null if no filters active. */
+	filterModel: FilterModel | null;
 }
 ```
 
@@ -116,18 +117,18 @@ viewDeleted = 'viewDeleted',
 
 - Add `private views: ColumnViewSnapshot[] = []` and `private activeViewName: string | null = null` to store.
 - `saveView(name)`:
-  1. Call `getColumnState()`, current `sortModel`, current `filterModel`.
-  2. Upsert into `this.views` by name.
-  3. Set `this.activeViewName = name`.
-  4. Dispatch `viewSaved` event.
-  5. Trigger persistence save (call existing debounced save path).
+    1. Call `getColumnState()`, current `sortModel`, current `filterModel`.
+    2. Upsert into `this.views` by name.
+    3. Set `this.activeViewName = name`.
+    4. Dispatch `viewSaved` event.
+    5. Trigger persistence save (call existing debounced save path).
 - `loadView(name)`:
-  1. Find view by name; return false if not found.
-  2. Call `applyColumnState(view.columnState, { applyOrder: true })`.
-  3. Call `setSortModel(view.sortModel)`.
-  4. Call `setFilterModel(view.filterModel)`.
-  5. Set `this.activeViewName = name`.
-  6. Dispatch `viewLoaded` event.
+    1. Find view by name; return false if not found.
+    2. Call `applyColumnState(view.columnState, { applyOrder: true })`.
+    3. Call `setSortModel(view.sortModel)`.
+    4. Call `setFilterModel(view.filterModel)`.
+    5. Set `this.activeViewName = name`.
+    6. Dispatch `viewLoaded` event.
 - `deleteView(name)`: splice from array, clear `activeViewName` if it matches, dispatch `viewDeleted`.
 - `renameView(oldName, newName)`: mutate the snapshot in-place, update `activeViewName` if affected.
 - `getViews()`: return `[...this.views]` (defensive copy).
@@ -137,6 +138,7 @@ viewDeleted = 'viewDeleted',
 ## Persistence wiring
 
 In `statePersistence.ts`:
+
 - `extractPersistedState` adds `views: store.getViews()` and `activeViewName: store.getActiveView()`.
 - `applyPersistedState` restores `views` array into the store and calls `loadView(activeViewName)` if set.
 - Persistence trigger keys: add `'views'` to `PERSISTENCE_KEYS`.
@@ -165,6 +167,7 @@ File: `packages/react/src/sidebar/panels/ViewsPanel.tsx`
 ### Theme-awareness
 
 Pull `api.getTheme()` for:
+
 - Panel background: `theme.colors.panelBg` (same as other panels)
 - Active row highlight: `theme.colors.primaryAccent` at 15% opacity
 - Border: `theme.colors.border`
@@ -195,19 +198,19 @@ export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 
 
 Extend `GridNavigationController.handleKeyDown` (or add a new lightweight plugin):
 
-| Shortcut | Action |
-|---|---|
-| `Ctrl+Shift+1` … `Ctrl+Shift+9` | `api.switchView(n-1)` (1-indexed → 0-indexed) |
-| `Ctrl+Shift+S` | `api.saveView(api.getActiveView() ?? 'Default')` |
-| `Ctrl+Shift+V` | `api.togglePanel('views')` |
+| Shortcut                        | Action                                           |
+| ------------------------------- | ------------------------------------------------ |
+| `Ctrl+Shift+1` … `Ctrl+Shift+9` | `api.switchView(n-1)` (1-indexed → 0-indexed)    |
+| `Ctrl+Shift+S`                  | `api.saveView(api.getActiveView() ?? 'Default')` |
+| `Ctrl+Shift+V`                  | `api.togglePanel('views')`                       |
 
 Implemented as a separate `GridViewsPlugin` that implements `GridPlugin` and reads hotkeys from `handleKeyDown`. Passed alongside `GridNavigationController` in the React wrapper.
 
 ```ts
 export class GridViewsPlugin<TRowData> implements GridPlugin<TRowData> {
-  readonly name = 'views';
-  onInit(api: GridPluginRuntime<TRowData>): void;
-  handleKeyDown(event: KeyboardEvent): void;
+	readonly name = 'views';
+	onInit(api: GridPluginRuntime<TRowData>): void;
+	handleKeyDown(event: KeyboardEvent): void;
 }
 ```
 

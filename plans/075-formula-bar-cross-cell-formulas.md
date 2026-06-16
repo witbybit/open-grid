@@ -14,6 +14,7 @@
 ## Problem
 
 `DagEngine` already provides a complete formula evaluation engine with:
+
 - A1-style cell references (`[rowId:colField]`)
 - Built-in functions: `SUM`, `AVERAGE`, `MIN`, `MAX`
 - Arithmetic with correct precedence
@@ -59,6 +60,7 @@ hasFormula(rowId: string, colField: string): boolean;
 ### 3. Edit lifecycle — formula commit (packages/core/src/features/EditingFeatureController.ts)
 
 When `commitEdit(rowId, colField, value)` is called:
+
 - If `value` is a string starting with `=`, call `store.setFormula(rowId, colField, value)` instead of `setCellValue`. Trigger a re-render for the cell and all dependents.
 - If there was a previous formula but the new value does not start with `=`, call `store.clearFormula(rowId, colField)` then `setCellValue` normally.
 
@@ -76,6 +78,7 @@ formulaMap?: Record<string, string>; // "rowId\x00colField" -> formula string
 ### 5. DagEngine — getAllFormulas (packages/core/src/calculations/dagEngine.ts)
 
 Add one method:
+
 ```ts
 getAllFormulas(): Map<string, string>; // cellKey -> formula string
 ```
@@ -84,8 +87,8 @@ getAllFormulas(): Map<string, string>; // cellKey -> formula string
 
 ```tsx
 interface FormulaBarProps<TRowData = unknown> {
-  api: GridApi<TRowData>;
-  className?: string;
+	api: GridApi<TRowData>;
+	className?: string;
 }
 ```
 

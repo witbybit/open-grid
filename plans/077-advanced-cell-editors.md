@@ -16,6 +16,7 @@
 The grid supports custom cell editors via `ColumnDef.cellEditor` but ships no built-in editors beyond the default inline-text behavior triggered by navigation. Every consumer must implement date pickers, dropdowns, and autocomplete from scratch — duplicating positioning, portal management, keyboard handling, and theme integration.
 
 The existing infrastructure is ready:
+
 - `CellEditorProps` provides `rowId`, `colField`, `value`, `onChange`, `onCommit`, `onCancel`, `api`.
 - `PortalMountManager` (from plan 067) renders DOM portals at body-level, avoiding `overflow: hidden` clipping.
 - `api.getTheme()` returns live `ThemeTokens` for consistent styling.
@@ -40,50 +41,50 @@ Each editor is a factory that takes editor-specific options and returns a `Colum
 export function createDateEditor(options?: DateEditorOptions): CellEditorFactory;
 
 export interface DateEditorOptions {
-  min?: string;          // ISO date string, e.g. "2020-01-01"
-  max?: string;          // ISO date string
-  format?: 'iso' | 'locale';  // How to display and commit the value (default: 'iso')
-  placeholder?: string;
+	min?: string; // ISO date string, e.g. "2020-01-01"
+	max?: string; // ISO date string
+	format?: 'iso' | 'locale'; // How to display and commit the value (default: 'iso')
+	placeholder?: string;
 }
 
 // AutocompleteEditor
 export function createAutocompleteEditor<T = string>(options: AutocompleteEditorOptions<T>): CellEditorFactory;
 
 export interface AutocompleteEditorOptions<T = string> {
-  fetchOptions: (query: string, signal: AbortSignal) => Promise<AutocompleteOption<T>[]>;
-  debounceMs?: number;         // Default: 200
-  minQueryLength?: number;     // Default: 0 (shows all on empty)
-  maxResults?: number;         // Default: 8
-  getOptionLabel: (option: T) => string;
-  getOptionValue: (option: T) => string;
-  multiSelect?: boolean;       // Default: false
-  placeholder?: string;
+	fetchOptions: (query: string, signal: AbortSignal) => Promise<AutocompleteOption<T>[]>;
+	debounceMs?: number; // Default: 200
+	minQueryLength?: number; // Default: 0 (shows all on empty)
+	maxResults?: number; // Default: 8
+	getOptionLabel: (option: T) => string;
+	getOptionValue: (option: T) => string;
+	multiSelect?: boolean; // Default: false
+	placeholder?: string;
 }
 
 export interface AutocompleteOption<T = string> {
-  label: string;
-  value: T;
-  disabled?: boolean;
+	label: string;
+	value: T;
+	disabled?: boolean;
 }
 
 // SelectEditor
 export function createSelectEditor<T = string>(options: SelectEditorOptions<T>): CellEditorFactory;
 
 export interface SelectEditorOptions<T = string> {
-  options: SelectOption<T>[] | ((api: GridApi) => SelectOption<T>[]);
-  getOptionLabel?: (option: T) => string;  // Default: String(option)
-  getOptionValue?: (option: T) => string;  // Default: String(option)
-  multiSelect?: boolean;       // Default: false
-  searchable?: boolean;        // Default: false (adds a filter input at top of list)
-  placeholder?: string;
-  maxHeight?: number;          // Dropdown max height px (default: 240)
+	options: SelectOption<T>[] | ((api: GridApi) => SelectOption<T>[]);
+	getOptionLabel?: (option: T) => string; // Default: String(option)
+	getOptionValue?: (option: T) => string; // Default: String(option)
+	multiSelect?: boolean; // Default: false
+	searchable?: boolean; // Default: false (adds a filter input at top of list)
+	placeholder?: string;
+	maxHeight?: number; // Dropdown max height px (default: 240)
 }
 
 export interface SelectOption<T = string> {
-  label: string;
-  value: T;
-  disabled?: boolean;
-  group?: string;              // Optional group header
+	label: string;
+	value: T;
+	disabled?: boolean;
+	group?: string; // Optional group header
 }
 
 // CellEditorFactory type alias (for documentation)
@@ -96,14 +97,18 @@ All three editors share a common `useAnchoredPortal` hook:
 
 ```ts
 // packages/react/src/editors/hooks/useAnchoredPortal.ts
-function useAnchoredPortal(cellRect: DOMRect, popoverSize: { width: number; height: number }): {
-  top: number;
-  left: number;
-  transformOrigin: string;
-}
+function useAnchoredPortal(
+	cellRect: DOMRect,
+	popoverSize: { width: number; height: number }
+): {
+	top: number;
+	left: number;
+	transformOrigin: string;
+};
 ```
 
 Logic:
+
 1. Default position: top of popover aligns to bottom of cell, left aligns to left of cell.
 2. Flip vertical if popover would overflow bottom of viewport.
 3. Flip horizontal if popover would overflow right of viewport.
@@ -133,36 +138,36 @@ Inline styles only — no Tailwind dependency in the core editor components. Thi
 
 ### DateEditor
 
-| Key | Behavior |
-|-----|----------|
-| `Escape` | `onCancel()` |
-| `Enter` | `onCommit(currentValue)` |
-| `Tab` | `onCommit(currentValue)` |
+| Key                | Behavior                 |
+| ------------------ | ------------------------ |
+| `Escape`           | `onCancel()`             |
+| `Enter`            | `onCommit(currentValue)` |
+| `Tab`              | `onCommit(currentValue)` |
 | Calendar day click | `onCommit(selectedDate)` |
 
 ### AutocompleteEditor
 
-| Key | Behavior |
-|-----|----------|
-| `ArrowDown` | Focus next result |
-| `ArrowUp` | Focus prev result |
-| `Enter` (list focused) | Select focused option; in multi-select: toggle |
-| `Enter` (no list focus) | `onCommit(currentValue)` |
-| `Escape` | Clear query → close dropdown (first Esc); second Esc → `onCancel()` |
-| `Tab` | `onCommit(currentValue)` |
-| Click result | Select; single-select commits immediately |
-| Click outside | `onCommit(currentValue)` |
+| Key                     | Behavior                                                            |
+| ----------------------- | ------------------------------------------------------------------- |
+| `ArrowDown`             | Focus next result                                                   |
+| `ArrowUp`               | Focus prev result                                                   |
+| `Enter` (list focused)  | Select focused option; in multi-select: toggle                      |
+| `Enter` (no list focus) | `onCommit(currentValue)`                                            |
+| `Escape`                | Clear query → close dropdown (first Esc); second Esc → `onCancel()` |
+| `Tab`                   | `onCommit(currentValue)`                                            |
+| Click result            | Select; single-select commits immediately                           |
+| Click outside           | `onCommit(currentValue)`                                            |
 
 ### SelectEditor
 
-| Key | Behavior |
-|-----|----------|
-| `ArrowDown / Up` | Move highlighted option |
-| `Enter / Space` | Toggle selection (multi) or select + commit (single) |
-| `Escape` | `onCancel()` |
-| `Tab` | `onCommit(currentValue)` |
-| Type char (searchable=true) | Filter options |
-| Click outside | `onCommit(currentValue)` |
+| Key                         | Behavior                                             |
+| --------------------------- | ---------------------------------------------------- |
+| `ArrowDown / Up`            | Move highlighted option                              |
+| `Enter / Space`             | Toggle selection (multi) or select + commit (single) |
+| `Escape`                    | `onCancel()`                                         |
+| `Tab`                       | `onCommit(currentValue)`                             |
+| Type char (searchable=true) | Filter options                                       |
+| Click outside               | `onCommit(currentValue)`                             |
 
 ## File structure
 
@@ -180,6 +185,7 @@ packages/react/src/
 ```
 
 Export from `packages/react/src/index.ts`:
+
 ```ts
 export { createDateEditor, createAutocompleteEditor, createSelectEditor } from './editors/index.js';
 export type { DateEditorOptions, AutocompleteEditorOptions, AutocompleteOption, SelectEditorOptions, SelectOption } from './editors/index.js';
@@ -192,14 +198,14 @@ Add `cellElement?: HTMLElement` to `CellEditorProps` so editors can anchor the p
 ```ts
 // packages/core/src/store.ts
 export interface CellEditorProps<TRowData = unknown, TValue = unknown> {
-  rowId: string;
-  colField: string;
-  value: TValue;
-  onChange: (value: TValue) => void;
-  onCommit: (finalValue?: TValue) => void;
-  onCancel: () => void;
-  api: GridApi<TRowData>;
-  cellElement?: HTMLElement;   // ← NEW: the DOM element of the cell being edited
+	rowId: string;
+	colField: string;
+	value: TValue;
+	onChange: (value: TValue) => void;
+	onCommit: (finalValue?: TValue) => void;
+	onCancel: () => void;
+	api: GridApi<TRowData>;
+	cellElement?: HTMLElement; // ← NEW: the DOM element of the cell being edited
 }
 ```
 
