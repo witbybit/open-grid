@@ -252,7 +252,6 @@ export class RowRenderer<TRowData = unknown> {
 	//   activeRows (visualIndexToSlot) is rebuilt from slot bindings after each frame.
 
 	public recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
-
 		const state = ctx?.state ?? this.engine.stateManager.getState();
 		this.selectionPaint.rebuildSelection(state.selectedRowIds);
 		const nextWindow =

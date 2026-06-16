@@ -11,13 +11,7 @@
  *   - Invalid transitions report a runtime fault in dev/test but do not throw in production.
  */
 
-export type RenderRuntimePhase =
-	| 'idle'
-	| 'scroll-pending'
-	| 'scroll-frame'
-	| 'paint-frame'
-	| 'post-scroll'
-	| 'destroyed';
+export type RenderRuntimePhase = 'idle' | 'scroll-pending' | 'scroll-frame' | 'paint-frame' | 'post-scroll' | 'destroyed';
 
 export interface RenderRuntimeSnapshot {
 	phase: RenderRuntimePhase;

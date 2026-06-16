@@ -53,9 +53,16 @@ describe('RenderRuntimeState', () => {
 				if (phase !== 'idle') {
 					// advance to the target phase via the happy path
 					if (phase === 'scroll-pending') s.transitionTo('scroll-pending');
-					if (phase === 'scroll-frame') { s.transitionTo('scroll-pending'); s.transitionTo('scroll-frame'); }
+					if (phase === 'scroll-frame') {
+						s.transitionTo('scroll-pending');
+						s.transitionTo('scroll-frame');
+					}
 					if (phase === 'paint-frame') s.transitionTo('paint-frame');
-					if (phase === 'post-scroll') { s.transitionTo('scroll-pending'); s.transitionTo('scroll-frame'); s.transitionTo('post-scroll'); }
+					if (phase === 'post-scroll') {
+						s.transitionTo('scroll-pending');
+						s.transitionTo('scroll-frame');
+						s.transitionTo('post-scroll');
+					}
 				}
 				s.transitionTo('destroyed');
 				expect(s.phase).toBe('destroyed');

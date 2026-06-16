@@ -5,9 +5,15 @@ import type { GridScheduler } from './gridScheduler.js';
 function makeSyncScheduler(): GridScheduler {
 	return {
 		microtask: (cb) => cb(),
-		raf: (cb) => { cb(); return 0; },
+		raf: (cb) => {
+			cb();
+			return 0;
+		},
 		cancelRaf: vi.fn(),
-		idle: (cb) => { cb(); return 0; },
+		idle: (cb) => {
+			cb();
+			return 0;
+		},
 		cancelIdle: vi.fn(),
 		timeout: (cb, ms) => setTimeout(cb, ms),
 		clearTimeout: (id) => clearTimeout(id),
@@ -59,7 +65,10 @@ describe('DefaultFrameCoordinator', () => {
 	});
 
 	it('flushNowForTests() invokes paint synchronously without scheduling', () => {
-		const raf = vi.fn((cb: () => void) => { cb(); return 0; });
+		const raf = vi.fn((cb: () => void) => {
+			cb();
+			return 0;
+		});
 		const onPaintFrame = vi.fn();
 		const gs: GridScheduler = { ...makeSyncScheduler(), raf };
 		const coordinator = new DefaultFrameCoordinator({
@@ -79,7 +88,10 @@ describe('DefaultFrameCoordinator', () => {
 		let captured: (() => void) | null = null;
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
-			raf: (cb) => { captured = cb; return 0; },
+			raf: (cb) => {
+				captured = cb;
+				return 0;
+			},
 		};
 		const coordinator = new DefaultFrameCoordinator({
 			onScrollFrame,
@@ -100,7 +112,10 @@ describe('DefaultFrameCoordinator', () => {
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
 			microtask: (cb) => cb(),
-			raf: (cb) => { capturedRaf = cb; return 0; },
+			raf: (cb) => {
+				capturedRaf = cb;
+				return 0;
+			},
 		};
 		const coordinator = new DefaultFrameCoordinator({
 			onScrollFrame: vi.fn(),
@@ -138,7 +153,10 @@ describe('DefaultFrameCoordinator', () => {
 		let capturedScrollRaf: (() => void) | null = null;
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
-			raf: (cb) => { capturedScrollRaf = cb; return 0; },
+			raf: (cb) => {
+				capturedScrollRaf = cb;
+				return 0;
+			},
 		};
 		const coordinator = new DefaultFrameCoordinator({
 			onScrollFrame: () => {
@@ -164,7 +182,10 @@ describe('DefaultFrameCoordinator', () => {
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
 			microtask: (cb) => cb(),
-			raf: (cb) => { capturedRaf = cb; return 0; },
+			raf: (cb) => {
+				capturedRaf = cb;
+				return 0;
+			},
 		};
 		const coordinator = new DefaultFrameCoordinator({
 			onScrollFrame: vi.fn(),

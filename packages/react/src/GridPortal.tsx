@@ -620,11 +620,7 @@ export function createPortalStore<TRowData = unknown>() {
 			// Reject stale imperative updates: if the slot was rebound (generation changed)
 			// the stored renderer belongs to a different row — force a structural mount.
 			const existing = portals.get(cellKey);
-			if (
-				slotGeneration !== undefined &&
-				existing?.slotGeneration !== undefined &&
-				existing.slotGeneration !== slotGeneration
-			) {
+			if (slotGeneration !== undefined && existing?.slotGeneration !== undefined && existing.slotGeneration !== slotGeneration) {
 				return false;
 			}
 			return fn(value, node, col, isEditing, isLoading, phase, isScrolling, isFocused, isSelected);
@@ -678,7 +674,20 @@ export function createPortalStore<TRowData = unknown>() {
 			const isStructuralChange =
 				!existing || existing.container !== container || (existingKeyForContainer != null && existingKeyForContainer !== cellKey);
 
-			portals.set(cellKey, { cellKey, container, value, node, col, isEditing, isLoading, phase, isScrolling, isFocused, isSelected, slotGeneration });
+			portals.set(cellKey, {
+				cellKey,
+				container,
+				value,
+				node,
+				col,
+				isEditing,
+				isLoading,
+				phase,
+				isScrolling,
+				isFocused,
+				isSelected,
+				slotGeneration,
+			});
 			cellPortalKeyByContainer.set(container, cellKey);
 
 			if (isStructuralChange) {
