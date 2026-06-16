@@ -671,33 +671,14 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			}
 		}
 
-		// Check if any of the changed fields are part of the active sort or filter models
-		const state = this.runtime.getState();
-		let needsFullRefresh = false;
-
-		if (state.sortModel && state.sortModel.length > 0) {
-			for (const sortItem of state.sortModel) {
-				for (const [_, fields] of result.changedFieldsByRow) {
-					if (fieldsAffectColumn(fields, sortItem.colId)) {
-						needsFullRefresh = true;
-						break;
-					}
-				}
-				if (needsFullRefresh) break;
-			}
+		// Classify the mutation impact using the dependency registry — covers sort, filter,
+		// group, tree-parent, and formula dependencies in one pass over all changed fields.
+		const allChangedFields = new Set<string>();
+		for (const [, fields] of result.changedFieldsByRow) {
+			for (const field of fields) allChangedFields.add(field);
 		}
-
-		if (!needsFullRefresh && state.filterModel && Object.keys(state.filterModel).length > 0) {
-			for (const filterColId of Object.keys(state.filterModel)) {
-				for (const [_, fields] of result.changedFieldsByRow) {
-					if (fieldsAffectColumn(fields, filterColId)) {
-						needsFullRefresh = true;
-						break;
-					}
-				}
-				if (needsFullRefresh) break;
-			}
-		}
+		const impact = this.classifyFieldMutation(allChangedFields);
+		const needsFullRefresh = impact === 'sort-key' || impact === 'filter-key' || impact === 'group-key' || impact === 'tree-parent';
 
 		if (needsFullRefresh) {
 			this.refresh();
