@@ -1,4 +1,5 @@
 import type { FilterModel, SortModel, RowModel } from './rowModel.js';
+import type { GridDomainVersions } from './state/GridDomainVersions.js';
 import type { RowValidator } from './features/ValidationManager.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
 import type { IGridDatasource } from './serverRowModel.js';
@@ -705,6 +706,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public subscribeToKey = (key: string, listener: Listener<TRowData>): (() => void) => {
 		return this.engine.subscribeToKey(key, listener);
+	};
+
+	public subscribeToDomainVersions = (listener: (v: GridDomainVersions) => void): (() => void) => {
+		return this.engine.subscribeToDomainVersions(listener);
 	};
 
 	public subscribeToViewport = (listener: Listener<TRowData>): (() => void) => {

@@ -86,6 +86,8 @@ export class GridEngine<TRowData = unknown> {
 	public rowModelVersion = 0;
 	public columnVersion = 0;
 
+	private readonly domainVersionListeners = new Set<(v: GridDomainVersions) => void>();
+
 	/** Returns a snapshot of all formal domain version counters. */
 	public getDomainVersions(): GridDomainVersions {
 		return {
@@ -96,6 +98,18 @@ export class GridEngine<TRowData = unknown> {
 			editing: 0,
 			styling: 0,
 		};
+	}
+
+	/** Subscribes to domain version changes. The listener is called once per committed
+	 *  logical mutation in any domain. Returns an unsubscribe function. */
+	public subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void {
+		this.domainVersionListeners.add(listener);
+		return () => this.domainVersionListeners.delete(listener);
+	}
+
+	private notifyDomainVersionListeners(): void {
+		const v = this.getDomainVersions();
+		this.domainVersionListeners.forEach((l) => l(v));
 	}
 
 	// Per-row version map: rowId → version, bumped on each row data mutation.
@@ -219,12 +233,15 @@ export class GridEngine<TRowData = unknown> {
 			requestRender: (reason) => this.requestRender(reason),
 			incrementColumnVersion: () => {
 				this.columnVersion++;
+				this.notifyDomainVersionListeners();
 			},
 			incrementGeometryVersion: () => {
 				this.geometryVersion++;
+				this.notifyDomainVersionListeners();
 			},
 			incrementRowModelVersion: () => {
 				this.rowModelVersion++;
+				this.notifyDomainVersionListeners();
 			},
 		});
 
@@ -601,6 +618,7 @@ export class GridEngine<TRowData = unknown> {
 		this.rowModel = rowModel;
 		this.rowModelVersion++;
 		this.geometryVersion++;
+		this.notifyDomainVersionListeners();
 		// Refresh coordinates
 		const state = this.stateManager.getState();
 		this.geometry.updateRows(this.getRowHeightsList(rowModel, state.rowHeights, state.defaultRowHeight), state.defaultRowHeight);
@@ -825,5 +843,6 @@ export class GridEngine<TRowData = unknown> {
 		this.cellNotifications.clear();
 		this.eventBus.clear();
 		this.stateManager.destroy();
+		this.domainVersionListeners.clear();
 	}
 }

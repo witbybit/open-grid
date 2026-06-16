@@ -1,4 +1,5 @@
 import type { FilterModel, SortModel } from '../rowModel.js';
+import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { IGridDatasource } from '../serverRowModel.js';
 import type { ColumnDef, GridStyleRule, CellRendererPhase } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
@@ -459,6 +460,9 @@ export interface GridApi<TRowData = unknown> {
 	applyGridState(state: PersistedGridState): void;
 	subscribe(listener: Listener<TRowData>): () => void;
 	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
+	/** Subscribe to domain version changes. Fires once per committed logical mutation in any domain.
+	 *  Prefer this over broad `subscribe()` for consumers that only need to know *that* something changed. */
+	subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void;
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;

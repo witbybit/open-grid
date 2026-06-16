@@ -252,6 +252,7 @@ export function createApiFacade<TRowData>(
 		rows: () => store.rows(),
 		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
 		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
+		subscribeToDomainVersions: (listener: Parameters<typeof store.subscribeToDomainVersions>[0]) => store.subscribeToDomainVersions(listener),
 		getColumnIndex: (colField: string) => store.getColumnIndex(colField),
 		getColumnField: (colIndex: number) => store.getColumnField(colIndex),
 		getColumnDef: (colField: string) => store.getColumnDef(colField),
