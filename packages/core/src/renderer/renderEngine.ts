@@ -39,7 +39,7 @@ import { RenderPaintCoordinator, type RenderPaintCoordinatorState } from './rend
 import { RenderScrollCoordinator, type RenderScrollCoordinatorState } from './renderScrollCoordinator.js';
 import { RenderViewportCoordinator } from './renderViewportCoordinator.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { GridApi, InternalGridApi } from '../store.js';
+import type { GridApi, InternalGridApi } from '../api/GridApi.js';
 import { RowDragController } from '../features/RowDragController.js';
 import { RenderRuntimeState } from './renderRuntimeState.js';
 

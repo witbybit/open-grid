@@ -1,7 +1,7 @@
 import { defaultGridScheduler } from './gridScheduler.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { GridApi } from '../store.js';
+import type { GridApi } from '../api/GridApi.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { getOpsForType, applyFilterToModel } from '../filterOperations.js';
 import type { TextFilterOperator, NumberFilterOperator, DateFilterOperator } from '../filterModel.js';

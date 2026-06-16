@@ -1,4 +1,4 @@
-import { GridEventName } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GeometryController } from './geometryController.js';
 import type { PortalMountManager } from './portalMountManager.js';

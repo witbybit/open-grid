@@ -1,5 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { CellRendererPhase, ColumnDef, GridState, RowNode } from '../store.js';
+import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
+import type { GridState } from '../state/GridState.js';
+import type { RowNode } from '../rowNode.js';
 import type { CellSlot } from './cellSlot.js';
 import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './rowCellBinder.js';
 import type { RowSlot } from './rowSlot.js';

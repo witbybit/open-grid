@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import { GridEventName } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 
 /**
  * Renders the group-by strip above the column headers.

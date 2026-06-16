@@ -390,4 +390,37 @@ describe('Architecture guardrails', () => {
 			}
 		}
 	});
+
+	// ── Plan 071 — store.ts hub decomposition boundary rules ─────────────────
+
+	it('renderer production files do not import from store.ts barrel', () => {
+		// Renderer source files should import types from narrow modules, not the store hub.
+		// Test files (*.test.ts) are exempt — they need GridStore for setup.
+		const rendererDir = resolve(CORE_ROOT, 'src', 'renderer');
+		const files = collectSourceFiles(rendererDir).filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'));
+		const violators: string[] = [];
+		for (const file of files) {
+			const content = readFileSync(file, 'utf-8');
+			if (content.includes("from '../store.js'") || content.includes('from "../store.js"')) {
+				violators.push(file.replace(rendererDir, 'renderer'));
+			}
+		}
+		expect(violators, `renderer files still importing from store.ts: ${violators.join(', ')}`).toHaveLength(0);
+	});
+
+	it('GridEventName is defined in api/GridEvents.ts, not store.ts', () => {
+		const eventsContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridEvents.ts'), 'utf-8');
+		expect(eventsContent).toContain('export enum GridEventName');
+		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(storeContent).not.toContain('export enum GridEventName');
+	});
+
+	it('GridState is defined in state/GridState.ts, not store.ts', () => {
+		const stateContent = readFileSync(resolve(CORE_ROOT, 'src', 'state', 'GridState.ts'), 'utf-8');
+		// GridState is a composed type alias (not an interface)
+		expect(stateContent).toContain('export type GridState');
+		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(storeContent).not.toContain('export type GridState');
+		expect(storeContent).not.toContain('export interface GridState');
+	});
 });

@@ -1,6 +1,8 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
-import type { GridCellPointer, GridCellClassParams, VisualRow } from '../store.js';
+import type { GridCellPointer } from '../api/GridApi.js';
+import type { GridCellClassParams } from '../columnDef.js';
+import type { VisualRow } from '../visualRow.js';
 import type { CellRenderer } from './cellRenderer.js';
 import { CellSlot } from './cellSlot.js';
 import type { FullWidthRowRenderer } from './fullWidthRowRenderer.js';

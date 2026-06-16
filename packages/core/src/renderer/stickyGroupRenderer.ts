@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { VisualRow } from '../store.js';
+import type { VisualRow } from '../visualRow.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import type { PortalMountManager } from './portalMountManager.js';
 

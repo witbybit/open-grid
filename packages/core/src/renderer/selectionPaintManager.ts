@@ -1,5 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { GridState, GridRowClassParams, RowNode } from '../store.js';
+import type { GridState } from '../state/GridState.js';
+import type { GridRowClassParams } from '../columnDef.js';
+import type { RowNode } from '../rowNode.js';
 import { CellSlot } from './cellSlot.js';
 import type { RowSlot } from './rowSlot.js';
 import { reportRendererFault } from './rendererFaults.js';

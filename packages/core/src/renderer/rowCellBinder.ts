@@ -1,7 +1,10 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { createEditRendererKey, createSlotRendererKey } from './identityKeys.js';
 import { reportRendererFault } from './rendererFaults.js';
-import type { CellRendererPhase, ColumnDef, GridCellClassParams, GridCellPointer, GridState, InternalColumnDef, RowNode } from '../store.js';
+import type { CellRendererPhase, ColumnDef, GridCellClassParams, InternalColumnDef } from '../columnDef.js';
+import type { GridCellPointer } from '../api/GridApi.js';
+import type { GridState } from '../state/GridState.js';
+import type { RowNode } from '../rowNode.js';
 import type { CellSlot, CellContentMode } from './cellSlot.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';

@@ -1,4 +1,6 @@
-import type { CompiledGridPlan, GridCellPointer, GridCellRangeBounds, GridState } from '../store.js';
+import type { CompiledGridPlan } from '../columnDef.js';
+import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
+import type { GridState } from '../state/GridState.js';
 
 export interface ScrollRenderContext<TRowData = unknown> {
 	isScrolling: boolean;

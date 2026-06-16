@@ -1,4 +1,6 @@
-import type { CellRendererPhase, ColumnDef, RowNode, VisualRow } from '../store.js';
+import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
+import type { RowNode } from '../rowNode.js';
+import type { VisualRow } from '../visualRow.js';
 
 /**
  * Explicit renderer lifecycle operation type (Phase 6).

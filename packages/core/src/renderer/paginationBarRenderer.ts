@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import { GridEventName } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 
 /**
  * Pagination bar (Plan 039 Phase 5) — chrome docked at the bottom of the grid.

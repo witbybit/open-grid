@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import { GridEventName } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 
 /**
  * Status bar (Plan 039 Phase 5) — read-only chrome docked at the bottom of the grid.

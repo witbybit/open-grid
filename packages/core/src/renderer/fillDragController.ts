@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { GridCellRange } from '../store.js';
+import type { GridCellRange } from '../api/GridApi.js';
 import { LEAF_HEADER_HEIGHT } from './layoutPlan.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import { reportRendererFault } from './rendererFaults.js';

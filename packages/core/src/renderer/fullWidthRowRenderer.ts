@@ -1,4 +1,4 @@
-import type { VisualRow } from '../store.js';
+import type { VisualRow } from '../visualRow.js';
 import type { RowSlot } from './rowSlot.js';
 import type { PortalMountManager } from './portalMountManager.js';
 

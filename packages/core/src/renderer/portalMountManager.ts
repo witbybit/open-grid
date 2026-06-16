@@ -6,8 +6,9 @@ import type {
 	GridRowContentMount,
 	GridRowContentUnmount,
 } from './IGridRenderer.js';
-import type { VisualRow, InternalColumnDef } from '../store.js';
-import { isDomCellRenderer } from '../store.js';
+import type { InternalColumnDef, DomCellRenderer } from '../columnDef.js';
+import { isDomCellRenderer } from '../columnDef.js';
+import type { VisualRow } from '../visualRow.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { CustomRendererManager, type ReleaseReason } from './customRendererManager.js';
@@ -153,7 +154,7 @@ export class PortalMountManager<TRowData = unknown> {
 				rendererKey,
 				cellKey: mount.cellKey,
 				parentContainer: mount.container,
-				renderer: col.cellRenderer as import('../store.js').DomCellRenderer<TRowData>,
+				renderer: col.cellRenderer as DomCellRenderer<TRowData>,
 				value: mount.value,
 				node,
 				col,

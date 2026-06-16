@@ -3,25 +3,20 @@ export type { ClientGridOptions, ServerGridOptions, GridPersistenceAdapter, Pers
 export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 export { GRID_STATE_SCHEMA_VERSION, validateSchemaVersion } from './persistence/statePersistence.js';
 
-export { RowNode, GridEventName } from './store.js';
-export type { RowDataTransaction, RowNodeTransaction } from './store.js';
+export { RowNode } from './rowNode.js';
+export { GridEventName } from './api/GridEvents.js';
+export type { RowDataTransaction, RowNodeTransaction } from './api/GridApi.js';
 export type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './api/GridApi.js';
-export type { GridEventPayloadMap } from './store.js';
+export type { GridEventPayloadMap } from './api/GridEvents.js';
 export type {
 	CellCopyParams,
 	CellPasteParams,
 	CellEditorProps,
 	CellPointer,
 	CellRendererCapabilities,
-	CellRendererPhase,
 	CellRendererProps,
 	CellState,
-	ColumnDef,
-	ColumnRendererSpec,
 	ColumnState,
-	DomCellRenderer,
-	DomCellRendererHandle,
-	DomCellRendererParams,
 	ImperativeCellHandle,
 	GridApi,
 	GridCellAccess,
@@ -35,44 +30,46 @@ export type {
 	GridRowsAccessor,
 	GridSelectionSource,
 	GridSelectionState,
-	GridState,
-	RowStyleRule,
-	GroupRowStyleRule,
-	DetailRowStyleRule,
-	CellStyleRule,
-	HeaderCellStyleRule,
-	GridStyleRule,
 	HeaderMenuRendererProps,
-	Listener,
-	RowModel,
 	RowSelectionMode,
 	RowSelectionOptions,
 	RowSelectionScope,
 	SelectRowsOptions,
 	SelectAllRowsOptions,
 	SelectionChangeResult,
-	SerializableGridState,
-	ValueGetterParams,
-	VisualRow,
 	VisualRowPointer,
-	DataVisualRow,
-	GroupVisualRow,
-	DetailVisualRow,
-	FooterVisualRow,
-	LoadingVisualRow,
-} from './store.js';
+} from './api/GridApi.js';
+export type {
+	CellRendererPhase,
+	ColumnDef,
+	ColumnRendererSpec,
+	DomCellRenderer,
+	DomCellRendererHandle,
+	DomCellRendererParams,
+	RowStyleRule,
+	GroupRowStyleRule,
+	DetailRowStyleRule,
+	CellStyleRule,
+	HeaderCellStyleRule,
+	GridStyleRule,
+	ValueGetterParams,
+} from './columnDef.js';
+export type { GridState, Listener } from './state/GridState.js';
+export type { RowModel } from './rowModel.js';
+export type { VisualRow, DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow } from './visualRow.js';
+export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';
 
 export {
 	canEditCell,
 	canFocusVisualRow,
-	compileStyleRules,
-	isDomCellRenderer,
 	isDataVisualRow,
 	isDataCellSelectable,
 	isEditableVisualRow,
 	isFullWidthVisualRow,
 	isSelectableVisualRow,
-} from './store.js';
+} from './visualRow.js';
+export { compileStyleRules } from './styling/styleRules.js';
+export { isDomCellRenderer } from './columnDef.js';
 export type {
 	FilterModel,
 	ColumnFilter,
@@ -103,7 +100,7 @@ export {
 	buildFilterByValue,
 	getFilterChipText,
 } from './filterOperations.js';
-export type { CsvExportOptions } from './store.js';
+export type { CsvExportOptions } from './export/csvExport.js';
 export {
 	parseVisualRowId,
 	toDataVisualRowId,
