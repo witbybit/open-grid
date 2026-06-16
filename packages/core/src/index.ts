@@ -9,15 +9,11 @@ export type { RowDataTransaction, RowNodeTransaction } from './api/GridApi.js';
 export type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './api/GridApi.js';
 export type { GridEventPayloadMap } from './api/GridEvents.js';
 export type {
-	CellCopyParams,
-	CellPasteParams,
 	CellEditorProps,
 	CellPointer,
-	CellRendererCapabilities,
 	CellRendererProps,
 	CellState,
 	ColumnState,
-	ImperativeCellHandle,
 	GridApi,
 	GridCellAccess,
 	GridCellClickParams,
@@ -25,8 +21,6 @@ export type {
 	GridCellPointer,
 	GridCellRange,
 	GridCellRangeBounds,
-	GridEvent,
-	GridEventListener,
 	GridRowsAccessor,
 	GridSelectionSource,
 	GridSelectionState,
@@ -39,13 +33,18 @@ export type {
 	SelectionChangeResult,
 	VisualRowPointer,
 } from './api/GridApi.js';
+export type { GridEvent, GridEventListener } from './api/GridEvents.js';
 export type {
+	CellCopyParams,
+	CellPasteParams,
+	CellRendererCapabilities,
 	CellRendererPhase,
 	ColumnDef,
 	ColumnRendererSpec,
 	DomCellRenderer,
 	DomCellRendererHandle,
 	DomCellRendererParams,
+	ImperativeCellHandle,
 	RowStyleRule,
 	GroupRowStyleRule,
 	DetailRowStyleRule,

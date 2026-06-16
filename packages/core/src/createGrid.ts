@@ -57,6 +57,7 @@ import {
 	createPersistenceSubscription,
 } from './persistence/statePersistence.js';
 import type { ThemeTokens } from './renderer/themes.js';
+import type { GridInstrumentation } from './diagnostics/GridInstrumentation.js';
 
 export type { GridPersistenceAdapter, PersistedGridState };
 export { createLocalStorageAdapter };
@@ -279,7 +280,7 @@ export function createApiFacade<TRowData>(
 		getRuntimeFaults: () => store.getRuntimeFaults(),
 		clearRuntimeFaults: () => store.clearRuntimeFaults(),
 		getInstrumentation: () => store.getInstrumentation(),
-		setInstrumentation: (inst) => store.setInstrumentation(inst),
+		setInstrumentation: (inst: GridInstrumentation) => store.setInstrumentation(inst),
 		flushCellUpdatesSync: () => store.flushCellUpdatesSync(),
 		getTheme: () => store.getTheme(),
 		getThemeName: () => store.getThemeName(),
