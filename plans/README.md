@@ -64,6 +64,16 @@
 | 062 | [XLSX Export](./062-xlsx-export.md)                                                             | TODO     | working tree |
 | 063 | [Row Drag-and-Drop](./063-row-drag-drop.md)                                                     | TODO     | working tree |
 | 064 | [SSRM Server-Push Filter/Sort](./064-ssrm-server-push-filter-sort.md)                           | TODO     | working tree |
+| 065 | [Single Render Runtime Phase Authority](./065-render-runtime-phase-authority.md)                | DONE     | b6e75513     |
+| 066 | [Unified Frame Coordinator and Invalidation Flow](./066-frame-coordinator-and-invalidation-unification.md) | DONE | 0fbd27e2 |
+| 067 | [Portal Ownership and Single Edit Lifecycle](./067-portal-ownership-and-edit-lifecycle.md)      | DONE     | f14cfd80     |
+| 068 | [Incremental Row Mutation Pipeline](./068-incremental-row-mutation-pipeline.md)                 | DONE     | 062bcc88     |
+| 069 | [Domain State Versions and Exception-Safe Transactions](./069-domain-state-versions-and-safe-transactions.md) | DONE | bcdd41ac |
+| 070 | [Explicit Renderer and Host Runtime Ports](./070-explicit-renderer-runtime-ports.md)            | DONE     | d8f7375f     |
+| 071 | [Decompose the Core Store Type Hub](./071-core-type-boundary-decomposition.md)                  | DONE     | cc42597b     |
+| 072 | [Centralized Runtime Instrumentation Sink](./072-centralized-runtime-instrumentation.md)        | DONE     | f777fe19     |
+| 073 | [Incremental Active Slot Index](./073-incremental-active-slot-index.md)                         | DONE     | 76a24b69     |
+| 074 | [Runtime Contract Documentation Cleanup](./074-runtime-contract-documentation-cleanup.md)       | DONE     | 8cf8abd7     |
 
 ## Execution order
 
@@ -199,6 +209,19 @@
 063  row drag-and-drop           (no deps — independent)
 064  ssrm server-push            (depends on 059 for filter model shape)
 ```
+
+## Plans 065–074 notes
+
+- Plan 065 is implemented and verified on 2026-06-16: a single `FrameCoordinator` interface owns render phase authority; `DefaultFrameCoordinator` wraps the RAF scheduler and exposes `beginFrame`/`commitFrame`; `RenderEngine` delegates all phase transitions through it. The phase-authority violation test in `architectureGuards.test.ts` guards against regression.
+- Plan 066 is implemented and verified on 2026-06-16: `DefaultFrameCoordinator` now owns RAF scheduling and coordinates invalidation through a single code path; `FrameCoordinator` exposes a reentrancy guard and structured fault reporting; the separate RAF scheduler adapters are retired.
+- Plan 067 is implemented and verified on 2026-06-16: `ActiveCellEditor` now owns the active-edit subscription and payload push; `commitEdit` is the single external stop route for the edit lifecycle; the React portal implementation is split into focused modules (`GridPortalCore`, `GridPortalCellRegistry`, `GridPortalRenderer`).
+- Plan 068 is implemented and verified on 2026-06-16 (phases 1–5): slot generation tracking enables stale-identity detection; `classifyMutation` provides an O(1) value-only fast path; filter membership short-circuits row-pipeline rebuilds when filter-key fields change but no row enters or exits; incremental sort relocation handles single-row moves without a full sort pass; `applyTransaction` pipes add/remove through the incremental path for flat grids.
+- Plan 069 is implemented and verified on 2026-06-16 (phases 1–4): `StateManager.transaction()` uses depth-tracking for nested-safe exception-proof batching; `GridDomainVersions` is a formal interface in `state/GridDomainVersions.ts`; `getDomainVersions()` exposes a stable snapshot; `subscribeToDomainVersions()` is on `GridEngine`, `GridStore`, and `GridApi` and fires once per committed logical mutation in any domain.
+- Plan 070 is implemented and verified on 2026-06-16: `RendererPort` and `ThemePort` are explicit interfaces in `engine/rendererPorts.ts`; `GridStore.setRendererPorts()` replaces post-construction optional engine field injection; headless ports are no-op defaults; `gridHost.ts` composes the live ports at mount time and restores headless on destroy.
+- Plan 071 is implemented and verified on 2026-06-16: renderer production files no longer import from the `store.ts` barrel; `GridEventName` lives in `api/GridEvents.ts`; `GridState` lives in `state/GridState.ts`; `index.ts` sources public types from narrow sub-modules; architecture guards in `architectureGuards.test.ts` enforce all three boundaries.
+- Plan 072 is implemented and verified on 2026-06-16: `GridMetric` const enum defines 26 canonical counters across 7 categories; `GridInstrumentation` interface, `NoopGridInstrumentation` (stable singleton, zero overhead), and `RecordingGridInstrumentation` (accumulates for tests/demos) live in `diagnostics/GridInstrumentation.ts`; `GridStore.setInstrumentation()` swaps the active sink at runtime; an architecture guard prevents renderer code from importing the concrete recording class.
+- Plan 073 is implemented and verified on 2026-06-16: `activeRows` is now maintained incrementally during `recycleViewport` — slot bind, rebind, unbind, and pre-destruction each update the map at the point of change. The previous O(n) `clear()` + full rebuild at the end of every frame is eliminated.
+- Plan 074 is implemented and verified on 2026-06-16: stale `Phase N` implementation-history anchors removed from `rowRenderer.ts`, `rowSlot.ts`, `cellSlot.ts`, and `store.ts`; replaced with stable descriptive names or contract explanations. `GridDomainVersions.ts` docs updated to accurately describe which counters are wired vs. pending.
 
 ## Findings considered and rejected
 
