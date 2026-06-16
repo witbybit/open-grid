@@ -18,7 +18,8 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 	const [stats, setStats] = useState({ sum: 0, avg: 0, min: 0, max: 0, count: 0 });
 	const [prices, setPrices] = useState<number[]>([]);
 	const [companyCount, setCompanyCount] = useState(0);
-	const [eventLogs, setEventLogs] = useState<Array<{ time: string; msg: string; type: string }>>([]);
+	const [eventLogs, setEventLogs] = useState<Array<{ id: number; time: string; msg: string; type: string }>>([]);
+	const eventLogIdRef = useRef(0);
 	const [autoFire, setAutoFire] = useState(false);
 	const autoFireRef = useRef(false);
 	const autoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -118,7 +119,7 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		if (!api) return;
 		updateStatsAndChart();
 		const log = (msg: string, type = 'info') =>
-			setEventLogs((prev) => [{ time: new Date().toLocaleTimeString(), msg, type }, ...prev].slice(0, 10));
+			setEventLogs((prev) => [{ id: ++eventLogIdRef.current, time: new Date().toLocaleTimeString(), msg, type }, ...prev].slice(0, 10));
 		// Selection change: re-evaluate which rows are in range, then refresh values.
 		const unsubSelection = api.subscribeToKey('selection', updateStatsAndChart);
 		// Live data from updateRows fires rowsUpdated (not cellValueChanged).
@@ -291,7 +292,7 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 						<div className='text-[10px] text-slate-500'>No events yet.</div>
 					) : (
 						eventLogs.map((log) => (
-							<div key={`${log.time}-${log.msg}`} className='font-mono text-[10px] text-slate-400'>
+							<div key={log.id} className='font-mono text-[10px] text-slate-400'>
 								{log.time} · {log.msg}
 							</div>
 						))
