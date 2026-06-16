@@ -1,5 +1,3 @@
-import { RenderScheduler } from './renderScheduler.js';
-import { ScrollFrameScheduler } from './scrollFrameScheduler.js';
 import { type GridScheduler, defaultGridScheduler } from './gridScheduler.js';
 
 /**
@@ -29,33 +27,55 @@ export interface FrameCoordinatorDeps {
 }
 
 export class DefaultFrameCoordinator implements FrameCoordinator {
-	private readonly paintScheduler: RenderScheduler;
-	private readonly scrollScheduler: ScrollFrameScheduler;
+	private paintScheduled = false;
+	private scrollScheduled = false;
+	private destroyed = false;
+	private readonly gs: GridScheduler;
+	private readonly onScrollFrame: () => void;
+	private readonly onPaintFrame: () => void;
 
 	constructor(deps: FrameCoordinatorDeps) {
-		const gs = deps.gridScheduler ?? defaultGridScheduler;
-		this.paintScheduler = new RenderScheduler(deps.onPaintFrame, gs);
-		this.scrollScheduler = new ScrollFrameScheduler(deps.onScrollFrame, gs);
+		this.gs = deps.gridScheduler ?? defaultGridScheduler;
+		this.onScrollFrame = deps.onScrollFrame;
+		this.onPaintFrame = deps.onPaintFrame;
 	}
 
 	requestScrollFrame(): void {
-		this.scrollScheduler.requestFrame();
+		if (this.destroyed || this.scrollScheduled) return;
+		this.scrollScheduled = true;
+		this.gs.raf(() => {
+			if (this.destroyed) return;
+			this.scrollScheduled = false;
+			this.onScrollFrame();
+		});
 	}
 
 	requestPaintFrame(): void {
-		this.paintScheduler.requestFlush('paint');
+		if (this.destroyed || this.paintScheduled) return;
+		this.paintScheduled = true;
+		this.gs.microtask(() => {
+			if (this.destroyed) return;
+			this.gs.raf(() => {
+				if (this.destroyed) return;
+				this.paintScheduled = false;
+				this.onPaintFrame();
+			});
+		});
 	}
 
 	requestPostScrollWork(): void {
-		this.paintScheduler.requestFlush('post-scroll');
+		this.requestPaintFrame();
 	}
 
 	flushNowForTests(): void {
-		this.paintScheduler.flushNow();
+		if (this.destroyed) return;
+		this.paintScheduled = false;
+		this.onPaintFrame();
 	}
 
 	destroy(): void {
-		this.paintScheduler.destroy();
-		this.scrollScheduler.destroy();
+		this.destroyed = true;
+		this.paintScheduled = false;
+		this.scrollScheduled = false;
 	}
 }
