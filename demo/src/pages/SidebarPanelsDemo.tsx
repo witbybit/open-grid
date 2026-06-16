@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
-import { GridProvider, OpenGrid, useClientGrid } from '@open-grid/react';
-import type { ColumnDef, CellRendererProps } from '@open-grid/react';
+import React from 'react';
+import { Grid } from '@open-grid/react';
+import type { ColumnDef, CellRendererProps, GridReadyEvent } from '@open-grid/react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -179,13 +179,11 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 
 const ROWS = generateHoldings(200);
 
-// ── Inner component (inside GridProvider) ─────────────────────────────────────
+interface SidebarPanelsDemoProps {
+	onGridReady?: (event: GridReadyEvent<HoldingRow>) => void;
+}
 
-function SidebarPanelsDemoInner({ api }: { api: ReturnType<typeof useClientGrid<HoldingRow>> }) {
-	useEffect(() => {
-		api.setRows(ROWS);
-	}, [api]);
-
+export default function SidebarPanelsDemo({ onGridReady }: SidebarPanelsDemoProps) {
 	return (
 		<div style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 12 }}>
 			{/* Intro strip */}
@@ -205,34 +203,22 @@ function SidebarPanelsDemoInner({ api }: { api: ReturnType<typeof useClientGrid<
 
 			{/* Grid with integrated sidebar — api.openPanel() / closePanel() / getOpenPanel() */}
 			<div className='flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-800 shadow-2xl'>
-				<OpenGrid<HoldingRow>
-					api={api}
+				<Grid<HoldingRow>
+					mode='client'
+					columns={COLUMNS}
+					rows={ROWS}
 					pinLeftColumns={1}
 					enableContextMenu={true}
 					enableChart
 					sidebar={{
-						panels: ['columns', 'filters', 'sort'],
+						panels: ['columns', 'filters', 'sort', 'themes'],
 						defaultOpen: 'columns',
 						position: 'right',
 						width: 300,
 					}}
+					onGridReady={onGridReady}
 				/>
 			</div>
 		</div>
-	);
-}
-
-// ── Page export ───────────────────────────────────────────────────────────────
-
-export default function SidebarPanelsDemo() {
-	const api = useClientGrid<HoldingRow>({
-		columns: COLUMNS,
-		rows: ROWS,
-	});
-
-	return (
-		<GridProvider api={api}>
-			<SidebarPanelsDemoInner api={api} />
-		</GridProvider>
 	);
 }

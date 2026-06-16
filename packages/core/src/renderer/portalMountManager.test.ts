@@ -2,6 +2,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { PortalMountManager } from './portalMountManager.js';
+import { RenderRuntimeState } from './renderRuntimeState.js';
+
+function makeScrollingRuntimeState(): RenderRuntimeState {
+	const rs = new RenderRuntimeState();
+	rs.transitionTo('scroll-pending');
+	return rs;
+}
+
+function makeIdleRuntimeState(): RenderRuntimeState {
+	return new RenderRuntimeState();
+}
 
 describe('PortalMountManager', () => {
 	it('tracks cell portal mount, update, release, and cleanup without DOM method patches', () => {
@@ -91,7 +102,7 @@ describe('PortalMountManager', () => {
 		const firstContainer = document.createElement('div');
 		const secondContainer = document.createElement('div');
 
-		manager.setScrolling(true);
+		manager.setRuntimeState(makeScrollingRuntimeState());
 		manager.mountRow({
 			rowKey: 'detail:1',
 			container: firstContainer,
@@ -111,7 +122,7 @@ describe('PortalMountManager', () => {
 			portalReleasesDuringScroll: 1,
 		});
 
-		manager.setScrolling(false);
+		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred();
 
 		expect(releaseRow).not.toHaveBeenCalled();
@@ -153,7 +164,7 @@ describe('PortalMountManager', () => {
 		manager.onMountCellContent = mount;
 		manager.onUnmountCellContent = release;
 
-		manager.setScrolling(true);
+		manager.setRuntimeState(makeScrollingRuntimeState());
 		manager.mountCell({
 			cellKey: 'r1:name',
 			container: stableContainer,
@@ -181,7 +192,7 @@ describe('PortalMountManager', () => {
 			portalReleasesDuringScroll: 1,
 		});
 
-		manager.setScrolling(false);
+		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred();
 
 		expect(release).not.toHaveBeenCalled();
@@ -207,14 +218,14 @@ describe('PortalMountManager', () => {
 			isLoading: false,
 		});
 
-		manager.setScrolling(true);
+		manager.setRuntimeState(makeScrollingRuntimeState());
 		manager.releaseCells([{ cellKey: 'r1:name', container }], true);
 
 		expect(release).not.toHaveBeenCalled();
 		expect(flush).not.toHaveBeenCalled();
 		expect(manager.getScrollStats().portalFlushesDuringScroll).toBe(0);
 
-		manager.setScrolling(false);
+		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred(true);
 
 		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: false });
@@ -238,11 +249,11 @@ describe('PortalMountManager', () => {
 				isLoading: false,
 			});
 		}
-		manager.setScrolling(true);
+		manager.setRuntimeState(makeScrollingRuntimeState());
 		for (let index = 0; index < 8; index++) {
 			manager.releaseCell({ cellKey: `r${index}:name` });
 		}
-		manager.setScrolling(false);
+		manager.setRuntimeState(makeIdleRuntimeState());
 
 		const first = manager.flushDeferred({ maxItems: 3, reason: 'scroll-idle' });
 
@@ -284,9 +295,9 @@ describe('PortalMountManager', () => {
 
 		expect(parent.querySelectorAll('.og-custom-renderer-container')).toHaveLength(1);
 
-		manager.setScrolling(true);
+		manager.setRuntimeState(makeScrollingRuntimeState());
 		manager.releaseCell({ cellKey: 'logical-1', container: parent });
-		manager.setScrolling(false);
+		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred();
 
 		const warmRoot = document.body.querySelector('.og-hidden-renderer-container');
@@ -321,9 +332,9 @@ describe('PortalMountManager', () => {
 			isEditing: false,
 			isLoading: false,
 		});
-		manager.setScrolling(true);
+		manager.setRuntimeState(makeScrollingRuntimeState());
 		manager.releaseCell({ cellKey: 'row-1:name', container: firstParent });
-		manager.setScrolling(false);
+		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred();
 
 		manager.mountCell({

@@ -31,11 +31,9 @@ export interface SlotRuntimeStats {
 	customWarmMovesFlushedAfterScroll: number;
 	customColdMountsDuringScroll: number;
 
-	// ── Legacy counters (backward compat) ─────────────────────────────────────────
+	// ── Legacy totals ─────────────────────────────────────────────────────────────
 	rowSlotAppendsTotal: number;
 	rowSlotRemovesTotal: number;
-	cellAppendsTotal: number;
-	cellRemovesTotal: number;
 	fullRebindFrames: number;
 	enteredOnlyFrames: number;
 }

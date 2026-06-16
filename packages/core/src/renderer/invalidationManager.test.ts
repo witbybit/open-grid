@@ -19,11 +19,17 @@ describe('InvalidationManager', () => {
 		expect(frame.rows.size).toBe(1);
 		expect(frame.headers).toBe(true);
 		expect(frame.reasons).toEqual(['edit', 'focus', 'sort']);
+		expect(frame.invalidations).toEqual([
+			{ kind: 'cell', rowId: 'row-1', colId: 'name', reason: 'edit' },
+			{ kind: 'row', rowId: 'row-1', reason: 'focus' },
+			{ kind: 'headers', reason: 'sort' },
+		]);
 
 		const next = manager.consume();
 		expect(next.cellsByRowId.size).toBe(0);
 		expect(next.rows.size).toBe(0);
 		expect(next.headers).toBe(false);
+		expect(next.invalidations).toEqual([]);
 	});
 
 	it('keeps row ids with colons structurally separate from column ids', () => {
@@ -43,6 +49,27 @@ describe('InvalidationManager', () => {
 		expect(frame.reasons).toEqual(['edit']);
 	});
 
+	it('tracks group and row range invalidations as first-class lanes', () => {
+		const manager = new InvalidationManager();
+
+		manager.invalidateGroup('group:region:Americas', 'groupBy');
+		manager.invalidateGroup('group:region:Americas', 'groupBy');
+		manager.invalidateRowRange(12, 4, 'viewport');
+		manager.invalidateRowRange(4, 12, 'viewport');
+		manager.invalidateColumn('revenue', 'aggDefs');
+
+		const frame = manager.consume();
+
+		expect(frame.groups).toEqual(new Set(['group:region:Americas']));
+		expect(frame.rowRanges).toEqual([{ startIndex: 4, endIndex: 12, reason: 'viewport' }]);
+		expect(frame.columns).toEqual(new Set(['revenue']));
+		expect(frame.invalidations).toEqual([
+			{ kind: 'group', groupId: 'group:region:Americas', reason: 'groupBy' },
+			{ kind: 'row-range', startIndex: 4, endIndex: 12, reason: 'viewport' },
+			{ kind: 'column', colId: 'revenue', reason: 'aggDefs' },
+		]);
+	});
+
 	it('lets full invalidation override granular paint work', () => {
 		const manager = new InvalidationManager();
 
@@ -56,5 +83,10 @@ describe('InvalidationManager', () => {
 		expect(frame.cellsByRowId.size).toBe(0);
 		expect(frame.geometry).toBe(false);
 		expect(frame.reasons).toEqual(['edit', 'resize', 'columns']);
+		expect(frame.invalidations).toEqual([
+			{ kind: 'cell', rowId: 'row-1', colId: 'name', reason: 'edit' },
+			{ kind: 'geometry', reason: 'resize' },
+			{ kind: 'full', reason: 'columns' },
+		]);
 	});
 });

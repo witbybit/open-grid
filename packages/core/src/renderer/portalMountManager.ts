@@ -6,9 +6,11 @@ import type {
 	GridRowContentMount,
 	GridRowContentUnmount,
 } from './IGridRenderer.js';
-import type { VisualRow, InternalColumnDef } from '../store.js';
-import { isDomCellRenderer } from '../store.js';
+import type { InternalColumnDef, DomCellRenderer } from '../columnDef.js';
+import { isDomCellRenderer } from '../columnDef.js';
+import type { VisualRow } from '../visualRow.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { CustomRendererManager, type ReleaseReason } from './customRendererManager.js';
 import { DomCellRendererManager } from './domCellRendererManager.js';
 import {
@@ -104,10 +106,20 @@ export class PortalMountManager<TRowData = unknown> {
 	private pendingCellReleases = new Map<string, GridCellContentUnmount>();
 	private deferredCellMounts = new Map<string, GridCellContentMount<TRowData>>();
 	private deferredCellReleases = new Map<string, GridCellContentUnmount>();
+	/** Tracks the current slotGeneration for each mounted cellKey. */
+	private activeGenerationByKey = new Map<string, number>();
 	private deferredNewCellMounts = new Set<string>();
 	private deferredRowMounts = new Map<string, GridRowContentMount<TRowData>>();
 	private deferredRowReleases = new Map<string, GridRowContentUnmount>();
-	private scrolling = false;
+	private runtimeState: RenderRuntimeState | null = null;
+
+	public setRuntimeState(state: RenderRuntimeState): void {
+		this.runtimeState = state;
+	}
+
+	private get scrolling(): boolean {
+		return this.runtimeState?.isScrolling() ?? false;
+	}
 	private stats = {
 		flushesDuringScroll: 0,
 		mountsDuringScroll: 0,
@@ -118,6 +130,9 @@ export class PortalMountManager<TRowData = unknown> {
 	};
 
 	private mountCellReal(mount: GridCellContentMount<TRowData>): void {
+		if (mount.slotGeneration !== undefined) {
+			this.activeGenerationByKey.set(mount.cellKey, mount.slotGeneration);
+		}
 		const col = mount.col as InternalColumnDef<TRowData>;
 		const isCustom = !!(col.cellRenderer || mount.isEditing);
 
@@ -139,7 +154,7 @@ export class PortalMountManager<TRowData = unknown> {
 				rendererKey,
 				cellKey: mount.cellKey,
 				parentContainer: mount.container,
-				renderer: col.cellRenderer as import('../store.js').DomCellRenderer<TRowData>,
+				renderer: col.cellRenderer as DomCellRenderer<TRowData>,
 				value: mount.value,
 				node,
 				col,
@@ -176,6 +191,7 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	private releaseCellReal(cellKey: string, reason: ReleaseReason, originalUnmount?: GridCellContentUnmount): void {
+		this.activeGenerationByKey.delete(cellKey);
 		// DOM renderer path — no portal/React involved
 		if (this.domCellRendererManager.releaseByCellKey(cellKey, reason)) return;
 
@@ -324,10 +340,6 @@ export class PortalMountManager<TRowData = unknown> {
 		}
 	}
 
-	public setScrolling(scrolling: boolean): void {
-		this.scrolling = scrolling;
-	}
-
 	public flushDeferred(options: DeferredPortalFlushOptions | boolean = {}): DeferredPortalFlushResult {
 		const normalized = typeof options === 'boolean' ? { flushSync: options } : options;
 		const maxItems = normalized.maxItems ?? Number.POSITIVE_INFINITY;
@@ -338,8 +350,6 @@ export class PortalMountManager<TRowData = unknown> {
 			return { processed: 0, remaining: pendingBefore };
 		}
 
-		const wasScrolling = this.scrolling;
-		this.scrolling = false;
 		let processed = 0;
 		// Weighted op budget: a cold mount commits a brand-new React subtree (~ms), a
 		// warm-hit mount or release is a cheap re-parent/bookkeeping op. Budgeting by
@@ -381,6 +391,13 @@ export class PortalMountManager<TRowData = unknown> {
 		// avoids an O(remaining) Array.from copy per chunk (O(N²/budget) over the drain).
 		for (const [cellKey, unmount] of this.deferredCellReleases) {
 			if (outOfBudget()) break;
+			// Reject stale releases: a later mount for the same key with a higher
+			// generation means this release was superseded by a slot rebind.
+			const activeGen = this.activeGenerationByKey.get(cellKey);
+			if (unmount.slotGeneration !== undefined && activeGen !== undefined && activeGen > unmount.slotGeneration) {
+				this.deferredCellReleases.delete(cellKey);
+				continue;
+			}
 			this.releaseCellReal(unmount.cellKey, 'scrolled-out', unmount);
 			this.deferredCellReleases.delete(cellKey);
 			processed++;
@@ -443,7 +460,6 @@ export class PortalMountManager<TRowData = unknown> {
 		if (flushSync && remaining === 0) {
 			this.onFlushCellContent?.({ flushSync: true });
 		}
-		this.scrolling = wasScrolling;
 		return { processed, remaining };
 	}
 
@@ -500,7 +516,6 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	public releaseAll(): void {
-		this.scrolling = false;
 		this.deferredCellMounts.clear();
 		this.deferredCellReleases.clear();
 		this.deferredNewCellMounts.clear();

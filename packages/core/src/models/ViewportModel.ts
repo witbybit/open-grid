@@ -8,6 +8,7 @@ export class ViewportModel<TRowData = unknown> {
 	public scrollLeft = 0;
 	public viewportWidth = 0;
 	public viewportHeight = 0;
+	public scrollViewportClientWidth = 0;
 
 	// Pinned configuration (Columns and Rows)
 	public pinLeftColumns = 0;
@@ -82,6 +83,14 @@ export class ViewportModel<TRowData = unknown> {
 		}
 		this.viewportWidth = width;
 		this.viewportHeight = height;
+		return true;
+	}
+
+	public setScrollViewportClientWidth(width: number): boolean {
+		if (this.scrollViewportClientWidth === width) {
+			return false;
+		}
+		this.scrollViewportClientWidth = width;
 		return true;
 	}
 
@@ -199,7 +208,8 @@ export class ViewportModel<TRowData = unknown> {
 		}
 
 		const visibleLeft = this.scrollLeft + pinnedLeftWidth;
-		const visibleRight = this.scrollLeft + this.viewportWidth - pinnedRightWidth;
+		const visibleWidth = this.scrollViewportClientWidth || this.viewportWidth;
+		const visibleRight = this.scrollLeft + visibleWidth - pinnedRightWidth;
 
 		// Perform O(log C) binary searches on GeometryModel
 		const activeStartIdx = this.engine.geometry.getColIndexAtOffset(visibleLeft);
@@ -207,7 +217,7 @@ export class ViewportModel<TRowData = unknown> {
 
 		// Predictive overscan
 		const state = this.engine.stateManager.getState();
-		const colBuffer = state.colBuffer ?? 1;
+		const colBuffer = state.colBuffer ?? 2;
 		let overscanLeft = colBuffer;
 		let overscanRight = colBuffer;
 

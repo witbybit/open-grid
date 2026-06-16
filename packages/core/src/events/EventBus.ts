@@ -1,9 +1,19 @@
-import type { GridEvent, GridEventListener } from '../store.js';
+import type { GridEvent, GridEventListener, GridEventPayloadMap } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 
-export class EventBus {
+export class EventBus<TRowData = unknown> {
 	private eventListeners = new Map<string, Set<GridEventListener<unknown>>>();
+	private faultReporter?: RuntimeFaultReporter<TRowData>;
 
-	public addEventListener = <T = unknown>(type: string, callback: GridEventListener<T>): (() => void) => {
+	public setRuntimeFaultReporter(reporter: RuntimeFaultReporter<TRowData>): void {
+		this.faultReporter = reporter;
+	}
+
+	public addEventListener<K extends keyof GridEventPayloadMap<TRowData>>(
+		type: K,
+		callback: GridEventListener<GridEventPayloadMap<TRowData>[K]>
+	): () => void {
 		if (!this.eventListeners.has(type)) {
 			this.eventListeners.set(type, new Set());
 		}
@@ -15,23 +25,30 @@ export class EventBus {
 				this.eventListeners.delete(type);
 			}
 		};
-	};
+	}
 
-	public dispatchEvent = <T = unknown>(type: string, payload: T): void => {
+	public dispatchEvent<K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void {
 		const set = this.eventListeners.get(type);
 		if (set) {
-			const event: GridEvent<T> = { type, payload };
+			const event: GridEvent<GridEventPayloadMap<TRowData>[K]> = { type, payload };
 			set.forEach((listener) => {
 				try {
-					listener(event);
+					listener(event as GridEvent<unknown>);
 				} catch (e) {
-					console.error(`EventBus: Error in event listener for "${type}"`, e);
+					this.faultReporter?.report(
+						{
+							source: 'event-bus',
+							operation: String(type),
+							error: e,
+						},
+						{ emitEvent: type !== GridEventName.runtimeFault }
+					);
 				}
 			});
 		}
-	};
+	}
 
-	public hasListeners(type: string): boolean {
+	public hasListeners(type: keyof GridEventPayloadMap<TRowData>): boolean {
 		return (this.eventListeners.get(type)?.size ?? 0) > 0;
 	}
 

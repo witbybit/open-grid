@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DefaultGridScheduler } from './gridScheduler.js';
-import { RenderScheduler } from './renderScheduler.js';
+import { DefaultFrameCoordinator } from './frameCoordinator.js';
 
 describe('DefaultGridScheduler', () => {
 	let scheduler: DefaultGridScheduler;
@@ -68,9 +68,27 @@ describe('DefaultGridScheduler', () => {
 		vi.advanceTimersByTime(200);
 		expect(cb).not.toHaveBeenCalled();
 	});
+
+	it('cancelRaf() cancels the setTimeout fallback when requestAnimationFrame is unavailable', () => {
+		const originalRaf = globalThis.requestAnimationFrame;
+		const originalCancel = globalThis.cancelAnimationFrame;
+		// @ts-expect-error intentionally removing raf
+		delete globalThis.requestAnimationFrame;
+		// @ts-expect-error intentionally removing cancelAnimationFrame
+		delete globalThis.cancelAnimationFrame;
+
+		const cb = vi.fn();
+		const id = scheduler.raf(cb);
+		scheduler.cancelRaf(id);
+		vi.advanceTimersByTime(100);
+		expect(cb).not.toHaveBeenCalled();
+
+		globalThis.requestAnimationFrame = originalRaf;
+		globalThis.cancelAnimationFrame = originalCancel;
+	});
 });
 
-describe('RenderScheduler with GridScheduler', () => {
+describe('DefaultFrameCoordinator with GridScheduler', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 	});
@@ -80,43 +98,43 @@ describe('RenderScheduler with GridScheduler', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('multiple requestFlush calls before microtask drains coalesce into one flush', async () => {
-		const flush = vi.fn();
+	it('multiple requestPaintFrame calls before microtask drains coalesce into one paint', async () => {
+		const onPaintFrame = vi.fn();
 		const mockScheduler = new DefaultGridScheduler();
 		vi.spyOn(mockScheduler, 'raf').mockImplementation((cb) => {
 			cb();
 			return 0;
 		});
 
-		const rs = new RenderScheduler(flush, mockScheduler);
-		rs.requestFlush();
-		rs.requestFlush();
-		rs.requestFlush();
+		const coordinator = new DefaultFrameCoordinator({ onScrollFrame: vi.fn(), onPaintFrame, gridScheduler: mockScheduler });
+		coordinator.requestPaintFrame();
+		coordinator.requestPaintFrame();
+		coordinator.requestPaintFrame();
 
 		await Promise.resolve(); // drain microtask
-		expect(flush).toHaveBeenCalledTimes(1);
+		expect(onPaintFrame).toHaveBeenCalledTimes(1);
 	});
 
-	it('does not flush after destroy()', async () => {
-		const flush = vi.fn();
+	it('does not paint after destroy()', async () => {
+		const onPaintFrame = vi.fn();
 		const mockScheduler = new DefaultGridScheduler();
 		vi.spyOn(mockScheduler, 'raf').mockImplementation((cb) => {
 			cb();
 			return 0;
 		});
 
-		const rs = new RenderScheduler(flush, mockScheduler);
-		rs.requestFlush();
-		rs.destroy();
+		const coordinator = new DefaultFrameCoordinator({ onScrollFrame: vi.fn(), onPaintFrame, gridScheduler: mockScheduler });
+		coordinator.requestPaintFrame();
+		coordinator.destroy();
 
 		await Promise.resolve();
-		expect(flush).not.toHaveBeenCalled();
+		expect(onPaintFrame).not.toHaveBeenCalled();
 	});
 
-	it('flushNow() calls flush immediately without waiting for RAF', () => {
-		const flush = vi.fn();
-		const rs = new RenderScheduler(flush);
-		rs.flushNow();
-		expect(flush).toHaveBeenCalledTimes(1);
+	it('flushNowForTests() calls paint immediately without waiting for RAF', () => {
+		const onPaintFrame = vi.fn();
+		const coordinator = new DefaultFrameCoordinator({ onScrollFrame: vi.fn(), onPaintFrame });
+		coordinator.flushNowForTests();
+		expect(onPaintFrame).toHaveBeenCalledTimes(1);
 	});
 });

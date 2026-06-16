@@ -3,6 +3,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
 import type { FillDragController, OverlayBox } from './fillDragController.js';
+import { getRightPinnedLaneScreenLeft, LEAF_HEADER_HEIGHT } from './layoutPlan.js';
 
 export class OverlayRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -135,7 +136,11 @@ export class OverlayRenderer<TRowData = unknown> {
 		const scrollTop = this.engine.viewport.scrollTop;
 		const scrollLeft = this.engine.viewport.scrollLeft;
 		const viewportHeight = this.engine.viewport.viewportHeight;
-		const viewportWidth = this.engine.viewport.viewportWidth;
+		const layoutPlan = this.viewportRenderer.getLayoutPlan();
+		const viewportWidth =
+			layoutPlan?.viewport.clientWidth ?? (this.engine.viewport.scrollViewportClientWidth || this.engine.viewport.viewportWidth);
+		const topChromeHeight = layoutPlan?.chrome.topChromeHeight ?? LEAF_HEADER_HEIGHT;
+		const overlayViewportHeight = Math.max(0, viewportHeight - topChromeHeight);
 
 		let pinnedLeftWidth = 0;
 		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
@@ -167,7 +172,8 @@ export class OverlayRenderer<TRowData = unknown> {
 			if (c >= colCount - pinRightColumns) {
 				const firstRightPinColIdx = colCount - pinRightColumns;
 				const firstRightPinColLeft = this.engine.geometry.colLefts[firstRightPinColIdx] || 0;
-				const left = viewportWidth - pinnedRightWidth + (cellLeft - firstRightPinColLeft);
+				const rightLaneLeft = layoutPlan ? getRightPinnedLaneScreenLeft(layoutPlan) : viewportWidth - pinnedRightWidth;
+				const left = rightLaneLeft + (cellLeft - firstRightPinColLeft);
 				return { left, right: left + cellWidth };
 			}
 
@@ -188,14 +194,14 @@ export class OverlayRenderer<TRowData = unknown> {
 			if (r >= rowCount - pinBottomRows) {
 				const totalHeight = this.engine.geometry.getTotalHeight(state.defaultRowHeight);
 				const bottomOffset = totalHeight - rowTop;
-				const top = viewportHeight - 40 - bottomOffset;
+				const top = overlayViewportHeight - bottomOffset;
 				return { top, bottom: top + rowHeight };
 			}
 
 			const unclippedTop = rowTop - scrollTop;
 			const unclippedBottom = unclippedTop + rowHeight;
-			const top = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedTop));
-			const bottom = Math.max(pinnedTopHeight, Math.min(viewportHeight - 40 - pinnedBottomHeight, unclippedBottom));
+			const top = Math.max(pinnedTopHeight, Math.min(overlayViewportHeight - pinnedBottomHeight, unclippedTop));
+			const bottom = Math.max(pinnedTopHeight, Math.min(overlayViewportHeight - pinnedBottomHeight, unclippedBottom));
 			return { top, bottom };
 		};
 

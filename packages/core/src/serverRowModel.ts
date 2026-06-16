@@ -1,36 +1,45 @@
-import {
-	GridStore,
-	ColumnDef,
-	RowModel,
-	RowNode,
-	setValueByPath,
-	type VisualRow,
-	type RowRefreshReason,
-	type RowModelRefreshResult,
-} from './store.js';
+import { type ColumnDef, setValueByPath } from './columnDef.js';
+import { GridEventName } from './api/GridEvents.js';
+import type { ServerRowModelRuntime } from './engine/runtimePorts.js';
+import type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
+import type { RowSelectionScope } from './api/GridApi.js';
+import { RowNode } from './rowNode.js';
 import { toDataVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
+import type { VisualRow } from './visualRow.js';
+
+function toErrorMessage(error: unknown): string {
+	if (error instanceof Error && error.message) return error.message;
+	if (typeof error === 'string' && error.length > 0) return error;
+	return 'Unknown server block load failure';
+}
 
 export interface GetRowsParams {
 	startRow: number;
 	endRow: number;
 	sortModel: unknown;
 	filterModel: unknown;
+	/** 0-based page number; set when the grid is in page mode. */
+	pageNumber?: number;
+	/** Page size; set when the grid is in page mode. */
+	pageSize?: number;
 }
 
-export interface IGridDatasource {
-	getRows(params: GetRowsParams): Promise<{ rows: unknown[]; totalCount?: number }>;
+export interface IGridDatasource<TRowData = unknown> {
+	getRows(params: GetRowsParams): Promise<{ rows: TRowData[]; totalCount?: number }>;
 }
 
 export interface ServerRowModelOptions<TData = unknown> {
 	blockSize?: number;
-	datasource: IGridDatasource;
+	datasource: IGridDatasource<TData>;
 	columns: Array<ColumnDef<TData>>;
 	getRowId?: (row: TData) => string;
+	/** When set, the model operates in page mode instead of infinite scroll. */
+	pagination?: { pageSize: number; initialPage?: number };
 }
 
 export class ServerRowModelController<TData = unknown> implements RowModel<TData> {
-	private store: GridStore<TData>;
-	private datasource: IGridDatasource;
+	private readonly runtime: ServerRowModelRuntime<TData>;
+	private datasource: IGridDatasource<TData>;
 	private blockSize: number;
 	private activeNodes: Array<RowNode<TData> | null> = [];
 	private visualRows: Array<VisualRow<TData> | null> = [];
@@ -43,31 +52,46 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 	private disposed = false;
 	private requestGeneration = 0;
 
-	constructor(store: GridStore<TData>, options: ServerRowModelOptions<TData>) {
-		this.store = store;
+	// Pagination (null = infinite scroll mode)
+	private readonly paginationPageSize: number | null;
+	private currentPage = 0;
+	private pageCount = 1;
+	private totalRowsKnown = 0;
+
+	constructor(runtime: ServerRowModelRuntime<TData>, options: ServerRowModelOptions<TData>) {
+		this.runtime = runtime;
 		this.datasource = options.datasource;
 		this.blockSize = options.blockSize ?? 100;
+		this.paginationPageSize = options.pagination?.pageSize ?? null;
+		this.currentPage = options.pagination?.initialPage ?? 0;
 
-		// Set base columns and config in store
-		this.store.setState({
+		this.runtime.initializeModel({
 			columns: options.columns,
 			getRowId: options.getRowId,
 		});
 
-		this.store.registerRowModel(this);
+		this.runtime.registerRowModel(this);
 
 		this.unsubscribers.push(
-			this.store.addEventListener('sortChanged', () => this.purgeCache()),
-			this.store.addEventListener('filterChanged', () => this.purgeCache())
+			this.runtime.addEventListener(GridEventName.sortChanged, () => this.purgeCache()),
+			this.runtime.addEventListener(GridEventName.filterChanged, () => this.purgeCache())
 		);
 
 		// Trigger initial fetch of block 0 to obtain totalCount and sparse placeholders
 		this.fetchBlock(0);
 	}
 
-	public setDatasource(datasource: IGridDatasource, blockSize: number = this.blockSize): void {
+	public setDatasource(datasource: IGridDatasource<TData>, blockSize: number = this.blockSize): void {
 		this.datasource = datasource;
 		this.blockSize = blockSize;
+		this.purgeCache();
+	}
+
+	public goToPage(page: number): void {
+		if (this.paginationPageSize === null) return;
+		const clamped = Math.max(0, Math.min(page, this.pageCount - 1));
+		if (clamped === this.currentPage) return;
+		this.currentPage = clamped;
 		this.purgeCache();
 	}
 
@@ -101,7 +125,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 		// If the user is flicking or dragging the scrollbar extremely fast, skip loading intermediate blocks.
 		// When the scrolling stops, the scroll-stop pipeline resets velocity to 0 and triggers the resting block load.
-		if (this.store.engine.viewport.isScrollingFast) {
+		if (this.runtime.isScrollingFast()) {
 			return;
 		}
 
@@ -117,7 +141,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		// Dynamic predictive pre-fetching based on scrolling velocity
-		const velocity = this.store.engine.viewport.getVelocity();
+		const velocity = this.runtime.getScrollVelocity();
 		const vy = velocity.vy; // px/ms
 		const totalBlocks = Math.ceil(this.getVisualRowCount() / this.blockSize);
 
@@ -153,6 +177,10 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		return this.visualRows.length;
 	};
 
+	public getDataRowCount = (): number => {
+		return this.visualRows.length;
+	};
+
 	public getVisualRowIndexById = (id: string): number => {
 		const idx = this.visualRowIdToIndex.get(id) ?? this.rowIdToVisualIndex.get(id);
 		return idx !== undefined ? idx : -1;
@@ -172,14 +200,24 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		return this.nodeMap.get(rowId)?.data ?? null;
 	};
 
+	public getSelectableDataRowIds = (_scope: RowSelectionScope = 'loaded'): string[] => {
+		const ids: string[] = [];
+		for (const node of this.activeNodes) {
+			if (node) ids.push(node.id);
+		}
+		return ids;
+	};
+
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
 		const node = this.getRowNodeById(rowId);
 		if (!node) return false;
 
-		const col = this.store.getColumnDef(colField);
+		const col = this.runtime.getColumnDef(colField);
+		const oldValue = this.runtime.getCellValue(rowId, colField);
 		const updatedRow = { ...node.data };
 		if (col?.valueSetter) {
-			if (!col.valueSetter(updatedRow, value)) return false;
+			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
+			if (!(result instanceof Promise) && !result) return false;
 		} else {
 			setValueByPath(updatedRow, colField, value);
 		}
@@ -188,7 +226,7 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 		// If the edited cell field is currently part of active sort or filter models,
 		// we must purge the cache and refetch from server to restore correct order/filters.
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		let needsPurge = false;
 		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
 			needsPurge = true;
@@ -215,25 +253,27 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 		// Set initial mount loading state and schedule immediate repaint only if fetching block 0
 		if (blockIndex === 0) {
-			this.store.setState((s) => ({
-				loading: true,
-				dataVersion: s.dataVersion + 1,
-			}));
+			this.runtime.setLoadingState(true);
 		}
 
-		const startRow = blockIndex * this.blockSize;
-		const endRow = startRow + this.blockSize;
+		// In page mode: translate block-local index to absolute datasource rows.
+		// In infinite scroll mode: block index maps directly to global rows.
+		const pageOffset = this.paginationPageSize !== null ? this.currentPage * this.paginationPageSize : 0;
+		const localStartRow = blockIndex * this.blockSize;
+		const absoluteStartRow = pageOffset + localStartRow;
+		const absoluteEndRow = absoluteStartRow + this.blockSize;
 
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		const requestSortModel = state.sortModel;
 		const requestFilterModel = state.filterModel;
 
 		try {
 			const response = await this.datasource.getRows({
-				startRow,
-				endRow,
+				startRow: absoluteStartRow,
+				endRow: absoluteEndRow,
 				sortModel: requestSortModel,
 				filterModel: requestFilterModel,
+				...(this.paginationPageSize !== null ? { pageNumber: this.currentPage, pageSize: this.paginationPageSize } : undefined),
 			});
 
 			if (this.disposed || generation !== this.requestGeneration) {
@@ -242,20 +282,23 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 
 			delete this.loadingBlocks[blockIndex];
 
+			// Use page-local index for array storage (infinite scroll: localStartRow === absoluteStartRow)
+			const storeStartRow = localStartRow;
+
 			// Grow sparsely without pushing one placeholder per missing row.
-			if (this.activeNodes.length < startRow) {
-				this.activeNodes.length = startRow;
+			if (this.activeNodes.length < storeStartRow) {
+				this.activeNodes.length = storeStartRow;
 			}
-			if (this.visualRows.length < startRow) {
-				this.visualRows.length = startRow;
+			if (this.visualRows.length < storeStartRow) {
+				this.visualRows.length = storeStartRow;
 			}
 
 			// Patch loaded rows into the array and index map
 			response.rows.forEach((row, idx) => {
-				const globalIdx = startRow + idx;
+				const localIdx = storeStartRow + idx;
 				const typedRow = row as TData;
 				if (typedRow) {
-					const id = this.store.getRowId(typedRow);
+					const id = this.runtime.getRowId(typedRow);
 					let node = this.nodeMap.get(id);
 					if (node) {
 						node.setData(typedRow);
@@ -263,8 +306,8 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 						node = new RowNode<TData>(id, typedRow);
 					}
 
-					this.activeNodes[globalIdx] = node;
-					this.visualRows[globalIdx] = {
+					this.activeNodes[localIdx] = node;
+					this.visualRows[localIdx] = {
 						kind: 'data',
 						id: toDataVisualRowId(node.id),
 						rowId: node.id,
@@ -272,54 +315,80 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 						depth: 0,
 					};
 					this.nodeMap.set(id, node);
-					this.visualRowIdToIndex.set(toDataVisualRowId(id), globalIdx);
-					this.rowIdToVisualIndex.set(id, globalIdx);
+					this.visualRowIdToIndex.set(toDataVisualRowId(id), localIdx);
+					this.rowIdToVisualIndex.set(id, localIdx);
 				} else {
-					this.activeNodes[globalIdx] = null;
-					this.visualRows[globalIdx] = null;
+					this.activeNodes[localIdx] = null;
+					this.visualRows[localIdx] = null;
 				}
 			});
 
-			// If total count returned, ensure array size matches
+			// Resize sparse array to reflect the known row count for this view.
 			if (typeof response.totalCount === 'number') {
-				if (this.activeNodes.length < response.totalCount) {
-					this.activeNodes.length = response.totalCount;
-				}
-				if (this.visualRows.length < response.totalCount) {
-					this.visualRows.length = response.totalCount;
+				if (this.paginationPageSize !== null) {
+					// Page mode: totalCount is the global total; size array to current page window.
+					this.totalRowsKnown = response.totalCount;
+					const newPageCount = Math.max(1, Math.ceil(response.totalCount / this.paginationPageSize));
+					const currentPageRows = Math.min(
+						this.paginationPageSize,
+						Math.max(0, response.totalCount - this.currentPage * this.paginationPageSize)
+					);
+					if (this.activeNodes.length < currentPageRows) {
+						this.activeNodes.length = currentPageRows;
+					}
+					if (this.visualRows.length < currentPageRows) {
+						this.visualRows.length = currentPageRows;
+					}
+					if (newPageCount !== this.pageCount) {
+						this.pageCount = newPageCount;
+					}
+					this.runtime.dispatchPaginationChanged({
+						page: this.currentPage,
+						pageCount: this.pageCount,
+						totalRows: this.totalRowsKnown,
+						pageSize: this.paginationPageSize,
+					});
+				} else {
+					// Infinite scroll mode: size array to global total count.
+					if (this.activeNodes.length < response.totalCount) {
+						this.activeNodes.length = response.totalCount;
+					}
+					if (this.visualRows.length < response.totalCount) {
+						this.visualRows.length = response.totalCount;
+					}
 				}
 			}
 
-			this.store.engine.clearFormulas();
+			this.runtime.clearFormulas();
 
 			// Layout geometry will be updated by GridEngine using GeometryModel
 			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
 			const hasActiveFetches = this.loadingBlockCount > 0;
-			this.store.setState((s) => ({
-				loading: hasActiveFetches,
-				dataVersion: s.dataVersion + 1,
-			}));
+			this.runtime.setLoadingState(hasActiveFetches);
 
 			const requestFinishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-			this.store.dispatchEvent('serverBlockLoaded', {
+			this.runtime.dispatchServerBlockLoaded({
 				blockIndex,
-				loadedBlockStart: startRow,
-				loadedBlockEnd: startRow + response.rows.length - 1,
-				totalRecords: response.totalCount ?? this.activeNodes.length,
+				loadedBlockStart: absoluteStartRow,
+				loadedBlockEnd: absoluteStartRow + response.rows.length - 1,
+				totalRecords: response.totalCount ?? pageOffset + this.activeNodes.length,
 				durationMs: requestFinishedAt - requestStartedAt,
 			});
 		} catch (error) {
 			if (this.disposed || generation !== this.requestGeneration) {
 				return;
 			}
-			console.error(`GridEngine: Failed to fetch row block ${blockIndex}`, error);
+			this.runtime.dispatchServerBlockLoadFailed({
+				blockIndex,
+				startRow: absoluteStartRow,
+				endRow: absoluteEndRow - 1,
+				message: toErrorMessage(error),
+			});
+			this.runtime.reportBlockLoadFailure(blockIndex, error);
 			delete this.loadingBlocks[blockIndex];
 			this.loadingBlockCount = Math.max(0, this.loadingBlockCount - 1);
 			const hasActiveFetches = this.loadingBlockCount > 0;
-			this.store.setState({
-				loading: hasActiveFetches,
-				dataVersion: this.store.getState().dataVersion + 1,
-			});
+			this.runtime.setLoadingState(hasActiveFetches);
 		}
 	};
 
@@ -333,11 +402,15 @@ export class ServerRowModelController<TData = unknown> implements RowModel<TData
 		this.nodeMap.clear();
 		this.visualRowIdToIndex.clear();
 		this.rowIdToVisualIndex.clear();
-		this.store.engine.clearFormulas();
-		this.store.setState({
-			loading: true,
-			dataVersion: this.store.getState().dataVersion + 1,
-		});
+		this.runtime.clearFormulas();
+		this.runtime.setLoadingState(true);
+		// In page mode reset row array to the last known page window size so the
+		// render engine shows the correct number of loading placeholders immediately.
+		if (this.paginationPageSize !== null && this.totalRowsKnown > 0) {
+			const currentPageRows = Math.min(this.paginationPageSize, Math.max(0, this.totalRowsKnown - this.currentPage * this.paginationPageSize));
+			this.activeNodes.length = currentPageRows;
+			this.visualRows.length = currentPageRows;
+		}
 		this.fetchBlock(0);
 	};
 

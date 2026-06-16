@@ -36,16 +36,6 @@ const AddIcon = () => (
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const PANEL_BG = '#0b0d14';
-const HEADER_BG = '#090a0f';
-const BORDER = 'rgba(30, 41, 59, 0.7)';
-const TEXT = '#cbd5e1';
-const TEXT_MUTED = '#64748b';
-const ACCENT = '#3b82f6';
-const ACCENT_LIGHT = '#60a5fa';
-const CHIP_BG = 'rgba(15, 23, 42, 0.9)';
-const CHIP_BORDER = 'rgba(30, 41, 59, 0.9)';
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface SortPanelProps {
@@ -56,6 +46,9 @@ interface SortPanelProps {
 export function SortPanel({ api, onClose }: SortPanelProps) {
 	const columns = useGridKeySelector<ColumnDef<any>[]>('columns', (s) => s.columns as ColumnDef<any>[]);
 	const sortModel = useGridKeySelector<SortModel | null>('sortModel', (s) => s.sortModel);
+	// Subscribe to themeName so the panel re-renders when the theme changes.
+	useGridKeySelector('themeName', (s) => s.themeName);
+	const theme = api.getTheme();
 
 	const [showAdd, setShowAdd] = useState(false);
 
@@ -91,7 +84,7 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 	};
 
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: PANEL_BG }}>
+		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: theme.bgColor }}>
 			{/* Header */}
 			<div
 				style={{
@@ -100,21 +93,23 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 					padding: '0 12px',
 					height: 44,
 					flexShrink: 0,
-					background: HEADER_BG,
-					borderBottom: `1px solid ${BORDER}`,
+					background: theme.headerBg,
+					borderBottom: `1px solid ${theme.borderColor}`,
 					gap: 8,
 				}}
 			>
-				<span style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: TEXT }}>Sort</span>
+				<span style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textColor }}>
+					Sort
+				</span>
 				{activeItems.length > 0 && (
 					<button
 						onClick={clearAll}
 						style={{
 							fontSize: 10,
 							fontWeight: 600,
-							color: ACCENT_LIGHT,
-							background: 'rgba(59,130,246,0.1)',
-							border: '1px solid rgba(59,130,246,0.3)',
+							color: theme.focusRing,
+							background: theme.selectionBg,
+							border: `1px solid ${theme.selectionBorder}`,
 							borderRadius: 4,
 							padding: '2px 7px',
 							cursor: 'pointer',
@@ -124,7 +119,7 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 						Clear all
 					</button>
 				)}
-				<button onClick={onClose} style={iconBtnStyle}>
+				<button onClick={onClose} style={makeIconBtnStyle(theme.headerText)}>
 					<CloseIcon />
 				</button>
 			</div>
@@ -138,7 +133,7 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 							padding: '28px 0',
 							textAlign: 'center',
 							fontSize: 11,
-							color: TEXT_MUTED,
+							color: theme.headerText,
 							display: 'flex',
 							flexDirection: 'column',
 							alignItems: 'center',
@@ -171,8 +166,8 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 							gap: 6,
 							padding: '6px 10px',
 							borderRadius: 7,
-							background: CHIP_BG,
-							border: `1px solid ${CHIP_BORDER}`,
+							background: theme.headerBg,
+							border: `1px solid ${theme.borderColor}`,
 						}}
 					>
 						{/* Priority badge */}
@@ -182,9 +177,9 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 								height: 18,
 								flexShrink: 0,
 								borderRadius: 4,
-								background: 'rgba(59,130,246,0.14)',
-								border: '1px solid rgba(59,130,246,0.3)',
-								color: ACCENT_LIGHT,
+								background: theme.selectionBg,
+								border: `1px solid ${theme.selectionBorder}`,
+								color: theme.focusRing,
 								fontSize: 9,
 								fontWeight: 800,
 								display: 'flex',
@@ -203,7 +198,7 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 								fontWeight: 600,
 								letterSpacing: '0.04em',
 								textTransform: 'uppercase',
-								color: TEXT,
+								color: theme.textColor,
 								overflow: 'hidden',
 								textOverflow: 'ellipsis',
 								whiteSpace: 'nowrap',
@@ -224,9 +219,9 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 								justifyContent: 'center',
 								gap: 3,
 								borderRadius: 5,
-								border: '1px solid rgba(59,130,246,0.35)',
-								background: 'rgba(59,130,246,0.1)',
-								color: ACCENT_LIGHT,
+								border: `1px solid ${theme.selectionBorder}`,
+								background: theme.selectionBg,
+								color: theme.focusRing,
 								cursor: 'pointer',
 								padding: 0,
 								fontSize: 9,
@@ -242,7 +237,7 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 							style={{
 								fontSize: 9,
 								fontWeight: 700,
-								color: ACCENT_LIGHT,
+								color: theme.focusRing,
 								letterSpacing: '0.04em',
 								textTransform: 'uppercase',
 								width: 22,
@@ -252,7 +247,7 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 						</span>
 
 						{/* Remove */}
-						<button onClick={() => removeSort(item.colId)} style={{ ...iconBtnStyle, flexShrink: 0 }}>
+						<button onClick={() => removeSort(item.colId)} style={{ ...makeIconBtnStyle(theme.headerText), flexShrink: 0 }}>
 							<RemoveIcon />
 						</button>
 					</div>
@@ -267,16 +262,16 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 							gap: 6,
 							padding: '8px 10px',
 							borderRadius: 7,
-							background: 'rgba(59,130,246,0.05)',
-							border: '1px solid rgba(59,130,246,0.25)',
+							background: theme.selectionBg,
+							border: `1px solid ${theme.selectionBorder}`,
 						}}
 					>
-						<span style={{ fontSize: 10, fontWeight: 700, color: TEXT_MUTED, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+						<span style={{ fontSize: 10, fontWeight: 700, color: theme.headerText, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
 							Add sort by
 						</span>
 						<div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
 							{sortableColumns.length === 0 && (
-								<span style={{ fontSize: 11, color: TEXT_MUTED, padding: '4px 0' }}>All columns sorted</span>
+								<span style={{ fontSize: 11, color: theme.headerText, padding: '4px 0' }}>All columns sorted</span>
 							)}
 							{sortableColumns.map((col) => (
 								<button
@@ -289,14 +284,14 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 										fontWeight: 600,
 										letterSpacing: '0.04em',
 										textTransform: 'uppercase',
-										color: TEXT,
+										color: theme.textColor,
 										background: 'transparent',
 										border: 'none',
 										borderRadius: 5,
 										cursor: 'pointer',
 										transition: 'background 0.1s',
 									}}
-									onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'rgba(59,130,246,0.1)')}
+									onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = theme.rowHoverBg)}
 									onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
 								>
 									{col.header || col.field}
@@ -308,7 +303,7 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 							style={{
 								fontSize: 10,
 								fontWeight: 600,
-								color: TEXT_MUTED,
+								color: theme.headerText,
 								background: 'transparent',
 								border: 'none',
 								cursor: 'pointer',
@@ -330,9 +325,9 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 								gap: 7,
 								padding: '7px 10px',
 								borderRadius: 7,
-								border: `1px dashed rgba(30,41,59,0.9)`,
+								border: `1px dashed ${theme.borderColor}`,
 								background: 'transparent',
-								color: TEXT_MUTED,
+								color: theme.headerText,
 								cursor: 'pointer',
 								fontSize: 11,
 								fontWeight: 600,
@@ -341,12 +336,12 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 								transition: 'border-color 0.12s, color 0.12s',
 							}}
 							onMouseEnter={(e) => {
-								(e.currentTarget as HTMLElement).style.borderColor = 'rgba(59,130,246,0.5)';
-								(e.currentTarget as HTMLElement).style.color = ACCENT_LIGHT;
+								(e.currentTarget as HTMLElement).style.borderColor = theme.focusRing;
+								(e.currentTarget as HTMLElement).style.color = theme.focusRing;
 							}}
 							onMouseLeave={(e) => {
-								(e.currentTarget as HTMLElement).style.borderColor = 'rgba(30,41,59,0.9)';
-								(e.currentTarget as HTMLElement).style.color = TEXT_MUTED;
+								(e.currentTarget as HTMLElement).style.borderColor = theme.borderColor;
+								(e.currentTarget as HTMLElement).style.color = theme.headerText;
 							}}
 						>
 							<AddIcon />
@@ -357,7 +352,7 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 
 				{/* Multi-sort hint */}
 				{activeItems.length > 1 && (
-					<p style={{ fontSize: 10, color: TEXT_MUTED, margin: 0, padding: '4px 2px', lineHeight: 1.5 }}>
+					<p style={{ fontSize: 10, color: theme.headerText, margin: 0, padding: '4px 2px', lineHeight: 1.5 }}>
 						Multi-sort active — rows are sorted by priority order above.
 					</p>
 				)}
@@ -366,16 +361,18 @@ export function SortPanel({ api, onClose }: SortPanelProps) {
 	);
 }
 
-const iconBtnStyle: React.CSSProperties = {
-	width: 24,
-	height: 24,
-	display: 'flex',
-	alignItems: 'center',
-	justifyContent: 'center',
-	borderRadius: 5,
-	border: 'none',
-	background: 'transparent',
-	cursor: 'pointer',
-	color: TEXT_MUTED,
-	padding: 0,
-};
+function makeIconBtnStyle(color: string): React.CSSProperties {
+	return {
+		width: 24,
+		height: 24,
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderRadius: 5,
+		border: 'none',
+		background: 'transparent',
+		cursor: 'pointer',
+		color,
+		padding: 0,
+	};
+}

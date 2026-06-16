@@ -6,6 +6,15 @@ import { GridStore, type RowModel, type VisualRow, type RowModelRefreshResult } 
 import { RenderEngine } from './renderEngine.js';
 import { ServerRowModelController } from '../serverRowModel.js';
 
+/**
+ * Count the row-slot DOM children of the rows container, excluding the `.og-layer-exiting`
+ * overlay (Plan 043) which is a deliberate non-slot sibling for fade-out ghosts. The
+ * stable-slot invariant is about slot elements, not this overlay.
+ */
+function slotDomCount(rowsContainer: HTMLElement): number {
+	return Array.from(rowsContainer.children).filter((c) => !c.classList.contains('og-layer-exiting')).length;
+}
+
 describe('RenderEngine', () => {
 	afterEach(() => {
 		document.body.textContent = '';
@@ -25,7 +34,7 @@ describe('RenderEngine', () => {
 			id: `row-${index}`,
 			name: `Row ${index}`,
 		}));
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows,
 			columns: store.getState().columns,
 		});
@@ -61,6 +70,134 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	// Regression (Plan 043 / expand-collapse animation): group/tree/detail toggles
+	// invalidate the VIEWPORT (not full), so the transition must fire from flushPaint —
+	// not only the full-paint path. Before the fix, captureSnapshot ran on the `expansion`
+	// state change but beginAnimation was never reached on the viewport flush, so rows
+	// snapped. This drives the real chain (toggle → invalidateViewport('group expansion')
+	// → flushPaint) and asserts WAAPI animate() is actually invoked.
+	it('plays the expand/collapse transition (invokes WAAPI animate) on a group toggle', () => {
+		// jsdom has no WAAPI; stub it so LayoutTransitionController is feature-enabled.
+		const animateMock = vi.fn(() => ({ cancel: vi.fn(), finish: vi.fn(), onfinish: null, oncancel: null }) as unknown as Animation);
+		(HTMLElement.prototype as unknown as { animate: unknown }).animate = animateMock;
+
+		const store = new GridStore<{ id: string; name: string; category: string }>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 120 },
+				{ field: 'category', header: 'Category', width: 120, enableRowGroup: true },
+			],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 20 }, (_, index) => ({
+			id: `row-${index}`,
+			name: `Row ${index}`,
+			category: index % 2 === 0 ? 'A' : 'B',
+		}));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 400,
+			width: 500,
+			height: 400,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		store.engine.setGroupBy(['category']);
+		renderer.fullPaint(); // populate slots with their current positions
+
+		// A toggle changes state.expansion (→ captureSnapshot, sync) and invalidates the
+		// viewport with reason 'group expansion'. Running the gated flush then plays it.
+		animateMock.mockClear();
+		store.engine.groupingFeature.toggleGroupExpanded('group:category=A');
+		(renderer as unknown as { flushPaint: () => void }).flushPaint();
+
+		expect(animateMock).toHaveBeenCalled();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('exposes ARIA grid semantics (roles, counts, indices, sort, selection)', () => {
+		const store = new GridStore<{ id: string; name: string; val: string }>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'val', header: 'Val', width: 100 },
+			],
+			defaultRowHeight: 30,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 8 }, (_, i) => ({ id: `row-${i}`, name: `N${i}`, val: `V${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 400,
+			bottom: 300,
+			width: 400,
+			height: 300,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		// Grid root
+		expect(container.getAttribute('role')).toBe('grid');
+		expect(container.getAttribute('aria-multiselectable')).toBe('true');
+		expect(container.getAttribute('aria-rowcount')).toBe('8');
+		expect(container.getAttribute('aria-colcount')).toBe('2');
+
+		// Row
+		const rowEl = container.querySelector('[data-row-index="0"]') as HTMLElement;
+		expect(rowEl.getAttribute('role')).toBe('row');
+		expect(rowEl.getAttribute('aria-rowindex')).toBe('1');
+
+		// Body cell
+		const cellEl = container.querySelector('.og-cell[data-col-field="name"]') as HTMLElement;
+		expect(cellEl.getAttribute('role')).toBe('gridcell');
+		expect(cellEl.getAttribute('aria-colindex')).toBe('1');
+
+		// Header cell + default aria-sort
+		const headerEl = container.querySelector('.og-header-cell[data-col-field="val"]') as HTMLElement;
+		expect(headerEl.getAttribute('role')).toBe('columnheader');
+		expect(headerEl.getAttribute('aria-colindex')).toBe('2');
+		expect(headerEl.getAttribute('aria-sort')).toBe('none');
+
+		// aria-sort tracks the sort model
+		store.setSortModel([{ colId: 'val', sort: 'desc' }]);
+		renderer.fullPaint();
+		expect((container.querySelector('.og-header-cell[data-col-field="val"]') as HTMLElement).getAttribute('aria-sort')).toBe('descending');
+
+		// aria-selected appears on a selected cell
+		store.selectCell({ rowId: 'row-0', colField: 'name' });
+		renderer.fullPaint();
+		const selCell = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="name"]') as HTMLElement;
+		expect(selCell.getAttribute('aria-selected')).toBe('true');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('releases out-of-range cells when columns shrink with right pinning enabled', () => {
 		const wideColumns = [
 			{ field: 'risk', header: 'Risk', width: 120 },
@@ -73,7 +210,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', risk: 'LOW', filler: 'Filler', col_999: 'Val 999' }],
 			columns: wideColumns,
 		});
@@ -123,7 +260,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 100,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' }],
 			columns,
 		});
@@ -193,7 +330,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'Hidden Name', price: 42 }],
 			columns,
 		});
@@ -239,9 +376,9 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			styleSlots: { rowClass },
+			styleRules: [{ kind: 'row', when: (...args) => !!rowClass(...args), rowClass: 'custom-focused-row custom-selected-row' }],
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row-1', name: 'One' },
 				{ id: 'row-2', name: 'Two' },
@@ -296,7 +433,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', status: 'Active' }],
 			columns,
 		});
@@ -356,7 +493,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'Before' }],
 			columns: store.getState().columns,
 		});
@@ -406,7 +543,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row:0', name: 'Before', status: 'Open' },
 				{ id: 'row:1', name: 'Other', status: 'Closed' },
@@ -515,7 +652,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row-1', name: 'One' },
 				{ id: 'row-2', name: 'Two' },
@@ -579,7 +716,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 30 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns: store.getState().columns,
 		});
@@ -634,7 +771,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'One' }],
 			columns: store.getState().columns,
 		});
@@ -682,7 +819,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'One' }],
 			columns: store.getState().columns,
 		});
@@ -736,7 +873,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-1', name: 'One' }],
 			columns: store.getState().columns,
 		});
@@ -797,7 +934,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			columns: store.getState().columns,
 			blockSize: 50,
 			datasource: {
@@ -830,7 +967,7 @@ describe('RenderEngine', () => {
 		renderer.fullPaint();
 		const before = renderer.getRenderStats();
 
-		store.setState((state) => ({ dataVersion: state.dataVersion + 1 }));
+		store.setState((state) => ({ globalVersion: state.globalVersion + 1 }));
 		await Promise.resolve();
 		await Promise.resolve();
 		const afterData = renderer.getRenderStats();
@@ -869,7 +1006,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 150 }, (_, index) => ({ id: `row-${index}`, a: `A${index}`, b: `B${index}` })),
 			columns,
 		});
@@ -924,7 +1061,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -977,7 +1114,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1023,7 +1160,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 100,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 20 }, (_, rowIndex) => {
 				const row: Record<string, string> = { id: `row-${rowIndex}` };
 				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
@@ -1081,7 +1218,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1142,7 +1279,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({
 				id: `row-${index}`,
 				a: `A${index}`,
@@ -1209,7 +1346,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1273,7 +1410,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1334,7 +1471,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}`, b: `B${index}` })),
 			columns,
 		});
@@ -1390,7 +1527,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}`, b: `B${index}` })),
 			columns,
 		});
@@ -1470,7 +1607,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1526,20 +1663,14 @@ describe('RenderEngine', () => {
 		});
 		const columns = [{ field: 'a', header: 'A', width: 120 }];
 		const cellClass = vi.fn(() => 'custom-cell');
-		const beforeCellRender = vi.fn();
-		const afterCellRender = vi.fn();
 		const store = new GridStore<{ id: string; a: string }>({
 			columns,
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			styleSlots: {
-				cellClass,
-				beforeCellRender,
-				afterCellRender,
-			},
+			styleRules: [{ kind: 'cell', when: () => !!cellClass(), cellClass: 'custom-cell' }],
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1560,8 +1691,6 @@ describe('RenderEngine', () => {
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
 		cellClass.mockClear();
-		beforeCellRender.mockClear();
-		afterCellRender.mockClear();
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 2400;
@@ -1570,8 +1699,6 @@ describe('RenderEngine', () => {
 		// Run scroll frame — cell hooks must not fire yet
 		callbacks[0](0);
 		expect(cellClass).not.toHaveBeenCalled();
-		expect(beforeCellRender).not.toHaveBeenCalled();
-		expect(afterCellRender).not.toHaveBeenCalled();
 		const statsDuringScroll = renderer.getRenderStats();
 		expect(statsDuringScroll.cellAccessReadsDuringScroll).toBe(0);
 		expect(statsDuringScroll.cellClassComputesDuringScroll).toBe(0);
@@ -1591,8 +1718,6 @@ describe('RenderEngine', () => {
 		}
 
 		expect(cellClass).toHaveBeenCalled();
-		expect(beforeCellRender).toHaveBeenCalled();
-		expect(afterCellRender).toHaveBeenCalled();
 		expect(renderer.getRenderStats().postScrollDirtyCellsDecorated).toBeGreaterThan(0);
 
 		renderer.unmount();
@@ -1616,9 +1741,9 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			styleSlots: { rowClass },
+			styleRules: [{ kind: 'row', when: (...args) => !!rowClass(...args), rowClass: 'custom-row' }],
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1681,7 +1806,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, index) => ({ id: `__loading_${index}`, a: `A${index}` })),
 			columns,
 		});
@@ -1745,7 +1870,7 @@ describe('RenderEngine', () => {
 				details: Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`row-${index}`, true])),
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1819,7 +1944,7 @@ describe('RenderEngine', () => {
 				details: { 'row-0': true },
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 30 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1872,7 +1997,6 @@ describe('RenderEngine', () => {
 			return 1;
 		});
 		const columns = [{ field: 'name', header: 'Name', width: 180 }];
-		const detailRowClass = vi.fn(() => 'custom-detail-row');
 		const store = new GridStore<{ id: string; name: string }>({
 			columns,
 			defaultRowHeight: 40,
@@ -1880,14 +2004,14 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			masterDetailEnabled: true,
 			detailRowHeight: 40,
-			styleSlots: { detailRowClass },
+			styleRules: [{ kind: 'detailRow', rowClass: 'custom-detail-row' }],
 			expansion: {
 				groups: {},
 				treeRows: {},
 				details: Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`row-${index}`, true])),
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -1907,13 +2031,12 @@ describe('RenderEngine', () => {
 
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
-		detailRowClass.mockClear();
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 1600;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		expect(detailRowClass).toHaveBeenCalled();
+		expect(container.querySelector('.og-row-detail.custom-detail-row')).not.toBeNull();
 
 		renderer.unmount();
 		controller.dispose();
@@ -1942,7 +2065,7 @@ describe('RenderEngine', () => {
 				},
 			},
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'row-0', name: 'Zero' },
 				{ id: 'row-1', name: 'One' },
@@ -2001,7 +2124,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 100,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 12 }, (_, rowIndex) => {
 				const row: Record<string, string> = { id: `row-${rowIndex}` };
 				for (let colIndex = 0; colIndex < columns.length; colIndex++) {
@@ -2067,7 +2190,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-0', a: 'A0' }],
 			columns,
 		});
@@ -2105,7 +2228,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('replaces loading skeletons with data rows immediately when loading state and dataVersion update', async () => {
+	it('replaces loading skeletons with data rows immediately when loading state and globalVersion update', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
 			return 1;
@@ -2118,7 +2241,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			loading: true,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [],
 			columns,
 		});
@@ -2174,7 +2297,7 @@ describe('RenderEngine', () => {
 			masterDetailEnabled: true,
 			detailRowHeight: 40,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: 'row-0', name: 'Row 0' }],
 			columns,
 		});
@@ -2238,7 +2361,7 @@ describe('RenderEngine', () => {
 			rowOverscanPx: 80,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 50 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			columns,
 		});
@@ -2330,7 +2453,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, index) => ({
 				id: `row-${index}`,
 				col1: `Val 1-${index}`,
@@ -2430,7 +2553,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, index) => ({
 				id: `row-${index}`,
 				live: `Live ${index}`,
@@ -2513,7 +2636,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, defer: `Defer ${index}` })),
 			columns,
 		});
@@ -2576,7 +2699,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			rowOverscanPx: 80,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 200 }, (_, i) => ({ id: `row-${i}`, v: `V${i}` })),
 			columns,
 		});
@@ -2612,7 +2735,7 @@ describe('RenderEngine', () => {
 
 		// Record the steady-state slot count (full overscan both ways).
 		const slotCountAtSteadyState = renderer.rowRenderer.rowSlotPool.count;
-		const domChildCountAtSteadyState = rowsContainer.children.length;
+		const domChildCountAtSteadyState = slotDomCount(rowsContainer);
 		expect(slotCountAtSteadyState).toBeGreaterThan(0);
 		expect(domChildCountAtSteadyState).toBe(slotCountAtSteadyState);
 
@@ -2628,7 +2751,7 @@ describe('RenderEngine', () => {
 
 		// Slot count and DOM child count must be identical after steady-state scroll.
 		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotCountAtSteadyState);
-		expect(rowsContainer.children.length).toBe(domChildCountAtSteadyState);
+		expect(slotDomCount(rowsContainer)).toBe(domChildCountAtSteadyState);
 
 		// Some rows were recycled, confirming the scroll did real work.
 		const stats = renderer.getRenderStats();
@@ -2659,7 +2782,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			rowOverscanPx: 0, // zero overscan → exactly 4 rows visible in 160px viewport
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 120 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
 			columns,
 		});
@@ -2726,7 +2849,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			rowOverscanPx: 80,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, x: `X${i}` })),
 			columns,
 		});
@@ -2751,7 +2874,7 @@ describe('RenderEngine', () => {
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 
 		// Invariant at mount: slot count matches DOM children.
-		expect(renderer.rowRenderer.rowSlotPool.count).toBe(rowsContainer.children.length);
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotDomCount(rowsContainer));
 
 		// Scroll to a middle position and run one scroll frame.
 		scrollViewport.scrollTop = 1200;
@@ -2761,7 +2884,7 @@ describe('RenderEngine', () => {
 
 		// Invariant after scroll: slot count still matches DOM children.
 		// This confirms the stable-slot model doesn't leave orphaned slots or DOM nodes.
-		expect(renderer.rowRenderer.rowSlotPool.count).toBe(rowsContainer.children.length);
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotDomCount(rowsContainer));
 
 		// Scroll further and verify again.
 		scrollViewport.scrollTop = 2400;
@@ -2770,7 +2893,7 @@ describe('RenderEngine', () => {
 		callbacks.length = 0;
 
 		// Invariant still holds.
-		expect(renderer.rowRenderer.rowSlotPool.count).toBe(rowsContainer.children.length);
+		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotDomCount(rowsContainer));
 
 		// Confirm rows were recycled (the scrolls did real work).
 		const stats = renderer.getRenderStats();
@@ -2796,7 +2919,7 @@ describe('RenderEngine', () => {
 			getRowId: (row) => row.id,
 			rowOverscanPx: 0,
 		});
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
 			columns,
 		});

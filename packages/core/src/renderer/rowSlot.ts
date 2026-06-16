@@ -18,8 +18,14 @@ export class RowSlot<TRowData = unknown> {
 	public lastVisualRowId = '\0'; // guaranteed != any real rowId on first update
 
 	public keepAlive = false;
-	/** True while the bound row is rendered as a sticky group row (scroll-pinned top). */
-	public isStickyGroup = false;
+	public lastPortalRowKey: string | undefined = undefined;
+
+	/**
+	 * Incremented each time this slot is rebound to a different visual row.
+	 * Consumers may capture the generation at mount time and compare later to
+	 * detect stale deferred or async operations.
+	 */
+	public generation = 0;
 
 	public pinLeftContainer: HTMLDivElement | null = null;
 	public pinRightContainer: HTMLDivElement | null = null;
@@ -29,10 +35,9 @@ export class RowSlot<TRowData = unknown> {
 	public pinRightContainerLeft = -1;
 	public pinRightContainerTransform = '';
 
-	// ── Phase 5: Stable lane-based cell slots ───────────────────────────────────────
-	// Replace the old `cells: Map<number, CellSlot>` with three fixed-length arrays —
-	// one per pin lane. During normal scroll none of these change length, so zero
-	// cell DOM append/remove occurs.
+	// ── Lane-based cell slots ───────────────────────────────────────────────────────
+	// Three fixed-length arrays — one per pin lane. During normal scroll none of these
+	// change length, so zero cell DOM append/remove occurs.
 	//
 	// Indices:
 	//   leftCells[i]   ↔  columns[i]                   (i in 0..pinLeftCount-1)
@@ -51,6 +56,7 @@ export class RowSlot<TRowData = unknown> {
 	constructor(id: string, element: HTMLDivElement) {
 		this.id = id;
 		this.element = element;
+		if (element.getAttribute('role') !== 'row') element.setAttribute('role', 'row');
 	}
 
 	// ── Lookup ───────────────────────────────────────────────────────────────────────
@@ -153,29 +159,6 @@ export class RowSlot<TRowData = unknown> {
 		return this.leftCells.length + this.centerCells.length + this.rightCells.length;
 	}
 
-	/**
-	 * Backward-compat shim: builds a Map<colIndex, CellSlot> on-demand.
-	 * Used by legacy tests and external code that still references slot.cells.
-	 * O(n) — don't call in hot paths.
-	 * @deprecated Use getCellForCol() or lane arrays directly.
-	 */
-	public get cells(): {
-		size: number;
-		get(key: number): CellSlot<TRowData> | undefined;
-		has(key: number): boolean;
-		entries(): IterableIterator<[number, CellSlot<TRowData>]>;
-		values(): IterableIterator<CellSlot<TRowData>>;
-		keys(): IterableIterator<number>;
-		forEach(fn: (value: CellSlot<TRowData>, key: number) => void): void;
-	} {
-		const map = new Map<number, CellSlot<TRowData>>();
-		for (let i = 0; i < this.leftCells.length; i++) map.set(i, this.leftCells[i]);
-		const cs = this.centerColStart;
-		for (let i = 0; i < this.centerCells.length; i++) map.set(cs + i, this.centerCells[i]);
-		for (let i = 0; i < this.rightCells.length; i++) map.set(this.pinRightStart + i, this.rightCells[i]);
-		return map;
-	}
-
 	// ── Row position / identity ──────────────────────────────────────────────────────
 
 	public update(
@@ -210,11 +193,13 @@ export class RowSlot<TRowData = unknown> {
 		if (this.lastVisualIndex !== visualIndex) {
 			this.lastVisualIndex = visualIndex;
 			this.element.dataset.rowIndex = String(visualIndex);
+			this.element.setAttribute('aria-rowindex', String(visualIndex + 1)); // ARIA: 1-based
 			domUpdated = true;
 		}
 		if (this.lastVisualRowId !== visualRowId) {
 			this.lastVisualRowId = visualRowId;
 			this.element.dataset.rowId = visualRowId;
+			this.generation++;
 			domUpdated = true;
 		}
 		if (this.lastClassName !== className) {
@@ -246,7 +231,7 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = -1;
 		this.rowHeight = -1;
 		this.keepAlive = false;
-		this.isStickyGroup = false;
+		this.lastPortalRowKey = undefined;
 		// Cell slots remain mounted — they will be rebound on next renderViewport.
 	}
 
@@ -261,10 +246,10 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = -1;
 		this.rowHeight = -1;
 		this.keepAlive = false;
-		this.isStickyGroup = false;
 		this.lastTop = -1;
 		this.lastHeight = -1;
 		this.lastClassName = '';
+		this.lastPortalRowKey = undefined;
 		this.centerColStart = 0;
 		this.pinLeftCount = 0;
 		this.pinRightStart = Number.MAX_SAFE_INTEGER;

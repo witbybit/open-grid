@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps, type GridApi, type VisualRow } from '@open-grid/react';
+import { Grid, type ColumnDef, type CellRendererProps, type GridApi, type GridReadyEvent, type VisualRow } from '@open-grid/react';
 import {
 	Layers,
 	FolderTree,
@@ -84,7 +84,7 @@ const treeRows: FileNodeRow[] = [
 
 	{ id: 'react', name: 'react', type: 'folder', parentId: 'packages' },
 	{ id: 'react-src', name: 'src', type: 'folder', parentId: 'react' },
-	{ id: 'opengrid-tsx', name: 'OpenGrid.tsx', type: 'tsx', size: '17.1 KB', modifiedAt: '5 mins ago', parentId: 'react-src' },
+	{ id: 'grid-surface-tsx', name: 'GridSurface.tsx', type: 'tsx', size: '17.1 KB', modifiedAt: '5 mins ago', parentId: 'react-src' },
 	{ id: 'gridportal-tsx', name: 'GridPortal.tsx', type: 'tsx', size: '8.4 KB', modifiedAt: '2 hours ago', parentId: 'react-src' },
 
 	{ id: 'demo', name: 'demo', type: 'folder', parentId: 'root' },
@@ -219,6 +219,7 @@ interface NestedOrderGridProps {
 }
 
 const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
+	const [detailApi, setDetailApi] = useState<GridApi<OrderItemRow> | null>(null);
 	if (visualRow.kind !== 'detail') return null;
 	const orderId = visualRow.parentId;
 	const items = orderItemsMap[orderId] || [];
@@ -234,16 +235,10 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 		[]
 	);
 
-	// Initialize local child grid store hook
-	const detailApi = useClientGrid<OrderItemRow>({
-		rows: items,
-		columns: detailColumns,
-	});
-
 	// Trigger latency profiling on cell change
 	const handleChildCellValueChanged = (rowId: string, colField: string, val: unknown) => {
 		const start = performance.now();
-		if (colField === 'quantity') {
+		if (colField === 'quantity' && detailApi) {
 			const q = parseInt(String(val)) || 0;
 			const row = detailApi.getRawRowById(rowId);
 			if (row) {
@@ -285,15 +280,17 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 				</div>
 			</div>
 			<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-950/70 shadow-inner'>
-				<GridProvider api={detailApi}>
-					<OpenGrid
-						enableNavigation={true}
-						navigationOptions={{
-							editTrigger: 'singleClick',
-							onCellValueChanged: handleChildCellValueChanged,
-						}}
-					/>
-				</GridProvider>
+				<Grid
+					mode='client'
+					rows={items}
+					columns={detailColumns}
+					enableNavigation={true}
+					navigationOptions={{
+						editTrigger: 'singleClick',
+						onCellValueChanged: handleChildCellValueChanged,
+					}}
+					onGridReady={({ api }) => setDetailApi(api)}
+				/>
 			</div>
 		</div>
 	);
@@ -303,7 +300,11 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 // Page Component
 // ============================================================================
 
-export default function NestedTablesGrouping() {
+interface NestedTablesGroupingProps {
+	onGridReady?: (event: GridReadyEvent<any>) => void;
+}
+
+export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupingProps) {
 	const [activeTab, setActiveTab] = useState<'group' | 'tree' | 'detail'>('group');
 	const [gridVersion, setGridVersion] = useState(0);
 
@@ -357,19 +358,14 @@ export default function NestedTablesGrouping() {
 		[]
 	);
 
-	const groupApi = useClientGrid<EmployeeRow>({
-		rows: groupRows,
-		columns: groupingColumns,
-		initialState: {
+	const groupInitialState = useMemo(
+		() => ({
 			groupBy: ['department'],
 			groupRowHeight: 42,
-			styleSlots: {
-				groupRowClass: (visualRow) => {
-					return 'border-l-[3px] border-purple-500 bg-purple-950/5';
-				},
-			},
-		},
-	});
+			styleRules: [{ kind: 'groupRow', rowClass: 'border-l-[3px] border-purple-500 bg-purple-950/5' }],
+		}),
+		[]
+	);
 
 	// Custom Group row renderer
 	const handleGroupRowRender = useCallback(({ visualRow, api }: { visualRow: VisualRow<EmployeeRow>; api: GridApi<EmployeeRow> }) => {
@@ -436,15 +432,13 @@ export default function NestedTablesGrouping() {
 		[]
 	);
 
-	const treeApi = useClientGrid<FileNodeRow>({
-		rows: treeRows,
-		columns: treeColumns,
-		initialState: {
+	const treeInitialState = useMemo(
+		() => ({
 			rowModelConfig: {
 				type: 'client',
 				treeData: {
 					enabled: true,
-					getParentId: (row) => row.parentId,
+					getParentId: (row: FileNodeRow) => row.parentId,
 				},
 			},
 			expansion: {
@@ -455,13 +449,16 @@ export default function NestedTablesGrouping() {
 				}, {}),
 				details: {},
 			},
-			styleSlots: {
-				rowClass: (row) => {
-					return row.type === 'folder' ? 'border-l-[3px] border-amber-500 bg-amber-950/5' : '';
+			styleRules: [
+				{
+					kind: 'row',
+					when: (row: FileNodeRow) => row.type === 'folder',
+					rowClass: 'border-l-[3px] border-amber-500 bg-amber-950/5',
 				},
-			},
-		},
-	});
+			],
+		}),
+		[]
+	);
 
 	// 3. Master-Detail Grid Config
 	const masterColumns = useMemo<ColumnDef<OrderRow>[]>(
@@ -476,14 +473,13 @@ export default function NestedTablesGrouping() {
 		[]
 	);
 
-	const masterApi = useClientGrid<OrderRow>({
-		rows: masterRows,
-		columns: masterColumns,
-		initialState: {
+	const masterInitialState = useMemo(
+		() => ({
 			masterDetailEnabled: true,
 			detailRowHeight: 220,
-		},
-	});
+		}),
+		[]
+	);
 
 	// Wrap the details renderer so that parentApi can be resolved and passed down!
 	const handleDetailRowRender = useCallback(({ visualRow, api }: { visualRow: VisualRow<OrderRow>; api: GridApi<OrderRow> }) => {
@@ -548,38 +544,50 @@ export default function NestedTablesGrouping() {
 				{/* Active Grid Viewport Surface */}
 				<div className='flex-1 min-h-0 min-w-0 border border-slate-900 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative'>
 					{activeTab === 'group' && (
-						<GridProvider api={groupApi} key={`group-${gridVersion}`}>
-							<OpenGrid
-								enableNavigation={true}
-								groupRowRenderer={handleGroupRowRender}
-								navigationOptions={{
-									editTrigger: 'doubleClick',
-								}}
-							/>
-						</GridProvider>
+						<Grid
+							key={`group-${gridVersion}`}
+							mode='client'
+							rows={groupRows}
+							columns={groupingColumns}
+							initialState={groupInitialState as any}
+							enableNavigation={true}
+							groupRowRenderer={handleGroupRowRender}
+							navigationOptions={{
+								editTrigger: 'doubleClick',
+							}}
+							onGridReady={onGridReady}
+						/>
 					)}
 
 					{activeTab === 'tree' && (
-						<GridProvider api={treeApi} key={`tree-${gridVersion}`}>
-							<OpenGrid
-								enableNavigation={true}
-								navigationOptions={{
-									editTrigger: 'doubleClick',
-								}}
-							/>
-						</GridProvider>
+						<Grid
+							key={`tree-${gridVersion}`}
+							mode='client'
+							rows={treeRows}
+							columns={treeColumns}
+							initialState={treeInitialState as any}
+							enableNavigation={true}
+							navigationOptions={{
+								editTrigger: 'doubleClick',
+							}}
+							onGridReady={onGridReady}
+						/>
 					)}
 
 					{activeTab === 'detail' && (
-						<GridProvider api={masterApi} key={`detail-${gridVersion}`}>
-							<OpenGrid
-								enableNavigation={true}
-								detailRowRenderer={handleDetailRowRender}
-								navigationOptions={{
-									editTrigger: 'doubleClick',
-								}}
-							/>
-						</GridProvider>
+						<Grid
+							key={`detail-${gridVersion}`}
+							mode='client'
+							rows={masterRows}
+							columns={masterColumns}
+							initialState={masterInitialState}
+							enableNavigation={true}
+							detailRowRenderer={handleDetailRowRender}
+							navigationOptions={{
+								editTrigger: 'doubleClick',
+							}}
+							onGridReady={onGridReady}
+						/>
 					)}
 				</div>
 			</div>
@@ -656,7 +664,7 @@ export default function NestedTablesGrouping() {
 					{activeTab === 'detail' && (
 						<div className='text-xs text-slate-300 flex flex-col gap-2 leading-relaxed'>
 							<span className='text-[10px] font-extrabold text-pink-400 uppercase tracking-wide'>🔍 Master-Detail Mode</span>
-							<p>Renders completely separate **nested interactive &lt;OpenGrid&gt; grids** inside order detail portals!</p>
+							<p>Renders completely separate **nested interactive grids** inside order detail portals!</p>
 							<p>
 								Try editing the <span className='font-mono text-pink-300 text-[10px]'>Qty</span> column in the nested grids. It
 								updates subtotal values and dynamically propagates totals up to the parent ledger cells!

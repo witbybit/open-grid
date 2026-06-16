@@ -72,11 +72,11 @@ pnpm install @open-grid/core @open-grid/react
 
 ### 2. Basic Setup Example
 
-The simplest way to use Open Grid — pass `rows` and `columns` directly to `<OpenGrid>`. No separate hook required.
+The simplest way to use Open Grid is the single public `<Grid>` component. Pick `mode="client"` or `mode="server"` explicitly, and use `onGridReady` when you need the `GridApi` handle outside the grid tree.
 
 ```tsx
 import React, { useMemo } from 'react';
-import { OpenGrid, type ColumnDef } from '@open-grid/react';
+import { Grid, type ColumnDef } from '@open-grid/react';
 
 interface BookRow {
 	id: string;
@@ -112,7 +112,8 @@ export default function BookInventoryGrid() {
 
 	return (
 		<div style={{ width: '100%', height: '500px' }}>
-			<OpenGrid
+			<Grid
+				mode='client'
 				rows={rows}
 				columns={columns}
 				getRowId={(row) => row.id}
@@ -125,27 +126,29 @@ export default function BookInventoryGrid() {
 }
 ```
 
-#### When to use `useClientGrid` instead
+#### When to use `onGridReady` and `useGridApi`
 
-Use the `useClientGrid` hook (and `GridProvider`) when you need the `GridApi` handle outside of `<OpenGrid>` — for example, to add a toolbar, a custom pagination bar, or access the api in a sibling component:
+Use `onGridReady` when a parent component needs the `GridApi` handle, and `useGridApi` when a descendant inside the grid tree needs access to the same instance:
 
 ```tsx
-import { GridProvider, OpenGrid, useClientGrid, useGridApi } from '@open-grid/react';
+import { useState } from 'react';
+import { Grid, type GridApi } from '@open-grid/react';
 
-function Toolbar() {
-	const api = useGridApi<BookRow>(); // reads api from nearest GridProvider
-	return <button onClick={() => api.exportCsv()}>Export CSV</button>;
+function Toolbar({ api }: { api: GridApi<BookRow> | null }) {
+	return (
+		<button disabled={!api} onClick={() => api?.exportCsv()}>
+			Export CSV
+		</button>
+	);
 }
 
 export function BookGrid({ rows, columns }) {
-	const api = useClientGrid({ rows, columns });
+	const [api, setApi] = useState<GridApi<BookRow> | null>(null);
 	return (
-		<GridProvider api={api}>
-			<Toolbar />
-			<div style={{ height: '500px' }}>
-				<OpenGrid pinLeftColumns={1} />
-			</div>
-		</GridProvider>
+		<>
+			<Toolbar api={api} />
+			<Grid mode='client' rows={rows} columns={columns} onGridReady={({ api }) => setApi(api)} />
+		</>
 	);
 }
 ```
@@ -164,7 +167,7 @@ To enable row grouping, pass the `groupBy` fields inside the `initialState` conf
 
 ```tsx
 import React, { useMemo, useCallback } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type VisualRow, type GridApi } from '@open-grid/react';
+import { Grid, type ColumnDef, type VisualRow, type GridApi } from '@open-grid/react';
 
 interface EmployeeRow {
 	id: string;
@@ -214,7 +217,8 @@ export function GroupedEmployeesGrid({ data }: { data: EmployeeRow[] }) {
 
 	return (
 		<div style={{ height: '500px' }}>
-			<OpenGrid
+			<Grid
+				mode='client'
 				rows={data}
 				columns={columns}
 				initialState={{ groupBy: ['department'], groupRowHeight: 42 }}
@@ -237,7 +241,7 @@ To configure tree data, specify the `getParentId` function inside `initialState`
 
 ```tsx
 import React, { useMemo } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type CellRendererProps } from '@open-grid/react';
+import { Grid, type ColumnDef, type CellRendererProps } from '@open-grid/react';
 
 interface FileNode {
 	id: string;
@@ -271,7 +275,7 @@ export function FileDirectoryGrid({ nodes }: { nodes: FileNode[] }) {
 
 	return (
 		<div style={{ height: '400px' }}>
-			<OpenGrid rows={nodes} columns={columns} initialState={{ getParentId: (row) => row.parentId, groupRowHeight: 38 }} />
+			<Grid mode='client' rows={nodes} columns={columns} initialState={{ getParentId: (row) => row.parentId, groupRowHeight: 38 }} />
 		</div>
 	);
 }
@@ -289,7 +293,7 @@ Enable master-detail by setting `masterDetailEnabled: true` in your options, and
 
 ```tsx
 import React, { useMemo, useCallback } from 'react';
-import { OpenGrid, GridProvider, useClientGrid, type ColumnDef, type VisualRow, type GridApi, type CellRendererProps } from '@open-grid/react';
+import { Grid, type ColumnDef, type VisualRow, type GridApi, type CellRendererProps } from '@open-grid/react';
 
 interface OrderRow {
 	id: string;
@@ -336,18 +340,11 @@ const NestedItemsGrid = ({ visualRow, parentApi }: { visualRow: VisualRow<OrderR
 		[]
 	);
 
-	const detailApi = useClientGrid<OrderItemRow>({
-		rows: items,
-		columns: detailColumns,
-	});
-
 	return (
 		<div className='w-full h-full p-4 pl-12 bg-slate-950/90 border-b border-slate-900 flex flex-col gap-2 relative'>
 			<div className='text-[10px] text-purple-400 uppercase tracking-widest font-extrabold'>Order Line Items (Parent ID: {parentOrderId})</div>
 			<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-900'>
-				<GridProvider api={detailApi}>
-					<OpenGrid enableNavigation={true} />
-				</GridProvider>
+				<Grid mode='client' rows={items} columns={detailColumns} enableNavigation={true} />
 			</div>
 		</div>
 	);
@@ -370,7 +367,8 @@ export function MasterOrdersGrid({ orders }: { orders: OrderRow[] }) {
 
 	return (
 		<div style={{ height: '600px' }}>
-			<OpenGrid
+			<Grid
+				mode='client'
 				rows={orders}
 				columns={masterColumns}
 				initialState={{ masterDetailEnabled: true }}
@@ -404,7 +402,7 @@ interface CustomFilterProps {
 
 export const StatusHeaderFilter = ({ colField, api, close }: CustomFilterProps) => {
 	const state = api.getState();
-	const activeFilter = state.filterModel?.[colField] as any;
+	const activeFilter = state.filterModel?.[colField];
 	const [selectedValue, setSelectedValue] = useState(activeFilter?.filter || '');
 
 	const handleApply = () => {
@@ -454,14 +452,197 @@ export const StatusHeaderFilter = ({ colField, api, close }: CustomFilterProps) 
 
 ---
 
-### 5. Pagination
+### 5. Built-in Cell Types & Column Type Registry
 
-Open Grid ships a built-in `GridPagination` component and a `useClientGridPagination` hook. Both are headless-first and fully styleable via CSS custom properties or className overrides.
+`@open-grid/react` ships six ready-to-use cell types — checkbox, date, number, multi-select, dropdown, and tags. Attach them to a column with `type: 'name'` and the grid resolves the renderer and editor automatically, with no component imports needed in your column definitions.
+
+#### Built-in types (no configuration required)
+
+| `type` value | Renderer           | Editor                              |
+| :----------- | :----------------- | :---------------------------------- |
+| `'checkbox'` | Toggle checkbox    | Toggles on click — no editor needed |
+| `'date'`     | DD/MM/YYYY display | Native date picker                  |
+| `'number'`   | Mono number        | Stepper with ↑↓ keys                |
+
+```tsx
+const columns: ColumnDef<Row>[] = [
+	{ field: 'isActive', header: 'Active', width: 70, type: 'checkbox' },
+	{ field: 'startDate', header: 'Start Date', width: 145, type: 'date' },
+	{ field: 'quantity', header: 'Qty', width: 100, type: 'number' },
+];
+```
+
+#### Parameterised types via `columnTypes`
+
+Types that need runtime config (options list, formatting, bounds) are registered in the `columnTypes` prop using the helper factories. The type name is then referenced in `ColumnDef.type` exactly like a built-in.
+
+```tsx
+import {
+	Grid,
+	multiSelectColumnType,
+	dropdownColumnType,
+	numberColumnType,
+	type ColumnDef,
+	type ColumnTypeDefinition,
+	type DropdownOption,
+} from '@open-grid/react';
+
+const STATUS_OPTIONS: DropdownOption[] = [
+	{ value: 'Active', color: 'emerald' },
+	{ value: 'Pending', color: 'amber' },
+	{ value: 'Inactive', color: 'default' },
+];
+
+const SKILLS_OPTIONS = ['React', 'TypeScript', 'Node', 'Go', 'Rust'];
+
+// Registered once at module level — references are stable
+const MY_COLUMN_TYPES: Record<string, ColumnTypeDefinition<EmployeeRow>> = {
+	status: dropdownColumnType(STATUS_OPTIONS),
+	skills: multiSelectColumnType(SKILLS_OPTIONS, 3),
+	salary: numberColumnType({ prefix: '$', decimals: 2, locale: true }),
+	yearsExp: numberColumnType({ suffix: ' yrs', min: 0, max: 50, step: 1 }),
+};
+
+const columns: ColumnDef<EmployeeRow>[] = [
+	{ field: 'name', header: 'Name', width: 180 },
+	{ field: 'status', header: 'Status', width: 130, type: 'status' },
+	{ field: 'skills', header: 'Skills', width: 260, type: 'skills' },
+	{ field: 'salary', header: 'Salary', width: 130, type: 'salary' },
+	{ field: 'yearsExp', header: 'Experience', width: 120, type: 'yearsExp' },
+	{ field: 'joinDate', header: 'Joined', width: 145, type: 'date' },
+	{ field: 'isPro', header: 'Pro', width: 68, type: 'checkbox' },
+];
+
+export function EmployeesGrid({ rows }: { rows: EmployeeRow[] }) {
+	return <Grid mode='client' rows={rows} columns={columns} columnTypes={MY_COLUMN_TYPES} />;
+}
+```
+
+Column-level `renderer` / `cellEditor` always override a type — so you can use a type as a default and override on specific columns.
+
+#### Helper factory reference
+
+| Factory                                       | Options                                                        | Description                                |
+| :-------------------------------------------- | :------------------------------------------------------------- | :----------------------------------------- |
+| `numberColumnType(opts?)`                     | `prefix`, `suffix`, `decimals`, `locale`, `min`, `max`, `step` | Formatted number renderer + stepper editor |
+| `multiSelectColumnType(options, maxVisible?)` | `string[]` option list, visible cap                            | Pill-tag renderer + search dropdown editor |
+| `dropdownColumnType(options)`                 | `DropdownOption[]` with `value`, `label`, `color`              | Badge renderer + `<select>` editor         |
+
+---
+
+### 6. Declarative Style Rules
+
+`styleRules` is the recommended way to conditionally style rows, cells, and header cells. It is the grid's declarative styling API: pass a plain array of rule objects and the core styling pipeline applies them directly.
+
+#### Passing rules as a prop
+
+When you own the grid via `<Grid>`, pass `styleRules` directly:
+
+```tsx
+import { Grid, type ColumnDef, type StyleRule } from '@open-grid/react';
+
+const styleRules = useMemo<StyleRule<OrderRow>[]>(
+	() => [
+		// Row rules — applied to the whole row
+		{
+			kind: 'row',
+			when: (row) => row.status === 'Cancelled',
+			rowClass: 'opacity-50 line-through text-slate-500',
+		},
+		// Cell rules — optionally scoped to a single field
+		{
+			kind: 'cell',
+			field: 'total',
+			when: (row) => Number(row.total) > 10_000,
+			cellClass: 'text-emerald-400 font-extrabold font-mono',
+		},
+		// Header cell rules
+		{
+			kind: 'headerCell',
+			field: 'total',
+			when: () => true,
+			headerCellClass: 'text-emerald-400 font-bold',
+		},
+		{
+			kind: 'headerCell',
+			when: (col) => col.field !== 'total',
+			headerCellClass: 'font-semibold text-slate-400',
+		},
+	],
+	[]
+);
+
+export function OrdersGrid({ rows, columns }: { rows: OrderRow[]; columns: ColumnDef<OrderRow>[] }) {
+	return <Grid mode='client' rows={rows} columns={columns} styleRules={styleRules} />;
+}
+```
+
+All matching rules contribute their class strings (space-joined), so rules are composable. Evaluate order follows array order — later rules can override earlier ones via the CSS cascade.
+
+#### `useStyleRules` — for components that receive `api` as a prop
+
+When a component needs to apply rules from inside the grid tree, use `useGridApi` + `useStyleRules`:
+
+```tsx
+import { Grid, useGridApi, useStyleRules, type ColumnDef, type StyleRule } from '@open-grid/react';
+
+function DashboardRules() {
+	const api = useGridApi<StockRow>();
+	const styleRules = useMemo<StyleRule<StockRow>[]>(
+		() => [
+			{
+				kind: 'row',
+				when: (row) => parseFloat(row.change) > 0,
+				rowClass: 'border-l-2 border-emerald-500/60 bg-emerald-950/5',
+			},
+			{
+				kind: 'row',
+				when: (row) => parseFloat(row.change) < 0,
+				rowClass: 'border-l-2 border-rose-500/60 bg-rose-950/5',
+			},
+			{
+				kind: 'headerCell',
+				field: 'change',
+				when: () => true,
+				headerCellClass: 'text-emerald-400 font-extrabold',
+			},
+		],
+		[]
+	);
+
+	useStyleRules(api, styleRules); // applies declarative rules; re-applies when rules reference changes
+	return null;
+}
+
+function DashboardGrid({ rows, columns }: { rows: StockRow[]; columns: ColumnDef<StockRow>[] }) {
+	return (
+		<Grid mode='client' rows={rows} columns={columns}>
+			<DashboardRules />
+		</Grid>
+	);
+}
+```
+
+#### Rule type reference
+
+| `kind`         | Required fields                     | `when` signature                | Applied to                                       |
+| :------------- | :---------------------------------- | :------------------------------ | :----------------------------------------------- |
+| `'row'`        | `rowClass`                          | `(row, params) => boolean`      | Entire row element                               |
+| `'cell'`       | `cellClass`, optional `field`       | `(row, col, params) => boolean` | Single cell; if `field` is set, only that column |
+| `'headerCell'` | `headerCellClass`, optional `field` | `(col) => boolean`              | Header cell; if `field` is set, only that column |
+
+`styleRules` is the supported conditional styling surface. Use the `styleRules` prop for declarative configuration, `useStyleRules` inside React grid trees, or `api.setStyleRules(...)` when you need an imperative public API.
+
+---
+
+### 7. Pagination
+
+Open Grid ships a built-in `GridPagination` component and a `useClientGridPagination` hook for slice-level paging. The grid instance itself is now owned by `<Grid>` and surfaced through `onGridReady` / `useGridApi`.
 
 #### Client-side pagination
 
 ```tsx
-import { OpenGrid, GridPagination, useClientGridPagination, type ColumnDef } from '@open-grid/react';
+import { Grid, GridPagination, useClientGridPagination, type ColumnDef } from '@open-grid/react';
 
 export function PaginatedGrid({ allRows, columns }: { allRows: MyRow[]; columns: ColumnDef<MyRow>[] }) {
 	const { pageRows, page, pageCount, setPage, totalRows, pageSize } = useClientGridPagination(allRows, {
@@ -471,7 +652,7 @@ export function PaginatedGrid({ allRows, columns }: { allRows: MyRow[]; columns:
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
 			<div style={{ flex: 1, minHeight: 0 }}>
-				<OpenGrid rows={pageRows} columns={columns} />
+				<Grid mode='client' rows={pageRows} columns={columns} />
 			</div>
 			<GridPagination page={page} pageCount={pageCount} totalRows={totalRows} pageSize={pageSize} onPageChange={setPage} />
 		</div>
@@ -484,7 +665,7 @@ export function PaginatedGrid({ allRows, columns }: { allRows: MyRow[]; columns:
 For server grids you manage the page state yourself — just drive your datasource and pass page metadata to `<GridPagination>`:
 
 ```tsx
-import { GridProvider, OpenGrid, GridPagination, useServerGrid, type ColumnDef } from '@open-grid/react';
+import { Grid, GridPagination, type ColumnDef } from '@open-grid/react';
 
 const PAGE_SIZE = 100;
 
@@ -492,23 +673,19 @@ export function ServerPaginatedGrid({ columns }: { columns: ColumnDef<MyRow>[] }
 	const [page, setPage] = useState(0);
 	const { datasource, totalRows } = useMyServerDatasource({ page, pageSize: PAGE_SIZE });
 
-	const api = useServerGrid({ datasource, columns });
-
 	return (
-		<GridProvider api={api}>
-			<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
-				<div style={{ flex: 1, minHeight: 0 }}>
-					<OpenGrid />
-				</div>
-				<GridPagination
-					page={page}
-					pageCount={Math.ceil(totalRows / PAGE_SIZE)}
-					totalRows={totalRows}
-					pageSize={PAGE_SIZE}
-					onPageChange={setPage}
-				/>
+		<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
+			<div style={{ flex: 1, minHeight: 0 }}>
+				<Grid mode='server' datasource={datasource} columns={columns} />
 			</div>
-		</GridProvider>
+			<GridPagination
+				page={page}
+				pageCount={Math.ceil(totalRows / PAGE_SIZE)}
+				totalRows={totalRows}
+				pageSize={PAGE_SIZE}
+				onPageChange={setPage}
+			/>
+		</div>
 	);
 }
 ```
@@ -548,34 +725,158 @@ export function ServerPaginatedGrid({ columns }: { columns: ColumnDef<MyRow>[] }
 
 ---
 
+### 8. Column Value Formatting
+
+`valueFormatter` formats cell text for display without affecting the underlying stored value. `onCopy` overrides what gets written to the clipboard. `onPaste` pre-processes incoming clipboard text before it's committed to the store.
+
+```tsx
+const columns: ColumnDef<OrderRow>[] = [
+	{
+		field: 'price',
+		header: 'Price',
+		// Shown in the cell: "$149.99"
+		valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
+		// Copied to clipboard: "149.99" (no symbol — stays numeric when pasted into Excel)
+		onCopy: ({ value }) => String(value),
+		// Pasted from clipboard: strip "$" before writing to the store
+		onPaste: ({ text }) => text.replace(/^\$/, ''),
+	},
+	{
+		field: 'createdAt',
+		header: 'Created',
+		valueFormatter: ({ value }) => new Date(value as string).toLocaleDateString(),
+	},
+];
+```
+
+`valueFormatter` receives `{ value, rowData, colDef, rowId }`. The formatted string is used in read-only cells and clipboard copy (fallback after `onCopy`). It does **not** affect `getCellValue()` — the raw value is always preserved.
+
+---
+
+### 9. Multi-Level Column Header Groups
+
+Group related columns under a shared spanning header label using `headerGroup` and `headerGroupLevel` on `ColumnDef`. Columns at the same level sharing the same `headerGroup` string are automatically merged into a single spanning cell.
+
+```tsx
+const columns: ColumnDef<FinancialRow>[] = [
+	{ field: 'symbol', header: 'Symbol', width: 80 },
+	{ field: 'q1Revenue', header: 'Q1', headerGroup: 'Revenue', headerGroupLevel: 0, width: 100 },
+	{ field: 'q2Revenue', header: 'Q2', headerGroup: 'Revenue', headerGroupLevel: 0, width: 100 },
+	{ field: 'q3Revenue', header: 'Q3', headerGroup: 'Revenue', headerGroupLevel: 0, width: 100 },
+	{ field: 'q1Cost', header: 'Q1', headerGroup: 'Costs', headerGroupLevel: 0, width: 100 },
+	{ field: 'q2Cost', header: 'Q2', headerGroup: 'Costs', headerGroupLevel: 0, width: 100 },
+];
+```
+
+Levels are zero-indexed. Add a `headerGroupLevel: 1` layer to nest groups within groups for deeper hierarchies.
+
+---
+
+### 10. Column Auto-Sizing
+
+Double-click a column resize handle to auto-size that column to fit its content. Programmatic control is available via the `GridApi`:
+
+```typescript
+// Resize a single column to fit its widest cell (header included by default)
+api.autoSizeColumn('price');
+
+// Resize all visible columns at once
+api.autoSizeAllColumns();
+
+// With options
+api.autoSizeColumn('name', { padding: 24, includeHeader: true });
+api.autoSizeAllColumns({ padding: 16, minWidth: 60, maxWidth: 400 });
+```
+
+**`AutoSizeColumnOptions`**
+
+| Option          | Type      | Default | Description                                            |
+| :-------------- | :-------- | :------ | :----------------------------------------------------- |
+| `padding`       | `number`  | `16`    | Extra pixels added to the measured content width.      |
+| `includeHeader` | `boolean` | `true`  | Include the header cell text in the width measurement. |
+| `minWidth`      | `number`  | —       | Clamp the result to at least this many pixels.         |
+| `maxWidth`      | `number`  | —       | Clamp the result to at most this many pixels.          |
+
+`autoSizeAllColumns` accepts the same options and applies them uniformly to every visible column.
+
+---
+
+### 11. Grid-Level Clipboard (Copy & Paste)
+
+Built-in clipboard controller. Keyboard shortcuts (`Ctrl+C` / `Ctrl+V`) work automatically on a focused grid. The programmatic API enables copy/paste from toolbar buttons or external triggers.
+
+#### Programmatic API
+
+```typescript
+// Copy whatever the user has currently selected
+await api.copySelectedRange();
+
+// Copy an explicit row/column range by visual index (rows 0–4, columns 1–3)
+await api.copyRange(0, 4, 1, 3);
+
+// Paste TSV from the system clipboard into the current selection anchor
+await api.pasteFromClipboard();
+```
+
+#### Copy format
+
+Copied data is TSV (tab-separated values), natively compatible with Excel and Google Sheets. Each cell is serialized using the first matching rule:
+
+1. `onCopy` column callback — custom/raw value
+2. `valueFormatter` column callback — formatted display string
+3. Raw cell value (fallback)
+
+#### Events
+
+```typescript
+api.addEventListener(GridEventName.cellsCopied, ({ payload }) => {
+	console.log(`Copied ${payload.rowCount}×${payload.colCount} cells`);
+	console.log('TSV text:', payload.text);
+	// payload.cells: Array<{ rowId: string; colField: string }>
+});
+
+api.addEventListener(GridEventName.cellsPasted, ({ payload }) => {
+	console.log(`Pasted ${payload.rowCount}×${payload.colCount} cells`);
+});
+```
+
+---
+
 ## 🛠️ Public API Reference (`GridApi`)
 
 Application code coordinates with the spreadsheet engine through the standard `GridApi` interface. In React, this handle can be retrieved anywhere inside the tree using the `useGridApi()` hook.
 
 ### Core API Methods
 
-| Method                     | Type Signature                                              | Description                                                          |
-| :------------------------- | :---------------------------------------------------------- | :------------------------------------------------------------------- |
-| **`getState`**             | `() => GridState`                                           | Retrieves the entire synchronous state snapshot.                     |
-| **`getCellValue`**         | `(rowId: string, colField: string) => unknown`              | Retrieves the calculated cell value from the cellular cache.         |
-| **`setCellValue`**         | `(rowId: string, colField: string, value: unknown) => void` | Mutates a cell value and journals a new history event for undo/redo. |
-| **`getCellState`**         | `(rowId: string, colField: string) => CellState`            | Retrieves cell details (e.g. value, computedValue, isEditing).       |
-| **`selectCell`**           | `(pointer: GridCellPointer \| null) => void`                | Sets active cell focus and triggers `focusChanged` events.           |
-| **`selectRange`**          | `(start: Pointer \| null, end: Pointer \| null) => void`    | Highlight an Excel-like selection bounding box.                      |
-| **`setColumnWidth`**       | `(colField: string, width: number) => void`                 | Dynamically resizes a column's layout boundary in pixels.            |
-| **`setColumns`**           | `(columns: ColumnDef[]) => void`                            | Updates active grid schema and re-compiles path accessors.           |
-| **`setSortModel`**         | `(sortModel: SortModel \| null) => void`                    | Sets sorting schema (supports multi-column sort).                    |
-| **`setFilterModel`**       | `(filterModel: FilterModel \| null) => void`                | Sets filtering schema (supports custom operators per column).        |
-| **`toggleGroupExpanded`**  | `(groupId: string) => void`                                 | Toggles expanded/collapsed state of a grouped folder node.           |
-| **`isGroupExpanded`**      | `(groupId: string) => boolean`                              | Returns whether a group row is currently expanded.                   |
-| **`toggleDetailExpanded`** | `(rowId: string) => void`                                   | Toggles expansion of nested master-detail portals.                   |
-| **`isDetailExpanded`**     | `(rowId: string) => boolean`                                | Returns whether a detail row is currently expanded.                  |
-| **`expandAllGroups`**      | `() => void`                                                | Expands all group rows.                                              |
-| **`collapseAllGroups`**    | `() => void`                                                | Collapses all group rows.                                            |
-| **`getVisualRow`**         | `(index: number) => VisualRow \| null`                      | Resolves visual layout state at a specific visible index.            |
-| **`subscribeToKey`**       | `(key: string, listener: Listener) => () => void`           | Subscribes selectively to updates for a specific coordinate key.     |
-| **`addEventListener`**     | `(type: string, cb: GridEventListener) => () => void`       | Registers grid-wide action hooks (e.g. `cellValueChanged`).          |
-| **`undo` / `redo`**        | `() => void`                                                | Traverse through state mutation journal history.                     |
+| Method                     | Type Signature                                                                      | Description                                                             |
+| :------------------------- | :---------------------------------------------------------------------------------- | :---------------------------------------------------------------------- |
+| **`getState`**             | `() => GridState`                                                                   | Retrieves the entire synchronous state snapshot.                        |
+| **`getCellValue`**         | `(rowId: string, colField: string) => unknown`                                      | Retrieves the calculated cell value from the cellular cache.            |
+| **`setCellValue`**         | `(rowId: string, colField: string, value: unknown) => void`                         | Mutates a cell value and journals a new history event for undo/redo.    |
+| **`getCellState`**         | `(rowId: string, colField: string) => CellState`                                    | Retrieves cell details (e.g. value, computedValue, isEditing).          |
+| **`selectCell`**           | `(pointer: GridCellPointer \| null) => void`                                        | Sets active cell focus and triggers `focusChanged` events.              |
+| **`selectRange`**          | `(start: Pointer \| null, end: Pointer \| null) => void`                            | Highlight an Excel-like selection bounding box.                         |
+| **`setColumnWidth`**       | `(colField: string, width: number) => void`                                         | Dynamically resizes a column's layout boundary in pixels.               |
+| **`setColumns`**           | `(columns: ColumnDef[]) => void`                                                    | Updates active grid schema and re-compiles path accessors.              |
+| **`setSortModel`**         | `(sortModel: SortModel \| null) => void`                                            | Sets sorting schema (supports multi-column sort).                       |
+| **`setFilterModel`**       | `(filterModel: FilterModel \| null) => void`                                        | Sets filtering schema (supports custom operators per column).           |
+| **`toggleGroupExpanded`**  | `(groupId: string) => void`                                                         | Toggles expanded/collapsed state of a grouped folder node.              |
+| **`isGroupExpanded`**      | `(groupId: string) => boolean`                                                      | Returns whether a group row is currently expanded.                      |
+| **`toggleDetailExpanded`** | `(rowId: string) => void`                                                           | Toggles expansion of nested master-detail portals.                      |
+| **`isDetailExpanded`**     | `(rowId: string) => boolean`                                                        | Returns whether a detail row is currently expanded.                     |
+| **`expandAllGroups`**      | `() => void`                                                                        | Expands all group rows.                                                 |
+| **`collapseAllGroups`**    | `() => void`                                                                        | Collapses all group rows.                                               |
+| **`getVisualRow`**         | `(index: number) => VisualRow \| null`                                              | Resolves visual layout state at a specific visible index.               |
+| **`subscribeToKey`**       | `(key: string, listener: Listener) => () => void`                                   | Subscribes selectively to updates for a specific coordinate key.        |
+| **`addEventListener`**     | `(type: string, cb: GridEventListener) => () => void`                               | Registers grid-wide action hooks (e.g. `cellValueChanged`).             |
+| **`undo` / `redo`**        | `() => void`                                                                        | Traverse through state mutation journal history.                        |
+| **`batchCellValues`**      | `(updates: BatchCellUpdate[], source?: string) => void`                             | Applies multiple cell mutations atomically as a single undo entry.      |
+| **`setColumnVisible`**     | `(colField: string, visible: boolean) => void`                                      | Shows or hides a column without removing it from the schema.            |
+| **`autoSizeColumn`**       | `(colField: string, opts?: AutoSizeColumnOptions) => void`                          | Resizes a column to fit its widest rendered cell content.               |
+| **`autoSizeAllColumns`**   | `(opts?: AutoSizeAllColumnsOptions) => void`                                        | Resizes all visible columns to fit their content simultaneously.        |
+| **`copySelectedRange`**    | `() => Promise<void>`                                                               | Copies the current selection to the system clipboard as TSV.            |
+| **`pasteFromClipboard`**   | `() => Promise<void>`                                                               | Reads TSV from the system clipboard and pastes at the selection anchor. |
+| **`copyRange`**            | `(minRow: number, maxRow: number, minCol: number, maxCol: number) => Promise<void>` | Copies an explicit row/column visual-index range to the clipboard.      |
 
 ---
 
@@ -595,29 +896,44 @@ api.batch(() => {
 });
 ```
 
-### 2. State-Driven Conditional Styling (`styleSlots`)
+### 2. Declarative Conditional Styling (`styleRules`)
 
-Provide conditional predicates to style rows or cells dynamically based on live business values:
+Style rows, cells, and header cells declaratively using an array of rule objects. The grid compiles them internally — no separate compiler call needed:
 
 ```tsx
-const api = useClientGrid<ProductRow>({
-	rows,
-	columns,
-	initialState: {
-		styleSlots: {
-			rowClass: (row, params) => {
-				return row.status === 'Inactive' ? 'bg-slate-900/50 opacity-60' : '';
-			},
-			cellClass: (col, row, params) => {
-				if (col.field === 'price' && Number(row.price) > 500) {
-					return 'text-rose-400 font-extrabold bg-rose-950/10 border-rose-800/30';
-				}
-				return '';
-			},
+import { Grid, type ColumnDef, type StyleRule } from '@open-grid/react';
+
+const styleRules = useMemo<StyleRule<ProductRow>[]>(
+	() => [
+		{
+			kind: 'row',
+			when: (row) => row.status === 'Inactive',
+			rowClass: 'bg-slate-900/50 opacity-60',
 		},
-	},
-});
+		{
+			kind: 'cell',
+			field: 'price',
+			when: (row) => Number(row.price) > 500,
+			cellClass: 'text-rose-400 font-extrabold bg-rose-950/10 border-rose-800/30',
+		},
+		{
+			kind: 'headerCell',
+			field: 'price',
+			when: () => true,
+			headerCellClass: 'text-rose-300 font-bold',
+		},
+	],
+	[]
+);
+
+export function ProductGrid({ rows, columns }: { rows: ProductRow[]; columns: ColumnDef<ProductRow>[] }) {
+	return <Grid mode='client' rows={rows} columns={columns} styleRules={styleRules} />;
+}
 ```
+
+For components that receive `api` as a prop, use the `useStyleRules` hook instead — see [Declarative Style Rules](#6-declarative-style-rules) for the full guide.
+
+For grid-owned styling, use `styleRules` for conditional decoration and the built-in theme API for token-level visuals.
 
 ### 3. Highly Granular Cell-Level Pub-Sub Subscriptions
 
@@ -771,7 +1087,7 @@ const PriceEditor = ({ value, rowId, colField, api, onCommit, onCancel }: CellEd
 The `GridDatasource` interface has a single `getRows` method. Open Grid calls it as the user scrolls into un-loaded blocks, passing the row range and the current sort/filter models.
 
 ```tsx
-import { useServerGrid, GridPagination, GridProvider, OpenGrid, type GridDatasource, type SortModel, type FilterModel } from '@open-grid/react';
+import { Grid, GridPagination, type GridDatasource, type SortModel, type FilterModel } from '@open-grid/react';
 
 interface LogRow {
 	id: string;
@@ -834,23 +1150,19 @@ export function ServerLogGrid() {
 		[]
 	);
 
-	const api = useServerGrid<LogRow>({ datasource, columns, blockSize: 100 });
-
 	return (
-		<GridProvider api={api}>
-			<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
-				<div style={{ flex: 1, minHeight: 0 }}>
-					<OpenGrid />
-				</div>
-				<GridPagination
-					page={page}
-					pageCount={200} // totalCount / PAGE_SIZE — update from first getRows response
-					totalRows={100_000}
-					pageSize={PAGE_SIZE}
-					onPageChange={setPage}
-				/>
+		<div style={{ display: 'flex', flexDirection: 'column', height: '600px' }}>
+			<div style={{ flex: 1, minHeight: 0 }}>
+				<Grid mode='server' datasource={datasource} columns={columns} blockSize={100} />
 			</div>
-		</GridProvider>
+			<GridPagination
+				page={page}
+				pageCount={200} // totalCount / PAGE_SIZE — update from first getRows response
+				totalRows={100_000}
+				pageSize={PAGE_SIZE}
+				onPageChange={setPage}
+			/>
+		</div>
 	);
 }
 ```
@@ -889,14 +1201,14 @@ const columns: ColumnDef<LogRow>[] = [
 
 ## 🛠️ Toolbar & Bulk Actions
 
-Use `useGridApi()` inside any component wrapped by `<GridProvider>` to access the grid api for bulk operations.
+Use `useGridApi()` inside any component rendered beneath `<Grid>` to access the grid api for bulk operations.
 
 ### Selection-based bulk actions
 
 Open Grid's selection model tracks focused cell and range bounds. Read `state.selection` to derive which rows are selected:
 
 ```tsx
-import { useGridApi, useGridSelector, GridProvider, OpenGrid, useClientGrid } from '@open-grid/react';
+import { Grid, useGridApi, useGridSelector } from '@open-grid/react';
 
 function GridToolbar<TRowData extends { id: string }>() {
 	const api = useGridApi<TRowData>();
@@ -942,16 +1254,12 @@ function GridToolbar<TRowData extends { id: string }>() {
 	);
 }
 
-// Usage: wrap in GridProvider so Toolbar can call useGridApi()
+// Usage: render the toolbar as a child so it shares the Grid api context
 export function MyGrid({ rows, columns }) {
-	const api = useClientGrid({ rows, columns });
 	return (
-		<GridProvider api={api}>
+		<Grid mode='client' rows={rows} columns={columns}>
 			<GridToolbar />
-			<div style={{ height: '500px' }}>
-				<OpenGrid />
-			</div>
-		</GridProvider>
+		</Grid>
 	);
 }
 ```
@@ -991,7 +1299,8 @@ Open Grid ships full keyboard navigation out of the box when `enableNavigation` 
 Configure the edit trigger:
 
 ```tsx
-<OpenGrid
+<Grid
+	mode='client'
 	rows={rows}
 	columns={columns}
 	navigationOptions={{
@@ -1011,7 +1320,7 @@ The grid container renders with `tabIndex={-1}` to be focusable but removed from
 	<p id='grid-instructions' className='sr-only'>
 		Use arrow keys to navigate cells. Press Enter to edit. Press Escape to cancel editing. Hold Shift and use arrow keys to extend the selection.
 	</p>
-	<OpenGrid rows={rows} columns={columns} />
+	<Grid mode='client' rows={rows} columns={columns} />
 </div>
 ```
 

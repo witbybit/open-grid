@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import type { GridApi } from '../types.js';
 import { useGridKeySelector } from '../hooks.js';
-import { getStoreFromApi } from '@open-grid/core/internal';
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
@@ -86,15 +85,11 @@ function extractData(
 	if (!bounds) return { categories: [], series: [], allSeries: [] };
 
 	const columns = api.getState().columns || [];
-
-	const internalApi = getStoreFromApi(api);
 	const selectedRows: { id: string; label: string }[] = [];
 	for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-		const vr = internalApi.getVisualRow(r);
-		if (vr?.kind === 'data') {
-			const rd = api.getDataRowAtVisualIndex(r);
-			if (rd) selectedRows.push({ id: vr.rowId, label: `R${r + 1}` });
-		}
+		const row = api.getDataRowAtVisualIndex(r);
+		if (!row) continue;
+		selectedRows.push({ id: api.getRowId(row), label: `R${r + 1}` });
 	}
 	const selectedCols: { field: string; header: string }[] = [];
 	for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
@@ -381,9 +376,9 @@ export function GridChartOverlay<TRowData>({ api }: { api: GridApi<TRowData> }) 
 
 	// ── Live data version ───────────────────────────────────────────────────
 	// bounds reference is now stable during live updates (no longer jumps on
-	// dataVersion change). Subscribe to dataVersion so the chart re-extracts
+	// globalVersion change). Subscribe to globalVersion so the chart re-extracts
 	// fresh cell values from the fixed window on every 10hz tick.
-	const dataVersion = useGridKeySelector('dataVersion', (s) => s.dataVersion);
+	const dataVersion = useGridKeySelector('globalVersion', (s) => s.globalVersion);
 
 	// ── Extract chart data ──────────────────────────────────────────────────
 	const { categories, series, allSeries } = useMemo(

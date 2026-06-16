@@ -4,10 +4,11 @@ import type { GridApi } from '../types.js';
 import { ColumnsPanel } from './panels/ColumnsPanel.js';
 import { FiltersPanel } from './panels/FiltersPanel.js';
 import { SortPanel } from './panels/SortPanel.js';
+import { ThemesPanel } from './panels/ThemesPanel.js';
 
 // ── Sidebar types ─────────────────────────────────────────────────────────────
 
-export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort';
+export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes';
 
 export interface SidebarPanelDef<TRowData = unknown> {
 	id: string;
@@ -47,6 +48,11 @@ const _SortIcon = () => (
 		<path d='M12 2.5v9M10.5 9.5l1.5 1.5 1.5-1.5' />
 	</svg>
 );
+const _ThemesIcon = () => (
+	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
+		<path d='M7.5 1.5a6 6 0 1 0 6 6c0-.6-.1-1.1-.2-1.6a.9.9 0 0 0-1.3-.6 2.8 2.8 0 0 1-1.4.4 2.9 2.9 0 0 1-2.9-2.9c0-.5.1-1 .4-1.4A.9.9 0 0 0 7.5 1.5Z' />
+	</svg>
+);
 
 interface _ResolvedPanel<TRowData> {
 	id: string;
@@ -59,8 +65,9 @@ const _BUILTIN_ICONS: Record<BuiltinSidebarPanelId, React.ReactNode> = {
 	columns: <_ColumnsIcon />,
 	filters: <_FiltersIcon />,
 	sort: <_SortIcon />,
+	themes: <_ThemesIcon />,
 };
-const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = { columns: 'Columns', filters: 'Filters', sort: 'Sort' };
+const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = { columns: 'Columns', filters: 'Filters', sort: 'Sort', themes: 'Themes' };
 
 function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TRowData>): _ResolvedPanel<TRowData> {
 	if (typeof def !== 'string') {
@@ -74,19 +81,20 @@ function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TR
 			if (def === 'columns') return <ColumnsPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'filters') return <FiltersPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'sort') return <SortPanel api={api as GridApi<any>} onClose={onClose} />;
+			if (def === 'themes') return <ThemesPanel api={api as GridApi<any>} onClose={onClose} />;
 			return null;
 		},
 	};
 }
 
 const _SIDEBAR_TAB_W = 44;
-const _SIDEBAR_BORDER = 'rgba(30, 41, 59, 0.9)';
-
 export function GridSidebar<TRowData>({ api, config }: { api: GridApi<TRowData>; config: GridSidebarConfig<TRowData> }) {
-	const { panels = ['columns', 'filters', 'sort'], position = 'right', width = 264 } = config;
+	const { panels = ['columns', 'filters', 'sort', 'themes'], position = 'right', width = 264 } = config;
 	const activeId = useGridKeySelector<string | null>('sidebarOpenPanel', (s) => s.sidebarOpenPanel ?? null);
+	const themeName = useGridKeySelector('themeName', (s) => s.themeName);
 	const filterCount = useGridKeySelector<number>('filterModel', (s) => (s.filterModel ? Object.keys(s.filterModel).length : 0));
 	const sortCount = useGridKeySelector<number>('sortModel', (s) => (s.sortModel ? s.sortModel.length : 0));
+	const theme = api.getTheme();
 
 	const getBadge = (id: string) => (id === 'filters' ? filterCount : id === 'sort' ? sortCount : 0);
 	const resolvedPanels = (panels as Array<BuiltinSidebarPanelId | SidebarPanelDef<TRowData>>).map(_resolvePanel);
@@ -104,9 +112,9 @@ export function GridSidebar<TRowData>({ api, config }: { api: GridApi<TRowData>;
 					alignItems: 'center',
 					paddingTop: 10,
 					gap: 4,
-					background: '#090a0f',
-					borderLeft: position === 'right' ? `1px solid ${_SIDEBAR_BORDER}` : undefined,
-					borderRight: position === 'left' ? `1px solid ${_SIDEBAR_BORDER}` : undefined,
+					background: theme.headerBg,
+					borderLeft: position === 'right' ? `1px solid ${theme.borderColor}` : undefined,
+					borderRight: position === 'left' ? `1px solid ${theme.borderColor}` : undefined,
 				}}
 			>
 				{resolvedPanels.map((panel) => {
@@ -125,9 +133,9 @@ export function GridSidebar<TRowData>({ api, config }: { api: GridApi<TRowData>;
 								alignItems: 'center',
 								justifyContent: 'center',
 								borderRadius: 7,
-								border: active ? '1px solid rgba(59,130,246,0.45)' : '1px solid transparent',
-								background: active ? 'rgba(59,130,246,0.14)' : 'transparent',
-								color: active ? '#60a5fa' : '#475569',
+								border: active ? `1px solid ${theme.selectionBorder}` : '1px solid transparent',
+								background: active ? theme.selectionBg : 'transparent',
+								color: active ? theme.focusRing : theme.headerText,
 								cursor: 'pointer',
 								position: 'relative',
 								padding: 0,
@@ -144,8 +152,8 @@ export function GridSidebar<TRowData>({ api, config }: { api: GridApi<TRowData>;
 										minWidth: 15,
 										height: 15,
 										borderRadius: 999,
-										background: '#3b82f6',
-										color: '#fff',
+										background: theme.focusRing,
+										color: theme.bgColor,
 										fontSize: 9,
 										fontWeight: 700,
 										display: 'flex',
@@ -172,9 +180,9 @@ export function GridSidebar<TRowData>({ api, config }: { api: GridApi<TRowData>;
 					transition: 'width 220ms cubic-bezier(0.4,0,0.2,1)',
 					display: 'flex',
 					flexDirection: 'column',
-					background: '#0b0d14',
-					borderLeft: position === 'right' ? `1px solid ${_SIDEBAR_BORDER}` : undefined,
-					borderRight: position === 'left' ? `1px solid ${_SIDEBAR_BORDER}` : undefined,
+					background: theme.bgColor,
+					borderLeft: position === 'right' ? `1px solid ${theme.borderColor}` : undefined,
+					borderRight: position === 'left' ? `1px solid ${theme.borderColor}` : undefined,
 				}}
 			>
 				<div style={{ width, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
