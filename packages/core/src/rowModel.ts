@@ -644,6 +644,93 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return false;
 	}
 
+	/**
+	 * Incrementally repositions changed rows within the sorted visual array, avoiding a full
+	 * pipeline rebuild. Only applicable to flat (non-grouped, non-tree) grids with an active sort
+	 * and no pagination. Returns false to signal that the caller must fall back to full refresh.
+	 */
+	private relocateSortedRows(changedNodes: RowNode<TData>[]): boolean {
+		const state = this.runtime.getState();
+		if (state.groupBy?.length) return false;
+		if (state.rowModelConfig?.treeData?.enabled) return false;
+		if (state.rowModelConfig?.masterDetail?.enabled) return false;
+		if (!state.sortModel || state.sortModel.length === 0) return false;
+		if (this._pageWindow !== null) return false;
+
+		// Build sort key getters mirroring the pipeline's comparator
+		const columnById = createColumnLookup(state.columns);
+		const sortGetters = state.sortModel.map((sortItem) => {
+			const col = columnById.get(sortItem.colId);
+			if (col) {
+				if (col.valueGetter) {
+					const vg = col.valueGetter;
+					return (node: RowNode<TData>): unknown => vg({ node, row: node.data, colField: col.field });
+				}
+				const pg = compilePathGetter(col.field);
+				return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);
+			}
+			return (): undefined => undefined;
+		});
+
+		// Pre-build source index map for stable-sort tiebreaker
+		const allNodes = this.dataStore.getAllNodes();
+		const sourceIndexOf = new Map<string, number>();
+		for (let i = 0; i < allNodes.length; i++) sourceIndexOf.set(allNodes[i].id, i);
+
+		const compareNodes = (a: RowNode<TData>, b: RowNode<TData>): number => {
+			for (let i = 0; i < state.sortModel!.length; i++) {
+				const aVal = sortGetters[i](a);
+				const bVal = sortGetters[i](b);
+				const cmp = compareValues(aVal, bVal);
+				if (cmp !== 0) return state.sortModel![i].sort === 'desc' ? -cmp : cmp;
+			}
+			return (sourceIndexOf.get(a.id) ?? 0) - (sourceIndexOf.get(b.id) ?? 0);
+		};
+
+		// Collect VisualRow objects and old indices for each changed node
+		const toRelocate: Array<{ node: RowNode<TData>; vr: VisualRow<TData>; oldIdx: number }> = [];
+		for (const node of changedNodes) {
+			const oldIdx = this.rowIdToVisualIndex.get(node.id);
+			if (oldIdx === undefined) continue; // was filtered out; stays filtered (sort-key can't change filter membership)
+			const vr = this.visualRows[oldIdx];
+			if (vr?.kind === 'data') toRelocate.push({ node, vr, oldIdx });
+		}
+		if (toRelocate.length === 0) return true;
+
+		// Remove in descending index order so prior splices don't shift remaining indices
+		toRelocate.sort((a, b) => b.oldIdx - a.oldIdx);
+		const mutable = this.visualRows.slice();
+		for (const item of toRelocate) mutable.splice(item.oldIdx, 1);
+
+		// Insert each row at its new sorted position
+		for (const item of toRelocate) {
+			let lo = 0, hi = mutable.length;
+			while (lo < hi) {
+				const mid = (lo + hi) >>> 1;
+				const midVR = mutable[mid];
+				if (midVR?.kind !== 'data') { lo = mid + 1; continue; }
+				if (compareNodes(item.node, midVR.node) <= 0) hi = mid;
+				else lo = mid + 1;
+			}
+			mutable.splice(lo, 0, item.vr);
+		}
+
+		// Rebuild all three index maps from the updated array
+		this.visualRows = mutable;
+		this.visualRowIdToIndex = new Map();
+		this.rowIdToVisualIndex = new Map();
+		this.rowIdToVisualRowId = new Map();
+		for (let i = 0; i < this.visualRows.length; i++) {
+			const vr = this.visualRows[i];
+			this.visualRowIdToIndex.set(vr.id, i);
+			if (vr.kind === 'data') {
+				this.rowIdToVisualIndex.set(vr.rowId, i);
+				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
+			}
+		}
+		return true;
+	}
+
 	public setRows(rows: TData[]): void {
 		this.dataStore.setRows(rows);
 		this.runtime.clearFormulas();
@@ -696,9 +783,16 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 		const impact = this.classifyFieldMutation(allChangedFields);
 
+		// sort-key: attempt incremental relocation within the sorted array. Falls back to full
+		// rebuild for grouped/tree/paginated grids or when relocateSortedRows returns false.
 		// filter-key: test membership for each changed node on flat grids. If no row enters
 		// or exits the filter, the visual array is unchanged — skip the pipeline rebuild.
-		let needsFullRefresh = impact === 'sort-key' || impact === 'group-key' || impact === 'tree-parent';
+		let needsFullRefresh = impact === 'group-key' || impact === 'tree-parent';
+		let didSortRelocation = false;
+		if (!needsFullRefresh && impact === 'sort-key') {
+			didSortRelocation = this.relocateSortedRows(result.changedNodes);
+			needsFullRefresh = !didSortRelocation;
+		}
 		if (!needsFullRefresh && impact === 'filter-key') {
 			needsFullRefresh = this.filterMembershipChanged(result.changedNodes);
 		}
@@ -735,6 +829,13 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			}
 
 			this.runtime.notifyBulkCellChange(notifyCells);
+
+			// Sort relocation changed the visual order — bump version so geometry and renderer
+			// refresh with the new row positions. Value-only updates don't need this since
+			// the visual array is unchanged and each cell's notifyBulkCellChange is sufficient.
+			if (didSortRelocation) {
+				this.runtime.bumpGlobalVersion();
+			}
 
 			if (result.changedValuesByRow.size > 0) {
 				this.runtime.dispatchRowsUpdated({

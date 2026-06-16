@@ -738,6 +738,161 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 	});
 });
 
+describe('Phase 068 — sort relocation in updateRows()', () => {
+	interface SRow { id: string; name: string; price: number }
+
+	function makeSortedStore(sortField: 'name' | 'price', dir: 'asc' | 'desc' = 'asc') {
+		return new GridStore<SRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+			sortModel: [{ colId: sortField, sort: dir }],
+		});
+	}
+
+	it('repositions a row in ascending sort order when its sort key changes', () => {
+		const store = makeSortedStore('price');
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', price: 10 },
+				{ id: '2', name: 'Bob', price: 20 },
+				{ id: '3', name: 'Carol', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Initial order: 1 (10), 2 (20), 3 (30)
+		expect(getRowNode(ctrl, 0)?.id).toBe('1');
+		expect(getRowNode(ctrl, 1)?.id).toBe('2');
+		expect(getRowNode(ctrl, 2)?.id).toBe('3');
+
+		// Raise row 1's price to 25 — should move between 2 and 3
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 25 } : r)));
+
+		expect(ctrl.getVisualRowCount()).toBe(3);
+		expect(getRowNode(ctrl, 0)?.id).toBe('2'); // 20
+		expect(getRowNode(ctrl, 1)?.id).toBe('1'); // 25 (moved)
+		expect(getRowNode(ctrl, 2)?.id).toBe('3'); // 30
+	});
+
+	it('repositions a row in descending sort order', () => {
+		const store = makeSortedStore('price', 'desc');
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', price: 30 },
+				{ id: '2', name: 'Bob', price: 20 },
+				{ id: '3', name: 'Carol', price: 10 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Initial order: 1 (30), 2 (20), 3 (10)
+		expect(getRowNode(ctrl, 0)?.id).toBe('1');
+
+		// Drop row 1's price below everyone else
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 5 } : r)));
+
+		expect(getRowNode(ctrl, 0)?.id).toBe('2');
+		expect(getRowNode(ctrl, 1)?.id).toBe('3');
+		expect(getRowNode(ctrl, 2)?.id).toBe('1'); // now last (lowest price, desc)
+	});
+
+	it('keeps index maps consistent after relocation', () => {
+		const store = makeSortedStore('name');
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', price: 10 },
+				{ id: '2', name: 'Bob', price: 20 },
+				{ id: '3', name: 'Carol', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// 'Bob' → 'Aaron' should move to first
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '2' ? { ...r, name: 'Aaron' } : r)));
+
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(0);
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(1);
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(2);
+	});
+
+	it('falls back to full rebuild on a grouped grid when sort key changes', () => {
+		const store = new GridStore<SRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+			rowModelConfig: {
+				type: 'client',
+				grouping: { model: [{ colId: 'name' }], defaultExpanded: true },
+			},
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'A', price: 10 },
+				{ id: '2', name: 'A', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Full rebuild should correctly update group structure even with sort change
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 30 } : r)));
+
+		// Verify rows are still present and correctly structured
+		expect(ctrl.getVisualRowCount()).toBeGreaterThan(0);
+		expect(ctrl.getRowNodeById('1')?.data.price).toBe(30);
+	});
+
+	it('handles no-op sort relocation when row stays at same position', () => {
+		const store = makeSortedStore('price');
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', price: 10 },
+				{ id: '2', name: 'Bob', price: 20 },
+				{ id: '3', name: 'Carol', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Update price but keep relative order (15 stays between 10 and 20 → no, 15 > 10 and < 20, so '1' stays at 0)
+		// Actually 15 > 10 (original) so row 1 stays first if it was at 10. 15 < 20, so still at index 0.
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 15 } : r)));
+
+		expect(getRowNode(ctrl, 0)?.id).toBe('1'); // still first (15 < 20 < 30)
+		expect(ctrl.getRowNodeById('1')?.data.price).toBe(15);
+	});
+
+	it('correctly relocates multiple changed rows simultaneously', () => {
+		const store = makeSortedStore('price');
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', price: 10 },
+				{ id: '2', name: 'Bob', price: 20 },
+				{ id: '3', name: 'Carol', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Swap prices of row 1 and row 3
+		ctrl.updateRows((rows) =>
+			rows.map((r) => {
+				if (r.id === '1') return { ...r, price: 30 };
+				if (r.id === '3') return { ...r, price: 10 };
+				return r;
+			})
+		);
+
+		// After swap: 3 (10), 2 (20), 1 (30)
+		expect(getRowNode(ctrl, 0)?.id).toBe('3');
+		expect(getRowNode(ctrl, 1)?.id).toBe('2');
+		expect(getRowNode(ctrl, 2)?.id).toBe('1');
+	});
+});
+
 describe('Numeric Filter Null Safety', () => {
 	interface NumericRow {
 		id: string;
