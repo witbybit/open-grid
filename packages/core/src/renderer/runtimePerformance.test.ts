@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
+import { RenderRuntimeState } from './renderRuntimeState.js';
 import {
 	diffRenderWindow,
 	getColIndices,
@@ -150,8 +151,10 @@ describe('Runtime Performance & Granular Versioning', () => {
 		renderer.mount(container);
 
 		// Trigger scrolling frame
-		store.engine.isScrolling = true;
-		store.engine.isScrollFrameActive = true;
+		const scrollFrameState = new RenderRuntimeState();
+		scrollFrameState.transitionTo('scroll-pending');
+		scrollFrameState.transitionTo('scroll-frame');
+		store.engine.setScrollStateProvider(scrollFrameState);
 		store.engine.getCellValueCallsDuringScroll = 0;
 
 		// Perform scroll update
@@ -173,8 +176,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(store.engine.getCellValueCallsDuringScroll).toBe(0);
 
 		// Stop scroll
-		store.engine.isScrolling = false;
-		store.engine.isScrollFrameActive = false;
+		store.engine.setScrollStateProvider(new RenderRuntimeState());
 
 		renderer.unmount();
 		controller.dispose();

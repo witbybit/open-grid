@@ -89,8 +89,20 @@ export class GridEngine<TRowData = unknown> {
 	// Keyed directly on the engine (not in GridState) so updates are zero-allocation.
 	public readonly rowVersions = new Map<string, number>();
 
-	public isScrolling = false;
-	public isScrollFrameActive = false;
+	private _scrollStateProvider: { isScrolling(): boolean; phase: string } | null = null;
+
+	/** Set once by the renderer during initialization; headless grids return false. */
+	public setScrollStateProvider(provider: { isScrolling(): boolean; phase: string }): void {
+		this._scrollStateProvider = provider;
+	}
+
+	public get isScrolling(): boolean {
+		return this._scrollStateProvider?.isScrolling() ?? false;
+	}
+
+	public get isScrollFrameActive(): boolean {
+		return this._scrollStateProvider?.phase === 'scroll-frame';
+	}
 
 	public getCellValueCallsDuringScroll = 0;
 	public valueGetterCallsDuringScroll = 0;

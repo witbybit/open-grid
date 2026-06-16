@@ -1,4 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { RenderRuntimeState } from './renderRuntimeState.js';
 import type { GridCellPointer, GridCellClassParams, VisualRow } from '../store.js';
 import type { CellRenderer } from './cellRenderer.js';
 import { CellSlot } from './cellSlot.js';
@@ -72,8 +73,7 @@ export interface RowRendererRuntimeStateHost<TRowData = unknown> {
 	pendingPortalReleasesAfterScroll: Map<string, unknown>;
 	programmaticScrollCell: GridCellPointer | null;
 	deferredFocusCell: HTMLDivElement | null;
-	isScrolling: boolean;
-	isScrollFrameActive: boolean;
+	runtimeState: RenderRuntimeState;
 	renderStats: any;
 	currentScrollCellsVisited: number;
 	currentScrollCellsPatched: number;
@@ -225,7 +225,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 		const cellKey = cellSlot.binding?.cellKey ?? cellSlot.lastPortalKey ?? cell.dataset.cellKey;
 		if (!cellKey) return;
 		const container = this.getCellPortalHost(cell) ?? cell;
-		const isDeferred = forceDeferred ?? (this.deps.stateHost.isScrollFrameActive || this.deps.stateHost.isScrolling);
+		const isDeferred = forceDeferred ?? this.deps.stateHost.runtimeState.isScrolling();
 
 		if (isDeferred) {
 			this.deps.stateHost.currentScrollPortalOps++;
@@ -249,7 +249,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 	}
 
 	public applyFocus(cell: HTMLDivElement): void {
-		if (this.deps.stateHost.isScrollFrameActive || this.deps.stateHost.isScrolling) {
+		if (this.deps.stateHost.runtimeState.isScrolling()) {
 			this.deps.stateHost.deferredFocusCell = cell;
 			const renderStats = this.deps.stateHost.renderStats;
 			if (renderStats) {
@@ -285,8 +285,8 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 			cancelPendingPortalRelease: (cellKey) => this.cancelPendingPortalRelease(cellKey),
 			applyFocus: (cell) => this.applyFocus(cell),
 			isEditorInteractiveElement: (el) => this.isEditorInteractiveElement(el),
-			isScrolling: this.deps.stateHost.isScrolling,
-			isScrollFrameActive: this.deps.stateHost.isScrollFrameActive,
+			isScrolling: this.deps.stateHost.runtimeState.isScrolling(),
+			isScrollFrameActive: this.deps.stateHost.runtimeState.phase === 'scroll-frame',
 			renderStats: this.deps.stateHost.renderStats,
 			programmaticScrollCell: this.deps.stateHost.programmaticScrollCell,
 			clearProgrammaticScrollCell: () => {

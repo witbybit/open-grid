@@ -125,8 +125,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		}
 
 		this.deps.runtimeState.transitionTo('scroll-frame');
-		this.deps.engine.isScrollFrameActive = true;
-		this.deps.rowRenderer.isScrollFrameActive = true;
 		this.deps.rowRenderer.currentScrollCellsPatched = 0;
 		this.deps.rowRenderer.currentScrollRowsRecycled = 0;
 		this.deps.rowRenderer.currentScrollRowsVisited = 0;
@@ -177,8 +175,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.deps.renderStats.cellsPatchedPerScrollFrame.push(this.deps.rowRenderer.currentScrollCellsPatched);
 			this.deps.renderStats.rowsRecycledPerScrollFrame.push(this.deps.rowRenderer.currentScrollRowsRecycled);
 			this.deps.runtimeState.transitionTo('post-scroll');
-			this.deps.engine.isScrollFrameActive = false;
-			this.deps.rowRenderer.isScrollFrameActive = false;
 		}
 	};
 
@@ -192,9 +188,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			// New scroll event during post-scroll window: re-enter scroll-pending (increments scrollEpoch).
 			this.deps.runtimeState.transitionTo('scroll-pending');
 		}
-		this.deps.engine.isScrolling = true;
-		this.deps.rowRenderer.isScrolling = true;
-		this.deps.portalMountManager.setScrolling(true);
 		this.clearPostScrollDecorationTimer();
 		this.deps.layoutTransition.cancel();
 		this.deps.rowRenderer.hoveredRowIndex = null;
@@ -204,10 +197,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.clearScrollEndTimer();
 		this.deps.viewportRenderer.setScrollingClass(false);
 		this.deps.runtimeState.transitionTo('idle');
-		this.deps.engine.isScrolling = false;
-		this.deps.rowRenderer.isScrolling = false;
 		this.deps.rowRenderer.programmaticScrollCell = null;
-		this.deps.portalMountManager.setScrolling(false);
 		this.flushPendingPortalReleasesAfterScroll();
 		this.state.needsPostScrollPortalFlush = this.state.needsPostScrollPortalFlush || this.deps.portalMountManager.getDeferredCount() > 0;
 		if (this.state.needsPostScrollPortalFlush) {

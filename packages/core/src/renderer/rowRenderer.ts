@@ -91,8 +91,7 @@ export class RowRenderer<TRowData = unknown> {
 	public currentScrollCellsVisited = 0;
 	public currentScrollCellsWritten = 0;
 	public currentScrollPortalOps = 0;
-	public isScrollFrameActive = false;
-	public isScrolling = false;
+	public runtimeState!: import('./renderRuntimeState.js').RenderRuntimeState;
 	public dirtyCellsMarkedDuringScroll = 0;
 
 	// Phase 10: stable-slot virtualization stats
@@ -253,8 +252,6 @@ export class RowRenderer<TRowData = unknown> {
 	//   activeRows (visualIndexToSlot) is rebuilt from slot bindings after each frame.
 
 	public recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
-		this.isScrollFrameActive = isScrollFrameActive;
-		this.isScrolling = isScrollFrameActive || this.engine.isScrolling;
 
 		const state = ctx?.state ?? this.engine.stateManager.getState();
 		this.selectionPaint.rebuildSelection(state.selectedRowIds);

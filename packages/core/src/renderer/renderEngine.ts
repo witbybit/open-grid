@@ -203,6 +203,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			this.viewportRenderer
 		);
 		this.rowRenderer.renderStats = this.renderStats;
+		// Wire runtime state into the engine (as computed getters) and renderer consumers.
+		engine.setScrollStateProvider(this.runtimeState);
+		this.rowRenderer.runtimeState = this.runtimeState;
+		this.portalMountManager.setRuntimeState(this.runtimeState);
 		this.portalMountManager.setPhysicalRowSlotIdResolver((rowIndex) => this.rowRenderer.activeRows.get(rowIndex)?.id);
 		this.layoutTransition = new LayoutTransitionController(() => this.rowRenderer.activeRows, {
 			getExitLayer: () => this.viewportRenderer.getLayer('exiting'),

@@ -9,6 +9,7 @@ import type {
 import type { VisualRow, InternalColumnDef } from '../store.js';
 import { isDomCellRenderer } from '../store.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { CustomRendererManager, type ReleaseReason } from './customRendererManager.js';
 import { DomCellRendererManager } from './domCellRendererManager.js';
 import {
@@ -107,7 +108,15 @@ export class PortalMountManager<TRowData = unknown> {
 	private deferredNewCellMounts = new Set<string>();
 	private deferredRowMounts = new Map<string, GridRowContentMount<TRowData>>();
 	private deferredRowReleases = new Map<string, GridRowContentUnmount>();
-	private scrolling = false;
+	private runtimeState: RenderRuntimeState | null = null;
+
+	public setRuntimeState(state: RenderRuntimeState): void {
+		this.runtimeState = state;
+	}
+
+	private get scrolling(): boolean {
+		return this.runtimeState?.isScrolling() ?? false;
+	}
 	private stats = {
 		flushesDuringScroll: 0,
 		mountsDuringScroll: 0,
@@ -324,10 +333,6 @@ export class PortalMountManager<TRowData = unknown> {
 		}
 	}
 
-	public setScrolling(scrolling: boolean): void {
-		this.scrolling = scrolling;
-	}
-
 	public flushDeferred(options: DeferredPortalFlushOptions | boolean = {}): DeferredPortalFlushResult {
 		const normalized = typeof options === 'boolean' ? { flushSync: options } : options;
 		const maxItems = normalized.maxItems ?? Number.POSITIVE_INFINITY;
@@ -338,8 +343,6 @@ export class PortalMountManager<TRowData = unknown> {
 			return { processed: 0, remaining: pendingBefore };
 		}
 
-		const wasScrolling = this.scrolling;
-		this.scrolling = false;
 		let processed = 0;
 		// Weighted op budget: a cold mount commits a brand-new React subtree (~ms), a
 		// warm-hit mount or release is a cheap re-parent/bookkeeping op. Budgeting by
@@ -443,7 +446,6 @@ export class PortalMountManager<TRowData = unknown> {
 		if (flushSync && remaining === 0) {
 			this.onFlushCellContent?.({ flushSync: true });
 		}
-		this.scrolling = wasScrolling;
 		return { processed, remaining };
 	}
 
@@ -500,7 +502,6 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	public releaseAll(): void {
-		this.scrolling = false;
 		this.deferredCellMounts.clear();
 		this.deferredCellReleases.clear();
 		this.deferredNewCellMounts.clear();

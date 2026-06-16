@@ -1,12 +1,30 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RowRendererRuntimeBridge, type RowRendererRuntimeBridgeDeps, type RowRendererRuntimeStateHost } from './rowRendererRuntime.js';
+import { RenderRuntimeState } from './renderRuntimeState.js';
 
 vi.mock('./cellSlot.js', () => ({
 	CellSlot: {
 		fromElement: vi.fn(() => ({ binding: null })),
 	},
 }));
+
+function makeIdleState(): RenderRuntimeState {
+	return new RenderRuntimeState();
+}
+
+function makeScrollingState(): RenderRuntimeState {
+	const rs = new RenderRuntimeState();
+	rs.transitionTo('scroll-pending');
+	return rs;
+}
+
+function makeScrollFrameState(): RenderRuntimeState {
+	const rs = new RenderRuntimeState();
+	rs.transitionTo('scroll-pending');
+	rs.transitionTo('scroll-frame');
+	return rs;
+}
 
 function makeStateHost(overrides?: Partial<RowRendererRuntimeStateHost<unknown>>): RowRendererRuntimeStateHost<unknown> {
 	return {
@@ -19,8 +37,7 @@ function makeStateHost(overrides?: Partial<RowRendererRuntimeStateHost<unknown>>
 		pendingPortalReleasesAfterScroll: new Map(),
 		programmaticScrollCell: null,
 		deferredFocusCell: null,
-		isScrolling: false,
-		isScrollFrameActive: false,
+		runtimeState: makeIdleState(),
 		renderStats: { focusCallsDuringScroll: 0, styleHookCallsDuringScroll: 0, cellsBoundDuringScroll: 0 },
 		currentScrollCellsVisited: 0,
 		currentScrollCellsPatched: 0,
@@ -119,7 +136,7 @@ describe('RowRendererRuntimeBridge – releaseCellPortal', () => {
 	});
 
 	it('uses immediate release when not scrolling', () => {
-		const { bridge, deps } = makeBridge({ isScrolling: false, isScrollFrameActive: false });
+		const { bridge, deps } = makeBridge();
 		const cell = cellWithKey('cell-1');
 
 		bridge.releaseCellPortal(cell);
@@ -129,7 +146,7 @@ describe('RowRendererRuntimeBridge – releaseCellPortal', () => {
 	});
 
 	it('uses deferred release when isScrolling', () => {
-		const { bridge, deps, stateHost } = makeBridge({ isScrolling: true });
+		const { bridge, deps, stateHost } = makeBridge({ runtimeState: makeScrollingState() });
 		const cell = cellWithKey('cell-2');
 
 		bridge.releaseCellPortal(cell);
@@ -140,7 +157,7 @@ describe('RowRendererRuntimeBridge – releaseCellPortal', () => {
 	});
 
 	it('uses deferred release when isScrollFrameActive', () => {
-		const { bridge, deps, stateHost } = makeBridge({ isScrollFrameActive: true });
+		const { bridge, deps, stateHost } = makeBridge({ runtimeState: makeScrollFrameState() });
 		const cell = cellWithKey('cell-3');
 
 		bridge.releaseCellPortal(cell);
@@ -150,7 +167,7 @@ describe('RowRendererRuntimeBridge – releaseCellPortal', () => {
 	});
 
 	it('forces deferred release when forceDeferred=true even if not scrolling', () => {
-		const { bridge, deps, stateHost } = makeBridge({ isScrolling: false, isScrollFrameActive: false });
+		const { bridge, deps, stateHost } = makeBridge();
 		const cell = cellWithKey('cell-4');
 
 		bridge.releaseCellPortal(cell, true);
@@ -165,7 +182,7 @@ describe('RowRendererRuntimeBridge – releaseCellPortal', () => {
 
 describe('RowRendererRuntimeBridge – applyFocus', () => {
 	it('calls cell.focus when not scrolling', () => {
-		const { bridge } = makeBridge({ isScrolling: false, isScrollFrameActive: false });
+		const { bridge } = makeBridge();
 		const cell = document.createElement('div');
 		const focusSpy = vi.spyOn(cell, 'focus');
 
@@ -175,7 +192,7 @@ describe('RowRendererRuntimeBridge – applyFocus', () => {
 	});
 
 	it('defers focus when isScrollFrameActive and does NOT call cell.focus', () => {
-		const { bridge, stateHost } = makeBridge({ isScrollFrameActive: true });
+		const { bridge, stateHost } = makeBridge({ runtimeState: makeScrollFrameState() });
 		const cell = document.createElement('div');
 		const focusSpy = vi.spyOn(cell, 'focus');
 
@@ -186,7 +203,7 @@ describe('RowRendererRuntimeBridge – applyFocus', () => {
 	});
 
 	it('defers focus when isScrolling and does NOT call cell.focus', () => {
-		const { bridge, stateHost } = makeBridge({ isScrolling: true });
+		const { bridge, stateHost } = makeBridge({ runtimeState: makeScrollingState() });
 		const cell = document.createElement('div');
 		const focusSpy = vi.spyOn(cell, 'focus');
 
@@ -198,7 +215,7 @@ describe('RowRendererRuntimeBridge – applyFocus', () => {
 
 	it('increments focusCallsDuringScroll when deferring', () => {
 		const renderStats = { focusCallsDuringScroll: 0 };
-		const { bridge } = makeBridge({ isScrolling: true, renderStats });
+		const { bridge } = makeBridge({ runtimeState: makeScrollingState(), renderStats });
 		const cell = document.createElement('div');
 
 		bridge.applyFocus(cell);
