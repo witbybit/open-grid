@@ -61,11 +61,9 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 	const localValueRef = useRef(localValue);
 	localValueRef.current = localValue;
 
-	const isCancelledRef = useRef(false);
 	const isCommittedRef = useRef(false);
 
 	useEffect(() => {
-		isCancelledRef.current = false;
 		isCommittedRef.current = false;
 		setLocalValue(value);
 	}, [value]);
@@ -73,12 +71,11 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 	useEffect(() => {
 		const unsubscribe = api.addEventListener(GridEventName.editStopped, (event) => {
 			if (event.payload.rowId === rowId && event.payload.colField === colField) {
-				if (event.payload.cancel) {
-					isCancelledRef.current = true;
-				} else if (!isCommittedRef.current) {
-					// Fallback: stopEditing was called externally (e.g. navigation) without commitEdit
+				if (!event.payload.cancel && !isCommittedRef.current) {
+					// External stop (e.g. navigation) without a prior commitEdit — run the full
+					// commit path (validation + valueSetter) rather than bypassing with setCellValue.
 					isCommittedRef.current = true;
-					api.setCellValue(rowId, colField, localValueRef.current);
+					void api.commitEdit(rowId, colField, localValueRef.current);
 				}
 			}
 		});
@@ -104,7 +101,6 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 	);
 
 	const handleCancel = useCallback(() => {
-		isCancelledRef.current = true;
 		api.stopEditing(true);
 	}, [api]);
 
