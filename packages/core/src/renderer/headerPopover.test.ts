@@ -26,7 +26,7 @@ describe('HeaderPopoverMenu', () => {
 			columns: [
 				{ field: 'id', header: 'ID' },
 				{ field: 'name', header: 'Name' },
-				{ field: 'price', header: 'Price' },
+				{ field: 'price', header: 'Price', filterType: 'number' },
 			],
 		});
 
