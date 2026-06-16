@@ -1,4 +1,5 @@
-import type { ColumnDef, RowNode, CellRendererPhase, DomCellRenderer, DomCellRendererHandle } from '../store.js';
+import type { ColumnDef, CellRendererPhase, DomCellRenderer, DomCellRendererHandle } from '../columnDef.js';
+import type { RowNode } from '../rowNode.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 
 interface DomRendererInstance<TRowData = unknown> {

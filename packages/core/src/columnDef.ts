@@ -5,15 +5,44 @@
  * erased at build time and TypeScript resolves them lazily.
  */
 import type { RowNode } from './rowNode.js';
-import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState, GridCellAccess } from './store.js';
+import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState } from './store.js';
 import type { GroupVisualRow, DetailVisualRow } from './visualRow.js';
 
-// ─── Value getter params ──────────────────────────────────────────────────────
+// ─── Value getter / setter / validator params ─────────────────────────────────
 
 export interface ValueGetterParams<TRowData = unknown> {
 	node: RowNode<TRowData>;
 	row: TRowData;
 	colField: string;
+}
+
+export interface ValueValidatorParams<TRowData = unknown> {
+	value: unknown;
+	oldValue: unknown;
+	row: TRowData;
+	colField: string;
+}
+
+export interface EditableParams<TRowData = unknown> {
+	row: TRowData;
+	rowId: string;
+	colField: string;
+}
+
+export interface TooltipParams<TRowData = unknown> {
+	row: TRowData;
+	rowId: string;
+	colField: string;
+	value: unknown;
+}
+
+export interface ValueSetterParams<TRowData = unknown> {
+	value: unknown;
+	oldValue: unknown;
+	row: TRowData;
+	colField: string;
+	/** Call to signal that the server rejected the value and the grid should roll back. */
+	abort: () => void;
 }
 
 // ─── Cell renderer phase + capabilities ──────────────────────────────────────
@@ -160,6 +189,17 @@ export interface CellPasteParams<TRowData = unknown> {
 	row: TRowData;
 }
 
+export interface ValueFormatterParams<TRowData = unknown> {
+	/** The raw cell value (from field, valueGetter, or formula). */
+	value: unknown;
+	/** The complete row data object. */
+	rowData: TRowData;
+	/** The column definition. */
+	colDef: ColumnDef<TRowData>;
+	/** The row ID. */
+	rowId: string;
+}
+
 export interface ColumnDef<TRowData = unknown> {
 	field: string;
 	header: string;
@@ -171,7 +211,28 @@ export interface ColumnDef<TRowData = unknown> {
 	loading?: boolean;
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
 	valueGetterDependencies?: string[];
-	valueSetter?: (row: TRowData, value: unknown) => boolean;
+	/**
+	 * Converts the raw cell value (from field, valueGetter, or formula) into a display string.
+	 * Used by: default text renderer, CSV export, tooltip (when no custom tooltip is set),
+	 * and the `formattedValue` prop passed to custom React cell renderers.
+	 *
+	 * @example
+	 * valueFormatter: ({ value }) => value != null ? `$${Number(value).toFixed(2)}` : ''
+	 */
+	valueFormatter?: (params: ValueFormatterParams<TRowData>) => string;
+	/**
+	 * Called before committing an edit to validate the new value.
+	 * Return a non-empty string to block the commit and surface an error message.
+	 * Supports async (return a Promise) for server-side checks.
+	 */
+	valueValidator?: (params: ValueValidatorParams<TRowData>) => string | null | Promise<string | null>;
+	/**
+	 * Called during commit to apply the value to the row's data object.
+	 * Sync: return false to reject. Async: return Promise<false> to reject after optimistic update.
+	 * Call params.abort() to trigger an immediate rollback.
+	 * Breaking change from v1: params object replaces the old (row, value) signature.
+	 */
+	valueSetter?: (params: ValueSetterParams<TRowData>) => boolean | Promise<boolean>;
 	renderer?: ColumnRendererSpec<TRowData>;
 	cellEditor?: (props: CellEditorProps<TRowData>) => unknown;
 	headerMenuRenderer?: (props: HeaderMenuRendererProps<TRowData>) => void;
@@ -179,12 +240,73 @@ export interface ColumnDef<TRowData = unknown> {
 	sortable?: boolean;
 	/** When false, this column cannot be added to the row grouping. Defaults to true. */
 	enableRowGroup?: boolean;
+	/** Set to true to hide/disable the header menu for this column. Defaults to false. */
+	suppressHeaderMenu?: boolean;
+	/** Set to false to disable column pinning for this column. Defaults to true. */
+	pinnable?: boolean;
+	/** Set to false to disable filtering for this column. Defaults to true. */
+	filterable?: boolean;
+	/**
+	 * Whether this cell is editable. Defaults to true.
+	 * Pass false to make the entire column read-only.
+	 * Pass a function for conditional editability (e.g., locked rows, permission checks).
+	 */
+	editable?: boolean | ((params: EditableParams<TRowData>) => boolean);
+	/** Minimum column width in pixels. Enforced during resize. */
+	minWidth?: number;
+	/** Maximum column width in pixels. Enforced during resize. */
+	maxWidth?: number;
+	/**
+	 * Cell tooltip. Shown as a native browser tooltip on hover.
+	 * Pass a string for a static tooltip, or a function for dynamic tooltips based on cell value/row data.
+	 */
+	tooltip?: string | ((params: TooltipParams<TRowData>) => string | null);
+	/**
+	 * Initial pin side for this column. Pinned-left columns should come first in the
+	 * columns array; pinned-right columns should come last.
+	 * Only applied at grid initialization — use api.setPinnedColumns() for runtime changes.
+	 */
+	pinned?: 'left' | 'right';
 	/** Override the clipboard text for this cell on copy. Return the string to write. */
 	onCopy?: (params: CellCopyParams<TRowData>) => string;
 	/** Transform pasted text before setting the cell value. Return the value to write. */
 	onPaste?: (params: CellPasteParams<TRowData>) => unknown;
 	/** When true, renders a checkbox in this column for row multi-select */
 	checkboxSelection?: boolean;
+	/**
+	 * One or more group header labels for this column.
+	 * A string places the column under a single group band.
+	 * An array places it under nested groups from outermost to innermost
+	 * (e.g. `['Financials', 'Revenue']` → Financials > Revenue > this leaf).
+	 */
+	headerGroup?: string | string[];
+	/**
+	 * Filter UI type shown for this column in the sidebar and header menu.
+	 * Defaults to `'text'`. Use `'none'` to hide the filter UI for this column.
+	 */
+	filterType?: 'text' | 'number' | 'date' | 'set' | 'none';
+	/**
+	 * For set filter: explicit list of selectable values.
+	 * When omitted, distinct values are derived from row data via `api.getColumnDistinctValues()`.
+	 */
+	filterValues?: (string | number | null)[];
+	/**
+	 * Custom floating filter renderer for this column (Plan 060).
+	 * Receives a `FloatingFilterRendererParams` object and must populate `eCell`.
+	 * When omitted, the default input (text / number / date / set badge) is used.
+	 */
+	floatingFilterRenderer?: (params: import('./renderer/floatingFilterRenderer.js').FloatingFilterRendererParams<TRowData>) => void;
+	/**
+	 * Show a drag handle in this column's cells, allowing rows to be reordered by dragging.
+	 * Typically placed on the first column. Works in both managed and unmanaged drag modes.
+	 * Pass a function for conditional per-row drag handles (return false to hide for a row).
+	 */
+	rowDrag?: boolean | ((params: { rowData: TRowData; rowId: string }) => boolean);
+	/**
+	 * Prevent cell range selection from starting when the user clicks on cells in this column.
+	 * Automatically applied to columns with `rowDrag` set. Useful for action / checkbox columns.
+	 */
+	disableCellRangeSelection?: boolean;
 }
 
 /**
@@ -227,15 +349,44 @@ export interface GridCellClassParams<TRowData = unknown> {
 	selection: GridSelectionState;
 }
 
-export interface GridStyleSlots<TRowData = unknown> {
-	rowClass?: (row: TRowData, params: GridRowClassParams<TRowData>) => string;
-	cellClass?: (col: ColumnDef<TRowData>, row: TRowData, params: GridCellClassParams<TRowData>) => string;
-	headerCellClass?: (col: ColumnDef<TRowData>) => string;
-	beforeCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
-	afterCellRender?: (cell: GridCellAccess<TRowData>, element: HTMLElement) => void;
-	groupRowClass?: (visualRow: GroupVisualRow<TRowData>) => string;
-	detailRowClass?: (visualRow: DetailVisualRow<TRowData>) => string;
+export interface RowStyleRule<TRowData = unknown> {
+	kind: 'row';
+	when: (row: TRowData, params: GridRowClassParams<TRowData>) => boolean;
+	rowClass: string;
 }
+
+export interface GroupRowStyleRule<TRowData = unknown> {
+	kind: 'groupRow';
+	when?: (visualRow: GroupVisualRow<TRowData>) => boolean;
+	rowClass: string;
+}
+
+export interface DetailRowStyleRule<TRowData = unknown> {
+	kind: 'detailRow';
+	when?: (visualRow: DetailVisualRow<TRowData>) => boolean;
+	rowClass: string;
+}
+
+export interface CellStyleRule<TRowData = unknown> {
+	kind: 'cell';
+	field?: string;
+	when: (row: TRowData, col: ColumnDef<TRowData>, params: GridCellClassParams<TRowData>) => boolean;
+	cellClass: string;
+}
+
+export interface HeaderCellStyleRule<TRowData = unknown> {
+	kind: 'headerCell';
+	field?: string;
+	when: (col: ColumnDef<TRowData>) => boolean;
+	headerCellClass: string;
+}
+
+export type GridStyleRule<TRowData = unknown> =
+	| RowStyleRule<TRowData>
+	| GroupRowStyleRule<TRowData>
+	| DetailRowStyleRule<TRowData>
+	| CellStyleRule<TRowData>
+	| HeaderCellStyleRule<TRowData>;
 
 // ─── Path utilities ───────────────────────────────────────────────────────────
 
@@ -293,4 +444,30 @@ export function compilePathGetter(path: string): (data: unknown) => unknown {
 	}
 	pathGetterCache.set(path, getter);
 	return getter;
+}
+
+/**
+ * Validates column definitions before they are applied to the grid.
+ * Throws early with a clear message rather than silently producing broken layout.
+ */
+export function validateColumns<TRowData>(columns: ColumnDef<TRowData>[]): void {
+	const seen = new Set<string>();
+
+	for (const column of columns) {
+		const id = column.field;
+
+		if (!id) {
+			throw new Error('Open Grid: every column must have a non-empty field.');
+		}
+
+		if (seen.has(id)) {
+			throw new Error(`Open Grid: duplicate column field "${id}". Each column must have a unique field.`);
+		}
+
+		seen.add(id);
+
+		if (column.width != null && (!Number.isFinite(column.width) || column.width <= 0)) {
+			throw new Error(`Open Grid: invalid width for column "${id}". Width must be a positive finite number, got ${column.width}.`);
+		}
+	}
 }

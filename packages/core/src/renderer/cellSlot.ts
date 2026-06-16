@@ -58,18 +58,25 @@ export class CellSlot<TRowData = unknown> {
 	public lastLeft = -1; // absolute left px for center and pin-left cells
 	public lastRight = -1; // distance-from-right px for pin-right cells (-1 = not set)
 	public lastWidth = -1; // column width px
+	public lastShift = 0; // live column-reorder preview offset px (Plan 047); 0 = none
+	public lastAriaSelected: boolean | undefined = undefined; // ARIA selection state cache
 	public lastClassName = '';
 	public lastContentMode: CellContentMode = 'empty';
 	public lastPortalKey: string | undefined = undefined;
-	// Phase 4: track tabindex state to avoid hasAttribute DOM read in hot unbind path
+	// Cached so unbindHot can skip the hasAttribute DOM read in the hot path.
 	public hasTabIndex = false;
-	// Data version when this cell's portal content was last mounted.
-	// Used during scroll to detect whether a frozen portal has gone stale.
-	public lastMountedDataVersion = -1;
+	// Per-row and global versions recorded when this cell's portal was last mounted.
+	// During scroll: if rowVersions.get(rowId) !== lastMountedRowVersion the row data changed
+	// (only that row thaws); if globalVersion !== lastMountedGlobalVersion everything thaws.
+	public lastMountedRowVersion = -1;
+	public lastMountedGlobalVersion = -1;
 
 	constructor(element: HTMLDivElement) {
 		this.element = element;
 		(element as any).__cellSlot = this;
+		// ARIA grid semantics — role is static per element; positional/state attrs are
+		// written (guarded) in update().
+		if (element.getAttribute('role') !== 'gridcell') element.setAttribute('role', 'gridcell');
 		let content = element.querySelector('.og-cell-content') as HTMLDivElement;
 		if (!content) {
 			content = document.createElement('div');
@@ -108,11 +115,23 @@ export class CellSlot<TRowData = unknown> {
 		this.lastLeft = -1;
 		this.lastRight = -1;
 		this.lastWidth = -1;
+		if (this.lastShift !== 0) {
+			this.lastShift = 0;
+			this.element.style.transform = '';
+		}
+		if (this.lastAriaSelected !== undefined) {
+			this.lastAriaSelected = undefined;
+			this.element.removeAttribute('aria-selected');
+		}
+		if (this.element.style.visibility) {
+			this.element.style.visibility = '';
+		}
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
 		this.hasTabIndex = false;
-		this.lastMountedDataVersion = -1;
+		this.lastMountedRowVersion = -1;
+		this.lastMountedGlobalVersion = -1;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;
@@ -137,11 +156,24 @@ export class CellSlot<TRowData = unknown> {
 		contentMode: CellContentMode,
 		rawValue: unknown,
 		formattedValue: string,
-		portalKey?: string
+		portalKey?: string,
+		dragShift = 0,
+		ariaSelected?: boolean
 	): boolean {
 		let domUpdated = false;
 
-		if (this.colIndex !== colIndex) this.colIndex = colIndex;
+		if (this.colIndex !== colIndex) {
+			this.colIndex = colIndex;
+			this.element.setAttribute('aria-colindex', String(colIndex + 1)); // ARIA: 1-based
+		}
+		// ARIA selection state — undefined means "leave unchanged" (the scroll bind path does
+		// not recompute selection, so it must not clobber it).
+		if (ariaSelected !== undefined && ariaSelected !== this.lastAriaSelected) {
+			this.lastAriaSelected = ariaSelected;
+			if (ariaSelected) this.element.setAttribute('aria-selected', 'true');
+			else this.element.removeAttribute('aria-selected');
+			domUpdated = true;
+		}
 		if (this.colField !== colField) {
 			this.colField = colField;
 			this.element.dataset.colField = colField;
@@ -188,6 +220,15 @@ export class CellSlot<TRowData = unknown> {
 			domUpdated = true;
 		}
 
+		// Live column-reorder preview offset (Plan 047). Composes on top of the `left`/`right`
+		// positioning above. Guarded by lastShift so steady-state binds (shift 0) never touch
+		// transform — the per-cell hot path stays write-free outside an active header drag.
+		if (dragShift !== this.lastShift) {
+			this.lastShift = dragShift;
+			this.element.style.transform = dragShift !== 0 ? `translateX(${toPx(dragShift)})` : '';
+			domUpdated = true;
+		}
+
 		if (this.lastClassName !== className) {
 			this.lastClassName = className;
 			this.element.className = className;
@@ -210,10 +251,14 @@ export class CellSlot<TRowData = unknown> {
 			}
 			domUpdated = true;
 		}
+		if (this.element.style.visibility) {
+			this.element.style.visibility = '';
+			domUpdated = true;
+		}
 
 		this.lastRawValue = rawValue;
 
-		// Phase 4: compare against JS-side cache only — no DOM read.
+		// Compare against JS-side cache only — no DOM read.
 		// lastFormattedValue is always kept in sync with contentElement.textContent.
 		// 'custom' mode: content is managed externally (e.g. checkbox cells) — never touch textContent.
 		if (contentMode !== 'custom') {
@@ -281,13 +326,17 @@ export class CellSlot<TRowData = unknown> {
 		this.rowId = '';
 		this.lastRawValue = undefined;
 		this.lastPortalKey = undefined;
-		this.lastMountedDataVersion = -1;
+		this.lastMountedRowVersion = -1;
+		this.lastMountedGlobalVersion = -1;
 		delete this.element.dataset.cellKey;
 		delete this.element.dataset.contentMode;
-		// Phase 4: use JS-side flag to skip DOM read in hot path
+		// Use JS-side flag to skip DOM read in hot path.
 		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');
 			this.hasTabIndex = false;
+		}
+		if (this.element.style.visibility) {
+			this.element.style.visibility = '';
 		}
 	}
 
@@ -298,11 +347,20 @@ export class CellSlot<TRowData = unknown> {
 		this.lastLeft = -1;
 		this.lastRight = -1;
 		this.lastWidth = -1;
+		if (this.lastShift !== 0) {
+			this.lastShift = 0;
+			this.element.style.transform = '';
+		}
+		if (this.lastAriaSelected !== undefined) {
+			this.lastAriaSelected = undefined;
+			this.element.removeAttribute('aria-selected');
+		}
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
 		this.hasTabIndex = false;
-		this.lastMountedDataVersion = -1;
+		this.lastMountedRowVersion = -1;
+		this.lastMountedGlobalVersion = -1;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;

@@ -1,9 +1,71 @@
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { GroupPanelRenderer } from './groupPanelRenderer.js';
+import type { GridLayoutPlan } from './layoutPlan.js';
+
+/**
+ * Compute the per-column horizontal shift (px) that previews a reorder of `fromIndex`
+ * to the insertion gap `gapIndex`, while a header drag is in progress (Plan 047).
+ *
+ * The returned `shifts[i]` is the delta from column i's CURRENT left to the left it
+ * will occupy AFTER the move. Renderers add it to the column's positioning so every
+ * displaced column slides aside under the cursor — and, crucially, the previewed
+ * position is exactly the post-`moveColumn` position. That makes the drop seamless:
+ * when the drag ends the shifts go to 0 and the reorder repaint writes the same pixel
+ * positions, so nothing jumps and no FLIP pass is needed.
+ *
+ * Only center-lane (non-pinned) columns are previewed. If the dragged column or the
+ * insertion target falls outside the center lane the function returns all-zero shifts
+ * (reorder still happens on drop, just without the live preview).
+ */
+export function computeColumnReorderShifts(
+	colWidths: ArrayLike<number>,
+	fromIndex: number,
+	gapIndex: number,
+	pinLeftCount: number,
+	pinRightCount: number
+): number[] {
+	const n = colWidths.length;
+	const shifts = new Array<number>(n).fill(0);
+	if (n === 0) return shifts;
+
+	const centerStart = pinLeftCount;
+	const centerEnd = n - pinRightCount; // exclusive
+	if (fromIndex < centerStart || fromIndex >= centerEnd) return shifts;
+
+	// Clamp the insertion gap into the center lane and mirror the drop's gap→index rule.
+	let gap = gapIndex;
+	if (gap < centerStart) gap = centerStart;
+	if (gap > centerEnd) gap = centerEnd;
+	const toIndex = gap > fromIndex ? gap - 1 : gap;
+	if (toIndex === fromIndex) return shifts;
+
+	// Current center order and the order after moving `fromIndex` to `toIndex`.
+	const order: number[] = [];
+	for (let i = centerStart; i < centerEnd; i++) order.push(i);
+	const newOrder = order.slice();
+	const [moved] = newOrder.splice(fromIndex - centerStart, 1);
+	newOrder.splice(toIndex - centerStart, 0, moved);
+
+	// Relative lefts (the center lane base cancels out in the delta).
+	const curLeft = new Map<number, number>();
+	let acc = 0;
+	for (const ci of order) {
+		curLeft.set(ci, acc);
+		acc += colWidths[ci];
+	}
+	acc = 0;
+	for (const ci of newOrder) {
+		shifts[ci] = acc - (curLeft.get(ci) ?? 0);
+		acc += colWidths[ci];
+	}
+	return shifts;
+}
 
 export interface ColumnInteractionControllerOptions<TRowData> {
 	engine: GridEngine<TRowData>;
 	getOverlayLayer: () => HTMLDivElement | null;
 	getScrollViewport: () => HTMLDivElement | null;
+	getLayoutPlan: () => GridLayoutPlan | null;
 	schedulePaint: () => void;
 }
 
@@ -11,6 +73,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private engine: GridEngine<TRowData>;
 	private getOverlayLayer: () => HTMLDivElement | null;
 	private getScrollViewport: () => HTMLDivElement | null;
+	private getLayoutPlan: () => GridLayoutPlan | null;
 	private schedulePaint: () => void;
 	private isColumnReordering = false;
 	private columnDragStartX = 0;
@@ -19,12 +82,25 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private columnDragField: string | null = null;
 	private columnDropInsertionIndex = -1;
 	private columnDropIndicator: HTMLDivElement | null = null;
+	private indicatorShown = false;
 	private columnDragGhost: HTMLDivElement | null = null;
+	// Live-reorder preview (Plan 047): per-column shift (px) for the current insertion
+	// point. Null when no preview is active. Recomputed only when the insertion index
+	// changes, then read by the header + body renderers via getColumnShift().
+	private dragShifts: number[] | null = null;
+	private shiftInsertionIndex = -2;
+
+	// Group panel reference — set by RenderEngine when panel is mounted.
+	private groupPanel: GroupPanelRenderer<TRowData> | null = null;
+	// Whether the current column drag is over the group panel.
+	private columnDragOverGroupPanel = false;
+	private cachedViewportRect: DOMRect | null = null;
 
 	constructor(options: ColumnInteractionControllerOptions<TRowData>) {
 		this.engine = options.engine;
 		this.getOverlayLayer = options.getOverlayLayer;
 		this.getScrollViewport = options.getScrollViewport;
+		this.getLayoutPlan = options.getLayoutPlan;
 		this.schedulePaint = options.schedulePaint;
 	}
 
@@ -79,24 +155,47 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.columnDragFromIndex = colIndex;
 		this.columnDragField = colField;
 		this.columnDropInsertionIndex = colIndex;
+		this.cachedViewportRect = this.getScrollViewport()?.getBoundingClientRect() ?? null;
 
 		window.addEventListener('mousemove', this.onHeaderColumnDragMove);
 		window.addEventListener('mouseup', this.onHeaderColumnDragMouseUp);
 		window.addEventListener('blur', this.onHeaderColumnDragMouseUp);
 	};
 
+	/** Called by RenderEngine to wire up the group panel for drag-to-group support. */
+	public setGroupPanel(panel: GroupPanelRenderer<TRowData> | null): void {
+		this.groupPanel = panel;
+	}
+
 	public cleanup(): void {
 		window.removeEventListener('mousemove', this.onHeaderColumnDragMove);
 		window.removeEventListener('mouseup', this.onHeaderColumnDragMouseUp);
 		window.removeEventListener('blur', this.onHeaderColumnDragMouseUp);
 
+		if (this.columnDragOverGroupPanel && this.groupPanel) {
+			this.groupPanel.onHeaderDragLeave();
+		}
+		this.columnDragOverGroupPanel = false;
 		this.isColumnReordering = false;
 		this.columnDragFromIndex = -1;
 		this.columnDragField = null;
 		this.columnDropInsertionIndex = -1;
+		this.dragShifts = null;
+		this.shiftInsertionIndex = -2;
+		this.cachedViewportRect = null;
 		this.removeColumnDropIndicator();
 		this.removeColumnDragGhost();
 		this.getScrollViewport()?.closest('.og-grid-container')?.classList.remove('og-col-reordering');
+	}
+
+	/**
+	 * Live-reorder preview shift (px) for a displayed column index — added to the
+	 * column's positioning by the header and body renderers during a drag so columns
+	 * slide aside under the cursor. 0 when no drag/preview is active. See
+	 * {@link computeColumnReorderShifts}.
+	 */
+	public getColumnShift(colIndex: number): number {
+		return this.dragShifts ? (this.dragShifts[colIndex] ?? 0) : 0;
 	}
 
 	public reattachOverlays(): void {
@@ -123,6 +222,36 @@ export class ColumnInteractionController<TRowData = unknown> {
 
 		e.preventDefault();
 		this.updateColumnDragGhost(e);
+
+		// Route to group panel when the dragged column supports grouping and the
+		// pointer is over the panel.  Hide the column drop indicator while over it.
+		const colField = this.columnDragField;
+		if (colField && this.groupPanel) {
+			const state = this.engine.stateManager.getState();
+			const col = state.columns.find((c) => c.field === colField);
+			const isGroupable = col?.enableRowGroup !== false;
+			const overPanel = isGroupable && this.groupPanel.containsPoint(e.clientX, e.clientY);
+
+			if (overPanel !== this.columnDragOverGroupPanel) {
+				this.columnDragOverGroupPanel = overPanel;
+				if (overPanel) {
+					this.groupPanel.onHeaderDragEnter(colField);
+					this.columnDropIndicator && (this.columnDropIndicator.style.display = 'none');
+					// Drop the live-reorder preview while over the panel; recompute on return.
+					this.dragShifts = null;
+					this.shiftInsertionIndex = -2;
+					this.schedulePaint();
+				} else {
+					this.groupPanel.onHeaderDragLeave();
+					this.columnDropIndicator && (this.columnDropIndicator.style.display = '');
+				}
+			}
+			if (overPanel) {
+				this.groupPanel.onHeaderDragMove(e);
+				return;
+			}
+		}
+
 		this.updateColumnDropTarget(e);
 	};
 	private onHeaderColumnDragMouseUp = (): void => {
@@ -130,6 +259,14 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const fromIndex = this.columnDragFromIndex;
 		const insertionIndex = this.columnDropInsertionIndex;
 		const colField = this.columnDragField;
+		const wasOverGroupPanel = this.columnDragOverGroupPanel;
+
+		// Finalise group-panel drop before cleanup() clears drag state
+		if (wasOverGroupPanel && this.groupPanel) {
+			this.groupPanel.onHeaderDragEnd(true);
+		} else if (this.groupPanel?.isHeaderDragActive()) {
+			this.groupPanel.onHeaderDragEnd(false);
+		}
 
 		this.cleanup();
 
@@ -149,6 +286,9 @@ export class ColumnInteractionController<TRowData = unknown> {
 			}
 			return;
 		}
+
+		// Group panel drop was handled above — don't also reorder columns.
+		if (wasOverGroupPanel) return;
 
 		if (!wasReordering || !colField || fromIndex < 0 || insertionIndex < 0) {
 			this.schedulePaint();
@@ -176,6 +316,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private removeColumnDropIndicator(): void {
 		this.columnDropIndicator?.remove();
 		this.columnDropIndicator = null;
+		this.indicatorShown = false;
 	}
 
 	private ensureColumnDragGhost(): void {
@@ -197,6 +338,13 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const labelSpan = document.createElement('span');
 		labelSpan.textContent = label;
 		this.columnDragGhost.appendChild(labelSpan);
+
+		const scrollViewport = this.getScrollViewport();
+		const container = scrollViewport?.closest('.og-grid-container') as HTMLElement | null;
+		if (container && container.dataset.ogThemeScope) {
+			this.columnDragGhost.dataset.ogThemeScope = container.dataset.ogThemeScope;
+		}
+
 		document.body.appendChild(this.columnDragGhost);
 	}
 
@@ -218,7 +366,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const state = this.engine.stateManager.getState();
 		if (state.columns.length === 0) return;
 
-		const scrollRect = scrollViewport.getBoundingClientRect();
+		const scrollRect = this.cachedViewportRect ?? scrollViewport.getBoundingClientRect();
 		const contentX = e.clientX - scrollRect.left + scrollViewport.scrollLeft;
 		const targetCol = Math.max(0, Math.min(state.columns.length - 1, this.engine.geometry.getColIndexAtOffset(contentX)));
 		const targetLeft = this.engine.geometry.colLefts[targetCol] || 0;
@@ -228,6 +376,22 @@ export class ColumnInteractionController<TRowData = unknown> {
 
 		this.columnDropInsertionIndex = insertionIndex;
 
+		// Recompute the live-reorder preview only when the insertion point actually
+		// changes, then force a full repaint so the header + body slide to the previewed
+		// positions. (schedulePaint is wired to a full paint during reorder.)
+		if (insertionIndex !== this.shiftInsertionIndex) {
+			this.shiftInsertionIndex = insertionIndex;
+			const layoutPlan = this.getLayoutPlan();
+			this.dragShifts = computeColumnReorderShifts(
+				this.engine.geometry.colWidths,
+				this.columnDragFromIndex,
+				insertionIndex,
+				layoutPlan?.columns.pinLeftCount ?? 0,
+				layoutPlan?.columns.pinRightCount ?? 0
+			);
+			this.schedulePaint();
+		}
+
 		const indicatorContentLeft =
 			insertionIndex >= state.columns.length
 				? this.engine.geometry.getTotalWidth(state.defaultColWidth)
@@ -235,7 +399,21 @@ export class ColumnInteractionController<TRowData = unknown> {
 		const indicatorViewportLeft = indicatorContentLeft - scrollViewport.scrollLeft;
 
 		this.columnDropIndicator.style.display = 'block';
-		this.columnDropIndicator.style.transform = `translate3d(${indicatorViewportLeft}px, 0, 0)`;
-		this.columnDropIndicator.style.height = `${Math.max(0, this.engine.viewport.viewportHeight - 40)}px`;
+		const topChromeHeight = this.getLayoutPlan()?.chrome.topChromeHeight ?? 0;
+		this.columnDropIndicator.style.height = `${Math.max(0, this.engine.viewport.viewportHeight - topChromeHeight)}px`;
+
+		const transform = `translate3d(${indicatorViewportLeft}px, 0, 0)`;
+		if (!this.indicatorShown) {
+			// First placement: position instantly (no fly-in from the left edge), then enable
+			// the CSS glide + fade so it slides smoothly between insertion points afterwards.
+			this.indicatorShown = true;
+			this.columnDropIndicator.style.transition = 'none';
+			this.columnDropIndicator.style.transform = transform;
+			void this.columnDropIndicator.offsetWidth; // commit position before transitions run
+			this.columnDropIndicator.style.transition = '';
+			this.columnDropIndicator.classList.add('og-indicator-ready');
+		} else {
+			this.columnDropIndicator.style.transform = transform; // glides via CSS transition
+		}
 	}
 }

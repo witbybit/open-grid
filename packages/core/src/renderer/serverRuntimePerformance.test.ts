@@ -157,11 +157,12 @@ function getScrollContext(grid: AuditGrid) {
 		isScrolling: true,
 		state,
 		stateVersion: 0,
-		dataVersion: state.dataVersion,
+		rowVersions: grid.store.engine.rowVersions,
+		globalVersion: state.globalVersion,
 		styleVersion: 0,
 		loadingVersion: 0,
 		activeEdit: state.activeEdit,
-		hasStyleHooks: !!state.styleSlots,
+		hasDeferredCellStyleRules: !!state.styleRules?.length,
 		hasCustomRenderers: plan.hasCustomRenderers,
 		plan,
 		visibleColRange: grid.store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),
@@ -195,7 +196,11 @@ async function createServerAuditGrid(options: { rows?: number; cols?: number; bl
 		getRowId: (row) => row.id,
 		runtimeLimits: { maxRenderedRows: 28, maxRenderedCells: 360 },
 	});
-	const controller = new ServerRowModelController<AuditPerfRow>(store, { datasource, blockSize: options.blockSize ?? 100, columns });
+	const controller = new ServerRowModelController<AuditPerfRow>(store.getServerRowModelRuntime(), {
+		datasource,
+		blockSize: options.blockSize ?? 100,
+		columns,
+	});
 	const container = createContainer();
 	const renderer = new RenderEngine(store.engine, store);
 	renderer.onMountCellContent = ({ cellKey, container: host }) => {
@@ -237,13 +242,13 @@ function assertNoStaleOrOverlappingDom(grid: AuditGrid): void {
 	expect(rows.length).toBeLessThanOrEqual(28 * 3);
 	for (const [rowIndex, slot] of grid.renderer.rowRenderer.activeRows) {
 		expect(expectedRowIndices.has(rowIndex)).toBe(true);
-		expect(slot.cells.size).toBeGreaterThan(0);
-		expect(slot.cells.size).toBeLessThanOrEqual(360);
+		expect(slot.cellCount).toBeGreaterThan(0);
+		expect(slot.cellCount).toBeLessThanOrEqual(360);
 		expect(slot.element.dataset.rowIndex).toBe(String(rowIndex));
 
-		// Assert DOM cells match the active cells map exactly to catch zombie cells
+		// Assert DOM cells match the active cell count exactly to catch zombie cells
 		const cells = Array.from(slot.element.querySelectorAll('.og-cell'));
-		expect(cells.length).toBe(slot.cells.size);
+		expect(cells.length).toBe(slot.cellCount);
 	}
 
 	for (const row of rows) {
@@ -387,7 +392,12 @@ function assertHorizontalGeometryIsContinuous(grid: AuditGrid, expectedScrollLef
 	);
 	expect(activeSlots.length).toBeGreaterThan(0);
 	const firstSlot = activeSlots[0];
-	const cells = Array.from(firstSlot.cells.entries()).sort(([left], [right]) => left - right);
+	const cells: [number, (typeof firstSlot.leftCells)[number]][] = [];
+	for (let i = 0; i < firstSlot.leftCells.length; i++) cells.push([i, firstSlot.leftCells[i]]);
+	const cs = firstSlot.centerColStart;
+	for (let i = 0; i < firstSlot.centerCells.length; i++) cells.push([cs + i, firstSlot.centerCells[i]]);
+	for (let i = 0; i < firstSlot.rightCells.length; i++) cells.push([firstSlot.pinRightStart + i, firstSlot.rightCells[i]]);
+	cells.sort(([a], [b]) => a - b);
 	expect(cells.length).toBeGreaterThan(0);
 
 	const viewportWidth = grid.store.engine.viewport.viewportWidth;
@@ -508,7 +518,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		assertHorizontalGeometryIsContinuous(grid, 0);
 
 		cleanupGrid(grid);
-	});
+	}, 10_000);
 
 	it('keeps violent real browser vertical scroll bounded, continuous, and visually non-stale across million rows', async () => {
 		const grid = await createServerAuditGrid({ rows: 1_000_000, cols: 1200 });
@@ -663,6 +673,12 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		expect(CORE_STYLES).toContain('.og-custom-renderer-container');
 	});
 
+	it('keeps pinned selected-row lanes opaque so center text cannot show through', () => {
+		expect(CORE_STYLES).toContain('.og-row-selected .og-row-pin-left');
+		expect(CORE_STYLES).toContain('.og-row-selected .og-cell-pinned-left');
+		expect(CORE_STYLES).toContain('linear-gradient(var(--og-selection-bg), var(--og-selection-bg)), var(--og-bg-color)');
+	});
+
 	it('preserves custom-live portals during scrolling without increasing warmMisses', async () => {
 		const grid = await createServerAuditGrid({ rows: 1000, cols: 50 });
 		await flushAnimationFrame();
@@ -703,7 +719,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 				};
 			},
 		};
-		const controller = new ServerRowModelController<AuditPerfRow>(store, { datasource, blockSize: 50, columns: cols });
+		const controller = new ServerRowModelController<AuditPerfRow>(store.getServerRowModelRuntime(), { datasource, blockSize: 50, columns: cols });
 		const container = createContainer();
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);

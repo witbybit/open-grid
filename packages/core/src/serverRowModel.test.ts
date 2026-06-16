@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GridStore } from './store.js';
+import { GridEventName, GridStore } from './store.js';
 import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
 
 interface TestRow {
@@ -29,7 +29,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -67,7 +67,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -103,7 +103,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 100,
 			columns: store.getState().columns,
@@ -147,7 +147,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 100,
 			columns: store.getState().columns,
@@ -195,7 +195,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -213,7 +213,7 @@ describe('ServerRowModelController', () => {
 		expect(controller.getVisualRowCount()).toBe(100);
 	});
 
-	it('should not synchronously set state and increment dataVersion when fetching subsequent blocks (blockIndex > 0)', async () => {
+	it('should not synchronously set state and increment globalVersion when fetching subsequent blocks (blockIndex > 0)', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
@@ -231,7 +231,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -239,9 +239,9 @@ describe('ServerRowModelController', () => {
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		// Reset dataVersion/loading change listeners
+		// Reset globalVersion/loading change listeners
 		const stateBefore = store.getState();
-		const initialDataVersion = stateBefore.dataVersion;
+		const initialGlobalVersion = stateBefore.globalVersion;
 
 		const stateSpy = vi.spyOn(store, 'setState');
 
@@ -249,16 +249,16 @@ describe('ServerRowModelController', () => {
 		controller.loadVisibleBlocks(60, 60);
 
 		// The setState should not have been called synchronously during the fetch start for block index 1
-		// Since setState wasn't called synchronously, dataVersion should still be the same
+		// Since setState wasn't called synchronously, globalVersion should still be the same
 		expect(stateSpy).not.toHaveBeenCalled();
-		expect(store.getState().dataVersion).toBe(initialDataVersion);
+		expect(store.getState().globalVersion).toBe(initialGlobalVersion);
 
 		// Now wait for the async fetch to complete
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		// Now the async response should have arrived, triggering setState with dataVersion increment
+		// Now the async response should have arrived, triggering setState with globalVersion increment
 		expect(stateSpy).toHaveBeenCalled();
-		expect(store.getState().dataVersion).toBe(initialDataVersion + 1);
+		expect(store.getState().globalVersion).toBe(initialGlobalVersion + 1);
 	});
 
 	it('should ignore an in-flight response after dispose', async () => {
@@ -276,7 +276,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController<TestRow>(store, {
+		const controller = new ServerRowModelController<TestRow>(store.getServerRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -309,7 +309,7 @@ describe('ServerRowModelController', () => {
 			}),
 		};
 
-		const controller = new ServerRowModelController(store, {
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
 			datasource: firstDatasource,
 			blockSize: 50,
 			columns: store.getState().columns,
@@ -324,5 +324,213 @@ describe('ServerRowModelController', () => {
 		expect(secondDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 0, endRow: 25 }));
 		expect(controller.getVisualRowIndexById('1')).toBe(-1);
 		expect(getRowNode(controller, 0)?.data.name).toBe('Bob');
+	});
+
+	it('captures datasource fetch failures as runtime faults', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const runtimeFault = vi.fn();
+		const blockLoadFailed = vi.fn();
+		store.addEventListener(GridEventName.runtimeFault, runtimeFault);
+		store.addEventListener(GridEventName.serverBlockLoadFailed, blockLoadFailed);
+
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+			datasource: {
+				getRows: vi.fn().mockRejectedValue(new Error('network down')),
+			},
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(runtimeFault).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'server-row-model',
+					operation: 'fetch-block',
+					message: 'network down',
+					context: { blockIndex: 0 },
+				}),
+			})
+		);
+		expect(store.getRuntimeFaults()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					source: 'server-row-model',
+					operation: 'fetch-block',
+				}),
+			])
+		);
+		expect(blockLoadFailed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					blockIndex: 0,
+					startRow: 0,
+					endRow: 49,
+					message: 'network down',
+				}),
+			})
+		);
+		expect(store.getState().loading).toBe(false);
+
+		controller.dispose();
+		store.destroy();
+	});
+});
+
+describe('ServerRowModelController – pagination mode', () => {
+	function makeStore() {
+		return new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+	}
+
+	function makeRows(start: number, count: number): TestRow[] {
+		return Array.from({ length: count }, (_, i) => ({ id: String(start + i), name: `Row ${start + i}` }));
+	}
+
+	it('fetches block 0 with pageNumber and pageSize in GetRowsParams', async () => {
+		const store = makeStore();
+		const getRows = vi.fn().mockResolvedValue({ rows: makeRows(0, 50), totalCount: 1000 });
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 50,
+			columns: store.getState().columns,
+			pagination: { pageSize: 200, initialPage: 0 },
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 0, endRow: 50, pageNumber: 0, pageSize: 200 }));
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('totalCount drives pageCount and dispatches paginationChanged', async () => {
+		const store = makeStore();
+		const paginationChanged = vi.fn();
+		store.addEventListener(GridEventName.paginationChanged, paginationChanged);
+
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+			datasource: { getRows: vi.fn().mockResolvedValue({ rows: makeRows(0, 50), totalCount: 1000 }) },
+			blockSize: 50,
+			columns: store.getState().columns,
+			pagination: { pageSize: 200 },
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(paginationChanged).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: { page: 0, pageCount: 5, totalRows: 1000, pageSize: 200 },
+			})
+		);
+		expect(store.getState().serverPagination).toEqual({ page: 0, pageCount: 5, totalRows: 1000, pageSize: 200 });
+		// Visual row count is the current page window, not the global total
+		expect(controller.getVisualRowCount()).toBe(200);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('goToPage navigates to the target page and purges cache', async () => {
+		const store = makeStore();
+		const getRows = vi.fn().mockResolvedValue({ rows: makeRows(0, 50), totalCount: 1000 });
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 50,
+			columns: store.getState().columns,
+			pagination: { pageSize: 200 },
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		getRows.mockClear();
+
+		controller.goToPage(2);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		// Block 0 of page 2: absoluteStartRow = 2 * 200 = 400
+		expect(getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 400, endRow: 450, pageNumber: 2, pageSize: 200 }));
+		expect(store.getState().serverPagination?.page).toBe(2);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('last page is sized correctly when totalCount is not a multiple of pageSize', async () => {
+		const store = makeStore();
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+			datasource: { getRows: vi.fn().mockResolvedValue({ rows: makeRows(0, 50), totalCount: 950 }) },
+			blockSize: 50,
+			columns: store.getState().columns,
+			pagination: { pageSize: 200 },
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		// Pages: 0..199, 200..399, 400..599, 600..799, 800..949 → pageCount=5
+		expect(store.getState().serverPagination?.pageCount).toBe(5);
+
+		// Navigate to last page (4): rows 800..949 = 150 rows
+		controller.goToPage(4);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRowCount()).toBe(150);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('goToPage is a no-op in infinite scroll mode', async () => {
+		const store = makeStore();
+		const getRows = vi.fn().mockResolvedValue({ rows: makeRows(0, 50), totalCount: 500 });
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 50,
+			columns: store.getState().columns,
+			// No pagination option — infinite scroll mode
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		getRows.mockClear();
+
+		controller.goToPage(2);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		// Should not have triggered a new fetch
+		expect(getRows).not.toHaveBeenCalled();
+		expect(store.getState().serverPagination).toBeUndefined();
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('setDatasource in page mode purges exactly once without a second cascade fetch', async () => {
+		const store = makeStore();
+		const getRows1 = vi.fn().mockResolvedValue({ rows: makeRows(0, 50), totalCount: 1000 });
+		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+			datasource: { getRows: getRows1 },
+			blockSize: 50,
+			columns: store.getState().columns,
+			pagination: { pageSize: 200 },
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const getRows2 = vi.fn().mockResolvedValue({ rows: makeRows(0, 50), totalCount: 800 });
+		controller.setDatasource({ getRows: getRows2 });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		// Exactly one call on the new datasource (block 0 of page 0)
+		expect(getRows2).toHaveBeenCalledTimes(1);
+		expect(getRows2).toHaveBeenCalledWith(expect.objectContaining({ startRow: 0, endRow: 50, pageNumber: 0, pageSize: 200 }));
+
+		controller.dispose();
+		store.destroy();
 	});
 });

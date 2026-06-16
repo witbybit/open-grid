@@ -1,4 +1,4 @@
-import type { VisualRow } from '../store.js';
+import type { VisualRow } from '../visualRow.js';
 import type { RowSlot } from './rowSlot.js';
 import type { PortalMountManager } from './portalMountManager.js';
 
@@ -41,8 +41,9 @@ export class FullWidthRowRenderer<TRowData = unknown> {
 		onCollapseLanes(slot);
 
 		const rowKey = visualRow.id;
-		if (slot.element.dataset.rowKey !== rowKey) {
+		if (slot.lastPortalRowKey !== rowKey) {
 			onReleaseRowPortal(slot);
+			slot.lastPortalRowKey = rowKey;
 			slot.element.dataset.rowKey = rowKey;
 		}
 
@@ -57,10 +58,11 @@ export class FullWidthRowRenderer<TRowData = unknown> {
 	 * Hides and removes the portal host from the slot element.
 	 */
 	public release(slot: RowSlot<TRowData>): boolean {
-		const rowKey = slot.element.dataset.rowKey;
+		const rowKey = slot.lastPortalRowKey;
 		if (!rowKey) return false;
 		const host = this.rowPortalHosts.get(slot.element);
 		if (!host) {
+			slot.lastPortalRowKey = undefined;
 			delete slot.element.dataset.rowKey;
 			return false;
 		}
@@ -68,6 +70,7 @@ export class FullWidthRowRenderer<TRowData = unknown> {
 		host.hidden = true;
 		delete host.dataset.rowKey;
 		host.remove();
+		slot.lastPortalRowKey = undefined;
 		delete slot.element.dataset.rowKey;
 		return true;
 	}

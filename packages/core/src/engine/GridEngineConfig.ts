@@ -1,10 +1,12 @@
-import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleSlots } from '../store.js';
+import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleRule, RowSelectionOptions } from '../store.js';
+import type { RowValidator } from '../features/ValidationManager.js';
+import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
 	columns: ColumnDef<TRowData>[];
-	/** When 'multiple', a built-in checkbox column is auto-injected at position 0 and pinned left. */
-	rowSelection?: 'single' | 'multiple';
+	/** Enables first-class row node selection and configures built-in checkbox behavior. */
+	rowSelection?: RowSelectionOptions;
 	getRowId?: (row: TRowData) => string;
 	rowHeights?: Record<string, number>;
 	columnWidths?: Record<string, number>;
@@ -15,10 +17,17 @@ export interface GridEngineConfig<TRowData = unknown> {
 	selectedRowIds?: string[];
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
+	themeName?: BuiltInThemeName;
 	activeEdit?: GridCellPointer | null;
 	loadingSkeletonCount?: number;
-	styleSlots?: GridStyleSlots<TRowData>;
+	styleRules?: GridStyleRule<TRowData>[];
 	loading?: boolean;
+	/**
+	 * Grid-level cross-field validator. Runs after per-column valueValidators on every
+	 * validateCell / validateGrid call. Return a map of colField → error string to set
+	 * cross-field errors; return null/empty string for a field to clear its row-level error.
+	 */
+	rowValidator?: RowValidator<TRowData>;
 
 	// Tree / Grouping / Master-Detail State Configuration
 	groupBy?: string[];
@@ -30,6 +39,11 @@ export interface GridEngineConfig<TRowData = unknown> {
 	rowModelConfig?: import('../rowModel.js').RowModelConfig<TRowData>;
 	showGroupFooter?: boolean;
 	enableStickyGroupRows?: boolean;
+	showGroupPanel?: boolean;
+	showFilterChipBar?: boolean;
+	showFloatingFilters?: boolean;
+	showStatusBar?: boolean;
+	pagination?: { pageSize: number; page?: number };
 	expansion?: {
 		groups: Record<string, true>;
 		treeRows: Record<string, true>;
@@ -54,4 +68,6 @@ export interface GridEngineConfig<TRowData = unknown> {
 	 * Default: false.
 	 */
 	overscanAdaptive?: boolean;
+	/** Returns the host container element. Used by auto-size and any feature that needs DOM measurements. */
+	getContainerElement?: () => HTMLElement | null;
 }

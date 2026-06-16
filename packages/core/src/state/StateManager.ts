@@ -1,18 +1,27 @@
 import type { GridState, GridStateUpdater, Listener } from '../store.js';
+import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 
 export class StateManager<TRowData = unknown> {
 	private state: GridState<TRowData>;
 	private listeners = new Set<Listener<TRowData>>();
 	private keyListeners = new Map<string, Set<Listener<TRowData>>>();
 
-	private isBatching = false;
-	private batchedStateUpdates: Partial<GridState<TRowData>> = {};
+	private transactionDepth = 0;
+	// Keys touched inside an open transaction — used to drive notifyChanges at commit.
+	// Using a Set avoids the repeated object spread that batchedStateUpdates previously required.
+	private batchedKeys = new Set<string>();
 	private preTransactionState: GridState<TRowData> | null = null;
 	private onChangesCallback?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void;
+	private readonly faultReporter?: RuntimeFaultReporter<TRowData>;
 
-	constructor(initialState: GridState<TRowData>, onChanges?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void) {
+	constructor(
+		initialState: GridState<TRowData>,
+		onChanges?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void,
+		faultReporter?: RuntimeFaultReporter<TRowData>
+	) {
 		this.state = initialState;
 		this.onChangesCallback = onChanges;
+		this.faultReporter = faultReporter;
 	}
 
 	public debugGetStateCount = 0;
@@ -25,8 +34,8 @@ export class StateManager<TRowData = unknown> {
 	public setState = (updater: GridStateUpdater<TRowData>): void => {
 		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
 
-		if (this.isBatching) {
-			this.batchedStateUpdates = { ...this.batchedStateUpdates, ...nextState };
+		if (this.transactionDepth > 0) {
+			for (const key of Object.keys(nextState)) this.batchedKeys.add(key);
 			this.state = { ...this.state, ...nextState };
 			return;
 		}
@@ -48,21 +57,38 @@ export class StateManager<TRowData = unknown> {
 	}
 
 	public startTransaction = (): void => {
-		if (!this.isBatching) {
+		if (this.transactionDepth === 0) {
 			this.preTransactionState = this.state;
-			this.isBatching = true;
+			this.batchedKeys.clear();
 		}
+		this.transactionDepth++;
 	};
 
 	public endTransaction = (): void => {
-		if (!this.isBatching) return;
-		this.isBatching = false;
+		if (this.transactionDepth === 0) return;
+		this.transactionDepth--;
+		if (this.transactionDepth > 0) return;
 		const preState = this.preTransactionState;
-		const updates = this.batchedStateUpdates;
+		const keys = this.batchedKeys;
 		this.preTransactionState = null;
-		this.batchedStateUpdates = {};
-		if (preState && Object.keys(updates).length > 0) {
-			this.notifyChanges(preState, Object.keys(updates));
+		this.batchedKeys = new Set<string>();
+		if (preState && keys.size > 0) {
+			this.notifyChanges(preState, Array.from(keys));
+		}
+	};
+
+	/**
+	 * Runs `work` within a single state transaction. Nested calls are supported —
+	 * notifications are deferred and fired once when the outermost transaction commits.
+	 * The finally block guarantees `endTransaction` is called even if `work` throws,
+	 * preventing the state manager from getting stuck in batching mode.
+	 */
+	public transaction = <T>(work: () => T): T => {
+		this.startTransaction();
+		try {
+			return work();
+		} finally {
+			this.endTransaction();
 		}
 	};
 
@@ -83,7 +109,12 @@ export class StateManager<TRowData = unknown> {
 			try {
 				this.onChangesCallback(prevState, updatedKeysArray);
 			} catch (e) {
-				console.error('StateManager: Error in onChangesCallback', e);
+				this.faultReporter?.report({
+					source: 'state-manager',
+					operation: 'onChangesCallback',
+					error: e,
+					context: { affectedKeys: updatedKeysArray },
+				});
 			}
 		}
 
@@ -92,7 +123,12 @@ export class StateManager<TRowData = unknown> {
 			try {
 				listener(this.state);
 			} catch (e) {
-				console.error('StateManager: Error in global store listener', e);
+				this.faultReporter?.report({
+					source: 'state-manager',
+					operation: 'global-listener',
+					error: e,
+					context: { affectedKeys: updatedKeysArray },
+				});
 			}
 		});
 
@@ -104,7 +140,7 @@ export class StateManager<TRowData = unknown> {
 					try {
 						listener(this.state);
 					} catch (e) {
-						console.error(`StateManager: Error in targeted key listener for ${key}`, e);
+						this.faultReporter?.report({ source: 'state-manager', operation: 'key-listener', error: e, context: { key } });
 					}
 				});
 			}
@@ -141,7 +177,7 @@ export class StateManager<TRowData = unknown> {
 				try {
 					listener(this.state);
 				} catch (e) {
-					console.error(`StateManager: Error in custom triggered key listener for ${key}`, e);
+					this.faultReporter?.report({ source: 'state-manager', operation: 'triggered-key-listener', error: e, context: { key } });
 				}
 			});
 		}

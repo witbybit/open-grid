@@ -6,7 +6,7 @@ function createStore(rowCount: number, colCount: number): GridStore<{ id: string
 	const store = new GridStore<{ id: string }>({
 		columns: Array.from({ length: colCount }, (_, i) => ({ field: `C${i}`, header: `Col ${i}` })),
 	});
-	new ClientRowModelController<{ id: string }>(store, {
+	new ClientRowModelController<{ id: string }>(store.getClientRowModelRuntime(), {
 		rows: Array.from({ length: rowCount }, (_, i) => ({ id: `row-${i}` })),
 		columns: store.getState().columns,
 	});
@@ -24,8 +24,8 @@ describe('ViewportController scrolling range computations', () => {
 		expect(visibleRows.endIdx).toBe(9);
 
 		const visibleCols = store.getVisibleColumnRange();
-		expect(visibleCols.startIdx).toBe(0);
-		expect(visibleCols.endIdx).toBe(5);
+		expect(visibleCols.colStart).toBe(0);
+		expect(visibleCols.colEnd).toBe(5);
 
 		store.destroy();
 	});
@@ -36,7 +36,7 @@ describe('ViewportController scrolling range computations', () => {
 			overscanAdaptive: true,
 			rowOverscanPx: 480, // 12 rows × 40px
 		});
-		new ClientRowModelController<{ id: string }>(store, {
+		new ClientRowModelController<{ id: string }>(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}` })),
 			columns: store.getState().columns,
 		});
@@ -58,7 +58,7 @@ describe('ViewportController scrolling range computations', () => {
 			columns: Array.from({ length: 10 }, (_, i) => ({ field: `C${i}`, header: `Col ${i}` })),
 			colBuffer: 8,
 		});
-		new ClientRowModelController<{ id: string }>(store, {
+		new ClientRowModelController<{ id: string }>(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 5 }, (_, i) => ({ id: `row-${i}` })),
 			columns: store.getState().columns,
 		});
@@ -66,7 +66,7 @@ describe('ViewportController scrolling range computations', () => {
 		store.setViewportPins({ left: 2, right: 1 });
 		store.setScrollPosition(0, 300);
 
-		expect(store.getVisibleColumnRange()).toEqual({ startIdx: 2, endIdx: 8 });
+		expect(store.getVisibleColumnRange()).toEqual({ colStart: 2, colEnd: 8, total: 10 });
 
 		store.destroy();
 	});

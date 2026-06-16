@@ -1,6 +1,16 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { applyRenderWindowRuntimeLimits, getRowIndices, getColIndices, diffRenderWindow, type RenderWindow } from './renderWindow.js';
+import {
+	applyRenderWindowRuntimeLimits,
+	getRowIndices,
+	getColIndices,
+	diffRenderWindow,
+	computeRenderWindow,
+	sameRenderedWindow,
+	type RenderWindow,
+} from './renderWindow.js';
+import { GridStore } from '../store.js';
+import { ClientRowModelController } from '../rowModel.js';
 
 describe('RenderWindow & ViewportDelta calculations', () => {
 	const baseWindow: RenderWindow = {
@@ -142,5 +152,304 @@ describe('RenderWindow & ViewportDelta calculations', () => {
 		expect(limited.colEnd).toBeGreaterThanOrEqual(limited.colStart);
 		expect(getRowIndices(limited)).toEqual([0, 1, 2, 3, 17, 18, 19]);
 		expect(getColIndices(limited)).toEqual([0, 1, 2, 8, 9]);
+	});
+
+	it('anchors sticky group rows below pinned top rows', () => {
+		const store = new GridStore<{ id: string; category: string; product: string }>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'product', header: 'Product' },
+			],
+			defaultRowHeight: 40,
+			groupRowHeight: 40,
+			enableStickyGroupRows: true,
+			rowModelConfig: {
+				type: 'client',
+				grouping: {
+					model: [{ colId: 'category' }, { colId: 'product' }],
+					defaultExpanded: true,
+				},
+			},
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', category: 'Hardware', product: 'Workstation' },
+				{ id: '2', category: 'Hardware', product: 'Workstation' },
+				{ id: '3', category: 'Hardware', product: 'Laptop' },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.setViewportPins({ top: 1 });
+		store.setViewportSize(500, 160);
+		store.setScrollPosition(80, 0);
+
+		const window = computeRenderWindow(store.engine);
+		expect(window.stickyGroupStack?.map((s) => s.visualIndex)).toContain(1);
+		const stickyItem = window.stickyGroupStack?.find((s) => s.visualIndex === 1);
+		expect(stickyItem?.top).toBe(120);
+		expect(window.stickyGroupStack).toEqual([
+			{
+				groupId: 'group:category=Hardware/product=Workstation',
+				visualIndex: 1,
+				depth: 1,
+				top: 120,
+				height: 40,
+				lastDescendantIndex: 3,
+				boundaryBottom: 160,
+				pushed: false,
+			},
+		]);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('does not invalidate the row window for sticky group pixel movement only', () => {
+		const base = {
+			rowStart: 10,
+			rowEnd: 20,
+			colStart: 0,
+			colEnd: 3,
+			pinLeftCols: 0,
+			pinRightCols: 0,
+			pinTopRows: 0,
+			pinBottomRows: 0,
+			rowCount: 100,
+			colCount: 4,
+			scrollTop: 120,
+			scrollLeft: 0,
+			viewportWidth: 500,
+			viewportHeight: 300,
+			stickyGroupStack: [
+				{
+					groupId: 'category:Hardware',
+					visualIndex: 4,
+					depth: 0,
+					top: 120,
+					height: 40,
+					lastDescendantIndex: 30,
+					boundaryBottom: 1240,
+					pushed: false,
+				},
+			],
+		};
+
+		expect(
+			sameRenderedWindow(base, {
+				...base,
+				scrollTop: 160,
+				stickyGroupStack: [{ ...base.stickyGroupStack[0], top: 160 }],
+			})
+		).toBe(true);
+		expect(
+			sameRenderedWindow(base, {
+				...base,
+				stickyGroupStack: [{ ...base.stickyGroupStack[0], pushed: true }],
+			})
+		).toBe(false);
+	});
+
+	it('pushes sticky group rows off at their subtree boundary', () => {
+		const store = new GridStore<{ id: string; category: string; product: string }>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'product', header: 'Product' },
+			],
+			defaultRowHeight: 40,
+			groupRowHeight: 40,
+			enableStickyGroupRows: true,
+			rowModelConfig: {
+				type: 'client',
+				grouping: {
+					model: [{ colId: 'category' }],
+					defaultExpanded: true,
+				},
+			},
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', category: 'Hardware', product: 'Workstation' },
+				{ id: '2', category: 'Hardware', product: 'Laptop' },
+				{ id: '3', category: 'Software', product: 'IDE' },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.setViewportSize(500, 160);
+		store.setScrollPosition(90, 0);
+
+		const window = computeRenderWindow(store.engine);
+		expect(window.stickyGroupStack).toEqual([
+			{
+				groupId: 'group:category=Hardware',
+				visualIndex: 0,
+				depth: 0,
+				top: 80,
+				height: 40,
+				lastDescendantIndex: 2,
+				boundaryBottom: 120,
+				pushed: true,
+			},
+		]);
+		expect(window.stickyGroupStack?.map((s) => s.top)).toEqual([80]);
+
+		controller.dispose();
+		store.destroy();
+	});
+});
+
+// ─── Column Virtualization Architecture Guard ─────────────────────────────────
+// These tests lock in the contract that only the visible column slice is bound,
+// preventing a silent regression from re-rendering all columns regardless of scroll.
+
+describe('column virtualization', () => {
+	function makeWideStore(colCount: number, colWidth: number, colBuffer: number) {
+		const columns = Array.from({ length: colCount }, (_, i) => ({
+			field: `col_${i}`,
+			header: `Col ${i}`,
+			width: colWidth,
+		}));
+		const store = new GridStore<Record<string, unknown>>({
+			getRowId: (r) => String(r['id']),
+			columns,
+			defaultRowHeight: 40,
+			colBuffer,
+			rowModelConfig: { type: 'client' },
+		});
+		return { store, columns };
+	}
+
+	it('center lane renders only the visible column slice, not all columns', () => {
+		const COL_COUNT = 50;
+		const COL_WIDTH = 100;
+		// viewport = 500px → ~5 active columns; colBuffer=1 → max 7 rendered center cols
+		const { store } = makeWideStore(COL_COUNT, COL_WIDTH, 1);
+		store.setViewportSize(500, 400);
+		store.setScrollPosition(0, 0);
+
+		const w = computeRenderWindow(store.engine);
+		const renderedCenterCols = w.colEnd - w.colStart + 1;
+
+		expect(w.colCount).toBe(COL_COUNT);
+		// Must render far fewer than all columns
+		expect(renderedCenterCols).toBeLessThan(COL_COUNT);
+		// With 500px viewport and 100px cols: 5 active + 2×1 buffer = 7 max
+		expect(renderedCenterCols).toBeLessThanOrEqual(7);
+
+		store.destroy();
+	});
+
+	it('scrolling right advances colStart and colEnd', () => {
+		const { store } = makeWideStore(50, 100, 1);
+		store.setViewportSize(500, 400);
+
+		store.setScrollPosition(0, 0);
+		const w0 = computeRenderWindow(store.engine);
+
+		// Scroll right by 1000px (10 columns worth)
+		store.setScrollPosition(0, 1000);
+		const w1 = computeRenderWindow(store.engine);
+
+		expect(w1.colStart).toBeGreaterThan(w0.colStart);
+		expect(w1.colEnd).toBeGreaterThan(w0.colEnd);
+
+		store.destroy();
+	});
+
+	it('scrolling to end reaches the last column', () => {
+		const COL_COUNT = 50;
+		const COL_WIDTH = 100;
+		const { store } = makeWideStore(COL_COUNT, COL_WIDTH, 1);
+		store.setViewportSize(500, 400);
+
+		// Scroll all the way to the right
+		store.setScrollPosition(0, COL_COUNT * COL_WIDTH);
+		const w = computeRenderWindow(store.engine);
+
+		expect(w.colEnd).toBe(COL_COUNT - 1);
+
+		store.destroy();
+	});
+
+	it('colBuffer enlarges the rendered window symmetrically', () => {
+		const makeAtScroll = (colBuffer: number, scrollLeft: number) => {
+			const { store } = makeWideStore(50, 100, colBuffer);
+			store.setViewportSize(500, 400);
+			store.setScrollPosition(0, scrollLeft);
+			const w = computeRenderWindow(store.engine);
+			store.destroy();
+			return w.colEnd - w.colStart + 1;
+		};
+
+		// Scroll to middle so both left and right overscan can expand
+		const scroll = 1000;
+		const spanWith1 = makeAtScroll(1, scroll);
+		const spanWith4 = makeAtScroll(4, scroll);
+
+		// 4 extra cols each side = 6 extra total vs buffer=1
+		expect(spanWith4).toBeGreaterThan(spanWith1);
+		expect(spanWith4 - spanWith1).toBe(6); // (4-1)*2
+	});
+
+	it('pinned columns are never counted in the center colStart/colEnd range', () => {
+		const COL_COUNT = 20;
+		const columns = Array.from({ length: COL_COUNT }, (_, i) => ({
+			field: `col_${i}`,
+			header: `Col ${i}`,
+			width: 80,
+		}));
+		const store = new GridStore<Record<string, unknown>>({
+			getRowId: (r) => String(r['id']),
+			columns,
+			defaultRowHeight: 40,
+			colBuffer: 1,
+			rowModelConfig: { type: 'client' },
+		});
+		store.setViewportPins({ left: 2, right: 2 });
+		store.setViewportSize(500, 400);
+		store.setScrollPosition(0, 0);
+
+		const w = computeRenderWindow(store.engine);
+
+		// Pinned cols live outside [colStart, colEnd]
+		expect(w.colStart).toBeGreaterThanOrEqual(w.pinLeftCols);
+		expect(w.colEnd).toBeLessThanOrEqual(w.colCount - 1 - w.pinRightCols);
+		expect(w.pinLeftCols).toBe(2);
+		expect(w.pinRightCols).toBe(2);
+
+		store.destroy();
+	});
+
+	it('getColIndices includes pinned cols plus only the center slice', () => {
+		// 10 total cols, 1 pinned each side, viewport shows ~3 center cols
+		const columns = Array.from({ length: 10 }, (_, i) => ({
+			field: `col_${i}`,
+			header: `Col ${i}`,
+			width: 100,
+		}));
+		const store = new GridStore<Record<string, unknown>>({
+			getRowId: (r) => String(r['id']),
+			columns,
+			defaultRowHeight: 40,
+			colBuffer: 0,
+			rowModelConfig: { type: 'client' },
+		});
+		store.setViewportPins({ left: 1, right: 1 });
+		store.setViewportSize(300, 400); // 300px shows ~3 center columns
+		store.setScrollPosition(0, 0);
+
+		const w = computeRenderWindow(store.engine);
+		const rendered = getColIndices(w);
+
+		// Must always include both pinned edges
+		expect(rendered).toContain(0); // left-pinned
+		expect(rendered).toContain(9); // right-pinned
+		// Must NOT render all 10 columns
+		expect(rendered.length).toBeLessThan(10);
+
+		store.destroy();
 	});
 });

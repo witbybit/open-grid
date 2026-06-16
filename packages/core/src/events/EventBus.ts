@@ -1,7 +1,14 @@
 import type { GridEvent, GridEventListener, GridEventPayloadMap } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 
 export class EventBus<TRowData = unknown> {
 	private eventListeners = new Map<string, Set<GridEventListener<unknown>>>();
+	private faultReporter?: RuntimeFaultReporter<TRowData>;
+
+	public setRuntimeFaultReporter(reporter: RuntimeFaultReporter<TRowData>): void {
+		this.faultReporter = reporter;
+	}
 
 	public addEventListener<K extends keyof GridEventPayloadMap<TRowData>>(
 		type: K,
@@ -28,7 +35,14 @@ export class EventBus<TRowData = unknown> {
 				try {
 					listener(event as GridEvent<unknown>);
 				} catch (e) {
-					console.error(`EventBus: Error in event listener for "${type}"`, e);
+					this.faultReporter?.report(
+						{
+							source: 'event-bus',
+							operation: String(type),
+							error: e,
+						},
+						{ emitEvent: type !== GridEventName.runtimeFault }
+					);
 				}
 			});
 		}

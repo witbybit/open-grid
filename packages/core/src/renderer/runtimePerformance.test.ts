@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
+import { RenderRuntimeState } from './renderRuntimeState.js';
 import {
 	diffRenderWindow,
 	getColIndices,
@@ -77,7 +78,7 @@ function createWideGrid(options: { rows?: number; cols?: number; custom?: boolea
 		getRowId: (row) => row.id,
 		runtimeLimits: { maxRenderedRows: 20, maxRenderedCells: 220 },
 	});
-	const controller = new ClientRowModelController(store, { rows, columns });
+	const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns });
 	const container = createContainer();
 	const renderer = new RenderEngine(store.engine, store);
 	renderer.mount(container);
@@ -91,11 +92,12 @@ function makeScrollCtx(store: GridStore<RuntimePerfRow>) {
 		isScrolling: true,
 		state,
 		stateVersion: 0,
-		dataVersion: state.dataVersion,
+		rowVersions: store.engine.rowVersions,
+		globalVersion: state.globalVersion,
 		styleVersion: 0,
 		loadingVersion: 0,
 		activeEdit: state.activeEdit,
-		hasStyleHooks: !!state.styleSlots,
+		hasDeferredCellStyleRules: !!state.styleRules?.length,
 		hasCustomRenderers: plan.hasCustomRenderers,
 		plan,
 		visibleColRange: store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),
@@ -126,7 +128,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 			getRowId: (row) => row.id,
 		});
 		const rows = Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows,
 			columns: store.getState().columns,
 		});
@@ -149,8 +151,10 @@ describe('Runtime Performance & Granular Versioning', () => {
 		renderer.mount(container);
 
 		// Trigger scrolling frame
-		store.engine.isScrolling = true;
-		store.engine.isScrollFrameActive = true;
+		const scrollFrameState = new RenderRuntimeState();
+		scrollFrameState.transitionTo('scroll-pending');
+		scrollFrameState.transitionTo('scroll-frame');
+		store.engine.setScrollStateProvider(scrollFrameState);
 		store.engine.getCellValueCallsDuringScroll = 0;
 
 		// Perform scroll update
@@ -164,7 +168,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 			dataVersion: store.getState().dataVersion,
 			styleVersion: 0,
 			loadingVersion: 0,
-			hasStyleHooks: false,
+			hasDeferredCellStyleRules: false,
 			plan,
 		} as any);
 
@@ -172,8 +176,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(store.engine.getCellValueCallsDuringScroll).toBe(0);
 
 		// Stop scroll
-		store.engine.isScrolling = false;
-		store.engine.isScrollFrameActive = false;
+		store.engine.setScrollStateProvider(new RenderRuntimeState());
 
 		renderer.unmount();
 		controller.dispose();
@@ -188,7 +191,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 			getRowId: (row) => row.id,
 		});
 		const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
-		const controller = new ClientRowModelController(store, {
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows,
 			columns: store.getState().columns,
 		});
@@ -235,6 +238,19 @@ describe('Runtime Performance & Granular Versioning', () => {
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
+	});
+
+	it('applies row-selection class through the cached selection membership set', () => {
+		const grid = createWideGrid({ rows: 100, cols: 4 });
+		try {
+			grid.store.selectRows(['row-0', 'row-20', 'row-40']);
+			grid.renderer.fullPaint();
+
+			const selectedRows = Array.from(grid.container.querySelectorAll<HTMLElement>('.og-row-node-selected'));
+			expect(selectedRows.some((row) => row.dataset.rowId === 'row:row-0')).toBe(true);
+		} finally {
+			cleanupGrid(grid);
+		}
 	});
 
 	it('does zero row and cell work when the scroll render window is unchanged', () => {

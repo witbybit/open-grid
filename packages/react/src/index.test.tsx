@@ -5,20 +5,10 @@ import { cleanup } from '@testing-library/react';
 afterEach(cleanup);
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
 import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
-import {
-	GridProvider,
-	GridEventName,
-	PortalCell,
-	PortalManager,
-	OpenGrid,
-	useGridKeySelector,
-	useGridApi,
-	useGridSelector,
-	useClientGrid,
-	useServerGrid,
-	GridPagination,
-	useClientGridPagination,
-} from './index.js';
+import * as ReactPackage from './index.js';
+import { GridProvider } from './gridContext.js';
+import { GridView } from './GridView.js';
+import { GridEventName, Grid, PortalCell, PortalManager, useGridKeySelector, useGridApi, useGridSelector } from './index.js';
 import { useGridNavigationController } from './hooks.js';
 import { createPortalStore } from './GridPortal.js';
 
@@ -43,7 +33,7 @@ function createTestGrid<TRowData>(options: ClientGridOptions<TRowData>) {
 
 const SelectorInspector = () => {
 	const focused = useGridSelector((s) => s.selection.focus);
-	const dataVersion = useGridKeySelector('dataVersion', (s) => s.dataVersion);
+	const dataVersion = useGridKeySelector('globalVersion', (s) => s.globalVersion);
 	const api = useGridApi<TestRow>();
 
 	return (
@@ -540,23 +530,6 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should mount OpenGrid component and setup rendering container', () => {
-		const grid = createTestGrid<TestRow>({
-			rows: [{ id: '1', name: 'Product A' }],
-			columns: [{ field: 'name', header: 'Name', width: 100 }],
-		});
-
-		const { container, unmount } = render(<OpenGrid api={grid.api} pinLeftColumns={1} enableNavigation={true} />);
-
-		// Verify that a div element with relative position has been rendered inside OpenGrid
-		const openGridDiv = container.firstElementChild as HTMLElement;
-		expect(openGridDiv).toBeDefined();
-		expect(openGridDiv.style.position).toBe('relative');
-
-		unmount();
-		grid.api.destroy();
-	});
-
 	it('should keep custom renderer portals mounted when renderer column layout changes', async () => {
 		// This test verifies the cycle: custom renderer columns visible → replace with native columns → restore
 		// custom renderer columns. Uses the same code path (releaseAll + full repaint) as a column reorder.
@@ -591,7 +564,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+		const { unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} />
+			</GridProvider>
+		);
 
 		// Initial render: React renderer portals are mounted and show their values.
 		await screen.findByTestId('severity-renderer');
@@ -630,7 +607,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const eventListener = vi.fn();
 		const unsubscribe = grid.api.addEventListener(GridEventName.cellClicked, eventListener);
 
-		const { container, unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} onCellClick={onCellClick} />);
+		const { container, unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} onCellClick={onCellClick} />
+			</GridProvider>
+		);
 
 		await waitFor(() => {
 			expect(container.querySelector('.og-cell[data-col-field="name"]')).not.toBeNull();
@@ -680,7 +661,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			getRowId: (row) => row.id,
 		});
 
-		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+		const { unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} />
+			</GridProvider>
+		);
 
 		await screen.findByText('Risk LOW');
 
@@ -709,7 +694,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
 
-		const { container, unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+		const { container, unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} />
+			</GridProvider>
+		);
 
 		fireEvent.mouseDown(container.querySelector('.og-cell[data-col-field="name"]')!);
 		expect(grid.api.getState().selection.focus).toBeNull();
@@ -728,7 +717,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const EqualityInspector = () => {
 			const selected = useGridSelector(
-				(state) => ({ version: state.dataVersion }),
+				(state) => ({ version: state.globalVersion }),
 				(left, right) => left.version === right.version
 			);
 			renderSpy(selected);
@@ -751,60 +740,6 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should keep useClientGrid api stable when callers pass inline columns', () => {
-		const apis: Array<ReturnType<typeof useClientGrid<TestRow>>> = [];
-
-		const HookHarness = ({ label }: { label: string }) => {
-			const api = useClientGrid<TestRow>({
-				rows: [{ id: '1', name: label }],
-				columns: [{ field: 'name', header: 'Name', width: 100 }],
-			});
-			apis.push(api);
-			return <span data-testid='api-count'>{apis.length}</span>;
-		};
-
-		const { rerender, unmount } = render(<HookHarness label='Product A' />);
-		rerender(<HookHarness label='Product B' />);
-
-		expect(apis.length).toBeGreaterThanOrEqual(2);
-		expect(apis[0]).toBe(apis[apis.length - 1]);
-
-		unmount();
-	});
-
-	it('should keep hook-created server grids alive through React StrictMode effect replay', async () => {
-		const datasource = {
-			getRows: vi.fn(async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
-				rows: Array.from({ length: endRow - startRow }, (_, index) => ({
-					id: `${startRow + index}`,
-					name: `Server Row ${startRow + index}`,
-				})),
-				totalCount: 100,
-			})),
-		};
-
-		const StrictServerHarness = () => {
-			const api = useServerGrid<TestRow>({
-				datasource,
-				blockSize: 20,
-				columns: [{ field: 'name', header: 'Name', width: 140 }],
-			});
-
-			return <OpenGrid api={api} enableNavigation={false} />;
-		};
-
-		const { unmount } = render(
-			<React.StrictMode>
-				<StrictServerHarness />
-			</React.StrictMode>
-		);
-
-		await screen.findByText('Server Row 0');
-		expect(datasource.getRows).toHaveBeenCalled();
-
-		unmount();
-	});
-
 	it('should rerender custom cell renderer when cell value is programmatically updated', async () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],
@@ -821,7 +756,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			],
 		});
 
-		const { unmount } = render(<OpenGrid api={grid.api} enableNavigation={false} />);
+		const { unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} />
+			</GridProvider>
+		);
 
 		await screen.findByText('Product A');
 		expect(screen.getByTestId('custom-renderer-programmatic').textContent).toBe('Product A');
@@ -865,7 +804,17 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const { unmount } = render(
-			<OpenGrid api={parentGrid.api} enableNavigation detailRowRenderer={() => <OpenGrid api={childGrid.api} enableNavigation />} />
+			<GridProvider api={parentGrid.api}>
+				<GridView
+					api={parentGrid.api}
+					enableNavigation
+					detailRowRenderer={() => (
+						<GridProvider api={childGrid.api}>
+							<GridView api={childGrid.api} enableNavigation />
+						</GridProvider>
+					)}
+				/>
+			</GridProvider>
 		);
 
 		act(() => {
@@ -903,13 +852,17 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const { container, unmount } = render(
 			<div style={{ width: 500, height: 400 }}>
-				<OpenGrid
-					api={grid.api}
-					enableNavigation={false}
-					detailRowRenderer={({ visualRow }) =>
-						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
-					}
-				/>
+				<GridProvider api={grid.api}>
+					<GridView
+						api={grid.api}
+						enableNavigation={false}
+						detailRowRenderer={({ visualRow }) =>
+							visualRow.kind === 'detail' ? (
+								<div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div>
+							) : null
+						}
+					/>
+				</GridProvider>
 			</div>
 		);
 
@@ -959,13 +912,17 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const { container, unmount } = render(
 			<div style={{ width: 500, height: 500 }}>
-				<OpenGrid
-					api={grid.api}
-					enableNavigation={false}
-					detailRowRenderer={({ visualRow }) =>
-						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
-					}
-				/>
+				<GridProvider api={grid.api}>
+					<GridView
+						api={grid.api}
+						enableNavigation={false}
+						detailRowRenderer={({ visualRow }) =>
+							visualRow.kind === 'detail' ? (
+								<div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div>
+							) : null
+						}
+					/>
+				</GridProvider>
 			</div>
 		);
 
@@ -1017,13 +974,17 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const { container, unmount } = render(
 			<div style={{ width: 500, height: 240 }}>
-				<OpenGrid
-					api={grid.api}
-					enableNavigation={false}
-					detailRowRenderer={({ visualRow }) =>
-						visualRow.kind === 'detail' ? <div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div> : null
-					}
-				/>
+				<GridProvider api={grid.api}>
+					<GridView
+						api={grid.api}
+						enableNavigation={false}
+						detailRowRenderer={({ visualRow }) =>
+							visualRow.kind === 'detail' ? (
+								<div data-testid={`detail-${visualRow.parentId}`}>Details for {visualRow.parentId}</div>
+							) : null
+						}
+					/>
+				</GridProvider>
 			</div>
 		);
 
@@ -1205,7 +1166,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const { unmount } = render(
 			<React.StrictMode>
-				<OpenGrid api={grid.api} />
+				<GridProvider api={grid.api}>
+					<GridView api={grid.api} />
+				</GridProvider>
 			</React.StrictMode>
 		);
 
@@ -1241,7 +1204,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			],
 		});
 
-		const { container } = render(<OpenGrid api={grid.api} />);
+		const { container } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} />
+			</GridProvider>
+		);
 		const openGridContainer = container.firstElementChild as HTMLElement;
 
 		// Initial render should bind event listeners on the container
@@ -1273,254 +1240,152 @@ describe('React Adapter (v2 API and Architecture)', () => {
 	});
 });
 
-// ─── GridPagination ───────────────────────────────────────────────────────────
-
-describe('GridPagination', () => {
-	it('renders page buttons and info text', () => {
-		render(<GridPagination page={0} pageCount={5} onPageChange={() => {}} totalRows={50} pageSize={10} />);
-		expect(screen.getByLabelText('Page 1')).toBeTruthy();
-		expect(screen.getByLabelText('Page 5')).toBeTruthy();
-		expect(screen.getByText('1–10 of 50')).toBeTruthy();
-	});
-
-	it('marks the active page with aria-current="page"', () => {
-		render(<GridPagination page={2} pageCount={5} onPageChange={() => {}} />);
-		const activeBtn = screen.getByLabelText('Page 3');
-		expect(activeBtn.getAttribute('aria-current')).toBe('page');
-	});
-
-	it('disables prev button on first page', () => {
-		render(<GridPagination page={0} pageCount={5} onPageChange={() => {}} />);
-		const prev = screen.getByLabelText('Previous page') as HTMLButtonElement;
-		expect(prev.disabled).toBe(true);
-	});
-
-	it('disables next button on last page', () => {
-		render(<GridPagination page={4} pageCount={5} onPageChange={() => {}} />);
-		const next = screen.getByLabelText('Next page') as HTMLButtonElement;
-		expect(next.disabled).toBe(true);
-	});
-
-	it('calls onPageChange with correct page index when clicking a page button', () => {
-		const onChange = vi.fn();
-		render(<GridPagination page={0} pageCount={5} onPageChange={onChange} />);
-		fireEvent.click(screen.getByLabelText('Page 3'));
-		expect(onChange).toHaveBeenCalledWith(2);
-	});
-
-	it('calls onPageChange with page - 1 when clicking prev', () => {
-		const onChange = vi.fn();
-		render(<GridPagination page={2} pageCount={5} onPageChange={onChange} />);
-		fireEvent.click(screen.getByLabelText('Previous page'));
-		expect(onChange).toHaveBeenCalledWith(1);
-	});
-
-	it('calls onPageChange with page + 1 when clicking next', () => {
-		const onChange = vi.fn();
-		render(<GridPagination page={2} pageCount={5} onPageChange={onChange} />);
-		fireEvent.click(screen.getByLabelText('Next page'));
-		expect(onChange).toHaveBeenCalledWith(3);
-	});
-
-	it('collapses to ellipsis when pageCount exceeds maxPageButtons', () => {
-		render(<GridPagination page={10} pageCount={20} onPageChange={() => {}} maxPageButtons={7} />);
-		// Should have exactly two ellipsis spans
-		const container = screen.getByRole('navigation');
-		const ellipses = within(container).getAllByText('…');
-		expect(ellipses.length).toBe(2);
-	});
-
-	it('renders custom prev/next button content', () => {
-		render(
-			<GridPagination
-				page={1}
-				pageCount={5}
-				onPageChange={() => {}}
-				renderPrevButton={() => <span>PREV</span>}
-				renderNextButton={() => <span>NEXT</span>}
-			/>
-		);
-		expect(screen.getByText('PREV')).toBeTruthy();
-		expect(screen.getByText('NEXT')).toBeTruthy();
-	});
-
-	it('renders custom page info via renderPageInfo', () => {
-		render(
-			<GridPagination page={1} pageCount={5} onPageChange={() => {}} renderPageInfo={(p, total) => <span>{`custom:${p}/${total}`}</span>} />
-		);
-		expect(screen.getByText('custom:1/5')).toBeTruthy();
-	});
-
-	it('shows "Page X of Y" fallback when totalRows/pageSize are absent', () => {
-		render(<GridPagination page={1} pageCount={5} onPageChange={() => {}} />);
-		expect(screen.getByText('Page 2 of 5')).toBeTruthy();
-	});
-});
-
-// ─── useClientGridPagination ──────────────────────────────────────────────────
-
-describe('useClientGridPagination', () => {
-	function PaginationHarness<T>({ rows, pageSize }: { rows: T[]; pageSize: number }) {
-		const result = useClientGridPagination(rows, { pageSize });
-		return (
-			<div>
-				<span data-testid='page'>{result.page}</span>
-				<span data-testid='pageCount'>{result.pageCount}</span>
-				<span data-testid='totalRows'>{result.totalRows}</span>
-				<span data-testid='pageRowsLength'>{result.pageRows.length}</span>
-				<span data-testid='canNext'>{String(result.canNextPage)}</span>
-				<span data-testid='canPrev'>{String(result.canPrevPage)}</span>
-				<button onClick={result.nextPage}>next</button>
-				<button onClick={result.prevPage}>prev</button>
-				<button onClick={() => result.setPage(0)}>first</button>
-			</div>
-		);
-	}
-
-	it('starts on page 0 with correct slice', () => {
-		const rows = Array.from({ length: 25 }, (_, i) => i);
-		render(<PaginationHarness rows={rows} pageSize={10} />);
-		expect(screen.getByTestId('page').textContent).toBe('0');
-		expect(screen.getByTestId('pageCount').textContent).toBe('3');
-		expect(screen.getByTestId('pageRowsLength').textContent).toBe('10');
-	});
-
-	it('nextPage advances the page', () => {
-		const rows = Array.from({ length: 25 }, (_, i) => i);
-		render(<PaginationHarness rows={rows} pageSize={10} />);
-		act(() => {
-			fireEvent.click(screen.getByText('next'));
-		});
-		expect(screen.getByTestId('page').textContent).toBe('1');
-		expect(screen.getByTestId('pageRowsLength').textContent).toBe('10');
-	});
-
-	it('last page has a partial slice', () => {
-		const rows = Array.from({ length: 25 }, (_, i) => i);
-		render(<PaginationHarness rows={rows} pageSize={10} />);
-		act(() => {
-			fireEvent.click(screen.getByText('next'));
-		});
-		act(() => {
-			fireEvent.click(screen.getByText('next'));
-		});
-		expect(screen.getByTestId('page').textContent).toBe('2');
-		expect(screen.getByTestId('pageRowsLength').textContent).toBe('5');
-		expect(screen.getByTestId('canNext').textContent).toBe('false');
-	});
-
-	it('canPrevPage is false on first page, true after next', () => {
-		const rows = Array.from({ length: 25 }, (_, i) => i);
-		render(<PaginationHarness rows={rows} pageSize={10} />);
-		expect(screen.getByTestId('canPrev').textContent).toBe('false');
-		act(() => {
-			fireEvent.click(screen.getByText('next'));
-		});
-		expect(screen.getByTestId('canPrev').textContent).toBe('true');
-	});
-
-	it('prevPage does not go below 0', () => {
-		const rows = Array.from({ length: 10 }, (_, i) => i);
-		render(<PaginationHarness rows={rows} pageSize={10} />);
-		act(() => {
-			fireEvent.click(screen.getByText('prev'));
-		});
-		expect(screen.getByTestId('page').textContent).toBe('0');
-	});
-
-	it('clamps page when rows shrink', () => {
-		const { rerender } = render(<PaginationHarness rows={Array.from({ length: 30 }, (_, i) => i)} pageSize={10} />);
-		act(() => {
-			fireEvent.click(screen.getByText('next'));
-		});
-		act(() => {
-			fireEvent.click(screen.getByText('next'));
-		});
-		expect(screen.getByTestId('page').textContent).toBe('2');
-		// Shrink rows so page 2 no longer exists
-		rerender(<PaginationHarness rows={Array.from({ length: 5 }, (_, i) => i)} pageSize={10} />);
-		expect(screen.getByTestId('page').textContent).toBe('0');
-	});
-
-	it('handles empty rows', () => {
-		render(<PaginationHarness rows={[]} pageSize={10} />);
-		expect(screen.getByTestId('pageCount').textContent).toBe('1');
-		expect(screen.getByTestId('totalRows').textContent).toBe('0');
-		expect(screen.getByTestId('pageRowsLength').textContent).toBe('0');
-	});
-});
-
-// ─── OpenGrid inline mode ─────────────────────────────────────────────────────
-
-describe('OpenGrid inline mode (rows + columns props)', () => {
-	const cols: ColumnDef<TestRow>[] = [
-		{ field: 'id', header: 'ID', width: 80 },
-		{ field: 'name', header: 'Name', width: 120 },
-	];
-
-	it('renders without useClientGrid or GridProvider', async () => {
+describe('Grid pagination prop', () => {
+	it('paginates client rows without requiring a separate pagination component', async () => {
 		const rows: TestRow[] = [
-			{ id: '1', name: 'Alice', value: 10 },
-			{ id: '2', name: 'Bob', value: 20 },
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Cara' },
+			{ id: '4', name: 'Dane' },
+			{ id: '5', name: 'Elle' },
 		];
+
 		render(
 			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows} columns={cols} getRowId={(r) => r.id} />
+				<Grid
+					mode='client'
+					rows={rows}
+					columns={[{ field: 'name', header: 'Name', width: 120 }]}
+					getRowId={(row: TestRow) => row.id}
+					enableNavigation={false}
+					pagination={{ pageSize: 2 }}
+				/>
 			</div>
 		);
-		// Grid host mounts — no throw
-		await act(async () => {});
+
+		await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
+		// Pagination is core chrome now — the core bar renders inside the grid; the adapter
+		// no longer slices rows or renders a React pagination component.
+		expect(screen.getByLabelText('Next page')).toBeTruthy();
+		expect(screen.queryByText('Cara')).toBeNull();
+
+		fireEvent.click(screen.getByLabelText('Next page'));
+
+		await waitFor(() => expect(screen.getByText('Cara')).toBeTruthy());
+		expect(screen.queryByText('Alice')).toBeNull();
+		expect(screen.getByText((content) => content.includes('of 5'))).toBeTruthy();
 	});
 
-	it('reacts to rows prop changes in inline mode', async () => {
-		const rows1: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
-		const rows2: TestRow[] = [
-			{ id: '1', name: 'Alice', value: 1 },
-			{ id: '2', name: 'Bob', value: 2 },
+	it('paginates server rows and shifts datasource fetches by page automatically', async () => {
+		const rows: TestRow[] = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Cara' },
+			{ id: '4', name: 'Dane' },
+			{ id: '5', name: 'Elle' },
 		];
-		const { rerender } = render(
-			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows1} columns={cols} getRowId={(r) => r.id} />
-			</div>
-		);
-		await act(async () => {});
-		rerender(
-			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows2} columns={cols} getRowId={(r) => r.id} />
-			</div>
-		);
-		await act(async () => {});
-		// No crash means the row update propagated
-	});
+		const getRows = vi.fn(async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
+			rows: rows.slice(startRow, endRow),
+			totalCount: rows.length,
+		}));
 
-	it('merges detailRowHeight into initialState', async () => {
-		const rows: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
-		// Smoke test: detailRowHeight prop accepted without error
 		render(
 			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows} columns={cols} getRowId={(r) => r.id} detailRowHeight={200} initialState={{ masterDetailEnabled: true }} />
+				<Grid
+					mode='server'
+					columns={[{ field: 'name', header: 'Name', width: 120 }]}
+					datasource={{ getRows }}
+					getRowId={(row: TestRow) => row.id}
+					blockSize={2}
+					enableNavigation={false}
+					pagination={{ pageSize: 2 }}
+				/>
 			</div>
 		);
-		await act(async () => {});
+
+		await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
+		expect(getRows.mock.calls.some(([params]) => params.startRow === 0 && params.endRow === 2)).toBe(true);
+
+		// Wait until the core bar reflects the server totals (next page available), then page.
+		await waitFor(() => expect((screen.getByLabelText('Next page') as HTMLButtonElement).disabled).toBe(false));
+		fireEvent.click(screen.getByLabelText('Next page'));
+
+		await waitFor(() => expect(getRows.mock.calls.some(([params]) => params.startRow === 2 && params.endRow === 4)).toBe(true));
+		await waitFor(() => expect(screen.getByText('Cara')).toBeTruthy());
+		expect(screen.queryByText('Alice')).toBeNull();
+	});
+});
+
+describe('explicit React entrypoints', () => {
+	it('exposes Grid as the only public grid entrypoint', () => {
+		expect(ReactPackage.Grid).toBeDefined();
+		expect((ReactPackage as Record<string, unknown>).GridView).toBeUndefined();
+		expect((ReactPackage as Record<string, unknown>).GridProvider).toBeUndefined();
+		expect((ReactPackage as Record<string, unknown>).useOwnedClientGrid).toBeUndefined();
+		expect((ReactPackage as Record<string, unknown>).useOwnedServerGrid).toBeUndefined();
 	});
 
-	it('throws when neither rows, api, nor GridProvider are supplied', () => {
-		// Suppress console.error for the expected throw
-		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		expect(() => render(<OpenGrid columns={cols} />)).toThrow();
-		spy.mockRestore();
-	});
+	it('Grid owns the api and fires onGridReady while descendants can still read useGridApi', async () => {
+		const onGridReady = vi.fn();
+		const HookRenderer = () => {
+			const api = useGridApi<TestRow>();
+			return <span data-testid='api-hook'>{api ? 'yes' : 'no'}</span>;
+		};
 
-	it('warns in dev when rows is provided but columns is empty', async () => {
-		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const rows: TestRow[] = [{ id: '1', name: 'Alice', value: 1 }];
 		render(
 			<div style={{ width: 400, height: 300 }}>
-				<OpenGrid rows={rows} columns={[]} />
+				<Grid
+					mode='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[
+						{
+							field: 'name',
+							header: 'Name',
+							width: 100,
+							renderer: { kind: 'react', component: HookRenderer },
+						},
+					]}
+					enableNavigation={false}
+					onGridReady={onGridReady}
+				/>
 			</div>
 		);
+
+		await waitFor(() => expect(onGridReady).toHaveBeenCalledTimes(1));
+		expect(onGridReady.mock.calls[0][0]).toEqual(expect.objectContaining({ mode: 'client' }));
+		expect(screen.getByTestId('api-hook').textContent).toBe('yes');
+	});
+
+	it('GridView renders against an explicit api', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Alice' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<GridProvider api={grid.api}>
+					<GridView api={grid.api} enableNavigation={false} />
+				</GridProvider>
+			</div>
+		);
+
 		await act(async () => {});
-		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[open-grid]'));
-		warnSpy.mockRestore();
+		grid.api.destroy();
+	});
+
+	it('Grid can own its api directly', async () => {
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid
+					mode='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[{ field: 'name', header: 'Name', width: 100 }]}
+					enableNavigation={false}
+				/>
+			</div>
+		);
+
+		await act(async () => {});
 	});
 });

@@ -1,12 +1,18 @@
-export { OpenGrid, GridProvider } from './OpenGrid.js';
-export type { OpenGridProps } from './OpenGrid.js';
-export { GridPagination, useClientGridPagination } from './pagination.js';
-export type { GridPaginationProps, ClientGridPaginationResult } from './pagination.js';
+export { Grid } from './Grid.js';
+export type { GridProps, GridClientProps, GridServerProps, GridPaginationConfig } from './Grid.js';
 export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
-export { useClientGrid, useServerGrid } from './useGrid.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
+export {
+	BUILT_IN_THEMES,
+	BUILT_IN_THEME_ORDER,
+	BUILT_IN_THEME_METADATA,
+	getBuiltInTheme,
+	isBuiltInThemeName,
+	createTheme,
+	themeToCSSVariables,
+} from '@open-grid/core';
 
 // ─── Built-in cell renderers & editors ───────────────────────────────────────
 export {
@@ -43,10 +49,12 @@ export type {
 	ColumnTypeDefinition,
 } from './renderers/CellTypes.js';
 
+export { FormulaBar } from './FormulaBar.js';
+export type { FormulaBarProps } from './FormulaBar.js';
+
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from './types.js';
 export type { GridEventPayloadMap, GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
-export { useStyleRules } from './styleRules.js';
-export type { StyleRule, RowStyleRule, CellStyleRule, HeaderCellStyleRule } from './styleRules.js';
+export type { StyleRule, RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from './types.js';
 export type {
 	ColumnDef,
 	CellEditorProps,
@@ -57,9 +65,6 @@ export type {
 	GridApi,
 	GridCellClickParams,
 	GridState,
-	ClientGridOptions,
-	ServerGridOptions,
-	FilterModelItem,
 	VisualRow,
 	DataVisualRow,
 	GroupVisualRow,
@@ -75,6 +80,28 @@ export type {
 	DomCellRendererHandle,
 	DomCellRendererParams,
 	ImperativeCellHandle,
+	GridReadyEvent,
+	BuiltInThemeName,
+	ThemeTokens,
+	RowSelectionMode,
+	RowSelectionOptions,
+	RowSelectionScope,
+	SelectRowsOptions,
+	SelectAllRowsOptions,
 } from './types.js';
 
-export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';
+export type {
+	GridContextMenuOptions,
+	GridContextMenuItem,
+	GridCellPointer,
+	HeaderMenuRendererProps,
+	CellValidationError,
+	RowValidatorParams,
+	RowValidator,
+	ValueValidatorParams,
+	EditableParams,
+	TooltipParams,
+	AutoSizeColumnOptions,
+	AutoSizeAllColumnsOptions,
+	FloatingFilterRendererParams,
+} from '@open-grid/core';

@@ -5,9 +5,8 @@
  * they ship inside the package, not here in the demo.
  */
 import React, { useMemo, useState } from 'react';
-import { GridProvider, useClientGrid, multiSelectColumnType, dropdownColumnType, numberColumnType } from '@open-grid/react';
-import type { ColumnDef, ColumnTypeDefinition, DropdownOption } from '@open-grid/react';
-import { GridView } from '../components/GridShared';
+import { Grid, multiSelectColumnType, dropdownColumnType, numberColumnType } from '@open-grid/react';
+import type { ColumnDef, ColumnTypeDefinition, DropdownOption, GridReadyEvent } from '@open-grid/react';
 import { CheckSquare, Tag, Calendar, List, Hash, Film, Sparkles, Code2, ChevronRight, Box } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
@@ -361,7 +360,7 @@ const columns: ColumnDef<Row>[] = [
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
-function NativeCellTypesDemoInner({ api }: { api: ReturnType<typeof useClientGrid<SkaterRow>> }) {
+function NativeCellTypesDemoInner({ rows, onGridReady }: { rows: SkaterRow[]; onGridReady?: (event: GridReadyEvent<SkaterRow>) => void }) {
 	const [activeType, setActiveType] = useState<number | null>(null);
 	const [showSnippet, setShowSnippet] = useState(false);
 
@@ -386,7 +385,15 @@ function NativeCellTypesDemoInner({ api }: { api: ReturnType<typeof useClientGri
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<GridView api={api} onCellValueChanged={() => {}} editTrigger='doubleClick' pinLeftColumns={1} />
+					<Grid
+						mode='client'
+						rows={rows}
+						columns={SKATER_COLUMNS}
+						columnTypes={SKATER_COLUMN_TYPES}
+						navigationOptions={{ editTrigger: 'doubleClick', onCellValueChanged: () => {} }}
+						pinLeftColumns={1}
+						onGridReady={onGridReady}
+					/>
 				</div>
 			</div>
 
@@ -509,13 +516,12 @@ function NativeCellTypesDemoInner({ api }: { api: ReturnType<typeof useClientGri
 	);
 }
 
-export default function NativeCellTypesDemo() {
-	const rows = useMemo(() => generateSkaterRows(50), []);
-	const api = useClientGrid<SkaterRow>({ rows, columns: SKATER_COLUMNS, columnTypes: SKATER_COLUMN_TYPES });
+interface NativeCellTypesDemoProps {
+	onGridReady?: (event: GridReadyEvent<SkaterRow>) => void;
+}
 
-	return (
-		<GridProvider api={api}>
-			<NativeCellTypesDemoInner api={api} />
-		</GridProvider>
-	);
+export default function NativeCellTypesDemo({ onGridReady }: NativeCellTypesDemoProps) {
+	const rows = useMemo(() => generateSkaterRows(50), []);
+
+	return <NativeCellTypesDemoInner rows={rows} onGridReady={onGridReady} />;
 }

@@ -57,12 +57,14 @@ describe('RowSlot & CellSlot Controllers', () => {
 		const div = document.createElement('div');
 		const cell = new CellSlot(div);
 		cell.setBinding('slot-1', 'row-1', 0, 'name', 0, 'slot-1::name', 'text');
-		cell.lastMountedDataVersion = 5;
+		cell.lastMountedRowVersion = 5;
+		cell.lastMountedGlobalVersion = 3;
 
 		cell.unbindCold();
 
 		expect(cell.binding).toBeNull();
-		expect(cell.lastMountedDataVersion).toBe(-1);
+		expect(cell.lastMountedRowVersion).toBe(-1);
+		expect(cell.lastMountedGlobalVersion).toBe(-1);
 	});
 
 	it('should prevent redundant DOM writes on RowSlot if layout values match', () => {
