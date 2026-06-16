@@ -83,7 +83,9 @@ export default function SpreadsheetWorkspace({
 			setFormulaText('');
 			return;
 		}
-		setFormulaText(String(api.getCellValue(focusedCell.rowId, focusedCell.colField) ?? ''));
+		// Show the formula string if one is registered, otherwise the evaluated value.
+		const formula = api.getFormula(focusedCell.rowId, focusedCell.colField);
+		setFormulaText(formula ?? String(api.getCellValue(focusedCell.rowId, focusedCell.colField) ?? ''));
 	}, [api, focusedCell]);
 
 	const rangeTelemetry = useMemo(() => {
@@ -179,7 +181,10 @@ export default function SpreadsheetWorkspace({
 		);
 	}, [api, compoundInputs.principal, compoundInputs.rate]);
 
-	const focusedValue = api && focusedCell ? String(api.getCellValue(focusedCell.rowId, focusedCell.colField) ?? '') : '';
+	const focusedValue =
+		api && focusedCell
+			? (api.getFormula(focusedCell.rowId, focusedCell.colField) ?? String(api.getCellValue(focusedCell.rowId, focusedCell.colField) ?? ''))
+			: '';
 
 	return (
 		<div className='flex flex-col xl:flex-row h-full w-full gap-5 overflow-hidden'>

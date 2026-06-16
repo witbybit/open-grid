@@ -325,6 +325,18 @@ export interface GridApi<TRowData = unknown> {
 	setServerDatasource(datasource: IGridDatasource<TRowData>, blockSize?: number): void;
 	goToPage(page: number): void;
 	getCellValue(rowId: string, colField: string): unknown;
+	/** Returns the formula string registered for a cell (e.g. `"=SUM([r1:price], [r2:price])"`), or undefined if none. */
+	getFormula(rowId: string, colField: string): string | undefined;
+	/** Returns true when a formula is registered for the cell. */
+	hasFormula(rowId: string, colField: string): boolean;
+	/**
+	 * Register a formula on a cell. The string must start with `=`.
+	 * Throws if the formula introduces a circular dependency.
+	 * Equivalent to `setCellValue(rowId, colField, formula)` but self-documents intent.
+	 */
+	setFormula(rowId: string, colField: string, formula: string): void;
+	/** Remove the formula from a cell. The raw stored value is retained. */
+	clearFormula(rowId: string, colField: string): void;
 	/**
 	 * Updates a single cell value. Triggers valueSetter, undo history, and formula recalculation.
 	 *

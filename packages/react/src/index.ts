@@ -49,6 +49,9 @@ export type {
 	ColumnTypeDefinition,
 } from './renderers/CellTypes.js';
 
+export { FormulaBar } from './FormulaBar.js';
+export type { FormulaBarProps } from './FormulaBar.js';
+
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from './types.js';
 export type { GridEventPayloadMap, GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
 export type { StyleRule, RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from './types.js';

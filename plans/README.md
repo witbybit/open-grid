@@ -74,6 +74,9 @@
 | 072 | [Centralized Runtime Instrumentation Sink](./072-centralized-runtime-instrumentation.md)                      | DONE     | f777fe19     |
 | 073 | [Incremental Active Slot Index](./073-incremental-active-slot-index.md)                                       | DONE     | 76a24b69     |
 | 074 | [Runtime Contract Documentation Cleanup](./074-runtime-contract-documentation-cleanup.md)                     | DONE     | 8cf8abd7     |
+| 075 | [Formula Bar + Cross-Cell Formulas](./075-formula-bar-cross-cell-formulas.md)                                 | TODO     | —            |
+| 076 | [Named Column Views / Profiles](./076-named-column-views-profiles.md)                                         | TODO     | —            |
+| 077 | [Advanced Cell Editors](./077-advanced-cell-editors.md)                                                       | TODO     | —            |
 
 ## Execution order
 
@@ -222,6 +225,12 @@
 - Plan 072 is implemented and verified on 2026-06-16: `GridMetric` const enum defines 26 canonical counters across 7 categories; `GridInstrumentation` interface, `NoopGridInstrumentation` (stable singleton, zero overhead), and `RecordingGridInstrumentation` (accumulates for tests/demos) live in `diagnostics/GridInstrumentation.ts`; `GridStore.setInstrumentation()` swaps the active sink at runtime; an architecture guard prevents renderer code from importing the concrete recording class.
 - Plan 073 is implemented and verified on 2026-06-16: `activeRows` is now maintained incrementally during `recycleViewport` — slot bind, rebind, unbind, and pre-destruction each update the map at the point of change. The previous O(n) `clear()` + full rebuild at the end of every frame is eliminated.
 - Plan 074 is implemented and verified on 2026-06-16: stale `Phase N` implementation-history anchors removed from `rowRenderer.ts`, `rowSlot.ts`, `cellSlot.ts`, and `store.ts`; replaced with stable descriptive names or contract explanations. `GridDomainVersions.ts` docs updated to accurately describe which counters are wired vs. pending.
+
+## Plans 075–077 notes
+
+- Plan 075 (Formula Bar + Cross-Cell Formulas) surfaces the existing `DagEngine` through four `GridApi` methods (`getFormula`, `setFormula`, `clearFormula`, `hasFormula`), wires `=` prefix detection into the edit lifecycle, adds `formulaMap` to `PersistedGridState` (schema bump), and ships a `FormulaBar` React component styled via theme tokens.
+- Plan 076 (Named Column Views / Profiles) adds `saveView` / `loadView` / `deleteView` / `renameView` / `getViews` / `switchView` / `getActiveView` to `GridApi`, extends `PersistedGridState` with `views` and `activeViewName`, implements a theme-aware `ViewsPanel` registered as a built-in sidebar panel, and adds a `GridViewsPlugin` for `Ctrl+Shift+1`–`9` / `Ctrl+Shift+S` / `Ctrl+Shift+V` hotkeys.
+- Plan 077 (Advanced Cell Editors) ships `createDateEditor`, `createAutocompleteEditor`, and `createSelectEditor` factory functions in `@open-grid/react`. All three render as DOM portals via `useAnchoredPortal` for viewport-safe positioning, share keyboard-navigation hooks, and are styled entirely via `api.getTheme()` tokens (no Tailwind dependency).
 
 ## Findings considered and rejected
 

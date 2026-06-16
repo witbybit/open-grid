@@ -201,6 +201,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getCellValue = (rowId: string, colField: string): unknown => this.engine.getCellDisplayValue(rowId, colField);
 
+	public getFormula = (rowId: string, colField: string): string | undefined => this.engine.getFormula(rowId, colField);
+	public hasFormula = (rowId: string, colField: string): boolean => this.engine.hasFormula(rowId, colField);
+	public setFormula = (rowId: string, colField: string, formula: string): void => this.engine.setCellValue(rowId, colField, formula);
+	public clearFormula = (rowId: string, colField: string): void => this.engine.syncFormulaForCell(rowId, colField, this.engine.getRawCellValue(rowId, colField));
+
 	public getCachedDisplayValue = (rowId: string, colField: string): string | undefined => this.engine.getCachedDisplayValue(rowId, colField);
 
 	public getCheapDisplayValue = (rowId: string, colField: string): string => this.engine.getCheapDisplayValue(rowId, colField);

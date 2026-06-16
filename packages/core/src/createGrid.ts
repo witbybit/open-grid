@@ -178,6 +178,10 @@ export function createApiFacade<TRowData>(
 		setServerDatasource: (datasource: IGridDatasource<TRowData>, blockSize?: number) => store.setServerDatasource(datasource, blockSize),
 		goToPage: (page: number) => store.goToPage(page),
 		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
+		getFormula: (rowId: string, colField: string) => store.getFormula(rowId, colField),
+		hasFormula: (rowId: string, colField: string) => store.hasFormula(rowId, colField),
+		setFormula: (rowId: string, colField: string, formula: string) => store.setFormula(rowId, colField, formula),
+		clearFormula: (rowId: string, colField: string) => store.clearFormula(rowId, colField),
 		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
 		batchCellValues: (updates: { rowId: string; colField: string; value: unknown }[], source?: 'paste' | 'api' | 'fill') =>
 			store.batchCellValues(updates, source),
