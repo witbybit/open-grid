@@ -25,7 +25,12 @@ function fields(...names: string[]): ReadonlySet<string> {
 
 describe('RowDependencyRegistry.update()', () => {
 	it('populates sortKeys from sort model', () => {
-		const reg = makeRegistry({ sortModel: [{ colId: 'price', sort: 'asc' }, { colId: 'name', sort: 'desc' }] });
+		const reg = makeRegistry({
+			sortModel: [
+				{ colId: 'price', sort: 'asc' },
+				{ colId: 'name', sort: 'desc' },
+			],
+		});
 		expect(reg.sortKeys).toEqual(new Set(['price', 'name']));
 	});
 
@@ -41,11 +46,7 @@ describe('RowDependencyRegistry.update()', () => {
 
 	it('populates formulaFields from columns with valueGetter', () => {
 		const reg = makeRegistry({
-			columns: [
-				makeCol('price', { valueGetter: () => 0 }),
-				makeCol('name'),
-				makeCol('margin', { valueGetter: () => 0 }),
-			],
+			columns: [makeCol('price', { valueGetter: () => 0 }), makeCol('name'), makeCol('margin', { valueGetter: () => 0 })],
 		});
 		expect(reg.formulaFields).toEqual(new Set(['price', 'margin']));
 	});

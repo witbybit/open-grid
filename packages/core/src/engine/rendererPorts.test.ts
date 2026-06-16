@@ -1,9 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import {
-	headlessRendererPort,
-	headlessThemePort,
-	createHeadlessPorts,
-} from './rendererPorts.js';
+import { headlessRendererPort, headlessThemePort, createHeadlessPorts } from './rendererPorts.js';
 import { DARK_THEME } from '../renderer/themes.js';
 
 describe('headlessRendererPort', () => {

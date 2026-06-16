@@ -610,7 +610,12 @@ describe('GroupRowMeta', () => {
 });
 
 describe('Phase 068 — filter membership shortcut in updateRows()', () => {
-	interface FRow { id: string; name: string; status: string; price: number }
+	interface FRow {
+		id: string;
+		name: string;
+		status: string;
+		price: number;
+	}
 
 	function makeFilteredStore(filterField: 'name' | 'status') {
 		return new GridStore<FRow>({
@@ -739,7 +744,11 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 });
 
 describe('Phase 068 — sort relocation in updateRows()', () => {
-	interface SRow { id: string; name: string; price: number }
+	interface SRow {
+		id: string;
+		name: string;
+		price: number;
+	}
 
 	function makeSortedStore(sortField: 'name' | 'price', dir: 'asc' | 'desc' = 'asc') {
 		return new GridStore<SRow>({
@@ -894,12 +903,19 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 });
 
 describe('Phase 068 — incremental insert/remove in applyTransaction()', () => {
-	interface TRow { id: string; name: string; price: number }
+	interface TRow {
+		id: string;
+		name: string;
+		price: number;
+	}
 
 	it('incrementally inserts a new row at the end of an unsorted flat grid', () => {
 		const store = new GridStore<TRow>({
 			getRowId: (r) => r.id,
-			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
 		});
 		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Alice', price: 10 }],
@@ -916,7 +932,10 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 	it('inserts into the correct sorted position', () => {
 		const store = new GridStore<TRow>({
 			getRowId: (r) => r.id,
-			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
 			sortModel: [{ colId: 'price', sort: 'asc' }],
 		});
 		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
@@ -938,7 +957,10 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 	it('filters out a newly added row if it does not pass the active filter', () => {
 		const store = new GridStore<TRow>({
 			getRowId: (r) => r.id,
-			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
 			filterModel: { name: { type: 'text', operator: 'equals', value: 'Alice' } },
 		});
 		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
@@ -956,7 +978,10 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 	it('adds a passing row when a filter is active', () => {
 		const store = new GridStore<TRow>({
 			getRowId: (r) => r.id,
-			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
 			filterModel: { name: { type: 'text', operator: 'equals', value: 'Alice' } },
 		});
 		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
@@ -972,7 +997,10 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 	it('incrementally removes a row and keeps index maps consistent', () => {
 		const store = new GridStore<TRow>({
 			getRowId: (r) => r.id,
-			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
 		});
 		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [
@@ -994,7 +1022,10 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 	it('falls back to full rebuild on a grouped grid', () => {
 		const store = new GridStore<TRow>({
 			getRowId: (r) => r.id,
-			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
 			rowModelConfig: {
 				type: 'client',
 				grouping: { model: [{ colId: 'name' }], defaultExpanded: true },

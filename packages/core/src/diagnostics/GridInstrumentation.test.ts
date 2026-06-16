@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-	GridMetric,
-	NoopGridInstrumentation,
-	RecordingGridInstrumentation,
-	NOOP_INSTRUMENTATION,
-} from './GridInstrumentation.js';
+import { GridMetric, NoopGridInstrumentation, RecordingGridInstrumentation, NOOP_INSTRUMENTATION } from './GridInstrumentation.js';
 
 describe('NoopGridInstrumentation', () => {
 	it('increment is a no-op — does not throw', () => {

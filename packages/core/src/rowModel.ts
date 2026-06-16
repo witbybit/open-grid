@@ -593,10 +593,22 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.runtime.registerRowModel(this);
 
 		this.unsubscribers.push(
-			this.runtime.addEventListener(GridEventName.sortChanged, () => { this.rebuildDependencyRegistry(); this.refresh(); }),
-			this.runtime.addEventListener(GridEventName.filterChanged, () => { this.rebuildDependencyRegistry(); this.refresh(); }),
-			this.runtime.addEventListener(GridEventName.groupByChanged, () => { this.rebuildDependencyRegistry(); this.refresh(); }),
-			this.runtime.addEventListener(GridEventName.aggDefsChanged, () => { this.rebuildDependencyRegistry(); this.refresh(); }),
+			this.runtime.addEventListener(GridEventName.sortChanged, () => {
+				this.rebuildDependencyRegistry();
+				this.refresh();
+			}),
+			this.runtime.addEventListener(GridEventName.filterChanged, () => {
+				this.rebuildDependencyRegistry();
+				this.refresh();
+			}),
+			this.runtime.addEventListener(GridEventName.groupByChanged, () => {
+				this.rebuildDependencyRegistry();
+				this.refresh();
+			}),
+			this.runtime.addEventListener(GridEventName.aggDefsChanged, () => {
+				this.rebuildDependencyRegistry();
+				this.refresh();
+			}),
 			this.runtime.addEventListener(GridEventName.showGroupFooterChanged, () => this.refresh()),
 			this.runtime.addEventListener(GridEventName.enableStickyGroupRowsChanged, () => this.refresh()),
 			// Client pagination page change → re-run the pipeline with the new page window.
@@ -705,11 +717,15 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 		// Insert each row at its new sorted position
 		for (const item of toRelocate) {
-			let lo = 0, hi = mutable.length;
+			let lo = 0,
+				hi = mutable.length;
 			while (lo < hi) {
 				const mid = (lo + hi) >>> 1;
 				const midVR = mutable[mid];
-				if (midVR?.kind !== 'data') { lo = mid + 1; continue; }
+				if (midVR?.kind !== 'data') {
+					lo = mid + 1;
+					continue;
+				}
 				if (compareNodes(item.node, midVR.node) <= 0) hi = mid;
 				else lo = mid + 1;
 			}
@@ -820,11 +836,15 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				};
 
 				if (sortComparator) {
-					let lo = 0, hi = mutable.length;
+					let lo = 0,
+						hi = mutable.length;
 					while (lo < hi) {
 						const mid = (lo + hi) >>> 1;
 						const midVR = mutable[mid];
-						if (midVR?.kind !== 'data') { lo = mid + 1; continue; }
+						if (midVR?.kind !== 'data') {
+							lo = mid + 1;
+							continue;
+						}
 						if (sortComparator(node, midVR.node) <= 0) hi = mid;
 						else lo = mid + 1;
 					}

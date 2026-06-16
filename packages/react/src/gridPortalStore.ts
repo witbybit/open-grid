@@ -1,13 +1,6 @@
 import { flushSync } from 'react-dom';
 import type { ColumnDef, RowNode, VisualRow, CellRendererPhase } from '@open-grid/core';
-import type {
-	PortalData,
-	RowPortalData,
-	MenuPortalData,
-	CellPortalSnapshot,
-	RowMenuPortalSnapshot,
-	ImperativeUpdaterFn,
-} from './gridPortalTypes.js';
+import type { PortalData, RowPortalData, MenuPortalData, CellPortalSnapshot, RowMenuPortalSnapshot, ImperativeUpdaterFn } from './gridPortalTypes.js';
 
 export type ConcretePortalStore<TRowData> = ReturnType<typeof createPortalStore<TRowData>>;
 
