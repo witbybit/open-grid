@@ -105,6 +105,8 @@ export class PortalMountManager<TRowData = unknown> {
 	private pendingCellReleases = new Map<string, GridCellContentUnmount>();
 	private deferredCellMounts = new Map<string, GridCellContentMount<TRowData>>();
 	private deferredCellReleases = new Map<string, GridCellContentUnmount>();
+	/** Tracks the current slotGeneration for each mounted cellKey. */
+	private activeGenerationByKey = new Map<string, number>();
 	private deferredNewCellMounts = new Set<string>();
 	private deferredRowMounts = new Map<string, GridRowContentMount<TRowData>>();
 	private deferredRowReleases = new Map<string, GridRowContentUnmount>();
@@ -127,6 +129,9 @@ export class PortalMountManager<TRowData = unknown> {
 	};
 
 	private mountCellReal(mount: GridCellContentMount<TRowData>): void {
+		if (mount.slotGeneration !== undefined) {
+			this.activeGenerationByKey.set(mount.cellKey, mount.slotGeneration);
+		}
 		const col = mount.col as InternalColumnDef<TRowData>;
 		const isCustom = !!(col.cellRenderer || mount.isEditing);
 
@@ -185,6 +190,7 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	private releaseCellReal(cellKey: string, reason: ReleaseReason, originalUnmount?: GridCellContentUnmount): void {
+		this.activeGenerationByKey.delete(cellKey);
 		// DOM renderer path — no portal/React involved
 		if (this.domCellRendererManager.releaseByCellKey(cellKey, reason)) return;
 
@@ -384,6 +390,13 @@ export class PortalMountManager<TRowData = unknown> {
 		// avoids an O(remaining) Array.from copy per chunk (O(N²/budget) over the drain).
 		for (const [cellKey, unmount] of this.deferredCellReleases) {
 			if (outOfBudget()) break;
+			// Reject stale releases: a later mount for the same key with a higher
+			// generation means this release was superseded by a slot rebind.
+			const activeGen = this.activeGenerationByKey.get(cellKey);
+			if (unmount.slotGeneration !== undefined && activeGen !== undefined && activeGen > unmount.slotGeneration) {
+				this.deferredCellReleases.delete(cellKey);
+				continue;
+			}
 			this.releaseCellReal(unmount.cellKey, 'scrolled-out', unmount);
 			this.deferredCellReleases.delete(cellKey);
 			processed++;

@@ -107,7 +107,8 @@ export function GridView<TRowData = unknown>({
 								mount.phase,
 								mount.isScrolling,
 								mount.isFocused,
-								mount.isSelected
+								mount.isSelected,
+								mount.slotGeneration
 							)
 						)
 							return;
@@ -123,7 +124,8 @@ export function GridView<TRowData = unknown>({
 						mount.phase,
 						mount.isScrolling,
 						mount.isFocused,
-						mount.isSelected
+						mount.isSelected,
+						mount.slotGeneration
 					);
 				},
 				unmountCellContent: (unmount) => {

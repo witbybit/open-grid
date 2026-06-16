@@ -254,6 +254,8 @@ export interface PortalData<TRowData = unknown> {
 	isScrolling?: boolean;
 	isFocused?: boolean;
 	isSelected?: boolean;
+	/** Slot generation at the time this cell was mounted — used to reject stale async updates. */
+	slotGeneration?: number;
 }
 
 function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
@@ -413,8 +415,24 @@ export interface PortalStore<TRowData = unknown> {
 		phase: CellRendererPhase | undefined,
 		isScrolling: boolean | undefined,
 		isFocused: boolean | undefined,
-		isSelected: boolean | undefined
+		isSelected: boolean | undefined,
+		slotGeneration?: number
 	): boolean;
+	mountCell(
+		cellKey: string,
+		container: HTMLElement,
+		value: unknown,
+		node: RowNode<TRowData>,
+		col: ColumnDef<TRowData>,
+		isEditing: boolean,
+		isLoading: boolean,
+		phase?: CellRendererPhase,
+		isScrolling?: boolean,
+		isFocused?: boolean,
+		isSelected?: boolean,
+		slotGeneration?: number
+	): void;
+	unmountCell(cellKey: string, container?: HTMLElement, sync?: boolean): void;
 }
 
 interface RowPortalData<TRowData = unknown> {
@@ -582,10 +600,21 @@ export function createPortalStore<TRowData = unknown>() {
 			phase: CellRendererPhase | undefined,
 			isScrolling: boolean | undefined,
 			isFocused: boolean | undefined,
-			isSelected: boolean | undefined
+			isSelected: boolean | undefined,
+			slotGeneration?: number
 		): boolean {
 			const fn = imperativeUpdaters.get(cellKey);
 			if (!fn) return false;
+			// Reject stale imperative updates: if the slot was rebound (generation changed)
+			// the stored renderer belongs to a different row — force a structural mount.
+			const existing = portals.get(cellKey);
+			if (
+				slotGeneration !== undefined &&
+				existing?.slotGeneration !== undefined &&
+				existing.slotGeneration !== slotGeneration
+			) {
+				return false;
+			}
 			return fn(value, node, col, isEditing, isLoading, phase, isScrolling, isFocused, isSelected);
 		},
 
@@ -601,7 +630,8 @@ export function createPortalStore<TRowData = unknown>() {
 			phase?: CellRendererPhase,
 			isScrolling?: boolean,
 			isFocused?: boolean,
-			isSelected?: boolean
+			isSelected?: boolean,
+			slotGeneration?: number
 		) {
 			const existing = portals.get(cellKey);
 
@@ -636,7 +666,7 @@ export function createPortalStore<TRowData = unknown>() {
 			const isStructuralChange =
 				!existing || existing.container !== container || (existingKeyForContainer != null && existingKeyForContainer !== cellKey);
 
-			portals.set(cellKey, { cellKey, container, value, node, col, isEditing, isLoading, phase, isScrolling, isFocused, isSelected });
+			portals.set(cellKey, { cellKey, container, value, node, col, isEditing, isLoading, phase, isScrolling, isFocused, isSelected, slotGeneration });
 			cellPortalKeyByContainer.set(container, cellKey);
 
 			if (isStructuralChange) {

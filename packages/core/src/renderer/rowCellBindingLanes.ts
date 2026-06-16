@@ -8,6 +8,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 export interface RowCellLaneFullBindRequest<TRowData = unknown> {
 	cellSlot: CellSlot<TRowData>;
 	slotId: string;
+	slotGeneration: number;
 	node: RowNode<TRowData>;
 	rowIndex: number;
 	colIndex: number;
@@ -33,6 +34,7 @@ export interface RowCellLaneScrollBindRequest<TRowData = unknown> {
 	pinRightStart: number;
 	ctx: ScrollRenderContext<TRowData>;
 	pooledRowId: string;
+	pooledRowGeneration: number;
 	left: number;
 	right: number;
 	width: number;
@@ -137,6 +139,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				pinRightStart,
 				ctx: ctx!,
 				pooledRowId: slot.id,
+				pooledRowGeneration: slot.generation,
 				left: leftArg,
 				right: -1,
 				width: cellWidth,
@@ -147,6 +150,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			bindCellFull(deps.cellBinderDeps, {
 				cellSlot,
 				slotId: slot.id,
+				slotGeneration: slot.generation,
 				node,
 				rowIndex,
 				colIndex: i,
@@ -183,6 +187,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				pinRightStart,
 				ctx: ctx!,
 				pooledRowId: slot.id,
+				pooledRowGeneration: slot.generation,
 				left: leftArg,
 				right: -1,
 				width: cellWidth,
@@ -193,6 +198,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			bindCellFull(deps.cellBinderDeps, {
 				cellSlot,
 				slotId: slot.id,
+				slotGeneration: slot.generation,
 				node,
 				rowIndex,
 				colIndex: c,
@@ -230,6 +236,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				pinRightStart,
 				ctx: ctx!,
 				pooledRowId: slot.id,
+				pooledRowGeneration: slot.generation,
 				left: leftArg,
 				right: -1,
 				width: cellWidth,
@@ -240,6 +247,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			bindCellFull(deps.cellBinderDeps, {
 				cellSlot,
 				slotId: slot.id,
+				slotGeneration: slot.generation,
 				node,
 				rowIndex,
 				colIndex: c,

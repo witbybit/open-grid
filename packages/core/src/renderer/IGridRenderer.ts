@@ -13,6 +13,17 @@ import type { CellRendererPhase, ColumnDef, RowNode, VisualRow } from '../store.
  */
 export type RendererLifecycleOperation = 'mount' | 'update' | 'rebind' | 'restore' | 'unmount' | 'destroy';
 
+/**
+ * Stable identity for a mounted cell renderer.
+ * `generation` increments each time the physical slot is rebound to a
+ * different visual row, allowing consumers to detect stale async work.
+ */
+export interface CellMountIdentity {
+	slotId: string;
+	generation: number;
+	columnId: string;
+}
+
 export interface GridCellContentMount<TRowData = unknown> {
 	cellKey: string;
 	container: HTMLElement;
@@ -29,6 +40,8 @@ export interface GridCellContentMount<TRowData = unknown> {
 	colIndex?: number;
 	/** Stable physical slot ID — bypasses the stale activeRows resolver during the binding loop. */
 	rowSlotId?: string;
+	/** Generation counter from the physical slot — incremented on each row rebind. */
+	slotGeneration?: number;
 	isEditing: boolean;
 	isLoading: boolean;
 	phase?: CellRendererPhase;
@@ -44,6 +57,8 @@ export interface GridCellContentUnmount {
 	container?: HTMLElement;
 	flushSync?: boolean;
 	reason?: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated';
+	/** Generation at the time this release was requested — used to reject stale releases. */
+	slotGeneration?: number;
 }
 
 export interface GridCellContentFlush {

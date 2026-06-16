@@ -46,6 +46,7 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 export interface BindCellFullRequest<TRowData = unknown> {
 	cellSlot: CellSlot<TRowData>;
 	slotId: string;
+	slotGeneration?: number;
 	node: RowNode<TRowData>;
 	rowIndex: number;
 	colIndex: number;
@@ -70,6 +71,7 @@ export interface BindCellDuringScrollRequest<TRowData = unknown> {
 	pinRightStart: number;
 	ctx: ScrollRenderContext<TRowData>;
 	pooledRowId: string;
+	pooledRowGeneration?: number;
 	left: number;
 	right: number;
 	width: number;
@@ -312,6 +314,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			rowIndex,
 			colIndex,
 			rowSlotId: slotId,
+			slotGeneration: request.slotGeneration,
 			isEditing: access.isEditing,
 			isLoading: access.isLoading,
 			phase: access.isEditing ? 'edit' : phase,
@@ -499,6 +502,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 				rowIndex,
 				colIndex,
 				rowSlotId: pooledRowId,
+				slotGeneration: request.pooledRowGeneration,
 				isEditing,
 				isLoading: false,
 				phase: 'scroll',
@@ -526,6 +530,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			rowIndex,
 			colIndex,
 			rowSlotId: pooledRowId,
+			slotGeneration: request.pooledRowGeneration,
 			isEditing,
 			isLoading: isRowLoading,
 			phase: 'scroll',

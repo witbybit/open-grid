@@ -20,6 +20,13 @@ export class RowSlot<TRowData = unknown> {
 	public keepAlive = false;
 	public lastPortalRowKey: string | undefined = undefined;
 
+	/**
+	 * Incremented each time this slot is rebound to a different visual row.
+	 * Consumers may capture the generation at mount time and compare later to
+	 * detect stale deferred or async operations.
+	 */
+	public generation = 0;
+
 	public pinLeftContainer: HTMLDivElement | null = null;
 	public pinRightContainer: HTMLDivElement | null = null;
 	public pinLeftContainerWidth = -1;
@@ -193,6 +200,7 @@ export class RowSlot<TRowData = unknown> {
 		if (this.lastVisualRowId !== visualRowId) {
 			this.lastVisualRowId = visualRowId;
 			this.element.dataset.rowId = visualRowId;
+			this.generation++;
 			domUpdated = true;
 		}
 		if (this.lastClassName !== className) {
