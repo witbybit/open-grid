@@ -7,6 +7,7 @@
  *   - api.validateGrid()  →  full-form sweep before submit
  *   - Red border (og-cell-invalid) persists after the editor closes
  *   - Mock server response with simulated server-side rejection
+ *   - api.setCellValidationError() → push external/server errors into the grid
  *   - api.clearValidationErrors() on a clean submit
  *   - api.getAllValidationErrors()  →  sync snapshot of current error state (no re-run)
  *   - Sidebar "Submission Log" panel showing errors or success payload as JSON
@@ -381,15 +382,20 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		setSubmitMessage('Sending to server…');
 		await new Promise((r) => setTimeout(r, 900));
 
-		// Simulate a 50% chance the server rejects row 4 for a domain policy reason
+		// Simulate a 50% chance the server rejects row 4 for a domain policy reason.
+		// api.setCellValidationError() pushes the error directly into the grid cell
+		// (same red-border treatment as client-side validation) without re-running validators.
 		const serverRejected = Math.random() > 0.5;
 		if (serverRejected) {
 			const serverErrors: CellValidationError[] = [
 				{ rowId: '4', colField: 'email', error: 'Server: @company.com domain reserved for existing staff' },
 			];
+			for (const { rowId, colField, error } of serverErrors) {
+				api.setCellValidationError(rowId, colField, error);
+			}
 			setValidationSummary(serverErrors);
 			setSubmitStatus('error');
-			setSubmitMessage('Server rejected the request. See error below.');
+			setSubmitMessage('Server rejected the request. Fix highlighted cells and retry.');
 			setSubmissionLog({ kind: 'error', errors: serverErrors });
 			api.openPanel('submission-log');
 			return;
@@ -613,6 +619,11 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				<span>Use the header filter menu to filter — active filters appear as chips above the headers</span>
 				<span>·</span>
 				<span>Row validator enforces per-department salary minimums</span>
+				<span>·</span>
+				<span>
+					<strong className='text-slate-400'>Submit Changes</strong> may surface a server error — the cell is highlighted via{' '}
+					<code className='text-slate-400'>setCellValidationError()</code>
+				</span>
 			</div>
 		</div>
 	);

@@ -212,6 +212,11 @@ export class ValidationManager<TRowData = unknown> {
 		return failures;
 	}
 
+	/** Set a validation error on a cell from an external source (e.g. server response, external form library). */
+	public setCellValidationError(rowId: string, colField: string, error: string): void {
+		this._setCellError(rowId, colField, error);
+	}
+
 	/** Clear a single cell's validation error. */
 	public clearCellValidationError(rowId: string, colField: string): void {
 		this._setCellError(rowId, colField, null);

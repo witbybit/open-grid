@@ -445,6 +445,8 @@ export interface GridApi<TRowData = unknown> {
 	 * and `gridValidated` is fired with the full result.
 	 */
 	validateGrid(): Promise<CellValidationError[]>;
+	/** Set a validation error on a cell from an external source (e.g. server response, external form library). */
+	setCellValidationError(rowId: string, colField: string, error: string): void;
 	/** Clear the validation error for a single cell. */
 	clearCellValidationError(rowId: string, colField: string): void;
 	/** Clear all validation errors on the grid. */

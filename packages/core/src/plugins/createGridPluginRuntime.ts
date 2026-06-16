@@ -133,6 +133,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		getRowModel: source.getRowModel,
 		validateCell: source.validateCell,
 		validateGrid: source.validateGrid,
+		setCellValidationError: source.setCellValidationError,
 		clearCellValidationError: source.clearCellValidationError,
 		clearValidationErrors: source.clearValidationErrors,
 		getCellValidationError: source.getCellValidationError,

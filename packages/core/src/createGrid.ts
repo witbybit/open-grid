@@ -231,6 +231,7 @@ export function createApiFacade<TRowData>(
 		commitEdit: (rowId: string, colField: string, value: unknown) => store.commitEdit(rowId, colField, value),
 		validateCell: (rowId: string, colField: string) => store.validateCell(rowId, colField),
 		validateGrid: () => store.validateGrid(),
+		setCellValidationError: (rowId: string, colField: string, error: string) => store.setCellValidationError(rowId, colField, error),
 		clearCellValidationError: (rowId: string, colField: string) => store.clearCellValidationError(rowId, colField),
 		clearValidationErrors: () => store.clearValidationErrors(),
 		getCellValidationError: (rowId: string, colField: string) => store.getCellValidationError(rowId, colField),
