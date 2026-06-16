@@ -372,12 +372,12 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		if (!handle) {
 			handle = document.createElement('div');
 			handle.className = 'og-drag-handle';
-			handle.draggable = true;
 			handle.innerHTML =
 				'<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><circle cx="5" cy="4" r="1.4"/><circle cx="11" cy="4" r="1.4"/><circle cx="5" cy="8" r="1.4"/><circle cx="11" cy="8" r="1.4"/><circle cx="5" cy="12" r="1.4"/><circle cx="11" cy="12" r="1.4"/></svg>';
-			// Stop propagation so the grid's range-selection mousedown handler never fires when the user grabs the handle.
-			// Do NOT preventDefault — that would block the browser's native dragstart.
-			handle.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+			// Pointer events handle drag; stop mousedown propagation to prevent range selection.
+			handle.addEventListener('mousedown', (e) => {
+				e.stopPropagation();
+			});
 			el.appendChild(handle);
 			el._dragHandle = handle;
 		}

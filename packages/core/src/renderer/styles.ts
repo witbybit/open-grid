@@ -1884,6 +1884,8 @@ export const CORE_STYLES = `
     top: 50%;
     transform: translateY(-50%);
     z-index: 2;
+    touch-action: none;
+    user-select: none;
   }
   .og-drag-handle:hover {
     color: var(--og-cell-text, #e2e8f0);
@@ -1914,10 +1916,19 @@ export const CORE_STYLES = `
     background-color: var(--og-focus-ring, #3b82f6);
   }
 
-  .og-row-dragging .og-row {
+  .og-row-being-dragged {
+    opacity: 0.3;
     transition: opacity 0.1s ease;
   }
-  .og-row-dragging .og-row[data-row-dragging="true"] {
-    opacity: 0.4;
+
+  .og-drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 1000;
+    overflow: hidden;
+    border-radius: 4px;
+    border: 1px solid var(--og-focus-ring, #3b82f6);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(59, 130, 246, 0.3);
+    opacity: 0.9;
   }
 `;
