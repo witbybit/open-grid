@@ -90,6 +90,19 @@ export type {
 	SortModel,
 } from './rowModel.js';
 export type { AggregationDef } from './rows/stages/aggregateStage.js';
+export type { OpOption } from './filterOperations.js';
+export {
+	TEXT_OPS,
+	NUMBER_OPS,
+	DATE_OPS,
+	getOpsForType,
+	getOpMeta,
+	defaultOpForType,
+	isFilterableColumn,
+	applyFilterToModel,
+	buildFilterByValue,
+	getFilterChipText,
+} from './filterOperations.js';
 export type { CsvExportOptions } from './store.js';
 export {
 	parseVisualRowId,

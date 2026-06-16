@@ -13,6 +13,7 @@ import type {
 	DateFilterOperator,
 } from '../filterModel.js';
 import type { InternalColumnDef } from '../columnDef.js';
+import { type OpOption, getOpsForType, getOpMeta, defaultOpForType, applyFilterToModel } from '../filterOperations.js';
 
 /** Params passed to a custom floatingFilterRenderer function. */
 export interface FloatingFilterRendererParams<TRowData = unknown> {
@@ -24,64 +25,6 @@ export interface FloatingFilterRendererParams<TRowData = unknown> {
 	setFilter(filter: ColumnFilter | null): void;
 	/** The cell container element — size to fill it. */
 	eCell: HTMLDivElement;
-}
-
-// ── Operator metadata ────────────────────────────────────────────────────────
-
-interface OpOption {
-	value: string;
-	label: string;
-	symbol: string;
-	noValue?: boolean;
-	range?: boolean;
-}
-
-const TEXT_OPS: OpOption[] = [
-	{ value: 'contains', label: 'Contains', symbol: '~' },
-	{ value: 'notContains', label: 'Not contains', symbol: '!~' },
-	{ value: 'equals', label: 'Equals', symbol: '=' },
-	{ value: 'notEquals', label: 'Not equals', symbol: '≠' },
-	{ value: 'startsWith', label: 'Starts with', symbol: '^' },
-	{ value: 'endsWith', label: 'Ends with', symbol: '$' },
-	{ value: 'blank', label: 'Is blank', symbol: '∅', noValue: true },
-	{ value: 'notBlank', label: 'Not blank', symbol: '!∅', noValue: true },
-];
-
-const NUMBER_OPS: OpOption[] = [
-	{ value: 'equals', label: 'Equals', symbol: '=' },
-	{ value: 'notEquals', label: 'Not equals', symbol: '≠' },
-	{ value: 'gt', label: 'Greater than', symbol: '>' },
-	{ value: 'gte', label: 'Greater or equal', symbol: '≥' },
-	{ value: 'lt', label: 'Less than', symbol: '<' },
-	{ value: 'lte', label: 'Less or equal', symbol: '≤' },
-	{ value: 'inRange', label: 'In range', symbol: '↔', range: true },
-	{ value: 'blank', label: 'Is blank', symbol: '∅', noValue: true },
-	{ value: 'notBlank', label: 'Not blank', symbol: '!∅', noValue: true },
-];
-
-const DATE_OPS: OpOption[] = [
-	{ value: 'equals', label: 'On date', symbol: '=' },
-	{ value: 'before', label: 'Before', symbol: '<' },
-	{ value: 'after', label: 'After', symbol: '>' },
-	{ value: 'inRange', label: 'In range', symbol: '↔', range: true },
-	{ value: 'blank', label: 'Is blank', symbol: '∅', noValue: true },
-	{ value: 'notBlank', label: 'Not blank', symbol: '!∅', noValue: true },
-];
-
-function getOpsForType(filterType: string): OpOption[] {
-	if (filterType === 'number') return NUMBER_OPS;
-	if (filterType === 'date') return DATE_OPS;
-	return TEXT_OPS;
-}
-
-function getOpMeta(filterType: string, operator: string): OpOption {
-	return getOpsForType(filterType).find((o) => o.value === operator) ?? { value: operator, label: operator, symbol: '~' };
-}
-
-function defaultOpForType(filterType: string): string {
-	if (filterType === 'number') return 'equals';
-	if (filterType === 'date') return 'equals';
-	return 'contains';
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -286,14 +229,8 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		cell.style.width = `${width}px`;
 
 		const setFilter = (filter: ColumnFilter | null): void => {
-			const state = this.engine.stateManager.getState();
-			const newModel: FilterModel = { ...(state.filterModel ?? {}) };
-			if (filter == null) {
-				delete newModel[col.field];
-			} else {
-				newModel[col.field] = filter;
-			}
-			this.engine.stateManager.setState({ filterModel: Object.keys(newModel).length > 0 ? newModel : null });
+			const newModel = applyFilterToModel(col.field, filter, this.engine.stateManager.getState().filterModel);
+			this.engine.stateManager.setState({ filterModel: newModel });
 			this.engine.invalidation.invalidateFull('floating-filter');
 		};
 

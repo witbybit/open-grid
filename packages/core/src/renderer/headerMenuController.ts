@@ -3,6 +3,8 @@ import type { PortalMountManager } from './portalMountManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi } from '../store.js';
 import { reportRendererFault } from './rendererFaults.js';
+import { getOpsForType, applyFilterToModel } from '../filterOperations.js';
+import type { TextFilterOperator, NumberFilterOperator, DateFilterOperator } from '../filterModel.js';
 
 /**
  * Manages the column header context menu/popover lifecycle.
@@ -302,19 +304,10 @@ export class HeaderMenuController<TRowData = unknown> {
 				}
 			}
 
+			const filterType = column.filterType ?? 'text';
 			const select = document.createElement('select');
 			select.className = 'og-popover-select';
-			const operators = [
-				{ value: 'contains', label: 'Contains' },
-				{ value: 'equals', label: 'Equals' },
-				{ value: 'startsWith', label: 'Starts with' },
-				{ value: 'endsWith', label: 'Ends with' },
-				{ value: 'gt', label: 'Greater than' },
-				{ value: 'gte', label: 'Greater or equal' },
-				{ value: 'lt', label: 'Less than' },
-				{ value: 'lte', label: 'Less or equal' },
-			];
-			operators.forEach((op) => {
+			getOpsForType(filterType).forEach((op) => {
 				const opt = document.createElement('option');
 				opt.value = op.value;
 				opt.textContent = op.label;
@@ -347,9 +340,7 @@ export class HeaderMenuController<TRowData = unknown> {
 			clearBtn.className = 'og-popover-btn og-btn-secondary';
 			clearBtn.textContent = 'Clear';
 			clearBtn.addEventListener('click', () => {
-				const nextFilterModel = { ...(state.filterModel || {}) };
-				delete nextFilterModel[colField];
-				this.engine.setFilterModel(Object.keys(nextFilterModel).length > 0 ? nextFilterModel : null);
+				this.engine.setFilterModel(applyFilterToModel(colField, null, state.filterModel));
 				this.hide();
 			});
 			btnGroup.appendChild(clearBtn);
@@ -359,17 +350,20 @@ export class HeaderMenuController<TRowData = unknown> {
 			applyBtn.textContent = 'Apply';
 			applyBtn.addEventListener('click', () => {
 				const term = input.value.trim();
-				const nextFilterModel = { ...(state.filterModel || {}) };
-				if (term === '') {
-					delete nextFilterModel[colField];
-				} else {
-					const op = select.value as string;
-					const isNumericOp = op === 'gt' || op === 'gte' || op === 'lt' || op === 'lte';
-					nextFilterModel[colField] = isNumericOp
-						? { type: 'number', operator: op as import('../filterModel.js').NumberFilterOperator, value: Number(term) || 0 }
-						: { type: 'text', operator: op as import('../filterModel.js').TextFilterOperator, value: term };
+				const op = select.value;
+				const opMeta = getOpsForType(filterType).find((o) => o.value === op);
+				let condition = null;
+				if (opMeta?.noValue) {
+					if (filterType === 'number') condition = { type: 'number' as const, operator: op as NumberFilterOperator, value: 0 };
+					else if (filterType === 'date') condition = { type: 'date' as const, operator: op as DateFilterOperator, dateFrom: '' };
+					else condition = { type: 'text' as const, operator: op as TextFilterOperator, value: '' };
+				} else if (term) {
+					if (filterType === 'number')
+						condition = { type: 'number' as const, operator: op as NumberFilterOperator, value: Number(term) || 0 };
+					else if (filterType === 'date') condition = { type: 'date' as const, operator: op as DateFilterOperator, dateFrom: term };
+					else condition = { type: 'text' as const, operator: op as TextFilterOperator, value: term };
 				}
-				this.engine.setFilterModel(Object.keys(nextFilterModel).length > 0 ? nextFilterModel : null);
+				this.engine.setFilterModel(applyFilterToModel(colField, condition, state.filterModel));
 				this.hide();
 			});
 			btnGroup.appendChild(applyBtn);

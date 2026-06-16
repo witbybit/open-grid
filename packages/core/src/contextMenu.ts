@@ -1,6 +1,7 @@
 import { GridCellPointer, GridPlugin, GridApi, GridPluginRuntime, GridSelectionState } from './store.js';
 import { exportToCsv } from './export/csvExport.js';
 import { attachRovingMenuKeyboard } from './menuKeyboardNav.js';
+import { isFilterableColumn, buildFilterByValue, applyFilterToModel } from './filterOperations.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
@@ -22,7 +23,19 @@ export interface GridContextMenuItem<TRowData = unknown> {
 export interface GridContextMenuOptions<TRowData = unknown> {
 	disabled?: boolean;
 	disableDefaults?: boolean;
-	excludeDefaults?: Array<'copy' | 'cut' | 'paste' | 'clear' | 'selectAll' | 'exportAll' | 'exportSelected' | 'divider'>;
+	excludeDefaults?: Array<
+		| 'copy'
+		| 'cut'
+		| 'paste'
+		| 'clear'
+		| 'selectAll'
+		| 'filterByValue'
+		| 'excludeValue'
+		| 'clearColumnFilter'
+		| 'exportAll'
+		| 'exportSelected'
+		| 'divider'
+	>;
 	customItems?: Array<GridContextMenuItem<TRowData>>;
 }
 
@@ -171,6 +184,28 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 				label: 'Select All',
 				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4"></rect></svg>`,
 				action: (p) => this.selectAll(p),
+			},
+			{ id: 'divider', isDivider: true },
+			{
+				id: 'filterByValue',
+				label: 'Filter by Value',
+				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>`,
+				hidden: (p) => !this.canFilterColumn(p.colField),
+				action: (p) => this.filterByValue(p, false),
+			},
+			{
+				id: 'excludeValue',
+				label: 'Exclude This Value',
+				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon><line x1="4" y1="4" x2="20" y2="20"></line></svg>`,
+				hidden: (p) => !this.canFilterColumn(p.colField),
+				action: (p) => this.filterByValue(p, true),
+			},
+			{
+				id: 'clearColumnFilter',
+				label: 'Clear Column Filter',
+				icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+				hidden: (p) => !this.hasColumnFilter(p.colField),
+				action: (p) => this.clearColumnFilter(p),
 			},
 			{ id: 'divider', isDivider: true },
 			{
@@ -389,5 +424,29 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const colFields = state.columns.slice(bounds.minCol, bounds.maxCol + 1).map((c) => c.field);
 
 		exportToCsv(this.runtime, { fileName: 'export-selection.csv', rowIds, columns: colFields });
+	}
+
+	// ── Filter by value helpers ────────────────────────────────────────────────
+
+	private canFilterColumn(colField: string): boolean {
+		const col = this.runtime.getColumnDef(colField);
+		return col ? isFilterableColumn(col) : false;
+	}
+
+	private hasColumnFilter(colField: string): boolean {
+		return !!this.runtime.getState().filterModel?.[colField];
+	}
+
+	private filterByValue(params: ContextMenuParams<TRowData>, exclude: boolean): void {
+		const { rowId, colField, api } = params;
+		const col = api.getColumnDef(colField);
+		if (!col) return;
+		const rawValue = api.getCellValue(rowId, colField);
+		api.setFilterModel(buildFilterByValue(col, rawValue, exclude, api.getState().filterModel));
+	}
+
+	private clearColumnFilter(params: ContextMenuParams<TRowData>): void {
+		const { colField, api } = params;
+		api.setFilterModel(applyFilterToModel(colField, null, api.getState().filterModel));
 	}
 }
