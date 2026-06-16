@@ -322,6 +322,8 @@ export class RowRenderer<TRowData = unknown> {
 			for (let i = totalSlots; i < prevSlotCount; i++) {
 				const slot = this.rowSlotPool.getSlot(i);
 				if (!slot) continue;
+				// Incremental index: remove excess slots before they are destroyed.
+				if (slot.visualIndex >= 0) this.activeRows.delete(slot.visualIndex);
 				this.releaseRowPortal(slot);
 				slot.forEachCell((cell) => {
 					if (cell.lastPortalKey) {
@@ -389,7 +391,9 @@ export class RowRenderer<TRowData = unknown> {
 				visualRow = { kind: 'loading', id: `loading:${r}`, rowIndex: r };
 			}
 			if (!visualRow) {
+				const prevUnbind = slot.visualIndex;
 				slot.unbindHot();
+				if (prevUnbind >= 0) this.activeRows.delete(prevUnbind);
 				continue;
 			}
 
@@ -506,7 +510,13 @@ export class RowRenderer<TRowData = unknown> {
 				}
 			}
 
+			const prevSlotIdx = slot.visualIndex;
 			const rowUpdated = slot.update(r, visualRow.id, visualRow.kind as any, rowTop, rowHeight, rowClassName);
+			// Incremental index: update map only when the binding changes.
+			if (prevSlotIdx !== r) {
+				if (prevSlotIdx >= 0) this.activeRows.delete(prevSlotIdx);
+				this.activeRows.set(r, slot);
+			}
 			if (slot.element.style.zIndex !== '') slot.element.style.zIndex = '';
 			if (isScrollFrameActive && rowUpdated) this.currentScrollRowsRebound++;
 
@@ -549,15 +559,8 @@ export class RowRenderer<TRowData = unknown> {
 			}
 		}
 
-		// ── Rebuild visualIndexToSlot (activeRows) ────────────────────────────────────
-		// activeRows is derived from slot bindings, not the primary lifecycle owner.
-		// Rebuilt here so external callers (repaint, decoration, API) can look up slots.
-		this.activeRows.clear();
-		for (const slot of this.rowSlotPool.getSlots()) {
-			if (slot.visualIndex >= 0) {
-				this.activeRows.set(slot.visualIndex, slot);
-			}
-		}
+		// activeRows is maintained incrementally above — no O(n) rebuild needed.
+		// All slot index changes (bind, rebind, unbind, destroy) update the map at the point of change.
 
 		this.currentWindow = nextWindow;
 	}
