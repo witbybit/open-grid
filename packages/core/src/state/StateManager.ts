@@ -7,7 +7,9 @@ export class StateManager<TRowData = unknown> {
 	private keyListeners = new Map<string, Set<Listener<TRowData>>>();
 
 	private transactionDepth = 0;
-	private batchedStateUpdates: Partial<GridState<TRowData>> = {};
+	// Keys touched inside an open transaction — used to drive notifyChanges at commit.
+	// Using a Set avoids the repeated object spread that batchedStateUpdates previously required.
+	private batchedKeys = new Set<string>();
 	private preTransactionState: GridState<TRowData> | null = null;
 	private onChangesCallback?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void;
 	private readonly faultReporter?: RuntimeFaultReporter<TRowData>;
@@ -33,7 +35,7 @@ export class StateManager<TRowData = unknown> {
 		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
 
 		if (this.transactionDepth > 0) {
-			this.batchedStateUpdates = { ...this.batchedStateUpdates, ...nextState };
+			for (const key of Object.keys(nextState)) this.batchedKeys.add(key);
 			this.state = { ...this.state, ...nextState };
 			return;
 		}
@@ -57,6 +59,7 @@ export class StateManager<TRowData = unknown> {
 	public startTransaction = (): void => {
 		if (this.transactionDepth === 0) {
 			this.preTransactionState = this.state;
+			this.batchedKeys.clear();
 		}
 		this.transactionDepth++;
 	};
@@ -66,11 +69,11 @@ export class StateManager<TRowData = unknown> {
 		this.transactionDepth--;
 		if (this.transactionDepth > 0) return;
 		const preState = this.preTransactionState;
-		const updates = this.batchedStateUpdates;
+		const keys = this.batchedKeys;
 		this.preTransactionState = null;
-		this.batchedStateUpdates = {};
-		if (preState && Object.keys(updates).length > 0) {
-			this.notifyChanges(preState, Object.keys(updates));
+		this.batchedKeys = new Set<string>();
+		if (preState && keys.size > 0) {
+			this.notifyChanges(preState, Array.from(keys));
 		}
 	};
 
