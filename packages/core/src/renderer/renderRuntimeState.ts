@@ -21,7 +21,9 @@ export interface RenderRuntimeSnapshot {
 
 const ALLOWED: Record<RenderRuntimePhase, ReadonlySet<RenderRuntimePhase>> = {
 	idle: new Set(['scroll-pending', 'paint-frame', 'destroyed']),
-	'scroll-pending': new Set(['scroll-frame', 'destroyed']),
+	// idle is allowed from scroll-pending: covers the case where a brief scroll ends
+	// before any RAF scroll frame fires (scrollEndTick fires before onScrollFrame runs).
+	'scroll-pending': new Set(['scroll-frame', 'idle', 'destroyed']),
 	'scroll-frame': new Set(['post-scroll', 'destroyed']),
 	'paint-frame': new Set(['idle', 'destroyed']),
 	'post-scroll': new Set(['idle', 'scroll-pending', 'destroyed']),

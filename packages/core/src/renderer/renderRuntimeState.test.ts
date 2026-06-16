@@ -38,6 +38,16 @@ describe('RenderRuntimeState', () => {
 			expect(s.phase).toBe('idle');
 		});
 
+		it('scroll-pending -> idle (brief scroll ends before any RAF frame fires)', () => {
+			// Reproduces: scrollEndTick fires after 3 quiet RAFs while still in scroll-pending
+			// because no onScrollFrame ran before the scroll stopped.
+			const s = new RenderRuntimeState();
+			s.transitionTo('scroll-pending');
+			expect(s.phase).toBe('scroll-pending');
+			s.transitionTo('idle');
+			expect(s.phase).toBe('idle');
+		});
+
 		it('post-scroll -> scroll-pending (new scroll during post-scroll)', () => {
 			const s = new RenderRuntimeState();
 			s.transitionTo('scroll-pending');
