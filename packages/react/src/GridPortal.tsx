@@ -43,6 +43,158 @@ export interface PortalCellProps<TRowData = unknown> {
 	isSelected?: boolean;
 }
 
+// ─── ActiveCellEditor ────────────────────────────────────────────────────────
+// Mounted ONLY when a cell is actively being edited. Keeping the activeEdit
+// subscription here means 0 cells subscribe when nothing is being edited,
+// and exactly 1 subscribes during an edit — instead of every visible cell.
+
+interface ActiveCellEditorProps<TRowData = unknown> {
+	rowId: string;
+	colField: string;
+	value: unknown;
+	col: ColumnDef<TRowData>;
+	api: GridApi<TRowData>;
+}
+
+function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col, api }: ActiveCellEditorProps<TRowData>) {
+	const [localValue, setLocalValue] = useState<unknown>(value);
+	const localValueRef = useRef(localValue);
+	localValueRef.current = localValue;
+
+	const isCancelledRef = useRef(false);
+	const isCommittedRef = useRef(false);
+
+	useEffect(() => {
+		isCancelledRef.current = false;
+		isCommittedRef.current = false;
+		setLocalValue(value);
+	}, [value]);
+
+	useEffect(() => {
+		const unsubscribe = api.addEventListener(GridEventName.editStopped, (event) => {
+			if (event.payload.rowId === rowId && event.payload.colField === colField) {
+				if (event.payload.cancel) {
+					isCancelledRef.current = true;
+				} else if (!isCommittedRef.current) {
+					// Fallback: stopEditing was called externally (e.g. navigation) without commitEdit
+					isCommittedRef.current = true;
+					api.setCellValue(rowId, colField, localValueRef.current);
+				}
+			}
+		});
+		return () => unsubscribe();
+	}, [api, rowId, colField]);
+
+	// activeEdit subscription lives here — only this mounted instance subscribes, not every cell
+	const activeEditState = useSyncExternalStore(
+		(cb) => api.subscribeToKey('activeEdit', () => cb()),
+		() => api.getState().activeEdit as ActiveEditState | null
+	);
+	const validationError =
+		activeEditState?.rowId === rowId && activeEditState?.colField === colField ? (activeEditState.validationError ?? null) : null;
+
+	const handleCommit = useCallback(
+		(finalValue?: unknown) => {
+			isCommittedRef.current = true;
+			const isEvent = finalValue && typeof finalValue === 'object' && ('nativeEvent' in finalValue || 'target' in finalValue);
+			const valToCommit = finalValue !== undefined && !isEvent ? finalValue : localValueRef.current;
+			void api.commitEdit(rowId, colField, valToCommit);
+		},
+		[api, rowId, colField]
+	);
+
+	const handleCancel = useCallback(() => {
+		isCancelledRef.current = true;
+		api.stopEditing(true);
+	}, [api]);
+
+	const CustomEditor = col?.cellEditor as ComponentType<Record<string, unknown>> | undefined;
+
+	return (
+		<>
+			{CustomEditor ? (
+				<div
+					style={{ width: '100%', height: '100%' }}
+					onMouseDown={(e) => e.stopPropagation()}
+					onDoubleClick={(e) => e.stopPropagation()}
+					onKeyDown={(e) => {
+						if (e.defaultPrevented) return;
+						if (e.key === 'Enter') {
+							e.stopPropagation();
+							handleCommit();
+						} else if (e.key === 'Escape') {
+							e.stopPropagation();
+							handleCancel();
+						}
+					}}
+				>
+					{createElement(CustomEditor, {
+						rowId,
+						colField,
+						value: localValue,
+						onChange: (val: unknown) => {
+							setLocalValue(val);
+							localValueRef.current = val;
+						},
+						api,
+						onCommit: handleCommit,
+						onCancel: handleCancel,
+					})}
+				</div>
+			) : (
+				<input
+					autoFocus
+					className='og-cell-editor'
+					value={typeof localValue === 'string' || typeof localValue === 'number' ? String(localValue) : ''}
+					onChange={(e) => {
+						setLocalValue(e.target.value);
+						localValueRef.current = e.target.value;
+					}}
+					onMouseDown={(e) => e.stopPropagation()}
+					onDoubleClick={(e) => e.stopPropagation()}
+					onBlur={() => handleCommit()}
+					onKeyDown={(e) => {
+						if (e.key === 'Enter') {
+							e.stopPropagation();
+							handleCommit();
+						} else if (e.key === 'Escape') {
+							e.stopPropagation();
+							handleCancel();
+						}
+					}}
+				/>
+			)}
+			{validationError && (
+				<div
+					className='og-cell-validation-error'
+					style={{
+						position: 'absolute',
+						top: '100%',
+						left: 0,
+						right: 0,
+						zIndex: 10,
+						background: 'var(--og-validation-error-bg, #fff0f0)',
+						color: 'var(--og-validation-error-color, #c00)',
+						fontSize: '11px',
+						padding: '2px 6px',
+						border: '1px solid var(--og-validation-error-border, #f5a5a5)',
+						borderTop: 'none',
+						borderRadius: '0 0 4px 4px',
+						whiteSpace: 'nowrap',
+						overflow: 'hidden',
+						textOverflow: 'ellipsis',
+					}}
+					role='alert'
+				>
+					{validationError}
+				</div>
+			)}
+		</>
+	);
+}
+
+const ActiveCellEditor = memo(ActiveCellEditorInner) as typeof ActiveCellEditorInner;
+
 /**
  * Clean React Portal cell adapter that mounts only custom renderers & custom editors.
  */
@@ -61,63 +213,6 @@ function PortalCellInner<TRowData = unknown>({
 }: PortalCellProps<TRowData>) {
 	const api = useGridApi<TRowData>();
 
-	const [localValue, setLocalValue] = useState<unknown>(value);
-
-	const localValueRef = useRef(localValue);
-	localValueRef.current = localValue;
-
-	const isCancelledRef = useRef(false);
-	const isCommittedRef = useRef(!isEditing);
-
-	// Subscribe to activeEdit to get live validationError from the store
-	const activeEditState = useSyncExternalStore(
-		(cb) => api.subscribeToKey('activeEdit', () => cb()),
-		() => api.getState().activeEdit as ActiveEditState | null
-	);
-	const validationError =
-		activeEditState?.rowId === rowId && activeEditState?.colField === colField ? (activeEditState.validationError ?? null) : null;
-
-	useEffect(() => {
-		if (isEditing) {
-			isCancelledRef.current = false;
-			isCommittedRef.current = false;
-			setLocalValue(value);
-		}
-	}, [isEditing, value]);
-
-	useEffect(() => {
-		const unsubscribe = api.addEventListener(GridEventName.editStopped, (event) => {
-			if (event.payload.rowId === rowId && event.payload.colField === colField) {
-				if (event.payload.cancel) {
-					isCancelledRef.current = true;
-				} else if (isEditing && !isCommittedRef.current) {
-					// Fallback: stopEditing was called externally (e.g. navigation) without commitEdit
-					isCommittedRef.current = true;
-					api.setCellValue(rowId, colField, localValueRef.current);
-				}
-			}
-		});
-		return () => {
-			unsubscribe();
-		};
-	}, [isEditing, api, rowId, colField]);
-
-	const handleCommit = useCallback(
-		(finalValue?: unknown) => {
-			isCommittedRef.current = true;
-			const isEvent = finalValue && typeof finalValue === 'object' && ('nativeEvent' in finalValue || 'target' in finalValue);
-			const valToCommit = finalValue !== undefined && !isEvent ? finalValue : localValueRef.current;
-			// Use commitEdit so validation and async valueSetter run before the edit closes
-			void api.commitEdit(rowId, colField, valToCommit);
-		},
-		[api, rowId, colField]
-	);
-
-	const handleCancel = useCallback(() => {
-		isCancelledRef.current = true;
-		api.stopEditing(true);
-	}, [api]);
-
 	if (isLoading) {
 		return (
 			<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', padding: '0 12px' }}>
@@ -128,7 +223,6 @@ function PortalCellInner<TRowData = unknown>({
 
 	const rowData = node?.data;
 
-	const CustomEditor = col?.cellEditor as ComponentType<Record<string, unknown>> | undefined;
 	// DomCellRenderer is an object ({mount}), memo/forwardRef are exotic objects — use isDomCellRenderer guard
 	const iCol = col as ColumnDef<TRowData> & {
 		cellRenderer?: unknown;
@@ -141,85 +235,7 @@ function PortalCellInner<TRowData = unknown>({
 	return (
 		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', position: 'relative' }}>
 			{isEditing ? (
-				<>
-					{CustomEditor ? (
-						<div
-							style={{ width: '100%', height: '100%' }}
-							onMouseDown={(e) => e.stopPropagation()}
-							onDoubleClick={(e) => e.stopPropagation()}
-							onKeyDown={(e) => {
-								if (e.defaultPrevented) return;
-								if (e.key === 'Enter') {
-									e.stopPropagation();
-									handleCommit();
-								} else if (e.key === 'Escape') {
-									e.stopPropagation();
-									handleCancel();
-								}
-							}}
-						>
-							{createElement(CustomEditor, {
-								rowId,
-								colField,
-								value: localValue,
-								onChange: (val: unknown) => {
-									setLocalValue(val);
-									localValueRef.current = val;
-								},
-								api,
-								onCommit: handleCommit,
-								onCancel: handleCancel,
-							})}
-						</div>
-					) : (
-						<input
-							autoFocus
-							className='og-cell-editor'
-							value={typeof localValue === 'string' || typeof localValue === 'number' ? String(localValue) : ''}
-							onChange={(e) => {
-								setLocalValue(e.target.value);
-								localValueRef.current = e.target.value;
-							}}
-							onMouseDown={(e) => e.stopPropagation()}
-							onDoubleClick={(e) => e.stopPropagation()}
-							onBlur={() => handleCommit()}
-							onKeyDown={(e) => {
-								if (e.key === 'Enter') {
-									e.stopPropagation();
-									handleCommit();
-								} else if (e.key === 'Escape') {
-									e.stopPropagation();
-									handleCancel();
-								}
-							}}
-						/>
-					)}
-					{validationError && (
-						<div
-							className='og-cell-validation-error'
-							style={{
-								position: 'absolute',
-								top: '100%',
-								left: 0,
-								right: 0,
-								zIndex: 10,
-								background: 'var(--og-validation-error-bg, #fff0f0)',
-								color: 'var(--og-validation-error-color, #c00)',
-								fontSize: '11px',
-								padding: '2px 6px',
-								border: '1px solid var(--og-validation-error-border, #f5a5a5)',
-								borderTop: 'none',
-								borderRadius: '0 0 4px 4px',
-								whiteSpace: 'nowrap',
-								overflow: 'hidden',
-								textOverflow: 'ellipsis',
-							}}
-							role='alert'
-						>
-							{validationError}
-						</div>
-					)}
-				</>
+				<ActiveCellEditor<TRowData> rowId={rowId} colField={colField} value={value} col={col} api={api} />
 			) : CustomRenderer && rowData ? (
 				createElement(CustomRenderer, {
 					value,
