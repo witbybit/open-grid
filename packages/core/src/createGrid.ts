@@ -278,6 +278,8 @@ export function createApiFacade<TRowData>(
 		saveNow: (): void => persistenceController?.saveNow(),
 		getRuntimeFaults: () => store.getRuntimeFaults(),
 		clearRuntimeFaults: () => store.clearRuntimeFaults(),
+		getInstrumentation: () => store.getInstrumentation(),
+		setInstrumentation: (inst) => store.setInstrumentation(inst),
 		flushCellUpdatesSync: () => store.flushCellUpdatesSync(),
 		getTheme: () => store.getTheme(),
 		getThemeName: () => store.getThemeName(),

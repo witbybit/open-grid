@@ -423,4 +423,30 @@ describe('Architecture guardrails', () => {
 		expect(storeContent).not.toContain('export type GridState');
 		expect(storeContent).not.toContain('export interface GridState');
 	});
+
+	// ── Plan 072 — GridInstrumentation hot-path boundary ─────────────────────
+
+	it('renderer production files do not import RecordingGridInstrumentation (noop path must be tree-shakeable)', () => {
+		// Renderer code must only depend on the GridInstrumentation interface.
+		// RecordingGridInstrumentation is for tests and demos — importing it in the
+		// renderer hot path would prevent the noop branch from being tree-shaken.
+		const rendererDir = resolve(CORE_ROOT, 'src', 'renderer');
+		const files = collectSourceFiles(rendererDir).filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'));
+		const violators: string[] = [];
+		for (const file of files) {
+			const content = readFileSync(file, 'utf-8');
+			if (content.includes('RecordingGridInstrumentation')) {
+				violators.push(file.replace(rendererDir, 'renderer'));
+			}
+		}
+		expect(violators, `renderer files importing RecordingGridInstrumentation: ${violators.join(', ')}`).toHaveLength(0);
+	});
+
+	it('GridInstrumentation interface is defined in diagnostics/GridInstrumentation.ts', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'diagnostics', 'GridInstrumentation.ts'), 'utf-8');
+		expect(content).toContain('export interface GridInstrumentation');
+		expect(content).toContain('export const enum GridMetric');
+		expect(content).toContain('export class NoopGridInstrumentation');
+		expect(content).toContain('export class RecordingGridInstrumentation');
+	});
 });

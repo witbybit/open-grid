@@ -138,3 +138,5 @@ export {
 } from './renderer/themes.js';
 export type { ThemeTokens, BuiltInThemeName } from './renderer/themes.js';
 export type { GridDomainVersions } from './state/GridDomainVersions.js';
+export type { GridInstrumentation, GridInstrumentationSnapshot, FrameMetrics, FallbackMetric } from './diagnostics/GridInstrumentation.js';
+export { GridMetric, NoopGridInstrumentation, RecordingGridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';

@@ -9,6 +9,7 @@ import type { ClientRowModelRuntime, ServerRowModelRuntime } from './engine/runt
 import { createClientRowModelRuntime, createServerRowModelRuntime } from './engine/createRowModelRuntimes.js';
 import type { GridRuntimePorts } from './engine/rendererPorts.js';
 import { createHeadlessPorts } from './engine/rendererPorts.js';
+import { type GridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
 import { createRowsAccessor } from './rowsAccessor.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
@@ -113,6 +114,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	private containerElement: HTMLElement | null = null;
 	private rendererPorts: GridRuntimePorts = createHeadlessPorts();
+	private instrumentation: GridInstrumentation = NOOP_INSTRUMENTATION;
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}, engineOptions?: { rowValidator?: RowValidator<TRowData> }) {
 		validateColumns(initialState.columns || []);
@@ -828,6 +830,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public setRendererPorts = (ports: GridRuntimePorts): void => {
 		this.rendererPorts = ports;
 	};
+
+	public getInstrumentation = (): GridInstrumentation => this.instrumentation;
+	public setInstrumentation = (inst: GridInstrumentation): void => { this.instrumentation = inst; };
 
 	public getRenderStats = (): RenderStats => {
 		const stats = this.rendererPorts.renderer.getStats();

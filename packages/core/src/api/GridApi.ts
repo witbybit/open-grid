@@ -11,6 +11,7 @@ import type { PersistenceStatus, PersistedGridState } from '../persistence/state
 import type { CsvExportOptions } from '../export/csvExport.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
+import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import type { GridState, GridStateUpdater, Listener, ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 
@@ -501,6 +502,10 @@ export interface GridApi<TRowData = unknown> {
 	clearRuntimeFaults(): void;
 	/** Synchronously flushes all pending cell update notifications. Use when you need to ensure repaints happen before the next frame. */
 	flushCellUpdatesSync(): void;
+	/** Returns the active instrumentation sink. Replace with a RecordingGridInstrumentation for diagnostics or tests. */
+	getInstrumentation(): GridInstrumentation;
+	/** Swap the active instrumentation sink. Provide NOOP_INSTRUMENTATION to disable recording. */
+	setInstrumentation(inst: GridInstrumentation): void;
 
 	// ── Theme API ──────────────────────────────────────────────────────────────
 	/** Returns the currently active theme tokens. */
