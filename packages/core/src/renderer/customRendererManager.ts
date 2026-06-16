@@ -1,4 +1,5 @@
-import type { ColumnDef, RowNode, CellRendererPhase } from '../store.js';
+import type { ColumnDef, CellRendererPhase } from '../columnDef.js';
+import type { RowNode } from '../rowNode.js';
 import type { GridCellContentMount, GridCellContentUnmount, RendererLifecycleOperation } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { createEditRendererKey, createSlotRendererKey, createIndexRendererKey } from './identityKeys.js';

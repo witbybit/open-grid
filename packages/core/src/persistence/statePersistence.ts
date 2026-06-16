@@ -1,17 +1,59 @@
 import type { GridState, ColumnDef } from '../store.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import { isBuiltInThemeName, type BuiltInThemeName } from '../renderer/themes.js';
+
+/**
+ * Schema version for persisted grid state. Increment this when any field in
+ * `PersistedGridState` changes shape (e.g. filter model operators added/removed,
+ * field renamed). `applyPersistedState` and `applyPersistedStateToApi` reject
+ * blobs whose `v` does not match this value.
+ *
+ * Migration path: add a `migrateV{N}toV{N+1}` function and call it in the
+ * version-dispatch chain before incrementing this constant.
+ */
+export const GRID_STATE_SCHEMA_VERSION = 2;
 
 export interface PersistedGridState {
+	/**
+	 * Schema version. Set automatically by `extractPersistedState`. If absent,
+	 * the blob pre-dates versioning and is accepted with a console warning.
+	 * A mismatched version causes the blob to be silently rejected (no-op).
+	 */
+	v?: number;
 	columnWidths?: Record<string, number>;
 	columnOrder?: string[];
 	/** false = hidden. Omitted fields use column defaults. */
 	columnVisibility?: Record<string, boolean>;
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
+	themeName?: BuiltInThemeName;
 	groupBy?: string[];
 	showGroupFooter?: boolean;
 	enableStickyGroupRows?: boolean;
 	pinnedColumns?: { left: number; right: number };
+}
+
+/**
+ * Validate the schema version of a persisted state blob.
+ * Returns null if the blob is compatible, or a human-readable error string if not.
+ * A missing version (`v === undefined`) is treated as a legacy pre-versioning blob
+ * and accepted with a warning rather than rejected.
+ */
+export function validateSchemaVersion(state: PersistedGridState): string | null {
+	if (state.v === undefined) {
+		console.warn(
+			`[open-grid] applyPersistedState: state blob has no schema version (v is undefined). ` +
+				`It predates versioning and will be applied as-is. ` +
+				`Future schema changes may break this. Save the grid state again to stamp v=${GRID_STATE_SCHEMA_VERSION}.`
+		);
+		return null;
+	}
+	if (state.v === GRID_STATE_SCHEMA_VERSION) return null;
+	return (
+		`[open-grid] applyPersistedState: schema version mismatch ` +
+		`(blob v=${state.v}, expected v=${GRID_STATE_SCHEMA_VERSION}). ` +
+		`State was not applied. Clear the persisted state or provide a migration function.`
+	);
 }
 
 /**
@@ -104,11 +146,13 @@ export function extractPersistedState(state: GridState): PersistedGridState {
 	}
 	const pins = state.pinnedColumns;
 	return {
+		v: GRID_STATE_SCHEMA_VERSION,
 		columnWidths: Object.keys(state.columnWidths).length > 0 ? state.columnWidths : undefined,
 		columnOrder,
 		columnVisibility: Object.keys(columnVisibility).length > 0 ? columnVisibility : undefined,
 		sortModel: state.sortModel,
 		filterModel: state.filterModel,
+		themeName: state.themeName,
 		groupBy: state.groupBy,
 		showGroupFooter: state.showGroupFooter,
 		enableStickyGroupRows: state.enableStickyGroupRows,
@@ -116,11 +160,21 @@ export function extractPersistedState(state: GridState): PersistedGridState {
 	};
 }
 
+/**
+ * Apply a persisted state blob onto the initial grid state.
+ * Returns null if the blob's schema version is incompatible (mismatch — not legacy).
+ * A legacy blob (no `v` field) is accepted with a console warning.
+ */
 export function applyPersistedState<TRowData>(
 	saved: PersistedGridState,
 	initial: Partial<GridState<TRowData>>,
 	columns: ColumnDef<unknown>[]
-): Partial<GridState<TRowData>> {
+): Partial<GridState<TRowData>> | null {
+	const versionError = validateSchemaVersion(saved);
+	if (versionError !== null) {
+		console.error(versionError);
+		return null;
+	}
 	const knownFields = new Set(columns.map((c) => c.field));
 	const result: Partial<GridState<TRowData>> = { ...initial };
 
@@ -172,6 +226,10 @@ export function applyPersistedState<TRowData>(
 		result.filterModel = saved.filterModel as GridState<TRowData>['filterModel'];
 	}
 
+	if (saved.themeName !== undefined && isBuiltInThemeName(saved.themeName)) {
+		result.themeName = saved.themeName as GridState<TRowData>['themeName'];
+	}
+
 	// Group by — only restore fields that still exist in schema
 	if (saved.groupBy !== undefined) {
 		result.groupBy = saved.groupBy.filter((f) => knownFields.has(f));
@@ -185,50 +243,6 @@ export function applyPersistedState<TRowData>(
 	if (saved.pinnedColumns !== undefined) result.pinnedColumns = saved.pinnedColumns;
 
 	return result;
-}
-
-/**
- * Apply a loaded PersistedGridState to a live grid via its API.
- * Used for async adapters that resolve after the grid is already mounted.
- */
-export function applyPersistedStateViaApi<TRowData>(
-	api: import('../store.js').GridApi<TRowData>,
-	saved: PersistedGridState,
-	columns: ColumnDef<TRowData>[]
-): void {
-	const knownFields = new Set((columns as ColumnDef<unknown>[]).map((c) => c.field));
-
-	if (saved.columnOrder) {
-		const validOrder = saved.columnOrder.filter((f) => knownFields.has(f));
-		if (validOrder.length === columns.length) api.setColumnOrder(validOrder);
-	}
-	if (saved.columnVisibility) {
-		const hidden = Object.entries(saved.columnVisibility)
-			.filter(([, v]) => v === false)
-			.map(([f]) => f)
-			.filter((f) => knownFields.has(f));
-		const visible = Object.entries(saved.columnVisibility)
-			.filter(([, v]) => v === true)
-			.map(([f]) => f)
-			.filter((f) => knownFields.has(f));
-		if (hidden.length > 0) api.setColumnsVisible(hidden, false);
-		if (visible.length > 0) api.setColumnsVisible(visible, true);
-	}
-	if (saved.columnWidths) {
-		for (const [field, width] of Object.entries(saved.columnWidths)) {
-			if (knownFields.has(field)) api.setColumnWidth(field, width);
-		}
-	}
-	if (saved.sortModel !== undefined) {
-		if (saved.sortModel === null || (Array.isArray(saved.sortModel) && saved.sortModel.every((s) => knownFields.has(s.colId)))) {
-			api.setSortModel(saved.sortModel);
-		}
-	}
-	if (saved.filterModel !== undefined) api.setFilterModel(saved.filterModel);
-	if (saved.groupBy !== undefined) api.setGroupBy(saved.groupBy.filter((f) => knownFields.has(f)));
-	if (saved.showGroupFooter !== undefined) api.setShowGroupFooter(saved.showGroupFooter);
-	if (saved.enableStickyGroupRows !== undefined) api.setStickyGroupRows(saved.enableStickyGroupRows);
-	if (saved.pinnedColumns !== undefined) api.setPinnedColumns(saved.pinnedColumns);
 }
 
 function debounce(fn: () => void, ms: number): (() => void) & { flush(): void; cancel(): void } {
@@ -266,6 +280,7 @@ const PERSISTENCE_KEYS = [
 	'columnWidths',
 	'sortModel',
 	'filterModel',
+	'themeName',
 	'groupBy',
 	'showGroupFooter',
 	'enableStickyGroupRows',
@@ -276,10 +291,10 @@ const PERSISTENCE_KEYS = [
  * Wire persistence to the grid via key-specific subscriptions.
  * Returns a controller that exposes auto-save toggle and save status.
  */
-export function createPersistenceSubscription<TRowData>(
+export function createPersistenceSubscription(
 	adapter: GridPersistenceAdapter,
 	subscribeToKey: (key: string, listener: () => void) => () => void,
-	getState: () => GridState<TRowData>,
+	getGridState: () => PersistedGridState,
 	debounceMs = 500
 ): PersistenceController {
 	let autoSave = true;
@@ -293,7 +308,7 @@ export function createPersistenceSubscription<TRowData>(
 
 	function performSave(): void {
 		if (!autoSave) return;
-		const snapshot = extractPersistedState(getState() as GridState);
+		const snapshot = getGridState();
 		setStatus({ status: 'saving', autoSave, lastSavedAt: currentStatus.lastSavedAt });
 		try {
 			const result = adapter.save(snapshot);
@@ -343,4 +358,77 @@ export function createPersistenceSubscription<TRowData>(
 			statusListeners.clear();
 		},
 	};
+}
+
+export function areRowHeightsEqual(current: Record<string, number>, next: Record<string, number>): boolean {
+	const currentKeys = Object.keys(current);
+	const nextKeys = Object.keys(next);
+	if (currentKeys.length !== nextKeys.length) return false;
+	for (const key of currentKeys) {
+		if (current[key] !== next[key]) return false;
+	}
+	return true;
+}
+
+/**
+ * Apply a persisted state blob via GridApi method calls.
+ * Returns true on success, false if the schema version is incompatible.
+ * The caller should report a runtime fault when this returns false.
+ */
+export function applyPersistedStateToApi<TRowData>(
+	api: {
+		getState(): any;
+		setColumnOrder(fields: string[]): void;
+		setColumnsVisible(fields: string[], visible: boolean): void;
+		setColumnWidth(field: string, width: number): void;
+		setSortModel(model: any): void;
+		setFilterModel(model: any): void;
+		switchTheme(theme: string): void;
+		setGroupBy(fields: string[]): void;
+		setShowGroupFooter(enabled: boolean): void;
+		setStickyGroupRows(enabled: boolean): void;
+		setPinnedColumns(pins: any): void;
+	},
+	state: PersistedGridState
+): boolean {
+	const versionError = validateSchemaVersion(state);
+	if (versionError !== null) {
+		return false;
+	}
+	const columns = api.getState().columns;
+	const knownFields = new Set(columns.map((c: any) => c.field));
+	if (state.columnOrder) {
+		const validOrder = state.columnOrder.filter((f) => knownFields.has(f));
+		if (validOrder.length === columns.length) api.setColumnOrder(validOrder);
+	}
+	if (state.columnVisibility) {
+		const hidden = Object.entries(state.columnVisibility)
+			.filter(([, v]) => v === false)
+			.map(([f]) => f)
+			.filter((f) => knownFields.has(f));
+		const visible = Object.entries(state.columnVisibility)
+			.filter(([, v]) => v === true)
+			.map(([f]) => f)
+			.filter((f) => knownFields.has(f));
+		if (hidden.length > 0) api.setColumnsVisible(hidden, false);
+		if (visible.length > 0) api.setColumnsVisible(visible, true);
+	}
+	if (state.columnWidths) {
+		for (const [field, width] of Object.entries(state.columnWidths)) {
+			if (knownFields.has(field)) api.setColumnWidth(field, width);
+		}
+	}
+	if (state.sortModel !== undefined) {
+		const sm = state.sortModel;
+		if (sm === null || (Array.isArray(sm) && sm.every((s) => knownFields.has(s.colId)))) {
+			api.setSortModel(sm);
+		}
+	}
+	if (state.filterModel !== undefined) api.setFilterModel(state.filterModel);
+	if (state.themeName !== undefined && isBuiltInThemeName(state.themeName)) api.switchTheme(state.themeName);
+	if (state.groupBy !== undefined) api.setGroupBy(state.groupBy.filter((f) => knownFields.has(f)));
+	if (state.showGroupFooter !== undefined) api.setShowGroupFooter(state.showGroupFooter);
+	if (state.enableStickyGroupRows !== undefined) api.setStickyGroupRows(state.enableStickyGroupRows);
+	if (state.pinnedColumns !== undefined) api.setPinnedColumns(state.pinnedColumns);
+	return true;
 }

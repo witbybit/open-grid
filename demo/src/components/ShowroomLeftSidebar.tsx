@@ -16,6 +16,13 @@ import {
 	PanelRight,
 	Boxes,
 	Layers,
+	CheckSquare,
+	ClipboardCheck,
+	Clipboard,
+	TableProperties,
+	LayoutTemplate,
+	SlidersHorizontal,
+	GripVertical,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -105,6 +112,48 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Live Grouping',
 			subtitle: 'Drag · Drop · Reorder Groups',
 			icon: Layers,
+		},
+		{
+			id: 'multiselect',
+			label: 'Row Multi-Select',
+			subtitle: 'Checkbox · Ctrl+Click · Bulk Ops',
+			icon: CheckSquare,
+		},
+		{
+			id: 'crud',
+			label: 'CRUD & Validation',
+			subtitle: 'Validate · Submit · Error Feedback',
+			icon: ClipboardCheck,
+		},
+		{
+			id: 'wide',
+			label: 'Wide Grid',
+			subtitle: '100 Columns · Column Virtualization',
+			icon: TableProperties,
+		},
+		{
+			id: 'colgroups',
+			label: 'Column Groups',
+			subtitle: '1-Level & 2-Level Header Bands',
+			icon: LayoutTemplate,
+		},
+		{
+			id: 'clipboard',
+			label: 'Clipboard',
+			subtitle: 'Copy · Paste · TSV · Formatters',
+			icon: Clipboard,
+		},
+		{
+			id: 'floatingfilters',
+			label: 'Floating Filters',
+			subtitle: 'Inline Filters · Custom Renderer',
+			icon: SlidersHorizontal,
+		},
+		{
+			id: 'rowdrag',
+			label: 'Row Drag & Drop',
+			subtitle: 'Managed · Unmanaged · Auto-scroll',
+			icon: GripVertical,
 		},
 	] as const;
 

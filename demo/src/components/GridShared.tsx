@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { OpenGrid, CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, useGridApi, GridContextMenuOptions } from '@open-grid/react';
+import { CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, GridContextMenuOptions } from '@open-grid/react';
 
 export type GridPageType =
 	| 'lab'
@@ -14,54 +14,17 @@ export type GridPageType =
 	| 'nested'
 	| 'panels'
 	| 'native'
-	| 'grouping';
+	| 'grouping'
+	| 'multiselect'
+	| 'crud'
+	| 'wide'
+	| 'colgroups'
+	| 'clipboard'
+	| 'floatingfilters'
+	| 'rowdrag';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================
-
-export const GlobalRenderTracker = {
-	cellRenders: 0,
-	rowRenders: 0,
-	flashEnabled: true,
-	cellRenderCounts: {} as Record<string, number>,
-	listeners: new Set<() => void>(),
-	notifyTimeout: null as any,
-
-	subscribe(cb: () => void) {
-		this.listeners.add(cb);
-		return () => {
-			this.listeners.delete(cb);
-		};
-	},
-	notify() {
-		if (this.notifyTimeout) return;
-		this.notifyTimeout = setTimeout(() => {
-			this.notifyTimeout = null;
-			this.listeners.forEach((cb) => cb());
-		}, 0);
-	},
-	incrementCellRender(rowId: string, colField: string) {
-		this.cellRenders++;
-		const key = `${rowId}:${colField}`;
-		this.cellRenderCounts[key] = (this.cellRenderCounts[key] || 0) + 1;
-		this.notify();
-		return this.cellRenderCounts[key];
-	},
-	incrementRowRender(rowIndex: number) {
-		this.rowRenders++;
-		this.notify();
-	},
-	getCellRenderCount(rowId: string, colField: string) {
-		const key = `${rowId}:${colField}`;
-		return this.cellRenderCounts[key] || 0;
-	},
-	reset() {
-		this.cellRenders = 0;
-		this.rowRenders = 0;
-		this.cellRenderCounts = {};
-		this.notify();
-	},
-};
 
 export const LatencyProfiler = {
 	latencies: [] as number[],
@@ -284,7 +247,7 @@ export const StatusHeaderFilter = ({ colField, api, close }: { colField: string;
 	let activeFilterVal = '';
 	if (activeFilter) {
 		if (typeof activeFilter === 'object' && 'filter' in activeFilter) {
-			activeFilterVal = String((activeFilter as any).filter ?? '');
+			activeFilterVal = String(activeFilter.filter ?? '');
 		} else {
 			activeFilterVal = String(activeFilter);
 		}
@@ -303,8 +266,9 @@ export const StatusHeaderFilter = ({ colField, api, close }: { colField: string;
 		const nextFilter = { ...(state.filterModel || {}) };
 		if (selectedValue) {
 			nextFilter[colField] = {
-				type: 'equals',
-				filter: selectedValue,
+				type: 'text',
+				value: selectedValue,
+				operator: 'contains',
 			};
 		} else {
 			delete nextFilter[colField];
@@ -446,124 +410,6 @@ export const RendererStrategyProbe = ({ value, phase, isScrolling, isFocused, is
 		</span>
 	);
 };
-
-// ============================================================================
-// 4. Grid View Panel
-// ============================================================================
-
-export interface GridViewProps {
-	api?: GridApi<any>;
-	pinLeftColumns?: number;
-	pinRightColumns?: number;
-	pinTopRows?: number;
-	pinBottomRows?: number;
-	rowHeights?: Record<string, number>;
-	defaultHeight?: number;
-	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
-	editTrigger?: 'singleClick' | 'doubleClick';
-	arrowKeyNavigationEdit?: boolean;
-	enableContextMenu?: boolean;
-	contextMenuOptions?: GridContextMenuOptions<any>;
-	className?: string;
-}
-
-const EMPTY_ROW_HEIGHTS = {};
-
-export function GridView({
-	api,
-	pinLeftColumns = 0,
-	pinRightColumns = 0,
-	pinTopRows = 0,
-	pinBottomRows = 0,
-	rowHeights = EMPTY_ROW_HEIGHTS,
-	defaultHeight = 38,
-	onCellValueChanged = () => {},
-	editTrigger = 'doubleClick',
-	arrowKeyNavigationEdit = false,
-	enableContextMenu = true,
-	contextMenuOptions,
-	className = '',
-}: GridViewProps) {
-	const [lastClick, setLastClick] = React.useState<GridCellClickParams<any> | null>(null);
-
-	// Resolve activeStore using either prop or React context hook, handling errors gracefully
-	let activeApi: GridApi<any>;
-	try {
-		const contextApi = useGridApi<any>();
-		activeApi = api || contextApi;
-	} catch (e) {
-		if (api) {
-			activeApi = api;
-		} else {
-			throw e;
-		}
-	}
-
-	useEffect(() => {
-		activeApi.setRowHeights(rowHeights ?? {});
-		activeApi.setDefaultRowHeight(defaultHeight ?? 38);
-	}, [activeApi, rowHeights, defaultHeight]);
-
-	const mergedContextMenuOptions = React.useMemo(() => {
-		const baseOptions = contextMenuOptions || {};
-		const customItems = baseOptions.customItems || [];
-
-		const chartItem = {
-			id: 'chartRange',
-			label: 'Chart Selected Range',
-			icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"></path><line x1="3" y1="20" x2="21" y2="20"></line></svg>`,
-			action: () => {
-				activeApi.openChart();
-			},
-			disabled: (params: any) => !params.selection.bounds,
-		};
-
-		return {
-			...baseOptions,
-			customItems: [chartItem, ...customItems],
-		};
-	}, [contextMenuOptions]);
-
-	return (
-		<div
-			className={`w-full h-full border border-slate-800 rounded-lg overflow-hidden bg-slate-950 shadow-2xl relative demo-grid-surface ${className}`}
-		>
-			<div className='absolute top-2 right-2 z-50 pointer-events-none rounded-md border border-slate-700/70 bg-slate-950/85 px-2 py-1 text-[10px] font-mono text-slate-300 shadow-lg backdrop-blur'>
-				{lastClick ? (
-					<span>
-						<span className='text-cyan-300'>clicked</span> {lastClick.rowId}:{lastClick.colField} ={' '}
-						<span className='text-emerald-300'>{String(lastClick.value ?? '')}</span>
-					</span>
-				) : (
-					<span className='text-slate-500'>cell --</span>
-				)}
-			</div>
-			<OpenGrid
-				pinLeftColumns={pinLeftColumns}
-				pinRightColumns={pinRightColumns}
-				pinTopRows={pinTopRows}
-				pinBottomRows={pinBottomRows}
-				enableNavigation={true}
-				enableContextMenu={enableContextMenu}
-				contextMenuOptions={mergedContextMenuOptions}
-				onCellClick={(params) => {
-					setLastClick(params);
-				}}
-				navigationOptions={{
-					editTrigger,
-					arrowKeyNavigationEdit,
-					onCellValueChanged: (rowId, colField, val) => {
-						const start = performance.now();
-						onCellValueChanged(rowId, colField, val);
-						const duration = performance.now() - start;
-						LatencyProfiler.record(duration);
-					},
-				}}
-				enableChart={true}
-			/>
-		</div>
-	);
-}
 
 export const GanttStatusBadgeRenderer = ({ value }: CellRendererProps<any>) => {
 	const valStr = String(value);

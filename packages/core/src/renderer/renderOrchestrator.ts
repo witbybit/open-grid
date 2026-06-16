@@ -1,4 +1,4 @@
-import type { InvalidationFrame } from './invalidationManager.js';
+import type { GridInvalidation, InvalidationFrame } from './invalidationManager.js';
 
 export interface RenderStats {
 	fullPaints: number;
@@ -51,6 +51,7 @@ export interface RenderStats {
 	cellsPatchedPerScrollFrame: number[];
 	rowsRecycledPerScrollFrame: number[];
 	lastInvalidationReasons: string[];
+	lastInvalidations: GridInvalidation[];
 	portalMounts?: { cells: number; rows: number; menus: number; custom?: any };
 	getCellValueCallsDuringScroll?: number;
 	valueGetterCallsDuringScroll?: number;
@@ -59,6 +60,70 @@ export interface RenderStats {
 	customRendererHydrationChunks?: number;
 	customRendererWarmHits?: number;
 	customRendererWarmMisses?: number;
+}
+
+/** Returns a zero-value RenderStats object. Used by GridStore.getRenderStats() when no render engine is mounted. */
+export function createEmptyRenderStats(): RenderStats {
+	return {
+		fullPaints: 0,
+		rowPaints: 0,
+		cellPaints: 0,
+		headerPaints: 0,
+		overlayPaints: 0,
+		geometryRecomputes: 0,
+		viewportPaints: 0,
+		scrollFrames: 0,
+		viewportRecycles: 0,
+		headerPaintsDuringScroll: 0,
+		headerRangeSyncsDuringScroll: 0,
+		overlayPaintsDuringScroll: 0,
+		overlayCheapSyncsDuringScroll: 0,
+		portalFlushesDuringScroll: 0,
+		portalDeferredDuringScroll: 0,
+		portalMountsDuringScroll: 0,
+		portalReleasesDuringScroll: 0,
+		portalFlushChunks: 0,
+		maxPortalOpsFlushedInOneChunk: 0,
+		focusCallsDuringScroll: 0,
+		rootTextContentWritesOnPortalCells: 0,
+		cellsBoundDuringScroll: 0,
+		rowsVisitedDuringScroll: 0,
+		rowsReboundDuringScroll: 0,
+		cellsVisitedDuringScroll: 0,
+		cellsWrittenDuringScroll: 0,
+		portalOpsDuringScroll: 0,
+		cellsDecoratedAfterScroll: 0,
+		rowsEnteredDuringScroll: 0,
+		rowsExitedDuringScroll: 0,
+		rowsStayedDuringScroll: 0,
+		colsEnteredDuringScroll: 0,
+		colsExitedDuringScroll: 0,
+		colsStayedDuringScroll: 0,
+		cellsSkippedDuringScroll: 0,
+		sameWindowBailouts: 0,
+		stateReadsDuringScroll: 0,
+		compiledPlanVersion: 0,
+		hotDomReleases: 0,
+		coldDomReleases: 0,
+		cellsPatchedPerScrollFrame: [],
+		rowsRecycledPerScrollFrame: [],
+		lastInvalidationReasons: [],
+		lastInvalidations: [],
+		portalMounts: { cells: 0, rows: 0, menus: 0, custom: { active: 0, warm: 0, cold: 0, hydrationQueue: 0, completedChunks: 0 } },
+		getCellValueCallsDuringScroll: 0,
+		valueGetterCallsDuringScroll: 0,
+		formulaCallsDuringScroll: 0,
+		customRendererMountsDuringScroll: 0,
+		customRendererHydrationChunks: 0,
+		customRendererWarmHits: 0,
+		customRendererWarmMisses: 0,
+		cellAccessReadsDuringScroll: 0,
+		cellClassComputesDuringScroll: 0,
+		dirtyCellsMarkedDuringScroll: 0,
+		postScrollDirtyCellsDecorated: 0,
+		reusableCellsSkippedDuringScroll: 0,
+		styleHookCallsDuringScroll: 0,
+	};
 }
 
 export interface RenderOrchestratorTargets {
@@ -123,6 +188,7 @@ export class RenderOrchestrator {
 		cellsPatchedPerScrollFrame: [],
 		rowsRecycledPerScrollFrame: [],
 		lastInvalidationReasons: [],
+		lastInvalidations: [],
 	};
 
 	constructor(targets: RenderOrchestratorTargets) {
@@ -131,6 +197,7 @@ export class RenderOrchestrator {
 
 	public flush(frame: InvalidationFrame): void {
 		this.stats.lastInvalidationReasons = frame.reasons;
+		this.stats.lastInvalidations = frame.invalidations;
 
 		if (frame.full) {
 			this.stats.fullPaints++;
@@ -184,6 +251,7 @@ export class RenderOrchestrator {
 			cellsPatchedPerScrollFrame: this.stats.cellsPatchedPerScrollFrame.slice(),
 			rowsRecycledPerScrollFrame: this.stats.rowsRecycledPerScrollFrame.slice(),
 			lastInvalidationReasons: this.stats.lastInvalidationReasons.slice(),
+			lastInvalidations: this.stats.lastInvalidations.slice(),
 		};
 	}
 
@@ -235,5 +303,6 @@ export class RenderOrchestrator {
 		this.stats.cellsPatchedPerScrollFrame = [];
 		this.stats.rowsRecycledPerScrollFrame = [];
 		this.stats.lastInvalidationReasons = [];
+		this.stats.lastInvalidations = [];
 	}
 }

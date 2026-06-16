@@ -89,7 +89,10 @@ export function isEditableVisualRow<TRowData>(row: VisualRow<TRowData> | null | 
 }
 
 export function canEditCell<TRowData>(row: VisualRow<TRowData> | null | undefined, column: ColumnDef<TRowData> | null | undefined): boolean {
-	return row?.kind === 'data' && !!column;
+	if (row?.kind !== 'data' || !column) return false;
+	if (column.editable === undefined) return true;
+	if (typeof column.editable === 'boolean') return column.editable;
+	return column.editable({ row: row.node.data as TRowData, rowId: row.rowId, colField: column.field });
 }
 
 export function canFocusVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {

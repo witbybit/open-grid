@@ -15,7 +15,11 @@ export interface CsvExportOptions {
 
 // Minimal duck-typed interface — avoids a circular import with store.ts
 interface Exportable<TRowData> {
-	getDisplayedColumns(): Array<{ field: string; header: string }>;
+	getDisplayedColumns(): Array<{
+		field: string;
+		header: string;
+		valueFormatter?: (params: { value: unknown; rowData: TRowData; colDef: any; rowId: string }) => string;
+	}>;
 	rows(): { getAll(): TRowData[]; getSelected(): TRowData[] };
 	getRowId(row: TRowData): string;
 	getCellValue(rowId: string, field: string): unknown;
@@ -44,7 +48,15 @@ export function exportToCsv<TRowData>(api: Exportable<TRowData>, options: CsvExp
 
 	for (const row of dataRows) {
 		const rowId = api.getRowId(row);
-		lines.push(cols.map((col) => escapeCell(fmt(api.getCellValue(rowId, col.field)), delimiter)).join(delimiter));
+		lines.push(
+			cols
+				.map((col) => {
+					const value = api.getCellValue(rowId, col.field);
+					const text = col.valueFormatter ? col.valueFormatter({ value, rowData: row, colDef: col, rowId }) : fmt(value);
+					return escapeCell(text, delimiter);
+				})
+				.join(delimiter)
+		);
 	}
 
 	// UTF-8 BOM makes Excel open the file correctly without re-encoding

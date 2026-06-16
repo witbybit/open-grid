@@ -1,86 +1,85 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Layout } from 'lucide-react';
-
+import type { FilterModel, GridApi, GridReadyEvent } from '@open-grid/react';
+import { DemoGridApiScope } from './DemoGridContext';
 import ShowroomHeader from './components/ShowroomHeader';
 import ShowroomLeftSidebar from './components/ShowroomLeftSidebar';
 import ShowroomTitleBanner from './components/ShowroomTitleBanner';
 import ShowroomRightSidebar from './components/ShowroomRightSidebar';
+import type { GridPageType } from './components/GridShared';
+import { layoutColumnsFull, setInactiveRiskSideEffects } from './pages/demoGridConfigs';
 
-import CalculationsArena from './pages/CalculationsArena';
-import InfiniteServerScroll from './pages/InfiniteServerScroll';
-import SpreadsheetWorkspace from './pages/SpreadsheetWorkspace';
-import CustomEditorRenderer from './pages/CustomEditorRenderer';
-import DynamicLayout from './pages/DynamicLayout';
-import HeadlessSkinsPlayground from './pages/HeadlessSkinsPlayground';
-import RealtimeDashboard from './pages/RealtimeDashboard';
-import GanttSchedulingWorkspace from './pages/GanttSchedulingWorkspace';
-import NestedTablesGrouping from './pages/NestedTablesGrouping';
-import PerformanceLab from './pages/PerformanceLab';
-import SidebarPanelsDemo from './pages/SidebarPanelsDemo';
-import NativeCellTypesDemo from './pages/NativeCellTypesDemo';
-import RealtimeGroupingDemo from './pages/RealtimeGroupingDemo';
-import { useShowroomStores } from './hooks/useShowroomStores';
-import type { FilterModel, SortModel } from '@open-grid/react';
-import { GridPageType } from './components/GridShared';
+const CalculationsArena = lazy(() => import('./pages/CalculationsArena'));
+const InfiniteServerScroll = lazy(() => import('./pages/InfiniteServerScroll'));
+const SpreadsheetWorkspace = lazy(() => import('./pages/SpreadsheetWorkspace'));
+const CustomEditorRenderer = lazy(() => import('./pages/CustomEditorRenderer'));
+const DynamicLayout = lazy(() => import('./pages/DynamicLayout'));
+const HeadlessSkinsPlayground = lazy(() => import('./pages/HeadlessSkinsPlayground'));
+const RealtimeDashboard = lazy(() => import('./pages/RealtimeDashboard'));
+const GanttSchedulingWorkspace = lazy(() => import('./pages/GanttSchedulingWorkspace'));
+const NestedTablesGrouping = lazy(() => import('./pages/NestedTablesGrouping'));
+const PerformanceLab = lazy(() => import('./pages/PerformanceLab'));
+const SidebarPanelsDemo = lazy(() => import('./pages/SidebarPanelsDemo'));
+const NativeCellTypesDemo = lazy(() => import('./pages/NativeCellTypesDemo'));
+const RealtimeGroupingDemo = lazy(() => import('./pages/RealtimeGroupingDemo'));
+const RowMultiSelectDemo = lazy(() => import('./pages/RowMultiSelectDemo'));
+const CrudValidationDemo = lazy(() => import('./pages/CrudValidationDemo'));
+const WideGridDemo = lazy(() => import('./pages/WideGridDemo'));
+const ColumnGroupHeaderDemo = lazy(() => import('./pages/ColumnGroupHeaderDemo'));
+const ClipboardDemo = lazy(() => import('./pages/ClipboardDemo'));
+const FloatingFiltersDemo = lazy(() => import('./pages/FloatingFiltersDemo'));
+const RowDragDemo = lazy(() => import('./pages/RowDragDemo'));
+
+const PAGES: readonly GridPageType[] = [
+	'perf',
+	'server',
+	'ranges',
+	'editors',
+	'layout',
+	'skins',
+	'dashboard',
+	'gantt',
+	'nested',
+	'lab',
+	'panels',
+	'native',
+	'grouping',
+	'multiselect',
+	'crud',
+	'wide',
+	'colgroups',
+	'floatingfilters',
+	'rowdrag',
+];
+
+function GridPageFallback() {
+	return (
+		<div className='flex h-full min-h-0 flex-1 items-center justify-center rounded-xl border border-slate-900 bg-slate-950/40'>
+			<div className='flex flex-col items-center gap-2 text-center'>
+				<div className='h-10 w-10 animate-pulse rounded-full border border-slate-800 bg-slate-900/80' />
+				<p className='text-[11px] font-semibold uppercase tracking-wider text-slate-500'>Loading showroom</p>
+			</div>
+		</div>
+	);
+}
+
+function readActivePage(): GridPageType {
+	const hash = window.location.hash.slice(1);
+	return PAGES.includes(hash as GridPageType) ? (hash as GridPageType) : 'perf';
+}
 
 export default function App() {
-	// Active Page Routing State via URL Hash Routing
-	const [activePage, setActivePage] = useState<GridPageType>('perf');
-
-	// Collapsible Sidebars State
+	const [activePage, setActivePage] = useState<GridPageType>(() => readActivePage());
 	const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
 	const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
-
-	// Pinning & Column Scale State
-	const [pinLeftColumns, setPinLeftColumns] = useState<number>(1);
-	const [pinRightColumns, setPinRightColumns] = useState<number>(1);
-	const [massiveColumns, setMassiveColumns] = useState<boolean>(false);
-
-	useEffect(() => {
-		const handleHashChange = () => {
-			const hash = window.location.hash.slice(1);
-			if (
-				[
-					'perf',
-					'server',
-					'ranges',
-					'editors',
-					'layout',
-					'skins',
-					'dashboard',
-					'gantt',
-					'nested',
-					'lab',
-					'panels',
-					'native',
-					'grouping',
-				].includes(hash)
-			) {
-				setActivePage(hash as any);
-			}
-		};
-		window.addEventListener('hashchange', handleHashChange);
-
-		// Set default hash or resolve current deep-link hash
-		if (window.location.hash) {
-			handleHashChange();
-		} else {
-			window.location.hash = 'perf';
-		}
-
-		return () => window.removeEventListener('hashchange', handleHashChange);
-	}, []);
-
-	// Preserve Accessibility settings
+	const [pinLeftColumns, setPinLeftColumns] = useState(1);
+	const [pinRightColumns, setPinRightColumns] = useState(1);
+	const [massiveColumns, setMassiveColumns] = useState(false);
 	const [editTrigger, setEditTrigger] = useState<'singleClick' | 'doubleClick'>('doubleClick');
-	const [arrowKeyNavigationEdit, setArrowKeyNavigationEdit] = useState<boolean>(false);
-
-	// Sorting & Filtering variables
+	const [arrowKeyNavigationEdit, setArrowKeyNavigationEdit] = useState(false);
 	const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Pending' | 'Inactive'>('All');
-	const [sortField, setSortField] = useState<string>('id');
+	const [sortField, setSortField] = useState('id');
 	const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-
-	// Dynamic Layout properties (Page 5)
 	const [compactLayout, setCompactLayout] = useState<'compact' | 'normal' | 'spacious'>('normal');
 	const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
 		id: true,
@@ -90,263 +89,231 @@ export default function App() {
 		subtotal: true,
 		status: true,
 	});
+	const [activeApi, setActiveApi] = useState<GridApi<any> | null>(null);
 
-	// Column height selection mapping
-	const rowHeightsMap = {
-		compact: 30,
-		normal: 38,
-		spacious: 48,
-	};
+	useEffect(() => {
+		const handleHashChange = () => {
+			setActivePage(readActivePage());
+			setActiveApi(null);
+			setSortField('id');
+			setSortDirection('asc');
+			setStatusFilter('All');
+		};
+		window.addEventListener('hashchange', handleHashChange);
+		if (window.location.hash) handleHashChange();
+		else window.location.hash = 'perf';
+		return () => window.removeEventListener('hashchange', handleHashChange);
+	}, []);
 
-	// Central showroom stores custom hook
-	const stores = useShowroomStores({ massiveColumns, visibleColumns });
-
-	const {
-		runBulkCalculationTest,
-		handlePerfCellValueChanged,
-		applySpreadsheetRangeAction,
-		handleSpreadsheetCellValueChanged,
-		handleCustomCellValueChanged,
-		handleLayoutCellValueChanged,
-		layoutColumnsFull,
-		handleSkinsCellValueChanged,
-		handleDashboardCellValueChanged,
-		handleGanttCellValueChanged,
-		perfApi,
-		serverApi,
-		spreadsheetApi,
-		customApi,
-		layoutApi,
-		skinsApi,
-		dashboardApi,
-		ganttApi,
-	} = stores;
-
-	const toggleColumnVisibility = (field: string) => {
-		const nextVisible = { ...visibleColumns, [field]: !visibleColumns[field] };
-		const visibleCount = Object.values(nextVisible).filter(Boolean).length;
-		if (visibleCount > 0) {
-			setVisibleColumns(nextVisible);
-		}
-	};
-
-	// --------------------------------------------------------------------------
-	// Active Grid Store Selector Helper
-	// --------------------------------------------------------------------------
-
-	const activeApi = useMemo(() => {
-		switch (activePage) {
-			case 'perf':
-				return perfApi;
-			case 'server':
-				return serverApi;
-			case 'ranges':
-				return spreadsheetApi;
-			case 'editors':
-				return customApi;
-			case 'layout':
-				return layoutApi;
-			case 'skins':
-				return skinsApi;
-			case 'dashboard':
-				return dashboardApi;
-			case 'gantt':
-				return ganttApi;
-			case 'lab':
-				return perfApi;
-			default:
-				return perfApi;
-		}
-	}, [activePage, perfApi, serverApi, spreadsheetApi, customApi, layoutApi, skinsApi, dashboardApi, ganttApi]);
-
-	// Apply filter and sort models to the active store when they change
-	const sortModel = useMemo<SortModel>(() => [{ colId: sortField, sort: sortDirection }], [sortField, sortDirection]);
+	const rowHeightsMap = useMemo(() => ({ compact: 30, normal: 38, spacious: 48 }), []);
 	const filterModel = useMemo<FilterModel | null>(
-		() => (statusFilter === 'All' ? null : { status: { type: 'equals', filter: statusFilter } }),
+		() => (statusFilter === 'All' ? null : { status: { type: 'text', operator: 'equals', value: statusFilter } }),
 		[statusFilter]
 	);
 
 	useEffect(() => {
-		activeApi.setSortModel(sortModel);
-	}, [activeApi, sortModel]);
-
-	useEffect(() => {
-		activeApi.setFilterModel(filterModel);
+		activeApi?.setFilterModel(filterModel);
 	}, [activeApi, filterModel]);
 
+	useEffect(() => {
+		if (!activeApi) return;
+		const columns = activeApi.getState().columns;
+		if (columns.length > 0 && !columns.some((column) => column.field === sortField)) {
+			setSortField(columns[0].field);
+		}
+	}, [activeApi, sortField]);
+
+	const registerGridApi = useCallback(
+		(page: GridPageType, event: GridReadyEvent<any>) => {
+			if (page === activePage) setActiveApi(event.api);
+		},
+		[activePage]
+	);
+
+	const handleGridReady = useCallback((event: GridReadyEvent<any>) => registerGridApi(activePage, event), [activePage, registerGridApi]);
+
+	const handleCellValueChanged = useCallback(
+		(rowId: string, colField: string, value: unknown) => {
+			if (!activeApi) return;
+			setInactiveRiskSideEffects(activeApi, rowId, colField, value);
+			if (activePage === 'gantt' && colField === 'status') {
+				if (value === 'Done') activeApi.setCellValue(rowId, 'progress', 100);
+				else if (value === 'Pending') activeApi.setCellValue(rowId, 'progress', 0);
+			}
+			performance.mark('open-grid-demo-cell-change');
+		},
+		[activeApi, activePage]
+	);
+
+	const runBulkCalculationTest = useCallback(() => {
+		if (!activeApi) return;
+		const start = performance.now();
+		const updates: any[] = [];
+		activeApi.rows().forEach((row, index) => {
+			if (index % 10 !== 0) return;
+			updates.push({
+				...row,
+				price: (Math.floor(Math.random() * 150) + 10).toString(),
+				quantity: (Math.floor(Math.random() * 60) + 15).toString(),
+			});
+		});
+		activeApi.applyTransaction({ update: updates });
+		performance.measure('open-grid-demo-bulk-calculation', { start, end: performance.now() });
+		performance.mark('open-grid-demo-grid-action');
+	}, [activeApi]);
+
+	const applySpreadsheetRangeAction = useCallback(
+		(action: 'fill' | 'clear' | 'addPercent' | 'sum') => {
+			if (!activeApi) return;
+			const state = activeApi.getState();
+			const range = state.selection.range;
+			if (!range) {
+				window.alert('Please select a range of cells first using click-and-drag or Shift+Arrows.');
+				return;
+			}
+			const startColIndex = state.columns.findIndex((column) => column.field === range.start.colField);
+			const endColIndex = state.columns.findIndex((column) => column.field === range.end.colField);
+			if (startColIndex === -1 || endColIndex === -1) return;
+			const rowIds = activeApi.rows().inRange(range).getIds();
+			const columns = state.columns
+				.slice(Math.min(startColIndex, endColIndex), Math.max(startColIndex, endColIndex) + 1)
+				.map((column) => column.field)
+				.filter((field) => field !== 'id');
+			if (action === 'sum') {
+				let total = 0;
+				for (const rowId of rowIds) for (const colField of columns) total += parseFloat(String(activeApi.getCellValue(rowId, colField))) || 0;
+				window.alert(`Calculated Selection Range Sum: ${total.toFixed(2)}`);
+				return;
+			}
+			const rowIdSet = new Set(rowIds);
+			activeApi.updateRows((currentRows) =>
+				currentRows.map((row) => {
+					if (!rowIdSet.has(row.id)) return row;
+					const next = { ...row } as any;
+					for (const field of columns) {
+						if (action === 'fill') next[field] = '100';
+						else if (action === 'clear') next[field] = 0;
+						else next[field] = ((parseFloat(String((row as any)[field])) || 0) * 1.1).toFixed(0);
+					}
+					return next;
+				})
+			);
+			performance.mark('open-grid-demo-range-action');
+		},
+		[activeApi]
+	);
+
+	const toggleColumnVisibility = (field: string) => {
+		const nextVisible = { ...visibleColumns, [field]: !visibleColumns[field] };
+		if (Object.values(nextVisible).some(Boolean)) setVisibleColumns(nextVisible);
+	};
+
+	const contextValue = useMemo(() => ({ activeApi, registerGridApi }), [activeApi, registerGridApi]);
+	const commonGridProps = {
+		editTrigger,
+		arrowKeyNavigationEdit,
+		onGridReady: handleGridReady,
+		onCellValueChanged: handleCellValueChanged,
+		pinLeftColumns,
+		pinRightColumns,
+	};
+
+	const activePageContent = (() => {
+		if (activePage === 'perf') return <CalculationsArena {...commonGridProps} massiveColumns={massiveColumns} />;
+		if (activePage === 'server') return <InfiniteServerScroll {...commonGridProps} />;
+		if (activePage === 'ranges') return <SpreadsheetWorkspace {...commonGridProps} />;
+		if (activePage === 'editors') return <CustomEditorRenderer {...commonGridProps} />;
+		if (activePage === 'layout') {
+			return <DynamicLayout {...commonGridProps} rowHeightsMap={rowHeightsMap} compactLayout={compactLayout} visibleColumns={visibleColumns} />;
+		}
+		if (activePage === 'skins') return <HeadlessSkinsPlayground {...commonGridProps} />;
+		if (activePage === 'dashboard') return <RealtimeDashboard {...commonGridProps} />;
+		if (activePage === 'gantt') return <GanttSchedulingWorkspace {...commonGridProps} />;
+		if (activePage === 'lab') return <PerformanceLab {...commonGridProps} />;
+		if (activePage === 'nested') return <NestedTablesGrouping {...commonGridProps} />;
+		if (activePage === 'panels') return <SidebarPanelsDemo {...commonGridProps} />;
+		if (activePage === 'native') return <NativeCellTypesDemo {...commonGridProps} />;
+		if (activePage === 'grouping') return <RealtimeGroupingDemo {...commonGridProps} />;
+		if (activePage === 'multiselect') return <RowMultiSelectDemo {...commonGridProps} />;
+		if (activePage === 'wide') return <WideGridDemo {...commonGridProps} />;
+		if (activePage === 'colgroups') return <ColumnGroupHeaderDemo {...commonGridProps} />;
+		if (activePage === 'clipboard') return <ClipboardDemo />;
+		if (activePage === 'floatingfilters') return <FloatingFiltersDemo {...commonGridProps} />;
+		if (activePage === 'rowdrag') return <RowDragDemo />;
+		return <CrudValidationDemo {...commonGridProps} />;
+	})();
+
 	return (
-		<div className='flex flex-col h-full w-full bg-slate-950 text-slate-100 p-6 box-border overflow-hidden select-none font-sans'>
-			{/* Dashboard Top Header */}
-			<ShowroomHeader />
-
-			{/* Three-Column Showroom Layout */}
-			<div className='flex-1 min-h-0 flex gap-6 mt-6 overflow-hidden'>
-				{/* COLUMN A: GORGEOUS SIDEBAR NAVIGATION */}
-				<ShowroomLeftSidebar
-					activePage={activePage}
-					leftSidebarCollapsed={leftSidebarCollapsed}
-					setLeftSidebarCollapsed={setLeftSidebarCollapsed}
-				/>
-
-				{/* COLUMN B: MAIN GRID AND VIEWPORTS */}
-				<div className='flex-1 min-h-0 min-w-0 flex flex-col gap-5 overflow-hidden pr-1.5'>
-					{/* Active Showcase Title Banner */}
-					<ShowroomTitleBanner
+		<DemoGridApiScope value={contextValue}>
+			<div className='flex h-full w-full select-none flex-col overflow-hidden bg-slate-950 p-6 font-sans text-slate-100'>
+				<ShowroomHeader />
+				<div className='mt-6 flex min-h-0 flex-1 gap-6 overflow-hidden'>
+					<ShowroomLeftSidebar
 						activePage={activePage}
-						runBulkCalculationTest={runBulkCalculationTest}
-						applySpreadsheetRangeAction={applySpreadsheetRangeAction}
-						compactLayout={compactLayout}
-						setCompactLayout={setCompactLayout}
-						rightSidebarCollapsed={rightSidebarCollapsed}
-						setRightSidebarCollapsed={setRightSidebarCollapsed}
+						leftSidebarCollapsed={leftSidebarCollapsed}
+						setLeftSidebarCollapsed={setLeftSidebarCollapsed}
 					/>
-
-					{/* Layout Column Visibility Bar (Only on Page 5) */}
-					{activePage === 'layout' && (
-						<div className='bg-slate-900/10 border border-slate-900 rounded-xl p-3 flex flex-wrap items-center gap-3 shrink-0 text-xs font-semibold'>
-							<span className='text-[10px] text-slate-500 uppercase tracking-wider font-extrabold flex items-center gap-1'>
-								<Layout className='w-3.5 h-3.5 text-purple-400' />
-								Column Visibility:
-							</span>
-							{layoutColumnsFull.map((col) => (
-								<label
-									key={col.field}
-									className='flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/80 border border-slate-850 hover:border-slate-750 cursor-pointer select-none transition-all'
-								>
-									<input
-										type='checkbox'
-										checked={visibleColumns[col.field]}
-										onChange={() => toggleColumnVisibility(col.field)}
-										className='rounded border-slate-800 text-purple-600 focus:ring-purple-500/20 w-3 h-3 bg-slate-950 cursor-pointer'
-									/>
-									<span className='text-[10px] font-bold text-slate-300'>{col.header}</span>
-								</label>
-							))}
-						</div>
-					)}
-
-					{/* Visual Interactive Grid viewport */}
-					<div className='flex-1 min-h-0 flex flex-col'>
-						{activePage === 'perf' && (
-							<CalculationsArena
-								api={perfApi}
-								editTrigger={editTrigger}
-								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-								onCellValueChanged={handlePerfCellValueChanged}
-								pinLeftColumns={pinLeftColumns}
-								pinRightColumns={pinRightColumns}
-							/>
-						)}
-
-						{activePage === 'server' && (
-							<InfiniteServerScroll
-								api={serverApi}
-								editTrigger={editTrigger}
-								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-								pinLeftColumns={pinLeftColumns}
-								pinRightColumns={pinRightColumns}
-							/>
-						)}
-
-						{activePage === 'ranges' && (
-							<SpreadsheetWorkspace
-								api={spreadsheetApi}
-								editTrigger={editTrigger}
-								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-								onCellValueChanged={handleSpreadsheetCellValueChanged}
-								pinLeftColumns={pinLeftColumns}
-								pinRightColumns={pinRightColumns}
-							/>
-						)}
-
-						{activePage === 'editors' && (
-							<CustomEditorRenderer
-								api={customApi}
-								editTrigger={editTrigger}
-								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-								onCellValueChanged={handleCustomCellValueChanged}
-								pinLeftColumns={pinLeftColumns}
-								pinRightColumns={pinRightColumns}
-							/>
-						)}
-
+					<div className='flex min-w-0 flex-1 flex-col gap-5 overflow-hidden pr-1.5'>
+						<ShowroomTitleBanner
+							activePage={activePage}
+							runBulkCalculationTest={runBulkCalculationTest}
+							applySpreadsheetRangeAction={applySpreadsheetRangeAction}
+							compactLayout={compactLayout}
+							setCompactLayout={setCompactLayout}
+							rightSidebarCollapsed={rightSidebarCollapsed}
+							setRightSidebarCollapsed={setRightSidebarCollapsed}
+						/>
 						{activePage === 'layout' && (
-							<DynamicLayout
-								api={layoutApi}
-								editTrigger={editTrigger}
-								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-								rowHeightsMap={rowHeightsMap}
-								onCellValueChanged={handleLayoutCellValueChanged}
-								compactLayout={compactLayout}
-								pinLeftColumns={pinLeftColumns}
-								pinRightColumns={pinRightColumns}
-							/>
+							<div className='flex shrink-0 flex-wrap items-center gap-3 rounded-xl border border-slate-900 bg-slate-900/10 p-3 text-xs font-semibold'>
+								<span className='flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-500'>
+									<Layout className='h-3.5 w-3.5 text-purple-400' />
+									Column Visibility:
+								</span>
+								{layoutColumnsFull.map((col) => (
+									<label
+										key={col.field}
+										className='flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-850 bg-slate-950/80 px-2.5 py-1 transition-all hover:border-slate-750'
+									>
+										<input
+											type='checkbox'
+											checked={visibleColumns[col.field]}
+											onChange={() => toggleColumnVisibility(col.field)}
+											className='h-3 w-3 cursor-pointer rounded border-slate-800 bg-slate-950 text-purple-600 focus:ring-purple-500/20'
+										/>
+										<span className='text-[10px] font-bold text-slate-300'>{col.header}</span>
+									</label>
+								))}
+							</div>
 						)}
-
-						{activePage === 'skins' && (
-							<HeadlessSkinsPlayground
-								api={skinsApi}
-								editTrigger={editTrigger}
-								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-								onCellValueChanged={handleSkinsCellValueChanged}
-							/>
-						)}
-
-						{activePage === 'dashboard' && (
-							<RealtimeDashboard
-								api={dashboardApi}
-								editTrigger={editTrigger}
-								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-								onCellValueChanged={handleDashboardCellValueChanged}
-							/>
-						)}
-
-						{activePage === 'gantt' && (
-							<GanttSchedulingWorkspace
-								api={ganttApi}
-								editTrigger={editTrigger}
-								arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-								onCellValueChanged={handleGanttCellValueChanged}
-								pinLeftColumns={pinLeftColumns}
-								pinRightColumns={pinRightColumns}
-							/>
-						)}
-
-						{activePage === 'lab' && <PerformanceLab />}
-
-						{activePage === 'nested' && <NestedTablesGrouping />}
-
-						{activePage === 'panels' && <SidebarPanelsDemo />}
-
-						{activePage === 'native' && <NativeCellTypesDemo />}
-
-						{activePage === 'grouping' && <RealtimeGroupingDemo />}
+						<div className='flex min-h-0 flex-1 flex-col'>
+							<Suspense fallback={<GridPageFallback />}>{activePageContent}</Suspense>
+						</div>
 					</div>
+					{activeApi && (
+						<ShowroomRightSidebar
+							rightSidebarCollapsed={rightSidebarCollapsed}
+							activeApi={activeApi}
+							pinLeftColumns={pinLeftColumns}
+							setPinLeftColumns={setPinLeftColumns}
+							pinRightColumns={pinRightColumns}
+							setPinRightColumns={setPinRightColumns}
+							activePage={activePage}
+							massiveColumns={massiveColumns}
+							setMassiveColumns={setMassiveColumns}
+							sortField={sortField}
+							setSortField={setSortField}
+							statusFilter={statusFilter}
+							setStatusFilter={setStatusFilter}
+							sortDirection={sortDirection}
+							setSortDirection={setSortDirection}
+							editTrigger={editTrigger}
+							setEditTrigger={setEditTrigger}
+							arrowKeyNavigationEdit={arrowKeyNavigationEdit}
+							setArrowKeyNavigationEdit={setArrowKeyNavigationEdit}
+						/>
+					)}
 				</div>
-
-				{/* COLUMN C: PRESERVED RIGHT-SIDE CONTROLS SIDEBAR */}
-				<ShowroomRightSidebar
-					rightSidebarCollapsed={rightSidebarCollapsed}
-					activeApi={activeApi}
-					pinLeftColumns={pinLeftColumns}
-					setPinLeftColumns={setPinLeftColumns}
-					pinRightColumns={pinRightColumns}
-					setPinRightColumns={setPinRightColumns}
-					activePage={activePage}
-					massiveColumns={massiveColumns}
-					setMassiveColumns={setMassiveColumns}
-					sortField={sortField}
-					setSortField={setSortField}
-					statusFilter={statusFilter}
-					setStatusFilter={setStatusFilter}
-					sortDirection={sortDirection}
-					setSortDirection={setSortDirection}
-					editTrigger={editTrigger}
-					setEditTrigger={setEditTrigger}
-					arrowKeyNavigationEdit={arrowKeyNavigationEdit}
-					setArrowKeyNavigationEdit={setArrowKeyNavigationEdit}
-				/>
 			</div>
-		</div>
+		</DemoGridApiScope>
 	);
 }

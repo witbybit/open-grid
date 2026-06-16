@@ -1,19 +1,18 @@
-export { OpenGrid, GridProvider } from './OpenGrid.js';
-export type { OpenGridProps } from './OpenGrid.js';
-export { GridPagination, useClientGridPagination } from './pagination.js';
-export type { GridPaginationProps, ClientGridPaginationResult } from './pagination.js';
+export { Grid } from './Grid.js';
+export type { GridProps, GridClientProps, GridServerProps, GridPaginationConfig } from './Grid.js';
 export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
 export { PortalCell, PortalManager } from './GridPortal.js';
-export { useClientGrid, useServerGrid } from './useGrid.js';
-export {
-	useGridApi,
-	useGridSelector,
-	useGridSelectorWithEquality,
-	useGridKeySelector,
-	useGridKeySelectorWithEquality,
-	useGridNavigationController,
-} from './hooks.js';
+export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
+export {
+	BUILT_IN_THEMES,
+	BUILT_IN_THEME_ORDER,
+	BUILT_IN_THEME_METADATA,
+	getBuiltInTheme,
+	isBuiltInThemeName,
+	createTheme,
+	themeToCSSVariables,
+} from '@open-grid/core';
 
 // ─── Built-in cell renderers & editors ───────────────────────────────────────
 export {
@@ -35,11 +34,27 @@ export {
 	// Utilities
 	parseMultiValue,
 	TagsCellRenderer,
+	// Column type registry
+	BUILTIN_COLUMN_TYPES,
+	// Column type helpers
+	numberColumnType,
+	multiSelectColumnType,
+	dropdownColumnType,
 } from './renderers/CellTypes.js';
-export type { DropdownOption, DropdownOptionColor, NumberCellRendererOptions, NumberCellEditorOptions } from './renderers/CellTypes.js';
+export type {
+	DropdownOption,
+	DropdownOptionColor,
+	NumberCellRendererOptions,
+	NumberCellEditorOptions,
+	ColumnTypeDefinition,
+} from './renderers/CellTypes.js';
 
-export { isDomCellRenderer, createLocalStorageAdapter } from './types.js';
-export type { GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
+export { FormulaBar } from './FormulaBar.js';
+export type { FormulaBarProps } from './FormulaBar.js';
+
+export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from './types.js';
+export type { GridEventPayloadMap, GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
+export type { StyleRule, RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from './types.js';
 export type {
 	ColumnDef,
 	CellEditorProps,
@@ -50,9 +65,6 @@ export type {
 	GridApi,
 	GridCellClickParams,
 	GridState,
-	ClientGridOptions,
-	ServerGridOptions,
-	FilterModelItem,
 	VisualRow,
 	DataVisualRow,
 	GroupVisualRow,
@@ -68,6 +80,28 @@ export type {
 	DomCellRendererHandle,
 	DomCellRendererParams,
 	ImperativeCellHandle,
+	GridReadyEvent,
+	BuiltInThemeName,
+	ThemeTokens,
+	RowSelectionMode,
+	RowSelectionOptions,
+	RowSelectionScope,
+	SelectRowsOptions,
+	SelectAllRowsOptions,
 } from './types.js';
 
-export type { GridContextMenuOptions, GridContextMenuItem, HeaderMenuRendererProps } from '@open-grid/core';
+export type {
+	GridContextMenuOptions,
+	GridContextMenuItem,
+	GridCellPointer,
+	HeaderMenuRendererProps,
+	CellValidationError,
+	RowValidatorParams,
+	RowValidator,
+	ValueValidatorParams,
+	EditableParams,
+	TooltipParams,
+	AutoSizeColumnOptions,
+	AutoSizeAllColumnsOptions,
+	FloatingFilterRendererParams,
+} from '@open-grid/core';

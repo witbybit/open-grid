@@ -1,19 +1,37 @@
-import {
-	GridStore,
-	ColumnDef,
-	RowModel,
-	RowNode,
-	setValueByPath,
-	compilePathGetter,
-	type VisualRow,
-	type RowRefreshReason,
-	type RowModelRefreshResult,
-	type RowDataTransaction,
-	type RowNodeTransaction,
-} from './store.js';
+import { type ColumnDef, setValueByPath, compilePathGetter } from './columnDef.js';
+import { GridEventName } from './api/GridEvents.js';
+import type { RowDataTransaction, RowNodeTransaction, RowSelectionScope } from './api/GridApi.js';
+import type { ClientRowModelRuntime } from './engine/runtimePorts.js';
 import { getFieldRoot } from './ids.js';
-import { RowPipeline, type RowModelConfig } from './rows/RowPipeline.js';
+import { RowNode } from './rowNode.js';
+import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
+import { RowDependencyRegistry, classifyMutation } from './rows/rowMutationClassifier.js';
+import type { PageWindow } from './rows/pageModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
+import { toDataVisualRowId } from './rows/visualRowIds.js';
+import type { VisualRow } from './visualRow.js';
+import {
+	type FilterModel,
+	type TextFilterCondition,
+	type NumberFilterCondition,
+	type DateFilterCondition,
+	type SetFilterCondition,
+	type FilterCondition,
+	type CompoundFilterCondition,
+	type ColumnFilter,
+} from './filterModel.js';
+
+export type {
+	FilterModel,
+	ColumnFilter,
+	FilterCondition,
+	CompoundFilterCondition,
+	TextFilterCondition,
+	NumberFilterCondition,
+	DateFilterCondition,
+	SetFilterCondition,
+};
+export type { TextFilterOperator, NumberFilterOperator, DateFilterOperator } from './filterModel.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -24,15 +42,6 @@ export interface SortModelItem {
 
 export type SortModel = SortModelItem[];
 
-export type FilterOperator = 'contains' | 'equals' | 'startsWith' | 'endsWith' | 'gt' | 'gte' | 'lt' | 'lte';
-
-export interface FilterModelItem {
-	type?: FilterOperator;
-	filter: unknown;
-}
-
-export type FilterModel = Record<string, FilterModelItem | unknown>;
-
 export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
 	columns: Array<ColumnDef<TData>>;
@@ -40,12 +49,141 @@ export interface ClientRowModelOptions<TData = unknown> {
 
 export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
 
-function getFilterItemValue(item: FilterModelItem | unknown): { operator: FilterOperator; filter: unknown } {
-	if (item && typeof item === 'object' && 'filter' in item) {
-		const typedItem = item as FilterModelItem;
-		return { operator: typedItem.type ?? 'contains', filter: typedItem.filter };
+// ── Row model contract types ──────────────────────────────────────────────────
+// Defined here to avoid a circular import with store.ts. store.ts re-exports these.
+
+export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit' | 'row-order';
+
+export interface RowModelRefreshResult {
+	changed: boolean;
+	reason?: RowRefreshReason;
+	previousRowCount?: number;
+	nextRowCount?: number;
+	changedStartIndex?: number;
+	changedEndIndex?: number;
+	groupId?: string;
+}
+
+export interface RowModel<TRowData = unknown> {
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	getVisualRowCount(): number;
+	getDataRowCount?(): number;
+	getVisualRowIndexById(id: string): number;
+	getVisualIndexById(visualRowId: string): number;
+	getVisualIndexByRowId(rowId: string): number;
+	getRowNodeById(rowId: string): RowNode<TRowData> | null;
+	getRawRowById(rowId: string): TRowData | null;
+	getSelectableDataRowIds?(scope?: RowSelectionScope): string[];
+	toggleGroupExpanded?(groupId: string): RowModelRefreshResult | void;
+	toggleDetailExpanded?(rowId: string): RowModelRefreshResult | void;
+	isGroupExpanded?(groupId: string): boolean;
+	isDetailExpanded?(rowId: string): boolean;
+	expandAllGroups?(): RowModelRefreshResult | void;
+	collapseAllGroups?(): RowModelRefreshResult | void;
+	getStickyGroupMeta?(): Map<number, number>;
+	/** The active client page-window (Plan 041), or null when pagination is off. */
+	getPageWindow?(): PageWindow | null;
+	/** Returns all data nodes (unfiltered) for distinct-value computation. */
+	getAllDataNodes?(): RowNode<TRowData>[];
+	getGroupMeta?(groupId: string): GroupRowMeta | null;
+	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
+	setRows?(rows: TRowData[]): void;
+	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
+	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
+	getRowOrder?(): string[];
+	setRowOrder?(rowIds: string[]): void;
+	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
+	purgeCache?(): void;
+	setDatasource?(datasource: import('./serverRowModel.js').IGridDatasource<TRowData>, blockSize?: number): void;
+	goToPage?(page: number): void;
+	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
+	loadVisibleBlocks?(startRow: number, endRow: number): void;
+}
+
+export interface GroupRowMeta {
+	groupId: string;
+	visualIndex: number;
+	depth: number;
+	parentGroupId: string | null;
+	/** Index of the first child visual row (group or data), or -1 if collapsed. */
+	firstChildIndex: number;
+	/** Index of the last child visual row (group or data), or -1 if collapsed. */
+	lastChildIndex: number;
+	firstLeafIndex: number;
+	lastLeafIndex: number;
+	/** rowIds of all visible (non-collapsed) data rows beneath this group. */
+	visibleDescendantRowIds: string[];
+	/** groupIds of immediate child group rows that are visible. */
+	childGroupIds: string[];
+	leafCount: number;
+	childCount: number;
+	expanded: boolean;
+	aggregateValues?: Record<string, unknown>;
+}
+
+// ── Filter preparation ────────────────────────────────────────────────────────
+
+interface PreparedBase<TData> {
+	getter: (node: RowNode<TData>) => unknown;
+}
+
+interface PreparedTextFilter<TData> extends PreparedBase<TData> {
+	kind: 'text';
+	operator: TextFilterCondition['operator'];
+	textValue: string;
+}
+
+interface PreparedNumberFilter<TData> extends PreparedBase<TData> {
+	kind: 'number';
+	operator: NumberFilterCondition['operator'];
+	value: number;
+	valueTo?: number;
+}
+
+interface PreparedDateFilter<TData> extends PreparedBase<TData> {
+	kind: 'date';
+	operator: DateFilterCondition['operator'];
+	dateFrom: Date;
+	dateTo?: Date;
+}
+
+interface PreparedSetFilter<TData> extends PreparedBase<TData> {
+	kind: 'set';
+	valueSet: Set<string>;
+	includeNull: boolean;
+}
+
+interface PreparedCompoundFilter<TData> {
+	kind: 'compound';
+	logicalOp: 'AND' | 'OR';
+	left: PreparedColumnFilter<TData>;
+	right: PreparedColumnFilter<TData>;
+}
+
+type PreparedColumnFilter<TData> =
+	| PreparedTextFilter<TData>
+	| PreparedNumberFilter<TData>
+	| PreparedDateFilter<TData>
+	| PreparedSetFilter<TData>
+	| PreparedCompoundFilter<TData>;
+
+function parseFilterDate(raw: string): Date | null {
+	const d = new Date(raw);
+	return isNaN(d.getTime()) ? null : d;
+}
+
+function stripTime(d: Date): Date {
+	return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function parseCellDate(value: unknown): Date | null {
+	if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+	if (typeof value === 'number') return new Date(value);
+	if (typeof value === 'string') {
+		const d = new Date(value);
+		return isNaN(d.getTime()) ? null : d;
 	}
-	return { operator: 'contains', filter: item };
+	return null;
 }
 
 function compareValues(a: unknown, b: unknown): number {
@@ -77,41 +215,223 @@ export function getColumnValue<TData>(node: RowNode<TData>, column: ColumnDef<TD
 	return node.getCellValue(column.field, getter);
 }
 
-interface PreparedFilter<TData> {
-	column: ColumnDef<TData>;
-	getter: (node: RowNode<TData>) => unknown;
-	operator: FilterOperator;
-	textFilter: string;
-	numericFilter: number;
-}
-
-function matchesPreparedFilter<TData>(value: unknown, pf: PreparedFilter<TData>): boolean {
-	const textValue = String(value ?? '').toLowerCase();
-	const numericValue = Number(value);
-
+function matchTextFilter(value: unknown, pf: PreparedTextFilter<unknown>): boolean {
+	const isBlank = value == null || value === '';
+	if (pf.operator === 'blank') return isBlank;
+	if (pf.operator === 'notBlank') return !isBlank;
+	const text = String(value ?? '').toLowerCase();
 	switch (pf.operator) {
 		case 'equals':
-			return textValue === pf.textFilter;
+			return text === pf.textValue;
+		case 'notEquals':
+			return text !== pf.textValue;
 		case 'startsWith':
-			return textValue.startsWith(pf.textFilter);
+			return text.startsWith(pf.textValue);
 		case 'endsWith':
-			return textValue.endsWith(pf.textFilter);
-		case 'gt':
-			return numericValue > pf.numericFilter;
-		case 'gte':
-			return numericValue >= pf.numericFilter;
-		case 'lt':
-			return numericValue < pf.numericFilter;
-		case 'lte':
-			return numericValue <= pf.numericFilter;
+			return text.endsWith(pf.textValue);
+		case 'notContains':
+			return !text.includes(pf.textValue);
 		case 'contains':
 		default:
-			return textValue.includes(pf.textFilter);
+			return text.includes(pf.textValue);
+	}
+}
+
+function matchNumberFilter(value: unknown, pf: PreparedNumberFilter<unknown>): boolean {
+	const isBlank = value == null || value === '';
+	if (pf.operator === 'blank') return isBlank;
+	if (pf.operator === 'notBlank') return !isBlank;
+	if (isBlank) return false;
+	const n = Number(value);
+	if (isNaN(n)) return false;
+	switch (pf.operator) {
+		case 'equals':
+			return n === pf.value;
+		case 'notEquals':
+			return n !== pf.value;
+		case 'gt':
+			return n > pf.value;
+		case 'gte':
+			return n >= pf.value;
+		case 'lt':
+			return n < pf.value;
+		case 'lte':
+			return n <= pf.value;
+		case 'inRange':
+			return pf.valueTo !== undefined ? n >= pf.value && n <= pf.valueTo : n >= pf.value;
+	}
+}
+
+function matchDateFilter(value: unknown, pf: PreparedDateFilter<unknown>): boolean {
+	const isBlank = value == null || value === '';
+	if (pf.operator === 'blank') return isBlank;
+	if (pf.operator === 'notBlank') return !isBlank;
+	const cellDate = parseCellDate(value);
+	if (!cellDate) return false;
+	switch (pf.operator) {
+		case 'equals':
+			return stripTime(cellDate).getTime() === stripTime(pf.dateFrom).getTime();
+		case 'before':
+			return cellDate < pf.dateFrom;
+		case 'after':
+			return cellDate > pf.dateFrom;
+		case 'inRange':
+			return pf.dateTo !== undefined ? cellDate >= pf.dateFrom && cellDate <= pf.dateTo : cellDate >= pf.dateFrom;
+	}
+}
+
+function matchSetFilter(value: unknown, pf: PreparedSetFilter<unknown>): boolean {
+	if (pf.valueSet.size === 0 && !pf.includeNull) return false;
+	if (value == null || value === '') return pf.includeNull;
+	return pf.valueSet.has(String(value).toLowerCase());
+}
+
+function matchPreparedFilter<TData>(node: RowNode<TData>, pf: PreparedColumnFilter<TData>): boolean {
+	if (pf.kind === 'compound') {
+		const l = matchPreparedFilter(node, pf.left);
+		const r = matchPreparedFilter(node, pf.right);
+		return pf.logicalOp === 'AND' ? l && r : l || r;
+	}
+	const value = pf.getter(node);
+	switch (pf.kind) {
+		case 'text':
+			return matchTextFilter(value, pf as PreparedTextFilter<unknown>);
+		case 'number':
+			return matchNumberFilter(value, pf as PreparedNumberFilter<unknown>);
+		case 'date':
+			return matchDateFilter(value, pf as PreparedDateFilter<unknown>);
+		case 'set':
+			return matchSetFilter(value, pf as PreparedSetFilter<unknown>);
 	}
 }
 
 function fieldsAffectColumn(fields: Set<string>, columnField: string): boolean {
 	return fields.has(columnField) || fields.has(getFieldRoot(columnField));
+}
+
+function createColumnLookup<TData>(columns: Array<ColumnDef<TData>>): Map<string, ColumnDef<TData>> {
+	const columnById = new Map<string, ColumnDef<TData>>();
+	columns.forEach((column) => {
+		columnById.set(column.field, column);
+	});
+	return columnById;
+}
+
+function sameVisualRowIdentity<TData>(left: VisualRow<TData>, right: VisualRow<TData>): boolean {
+	return left.kind === right.kind && left.id === right.id;
+}
+
+function describeVisualRowDiff<TData>(
+	previousRows: Array<VisualRow<TData>>,
+	nextRows: Array<VisualRow<TData>>,
+	reason?: RowRefreshReason,
+	groupId?: string
+): RowModelRefreshResult {
+	let prefix = 0;
+	const minLength = Math.min(previousRows.length, nextRows.length);
+	while (prefix < minLength && sameVisualRowIdentity(previousRows[prefix], nextRows[prefix])) {
+		prefix++;
+	}
+
+	let suffix = 0;
+	while (
+		suffix < minLength - prefix &&
+		sameVisualRowIdentity(previousRows[previousRows.length - 1 - suffix], nextRows[nextRows.length - 1 - suffix])
+	) {
+		suffix++;
+	}
+
+	const changed = previousRows.length !== nextRows.length || prefix < previousRows.length || prefix < nextRows.length;
+	const changedEndIndex = changed ? Math.max(previousRows.length, nextRows.length) - suffix - 1 : undefined;
+
+	return {
+		changed,
+		reason,
+		previousRowCount: previousRows.length,
+		nextRowCount: nextRows.length,
+		changedStartIndex: changed ? prefix : undefined,
+		changedEndIndex,
+		groupId,
+	};
+}
+
+function makeGetter<TData>(column: ColumnDef<TData>): (node: RowNode<TData>) => unknown {
+	if (column.valueGetter) {
+		const vg = column.valueGetter;
+		return (node) => vg({ node, row: node.data, colField: column.field });
+	}
+	const pg = compilePathGetter(column.field);
+	return (node) => node.getCellValue(column.field, pg);
+}
+
+function prepareCondition<TData>(condition: FilterCondition, getter: (node: RowNode<TData>) => unknown): PreparedColumnFilter<TData> | null {
+	if (condition.type === 'text') {
+		return { kind: 'text', getter, operator: condition.operator, textValue: condition.value.toLowerCase() };
+	}
+	if (condition.type === 'number') {
+		return { kind: 'number', getter, operator: condition.operator, value: condition.value, valueTo: condition.valueTo };
+	}
+	if (condition.type === 'date') {
+		if (condition.operator === 'blank' || condition.operator === 'notBlank') {
+			return { kind: 'date', getter, operator: condition.operator, dateFrom: new Date(0) };
+		}
+		const dateFrom = parseFilterDate(condition.dateFrom);
+		if (!dateFrom) return null;
+		const dateTo = condition.dateTo ? (parseFilterDate(condition.dateTo) ?? undefined) : undefined;
+		return { kind: 'date', getter, operator: condition.operator, dateFrom, dateTo };
+	}
+	if (condition.type === 'set') {
+		const hasNull = condition.values.includes(null);
+		const valueSet = new Set(condition.values.filter((v): v is string | number => v !== null).map((v) => String(v).toLowerCase()));
+		return { kind: 'set', getter, valueSet, includeNull: hasNull };
+	}
+	return null;
+}
+
+function prepareColumnFilter<TData>(columnFilter: ColumnFilter, getter: (node: RowNode<TData>) => unknown): PreparedColumnFilter<TData> | null {
+	if (columnFilter.type === 'compound') {
+		const [c1, c2] = columnFilter.conditions;
+		const left = prepareCondition<TData>(c1, getter);
+		const right = prepareCondition<TData>(c2, getter);
+		if (!left || !right) return null;
+		return { kind: 'compound', logicalOp: columnFilter.operator, left, right };
+	}
+	return prepareCondition(columnFilter, getter);
+}
+
+function prepareFilters<TData>(columns: Array<ColumnDef<TData>>, filterModel: FilterModel | null | undefined): PreparedColumnFilter<TData>[] {
+	const result: PreparedColumnFilter<TData>[] = [];
+	if (!filterModel) return result;
+	const columnById = createColumnLookup(columns);
+
+	for (const [colId, rawItem] of Object.entries(filterModel)) {
+		const item = rawItem as ColumnFilter;
+		if (!item) continue;
+		const column = columnById.get(colId);
+		if (!column) continue;
+		const getter = makeGetter(column);
+		const prepared = prepareColumnFilter(item, getter);
+		if (prepared) result.push(prepared);
+	}
+
+	return result;
+}
+
+function nodeMatchesPreparedFilters<TData>(node: RowNode<TData>, preparedFilters: PreparedColumnFilter<TData>[]): boolean {
+	for (let i = 0; i < preparedFilters.length; i++) {
+		if (!matchPreparedFilter(node, preparedFilters[i])) return false;
+	}
+	return true;
+}
+
+export function applyClientFilterOnly<TData>(
+	nodes: RowNode<TData>[],
+	columns: Array<ColumnDef<TData>>,
+	filterModel: FilterModel | null | undefined
+): RowNode<TData>[] {
+	const preparedFilters = prepareFilters(columns, filterModel);
+	if (preparedFilters.length === 0) return nodes;
+	return nodes.filter((node) => nodeMatchesPreparedFilters(node, preparedFilters));
 }
 
 export function applyClientSortAndFilter<TData>(
@@ -120,56 +440,13 @@ export function applyClientSortAndFilter<TData>(
 	sortModel: SortModel | null | undefined,
 	filterModel: FilterModel | null | undefined
 ): Array<{ node: RowNode<TData>; sourceIndex: number }> {
-	const columnById = new Map<string, ColumnDef<TData>>();
-	columns.forEach((column) => {
-		columnById.set(column.field, column);
-	});
-
+	const columnById = createColumnLookup(columns);
 	let result = nodes.map((node, sourceIndex) => ({ node, sourceIndex }));
 
 	// 1. Pre-compile and pre-resolve active filters to avoid O(N) entries allocations, string manipulation, and Map lookups
-	const preparedFilters: PreparedFilter<TData>[] = [];
-	if (filterModel) {
-		for (const [colId, item] of Object.entries(filterModel)) {
-			const { operator, filter } = getFilterItemValue(item);
-			if (filter == null || filter === '') continue;
-
-			const column = columnById.get(colId);
-			if (!column) continue;
-
-			const textFilter = String(filter).toLowerCase();
-			const numericFilter = Number(filter);
-
-			let getter: (node: RowNode<TData>) => unknown;
-			if (column.valueGetter) {
-				const colValGetter = column.valueGetter;
-				getter = (node: RowNode<TData>) => colValGetter({ node, row: node.data, colField: column.field });
-			} else {
-				const pathGetter = compilePathGetter(column.field);
-				getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
-			}
-
-			preparedFilters.push({
-				column,
-				getter,
-				operator,
-				textFilter,
-				numericFilter,
-			});
-		}
-	}
-
+	const preparedFilters = prepareFilters(columns, filterModel);
 	if (preparedFilters.length > 0) {
-		result = result.filter(({ node }) => {
-			for (let i = 0; i < preparedFilters.length; i++) {
-				const pf = preparedFilters[i];
-				const val = pf.getter(node);
-				if (!matchesPreparedFilter(val, pf)) {
-					return false;
-				}
-			}
-			return true;
-		});
+		result = result.filter(({ node }) => nodeMatchesPreparedFilters(node, preparedFilters));
 	}
 
 	// 2. Pre-compile sort getters to avoid O(N log N) getter compilations and map lookups
@@ -218,22 +495,32 @@ export function applyClientSortAndFilter<TData>(
 }
 
 export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
-	private store: GridStore<TData>;
+	private readonly runtime: ClientRowModelRuntime<TData>;
 	private dataStore: RowDataStore<TData>;
 	private visualRows: Array<VisualRow<TData>> = [];
 	private visualRowIdToIndex = new Map<string, number>();
 	private rowIdToVisualIndex = new Map<string, number>();
 	private rowIdToVisualRowId = new Map<string, string>();
 	private rowIdToVisualRowIds: Map<string, string[]> | undefined;
+	private dataRowCount = 0;
 	private unsubscribers: Array<() => void> = [];
 
 	private pipeline = new RowPipeline<TData>();
+	readonly dependencyRegistry = new RowDependencyRegistry<TData>();
 	private _stickyGroupMeta = new Map<number, number>();
+	private _groupMeta = new Map<string, GroupRowMeta>();
+	private _groupMetaByVisualIndex = new Map<number, GroupRowMeta>();
+	private _pageWindow: PageWindow | null = null;
 
 	public getStickyGroupMeta = (): Map<number, number> => this._stickyGroupMeta;
+	public getPageWindow = (): PageWindow | null => this._pageWindow;
+	public getGroupMeta = (groupId: string): GroupRowMeta | null => this._groupMeta.get(groupId) ?? null;
+	public getGroupMetaByVisualIndex = (visualIndex: number): GroupRowMeta | null => this._groupMetaByVisualIndex.get(visualIndex) ?? null;
 
-	public toggleGroupExpanded = (groupId: string): void => {
-		const expansion = this.store.getState().expansion;
+	public getDataRowCount = (): number => this.dataRowCount;
+
+	public toggleGroupExpanded = (groupId: string): RowModelRefreshResult => {
+		const expansion = this.runtime.getState().expansion;
 		if (groupId.startsWith('group:')) {
 			const groups = { ...expansion.groups };
 			if (groups[groupId]) {
@@ -241,7 +528,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			} else {
 				groups[groupId] = true;
 			}
-			this.store.setState({ expansion: { ...expansion, groups } });
+			this.runtime.updateExpansion(() => ({ ...expansion, groups }));
 		} else {
 			const treeRows = { ...expansion.treeRows };
 			if (treeRows[groupId]) {
@@ -249,34 +536,34 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			} else {
 				treeRows[groupId] = true;
 			}
-			this.store.setState({ expansion: { ...expansion, treeRows } });
+			this.runtime.updateExpansion(() => ({ ...expansion, treeRows }));
 		}
-		this.refresh();
+		return this.refresh('expansion', groupId);
 	};
 
-	public toggleDetailExpanded = (rowId: string): void => {
-		const expansion = this.store.getState().expansion;
+	public toggleDetailExpanded = (rowId: string): RowModelRefreshResult => {
+		const expansion = this.runtime.getState().expansion;
 		const details = { ...expansion.details };
 		if (details[rowId]) {
 			delete details[rowId];
 		} else {
 			details[rowId] = true;
 		}
-		this.store.setState({ expansion: { ...expansion, details } });
-		this.refresh();
+		this.runtime.updateExpansion(() => ({ ...expansion, details }));
+		return this.refresh('detail');
 	};
 
 	public isGroupExpanded = (groupId: string): boolean => {
-		const expansion = this.store.getState().expansion;
+		const expansion = this.runtime.getState().expansion;
 		return groupId.startsWith('group:') ? !!expansion.groups[groupId] : !!expansion.treeRows[groupId];
 	};
 
 	public isDetailExpanded = (rowId: string): boolean => {
-		return !!this.store.getState().expansion.details[rowId];
+		return !!this.runtime.getState().expansion.details[rowId];
 	};
 
-	public expandAllGroups = (): void => {
-		const state = this.store.getState();
+	public expandAllGroups = (): RowModelRefreshResult => {
+		const state = this.runtime.getState();
 		const allIds = this.pipeline.collectAllGroupIds({
 			nodes: this.dataStore.getAllNodes(),
 			columns: state.columns,
@@ -286,35 +573,48 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		});
 		const groups: Record<string, true> = {};
 		for (const id of allIds) groups[id] = true;
-		this.store.setState({ expansion: { ...state.expansion, groups } });
-		this.refresh();
+		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups }));
+		return this.refresh('expansion');
 	};
 
-	public collapseAllGroups = (): void => {
-		const state = this.store.getState();
-		this.store.setState({ expansion: { ...state.expansion, groups: {} } });
-		this.refresh();
+	public collapseAllGroups = (): RowModelRefreshResult => {
+		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups: {} }));
+		return this.refresh('expansion');
 	};
 
-	constructor(store: GridStore<TData>, options: ClientRowModelOptions<TData>) {
-		this.store = store;
-		this.dataStore = new RowDataStore<TData>((row) => this.store.getRowId(row));
+	constructor(runtime: ClientRowModelRuntime<TData>, options: ClientRowModelOptions<TData>) {
+		this.runtime = runtime;
+		this.dataStore = new RowDataStore<TData>((row) => this.runtime.getRowId(row));
 
-		// Set base columns and config in store
-		this.store.setState({
+		this.runtime.initializeModel({
 			columns: options.columns,
 		});
 
-		this.store.registerRowModel(this);
+		this.runtime.registerRowModel(this);
 
 		this.unsubscribers.push(
-			this.store.addEventListener('sortChanged', () => this.refresh()),
-			this.store.addEventListener('filterChanged', () => this.refresh()),
-			this.store.addEventListener('groupByChanged', () => this.refresh()),
-			this.store.addEventListener('aggDefsChanged', () => this.refresh()),
-			this.store.addEventListener('showGroupFooterChanged', () => this.refresh()),
-			this.store.addEventListener('enableStickyGroupRowsChanged', () => this.refresh())
+			this.runtime.addEventListener(GridEventName.sortChanged, () => {
+				this.rebuildDependencyRegistry();
+				this.refresh();
+			}),
+			this.runtime.addEventListener(GridEventName.filterChanged, () => {
+				this.rebuildDependencyRegistry();
+				this.refresh();
+			}),
+			this.runtime.addEventListener(GridEventName.groupByChanged, () => {
+				this.rebuildDependencyRegistry();
+				this.refresh();
+			}),
+			this.runtime.addEventListener(GridEventName.aggDefsChanged, () => {
+				this.rebuildDependencyRegistry();
+				this.refresh();
+			}),
+			this.runtime.addEventListener(GridEventName.showGroupFooterChanged, () => this.refresh()),
+			this.runtime.addEventListener(GridEventName.enableStickyGroupRowsChanged, () => this.refresh()),
+			// Client pagination page change → re-run the pipeline with the new page window.
+			this.runtime.addEventListener(GridEventName.paginationChanged, () => this.refresh('flatten'))
 		);
+		this.rebuildDependencyRegistry();
 		this.setRows(options.rows);
 	}
 
@@ -323,10 +623,254 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.unsubscribers = [];
 	}
 
+	private rebuildDependencyRegistry(): void {
+		const state = this.runtime.getState();
+		this.dependencyRegistry.update({
+			columns: state.columns,
+			sortModel: state.sortModel,
+			filterModel: state.filterModel,
+			groupBy: state.groupBy,
+			aggDefs: state.aggDefs,
+			hasTreeParent: !!state.getParentId,
+		});
+	}
+
+	/** @internal Exposed for use by the incremental update path. */
+	public classifyFieldMutation(changedFields: ReadonlySet<string>) {
+		return classifyMutation(changedFields, this.dependencyRegistry);
+	}
+
+	/**
+	 * Returns true when at least one of the changed nodes would enter or exit the active filter,
+	 * meaning the visual row array must be rebuilt. Returns true immediately for grouped/tree grids
+	 * because group rows may appear or disappear when all their children enter/exit the filter.
+	 */
+	private filterMembershipChanged(changedNodes: RowNode<TData>[]): boolean {
+		const state = this.runtime.getState();
+		if (state.groupBy?.length || state.rowModelConfig?.treeData?.enabled) return true;
+		const preparedFilters = prepareFilters(state.columns, state.filterModel);
+		for (const node of changedNodes) {
+			const wasVisible = this.rowIdToVisualIndex.has(node.id);
+			const passes = preparedFilters.length === 0 || nodeMatchesPreparedFilters(node, preparedFilters);
+			if (wasVisible !== passes) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Incrementally repositions changed rows within the sorted visual array, avoiding a full
+	 * pipeline rebuild. Only applicable to flat (non-grouped, non-tree) grids with an active sort
+	 * and no pagination. Returns false to signal that the caller must fall back to full refresh.
+	 */
+	private relocateSortedRows(changedNodes: RowNode<TData>[]): boolean {
+		const state = this.runtime.getState();
+		if (state.groupBy?.length) return false;
+		if (state.rowModelConfig?.treeData?.enabled) return false;
+		if (state.rowModelConfig?.masterDetail?.enabled) return false;
+		if (!state.sortModel || state.sortModel.length === 0) return false;
+		if (this._pageWindow !== null) return false;
+
+		// Build sort key getters mirroring the pipeline's comparator
+		const columnById = createColumnLookup(state.columns);
+		const sortGetters = state.sortModel.map((sortItem) => {
+			const col = columnById.get(sortItem.colId);
+			if (col) {
+				if (col.valueGetter) {
+					const vg = col.valueGetter;
+					return (node: RowNode<TData>): unknown => vg({ node, row: node.data, colField: col.field });
+				}
+				const pg = compilePathGetter(col.field);
+				return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);
+			}
+			return (): undefined => undefined;
+		});
+
+		// Pre-build source index map for stable-sort tiebreaker
+		const allNodes = this.dataStore.getAllNodes();
+		const sourceIndexOf = new Map<string, number>();
+		for (let i = 0; i < allNodes.length; i++) sourceIndexOf.set(allNodes[i].id, i);
+
+		const compareNodes = (a: RowNode<TData>, b: RowNode<TData>): number => {
+			for (let i = 0; i < state.sortModel!.length; i++) {
+				const aVal = sortGetters[i](a);
+				const bVal = sortGetters[i](b);
+				const cmp = compareValues(aVal, bVal);
+				if (cmp !== 0) return state.sortModel![i].sort === 'desc' ? -cmp : cmp;
+			}
+			return (sourceIndexOf.get(a.id) ?? 0) - (sourceIndexOf.get(b.id) ?? 0);
+		};
+
+		// Collect VisualRow objects and old indices for each changed node
+		const toRelocate: Array<{ node: RowNode<TData>; vr: VisualRow<TData>; oldIdx: number }> = [];
+		for (const node of changedNodes) {
+			const oldIdx = this.rowIdToVisualIndex.get(node.id);
+			if (oldIdx === undefined) continue; // was filtered out; stays filtered (sort-key can't change filter membership)
+			const vr = this.visualRows[oldIdx];
+			if (vr?.kind === 'data') toRelocate.push({ node, vr, oldIdx });
+		}
+		if (toRelocate.length === 0) return true;
+
+		// Remove in descending index order so prior splices don't shift remaining indices
+		toRelocate.sort((a, b) => b.oldIdx - a.oldIdx);
+		const mutable = this.visualRows.slice();
+		for (const item of toRelocate) mutable.splice(item.oldIdx, 1);
+
+		// Insert each row at its new sorted position
+		for (const item of toRelocate) {
+			let lo = 0,
+				hi = mutable.length;
+			while (lo < hi) {
+				const mid = (lo + hi) >>> 1;
+				const midVR = mutable[mid];
+				if (midVR?.kind !== 'data') {
+					lo = mid + 1;
+					continue;
+				}
+				if (compareNodes(item.node, midVR.node) <= 0) hi = mid;
+				else lo = mid + 1;
+			}
+			mutable.splice(lo, 0, item.vr);
+		}
+
+		// Rebuild all three index maps from the updated array
+		this.visualRows = mutable;
+		this.visualRowIdToIndex = new Map();
+		this.rowIdToVisualIndex = new Map();
+		this.rowIdToVisualRowId = new Map();
+		for (let i = 0; i < this.visualRows.length; i++) {
+			const vr = this.visualRows[i];
+			this.visualRowIdToIndex.set(vr.id, i);
+			if (vr.kind === 'data') {
+				this.rowIdToVisualIndex.set(vr.rowId, i);
+				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
+			}
+		}
+		return true;
+	}
+
 	public setRows(rows: TData[]): void {
 		this.dataStore.setRows(rows);
-		this.store.engine.clearFormulas();
+		this.runtime.clearFormulas();
 		this.refresh();
+	}
+
+	/**
+	 * Threshold (added + removed rows) above which a full pipeline rebuild is cheaper than
+	 * incremental insert/remove into the visual array. Chosen empirically: below this threshold
+	 * individual array splices + map rebuilds outperform a full O(N log N) sort.
+	 */
+	private static readonly INCREMENTAL_TX_LIMIT = 100;
+
+	/**
+	 * Attempts to apply structural row mutations (adds/removes) incrementally on flat grids.
+	 * Returns false to signal full rebuild is needed (grouped/tree/paginated grids, or when
+	 * the transaction exceeds the INCREMENTAL_TX_LIMIT threshold).
+	 */
+	private tryIncrementalTransaction(added: RowNode<TData>[], removed: RowNode<TData>[]): boolean {
+		const state = this.runtime.getState();
+		if (state.groupBy?.length) return false;
+		if (state.rowModelConfig?.treeData?.enabled) return false;
+		if (state.rowModelConfig?.masterDetail?.enabled) return false;
+		if (this._pageWindow !== null) return false;
+		if (added.length + removed.length > ClientRowModelController.INCREMENTAL_TX_LIMIT) return false;
+
+		const mutable = this.visualRows.slice();
+
+		// Removals: collect visual indices in descending order so splices don't shift later indices
+		if (removed.length > 0) {
+			const removalIndices: number[] = [];
+			for (const node of removed) {
+				const idx = this.rowIdToVisualIndex.get(node.id);
+				if (idx !== undefined) removalIndices.push(idx);
+			}
+			removalIndices.sort((a, b) => b - a);
+			for (const idx of removalIndices) mutable.splice(idx, 1);
+		}
+
+		// Additions: filter-check, then insert at sorted position (or append if unsorted)
+		if (added.length > 0) {
+			const preparedFilters = prepareFilters(state.columns, state.filterModel);
+			const hasSort = !!(state.sortModel && state.sortModel.length > 0);
+
+			let sortComparator: ((a: RowNode<TData>, b: RowNode<TData>) => number) | null = null;
+			if (hasSort) {
+				const columnById = createColumnLookup(state.columns);
+				const sortGetters = state.sortModel!.map((sortItem) => {
+					const col = columnById.get(sortItem.colId);
+					if (col) {
+						if (col.valueGetter) {
+							const vg = col.valueGetter;
+							return (node: RowNode<TData>): unknown => vg({ node, row: node.data, colField: col.field });
+						}
+						const pg = compilePathGetter(col.field);
+						return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);
+					}
+					return (): undefined => undefined;
+				});
+				const allNodes = this.dataStore.getAllNodes();
+				const sourceIndexOf = new Map<string, number>();
+				for (let i = 0; i < allNodes.length; i++) sourceIndexOf.set(allNodes[i].id, i);
+
+				sortComparator = (a: RowNode<TData>, b: RowNode<TData>): number => {
+					for (let i = 0; i < state.sortModel!.length; i++) {
+						const cmp = compareValues(sortGetters[i](a), sortGetters[i](b));
+						if (cmp !== 0) return state.sortModel![i].sort === 'desc' ? -cmp : cmp;
+					}
+					return (sourceIndexOf.get(a.id) ?? 0) - (sourceIndexOf.get(b.id) ?? 0);
+				};
+			}
+
+			for (const node of added) {
+				if (preparedFilters.length > 0 && !nodeMatchesPreparedFilters(node, preparedFilters)) continue;
+
+				const explicitHeight = (state.rowHeights as Record<string, number>)[node.id];
+				const vr: VisualRow<TData> = {
+					kind: 'data',
+					id: toDataVisualRowId(node.id),
+					rowId: node.id,
+					node,
+					depth: 0,
+					height: explicitHeight !== undefined ? explicitHeight : state.defaultRowHeight,
+					selectable: true,
+					editable: true,
+				};
+
+				if (sortComparator) {
+					let lo = 0,
+						hi = mutable.length;
+					while (lo < hi) {
+						const mid = (lo + hi) >>> 1;
+						const midVR = mutable[mid];
+						if (midVR?.kind !== 'data') {
+							lo = mid + 1;
+							continue;
+						}
+						if (sortComparator(node, midVR.node) <= 0) hi = mid;
+						else lo = mid + 1;
+					}
+					mutable.splice(lo, 0, vr);
+				} else {
+					mutable.push(vr);
+				}
+			}
+		}
+
+		// Rebuild all index maps from the updated visual array
+		this.visualRows = mutable;
+		this.visualRowIdToIndex = new Map();
+		this.rowIdToVisualIndex = new Map();
+		this.rowIdToVisualRowId = new Map();
+		this.dataRowCount = 0;
+		for (let i = 0; i < this.visualRows.length; i++) {
+			const vr = this.visualRows[i];
+			this.visualRowIdToIndex.set(vr.id, i);
+			if (vr.kind === 'data') {
+				this.rowIdToVisualIndex.set(vr.rowId, i);
+				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
+				this.dataRowCount++;
+			}
+		}
+		return true;
 	}
 
 	public updateRows(updater: (rows: TData[]) => TData[]): void {
@@ -357,42 +901,36 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				const node = this.dataStore.getNode(rowId);
 				if (node) {
 					const nextVal = (node.data as Record<string, unknown>)[field];
-					this.store.engine.syncFormulaForCell(rowId, field, nextVal);
+					this.runtime.syncFormulaForCell(rowId, field, nextVal);
 				}
 
-				const invalidated = this.store.engine.invalidateFormulaCell(rowId, field);
+				const invalidated = this.runtime.invalidateFormulaCell(rowId, field);
 				for (const cell of invalidated) {
 					addInvalidatedCell(cell.rowId, cell.colField);
 				}
 			}
 		}
 
-		// Check if any of the changed fields are part of the active sort or filter models
-		const state = this.store.getState();
-		let needsFullRefresh = false;
-
-		if (state.sortModel && state.sortModel.length > 0) {
-			for (const sortItem of state.sortModel) {
-				for (const [_, fields] of result.changedFieldsByRow) {
-					if (fieldsAffectColumn(fields, sortItem.colId)) {
-						needsFullRefresh = true;
-						break;
-					}
-				}
-				if (needsFullRefresh) break;
-			}
+		// Classify the mutation impact using the dependency registry — covers sort, filter,
+		// group, tree-parent, and formula dependencies in one pass over all changed fields.
+		const allChangedFields = new Set<string>();
+		for (const [, fields] of result.changedFieldsByRow) {
+			for (const field of fields) allChangedFields.add(field);
 		}
+		const impact = this.classifyFieldMutation(allChangedFields);
 
-		if (!needsFullRefresh && state.filterModel && Object.keys(state.filterModel).length > 0) {
-			for (const filterColId of Object.keys(state.filterModel)) {
-				for (const [_, fields] of result.changedFieldsByRow) {
-					if (fieldsAffectColumn(fields, filterColId)) {
-						needsFullRefresh = true;
-						break;
-					}
-				}
-				if (needsFullRefresh) break;
-			}
+		// sort-key: attempt incremental relocation within the sorted array. Falls back to full
+		// rebuild for grouped/tree/paginated grids or when relocateSortedRows returns false.
+		// filter-key: test membership for each changed node on flat grids. If no row enters
+		// or exits the filter, the visual array is unchanged — skip the pipeline rebuild.
+		let needsFullRefresh = impact === 'group-key' || impact === 'tree-parent';
+		let didSortRelocation = false;
+		if (!needsFullRefresh && impact === 'sort-key') {
+			didSortRelocation = this.relocateSortedRows(result.changedNodes);
+			needsFullRefresh = !didSortRelocation;
+		}
+		if (!needsFullRefresh && impact === 'filter-key') {
+			needsFullRefresh = this.filterMembershipChanged(result.changedNodes);
 		}
 
 		if (needsFullRefresh) {
@@ -417,7 +955,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				if (changedFields) {
 					for (const field of changedFields) {
 						addNotifyCell(node.id, field);
-						for (const dependentField of this.store.engine.columns.getValueGetterDependents(field)) {
+						for (const dependentField of this.runtime.getValueGetterDependents(field)) {
 							if (dependentField !== field) {
 								addNotifyCell(node.id, dependentField);
 							}
@@ -426,10 +964,17 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				}
 			}
 
-			this.store.engine.notifyBulkCellChange(notifyCells);
+			this.runtime.notifyBulkCellChange(notifyCells);
+
+			// Sort relocation changed the visual order — bump version so geometry and renderer
+			// refresh with the new row positions. Value-only updates don't need this since
+			// the visual array is unchanged and each cell's notifyBulkCellChange is sufficient.
+			if (didSortRelocation) {
+				this.runtime.bumpGlobalVersion();
+			}
 
 			if (result.changedValuesByRow.size > 0) {
-				this.store.dispatchEvent('rowsUpdated', {
+				this.runtime.dispatchRowsUpdated({
 					changedValuesByRow: result.changedValuesByRow,
 					changedNodes: result.changedNodes,
 				});
@@ -446,21 +991,28 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				const cellSet = new Set<string>();
 				for (const field of fields) {
 					cellSet.add(field);
-					for (const dep of this.store.engine.columns.getValueGetterDependents(field)) {
+					for (const dep of this.runtime.getValueGetterDependents(field)) {
 						if (dep !== field) cellSet.add(dep);
 					}
 				}
 				notifyCells.set(rowId, cellSet);
 			}
-			this.store.engine.notifyBulkCellChange(notifyCells);
+			this.runtime.notifyBulkCellChange(notifyCells);
 		}
 
 		if (result.added.length > 0 || result.removed.length > 0) {
-			this.refresh('bulk');
+			// Attempt incremental insert/remove for flat grids within the threshold; fall
+			// back to full rebuild for grouped/tree/paginated grids or large transactions.
+			const wasIncremental = this.tryIncrementalTransaction(result.added, result.removed);
+			if (wasIncremental) {
+				this.runtime.bumpGlobalVersion();
+			} else {
+				this.refresh('bulk');
+			}
 		}
 
 		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {
-			this.store.dispatchEvent('rowsUpdated', {
+			this.runtime.dispatchRowsUpdated({
 				changedValuesByRow: result.changedValuesByRow,
 				changedNodes: result.updated,
 				addedNodes: result.added,
@@ -524,27 +1076,91 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return this.dataStore.getNode(rowId)?.data ?? null;
 	};
 
+	public getAllDataNodes = (): RowNode<TData>[] => this.dataStore.getAllNodes();
+
+	public getRowOrder = (): string[] => this.dataStore.getSourceOrder();
+
+	public setRowOrder = (rowIds: string[]): void => {
+		this.dataStore.setRowOrder(rowIds);
+		this.refresh('row-order');
+	};
+
+	public getSelectableDataRowIds = (scope: RowSelectionScope = 'page'): string[] => {
+		if (scope === 'all') {
+			return this.dataStore.getAllNodes().map((node) => node.id);
+		}
+		if (scope === 'filtered') {
+			const state = this.runtime.getState();
+			const expansion = state.expansion;
+			const rowModelConfig: RowModelConfig<TData> | undefined =
+				state.rowModelConfig ??
+				(state.groupBy?.length || state.getParentId || state.masterDetailEnabled
+					? {
+							type: 'client',
+							grouping: state.groupBy?.length
+								? { model: state.groupBy.map((colId) => ({ colId })), includeFooter: !!state.showGroupFooter }
+								: undefined,
+							treeData: state.getParentId ? { enabled: true, getParentId: state.getParentId } : undefined,
+							masterDetail: state.masterDetailEnabled
+								? {
+										enabled: true,
+										expandedRowIds: expansion.details,
+										defaultDetailHeight: state.detailRowHeight,
+									}
+								: undefined,
+						}
+					: undefined);
+			const result = this.pipeline.run({
+				nodes: this.dataStore.getAllNodes(),
+				columns: state.columns,
+				sortModel: state.sortModel,
+				filterModel: state.filterModel,
+				groupBy: state.groupBy,
+				rowModelConfig,
+				getParentId: state.getParentId,
+				aggDefs: state.aggDefs ?? [],
+				expandedGroupIds: new Set(Object.keys(expansion.groups)),
+				expandedTreeRowIds: new Set(Object.keys(expansion.treeRows)),
+				expandedDetailRowIds: new Set(Object.keys(expansion.details)),
+				defaultRowHeight: state.defaultRowHeight,
+				rowHeightsRecord: state.rowHeights,
+				groupRowHeight: state.groupRowHeight,
+				detailRowHeight: state.detailRowHeight,
+				masterDetailEnabled: state.masterDetailEnabled,
+				detailRenderer: state.detailRenderer,
+				reportFault: this.runtime.reportRowPipelineFault,
+			});
+			return result.visualRows.flatMap((row) => (row.kind === 'data' ? [row.rowId] : []));
+		}
+		const ids: string[] = [];
+		for (const row of this.visualRows) {
+			if (row?.kind === 'data') ids.push(row.rowId);
+		}
+		return ids;
+	};
+
 	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
 		const node = this.getRowNodeById(rowId);
 		if (!node) return false;
 
-		const col = this.store.getColumnDef(colField);
-		const updatedRow = col?.valueSetter ? { ...node.data } : node.data;
+		const col = this.runtime.getColumnDef(colField);
+		const oldValue = this.runtime.getCellValue(rowId, colField);
+		const updatedRow = { ...node.data };
 		if (col?.valueSetter) {
-			if (!col.valueSetter(updatedRow, value)) return false;
+			// Sync path: call valueSetter with params. Async setters are handled by commitEdit.
+			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
+			if (result === false || (result instanceof Promise && false)) return false;
+			// For sync-returning false, bail out. Async setters proceed optimistically here.
+			if (!(result instanceof Promise) && !result) return false;
 		} else {
 			setValueByPath(updatedRow, colField, value);
 		}
 
-		if (updatedRow !== node.data) {
-			node.setData(updatedRow);
-		} else {
-			node.clearValueCache();
-		}
+		node.setData(updatedRow);
 
 		// If the edited cell field affects active sorting, filtering, grouping, or aggregates,
 		// we must re-run the pipeline to update the row positions, visibility, or computed aggregates.
-		const state = this.store.getState();
+		const state = this.runtime.getState();
 		let needsRefresh = false;
 
 		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
@@ -553,7 +1169,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			needsRefresh = true;
 		} else if (state.groupBy && state.groupBy.includes(colField)) {
 			needsRefresh = true;
-		} else if (this.store.engine.columns.hasValueGetter(colField)) {
+		} else if (this.runtime.hasValueGetter(colField)) {
 			needsRefresh = true;
 		} else {
 			// If grouping or custom row models (e.g. parentId tree) are active, any cell edit
@@ -572,8 +1188,9 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return true;
 	};
 
-	public refresh(reason?: RowRefreshReason): RowModelRefreshResult {
-		const state = this.store.getState();
+	public refresh(reason?: RowRefreshReason, groupId?: string): RowModelRefreshResult {
+		const state = this.runtime.getState();
+		const previousRows = this.visualRows;
 
 		const expansion = state.expansion;
 		const rowModelConfig: RowModelConfig<TData> | undefined =
@@ -613,22 +1230,27 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			detailRowHeight: state.detailRowHeight,
 			masterDetailEnabled: state.masterDetailEnabled,
 			detailRenderer: state.detailRenderer,
+			reportFault: this.runtime.reportRowPipelineFault,
+			// Client pagination (Plan 041): slice happens inside the pipeline so every
+			// derived map/meta/geometry stays page-consistent. Undefined → full list.
+			pagination: state.pagination ? { pageSize: state.pagination.pageSize, page: state.pagination.page ?? 0 } : undefined,
 		});
 		const { visualRows } = result;
-
-		const changed = visualRows.length !== this.visualRows.length || visualRows.some((row, idx) => row !== this.visualRows[idx]);
+		const refreshResult = describeVisualRowDiff(previousRows, visualRows, reason, groupId);
 
 		this.visualRows = visualRows;
+		this._pageWindow = result.pageWindow ?? null;
 		this.visualRowIdToIndex = result.visualRowIdToIndex;
 		this.rowIdToVisualIndex = result.rowIdToVisualIndex;
 		this.rowIdToVisualRowId = result.rowIdToVisualRowId;
 		this.rowIdToVisualRowIds = result.rowIdToVisualRowIds;
 		this._stickyGroupMeta = result.stickyGroupMeta;
+		this._groupMeta = result.groupMeta;
+		this._groupMetaByVisualIndex = result.groupMetaByVisualIndex;
+		this.dataRowCount = result.stats.totalDataRows;
 
-		this.store.setState({
-			dataVersion: state.dataVersion + 1,
-		});
+		this.runtime.bumpGlobalVersion();
 
-		return { changed };
+		return refreshResult;
 	}
 }

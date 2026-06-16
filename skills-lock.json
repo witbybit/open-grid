@@ -1,0 +1,11 @@
+{
+	"version": 1,
+	"skills": {
+		"improve": {
+			"source": "shadcn/improve",
+			"sourceType": "github",
+			"skillPath": "skills/improve/SKILL.md",
+			"computedHash": "992d71e2ed2a83e7f25d8522d069f090e2ea16286ec29ea86f84cfa05c0c2430"
+		}
+	}
+}

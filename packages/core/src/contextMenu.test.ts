@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GridStore, type GridCellPointer } from './store.js';
+import { GridStore, GridEventName, type GridCellPointer } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { GridContextMenuPlugin, type ContextMenuParams } from './contextMenu.js';
 
@@ -48,7 +48,7 @@ describe('GridContextMenuPlugin', () => {
 			],
 		});
 
-		rowController = new ClientRowModelController<TestRow>(store, {
+		rowController = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
 			rows: [
 				{ id: 'r1', name: 'Product A', price: 100 },
 				{ id: 'r2', name: 'Product B', price: 200 },
@@ -181,6 +181,34 @@ describe('GridContextMenuPlugin', () => {
 		expect(store.getCellValue('r2', 'price')).toBe('888');
 	});
 
+	it('should silently ignore clipboard permission errors (no runtime faults)', async () => {
+		Object.defineProperty(navigator, 'clipboard', {
+			value: {
+				readText: vi.fn().mockRejectedValue(new Error('paste denied')),
+				writeText: vi.fn().mockRejectedValue(new Error('copy denied')),
+			},
+			writable: true,
+			configurable: true,
+		});
+
+		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r1', colField: 'price' });
+		const state = store.getState();
+		const params = {
+			rowId: 'r1',
+			colField: 'name',
+			api: store,
+			selection: state.selection,
+		};
+
+		// Copy and paste should not throw even when clipboard access is denied
+		testPlugin.copySelectedRange(params);
+		await Promise.resolve();
+		await testPlugin.pasteSelectedRange(params);
+
+		// ClipboardController silently ignores clipboard errors (consistent with navigation plugin behavior)
+		expect(store.getRuntimeFaults()).toHaveLength(0);
+	});
+
 	it('should select all cells in the grid', () => {
 		const state = store.getState();
 		const params = {
@@ -273,7 +301,8 @@ describe('GridContextMenuPlugin', () => {
 		const params = customAction.mock.calls[0][0];
 		expect(params.rowId).toBe('r1');
 		expect(params.colField).toBe('name');
-		expect(params.api).toBe(store);
+		expect(params.api).not.toBe(store);
+		expect(params.api.getState()).toEqual(store.getState());
 		expect(params.selection.range).toEqual({
 			start: { rowId: 'r1', colField: 'name' },
 			end: { rowId: 'r2', colField: 'price' },
@@ -288,7 +317,7 @@ describe('GridContextMenuPlugin', () => {
 
 	it('should dispatch cellValueChanged event when setting a cell value', () => {
 		const spy = vi.fn();
-		store.addEventListener('cellValueChanged', spy);
+		store.addEventListener(GridEventName.cellValueChanged, spy);
 		store.setCellValue('r1', 'price', 999);
 		expect(spy).toHaveBeenCalled();
 		const event = spy.mock.calls[0][0];
