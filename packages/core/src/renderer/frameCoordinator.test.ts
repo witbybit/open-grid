@@ -132,4 +132,53 @@ describe('DefaultFrameCoordinator', () => {
 		expect(onScrollFrame).not.toHaveBeenCalled();
 		expect(onPaintFrame).not.toHaveBeenCalled();
 	});
+
+	it('reports a fault and skips the frame when a reentrant scroll frame is detected', () => {
+		const onFault = vi.fn();
+		let capturedScrollRaf: (() => void) | null = null;
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			raf: (cb) => { capturedScrollRaf = cb; return 0; },
+		};
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: () => {
+				// Try to request another scroll frame from inside the scroll callback
+				coordinator.requestScrollFrame();
+				// Manually fire the inner RAF immediately to simulate reentrancy
+				capturedScrollRaf?.();
+			},
+			onPaintFrame: vi.fn(),
+			gridScheduler: gs,
+			onFault,
+		});
+
+		coordinator.requestScrollFrame();
+		capturedScrollRaf?.();
+
+		expect(onFault).toHaveBeenCalledWith(expect.stringContaining('reentrant scroll frame'));
+	});
+
+	it('reports a fault and skips the frame when a reentrant paint frame is detected', () => {
+		const onFault = vi.fn();
+		let capturedRaf: (() => void) | null = null;
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			microtask: (cb) => cb(),
+			raf: (cb) => { capturedRaf = cb; return 0; },
+		};
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame: () => {
+				// Simulate reentrancy: fire a stale inner RAF from inside the paint callback
+				capturedRaf?.();
+			},
+			gridScheduler: gs,
+			onFault,
+		});
+
+		coordinator.requestPaintFrame();
+		capturedRaf?.();
+
+		expect(onFault).toHaveBeenCalledWith(expect.stringContaining('reentrant paint frame'));
+	});
 });

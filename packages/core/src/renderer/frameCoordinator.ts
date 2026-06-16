@@ -24,20 +24,25 @@ export interface FrameCoordinatorDeps {
 	onScrollFrame: () => void;
 	onPaintFrame: () => void;
 	gridScheduler?: GridScheduler;
+	/** Called when a reentrancy violation is detected. Should not throw. */
+	onFault?: (msg: string) => void;
 }
 
 export class DefaultFrameCoordinator implements FrameCoordinator {
 	private paintScheduled = false;
 	private scrollScheduled = false;
+	private inFrame = false;
 	private destroyed = false;
 	private readonly gs: GridScheduler;
 	private readonly onScrollFrame: () => void;
 	private readonly onPaintFrame: () => void;
+	private readonly onFault: ((msg: string) => void) | undefined;
 
 	constructor(deps: FrameCoordinatorDeps) {
 		this.gs = deps.gridScheduler ?? defaultGridScheduler;
 		this.onScrollFrame = deps.onScrollFrame;
 		this.onPaintFrame = deps.onPaintFrame;
+		this.onFault = deps.onFault;
 	}
 
 	requestScrollFrame(): void {
@@ -46,7 +51,16 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 		this.gs.raf(() => {
 			if (this.destroyed) return;
 			this.scrollScheduled = false;
-			this.onScrollFrame();
+			if (this.inFrame) {
+				this.onFault?.('FrameCoordinator: reentrant scroll frame detected');
+				return;
+			}
+			this.inFrame = true;
+			try {
+				this.onScrollFrame();
+			} finally {
+				this.inFrame = false;
+			}
 		});
 	}
 
@@ -58,7 +72,16 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 			this.gs.raf(() => {
 				if (this.destroyed) return;
 				this.paintScheduled = false;
-				this.onPaintFrame();
+				if (this.inFrame) {
+					this.onFault?.('FrameCoordinator: reentrant paint frame detected');
+					return;
+				}
+				this.inFrame = true;
+				try {
+					this.onPaintFrame();
+				} finally {
+					this.inFrame = false;
+				}
 			});
 		});
 	}
