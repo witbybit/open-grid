@@ -29,6 +29,7 @@ const ColumnGroupHeaderDemo = lazy(() => import('./pages/ColumnGroupHeaderDemo')
 const ClipboardDemo = lazy(() => import('./pages/ClipboardDemo'));
 const FloatingFiltersDemo = lazy(() => import('./pages/FloatingFiltersDemo'));
 const RowDragDemo = lazy(() => import('./pages/RowDragDemo'));
+const AdvancedFiltersDemo = lazy(() => import('./pages/AdvancedFiltersDemo'));
 
 const PAGES: readonly GridPageType[] = [
 	'perf',
@@ -50,6 +51,7 @@ const PAGES: readonly GridPageType[] = [
 	'colgroups',
 	'floatingfilters',
 	'rowdrag',
+	'advancedfilters',
 ];
 
 function GridPageFallback() {
@@ -240,6 +242,7 @@ export default function App() {
 		if (activePage === 'clipboard') return <ClipboardDemo />;
 		if (activePage === 'floatingfilters') return <FloatingFiltersDemo {...commonGridProps} />;
 		if (activePage === 'rowdrag') return <RowDragDemo />;
+		if (activePage === 'advancedfilters') return <AdvancedFiltersDemo />;
 		return <CrudValidationDemo {...commonGridProps} />;
 	})();
 

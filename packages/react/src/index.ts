@@ -52,6 +52,22 @@ export type {
 export { FormulaBar } from './FormulaBar.js';
 export type { FormulaBarProps } from './FormulaBar.js';
 
+// ─── Advanced filter API ──────────────────────────────────────────────────────
+export { ColumnFilterRenderer } from './filters/ColumnFilterRenderer.js';
+export type {
+	ColumnFilterDef,
+	ColumnFilterType,
+	FilterSelectOption,
+	FilterFetchParams,
+	FilterFetchResult,
+	FilterPageParams,
+	FilterPageResult,
+	CustomFilterRendererParams,
+	FilterSurface,
+	SelectFilterCondition,
+} from '@open-grid/core';
+export { resolveColumnFilterDef } from '@open-grid/core';
+
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from './types.js';
 export type { GridEventPayloadMap, GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
 export type { StyleRule, RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from './types.js';

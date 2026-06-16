@@ -155,6 +155,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			subtitle: 'Managed · Unmanaged · Auto-scroll',
 			icon: GripVertical,
 		},
+		{
+			id: 'advancedfilters',
+			label: 'Advanced Filters',
+			subtitle: 'Multi-Select · Async · Infinite',
+			icon: SlidersHorizontal,
+		},
 	] as const;
 
 	return (

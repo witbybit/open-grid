@@ -31,7 +31,7 @@ export type {
 	DateFilterCondition,
 	SetFilterCondition,
 };
-export type { TextFilterOperator, NumberFilterOperator, DateFilterOperator } from './filterModel.js';
+export type { TextFilterOperator, NumberFilterOperator, DateFilterOperator, SelectFilterCondition } from './filterModel.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -153,6 +153,13 @@ interface PreparedSetFilter<TData> extends PreparedBase<TData> {
 	includeNull: boolean;
 }
 
+interface PreparedSelectFilter<TData> extends PreparedBase<TData> {
+	kind: 'select';
+	valueSet: Set<string>;
+	includeNull: boolean;
+	matchMode: 'any' | 'all';
+}
+
 interface PreparedCompoundFilter<TData> {
 	kind: 'compound';
 	logicalOp: 'AND' | 'OR';
@@ -165,6 +172,7 @@ type PreparedColumnFilter<TData> =
 	| PreparedNumberFilter<TData>
 	| PreparedDateFilter<TData>
 	| PreparedSetFilter<TData>
+	| PreparedSelectFilter<TData>
 	| PreparedCompoundFilter<TData>;
 
 function parseFilterDate(raw: string): Date | null {
@@ -286,6 +294,18 @@ function matchSetFilter(value: unknown, pf: PreparedSetFilter<unknown>): boolean
 	return pf.valueSet.has(String(value).toLowerCase());
 }
 
+function matchSelectFilter(value: unknown, pf: PreparedSelectFilter<unknown>): boolean {
+	if (pf.valueSet.size === 0 && !pf.includeNull) return false;
+	if (value == null || value === '') return pf.includeNull;
+	const strVal = String(value).toLowerCase();
+	if (pf.matchMode === 'all') {
+		// Unusual: cell value must equal every selected value (useful for multi-valued cells)
+		return pf.valueSet.has(strVal) && pf.valueSet.size === 1;
+	}
+	// Default: OR — any selected value matches
+	return pf.valueSet.has(strVal);
+}
+
 function matchPreparedFilter<TData>(node: RowNode<TData>, pf: PreparedColumnFilter<TData>): boolean {
 	if (pf.kind === 'compound') {
 		const l = matchPreparedFilter(node, pf.left);
@@ -302,6 +322,8 @@ function matchPreparedFilter<TData>(node: RowNode<TData>, pf: PreparedColumnFilt
 			return matchDateFilter(value, pf as PreparedDateFilter<unknown>);
 		case 'set':
 			return matchSetFilter(value, pf as PreparedSetFilter<unknown>);
+		case 'select':
+			return matchSelectFilter(value, pf as PreparedSelectFilter<unknown>);
 	}
 }
 
@@ -384,6 +406,11 @@ function prepareCondition<TData>(condition: FilterCondition, getter: (node: RowN
 		const hasNull = condition.values.includes(null);
 		const valueSet = new Set(condition.values.filter((v): v is string | number => v !== null).map((v) => String(v).toLowerCase()));
 		return { kind: 'set', getter, valueSet, includeNull: hasNull };
+	}
+	if (condition.type === 'select') {
+		const hasNull = condition.values.includes(null);
+		const valueSet = new Set(condition.values.filter((v): v is string | number => v !== null).map((v) => String(v).toLowerCase()));
+		return { kind: 'select', getter, valueSet, includeNull: hasNull, matchMode: condition.matchMode ?? 'any' };
 	}
 	return null;
 }

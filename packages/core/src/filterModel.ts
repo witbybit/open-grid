@@ -39,7 +39,28 @@ export interface SetFilterCondition {
 	values: (string | number | null)[];
 }
 
-export type FilterCondition = TextFilterCondition | NumberFilterCondition | DateFilterCondition | SetFilterCondition;
+/**
+ * Used by all new select filter types (multi-select, single-select, async-*, infinite-*).
+ * Supersedes SetFilterCondition for new filter definitions while remaining backwards-compatible.
+ */
+export interface SelectFilterCondition {
+	type: 'select';
+	/** Selected option values. Length 1 for single-select, N for multi-select. */
+	values: (string | number | null)[];
+	/**
+	 * Display labels parallel to values — stored so chip bar can show readable text
+	 * without re-fetching option lists on every render.
+	 */
+	labels?: string[];
+	/**
+	 * 'any' (default): row matches if cell value equals ANY selected value (OR logic).
+	 * 'all': row matches only if cell value equals ALL selected values (unusual — useful
+	 *         for array-valued cells or tag matching).
+	 */
+	matchMode?: 'any' | 'all';
+}
+
+export type FilterCondition = TextFilterCondition | NumberFilterCondition | DateFilterCondition | SetFilterCondition | SelectFilterCondition;
 
 export interface CompoundFilterCondition {
 	type: 'compound';

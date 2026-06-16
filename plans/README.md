@@ -77,6 +77,7 @@
 | 075 | [Formula Bar + Cross-Cell Formulas](./075-formula-bar-cross-cell-formulas.md)                                 | TODO     | —            |
 | 076 | [Named Column Views / Profiles](./076-named-column-views-profiles.md)                                         | TODO     | —            |
 | 077 | [Advanced Cell Editors](./077-advanced-cell-editors.md)                                                       | TODO     | —            |
+| 078 | [Advanced Column Filter API](./078-advanced-column-filter-api.md)                                             | DONE     | —            |
 
 ## Execution order
 
@@ -231,6 +232,7 @@
 - Plan 075 (Formula Bar + Cross-Cell Formulas) surfaces the existing `DagEngine` through four `GridApi` methods (`getFormula`, `setFormula`, `clearFormula`, `hasFormula`), wires `=` prefix detection into the edit lifecycle, adds `formulaMap` to `PersistedGridState` (schema bump), and ships a `FormulaBar` React component styled via theme tokens.
 - Plan 076 (Named Column Views / Profiles) adds `saveView` / `loadView` / `deleteView` / `renameView` / `getViews` / `switchView` / `getActiveView` to `GridApi`, extends `PersistedGridState` with `views` and `activeViewName`, implements a theme-aware `ViewsPanel` registered as a built-in sidebar panel, and adds a `GridViewsPlugin` for `Ctrl+Shift+1`–`9` / `Ctrl+Shift+S` / `Ctrl+Shift+V` hotkeys.
 - Plan 077 (Advanced Cell Editors) ships `createDateEditor`, `createAutocompleteEditor`, and `createSelectEditor` factory functions in `@open-grid/react`. All three render as DOM portals via `useAnchoredPortal` for viewport-safe positioning, share keyboard-navigation hooks, and are styled entirely via `api.getTheme()` tokens (no Tailwind dependency).
+- Plan 078 (Advanced Column Filter API) replaces `filterType: 'set'` with a full `ColumnFilterDef` API on `ColumnDef` supporting `multi-select`, `async-multi-select`, `infinite-multi-select`, `single-select`, `async-single-select`, and a `custom` React renderer escape hatch. Adds `SelectFilterCondition` to `FilterModel`, shared React filter components, `useFilterFetch`/`useFilterPage` hooks, and a `FilterReactBridge` that bridges React into the DOM-based header menu and floating filter row. All three filter surfaces (sidebar panel, header 3-dot menu, floating row) render the same component tree. Backwards-compatible — existing `filterType`/`filterValues` normalise automatically.
 
 ## Findings considered and rejected
 

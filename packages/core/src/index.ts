@@ -77,6 +77,7 @@ export type {
 	NumberFilterCondition,
 	DateFilterCondition,
 	SetFilterCondition,
+	SelectFilterCondition,
 	CompoundFilterCondition,
 	TextFilterOperator,
 	NumberFilterOperator,
@@ -85,6 +86,18 @@ export type {
 	RowModelConfig,
 	SortModel,
 } from './rowModel.js';
+export type {
+	ColumnFilterDef,
+	ColumnFilterType,
+	FilterSelectOption,
+	FilterFetchParams,
+	FilterFetchResult,
+	FilterPageParams,
+	FilterPageResult,
+	CustomFilterRendererParams,
+	FilterSurface,
+} from './filters/filterDef.js';
+export { resolveColumnFilterDef } from './filters/filterDef.js';
 export type { AggregationDef } from './rows/stages/aggregateStage.js';
 export type { OpOption } from './filterOperations.js';
 export {

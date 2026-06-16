@@ -281,19 +281,29 @@ export interface ColumnDef<TRowData = unknown> {
 	 */
 	headerGroup?: string | string[];
 	/**
+	 * Rich filter definition for this column. Supersedes `filterType` and `filterValues`.
+	 * Supports multi-select, single-select, async-*, infinite-*, and fully custom React UI.
+	 * Backwards-compatible — existing filterType/filterValues still work and are normalised
+	 * to filterDef internally.
+	 */
+	filterDef?: import('./filters/filterDef.js').ColumnFilterDef<TRowData>;
+	/**
 	 * Filter UI type shown for this column in the sidebar and header menu.
 	 * Defaults to `'text'`. Use `'none'` to hide the filter UI for this column.
+	 * @deprecated Prefer filterDef.type — this field is normalised into filterDef on mount.
 	 */
 	filterType?: 'text' | 'number' | 'date' | 'set' | 'none';
 	/**
 	 * For set filter: explicit list of selectable values.
 	 * When omitted, distinct values are derived from row data via `api.getColumnDistinctValues()`.
+	 * @deprecated Prefer filterDef.options — this field is normalised into filterDef on mount.
 	 */
 	filterValues?: (string | number | null)[];
 	/**
 	 * Custom floating filter renderer for this column (Plan 060).
 	 * Receives a `FloatingFilterRendererParams` object and must populate `eCell`.
 	 * When omitted, the default input (text / number / date / set badge) is used.
+	 * @deprecated Prefer filterDef.renderFloatingFilter for React-based renderers.
 	 */
 	floatingFilterRenderer?: (params: import('./renderer/floatingFilterRenderer.js').FloatingFilterRendererParams<TRowData>) => void;
 	/**

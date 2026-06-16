@@ -14,7 +14,9 @@ import type {
 	DateFilterOperator,
 } from '../../types.js';
 import { useGridKeySelector } from '../../hooks.js';
-import type { ThemeTokens } from '@open-grid/core';
+import type { ThemeTokens, CustomFilterRendererParams } from '@open-grid/core';
+import { resolveColumnFilterDef } from '@open-grid/core';
+import { ColumnFilterRenderer } from '../../filters/ColumnFilterRenderer.js';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -492,9 +494,125 @@ function ConditionEditor({
 	return <TextFilterEditor condition={condition?.type === 'text' ? condition : null} onChange={onChange} theme={theme} />;
 }
 
+// ── Helpers for new filter type detection ─────────────────────────────────────
+
+const NEW_FILTER_TYPES = new Set(['multi-select', 'single-select', 'async-multi-select', 'async-single-select', 'infinite-multi-select', 'custom']);
+
+function isNewFilterType(type: string): boolean {
+	return NEW_FILTER_TYPES.has(type);
+}
+
 // ── ColumnFilterRow ───────────────────────────────────────────────────────────
 
 function ColumnFilterRow({
+	col,
+	columnFilter,
+	api,
+	filterModel,
+	theme,
+}: {
+	col: ColumnDef<any>;
+	columnFilter: ColumnFilter | undefined;
+	api: GridApi<any>;
+	filterModel: FilterModel | null;
+	theme: ThemeTokens;
+}) {
+	// Resolve filterDef — may be null for filterType='none'
+	const resolvedDef = useMemo(
+		() => resolveColumnFilterDef(col.filterDef as any, col.filterType as string | undefined, col.filterValues as any),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[col.filterDef, col.filterType, col.filterValues]
+	);
+
+	const useNewRenderer = resolvedDef != null && isNewFilterType(resolvedDef.type);
+	const hasValue = !!columnFilter;
+
+	const commitFilter = useCallback(
+		(f: ColumnFilter | null) => {
+			const next: FilterModel = { ...(filterModel ?? {}) };
+			if (!f) delete next[col.field];
+			else next[col.field] = f;
+			api.setFilterModel(Object.keys(next).length > 0 ? next : null);
+		},
+		[filterModel, col.field, api]
+	);
+
+	// ── New select/async/custom path ──────────────────────────────────────────
+	if (useNewRenderer) {
+		const rendererParams: CustomFilterRendererParams = {
+			value: columnFilter ?? null,
+			onChange: commitFilter,
+			onCommit: commitFilter,
+			colField: col.field,
+			surface: 'sidebar',
+		};
+		return (
+			<div style={{ padding: '4px 12px 6px' }}>
+				<ColumnFilterRowHeader col={col} hasValue={hasValue} theme={theme} onClear={() => commitFilter(null)} />
+				<ColumnFilterRenderer params={rendererParams} filterDef={resolvedDef} theme={theme} />
+			</div>
+		);
+	}
+
+	// ── Legacy text/number/date/set path ──────────────────────────────────────
+	return <LegacyColumnFilterRow col={col} columnFilter={columnFilter} api={api} filterModel={filterModel} theme={theme} />;
+}
+
+// ── Extracted header shared by both paths ─────────────────────────────────────
+
+function ColumnFilterRowHeader({
+	col,
+	hasValue,
+	theme,
+	onClear,
+}: {
+	col: ColumnDef<any>;
+	hasValue: boolean;
+	theme: ThemeTokens;
+	onClear: () => void;
+}) {
+	return (
+		<div
+			style={{
+				fontSize: 10,
+				fontWeight: 700,
+				letterSpacing: '0.06em',
+				textTransform: 'uppercase',
+				color: hasValue ? theme.focusRing : theme.headerText,
+				marginBottom: 5,
+				display: 'flex',
+				alignItems: 'center',
+				gap: 6,
+			}}
+		>
+			{col.header || col.field}
+			{hasValue && (
+				<span style={{ width: 6, height: 6, borderRadius: '50%', background: theme.focusRing, display: 'inline-block', flexShrink: 0 }} />
+			)}
+			{hasValue && (
+				<button
+					onClick={onClear}
+					style={{
+						marginLeft: 'auto',
+						background: 'none',
+						border: 'none',
+						cursor: 'pointer',
+						color: theme.headerText,
+						padding: 0,
+						display: 'flex',
+						alignItems: 'center',
+					}}
+				>
+					<ClearIcon />
+				</button>
+			)}
+		</div>
+	);
+}
+
+// ── LegacyColumnFilterRow (text/number/date/set with compound support) ────────
+
+function LegacyColumnFilterRow({
 	col,
 	columnFilter,
 	api,
@@ -517,7 +635,6 @@ function ColumnFilterRow({
 		[ft, col.field]
 	);
 
-	// Keep showSecond in sync when filter cleared externally
 	useEffect(() => {
 		setShowSecond(columnFilter?.type === 'compound');
 	}, [columnFilter]);
@@ -546,47 +663,10 @@ function ColumnFilterRow({
 
 	return (
 		<div style={{ padding: '4px 12px 10px' }}>
-			{/* Column label */}
-			<div
-				style={{
-					fontSize: 10,
-					fontWeight: 700,
-					letterSpacing: '0.06em',
-					textTransform: 'uppercase',
-					color: hasAnyValue ? theme.focusRing : theme.headerText,
-					marginBottom: 5,
-					display: 'flex',
-					alignItems: 'center',
-					gap: 6,
-				}}
-			>
-				{col.header || col.field}
-				{hasAnyValue && (
-					<span style={{ width: 6, height: 6, borderRadius: '50%', background: theme.focusRing, display: 'inline-block', flexShrink: 0 }} />
-				)}
-				{hasAnyValue && (
-					<button
-						onClick={() => commit(null, null, compoundOp)}
-						style={{
-							marginLeft: 'auto',
-							background: 'none',
-							border: 'none',
-							cursor: 'pointer',
-							color: theme.headerText,
-							padding: 0,
-							display: 'flex',
-							alignItems: 'center',
-						}}
-					>
-						<ClearIcon />
-					</button>
-				)}
-			</div>
+			<ColumnFilterRowHeader col={col} hasValue={hasAnyValue} theme={theme} onClear={() => commit(null, null, compoundOp)} />
 
-			{/* Condition 1 */}
 			<ConditionEditor ft={ft} condition={c1} allSetValues={allSetValues} onChange={handleC1Change} theme={theme} />
 
-			{/* Compound section — only for text/number/date */}
 			{ft !== 'set' && (
 				<>
 					{!showSecond ? (
@@ -606,7 +686,6 @@ function ColumnFilterRow({
 						</button>
 					) : (
 						<>
-							{/* AND/OR toggle */}
 							<div style={{ display: 'flex', gap: 4, margin: '5px 0' }}>
 								{(['AND', 'OR'] as const).map((o) => (
 									<button
@@ -645,7 +724,6 @@ function ColumnFilterRow({
 									<ClearIcon />
 								</button>
 							</div>
-							{/* Condition 2 */}
 							<ConditionEditor ft={ft} condition={c2} allSetValues={allSetValues} onChange={handleC2Change} theme={theme} />
 						</>
 					)}
@@ -668,7 +746,10 @@ export function FiltersPanel({ api, onClose }: FiltersPanelProps) {
 	useGridKeySelector('themeName', (s) => s.themeName);
 	const theme = api.getTheme();
 
-	const displayedCols = api.getDisplayedColumns().filter((col) => col.filterType !== 'none');
+	const displayedCols = api.getDisplayedColumns().filter((col) => {
+		if (col.filterDef) return col.filterDef.type !== 'none';
+		return col.filterType !== 'none';
+	});
 
 	const activeCount = filterModel ? Object.keys(filterModel).length : 0;
 
