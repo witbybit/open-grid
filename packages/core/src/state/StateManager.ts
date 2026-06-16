@@ -6,7 +6,7 @@ export class StateManager<TRowData = unknown> {
 	private listeners = new Set<Listener<TRowData>>();
 	private keyListeners = new Map<string, Set<Listener<TRowData>>>();
 
-	private isBatching = false;
+	private transactionDepth = 0;
 	private batchedStateUpdates: Partial<GridState<TRowData>> = {};
 	private preTransactionState: GridState<TRowData> | null = null;
 	private onChangesCallback?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void;
@@ -32,7 +32,7 @@ export class StateManager<TRowData = unknown> {
 	public setState = (updater: GridStateUpdater<TRowData>): void => {
 		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
 
-		if (this.isBatching) {
+		if (this.transactionDepth > 0) {
 			this.batchedStateUpdates = { ...this.batchedStateUpdates, ...nextState };
 			this.state = { ...this.state, ...nextState };
 			return;
@@ -55,21 +55,37 @@ export class StateManager<TRowData = unknown> {
 	}
 
 	public startTransaction = (): void => {
-		if (!this.isBatching) {
+		if (this.transactionDepth === 0) {
 			this.preTransactionState = this.state;
-			this.isBatching = true;
 		}
+		this.transactionDepth++;
 	};
 
 	public endTransaction = (): void => {
-		if (!this.isBatching) return;
-		this.isBatching = false;
+		if (this.transactionDepth === 0) return;
+		this.transactionDepth--;
+		if (this.transactionDepth > 0) return;
 		const preState = this.preTransactionState;
 		const updates = this.batchedStateUpdates;
 		this.preTransactionState = null;
 		this.batchedStateUpdates = {};
 		if (preState && Object.keys(updates).length > 0) {
 			this.notifyChanges(preState, Object.keys(updates));
+		}
+	};
+
+	/**
+	 * Runs `work` within a single state transaction. Nested calls are supported —
+	 * notifications are deferred and fired once when the outermost transaction commits.
+	 * The finally block guarantees `endTransaction` is called even if `work` throws,
+	 * preventing the state manager from getting stuck in batching mode.
+	 */
+	public transaction = <T>(work: () => T): T => {
+		this.startTransaction();
+		try {
+			return work();
+		} finally {
+			this.endTransaction();
 		}
 	};
 
