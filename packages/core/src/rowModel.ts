@@ -8,6 +8,7 @@ import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows
 import { RowDependencyRegistry, classifyMutation } from './rows/rowMutationClassifier.js';
 import type { PageWindow } from './rows/pageModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
+import { toDataVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
 import {
 	type FilterModel,
@@ -737,6 +738,121 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.refresh();
 	}
 
+	/**
+	 * Threshold (added + removed rows) above which a full pipeline rebuild is cheaper than
+	 * incremental insert/remove into the visual array. Chosen empirically: below this threshold
+	 * individual array splices + map rebuilds outperform a full O(N log N) sort.
+	 */
+	private static readonly INCREMENTAL_TX_LIMIT = 100;
+
+	/**
+	 * Attempts to apply structural row mutations (adds/removes) incrementally on flat grids.
+	 * Returns false to signal full rebuild is needed (grouped/tree/paginated grids, or when
+	 * the transaction exceeds the INCREMENTAL_TX_LIMIT threshold).
+	 */
+	private tryIncrementalTransaction(added: RowNode<TData>[], removed: RowNode<TData>[]): boolean {
+		const state = this.runtime.getState();
+		if (state.groupBy?.length) return false;
+		if (state.rowModelConfig?.treeData?.enabled) return false;
+		if (state.rowModelConfig?.masterDetail?.enabled) return false;
+		if (this._pageWindow !== null) return false;
+		if (added.length + removed.length > ClientRowModelController.INCREMENTAL_TX_LIMIT) return false;
+
+		const mutable = this.visualRows.slice();
+
+		// Removals: collect visual indices in descending order so splices don't shift later indices
+		if (removed.length > 0) {
+			const removalIndices: number[] = [];
+			for (const node of removed) {
+				const idx = this.rowIdToVisualIndex.get(node.id);
+				if (idx !== undefined) removalIndices.push(idx);
+			}
+			removalIndices.sort((a, b) => b - a);
+			for (const idx of removalIndices) mutable.splice(idx, 1);
+		}
+
+		// Additions: filter-check, then insert at sorted position (or append if unsorted)
+		if (added.length > 0) {
+			const preparedFilters = prepareFilters(state.columns, state.filterModel);
+			const hasSort = !!(state.sortModel && state.sortModel.length > 0);
+
+			let sortComparator: ((a: RowNode<TData>, b: RowNode<TData>) => number) | null = null;
+			if (hasSort) {
+				const columnById = createColumnLookup(state.columns);
+				const sortGetters = state.sortModel!.map((sortItem) => {
+					const col = columnById.get(sortItem.colId);
+					if (col) {
+						if (col.valueGetter) {
+							const vg = col.valueGetter;
+							return (node: RowNode<TData>): unknown => vg({ node, row: node.data, colField: col.field });
+						}
+						const pg = compilePathGetter(col.field);
+						return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);
+					}
+					return (): undefined => undefined;
+				});
+				const allNodes = this.dataStore.getAllNodes();
+				const sourceIndexOf = new Map<string, number>();
+				for (let i = 0; i < allNodes.length; i++) sourceIndexOf.set(allNodes[i].id, i);
+
+				sortComparator = (a: RowNode<TData>, b: RowNode<TData>): number => {
+					for (let i = 0; i < state.sortModel!.length; i++) {
+						const cmp = compareValues(sortGetters[i](a), sortGetters[i](b));
+						if (cmp !== 0) return state.sortModel![i].sort === 'desc' ? -cmp : cmp;
+					}
+					return (sourceIndexOf.get(a.id) ?? 0) - (sourceIndexOf.get(b.id) ?? 0);
+				};
+			}
+
+			for (const node of added) {
+				if (preparedFilters.length > 0 && !nodeMatchesPreparedFilters(node, preparedFilters)) continue;
+
+				const explicitHeight = (state.rowHeights as Record<string, number>)[node.id];
+				const vr: VisualRow<TData> = {
+					kind: 'data',
+					id: toDataVisualRowId(node.id),
+					rowId: node.id,
+					node,
+					depth: 0,
+					height: explicitHeight !== undefined ? explicitHeight : state.defaultRowHeight,
+					selectable: true,
+					editable: true,
+				};
+
+				if (sortComparator) {
+					let lo = 0, hi = mutable.length;
+					while (lo < hi) {
+						const mid = (lo + hi) >>> 1;
+						const midVR = mutable[mid];
+						if (midVR?.kind !== 'data') { lo = mid + 1; continue; }
+						if (sortComparator(node, midVR.node) <= 0) hi = mid;
+						else lo = mid + 1;
+					}
+					mutable.splice(lo, 0, vr);
+				} else {
+					mutable.push(vr);
+				}
+			}
+		}
+
+		// Rebuild all index maps from the updated visual array
+		this.visualRows = mutable;
+		this.visualRowIdToIndex = new Map();
+		this.rowIdToVisualIndex = new Map();
+		this.rowIdToVisualRowId = new Map();
+		this.dataRowCount = 0;
+		for (let i = 0; i < this.visualRows.length; i++) {
+			const vr = this.visualRows[i];
+			this.visualRowIdToIndex.set(vr.id, i);
+			if (vr.kind === 'data') {
+				this.rowIdToVisualIndex.set(vr.rowId, i);
+				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
+				this.dataRowCount++;
+			}
+		}
+		return true;
+	}
+
 	public updateRows(updater: (rows: TData[]) => TData[]): void {
 		const result = this.dataStore.updateRows(updater);
 
@@ -865,7 +981,14 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 
 		if (result.added.length > 0 || result.removed.length > 0) {
-			this.refresh('bulk');
+			// Attempt incremental insert/remove for flat grids within the threshold; fall
+			// back to full rebuild for grouped/tree/paginated grids or large transactions.
+			const wasIncremental = this.tryIncrementalTransaction(result.added, result.removed);
+			if (wasIncremental) {
+				this.runtime.bumpGlobalVersion();
+			} else {
+				this.refresh('bulk');
+			}
 		}
 
 		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {

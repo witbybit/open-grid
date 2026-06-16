@@ -893,6 +893,126 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 	});
 });
 
+describe('Phase 068 — incremental insert/remove in applyTransaction()', () => {
+	interface TRow { id: string; name: string; price: number }
+
+	it('incrementally inserts a new row at the end of an unsorted flat grid', () => {
+		const store = new GridStore<TRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Alice', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		ctrl.applyTransaction({ add: [{ id: '2', name: 'Bob', price: 20 }] });
+
+		expect(ctrl.getVisualRowCount()).toBe(2);
+		expect(getRowNode(ctrl, 0)?.id).toBe('1');
+		expect(getRowNode(ctrl, 1)?.id).toBe('2');
+	});
+
+	it('inserts into the correct sorted position', () => {
+		const store = new GridStore<TRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', price: 10 },
+				{ id: '3', name: 'Carol', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		ctrl.applyTransaction({ add: [{ id: '2', name: 'Bob', price: 20 }] });
+
+		expect(ctrl.getVisualRowCount()).toBe(3);
+		expect(getRowNode(ctrl, 0)?.id).toBe('1'); // 10
+		expect(getRowNode(ctrl, 1)?.id).toBe('2'); // 20 — inserted
+		expect(getRowNode(ctrl, 2)?.id).toBe('3'); // 30
+	});
+
+	it('filters out a newly added row if it does not pass the active filter', () => {
+		const store = new GridStore<TRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			filterModel: { name: { type: 'text', operator: 'equals', value: 'Alice' } },
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Alice', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		ctrl.applyTransaction({ add: [{ id: '2', name: 'Bob', price: 20 }] });
+
+		// Bob doesn't match filter — should not appear
+		expect(ctrl.getVisualRowCount()).toBe(1);
+		expect(getRowNode(ctrl, 0)?.id).toBe('1');
+	});
+
+	it('adds a passing row when a filter is active', () => {
+		const store = new GridStore<TRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			filterModel: { name: { type: 'text', operator: 'equals', value: 'Alice' } },
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Alice', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		ctrl.applyTransaction({ add: [{ id: '2', name: 'Alice', price: 20 }] });
+
+		expect(ctrl.getVisualRowCount()).toBe(2);
+	});
+
+	it('incrementally removes a row and keeps index maps consistent', () => {
+		const store = new GridStore<TRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', price: 10 },
+				{ id: '2', name: 'Bob', price: 20 },
+				{ id: '3', name: 'Carol', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		ctrl.applyTransaction({ remove: [{ id: '2', name: 'Bob', price: 20 }] });
+
+		expect(ctrl.getVisualRowCount()).toBe(2);
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(0);
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(-1);
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(1);
+	});
+
+	it('falls back to full rebuild on a grouped grid', () => {
+		const store = new GridStore<TRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'name', header: 'Name' }, { field: 'price', header: 'Price' }],
+			rowModelConfig: {
+				type: 'client',
+				grouping: { model: [{ colId: 'name' }], defaultExpanded: true },
+			},
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		ctrl.applyTransaction({ add: [{ id: '2', name: 'B', price: 20 }] });
+
+		// Both rows should be visible (full rebuild correctly groups them)
+		expect(ctrl.getRowNodeById('1')).not.toBeNull();
+		expect(ctrl.getRowNodeById('2')).not.toBeNull();
+	});
+});
+
 describe('Numeric Filter Null Safety', () => {
 	interface NumericRow {
 		id: string;
