@@ -2,13 +2,14 @@
  * Formal domain version snapshot. Each counter is incremented exactly once per
  * committed logical mutation of that domain — never during reads or speculative work.
  *
- * Ownership and increment rules:
- *   columns   — incremented by ColumnModel.updateColumns() via GridStateReactionController
- *   rows      — incremented by GridStateReactionController on globalVersion / sortModel / filterModel changes
- *   geometry  — incremented by GeometryModel.updateRows() via GridStateReactionController
- *   selection — reserved for SelectionModel mutations (not yet formally wired)
- *   editing   — reserved for EditModel mutations (not yet formally wired)
- *   styling   — reserved for theme/style mutations (not yet formally wired)
+ * Wired increment points:
+ *   columns   — ColumnModel.updateColumns() via GridStateReactionController
+ *   rows      — GridStateReactionController on globalVersion / sortModel / filterModel changes
+ *   geometry  — GeometryModel.updateRows() via GridStateReactionController
+ *
+ * Counters for selection, editing, and styling are present in the snapshot but not yet
+ * incremented by their respective domains. They will remain 0 until formally wired.
+ * Subscribers should treat 0 as "no mutations observed", not "domain is inactive".
  */
 export interface GridDomainVersions {
 	/** Incremented when column definitions, widths, or pin configuration change. */
@@ -17,10 +18,10 @@ export interface GridDomainVersions {
 	rows: number;
 	/** Incremented when row heights or positions recompute (any geometry layout change). */
 	geometry: number;
-	/** Incremented when the active selection or focus changes. Reserved. */
+	/** Counter for selection/focus mutations. Always 0 until SelectionModel wires its increment. */
 	selection: number;
-	/** Incremented when the active edit session starts or commits. Reserved. */
+	/** Counter for edit-session lifecycle events. Always 0 until EditModel wires its increment. */
 	editing: number;
-	/** Incremented when theme tokens or cell styling rules change. Reserved. */
+	/** Counter for theme/style rule mutations. Always 0 until styling domain wires its increment. */
 	styling: number;
 }

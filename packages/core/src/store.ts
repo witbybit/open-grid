@@ -154,7 +154,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			themeName: initialState.themeName,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 2,
-			// Phase 2: always normalize runtimeLimits so all callers can assume it exists
+			// Always normalize runtimeLimits so all callers can assume it exists.
 			runtimeLimits: {
 				maxRenderedRows: 500,
 				maxRenderedCells: 20_000,

@@ -63,7 +63,7 @@ export class CellSlot<TRowData = unknown> {
 	public lastClassName = '';
 	public lastContentMode: CellContentMode = 'empty';
 	public lastPortalKey: string | undefined = undefined;
-	// Phase 4: track tabindex state to avoid hasAttribute DOM read in hot unbind path
+	// Cached so unbindHot can skip the hasAttribute DOM read in the hot path.
 	public hasTabIndex = false;
 	// Per-row and global versions recorded when this cell's portal was last mounted.
 	// During scroll: if rowVersions.get(rowId) !== lastMountedRowVersion the row data changed
@@ -258,7 +258,7 @@ export class CellSlot<TRowData = unknown> {
 
 		this.lastRawValue = rawValue;
 
-		// Phase 4: compare against JS-side cache only — no DOM read.
+		// Compare against JS-side cache only — no DOM read.
 		// lastFormattedValue is always kept in sync with contentElement.textContent.
 		// 'custom' mode: content is managed externally (e.g. checkbox cells) — never touch textContent.
 		if (contentMode !== 'custom') {
@@ -330,7 +330,7 @@ export class CellSlot<TRowData = unknown> {
 		this.lastMountedGlobalVersion = -1;
 		delete this.element.dataset.cellKey;
 		delete this.element.dataset.contentMode;
-		// Phase 4: use JS-side flag to skip DOM read in hot path
+		// Use JS-side flag to skip DOM read in hot path.
 		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');
 			this.hasTabIndex = false;

@@ -98,7 +98,7 @@ export class RowRenderer<TRowData = unknown> {
 	public runtimeState!: import('./renderRuntimeState.js').RenderRuntimeState;
 	public dirtyCellsMarkedDuringScroll = 0;
 
-	// Phase 10: stable-slot virtualization stats
+	// Stable-slot virtualization counters — reset per scroll frame by renderScrollCoordinator.
 	public slotStats: SlotRuntimeStats = {
 		rowSlotCount: 0,
 		cellSlotCount: 0,
@@ -248,12 +248,12 @@ export class RowRenderer<TRowData = unknown> {
 
 	// ── Slot-based viewport virtualization core ─────────────────────────────────────
 	//
-	// Architecture (from spec Phase 2-3):
+	// Row slot contract:
 	//   rowSlots[i] always represents viewport position i.
 	//   slot[0] → allRows[0], slot[1] → allRows[1], ...
 	//   When the render window shifts, slots rebind to new visual rows.
 	//   The slot DOM element never moves; only the binding changes.
-	//   activeRows (visualIndexToSlot) is rebuilt from slot bindings after each frame.
+	//   activeRows (visualIndexToSlot) is maintained incrementally during recycleViewport.
 
 	public recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
 		const state = ctx?.state ?? this.engine.stateManager.getState();
@@ -565,7 +565,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.currentWindow = nextWindow;
 	}
 
-	// ── Phase 5+6: Lane cell binding helpers ─────────────────────────────────────────
+	// ── Lane cell binding helpers ────────────────────────────────────────────────────
 
 	// Arrow properties so these can be passed directly as callbacks without wrapping
 	// in a new closure on every row bind — the hot path calls these once per lane per row.

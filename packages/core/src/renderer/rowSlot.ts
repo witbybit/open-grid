@@ -35,10 +35,9 @@ export class RowSlot<TRowData = unknown> {
 	public pinRightContainerLeft = -1;
 	public pinRightContainerTransform = '';
 
-	// ── Phase 5: Stable lane-based cell slots ───────────────────────────────────────
-	// Replace the old `cells: Map<number, CellSlot>` with three fixed-length arrays —
-	// one per pin lane. During normal scroll none of these change length, so zero
-	// cell DOM append/remove occurs.
+	// ── Lane-based cell slots ───────────────────────────────────────────────────────
+	// Three fixed-length arrays — one per pin lane. During normal scroll none of these
+	// change length, so zero cell DOM append/remove occurs.
 	//
 	// Indices:
 	//   leftCells[i]   ↔  columns[i]                   (i in 0..pinLeftCount-1)
