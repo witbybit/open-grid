@@ -14,9 +14,9 @@ import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
 import { compileStyleRules } from '../styling/styleRules.js';
+import type { RenderRuntimeState } from './renderRuntimeState.js';
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
-	isScrolling: boolean;
 	scrollEndRafId: number | null;
 	scrollEndQuietFrames: number;
 	scrollEndTickerActive: boolean;
@@ -24,7 +24,6 @@ export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	flushPendingAfterScroll: boolean;
 	needsPostScrollPortalFlush: boolean;
 	portalFlushScheduled: boolean;
-	isScrollFrameActive: boolean;
 	postScrollDecorationScheduled: boolean;
 	postScrollDecorationTimer: number | null;
 	cachedMaxScrollLeft: number;
@@ -52,6 +51,7 @@ export interface RenderScrollCoordinatorDeps<TRowData = unknown> {
 	requestScrollFrame: () => void;
 	layoutTransition: LayoutTransitionController<TRowData>;
 	renderStats: RenderRuntimeStats;
+	runtimeState: RenderRuntimeState;
 	recycleViewport: (isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow) => void;
 	syncLayoutPlan: (renderWindow?: RenderWindow) => GridLayoutPlan;
 }
@@ -63,11 +63,11 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	) {}
 
 	public getIsScrolling(): boolean {
-		return this.state.isScrolling;
+		return this.deps.runtimeState.isScrolling();
 	}
 
 	public getIsScrollFrameActive(): boolean {
-		return this.state.isScrollFrameActive;
+		return this.deps.runtimeState.phase === 'scroll-frame';
 	}
 
 	public markFlushPendingAfterScroll(): void {
@@ -124,7 +124,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.state.activeRenderWindowBufIdx = candidateIdx;
 		}
 
-		this.state.isScrollFrameActive = true;
+		this.deps.runtimeState.transitionTo('scroll-frame');
 		this.deps.engine.isScrollFrameActive = true;
 		this.deps.rowRenderer.isScrollFrameActive = true;
 		this.deps.rowRenderer.currentScrollCellsPatched = 0;
@@ -176,17 +176,22 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			}
 			this.deps.renderStats.cellsPatchedPerScrollFrame.push(this.deps.rowRenderer.currentScrollCellsPatched);
 			this.deps.renderStats.rowsRecycledPerScrollFrame.push(this.deps.rowRenderer.currentScrollRowsRecycled);
-			this.state.isScrollFrameActive = false;
+			this.deps.runtimeState.transitionTo('post-scroll');
 			this.deps.engine.isScrollFrameActive = false;
 			this.deps.rowRenderer.isScrollFrameActive = false;
 		}
 	};
 
 	public markScrolling(): void {
-		if (!this.state.isScrolling) {
+		const wasScrolling = this.deps.runtimeState.isScrolling();
+		const phase = this.deps.runtimeState.phase;
+		if (!wasScrolling) {
 			this.deps.viewportRenderer.setScrollingClass(true);
+			this.deps.runtimeState.transitionTo('scroll-pending');
+		} else if (phase === 'post-scroll') {
+			// New scroll event during post-scroll window: re-enter scroll-pending (increments scrollEpoch).
+			this.deps.runtimeState.transitionTo('scroll-pending');
 		}
-		this.state.isScrolling = true;
 		this.deps.engine.isScrolling = true;
 		this.deps.rowRenderer.isScrolling = true;
 		this.deps.portalMountManager.setScrolling(true);
@@ -198,7 +203,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	public finishScrolling(): void {
 		this.clearScrollEndTimer();
 		this.deps.viewportRenderer.setScrollingClass(false);
-		this.state.isScrolling = false;
+		this.deps.runtimeState.transitionTo('idle');
 		this.deps.engine.isScrolling = false;
 		this.deps.rowRenderer.isScrolling = false;
 		this.deps.rowRenderer.programmaticScrollCell = null;
@@ -256,7 +261,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.state.portalFlushScheduled = true;
 		defaultGridScheduler.idle((deadline) => {
 			this.state.portalFlushScheduled = false;
-			if (this.state.isScrolling) {
+			if (this.deps.runtimeState.isScrolling()) {
 				this.state.needsPostScrollPortalFlush = true;
 				return;
 			}
@@ -287,7 +292,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.state.postScrollDecorationTimer = defaultGridScheduler.idle(() => {
 			this.state.postScrollDecorationTimer = null;
 			this.state.postScrollDecorationScheduled = false;
-			if (this.state.isScrolling) {
+			if (this.deps.runtimeState.isScrolling()) {
 				return;
 			}
 			this.deps.renderStats.postScrollDecorationChunks++;
@@ -357,7 +362,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	}
 
 	private readonly scrollEndTick = (): void => {
-		if (!this.state.isScrolling) {
+		if (!this.deps.runtimeState.isScrolling()) {
 			this.state.scrollEndTickerActive = false;
 			this.state.scrollEndRafId = null;
 			return;

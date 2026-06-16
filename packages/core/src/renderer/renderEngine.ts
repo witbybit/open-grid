@@ -42,6 +42,7 @@ import { RenderViewportCoordinator } from './renderViewportCoordinator.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi, InternalGridApi } from '../store.js';
 import { RowDragController } from '../features/RowDragController.js';
+import { RenderRuntimeState } from './renderRuntimeState.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -82,17 +83,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly rowDrag: RowDragController<TRowData>;
 	private _pendingTransition = false;
 
-	private isScrolling = false;
-	private scrollEndRafId: number | null = null;
-	private scrollEndQuietFrames = 0;
-	private scrollEndTickerActive = false;
-	private viewportDirtyAfterScroll = false;
-	private flushPendingAfterScroll = false;
-	private needsPostScrollPortalFlush = false;
-	private portalFlushScheduled = false;
-	private isScrollFrameActive = false;
-	private postScrollDecorationScheduled = false;
-	private postScrollDecorationTimer: number | null = null;
+	// Authoritative render lifecycle phase (Plan 065). Initialized first in constructor.
+	private runtimeState!: RenderRuntimeState;
 
 	private lastStyleRules: unknown = undefined;
 	private lastLoading: unknown = undefined;
@@ -186,6 +178,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			selectionBounds: undefined,
 			canUseCachedDisplayValues: true,
 		};
+		// Initialize first — other renderer components query it during construction.
+		this.runtimeState = new RenderRuntimeState(
+			(msg) => engine.runtimeFaults.report({ source: 'renderer', operation: 'runtime-phase-transition', error: new Error(msg) })
+		);
 		this.portalMountManager = new PortalMountManager<TRowData>(engine);
 		this.headerMenu = new HeaderMenuController<TRowData>(
 			engine,
@@ -282,17 +278,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
 		this.rowDrag = new RowDragController<TRowData>(engine);
 		const scrollState: RenderScrollCoordinatorState<TRowData> = {
-			isScrolling: this.isScrolling,
-			scrollEndRafId: this.scrollEndRafId,
-			scrollEndQuietFrames: this.scrollEndQuietFrames,
-			scrollEndTickerActive: this.scrollEndTickerActive,
-			viewportDirtyAfterScroll: this.viewportDirtyAfterScroll,
-			flushPendingAfterScroll: this.flushPendingAfterScroll,
-			needsPostScrollPortalFlush: this.needsPostScrollPortalFlush,
-			portalFlushScheduled: this.portalFlushScheduled,
-			isScrollFrameActive: this.isScrollFrameActive,
-			postScrollDecorationScheduled: this.postScrollDecorationScheduled,
-			postScrollDecorationTimer: this.postScrollDecorationTimer,
+			scrollEndRafId: null,
+			scrollEndQuietFrames: 0,
+			scrollEndTickerActive: false,
+			viewportDirtyAfterScroll: false,
+			flushPendingAfterScroll: false,
+			needsPostScrollPortalFlush: false,
+			portalFlushScheduled: false,
+			postScrollDecorationScheduled: false,
+			postScrollDecorationTimer: null,
 			cachedMaxScrollLeft: this.cachedMaxScrollLeft,
 			cachedTotalWidth: this.cachedTotalWidth,
 			cachedTotalHeight: this.cachedTotalHeight,
@@ -318,6 +312,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				requestScrollFrame: () => this.scrollScheduler.requestFrame(),
 				layoutTransition: this.layoutTransition,
 				renderStats: this.renderStats,
+				runtimeState: this.runtimeState,
 				recycleViewport: (isScrollFrameActive, ctx, precomputedWindow) =>
 					this.viewportCoordinator.recycleViewport(isScrollFrameActive, ctx, precomputedWindow),
 				syncLayoutPlan: (renderWindow) => this.viewportCoordinator.syncLayoutPlan(renderWindow),
@@ -364,14 +359,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			portalMountManager: this.portalMountManager,
 			layoutTransition: this.layoutTransition,
 			scheduler: this.scheduler,
+			runtimeState: this.runtimeState,
 			syncLayoutPlan: () => {
 				this.viewportCoordinator.syncLayoutPlan();
 			},
 			scrollCellIntoView: (rowId, colField) => this.viewportCoordinator.scrollCellIntoView(rowId, colField),
 			resetScroll: () => this.scrollEngine.scrollTo(0, this.engine.viewport.scrollLeft),
 			updateCachedGeometryBounds: () => this.updateCachedGeometryBounds(),
-			getIsScrolling: () => this.scrollCoordinator.getIsScrolling(),
-			getIsScrollFrameActive: () => this.scrollCoordinator.getIsScrollFrameActive(),
 			markFlushPendingAfterScroll: () => {
 				this.scrollCoordinator.markFlushPendingAfterScroll();
 			},

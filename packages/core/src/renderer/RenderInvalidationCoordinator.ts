@@ -4,6 +4,7 @@ import type { GeometryController } from './geometryController.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { RenderScheduler } from './renderScheduler.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
+import type { RenderRuntimeState } from './renderRuntimeState.js';
 
 export interface RenderInvalidationCoordinatorDeps<TRowData = unknown> {
 	engine: GridEngine<TRowData>;
@@ -11,12 +12,11 @@ export interface RenderInvalidationCoordinatorDeps<TRowData = unknown> {
 	portalMountManager: PortalMountManager<TRowData>;
 	layoutTransition: LayoutTransitionController<TRowData>;
 	scheduler: RenderScheduler;
+	runtimeState: RenderRuntimeState;
 	syncLayoutPlan: () => void;
 	scrollCellIntoView: (rowId: string, colField: string) => void;
 	resetScroll: () => void;
 	updateCachedGeometryBounds: () => void;
-	getIsScrolling: () => boolean;
-	getIsScrollFrameActive: () => boolean;
 	markFlushPendingAfterScroll: () => void;
 	markViewportDirtyAfterScroll: () => void;
 }
@@ -253,8 +253,6 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 	}
 
 	private isScrollActive(): boolean {
-		return (
-			this.deps.getIsScrolling() || this.deps.engine.isScrolling || this.deps.getIsScrollFrameActive() || this.deps.engine.isScrollFrameActive
-		);
+		return this.deps.runtimeState.isScrolling();
 	}
 }
