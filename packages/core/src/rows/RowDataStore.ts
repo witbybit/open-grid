@@ -226,4 +226,17 @@ export class RowDataStore<T> {
 	public getAllNodes(): RowNode<T>[] {
 		return this.sourceOrder.map((id) => this.rowsById.get(id)!);
 	}
+
+	public getSourceOrder(): string[] {
+		return this.sourceOrder.slice();
+	}
+
+	/** Reorder rows by providing a new array of row IDs. IDs not present in the store are silently dropped. */
+	public setRowOrder(rowIds: string[]): void {
+		const next: string[] = [];
+		for (const id of rowIds) {
+			if (this.rowsById.has(id)) next.push(id);
+		}
+		this.sourceOrder = next;
+	}
 }

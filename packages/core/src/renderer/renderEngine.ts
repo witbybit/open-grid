@@ -41,6 +41,7 @@ import { RenderScrollCoordinator, type RenderScrollCoordinatorState } from './re
 import { RenderViewportCoordinator } from './renderViewportCoordinator.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi, InternalGridApi } from '../store.js';
+import { RowDragController } from '../features/RowDragController.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -78,6 +79,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly headerMenu: HeaderMenuController<TRowData>;
 
 	private readonly layoutTransition: LayoutTransitionController<TRowData>;
+	private readonly rowDrag: RowDragController<TRowData>;
 	private _pendingTransition = false;
 
 	private isScrolling = false;
@@ -278,6 +280,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.statusBarRenderer = new StatusBarRenderer<TRowData>(engine);
 		this.paginationBarRenderer = new PaginationBarRenderer<TRowData>(engine);
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
+		this.rowDrag = new RowDragController<TRowData>(engine);
 		const scrollState: RenderScrollCoordinatorState<TRowData> = {
 			isScrolling: this.isScrolling,
 			scrollEndRafId: this.scrollEndRafId,
@@ -437,6 +440,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		this.overlayRenderer.mount();
 
+		// Row drag-and-drop
+		if (scrollViewport) {
+			this.rowDrag.mount(container, scrollViewport);
+		}
+
 		// Pre-warm DOM recycling pools
 		const rect = container.getBoundingClientRect();
 		const estRows = Math.ceil((rect.height || 500) / 40) + 15;
@@ -476,6 +484,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.columnInteractions.cleanup();
 		this.columnInteractions.setGroupPanel(null);
 		this.fillDrag.cleanup();
+		this.rowDrag.unmount();
 		this.groupPanelRenderer.unmount();
 		this.filterChipBarRenderer.unmount();
 		this.floatingFilterRenderer.unmount();

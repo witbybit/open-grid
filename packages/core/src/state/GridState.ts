@@ -35,6 +35,12 @@ export interface GridModelState<TRowData = unknown> {
 
 	/** Show an always-visible inline filter row below the column headers (Plan 060). */
 	showFloatingFilters?: boolean;
+	/**
+	 * 'managed': grid reorders rows automatically on drop.
+	 * 'unmanaged': grid fires events but does not reorder; handle drop in onRowDragEnd.
+	 * Only applies to client-side row model. Default: 'managed'.
+	 */
+	rowDragMode?: 'managed' | 'unmanaged';
 
 	// Bottom chrome (Plan 039 Phase 5). Presence gates the bottom-chrome height in the
 	// layout plan; full panel/page config is filled in when the feature lands.

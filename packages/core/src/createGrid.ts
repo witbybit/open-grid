@@ -168,6 +168,8 @@ export function createApiFacade<TRowData>(
 		setRows: (rows: TRowData[]) => store.setRows(rows),
 		updateRows: (updater: (rows: TRowData[]) => TRowData[]) => store.updateRows(updater),
 		applyTransaction: (transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null => store.applyTransaction(transaction),
+		getRowOrder: () => store.getRowOrder(),
+		setRowOrder: (rowIds: string[]) => store.setRowOrder(rowIds),
 		refreshRows: () => store.refreshRows(),
 		setRowHeights: (rowHeights: Record<string, number> | undefined) => store.setRowHeights(rowHeights),
 		setDefaultRowHeight: (defaultRowHeight?: number | undefined) => store.setDefaultRowHeight(defaultRowHeight),

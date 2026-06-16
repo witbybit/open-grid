@@ -132,5 +132,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		hasValidationErrors: source.hasValidationErrors,
 		getAllValidationErrors: source.getAllValidationErrors,
 		getVisibleColumnRange: source.getVisibleColumnRange,
+		getRowOrder: source.getRowOrder,
+		setRowOrder: source.setRowOrder,
 	};
 }

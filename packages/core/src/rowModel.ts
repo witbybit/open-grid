@@ -50,7 +50,7 @@ export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
 // ── Row model contract types ──────────────────────────────────────────────────
 // Defined here to avoid a circular import with store.ts. store.ts re-exports these.
 
-export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit';
+export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit' | 'row-order';
 
 export interface RowModelRefreshResult {
 	changed: boolean;
@@ -88,6 +88,8 @@ export interface RowModel<TRowData = unknown> {
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
+	getRowOrder?(): string[];
+	setRowOrder?(rowIds: string[]): void;
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
 	purgeCache?(): void;
 	setDatasource?(datasource: import('./serverRowModel.js').IGridDatasource<TRowData>, blockSize?: number): void;
@@ -807,6 +809,13 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	};
 
 	public getAllDataNodes = (): RowNode<TData>[] => this.dataStore.getAllNodes();
+
+	public getRowOrder = (): string[] => this.dataStore.getSourceOrder();
+
+	public setRowOrder = (rowIds: string[]): void => {
+		this.dataStore.setRowOrder(rowIds);
+		this.refresh('row-order');
+	};
 
 	public getSelectableDataRowIds = (scope: RowSelectionScope = 'page'): string[] => {
 		if (scope === 'all') {

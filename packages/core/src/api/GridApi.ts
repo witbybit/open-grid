@@ -312,6 +312,10 @@ export interface GridApi<TRowData = unknown> {
 	setRows(rows: TRowData[]): void;
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
 	applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null;
+	/** Returns the current row order as an array of row IDs (source order, unfiltered). */
+	getRowOrder(): string[];
+	/** Reorder rows programmatically. All IDs must belong to existing rows; unknown IDs are silently dropped. */
+	setRowOrder(rowIds: string[]): void;
 	refreshRows(): void;
 	setRowHeights: (rowHeights: Record<string, number> | undefined) => void;
 	setDefaultRowHeight: (defaultRowHeight?: number | undefined) => void;

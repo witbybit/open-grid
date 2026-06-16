@@ -45,6 +45,11 @@ export enum GridEventName {
 	sortChanged = 'sortChanged',
 	cellValidationChanged = 'cellValidationChanged',
 	gridValidated = 'gridValidated',
+	rowDragStart = 'rowDragStart',
+	rowDragMove = 'rowDragMove',
+	rowDragEnd = 'rowDragEnd',
+	rowDragCancelled = 'rowDragCancelled',
+	rowOrderChanged = 'rowOrderChanged',
 }
 
 export interface GridEventPayloadMap<TRowData = unknown> {
@@ -101,4 +106,9 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.sortChanged]: { sortModel: SortModel | null };
 	[GridEventName.cellValidationChanged]: { rowId: string; colField: string; error: string | null };
 	[GridEventName.gridValidated]: { errors: Array<{ rowId: string; colField: string; error: string }>; hasErrors: boolean };
+	[GridEventName.rowDragStart]: { rowId: string; rowData: unknown; visualIndex: number };
+	[GridEventName.rowDragMove]: { rowId: string; overRowId: string | null; overVisualIndex: number | null };
+	[GridEventName.rowDragEnd]: { rowId: string; overRowId: string | null; overVisualIndex: number | null };
+	[GridEventName.rowDragCancelled]: { rowId: string };
+	[GridEventName.rowOrderChanged]: { rowIds: string[] };
 }

@@ -282,6 +282,10 @@ export function GridView<TRowData = unknown>({
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
+			// Skip range selection for columns that have rowDrag or disableCellRangeSelection set.
+			const colDef = api.getColumnDef(pointer.colField);
+			if (colDef && (colDef.rowDrag || colDef.disableCellRangeSelection)) return;
+
 			cellEl.tabIndex = -1;
 			cellEl.focus();
 			navigation.handleMouseDown(pointer.rowId, pointer.colField, e);

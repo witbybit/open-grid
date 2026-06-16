@@ -1865,4 +1865,59 @@ export const CORE_STYLES = `
     font-size: var(--og-detail-row-font-size);
     font-style: italic;
   }
+
+  /* Row Drag-and-Drop */
+  .og-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 2px;
+    flex-shrink: 0;
+    color: var(--og-cell-text-muted, rgba(148, 163, 184, 0.5));
+    cursor: grab;
+    border-radius: 3px;
+    transition: color 0.12s ease, background-color 0.12s ease;
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+  }
+  .og-drag-handle:hover {
+    color: var(--og-cell-text, #e2e8f0);
+    background-color: var(--og-popover-item-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+  .og-drag-handle:active {
+    cursor: grabbing;
+  }
+
+  .og-row-drop-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--og-focus-ring, #3b82f6);
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: 0 0 4px var(--og-focus-ring, #3b82f6);
+  }
+  .og-row-drop-indicator::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--og-focus-ring, #3b82f6);
+  }
+
+  .og-row-dragging .og-row {
+    transition: opacity 0.1s ease;
+  }
+  .og-row-dragging .og-row[data-row-dragging="true"] {
+    opacity: 0.4;
+  }
 `;

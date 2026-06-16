@@ -20,7 +20,8 @@ export type GridPageType =
 	| 'wide'
 	| 'colgroups'
 	| 'clipboard'
-	| 'floatingfilters';
+	| 'floatingfilters'
+	| 'rowdrag';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================

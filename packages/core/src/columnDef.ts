@@ -296,6 +296,17 @@ export interface ColumnDef<TRowData = unknown> {
 	 * When omitted, the default input (text / number / date / set badge) is used.
 	 */
 	floatingFilterRenderer?: (params: import('./renderer/floatingFilterRenderer.js').FloatingFilterRendererParams<TRowData>) => void;
+	/**
+	 * Show a drag handle in this column's cells, allowing rows to be reordered by dragging.
+	 * Typically placed on the first column. Works in both managed and unmanaged drag modes.
+	 * Pass a function for conditional per-row drag handles (return false to hide for a row).
+	 */
+	rowDrag?: boolean | ((params: { rowData: TRowData; rowId: string }) => boolean);
+	/**
+	 * Prevent cell range selection from starting when the user clicks on cells in this column.
+	 * Automatically applied to columns with `rowDrag` set. Useful for action / checkbox columns.
+	 */
+	disableCellRangeSelection?: boolean;
 }
 
 /**

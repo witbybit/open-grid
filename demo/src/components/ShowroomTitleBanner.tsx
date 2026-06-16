@@ -15,6 +15,7 @@ import {
 	TableProperties,
 	LayoutTemplate,
 	SlidersHorizontal,
+	GripVertical,
 } from 'lucide-react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
@@ -55,6 +56,7 @@ export default function ShowroomTitleBanner({
 					{activePage === 'wide' && <TableProperties className='w-4.5 h-4.5' />}
 					{activePage === 'colgroups' && <LayoutTemplate className='w-4.5 h-4.5' />}
 					{activePage === 'floatingfilters' && <SlidersHorizontal className='w-4.5 h-4.5' />}
+					{activePage === 'rowdrag' && <GripVertical className='w-4.5 h-4.5' />}
 				</span>
 				<div>
 					<h2 className='text-sm font-extrabold text-slate-200 leading-tight uppercase tracking-wider flex items-center gap-2'>
@@ -72,6 +74,7 @@ export default function ShowroomTitleBanner({
 						{activePage === 'wide' && 'Wide Grid — Column Virtualization Showcase'}
 						{activePage === 'colgroups' && 'Multi-Level Column Header Groups'}
 						{activePage === 'floatingfilters' && 'Floating Filters — Inline Filter Row with Custom Renderers'}
+						{activePage === 'rowdrag' && 'Row Drag & Drop — Managed and Unmanaged Reorder Modes'}
 					</h2>
 					<p className='text-[10px] text-slate-400 leading-tight mt-0.5'>
 						{activePage === 'lab' &&
@@ -101,6 +104,8 @@ export default function ShowroomTitleBanner({
 							'Header bands span related columns at one or two levels of depth. Resize a column and the group cell reflows. Pin columns and the group splits at the pin-zone boundary.'}
 						{activePage === 'floatingfilters' &&
 							'Always-visible filter row per column below the header. Text debounce, number eq, date, set-badge, and custom DOM renderer (probability slider). Horizontally virtualised, pinned-lane aware.'}
+						{activePage === 'rowdrag' &&
+							'Drag the gripper handle to reorder rows. Managed mode auto-applies the new order; unmanaged mode lets the host drive the update. Auto-scroll at viewport edges, Escape to cancel.'}
 					</p>
 				</div>
 			</div>

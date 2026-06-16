@@ -43,6 +43,8 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	showFilterChipBar?: boolean;
 	/** Show the floating filter row — always-visible inline filter inputs below column headers. */
 	showFloatingFilters?: boolean;
+	/** Row drag mode: 'managed' (grid auto-reorders) or 'unmanaged' (host applies order). */
+	rowDragMode?: 'managed' | 'unmanaged';
 	onGridReady?: (event: GridReadyEvent<TRowData>) => void;
 }
 
@@ -74,6 +76,7 @@ function createInitialState<TRowData>(
 		showStatusBar?: boolean;
 		showFilterChipBar?: boolean;
 		showFloatingFilters?: boolean;
+		rowDragMode?: 'managed' | 'unmanaged';
 	}
 ) {
 	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits } = base;
@@ -90,6 +93,7 @@ function createInitialState<TRowData>(
 	if (extras.showStatusBar) merged.showStatusBar = true;
 	if (extras.showFilterChipBar) merged.showFilterChipBar = true;
 	if (extras.showFloatingFilters) merged.showFloatingFilters = true;
+	if (extras.rowDragMode) merged.rowDragMode = extras.rowDragMode;
 	return merged;
 }
 
@@ -117,6 +121,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		datasource,
 		blockSize,
 		rowSelection,
+		rowDragMode,
 		children,
 		...viewProps
 	} = props as GridRootProps<TRowData> &
@@ -125,6 +130,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			datasource?: GridDatasource<TRowData>;
 			blockSize?: number;
 			rowSelection?: RowSelectionMode | RowSelectionOptions;
+			rowDragMode?: 'managed' | 'unmanaged';
 		};
 	const readyFiredRef = useRef(false);
 	const lastColumnsRef = useRef(columns);
@@ -148,7 +154,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				columnTypes,
 				styleRules,
 			},
-			{ detailRowHeight, pagination: paginationConfig, showStatusBar, showFilterChipBar, showFloatingFilters }
+			{ detailRowHeight, pagination: paginationConfig, showStatusBar, showFilterChipBar, showFloatingFilters, rowDragMode }
 		);
 		if (mode === 'client') {
 			return createClientGrid({

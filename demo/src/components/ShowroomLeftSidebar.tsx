@@ -22,6 +22,7 @@ import {
 	TableProperties,
 	LayoutTemplate,
 	SlidersHorizontal,
+	GripVertical,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -147,6 +148,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Floating Filters',
 			subtitle: 'Inline Filters · Custom Renderer',
 			icon: SlidersHorizontal,
+		},
+		{
+			id: 'rowdrag',
+			label: 'Row Drag & Drop',
+			subtitle: 'Managed · Unmanaged · Auto-scroll',
+			icon: GripVertical,
 		},
 	] as const;
 
