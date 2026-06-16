@@ -50,6 +50,7 @@ import { ColumnAutoSizeController } from '../features/ColumnAutoSizeController.j
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from '../features/ColumnAutoSizeController.js';
 import { ClipboardController } from '../features/ClipboardController.js';
 import { computeDistinctValues } from '../filterModel.js';
+import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -84,6 +85,18 @@ export class GridEngine<TRowData = unknown> {
 	public geometryVersion = 0;
 	public rowModelVersion = 0;
 	public columnVersion = 0;
+
+	/** Returns a snapshot of all formal domain version counters. */
+	public getDomainVersions(): GridDomainVersions {
+		return {
+			columns: this.columnVersion,
+			rows: this.rowModelVersion,
+			geometry: this.geometryVersion,
+			selection: 0,
+			editing: 0,
+			styling: 0,
+		};
+	}
 
 	// Per-row version map: rowId → version, bumped on each row data mutation.
 	// Keyed directly on the engine (not in GridState) so updates are zero-allocation.
