@@ -609,6 +609,135 @@ describe('GroupRowMeta', () => {
 	});
 });
 
+describe('Phase 068 — filter membership shortcut in updateRows()', () => {
+	interface FRow { id: string; name: string; status: string; price: number }
+
+	function makeFilteredStore(filterField: 'name' | 'status') {
+		return new GridStore<FRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'status', header: 'Status' },
+				{ field: 'price', header: 'Price' },
+			],
+			filterModel: { [filterField]: { type: 'text', operator: 'equals', value: 'active' } },
+		});
+	}
+
+	it('skips full rebuild when a filter-key field changes but row membership is unchanged (still passes)', () => {
+		const store = makeFilteredStore('status');
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', status: 'active', price: 10 },
+				{ id: '2', name: 'Bob', status: 'inactive', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(ctrl.getVisualRowCount()).toBe(1);
+		expect(getRowNode(ctrl, 0)?.id).toBe('1');
+
+		// Update `status` on row 1 to a different value that still matches the filter
+		// (same value 'active' → still passes; membership unchanged)
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 99 } : r)));
+
+		// Row count unchanged, row still visible, value updated
+		expect(ctrl.getVisualRowCount()).toBe(1);
+		expect(ctrl.getRowNodeById('1')?.data.price).toBe(99);
+	});
+
+	it('triggers full rebuild when a filtered-out row now passes the filter', () => {
+		const store = makeFilteredStore('status');
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', status: 'active', price: 10 },
+				{ id: '2', name: 'Bob', status: 'inactive', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(ctrl.getVisualRowCount()).toBe(1);
+
+		// Row 2 was hidden; now update its status so it passes the filter
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '2' ? { ...r, status: 'active' } : r)));
+
+		expect(ctrl.getVisualRowCount()).toBe(2);
+	});
+
+	it('triggers full rebuild when a visible row no longer passes the filter', () => {
+		const store = makeFilteredStore('status');
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', status: 'active', price: 10 },
+				{ id: '2', name: 'Bob', status: 'inactive', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(ctrl.getVisualRowCount()).toBe(1);
+
+		// Row 1 is visible; now make it fail the filter
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
+
+		expect(ctrl.getVisualRowCount()).toBe(0);
+	});
+
+	it('always does full rebuild for filter-key changes on a grouped grid', () => {
+		const store = new GridStore<FRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'status', header: 'Status' },
+				{ field: 'name', header: 'Name' },
+			],
+			filterModel: { status: { type: 'text', operator: 'equals', value: 'active' } },
+			rowModelConfig: {
+				type: 'client',
+				grouping: { model: [{ colId: 'status' }], defaultExpanded: true },
+			},
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', status: 'active', price: 10 },
+				{ id: '2', name: 'Bob', status: 'inactive', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Only the 'active' group + its 1 child is visible (inactive filtered out)
+		expect(ctrl.getVisualRowCount()).toBe(2);
+
+		// Update a status field on the visible row; full rebuild runs (group may need updating)
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
+
+		// Active group should disappear; inactive group was previously filtered
+		expect(ctrl.getVisualRowCount()).toBe(0);
+	});
+
+	it('value-only path preserves visual row order when filter-key field changes without membership change', () => {
+		const store = makeFilteredStore('status');
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', status: 'active', price: 10 },
+				{ id: '2', name: 'Carol', status: 'active', price: 30 },
+				{ id: '3', name: 'Bob', status: 'inactive', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(ctrl.getVisualRowCount()).toBe(2);
+		expect(getRowNode(ctrl, 0)?.id).toBe('1');
+		expect(getRowNode(ctrl, 1)?.id).toBe('2');
+
+		// Change price (not a filter key) and status (still 'active') — neither changes membership
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 999 } : r)));
+
+		expect(ctrl.getVisualRowCount()).toBe(2);
+		expect(getRowNode(ctrl, 0)?.id).toBe('1');
+		expect(getRowNode(ctrl, 1)?.id).toBe('2');
+		expect(ctrl.getRowNodeById('1')?.data.price).toBe(999);
+	});
+});
+
 describe('Numeric Filter Null Safety', () => {
 	interface NumericRow {
 		id: string;

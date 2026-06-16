@@ -627,6 +627,23 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return classifyMutation(changedFields, this.dependencyRegistry);
 	}
 
+	/**
+	 * Returns true when at least one of the changed nodes would enter or exit the active filter,
+	 * meaning the visual row array must be rebuilt. Returns true immediately for grouped/tree grids
+	 * because group rows may appear or disappear when all their children enter/exit the filter.
+	 */
+	private filterMembershipChanged(changedNodes: RowNode<TData>[]): boolean {
+		const state = this.runtime.getState();
+		if (state.groupBy?.length || state.rowModelConfig?.treeData?.enabled) return true;
+		const preparedFilters = prepareFilters(state.columns, state.filterModel);
+		for (const node of changedNodes) {
+			const wasVisible = this.rowIdToVisualIndex.has(node.id);
+			const passes = preparedFilters.length === 0 || nodeMatchesPreparedFilters(node, preparedFilters);
+			if (wasVisible !== passes) return true;
+		}
+		return false;
+	}
+
 	public setRows(rows: TData[]): void {
 		this.dataStore.setRows(rows);
 		this.runtime.clearFormulas();
@@ -678,7 +695,13 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			for (const field of fields) allChangedFields.add(field);
 		}
 		const impact = this.classifyFieldMutation(allChangedFields);
-		const needsFullRefresh = impact === 'sort-key' || impact === 'filter-key' || impact === 'group-key' || impact === 'tree-parent';
+
+		// filter-key: test membership for each changed node on flat grids. If no row enters
+		// or exits the filter, the visual array is unchanged — skip the pipeline rebuild.
+		let needsFullRefresh = impact === 'sort-key' || impact === 'group-key' || impact === 'tree-parent';
+		if (!needsFullRefresh && impact === 'filter-key') {
+			needsFullRefresh = this.filterMembershipChanged(result.changedNodes);
+		}
 
 		if (needsFullRefresh) {
 			this.refresh();
