@@ -1,6 +1,6 @@
-# 🚀 Headless High-Performance Data Grid & Spreadsheet Engine
+# 🚀 High-Performance Data Grid & Spreadsheet Engine
 
-Open Grid is a lightweight, framework-agnostic, headless grid engine for high-performance virtualized spreadsheets and data grids. Built to handle massive datasets with complex layouts, Open Grid maintains an out-of-render state loop in a centralized engine while exposing granular micro-subscriptions. This allows React, Vue, or vanilla JS wrappers to paint individual cells and rows with surgical precision, entirely bypassing the framework rendering bottleneck.
+Open Grid is a lightweight, framework-agnostic grid engine for high-performance virtualized spreadsheets and data grids. Built to handle massive datasets with complex layouts, Open Grid maintains an out-of-render state loop in a centralized engine while exposing granular micro-subscriptions. This allows React, Vue, or vanilla JS wrappers to paint individual cells and rows with surgical precision, entirely bypassing the framework rendering bottleneck.
 
 ---
 
@@ -1411,10 +1411,9 @@ Open your browser to `http://localhost:5173` to explore the **Calculations Arena
 
 ---
 
-## 👑 Author & Creator
+## Author & Creator
 
-**Rishikesh Kumar**  
-Lead Architect of Open Grid
+**Rishikesh Kumar**
 
 ---
 
