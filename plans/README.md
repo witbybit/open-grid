@@ -79,7 +79,7 @@
 | 077 | [Advanced Cell Editors](./077-advanced-cell-editors.md)                                                       | TODO     | —            |
 | 078 | [Advanced Column Filter API](./078-advanced-column-filter-api.md)                                             | DONE     | —            |
 | 079 | [Paint Frame Runtime Integration](./079-paint-frame-runtime-integration.md)                                   | DONE     | working tree |
-| 080 | [Real Post-Scroll Queue and Scheduler Authority](./080-post-scroll-queue-and-scheduler-authority.md)           | TODO     | —            |
+| 080 | [Real Post-Scroll Queue and Scheduler Authority](./080-post-scroll-queue-and-scheduler-authority.md)           | DONE     | working tree |
 | 081 | [Portal Mount Identity and Generation Contract](./081-portal-mount-identity-and-generation-contract.md)       | TODO     | —            |
 | 082 | [Derived Row Dependency Closure](./082-derived-row-dependency-closure.md)                                     | TODO     | —            |
 | 083 | [Large-Model Incremental Index Maintenance](./083-large-model-incremental-index-maintenance.md)               | TODO     | —            |
@@ -246,6 +246,7 @@
 
 ## Plans 079–088 notes
 
+- Plan 080 is implemented and verified on 2026-06-17: `FrameCoordinatorDeps` gains a required `onPostScrollWork` callback distinct from `onPaintFrame`; `requestPostScrollWork()` schedules its own RAF with scroll-epoch capture so stale work is silently dropped when a new scroll session begins; cancellable RAF handles (`scrollRafId`, `paintRafId`, `postScrollRafId`) are stored on `DefaultFrameCoordinator` and cancelled in `destroy()`; `renderScrollCoordinator.ts` receives `gridScheduler` via deps and no longer imports `defaultGridScheduler` directly; `renderEngine.ts` wires both. Phase 3 (microtask removal) was evaluated but retained — the microtask coalesces synchronous invalidation events into one RAF, which is measurably correct under synchronous test schedulers and real-browser semantics. All 855 core tests and React build pass.
 - Plan 079 is implemented and verified on 2026-06-17: `DefaultFrameCoordinator` now accepts `runtimeState` in its deps and wraps every paint frame in a `runPaintFrame()` method that transitions to `paint-frame` before and back to `idle` after (via `finally`). `RenderRuntimeState` gained `isDestroyed()`. `renderEngine.ts` wires `runtimeState` into the coordinator. Integration tests assert that `phase`, `isFrameActive()`, `canRunDecoration()`, and `frameEpoch` are all correct inside and after real paint execution. Architecture guard enforces the `runPaintFrame` boundary. All 847 core tests and React build pass.
 
 ## Findings considered and rejected

@@ -110,6 +110,25 @@ describe('Architecture guardrails', () => {
 		expect(engineContent).toContain('runtimeState: this.runtimeState');
 	});
 
+	it('DefaultFrameCoordinator owns a distinct post-scroll callback and scroll epoch (Plan 080)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts'), 'utf-8');
+		// Distinct callback — not an alias of onPaintFrame.
+		expect(content).toContain('onPostScrollWork: () => void');
+		expect(content).toContain('this.onPostScrollWork()');
+		// Scroll epoch captured at schedule time for stale-work rejection.
+		expect(content).toContain('this.runtimeState?.scrollEpoch');
+		expect(content).toContain('rs.isScrollEpochCurrent(this.postScrollEpoch)');
+		// Cancellable RAF handles for all three work types.
+		expect(content).toContain('this.scrollRafId');
+		expect(content).toContain('this.paintRafId');
+		expect(content).toContain('this.postScrollRafId');
+		// renderScrollCoordinator must not import defaultGridScheduler directly.
+		const scrollContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts'), 'utf-8');
+		expect(scrollContent).not.toContain("import { defaultGridScheduler }");
+		expect(scrollContent).toContain('gridScheduler: GridScheduler');
+		expect(scrollContent).toContain('this.deps.gridScheduler.');
+	});
+
 	it('renderPaintCoordinator owns paint lifecycle orchestration', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderPaintCoordinator.ts'), 'utf-8');
 		expect(content).toContain('public flushPaint =');

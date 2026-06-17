@@ -1,4 +1,4 @@
-import { defaultGridScheduler } from './gridScheduler.js';
+import { type GridScheduler } from './gridScheduler.js';
 import { applyRenderWindowRuntimeLimits, computeRenderWindowInto, sameRenderedWindow, type RenderWindow } from './renderWindow.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
@@ -48,6 +48,7 @@ export interface RenderScrollCoordinatorDeps<TRowData = unknown> {
 	stickyGroupRenderer: StickyGroupRenderer<TRowData>;
 	portalMountManager: PortalMountManager<TRowData>;
 	frameCoordinator: FrameCoordinator;
+	gridScheduler: GridScheduler;
 	requestScrollFrame: () => void;
 	layoutTransition: LayoutTransitionController<TRowData>;
 	renderStats: RenderRuntimeStats;
@@ -225,7 +226,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	public clearScrollEndTimer(): void {
 		this.state.scrollEndTickerActive = false;
 		if (this.state.scrollEndRafId !== null) {
-			defaultGridScheduler.cancelRaf(this.state.scrollEndRafId);
+			this.deps.gridScheduler.cancelRaf(this.state.scrollEndRafId);
 			this.state.scrollEndRafId = null;
 		}
 	}
@@ -234,7 +235,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.state.scrollEndQuietFrames = 0;
 		if (!this.state.scrollEndTickerActive) {
 			this.state.scrollEndTickerActive = true;
-			this.state.scrollEndRafId = defaultGridScheduler.raf(this.scrollEndTick);
+			this.state.scrollEndRafId = this.deps.gridScheduler.raf(this.scrollEndTick);
 		}
 	}
 
@@ -249,7 +250,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	public scheduleBudgetedPortalFlush(): void {
 		if (this.state.portalFlushScheduled) return;
 		this.state.portalFlushScheduled = true;
-		defaultGridScheduler.idle((deadline) => {
+		this.deps.gridScheduler.idle((deadline) => {
 			this.state.portalFlushScheduled = false;
 			if (this.deps.runtimeState.isScrolling()) {
 				this.state.needsPostScrollPortalFlush = true;
@@ -270,7 +271,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 
 	public clearPostScrollDecorationTimer(): void {
 		if (this.state.postScrollDecorationTimer !== null) {
-			defaultGridScheduler.cancelIdle(this.state.postScrollDecorationTimer);
+			this.deps.gridScheduler.cancelIdle(this.state.postScrollDecorationTimer);
 			this.state.postScrollDecorationTimer = null;
 		}
 		this.state.postScrollDecorationScheduled = false;
@@ -279,7 +280,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	public scheduleBudgetedDecoration(): void {
 		if (this.state.postScrollDecorationScheduled) return;
 		this.state.postScrollDecorationScheduled = true;
-		this.state.postScrollDecorationTimer = defaultGridScheduler.idle(() => {
+		this.state.postScrollDecorationTimer = this.deps.gridScheduler.idle(() => {
 			this.state.postScrollDecorationTimer = null;
 			this.state.postScrollDecorationScheduled = false;
 			if (this.deps.runtimeState.isScrolling()) {
@@ -364,6 +365,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			return;
 		}
 		this.state.scrollEndQuietFrames++;
-		this.state.scrollEndRafId = defaultGridScheduler.raf(this.scrollEndTick);
+		this.state.scrollEndRafId = this.deps.gridScheduler.raf(this.scrollEndTick);
 	};
 }

@@ -42,6 +42,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi, InternalGridApi } from '../api/GridApi.js';
 import { RowDragController } from '../features/RowDragController.js';
 import { RenderRuntimeState } from './renderRuntimeState.js';
+import { defaultGridScheduler } from './gridScheduler.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -191,8 +192,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.frameCoordinator = new DefaultFrameCoordinator({
 			onScrollFrame: () => this.flushScrollFrame(),
 			onPaintFrame: () => this.flushPaint(),
+			onPostScrollWork: () => this.flushPaint(),
 			onFault: (msg) => engine.runtimeFaults.report({ source: 'renderer', operation: 'frame-reentry', error: new Error(msg) }),
 			runtimeState: this.runtimeState,
+			gridScheduler: defaultGridScheduler,
 		});
 
 		this.viewportRenderer = new ViewportRenderer<TRowData>(engine, this.geometryController);
@@ -315,6 +318,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				stickyGroupRenderer: this.stickyGroupRenderer,
 				portalMountManager: this.portalMountManager,
 				frameCoordinator: this.frameCoordinator,
+				gridScheduler: defaultGridScheduler,
 				requestScrollFrame: () => this.frameCoordinator.requestScrollFrame(),
 				layoutTransition: this.layoutTransition,
 				renderStats: this.renderStats,

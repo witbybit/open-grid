@@ -89,12 +89,7 @@ describe('DefaultGridScheduler', () => {
 });
 
 describe('DefaultFrameCoordinator with GridScheduler', () => {
-	beforeEach(() => {
-		vi.useFakeTimers();
-	});
-
 	afterEach(() => {
-		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
 
@@ -106,16 +101,21 @@ describe('DefaultFrameCoordinator with GridScheduler', () => {
 			return 0;
 		});
 
-		const coordinator = new DefaultFrameCoordinator({ onScrollFrame: vi.fn(), onPaintFrame, gridScheduler: mockScheduler });
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame,
+			onPostScrollWork: vi.fn(),
+			gridScheduler: mockScheduler,
+		});
 		coordinator.requestPaintFrame();
 		coordinator.requestPaintFrame();
 		coordinator.requestPaintFrame();
 
-		await Promise.resolve(); // drain microtask
+		await Promise.resolve(); // drain microtask queue — only one RAF fires
 		expect(onPaintFrame).toHaveBeenCalledTimes(1);
 	});
 
-	it('does not paint after destroy()', async () => {
+	it('does not paint after destroy() before microtask drains', async () => {
 		const onPaintFrame = vi.fn();
 		const mockScheduler = new DefaultGridScheduler();
 		vi.spyOn(mockScheduler, 'raf').mockImplementation((cb) => {
@@ -123,17 +123,26 @@ describe('DefaultFrameCoordinator with GridScheduler', () => {
 			return 0;
 		});
 
-		const coordinator = new DefaultFrameCoordinator({ onScrollFrame: vi.fn(), onPaintFrame, gridScheduler: mockScheduler });
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame,
+			onPostScrollWork: vi.fn(),
+			gridScheduler: mockScheduler,
+		});
 		coordinator.requestPaintFrame();
 		coordinator.destroy();
 
-		await Promise.resolve();
+		await Promise.resolve(); // microtask fires but destroyed guard exits early
 		expect(onPaintFrame).not.toHaveBeenCalled();
 	});
 
 	it('flushNowForTests() calls paint immediately without waiting for RAF', () => {
 		const onPaintFrame = vi.fn();
-		const coordinator = new DefaultFrameCoordinator({ onScrollFrame: vi.fn(), onPaintFrame });
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame,
+			onPostScrollWork: vi.fn(),
+		});
 		coordinator.flushNowForTests();
 		expect(onPaintFrame).toHaveBeenCalledTimes(1);
 	});
