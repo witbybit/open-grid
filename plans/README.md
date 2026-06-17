@@ -80,7 +80,7 @@
 | 078 | [Advanced Column Filter API](./078-advanced-column-filter-api.md)                                             | DONE     | —            |
 | 079 | [Paint Frame Runtime Integration](./079-paint-frame-runtime-integration.md)                                   | DONE     | working tree |
 | 080 | [Real Post-Scroll Queue and Scheduler Authority](./080-post-scroll-queue-and-scheduler-authority.md)           | DONE     | working tree |
-| 081 | [Portal Mount Identity and Generation Contract](./081-portal-mount-identity-and-generation-contract.md)       | TODO     | —            |
+| 081 | [Portal Mount Identity and Generation Contract](./081-portal-mount-identity-and-generation-contract.md)       | DONE     | working tree |
 | 082 | [Derived Row Dependency Closure](./082-derived-row-dependency-closure.md)                                     | TODO     | —            |
 | 083 | [Large-Model Incremental Index Maintenance](./083-large-model-incremental-index-maintenance.md)               | TODO     | —            |
 | 084 | [Domain State Versions and Targeted Notification](./084-domain-state-versions-and-targeted-notification.md)   | TODO     | —            |

@@ -16,13 +16,22 @@ import type { VisualRow } from '../visualRow.js';
 export type RendererLifecycleOperation = 'mount' | 'update' | 'rebind' | 'restore' | 'unmount' | 'destroy';
 
 /**
- * Stable identity for a mounted cell renderer.
+ * Physical slot identity for a mounted cell renderer.
  * `generation` increments each time the physical slot is rebound to a
  * different visual row, allowing consumers to detect stale async work.
+ * `lane` and `laneIndex` locate the slot within the virtualised column lanes.
  */
 export interface CellMountIdentity {
 	slotId: string;
 	generation: number;
+	columnId: string;
+	lane: 'left' | 'center' | 'right';
+	laneIndex: number;
+}
+
+/** Logical row/column identity, independent of the physical slot binding. */
+export interface CellPayloadIdentity {
+	rowId: string;
 	columnId: string;
 }
 

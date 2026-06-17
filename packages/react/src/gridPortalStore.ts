@@ -185,7 +185,10 @@ export function createPortalStore<TRowData = unknown>() {
 		) {
 			const existing = portals.get(cellKey);
 
-			// Full equality check — skip everything when nothing changed
+			// Full equality check — skip everything when nothing changed.
+			// slotGeneration MUST be compared: a slot rebound to a new row advances the generation
+			// while the visible payload (value, node, etc.) may remain identical. Omitting this
+			// check allows stale portal ownership to persist across a slot rebind.
 			if (
 				existing &&
 				existing.container === container &&
@@ -197,7 +200,8 @@ export function createPortalStore<TRowData = unknown>() {
 				existing.phase === phase &&
 				existing.isScrolling === isScrolling &&
 				existing.isFocused === isFocused &&
-				existing.isSelected === isSelected
+				existing.isSelected === isSelected &&
+				existing.slotGeneration === slotGeneration
 			) {
 				cellPortalKeyByContainer.set(container, cellKey);
 				return;

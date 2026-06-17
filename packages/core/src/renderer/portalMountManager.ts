@@ -422,6 +422,14 @@ export class PortalMountManager<TRowData = unknown> {
 			for (let i = 0; i < bucket.length && !outOfBudget(); i++) {
 				const mount = bucket[i];
 				const isColdMount = this.deferredNewCellMounts.has(mount.cellKey);
+				// Reject stale deferred mounts: a later immediate mount for the same key
+				// with a higher generation means this deferred work targets an old slot.
+				const activeGen = this.activeGenerationByKey.get(mount.cellKey);
+				if (mount.slotGeneration !== undefined && activeGen !== undefined && activeGen > mount.slotGeneration) {
+					this.deferredCellMounts.delete(mount.cellKey);
+					this.deferredNewCellMounts.delete(mount.cellKey);
+					continue;
+				}
 				this.mountCellReal(mount);
 				this.deferredCellMounts.delete(mount.cellKey);
 				this.deferredNewCellMounts.delete(mount.cellKey);

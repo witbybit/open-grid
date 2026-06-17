@@ -486,4 +486,26 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('export class NoopGridInstrumentation');
 		expect(content).toContain('export class RecordingGridInstrumentation');
 	});
+
+	it('CellMountIdentity includes lane/laneIndex and CellPayloadIdentity is defined (Plan 081)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'IGridRenderer.ts'), 'utf-8');
+		// Physical identity must include lane placement fields.
+		expect(content).toContain("lane: 'left' | 'center' | 'right'");
+		expect(content).toContain('laneIndex: number');
+		// Logical payload identity must be kept separate from physical identity.
+		expect(content).toContain('export interface CellPayloadIdentity');
+		expect(content).toContain('rowId: string');
+	});
+
+	it('portal mount equality check compares slotGeneration (Plan 081)', () => {
+		const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalStore.ts'), 'utf-8');
+		// slotGeneration must participate in the equality guard to prevent stale portal ownership.
+		expect(content).toContain('existing.slotGeneration === slotGeneration');
+	});
+
+	it('deferred cell mounts validate generation before executing (Plan 081)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
+		// Stale deferred mounts must be rejected symmetrically to stale deferred releases.
+		expect(content).toContain('activeGen > mount.slotGeneration');
+	});
 });

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 
 import { PortalMountManager } from './portalMountManager.js';
@@ -392,4 +392,71 @@ describe('PortalMountManager', () => {
 		expect(release).toHaveBeenCalledTimes(1);
 		expect(release.mock.calls[0][0].cellKey).toBe('row-1:name');
 	});
+
+	it('drops a stale deferred mount when a newer immediate mount has already run for the same key (Plan 081)', () => {
+		const manager = new PortalMountManager();
+		const mount = vi.fn();
+		const container = document.createElement('div');
+		manager.onMountCellContent = mount;
+
+		// Slot gen=1 is queued during scroll
+		manager.setRuntimeState(makeScrollingRuntimeState());
+		manager.mountCell({
+			cellKey: 'slot-a:name',
+			container,
+			value: 'old',
+			node: {} as never,
+			col: { field: 'name', header: 'Name' },
+			isEditing: false,
+			isLoading: false,
+			slotGeneration: 1,
+		});
+
+		// Scroll ends — slot is immediately rebound to gen=2 with a new value
+		manager.setRuntimeState(makeIdleRuntimeState());
+		manager.mountCell({
+			cellKey: 'slot-a:name',
+			container,
+			value: 'new',
+			node: {} as never,
+			col: { field: 'name', header: 'Name' },
+			isEditing: false,
+			isLoading: false,
+			slotGeneration: 2,
+		});
+		expect(mount).toHaveBeenCalledTimes(1);
+		expect(mount.mock.calls[0][0].value).toBe('new');
+
+		// The deferred gen=1 mount must be silently dropped
+		manager.flushDeferred();
+		expect(mount).toHaveBeenCalledTimes(1);
+	});
+
+	it('processes a deferred mount normally when no newer generation has displaced it (Plan 081)', () => {
+		const manager = new PortalMountManager();
+		const mount = vi.fn();
+		const container = document.createElement('div');
+		manager.onMountCellContent = mount;
+
+		manager.setRuntimeState(makeScrollingRuntimeState());
+		manager.mountCell({
+			cellKey: 'slot-b:name',
+			container,
+			value: 'A',
+			node: {} as never,
+			col: { field: 'name', header: 'Name' },
+			isEditing: false,
+			isLoading: false,
+			slotGeneration: 1,
+		});
+
+		expect(mount).not.toHaveBeenCalled();
+
+		manager.setRuntimeState(makeIdleRuntimeState());
+		manager.flushDeferred();
+
+		expect(mount).toHaveBeenCalledTimes(1);
+		expect(mount.mock.calls[0][0].value).toBe('A');
+	});
 });
+
