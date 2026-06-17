@@ -118,10 +118,8 @@ describe('Architecture guardrails', () => {
 		// Scroll epoch captured at schedule time for stale-work rejection.
 		expect(content).toContain('this.runtimeState?.scrollEpoch');
 		expect(content).toContain('rs.isScrollEpochCurrent(this.postScrollEpoch)');
-		// Cancellable RAF handles for all three work types.
-		expect(content).toContain('this.scrollRafId');
-		expect(content).toContain('this.paintRafId');
-		expect(content).toContain('this.postScrollRafId');
+		// Single RAF arbiter (Plan 093 replaced per-channel handles with a single rafId).
+		expect(content).toContain('this.rafId');
 		// renderScrollCoordinator must not import defaultGridScheduler directly.
 		const scrollContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts'), 'utf-8');
 		expect(scrollContent).not.toContain('import { defaultGridScheduler }');
@@ -890,5 +888,37 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(rowModelPath, 'utf-8');
 		expect(content).toContain("impact === 'aggregation-input'");
 		expect(content).toContain('classifyFieldMutation(allChangedFields)');
+	});
+
+	// ── Plan 093: single RAF frame arbitration ────────────────────────────────
+
+	it('DefaultFrameCoordinator uses a single rafId (not per-channel RAF handles) (Plan 093)', () => {
+		const fcPath = resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts');
+		const content = readFileSync(fcPath, 'utf-8');
+		// Single arbiter field
+		expect(content).toContain('private rafId:');
+		// Per-channel handles must not exist
+		expect(content).not.toContain('scrollRafId');
+		expect(content).not.toContain('paintRafId');
+		expect(content).not.toContain('postScrollRafId');
+	});
+
+	it('DefaultFrameCoordinator uses pending bits (not per-channel scheduled flags) (Plan 093)', () => {
+		const fcPath = resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts');
+		const content = readFileSync(fcPath, 'utf-8');
+		expect(content).toContain('pendingScroll');
+		expect(content).toContain('pendingPaint');
+		expect(content).toContain('pendingPostScroll');
+		// Legacy per-channel scheduled booleans must not exist
+		expect(content).not.toContain('scrollScheduled');
+		expect(content).not.toContain('paintScheduled');
+		expect(content).not.toContain('postScrollScheduled');
+	});
+
+	it('DefaultFrameCoordinator has scheduleFrame and flushFrame private methods (Plan 093)', () => {
+		const fcPath = resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts');
+		const content = readFileSync(fcPath, 'utf-8');
+		expect(content).toContain('scheduleFrame()');
+		expect(content).toContain('flushFrame()');
 	});
 });

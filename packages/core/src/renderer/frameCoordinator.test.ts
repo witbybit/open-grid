@@ -154,7 +154,7 @@ describe('DefaultFrameCoordinator', () => {
 		expect(onPostScrollWork).not.toHaveBeenCalled();
 	});
 
-	it('destroy() cancels pending RAF handles for scroll and post-scroll', () => {
+	it('destroy() cancels the single pending RAF (scroll + post-scroll share one RAF)', () => {
 		const cancelRaf = vi.fn();
 		let lastRafId = 0;
 		const gs: GridScheduler = {
@@ -167,12 +167,12 @@ describe('DefaultFrameCoordinator', () => {
 		};
 		const coordinator = new DefaultFrameCoordinator(makeBaseDeps({ gridScheduler: gs }));
 
-		coordinator.requestScrollFrame(); // RAF scheduled immediately
-		coordinator.requestPostScrollWork(); // RAF scheduled immediately
+		coordinator.requestScrollFrame(); // RAF registered (rafId = 1)
+		coordinator.requestPostScrollWork(); // RAF already registered — no-op
 		coordinator.destroy();
 
-		// Scroll and post-scroll RAFs are cancelled; paint RAF never scheduled (microtask pending).
-		expect(cancelRaf).toHaveBeenCalledTimes(2);
+		// Both share one RAF; destroy() cancels it once.
+		expect(cancelRaf).toHaveBeenCalledTimes(1);
 	});
 
 	it('destroy() cancels paint RAF when it was already scheduled past the microtask', () => {
@@ -216,7 +216,7 @@ describe('DefaultFrameCoordinator', () => {
 		coordinator.requestScrollFrame();
 		capturedScrollRaf?.();
 
-		expect(onFault).toHaveBeenCalledWith(expect.stringContaining('reentrant scroll frame'));
+		expect(onFault).toHaveBeenCalledWith(expect.stringContaining('reentrant frame'));
 	});
 
 	it('reports a fault and skips the frame when a reentrant paint frame is detected (no runtimeState)', () => {
@@ -243,7 +243,7 @@ describe('DefaultFrameCoordinator', () => {
 		coordinator.requestPaintFrame();
 		capturedRaf?.();
 
-		expect(onFault).toHaveBeenCalledWith(expect.stringContaining('reentrant paint frame'));
+		expect(onFault).toHaveBeenCalledWith(expect.stringContaining('reentrant frame'));
 	});
 });
 
@@ -300,27 +300,142 @@ describe('DefaultFrameCoordinator – post-scroll epoch semantics (Plan 080)', (
 		expect(onPostScrollWork).not.toHaveBeenCalled();
 	});
 
-	it('post-scroll work does not alias requestPaintFrame scheduling', () => {
+	it('paint and post-scroll coalesce into one RAF when both pending (Plan 093)', () => {
 		const onPaintFrame = vi.fn();
 		const onPostScrollWork = vi.fn();
+		let capturedRaf: (() => void) | null = null;
 		let rafCount = 0;
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
+			microtask: (cb) => cb(), // sync — fires before requestPostScrollWork() is called
 			raf: (cb) => {
 				rafCount++;
-				cb();
+				capturedRaf = cb;
 				return rafCount;
 			},
 		};
 		const coordinator = new DefaultFrameCoordinator(makeBaseDeps({ onPaintFrame, onPostScrollWork, gridScheduler: gs }));
 
-		coordinator.requestPaintFrame();
-		coordinator.requestPostScrollWork();
+		coordinator.requestPaintFrame(); // microtask fires → scheduleFrame() → RAF registered (rafId = 1)
+		coordinator.requestPostScrollWork(); // rafId already set → scheduleFrame() is a no-op
 
-		// Each type scheduled its own RAF independently.
-		expect(rafCount).toBe(2);
+		capturedRaf?.(); // flush: scroll (none) → paint → post-scroll
+
+		expect(rafCount).toBe(1);
 		expect(onPaintFrame).toHaveBeenCalledTimes(1);
 		expect(onPostScrollWork).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('DefaultFrameCoordinator – single RAF arbitration (Plan 093)', () => {
+	it('scroll executes before paint even when paint is requested first', () => {
+		const order: string[] = [];
+		let capturedRaf: (() => void) | null = null;
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			microtask: (cb) => cb(),
+			raf: (cb) => {
+				capturedRaf = cb;
+				return 0;
+			},
+		};
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				onPaintFrame: () => order.push('paint'),
+				onScrollFrame: () => order.push('scroll'),
+				gridScheduler: gs,
+			})
+		);
+
+		coordinator.requestPaintFrame(); // microtask fires → RAF registered
+		coordinator.requestScrollFrame(); // pending scroll set; RAF already registered
+
+		capturedRaf?.();
+
+		expect(order).toEqual(['scroll', 'paint']);
+	});
+
+	it('scroll → paint → post-scroll all run in priority order in one RAF', () => {
+		const order: string[] = [];
+		let capturedRaf: (() => void) | null = null;
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			microtask: (cb) => cb(),
+			raf: (cb) => {
+				capturedRaf = cb;
+				return 0;
+			},
+		};
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				onScrollFrame: () => order.push('scroll'),
+				onPaintFrame: () => order.push('paint'),
+				onPostScrollWork: () => order.push('post-scroll'),
+				gridScheduler: gs,
+			})
+		);
+
+		coordinator.requestPostScrollWork();
+		coordinator.requestPaintFrame(); // microtask fires → scheduleFrame → no-op (rafId set)
+		coordinator.requestScrollFrame(); // pending scroll set; RAF already registered
+
+		capturedRaf?.();
+
+		expect(order).toEqual(['scroll', 'paint', 'post-scroll']);
+	});
+
+	it('scroll request during scroll callback defers to next RAF (not lost)', () => {
+		const onScrollFrame = vi.fn();
+		const rafs: Array<() => void> = [];
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			raf: (cb) => {
+				rafs.push(cb);
+				return rafs.length;
+			},
+		};
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				onScrollFrame: () => {
+					onScrollFrame();
+					// Re-request only on the first callback to test deferral semantics.
+					if (onScrollFrame.mock.calls.length === 1) {
+						coordinator.requestScrollFrame();
+					}
+				},
+				gridScheduler: gs,
+			})
+		);
+
+		coordinator.requestScrollFrame();
+		rafs[0]?.(); // first frame: scroll runs, requests second scroll
+		rafs[1]?.(); // second frame: deferred scroll runs
+
+		expect(onScrollFrame).toHaveBeenCalledTimes(2);
+		expect(rafs.length).toBe(2);
+	});
+
+	it('exactly one RAF is registered for multiple simultaneous pending requests', () => {
+		let rafRegistrations = 0;
+		let capturedRaf: (() => void) | null = null;
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			microtask: (cb) => cb(),
+			raf: (cb) => {
+				rafRegistrations++;
+				capturedRaf = cb;
+				return rafRegistrations;
+			},
+		};
+		const coordinator = new DefaultFrameCoordinator(makeBaseDeps({ gridScheduler: gs }));
+
+		coordinator.requestScrollFrame();
+		coordinator.requestPaintFrame(); // microtask → scheduleFrame → no-op
+		coordinator.requestPostScrollWork(); // scheduleFrame → no-op
+
+		expect(rafRegistrations).toBe(1);
+
+		capturedRaf?.();
 	});
 });
 
