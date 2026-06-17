@@ -1,6 +1,6 @@
 import type { FilterModel, SortModel } from '../rowModel.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
-import type { GridRuntimePorts, RuntimePortBinding } from '../engine/rendererPorts.js';
+import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from '../engine/rendererPorts.js';
 import type { IGridDatasource } from '../serverRowModel.js';
 import type { ColumnDef, GridStyleRule, CellRendererPhase } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
@@ -601,9 +601,9 @@ export interface GridHostRuntime<TRowData = unknown> {
 	setViewportPins(pins: { left?: number; right?: number; top?: number; bottom?: number }): void;
 	setViewportSize(width: number, height: number): boolean;
 	updateVisibleRanges(): boolean;
-	/** Bind live runtime ports for an active host. Returns an opaque token for lifecycle management. */
-	bindRuntimePorts(ports: GridRuntimePorts): RuntimePortBinding;
-	/** Unbind the active host and restore headless ports. Stale tokens are silently ignored. */
+	/** Bind live runtime ports for an active host. Returns a result; ok=false means rejected (already-bound or destroyed). */
+	bindRuntimePorts(ports: GridRuntimePorts): RuntimePortBindResult;
+	/** Unbind the active host and restore headless ports. Stale tokens report a fault and no-op. */
 	unbindRuntimePorts(binding: RuntimePortBinding): void;
 	/** Returns true if this binding token corresponds to the currently active host. */
 	isBindingCurrent(binding: RuntimePortBinding): boolean;

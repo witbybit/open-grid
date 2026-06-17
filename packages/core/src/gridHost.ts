@@ -102,8 +102,8 @@ export function mountGridHost<TRowData>(
 	renderEngine.onMountHeaderMenu = options.headerMenu?.mountHeaderMenu;
 	renderEngine.onUnmountHeaderMenu = options.headerMenu?.unmountHeaderMenu;
 
-	// Bind live runtime ports — returns a generation token used to guard stale host callbacks.
-	const binding = store.bindRuntimePorts({
+	// Bind live runtime ports — exclusive: only one host may be active at a time.
+	const bindResult = store.bindRuntimePorts({
 		renderer: {
 			requestRender: () => {},
 			getStats: () => renderEngine.getRenderStats(),
@@ -119,6 +119,11 @@ export function mountGridHost<TRowData>(
 			onThemeChange: (listener) => renderEngine.viewportRenderer.onThemeChange(listener),
 		},
 	});
+	if (!bindResult.ok) {
+		// Binding rejected — renderEngine was never mounted, so no DOM cleanup is needed.
+		throw new Error(`mountGridHost: port binding rejected (${bindResult.reason}). Destroy the active host before mounting a new one.`);
+	}
+	const binding = bindResult.binding;
 
 	if (options.pins) {
 		internalApi.setViewportPins(options.pins);

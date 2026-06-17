@@ -58,7 +58,15 @@ export const headlessThemePort: ThemePort = {
 export const HEADLESS_PORTS: GridRuntimePorts = { renderer: headlessRendererPort, theme: headlessThemePort };
 
 
-/** Opaque token returned by bindRuntimePorts(). Captures the binding generation to detect stale host callbacks. */
+/** Opaque token returned by a successful bindRuntimePorts(). Captures the binding generation to detect stale host callbacks. */
 export interface RuntimePortBinding {
 	readonly generation: number;
 }
+
+/**
+ * Result of bindRuntimePorts().
+ * ok=false means the current ports are unchanged — the caller must not mount.
+ */
+export type RuntimePortBindResult =
+	| { readonly ok: true; readonly binding: RuntimePortBinding }
+	| { readonly ok: false; readonly reason: 'already-bound' | 'destroyed' };

@@ -7,7 +7,7 @@ import { ViewportController, type ViewportRange } from './viewportController.js'
 import { GridEngine } from './engine/GridEngine.js';
 import type { ClientRowModelRuntime, ServerRowModelRuntime } from './engine/runtimePorts.js';
 import { createClientRowModelRuntime, createServerRowModelRuntime } from './engine/createRowModelRuntimes.js';
-import type { GridRuntimePorts, RuntimePortBinding } from './engine/rendererPorts.js';
+import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from './engine/rendererPorts.js';
 import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
@@ -117,6 +117,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private instrumentation: GridInstrumentation = NOOP_INSTRUMENTATION;
 	private portBindingGeneration = 0;
 	private activeBindingGeneration: number | null = null;
+	private storeDestroyed = false;
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}, engineOptions?: { rowValidator?: RowValidator<TRowData> }) {
 		validateColumns(initialState.columns || []);
@@ -842,24 +843,35 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	/** Bind live renderer and theme ports for an active host. Returns a binding token.
 	 *  Rejects concurrent bindings — only one active host is allowed at a time. */
-	public bindRuntimePorts = (ports: GridRuntimePorts): RuntimePortBinding => {
+	public bindRuntimePorts = (ports: GridRuntimePorts): RuntimePortBindResult => {
+		if (this.storeDestroyed) {
+			return { ok: false, reason: 'destroyed' };
+		}
 		if (this.activeBindingGeneration !== null) {
 			this.engine.runtimeFaults.report({
 				source: 'store',
 				operation: 'bindRuntimePorts',
 				error: new Error('Attempted to bind runtime ports while a binding is already active. Unbind first.'),
 			});
+			return { ok: false, reason: 'already-bound' };
 		}
 		this.portBindingGeneration++;
 		this.activeBindingGeneration = this.portBindingGeneration;
 		this.rendererPorts = ports;
 		const generation = this.portBindingGeneration;
-		return { generation };
+		return { ok: true, binding: { generation } };
 	};
 
-	/** Unbind the active host and restore headless ports. Stale binding tokens are silently ignored. */
+	/** Unbind the active host and restore headless ports. Stale binding tokens report a fault and no-op. */
 	public unbindRuntimePorts = (binding: RuntimePortBinding): void => {
-		if (binding.generation !== this.activeBindingGeneration) return;
+		if (binding.generation !== this.activeBindingGeneration) {
+			this.engine.runtimeFaults.report({
+				source: 'store',
+				operation: 'unbindRuntimePorts',
+				error: new Error('Attempted to unbind with a stale or unrecognised binding token.'),
+			});
+			return;
+		}
 		this.activeBindingGeneration = null;
 		this.rendererPorts = HEADLESS_PORTS;
 	};
@@ -922,6 +934,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getContainer = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
 
 	public destroy = (): void => {
+		this.storeDestroyed = true;
 		this.pluginRegistry.destroy();
 		this.engine.destroy();
 	};

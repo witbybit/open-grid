@@ -921,4 +921,39 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('scheduleFrame()');
 		expect(content).toContain('flushFrame()');
 	});
+
+	// ── Plan 094: exclusive runtime port binding ──────────────────────────────
+
+	it('RuntimePortBindResult type exists in rendererPorts.ts (Plan 094)', () => {
+		const portPath = resolve(CORE_ROOT, 'src', 'engine', 'rendererPorts.ts');
+		const content = readFileSync(portPath, 'utf-8');
+		expect(content).toContain('RuntimePortBindResult');
+		expect(content).toContain("'already-bound'");
+		expect(content).toContain("'destroyed'");
+	});
+
+	it('bindRuntimePorts returns RuntimePortBindResult and rejects concurrent binds (Plan 094)', () => {
+		const storePath = resolve(CORE_ROOT, 'src', 'store.ts');
+		const content = readFileSync(storePath, 'utf-8');
+		expect(content).toContain('RuntimePortBindResult');
+		// Must return early on already-bound without touching ports
+		expect(content).toContain("reason: 'already-bound'");
+		expect(content).toContain("reason: 'destroyed'");
+		// storeDestroyed flag
+		expect(content).toContain('storeDestroyed');
+	});
+
+	it('unbindRuntimePorts reports a fault on stale tokens instead of silently ignoring (Plan 094)', () => {
+		const storePath = resolve(CORE_ROOT, 'src', 'store.ts');
+		const content = readFileSync(storePath, 'utf-8');
+		expect(content).toContain("operation: 'unbindRuntimePorts'");
+	});
+
+	it('gridHost.ts checks bindResult.ok before mounting (Plan 094)', () => {
+		const hostPath = resolve(CORE_ROOT, 'src', 'gridHost.ts');
+		const content = readFileSync(hostPath, 'utf-8');
+		expect(content).toContain('bindResult');
+		expect(content).toContain('bindResult.ok');
+		expect(content).toContain('bindResult.binding');
+	});
 });
