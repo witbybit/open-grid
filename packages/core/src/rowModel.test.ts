@@ -4,6 +4,7 @@ import { ClientRowModelController } from './rowModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
 import { RowPipeline } from './rows/RowPipeline.js';
 import { toDataVisualRowId, toDetailVisualRowId } from './rows/visualRowIds.js';
+import { RecordingGridInstrumentation, GridMetric } from './diagnostics/GridInstrumentation.js';
 
 interface TestRow {
 	id: string;
@@ -1182,3 +1183,111 @@ describe('Plan 083 — incremental index maintenance', () => {
 		expect(ctrl.getVisualIndexByRowId('4')).toBe(2);
 	});
 });
+
+// ── Plan 092: aggregation input mutation correctness ──────────────────────────
+
+describe('Aggregation input mutation correctness (Plan 092)', () => {
+	interface AggRow { id: string; name: string; category: string; salary: number; bonus: number; }
+
+	function makeAggStore(rows: AggRow[], expanded = true) {
+		const store = new GridStore<AggRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'name', header: 'Name' },
+				{ field: 'salary', header: 'Salary' },
+				{ field: 'bonus', header: 'Bonus' },
+			],
+			rowModelConfig: {
+				type: 'client',
+				grouping: { model: [{ colId: 'category' }], defaultExpanded: expanded },
+			},
+		});
+		// aggDefs must be applied via setAggDefs — GridStore constructor does not forward aggDefs to GridEngine
+		store.setAggDefs([
+			{ field: 'salary', aggFunc: 'sum' },
+			{ field: 'bonus', aggFunc: 'avg' },
+		]);
+		const controller = new ClientRowModelController<AggRow>(store.getClientRowModelRuntime(), {
+			rows,
+			columns: store.getState().columns,
+		});
+		return { store, controller };
+	}
+
+	function getGroupAggregates(controller: ClientRowModelController<AggRow>, groupId: string) {
+		const count = controller.getVisualRowCount();
+		for (let i = 0; i < count; i++) {
+			const row = controller.getVisualRow(i);
+			if (row?.kind === 'group' && row.id === groupId) {
+				return row.aggregateValues ?? {};
+			}
+		}
+		return null;
+	}
+
+	it('group sum stays consistent after leaf salary update via applyTransaction', () => {
+		const rows: AggRow[] = [
+			{ id: '1', name: 'Alice', category: 'Eng', salary: 100, bonus: 10 },
+			{ id: '2', name: 'Bob', category: 'Eng', salary: 200, bonus: 20 },
+		];
+		const { store, controller } = makeAggStore(rows);
+
+		const before = getGroupAggregates(controller, 'group:category=Eng');
+		expect(before?.salary).toBe(300); // 100 + 200
+
+		store.applyTransaction({ update: [{ id: '1', name: 'Alice', category: 'Eng', salary: 150, bonus: 10 }] });
+
+		const after = getGroupAggregates(controller, 'group:category=Eng');
+		expect(after?.salary).toBe(350); // 150 + 200 — was stale (300) before Plan 092 fix
+	});
+
+	it('group average stays consistent after leaf bonus update via applyTransaction', () => {
+		const rows: AggRow[] = [
+			{ id: '1', name: 'Alice', category: 'Eng', salary: 100, bonus: 20 },
+			{ id: '2', name: 'Bob', category: 'Eng', salary: 200, bonus: 40 },
+		];
+		const { store, controller } = makeAggStore(rows);
+
+		const before = getGroupAggregates(controller, 'group:category=Eng');
+		expect(before?.bonus).toBe(30); // avg(20, 40) = 30
+
+		store.applyTransaction({ update: [{ id: '2', name: 'Bob', category: 'Eng', salary: 200, bonus: 60 }] });
+
+		const after = getGroupAggregates(controller, 'group:category=Eng');
+		expect(after?.bonus).toBe(40); // avg(20, 60) = 40 — was stale (30) before Plan 092 fix
+	});
+
+	it('multiple groups each update their own aggregate independently', () => {
+		const rows: AggRow[] = [
+			{ id: '1', name: 'Alice', category: 'Eng', salary: 100, bonus: 10 },
+			{ id: '2', name: 'Bob', category: 'Mkt', salary: 90, bonus: 5 },
+		];
+		const { store, controller } = makeAggStore(rows);
+
+		store.applyTransaction({ update: [{ id: '1', name: 'Alice', category: 'Eng', salary: 200, bonus: 10 }] });
+
+		expect(getGroupAggregates(controller, 'group:category=Eng')?.salary).toBe(200);
+		// Mkt group must be unchanged
+		expect(getGroupAggregates(controller, 'group:category=Mkt')?.salary).toBe(90);
+	});
+
+	it('name update (non-aggregation field) does NOT trigger full rebuild', () => {
+		const rows: AggRow[] = [
+			{ id: '1', name: 'Alice', category: 'Eng', salary: 100, bonus: 10 },
+			{ id: '2', name: 'Bob', category: 'Eng', salary: 200, bonus: 20 },
+		];
+		const inst = new RecordingGridInstrumentation();
+		const { store, controller } = makeAggStore(rows);
+		store.setInstrumentation(inst);
+		inst.reset();
+
+		store.applyTransaction({ update: [{ id: '1', name: 'Alice Renamed', category: 'Eng', salary: 100, bonus: 10 }] });
+
+		const full = inst.get(GridMetric.ROW_MUTATION_FULL_REBUILD);
+		// A non-aggregation, non-sort, non-filter, non-group field update must NOT trigger a full rebuild.
+		expect(full).toBe(0);
+		controller.dispose();
+	});
+});
+

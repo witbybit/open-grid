@@ -980,7 +980,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		// rebuild for grouped/tree/paginated grids or when relocateSortedRows returns false.
 		// filter-key: test membership for each changed node on flat grids. If no row enters
 		// or exits the filter, the visual array is unchanged — skip the pipeline rebuild.
-		let needsFullRefresh = impact === 'group-key' || impact === 'tree-parent';
+		let needsFullRefresh = impact === 'group-key' || impact === 'tree-parent' || impact === 'aggregation-input';
 		let didSortRelocation = false;
 		if (!needsFullRefresh && impact === 'sort-key') {
 			didSortRelocation = this.relocateSortedRows(result.changedNodes);
@@ -1069,7 +1069,21 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
 			}
 		} else if (result.updated.length > 0) {
-			this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_INCREMENTAL);
+			// Classify the update to determine whether the pipeline must rebuild.
+			// Sort keys, filter keys, group keys, tree-parent, and aggregation inputs
+			// all require a pipeline refresh to keep derived state consistent.
+			const allChangedFields = new Set<string>();
+			for (const [, fields] of result.changedFieldsByRow) {
+				for (const f of fields) allChangedFields.add(f);
+			}
+			const impact = this.classifyFieldMutation(allChangedFields);
+			const needsRefresh = impact === 'group-key' || impact === 'tree-parent' || impact === 'aggregation-input';
+			if (needsRefresh) {
+				this.refresh();
+				this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
+			} else {
+				this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_INCREMENTAL);
+			}
 		}
 
 		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {

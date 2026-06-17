@@ -874,4 +874,21 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('GridMetric.ROW_MUTATION_INCREMENTAL');
 		expect(content).toContain('getInstrumentation().increment');
 	});
+
+	// ── Plan 092: aggregation input mutation correctness ─────────────────────
+
+	it('aggregation-input is in RowMutationImpact and checked in classifyMutation (Plan 092)', () => {
+		const classifierPath = resolve(CORE_ROOT, 'src', 'rows', 'rowMutationClassifier.ts');
+		const content = readFileSync(classifierPath, 'utf-8');
+		expect(content).toContain("'aggregation-input'");
+		expect(content).toContain('aggregationFields');
+		expect(content).toContain("return 'aggregation-input'");
+	});
+
+	it('applyTransaction classifies update impact and triggers refresh for aggregation-input (Plan 092)', () => {
+		const rowModelPath = resolve(CORE_ROOT, 'src', 'rowModel.ts');
+		const content = readFileSync(rowModelPath, 'utf-8');
+		expect(content).toContain("impact === 'aggregation-input'");
+		expect(content).toContain('classifyFieldMutation(allChangedFields)');
+	});
 });

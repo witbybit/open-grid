@@ -91,6 +91,7 @@
 | 089 | [Open Grid Core Architecture Target](./089-open-grid-core-architecture-target.md)                                | DONE     | working tree |
 | 090 | [Feature Surface Triage and Quarantine](./090-feature-surface-triage-and-quarantine.md)                          | DONE     | working tree |
 | 091 | [Performance Baseline Laboratory](./091-performance-baseline-laboratory.md)                                       | DONE     | working tree |
+| 092 | [Aggregation Input Mutation Correctness](./092-aggregation-input-mutation-correctness.md)                          | DONE     | working tree |
 
 ## Execution order
 
@@ -248,6 +249,8 @@
 - Plan 078 (Advanced Column Filter API) replaces `filterType: 'set'` with a full `ColumnFilterDef` API on `ColumnDef` supporting `multi-select`, `async-multi-select`, `infinite-multi-select`, `single-select`, `async-single-select`, and a `custom` React renderer escape hatch. Adds `SelectFilterCondition` to `FilterModel`, shared React filter components, `useFilterFetch`/`useFilterPage` hooks, and a `FilterReactBridge` that bridges React into the DOM-based header menu and floating filter row. All three filter surfaces (sidebar panel, header 3-dot menu, floating row) render the same component tree. Backwards-compatible — existing `filterType`/`filterValues` normalise automatically.
 
 ## Plans 089–103 notes
+
+- Plan 092 is implemented on 2026-06-18: adds `'aggregation-input'` to `RowMutationImpact`; `classifyMutation()` now checks `registry.aggregationFields` before the value-only fallback; `applyTransaction()` runs classification for pure-update transactions and triggers `refresh()` when impact is `aggregation-input`, `group-key`, or `tree-parent`; 8 new unit tests in `rowMutationClassifier.test.ts` and 4 integration tests in `rowModel.test.ts` prove sum/avg/multi-group correctness and that non-aggregation field updates still use the incremental cell-notification path. 2 new architecture guards (79 total). All 926 core tests pass.
 
 - Plan 091 is implemented on 2026-06-18: creates `docs/architecture/benchmark-scenarios.json` (8 canonical scenarios with correctness budgets) and `docs/architecture/baseline.json` (pre-convergence metric snapshot). Creates `packages/core/src/perf/instrumentedBudgets.test.ts` with 7 instrumentation-based correctness budget tests (zero wall-clock timing). Adds `getInstrumentation()` to `RowModelRuntimeBase` and wires it through both client and server runtimes so `ClientRowModelController` can increment `ROW_MUTATION_FULL_REBUILD` on `setRows` and `ROW_MUTATION_INCREMENTAL` / `ROW_MUTATION_FULL_REBUILD` on `applyTransaction`. Converts all wall-clock `expect(duration).toBeLessThan(X)` assertions in `performance.test.ts` to informational `console.log` only — correctness assertions remain. Adds 3 new architecture guards (77 total): benchmark-scenarios.json valid, baseline.json exists, rowModel.ts increments ROW_MUTATION_* metrics. All 914 core tests pass.
 

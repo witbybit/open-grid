@@ -20,6 +20,7 @@ import type { AggregationDef } from './stages/aggregateStage.js';
 export type RowMutationImpact =
 	| 'value-only'
 	| 'formula-dependent'
+	| 'aggregation-input'
 	| 'sort-key'
 	| 'filter-key'
 	| 'group-key'
@@ -186,6 +187,10 @@ export function classifyMutation(
 	}
 
 	if (registry.formulaFields.size > 0 && anyFieldMatchesSet(changedFields, registry.formulaFields)) return 'formula-dependent';
+
+	// Aggregation input: a leaf field that feeds a group aggregate. Requires full
+	// grouped-model refresh so ancestor group totals stay consistent with leaf data.
+	if (registry.aggregationFields.size > 0 && anyFieldMatchesSet(changedFields, registry.aggregationFields)) return 'aggregation-input';
 
 	// Opaque active operation: an undeclared computed sort/filter/group column means
 	// this change might affect it — return the conservative structural impact.
