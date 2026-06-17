@@ -659,6 +659,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			groupBy: state.groupBy,
 			aggDefs: state.aggDefs,
 			hasTreeParent: !!state.getParentId,
+			treeParentDependencies: state.rowModelConfig?.treeData?.getParentIdDependencies,
 		});
 	}
 

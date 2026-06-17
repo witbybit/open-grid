@@ -28,6 +28,8 @@ export interface RowModelConfig<TData = unknown> {
 	treeData?: {
 		enabled: boolean;
 		getParentId: (row: TData) => string | null | undefined;
+		/** Source fields read by getParentId. When declared, only changes to these fields trigger tree restructuring. */
+		getParentIdDependencies?: string[];
 		defaultExpanded?: boolean;
 		expandedRowIds?: Record<string, true>;
 		filterMode?: 'strict' | 'includeAncestors' | 'includeDescendants';

@@ -15,6 +15,7 @@ function makeRegistry(config: Partial<RowDependencyConfig>): RowDependencyRegist
 		groupBy: config.groupBy,
 		aggDefs: config.aggDefs,
 		hasTreeParent: config.hasTreeParent ?? false,
+		treeParentDependencies: config.treeParentDependencies,
 	});
 	return reg;
 }
@@ -198,6 +199,136 @@ describe('classifyMutation()', () => {
 		it('returns sort-key when one of many fields matches sort', () => {
 			const reg = makeRegistry({ sortModel: [{ colId: 'price', sort: 'asc' }] });
 			expect(classifyMutation(fields('description', 'price', 'quantity'), reg)).toBe('sort-key');
+		});
+	});
+});
+
+describe('RowDependencyRegistry – source dependency expansion (Plan 082)', () => {
+	describe('sort source fields via valueGetterDependencies', () => {
+		it('adds valueGetterDependencies of a sorted computed column to sortKeys', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('total', { valueGetter: () => 0, valueGetterDependencies: ['price', 'quantity'] })],
+				sortModel: [{ colId: 'total', sort: 'asc' }],
+			});
+			expect(reg.sortKeys).toContain('total');
+			expect(reg.sortKeys).toContain('price');
+			expect(reg.sortKeys).toContain('quantity');
+		});
+
+		it('classifies a source dependency change as sort-key', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('total', { valueGetter: () => 0, valueGetterDependencies: ['price', 'quantity'] })],
+				sortModel: [{ colId: 'total', sort: 'asc' }],
+			});
+			expect(classifyMutation(fields('price'), reg)).toBe('sort-key');
+			expect(classifyMutation(fields('quantity'), reg)).toBe('sort-key');
+		});
+
+		it('does not expand sort keys for a computed column not in the sort model', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('margin', { valueGetter: () => 0, valueGetterDependencies: ['revenue', 'cost'] })],
+				sortModel: [{ colId: 'name', sort: 'asc' }],
+			});
+			expect(reg.sortKeys).not.toContain('revenue');
+		});
+	});
+
+	describe('filter source fields via valueGetterDependencies', () => {
+		it('adds valueGetterDependencies of a filtered computed column to filterKeys', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('fullName', { valueGetter: () => '', valueGetterDependencies: ['firstName', 'lastName'] })],
+				filterModel: { fullName: { type: 'text', conditions: [] } },
+			});
+			expect(reg.filterKeys).toContain('firstName');
+			expect(reg.filterKeys).toContain('lastName');
+		});
+
+		it('classifies a filter source dependency change as filter-key', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('fullName', { valueGetter: () => '', valueGetterDependencies: ['firstName', 'lastName'] })],
+				filterModel: { fullName: { type: 'text', conditions: [] } },
+			});
+			expect(classifyMutation(fields('firstName'), reg)).toBe('filter-key');
+		});
+	});
+
+	describe('group source fields via valueGetterDependencies', () => {
+		it('adds valueGetterDependencies of a group-by computed column to groupKeys', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('region', { valueGetter: () => '', valueGetterDependencies: ['country', 'zone'] })],
+				groupBy: ['region'],
+			});
+			expect(reg.groupKeys).toContain('country');
+			expect(reg.groupKeys).toContain('zone');
+		});
+
+		it('classifies a group source dependency change as group-key', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('region', { valueGetter: () => '', valueGetterDependencies: ['country', 'zone'] })],
+				groupBy: ['region'],
+			});
+			expect(classifyMutation(fields('country'), reg)).toBe('group-key');
+		});
+	});
+
+	describe('opaque computed columns (no valueGetterDependencies)', () => {
+		it('sets opaqueStructuralDependency when active sort column has valueGetter without dependencies', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('computed', { valueGetter: () => 0 })],
+				sortModel: [{ colId: 'computed', sort: 'asc' }],
+			});
+			expect(reg.opaqueStructuralDependency).toBe(true);
+		});
+
+		it('conservatively returns sort-key for unmatched field when active sort is opaque', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('computed', { valueGetter: () => 0 })],
+				sortModel: [{ colId: 'computed', sort: 'asc' }],
+			});
+			// 'unrelated' is not in sortKeys, but computed is opaque → conservative
+			expect(classifyMutation(fields('unrelated'), reg)).toBe('sort-key');
+		});
+
+		it('does not set opaqueStructuralDependency when all active computed columns declare dependencies', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('total', { valueGetter: () => 0, valueGetterDependencies: ['price', 'qty'] })],
+				sortModel: [{ colId: 'total', sort: 'asc' }],
+			});
+			expect(reg.opaqueStructuralDependency).toBe(false);
+		});
+
+		it('conservatively returns group-key when group column is opaque (highest priority)', () => {
+			const reg = makeRegistry({
+				columns: [makeCol('grp', { valueGetter: () => '' }), makeCol('srt', { valueGetter: () => 0 })],
+				groupBy: ['grp'],
+				sortModel: [{ colId: 'srt', sort: 'asc' }],
+			});
+			expect(classifyMutation(fields('unrelated'), reg)).toBe('group-key');
+		});
+	});
+
+	describe('tree-parent source dependencies', () => {
+		it('populates treeParentSourceFields from treeParentDependencies', () => {
+			const reg = makeRegistry({ hasTreeParent: true, treeParentDependencies: ['parentId'] });
+			expect(reg.treeParentSourceFields).toEqual(new Set(['parentId']));
+		});
+
+		it('returns tree-parent only for declared source fields when treeParentDependencies provided', () => {
+			const reg = makeRegistry({ hasTreeParent: true, treeParentDependencies: ['parentId'] });
+			expect(classifyMutation(fields('parentId'), reg)).toBe('tree-parent');
+			// 'name' is not a tree-parent source — should be value-only
+			expect(classifyMutation(fields('name'), reg)).toBe('value-only');
+		});
+
+		it('conservatively returns tree-parent for any field when no dependencies declared', () => {
+			const reg = makeRegistry({ hasTreeParent: true });
+			expect(classifyMutation(fields('name'), reg)).toBe('tree-parent');
+			expect(classifyMutation(fields('unrelated'), reg)).toBe('tree-parent');
+		});
+
+		it('treeParentSourceFields is empty when no dependencies declared', () => {
+			const reg = makeRegistry({ hasTreeParent: true });
+			expect(reg.treeParentSourceFields.size).toBe(0);
 		});
 	});
 });

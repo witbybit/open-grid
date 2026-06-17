@@ -508,4 +508,22 @@ describe('Architecture guardrails', () => {
 		// Stale deferred mounts must be rejected symmetrically to stale deferred releases.
 		expect(content).toContain('activeGen > mount.slotGeneration');
 	});
+
+	it('RowDependencyRegistry expands sort/filter/group source fields and tracks opaque getters (Plan 082)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rows', 'rowMutationClassifier.ts'), 'utf-8');
+		// Source dependency expansion must use valueGetterDependencies.
+		expect(content).toContain('col?.valueGetterDependencies');
+		// Opaque getter detection must set the flag.
+		expect(content).toContain('opaqueStructuralDependency = true');
+		// Opaque fallback in classifyMutation must exist.
+		expect(content).toContain('registry.opaqueStructuralDependency');
+		// Tree-parent precision: source fields tracked separately.
+		expect(content).toContain('treeParentSourceFields');
+		expect(content).toContain('treeParentDependencies');
+	});
+
+	it('treeData options expose getParentIdDependencies (Plan 082)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rows', 'RowPipeline.ts'), 'utf-8');
+		expect(content).toContain('getParentIdDependencies');
+	});
 });
