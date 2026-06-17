@@ -840,12 +840,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public canRedo = (): boolean => this.engine.commandHistory.canRedo();
 
-	/** Supply live renderer and theme ports when a renderer mounts; reset to headless on unmount.
-	 * @deprecated Use bindRuntimePorts() / unbindRuntimePorts() for lifecycle-safe port management. */
-	public setRendererPorts = (ports: GridRuntimePorts): void => {
-		this.rendererPorts = ports;
-	};
-
 	/** Bind live renderer and theme ports for an active host. Returns a binding token.
 	 *  Rejects concurrent bindings — only one active host is allowed at a time. */
 	public bindRuntimePorts = (ports: GridRuntimePorts): RuntimePortBinding => {

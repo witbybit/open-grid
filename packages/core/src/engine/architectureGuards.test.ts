@@ -597,6 +597,13 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('isBindingCurrent(binding)');
 	});
 
+	it('deprecated setRendererPorts and createHeadlessPorts are deleted (Plan 090)', () => {
+		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(storeContent).not.toContain('setRendererPorts');
+		const portsContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'rendererPorts.ts'), 'utf-8');
+		expect(portsContent).not.toContain('createHeadlessPorts');
+	});
+
 	// ── Plan 087 — store.ts boundary enforcement ─────────────────────────────
 
 	it('engine/ production files import GridEventName from api/GridEvents.ts, not store.ts (Plan 087)', () => {
@@ -760,5 +767,76 @@ describe('Architecture guardrails', () => {
 			}
 		}
 		expect(violations, `public index.ts re-exports renderer-internal types: ${violations.join(', ')}`).toHaveLength(0);
+	});
+
+	// ── Plan 090: feature surface triage ──────────────────────────────────────
+
+	it('feature-registry.json exists and is valid JSON with required fields (Plan 090)', () => {
+		const registryPath = resolve(CORE_ROOT, '../../docs/architecture/feature-registry.json');
+		expect(existsSync(registryPath), 'docs/architecture/feature-registry.json must exist').toBe(true);
+		const raw = readFileSync(registryPath, 'utf-8');
+		let registry: { features?: unknown[]; alphaFeatureMatrix?: unknown[] };
+		expect(() => { registry = JSON.parse(raw); }, 'feature-registry.json must be valid JSON').not.toThrow();
+		registry = JSON.parse(raw);
+		expect(Array.isArray(registry.features), 'feature-registry.json must have a features array').toBe(true);
+		expect(Array.isArray(registry.alphaFeatureMatrix), 'feature-registry.json must have an alphaFeatureMatrix array').toBe(true);
+		const validLevels = new Set(['foundation', 'reference', 'incubating', 'deferred']);
+		const features = registry.features as Array<{ id?: unknown; level?: unknown }>;
+		const badLevel = features.find((f) => !validLevels.has(f.level as string));
+		expect(badLevel, `feature entry has invalid level: ${JSON.stringify(badLevel)}`).toBeUndefined();
+		const missingId = features.find((f) => typeof f.id !== 'string' || !f.id);
+		expect(missingId, `feature entry is missing id: ${JSON.stringify(missingId)}`).toBeUndefined();
+	});
+
+	it('deferred features are not directly imported by engine/ production files (Plan 090)', () => {
+		const srcDir = resolve(CORE_ROOT, 'src');
+		const registryPath = resolve(CORE_ROOT, '../../docs/architecture/feature-registry.json');
+		const registry = JSON.parse(readFileSync(registryPath, 'utf-8')) as {
+			features: Array<{ id: string; level: string; modules?: string[]; knownCoupling?: string }>;
+		};
+		// Collect modules for deferred features
+		const deferredModules = registry.features
+			.filter((f) => f.level === 'deferred')
+			.flatMap((f) => f.modules ?? [])
+			.map((m) => path.basename(m)); // match by filename
+		if (deferredModules.length === 0) return;
+		// Known couplings are documented in the registry; only new couplings are violations
+		const knownCouplings = new Set(
+			registry.features
+				.filter((f) => f.level === 'deferred' && f.knownCoupling)
+				.map((f) => path.basename(f.knownCoupling!.split(' imports ')[0]))
+		);
+		const engineDir = resolve(srcDir, 'engine');
+		const engineFiles = collectSourceFiles(engineDir).filter(
+			(f) => !f.endsWith('.test.ts') && !knownCouplings.has(path.basename(f))
+		);
+		const violators: string[] = [];
+		for (const file of engineFiles) {
+			const content = readFileSync(file, 'utf-8');
+			for (const mod of deferredModules) {
+				if (content.includes(mod.replace('.ts', ''))) {
+					violators.push(`${path.relative(srcDir, file)} → ${mod}`);
+				}
+			}
+		}
+		expect(
+			violators,
+			`engine/ files with new deferred-feature imports (add knownCoupling to registry if intentional): ${violators.join(', ')}`
+		).toHaveLength(0);
+	});
+
+	it('alpha feature matrix in feature-registry.json covers all foundation features (Plan 090)', () => {
+		const registryPath = resolve(CORE_ROOT, '../../docs/architecture/feature-registry.json');
+		const registry = JSON.parse(readFileSync(registryPath, 'utf-8')) as {
+			features: Array<{ id: string; level: string }>;
+			alphaFeatureMatrix: string[];
+		};
+		const foundationIds = registry.features.filter((f) => f.level === 'foundation').map((f) => f.id);
+		const matrixSet = new Set(registry.alphaFeatureMatrix);
+		const missing = foundationIds.filter((id) => !matrixSet.has(id));
+		expect(
+			missing,
+			`foundation features missing from alphaFeatureMatrix: ${missing.join(', ')}`
+		).toHaveLength(0);
 	});
 });

@@ -89,6 +89,7 @@
 | 087 | [Store Compatibility Boundary Enforcement](./087-store-boundary-enforcement.md)                                  | DONE     | working tree |
 | 088 | [Runtime Contract Comment Cleanup](./088-runtime-contract-comment-cleanup.md)                                    | DONE     | working tree |
 | 089 | [Open Grid Core Architecture Target](./089-open-grid-core-architecture-target.md)                                | DONE     | working tree |
+| 090 | [Feature Surface Triage and Quarantine](./090-feature-surface-triage-and-quarantine.md)                          | DONE     | working tree |
 
 ## Execution order
 
@@ -246,6 +247,8 @@
 - Plan 078 (Advanced Column Filter API) replaces `filterType: 'set'` with a full `ColumnFilterDef` API on `ColumnDef` supporting `multi-select`, `async-multi-select`, `infinite-multi-select`, `single-select`, `async-single-select`, and a `custom` React renderer escape hatch. Adds `SelectFilterCondition` to `FilterModel`, shared React filter components, `useFilterFetch`/`useFilterPage` hooks, and a `FilterReactBridge` that bridges React into the DOM-based header menu and floating filter row. All three filter surfaces (sidebar panel, header 3-dot menu, floating row) render the same component tree. Backwards-compatible — existing `filterType`/`filterValues` normalise automatically.
 
 ## Plans 089–103 notes
+
+- Plan 090 is implemented on 2026-06-18: creates `docs/architecture/feature-registry.json` — machine-readable classification of 33 features across foundation (11), reference (16), incubating (6), deferred (1) levels with alpha feature matrix. Adds `@experimental` JSDoc to 16 incubating API methods (`undo/redo`, formula methods, sidebar panel, chart overlay). Deletes deprecated `setRendererPorts` from `store.ts` and `createHeadlessPorts` from `rendererPorts.ts` (no external callers; replaced by `bindRuntimePorts`/`HEADLESS_PORTS` in Plan 086). Updates `rendererPorts.test.ts` to use `HEADLESS_PORTS`. Adds 3 new architecture guards (74 total): registry exists/valid, deferred features not imported by new engine files, alpha matrix covers all foundation features. All 904 core tests pass.
 
 - Plan 089 is implemented on 2026-06-18: creates `docs/architecture/core-target.md` as the normative architecture constitution covering 9 layers, domain ownership table (22 domains), canonical command-to-render and raw-row-to-viewport flows, physical vs logical identity rules, feature maturity classification (foundation/reference/incubating/deferred), package boundary rules, and a responsibility registry for 37 major production classes. Adds 7 new architecture guards to `architectureGuards.test.ts` (constitution file exists, no cross-package React imports, no React in domain layers, models cannot import renderer, renderer cannot import store barrel, scheduling API restriction with documented exception list, public index cannot re-export renderer-internal types). README updated with architecture reference link. All 70 architecture guards pass.
 

@@ -326,17 +326,17 @@ export interface GridApi<TRowData = unknown> {
 	setServerDatasource(datasource: IGridDatasource<TRowData>, blockSize?: number): void;
 	goToPage(page: number): void;
 	getCellValue(rowId: string, colField: string): unknown;
-	/** Returns the formula string registered for a cell (e.g. `"=SUM([r1:price], [r2:price])"`), or undefined if none. */
+	/** @experimental Formula/DAG engine (incubating) — DagEngine is directly coupled into GridEngine; must be extracted before Plan 097. Returns the formula string for a cell, or undefined if none. */
 	getFormula(rowId: string, colField: string): string | undefined;
-	/** Returns true when a formula is registered for the cell. */
+	/** @experimental Formula/DAG engine (incubating). Returns true when a formula is registered for the cell. */
 	hasFormula(rowId: string, colField: string): boolean;
 	/**
+	 * @experimental Formula/DAG engine (incubating) — contract may change before alpha.
 	 * Register a formula on a cell. The string must start with `=`.
 	 * Throws if the formula introduces a circular dependency.
-	 * Equivalent to `setCellValue(rowId, colField, formula)` but self-documents intent.
 	 */
 	setFormula(rowId: string, colField: string, formula: string): void;
-	/** Remove the formula from a cell. The raw stored value is retained. */
+	/** @experimental Formula/DAG engine (incubating). Remove the formula from a cell; raw stored value is retained. */
 	clearFormula(rowId: string, colField: string): void;
 	/**
 	 * Updates a single cell value. Triggers valueSetter, undo history, and formula recalculation.
@@ -485,19 +485,29 @@ export interface GridApi<TRowData = unknown> {
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
+	/** @experimental Undo/redo (incubating) — coverage limited to cell edits; contract may change. */
 	undo(): void;
+	/** @experimental Undo/redo (incubating) — coverage limited to cell edits; contract may change. */
 	redo(): void;
+	/** @experimental Undo/redo (incubating). */
 	canUndo(): boolean;
+	/** @experimental Undo/redo (incubating). */
 	canRedo(): boolean;
-	// Sidebar panel API
+	/** @experimental Sidebar panel (incubating) — API may change before alpha. */
 	openPanel(panelId: string): void;
+	/** @experimental Sidebar panel (incubating). */
 	closePanel(): void;
+	/** @experimental Sidebar panel (incubating). */
 	togglePanel(panelId: string): void;
+	/** @experimental Sidebar panel (incubating). */
 	getOpenPanel(): string | null;
-	// Chart overlay API
+	/** @experimental Chart overlay (incubating) — no chart renderer in core; candidate for removal before Plan 103. */
 	openChart(): void;
+	/** @experimental Chart overlay (incubating). */
 	closeChart(): void;
+	/** @experimental Chart overlay (incubating). */
 	toggleChart(): void;
+	/** @experimental Chart overlay (incubating). */
 	isChartOpen(): boolean;
 	exportCsv(options?: CsvExportOptions): void;
 	/** Returns true when a persistence adapter is configured for this grid instance. */

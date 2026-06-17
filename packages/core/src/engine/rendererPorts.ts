@@ -54,13 +54,9 @@ export const headlessThemePort: ThemePort = {
 	onThemeChange: () => () => {},
 };
 
-/** Stable singleton headless ports object. Use this instead of createHeadlessPorts() to avoid allocation on every unmount. */
+/** Stable singleton headless ports object. Avoids allocation on every renderer unmount. */
 export const HEADLESS_PORTS: GridRuntimePorts = { renderer: headlessRendererPort, theme: headlessThemePort };
 
-/** Convenience factory for a fully headless ports object. @deprecated Use HEADLESS_PORTS instead. */
-export function createHeadlessPorts(): GridRuntimePorts {
-	return HEADLESS_PORTS;
-}
 
 /** Opaque token returned by bindRuntimePorts(). Captures the binding generation to detect stale host callbacks. */
 export interface RuntimePortBinding {
