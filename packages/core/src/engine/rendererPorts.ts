@@ -28,7 +28,8 @@ export interface ThemePort {
 
 /**
  * Aggregate of all runtime ports available to the API facade.
- * Ports are supplied during composition; never attached after construction.
+ * Ports are mutable host capability bindings with a headless fallback;
+ * use bindRuntimePorts() / unbindRuntimePorts() to manage the lifecycle.
  */
 export interface GridRuntimePorts {
 	renderer: RendererPort;
@@ -53,7 +54,15 @@ export const headlessThemePort: ThemePort = {
 	onThemeChange: () => () => {},
 };
 
-/** Convenience factory for a fully headless ports object. */
+/** Stable singleton headless ports object. Use this instead of createHeadlessPorts() to avoid allocation on every unmount. */
+export const HEADLESS_PORTS: GridRuntimePorts = { renderer: headlessRendererPort, theme: headlessThemePort };
+
+/** Convenience factory for a fully headless ports object. @deprecated Use HEADLESS_PORTS instead. */
 export function createHeadlessPorts(): GridRuntimePorts {
-	return { renderer: headlessRendererPort, theme: headlessThemePort };
+	return HEADLESS_PORTS;
+}
+
+/** Opaque token returned by bindRuntimePorts(). Captures the binding generation to detect stale host callbacks. */
+export interface RuntimePortBinding {
+	readonly generation: number;
 }

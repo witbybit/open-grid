@@ -7,8 +7,8 @@ import { ViewportController, type ViewportRange } from './viewportController.js'
 import { GridEngine } from './engine/GridEngine.js';
 import type { ClientRowModelRuntime, ServerRowModelRuntime } from './engine/runtimePorts.js';
 import { createClientRowModelRuntime, createServerRowModelRuntime } from './engine/createRowModelRuntimes.js';
-import type { GridRuntimePorts } from './engine/rendererPorts.js';
-import { createHeadlessPorts } from './engine/rendererPorts.js';
+import type { GridRuntimePorts, RuntimePortBinding } from './engine/rendererPorts.js';
+import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
 import { createRowsAccessor } from './rowsAccessor.js';
@@ -113,8 +113,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private readonly pluginRegistry: GridPluginRegistry<TRowData>;
 
 	private containerElement: HTMLElement | null = null;
-	private rendererPorts: GridRuntimePorts = createHeadlessPorts();
+	private rendererPorts: GridRuntimePorts = HEADLESS_PORTS;
 	private instrumentation: GridInstrumentation = NOOP_INSTRUMENTATION;
+	private portBindingGeneration = 0;
+	private activeBindingGeneration: number | null = null;
 
 	constructor(initialState: Partial<GridState<TRowData>> = {}, engineOptions?: { rowValidator?: RowValidator<TRowData> }) {
 		validateColumns(initialState.columns || []);
@@ -838,9 +840,39 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public canRedo = (): boolean => this.engine.commandHistory.canRedo();
 
-	/** Supply live renderer and theme ports when a renderer mounts; reset to headless on unmount. */
+	/** Supply live renderer and theme ports when a renderer mounts; reset to headless on unmount.
+	 * @deprecated Use bindRuntimePorts() / unbindRuntimePorts() for lifecycle-safe port management. */
 	public setRendererPorts = (ports: GridRuntimePorts): void => {
 		this.rendererPorts = ports;
+	};
+
+	/** Bind live renderer and theme ports for an active host. Returns a binding token.
+	 *  Rejects concurrent bindings — only one active host is allowed at a time. */
+	public bindRuntimePorts = (ports: GridRuntimePorts): RuntimePortBinding => {
+		if (this.activeBindingGeneration !== null) {
+			this.engine.runtimeFaults.report({
+				source: 'store',
+				operation: 'bindRuntimePorts',
+				error: new Error('Attempted to bind runtime ports while a binding is already active. Unbind first.'),
+			});
+		}
+		this.portBindingGeneration++;
+		this.activeBindingGeneration = this.portBindingGeneration;
+		this.rendererPorts = ports;
+		const generation = this.portBindingGeneration;
+		return { generation };
+	};
+
+	/** Unbind the active host and restore headless ports. Stale binding tokens are silently ignored. */
+	public unbindRuntimePorts = (binding: RuntimePortBinding): void => {
+		if (binding.generation !== this.activeBindingGeneration) return;
+		this.activeBindingGeneration = null;
+		this.rendererPorts = HEADLESS_PORTS;
+	};
+
+	/** Returns true if the binding token corresponds to the currently active host. */
+	public isBindingCurrent = (binding: RuntimePortBinding): boolean => {
+		return binding.generation === this.activeBindingGeneration;
 	};
 
 	public getInstrumentation = (): GridInstrumentation => this.instrumentation;

@@ -1,7 +1,6 @@
 import { getStoreFromApi } from './createGrid.js';
 import { RenderEngine } from './renderer/renderEngine.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
-import { createHeadlessPorts } from './engine/rendererPorts.js';
 import type {
 	GridCellContentMount,
 	GridCellContentUnmount,
@@ -103,8 +102,8 @@ export function mountGridHost<TRowData>(
 	renderEngine.onMountHeaderMenu = options.headerMenu?.mountHeaderMenu;
 	renderEngine.onUnmountHeaderMenu = options.headerMenu?.unmountHeaderMenu;
 
-	// Supply runtime ports to the store — public API methods now delegate through these.
-	store.setRendererPorts({
+	// Bind live runtime ports — returns a generation token used to guard stale host callbacks.
+	const binding = store.bindRuntimePorts({
 		renderer: {
 			requestRender: () => {},
 			getStats: () => renderEngine.getRenderStats(),
@@ -129,6 +128,7 @@ export function mountGridHost<TRowData>(
 	renderEngine.mount(container);
 
 	const observer = new ResizeObserver((entries) => {
+		if (!store.isBindingCurrent(binding)) return;
 		if (!entries || entries.length === 0) return;
 		const { width, height } = entries[0].contentRect;
 		if (internalApi.setViewportSize(width, height)) {
@@ -218,7 +218,7 @@ export function mountGridHost<TRowData>(
 		destroy() {
 			observer.disconnect();
 			renderEngine.unmount();
-			store.setRendererPorts(createHeadlessPorts());
+			store.unbindRuntimePorts(binding);
 		},
 		adapterHandle,
 	};

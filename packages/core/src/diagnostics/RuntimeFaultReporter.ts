@@ -10,7 +10,8 @@ export type RuntimeFaultSource =
 	| 'cell-notifications'
 	| 'server-row-model'
 	| 'renderer'
-	| 'persistence';
+	| 'persistence'
+	| 'store';
 
 export interface RuntimeFault {
 	id: number;
