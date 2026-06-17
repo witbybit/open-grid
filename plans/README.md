@@ -88,6 +88,7 @@
 | 086 | [Runtime Port Binding Lifecycle](./086-runtime-port-binding-lifecycle.md)                                        | DONE     | working tree |
 | 087 | [Store Compatibility Boundary Enforcement](./087-store-boundary-enforcement.md)                                  | DONE     | working tree |
 | 088 | [Runtime Contract Comment Cleanup](./088-runtime-contract-comment-cleanup.md)                                    | DONE     | working tree |
+| 089 | [Open Grid Core Architecture Target](./089-open-grid-core-architecture-target.md)                                | DONE     | working tree |
 
 ## Execution order
 
@@ -243,6 +244,10 @@
 - Plan 076 (Named Column Views / Profiles) adds `saveView` / `loadView` / `deleteView` / `renameView` / `getViews` / `switchView` / `getActiveView` to `GridApi`, extends `PersistedGridState` with `views` and `activeViewName`, implements a theme-aware `ViewsPanel` registered as a built-in sidebar panel, and adds a `GridViewsPlugin` for `Ctrl+Shift+1`–`9` / `Ctrl+Shift+S` / `Ctrl+Shift+V` hotkeys.
 - Plan 077 (Advanced Cell Editors) ships `createDateEditor`, `createAutocompleteEditor`, and `createSelectEditor` factory functions in `@open-grid/react`. All three render as DOM portals via `useAnchoredPortal` for viewport-safe positioning, share keyboard-navigation hooks, and are styled entirely via `api.getTheme()` tokens (no Tailwind dependency).
 - Plan 078 (Advanced Column Filter API) replaces `filterType: 'set'` with a full `ColumnFilterDef` API on `ColumnDef` supporting `multi-select`, `async-multi-select`, `infinite-multi-select`, `single-select`, `async-single-select`, and a `custom` React renderer escape hatch. Adds `SelectFilterCondition` to `FilterModel`, shared React filter components, `useFilterFetch`/`useFilterPage` hooks, and a `FilterReactBridge` that bridges React into the DOM-based header menu and floating filter row. All three filter surfaces (sidebar panel, header 3-dot menu, floating row) render the same component tree. Backwards-compatible — existing `filterType`/`filterValues` normalise automatically.
+
+## Plans 089–103 notes
+
+- Plan 089 is implemented on 2026-06-18: creates `docs/architecture/core-target.md` as the normative architecture constitution covering 9 layers, domain ownership table (22 domains), canonical command-to-render and raw-row-to-viewport flows, physical vs logical identity rules, feature maturity classification (foundation/reference/incubating/deferred), package boundary rules, and a responsibility registry for 37 major production classes. Adds 7 new architecture guards to `architectureGuards.test.ts` (constitution file exists, no cross-package React imports, no React in domain layers, models cannot import renderer, renderer cannot import store barrel, scheduling API restriction with documented exception list, public index cannot re-export renderer-internal types). README updated with architecture reference link. All 70 architecture guards pass.
 
 ## Plans 079–088 notes
 

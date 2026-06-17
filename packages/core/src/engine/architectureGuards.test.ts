@@ -641,4 +641,124 @@ describe('Architecture guardrails', () => {
 		}
 		expect(violators, `Production files with roadmap-chronology comments: ${violators.join(', ')}`).toHaveLength(0);
 	});
+
+	// ── Plan 089: core-target.md dependency enforcement ───────────────────────
+
+	it('core-target.md architecture constitution exists at docs/architecture/core-target.md (Plan 089)', () => {
+		const constitutionPath = resolve(CORE_ROOT, '../../docs/architecture/core-target.md');
+		expect(existsSync(constitutionPath), 'docs/architecture/core-target.md must exist').toBe(true);
+	});
+
+	it('core package does not import from packages/react (Plan 089)', () => {
+		const srcDir = resolve(CORE_ROOT, 'src');
+		const allFiles = collectSourceFiles(srcDir).filter((f) => !f.endsWith('.test.ts'));
+		// Match only actual import/require statements, not comments mentioning the package name.
+		// Covers: import ... from '@open-grid/react' and require('@open-grid/react')
+		const reactImportPattern = /(?:from\s+|require\s*\(\s*)['"]@open-grid\/react['"]/;
+		const violators: string[] = [];
+		for (const file of allFiles) {
+			const content = readFileSync(file, 'utf-8');
+			if (reactImportPattern.test(content)) {
+				violators.push(path.relative(srcDir, file));
+			}
+		}
+		expect(violators, `core files importing from react package: ${violators.join(', ')}`).toHaveLength(0);
+	});
+
+	it('engine/, state/, models/, rows/ production files do not import React (Plan 089)', () => {
+		const srcDir = resolve(CORE_ROOT, 'src');
+		const protectedDirs = ['engine', 'state', 'models', 'rows'];
+		const violators: string[] = [];
+		for (const dir of protectedDirs) {
+			const dirPath = resolve(srcDir, dir);
+			if (!existsSync(dirPath)) continue;
+			const files = collectSourceFiles(dirPath).filter((f) => !f.endsWith('.test.ts'));
+			for (const file of files) {
+				const content = readFileSync(file, 'utf-8');
+				// Matches: from 'react', from "react", from 'react/', require('react')
+				if (/from ['"]react['"/]|require\(['"]react['"]/.test(content)) {
+					violators.push(path.relative(srcDir, file));
+				}
+			}
+		}
+		expect(violators, `domain layer files importing React: ${violators.join(', ')}`).toHaveLength(0);
+	});
+
+	it('models/ production files do not import from renderer/ (Plan 089)', () => {
+		const srcDir = resolve(CORE_ROOT, 'src');
+		const modelsDir = resolve(srcDir, 'models');
+		if (!existsSync(modelsDir)) return;
+		const files = collectSourceFiles(modelsDir).filter((f) => !f.endsWith('.test.ts'));
+		const violators: string[] = [];
+		for (const file of files) {
+			const content = readFileSync(file, 'utf-8');
+			if (content.includes("from '../renderer/") || content.includes('from "../renderer/')) {
+				violators.push(path.relative(srcDir, file));
+			}
+		}
+		expect(violators, `models/ files importing from renderer/: ${violators.join(', ')}`).toHaveLength(0);
+	});
+
+	it('renderer/ production files do not import from store.ts barrel (Plan 089)', () => {
+		const srcDir = resolve(CORE_ROOT, 'src');
+		const rendererDir = resolve(srcDir, 'renderer');
+		const files = collectSourceFiles(rendererDir).filter((f) => !f.endsWith('.test.ts'));
+		const violators: string[] = [];
+		for (const file of files) {
+			const content = readFileSync(file, 'utf-8');
+			if (content.includes("from '../store.js'") || content.includes('from "../store.js"')) {
+				violators.push(path.relative(srcDir, file));
+			}
+		}
+		expect(violators, `renderer/ files importing from store.ts: ${violators.join(', ')}`).toHaveLength(0);
+	});
+
+	it('browser scheduling APIs (setTimeout/rAF/rIC) are restricted to frame-coordination files (Plan 089)', () => {
+		const srcDir = resolve(CORE_ROOT, 'src');
+		const allFiles = collectSourceFiles(srcDir).filter((f) => !f.endsWith('.test.ts'));
+		// Canonical sites: the only files that should schedule browser work.
+		// Known exceptions document pre-existing usages that must be migrated in Plans 093–096.
+		// Remove entries as each site is migrated; do not add new entries.
+		const allowedFiles = new Set([
+			// Canonical scheduling sites (Plan 089 target)
+			resolve(srcDir, 'renderer', 'frameCoordinator.ts'),
+			resolve(srcDir, 'renderer', 'gridScheduler.ts'),
+			// Known exceptions — to be eliminated in Stage B plans
+			resolve(srcDir, 'contextMenu.ts'),                          // focus + close delay
+			resolve(srcDir, 'export', 'csvExport.ts'),                  // URL.revokeObjectURL cleanup
+			resolve(srcDir, 'features', 'RowDragController.ts'),        // scroll-animation rAF loop
+			resolve(srcDir, 'persistence', 'statePersistence.ts'),      // debounced auto-save
+			resolve(srcDir, 'renderer', 'floatingFilterRenderer.ts'),   // filter debounce + focus
+			resolve(srcDir, 'renderer', 'headerMenuController.ts'),     // filter debounce
+			resolve(srcDir, 'renderer', 'scrollEngine.ts'),             // scroll-end timer
+		]);
+		const schedulingPattern = /\bsetTimeout\b|\brequestAnimationFrame\b|\brequestIdleCallback\b/;
+		const violators: string[] = [];
+		for (const file of allFiles) {
+			if (allowedFiles.has(file)) continue;
+			const content = readFileSync(file, 'utf-8');
+			if (schedulingPattern.test(content)) {
+				violators.push(path.relative(srcDir, file));
+			}
+		}
+		expect(
+			violators,
+			`New files calling browser scheduling APIs outside the allowed set — add migration plan or route through frameCoordinator/gridScheduler: ${violators.join(', ')}`
+		).toHaveLength(0);
+	});
+
+	it('public index.ts does not re-export internal renderer or engine types (Plan 089)', () => {
+		const indexPath = resolve(CORE_ROOT, 'src', 'index.ts');
+		const content = readFileSync(indexPath, 'utf-8');
+		// Renderer-internal types that must not appear in the public barrel
+		const internalRendererTypes = ['RenderEngine', 'ViewportRenderer', 'RowRenderer', 'CellRenderer', 'PortalMountManager', 'RowSlot', 'CellSlot'];
+		const violations: string[] = [];
+		for (const t of internalRendererTypes) {
+			// Match export { ... TypeName ... } or export type { ... TypeName ... }
+			if (new RegExp(`\\b${t}\\b`).test(content)) {
+				violations.push(t);
+			}
+		}
+		expect(violations, `public index.ts re-exports renderer-internal types: ${violations.join(', ')}`).toHaveLength(0);
+	});
 });

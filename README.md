@@ -4,6 +4,12 @@ Open Grid is a lightweight, framework-agnostic grid engine for high-performance 
 
 ---
 
+## Architecture
+
+The normative architecture constitution is at [docs/architecture/core-target.md](docs/architecture/core-target.md). It defines layer ownership, legal dependency directions, canonical execution flows, feature maturity levels, and the responsibility registry for all major production classes. Plans 089–103 converge the codebase toward that document.
+
+---
+
 ## ⚡ Technical Architecture Overview
 
 To bypass virtual DOM performance bottlenecks and eliminate layout thrashing during rapid scrolling, Open Grid decouples raw record arrays from visual presentation using a dynamic **Row Node Tree** and a discriminated union **VisualRow** pipeline:
