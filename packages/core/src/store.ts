@@ -846,6 +846,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getInstrumentation = (): GridInstrumentation => this.instrumentation;
 	public setInstrumentation = (inst: GridInstrumentation): void => {
 		this.instrumentation = inst;
+		this.engine.setInstrumentation(inst);
 	};
 
 	public getRenderStats = (): RenderStats => {

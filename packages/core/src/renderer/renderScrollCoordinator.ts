@@ -1,6 +1,7 @@
 import { type GridScheduler } from './gridScheduler.js';
 import { applyRenderWindowRuntimeLimits, computeRenderWindowInto, sameRenderedWindow, type RenderWindow } from './renderWindow.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import type { OverlayRenderer } from './overlayRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';
@@ -134,7 +135,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.deps.rowRenderer.currentScrollCellsWritten = 0;
 		this.deps.rowRenderer.currentScrollPortalOps = 0;
 		this.deps.renderStats.scrollFrames++;
-		const startStateReads = this.deps.engine.stateManager.debugGetStateCount;
+		const startStateReads = this.deps.engine.instrumentation.get(GridMetric.STATE_READS);
 		try {
 			const plan = this.deps.engine.columns.getCompiledPlan();
 			const scrollCtx = this.state.scrollCtx;
@@ -165,7 +166,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.deps.renderStats.overlayCheapSyncsDuringScroll++;
 			this.deps.overlayRenderer.syncScrollPosition(this.state.cachedHasSelectionOverlay);
 		} finally {
-			const stateReadsInFrame = this.deps.engine.stateManager.debugGetStateCount - startStateReads;
+			const stateReadsInFrame = this.deps.engine.instrumentation.get(GridMetric.STATE_READS) - startStateReads;
 			this.deps.renderStats.stateReadsDuringScroll += stateReadsInFrame;
 			if (this.deps.renderStats.cellsPatchedPerScrollFrame.length >= 1024) {
 				this.deps.renderStats.cellsPatchedPerScrollFrame.length = 0;

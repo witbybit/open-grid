@@ -558,4 +558,25 @@ describe('Architecture guardrails', () => {
 		const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
 		expect(apiContent).toContain('subscribeDomain(');
 	});
+
+	it('StateManager.debugGetStateCount is removed — reads route through GridInstrumentation (Plan 085)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'state', 'StateManager.ts'), 'utf-8');
+		expect(content).not.toContain('debugGetStateCount');
+		expect(content).toContain('GridMetric.STATE_READS');
+	});
+
+	it('GridInstrumentation exposes get() for zero-allocation counter reads (Plan 085)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'diagnostics', 'GridInstrumentation.ts'), 'utf-8');
+		expect(content).toContain('get(metric: GridMetric): number');
+		expect(content).toContain('STATE_READS');
+		expect(content).toContain('ROW_MUTATION_INCREMENTAL');
+		expect(content).toContain('ROW_MUTATION_FULL_REBUILD');
+		expect(content).toContain('SLOT_REBINDS');
+	});
+
+	it('GridEngine exposes instrumentation field and setInstrumentation (Plan 085)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+		expect(content).toContain('public instrumentation: GridInstrumentation');
+		expect(content).toContain('public setInstrumentation(');
+	});
 });

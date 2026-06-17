@@ -1,5 +1,6 @@
 import type { GridState, GridStateUpdater, Listener } from '../store.js';
 import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
+import { type GridInstrumentation, GridMetric, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
 
 export class StateManager<TRowData = unknown> {
 	private state: GridState<TRowData>;
@@ -13,21 +14,22 @@ export class StateManager<TRowData = unknown> {
 	private preTransactionState: GridState<TRowData> | null = null;
 	private onChangesCallback?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void;
 	private readonly faultReporter?: RuntimeFaultReporter<TRowData>;
+	public instrumentation: GridInstrumentation;
 
 	constructor(
 		initialState: GridState<TRowData>,
 		onChanges?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void,
-		faultReporter?: RuntimeFaultReporter<TRowData>
+		faultReporter?: RuntimeFaultReporter<TRowData>,
+		instrumentation?: GridInstrumentation
 	) {
 		this.state = initialState;
 		this.onChangesCallback = onChanges;
 		this.faultReporter = faultReporter;
+		this.instrumentation = instrumentation ?? NOOP_INSTRUMENTATION;
 	}
 
-	public debugGetStateCount = 0;
-
 	public getState(): GridState<TRowData> {
-		this.debugGetStateCount++;
+		this.instrumentation.increment(GridMetric.STATE_READS);
 		return this.state;
 	}
 

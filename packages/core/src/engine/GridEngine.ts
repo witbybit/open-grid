@@ -49,6 +49,7 @@ import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from '../featur
 import { ClipboardController } from '../features/ClipboardController.js';
 import { computeDistinctValues } from '../filterModel.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
+import { type GridInstrumentation, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -87,6 +88,14 @@ export class GridEngine<TRowData = unknown> {
 	public editingVersion = 0;
 	public filteringVersion = 0;
 	public sortingVersion = 0;
+
+	/** Active instrumentation sink. Defaults to noop; call setInstrumentation() to swap in a recording sink. */
+	public instrumentation: GridInstrumentation = NOOP_INSTRUMENTATION;
+
+	public setInstrumentation(inst: GridInstrumentation): void {
+		this.instrumentation = inst;
+		this.stateManager.instrumentation = inst;
+	}
 
 	private readonly domainVersionListeners = new Set<(v: GridDomainVersions) => void>();
 	private readonly domainListeners = new Map<keyof GridDomainVersions, Set<(version: number) => void>>();
@@ -329,7 +338,7 @@ export class GridEngine<TRowData = unknown> {
 		};
 
 		// Construct StateManager with coordinate state update bridging
-		this.stateManager = new StateManager<TRowData>(initialState, this.stateReactions.handleStateChanges, this.runtimeFaults);
+		this.stateManager = new StateManager<TRowData>(initialState, this.stateReactions.handleStateChanges, this.runtimeFaults, this.instrumentation);
 
 		// Initialize changeApplier after stateManager is available
 		this.changeApplier = new GridChangeApplier<TRowData>({

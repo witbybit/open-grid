@@ -42,6 +42,16 @@ export const enum GridMetric {
 	GET_CELL_VALUE_CALLS = 'getCellValueCalls',
 	VALUE_GETTER_CALLS = 'valueGetterCalls',
 	FORMULA_CALLS = 'formulaCalls',
+
+	// ── State reads (StateManager) ────────────────────────────────────
+	STATE_READS = 'stateReads',
+
+	// ── Row mutation classification (ClientRowModelController) ───────
+	ROW_MUTATION_INCREMENTAL = 'rowMutationIncremental',
+	ROW_MUTATION_FULL_REBUILD = 'rowMutationFullRebuild',
+
+	// ── Slot reuse path (rowCellBinder) ───────────────────────────────
+	SLOT_REBINDS = 'slotRebinds',
 }
 
 /** Per-frame timing summary emitted by the frame coordinator. */
@@ -75,6 +85,8 @@ export interface GridInstrumentationSnapshot {
  */
 export interface GridInstrumentation {
 	increment(metric: GridMetric, amount?: number): void;
+	/** Read the current accumulated value for a single counter. Zero-allocation; returns 0 on noop. */
+	get(metric: GridMetric): number;
 	recordFrame(frame: FrameMetrics): void;
 	recordFallback(event: FallbackMetric): void;
 	snapshot(): GridInstrumentationSnapshot;
@@ -92,6 +104,7 @@ const EMPTY_SNAPSHOT: GridInstrumentationSnapshot = Object.freeze({
 /** Zero-overhead sink. All methods are no-ops; snapshot() returns a stable empty object. */
 export class NoopGridInstrumentation implements GridInstrumentation {
 	increment(_metric: GridMetric, _amount?: number): void {}
+	get(_metric: GridMetric): number { return 0; }
 	recordFrame(_frame: FrameMetrics): void {}
 	recordFallback(_event: FallbackMetric): void {}
 	snapshot(): GridInstrumentationSnapshot {
