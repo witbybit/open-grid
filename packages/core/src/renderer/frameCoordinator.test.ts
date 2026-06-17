@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DefaultFrameCoordinator } from './frameCoordinator.js';
+import { RenderRuntimeState } from './renderRuntimeState.js';
 import type { GridScheduler } from './gridScheduler.js';
 
 function makeSyncScheduler(): GridScheduler {
@@ -176,7 +177,7 @@ describe('DefaultFrameCoordinator', () => {
 		expect(onFault).toHaveBeenCalledWith(expect.stringContaining('reentrant scroll frame'));
 	});
 
-	it('reports a fault and skips the frame when a reentrant paint frame is detected', () => {
+	it('reports a fault and skips the frame when a reentrant paint frame is detected (no runtimeState)', () => {
 		const onFault = vi.fn();
 		let capturedRaf: (() => void) | null = null;
 		const gs: GridScheduler = {
@@ -201,5 +202,140 @@ describe('DefaultFrameCoordinator', () => {
 		capturedRaf?.();
 
 		expect(onFault).toHaveBeenCalledWith(expect.stringContaining('reentrant paint frame'));
+	});
+});
+
+describe('DefaultFrameCoordinator – runtime state integration (Plan 079)', () => {
+	it('transitions to paint-frame before invoking the callback', () => {
+		const rs = new RenderRuntimeState();
+		let phaseInsidePaint: string | null = null;
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame: () => {
+				phaseInsidePaint = rs.phase;
+			},
+			gridScheduler: makeSyncScheduler(),
+			runtimeState: rs,
+		});
+
+		coordinator.requestPaintFrame();
+
+		expect(phaseInsidePaint).toBe('paint-frame');
+	});
+
+	it('returns to idle after a successful paint', () => {
+		const rs = new RenderRuntimeState();
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame: vi.fn(),
+			gridScheduler: makeSyncScheduler(),
+			runtimeState: rs,
+		});
+
+		coordinator.requestPaintFrame();
+
+		expect(rs.phase).toBe('idle');
+	});
+
+	it('returns to idle after a paint that throws', () => {
+		const rs = new RenderRuntimeState();
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame: () => {
+				throw new Error('paint failure');
+			},
+			gridScheduler: makeSyncScheduler(),
+			runtimeState: rs,
+		});
+
+		expect(() => coordinator.requestPaintFrame()).toThrow('paint failure');
+		expect(rs.phase).toBe('idle');
+	});
+
+	it('increments frameEpoch for every paint frame', () => {
+		const rs = new RenderRuntimeState();
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame: vi.fn(),
+			gridScheduler: makeSyncScheduler(),
+			runtimeState: rs,
+		});
+
+		expect(rs.frameEpoch).toBe(0);
+		coordinator.requestPaintFrame();
+		expect(rs.frameEpoch).toBe(1);
+		coordinator.requestPaintFrame();
+		expect(rs.frameEpoch).toBe(2);
+	});
+
+	it('isFrameActive() is true inside the paint callback', () => {
+		const rs = new RenderRuntimeState();
+		let frameActiveInsidePaint = false;
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame: () => {
+				frameActiveInsidePaint = rs.isFrameActive();
+			},
+			gridScheduler: makeSyncScheduler(),
+			runtimeState: rs,
+		});
+
+		coordinator.requestPaintFrame();
+
+		expect(frameActiveInsidePaint).toBe(true);
+	});
+
+	it('canRunDecoration() is false inside the paint callback', () => {
+		const rs = new RenderRuntimeState();
+		let decorationAllowedInsidePaint = true;
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame: () => {
+				decorationAllowedInsidePaint = rs.canRunDecoration();
+			},
+			gridScheduler: makeSyncScheduler(),
+			runtimeState: rs,
+		});
+
+		coordinator.requestPaintFrame();
+
+		expect(decorationAllowedInsidePaint).toBe(false);
+	});
+
+	it('flushNowForTests() also transitions through paint-frame', () => {
+		const rs = new RenderRuntimeState();
+		let phaseInsidePaint: string | null = null;
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame: () => {
+				phaseInsidePaint = rs.phase;
+			},
+			gridScheduler: makeSyncScheduler(),
+			runtimeState: rs,
+		});
+
+		coordinator.flushNowForTests();
+
+		expect(phaseInsidePaint).toBe('paint-frame');
+		expect(rs.phase).toBe('idle');
+	});
+
+	it('reports a fault and skips execution when paint is attempted after destruction', () => {
+		const onFault = vi.fn();
+		const rs = new RenderRuntimeState();
+		const onPaintFrame = vi.fn();
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame,
+			gridScheduler: makeSyncScheduler(),
+			onFault,
+			runtimeState: rs,
+		});
+
+		rs.transitionTo('destroyed');
+		coordinator.flushNowForTests();
+
+		expect(onFault).toHaveBeenCalledWith(expect.stringContaining('paint frame after destruction'));
+		expect(onPaintFrame).not.toHaveBeenCalled();
 	});
 });

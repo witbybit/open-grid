@@ -192,6 +192,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			onScrollFrame: () => this.flushScrollFrame(),
 			onPaintFrame: () => this.flushPaint(),
 			onFault: (msg) => engine.runtimeFaults.report({ source: 'renderer', operation: 'frame-reentry', error: new Error(msg) }),
+			runtimeState: this.runtimeState,
 		});
 
 		this.viewportRenderer = new ViewportRenderer<TRowData>(engine, this.geometryController);

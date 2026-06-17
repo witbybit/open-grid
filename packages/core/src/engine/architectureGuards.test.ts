@@ -92,6 +92,24 @@ describe('Architecture guardrails', () => {
 		expect(engineContent).not.toContain('sameRenderedWindow(');
 	});
 
+	it('DefaultFrameCoordinator routes every paint callback through runPaintFrame (Plan 079)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts'), 'utf-8');
+		// The private wrapper must exist.
+		expect(content).toContain('private runPaintFrame()');
+		// runtimeState is accepted as a dep and stored.
+		expect(content).toContain('runtimeState?: RenderRuntimeState');
+		expect(content).toContain('this.runtimeState = deps.runtimeState');
+		// Both external call sites (RAF callback and flushNowForTests) must delegate to runPaintFrame.
+		expect(content).toContain('this.runPaintFrame()');
+		// runPaintFrame must enter and exit the paint-frame phase.
+		expect(content).toContain("rs.transitionTo('paint-frame')");
+		expect(content).toContain("rs.transitionTo('idle')");
+
+		const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
+		// renderEngine must wire runtimeState into the coordinator.
+		expect(engineContent).toContain('runtimeState: this.runtimeState');
+	});
+
 	it('renderPaintCoordinator owns paint lifecycle orchestration', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderPaintCoordinator.ts'), 'utf-8');
 		expect(content).toContain('public flushPaint =');

@@ -1,4 +1,5 @@
 import { type GridScheduler, defaultGridScheduler } from './gridScheduler.js';
+import type { RenderRuntimeState } from './renderRuntimeState.js';
 
 /**
  * Single entry point for all renderer frame scheduling.
@@ -26,6 +27,8 @@ export interface FrameCoordinatorDeps {
 	gridScheduler?: GridScheduler;
 	/** Called when a reentrancy violation is detected. Should not throw. */
 	onFault?: (msg: string) => void;
+	/** Authoritative render lifecycle state. When provided, every paint frame is wrapped in paint-frame phase transitions. */
+	runtimeState?: RenderRuntimeState;
 }
 
 export class DefaultFrameCoordinator implements FrameCoordinator {
@@ -37,12 +40,14 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 	private readonly onScrollFrame: () => void;
 	private readonly onPaintFrame: () => void;
 	private readonly onFault: ((msg: string) => void) | undefined;
+	private readonly runtimeState: RenderRuntimeState | undefined;
 
 	constructor(deps: FrameCoordinatorDeps) {
 		this.gs = deps.gridScheduler ?? defaultGridScheduler;
 		this.onScrollFrame = deps.onScrollFrame;
 		this.onPaintFrame = deps.onPaintFrame;
 		this.onFault = deps.onFault;
+		this.runtimeState = deps.runtimeState;
 	}
 
 	requestScrollFrame(): void {
@@ -78,7 +83,7 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 				}
 				this.inFrame = true;
 				try {
-					this.onPaintFrame();
+					this.runPaintFrame();
 				} finally {
 					this.inFrame = false;
 				}
@@ -93,7 +98,25 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 	flushNowForTests(): void {
 		if (this.destroyed) return;
 		this.paintScheduled = false;
-		this.onPaintFrame();
+		this.runPaintFrame();
+	}
+
+	private runPaintFrame(): void {
+		const rs = this.runtimeState;
+		if (rs) {
+			if (rs.isDestroyed()) {
+				this.onFault?.('FrameCoordinator: paint frame after destruction');
+				return;
+			}
+			rs.transitionTo('paint-frame');
+		}
+		try {
+			this.onPaintFrame();
+		} finally {
+			if (rs && !rs.isDestroyed()) {
+				rs.transitionTo('idle');
+			}
+		}
 	}
 
 	destroy(): void {

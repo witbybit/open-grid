@@ -89,6 +89,10 @@ export class RenderRuntimeState {
 		return this._phase === 'idle';
 	}
 
+	isDestroyed(): boolean {
+		return this._phase === 'destroyed';
+	}
+
 	// ─── Epoch validation for stale-work rejection ────────────────────────────
 
 	isScrollEpochCurrent(epoch: number): boolean {

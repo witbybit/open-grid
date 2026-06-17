@@ -78,6 +78,16 @@
 | 076 | [Named Column Views / Profiles](./076-named-column-views-profiles.md)                                         | TODO     | —            |
 | 077 | [Advanced Cell Editors](./077-advanced-cell-editors.md)                                                       | TODO     | —            |
 | 078 | [Advanced Column Filter API](./078-advanced-column-filter-api.md)                                             | DONE     | —            |
+| 079 | [Paint Frame Runtime Integration](./079-paint-frame-runtime-integration.md)                                   | DONE     | working tree |
+| 080 | [Real Post-Scroll Queue and Scheduler Authority](./080-post-scroll-queue-and-scheduler-authority.md)           | TODO     | —            |
+| 081 | [Portal Mount Identity and Generation Contract](./081-portal-mount-identity-and-generation-contract.md)       | TODO     | —            |
+| 082 | [Derived Row Dependency Closure](./082-derived-row-dependency-closure.md)                                     | TODO     | —            |
+| 083 | [Large-Model Incremental Index Maintenance](./083-large-model-incremental-index-maintenance.md)               | TODO     | —            |
+| 084 | [Domain State Versions and Targeted Notification](./084-domain-state-versions-and-targeted-notification.md)   | TODO     | —            |
+| 085 | [Instrumentation Consolidation and Production No-Op](./085-instrumentation-consolidation-and-production-noop.md) | TODO  | —            |
+| 086 | [Runtime Port Binding Lifecycle](./086-runtime-port-binding-lifecycle.md)                                     | TODO     | —            |
+| 087 | [Store Compatibility Boundary Enforcement](./087-store-boundary-enforcement.md)                               | TODO     | —            |
+| 088 | [Runtime Contract Comment Cleanup](./088-runtime-contract-comment-cleanup.md)                                 | TODO     | —            |
 
 ## Execution order
 
@@ -233,6 +243,10 @@
 - Plan 076 (Named Column Views / Profiles) adds `saveView` / `loadView` / `deleteView` / `renameView` / `getViews` / `switchView` / `getActiveView` to `GridApi`, extends `PersistedGridState` with `views` and `activeViewName`, implements a theme-aware `ViewsPanel` registered as a built-in sidebar panel, and adds a `GridViewsPlugin` for `Ctrl+Shift+1`–`9` / `Ctrl+Shift+S` / `Ctrl+Shift+V` hotkeys.
 - Plan 077 (Advanced Cell Editors) ships `createDateEditor`, `createAutocompleteEditor`, and `createSelectEditor` factory functions in `@open-grid/react`. All three render as DOM portals via `useAnchoredPortal` for viewport-safe positioning, share keyboard-navigation hooks, and are styled entirely via `api.getTheme()` tokens (no Tailwind dependency).
 - Plan 078 (Advanced Column Filter API) replaces `filterType: 'set'` with a full `ColumnFilterDef` API on `ColumnDef` supporting `multi-select`, `async-multi-select`, `infinite-multi-select`, `single-select`, `async-single-select`, and a `custom` React renderer escape hatch. Adds `SelectFilterCondition` to `FilterModel`, shared React filter components, `useFilterFetch`/`useFilterPage` hooks, and a `FilterReactBridge` that bridges React into the DOM-based header menu and floating filter row. All three filter surfaces (sidebar panel, header 3-dot menu, floating row) render the same component tree. Backwards-compatible — existing `filterType`/`filterValues` normalise automatically.
+
+## Plans 079–088 notes
+
+- Plan 079 is implemented and verified on 2026-06-17: `DefaultFrameCoordinator` now accepts `runtimeState` in its deps and wraps every paint frame in a `runPaintFrame()` method that transitions to `paint-frame` before and back to `idle` after (via `finally`). `RenderRuntimeState` gained `isDestroyed()`. `renderEngine.ts` wires `runtimeState` into the coordinator. Integration tests assert that `phase`, `isFrameActive()`, `canRunDecoration()`, and `frameEpoch` are all correct inside and after real paint execution. Architecture guard enforces the `runPaintFrame` boundary. All 847 core tests and React build pass.
 
 ## Findings considered and rejected
 
