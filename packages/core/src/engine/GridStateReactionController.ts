@@ -33,6 +33,10 @@ export interface GridStateReactionControllerDeps<TRowData = unknown> {
 	incrementColumnVersion: () => void;
 	incrementGeometryVersion: () => void;
 	incrementRowModelVersion: () => void;
+	incrementSelectionVersion: () => void;
+	incrementEditingVersion: () => void;
+	incrementFilteringVersion: () => void;
+	incrementSortingVersion: () => void;
 }
 
 export class GridStateReactionController<TRowData = unknown> {
@@ -62,6 +66,14 @@ export class GridStateReactionController<TRowData = unknown> {
 
 		if (updatedSet.has('globalVersion') || updatedSet.has('sortModel') || updatedSet.has('filterModel')) {
 			this.deps.incrementRowModelVersion();
+		}
+
+		if (updatedSet.has('sortModel')) {
+			this.deps.incrementSortingVersion();
+		}
+
+		if (updatedSet.has('filterModel')) {
+			this.deps.incrementFilteringVersion();
 		}
 
 		const rowModel = this.deps.getRowModel();
@@ -126,6 +138,7 @@ export class GridStateReactionController<TRowData = unknown> {
 		if (updatedSet.has('selection')) {
 			this.deps.selection.setSelection(currState.selection);
 			this.deps.invalidation.invalidateOverlay('selection');
+			this.deps.incrementSelectionVersion();
 		}
 
 		const needsRangeUpdate =
@@ -187,6 +200,7 @@ export class GridStateReactionController<TRowData = unknown> {
 		if (updatedSet.has('activeEdit')) {
 			if (prevState.activeEdit) notifyCellOnce(prevState.activeEdit.rowId, prevState.activeEdit.colField);
 			if (currState.activeEdit) notifyCellOnce(currState.activeEdit.rowId, currState.activeEdit.colField);
+			this.deps.incrementEditingVersion();
 		}
 
 		if (updatedSet.has('selection')) {

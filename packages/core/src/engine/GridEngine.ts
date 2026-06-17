@@ -83,8 +83,13 @@ export class GridEngine<TRowData = unknown> {
 	public geometryVersion = 0;
 	public rowModelVersion = 0;
 	public columnVersion = 0;
+	public selectionVersion = 0;
+	public editingVersion = 0;
+	public filteringVersion = 0;
+	public sortingVersion = 0;
 
 	private readonly domainVersionListeners = new Set<(v: GridDomainVersions) => void>();
+	private readonly domainListeners = new Map<keyof GridDomainVersions, Set<(version: number) => void>>();
 
 	/** Returns a snapshot of all formal domain version counters. */
 	public getDomainVersions(): GridDomainVersions {
@@ -92,8 +97,10 @@ export class GridEngine<TRowData = unknown> {
 			columns: this.columnVersion,
 			rows: this.rowModelVersion,
 			geometry: this.geometryVersion,
-			selection: 0,
-			editing: 0,
+			selection: this.selectionVersion,
+			editing: this.editingVersion,
+			filtering: this.filteringVersion,
+			sorting: this.sortingVersion,
 			styling: 0,
 		};
 	}
@@ -105,9 +112,31 @@ export class GridEngine<TRowData = unknown> {
 		return () => this.domainVersionListeners.delete(listener);
 	}
 
-	private notifyDomainVersionListeners(): void {
+	/** Subscribes to version increments for a single domain. The listener receives the new
+	 *  version counter each time that domain is mutated. Returns an unsubscribe function. */
+	public subscribeDomain(domain: keyof GridDomainVersions, listener: (version: number) => void): () => void {
+		let set = this.domainListeners.get(domain);
+		if (!set) {
+			set = new Set();
+			this.domainListeners.set(domain, set);
+		}
+		set.add(listener);
+		return () => {
+			const s = this.domainListeners.get(domain);
+			if (s) s.delete(listener);
+		};
+	}
+
+	private notifyDomainVersionListeners(domain?: keyof GridDomainVersions): void {
 		const v = this.getDomainVersions();
 		this.domainVersionListeners.forEach((l) => l(v));
+		if (domain) {
+			const set = this.domainListeners.get(domain);
+			if (set) {
+				const version = v[domain];
+				set.forEach((l) => l(version));
+			}
+		}
 	}
 
 	// Per-row version map: rowId → version, bumped on each row data mutation.
@@ -224,15 +253,31 @@ export class GridEngine<TRowData = unknown> {
 			requestRender: (reason) => this.requestRender(reason),
 			incrementColumnVersion: () => {
 				this.columnVersion++;
-				this.notifyDomainVersionListeners();
+				this.notifyDomainVersionListeners('columns');
 			},
 			incrementGeometryVersion: () => {
 				this.geometryVersion++;
-				this.notifyDomainVersionListeners();
+				this.notifyDomainVersionListeners('geometry');
 			},
 			incrementRowModelVersion: () => {
 				this.rowModelVersion++;
-				this.notifyDomainVersionListeners();
+				this.notifyDomainVersionListeners('rows');
+			},
+			incrementSelectionVersion: () => {
+				this.selectionVersion++;
+				this.notifyDomainVersionListeners('selection');
+			},
+			incrementEditingVersion: () => {
+				this.editingVersion++;
+				this.notifyDomainVersionListeners('editing');
+			},
+			incrementFilteringVersion: () => {
+				this.filteringVersion++;
+				this.notifyDomainVersionListeners('filtering');
+			},
+			incrementSortingVersion: () => {
+				this.sortingVersion++;
+				this.notifyDomainVersionListeners('sorting');
 			},
 		});
 
@@ -835,5 +880,6 @@ export class GridEngine<TRowData = unknown> {
 		this.eventBus.clear();
 		this.stateManager.destroy();
 		this.domainVersionListeners.clear();
+		this.domainListeners.clear();
 	}
 }

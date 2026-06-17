@@ -6,9 +6,13 @@
  *   columns   — ColumnModel.updateColumns() via GridStateReactionController
  *   rows      — GridStateReactionController on globalVersion / sortModel / filterModel changes
  *   geometry  — GeometryModel.updateRows() via GridStateReactionController
+ *   selection — GridStateReactionController on selection state key change
+ *   editing   — GridStateReactionController on activeEdit state key change
+ *   filtering — GridStateReactionController on filterModel state key change
+ *   sorting   — GridStateReactionController on sortModel state key change
  *
- * Counters for selection, editing, and styling are present in the snapshot but not yet
- * incremented by their respective domains. They will remain 0 until formally wired.
+ * The styling counter is present but not yet incremented. It will remain 0 until
+ * the styling domain wires its increment.
  * Subscribers should treat 0 as "no mutations observed", not "domain is inactive".
  */
 export interface GridDomainVersions {
@@ -18,10 +22,14 @@ export interface GridDomainVersions {
 	rows: number;
 	/** Incremented when row heights or positions recompute (any geometry layout change). */
 	geometry: number;
-	/** Counter for selection/focus mutations. Always 0 until SelectionModel wires its increment. */
+	/** Incremented when the selection or focus cell changes. */
 	selection: number;
-	/** Counter for edit-session lifecycle events. Always 0 until EditModel wires its increment. */
+	/** Incremented when an edit session starts or ends. */
 	editing: number;
+	/** Incremented when the active filter model changes. */
+	filtering: number;
+	/** Incremented when the active sort model changes. */
+	sorting: number;
 	/** Counter for theme/style rule mutations. Always 0 until styling domain wires its increment. */
 	styling: number;
 }

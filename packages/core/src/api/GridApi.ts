@@ -478,6 +478,9 @@ export interface GridApi<TRowData = unknown> {
 	/** Subscribe to domain version changes. Fires once per committed logical mutation in any domain.
 	 *  Prefer this over broad `subscribe()` for consumers that only need to know *that* something changed. */
 	subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void;
+	/** Subscribe to version increments for a single domain. The listener receives the new version counter
+	 *  each time that domain is mutated. More targeted than `subscribeToDomainVersions`. */
+	subscribeDomain(domain: keyof GridDomainVersions, listener: (version: number) => void): () => void;
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;

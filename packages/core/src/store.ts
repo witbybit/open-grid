@@ -723,6 +723,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.subscribeToDomainVersions(listener);
 	};
 
+	public subscribeDomain = (domain: keyof GridDomainVersions, listener: (version: number) => void): (() => void) => {
+		return this.engine.subscribeDomain(domain, listener);
+	};
+
 	public subscribeToViewport = (listener: Listener<TRowData>): (() => void) => {
 		const unsubscribeRows = this.subscribeToKey('visibleRowRange', listener);
 		const unsubscribeCols = this.subscribeToKey('visibleColRange', listener);
