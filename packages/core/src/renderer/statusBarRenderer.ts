@@ -2,7 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
 
 /**
- * Status bar (Plan 039 Phase 5) — read-only chrome docked at the bottom of the grid.
+ * Status bar — read-only chrome docked at the bottom of the grid.
  *
  * Renders a row of panels with live counts (total data rows, selected rows). It is a
  * first-class layer: `ViewportRenderer` builds the `.og-layer-status-bar` element from

@@ -83,7 +83,7 @@ export class HeaderRenderer<TRowData = unknown> {
 	private syncPinnedLayerPositions(layoutPlan: GridLayoutPlan): void {
 		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
 		const scrollLeft = layoutPlan.viewport.scrollLeft;
-		// Single source of truth for the right-lane origin (Plan 039 Phase 4).
+		// Single source of truth for the right-lane origin.
 		const pinRightBaseLeft = layoutPlan.columns.lanes.right.baseLeft;
 
 		if (this.headerLeftLayer) {
@@ -219,8 +219,8 @@ export class HeaderRenderer<TRowData = unknown> {
 					className += ' og-header-cell-col-focus';
 
 				if (headerCell.className !== className) headerCell.className = className;
-				// Live column-reorder preview (Plan 047): slide this header to its previewed
-				// post-drop position. Folded into the positioning transform; the existing
+				// Live column-reorder preview: slide this header to its previewed post-drop
+				// position. Folded into the positioning transform; the existing
 				// `.og-header-cell-movable { transition: transform }` makes it glide + settle.
 				const shiftedLeft = cellLeft + columnInteractions.getColumnShift(cell.colStart);
 				const nextTransform = isDraggingThis ? `translate3d(${shiftedLeft}px, -2px, 0) scale(1.035)` : `translate3d(${shiftedLeft}px, 0, 0)`;

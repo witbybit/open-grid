@@ -4,7 +4,7 @@ const DURATION = 280;
 const EASING = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
 /**
- * LayoutTransitionController (Plan 039) — animates **discrete** layout changes via the
+ * LayoutTransitionController — animates **discrete** layout changes via the
  * Web Animations API (WAAPI). It generalizes the former DOM-snapshot FLIP sort animator
  * into one controller for every animated structural delta: row reorder (sort), row
  * **enter** (expand reveal), and — once the slot exit pool lands — row **exit** (collapse).
@@ -29,7 +29,7 @@ const EASING = 'cubic-bezier(0.4, 0, 0.2, 1)';
  * user prefers reduced motion, changes apply instantly (no animation).
  */
 export interface LayoutTransitionOptions {
-	/** The `.og-layer-exiting` overlay that holds fade-out ghosts (Plan 043). */
+	/** The `.og-layer-exiting` overlay that holds fade-out ghosts. */
 	getExitLayer?: () => HTMLElement | null;
 	/** True when a rowId still exists in the visual model — used to tell a true exit
 	 *  (row removed, e.g. collapsed) from a row that merely scrolled out of the window. */

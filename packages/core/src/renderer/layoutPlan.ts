@@ -37,10 +37,10 @@ export interface HeaderBandLayout {
 }
 
 /**
- * One horizontal pin lane (Plan 039 Phase 4). `baseLeft` is the absolute X (in content
- * coordinates) where the lane's columns begin — the single value used to convert an
- * absolute `colLefts[c]` into a lane-relative offset. Header and body both read this so
- * they cannot drift, and a pin/unpin animation has one geometry to interpolate.
+ * One horizontal pin lane. `baseLeft` is the absolute X (in content coordinates) where
+ * the lane's columns begin — the single value used to convert an absolute `colLefts[c]`
+ * into a lane-relative offset. Header and body both read this so they cannot drift, and
+ * a pin/unpin animation has one geometry to interpolate.
  */
 export interface ColumnLane {
 	width: number;
@@ -291,9 +291,8 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const floatingFilterHeight = state.showFloatingFilters ? FLOATING_FILTER_HEIGHT : 0;
 	const topChromeHeight = groupPanelHeight + filterChipBarHeight + totalHeaderHeight + floatingFilterHeight;
 
-	// Bottom chrome — status bar + pagination bar. These are config-gated; until the
-	// config lands (Plan 039 Phase 5) both heights resolve to 0 and the layout is
-	// identical to the top-only era. Heights come from constants, never magic literals.
+	// Bottom chrome — status bar + pagination bar. Config-gated: when absent both heights
+	// resolve to 0. Heights come from constants, never magic literals.
 	const statusBarHeight = state.showStatusBar ? STATUS_BAR_HEIGHT : 0;
 	const paginationHeight = state.pagination ? PAGINATION_HEIGHT : 0;
 	const bottomChromeHeight = statusBarHeight + paginationHeight;

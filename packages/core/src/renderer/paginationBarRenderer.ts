@@ -2,15 +2,12 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
 
 /**
- * Pagination bar (Plan 039 Phase 5) — chrome docked at the bottom of the grid.
+ * Pagination bar — chrome docked at the bottom of the grid.
  *
  * Renders a page summary + first/prev/next/last controls. Navigation updates
  * `state.pagination.page` and dispatches `paginationChanged` ({page, pageCount,
  * totalRows, pageSize}). This is the integration seam: a server row model (or app code)
- * reacts to the event to fetch/slice the page. NOTE (Plan 039): client-side auto-slicing
- * of the rendered rows is the remaining data-layer step — it must thread a page window
- * through the row pipeline so the visual-row index maps, geometry, and group/sticky meta
- * stay consistent; until then the bar drives page state + the event, not the row set.
+ * reacts to the event to fetch/slice the page.
  *
  * First-class layer: `ViewportRenderer` builds `.og-layer-pagination` from the registry
  * and positions it from the plan; this renderer only fills + wires it.
@@ -53,7 +50,7 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		if (serverPg) {
 			return { page: serverPg.page, pageSize: serverPg.pageSize, totalRows: serverPg.totalRows, pageCount: serverPg.pageCount };
 		}
-		// Client pagination: the row pipeline's page window is authoritative (Plan 041) — its
+		// Client pagination: the row pipeline's page window is authoritative — its
 		// total is the post-filter/post-group visible count, the correct denominator.
 		const pageWindow = rowModel?.getPageWindow?.();
 		if (pageWindow) {
@@ -76,7 +73,7 @@ export class PaginationBarRenderer<TRowData = unknown> {
 			return;
 		}
 		// Client: drive via state + event; the client row model re-runs the pipeline page
-		// window on paginationChanged (Plan 041), and the scroll resets to the page top.
+		// window on paginationChanged, and the scroll resets to the page top.
 		const current = this.engine.stateManager.getState().pagination;
 		if (current && current.page === next) return;
 		this.engine.stateManager.setState({ pagination: { pageSize, page: next } });

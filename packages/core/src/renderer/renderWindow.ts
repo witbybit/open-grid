@@ -29,7 +29,7 @@ export interface RenderWindow {
 	geometryVersion?: number;
 	rowModelVersion?: number;
 	columnVersion?: number;
-	// Phase 9: pixel-first windowing fields
+	// Pixel-first windowing fields
 	/** Top pixel of the visible (non-pinned) area, accounting for pinned top rows. */
 	visibleTop?: number;
 	/** Bottom pixel of the visible area, accounting for pinned bottom rows. */

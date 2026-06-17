@@ -31,7 +31,7 @@ export class ViewportRenderer<TRowData = unknown> {
 	public headerLeftLayer: HTMLDivElement | null = null;
 	public headerRightLayer: HTMLDivElement | null = null;
 
-	// Floating filter layers (Plan 060) — mirror of the header's three-lane pattern
+	// Floating filter layers — mirror of the header's three-lane pattern
 	public floatingFilterWrapper: HTMLDivElement | null = null;
 	public floatingFilterLayer: HTMLDivElement | null = null;
 	public floatingFilterLeftLayer: HTMLDivElement | null = null;

@@ -82,7 +82,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly rowDrag: RowDragController<TRowData>;
 	private _pendingTransition = false;
 
-	// Authoritative render lifecycle phase (Plan 065). Initialized first in constructor.
+	// Authoritative render lifecycle phase. Initialized first in constructor.
 	private runtimeState!: RenderRuntimeState;
 
 	private lastStyleRules: unknown = undefined;
@@ -221,7 +221,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				const model = this.engine.getRowModel();
 				return model ? model.getVisualIndexById(visualRowId) >= 0 : false;
 			},
-			// Grid root for semantic column-pin effects (Plan 044).
+			// Grid root for semantic column-pin effects.
 			getGridRoot: () => this.viewportRenderer.container,
 		});
 
@@ -266,7 +266,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			// change. Bounded to discrete insertion changes during a drag, not per pixel.
 			schedulePaint: () => this.scheduleFullPaint('column interaction'),
 		});
-		// Feed the live column-reorder preview offset into the body bind path (Plan 047).
+		// Feed the live column-reorder preview offset into the body bind path.
 		this.rowRenderer.columnShiftSource = (colIndex) => this.columnInteractions.getColumnShift(colIndex);
 		this.fillDrag = new FillDragController<TRowData>({
 			engine,

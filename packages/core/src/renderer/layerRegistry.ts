@@ -1,7 +1,7 @@
 import type { GridLayoutPlan } from './layoutPlan.js';
 
 /**
- * Declarative DOM-layer registry (Plan 039 Phase 1).
+ * Declarative DOM-layer registry.
  *
  * Every structural layer the grid mounts is described here once: its class, its
  * parent, its sibling order, and a pure `apply(el, plan)` that positions/sizes it
@@ -102,7 +102,7 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 			el.style.width = `${plan.columns.pinRightWidth}px`;
 		},
 	},
-	// Floating filter row (Plan 060) — always-visible inline filter inputs below the header.
+	// Floating filter row — always-visible inline filter inputs below the header.
 	// Mirrors the header's three-lane pattern: center columns are horizontally virtualised,
 	// pinned columns always rendered.
 	{
@@ -168,10 +168,10 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 			el.style.width = `${plan.dimensions.contentWidth}px`;
 		},
 	},
-	// Exit-animation overlay (Plan 043) — holds short-lived clone "ghosts" of rows that
-	// left the model (e.g. collapsed group children) while they fade out. Lives in the
-	// rows' content coordinate space (ghosts carry their own translateY), is pointer-inert,
-	// and is purely a CSS overlay — no plan-driven positioning, so no apply().
+	// Exit-animation overlay — holds short-lived clone "ghosts" of rows that left the model
+	// (e.g. collapsed group children) while they fade out. Lives in the rows' content
+	// coordinate space (ghosts carry their own translateY), is pointer-inert, and is purely
+	// a CSS overlay — no plan-driven positioning, so no apply().
 	{
 		id: 'exiting',
 		className: 'og-layer-exiting',
@@ -187,9 +187,9 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 			el.style.top = `${plan.origins.overlayTop}px`;
 		},
 	},
-	// Bottom chrome (Plan 039 Phase 5) — fixed bars docked below the scroll viewport,
-	// parented to the grid container (not the scroll viewport) so they never scroll.
-	// They occupy the space the scroll viewport gives up via --og-bottom-chrome-height.
+	// Bottom chrome — fixed bars docked below the scroll viewport, parented to the grid
+	// container (not the scroll viewport) so they never scroll. They occupy the space
+	// the scroll viewport gives up via --og-bottom-chrome-height.
 	{
 		id: 'status-bar',
 		className: 'og-layer-status-bar',

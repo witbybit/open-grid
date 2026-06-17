@@ -67,9 +67,9 @@ export interface RowPipelineInput<TData = unknown> {
 	detailRenderer?: unknown;
 	reportFault?: (operation: string, error: unknown, context?: Record<string, unknown>) => void;
 
-	// Client pagination (Plan 041). When set, the final flattened visual rows are sliced
-	// to this page window before any index maps / sticky / group meta are built, so the
-	// whole output is page-relative. Omit for no pagination (full list).
+	// Client pagination. When set, the final flattened visual rows are sliced to this page
+	// window before any index maps / sticky / group meta are built, so the whole output is
+	// page-relative. Omit for no pagination (full list).
 	pagination?: { pageSize: number; page: number };
 }
 
@@ -204,9 +204,9 @@ export class RowPipeline<TData = unknown> {
 			stickyGroupMeta
 		);
 
-		// Client pagination page-window (Plan 041). Slice the fully-flattened visual rows to
-		// the requested page BEFORE building any derived structure, so the index maps and
-		// group meta below — and the geometry/render-window/sticky/selection that read them —
+		// Client pagination page-window. Slice the fully-flattened visual rows to the
+		// requested page BEFORE building any derived structure, so the index maps and group
+		// meta below — and the geometry/render-window/sticky/selection that read them —
 		// are all page-relative with zero extra work. The total (pre-slice) count is the
 		// pagination denominator and is preserved on `pageWindow.totalRows`.
 		let pageWindow: PageWindow | undefined;

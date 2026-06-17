@@ -3,7 +3,7 @@ import type { RowNode } from '../rowNode.js';
 import type { VisualRow } from '../visualRow.js';
 
 /**
- * Explicit renderer lifecycle operation type (Phase 6).
+ * Explicit renderer lifecycle operation type.
  * Adapters can use this to distinguish first mount from updates, rebinds, and warm restores.
  *
  *   mount   — first render of this renderer for this slot
@@ -59,7 +59,7 @@ export interface GridCellContentMount<TRowData = unknown> {
 	isScrolling?: boolean;
 	isFocused?: boolean;
 	isSelected?: boolean;
-	/** Phase 6: explicit lifecycle operation so adapters skip reconciliation when not needed. */
+	/** Explicit lifecycle operation so adapters skip reconciliation when not needed. */
 	lifecycleOperation?: RendererLifecycleOperation;
 }
 

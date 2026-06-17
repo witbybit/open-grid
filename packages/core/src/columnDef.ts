@@ -300,7 +300,7 @@ export interface ColumnDef<TRowData = unknown> {
 	 */
 	filterValues?: (string | number | null)[];
 	/**
-	 * Custom floating filter renderer for this column (Plan 060).
+	 * Custom floating filter renderer for this column.
 	 * Receives a `FloatingFilterRendererParams` object and must populate `eCell`.
 	 * When omitted, the default input (text / number / date / set badge) is used.
 	 * @deprecated Prefer filterDef.renderFloatingFilter for React-based renderers.

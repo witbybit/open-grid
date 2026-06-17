@@ -20,7 +20,7 @@ export interface CellBinding {
 const _PX = Array.from({ length: 2001 }, (_, i) => `${i}px`);
 export const toPx = (n: number): string => (n >= 0 && n < _PX.length ? _PX[n] : `${n}px`);
 
-// Debug stats for DOM write tracking (Phase 4). Shared across all CellSlot instances.
+// DOM write stats shared across all CellSlot instances for performance instrumentation.
 export const cellSlotWriteStats = {
 	cellTextWrites: 0,
 	cellClassWrites: 0,
@@ -58,7 +58,7 @@ export class CellSlot<TRowData = unknown> {
 	public lastLeft = -1; // absolute left px for center and pin-left cells
 	public lastRight = -1; // distance-from-right px for pin-right cells (-1 = not set)
 	public lastWidth = -1; // column width px
-	public lastShift = 0; // live column-reorder preview offset px (Plan 047); 0 = none
+	public lastShift = 0; // live column-reorder preview offset px; 0 = none
 	public lastAriaSelected: boolean | undefined = undefined; // ARIA selection state cache
 	public lastClassName = '';
 	public lastContentMode: CellContentMode = 'empty';
@@ -220,7 +220,7 @@ export class CellSlot<TRowData = unknown> {
 			domUpdated = true;
 		}
 
-		// Live column-reorder preview offset (Plan 047). Composes on top of the `left`/`right`
+		// Live column-reorder preview offset. Composes on top of the `left`/`right`
 		// positioning above. Guarded by lastShift so steady-state binds (shift 0) never touch
 		// transform — the per-cell hot path stays write-free outside an active header drag.
 		if (dragShift !== this.lastShift) {

@@ -46,7 +46,7 @@ export class RowRenderer<TRowData = unknown> {
 	public readonly portalMountManager: PortalMountManager<TRowData>;
 	private readonly cellRenderer: CellRenderer;
 	private readonly viewportRenderer: ViewportRenderer<TRowData>;
-	/** Phase 7 — Real full-width row renderer (group/detail/footer/loading-fw). */
+	/** Full-width row renderer (group/detail/footer/loading-fw). */
 	private fullWidthRenderer!: FullWidthRowRenderer<TRowData>;
 
 	// ── Stable slot pool ──────────────────────────────────────────────────────────────
@@ -154,7 +154,7 @@ export class RowRenderer<TRowData = unknown> {
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 	private readonly runtime: RowRendererRuntimeBridge<TRowData>;
 	private readonly pinnedContainers = new PinnedContainerManager<TRowData>();
-	/** Live column-reorder preview source (Plan 047), wired by RenderEngine to the
+	/** Live column-reorder preview source, wired by RenderEngine to the
 	 *  ColumnInteractionController. Returns 0 outside an active header drag. */
 	public columnShiftSource: ((colIndex: number) => number) | null = null;
 

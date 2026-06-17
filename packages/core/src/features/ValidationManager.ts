@@ -101,7 +101,7 @@ export class ValidationManager<TRowData = unknown> {
 		const state = this.ctx.getState();
 		const rowCount = rowModel.getVisualRowCount();
 
-		// ── Phase 1: column validators ────────────────────────────────────────────
+		// ── Column validators ────────────────────────────────────────────────────
 		const colTasks: Array<Promise<{ rowId: string; colField: string; error: string | null }>> = [];
 		for (let i = 0; i < rowCount; i++) {
 			const vr = rowModel.getVisualRow(i);
@@ -146,7 +146,7 @@ export class ValidationManager<TRowData = unknown> {
 			if (r.error) nextErrors[validationKey(r.rowId, r.colField)] = r.error;
 		}
 
-		// ── Phase 2: row validator (cross-field rules) ────────────────────────────
+		// ── Row validator (cross-field rules) ────────────────────────────────────
 		if (this.rowValidator) {
 			const rowTasks: Array<Promise<{ rowId: string; errors: Record<string, string | null> }>> = [];
 			for (let i = 0; i < rowCount; i++) {

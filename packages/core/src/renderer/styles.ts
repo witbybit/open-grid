@@ -87,7 +87,7 @@ export const CORE_STYLES = `
     z-index: 10;
   }
 
-  /* ── Exit-animation overlay (Plan 043) ──────────────────────────────────── */
+  /* ── Exit-animation overlay ─────────────────────────────────────────────── */
   /* Sits in the rows' content coordinate space; ghosts carry their own translateY.
      Pointer-inert and above normal rows so fade-outs read on top of rows sliding up. */
   .og-layer-exiting {
@@ -108,7 +108,7 @@ export const CORE_STYLES = `
     pointer-events: none;
   }
 
-  /* ── Floating filter row (Plan 060) ─────────────────────────────────────── */
+  /* ── Floating filter row ────────────────────────────────────────────────── */
 
   /* Wrapper: sticky horizontal stripe, same z-index as the header. */
   .og-layer-floating-filter-wrapper {
@@ -227,7 +227,7 @@ export const CORE_STYLES = `
     text-overflow: ellipsis;
   }
 
-  /* Operator picker button (Plan 059) */
+  /* Operator picker button */
   .og-floating-filter-op-btn {
     flex-shrink: 0;
     display: inline-flex;
@@ -285,7 +285,7 @@ export const CORE_STYLES = `
     opacity: 0.4;
   }
 
-  /* ── Bottom chrome: status bar + pagination (Plan 039 Phase 5) ───────────── */
+  /* ── Bottom chrome: status bar + pagination ─────────────────────────────── */
 
   .og-layer-status-bar,
   .og-layer-pagination {
@@ -1245,7 +1245,7 @@ export const CORE_STYLES = `
     transition: opacity 0.15s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* Live column-reorder preview (Plan 047): body cells slide to their previewed
+  /* Live column-reorder preview: body cells slide to their previewed
      post-drop position via a translateX composed on top of their left offset. The
      glide transition is scoped to an active drag, so steady-state scroll/resize
      frames — which never carry this class — never transition transform. On drop the

@@ -44,10 +44,10 @@ export interface CustomRendererStats {
 	warmHits: number;
 	warmMisses: number;
 	evictions: number;
-	// Phase 7: hydration budget tracking
+	// hydration budget tracking
 	hydrationChunks: number;
 	maxHydratedInOneChunk: number;
-	// Phase 8: warm DOM move tracking
+	// warm DOM move tracking
 	warmMovesDeferred: number;
 	warmMovesFlushed: number;
 }
@@ -81,7 +81,7 @@ export class CustomRendererManager<TRowData = unknown> {
 		warmMovesFlushed: 0,
 	};
 
-	// Phase 8: pending warm DOM moves deferred during scroll
+	// Warm DOM moves deferred during scroll — flushed in budgeted chunks after scroll idle.
 	private pendingWarmMoves: RendererInstance<TRowData>[] = [];
 
 	private hiddenContainer: HTMLDivElement | null = null;
@@ -268,9 +268,8 @@ export class CustomRendererManager<TRowData = unknown> {
 	}
 
 	/**
-	 * Phase 8: Flush deferred warm DOM moves in budgeted chunks after scroll idle.
-	 * This is where the actual DOM move to hiddenContainer happens for scroll-deferred
-	 * warm cache entries. Returns the number of moves performed.
+	 * Flush deferred warm DOM moves in budgeted chunks after scroll idle.
+	 * Returns the number of moves performed.
 	 */
 	public flushPendingWarmMoves(maxItems = 16): number {
 		// Containers were already moved to hiddenContainer in releaseInstance.
@@ -286,9 +285,8 @@ export class CustomRendererManager<TRowData = unknown> {
 	}
 
 	/**
-	 * Phase 8: Flush warm move budget — move deferred scroll-out containers to the hidden
-	 * container in budgeted chunks. This is the correct name; flushHydrationBudget is kept
-	 * as a compat alias for existing callers until they are updated.
+	 * Flush warm move budget — move deferred scroll-out containers to the hidden
+	 * container in budgeted chunks.
 	 */
 	public flushWarmMoveBudget(options: { maxItems?: number; deadlineMs?: number } = {}): { warmMovesFlushed: number } {
 		const maxItems = options.maxItems ?? 16;

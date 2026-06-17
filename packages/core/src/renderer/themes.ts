@@ -113,7 +113,7 @@ export interface ThemeTokens {
 	filterChipColor?: string;
 
 	/* ─────────────────────────────────────────────────────────────────────
-     Floating Filter Row (Plan 060)
+     Floating Filter Row
      ───────────────────────────────────────────────────────────────────── */
 	/** Background of the floating filter row. Defaults to headerBg when unset. */
 	floatingFilterBg?: string;

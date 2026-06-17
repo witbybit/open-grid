@@ -626,4 +626,19 @@ describe('Architecture guardrails', () => {
 		}
 		expect(violators, `state/ files still importing from store.ts: ${violators.join(', ')}`).toHaveLength(0);
 	});
+
+	it('production source files do not contain Plan NNN or Phase N: roadmap-chronology comments (Plan 088)', () => {
+		const srcDir = resolve(CORE_ROOT, 'src');
+		const allFiles = collectSourceFiles(srcDir).filter((f) => !f.endsWith('.test.ts'));
+		// Pattern: "(Plan NNN" or "Phase N:" or "Phase N —" or "(Phase N)"
+		const roadmapPattern = /\(Plan \d+|\bPhase \d+[:\s—]|\(Phase \d+\)/;
+		const violators: string[] = [];
+		for (const file of allFiles) {
+			const content = readFileSync(file, 'utf-8');
+			if (roadmapPattern.test(content)) {
+				violators.push(path.relative(srcDir, file));
+			}
+		}
+		expect(violators, `Production files with roadmap-chronology comments: ${violators.join(', ')}`).toHaveLength(0);
+	});
 });

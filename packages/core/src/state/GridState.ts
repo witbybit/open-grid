@@ -33,7 +33,7 @@ export interface GridModelState<TRowData = unknown> {
 	showFilterChipBar?: boolean;
 	pinnedColumns?: { left: number; right: number };
 
-	/** Show an always-visible inline filter row below the column headers (Plan 060). */
+	/** Show an always-visible inline filter row below the column headers. */
 	showFloatingFilters?: boolean;
 	/**
 	 * 'managed': grid reorders rows automatically on drop.
@@ -42,8 +42,7 @@ export interface GridModelState<TRowData = unknown> {
 	 */
 	rowDragMode?: 'managed' | 'unmanaged';
 
-	// Bottom chrome (Plan 039 Phase 5). Presence gates the bottom-chrome height in the
-	// layout plan; full panel/page config is filled in when the feature lands.
+	// Bottom chrome. Presence gates the bottom-chrome height in the layout plan.
 	showStatusBar?: boolean;
 	pagination?: { pageSize: number; page?: number };
 

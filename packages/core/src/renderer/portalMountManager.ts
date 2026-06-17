@@ -458,7 +458,7 @@ export class PortalMountManager<TRowData = unknown> {
 			this.stats.flushChunks++;
 			this.stats.maxOpsFlushedInOneChunk = Math.max(this.stats.maxOpsFlushedInOneChunk, processed);
 		}
-		// Phase 7: delegate warm DOM move budget to CustomRendererManager (it owns hydration policy)
+		// Delegate warm DOM move budget to CustomRendererManager (it owns hydration policy).
 		if (processed > 0 || this.customRendererManager['pendingWarmMoves'].length > 0) {
 			this.customRendererManager.flushWarmMoveBudget({
 				maxItems: maxItems === Number.POSITIVE_INFINITY ? 16 : Math.max(1, Math.floor(maxItems / 2)),

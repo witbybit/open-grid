@@ -41,7 +41,7 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	incrementStyleHookCallsDuringScroll: () => void;
 	incrementCellsBoundDuringScroll: () => void;
 	incrementCurrentScrollCellsWritten: () => void;
-	/** Live column-reorder preview offset (px) for a displayed column index (Plan 047).
+	/** Live column-reorder preview offset (px) for a displayed column index.
 	 *  0 outside an active header drag. Only consulted on the full-bind path. */
 	getColumnShift?: (colIndex: number) => number;
 }

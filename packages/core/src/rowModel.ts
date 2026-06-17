@@ -81,7 +81,7 @@ export interface RowModel<TRowData = unknown> {
 	expandAllGroups?(): RowModelRefreshResult | void;
 	collapseAllGroups?(): RowModelRefreshResult | void;
 	getStickyGroupMeta?(): Map<number, number>;
-	/** The active client page-window (Plan 041), or null when pagination is off. */
+	/** The active client page-window, or null when pagination is off. */
 	getPageWindow?(): PageWindow | null;
 	/** Returns all data nodes (unfiltered) for distinct-value computation. */
 	getAllDataNodes?(): RowNode<TRowData>[];
@@ -1286,8 +1286,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			masterDetailEnabled: state.masterDetailEnabled,
 			detailRenderer: state.detailRenderer,
 			reportFault: this.runtime.reportRowPipelineFault,
-			// Client pagination (Plan 041): slice happens inside the pipeline so every
-			// derived map/meta/geometry stays page-consistent. Undefined → full list.
+			// Client pagination: slice happens inside the pipeline so every derived
+			// map/meta/geometry stays page-consistent. Undefined → full list.
 			pagination: state.pagination ? { pageSize: state.pagination.pageSize, page: state.pagination.page ?? 0 } : undefined,
 		});
 		const { visualRows } = result;

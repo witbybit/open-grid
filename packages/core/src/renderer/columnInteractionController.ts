@@ -4,7 +4,7 @@ import type { GridLayoutPlan } from './layoutPlan.js';
 
 /**
  * Compute the per-column horizontal shift (px) that previews a reorder of `fromIndex`
- * to the insertion gap `gapIndex`, while a header drag is in progress (Plan 047).
+ * to the insertion gap `gapIndex`, while a header drag is in progress.
  *
  * The returned `shifts[i]` is the delta from column i's CURRENT left to the left it
  * will occupy AFTER the move. Renderers add it to the column's positioning so every
@@ -84,7 +84,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private columnDropIndicator: HTMLDivElement | null = null;
 	private indicatorShown = false;
 	private columnDragGhost: HTMLDivElement | null = null;
-	// Live-reorder preview (Plan 047): per-column shift (px) for the current insertion
+	// Live-reorder preview: per-column shift (px) for the current insertion
 	// point. Null when no preview is active. Recomputed only when the insertion index
 	// changes, then read by the header + body renderers via getColumnShift().
 	private dragShifts: number[] | null = null;
