@@ -38,6 +38,7 @@ export function createClientRowModelRuntime<TRowData>(store: GridStore<TRowData>
 		hasValueGetter: (colField) => store.engine.hasValueGetter(colField),
 		notifyBulkCellChange: (changes) => store.engine.notifyBulkCellChange(changes),
 		dispatchRowsUpdated: (payload) => store.dispatchEvent(GridEventName.rowsUpdated, payload),
+		getInstrumentation: () => store.getInstrumentation(),
 	};
 }
 
@@ -75,5 +76,6 @@ export function createServerRowModelRuntime<TRowData>(store: GridStore<TRowData>
 				error,
 				context: { blockIndex },
 			}),
+		getInstrumentation: () => store.getInstrumentation(),
 	};
 }

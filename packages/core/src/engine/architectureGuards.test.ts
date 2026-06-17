@@ -839,4 +839,39 @@ describe('Architecture guardrails', () => {
 			`foundation features missing from alphaFeatureMatrix: ${missing.join(', ')}`
 		).toHaveLength(0);
 	});
+
+	// ── Plan 091: performance baseline laboratory ─────────────────────────────
+
+	it('benchmark-scenarios.json exists and is valid JSON with scenarioVersion and scenarios array (Plan 091)', () => {
+		const scenariosPath = resolve(CORE_ROOT, '../../docs/architecture/benchmark-scenarios.json');
+		expect(existsSync(scenariosPath), 'docs/architecture/benchmark-scenarios.json must exist').toBe(true);
+		const raw = readFileSync(scenariosPath, 'utf-8');
+		let manifest: { scenarioVersion?: unknown; scenarios?: unknown[] };
+		expect(() => { manifest = JSON.parse(raw); }, 'benchmark-scenarios.json must be valid JSON').not.toThrow();
+		manifest = JSON.parse(raw);
+		expect(typeof manifest.scenarioVersion, 'benchmark-scenarios.json must have a scenarioVersion field').toBe('string');
+		expect(Array.isArray(manifest.scenarios), 'benchmark-scenarios.json must have a scenarios array').toBe(true);
+		const scenarios = manifest.scenarios as Array<{ id?: unknown; level?: unknown }>;
+		const missingId = scenarios.find((s) => typeof s.id !== 'string' || !s.id);
+		expect(missingId, `scenario entry is missing id: ${JSON.stringify(missingId)}`).toBeUndefined();
+	});
+
+	it('baseline.json exists as pre-convergence metric snapshot (Plan 091)', () => {
+		const baselinePath = resolve(CORE_ROOT, '../../docs/architecture/baseline.json');
+		expect(existsSync(baselinePath), 'docs/architecture/baseline.json must exist').toBe(true);
+		const raw = readFileSync(baselinePath, 'utf-8');
+		let baseline: { capturedAt?: unknown; scenarios?: unknown[] };
+		expect(() => { baseline = JSON.parse(raw); }, 'baseline.json must be valid JSON').not.toThrow();
+		baseline = JSON.parse(raw);
+		expect(typeof baseline.capturedAt, 'baseline.json must have a capturedAt field').toBe('string');
+		expect(Array.isArray(baseline.scenarios), 'baseline.json must have a scenarios array').toBe(true);
+	});
+
+	it('ROW_MUTATION_INCREMENTAL and ROW_MUTATION_FULL_REBUILD are incremented in rowModel.ts (Plan 091)', () => {
+		const rowModelPath = resolve(CORE_ROOT, 'src', 'rowModel.ts');
+		const content = readFileSync(rowModelPath, 'utf-8');
+		expect(content).toContain('GridMetric.ROW_MUTATION_FULL_REBUILD');
+		expect(content).toContain('GridMetric.ROW_MUTATION_INCREMENTAL');
+		expect(content).toContain('getInstrumentation().increment');
+	});
 });

@@ -90,6 +90,7 @@
 | 088 | [Runtime Contract Comment Cleanup](./088-runtime-contract-comment-cleanup.md)                                    | DONE     | working tree |
 | 089 | [Open Grid Core Architecture Target](./089-open-grid-core-architecture-target.md)                                | DONE     | working tree |
 | 090 | [Feature Surface Triage and Quarantine](./090-feature-surface-triage-and-quarantine.md)                          | DONE     | working tree |
+| 091 | [Performance Baseline Laboratory](./091-performance-baseline-laboratory.md)                                       | DONE     | working tree |
 
 ## Execution order
 
@@ -247,6 +248,8 @@
 - Plan 078 (Advanced Column Filter API) replaces `filterType: 'set'` with a full `ColumnFilterDef` API on `ColumnDef` supporting `multi-select`, `async-multi-select`, `infinite-multi-select`, `single-select`, `async-single-select`, and a `custom` React renderer escape hatch. Adds `SelectFilterCondition` to `FilterModel`, shared React filter components, `useFilterFetch`/`useFilterPage` hooks, and a `FilterReactBridge` that bridges React into the DOM-based header menu and floating filter row. All three filter surfaces (sidebar panel, header 3-dot menu, floating row) render the same component tree. Backwards-compatible — existing `filterType`/`filterValues` normalise automatically.
 
 ## Plans 089–103 notes
+
+- Plan 091 is implemented on 2026-06-18: creates `docs/architecture/benchmark-scenarios.json` (8 canonical scenarios with correctness budgets) and `docs/architecture/baseline.json` (pre-convergence metric snapshot). Creates `packages/core/src/perf/instrumentedBudgets.test.ts` with 7 instrumentation-based correctness budget tests (zero wall-clock timing). Adds `getInstrumentation()` to `RowModelRuntimeBase` and wires it through both client and server runtimes so `ClientRowModelController` can increment `ROW_MUTATION_FULL_REBUILD` on `setRows` and `ROW_MUTATION_INCREMENTAL` / `ROW_MUTATION_FULL_REBUILD` on `applyTransaction`. Converts all wall-clock `expect(duration).toBeLessThan(X)` assertions in `performance.test.ts` to informational `console.log` only — correctness assertions remain. Adds 3 new architecture guards (77 total): benchmark-scenarios.json valid, baseline.json exists, rowModel.ts increments ROW_MUTATION_* metrics. All 914 core tests pass.
 
 - Plan 090 is implemented on 2026-06-18: creates `docs/architecture/feature-registry.json` — machine-readable classification of 33 features across foundation (11), reference (16), incubating (6), deferred (1) levels with alpha feature matrix. Adds `@experimental` JSDoc to 16 incubating API methods (`undo/redo`, formula methods, sidebar panel, chart overlay). Deletes deprecated `setRendererPorts` from `store.ts` and `createHeadlessPorts` from `rendererPorts.ts` (no external callers; replaced by `bindRuntimePorts`/`HEADLESS_PORTS` in Plan 086). Updates `rendererPorts.test.ts` to use `HEADLESS_PORTS`. Adds 3 new architecture guards (74 total): registry exists/valid, deferred features not imported by new engine files, alpha matrix covers all foundation features. All 904 core tests pass.
 

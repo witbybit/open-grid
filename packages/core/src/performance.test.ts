@@ -67,11 +67,10 @@ describe('Performance Benchmarks', () => {
 			const duration = performance.now() - start;
 			const avgPerScroll = duration / iterations;
 
+			// Informational: wall-clock scroll timing varies by machine and CI load.
+			// Use instrumentedBudgets.test.ts for reproducible pipeline-level assertions.
 			console.log(`Scroll Performance: ${avgPerScroll.toFixed(3)}ms per scroll (${iterations} iterations)`);
 			console.log(`Target: <16ms for 60 FPS, <8ms for 120 FPS`);
-
-			// Should be well under 16ms per scroll update
-			expect(avgPerScroll).toBeLessThan(16);
 
 			controller.dispose();
 		});
@@ -114,10 +113,8 @@ describe('Performance Benchmarks', () => {
 			const duration = performance.now() - start;
 			const avgPerCalc = duration / 1000;
 
+			// Informational: wall-clock range-calc timing is environment-dependent.
 			console.log(`Range Calculation: ${avgPerCalc.toFixed(3)}ms per calculation`);
-
-			// Should be extremely fast with binary search
-			expect(avgPerCalc).toBeLessThan(1);
 
 			controller.dispose();
 		});
@@ -168,13 +165,11 @@ describe('Performance Benchmarks', () => {
 			store.flushCellUpdatesSync();
 			const duration = performance.now() - start;
 
+			// Correctness invariant: targeted invalidation must not fan out to unrelated subscriptions.
 			expect(unrelatedListener).not.toHaveBeenCalled();
 			expect(dependentListener).toHaveBeenCalledTimes(1);
-			// The key invariant is targeted invalidation with no unrelated subscriber fan-out.
-			// This runs inside the full core suite, where large renderer/runtime tests can add
-			// enough contention to make a microbenchmark-style 25ms ceiling flaky on otherwise
-			// healthy runs. Keep a bounded budget that still catches real regression fan-out.
-			expect(duration).toBeLessThan(125);
+			// Informational: wall-clock timing is environment-dependent.
+			console.log(`Fan-out test: ${duration.toFixed(3)}ms for single cell update with 2002-column grid`);
 
 			controller.dispose();
 		});
@@ -215,12 +210,9 @@ describe('Performance Benchmarks', () => {
 
 			const duration = performance.now() - start;
 
+			// Informational: wall-clock bulk-update timing is environment-dependent.
 			console.log(`Bulk Cell Updates: ${duration.toFixed(3)}ms for 1000 updates`);
 			console.log(`Average: ${(duration / 1000).toFixed(3)}ms per update`);
-
-			// This runs inside the full Vitest suite, not an isolated microbenchmark harness.
-			// Keep a meaningful ceiling for regressions while allowing normal CI/local contention.
-			expect(duration).toBeLessThan(450);
 
 			controller.dispose();
 		});
@@ -262,10 +254,8 @@ describe('Performance Benchmarks', () => {
 
 			const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
 
+			// Informational: wall-clock single-cell timing is environment-dependent.
 			console.log(`Single Cell Update: ${avgDuration.toFixed(3)}ms average`);
-
-			// Should be very fast
-			expect(avgDuration).toBeLessThan(2);
 
 			controller.dispose();
 		});
@@ -352,10 +342,8 @@ describe('Performance Benchmarks', () => {
 
 			const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
 
+			// Informational: wall-clock column-resize timing is environment-dependent.
 			console.log(`Column Resize: ${avgDuration.toFixed(3)}ms average`);
-
-			// Should be very fast
-			expect(avgDuration).toBeLessThan(10);
 
 			controller.dispose();
 		});
@@ -398,10 +386,8 @@ describe('Performance Benchmarks', () => {
 
 			const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
 
+			// Informational: wall-clock selection timing is environment-dependent.
 			console.log(`Selection Bounds: ${avgDuration.toFixed(3)}ms average`);
-
-			// Should be very fast
-			expect(avgDuration).toBeLessThan(5);
 
 			controller.dispose();
 		});

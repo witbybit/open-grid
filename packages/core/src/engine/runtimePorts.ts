@@ -6,6 +6,7 @@ import type { GeometryModel } from '../models/GeometryModel.js';
 import type { RowModel } from '../rowModel.js';
 import type { GridState } from '../state/GridState.js';
 import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
+import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 
 export interface DataModelRuntime<TRowData = unknown> {
 	getState: () => GridState<TRowData>;
@@ -56,6 +57,7 @@ export interface RowModelRuntimeBase<TRowData = unknown> {
 	getCellValue: (rowId: string, colField: string) => unknown;
 	bumpGlobalVersion: () => void;
 	reportRowPipelineFault: (operation: string, error: unknown, context?: Record<string, unknown>) => RuntimeFault;
+	getInstrumentation: () => GridInstrumentation;
 }
 
 export interface RowModelMutationRuntime<TRowData = unknown> {

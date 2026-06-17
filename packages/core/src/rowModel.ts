@@ -2,6 +2,7 @@ import { type ColumnDef, setValueByPath, compilePathGetter } from './columnDef.j
 import { GridEventName } from './api/GridEvents.js';
 import type { RowDataTransaction, RowNodeTransaction, RowSelectionScope } from './api/GridApi.js';
 import type { ClientRowModelRuntime } from './engine/runtimePorts.js';
+import { GridMetric } from './diagnostics/GridInstrumentation.js';
 import { getFieldRoot } from './ids.js';
 import { RowNode } from './rowNode.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
@@ -774,6 +775,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.dataStore.setRows(rows);
 		this.runtime.clearFormulas();
 		this.refresh();
+		this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
 	}
 
 	/**
@@ -1061,9 +1063,13 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			const wasIncremental = this.tryIncrementalTransaction(result.added, result.removed);
 			if (wasIncremental) {
 				this.runtime.bumpGlobalVersion();
+				this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_INCREMENTAL);
 			} else {
 				this.refresh('bulk');
+				this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
 			}
+		} else if (result.updated.length > 0) {
+			this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_INCREMENTAL);
 		}
 
 		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {
