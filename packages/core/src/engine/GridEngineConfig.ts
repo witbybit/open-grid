@@ -1,4 +1,5 @@
-import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleRule, RowSelectionOptions } from '../store.js';
+import type { ColumnDef, GridStyleRule } from '../columnDef.js';
+import type { GridCellPointer, GridSelectionState, RowSelectionOptions } from '../api/GridApi.js';
 import type { RowValidator } from '../features/ValidationManager.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { SortModel, FilterModel } from '../rowModel.js';

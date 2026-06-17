@@ -1,4 +1,6 @@
-import { GridEventName, type GridState, type RowModel } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { GridState } from '../state/GridState.js';
+import type { RowModel } from '../rowModel.js';
 import type { StateManager } from '../state/StateManager.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { ColumnModel } from '../models/ColumnModel.js';

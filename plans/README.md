@@ -86,7 +86,7 @@
 | 084 | [Domain State Versions and Targeted Notification](./084-domain-state-versions-and-targeted-notification.md)   | DONE     | working tree |
 | 085 | [Instrumentation Consolidation and Production No-Op](./085-instrumentation-consolidation-and-production-noop.md) | DONE  | working tree |
 | 086 | [Runtime Port Binding Lifecycle](./086-runtime-port-binding-lifecycle.md)                                     | DONE     | working tree |
-| 087 | [Store Compatibility Boundary Enforcement](./087-store-boundary-enforcement.md)                               | TODO     | —            |
+| 087 | [Store Compatibility Boundary Enforcement](./087-store-boundary-enforcement.md)                               | DONE     | working tree |
 | 088 | [Runtime Contract Comment Cleanup](./088-runtime-contract-comment-cleanup.md)                                 | TODO     | —            |
 
 ## Execution order

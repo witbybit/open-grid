@@ -1,4 +1,4 @@
-import type { GridState, GridStateUpdater, Listener } from '../store.js';
+import type { GridState, GridStateUpdater, Listener } from './GridState.js';
 import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import { type GridInstrumentation, GridMetric, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
 

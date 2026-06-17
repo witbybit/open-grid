@@ -1,4 +1,5 @@
-import type { GridStateUpdater, GridEventPayloadMap } from '../store.js';
+import type { GridStateUpdater } from '../state/GridState.js';
+import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import type { StateManager } from '../state/StateManager.js';
 import type { InvalidationManager, GridInvalidation } from '../renderer/invalidationManager.js';
 import type { EventBus } from '../events/EventBus.js';

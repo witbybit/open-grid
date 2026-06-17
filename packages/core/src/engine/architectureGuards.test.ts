@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
-import { resolve } from 'path';
+import path, { resolve } from 'path';
 
 const CORE_ROOT = resolve(__dirname, '../..');
 const REACT_ROOT = resolve(__dirname, '../../../../packages/react');
@@ -595,5 +595,35 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('setRendererPorts(');
 		// ResizeObserver must guard against stale bindings.
 		expect(content).toContain('isBindingCurrent(binding)');
+	});
+
+	// ── Plan 087 — store.ts boundary enforcement ─────────────────────────────
+
+	it('engine/ production files import GridEventName from api/GridEvents.ts, not store.ts (Plan 087)', () => {
+		const engineDir = resolve(CORE_ROOT, 'src', 'engine');
+		const files = collectSourceFiles(engineDir).filter((f) => !f.endsWith('.test.ts'));
+		const violators: string[] = [];
+		for (const file of files) {
+			const content = readFileSync(file, 'utf-8');
+			// GridStore import is allowed only in createRowModelRuntimes.ts (bridge factory).
+			const isAllowedBridge = file.endsWith('createRowModelRuntimes.ts');
+			if (!isAllowedBridge && (content.includes("from '../store.js'") || content.includes('from "../store.js"'))) {
+				violators.push(path.relative(engineDir, file));
+			}
+		}
+		expect(violators, `engine/ files still importing from store.ts: ${violators.join(', ')}`).toHaveLength(0);
+	});
+
+	it('state/ production files do not import from store.ts barrel (Plan 087)', () => {
+		const stateDir = resolve(CORE_ROOT, 'src', 'state');
+		const files = collectSourceFiles(stateDir).filter((f) => !f.endsWith('.test.ts'));
+		const violators: string[] = [];
+		for (const file of files) {
+			const content = readFileSync(file, 'utf-8');
+			if (content.includes("from '../store.js'") || content.includes('from "../store.js"')) {
+				violators.push(path.relative(stateDir, file));
+			}
+		}
+		expect(violators, `state/ files still importing from store.ts: ${violators.join(', ')}`).toHaveLength(0);
 	});
 });

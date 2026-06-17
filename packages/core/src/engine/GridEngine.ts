@@ -1,23 +1,19 @@
-import {
-	canEditCell,
-	isDataCellSelectable,
-	GridEventName,
-	type GridState,
-	type RowModel,
-	type CellSubscription,
-	type ColumnDef,
-	type GridCellRange,
-	type GridCellPointer,
-	type GridEventListener,
-	type GridEventPayloadMap,
-	type GridSelectionSource,
-	type GridStateUpdater,
-	type Listener,
-	type RowSelectionChangeResult,
-	type RowSelectionGesture,
-	type RowSelectionGestureSource,
-	type RowSelectionScope,
-} from '../store.js';
+import { canEditCell, isDataCellSelectable } from '../visualRow.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { GridEventListener, GridEventPayloadMap } from '../api/GridEvents.js';
+import type {
+	CellSubscription,
+	GridCellPointer,
+	GridCellRange,
+	GridSelectionSource,
+	RowSelectionChangeResult,
+	RowSelectionGesture,
+	RowSelectionGestureSource,
+	RowSelectionScope,
+} from '../api/GridApi.js';
+import type { ColumnDef } from '../columnDef.js';
+import type { GridState, GridStateUpdater, Listener } from '../state/GridState.js';
+import type { RowModel } from '../rowModel.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
 import { EventBus } from '../events/EventBus.js';

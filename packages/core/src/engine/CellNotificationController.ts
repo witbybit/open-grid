@@ -1,4 +1,5 @@
-import { GridEventName, type CellSubscription } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { CellSubscription } from '../api/GridApi.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import type { EventBus } from '../events/EventBus.js';
