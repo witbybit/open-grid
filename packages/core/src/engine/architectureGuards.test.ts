@@ -956,4 +956,24 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('bindResult.ok');
 		expect(content).toContain('bindResult.binding');
 	});
+
+	// ── Plan 095: portal flush phase contract ─────────────────────────────────
+
+	it('canFlushPortals() does not allow paint-frame (Plan 095)', () => {
+		const rrPath = resolve(CORE_ROOT, 'src', 'renderer', 'renderRuntimeState.ts');
+		const content = readFileSync(rrPath, 'utf-8');
+		// Must NOT use paint-frame as an allowed phase for portal flushing
+		// (it was removed in Plan 095)
+		const canFlushMatch = content.match(/canFlushPortals\(\)[^}]+\}/s);
+		expect(canFlushMatch, 'canFlushPortals method must exist').toBeTruthy();
+		expect(canFlushMatch![0]).not.toContain("'paint-frame'");
+	});
+
+	it('withPortalFlushPermission exists and uses _portalFlushActive (Plan 095)', () => {
+		const rrPath = resolve(CORE_ROOT, 'src', 'renderer', 'renderRuntimeState.ts');
+		const content = readFileSync(rrPath, 'utf-8');
+		expect(content).toContain('withPortalFlushPermission');
+		expect(content).toContain('_portalFlushActive');
+		expect(content).toContain('nested portal flush');
+	});
 });

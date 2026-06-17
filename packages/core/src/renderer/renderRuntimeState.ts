@@ -34,6 +34,7 @@ export class RenderRuntimeState {
 	private _phase: RenderRuntimePhase = 'idle';
 	private _frameEpoch = 0;
 	private _scrollEpoch = 0;
+	private _portalFlushActive = false;
 
 	constructor(private readonly _onFault?: (msg: string) => void) {}
 
@@ -79,9 +80,30 @@ export class RenderRuntimeState {
 		return this._phase === 'scroll-frame' || this._phase === 'paint-frame';
 	}
 
-	/** Portals may be synchronously flushed only when no frame is executing and scrolling is idle. */
+	/**
+	 * Portals may be synchronously flushed only when idle or within an explicit
+	 * portal-commit stage created by withPortalFlushPermission().
+	 * The broad paint-frame permission was removed in Plan 095.
+	 */
 	canFlushPortals(): boolean {
-		return this._phase === 'idle' || this._phase === 'paint-frame';
+		return this._phase === 'idle' || this._portalFlushActive;
+	}
+
+	/**
+	 * Execute fn with portal-flush permission granted.  Nested calls report a fault and no-op.
+	 * Use this from the paint pipeline's portal-commit stage to bound where React flushSync may run.
+	 */
+	withPortalFlushPermission(fn: () => void): void {
+		if (this._portalFlushActive) {
+			this._onFault?.('RenderRuntimeState: nested portal flush detected');
+			return;
+		}
+		this._portalFlushActive = true;
+		try {
+			fn();
+		} finally {
+			this._portalFlushActive = false;
+		}
 	}
 
 	/** Post-scroll decoration may run only when scroll has fully completed. */
