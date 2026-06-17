@@ -526,4 +526,15 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rows', 'RowPipeline.ts'), 'utf-8');
 		expect(content).toContain('getParentIdDependencies');
 	});
+
+	it('incremental index maintenance uses reindexFrom and preserves Map identity (Plan 083)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		// reindexFrom must exist and update maps in-place (no new Map() calls in incremental paths).
+		expect(content).toContain('private reindexFrom(');
+		expect(content).toContain('this.reindexFrom(');
+		// Cost model must exist.
+		expect(content).toContain('isIncrementalCheaper');
+		// Stale entries for removed rows must be deleted before splice.
+		expect(content).toContain('this.rowIdToVisualIndex.delete(node.id)');
+	});
 });

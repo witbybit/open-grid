@@ -82,7 +82,7 @@
 | 080 | [Real Post-Scroll Queue and Scheduler Authority](./080-post-scroll-queue-and-scheduler-authority.md)           | DONE     | working tree |
 | 081 | [Portal Mount Identity and Generation Contract](./081-portal-mount-identity-and-generation-contract.md)       | DONE     | working tree |
 | 082 | [Derived Row Dependency Closure](./082-derived-row-dependency-closure.md)                                     | DONE     | working tree |
-| 083 | [Large-Model Incremental Index Maintenance](./083-large-model-incremental-index-maintenance.md)               | TODO     | —            |
+| 083 | [Large-Model Incremental Index Maintenance](./083-large-model-incremental-index-maintenance.md)               | DONE     | working tree |
 | 084 | [Domain State Versions and Targeted Notification](./084-domain-state-versions-and-targeted-notification.md)   | TODO     | —            |
 | 085 | [Instrumentation Consolidation and Production No-Op](./085-instrumentation-consolidation-and-production-noop.md) | TODO  | —            |
 | 086 | [Runtime Port Binding Lifecycle](./086-runtime-port-binding-lifecycle.md)                                     | TODO     | —            |

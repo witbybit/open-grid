@@ -738,12 +738,15 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 		if (toRelocate.length === 0) return true;
 
-		// Remove in descending index order so prior splices don't shift remaining indices
+		// Remove in descending index order so prior splices don't shift remaining indices.
+		// After sort, toRelocate[last].oldIdx is the smallest (earliest) affected position.
 		toRelocate.sort((a, b) => b.oldIdx - a.oldIdx);
+		const earliestRemovedIndex = toRelocate[toRelocate.length - 1].oldIdx;
 		const mutable = this.visualRows.slice();
 		for (const item of toRelocate) mutable.splice(item.oldIdx, 1);
 
-		// Insert each row at its new sorted position
+		// Insert each row at its new sorted position; track earliest insertion index.
+		let earliestInsertedIndex = mutable.length;
 		for (const item of toRelocate) {
 			let lo = 0,
 				hi = mutable.length;
@@ -758,21 +761,12 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				else lo = mid + 1;
 			}
 			mutable.splice(lo, 0, item.vr);
+			if (lo < earliestInsertedIndex) earliestInsertedIndex = lo;
 		}
 
-		// Rebuild all three index maps from the updated array
+		// Update maps in-place from the earliest affected index — no Map allocations.
 		this.visualRows = mutable;
-		this.visualRowIdToIndex = new Map();
-		this.rowIdToVisualIndex = new Map();
-		this.rowIdToVisualRowId = new Map();
-		for (let i = 0; i < this.visualRows.length; i++) {
-			const vr = this.visualRows[i];
-			this.visualRowIdToIndex.set(vr.id, i);
-			if (vr.kind === 'data') {
-				this.rowIdToVisualIndex.set(vr.rowId, i);
-				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
-			}
-		}
+		this.reindexFrom(Math.min(earliestRemovedIndex, earliestInsertedIndex));
 		return true;
 	}
 
@@ -790,6 +784,37 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	private static readonly INCREMENTAL_TX_LIMIT = 100;
 
 	/**
+	 * Returns false when the estimated reindex cost — proportional to the number of rows
+	 * that must have their map entries updated — exceeds the rebuild threshold.
+	 *
+	 * Rule: if reindexing would touch more than INCREMENTAL_TX_LIMIT × 10 rows AND more than
+	 * 40 % of the total visual model, a full O(N log N) pipeline rebuild is cheaper than
+	 * the O(N - earliestChangedIndex) partial reindex.
+	 */
+	private static isIncrementalCheaper(totalVisualRows: number, earliestChangedIndex: number): boolean {
+		const shiftCount = totalVisualRows - earliestChangedIndex;
+		if (shiftCount <= ClientRowModelController.INCREMENTAL_TX_LIMIT * 10) return true;
+		return shiftCount / totalVisualRows < 0.4;
+	}
+
+	/**
+	 * Update map entries in-place for all rows from `start` to the end of `visualRows`.
+	 * Avoids allocating new Map objects — preserves existing map identity and all entries
+	 * before `start` (which are unaffected by the incremental operation).
+	 * O(N - start) time; cheapest when the earliest changed index is near the end.
+	 */
+	private reindexFrom(start: number): void {
+		for (let i = start; i < this.visualRows.length; i++) {
+			const vr = this.visualRows[i];
+			this.visualRowIdToIndex.set(vr.id, i);
+			if (vr.kind === 'data') {
+				this.rowIdToVisualIndex.set(vr.rowId, i);
+				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
+			}
+		}
+	}
+
+	/**
 	 * Attempts to apply structural row mutations (adds/removes) incrementally on flat grids.
 	 * Returns false to signal full rebuild is needed (grouped/tree/paginated grids, or when
 	 * the transaction exceeds the INCREMENTAL_TX_LIMIT threshold).
@@ -803,19 +828,30 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		if (added.length + removed.length > ClientRowModelController.INCREMENTAL_TX_LIMIT) return false;
 
 		const mutable = this.visualRows.slice();
+		let earliestChangedIndex = mutable.length;
 
-		// Removals: collect visual indices in descending order so splices don't shift later indices
+		// Removals: collect visual indices in descending order so splices don't shift later indices.
+		// Delete stale map entries for removed rows before the splice.
 		if (removed.length > 0) {
 			const removalIndices: number[] = [];
 			for (const node of removed) {
 				const idx = this.rowIdToVisualIndex.get(node.id);
-				if (idx !== undefined) removalIndices.push(idx);
+				if (idx !== undefined) {
+					removalIndices.push(idx);
+					this.rowIdToVisualIndex.delete(node.id);
+					this.rowIdToVisualRowId.delete(node.id);
+					this.visualRowIdToIndex.delete(toDataVisualRowId(node.id));
+					this.dataRowCount--;
+				}
 			}
 			removalIndices.sort((a, b) => b - a);
 			for (const idx of removalIndices) mutable.splice(idx, 1);
+			if (removalIndices.length > 0) {
+				earliestChangedIndex = Math.min(earliestChangedIndex, removalIndices[removalIndices.length - 1]);
+			}
 		}
 
-		// Additions: filter-check, then insert at sorted position (or append if unsorted)
+		// Additions: filter-check, then insert at sorted position (or append if unsorted).
 		if (added.length > 0) {
 			const preparedFilters = prepareFilters(state.columns, state.filterModel);
 			const hasSort = !!(state.sortModel && state.sortModel.length > 0);
@@ -877,27 +913,18 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 						else lo = mid + 1;
 					}
 					mutable.splice(lo, 0, vr);
+					if (lo < earliestChangedIndex) earliestChangedIndex = lo;
 				} else {
+					earliestChangedIndex = Math.min(earliestChangedIndex, mutable.length);
 					mutable.push(vr);
 				}
-			}
-		}
-
-		// Rebuild all index maps from the updated visual array
-		this.visualRows = mutable;
-		this.visualRowIdToIndex = new Map();
-		this.rowIdToVisualIndex = new Map();
-		this.rowIdToVisualRowId = new Map();
-		this.dataRowCount = 0;
-		for (let i = 0; i < this.visualRows.length; i++) {
-			const vr = this.visualRows[i];
-			this.visualRowIdToIndex.set(vr.id, i);
-			if (vr.kind === 'data') {
-				this.rowIdToVisualIndex.set(vr.rowId, i);
-				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
 				this.dataRowCount++;
 			}
 		}
+
+		// Update maps in-place from the earliest affected index — preserves Map identity.
+		this.visualRows = mutable;
+		this.reindexFrom(earliestChangedIndex);
 		return true;
 	}
 

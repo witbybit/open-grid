@@ -1088,3 +1088,97 @@ describe('Numeric Filter Null Safety', () => {
 		expect(matchedIds).toContain('5');
 	});
 });
+
+describe('Plan 083 — incremental index maintenance', () => {
+	interface SimpleRow {
+		id: string;
+		value: number;
+	}
+
+	function makeCtrl(rows: SimpleRow[], opts: { sorted?: boolean } = {}) {
+		const store = new GridStore<SimpleRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'value', header: 'Value' }],
+			...(opts.sorted ? { sortModel: [{ colId: 'value', sort: 'asc' }] } : {}),
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns: store.getState().columns,
+		});
+		return ctrl;
+	}
+
+	it('preserves correct indices after removal at the beginning of an unsorted grid', () => {
+		const ctrl = makeCtrl([
+			{ id: '1', value: 10 },
+			{ id: '2', value: 20 },
+			{ id: '3', value: 30 },
+			{ id: '4', value: 40 },
+		]);
+
+		ctrl.applyTransaction({ remove: [{ id: '1', value: 10 }] });
+
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(-1);
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(0);
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(1);
+		expect(ctrl.getVisualIndexByRowId('4')).toBe(2);
+	});
+
+	it('preserves correct indices after insertion at the beginning of a sorted grid', () => {
+		const ctrl = makeCtrl(
+			[
+				{ id: '2', value: 20 },
+				{ id: '3', value: 30 },
+				{ id: '4', value: 40 },
+			],
+			{ sorted: true }
+		);
+
+		ctrl.applyTransaction({ add: [{ id: '1', value: 5 }] });
+
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(0);
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(1);
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(2);
+		expect(ctrl.getVisualIndexByRowId('4')).toBe(3);
+	});
+
+	it('preserves correct indices after sort relocation to an earlier position', () => {
+		const store = new GridStore<SimpleRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'value', header: 'Value' }],
+			sortModel: [{ colId: 'value', sort: 'asc' }],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', value: 10 },
+				{ id: '2', value: 20 },
+				{ id: '3', value: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// updateRows() triggers the sort-key mutation path (classifyFieldMutation → sort-key → relocateSortedRows)
+		ctrl.updateRows((rows) => rows.map((r) => (r.id === '3' ? { ...r, value: 5 } : r)));
+
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(0);
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(1);
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(2);
+	});
+
+	it('handles add+remove in same transaction and produces correct indices', () => {
+		const ctrl = makeCtrl([
+			{ id: '1', value: 10 },
+			{ id: '2', value: 20 },
+			{ id: '3', value: 30 },
+		]);
+
+		ctrl.applyTransaction({
+			add: [{ id: '4', value: 40 }],
+			remove: [{ id: '2', value: 20 }],
+		});
+
+		expect(ctrl.getVisualRowCount()).toBe(3);
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(-1);
+		expect(ctrl.getVisualIndexByRowId('4')).toBe(2);
+	});
+});
