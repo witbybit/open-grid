@@ -24,10 +24,7 @@ This can produce reentrant React rendering against partially updated physical sl
 Prefer an explicit stage inside the paint pipeline:
 
 ```ts
-type PaintStage =
-  | 'native-bind'
-  | 'portal-commit'
-  | 'decoration';
+type PaintStage = 'native-bind' | 'portal-commit' | 'decoration';
 ```
 
 Portal flushing is legal only during `portal-commit` or when fully idle.
@@ -36,7 +33,7 @@ Portal flushing is legal only during `portal-commit` or when fully idle.
 
 ```ts
 runtimeState.withPortalFlushPermission(() => {
-  portalManager.flush();
+	portalManager.flush();
 });
 ```
 

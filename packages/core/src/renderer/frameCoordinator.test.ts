@@ -159,13 +159,15 @@ describe('DefaultFrameCoordinator', () => {
 		let lastRafId = 0;
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
-			microtask: (_cb) => { /* intentionally do not fire — simulates async microtask */ },
+			microtask: (_cb) => {
+				/* intentionally do not fire — simulates async microtask */
+			},
 			raf: (_cb) => ++lastRafId,
 			cancelRaf,
 		};
 		const coordinator = new DefaultFrameCoordinator(makeBaseDeps({ gridScheduler: gs }));
 
-		coordinator.requestScrollFrame();   // RAF scheduled immediately
+		coordinator.requestScrollFrame(); // RAF scheduled immediately
 		coordinator.requestPostScrollWork(); // RAF scheduled immediately
 		coordinator.destroy();
 

@@ -16,13 +16,7 @@
 `RenderRuntimeState` defines:
 
 ```ts
-type RenderRuntimePhase =
-  | 'idle'
-  | 'scroll-pending'
-  | 'scroll-frame'
-  | 'paint-frame'
-  | 'post-scroll'
-  | 'destroyed';
+type RenderRuntimePhase = 'idle' | 'scroll-pending' | 'scroll-frame' | 'paint-frame' | 'post-scroll' | 'destroyed';
 ```
 
 Production scroll work transitions through the runtime state, but ordinary paint callbacks do not transition into `paint-frame`. During a real paint:

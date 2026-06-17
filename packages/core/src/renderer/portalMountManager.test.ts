@@ -459,4 +459,3 @@ describe('PortalMountManager', () => {
 		expect(mount.mock.calls[0][0].value).toBe('A');
 	});
 });
-

@@ -33,15 +33,15 @@ Internal subsystems then observe broad snapshot/key changes even when a dedicate
 
 ```ts
 interface GridDomainVersions {
-  columns: number;
-  rows: number;
-  viewport: number;
-  selection: number;
-  editing: number;
-  filtering: number;
-  sorting: number;
-  styling: number;
-  pagination: number;
+	columns: number;
+	rows: number;
+	viewport: number;
+	selection: number;
+	editing: number;
+	filtering: number;
+	sorting: number;
+	styling: number;
+	pagination: number;
 }
 ```
 

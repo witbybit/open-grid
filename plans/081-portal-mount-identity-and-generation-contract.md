@@ -31,10 +31,10 @@ The mount equality check compares visible payload but can omit `slotGeneration`.
 
 ```ts
 export interface CellMountIdentity {
-  slotId: string;
-  generation: number;
-  lane: 'left' | 'center' | 'right';
-  laneIndex: number;
+	slotId: string;
+	generation: number;
+	lane: 'left' | 'center' | 'right';
+	laneIndex: number;
 }
 ```
 
@@ -42,8 +42,8 @@ Keep logical payload identity separate:
 
 ```ts
 export interface CellPayloadIdentity {
-  rowId: string;
-  columnId: string;
+	rowId: string;
+	columnId: string;
 }
 ```
 

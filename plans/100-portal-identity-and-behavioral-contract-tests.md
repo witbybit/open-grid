@@ -23,17 +23,17 @@ Important runtime guarantees are often protected by source-text tests rather tha
 
 ```ts
 type PortalMountIdentity =
-  | {
-      kind: 'pooled-cell';
-      slotId: number;
-      generation: number;
-      lane: 'left' | 'center' | 'right';
-      laneIndex: number;
-    }
-  | {
-      kind: 'standalone';
-      key: string;
-    };
+	| {
+			kind: 'pooled-cell';
+			slotId: number;
+			generation: number;
+			lane: 'left' | 'center' | 'right';
+			laneIndex: number;
+	  }
+	| {
+			kind: 'standalone';
+			key: string;
+	  };
 ```
 
 Pooled identity is mandatory and compared by exact physical identity plus generation.

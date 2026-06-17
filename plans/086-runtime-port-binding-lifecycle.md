@@ -36,7 +36,7 @@ unbindRuntimePorts(binding: RuntimePortBinding): void;
 
 ```ts
 interface RuntimePortBinding {
-  readonly generation: number;
+	readonly generation: number;
 }
 ```
 

@@ -26,10 +26,10 @@ Enter `scroll-frame` before deciding whether the work is a same-window bailout o
 ```ts
 runtimeState.transitionTo('scroll-frame');
 try {
-  if (sameWindow) syncCheapScrollOnly();
-  else recycleViewport();
+	if (sameWindow) syncCheapScrollOnly();
+	else recycleViewport();
 } finally {
-  runtimeState.transitionTo('post-scroll');
+	runtimeState.transitionTo('post-scroll');
 }
 ```
 

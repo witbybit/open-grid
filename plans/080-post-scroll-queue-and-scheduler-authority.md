@@ -42,9 +42,9 @@ This leaves multiple timing authorities.
 
 ```ts
 interface FrameCoordinatorDeps {
-  onScrollFrame(): void;
-  onPaintFrame(): void;
-  onPostScrollWork(): void;
+	onScrollFrame(): void;
+	onPaintFrame(): void;
+	onPostScrollWork(): void;
 }
 ```
 

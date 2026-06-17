@@ -30,10 +30,10 @@ A transaction-size threshold alone is insufficient because the dominant cost dep
 
 ```ts
 interface IncrementalMutationCost {
-  changedRows: number;
-  totalVisualRows: number;
-  earliestChangedIndex: number;
-  estimatedShiftCount: number;
+	changedRows: number;
+	totalVisualRows: number;
+	earliestChangedIndex: number;
+	estimatedShiftCount: number;
 }
 ```
 

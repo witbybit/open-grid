@@ -124,7 +124,7 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('this.postScrollRafId');
 		// renderScrollCoordinator must not import defaultGridScheduler directly.
 		const scrollContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts'), 'utf-8');
-		expect(scrollContent).not.toContain("import { defaultGridScheduler }");
+		expect(scrollContent).not.toContain('import { defaultGridScheduler }');
 		expect(scrollContent).toContain('gridScheduler: GridScheduler');
 		expect(scrollContent).toContain('this.deps.gridScheduler.');
 	});

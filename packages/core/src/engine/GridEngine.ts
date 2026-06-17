@@ -334,7 +334,12 @@ export class GridEngine<TRowData = unknown> {
 		};
 
 		// Construct StateManager with coordinate state update bridging
-		this.stateManager = new StateManager<TRowData>(initialState, this.stateReactions.handleStateChanges, this.runtimeFaults, this.instrumentation);
+		this.stateManager = new StateManager<TRowData>(
+			initialState,
+			this.stateReactions.handleStateChanges,
+			this.runtimeFaults,
+			this.instrumentation
+		);
 
 		// Initialize changeApplier after stateManager is available
 		this.changeApplier = new GridChangeApplier<TRowData>({

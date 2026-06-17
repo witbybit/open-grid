@@ -25,7 +25,7 @@ Store stable source order on the row node or data store:
 
 ```ts
 interface RowNode {
-  readonly sourceOrder: number;
+	readonly sourceOrder: number;
 }
 ```
 

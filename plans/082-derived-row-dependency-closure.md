@@ -40,11 +40,11 @@ Support explicit source dependencies:
 
 ```ts
 interface ColumnDef<TRowData> {
-  valueGetterDependencies?: string[];
+	valueGetterDependencies?: string[];
 }
 
 interface TreeDataOptions<TRowData> {
-  getParentIdDependencies?: string[];
+	getParentIdDependencies?: string[];
 }
 ```
 
@@ -56,12 +56,12 @@ Build active source-field sets:
 
 ```ts
 interface ActiveRowDependencies {
-  sortSourceFields: ReadonlySet<string>;
-  filterSourceFields: ReadonlySet<string>;
-  groupSourceFields: ReadonlySet<string>;
-  aggregationSourceFields: ReadonlySet<string>;
-  treeParentSourceFields: ReadonlySet<string>;
-  opaqueStructuralDependency: boolean;
+	sortSourceFields: ReadonlySet<string>;
+	filterSourceFields: ReadonlySet<string>;
+	groupSourceFields: ReadonlySet<string>;
+	aggregationSourceFields: ReadonlySet<string>;
+	treeParentSourceFields: ReadonlySet<string>;
+	opaqueStructuralDependency: boolean;
 }
 ```
 

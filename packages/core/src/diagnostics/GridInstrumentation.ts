@@ -104,7 +104,9 @@ const EMPTY_SNAPSHOT: GridInstrumentationSnapshot = Object.freeze({
 /** Zero-overhead sink. All methods are no-ops; snapshot() returns a stable empty object. */
 export class NoopGridInstrumentation implements GridInstrumentation {
 	increment(_metric: GridMetric, _amount?: number): void {}
-	get(_metric: GridMetric): number { return 0; }
+	get(_metric: GridMetric): number {
+		return 0;
+	}
 	recordFrame(_frame: FrameMetrics): void {}
 	recordFallback(_event: FallbackMetric): void {}
 	snapshot(): GridInstrumentationSnapshot {

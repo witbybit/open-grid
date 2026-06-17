@@ -32,16 +32,16 @@ This causes:
 
 ```ts
 type GridMetric =
-  | 'state.read'
-  | 'render.frame'
-  | 'render.cellVisited'
-  | 'render.cellWritten'
-  | 'render.sameWindowBailout'
-  | 'portal.mount'
-  | 'portal.release'
-  | 'slot.rebind'
-  | 'rowMutation.incremental'
-  | 'rowMutation.fullRebuild';
+	| 'state.read'
+	| 'render.frame'
+	| 'render.cellVisited'
+	| 'render.cellWritten'
+	| 'render.sameWindowBailout'
+	| 'portal.mount'
+	| 'portal.release'
+	| 'slot.rebind'
+	| 'rowMutation.incremental'
+	| 'rowMutation.fullRebuild';
 ```
 
 Use typed payloads for frame summaries where counters are insufficient.
