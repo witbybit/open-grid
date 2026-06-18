@@ -355,7 +355,7 @@ describe('RenderEngine', () => {
 		expect(inst.get(GridMetric.LEGACY_INFERRED_INVALIDATIONS)).toBeGreaterThan(0);
 		expect(inst.snapshot().fallbacks).toContainEqual({
 			component: 'RenderInvalidationCoordinator',
-			reason: 'legacy-inferred-invalidation:geometry',
+			reason: 'legacy-inferred-invalidation:defaultRowHeight',
 		});
 
 		renderer.unmount();

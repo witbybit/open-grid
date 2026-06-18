@@ -36,7 +36,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 			this.requestFlushGated('state');
 		};
 		const invalidateViewport = () => {
-			this.recordLegacyInferredInvalidation('viewport');
+			this.recordLegacyInferredInvalidation('visible-range');
 			this.deps.engine.invalidation.invalidateViewport('viewport');
 			this.requestViewportFlushOrDefer('viewport');
 		};
@@ -54,8 +54,8 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 			this.deps.updateCachedGeometryBounds();
 			this.requestFlushGated('columns');
 		};
-		const invalidateGeometryFull = () => {
-			this.recordLegacyInferredInvalidation('geometry');
+		const invalidateGeometryFull = (trigger: string) => {
+			this.recordLegacyInferredInvalidation(trigger);
 			this.deps.geometryController.invalidateAll();
 			this.deps.engine.invalidation.invalidateGeometry('geometry');
 			this.deps.engine.invalidation.invalidateViewport('geometry');
@@ -63,12 +63,26 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 			this.requestFlushGated('geometry');
 		};
 
-		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('defaultRowHeight', invalidateGeometryFull));
+		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('defaultRowHeight', () => invalidateGeometryFull('defaultRowHeight')));
 		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('defaultColWidth', invalidateDefaultColumnGeometry));
 		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('globalVersion', invalidateData));
-		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('loading', invalidateViewport));
-		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('visibleRowRange', invalidateViewport));
-		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('visibleColRange', invalidateViewport));
+		this.unsubscribers.push(
+			this.deps.engine.stateManager.subscribeToKey('loading', () => {
+				this.recordLegacyInferredInvalidation('loading');
+				this.deps.engine.invalidation.invalidateViewport('viewport');
+				this.requestViewportFlushOrDefer('viewport');
+			})
+		);
+		this.unsubscribers.push(
+			this.deps.engine.stateManager.subscribeToKey('visibleRowRange', () => {
+				invalidateViewport();
+			})
+		);
+		this.unsubscribers.push(
+			this.deps.engine.stateManager.subscribeToKey('visibleColRange', () => {
+				invalidateViewport();
+			})
+		);
 
 		this.unsubscribers.push(
 			this.deps.engine.stateManager.subscribeToKey('columns', () => {
@@ -76,8 +90,8 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 				invalidateFull();
 			})
 		);
-		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('columnWidths', invalidateGeometryFull));
-		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('rowHeights', invalidateGeometryFull));
+		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('columnWidths', () => invalidateGeometryFull('columnWidths')));
+		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('rowHeights', () => invalidateGeometryFull('rowHeights')));
 		this.unsubscribers.push(
 			this.deps.engine.stateManager.subscribeToKey('sortModel', () => {
 				this.deps.layoutTransition.captureSnapshot('sort');
