@@ -496,6 +496,14 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
+	public setVisibleRanges(visibleRowRange: GridState<TRowData>['visibleRowRange'], visibleColRange: GridState<TRowData>['visibleColRange']): void {
+		this.changeApplier.apply({
+			reason: 'viewport:set-visible-ranges',
+			state: { visibleRowRange, visibleColRange },
+			requestRender: false,
+		});
+	}
+
 	public subscribe(listener: Listener<TRowData>): () => void {
 		return this.stateManager.subscribe(listener);
 	}

@@ -22,6 +22,8 @@ This is the first checked-in inventory for the Plan 103 convergence pass. It rec
   Removed the legacy fallback branch so UI-state feature writes now require `GridChangeApplier`.
 - `engine/GridEngine.ts`
   Converted row-model helper commits (`initializeRowModelState`, `bumpRowModelGlobalVersion`, `updateExpansionState`, `setRowModelLoadingState`, `setServerPaginationState`) onto typed changes with render suppressed.
+- `viewportController.ts`
+  Converted visible-range synchronization to `engine.setVisibleRanges(...)` so viewport runtime no longer writes raw state directly.
 
 ## Current allowlist
 
@@ -33,6 +35,7 @@ The source-of-truth allowlist lives in [packages/core/src/engine/gridDirectWrite
   Bootstrap and legacy public facade helpers such as generic `setState(...)` still contain direct writes.
 - `store.ts`
   Legacy facade compatibility still exists, but row overscan plus panel/chart/theme/pin sync now route through typed engine intent methods.
+  The dead private `state` setter has been removed; the remaining escape hatch is the explicit public `setState(...)` compatibility API.
 - `renderer/RenderInvalidationCoordinator.ts`
   State-reaction invalidation remains active and will be reduced in Plan 105.
 

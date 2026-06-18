@@ -41,9 +41,4 @@ export const GRID_DIRECT_WRITE_ALLOWLIST = [
 		kind: 'legacy-public-facade',
 		justification: 'Public facade still carries a shrinking set of direct-write compatibility helpers pending Plan 109.',
 	},
-	{
-		file: 'viewportController.ts',
-		kind: 'viewport-runtime',
-		justification: 'Viewport runtime updates derived visible ranges outside the logical mutation path.',
-	},
 ] as const;

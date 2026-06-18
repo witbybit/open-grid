@@ -1357,6 +1357,12 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('this.setState({ themeName');
 	});
 
+	it('store raw mutation surface is reduced to the explicit compatibility setState API (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain('public setState = (updater: GridStateUpdater<TRowData>): void => this.engine.setState(updater);');
+		expect(content).not.toContain('private set state(');
+	});
+
 	it('GridStateFeatureController no longer contains raw write fallbacks (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'), 'utf-8');
 		expect(content).toContain('applyChange: (change: GridChange<TRowData>) => void;');
@@ -1400,5 +1406,11 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('this.stateManager.setState((state) => ({ expansion: updater(state.expansion) }));');
 		expect(content).not.toContain('this.stateManager.setState((state) => ({ loading, globalVersion: state.globalVersion + 1 }));');
 		expect(content).not.toContain('this.stateManager.setState({ serverPagination: payload });');
+	});
+
+	it('viewportController routes visible range commits through GridEngine intent methods (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'viewportController.ts'), 'utf-8');
+		expect(content).toContain('this.engine.setVisibleRanges(rowRange, colRange);');
+		expect(content).not.toContain('this.engine.stateManager.setState({');
 	});
 });

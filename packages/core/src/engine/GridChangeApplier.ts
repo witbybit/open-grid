@@ -48,7 +48,8 @@ export type GridChangeReason =
 	| 'ui:set-col-buffer'
 	| 'ui:set-sidebar-panel'
 	| 'ui:set-chart-open'
-	| 'ui:set-theme';
+	| 'ui:set-theme'
+	| 'viewport:set-visible-ranges';
 
 export interface GridChange<TRowData = unknown> {
 	reason: GridChangeReason;

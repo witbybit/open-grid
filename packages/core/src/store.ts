@@ -188,10 +188,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.getState();
 	}
 
-	private set state(val: GridState<TRowData>) {
-		this.engine.setState(val);
-	}
-
 	public getPluginController = (): GridPluginController<TRowData> => this.pluginRegistry;
 
 	public getState = (): GridState<TRowData> => this.engine.getState();

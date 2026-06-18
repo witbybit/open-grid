@@ -135,10 +135,7 @@ export class ViewportController<TRowData = unknown> {
 			currState.visibleColRange.endIdx !== colRange.endIdx;
 
 		if (rowChanged || colChanged) {
-			this.engine.stateManager.setState({
-				visibleRowRange: rowRange,
-				visibleColRange: colRange,
-			});
+			this.engine.setVisibleRanges(rowRange, colRange);
 			return true;
 		}
 		return false;
