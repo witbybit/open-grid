@@ -636,6 +636,30 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('SLOT_REBINDS');
 	});
 
+	it('GridInstrumentation does not duplicate RenderStats paint, scroll, or portal counters (Plan 111)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'diagnostics', 'GridInstrumentation.ts'), 'utf-8');
+		expect(content).not.toContain('FULL_PAINTS');
+		expect(content).not.toContain('ROW_PAINTS');
+		expect(content).not.toContain('CELL_PAINTS');
+		expect(content).not.toContain('HEADER_PAINTS');
+		expect(content).not.toContain('OVERLAY_PAINTS');
+		expect(content).not.toContain('VIEWPORT_PAINTS');
+		expect(content).not.toContain('GEOMETRY_RECOMPUTES');
+		expect(content).not.toContain('SCROLL_FRAMES');
+		expect(content).not.toContain('VIEWPORT_RECYCLES');
+		expect(content).not.toContain('SAME_WINDOW_BAILOUTS');
+		expect(content).not.toContain('PORTAL_MOUNTS');
+		expect(content).not.toContain('PORTAL_RELEASES');
+		expect(content).not.toContain('PORTAL_FLUSHES');
+		expect(content).not.toContain('PORTAL_DEFERRED');
+	});
+
+	it('NoopGridInstrumentation is described as minimal overhead, not zero overhead (Plan 111)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'diagnostics', 'GridInstrumentation.ts'), 'utf-8');
+		expect(content).toContain('minimal overhead');
+		expect(content).not.toContain('zero overhead');
+	});
+
 	it('GridEngine exposes instrumentation field and setInstrumentation (Plan 085)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 		expect(content).toContain('public instrumentation: GridInstrumentation');

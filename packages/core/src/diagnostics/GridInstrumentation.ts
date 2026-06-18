@@ -1,57 +1,20 @@
 /**
- * Canonical metric names. Each name is owned by exactly one component.
+ * Canonical instrumentation-only metric names. Each name is owned by exactly one component.
+ * Metrics that already live in RenderStats must not be duplicated here.
  *
  * Naming convention: <owner>_<event> in SCREAMING_SNAKE_CASE.
  * All counters are non-negative integers that increase monotonically until reset().
  */
 export const enum GridMetric {
-	// ── Paint orchestration (RenderOrchestrator) ─────────────────────
-	FULL_PAINTS = 'fullPaints',
-	ROW_PAINTS = 'rowPaints',
-	CELL_PAINTS = 'cellPaints',
-	HEADER_PAINTS = 'headerPaints',
-	OVERLAY_PAINTS = 'overlayPaints',
-	VIEWPORT_PAINTS = 'viewportPaints',
-	GEOMETRY_RECOMPUTES = 'geometryRecomputes',
-
-	// ── Scroll frame orchestration ────────────────────────────────────
-	SCROLL_FRAMES = 'scrollFrames',
-	VIEWPORT_RECYCLES = 'viewportRecycles',
-	SAME_WINDOW_BAILOUTS = 'sameWindowBailouts',
-
-	// ── Cell write path (CellSlot) ────────────────────────────────────
-	CELL_TEXT_WRITES = 'cellTextWrites',
-	CELL_CLASS_WRITES = 'cellClassWrites',
-	CELL_TRANSFORM_WRITES = 'cellTransformWrites',
-	CELL_WIDTH_WRITES = 'cellWidthWrites',
-	CELL_LEFT_WRITES = 'cellLeftWrites',
-	CELL_DOM_READS_AVOIDED = 'cellDomReadsAvoided',
-
-	// ── Portal lifecycle (PortalMountManager) ─────────────────────────
-	PORTAL_MOUNTS = 'portalMounts',
-	PORTAL_RELEASES = 'portalReleases',
-	PORTAL_FLUSHES = 'portalFlushes',
-	PORTAL_DEFERRED = 'portalDeferred',
-
-	// ── Custom renderer lifecycle (CustomRendererManager) ────────────
-	CUSTOM_RENDERER_WARM_HITS = 'customRendererWarmHits',
-	CUSTOM_RENDERER_WARM_MISSES = 'customRendererWarmMisses',
-	CUSTOM_RENDERER_EVICTIONS = 'customRendererEvictions',
-
-	// ── Data accessor hot path (GridEngine) ──────────────────────────
-	GET_CELL_VALUE_CALLS = 'getCellValueCalls',
-	VALUE_GETTER_CALLS = 'valueGetterCalls',
-	FORMULA_CALLS = 'formulaCalls',
-
-	// ── State reads (StateManager) ────────────────────────────────────
+	// State reads (StateManager)
 	STATE_READS = 'stateReads',
 
-	// ── Row mutation classification (ClientRowModelController) ───────
+	// Row mutation classification (ClientRowModelController)
 	LEGACY_INFERRED_INVALIDATIONS = 'legacyInferredInvalidations',
 	ROW_MUTATION_INCREMENTAL = 'rowMutationIncremental',
 	ROW_MUTATION_FULL_REBUILD = 'rowMutationFullRebuild',
 
-	// ── Slot reuse path (rowCellBinder) ───────────────────────────────
+	// Slot reuse path (rowCellBinder)
 	SLOT_REBINDS = 'slotRebinds',
 }
 
@@ -81,7 +44,7 @@ export interface GridInstrumentationSnapshot {
  * can record metrics without depending on a concrete implementation.
  *
  * Two implementations are provided:
- *   - `NoopGridInstrumentation`    — zero overhead, used in production
+ *   - `NoopGridInstrumentation` — minimal overhead, used in production
  *   - `RecordingGridInstrumentation` — accumulates data for tests and demos
  */
 export interface GridInstrumentation {
@@ -94,15 +57,13 @@ export interface GridInstrumentation {
 	reset(): void;
 }
 
-// ── No-op sink ────────────────────────────────────────────────────────────────
-
 const EMPTY_SNAPSHOT: GridInstrumentationSnapshot = Object.freeze({
 	counters: Object.freeze({} as Partial<Record<GridMetric, number>>),
 	frames: Object.freeze([] as FrameMetrics[]),
 	fallbacks: Object.freeze([] as FallbackMetric[]),
 });
 
-/** Zero-overhead sink. All methods are no-ops; snapshot() returns a stable empty object. */
+/** Minimal-overhead sink. All methods are no-ops; snapshot() returns a stable empty object. */
 export class NoopGridInstrumentation implements GridInstrumentation {
 	increment(_metric: GridMetric, _amount?: number): void {}
 	get(_metric: GridMetric): number {
@@ -115,8 +76,6 @@ export class NoopGridInstrumentation implements GridInstrumentation {
 	}
 	reset(): void {}
 }
-
-// ── Recording sink ────────────────────────────────────────────────────────────
 
 /** Accumulates counters, frames, and fallbacks. Intended for tests and perf demos. */
 export class RecordingGridInstrumentation implements GridInstrumentation {
