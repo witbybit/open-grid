@@ -54,7 +54,7 @@ export type {
 	ValueGetterParams,
 } from './columnDef.js';
 export type { GridState, Listener } from './state/GridState.js';
-export type { RowModel } from './rowModel.js';
+export type { VisualRowModel } from './rowModel.js';
 export type { VisualRow, DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow } from './visualRow.js';
 export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';
 
@@ -98,7 +98,7 @@ export type {
 	FilterSurface,
 } from './filters/filterDef.js';
 export { resolveColumnFilterDef } from './filters/filterDef.js';
-export type { AggregationDef } from './rows/stages/aggregateStage.js';
+export type { AggregationDef } from './rowModel.js';
 export type { OpOption } from './filterOperations.js';
 export {
 	TEXT_OPS,
@@ -124,8 +124,8 @@ export {
 export type { GroupPathItem } from './rows/visualRowIds.js';
 export type { IGridDatasource } from './serverRowModel.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
-export type { BatchCellValueUpdate } from './features/DataMutationController.js';
-export type { CellValidationError, RowValidatorParams, RowValidator } from './features/ValidationManager.js';
+export type { BatchCellValueUpdate } from './api/GridApi.js';
+export type { CellValidationError, RowValidatorParams, RowValidator } from './api/GridApi.js';
 export type { ValueValidatorParams, EditableParams, TooltipParams, ValueFormatterParams } from './columnDef.js';
 export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';

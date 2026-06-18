@@ -2,32 +2,9 @@ import { GridEventName } from '../store.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { RowModel } from '../rowModel.js';
+import type { CellValidationError, RowValidatorParams, RowValidator } from '../api/GridApi.js';
 
-export interface CellValidationError {
-	rowId: string;
-	colField: string;
-	error: string;
-}
-
-/** Parameters passed to a grid-level row validator. */
-export interface RowValidatorParams<TRowData = unknown> {
-	/** Current row data snapshot. */
-	row: TRowData;
-	/**
-	 * Which column triggered this validation call (set during single-cell validation,
-	 * undefined during a full grid validateGrid() sweep).
-	 */
-	changedColField?: string;
-}
-
-/**
- * Grid-level cross-field validator. Return a map of colField → error string (or null/empty
- * to clear a row-level error for that field). Runs after per-column valueValidators so it can
- * override or supplement them.
- */
-export type RowValidator<TRowData = unknown> = (
-	params: RowValidatorParams<TRowData>
-) => Record<string, string | null> | Promise<Record<string, string | null>>;
+export type { CellValidationError, RowValidatorParams, RowValidator };
 
 export interface ValidationManagerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;

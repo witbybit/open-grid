@@ -49,6 +49,7 @@ export interface ClientRowModelOptions<TData = unknown> {
 }
 
 export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
+export type { AggregationDef } from './rows/stages/aggregateStage.js';
 
 // ── Row model contract types ──────────────────────────────────────────────────
 // Defined here to avoid a circular import with store.ts. store.ts re-exports these.

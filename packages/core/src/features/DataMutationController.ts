@@ -4,18 +4,15 @@ import type { ColumnModel } from '../models/ColumnModel.js';
 import type { EventBus } from '../events/EventBus.js';
 import type { CommandHistory } from '../commands/CommandHistory.js';
 import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
+import type { BatchCellValueUpdate } from '../api/GridApi.js';
+
+export type { BatchCellValueUpdate };
 
 export interface CellValueChangeOptions {
 	undoable?: boolean;
 	emitEvent?: boolean;
 	notify?: boolean;
 	source?: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo' | 'transaction';
-}
-
-export interface BatchCellValueUpdate {
-	rowId: string;
-	colField: string;
-	value: unknown;
 }
 
 export interface CellValueChangeResult {

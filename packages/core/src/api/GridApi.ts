@@ -7,7 +7,7 @@ import type { VisualRow } from '../visualRow.js';
 import type { RowNode } from '../rowNode.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { RenderStats } from '../renderer/renderOrchestrator.js';
-import type { AggregationDef } from '../rows/stages/aggregateStage.js';
+import type { AggregationDef } from '../rowModel.js';
 import type { PersistenceStatus, PersistedGridState } from '../persistence/statePersistence.js';
 import type { CsvExportOptions } from '../export/csvExport.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
@@ -18,8 +18,34 @@ import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 
 export type { CsvExportOptions };
 export type { RuntimeFault };
-export type { CellValidationError } from '../features/ValidationManager.js';
-import type { CellValidationError } from '../features/ValidationManager.js';
+
+// ── Validation types ──────────────────────────────────────────────────────────
+
+export interface CellValidationError {
+	rowId: string;
+	colField: string;
+	error: string;
+}
+
+/** Parameters passed to a grid-level row validator. */
+export interface RowValidatorParams<TRowData = unknown> {
+	/** Current row data snapshot. */
+	row: TRowData;
+	/**
+	 * Which column triggered this validation call (set during single-cell validation,
+	 * undefined during a full grid validateGrid() sweep).
+	 */
+	changedColField?: string;
+}
+
+/**
+ * Grid-level cross-field validator. Return a map of colField → error string (or null/empty
+ * to clear a row-level error for that field). Runs after per-column valueValidators so it can
+ * override or supplement them.
+ */
+export type RowValidator<TRowData = unknown> = (
+	params: RowValidatorParams<TRowData>
+) => Record<string, string | null> | Promise<Record<string, string | null>>;
 
 // ── Cell / selection types ────────────────────────────────────────────────────
 
@@ -43,6 +69,13 @@ export interface ActiveEditState extends GridCellPointer {
 export interface CellPointer {
 	rowId: string;
 	colId: string;
+}
+
+/** A single cell value write in a batch update operation. */
+export interface BatchCellValueUpdate {
+	rowId: string;
+	colField: string;
+	value: unknown;
 }
 
 export interface VisualRowPointer {
@@ -352,7 +385,7 @@ export interface GridApi<TRowData = unknown> {
 	 * are coalesced — one RAF flush and one undo entry for the entire batch.
 	 * Use this instead of looping setCellValue for paste, clear, and programmatic bulk edits.
 	 */
-	batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source?: 'paste' | 'api' | 'fill'): void;
+	batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): void;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
 	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;

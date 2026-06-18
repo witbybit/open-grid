@@ -1160,4 +1160,35 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('getActiveGeneration(cellKey)');
 		expect(content).toContain('slotGeneration,');
 	});
+
+	// ── Plan 101: public API and package boundary reset ───────────────────────
+
+	it('core/index.ts does not import from rows/stages/ internal path (Plan 101)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
+		expect(content).not.toContain('rows/stages/');
+	});
+
+	it('core/index.ts does not import from features/ internal path (Plan 101)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
+		expect(content).not.toContain("from './features/");
+	});
+
+	it('core/index.ts exports VisualRowModel (read-only renderer contract) not RowModel (Plan 101)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
+		expect(content).toContain('VisualRowModel');
+		expect(content).not.toContain("{ RowModel }");
+	});
+
+	it('AggregationDef is re-exported through rowModel.ts (stable path) not directly from rows/stages/ (Plan 101)', () => {
+		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(rowModelContent).toContain("AggregationDef");
+		const indexContent = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
+		expect(indexContent).toContain("AggregationDef");
+		expect(indexContent).not.toContain("rows/stages/");
+	});
+
+	it('BatchCellValueUpdate is defined in api/GridApi.ts (public API location) not features/ (Plan 101)', () => {
+		const gridApiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		expect(gridApiContent).toContain('BatchCellValueUpdate');
+	});
 });
