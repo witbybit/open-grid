@@ -49,7 +49,8 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 export interface BindCellFullRequest<TRowData = unknown> {
 	cellSlot: CellSlot<TRowData>;
 	slotId: string;
-	slotGeneration?: number;
+	/** Physical slot generation — incremented on each row rebind. Required for stale-mount detection. */
+	slotGeneration: number;
 	node: RowNode<TRowData>;
 	rowIndex: number;
 	colIndex: number;
@@ -74,7 +75,8 @@ export interface BindCellDuringScrollRequest<TRowData = unknown> {
 	pinRightStart: number;
 	ctx: ScrollRenderContext<TRowData>;
 	pooledRowId: string;
-	pooledRowGeneration?: number;
+	/** Physical slot generation — required for stale-mount detection in deferred flush. */
+	pooledRowGeneration: number;
 	left: number;
 	right: number;
 	width: number;

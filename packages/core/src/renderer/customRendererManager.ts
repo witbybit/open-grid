@@ -7,6 +7,8 @@ import { createEditRendererKey, createSlotRendererKey, createIndexRendererKey } 
 export interface RendererInstance<TRowData = unknown> {
 	rendererKey: string;
 	cellKey: string;
+	rowSlotId: string;
+	slotGeneration: number;
 	container: HTMLDivElement;
 	value: unknown;
 	node: RowNode<TRowData>;
@@ -23,6 +25,8 @@ export interface RendererInstance<TRowData = unknown> {
 export interface AcquireRendererParams<TRowData = unknown> {
 	rendererKey: string;
 	cellKey: string;
+	rowSlotId: string;
+	slotGeneration: number;
 	parentContainer: HTMLElement;
 	value: unknown;
 	node: RowNode<TRowData>;
@@ -185,6 +189,8 @@ export class CustomRendererManager<TRowData = unknown> {
 		const newInstance: RendererInstance<TRowData> = {
 			rendererKey: params.rendererKey,
 			cellKey: params.cellKey,
+			rowSlotId: params.rowSlotId,
+			slotGeneration: params.slotGeneration,
 			container,
 			value: params.value,
 			node: params.node,
@@ -203,6 +209,8 @@ export class CustomRendererManager<TRowData = unknown> {
 
 		this.onMountCellContent?.({
 			cellKey: params.cellKey,
+			rowSlotId: params.rowSlotId,
+			slotGeneration: params.slotGeneration,
 			container,
 			value: params.value,
 			node: params.node,
@@ -362,6 +370,8 @@ export class CustomRendererManager<TRowData = unknown> {
 		this.unregisterActive(instance);
 		instance.rendererKey = params.rendererKey;
 		instance.cellKey = params.cellKey;
+		instance.rowSlotId = params.rowSlotId;
+		instance.slotGeneration = params.slotGeneration;
 		instance.value = params.value;
 		instance.node = params.node;
 		instance.col = params.col;
@@ -384,6 +394,8 @@ export class CustomRendererManager<TRowData = unknown> {
 		if (needsUpdate) {
 			this.onMountCellContent?.({
 				cellKey: params.cellKey,
+				rowSlotId: params.rowSlotId,
+				slotGeneration: params.slotGeneration,
 				container: instance.container,
 				value: params.value,
 				node: params.node,
@@ -431,6 +443,7 @@ export class CustomRendererManager<TRowData = unknown> {
 				cellKey: instance.cellKey,
 				container: instance.container,
 				flushSync: false,
+				slotGeneration: instance.slotGeneration,
 			});
 		}
 		delete instance.container.dataset.rendererKey;

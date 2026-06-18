@@ -61,6 +61,7 @@ function makeDeps(stateHost: RowRendererRuntimeStateHost<unknown>): RowRendererR
 		portalMountManager: {
 			releaseCellForScroll: vi.fn(),
 			releaseCell: vi.fn(),
+			getActiveGeneration: vi.fn(() => undefined),
 		} as any,
 		getViewportContainer: () => null,
 		selectionPaint: {} as any,

@@ -50,9 +50,9 @@ export interface GridCellContentMount<TRowData = unknown> {
 	rowIndex?: number;
 	colIndex?: number;
 	/** Stable physical slot ID — bypasses the stale activeRows resolver during the binding loop. */
-	rowSlotId?: string;
-	/** Generation counter from the physical slot — incremented on each row rebind. */
-	slotGeneration?: number;
+	rowSlotId: string;
+	/** Generation counter from the physical slot — incremented on each row rebind. Required for stale-mount detection. */
+	slotGeneration: number;
 	isEditing: boolean;
 	isLoading: boolean;
 	phase?: CellRendererPhase;
@@ -69,7 +69,7 @@ export interface GridCellContentUnmount {
 	flushSync?: boolean;
 	reason?: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated';
 	/** Generation at the time this release was requested — used to reject stale releases. */
-	slotGeneration?: number;
+	slotGeneration: number;
 }
 
 export interface GridCellContentFlush {

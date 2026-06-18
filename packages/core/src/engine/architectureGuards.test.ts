@@ -1122,4 +1122,42 @@ describe('Architecture guardrails', () => {
 		expect(maintenanceContent).toContain('getVisualRowModel()');
 		expect(maintenanceContent).not.toContain('engine.getRowModel()');
 	});
+
+	// ── Plan 100: physical renderer and adapter contract ─────────────────────
+
+	it('GridCellContentMount.slotGeneration is required (not optional) (Plan 100)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'IGridRenderer.ts'), 'utf-8');
+		expect(content).toContain('slotGeneration: number;');
+		expect(content).not.toContain('slotGeneration?: number');
+	});
+
+	it('GridCellContentMount.rowSlotId is required (not optional) (Plan 100)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'IGridRenderer.ts'), 'utf-8');
+		expect(content).toContain('rowSlotId: string;');
+		expect(content).not.toContain('rowSlotId?: string');
+	});
+
+	it('GridCellContentUnmount.slotGeneration is required (not optional) (Plan 100)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'IGridRenderer.ts'), 'utf-8');
+		// GridCellContentUnmount section: must have required slotGeneration
+		const unmountSection = content.slice(content.indexOf('GridCellContentUnmount'));
+		expect(unmountSection).toContain('slotGeneration: number;');
+	});
+
+	it('PortalMountManager exposes getActiveGeneration() for deferred release generation capture (Plan 100)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
+		expect(content).toContain('getActiveGeneration(');
+		expect(content).toContain('activeGenerationByKey.get(');
+	});
+
+	it('stale-detection guards in portalMountManager no longer have redundant !== undefined checks (Plan 100)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
+		expect(content).not.toContain('slotGeneration !== undefined');
+	});
+
+	it('releaseCellPortal captures generation at scheduling time via getActiveGeneration (Plan 100)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRendererRuntime.ts'), 'utf-8');
+		expect(content).toContain('getActiveGeneration(cellKey)');
+		expect(content).toContain('slotGeneration,');
+	});
 });

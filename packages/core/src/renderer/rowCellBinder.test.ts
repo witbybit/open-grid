@@ -66,6 +66,7 @@ describe('bindCellDuringScroll', () => {
 				rowVersions: new Map(),
 			} as any,
 			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
 			left: 0,
 			right: -1,
 			width: 100,

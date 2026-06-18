@@ -129,10 +129,13 @@ export class PortalMountManager<TRowData = unknown> {
 		maxOpsFlushedInOneChunk: 0,
 	};
 
+	/** Returns the active slot generation for a cell key, or undefined if not mounted. */
+	public getActiveGeneration(cellKey: string): number | undefined {
+		return this.activeGenerationByKey.get(cellKey);
+	}
+
 	private mountCellReal(mount: GridCellContentMount<TRowData>): void {
-		if (mount.slotGeneration !== undefined) {
-			this.activeGenerationByKey.set(mount.cellKey, mount.slotGeneration);
-		}
+		this.activeGenerationByKey.set(mount.cellKey, mount.slotGeneration);
 		const col = mount.col as InternalColumnDef<TRowData>;
 		const isCustom = !!(col.cellRenderer || mount.isEditing);
 
@@ -177,6 +180,8 @@ export class PortalMountManager<TRowData = unknown> {
 		this.customRendererManager.acquire({
 			rendererKey,
 			cellKey: mount.cellKey,
+			rowSlotId: mount.rowSlotId,
+			slotGeneration: mount.slotGeneration,
 			parentContainer: mount.container,
 			value: mount.value,
 			node: mount.node,
@@ -201,7 +206,7 @@ export class PortalMountManager<TRowData = unknown> {
 				this.onUnmountCellContent?.(originalUnmount);
 			} else {
 				const container = this.mountedCells.get(cellKey);
-				this.onUnmountCellContent?.({ cellKey, container, flushSync: false });
+				this.onUnmountCellContent?.({ cellKey, container, flushSync: false, slotGeneration: 0 });
 			}
 		}
 	}
@@ -394,7 +399,7 @@ export class PortalMountManager<TRowData = unknown> {
 			// Reject stale releases: a later mount for the same key with a higher
 			// generation means this release was superseded by a slot rebind.
 			const activeGen = this.activeGenerationByKey.get(cellKey);
-			if (unmount.slotGeneration !== undefined && activeGen !== undefined && activeGen > unmount.slotGeneration) {
+			if (activeGen !== undefined && activeGen > unmount.slotGeneration) {
 				this.deferredCellReleases.delete(cellKey);
 				continue;
 			}
@@ -425,7 +430,7 @@ export class PortalMountManager<TRowData = unknown> {
 				// Reject stale deferred mounts: a later immediate mount for the same key
 				// with a higher generation means this deferred work targets an old slot.
 				const activeGen = this.activeGenerationByKey.get(mount.cellKey);
-				if (mount.slotGeneration !== undefined && activeGen !== undefined && activeGen > mount.slotGeneration) {
+				if (activeGen !== undefined && activeGen > mount.slotGeneration) {
 					this.deferredCellMounts.delete(mount.cellKey);
 					this.deferredNewCellMounts.delete(mount.cellKey);
 					continue;

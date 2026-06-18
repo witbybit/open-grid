@@ -14,6 +14,8 @@ export interface RowCellBindRequest<TRowData = unknown> {
 		element: HTMLDivElement;
 	};
 	slotId: string;
+	/** Physical slot generation — incremented on each row rebind. Required for stale-mount detection. */
+	slotGeneration: number;
 	node: RowNode<TRowData>;
 	rowIndex: number;
 	colIndex: number;
@@ -81,6 +83,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			deps.bindCellFull({
 				cellSlot,
 				slotId: slot.id,
+				slotGeneration: slot.generation,
 				node: row.node,
 				rowIndex,
 				colIndex: c,
@@ -112,6 +115,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			deps.bindCellFull({
 				cellSlot,
 				slotId: slot.id,
+				slotGeneration: slot.generation,
 				node: row.node,
 				rowIndex,
 				colIndex,
@@ -140,6 +144,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			deps.bindCellFull({
 				cellSlot,
 				slotId: slot.id,
+				slotGeneration: slot.generation,
 				node: row.node,
 				rowIndex,
 				colIndex,
@@ -248,6 +253,7 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 				deps.bindCellFull({
 					cellSlot,
 					slotId: slot.id,
+					slotGeneration: slot.generation,
 					node: visualRow.node,
 					rowIndex,
 					colIndex,

@@ -27,6 +27,8 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'r1:name',
 			container,
+			rowSlotId: 'slot-0',
+			slotGeneration: 0,
 			value: 'A',
 			node: {} as never,
 			col: { field: 'name', header: 'Name' },
@@ -40,6 +42,8 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'r1:name',
 			container,
+			rowSlotId: 'slot-0',
+			slotGeneration: 0,
 			value: 'B',
 			node: {} as never,
 			col: { field: 'name', header: 'Name' },
@@ -49,9 +53,9 @@ describe('PortalMountManager', () => {
 		expect(manager.getStats().cells).toBe(1);
 		expect(mount).toHaveBeenCalledTimes(2);
 
-		manager.releaseCell({ cellKey: 'r1:name', container, flushSync: true });
+		manager.releaseCell({ cellKey: 'r1:name', container, flushSync: true, slotGeneration: 0 });
 		expect(manager.getStats().cells).toBe(0);
-		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: true });
+		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: true, slotGeneration: 0 });
 	});
 
 	it('releases all tracked portal mounts on cleanup', () => {
@@ -66,6 +70,8 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'r1:name',
 			container: document.createElement('div'),
+			rowSlotId: 'slot-0',
+			slotGeneration: 0,
 			value: 'A',
 			node: {} as never,
 			col: { field: 'name', header: 'Name' },
@@ -168,6 +174,8 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'r1:name',
 			container: stableContainer,
+			rowSlotId: 'slot-0',
+			slotGeneration: 0,
 			value: 'A',
 			node: {} as never,
 			col: { field: 'name', header: 'Name' },
@@ -177,13 +185,15 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'r2:name',
 			container: transientContainer,
+			rowSlotId: 'slot-1',
+			slotGeneration: 0,
 			value: 'B',
 			node: {} as never,
 			col: { field: 'name', header: 'Name' },
 			isEditing: false,
 			isLoading: false,
 		});
-		manager.releaseCell({ cellKey: 'r2:name', container: transientContainer });
+		manager.releaseCell({ cellKey: 'r2:name', container: transientContainer, slotGeneration: 0 });
 
 		expect(mount).not.toHaveBeenCalled();
 		expect(release).not.toHaveBeenCalled();
@@ -211,6 +221,8 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'r1:name',
 			container,
+			rowSlotId: 'slot-0',
+			slotGeneration: 0,
 			value: 'A',
 			node: {} as never,
 			col: { field: 'name', header: 'Name' },
@@ -219,7 +231,7 @@ describe('PortalMountManager', () => {
 		});
 
 		manager.setRuntimeState(makeScrollingRuntimeState());
-		manager.releaseCells([{ cellKey: 'r1:name', container }], true);
+		manager.releaseCells([{ cellKey: 'r1:name', container, slotGeneration: 0 }], true);
 
 		expect(release).not.toHaveBeenCalled();
 		expect(flush).not.toHaveBeenCalled();
@@ -228,7 +240,7 @@ describe('PortalMountManager', () => {
 		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred(true);
 
-		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: false });
+		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: false, slotGeneration: 0 });
 		expect(flush).toHaveBeenCalledWith({ flushSync: true });
 		expect(manager.getScrollStats().portalFlushesDuringScroll).toBe(0);
 	});
@@ -242,6 +254,8 @@ describe('PortalMountManager', () => {
 			manager.mountCell({
 				cellKey: `r${index}:name`,
 				container: document.createElement('div'),
+				rowSlotId: `slot-${index}`,
+				slotGeneration: 0,
 				value: `A${index}`,
 				node: {} as never,
 				col: { field: 'name', header: 'Name' },
@@ -251,7 +265,7 @@ describe('PortalMountManager', () => {
 		}
 		manager.setRuntimeState(makeScrollingRuntimeState());
 		for (let index = 0; index < 8; index++) {
-			manager.releaseCell({ cellKey: `r${index}:name` });
+			manager.releaseCell({ cellKey: `r${index}:name`, slotGeneration: 0 });
 		}
 		manager.setRuntimeState(makeIdleRuntimeState());
 
@@ -284,6 +298,8 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'logical-1',
 			container: parent,
+			rowSlotId: 'slot-0',
+			slotGeneration: 0,
 			value: 'A',
 			node: { id: 'row-1' } as never,
 			col: { field: 'name', header: 'Name', cellRenderer: vi.fn() },
@@ -296,7 +312,7 @@ describe('PortalMountManager', () => {
 		expect(parent.querySelectorAll('.og-custom-renderer-container')).toHaveLength(1);
 
 		manager.setRuntimeState(makeScrollingRuntimeState());
-		manager.releaseCell({ cellKey: 'logical-1', container: parent });
+		manager.releaseCell({ cellKey: 'logical-1', container: parent, slotGeneration: 0 });
 		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred();
 
@@ -324,6 +340,8 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'row-1:name',
 			container: firstParent,
+			rowSlotId: 'slot-0',
+			slotGeneration: 0,
 			value: 'A',
 			node: { id: 'row-1' } as never,
 			col,
@@ -333,13 +351,15 @@ describe('PortalMountManager', () => {
 			isLoading: false,
 		});
 		manager.setRuntimeState(makeScrollingRuntimeState());
-		manager.releaseCell({ cellKey: 'row-1:name', container: firstParent });
+		manager.releaseCell({ cellKey: 'row-1:name', container: firstParent, slotGeneration: 0 });
 		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred();
 
 		manager.mountCell({
 			cellKey: 'row-2:name',
 			container: secondParent,
+			rowSlotId: 'slot-0',
+			slotGeneration: 1,
 			value: 'B',
 			node: { id: 'row-2' } as never,
 			col,
@@ -368,6 +388,8 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'row-1:name',
 			container: parent,
+			rowSlotId: 'slot-0',
+			slotGeneration: 0,
 			value: 'A',
 			node: { id: 'row-1' } as never,
 			col,
@@ -379,6 +401,8 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'row-2:name',
 			container: parent,
+			rowSlotId: 'slot-1',
+			slotGeneration: 0,
 			value: 'B',
 			node: { id: 'row-2' } as never,
 			col,
@@ -404,6 +428,7 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'slot-a:name',
 			container,
+			rowSlotId: 'slot-0',
 			value: 'old',
 			node: {} as never,
 			col: { field: 'name', header: 'Name' },
@@ -417,6 +442,7 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'slot-a:name',
 			container,
+			rowSlotId: 'slot-0',
 			value: 'new',
 			node: {} as never,
 			col: { field: 'name', header: 'Name' },
@@ -442,6 +468,7 @@ describe('PortalMountManager', () => {
 		manager.mountCell({
 			cellKey: 'slot-b:name',
 			container,
+			rowSlotId: 'slot-0',
 			value: 'A',
 			node: {} as never,
 			col: { field: 'name', header: 'Name' },

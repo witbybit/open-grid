@@ -150,6 +150,7 @@ function createRowRenderMaintenanceDeps<TRowData>(args: RowRendererRuntimeArgs<T
 			bindCellFull(createRowCellBinderDeps(args), {
 				cellSlot: request.cellSlot as CellSlot<TRowData>,
 				slotId: request.slotId,
+				slotGeneration: request.slotGeneration,
 				node: request.node,
 				rowIndex: request.rowIndex,
 				colIndex: request.colIndex,
@@ -228,6 +229,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 		if (!cellKey) return;
 		const container = this.getCellPortalHost(cell) ?? cell;
 		const isDeferred = forceDeferred ?? this.deps.stateHost.runtimeState.isScrolling();
+		const slotGeneration = this.deps.portalMountManager.getActiveGeneration(cellKey) ?? 0;
 
 		if (isDeferred) {
 			this.deps.stateHost.currentScrollPortalOps++;
@@ -235,6 +237,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 				cellKey,
 				container,
 				flushSync: false,
+				slotGeneration,
 			});
 		} else {
 			this.deps.portalMountManager.releaseCell({
@@ -242,6 +245,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 				container,
 				flushSync: false,
 				reason,
+				slotGeneration,
 			});
 		}
 	}
