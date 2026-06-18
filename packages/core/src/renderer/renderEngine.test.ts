@@ -363,6 +363,48 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('keeps migrated command-owned invalidations off the legacy inferred path', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-1', name: 'Row 1' }],
+			columns: store.getState().columns,
+		});
+		const inst = new RecordingGridInstrumentation();
+		store.setInstrumentation(inst);
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		store.setShowFilterChipBar(true);
+		store.setColumnReorderEnabled(false);
+
+		expect(inst.get(GridMetric.LEGACY_INFERRED_INVALIDATIONS)).toBe(0);
+		expect(inst.snapshot().fallbacks).toEqual([]);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('does not render hidden columns in headers or cells', () => {
 		const columns = [
 			{ field: 'id', header: 'ID', width: 80 },
