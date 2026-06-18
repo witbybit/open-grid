@@ -20,6 +20,8 @@ This is the first checked-in inventory for the Plan 103 convergence pass. It rec
   Converted `setData(...)`, range-selection commits, and row-model registration side effects onto `GridChangeApplier`.
 - `features/GridStateFeatureController.ts`
   Removed the legacy fallback branch so UI-state feature writes now require `GridChangeApplier`.
+- `engine/GridEngine.ts`
+  Converted row-model helper commits (`initializeRowModelState`, `bumpRowModelGlobalVersion`, `updateExpansionState`, `setRowModelLoadingState`, `setServerPaginationState`) onto typed changes with render suppressed.
 
 ## Current allowlist
 
@@ -28,7 +30,7 @@ The source-of-truth allowlist lives in [packages/core/src/engine/gridDirectWrite
 ## Remaining hot spots to convert next
 
 - `engine/GridEngine.ts`
-  Bootstrap plus the remaining derived runtime helpers (`initializeRowModelState`, `bumpRowModelGlobalVersion`, `updateExpansionState`, `setRowModelLoadingState`, `setServerPaginationState`) still perform direct writes.
+  Bootstrap and legacy public facade helpers such as generic `setState(...)` still contain direct writes.
 - `store.ts`
   Legacy facade compatibility still exists, but row overscan plus panel/chart/theme/pin sync now route through typed engine intent methods.
 - `renderer/RenderInvalidationCoordinator.ts`

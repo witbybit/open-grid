@@ -449,31 +449,51 @@ export class GridEngine<TRowData = unknown> {
 	public setState(updater: GridStateUpdater<TRowData>): void {
 		this.stateManager.setState(updater);
 	}
-	/** Allowlisted direct write for row-model bootstrap. */
+
 	public initializeRowModelState(model: { columns?: GridState<TRowData>['columns']; getRowId?: ((row: TRowData) => string) | undefined }): void {
 		const nextState: Partial<GridState<TRowData>> = {};
 		if (model.columns) nextState.columns = model.columns;
 		if (model.getRowId !== undefined) nextState.getRowId = model.getRowId;
-		if (Object.keys(nextState).length > 0) this.stateManager.setState(nextState);
+		if (Object.keys(nextState).length === 0) return;
+		this.changeApplier.apply({
+			reason: 'rows:initialize-model',
+			state: nextState,
+			requestRender: false,
+		});
 	}
-	/** Allowlisted direct write for derived row-model structural version bumps. */
+
 	public bumpRowModelGlobalVersion(): void {
-		this.stateManager.setState((state) => ({ globalVersion: state.globalVersion + 1 }));
-		this.incrementDomain('rows');
+		this.changeApplier.apply({
+			reason: 'rows:bump-global-version',
+			state: (state) => ({ globalVersion: state.globalVersion + 1 }),
+			domains: ['rows'],
+			requestRender: false,
+		});
 	}
-	/** Allowlisted direct write for derived expansion synchronization. */
+
 	public updateExpansionState(updater: (expansion: GridState<TRowData>['expansion']) => GridState<TRowData>['expansion']): void {
-		this.stateManager.setState((state) => ({ expansion: updater(state.expansion) }));
+		this.changeApplier.apply({
+			reason: 'rows:update-expansion',
+			state: (state) => ({ expansion: updater(state.expansion) }),
+			requestRender: false,
+		});
 	}
-	/** Allowlisted direct write for server row-model loading state. */
+
 	public setRowModelLoadingState(loading: boolean): void {
-		this.stateManager.setState((state) => ({ loading, globalVersion: state.globalVersion + 1 }));
-		this.incrementDomain('rows');
-		this.incrementDomain('geometry');
+		this.changeApplier.apply({
+			reason: 'rows:set-loading-state',
+			state: (state) => ({ loading, globalVersion: state.globalVersion + 1 }),
+			domains: ['rows', 'geometry'],
+			requestRender: false,
+		});
 	}
-	/** Allowlisted direct write for server-owned pagination metadata. */
+
 	public setServerPaginationState(payload: NonNullable<GridState<TRowData>['serverPagination']>): void {
-		this.stateManager.setState({ serverPagination: payload });
+		this.changeApplier.apply({
+			reason: 'rows:set-server-pagination',
+			state: { serverPagination: payload },
+			requestRender: false,
+		});
 	}
 
 	public subscribe(listener: Listener<TRowData>): () => void {

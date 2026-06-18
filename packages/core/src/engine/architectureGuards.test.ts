@@ -1387,4 +1387,18 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain("this.invalidation.invalidateFull('row model registered')");
 		expect(content).not.toContain("this.requestRender('row model registered')");
 	});
+
+	it('GridEngine row-model helper commits route through GridChangeApplier (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+		expect(content).toContain("reason: 'rows:initialize-model'");
+		expect(content).toContain("reason: 'rows:bump-global-version'");
+		expect(content).toContain("reason: 'rows:update-expansion'");
+		expect(content).toContain("reason: 'rows:set-loading-state'");
+		expect(content).toContain("reason: 'rows:set-server-pagination'");
+		expect(content).not.toContain('if (Object.keys(nextState).length > 0) this.stateManager.setState(nextState);');
+		expect(content).not.toContain('this.stateManager.setState((state) => ({ globalVersion: state.globalVersion + 1 }));');
+		expect(content).not.toContain('this.stateManager.setState((state) => ({ expansion: updater(state.expansion) }));');
+		expect(content).not.toContain('this.stateManager.setState((state) => ({ loading, globalVersion: state.globalVersion + 1 }));');
+		expect(content).not.toContain('this.stateManager.setState({ serverPagination: payload });');
+	});
 });
