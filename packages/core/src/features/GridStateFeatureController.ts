@@ -2,12 +2,12 @@ import { GridEventName, type GridState } from '../store.js';
 import type { StateManager } from '../state/StateManager.js';
 import type { CommandHistory } from '../commands/CommandHistory.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
-import type { GridChange } from '../engine/GridChangeApplier.js';
+import type { GridChange, GridCommitResult } from '../engine/GridChangeApplier.js';
 
 export interface GridStateFeatureControllerDeps<TRowData = unknown> {
 	stateManager: StateManager<TRowData>;
 	commandHistory: CommandHistory;
-	applyChange: (change: GridChange<TRowData>) => void;
+	applyChange: (change: GridChange<TRowData>) => GridCommitResult;
 }
 
 export class GridStateFeatureController<TRowData = unknown> {

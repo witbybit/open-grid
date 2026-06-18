@@ -1365,7 +1365,7 @@ describe('Architecture guardrails', () => {
 
 	it('GridStateFeatureController no longer contains raw write fallbacks (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'), 'utf-8');
-		expect(content).toContain('applyChange: (change: GridChange<TRowData>) => void;');
+		expect(content).toContain('applyChange: (change: GridChange<TRowData>) => GridCommitResult;');
 		expect(content).not.toContain('applyChange?:');
 		expect(content).not.toContain('stateManager.setState(');
 		expect(content).not.toContain('invalidateGeometry(');
@@ -1416,6 +1416,7 @@ describe('Architecture guardrails', () => {
 
 	it('GridChangeApplier exposes explicit commit results and non-recursive history records (Plan 104)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
+		expect(content).toContain('apply(change: GridChange<TRowData>): GridCommitResult');
 		expect(content).toContain("status: 'committed'");
 		expect(content).toContain("status: 'noop'");
 		expect(content).toContain("status: 'rejected'");
@@ -1424,6 +1425,13 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('events?: GridChangeEvent<TRowData>[];');
 		expect(content).not.toContain('undo?: GridChange<TRowData>;');
 		expect(content).not.toContain('redo?: GridChange<TRowData>;');
+	});
+
+	it('feature mutation contexts surface GridCommitResult explicitly (Plan 104)', () => {
+		const featureCtx = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridFeatureContext.ts'), 'utf-8');
+		const stateFeature = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'), 'utf-8');
+		expect(featureCtx).toContain('applyChange: (change: GridChange<TRowData>) => GridCommitResult;');
+		expect(stateFeature).toContain('applyChange: (change: GridChange<TRowData>) => GridCommitResult;');
 	});
 
 	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {

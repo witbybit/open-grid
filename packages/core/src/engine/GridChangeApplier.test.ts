@@ -108,6 +108,22 @@ describe('GridChangeApplier', () => {
 		expect(requestRender).not.toHaveBeenCalled();
 	});
 
+	it('faults when a precondition throws without committing state', () => {
+		const { applier, stateManager, faultReporter } = makeApplier();
+
+		const result = applier.apply({
+			reason: 'precondition-throws',
+			precondition: () => {
+				throw new Error('bad precondition');
+			},
+			state: { columnWidths: { name: 250 } },
+		});
+
+		expect(result.status).toBe('faulted');
+		expect(stateManager.getState().columnWidths).toEqual({});
+		expect(faultReporter.snapshot()[0]?.operation).toBe('validate-precondition');
+	});
+
 	it('applies commit phases in deterministic order: state -> domains -> invalidations -> history -> render -> events', () => {
 		const { applier, stateManager, invalidation, eventBus, requestRender, incrementDomain, commandHistory } = makeApplier();
 		const callOrder: string[] = [];
@@ -226,6 +242,108 @@ describe('GridChangeApplier', () => {
 		expect(dispatchSpy).toHaveBeenCalledWith(GridEventName.columnResized, { colField: 'name', width: 220 });
 		expect(faultReporter.snapshot()[0]?.source).toBe('grid-change');
 		expect(faultReporter.snapshot()[0]?.operation).toBe('request-render');
+	});
+
+	it('domain publication faults do not block invalidations, history, render, or events', () => {
+		const { applier, invalidation, eventBus, requestRender, incrementDomain, commandHistory, faultReporter } = makeApplier();
+		const callOrder: string[] = [];
+
+		incrementDomain.mockImplementation(() => {
+			callOrder.push('domains');
+			throw new Error('domain failed');
+		});
+		vi.spyOn(invalidation, 'invalidate').mockImplementation(() => {
+			callOrder.push('invalidation');
+		});
+		vi.spyOn(commandHistory, 'add').mockImplementation(() => {
+			callOrder.push('history');
+		});
+		vi.spyOn(eventBus, 'dispatchEvent').mockImplementation(() => {
+			callOrder.push('event');
+		});
+		requestRender.mockImplementation(() => {
+			callOrder.push('render');
+		});
+
+		const result = applier.apply({
+			reason: 'domain-fault',
+			state: { columnWidths: { name: 200 } },
+			domains: ['columns'],
+			invalidations: [{ kind: 'geometry' }],
+			history: {
+				undo: { reason: 'domain-fault:undo', state: { columnWidths: {} }, requestRender: false },
+				redo: { reason: 'domain-fault:redo', state: { columnWidths: { name: 200 } }, requestRender: false },
+			},
+			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 200 } }],
+		});
+
+		expect(result.status).toBe('faulted');
+		expect(callOrder).toEqual(['domains', 'invalidation', 'history', 'render', 'event']);
+		expect(faultReporter.snapshot()[0]?.operation).toBe('publish-domains');
+	});
+
+	it('invalidation faults do not block history, render, or events', () => {
+		const { applier, invalidation, eventBus, requestRender, commandHistory, faultReporter } = makeApplier();
+		const callOrder: string[] = [];
+
+		vi.spyOn(invalidation, 'invalidate').mockImplementation(() => {
+			callOrder.push('invalidation');
+			throw new Error('invalidate failed');
+		});
+		vi.spyOn(commandHistory, 'add').mockImplementation(() => {
+			callOrder.push('history');
+		});
+		vi.spyOn(eventBus, 'dispatchEvent').mockImplementation(() => {
+			callOrder.push('event');
+		});
+		requestRender.mockImplementation(() => {
+			callOrder.push('render');
+		});
+
+		const result = applier.apply({
+			reason: 'invalidation-fault',
+			state: { columnWidths: { name: 210 } },
+			invalidations: [{ kind: 'geometry' }],
+			history: {
+				undo: { reason: 'invalidation-fault:undo', state: { columnWidths: {} }, requestRender: false },
+				redo: { reason: 'invalidation-fault:redo', state: { columnWidths: { name: 210 } }, requestRender: false },
+			},
+			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 210 } }],
+		});
+
+		expect(result.status).toBe('faulted');
+		expect(callOrder).toEqual(['invalidation', 'history', 'render', 'event']);
+		expect(faultReporter.snapshot()[0]?.operation).toBe('apply-invalidations');
+	});
+
+	it('history registration faults do not block render or events', () => {
+		const { applier, eventBus, requestRender, commandHistory, faultReporter } = makeApplier();
+		const callOrder: string[] = [];
+
+		vi.spyOn(commandHistory, 'add').mockImplementation(() => {
+			callOrder.push('history');
+			throw new Error('history failed');
+		});
+		vi.spyOn(eventBus, 'dispatchEvent').mockImplementation(() => {
+			callOrder.push('event');
+		});
+		requestRender.mockImplementation(() => {
+			callOrder.push('render');
+		});
+
+		const result = applier.apply({
+			reason: 'history-fault',
+			state: { columnWidths: { name: 230 } },
+			history: {
+				undo: { reason: 'history-fault:undo', state: { columnWidths: {} }, requestRender: false },
+				redo: { reason: 'history-fault:redo', state: { columnWidths: { name: 230 } }, requestRender: false },
+			},
+			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 230 } }],
+		});
+
+		expect(result.status).toBe('faulted');
+		expect(callOrder).toEqual(['history', 'render', 'event']);
+		expect(faultReporter.snapshot()[0]?.operation).toBe('register-history');
 	});
 
 	it('multiple invalidations of different kinds are all applied', () => {
