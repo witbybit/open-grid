@@ -10,7 +10,7 @@
 		"build:demo": "pnpm --filter \"demo-app\" run build",
 		"test": "pnpm --filter @open-grid/core run test && pnpm --filter @open-grid/react run test",
 		"test:architecture": "pnpm --filter @open-grid/core exec vitest run src/boundary.test.ts src/engine/architectureGuards.test.ts && pnpm --filter @open-grid/react exec vitest run src/boundary.test.tsx",
-		"test:adversarial": "pnpm --filter @open-grid/core exec vitest run src/rowModel.adversarial.test.ts src/lifecycle.adversarial.test.ts src/serverRowModel.adversarial.test.ts",
+		"test:adversarial": "pnpm --filter @open-grid/core exec vitest run src/rowModel.adversarial.test.ts src/lifecycle.adversarial.test.ts src/serverRowModel.adversarial.test.ts && pnpm --filter @open-grid/react exec vitest run src/gridPortalStore.adversarial.test.ts",
 		"bench": "pnpm --filter @open-grid/core exec vitest run src/perf/instrumentedBudgets.test.ts",
 		"pack:verify": "node ./scripts/pack-verify.mjs",
 		"dev:demo": "pnpm --filter \"demo-app\" run dev",
