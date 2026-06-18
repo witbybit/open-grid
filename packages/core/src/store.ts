@@ -486,9 +486,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.getRowModel()?.getVisualRowCount() ?? 0;
 	};
 
-	public getVisualRowIndexById = (id: string): number | null => {
-		return this.getRowModel()?.getVisualRowIndexById(id) ?? null;
-	};
 
 	public getVisualIndexById = (visualRowId: string): number | null => {
 		const idx = this.getRowModel()?.getVisualIndexById(visualRowId);
@@ -831,7 +828,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.batchedUpdates = enabled;
 	}
 
-	public batch = (callback: () => void): void => this.engine.batch(callback);
 	public flushCellUpdatesSync = (): void => this.engine.flushCellUpdatesSync();
 	public registerPlugin = (plugin: GridPlugin<TRowData>): void => this.pluginRegistry.registerPlugin(plugin);
 	public unregisterPlugin = (name: string): void => this.pluginRegistry.unregisterPlugin(name);

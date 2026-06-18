@@ -39,8 +39,8 @@ describe('ServerRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(controller.getVisualRowCount()).toBe(100);
-		expect(controller.getVisualRowIndexById('row:1')).toBe(0);
-		expect(controller.getVisualRowIndexById('row:2')).toBe(1);
+		expect(controller.getVisualIndexById('row:1')).toBe(0);
+		expect(controller.getVisualIndexById('row:2')).toBe(1);
 		expect(controller.getVisualIndexByRowId('1')).toBe(0);
 
 		const visualRow1 = controller.getVisualRow(0);
@@ -287,7 +287,7 @@ describe('ServerRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(controller.getVisualRowCount()).toBe(0);
-		expect(controller.getVisualRowIndexById('1')).toBe(-1);
+		expect(controller.getVisualIndexById('1')).toBe(-1);
 	});
 
 	it('should switch datasource and block size when server options change', async () => {
@@ -322,7 +322,7 @@ describe('ServerRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(secondDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 0, endRow: 25 }));
-		expect(controller.getVisualRowIndexById('1')).toBe(-1);
+		expect(controller.getVisualIndexById('1')).toBe(-1);
 		expect(getRowNode(controller, 0)?.data.name).toBe('Bob');
 	});
 

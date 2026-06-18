@@ -40,8 +40,8 @@ describe('ClientRowModelController', () => {
 		});
 
 		expect(controller.getVisualRowCount()).toBe(2);
-		expect(controller.getVisualRowIndexById(toDataVisualRowId('1'))).toBe(0);
-		expect(controller.getVisualRowIndexById(toDataVisualRowId('2'))).toBe(1);
+		expect(controller.getVisualIndexById(toDataVisualRowId('1'))).toBe(0);
+		expect(controller.getVisualIndexById(toDataVisualRowId('2'))).toBe(1);
 
 		const visualRow1 = controller.getVisualRow(0);
 		expect(visualRow1?.kind).toBe('data');

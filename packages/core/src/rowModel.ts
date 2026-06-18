@@ -103,8 +103,6 @@ export interface RowModelRefreshResult {
 /** Full row-model contract. Extends VisualRowModel with mutation, selection, and server APIs. */
 export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
 	getDataRowCount?(): number;
-	/** @deprecated Use getVisualIndexById instead. Will be removed in a future release. */
-	getVisualRowIndexById(id: string): number;
 	getSelectableDataRowIds?(scope?: RowSelectionScope): string[];
 	toggleGroupExpanded?(groupId: string): RowModelRefreshResult | void;
 	toggleDetailExpanded?(rowId: string): RowModelRefreshResult | void;
@@ -1139,10 +1137,6 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return this.visualRows.length;
 	};
 
-	public getVisualRowIndexById = (id: string): number => {
-		const idx = this.visualRowIdToIndex.get(id) ?? this.rowIdToVisualIndex.get(id);
-		return idx !== undefined ? idx : -1;
-	};
 
 	public getVisualIndexById = (visualRowId: string): number => {
 		const idx = this.visualRowIdToIndex.get(visualRowId);

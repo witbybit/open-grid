@@ -14,7 +14,6 @@ describe('SelectionModel', () => {
 		const rowModel: RowModel<{ id: string; name: string }> = {
 			getVisualRow: (index) => visualRows[index] ?? null,
 			getVisualRowCount: () => visualRows.length,
-			getVisualRowIndexById: (id) => visualRows.findIndex((row) => row.id === id || (row.kind === 'data' && row.rowId === id)),
 			getVisualIndexById: (id) => visualRows.findIndex((row) => row.id === id),
 			getVisualIndexByRowId: (id) => visualRows.findIndex((row) => row.kind === 'data' && row.rowId === id),
 			getRowNodeById: (id) => (id === 'r1' ? rowOne : null),

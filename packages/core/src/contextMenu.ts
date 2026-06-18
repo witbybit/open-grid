@@ -69,7 +69,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		if (state.selection.bounds) {
 			const rowModel = this.runtime.getRowModel();
 			if (rowModel) {
-				const clickedRowIdx = rowModel.getVisualRowIndexById(rowId);
+				const clickedRowIdx = rowModel.getVisualIndexByRowId(rowId);
 				const clickedColIdx = state.columns.findIndex((c) => c.field === colField);
 				const bounds = state.selection.bounds;
 				if (

@@ -615,7 +615,6 @@ export interface GridRendererApi<TRowData = unknown> extends GridApi<TRowData> {
 	setRowOverscanPx(px: number): void;
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	getVisualRowCount(): number;
-	getVisualRowIndexById(id: string): number | null;
 	getVisualIndexById(visualRowId: string): number | null;
 	getVisualIndexByRowId(rowId: string): number | null;
 	subscribeToViewport(listener: Listener<TRowData>): () => void;
@@ -647,11 +646,6 @@ export interface GridStoreRuntime<TRowData = unknown> {
 	registerRowModel(rowModel: import('../store.js').RowModel<TRowData>): void;
 	getRowModel(): import('../store.js').RowModel<TRowData> | null;
 	triggerCellNotifications(rowId: string): void;
-	/**
-	 * @deprecated Auto-batching is on by default. Use `flushCellUpdatesSync()` if a synchronous
-	 * flush is required, or restructure to use `applyTransaction` for row-level bulk changes.
-	 */
-	batch(callback: () => void): void;
 	batchedUpdates: boolean;
 	registerCellSubscription(sub: CellSubscription): void;
 	unregisterCellSubscription(sub: CellSubscription): void;
@@ -684,7 +678,6 @@ export interface InternalGridApi<TRowData = unknown> extends GridRendererApi<TRo
 	// ── Visual row model access (used by renderer, not application code) ─────
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	getVisualRowCount(): number;
-	getVisualRowIndexById(id: string): number | null;
 	getVisualIndexById(visualRowId: string): number | null;
 	getVisualIndexByRowId(rowId: string): number | null;
 
@@ -706,11 +699,6 @@ export interface InternalGridApi<TRowData = unknown> extends GridRendererApi<TRo
 	setViewportSize(width: number, height: number): boolean;
 	updateVisibleRanges(): boolean;
 	triggerCellNotifications(rowId: string): void;
-	/**
-	 * @deprecated Auto-batching is on by default. Use `flushCellUpdatesSync()` if a synchronous
-	 * flush is required, or restructure to use `applyTransaction` for row-level bulk changes.
-	 */
-	batch(callback: () => void): void;
 	batchedUpdates: boolean;
 	registerCellSubscription(sub: CellSubscription): void;
 	unregisterCellSubscription(sub: CellSubscription): void;

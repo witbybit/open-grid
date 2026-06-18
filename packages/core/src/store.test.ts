@@ -1414,7 +1414,7 @@ describe('GridStore undo and redo functionality', () => {
 		expect(plan.hasDomRenderers).toBe(true);
 	});
 
-	it('coalesces api.batch and api.transaction render invalidations into one render request', () => {
+	it('coalesces api.transaction render invalidations into one render request', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'id', header: 'ID', width: 50 },
@@ -1432,16 +1432,6 @@ describe('GridStore undo and redo functionality', () => {
 		});
 		const renderInvalidated = vi.fn();
 		store.addEventListener(GridEventName.renderInvalidated, renderInvalidated);
-
-		store.batch(() => {
-			store.setColumnWidth('id', 60);
-			store.setColumnWidth('name', 180);
-			store.setSortModel([{ colId: 'name', sort: 'asc' }]);
-			store.setCellValue('1', 'name', 'Product A+');
-		});
-
-		expect(renderInvalidated).toHaveBeenCalledTimes(1);
-		renderInvalidated.mockClear();
 
 		store.transaction({
 			columns: [

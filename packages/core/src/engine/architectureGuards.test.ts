@@ -1191,4 +1191,78 @@ describe('Architecture guardrails', () => {
 		const gridApiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
 		expect(gridApiContent).toContain('BatchCellValueUpdate');
 	});
+
+	// ── Plan 102: adversarial correctness, fuzzing, and lifecycle hardening ──
+
+	it('applyClientSortAndFilter is exported from rowModel.ts for use as a reference model in differential tests (Plan 102)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(content).toContain('export function applyClientSortAndFilter');
+	});
+
+	it('ClientRowModelController exposes dispose() that clears its unsubscribers list (Plan 102)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(content).toContain('public dispose()');
+		// Must clear the array so a second call is safe and subscription count can be verified.
+		expect(content).toContain('this.unsubscribers = []');
+	});
+
+	it('ClientRowModelController exposes getAllDataNodes() for reference-model construction (Plan 102)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(content).toContain('getAllDataNodes');
+	});
+
+	it('adversarial test files exist and are not empty (Plan 102)', () => {
+		const adversarialPath = resolve(CORE_ROOT, 'src', 'rowModel.adversarial.test.ts');
+		const lifecyclePath = resolve(CORE_ROOT, 'src', 'lifecycle.adversarial.test.ts');
+		expect(existsSync(adversarialPath), 'rowModel.adversarial.test.ts must exist').toBe(true);
+		expect(existsSync(lifecyclePath), 'lifecycle.adversarial.test.ts must exist').toBe(true);
+		const adversarialContent = readFileSync(adversarialPath, 'utf-8');
+		const lifecycleContent = readFileSync(lifecyclePath, 'utf-8');
+		// Must contain property-based differential tests, not source-string assertions.
+		expect(adversarialContent).toContain('applyClientSortAndFilter');
+		expect(adversarialContent).toContain('makeLcg');
+		// Must cover the destroy-terminal invariant.
+		expect(lifecycleContent).toContain('dispose()');
+		expect(lifecycleContent).toContain('destroy()');
+	});
+
+	it('adversarial test files do not call Math.random() — PRNG must be seeded (Plan 102)', () => {
+		const adversarialPath = resolve(CORE_ROOT, 'src', 'rowModel.adversarial.test.ts');
+		const lifecyclePath = resolve(CORE_ROOT, 'src', 'lifecycle.adversarial.test.ts');
+		const adversarialContent = readFileSync(adversarialPath, 'utf-8');
+		const lifecycleContent = readFileSync(lifecyclePath, 'utf-8');
+		expect(adversarialContent, 'adversarial tests must use a seeded PRNG, not Math.random()').not.toContain('Math.random()');
+		expect(lifecycleContent, 'lifecycle tests must not use Math.random()').not.toContain('Math.random()');
+	});
+
+	// ── Plan 103: alpha foundation cut and codebase demolition ────────────────
+
+	it('deprecated getVisualRowIndexById is removed from RowModel and VisualRowModel (Plan 103)', () => {
+		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(rowModelContent).not.toContain('getVisualRowIndexById');
+	});
+
+	it('deprecated getVisualRowIndexById is removed from GridStore and GridApi interfaces (Plan 103)', () => {
+		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(storeContent).not.toContain('getVisualRowIndexById');
+		const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		expect(apiContent).not.toContain('getVisualRowIndexById');
+	});
+
+	it('contextMenu uses getVisualIndexByRowId (data row ID) not the deleted alias (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'contextMenu.ts'), 'utf-8');
+		expect(content).not.toContain('getVisualRowIndexById');
+		expect(content).toContain('getVisualIndexByRowId');
+	});
+
+	it('deprecated batch() callback is removed from GridStoreRuntime interface (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		// The @deprecated batch(callback) escape hatch must no longer be on the interface.
+		expect(content).not.toContain('batch(callback: () => void): void;');
+	});
+
+	it('GridStore does not expose a public batch() method (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).not.toContain('public batch =');
+	});
 });

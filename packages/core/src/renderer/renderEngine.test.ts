@@ -603,7 +603,6 @@ describe('RenderEngine', () => {
 		const rowModel: RowModel<{ id: string; name: string }> = {
 			getVisualRow: (index) => (index === 0 ? loadingRow : null),
 			getVisualRowCount: () => 1,
-			getVisualRowIndexById: (id) => (id === loadingRow.id ? 0 : -1),
 			getVisualIndexById: (id) => (id === loadingRow.id ? 0 : -1),
 			getVisualIndexByRowId: () => -1,
 			getRowNodeById: () => null,

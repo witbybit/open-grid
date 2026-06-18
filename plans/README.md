@@ -92,6 +92,17 @@
 | 090 | [Feature Surface Triage and Quarantine](./090-feature-surface-triage-and-quarantine.md)                          | DONE     | working tree |
 | 091 | [Performance Baseline Laboratory](./091-performance-baseline-laboratory.md)                                       | DONE     | working tree |
 | 092 | [Aggregation Input Mutation Correctness](./092-aggregation-input-mutation-correctness.md)                          | DONE     | working tree |
+| 093 | [Single RAF Frame Arbitration](./093-single-raf-frame-arbitration.md)                                              | DONE     | working tree |
+| 094 | [Exclusive Runtime Port Binding](./094-exclusive-runtime-port-binding.md)                                          | DONE     | working tree |
+| 095 | [Portal Flush Phase Contract](./095-portal-flush-phase-contract.md)                                                | DONE     | working tree |
+| 096 | [Frame Epoch and Post-Scroll Durability](./096-frame-epoch-and-post-scroll-durability.md)                          | DONE     | working tree |
+| 097 | [Canonical Domain Command and Mutation Boundary](./097-canonical-domain-command-and-mutation-boundary.md)          | DONE     | working tree |
+| 098 | [Render Runtime Convergence and Demolition](./098-render-runtime-convergence-and-demolition.md)                    | DONE     | working tree |
+| 099 | [Row Model and Derived Data Authority](./099-row-model-and-derived-data-authority.md)                              | DONE     | working tree |
+| 100 | [Physical Renderer and Adapter Contract](./100-physical-renderer-and-adapter-contract.md)                          | DONE     | working tree |
+| 101 | [Public API and Package Boundary Reset](./101-public-api-and-package-boundary-reset.md)                            | DONE     | working tree |
+| 102 | [Adversarial Correctness, Fuzzing, and Lifecycle Hardening](./102-adversarial-correctness-fuzzing-and-lifecycle-hardening.md) | DONE | working tree |
+| 103 | [Alpha Foundation Cut and Codebase Demolition](./103-alpha-foundation-cut-and-codebase-demolition.md)              | WIP      | working tree |
 
 ## Execution order
 
