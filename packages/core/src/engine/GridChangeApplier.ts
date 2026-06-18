@@ -4,6 +4,7 @@ import type { StateManager } from '../state/StateManager.js';
 import type { InvalidationManager, GridInvalidation } from '../renderer/invalidationManager.js';
 import type { EventBus } from '../events/EventBus.js';
 import type { CommandHistory } from '../commands/CommandHistory.js';
+import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 
 export type GridChangeReason =
 	| 'columns:resize'
@@ -25,12 +26,23 @@ export type GridChangeReason =
 	| 'editing:save-failed'
 	| 'validation:cell'
 	| 'validation:grid'
-	| 'validation:clear-all';
+	| 'validation:clear-all'
+	| 'rows:set-sort-model'
+	| 'rows:set-filter-model'
+	| 'geometry:resize-row'
+	| 'geometry:set-default-row-height';
 
 export interface GridChange<TRowData = unknown> {
 	reason: GridChangeReason;
 	state?: GridStateUpdater<TRowData>;
 	invalidations?: GridInvalidation[];
+	/**
+	 * Domain version increments to apply after the state patch commits.
+	 * Each named domain is incremented exactly once, in order, before events fire.
+	 * Declaring domains here is the authoritative path — do not call incrementDomain
+	 * separately for changes that go through GridChangeApplier.
+	 */
+	domains?: ReadonlyArray<keyof GridDomainVersions>;
 	events?: Array<{
 		type: keyof GridEventPayloadMap<TRowData>;
 		payload: GridEventPayloadMap<TRowData>[keyof GridEventPayloadMap<TRowData>];
@@ -46,6 +58,8 @@ export interface GridChangeApplierDeps<TRowData = unknown> {
 	eventBus: EventBus<TRowData>;
 	commandHistory: CommandHistory;
 	requestRender: (reason: string) => void;
+	/** Called once per declared domain after the state patch commits, before events fire. */
+	incrementDomain?: (domain: keyof GridDomainVersions) => void;
 }
 
 export class GridChangeApplier<TRowData = unknown> {
@@ -62,7 +76,14 @@ export class GridChangeApplier<TRowData = unknown> {
 				this.deps.invalidation.invalidate(inv);
 			}
 		}
-		// 3. Dispatch events
+		// 3. Increment declared domain versions — must happen before events so that
+		//    any event handler that reads a domain version sees the updated value.
+		if (change.domains && this.deps.incrementDomain) {
+			for (const domain of change.domains) {
+				this.deps.incrementDomain(domain);
+			}
+		}
+		// 4. Dispatch events
 		if (change.events) {
 			for (const ev of change.events) {
 				this.deps.eventBus.dispatchEvent(
@@ -71,14 +92,14 @@ export class GridChangeApplier<TRowData = unknown> {
 				);
 			}
 		}
-		// 4. Register undo/redo
+		// 5. Register undo/redo
 		if (change.undo && change.redo) {
 			this.deps.commandHistory.add({
 				undo: () => this.apply(change.undo!),
 				redo: () => this.apply(change.redo!),
 			});
 		}
-		// 5. Request render (default true)
+		// 6. Request render (default true)
 		if (change.requestRender !== false) {
 			this.deps.requestRender(change.reason);
 		}

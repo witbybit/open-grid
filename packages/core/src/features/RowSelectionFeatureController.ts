@@ -120,6 +120,7 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 				...result.changedRowIds.map((rowId) => ({ kind: 'row' as const, rowId, reason: 'selection' })),
 				{ kind: 'headers', reason: 'selection' },
 			],
+			domains: ['selection'],
 			events: [{ type: GridEventName.rowSelectionChanged, payload: result as never }],
 		});
 		return result;

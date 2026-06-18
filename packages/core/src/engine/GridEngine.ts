@@ -144,6 +144,19 @@ export class GridEngine<TRowData = unknown> {
 		}
 	}
 
+	public incrementDomain(domain: keyof GridDomainVersions): void {
+		switch (domain) {
+			case 'columns': this.columnVersion++; break;
+			case 'rows': this.rowModelVersion++; break;
+			case 'geometry': this.geometryVersion++; break;
+			case 'selection': this.selectionVersion++; break;
+			case 'editing': this.editingVersion++; break;
+			case 'filtering': this.filteringVersion++; break;
+			case 'sorting': this.sortingVersion++; break;
+		}
+		this.notifyDomainVersionListeners(domain);
+	}
+
 	// Per-row version map: rowId → version, bumped on each row data mutation.
 	// Keyed directly on the engine (not in GridState) so updates are zero-allocation.
 	public readonly rowVersions = new Map<string, number>();
@@ -256,34 +269,6 @@ export class GridEngine<TRowData = unknown> {
 			getRowHeightsList: (rowModel, rowHeightsRecord, defaultRowHeight) => this.getRowHeightsList(rowModel, rowHeightsRecord, defaultRowHeight),
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
 			requestRender: (reason) => this.requestRender(reason),
-			incrementColumnVersion: () => {
-				this.columnVersion++;
-				this.notifyDomainVersionListeners('columns');
-			},
-			incrementGeometryVersion: () => {
-				this.geometryVersion++;
-				this.notifyDomainVersionListeners('geometry');
-			},
-			incrementRowModelVersion: () => {
-				this.rowModelVersion++;
-				this.notifyDomainVersionListeners('rows');
-			},
-			incrementSelectionVersion: () => {
-				this.selectionVersion++;
-				this.notifyDomainVersionListeners('selection');
-			},
-			incrementEditingVersion: () => {
-				this.editingVersion++;
-				this.notifyDomainVersionListeners('editing');
-			},
-			incrementFilteringVersion: () => {
-				this.filteringVersion++;
-				this.notifyDomainVersionListeners('filtering');
-			},
-			incrementSortingVersion: () => {
-				this.sortingVersion++;
-				this.notifyDomainVersionListeners('sorting');
-			},
 		});
 
 		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
@@ -348,6 +333,7 @@ export class GridEngine<TRowData = unknown> {
 			eventBus: this.eventBus,
 			commandHistory: this.commandHistory,
 			requestRender: (reason) => this.requestRender(reason),
+			incrementDomain: (domain) => this.incrementDomain(domain),
 		});
 
 		// Initialize feature controllers (columns model will be linked after sub-models init)
@@ -404,6 +390,7 @@ export class GridEngine<TRowData = unknown> {
 			commandHistory: this.commandHistory,
 			eventBus: this.eventBus,
 			requestRender: (reason) => this.requestRender(reason),
+			applyChange: (change) => this.changeApplier.apply(change),
 		});
 		this.dataMutation = new DataMutationController<TRowData>({
 			data: this.data,
@@ -436,6 +423,12 @@ export class GridEngine<TRowData = unknown> {
 			...state,
 			...payload,
 		}));
+		if (payload.columns !== undefined || payload.defaultColWidth !== undefined) {
+			this.incrementDomain('columns');
+		}
+		if (payload.defaultRowHeight !== undefined) {
+			this.incrementDomain('geometry');
+		}
 		this.invalidation.invalidateFull('set data');
 		this.requestRender('set data');
 		this.commandHistory.clear();
@@ -832,6 +825,7 @@ export class GridEngine<TRowData = unknown> {
 		this.stateManager.setState({
 			selection,
 		});
+		this.incrementDomain('selection');
 	};
 
 	private canEditCell(rowId: string, colField: string): boolean {

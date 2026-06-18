@@ -49,6 +49,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'headers', reason: 'groupBy' },
 				{ kind: 'overlay', reason: 'groupBy' },
 			],
+			domains: ['rows'],
+			events: [{ type: GridEventName.groupByChanged, payload: { groupBy: colIds } as never }],
 		});
 	}
 
@@ -70,7 +72,11 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'headers', reason: 'groupBy' },
 				{ kind: 'overlay', reason: 'groupBy' },
 			],
-			events: [{ type: GridEventName.groupColumnAdded, payload: { colId, index: insertAt, groupBy: next } as never }],
+			domains: ['rows'],
+			events: [
+				{ type: GridEventName.groupByChanged, payload: { groupBy: next } as never },
+				{ type: GridEventName.groupColumnAdded, payload: { colId, index: insertAt, groupBy: next } as never },
+			],
 		});
 	}
 
@@ -90,7 +96,11 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'headers', reason: 'groupBy' },
 				{ kind: 'overlay', reason: 'groupBy' },
 			],
-			events: [{ type: GridEventName.groupColumnRemoved, payload: { colId, groupBy: next } as never }],
+			domains: ['rows'],
+			events: [
+				{ type: GridEventName.groupByChanged, payload: { groupBy: next } as never },
+				{ type: GridEventName.groupColumnRemoved, payload: { colId, groupBy: next } as never },
+			],
 		});
 	}
 
@@ -115,7 +125,11 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'headers', reason: 'groupBy' },
 				{ kind: 'overlay', reason: 'groupBy' },
 			],
-			events: [{ type: GridEventName.groupColumnMoved, payload: { colId, fromIndex, toIndex: boundedTo, groupBy: next } as never }],
+			domains: ['rows'],
+			events: [
+				{ type: GridEventName.groupByChanged, payload: { groupBy: next } as never },
+				{ type: GridEventName.groupColumnMoved, payload: { colId, fromIndex, toIndex: boundedTo, groupBy: next } as never },
+			],
 		});
 	}
 
@@ -124,6 +138,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 			reason: 'grouping:set-agg-defs',
 			state: { aggDefs: defs },
 			invalidations: [{ kind: 'viewport' }, { kind: 'overlay' }],
+			domains: ['rows'],
+			events: [{ type: GridEventName.aggDefsChanged, payload: { aggDefs: defs } as never }],
 		});
 	}
 
@@ -136,6 +152,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'viewport', reason: 'showGroupFooter' },
 				{ kind: 'overlay', reason: 'showGroupFooter' },
 			],
+			domains: ['rows', 'geometry'],
+			events: [{ type: GridEventName.showGroupFooterChanged, payload: { showGroupFooter: enabled } as never }],
 		});
 	}
 
@@ -144,6 +162,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 			reason: 'grouping:set-sticky-rows',
 			state: { enableStickyGroupRows: enabled },
 			invalidations: [{ kind: 'viewport', reason: 'enableStickyGroupRows' }],
+			domains: ['rows'],
+			events: [{ type: GridEventName.enableStickyGroupRowsChanged, payload: { enableStickyGroupRows: enabled } as never }],
 		});
 	}
 

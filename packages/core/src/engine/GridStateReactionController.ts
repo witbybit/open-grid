@@ -32,13 +32,6 @@ export interface GridStateReactionControllerDeps<TRowData = unknown> {
 	getRowHeightsList: (rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number) => number[];
 	notifyCellChange: (rowId: string, colField: string) => void;
 	requestRender: (reason: string) => void;
-	incrementColumnVersion: () => void;
-	incrementGeometryVersion: () => void;
-	incrementRowModelVersion: () => void;
-	incrementSelectionVersion: () => void;
-	incrementEditingVersion: () => void;
-	incrementFilteringVersion: () => void;
-	incrementSortingVersion: () => void;
 }
 
 export class GridStateReactionController<TRowData = unknown> {
@@ -58,24 +51,18 @@ export class GridStateReactionController<TRowData = unknown> {
 
 		if (updatedSet.has('columns') || updatedSet.has('columnWidths') || updatedSet.has('defaultColWidth')) {
 			this.deps.columns.updateColumns(currState.columns, currState.columnWidths, currState.defaultColWidth);
-			this.deps.incrementColumnVersion();
-			this.deps.incrementGeometryVersion();
+			// Domain version increments (columns, geometry) are declared on the GridChange.domains
+			// of the mutation that triggered this key change — not inferred here.
 		}
 
 		if (updatedSet.has('globalVersion')) {
 			this.deps.data.clearValueGetterCache();
 		}
 
-		if (updatedSet.has('globalVersion') || updatedSet.has('sortModel') || updatedSet.has('filterModel')) {
-			this.deps.incrementRowModelVersion();
-		}
-
-		if (updatedSet.has('sortModel')) {
-			this.deps.incrementSortingVersion();
-		}
-
-		if (updatedSet.has('filterModel')) {
-			this.deps.incrementFilteringVersion();
+		// Flag structural row-order changes so the subsequent globalVersion reaction
+		// (fired by rowModel.refresh() → bumpGlobalVersion()) knows to recompute bounds.
+		if (updatedSet.has('sortModel') || updatedSet.has('filterModel') || updatedSet.has('groupBy') || updatedSet.has('expansion')) {
+			this.pendingStructuralBoundsUpdate = true;
 		}
 
 		const rowModel = this.deps.getRowModel();
@@ -92,13 +79,8 @@ export class GridStateReactionController<TRowData = unknown> {
 				this.deps.getRowHeightsList(rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight
 			);
-			this.deps.incrementGeometryVersion();
-		}
-
-		// Flag structural row-order changes so the subsequent globalVersion reaction
-		// (fired by rowModel.refresh() → bumpGlobalVersion()) knows to recompute bounds.
-		if (updatedSet.has('sortModel') || updatedSet.has('filterModel') || updatedSet.has('groupBy') || updatedSet.has('expansion')) {
-			this.pendingStructuralBoundsUpdate = true;
+			// geometry domain version increment is declared on the mutation that triggered this —
+			// either via GridChange.domains or via explicit engine.incrementDomain() at the call site.
 		}
 
 		if (
@@ -140,7 +122,8 @@ export class GridStateReactionController<TRowData = unknown> {
 		if (updatedSet.has('selection')) {
 			this.deps.selection.setSelection(currState.selection);
 			this.deps.invalidation.invalidateOverlay('selection');
-			this.deps.incrementSelectionVersion();
+			// selectionVersion is incremented by the mutation site (applySelectionRange or
+			// GridChange.domains: ['selection']), not by key observation.
 		}
 
 		const needsRangeUpdate =
@@ -202,7 +185,7 @@ export class GridStateReactionController<TRowData = unknown> {
 		if (updatedSet.has('activeEdit')) {
 			if (prevState.activeEdit) notifyCellOnce(prevState.activeEdit.rowId, prevState.activeEdit.colField);
 			if (currState.activeEdit) notifyCellOnce(currState.activeEdit.rowId, currState.activeEdit.colField);
-			this.deps.incrementEditingVersion();
+			// editingVersion is incremented via GridChange.domains: ['editing'] on editing:start/stop changes.
 		}
 
 		if (updatedSet.has('selection')) {
@@ -241,6 +224,9 @@ export class GridStateReactionController<TRowData = unknown> {
 			this.deps.cellNotifications.notifyAllCellSubscribers();
 		}
 
+		// Derived selection events: these are computed from prev/curr state diff and are
+		// retained here as narrowly scoped derived-read notifications (not semantic mutation
+		// ownership). Domain version increments for selection are declared on the mutation.
 		if (updatedSet.has('selection') && prevState.selection.focus !== currState.selection.focus) {
 			this.deps.eventBus.dispatchEvent(GridEventName.focusChanged, { focus: currState.selection.focus, selection: currState.selection });
 		}
@@ -250,26 +236,6 @@ export class GridStateReactionController<TRowData = unknown> {
 				result: this.deps.selection.describeChange(prevState.selection, currState.selection, this.deps.getRowModel(), currState.columns),
 			});
 			this.deps.requestRender('selection');
-		}
-		if (updatedSet.has('sortModel')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.sortChanged, { sortModel: currState.sortModel });
-		}
-		if (updatedSet.has('filterModel')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.filterChanged, { filterModel: currState.filterModel });
-		}
-		if (updatedSet.has('groupBy')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.groupByChanged, { groupBy: currState.groupBy });
-		}
-		if (updatedSet.has('aggDefs')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.aggDefsChanged, { aggDefs: currState.aggDefs });
-		}
-		if (updatedSet.has('showGroupFooter')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.showGroupFooterChanged, { showGroupFooter: currState.showGroupFooter });
-		}
-		if (updatedSet.has('enableStickyGroupRows')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.enableStickyGroupRowsChanged, {
-				enableStickyGroupRows: currState.enableStickyGroupRows,
-			});
 		}
 	};
 

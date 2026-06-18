@@ -4,6 +4,7 @@ import type { InvalidationManager } from '../renderer/invalidationManager.js';
 import type { CommandHistory } from '../commands/CommandHistory.js';
 import type { EventBus } from '../events/EventBus.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import type { GridChange } from '../engine/GridChangeApplier.js';
 
 export interface GridStateFeatureControllerDeps<TRowData = unknown> {
 	stateManager: StateManager<TRowData>;
@@ -11,6 +12,7 @@ export interface GridStateFeatureControllerDeps<TRowData = unknown> {
 	commandHistory: CommandHistory;
 	eventBus: EventBus<TRowData>;
 	requestRender: (reason: string) => void;
+	applyChange?: (change: GridChange<TRowData>) => void;
 }
 
 export class GridStateFeatureController<TRowData = unknown> {
@@ -57,46 +59,79 @@ export class GridStateFeatureController<TRowData = unknown> {
 
 	public setSortModel(sortModel: SortModel | null, undoable = true): void {
 		const oldSort = this.deps.stateManager.getState().sortModel;
-		this.deps.stateManager.setState({ sortModel });
-		this.deps.invalidation.invalidateHeaders('sort');
-		this.deps.invalidation.invalidateFull('sort');
-		this.deps.requestRender('sort');
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'rows:set-sort-model',
+				state: { sortModel },
+				invalidations: [{ kind: 'headers' }, { kind: 'full' }],
+				domains: ['rows', 'sorting'],
+				events: [{ type: GridEventName.sortChanged, payload: { sortModel } as never }],
+				requestRender: true,
+			});
+		} else {
+			this.deps.stateManager.setState({ sortModel });
+			this.deps.invalidation.invalidateHeaders('sort');
+			this.deps.invalidation.invalidateFull('sort');
+			this.deps.requestRender('sort');
+		}
 
 		if (undoable) {
 			this.deps.commandHistory.add({
-				undo: () => this.deps.stateManager.setState({ sortModel: oldSort }),
-				redo: () => this.deps.stateManager.setState({ sortModel }),
+				undo: () => this.setSortModel(oldSort, false),
+				redo: () => this.setSortModel(sortModel, false),
 			});
 		}
 	}
 
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
 		const oldFilter = this.deps.stateManager.getState().filterModel;
-		this.deps.stateManager.setState({ filterModel });
-		this.deps.invalidation.invalidateFull('filter');
-		this.deps.requestRender('filter');
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'rows:set-filter-model',
+				state: { filterModel },
+				invalidations: [{ kind: 'full' }],
+				domains: ['rows', 'filtering'],
+				events: [{ type: GridEventName.filterChanged, payload: { filterModel } as never }],
+				requestRender: true,
+			});
+		} else {
+			this.deps.stateManager.setState({ filterModel });
+			this.deps.invalidation.invalidateFull('filter');
+			this.deps.requestRender('filter');
+		}
 
 		if (undoable) {
 			this.deps.commandHistory.add({
-				undo: () => this.deps.stateManager.setState({ filterModel: oldFilter }),
-				redo: () => this.deps.stateManager.setState({ filterModel }),
+				undo: () => this.setFilterModel(oldFilter, false),
+				redo: () => this.setFilterModel(filterModel, false),
 			});
 		}
 	}
 
 	private applyRowHeight(rowId: string, height: number): void {
-		this.deps.stateManager.setState((state) => ({
-			rowHeights: {
-				...state.rowHeights,
-				[rowId]: height,
-			},
-		}));
-		this.deps.invalidation.invalidateGeometry('row resize');
-		this.deps.invalidation.invalidateRow(rowId, 'row resize');
-		this.deps.eventBus.dispatchEvent(GridEventName.rowResized, {
-			rowId,
-			height,
-		});
-		this.deps.requestRender('row resize');
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'geometry:resize-row',
+				state: (state) => ({ rowHeights: { ...state.rowHeights, [rowId]: height } }),
+				invalidations: [{ kind: 'geometry' }, { kind: 'row', rowId, reason: 'row resize' }],
+				domains: ['geometry'],
+				events: [{ type: GridEventName.rowResized, payload: { rowId, height } as never }],
+				requestRender: true,
+			});
+		} else {
+			this.deps.stateManager.setState((state) => ({
+				rowHeights: {
+					...state.rowHeights,
+					[rowId]: height,
+				},
+			}));
+			this.deps.invalidation.invalidateGeometry('row resize');
+			this.deps.invalidation.invalidateRow(rowId, 'row resize');
+			this.deps.eventBus.dispatchEvent(GridEventName.rowResized, {
+				rowId,
+				height,
+			});
+			this.deps.requestRender('row resize');
+		}
 	}
 }

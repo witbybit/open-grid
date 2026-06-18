@@ -653,12 +653,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		const next = rowHeights ?? {};
 		if (areRowHeightsEqual(current, next)) return;
 		this.engine.setState({ rowHeights: next });
+		this.engine.incrementDomain('geometry');
 	};
 
 	public setDefaultRowHeight = (defaultRowHeight?: number | undefined): void => {
 		if (defaultRowHeight === undefined) return;
 		if (this.state.defaultRowHeight === defaultRowHeight) return;
 		this.engine.setState({ defaultRowHeight });
+		this.engine.incrementDomain('geometry');
 	};
 
 	public purgeCache = (): void => {

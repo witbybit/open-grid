@@ -14,6 +14,7 @@ export class ColumnFeatureController<TRowData = unknown> {
 			reason: 'columns:order',
 			state: { columns },
 			invalidations: [{ kind: 'full' }],
+			domains: ['columns', 'geometry'],
 			events: [{ type: GridEventName.columnOrderChanged, payload: { columns, columnFields: nextFields } as never }],
 		});
 	}
@@ -37,6 +38,7 @@ export class ColumnFeatureController<TRowData = unknown> {
 			reason: 'columns:resize',
 			state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: width } }),
 			invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+			domains: ['columns', 'geometry'],
 			events: [{ type: GridEventName.columnResized, payload: { colField, width } as never }],
 			...(undoable
 				? {
@@ -44,12 +46,14 @@ export class ColumnFeatureController<TRowData = unknown> {
 							reason: 'columns:resize',
 							state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: oldWidth } }),
 							invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+							domains: ['columns', 'geometry'],
 							events: [{ type: GridEventName.columnResized, payload: { colField, width: oldWidth } as never }],
 						},
 						redo: {
 							reason: 'columns:resize',
 							state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: width } }),
 							invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+							domains: ['columns', 'geometry'],
 							events: [{ type: GridEventName.columnResized, payload: { colField, width } as never }],
 						},
 					}
@@ -119,6 +123,7 @@ export class ColumnFeatureController<TRowData = unknown> {
 			reason: 'columns:set',
 			state: { columns, columnWidths: nextWidths },
 			invalidations: [{ kind: 'full' }],
+			domains: ['columns', 'geometry'],
 			events: [{ type: GridEventName.columnsChanged, payload: { columns, columnFields: columns.map((c) => c.field) } as never }],
 			...(undoable
 				? {
@@ -126,12 +131,14 @@ export class ColumnFeatureController<TRowData = unknown> {
 							reason: 'columns:set',
 							state: { columns: prevColumns, columnWidths: prevWidths },
 							invalidations: [{ kind: 'full' }],
+							domains: ['columns', 'geometry'],
 							requestRender: true,
 						},
 						redo: {
 							reason: 'columns:set',
 							state: { columns, columnWidths: nextWidths },
 							invalidations: [{ kind: 'full' }],
+							domains: ['columns', 'geometry'],
 							requestRender: true,
 						},
 					}

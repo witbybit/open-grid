@@ -542,12 +542,17 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('sorting: number');
 	});
 
-	it('GridEngine wires selection/editing/filtering/sorting version increments (Plan 084)', () => {
+	it('GridEngine exposes incrementDomain covering all 7 domains (Plan 084 → Plan 097)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
-		expect(content).toContain('incrementSelectionVersion');
-		expect(content).toContain('incrementEditingVersion');
-		expect(content).toContain('incrementFilteringVersion');
-		expect(content).toContain('incrementSortingVersion');
+		// Plan 097: unified incrementDomain replaces per-domain increment callbacks
+		expect(content).toContain('public incrementDomain(');
+		expect(content).toContain("case 'columns'");
+		expect(content).toContain("case 'rows'");
+		expect(content).toContain("case 'geometry'");
+		expect(content).toContain("case 'selection'");
+		expect(content).toContain("case 'editing'");
+		expect(content).toContain("case 'filtering'");
+		expect(content).toContain("case 'sorting'");
 	});
 
 	it('subscribeDomain targeted API is present on GridEngine and GridApi (Plan 084)', () => {
@@ -995,5 +1000,46 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('isFrameActive()');
 		// Must NOT clear pendingPostScroll unconditionally — the retain comment must exist.
 		expect(content).toContain('Retain pendingPostScroll');
+	});
+
+	// ── Plan 097: canonical domain command and mutation boundary ─────────────
+
+	it('GridChange.domains field is declared on GridChangeApplier (Plan 097)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
+		expect(content).toContain('domains?: ReadonlyArray<keyof GridDomainVersions>');
+		expect(content).toContain('incrementDomain?:');
+	});
+
+	it('GridChangeApplier.apply increments declared domains before events (Plan 097)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
+		// Domain increments must precede event dispatch — enforced by comment order in apply()
+		expect(content).toContain('Increment declared domain versions');
+		expect(content).toContain('Dispatch events');
+		const incrementPos = content.indexOf('Increment declared domain versions');
+		const dispatchPos = content.indexOf('Dispatch events');
+		expect(incrementPos).toBeLessThan(dispatchPos);
+	});
+
+	it('GridStateReactionController no longer owns domain version increments (Plan 097)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridStateReactionController.ts'), 'utf-8');
+		// These callbacks were removed — domain increments are declared on GridChange.domains
+		expect(content).not.toContain('incrementColumnVersion');
+		expect(content).not.toContain('incrementGeometryVersion');
+		expect(content).not.toContain('incrementRowModelVersion');
+		expect(content).not.toContain('incrementSelectionVersion');
+		expect(content).not.toContain('incrementEditingVersion');
+		expect(content).not.toContain('incrementFilteringVersion');
+		expect(content).not.toContain('incrementSortingVersion');
+	});
+
+	it('feature controllers declare domains on their GridChange objects (Plan 097)', () => {
+		const columnCtrl = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'ColumnFeatureController.ts'), 'utf-8');
+		expect(columnCtrl).toContain("domains: ['columns', 'geometry']");
+		const groupCtrl = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GroupingFeatureController.ts'), 'utf-8');
+		expect(groupCtrl).toContain("domains: ['rows']");
+		const editCtrl = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'EditingFeatureController.ts'), 'utf-8');
+		expect(editCtrl).toContain("domains: ['editing']");
+		const selCtrl = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'RowSelectionFeatureController.ts'), 'utf-8');
+		expect(selCtrl).toContain("domains: ['selection']");
 	});
 });

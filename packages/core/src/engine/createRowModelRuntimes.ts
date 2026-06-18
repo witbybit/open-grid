@@ -22,7 +22,10 @@ export function createClientRowModelRuntime<TRowData>(store: GridStore<TRowData>
 		getRowId: store.getRowId,
 		getColumnDef: store.getColumnDef,
 		getCellValue: store.getCellValue,
-		bumpGlobalVersion: () => store.setState((s) => ({ globalVersion: s.globalVersion + 1 })),
+		bumpGlobalVersion: () => {
+			store.setState((s) => ({ globalVersion: s.globalVersion + 1 }));
+			store.engine.incrementDomain('rows');
+		},
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',
@@ -51,7 +54,10 @@ export function createServerRowModelRuntime<TRowData>(store: GridStore<TRowData>
 		getRowId: store.getRowId,
 		getColumnDef: store.getColumnDef,
 		getCellValue: store.getCellValue,
-		bumpGlobalVersion: () => store.setState((s) => ({ globalVersion: s.globalVersion + 1 })),
+		bumpGlobalVersion: () => {
+			store.setState((s) => ({ globalVersion: s.globalVersion + 1 }));
+			store.engine.incrementDomain('rows');
+		},
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',
@@ -62,7 +68,11 @@ export function createServerRowModelRuntime<TRowData>(store: GridStore<TRowData>
 		clearFormulas: () => store.engine.clearFormulas(),
 		isScrollingFast: () => store.engine.isScrollingFast(),
 		getScrollVelocity: () => store.engine.getScrollVelocity(),
-		setLoadingState: (loading) => store.setState((s) => ({ loading, globalVersion: s.globalVersion + 1 })),
+		setLoadingState: (loading) => {
+			store.setState((s) => ({ loading, globalVersion: s.globalVersion + 1 }));
+			store.engine.incrementDomain('rows');
+			store.engine.incrementDomain('geometry');
+		},
 		dispatchServerBlockLoaded: (payload) => store.dispatchEvent(GridEventName.serverBlockLoaded, payload),
 		dispatchServerBlockLoadFailed: (payload) => store.dispatchEvent(GridEventName.serverBlockLoadFailed, payload),
 		dispatchPaginationChanged: (payload) => {
