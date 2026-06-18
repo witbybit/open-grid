@@ -76,9 +76,7 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		// window on paginationChanged, and the scroll resets to the page top.
 		const current = this.engine.stateManager.getState().pagination;
 		if (current && current.page === next) return;
-		this.engine.stateManager.setState({ pagination: { pageSize, page: next } });
-		this.engine.eventBus.dispatchEvent(GridEventName.paginationChanged, { page: next, pageCount, totalRows, pageSize });
-		this.render();
+		this.engine.setPaginationPage(next, { pageCount, totalRows });
 	}
 
 	private button(label: string, ariaLabel: string, disabled: boolean, onClick: () => void): HTMLButtonElement {

@@ -230,8 +230,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 
 		const setFilter = (filter: ColumnFilter | null): void => {
 			const newModel = applyFilterToModel(col.field, filter, this.engine.stateManager.getState().filterModel);
-			this.engine.stateManager.setState({ filterModel: newModel });
-			this.engine.invalidation.invalidateFull('floating-filter');
+			this.engine.setFilterModel(newModel);
 		};
 
 		// Use custom renderer if provided
@@ -750,8 +749,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 				const newModel: FilterModel = { ...(state.filterModel ?? {}) };
 				if (newFilter == null) delete newModel[colField];
 				else newModel[colField] = newFilter;
-				this.engine.stateManager.setState({ filterModel: Object.keys(newModel).length > 0 ? newModel : null });
-				this.engine.invalidation.invalidateFull('floating-filter');
+				this.engine.setFilterModel(Object.keys(newModel).length > 0 ? newModel : null);
 			};
 			const setFilter2 = currentFilter?.type === 'set' ? currentFilter : null;
 			if ((setFilter2 && !hasBadge) || (!setFilter2 && !hasEmpty)) {
@@ -781,8 +779,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 					const newModel: FilterModel = { ...(state.filterModel ?? {}) };
 					if (newFilter == null) delete newModel[colField];
 					else newModel[colField] = newFilter;
-					this.engine.stateManager.setState({ filterModel: Object.keys(newModel).length > 0 ? newModel : null });
-					this.engine.invalidation.invalidateFull('floating-filter');
+					this.engine.setFilterModel(Object.keys(newModel).length > 0 ? newModel : null);
 				};
 				this.buildDefaultInput(cell, col, currentFilter, setFilter);
 			}

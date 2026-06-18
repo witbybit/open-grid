@@ -66,10 +66,10 @@ Create types such as:
 
 ```ts
 type GridCommitResult =
-  | { status: 'committed'; changeId: number }
-  | { status: 'noop' }
-  | { status: 'rejected'; reason: string }
-  | { status: 'faulted'; fault: GridRuntimeFault };
+	| { status: 'committed'; changeId: number }
+	| { status: 'noop' }
+	| { status: 'rejected'; reason: string }
+	| { status: 'faulted'; fault: GridRuntimeFault };
 ```
 
 Define a computed internal commit record separate from the incoming command.

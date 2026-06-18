@@ -1274,4 +1274,28 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
 		expect(content).not.toContain('public batch =');
 	});
+
+	it('Plan 103 direct-write allowlist is checked in with explicit justifications', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'gridDirectWriteAllowlist.ts'), 'utf-8');
+		expect(content).toContain('GRID_DIRECT_WRITE_ALLOWLIST');
+		expect(content).toContain('justification');
+	});
+
+	it('floating filter renderer expresses filter intent through engine.setFilterModel (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'floatingFilterRenderer.ts'), 'utf-8');
+		expect(content).toContain('this.engine.setFilterModel(');
+		expect(content).not.toContain('this.engine.stateManager.setState({ filterModel');
+	});
+
+	it('pagination bar renderer expresses page changes through engine.setPaginationPage (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'paginationBarRenderer.ts'), 'utf-8');
+		expect(content).toContain('this.engine.setPaginationPage(');
+		expect(content).not.toContain('this.engine.stateManager.setState({ pagination');
+	});
+
+	it('store floating-filter toggle no longer mutates state directly (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain('this.engine.setShowFloatingFilters(enabled);');
+		expect(content).not.toContain('this.engine.stateManager.setState({ showFloatingFilters: enabled })');
+	});
 });

@@ -521,35 +521,27 @@ export class GridEngine<TRowData = unknown> {
 	public getColumnField(colIndex: number): string | null {
 		return this.columns.getColumnField(colIndex);
 	}
-
 	public getColumnDef(colField: string): ColumnDef<TRowData> | undefined {
 		return this.columns.getColumnDef(colField);
 	}
-
 	public getValueGetterDependents(colField: string): string[] {
 		return this.columns.getValueGetterDependents(colField);
 	}
-
 	public hasValueGetter(colField: string): boolean {
 		return this.columns.hasValueGetter(colField);
 	}
-
 	public getCompiledPlanVersion(): number {
 		return this.columns.getCompiledPlanVersion();
 	}
-
 	public isScrollingFast(): boolean {
 		return this.viewport.isScrollingFast;
 	}
-
 	public getScrollVelocity(): { vx: number; vy: number } {
 		return this.viewport.getVelocity();
 	}
-
 	public getRowOverscanPx(): number {
 		return this.stateFeature.getRowOverscanPx();
 	}
-
 	public setRowOverscanPx(px: number): void {
 		this.stateFeature.setRowOverscanPx(px);
 	}
@@ -557,7 +549,6 @@ export class GridEngine<TRowData = unknown> {
 	public getColBuffer(): number {
 		return this.stateFeature.getColBuffer();
 	}
-
 	public setColBuffer(colBuffer: number): void {
 		this.stateFeature.setColBuffer(colBuffer);
 	}
@@ -569,15 +560,12 @@ export class GridEngine<TRowData = unknown> {
 	public resizeColumn(colField: string, width: number, undoable = true): void {
 		this.columnFeature.resizeColumn(colField, width, undoable);
 	}
-
 	public autoSizeColumn(colField: string, opts?: AutoSizeColumnOptions): void {
 		this.columnAutoSize.autoSizeColumn(colField, opts);
 	}
-
 	public autoSizeAllColumns(opts?: AutoSizeAllColumnsOptions): void {
 		this.columnAutoSize.autoSizeAllColumns(opts);
 	}
-
 	public copySelectedRange(): Promise<void> {
 		return this.clipboard.copySelectedRange();
 	}
@@ -590,33 +578,32 @@ export class GridEngine<TRowData = unknown> {
 	public getColumnDistinctValues(colField: string): (string | number | null)[] {
 		return computeDistinctValues(this.rowModel?.getAllDataNodes?.() ?? [], colField);
 	}
-
 	public moveColumn(colField: string, toIndex: number): void {
 		this.columnFeature.moveColumn(colField, toIndex);
 	}
-
 	public setColumnOrderByFields(colFields: string[]): void {
 		this.columnFeature.setColumnOrderByFields(colFields);
 	}
-
 	public setColumnReorderEnabled(enabled: boolean): void {
 		this.columnFeature.setColumnReorderEnabled(enabled);
 	}
-
 	public setStyleRules(styleRules: GridState<TRowData>['styleRules']): void {
 		this.stateFeature.setStyleRules(styleRules);
 	}
-
+	public setShowFloatingFilters(enabled: boolean): void {
+		this.stateFeature.setShowFloatingFilters(enabled);
+	}
 	public resizeRow(rowId: string, height: number, undoable = true): void {
 		this.stateFeature.resizeRow(rowId, height, undoable);
 	}
-
 	public setSortModel(sortModel: SortModel | null, undoable = true): void {
 		this.stateFeature.setSortModel(sortModel, undoable);
 	}
-
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
 		this.stateFeature.setFilterModel(filterModel, undoable);
+	}
+	public setPaginationPage(page: number, metrics?: { pageCount: number; totalRows: number }): void {
+		this.stateFeature.setPaginationPage(page, metrics);
 	}
 
 	public setGroupBy(colIds: string[]): void {

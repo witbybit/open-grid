@@ -5,18 +5,39 @@ import { PaginationBarRenderer } from './paginationBarRenderer.js';
 function fakeEngine(opts: { totalRows: number; pageSize: number; page?: number }) {
 	const state: any = { pagination: { pageSize: opts.pageSize, page: opts.page ?? 0 } };
 	const dispatch = vi.fn();
+	const listeners = new Map<string, Array<() => void>>();
+	const setPaginationPage = vi.fn((page: number, metrics?: { pageCount: number; totalRows: number }) => {
+		state.pagination = { pageSize: state.pagination.pageSize, page };
+		dispatch('paginationChanged', {
+			page,
+			pageCount: metrics?.pageCount ?? 0,
+			totalRows: metrics?.totalRows ?? 0,
+			pageSize: state.pagination.pageSize,
+		});
+		for (const listener of listeners.get('paginationChanged') ?? []) listener();
+	});
 	return {
 		dispatch,
 		getState: () => state,
 		engine: {
 			getRowModel: () => ({ getDataRowCount: () => opts.totalRows }),
+			setPaginationPage,
 			stateManager: {
 				getState: () => state,
 				setState: (patch: any) => Object.assign(state, patch),
 				subscribeToKey: () => () => {},
 			},
 			eventBus: {
-				addEventListener: () => () => {},
+				addEventListener: (type: string, listener: () => void) => {
+					const bucket = listeners.get(type) ?? [];
+					bucket.push(listener);
+					listeners.set(type, bucket);
+					return () =>
+						listeners.set(
+							type,
+							bucket.filter((entry) => entry !== listener)
+						);
+				},
 				dispatchEvent: dispatch,
 			},
 		} as any,

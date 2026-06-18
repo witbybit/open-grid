@@ -20,17 +20,17 @@ Slot generations exist, but identity remains optional or represented through sev
 
 ```ts
 type PortalMountIdentity =
-  | {
-      kind: 'pooled-cell';
-      slotId: number;
-      generation: number;
-      lane: 'left' | 'center' | 'right';
-      laneIndex: number;
-    }
-  | {
-      kind: 'standalone';
-      key: string;
-    };
+	| {
+			kind: 'pooled-cell';
+			slotId: number;
+			generation: number;
+			lane: 'left' | 'center' | 'right';
+			laneIndex: number;
+	  }
+	| {
+			kind: 'standalone';
+			key: string;
+	  };
 ```
 
 Logical identity (`rowId`, `columnId`, visual row ID) remains payload identity and is never substituted for physical ownership identity.

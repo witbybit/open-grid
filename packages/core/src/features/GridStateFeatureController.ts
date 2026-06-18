@@ -35,11 +35,46 @@ export class GridStateFeatureController<TRowData = unknown> {
 	}
 
 	public setStyleRules(styleRules: GridState<TRowData>['styleRules']): void {
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'ui:set-style-rules',
+				state: { styleRules },
+				invalidations: [
+					{ kind: 'viewport', reason: 'style rules' },
+					{ kind: 'headers', reason: 'style rules' },
+					{ kind: 'overlay', reason: 'style rules' },
+				],
+				requestRender: true,
+			});
+			return;
+		}
 		this.deps.stateManager.setState({ styleRules });
 		this.deps.invalidation.invalidateViewport('style rules');
 		this.deps.invalidation.invalidateHeaders('style rules');
 		this.deps.invalidation.invalidateOverlay('style rules');
 		this.deps.requestRender('style rules');
+	}
+
+	public setShowFloatingFilters(enabled: boolean): void {
+		if (this.deps.stateManager.getState().showFloatingFilters === enabled) return;
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'ui:set-floating-filters',
+				state: { showFloatingFilters: enabled },
+				invalidations: [
+					{ kind: 'geometry', reason: 'showFloatingFilters' },
+					{ kind: 'viewport', reason: 'showFloatingFilters' },
+					{ kind: 'headers', reason: 'showFloatingFilters' },
+				],
+				requestRender: true,
+			});
+			return;
+		}
+		this.deps.stateManager.setState({ showFloatingFilters: enabled });
+		this.deps.invalidation.invalidateGeometry('showFloatingFilters');
+		this.deps.invalidation.invalidateViewport('showFloatingFilters');
+		this.deps.invalidation.invalidateHeaders('showFloatingFilters');
+		this.deps.requestRender('showFloatingFilters');
 	}
 
 	public resizeRow(rowId: string, height: number, undoable = true): void {
@@ -106,6 +141,33 @@ export class GridStateFeatureController<TRowData = unknown> {
 				redo: () => this.setFilterModel(filterModel, false),
 			});
 		}
+	}
+
+	public setPaginationPage(page: number, metrics?: { pageCount: number; totalRows: number }): void {
+		const state = this.deps.stateManager.getState();
+		const current = state.pagination;
+		if (!current) return;
+		const nextPage = Math.max(0, page);
+		if (current.page === nextPage) return;
+		const payload = {
+			page: nextPage,
+			pageCount: metrics?.pageCount ?? 0,
+			totalRows: metrics?.totalRows ?? 0,
+			pageSize: current.pageSize,
+		};
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'rows:set-pagination-page',
+				state: { pagination: { pageSize: current.pageSize, page: nextPage } },
+				domains: ['rows'],
+				events: [{ type: GridEventName.paginationChanged, payload: payload as never }],
+				requestRender: true,
+			});
+			return;
+		}
+		this.deps.stateManager.setState({ pagination: { pageSize: current.pageSize, page: nextPage } });
+		this.deps.eventBus.dispatchEvent(GridEventName.paginationChanged, payload);
+		this.deps.requestRender('pagination');
 	}
 
 	private applyRowHeight(rowId: string, height: number): void {

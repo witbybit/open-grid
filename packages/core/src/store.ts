@@ -406,8 +406,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setShowFloatingFilters = (enabled: boolean): void => {
-		this.engine.stateManager.setState({ showFloatingFilters: enabled });
-		this.engine.invalidation.invalidateFull('showFloatingFilters');
+		this.engine.setShowFloatingFilters(enabled);
 	};
 
 	public exportCsv = (options?: CsvExportOptions): void => {
