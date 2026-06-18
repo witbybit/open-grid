@@ -18,33 +18,33 @@ The scheduler and instrumentation simplifications landed with measured verificat
 ### Scheduler
 
 - `packages/core/src/renderer/frameCoordinator.ts`
-  - `requestPaintFrame()` now schedules directly on the shared RAF arbiter.
+    - `requestPaintFrame()` now schedules directly on the shared RAF arbiter.
 - `packages/core/src/renderer/gridScheduler.test.ts`
-  - updated to assert coalescing before RAF flush rather than via a microtask drain.
+    - updated to assert coalescing before RAF flush rather than via a microtask drain.
 - `packages/core/src/contextMenu.ts`
-  - direct RAF documented as interaction-only animation staging.
+    - direct RAF documented as interaction-only animation staging.
 - `packages/core/src/features/RowDragController.ts`
-  - direct RAF usage documented as interaction-only row animation / drag auto-scroll behavior.
+    - direct RAF usage documented as interaction-only row animation / drag auto-scroll behavior.
 
 ### Instrumentation
 
 - `packages/core/src/diagnostics/GridInstrumentation.ts`
-  - removed counters duplicated by `RenderStats`.
-  - retained only instrumentation-owned counters:
-    - `STATE_READS`
-    - `LEGACY_INFERRED_INVALIDATIONS`
-    - `ROW_MUTATION_INCREMENTAL`
-    - `ROW_MUTATION_FULL_REBUILD`
-    - `SLOT_REBINDS`
+    - removed counters duplicated by `RenderStats`.
+    - retained only instrumentation-owned counters:
+        - `STATE_READS`
+        - `LEGACY_INFERRED_INVALIDATIONS`
+        - `ROW_MUTATION_INCREMENTAL`
+        - `ROW_MUTATION_FULL_REBUILD`
+        - `SLOT_REBINDS`
 - `packages/core/src/diagnostics/GridInstrumentation.test.ts`
-  - updated to validate only the surviving instrumentation-owned metrics.
+    - updated to validate only the surviving instrumentation-owned metrics.
 
 ### Guardrails
 
 - `packages/core/src/engine/architectureGuards.test.ts`
-  - guards direct RAF allowlist.
-  - guards removal of duplicated instrumentation counters.
-  - guards honest noop instrumentation wording.
+    - guards direct RAF allowlist.
+    - guards removal of duplicated instrumentation counters.
+    - guards honest noop instrumentation wording.
 
 ## Measured Verification
 
