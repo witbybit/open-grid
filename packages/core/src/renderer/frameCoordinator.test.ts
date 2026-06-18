@@ -557,3 +557,134 @@ describe('DefaultFrameCoordinator – runtime state integration (Plan 079)', () 
 		expect(onPaintFrame).not.toHaveBeenCalled();
 	});
 });
+
+describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => {
+	it('post-scroll work requested during an active paint frame runs after the paint completes', () => {
+		const rs = new RenderRuntimeState();
+		const onPostScrollWork = vi.fn();
+		let capturedRaf: (() => void) | null = null;
+		let rafCount = 0;
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			microtask: (cb) => cb(),
+			raf: (cb) => {
+				rafCount++;
+				capturedRaf = cb;
+				return rafCount;
+			},
+		};
+		let requestPostScrollDuringPaint: (() => void) | null = null;
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				onPaintFrame: () => {
+					// Request post-scroll work mid-paint — should survive
+					requestPostScrollDuringPaint?.();
+				},
+				onPostScrollWork,
+				gridScheduler: gs,
+				runtimeState: rs,
+			})
+		);
+
+		coordinator.requestPaintFrame(); // microtask → RAF registered
+		requestPostScrollDuringPaint = () => coordinator.requestPostScrollWork();
+
+		capturedRaf?.(); // paint frame fires; onPaintFrame calls requestPostScrollWork inside
+
+		// After paint, post-scroll should have run (idle phase, conditions met)
+		expect(onPostScrollWork).toHaveBeenCalledTimes(1);
+	});
+
+	it('post-scroll work retained when scroll is still active, executed once scrolling becomes idle', () => {
+		const rs = new RenderRuntimeState();
+		const onPostScrollWork = vi.fn();
+		const rafs: Array<() => void> = [];
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			raf: (cb) => {
+				rafs.push(cb);
+				return rafs.length;
+			},
+		};
+		// coordinator is captured by the onScrollFrame closure; by the time onScrollFrame
+		// fires (inside rafs[0]), the assignment is complete.
+		let coordinator!: DefaultFrameCoordinator;
+		coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				onScrollFrame: () => {
+					// Proper state machine: idle → scroll-pending (increments epoch) → scroll-frame → post-scroll
+					rs.transitionTo('scroll-pending'); // epoch → 1
+					rs.transitionTo('scroll-frame');
+					// Request post-scroll work here so it captures the current (incremented) epoch.
+					coordinator.requestPostScrollWork(); // postScrollEpoch = 1
+					rs.transitionTo('post-scroll');
+				},
+				onPostScrollWork,
+				gridScheduler: gs,
+				runtimeState: rs,
+			})
+		);
+
+		coordinator.requestScrollFrame();
+
+		rafs[0]?.(); // scroll fires → post-scroll phase; post-scroll check retained (scrolling active)
+
+		// post-scroll hasn't run yet (still scrolling — rs.phase === 'post-scroll')
+		expect(onPostScrollWork).not.toHaveBeenCalled();
+		// A new RAF was scheduled inside requestPostScrollWork() during the scroll callback
+		expect(rafs.length).toBeGreaterThanOrEqual(2);
+
+		// Simulate scroll end → idle
+		rs.transitionTo('idle');
+		rafs[rafs.length - 1]?.(); // fire the latest RAF → post-scroll now eligible
+
+		expect(onPostScrollWork).toHaveBeenCalledTimes(1);
+	});
+
+	it('post-scroll work is dropped when a new scroll epoch supersedes it', () => {
+		const rs = new RenderRuntimeState();
+		const onPostScrollWork = vi.fn();
+		let capturedRaf: (() => void) | null = null;
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			raf: (cb) => {
+				capturedRaf = cb;
+				return 0;
+			},
+		};
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({ onPostScrollWork, gridScheduler: gs, runtimeState: rs })
+		);
+
+		coordinator.requestPostScrollWork(); // epoch captured as 0
+
+		// New scroll session starts: epoch advances
+		rs.transitionTo('scroll-pending'); // epoch → 1
+
+		capturedRaf?.(); // RAF fires with stale epoch
+		expect(onPostScrollWork).not.toHaveBeenCalled();
+	});
+
+	it('destroy() cancels pending post-scroll work before it executes', () => {
+		const onPostScrollWork = vi.fn();
+		let capturedRaf: (() => void) | null = null;
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			raf: (cb) => {
+				capturedRaf = cb;
+				return 0;
+			},
+			cancelRaf: vi.fn(),
+		};
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({ onPostScrollWork, gridScheduler: gs })
+		);
+
+		coordinator.requestPostScrollWork();
+		coordinator.destroy(); // cancels the RAF
+
+		// Even if someone manually fires the RAF, the guard prevents execution
+		capturedRaf?.();
+		expect(onPostScrollWork).not.toHaveBeenCalled();
+	});
+});

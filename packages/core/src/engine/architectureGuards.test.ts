@@ -976,4 +976,24 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('_portalFlushActive');
 		expect(content).toContain('nested portal flush');
 	});
+
+	// ── Plan 096: frame epoch and post-scroll durability ─────────────────────
+
+	it('renderScrollCoordinator enters scroll-frame for cheap same-window scroll (Plan 096)', () => {
+		const rscPath = resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts');
+		const content = readFileSync(rscPath, 'utf-8');
+		// The cheap path must enter a scroll-frame phase transition instead of being phaseless.
+		expect(content).toContain("transitionTo('scroll-frame')");
+		expect(content).toContain("transitionTo('post-scroll')");
+	});
+
+	it('flushFrame retains pendingPostScroll when epoch is valid but scrolling is active (Plan 096)', () => {
+		const fcPath = resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts');
+		const content = readFileSync(fcPath, 'utf-8');
+		// Must check isScrolling and isFrameActive before running post-scroll work.
+		expect(content).toContain('isScrolling()');
+		expect(content).toContain('isFrameActive()');
+		// Must NOT clear pendingPostScroll unconditionally — the retain comment must exist.
+		expect(content).toContain('Retain pendingPostScroll');
+	});
 });

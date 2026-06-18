@@ -118,7 +118,14 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		if (sameRenderedWindow(this.deps.rowRenderer.currentWindow, nextWindow)) {
 			this.deps.renderStats.scrollFrames++;
 			this.deps.renderStats.sameWindowBailouts = (this.deps.renderStats.sameWindowBailouts || 0) + 1;
-			this.syncCheapScrollOnly(layoutPlan);
+			// Enter scroll-frame so frameEpoch advances and isFrameActive() is correct
+			// even for cheap same-window work.
+			this.deps.runtimeState.transitionTo('scroll-frame');
+			try {
+				this.syncCheapScrollOnly(layoutPlan);
+			} finally {
+				this.deps.runtimeState.transitionTo('post-scroll');
+			}
 			return;
 		}
 

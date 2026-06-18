@@ -113,12 +113,20 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 				this.runPaintFrame();
 			}
 			if (this.pendingPostScroll) {
-				this.pendingPostScroll = false;
 				const rs = this.runtimeState;
 				const epochOk = !rs || rs.isScrollEpochCurrent(this.postScrollEpoch);
-				const notActive = !rs || (!rs.isScrolling() && !rs.isFrameActive());
-				if (epochOk && notActive) {
-					this.onPostScrollWork();
+				if (!epochOk) {
+					// Stale epoch: a newer scroll session supersedes this request — drop.
+					this.pendingPostScroll = false;
+				} else {
+					const notActive = !rs || (!rs.isScrolling() && !rs.isFrameActive());
+					if (notActive) {
+						this.pendingPostScroll = false;
+						this.onPostScrollWork();
+					}
+					// else: conditions not yet met but epoch is valid (scrolling still active).
+					// Retain pendingPostScroll = true so the finally block re-schedules a RAF.
+					// The work will execute once scrolling becomes idle.
 				}
 			}
 		} finally {
