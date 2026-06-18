@@ -1,7 +1,5 @@
 export { Grid } from './Grid.js';
 export type { GridProps, GridClientProps, GridServerProps, GridPaginationConfig } from './Grid.js';
-export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
-export { PortalCell, PortalManager } from './GridPortal.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
 export {
@@ -49,11 +47,7 @@ export type {
 	ColumnTypeDefinition,
 } from './renderers/CellTypes.js';
 
-export { FormulaBar } from './FormulaBar.js';
-export type { FormulaBarProps } from './FormulaBar.js';
-
 // ─── Advanced filter API ──────────────────────────────────────────────────────
-export { ColumnFilterRenderer } from './filters/ColumnFilterRenderer.js';
 export type {
 	ColumnFilterDef,
 	ColumnFilterType,

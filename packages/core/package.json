@@ -1,6 +1,6 @@
 {
 	"name": "@open-grid/core",
-	"version": "1.0.0",
+	"version": "0.1.0-alpha.0",
 	"description": "Framework-agnostic high-performance spreadsheet and grid engine core",
 	"type": "module",
 	"main": "./dist/index.js",

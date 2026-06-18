@@ -8,9 +8,9 @@ import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-
 import * as ReactPackage from './index.js';
 import { GridProvider } from './gridContext.js';
 import { GridView } from './GridView.js';
-import { GridEventName, Grid, PortalCell, PortalManager, useGridKeySelector, useGridApi, useGridSelector } from './index.js';
+import { GridEventName, Grid, useGridKeySelector, useGridApi, useGridSelector } from './index.js';
 import { useGridNavigationController } from './hooks.js';
-import { createPortalStore } from './GridPortal.js';
+import { PortalCell, PortalManager, createPortalStore } from './GridPortal.js';
 
 // Mock ResizeObserver for jsdom environment
 class MockResizeObserver {

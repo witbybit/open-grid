@@ -72,6 +72,15 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('eventBus.addEventListener');
 	});
 
+	it('workspace and published packages use an explicit alpha pre-release version (Plan 106)', () => {
+		const workspacePackage = JSON.parse(readFileSync(resolve(CORE_ROOT, '..', '..', 'package.json'), 'utf-8')) as { version: string };
+		const corePackage = JSON.parse(readFileSync(resolve(CORE_ROOT, 'package.json'), 'utf-8')) as { version: string };
+		const reactPackage = JSON.parse(readFileSync(resolve(REACT_ROOT, 'package.json'), 'utf-8')) as { version: string };
+		expect(workspacePackage.version).toMatch(/^0\.\d+\.\d+-alpha\.\d+$/);
+		expect(corePackage.version).toMatch(/^0\.\d+\.\d+-alpha\.\d+$/);
+		expect(reactPackage.version).toMatch(/^0\.\d+\.\d+-alpha\.\d+$/);
+	});
+
 	it('RenderInvalidationCoordinator owns renderer subscription wiring', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
 		expect(content).toContain('stateManager.subscribeToKey');
@@ -268,6 +277,15 @@ describe('Architecture guardrails', () => {
 		for (const file of files) {
 			const content = readFileSync(resolve(REACT_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not import @open-grid/core/internal directly`).not.toContain('@open-grid/core/internal');
+		}
+	});
+
+	it('demo app imports no internal package entry points (Plan 106)', () => {
+		for (const file of collectSourceFiles(resolve(DEMO_ROOT, 'src'))) {
+			const content = readFileSync(file, 'utf-8');
+			expect(content, `${file} must not import @open-grid/core/internal`).not.toContain('@open-grid/core/internal');
+			expect(content, `${file} must not import @open-grid/react internals by subpath`).not.toMatch(/from ['"]@open-grid\/react\//);
+			expect(content, `${file} must not import @open-grid/core internals by subpath`).not.toMatch(/from ['"]@open-grid\/core\//);
 		}
 	});
 
@@ -1493,6 +1511,25 @@ describe('Architecture guardrails', () => {
 		expect(ricContent).toContain("component: 'RenderInvalidationCoordinator'");
 		expect(ricContent).toContain('legacy-inferred-invalidation:');
 		expect(ricContent).not.toContain("subscribeToKey('enableColumnReorder'");
+	});
+
+	it('RenderInvalidationCoordinator legacy state-key subscriptions are explicitly allowlisted while Plan 105 completes', () => {
+		const ricContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
+		const subscriptions = [...ricContent.matchAll(/subscribeToKey\('([^']+)'/g)].map((match) => match[1]);
+		expect(subscriptions).toEqual([
+			'defaultRowHeight',
+			'defaultColWidth',
+			'globalVersion',
+			'loading',
+			'visibleRowRange',
+			'visibleColRange',
+			'columns',
+			'columnWidths',
+			'rowHeights',
+			'sortModel',
+			'expansion',
+			'pinnedColumns',
+		]);
 	});
 
 	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {
