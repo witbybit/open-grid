@@ -243,20 +243,20 @@ describe('ServerRowModelController', () => {
 		const stateBefore = store.getState();
 		const initialGlobalVersion = stateBefore.globalVersion;
 
-		const stateSpy = vi.spyOn(store, 'setState');
+		const stateSpy = vi.spyOn(store.engine.stateManager, 'setState');
 
 		// Trigger fetch block 1 (subsequent block)
 		controller.loadVisibleBlocks(60, 60);
 
-		// The setState should not have been called synchronously during the fetch start for block index 1
-		// Since setState wasn't called synchronously, globalVersion should still be the same
+		// The runtime should not synchronously mutate state during the fetch start for block index 1.
+		// Since no direct state write happened yet, globalVersion should still be the same.
 		expect(stateSpy).not.toHaveBeenCalled();
 		expect(store.getState().globalVersion).toBe(initialGlobalVersion);
 
 		// Now wait for the async fetch to complete
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		// Now the async response should have arrived, triggering setState with globalVersion increment
+		// Now the async response should have arrived, triggering the centralized state write with globalVersion increment.
 		expect(stateSpy).toHaveBeenCalled();
 		expect(store.getState().globalVersion).toBe(initialGlobalVersion + 1);
 	});

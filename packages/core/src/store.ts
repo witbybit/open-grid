@@ -331,7 +331,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 					}
 				}
 				if (filterChanged) {
-					this.engine.stateManager.setState({ filterModel: Object.keys(newModel).length > 0 ? newModel : null });
+					this.engine.setFilterModel(Object.keys(newModel).length > 0 ? newModel : null, false);
 				}
 			}
 		}
@@ -647,15 +647,13 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		const current = this.state.rowHeights;
 		const next = rowHeights ?? {};
 		if (areRowHeightsEqual(current, next)) return;
-		this.engine.setState({ rowHeights: next });
-		this.engine.incrementDomain('geometry');
+		this.engine.setRowHeights(next);
 	};
 
 	public setDefaultRowHeight = (defaultRowHeight?: number | undefined): void => {
 		if (defaultRowHeight === undefined) return;
 		if (this.state.defaultRowHeight === defaultRowHeight) return;
-		this.engine.setState({ defaultRowHeight });
-		this.engine.incrementDomain('geometry');
+		this.engine.setDefaultRowHeight(defaultRowHeight);
 	};
 
 	public purgeCache = (): void => {

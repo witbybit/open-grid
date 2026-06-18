@@ -31,6 +31,7 @@ export type GridChangeReason =
 	| 'rows:set-filter-model'
 	| 'rows:set-pagination-page'
 	| 'geometry:resize-row'
+	| 'geometry:set-row-heights'
 	| 'geometry:set-default-row-height'
 	| 'ui:set-style-rules'
 	| 'ui:set-floating-filters';

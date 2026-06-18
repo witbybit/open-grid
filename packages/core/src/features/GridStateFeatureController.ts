@@ -92,6 +92,46 @@ export class GridStateFeatureController<TRowData = unknown> {
 		}
 	}
 
+	public setRowHeights(rowHeights: Record<string, number>): void {
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'geometry:set-row-heights',
+				state: { rowHeights },
+				invalidations: [
+					{ kind: 'geometry', reason: 'row heights' },
+					{ kind: 'viewport', reason: 'row heights' },
+				],
+				domains: ['geometry'],
+				requestRender: true,
+			});
+			return;
+		}
+		this.deps.stateManager.setState({ rowHeights });
+		this.deps.invalidation.invalidateGeometry('row heights');
+		this.deps.invalidation.invalidateViewport('row heights');
+		this.deps.requestRender('row heights');
+	}
+
+	public setDefaultRowHeight(defaultRowHeight: number): void {
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'geometry:set-default-row-height',
+				state: { defaultRowHeight },
+				invalidations: [
+					{ kind: 'geometry', reason: 'default row height' },
+					{ kind: 'viewport', reason: 'default row height' },
+				],
+				domains: ['geometry'],
+				requestRender: true,
+			});
+			return;
+		}
+		this.deps.stateManager.setState({ defaultRowHeight });
+		this.deps.invalidation.invalidateGeometry('default row height');
+		this.deps.invalidation.invalidateViewport('default row height');
+		this.deps.requestRender('default row height');
+	}
+
 	public setSortModel(sortModel: SortModel | null, undoable = true): void {
 		const oldSort = this.deps.stateManager.getState().sortModel;
 		if (this.deps.applyChange) {

@@ -1298,4 +1298,27 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('this.engine.setShowFloatingFilters(enabled);');
 		expect(content).not.toContain('this.engine.stateManager.setState({ showFloatingFilters: enabled })');
 	});
+
+	it('store hidden-column filter cleanup routes through engine.setFilterModel (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain('this.engine.setFilterModel(Object.keys(newModel).length > 0 ? newModel : null, false);');
+		expect(content).not.toContain('this.engine.stateManager.setState({ filterModel: Object.keys(newModel).length > 0 ? newModel : null })');
+	});
+
+	it('store bulk row-height APIs route through GridEngine stateFeature wrappers (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain('this.engine.setRowHeights(next);');
+		expect(content).toContain('this.engine.setDefaultRowHeight(defaultRowHeight);');
+		expect(content).not.toContain('this.engine.setState({ rowHeights: next })');
+		expect(content).not.toContain('this.engine.setState({ defaultRowHeight })');
+	});
+
+	it('row-model runtime factory no longer writes state directly (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'createRowModelRuntimes.ts'), 'utf-8');
+		expect(content).not.toContain('store.setState(');
+		expect(content).toContain('store.engine.initializeRowModelState(model)');
+		expect(content).toContain('store.engine.bumpRowModelGlobalVersion()');
+		expect(content).toContain('store.engine.setRowModelLoadingState(loading)');
+		expect(content).toContain('store.engine.setServerPaginationState(payload)');
+	});
 });
