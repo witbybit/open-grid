@@ -53,9 +53,9 @@ describe('PortalMountManager', () => {
 		expect(manager.getStats().cells).toBe(1);
 		expect(mount).toHaveBeenCalledTimes(2);
 
-		manager.releaseCell({ cellKey: 'r1:name', container, flushSync: true, slotGeneration: 0 });
+		manager.releaseCell({ cellKey: 'r1:name', container, flushSync: true, rowSlotId: 'slot-0', slotGeneration: 0 });
 		expect(manager.getStats().cells).toBe(0);
-		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: true, slotGeneration: 0 });
+		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: true, rowSlotId: 'slot-0', slotGeneration: 0 });
 	});
 
 	it('releases all tracked portal mounts on cleanup', () => {
@@ -193,7 +193,7 @@ describe('PortalMountManager', () => {
 			isEditing: false,
 			isLoading: false,
 		});
-		manager.releaseCell({ cellKey: 'r2:name', container: transientContainer, slotGeneration: 0 });
+		manager.releaseCell({ cellKey: 'r2:name', container: transientContainer, rowSlotId: 'slot-1', slotGeneration: 0 });
 
 		expect(mount).not.toHaveBeenCalled();
 		expect(release).not.toHaveBeenCalled();
@@ -231,7 +231,7 @@ describe('PortalMountManager', () => {
 		});
 
 		manager.setRuntimeState(makeScrollingRuntimeState());
-		manager.releaseCells([{ cellKey: 'r1:name', container, slotGeneration: 0 }], true);
+		manager.releaseCells([{ cellKey: 'r1:name', container, rowSlotId: 'slot-0', slotGeneration: 0 }], true);
 
 		expect(release).not.toHaveBeenCalled();
 		expect(flush).not.toHaveBeenCalled();
@@ -240,7 +240,7 @@ describe('PortalMountManager', () => {
 		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred(true);
 
-		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: false, slotGeneration: 0 });
+		expect(release).toHaveBeenCalledWith({ cellKey: 'r1:name', container, flushSync: false, rowSlotId: 'slot-0', slotGeneration: 0 });
 		expect(flush).toHaveBeenCalledWith({ flushSync: true });
 		expect(manager.getScrollStats().portalFlushesDuringScroll).toBe(0);
 	});
@@ -265,7 +265,7 @@ describe('PortalMountManager', () => {
 		}
 		manager.setRuntimeState(makeScrollingRuntimeState());
 		for (let index = 0; index < 8; index++) {
-			manager.releaseCell({ cellKey: `r${index}:name`, slotGeneration: 0 });
+			manager.releaseCell({ cellKey: `r${index}:name`, rowSlotId: `slot-${index}`, slotGeneration: 0 });
 		}
 		manager.setRuntimeState(makeIdleRuntimeState());
 
@@ -312,7 +312,7 @@ describe('PortalMountManager', () => {
 		expect(parent.querySelectorAll('.og-custom-renderer-container')).toHaveLength(1);
 
 		manager.setRuntimeState(makeScrollingRuntimeState());
-		manager.releaseCell({ cellKey: 'logical-1', container: parent, slotGeneration: 0 });
+		manager.releaseCell({ cellKey: 'logical-1', container: parent, rowSlotId: 'slot-0', slotGeneration: 0 });
 		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred();
 
@@ -351,7 +351,7 @@ describe('PortalMountManager', () => {
 			isLoading: false,
 		});
 		manager.setRuntimeState(makeScrollingRuntimeState());
-		manager.releaseCell({ cellKey: 'row-1:name', container: firstParent, slotGeneration: 0 });
+		manager.releaseCell({ cellKey: 'row-1:name', container: firstParent, rowSlotId: 'slot-0', slotGeneration: 0 });
 		manager.setRuntimeState(makeIdleRuntimeState());
 		manager.flushDeferred();
 

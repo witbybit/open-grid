@@ -110,7 +110,7 @@ export interface PortalStore<TRowData = unknown> {
 		isSelected: boolean | undefined,
 		physicalIdentity: CellPortalPhysicalIdentity
 	): void;
-	unmountCell(cellKey: string, container?: HTMLElement, sync?: boolean): void;
+	unmountCell(cellKey: string, container?: HTMLElement, sync?: boolean, physicalIdentity?: CellPortalPhysicalIdentity): void;
 }
 
 export interface PortalManagerProps<TRowData = unknown> {

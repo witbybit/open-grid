@@ -129,7 +129,10 @@ export function GridView<TRowData = unknown>({
 					);
 				},
 				unmountCellContent: (unmount) => {
-					portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync ?? false);
+					portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync ?? false, {
+						rowSlotId: unmount.rowSlotId,
+						slotGeneration: unmount.slotGeneration,
+					});
 				},
 				flushCellContent: () => {},
 			},

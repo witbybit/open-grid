@@ -256,9 +256,10 @@ export function createPortalStore<TRowData = unknown>() {
 			}
 		},
 
-		unmountCell(cellKey: string, container?: HTMLElement, sync = false) {
+		unmountCell(cellKey: string, container?: HTMLElement, sync = false, physicalIdentity?: CellPortalPhysicalIdentity) {
 			const existing = portals.get(cellKey);
 			if (!existing || (container && existing.container !== container)) return;
+			if (physicalIdentity && !isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)) return;
 			portals.delete(cellKey);
 			if (cellPortalKeyByContainer.get(existing.container) === cellKey) {
 				cellPortalKeyByContainer.delete(existing.container);

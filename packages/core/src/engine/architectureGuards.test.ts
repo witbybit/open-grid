@@ -562,8 +562,8 @@ describe('Architecture guardrails', () => {
 
 	it('deferred cell mounts validate generation before executing (Plan 081)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
-		// Stale deferred mounts must be rejected symmetrically to stale deferred releases.
-		expect(content).toContain('activeGen > mount.slotGeneration');
+		expect(content).toContain('activeIdentity.rowSlotId !== mount.rowSlotId');
+		expect(content).toContain('activeIdentity.slotGeneration !== mount.slotGeneration');
 	});
 
 	it('RowDependencyRegistry expands sort/filter/group source fields and tracks opaque getters (Plan 082)', () => {
@@ -1218,10 +1218,11 @@ describe('Architecture guardrails', () => {
 		expect(unmountSection).toContain('slotGeneration: number;');
 	});
 
-	it('PortalMountManager exposes getActiveGeneration() for deferred release generation capture (Plan 100)', () => {
+	it('PortalMountManager exposes active physical identity accessors for deferred release capture (Plan 110)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
 		expect(content).toContain('getActiveGeneration(');
-		expect(content).toContain('activeGenerationByKey.get(');
+		expect(content).toContain('getActiveIdentity(');
+		expect(content).toContain('activeIdentityByKey.get(');
 	});
 
 	it('stale-detection guards in portalMountManager no longer have redundant !== undefined checks (Plan 100)', () => {
@@ -1229,9 +1230,10 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('slotGeneration !== undefined');
 	});
 
-	it('releaseCellPortal captures generation at scheduling time via getActiveGeneration (Plan 100)', () => {
+	it('releaseCellPortal captures physical identity at scheduling time via getActiveIdentity (Plan 110)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRendererRuntime.ts'), 'utf-8');
-		expect(content).toContain('getActiveGeneration(cellKey)');
+		expect(content).toContain('getActiveIdentity(cellKey)');
+		expect(content).toContain('rowSlotId,');
 		expect(content).toContain('slotGeneration,');
 	});
 

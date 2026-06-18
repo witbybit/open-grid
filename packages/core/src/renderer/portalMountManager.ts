@@ -106,8 +106,8 @@ export class PortalMountManager<TRowData = unknown> {
 	private pendingCellReleases = new Map<string, GridCellContentUnmount>();
 	private deferredCellMounts = new Map<string, GridCellContentMount<TRowData>>();
 	private deferredCellReleases = new Map<string, GridCellContentUnmount>();
-	/** Tracks the current slotGeneration for each mounted cellKey. */
-	private activeGenerationByKey = new Map<string, number>();
+	/** Tracks the current physical identity for each mounted cellKey. */
+	private activeIdentityByKey = new Map<string, { rowSlotId: string; slotGeneration: number }>();
 	private deferredNewCellMounts = new Set<string>();
 	private deferredRowMounts = new Map<string, GridRowContentMount<TRowData>>();
 	private deferredRowReleases = new Map<string, GridRowContentUnmount>();
@@ -131,11 +131,18 @@ export class PortalMountManager<TRowData = unknown> {
 
 	/** Returns the active slot generation for a cell key, or undefined if not mounted. */
 	public getActiveGeneration(cellKey: string): number | undefined {
-		return this.activeGenerationByKey.get(cellKey);
+		return this.activeIdentityByKey.get(cellKey)?.slotGeneration;
+	}
+
+	public getActiveIdentity(cellKey: string): { rowSlotId: string; slotGeneration: number } | undefined {
+		return this.activeIdentityByKey.get(cellKey);
 	}
 
 	private mountCellReal(mount: GridCellContentMount<TRowData>): void {
-		this.activeGenerationByKey.set(mount.cellKey, mount.slotGeneration);
+		this.activeIdentityByKey.set(mount.cellKey, {
+			rowSlotId: mount.rowSlotId,
+			slotGeneration: mount.slotGeneration,
+		});
 		const col = mount.col as InternalColumnDef<TRowData>;
 		const isCustom = !!(col.cellRenderer || mount.isEditing);
 
@@ -196,7 +203,8 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	private releaseCellReal(cellKey: string, reason: ReleaseReason, originalUnmount?: GridCellContentUnmount): void {
-		this.activeGenerationByKey.delete(cellKey);
+		const activeIdentity = this.activeIdentityByKey.get(cellKey);
+		this.activeIdentityByKey.delete(cellKey);
 		// DOM renderer path — no portal/React involved
 		if (this.domCellRendererManager.releaseByCellKey(cellKey, reason)) return;
 
@@ -206,7 +214,13 @@ export class PortalMountManager<TRowData = unknown> {
 				this.onUnmountCellContent?.(originalUnmount);
 			} else {
 				const container = this.mountedCells.get(cellKey);
-				this.onUnmountCellContent?.({ cellKey, container, flushSync: false, slotGeneration: 0 });
+				this.onUnmountCellContent?.({
+					cellKey,
+					container,
+					flushSync: false,
+					rowSlotId: activeIdentity?.rowSlotId ?? '__unknown_slot__',
+					slotGeneration: activeIdentity?.slotGeneration ?? 0,
+				});
 			}
 		}
 	}
@@ -396,10 +410,11 @@ export class PortalMountManager<TRowData = unknown> {
 		// avoids an O(remaining) Array.from copy per chunk (O(N²/budget) over the drain).
 		for (const [cellKey, unmount] of this.deferredCellReleases) {
 			if (outOfBudget()) break;
-			// Reject stale releases: a later mount for the same key with a higher
-			// generation means this release was superseded by a slot rebind.
-			const activeGen = this.activeGenerationByKey.get(cellKey);
-			if (activeGen !== undefined && activeGen > unmount.slotGeneration) {
+			const activeIdentity = this.activeIdentityByKey.get(cellKey);
+			if (
+				activeIdentity !== undefined &&
+				(activeIdentity.rowSlotId !== unmount.rowSlotId || activeIdentity.slotGeneration !== unmount.slotGeneration)
+			) {
 				this.deferredCellReleases.delete(cellKey);
 				continue;
 			}
@@ -427,10 +442,11 @@ export class PortalMountManager<TRowData = unknown> {
 			for (let i = 0; i < bucket.length && !outOfBudget(); i++) {
 				const mount = bucket[i];
 				const isColdMount = this.deferredNewCellMounts.has(mount.cellKey);
-				// Reject stale deferred mounts: a later immediate mount for the same key
-				// with a higher generation means this deferred work targets an old slot.
-				const activeGen = this.activeGenerationByKey.get(mount.cellKey);
-				if (activeGen !== undefined && activeGen > mount.slotGeneration) {
+				const activeIdentity = this.activeIdentityByKey.get(mount.cellKey);
+				if (
+					activeIdentity !== undefined &&
+					(activeIdentity.rowSlotId !== mount.rowSlotId || activeIdentity.slotGeneration !== mount.slotGeneration)
+				) {
 					this.deferredCellMounts.delete(mount.cellKey);
 					this.deferredNewCellMounts.delete(mount.cellKey);
 					continue;
@@ -551,6 +567,7 @@ export class PortalMountManager<TRowData = unknown> {
 		this.mountedRows.clear();
 		this.mountedRowVisualRows.clear();
 		this.mountedMenus.clear();
+		this.activeIdentityByKey.clear();
 	}
 
 	public isCellMounted(cellKey: string): boolean {

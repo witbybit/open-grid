@@ -229,7 +229,9 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 		if (!cellKey) return;
 		const container = this.getCellPortalHost(cell) ?? cell;
 		const isDeferred = forceDeferred ?? this.deps.stateHost.runtimeState.isScrolling();
-		const slotGeneration = this.deps.portalMountManager.getActiveGeneration(cellKey) ?? 0;
+		const activeIdentity = this.deps.portalMountManager.getActiveIdentity(cellKey);
+		const rowSlotId = activeIdentity?.rowSlotId ?? '__unknown_slot__';
+		const slotGeneration = activeIdentity?.slotGeneration ?? 0;
 
 		if (isDeferred) {
 			this.deps.stateHost.currentScrollPortalOps++;
@@ -237,6 +239,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 				cellKey,
 				container,
 				flushSync: false,
+				rowSlotId,
 				slotGeneration,
 			});
 		} else {
@@ -245,6 +248,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 				container,
 				flushSync: false,
 				reason,
+				rowSlotId,
 				slotGeneration,
 			});
 		}

@@ -443,6 +443,7 @@ export class CustomRendererManager<TRowData = unknown> {
 				cellKey: instance.cellKey,
 				container: instance.container,
 				flushSync: false,
+				rowSlotId: instance.rowSlotId,
 				slotGeneration: instance.slotGeneration,
 			});
 		}

@@ -68,6 +68,7 @@ export interface GridCellContentUnmount {
 	container?: HTMLElement;
 	flushSync?: boolean;
 	reason?: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated';
+	rowSlotId: string;
 	/** Generation at the time this release was requested — used to reject stale releases. */
 	slotGeneration: number;
 }

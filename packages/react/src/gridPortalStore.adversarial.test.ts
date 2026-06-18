@@ -121,6 +121,41 @@ describe('createPortalStore — adversarial lifecycle invariants', () => {
 		expect(updater).not.toHaveBeenCalled();
 	});
 
+	it('ignores stale unmounts when physical identity mismatches the current owner', () => {
+		const store = createPortalStore<TestRow>();
+		const container = document.createElement('div');
+
+		store.mountCell(
+			'slot-0:name',
+			container,
+			'Current',
+			makeNode('row-a', 'Current'),
+			COLUMN,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-0',
+				slotGeneration: 2,
+			}
+		);
+
+		store.unmountCell('slot-0:name', container, false, {
+			rowSlotId: 'slot-0',
+			slotGeneration: 1,
+		});
+		expect(store.getCellData?.('slot-0:name')?.value).toBe('Current');
+
+		store.unmountCell('slot-0:name', container, false, {
+			rowSlotId: 'slot-1',
+			slotGeneration: 2,
+		});
+		expect(store.getCellData?.('slot-0:name')?.value).toBe('Current');
+	});
+
 	it('recycled containers retain only the latest cell and row owners under seeded churn', async () => {
 		const rng = makeLcg(0x1080cafe);
 		const store = createPortalStore<TestRow>();
