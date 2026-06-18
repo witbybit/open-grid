@@ -6,6 +6,7 @@
 		"baseUrl": "../..",
 		"paths": {
 			"@open-grid/core": ["packages/core/dist/index"],
+			"@open-grid/core/experimental": ["packages/core/dist/experimental"],
 			"@open-grid/core/internal": ["packages/core/dist/internal"]
 		},
 		"jsx": "react-jsx",

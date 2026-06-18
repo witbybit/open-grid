@@ -67,7 +67,6 @@ export {
 	isFullWidthVisualRow,
 	isSelectableVisualRow,
 } from './visualRow.js';
-export { compileStyleRules } from './styling/styleRules.js';
 export { isDomCellRenderer } from './columnDef.js';
 export type {
 	FilterModel,
@@ -151,4 +150,4 @@ export {
 export type { ThemeTokens, BuiltInThemeName } from './renderer/themes.js';
 export type { GridDomainVersions } from './state/GridDomainVersions.js';
 export type { GridInstrumentation, GridInstrumentationSnapshot, FrameMetrics, FallbackMetric } from './diagnostics/GridInstrumentation.js';
-export { GridMetric, NoopGridInstrumentation, RecordingGridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
+export { GridMetric } from './diagnostics/GridInstrumentation.js';

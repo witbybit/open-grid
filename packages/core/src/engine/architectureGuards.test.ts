@@ -98,9 +98,7 @@ describe('Architecture guardrails', () => {
 
 	it('core and react source trees do not contain generated js or d.ts artifacts', () => {
 		const sourceRoots = [resolve(CORE_ROOT, 'src'), resolve(REACT_ROOT, 'src')];
-		const generated = sourceRoots.flatMap((root) =>
-			collectFiles(root).filter((file) => file.endsWith('.js') || file.endsWith('.d.ts'))
-		);
+		const generated = sourceRoots.flatMap((root) => collectFiles(root).filter((file) => file.endsWith('.js') || file.endsWith('.d.ts')));
 		expect(generated, `generated artifacts found in source tree: ${generated.join(', ')}`).toEqual([]);
 	});
 
@@ -317,6 +315,16 @@ describe('Architecture guardrails', () => {
 			exports?: Record<string, { types?: string; import?: string }>;
 		};
 		expect(reactPackage.exports?.['./experimental']).toEqual({
+			types: './dist/experimental.d.ts',
+			import: './dist/experimental.js',
+		});
+	});
+
+	it('core package publishes an explicit experimental entry for incubating helpers (Plan 106)', () => {
+		const corePackage = JSON.parse(readFileSync(resolve(CORE_ROOT, 'package.json'), 'utf-8')) as {
+			exports?: Record<string, { types?: string; import?: string }>;
+		};
+		expect(corePackage.exports?.['./experimental']).toEqual({
 			types: './dist/experimental.d.ts',
 			import: './dist/experimental.js',
 		});

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as publicApi from './index.js';
+import * as experimentalApi from './experimental.js';
 import * as internalApi from './internal.js';
 import { createClientGrid, getStoreFromApi } from './createGrid.js';
 
@@ -49,9 +50,24 @@ describe('Public/internal boundary', () => {
 			expect(typeof publicApi.createClientGrid).toBe('function');
 		});
 
+		it('does not export experimental style-rule compiler or concrete instrumentation helpers', () => {
+			for (const name of ['compileStyleRules', 'NoopGridInstrumentation', 'RecordingGridInstrumentation', 'NOOP_INSTRUMENTATION']) {
+				expect((publicApi as Record<string, unknown>)[name], `${name} must not be in public entry`).toBeUndefined();
+			}
+		});
+
 		it('exports ColumnDef-related types (runtime value: nothing) and GridApi (no runtime value)', () => {
 			// These are type-only exports; they leave no runtime footprint — just confirm the module loads
 			expect(publicApi).toBeDefined();
+		});
+	});
+
+	describe('Experimental entry (@open-grid/core/experimental)', () => {
+		it('exports style-rule compiler and concrete instrumentation helpers', () => {
+			expect(typeof (experimentalApi as Record<string, unknown>)['compileStyleRules']).toBe('function');
+			expect(typeof (experimentalApi as Record<string, unknown>)['NoopGridInstrumentation']).toBe('function');
+			expect(typeof (experimentalApi as Record<string, unknown>)['RecordingGridInstrumentation']).toBe('function');
+			expect((experimentalApi as Record<string, unknown>)['NOOP_INSTRUMENTATION']).toBeDefined();
 		});
 	});
 
