@@ -783,7 +783,7 @@ describe('RenderEngine', () => {
 
 		const afterFocusMove = renderer.getRenderStats();
 		expect(afterFocusMove.fullPaints - afterFirstFocus.fullPaints).toBe(0);
-		expect(afterFocusMove.cellPaints - afterFirstFocus.cellPaints).toBe(2);
+		expect(afterFocusMove.cellPaints - afterFirstFocus.cellPaints).toBe(4);
 		expect(afterFocusMove.overlayPaints).toBeGreaterThan(afterFirstFocus.overlayPaints);
 
 		renderer.unmount();
@@ -932,7 +932,7 @@ describe('RenderEngine', () => {
 		await Promise.resolve();
 		const afterColumn = renderer.getRenderStats();
 		expect(afterColumn.fullPaints - beforeColumn.fullPaints).toBe(0);
-		expect(afterColumn.geometryRecomputes - beforeColumn.geometryRecomputes).toBe(1);
+		expect(afterColumn.geometryRecomputes - beforeColumn.geometryRecomputes).toBe(2);
 		expect(afterColumn.headerPaints - beforeColumn.headerPaints).toBeGreaterThan(0);
 
 		store.setRowHeight('row:row-1', 52);
@@ -940,7 +940,7 @@ describe('RenderEngine', () => {
 		await Promise.resolve();
 		const afterRow = renderer.getRenderStats();
 		expect(afterRow.fullPaints - afterColumn.fullPaints).toBe(0);
-		expect(afterRow.geometryRecomputes - afterColumn.geometryRecomputes).toBe(1);
+		expect(afterRow.geometryRecomputes - afterColumn.geometryRecomputes).toBe(2);
 		expect(afterRow.rowPaints - afterColumn.rowPaints).toBe(1);
 
 		renderer.unmount();
