@@ -171,6 +171,12 @@ export class GroupingFeatureController<TRowData = unknown> {
 		this.ctx.applyChange({
 			reason: 'grouping:set-panel',
 			state: { showGroupPanel: enabled },
+			invalidations: [
+				{ kind: 'geometry', reason: 'showGroupPanel' },
+				{ kind: 'viewport', reason: 'showGroupPanel' },
+				{ kind: 'headers', reason: 'showGroupPanel' },
+			],
+			domains: ['geometry'],
 		});
 	}
 

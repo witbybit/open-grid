@@ -405,6 +405,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.setShowFloatingFilters(enabled);
 	};
 
+	public setShowFilterChipBar = (enabled: boolean): void => {
+		this.engine.setShowFilterChipBar(enabled);
+	};
+
 	public exportCsv = (options?: CsvExportOptions): void => {
 		exportToCsv(this, options);
 	};

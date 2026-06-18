@@ -69,6 +69,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		setStickyGroupRows: source.setStickyGroupRows,
 		setShowGroupPanel: source.setShowGroupPanel,
 		setShowFloatingFilters: source.setShowFloatingFilters,
+		setShowFilterChipBar: source.setShowFilterChipBar,
 		toggleGroupExpanded: source.toggleGroupExpanded,
 		toggleDetailExpanded: source.toggleDetailExpanded,
 		isGroupExpanded: source.isGroupExpanded,

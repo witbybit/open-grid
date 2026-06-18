@@ -1981,4 +1981,14 @@ describe('groupBy mutation API', () => {
 		expect(store.getState().showGroupPanel).toBe(false);
 		store.destroy();
 	});
+
+	it('setShowFilterChipBar toggles showFilterChipBar state', () => {
+		const store = makeGroupStore();
+		expect(store.getState().showFilterChipBar).toBeUndefined();
+		store.setShowFilterChipBar(true);
+		expect(store.getState().showFilterChipBar).toBe(true);
+		store.setShowFilterChipBar(false);
+		expect(store.getState().showFilterChipBar).toBe(false);
+		store.destroy();
+	});
 });

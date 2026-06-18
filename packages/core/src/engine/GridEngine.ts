@@ -627,6 +627,9 @@ export class GridEngine<TRowData = unknown> {
 	public setShowFloatingFilters(enabled: boolean): void {
 		this.stateFeature.setShowFloatingFilters(enabled);
 	}
+	public setShowFilterChipBar(enabled: boolean): void {
+		this.stateFeature.setShowFilterChipBar(enabled);
+	}
 	public setSidebarOpenPanel(panelId: string | null): void {
 		this.stateFeature.setSidebarOpenPanel(panelId);
 	}

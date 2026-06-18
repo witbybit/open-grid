@@ -1,4 +1,5 @@
 import { GridEventName } from '../api/GridEvents.js';
+import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GeometryController } from './geometryController.js';
 import type { PortalMountManager } from './portalMountManager.js';
@@ -30,22 +31,22 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		if (this.unsubscribers.length > 0) return;
 
 		const invalidateFull = () => {
+			this.recordLegacyInferredInvalidation('columns');
 			this.deps.engine.invalidation.invalidateFull('state');
 			this.requestFlushGated('state');
 		};
-		const invalidateHeaders = () => {
-			this.deps.engine.invalidation.invalidateHeaders('headers');
-			this.requestFlushGated('headers');
-		};
 		const invalidateViewport = () => {
+			this.recordLegacyInferredInvalidation('viewport');
 			this.deps.engine.invalidation.invalidateViewport('viewport');
 			this.requestViewportFlushOrDefer('viewport');
 		};
 		const invalidateData = () => {
+			this.recordLegacyInferredInvalidation('globalVersion');
 			this.deps.engine.invalidation.invalidateViewport('data');
 			this.requestViewportFlushOrDefer('data');
 		};
 		const invalidateDefaultColumnGeometry = () => {
+			this.recordLegacyInferredInvalidation('defaultColWidth');
 			this.deps.geometryController.invalidateAll();
 			this.deps.engine.invalidation.invalidateGeometry('columns');
 			this.deps.engine.invalidation.invalidateViewport('columns');
@@ -54,6 +55,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 			this.requestFlushGated('columns');
 		};
 		const invalidateGeometryFull = () => {
+			this.recordLegacyInferredInvalidation('geometry');
 			this.deps.geometryController.invalidateAll();
 			this.deps.engine.invalidation.invalidateGeometry('geometry');
 			this.deps.engine.invalidation.invalidateViewport('geometry');
@@ -76,7 +78,6 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		);
 		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('columnWidths', invalidateGeometryFull));
 		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('rowHeights', invalidateGeometryFull));
-		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('enableColumnReorder', invalidateHeaders));
 		this.unsubscribers.push(
 			this.deps.engine.stateManager.subscribeToKey('sortModel', () => {
 				this.deps.layoutTransition.captureSnapshot('sort');
@@ -94,6 +95,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		// semantic transition after the new pinned lanes are already committed.
 		this.unsubscribers.push(
 			this.deps.engine.stateManager.subscribeToKey('pinnedColumns', () => {
+				this.recordLegacyInferredInvalidation('pinnedColumns');
 				this.deps.geometryController.invalidateAll();
 				this.deps.engine.invalidation.invalidateGeometry('pin');
 				this.deps.engine.invalidation.invalidateViewport('pin');
@@ -146,24 +148,6 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.renderInvalidated, (event) => {
 				this.requestFlushGated(event.payload.reason);
-			})
-		);
-		this.unsubscribers.push(
-			this.deps.engine.stateManager.subscribeToKey('showGroupPanel', () => {
-				this.deps.syncLayoutPlan();
-				this.scheduleGeometryPaint('showGroupPanel');
-			})
-		);
-		this.unsubscribers.push(
-			this.deps.engine.stateManager.subscribeToKey('showFilterChipBar', () => {
-				this.deps.syncLayoutPlan();
-				this.scheduleGeometryPaint('showFilterChipBar');
-			})
-		);
-		this.unsubscribers.push(
-			this.deps.engine.stateManager.subscribeToKey('showFloatingFilters', () => {
-				this.deps.syncLayoutPlan();
-				this.scheduleGeometryPaint('showFloatingFilters');
 			})
 		);
 	}
@@ -238,5 +222,13 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 
 	private isScrollActive(): boolean {
 		return this.deps.runtimeState.isScrolling();
+	}
+
+	private recordLegacyInferredInvalidation(trigger: string): void {
+		this.deps.engine.instrumentation.increment(GridMetric.LEGACY_INFERRED_INVALIDATIONS);
+		this.deps.engine.instrumentation.recordFallback({
+			component: 'RenderInvalidationCoordinator',
+			reason: `legacy-inferred-invalidation:${trigger}`,
+		});
 	}
 }

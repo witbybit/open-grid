@@ -64,6 +64,21 @@ export class GridStateFeatureController<TRowData = unknown> {
 		});
 	}
 
+	public setShowFilterChipBar(enabled: boolean): void {
+		if ((this.deps.stateManager.getState().showFilterChipBar ?? false) === enabled) return;
+		this.deps.applyChange({
+			reason: 'ui:set-filter-chip-bar',
+			state: { showFilterChipBar: enabled },
+			invalidations: [
+				{ kind: 'geometry', reason: 'showFilterChipBar' },
+				{ kind: 'viewport', reason: 'showFilterChipBar' },
+				{ kind: 'headers', reason: 'showFilterChipBar' },
+			],
+			domains: ['geometry'],
+			requestRender: true,
+		});
+	}
+
 	public setSidebarOpenPanel(panelId: string | null): void {
 		if (this.deps.stateManager.getState().sidebarOpenPanel === panelId) return;
 		this.deps.applyChange({

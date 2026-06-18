@@ -1464,6 +1464,37 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('GridEventName.rowSelectionChanged');
 	});
 
+	it('layout-panel commands own showGroupPanel/showFloatingFilters/showFilterChipBar invalidation instead of RenderInvalidationCoordinator (Plan 105)', () => {
+		const groupingContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GroupingFeatureController.ts'), 'utf-8');
+		const stateContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'), 'utf-8');
+		const ricContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
+		expect(groupingContent).toContain("reason: 'grouping:set-panel'");
+		expect(groupingContent).toContain("{ kind: 'geometry', reason: 'showGroupPanel' }");
+		expect(groupingContent).toContain("{ kind: 'viewport', reason: 'showGroupPanel' }");
+		expect(stateContent).toContain("{ kind: 'geometry', reason: 'showFloatingFilters' }");
+		expect(stateContent).toContain("{ kind: 'viewport', reason: 'showFloatingFilters' }");
+		expect(stateContent).toContain("reason: 'ui:set-filter-chip-bar'");
+		expect(stateContent).toContain("{ kind: 'geometry', reason: 'showFilterChipBar' }");
+		expect(stateContent).toContain("{ kind: 'viewport', reason: 'showFilterChipBar' }");
+		expect(ricContent).not.toContain("subscribeToKey('showGroupPanel'");
+		expect(ricContent).not.toContain("subscribeToKey('showFloatingFilters'");
+		expect(ricContent).not.toContain("subscribeToKey('showFilterChipBar'");
+	});
+
+	it('RenderInvalidationCoordinator surfaces remaining inferred invalidation fallbacks explicitly (Plan 105)', () => {
+		const diagnosticsContent = readFileSync(resolve(CORE_ROOT, 'src', 'diagnostics', 'GridInstrumentation.ts'), 'utf-8');
+		const ricContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
+		const columnContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'ColumnFeatureController.ts'), 'utf-8');
+		expect(diagnosticsContent).toContain("LEGACY_INFERRED_INVALIDATIONS = 'legacyInferredInvalidations'");
+		expect(columnContent).toContain("reason: 'columns:reorder-toggle'");
+		expect(columnContent).toContain("{ kind: 'headers' }");
+		expect(ricContent).toContain('recordLegacyInferredInvalidation(');
+		expect(ricContent).toContain('GridMetric.LEGACY_INFERRED_INVALIDATIONS');
+		expect(ricContent).toContain("component: 'RenderInvalidationCoordinator'");
+		expect(ricContent).toContain('legacy-inferred-invalidation:');
+		expect(ricContent).not.toContain("subscribeToKey('enableColumnReorder'");
+	});
+
 	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {
 		const files = [
 			resolve(CORE_ROOT, 'src', 'features', 'ColumnFeatureController.ts'),

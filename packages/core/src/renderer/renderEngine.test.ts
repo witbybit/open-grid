@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type RowModel, type VisualRow, type RowModelRefreshResult } from '../store.js';
+import { GridMetric, RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { RenderEngine } from './renderEngine.js';
 import { ServerRowModelController } from '../serverRowModel.js';
 
@@ -312,6 +313,50 @@ describe('RenderEngine', () => {
 		expect(rightHeaderLayer.style.left).toBe('330px');
 		expect(rightHeaderLayer.style.width).toBe('270px');
 		expect(eHeader.parentElement).toBe(rightHeaderLayer);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('records legacy inferred invalidations for compatibility state writes', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-1', name: 'Row 1' }],
+			columns: store.getState().columns,
+		});
+		const inst = new RecordingGridInstrumentation();
+		store.setInstrumentation(inst);
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		store.setState({ defaultRowHeight: 48 });
+
+		expect(inst.get(GridMetric.LEGACY_INFERRED_INVALIDATIONS)).toBeGreaterThan(0);
+		expect(inst.snapshot().fallbacks).toContainEqual({
+			component: 'RenderInvalidationCoordinator',
+			reason: 'legacy-inferred-invalidation:geometry',
+		});
 
 		renderer.unmount();
 		controller.dispose();
