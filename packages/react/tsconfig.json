@@ -3,6 +3,11 @@
 	"compilerOptions": {
 		"outDir": "./dist",
 		"rootDir": "./src",
+		"baseUrl": "../..",
+		"paths": {
+			"@open-grid/core": ["packages/core/dist/index"],
+			"@open-grid/core/internal": ["packages/core/dist/internal"]
+		},
 		"jsx": "react-jsx",
 		"sourceMap": false,
 		"declarationMap": false

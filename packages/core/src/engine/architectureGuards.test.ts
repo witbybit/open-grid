@@ -40,6 +40,21 @@ function collectSourceFiles(root: string): string[] {
 	return files;
 }
 
+function collectFiles(root: string): string[] {
+	const entries = readdirSync(root);
+	const files: string[] = [];
+	for (const entry of entries) {
+		const abs = resolve(root, entry);
+		const stat = statSync(abs);
+		if (stat.isDirectory()) {
+			files.push(...collectFiles(abs));
+			continue;
+		}
+		files.push(abs);
+	}
+	return files;
+}
+
 function parseAllowlistedFiles(fileContent: string): string[] {
 	const matches = [...fileContent.matchAll(/file:\s*'([^']+)'/g)];
 	return matches.map((match) => match[1]);
@@ -79,6 +94,14 @@ describe('Architecture guardrails', () => {
 		expect(workspacePackage.version).toMatch(/^0\.\d+\.\d+-alpha\.\d+$/);
 		expect(corePackage.version).toMatch(/^0\.\d+\.\d+-alpha\.\d+$/);
 		expect(reactPackage.version).toMatch(/^0\.\d+\.\d+-alpha\.\d+$/);
+	});
+
+	it('core and react source trees do not contain generated js or d.ts artifacts', () => {
+		const sourceRoots = [resolve(CORE_ROOT, 'src'), resolve(REACT_ROOT, 'src')];
+		const generated = sourceRoots.flatMap((root) =>
+			collectFiles(root).filter((file) => file.endsWith('.js') || file.endsWith('.d.ts'))
+		);
+		expect(generated, `generated artifacts found in source tree: ${generated.join(', ')}`).toEqual([]);
 	});
 
 	it('RenderInvalidationCoordinator owns renderer subscription wiring', () => {
@@ -287,6 +310,16 @@ describe('Architecture guardrails', () => {
 			expect(content, `${file} must not import @open-grid/react internals by subpath`).not.toMatch(/from ['"]@open-grid\/react\//);
 			expect(content, `${file} must not import @open-grid/core internals by subpath`).not.toMatch(/from ['"]@open-grid\/core\//);
 		}
+	});
+
+	it('react package publishes an explicit experimental entry for incubating helpers (Plan 106)', () => {
+		const reactPackage = JSON.parse(readFileSync(resolve(REACT_ROOT, 'package.json'), 'utf-8')) as {
+			exports?: Record<string, { types?: string; import?: string }>;
+		};
+		expect(reactPackage.exports?.['./experimental']).toEqual({
+			types: './dist/experimental.d.ts',
+			import: './dist/experimental.js',
+		});
 	});
 
 	it('SpreadsheetFillEngine does not call engine.data.setCellValue directly', () => {
