@@ -1413,4 +1413,30 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('this.engine.setVisibleRanges(rowRange, colRange);');
 		expect(content).not.toContain('this.engine.stateManager.setState({');
 	});
+
+	it('GridChangeApplier exposes explicit commit results and non-recursive history records (Plan 104)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
+		expect(content).toContain("status: 'committed'");
+		expect(content).toContain("status: 'noop'");
+		expect(content).toContain("status: 'rejected'");
+		expect(content).toContain("status: 'faulted'");
+		expect(content).toContain('history?: GridHistoryEntry<TRowData>;');
+		expect(content).toContain('events?: GridChangeEvent<TRowData>[];');
+		expect(content).not.toContain('undo?: GridChange<TRowData>;');
+		expect(content).not.toContain('redo?: GridChange<TRowData>;');
+	});
+
+	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {
+		const files = [
+			resolve(CORE_ROOT, 'src', 'features', 'ColumnFeatureController.ts'),
+			resolve(CORE_ROOT, 'src', 'features', 'EditingFeatureController.ts'),
+			resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'),
+			resolve(CORE_ROOT, 'src', 'features', 'GroupingFeatureController.ts'),
+			resolve(CORE_ROOT, 'src', 'features', 'RowSelectionFeatureController.ts'),
+			resolve(CORE_ROOT, 'src', 'features', 'ValidationManager.ts'),
+		];
+		for (const file of files) {
+			expect(readFileSync(file, 'utf-8'), `${path.basename(file)} should rely on typed GridChange events`).not.toContain('as never');
+		}
+	});
 });

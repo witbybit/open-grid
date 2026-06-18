@@ -2,6 +2,7 @@ import { GridEventName, type GridEventPayloadMap } from '../api/GridEvents.js';
 
 export type RuntimeFaultSource =
 	| 'event-bus'
+	| 'grid-change'
 	| 'state-manager'
 	| 'command-history'
 	| 'plugin-registry'

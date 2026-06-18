@@ -181,7 +181,7 @@ export class ValidationManager<TRowData = unknown> {
 			events: [
 				{
 					type: GridEventName.gridValidated,
-					payload: { errors: failures, hasErrors: failures.length > 0 } as never,
+					payload: { errors: failures, hasErrors: failures.length > 0 },
 				},
 			],
 		});
@@ -264,7 +264,7 @@ export class ValidationManager<TRowData = unknown> {
 			events: [
 				{
 					type: GridEventName.cellValidationChanged,
-					payload: { rowId, colField, error } as never,
+					payload: { rowId, colField, error },
 				},
 			],
 		});

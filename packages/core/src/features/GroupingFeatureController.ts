@@ -50,7 +50,7 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'overlay', reason: 'groupBy' },
 			],
 			domains: ['rows'],
-			events: [{ type: GridEventName.groupByChanged, payload: { groupBy: colIds } as never }],
+			events: [{ type: GridEventName.groupByChanged, payload: { groupBy: colIds } }],
 		});
 	}
 
@@ -74,8 +74,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 			],
 			domains: ['rows'],
 			events: [
-				{ type: GridEventName.groupByChanged, payload: { groupBy: next } as never },
-				{ type: GridEventName.groupColumnAdded, payload: { colId, index: insertAt, groupBy: next } as never },
+				{ type: GridEventName.groupByChanged, payload: { groupBy: next } },
+				{ type: GridEventName.groupColumnAdded, payload: { colId, index: insertAt, groupBy: next } },
 			],
 		});
 	}
@@ -98,8 +98,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 			],
 			domains: ['rows'],
 			events: [
-				{ type: GridEventName.groupByChanged, payload: { groupBy: next } as never },
-				{ type: GridEventName.groupColumnRemoved, payload: { colId, groupBy: next } as never },
+				{ type: GridEventName.groupByChanged, payload: { groupBy: next } },
+				{ type: GridEventName.groupColumnRemoved, payload: { colId, groupBy: next } },
 			],
 		});
 	}
@@ -127,8 +127,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 			],
 			domains: ['rows'],
 			events: [
-				{ type: GridEventName.groupByChanged, payload: { groupBy: next } as never },
-				{ type: GridEventName.groupColumnMoved, payload: { colId, fromIndex, toIndex: boundedTo, groupBy: next } as never },
+				{ type: GridEventName.groupByChanged, payload: { groupBy: next } },
+				{ type: GridEventName.groupColumnMoved, payload: { colId, fromIndex, toIndex: boundedTo, groupBy: next } },
 			],
 		});
 	}
@@ -139,7 +139,7 @@ export class GroupingFeatureController<TRowData = unknown> {
 			state: { aggDefs: defs },
 			invalidations: [{ kind: 'viewport' }, { kind: 'overlay' }],
 			domains: ['rows'],
-			events: [{ type: GridEventName.aggDefsChanged, payload: { aggDefs: defs } as never }],
+			events: [{ type: GridEventName.aggDefsChanged, payload: { aggDefs: defs } }],
 		});
 	}
 
@@ -153,7 +153,7 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'overlay', reason: 'showGroupFooter' },
 			],
 			domains: ['rows', 'geometry'],
-			events: [{ type: GridEventName.showGroupFooterChanged, payload: { showGroupFooter: enabled } as never }],
+			events: [{ type: GridEventName.showGroupFooterChanged, payload: { showGroupFooter: enabled } }],
 		});
 	}
 
@@ -163,7 +163,7 @@ export class GroupingFeatureController<TRowData = unknown> {
 			state: { enableStickyGroupRows: enabled },
 			invalidations: [{ kind: 'viewport', reason: 'enableStickyGroupRows' }],
 			domains: ['rows'],
-			events: [{ type: GridEventName.enableStickyGroupRowsChanged, payload: { enableStickyGroupRows: enabled } as never }],
+			events: [{ type: GridEventName.enableStickyGroupRowsChanged, payload: { enableStickyGroupRows: enabled } }],
 		});
 	}
 

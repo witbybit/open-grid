@@ -121,7 +121,7 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 				{ kind: 'headers', reason: 'selection' },
 			],
 			domains: ['selection'],
-			events: [{ type: GridEventName.rowSelectionChanged, payload: result as never }],
+			events: [{ type: GridEventName.rowSelectionChanged, payload: result }],
 		});
 		return result;
 	}

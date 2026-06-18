@@ -55,7 +55,7 @@ export class EditingFeatureController<TRowData = unknown> {
 				{ kind: 'overlay', reason: 'edit started' },
 			],
 			domains: ['editing'],
-			events: [{ type: GridEventName.editStarted, payload: { rowId, colField } as never }],
+			events: [{ type: GridEventName.editStarted, payload: { rowId, colField } }],
 		});
 		this.notifyCellChange(rowId, colField);
 	}
@@ -73,7 +73,7 @@ export class EditingFeatureController<TRowData = unknown> {
 				{ kind: 'overlay', reason: 'edit stopped' },
 			],
 			domains: ['editing'],
-			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel } as never }],
+			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel } }],
 		});
 		this.notifyCellChange(rowId, colField);
 	}

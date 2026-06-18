@@ -139,7 +139,7 @@ export class GridStateFeatureController<TRowData = unknown> {
 			state: { sortModel },
 			invalidations: [{ kind: 'headers' }, { kind: 'full' }],
 			domains: ['rows', 'sorting'],
-			events: [{ type: GridEventName.sortChanged, payload: { sortModel } as never }],
+			events: [{ type: GridEventName.sortChanged, payload: { sortModel } }],
 			requestRender: true,
 		});
 
@@ -158,7 +158,7 @@ export class GridStateFeatureController<TRowData = unknown> {
 			state: { filterModel },
 			invalidations: [{ kind: 'full' }],
 			domains: ['rows', 'filtering'],
-			events: [{ type: GridEventName.filterChanged, payload: { filterModel } as never }],
+			events: [{ type: GridEventName.filterChanged, payload: { filterModel } }],
 			requestRender: true,
 		});
 
@@ -186,7 +186,7 @@ export class GridStateFeatureController<TRowData = unknown> {
 			reason: 'rows:set-pagination-page',
 			state: { pagination: { pageSize: current.pageSize, page: nextPage } },
 			domains: ['rows'],
-			events: [{ type: GridEventName.paginationChanged, payload: payload as never }],
+			events: [{ type: GridEventName.paginationChanged, payload }],
 			requestRender: true,
 		});
 	}
@@ -197,7 +197,7 @@ export class GridStateFeatureController<TRowData = unknown> {
 			state: (state) => ({ rowHeights: { ...state.rowHeights, [rowId]: height } }),
 			invalidations: [{ kind: 'geometry' }, { kind: 'row', rowId, reason: 'row resize' }],
 			domains: ['geometry'],
-			events: [{ type: GridEventName.rowResized, payload: { rowId, height } as never }],
+			events: [{ type: GridEventName.rowResized, payload: { rowId, height } }],
 			requestRender: true,
 		});
 	}

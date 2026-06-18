@@ -348,6 +348,7 @@ export class GridEngine<TRowData = unknown> {
 			commandHistory: this.commandHistory,
 			requestRender: (reason) => this.requestRender(reason),
 			incrementDomain: (domain) => this.incrementDomain(domain),
+			faultReporter: this.runtimeFaults,
 		});
 
 		// Initialize feature controllers (columns model will be linked after sub-models init)
