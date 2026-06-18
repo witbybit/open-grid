@@ -1451,6 +1451,84 @@ describe('GridStore undo and redo functionality', () => {
 		controller.dispose();
 	});
 
+	it('setFilterModel keeps state, domain versions, history, events, and render requests coherent', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alpha', price: 10 },
+				{ id: '2', name: 'Beta', price: 20 },
+				{ id: '3', name: 'Gamma', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+		const renderInvalidated = vi.fn();
+		const filterChanged = vi.fn();
+		const rowsDomain = vi.fn();
+		const filteringDomain = vi.fn();
+		const domainSnapshots: Array<{ rows: number; filtering: number }> = [];
+		const initialVersions = {
+			rows: store.engine.getDomainVersions().rows,
+			filtering: store.engine.getDomainVersions().filtering,
+		};
+
+		store.addEventListener(GridEventName.renderInvalidated, renderInvalidated);
+		store.addEventListener(GridEventName.filterChanged, filterChanged);
+		store.subscribeDomain('rows', rowsDomain);
+		store.subscribeDomain('filtering', filteringDomain);
+		store.subscribeToDomainVersions((versions) => {
+			domainSnapshots.push({ rows: versions.rows, filtering: versions.filtering });
+		});
+		const initialRowsDomainCalls = rowsDomain.mock.calls.length;
+		const initialFilteringDomainCalls = filteringDomain.mock.calls.length;
+
+		const filterModel = { name: { type: 'text', operator: 'contains', value: 'a' } } as const;
+
+		store.setFilterModel(filterModel);
+
+		expect(store.getState().filterModel).toEqual(filterModel);
+		expect(renderInvalidated).toHaveBeenCalledTimes(1);
+		expect(renderInvalidated).toHaveBeenLastCalledWith(expect.objectContaining({ payload: { reason: 'rows:set-filter-model' } }));
+		expect(filterChanged).toHaveBeenCalledTimes(1);
+		expect(filterChanged).toHaveBeenLastCalledWith(expect.objectContaining({ payload: { filterModel } }));
+		expect(rowsDomain.mock.calls.length - initialRowsDomainCalls).toBe(2);
+		expect(filteringDomain.mock.calls.length - initialFilteringDomainCalls).toBe(1);
+		expect(store.engine.getDomainVersions()).toMatchObject({
+			rows: initialVersions.rows + 2,
+			filtering: initialVersions.filtering + 1,
+		});
+		expect(domainSnapshots.at(-1)).toMatchObject({
+			rows: initialVersions.rows + 2,
+			filtering: initialVersions.filtering + 1,
+		});
+		expect(store.canUndo()).toBe(true);
+
+		store.undo();
+
+		expect(store.getState().filterModel).toBeNull();
+		expect(renderInvalidated).toHaveBeenCalledTimes(2);
+		expect(filterChanged).toHaveBeenCalledTimes(2);
+		expect(filterChanged).toHaveBeenLastCalledWith(expect.objectContaining({ payload: { filterModel: null } }));
+		expect(rowsDomain.mock.calls.length - initialRowsDomainCalls).toBe(4);
+		expect(filteringDomain.mock.calls.length - initialFilteringDomainCalls).toBe(2);
+		expect(store.engine.getDomainVersions()).toMatchObject({
+			rows: initialVersions.rows + 4,
+			filtering: initialVersions.filtering + 2,
+		});
+		expect(domainSnapshots.at(-1)).toMatchObject({
+			rows: initialVersions.rows + 4,
+			filtering: initialVersions.filtering + 2,
+		});
+
+		controller.dispose();
+	});
+
 	it('captures event-listener faults as runtime diagnostics instead of throwing through the bus', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
