@@ -1341,4 +1341,10 @@ describe('Architecture guardrails', () => {
 		);
 		expect(content).not.toContain('this.engine.setState({');
 	});
+
+	it('GridEngine setData and range selection route through GridChangeApplier (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+		expect(content).toContain("reason: 'columns:set-data'");
+		expect(content).toContain("reason: 'selection:set-range'");
+	});
 });

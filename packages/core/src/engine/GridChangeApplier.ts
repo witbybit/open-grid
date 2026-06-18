@@ -7,6 +7,7 @@ import type { CommandHistory } from '../commands/CommandHistory.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 
 export type GridChangeReason =
+	| 'columns:set-data'
 	| 'columns:resize'
 	| 'columns:order'
 	| 'columns:reorder-toggle'
@@ -19,6 +20,7 @@ export type GridChangeReason =
 	| 'grouping:set-footer'
 	| 'grouping:set-sticky-rows'
 	| 'grouping:set-panel'
+	| 'selection:set-range'
 	| 'selection:rows'
 	| 'editing:start'
 	| 'editing:stop'

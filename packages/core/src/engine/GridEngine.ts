@@ -433,18 +433,16 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public setData(payload: { columns?: ColumnDef<TRowData>[]; defaultColWidth?: number; defaultRowHeight?: number }): void {
-		this.stateManager.setState((state) => ({
-			...state,
-			...payload,
-		}));
-		if (payload.columns !== undefined || payload.defaultColWidth !== undefined) {
-			this.incrementDomain('columns');
-		}
-		if (payload.defaultRowHeight !== undefined) {
-			this.incrementDomain('geometry');
-		}
-		this.invalidation.invalidateFull('set data');
-		this.requestRender('set data');
+		const domains: Array<keyof GridDomainVersions> = [];
+		if (payload.columns !== undefined || payload.defaultColWidth !== undefined) domains.push('columns');
+		if (payload.defaultRowHeight !== undefined) domains.push('geometry');
+		this.changeApplier.apply({
+			reason: 'columns:set-data',
+			state: (state) => ({ ...state, ...payload }),
+			invalidations: [{ kind: 'full', reason: 'set data' }],
+			domains,
+			requestRender: true,
+		});
 		this.commandHistory.clear();
 	}
 
@@ -858,10 +856,12 @@ export class GridEngine<TRowData = unknown> {
 			range,
 			source,
 		});
-		this.stateManager.setState({
-			selection,
+		this.changeApplier.apply({
+			reason: 'selection:set-range',
+			state: { selection },
+			domains: ['selection'],
+			requestRender: false,
 		});
-		this.incrementDomain('selection');
 	};
 
 	private canEditCell(rowId: string, colField: string): boolean {
