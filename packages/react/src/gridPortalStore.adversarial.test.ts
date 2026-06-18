@@ -49,22 +49,76 @@ describe('createPortalStore — adversarial lifecycle invariants', () => {
 		const nodeB = makeNode('row-b', 'New');
 		const updater = vi.fn(() => true);
 
-		store.mountCell('slot-0:name', container, 'Old', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined, 1);
+		store.mountCell('slot-0:name', container, 'Old', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined, {
+			rowSlotId: 'slot-0',
+			slotGeneration: 1,
+		});
 		store.registerImperativeUpdater?.('slot-0:name', updater);
 
-		expect(store.tryImperativeUpdate?.('slot-0:name', 'Old+', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined, 1)).toBe(
-			true
-		);
+		expect(
+			store.tryImperativeUpdate?.('slot-0:name', 'Old+', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined, {
+				rowSlotId: 'slot-0',
+				slotGeneration: 1,
+			})
+		).toBe(true);
 		expect(updater).toHaveBeenCalledTimes(1);
 
-		store.mountCell('slot-0:name', container, 'New', nodeB, COLUMN, false, false, undefined, undefined, undefined, undefined, 2);
+		store.mountCell('slot-0:name', container, 'New', nodeB, COLUMN, false, false, undefined, undefined, undefined, undefined, {
+			rowSlotId: 'slot-0',
+			slotGeneration: 2,
+		});
 
-		expect(store.tryImperativeUpdate?.('slot-0:name', 'STALE', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined, 1)).toBe(
-			false
-		);
+		expect(
+			store.tryImperativeUpdate?.('slot-0:name', 'STALE', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined, {
+				rowSlotId: 'slot-0',
+				slotGeneration: 1,
+			})
+		).toBe(false);
 		expect(updater).toHaveBeenCalledTimes(1);
 		expect(store.getCellData?.('slot-0:name')?.value).toBe('New');
-		expect(store.getCellData?.('slot-0:name')?.slotGeneration).toBe(2);
+		expect(store.getCellData?.('slot-0:name')?.physicalIdentity).toEqual({ rowSlotId: 'slot-0', slotGeneration: 2 });
+	});
+
+	it('rejects stale imperative updates when slot id mismatches even if generation matches', () => {
+		const store = createPortalStore<TestRow>();
+		const container = document.createElement('div');
+		const updater = vi.fn(() => true);
+
+		store.mountCell(
+			'slot-0:name',
+			container,
+			'Current',
+			makeNode('row-a', 'Current'),
+			COLUMN,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-0',
+				slotGeneration: 7,
+			}
+		);
+		store.registerImperativeUpdater?.('slot-0:name', updater);
+
+		expect(
+			store.tryImperativeUpdate?.(
+				'slot-0:name',
+				'STALE-WRONG-SLOT',
+				makeNode('row-a', 'Current'),
+				COLUMN,
+				false,
+				false,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				{ rowSlotId: 'slot-1', slotGeneration: 7 }
+			)
+		).toBe(false);
+		expect(updater).not.toHaveBeenCalled();
 	});
 
 	it('recycled containers retain only the latest cell and row owners under seeded churn', async () => {
@@ -96,7 +150,7 @@ describe('createPortalStore — adversarial lifecycle invariants', () => {
 					undefined,
 					undefined,
 					undefined,
-					generation
+					{ rowSlotId: `slot-${container === cellContainers[0] ? 0 : 1}`, slotGeneration: generation }
 				);
 				activeCellByContainer.set(container, cellKey);
 			} else if (op === 1) {

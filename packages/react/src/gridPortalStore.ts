@@ -1,8 +1,20 @@
 import { flushSync } from 'react-dom';
 import type { ColumnDef, RowNode, VisualRow, CellRendererPhase } from '@open-grid/core';
-import type { PortalData, RowPortalData, MenuPortalData, CellPortalSnapshot, RowMenuPortalSnapshot, ImperativeUpdaterFn } from './gridPortalTypes.js';
+import type {
+	PortalData,
+	RowPortalData,
+	MenuPortalData,
+	CellPortalSnapshot,
+	RowMenuPortalSnapshot,
+	ImperativeUpdaterFn,
+	CellPortalPhysicalIdentity,
+} from './gridPortalTypes.js';
 
 export type ConcretePortalStore<TRowData> = ReturnType<typeof createPortalStore<TRowData>>;
+
+function isSamePhysicalIdentity(left: CellPortalPhysicalIdentity | undefined, right: CellPortalPhysicalIdentity | undefined): boolean {
+	return left?.rowSlotId === right?.rowSlotId && left?.slotGeneration === right?.slotGeneration;
+}
 
 export function createPortalStore<TRowData = unknown>() {
 	// Mutable maps — source of truth
@@ -155,14 +167,12 @@ export function createPortalStore<TRowData = unknown>() {
 			isScrolling: boolean | undefined,
 			isFocused: boolean | undefined,
 			isSelected: boolean | undefined,
-			slotGeneration?: number
+			physicalIdentity: CellPortalPhysicalIdentity
 		): boolean {
 			const fn = imperativeUpdaters.get(cellKey);
 			if (!fn) return false;
-			// Reject stale imperative updates: if the slot was rebound (generation changed)
-			// the stored renderer belongs to a different row — force a structural mount.
 			const existing = portals.get(cellKey);
-			if (slotGeneration !== undefined && existing?.slotGeneration !== undefined && existing.slotGeneration !== slotGeneration) {
+			if (!isSamePhysicalIdentity(existing?.physicalIdentity, physicalIdentity)) {
 				return false;
 			}
 			return fn(value, node, col, isEditing, isLoading, phase, isScrolling, isFocused, isSelected);
@@ -177,11 +187,11 @@ export function createPortalStore<TRowData = unknown>() {
 			col: ColumnDef<TRowData>,
 			isEditing: boolean,
 			isLoading: boolean,
-			phase?: CellRendererPhase,
-			isScrolling?: boolean,
-			isFocused?: boolean,
-			isSelected?: boolean,
-			slotGeneration?: number
+			phase: CellRendererPhase | undefined,
+			isScrolling: boolean | undefined,
+			isFocused: boolean | undefined,
+			isSelected: boolean | undefined,
+			physicalIdentity: CellPortalPhysicalIdentity
 		) {
 			const existing = portals.get(cellKey);
 
@@ -201,7 +211,7 @@ export function createPortalStore<TRowData = unknown>() {
 				existing.isScrolling === isScrolling &&
 				existing.isFocused === isFocused &&
 				existing.isSelected === isSelected &&
-				existing.slotGeneration === slotGeneration
+				isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)
 			) {
 				cellPortalKeyByContainer.set(container, cellKey);
 				return;
@@ -232,7 +242,7 @@ export function createPortalStore<TRowData = unknown>() {
 				isScrolling,
 				isFocused,
 				isSelected,
-				slotGeneration,
+				physicalIdentity,
 			});
 			cellPortalKeyByContainer.set(container, cellKey);
 

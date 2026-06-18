@@ -554,10 +554,10 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('rowId: string');
 	});
 
-	it('portal mount equality check compares slotGeneration (Plan 081)', () => {
+	it('portal mount equality check compares full physical identity in React store (Plan 110)', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalStore.ts'), 'utf-8');
-		// slotGeneration must participate in the equality guard to prevent stale portal ownership.
-		expect(content).toContain('existing.slotGeneration === slotGeneration');
+		expect(content).toContain('isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)');
+		expect(content).toContain('existing?.physicalIdentity');
 	});
 
 	it('deferred cell mounts validate generation before executing (Plan 081)', () => {
@@ -674,9 +674,7 @@ describe('Architecture guardrails', () => {
 		const violators: string[] = [];
 		for (const file of files) {
 			const content = readFileSync(file, 'utf-8');
-			// GridStore import is allowed only in createRowModelRuntimes.ts (bridge factory).
-			const isAllowedBridge = file.endsWith('createRowModelRuntimes.ts');
-			if (!isAllowedBridge && (content.includes("from '../store.js'") || content.includes('from "../store.js"'))) {
+			if (content.includes("from '../store.js'") || content.includes('from "../store.js"')) {
 				violators.push(path.relative(engineDir, file));
 			}
 		}
@@ -1203,6 +1201,14 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'IGridRenderer.ts'), 'utf-8');
 		expect(content).toContain('rowSlotId: string;');
 		expect(content).not.toContain('rowSlotId?: string');
+	});
+
+	it('React portal store requires physical identity for pooled cell mounts (Plan 110)', () => {
+		const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalTypes.ts'), 'utf-8');
+		expect(content).toContain('export interface CellPortalPhysicalIdentity');
+		expect(content).toContain('rowSlotId: string;');
+		expect(content).toContain('slotGeneration: number;');
+		expect(content).toContain('physicalIdentity: CellPortalPhysicalIdentity;');
 	});
 
 	it('GridCellContentUnmount.slotGeneration is required (not optional) (Plan 100)', () => {

@@ -398,7 +398,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
 
 		const store = createPortalStore<TestRow>();
-		store.mountCell('1:name', container, 'Product A', node, colDef, false, false);
+		store.mountCell('1:name', container, 'Product A', node, colDef, false, false, undefined, undefined, undefined, undefined, {
+			rowSlotId: 'slot-1',
+			slotGeneration: 1,
+		});
 
 		render(<PortalManager store={store} api={grid.api} />);
 
@@ -428,8 +431,14 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const colDef = grid.api.getColumnDef('name')!;
 
 		const store = createPortalStore<TestRow>();
-		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false);
-		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false);
+		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+			rowSlotId: 'slot-1',
+			slotGeneration: 1,
+		});
+		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+			rowSlotId: 'slot-1',
+			slotGeneration: 2,
+		});
 
 		render(<PortalManager store={store} api={grid.api} />);
 
@@ -452,8 +461,14 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const container = document.createElement('div');
 		const colDef = grid.api.getColumnDef('name')!;
 
-		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false);
-		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false);
+		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+			rowSlotId: 'slot-1',
+			slotGeneration: 1,
+		});
+		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+			rowSlotId: 'slot-1',
+			slotGeneration: 2,
+		});
 		await act(async () => {
 			await Promise.resolve();
 		});
@@ -484,7 +499,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const colDef = grid.api.getColumnDef('name')!;
 
 		// Mount cell first (structural change)
-		store.mountCell(cellKey, container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false);
+		store.mountCell(cellKey, container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+			rowSlotId: 'slot-1',
+			slotGeneration: 1,
+		});
 		await act(async () => {
 			await Promise.resolve();
 		});
@@ -494,7 +512,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const unsubscribeCell = store.subscribeToCell!(cellKey, cellListener);
 
 		// Update cell data only (non-structural change)
-		store.mountCell(cellKey, container, 'New', grid.api.getRowNodeById('1')!, colDef, false, false);
+		store.mountCell(cellKey, container, 'New', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+			rowSlotId: 'slot-1',
+			slotGeneration: 2,
+		});
 
 		// The structural listener should NOT have fired again (remains 1)
 		expect(structuralListener).toHaveBeenCalledTimes(1);

@@ -108,7 +108,7 @@ export function GridView<TRowData = unknown>({
 								mount.isScrolling,
 								mount.isFocused,
 								mount.isSelected,
-								mount.slotGeneration
+								{ rowSlotId: mount.rowSlotId, slotGeneration: mount.slotGeneration }
 							)
 						)
 							return;
@@ -125,7 +125,7 @@ export function GridView<TRowData = unknown>({
 						mount.isScrolling,
 						mount.isFocused,
 						mount.isSelected,
-						mount.slotGeneration
+						{ rowSlotId: mount.rowSlotId, slotGeneration: mount.slotGeneration }
 					);
 				},
 				unmountCellContent: (unmount) => {

@@ -1,8 +1,7 @@
 import { GridEventName } from '../api/GridEvents.js';
-import type { GridStore } from '../store.js';
-import type { ClientRowModelRuntime, ServerRowModelRuntime } from './runtimePorts.js';
+import type { ClientRowModelRuntime, RowModelRuntimeStoreBridge, ServerRowModelRuntime } from './runtimePorts.js';
 
-export function createClientRowModelRuntime<TRowData>(store: GridStore<TRowData>): ClientRowModelRuntime<TRowData> {
+export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ClientRowModelRuntime<TRowData> {
 	return {
 		getState: store.getState,
 		initializeModel: (model) => store.engine.initializeRowModelState(model),
@@ -31,7 +30,7 @@ export function createClientRowModelRuntime<TRowData>(store: GridStore<TRowData>
 	};
 }
 
-export function createServerRowModelRuntime<TRowData>(store: GridStore<TRowData>): ServerRowModelRuntime<TRowData> {
+export function createServerRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ServerRowModelRuntime<TRowData> {
 	return {
 		getState: store.getState,
 		initializeModel: (model) => store.engine.initializeRowModelState(model),

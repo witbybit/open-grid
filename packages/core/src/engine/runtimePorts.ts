@@ -5,7 +5,7 @@ import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import type { GeometryModel } from '../models/GeometryModel.js';
 import type { RowModel } from '../rowModel.js';
 import type { GridState } from '../state/GridState.js';
-import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
+import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 
 export interface DataModelRuntime<TRowData = unknown> {
@@ -83,4 +83,36 @@ export interface ServerRowModelRuntime<TRowData = unknown> extends RowModelRunti
 	dispatchServerBlockLoadFailed: (payload: GridEventPayloadMap<TRowData>[GridEventName.serverBlockLoadFailed]) => void;
 	dispatchPaginationChanged: (payload: GridEventPayloadMap<TRowData>[GridEventName.paginationChanged]) => void;
 	reportBlockLoadFailure: (blockIndex: number, error: unknown) => void;
+}
+
+export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
+	initializeRowModelState: (model: { columns?: ColumnDef<TRowData>[]; getRowId?: ((row: TRowData) => string) | undefined }) => void;
+	bumpRowModelGlobalVersion: () => void;
+	updateExpansionState: (updater: (expansion: GridState<TRowData>['expansion']) => GridState<TRowData>['expansion']) => void;
+	clearFormulas: () => void;
+	syncFormulaForCell: (rowId: string, colField: string, value: unknown) => void;
+	invalidateFormulaCell: (rowId: string, colField: string) => FormulaCellCoordinate[];
+	getValueGetterDependents: (colField: string) => string[];
+	hasValueGetter: (colField: string) => boolean;
+	notifyBulkCellChange: (changes: Map<string, Set<string>>) => void;
+	isScrollingFast: () => boolean;
+	getScrollVelocity: () => { vx: number; vy: number };
+	setRowModelLoadingState: (loading: boolean) => void;
+	setServerPaginationState: (payload: GridEventPayloadMap<TRowData>[GridEventName.paginationChanged]) => void;
+}
+
+export interface RowModelRuntimeStoreBridge<TRowData = unknown> {
+	engine: RowModelRuntimeEngineBridge<TRowData>;
+	getState: () => GridState<TRowData>;
+	registerRowModel: (rowModel: RowModel<TRowData>) => void;
+	addEventListener: <K extends keyof GridEventPayloadMap<TRowData>>(
+		type: K,
+		callback: GridEventListener<GridEventPayloadMap<TRowData>[K]>
+	) => () => void;
+	getRowId: (row: TRowData) => string;
+	getColumnDef: (colField: string) => ColumnDef<TRowData> | undefined;
+	getCellValue: (rowId: string, colField: string) => unknown;
+	dispatchEvent: <K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]) => void;
+	reportRuntimeFault: (fault: RuntimeFaultInput) => RuntimeFault;
+	getInstrumentation: () => GridInstrumentation;
 }

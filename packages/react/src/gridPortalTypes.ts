@@ -1,5 +1,10 @@
 import type { ColumnDef, GridApi, RowNode, VisualRow, CellRendererPhase } from '@open-grid/core';
 
+export interface CellPortalPhysicalIdentity {
+	rowSlotId: string;
+	slotGeneration: number;
+}
+
 export interface PortalCellProps<TRowData = unknown> {
 	rowId: string;
 	colField: string;
@@ -26,8 +31,8 @@ export interface PortalData<TRowData = unknown> {
 	isScrolling?: boolean;
 	isFocused?: boolean;
 	isSelected?: boolean;
-	/** Slot generation at the time this cell was mounted — used to reject stale async updates. */
-	slotGeneration?: number;
+	/** Physical ownership identity for pooled cell portals. */
+	physicalIdentity: CellPortalPhysicalIdentity;
 }
 
 /** Snapshot used by the optimised CellPortalPool — rebuilt only on structural changes (add/remove). */
@@ -89,7 +94,7 @@ export interface PortalStore<TRowData = unknown> {
 		isScrolling: boolean | undefined,
 		isFocused: boolean | undefined,
 		isSelected: boolean | undefined,
-		slotGeneration?: number
+		physicalIdentity: CellPortalPhysicalIdentity
 	): boolean;
 	mountCell(
 		cellKey: string,
@@ -99,11 +104,11 @@ export interface PortalStore<TRowData = unknown> {
 		col: ColumnDef<TRowData>,
 		isEditing: boolean,
 		isLoading: boolean,
-		phase?: CellRendererPhase,
-		isScrolling?: boolean,
-		isFocused?: boolean,
-		isSelected?: boolean,
-		slotGeneration?: number
+		phase: CellRendererPhase | undefined,
+		isScrolling: boolean | undefined,
+		isFocused: boolean | undefined,
+		isSelected: boolean | undefined,
+		physicalIdentity: CellPortalPhysicalIdentity
 	): void;
 	unmountCell(cellKey: string, container?: HTMLElement, sync?: boolean): void;
 }
