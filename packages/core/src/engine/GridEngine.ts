@@ -13,7 +13,7 @@ import type {
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { GridState, GridStateUpdater, Listener } from '../state/GridState.js';
-import type { RowModel } from '../rowModel.js';
+import type { RowModel, VisualRowModel } from '../rowModel.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
 import { EventBus } from '../events/EventBus.js';
@@ -668,6 +668,11 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public getRowModel(): RowModel<TRowData> | null {
+		return this.rowModel;
+	}
+
+	/** Renderer-facing row model contract. Renderer paths must use this, not getRowModel(). */
+	public getVisualRowModel(): VisualRowModel<TRowData> | null {
 		return this.rowModel;
 	}
 

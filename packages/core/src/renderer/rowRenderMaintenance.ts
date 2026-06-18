@@ -54,7 +54,7 @@ function getMaintenanceWindowPins<TRowData>(
 }
 
 export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
-	const rowModel = deps.engine.getRowModel();
+	const rowModel = deps.engine.getVisualRowModel();
 	if (!rowModel) return;
 
 	const state = deps.engine.stateManager.getState();
@@ -166,7 +166,7 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 		return { remaining: 0, processed: 0 };
 	}
 
-	const rowModel = deps.engine.getRowModel();
+	const rowModel = deps.engine.getVisualRowModel();
 	if (!rowModel) {
 		deps.dirtyCellsAfterScroll.clear();
 		deps.dirtyRowsAfterScroll.clear();

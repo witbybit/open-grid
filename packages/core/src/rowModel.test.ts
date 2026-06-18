@@ -1291,3 +1291,204 @@ describe('Aggregation input mutation correctness (Plan 092)', () => {
 	});
 });
 
+// ── Plan 099: Differential correctness tests ─────────────────────────────────
+//
+// Invariant: incremental and full-rebuild paths must produce identical visual
+// output for any supported mutation sequence. Each test applies mutations
+// incrementally to one controller and compares the visual row sequence to a
+// controller rebuilt from scratch with the final row state.
+
+function snapshotVisualRows<TData>(controller: ClientRowModelController<TData>): string[] {
+	const result: string[] = [];
+	for (let i = 0; i < controller.getVisualRowCount(); i++) {
+		const vr = controller.getVisualRow(i);
+		result.push(vr ? vr.id : `null:${i}`);
+	}
+	return result;
+}
+
+describe('ClientRowModelController – differential correctness (Plan 099)', () => {
+	it('incremental add produces same order as full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+		];
+		const added = { id: '3', name: 'Charlie' };
+
+		// Incremental path: start with initial, then add.
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		incr.applyTransaction!({ add: [added] });
+
+		// Full rebuild: construct from scratch with all three rows.
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial, added],
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('incremental remove produces same order as full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Charlie' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		incr.applyTransaction!({ remove: [initial[1]] }); // remove by row object (matched by row ID)
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [initial[0], initial[2]],
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('incremental update produces same order as full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		incr.applyTransaction!({ update: [{ id: '1', name: 'Alicia' }] });
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Alicia' }, initial[1]],
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		// Raw data must match too.
+		expect(incr.getRawRowById('1')).toEqual({ id: '1', name: 'Alicia' });
+		expect(full.getRawRowById('1')).toEqual({ id: '1', name: 'Alicia' });
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('incremental add+remove sequence produces same order as full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Charlie' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		// Remove Bob, add Dave (remove takes row objects matched by ID).
+		incr.applyTransaction!({ remove: [initial[1]], add: [{ id: '4', name: 'Dave' }] });
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [initial[0], initial[2], { id: '4', name: 'Dave' }],
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('setRows produces same order as equivalent full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [{ id: '1', name: 'Alice' }];
+		const replacement = [
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Charlie' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: initial,
+			columns: store.getState().columns,
+		});
+		incr.setRows!(replacement);
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: replacement,
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('sort: incremental re-sort matches full rebuild with same sort model', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'name' }],
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+		});
+		const initial = [
+			{ id: '1', name: 'Charlie' },
+			{ id: '2', name: 'Alice' },
+			{ id: '3', name: 'Bob' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+
+		// Both should produce same ascending-name order.
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		// Verify sorted: Alice (id:2), Bob (id:3), Charlie (id:1)
+		expect(incr.getVisualRow(0)?.id).toBe(toDataVisualRowId('2'));
+		expect(incr.getVisualRow(1)?.id).toBe(toDataVisualRowId('3'));
+		expect(incr.getVisualRow(2)?.id).toBe(toDataVisualRowId('1'));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('lookup consistency: getVisualIndexByRowId inverse of getVisualRow after mutations', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Charlie' },
+		];
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		controller.applyTransaction!({ remove: [initial[1]], add: [{ id: '4', name: 'Dave' }] });
+
+		// After mutation: verify lookup consistency for all remaining rows.
+		for (let i = 0; i < controller.getVisualRowCount(); i++) {
+			const vr = controller.getVisualRow(i);
+			if (vr?.kind !== 'data') continue;
+			const idx = controller.getVisualIndexByRowId(vr.rowId);
+			expect(idx).toBe(i);
+		}
+		// Removed row must not be found.
+		expect(controller.getVisualIndexByRowId('2')).toBe(-1);
+		controller.dispose();
+	});
+});
+

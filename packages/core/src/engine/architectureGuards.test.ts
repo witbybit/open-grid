@@ -1084,4 +1084,42 @@ describe('Architecture guardrails', () => {
 		expect(reContent).not.toContain('scheduleScrollEnd');
 		expect(reContent).not.toContain('clearScrollEndTimer');
 	});
+
+	// ── Plan 099: Row model and derived data authority ───────────────────────
+
+	it('VisualRowModel interface is defined in rowModel.ts (Plan 099)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(content).toContain('export interface VisualRowModel<');
+		// Core renderer-facing methods must be present.
+		expect(content).toContain('getVisualRow(');
+		expect(content).toContain('getVisualRowCount():');
+		expect(content).toContain('getVisualIndexById(');
+		expect(content).toContain('getVisualIndexByRowId(');
+	});
+
+	it('RowModel extends VisualRowModel (Plan 099)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(content).toContain('RowModel<TRowData = unknown> extends VisualRowModel<TRowData>');
+	});
+
+	it('GridEngine exposes getVisualRowModel() for renderer-agnostic row access (Plan 099)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+		expect(content).toContain('getVisualRowModel()');
+		expect(content).toContain('VisualRowModel<TRowData>');
+	});
+
+	it('renderer core paths use getVisualRowModel(), not getRowModel() (Plan 099)', () => {
+		// These are the pure visual rendering paths that must not touch mutation APIs.
+		const renderWindowContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderWindow.ts'), 'utf-8');
+		expect(renderWindowContent).toContain('getVisualRowModel()');
+		expect(renderWindowContent).not.toContain('engine.getRowModel()');
+
+		const geometryContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'geometryController.ts'), 'utf-8');
+		expect(geometryContent).toContain('getVisualRowModel()');
+		expect(geometryContent).not.toContain('engine.getRowModel()');
+
+		const maintenanceContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderMaintenance.ts'), 'utf-8');
+		expect(maintenanceContent).toContain('getVisualRowModel()');
+		expect(maintenanceContent).not.toContain('engine.getRowModel()');
+	});
 });

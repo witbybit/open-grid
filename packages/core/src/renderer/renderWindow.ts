@@ -293,7 +293,7 @@ export function createEmptyRenderWindow(): RenderWindow {
  * overwritten every frame.
  */
 export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, target: RenderWindow): void {
-	const rowModel = engine.getRowModel();
+	const rowModel = engine.getVisualRowModel();
 	let rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 	const state = engine.stateManager.getState();
 	if (state.loading && rowCount === 0) {

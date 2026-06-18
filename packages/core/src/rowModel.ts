@@ -55,6 +55,40 @@ export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
 
 export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit' | 'row-order';
 
+/**
+ * The renderer-facing read contract for the row model.
+ *
+ * This is the stable, model-agnostic interface the rendering layer depends on.
+ * It contains only visual-position lookups and row-data accessors — no mutation,
+ * pagination, server-datasource, or client-specific methods. Both
+ * ClientRowModelController and ServerRowModelController satisfy it.
+ *
+ * Renderer code must depend on VisualRowModel, not the full RowModel, so that
+ * client and server implementations remain substitutable and the renderer cannot
+ * accidentally call mutation or model-specific APIs.
+ */
+export interface VisualRowModel<TRowData = unknown> {
+    /** Fetch a rendered row by its visual (display) index, or null if out of range. */
+    getVisualRow(index: number): VisualRow<TRowData> | null;
+    /** Total number of visual rows currently displayed (includes group/aggregate rows). */
+    getVisualRowCount(): number;
+    /** Resolve a visual-row ID to its current visual index, or -1 if not found. */
+    getVisualIndexById(visualRowId: string): number;
+    /** Resolve a data-row ID to its current visual index, or -1 if not found. */
+    getVisualIndexByRowId(rowId: string): number;
+    /** Fetch the RowNode for a given data-row ID, or null. */
+    getRowNodeById(rowId: string): RowNode<TRowData> | null;
+    /** Fetch the raw source data for a given data-row ID, or null. */
+    getRawRowById(rowId: string): TRowData | null;
+    /**
+     * Returns a map from a sticky-group row's visual index to the visual index of
+     * its last descendant. Absent when there are no sticky group rows.
+     */
+    getStickyGroupMeta?(): Map<number, number>;
+    /** Returns the group metadata for a row at the given visual index, or null. */
+    getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
+}
+
 export interface RowModelRefreshResult {
 	changed: boolean;
 	reason?: RowRefreshReason;
@@ -65,15 +99,11 @@ export interface RowModelRefreshResult {
 	groupId?: string;
 }
 
-export interface RowModel<TRowData = unknown> {
-	getVisualRow(index: number): VisualRow<TRowData> | null;
-	getVisualRowCount(): number;
+/** Full row-model contract. Extends VisualRowModel with mutation, selection, and server APIs. */
+export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
 	getDataRowCount?(): number;
+	/** @deprecated Use getVisualIndexById instead. Will be removed in a future release. */
 	getVisualRowIndexById(id: string): number;
-	getVisualIndexById(visualRowId: string): number;
-	getVisualIndexByRowId(rowId: string): number;
-	getRowNodeById(rowId: string): RowNode<TRowData> | null;
-	getRawRowById(rowId: string): TRowData | null;
 	getSelectableDataRowIds?(scope?: RowSelectionScope): string[];
 	toggleGroupExpanded?(groupId: string): RowModelRefreshResult | void;
 	toggleDetailExpanded?(rowId: string): RowModelRefreshResult | void;
@@ -81,13 +111,11 @@ export interface RowModel<TRowData = unknown> {
 	isDetailExpanded?(rowId: string): boolean;
 	expandAllGroups?(): RowModelRefreshResult | void;
 	collapseAllGroups?(): RowModelRefreshResult | void;
-	getStickyGroupMeta?(): Map<number, number>;
 	/** The active client page-window, or null when pagination is off. */
 	getPageWindow?(): PageWindow | null;
 	/** Returns all data nodes (unfiltered) for distinct-value computation. */
 	getAllDataNodes?(): RowNode<TRowData>[];
 	getGroupMeta?(groupId: string): GroupRowMeta | null;
-	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;

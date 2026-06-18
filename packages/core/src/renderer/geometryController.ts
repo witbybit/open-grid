@@ -45,9 +45,9 @@ export class GeometryController<TRowData = unknown> {
 		if (this.invalidColumns.size > 0 || this.allInvalid) {
 			this.engine.columns.updateColumns(state.columns, state.columnWidths, state.defaultColWidth);
 		}
-		if (this.engine.getRowModel() && (this.invalidRows.size > 0 || this.allInvalid)) {
+		if (this.engine.getVisualRowModel() && (this.invalidRows.size > 0 || this.allInvalid)) {
 			const heights: number[] = [];
-			const rowModel = this.engine.getRowModel()!;
+			const rowModel = this.engine.getVisualRowModel()!;
 			for (let i = 0; i < rowModel.getVisualRowCount(); i++) {
 				const row = rowModel.getVisualRow(i);
 				heights.push(row ? (row.height ?? state.rowHeights[row.id] ?? state.defaultRowHeight) : state.defaultRowHeight);

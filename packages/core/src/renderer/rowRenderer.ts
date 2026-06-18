@@ -287,11 +287,13 @@ export class RowRenderer<TRowData = unknown> {
 			this.renderStats.colsStayedDuringScroll = (this.renderStats.colsStayedDuringScroll || 0) + delta.colsStayed.length;
 		}
 
-		// Load visible blocks if server row model
-		const rowModel = this.engine.getRowModel();
-		if (rowModel && typeof rowModel.loadVisibleBlocks === 'function') {
-			rowModel.loadVisibleBlocks(nextWindow.rowStart, nextWindow.rowEnd);
+		// Load visible blocks if server row model (server-specific, not in VisualRowModel)
+		const fullRowModel = this.engine.getRowModel();
+		if (fullRowModel && typeof fullRowModel.loadVisibleBlocks === 'function') {
+			fullRowModel.loadVisibleBlocks(nextWindow.rowStart, nextWindow.rowEnd);
 		}
+		// Renderer-facing visual row access uses the stable VisualRowModel contract.
+		const rowModel = this.engine.getVisualRowModel();
 
 		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
 		const columns = plan.displayedColumns;
