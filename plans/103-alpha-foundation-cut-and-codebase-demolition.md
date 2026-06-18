@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Create the first coherent foundation cut—not a public stable release—where the target architecture is authoritative, obsolete mechanisms are deleted, reference features pass hard gates, and the codebase is smaller and easier to explain than the POC.
@@ -55,12 +54,14 @@ The implementation is not complete until these are removed or reduced to an expl
 - Generate dependency graph, export graph, file/class responsibility inventory, and dead-code report.
 - For every major subsystem, compare actual code to the architecture constitution.
 - Delete rather than deprecate because no release compatibility exists.
+
 ### Workstream 2 — Create the foundation cut
 
 - Produce clean package manifests, workspace configuration, build/test commands, benchmark commands, and release artifacts.
 - Verify core and React packages from a clean checkout.
 - Integrate the real application using only stable APIs.
 - Write concise architecture, contributor, debugging, and performance docs.
+
 ### Workstream 3 — Hold the foundation review
 
 - Explain the complete mutation and render paths from memory using code references.

@@ -57,7 +57,6 @@ export const headlessThemePort: ThemePort = {
 /** Stable singleton headless ports object. Avoids allocation on every renderer unmount. */
 export const HEADLESS_PORTS: GridRuntimePorts = { renderer: headlessRendererPort, theme: headlessThemePort };
 
-
 /** Opaque token returned by a successful bindRuntimePorts(). Captures the binding generation to detect stale host callbacks. */
 export interface RuntimePortBinding {
 	readonly generation: number;

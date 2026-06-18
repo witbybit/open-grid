@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Define the architecture that all future code must converge toward. Establish one canonical mutation path, one render path, explicit domain ownership, renderer identity rules, package boundaries, feature maturity levels, and release gates.
@@ -54,11 +53,13 @@ The implementation is not complete until these are removed or reduced to an expl
 - Define exact owners for rows, columns, geometry, selection, focus, editing, configuration, persistence, diagnostics, and host binding.
 - Define logical versus physical identity and lifecycle boundaries.
 - Define legal dependency arrows between packages and layers.
+
 ### Workstream 2 — Encode the constitution
 
 - Add dependency-graph architecture tests for illegal imports and back-references.
 - Add a responsibility registry mapping major production classes to one architectural role.
 - Add a PR checklist requiring owner, invalidation, lifecycle, deletion, and benchmark analysis for core changes.
+
 ### Workstream 3 — Classify features
 
 - Mark each feature as foundation, reference, incubating, or deferred.

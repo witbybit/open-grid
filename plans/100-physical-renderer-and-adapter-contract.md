@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Make physical slot ownership and renderer adapter behavior impossible to misunderstand. Native rendering remains the default path; framework adapters receive explicit mount/update/unmount commands keyed by mandatory physical identity generations.
@@ -55,17 +54,20 @@ The implementation is not complete until these are removed or reduced to an expl
 - Define physical slot/lane/index/generation identity separately from logical row/column identity.
 - Define mount, update, move, suspend, and unmount adapter commands.
 - Reject stale commands by exact physical identity equality.
+
 ### Workstream 2 — Collapse renderer ownership
 
 - Make the slot renderer the only owner of physical binding.
 - Choose one custom renderer lifecycle manager; remove parallel portal/custom/DOM ownership where responsibilities overlap.
 - Make warm reuse and cache semantics explicit and bounded.
+
 ### Workstream 3 — Simplify React integration
 
 - Use one structural subscription for adapter commands and targeted editor state delivery.
 - Do not allow portal cells to call `api.getState()` for routine updates.
 - Ensure React Strict Mode mount/unmount behavior is safe.
 - Make adapter failure isolation and cleanup deterministic.
+
 ### Workstream 4 — Unify editing lifecycle
 
 - One edit session owner, one commit/cancel protocol, one validation pipeline.

@@ -146,13 +146,27 @@ export class GridEngine<TRowData = unknown> {
 
 	public incrementDomain(domain: keyof GridDomainVersions): void {
 		switch (domain) {
-			case 'columns': this.columnVersion++; break;
-			case 'rows': this.rowModelVersion++; break;
-			case 'geometry': this.geometryVersion++; break;
-			case 'selection': this.selectionVersion++; break;
-			case 'editing': this.editingVersion++; break;
-			case 'filtering': this.filteringVersion++; break;
-			case 'sorting': this.sortingVersion++; break;
+			case 'columns':
+				this.columnVersion++;
+				break;
+			case 'rows':
+				this.rowModelVersion++;
+				break;
+			case 'geometry':
+				this.geometryVersion++;
+				break;
+			case 'selection':
+				this.selectionVersion++;
+				break;
+			case 'editing':
+				this.editingVersion++;
+				break;
+			case 'filtering':
+				this.filteringVersion++;
+				break;
+			case 'sorting':
+				this.sortingVersion++;
+				break;
 		}
 		this.notifyDomainVersionListeners(domain);
 	}

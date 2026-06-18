@@ -69,25 +69,25 @@ export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion
  * accidentally call mutation or model-specific APIs.
  */
 export interface VisualRowModel<TRowData = unknown> {
-    /** Fetch a rendered row by its visual (display) index, or null if out of range. */
-    getVisualRow(index: number): VisualRow<TRowData> | null;
-    /** Total number of visual rows currently displayed (includes group/aggregate rows). */
-    getVisualRowCount(): number;
-    /** Resolve a visual-row ID to its current visual index, or -1 if not found. */
-    getVisualIndexById(visualRowId: string): number;
-    /** Resolve a data-row ID to its current visual index, or -1 if not found. */
-    getVisualIndexByRowId(rowId: string): number;
-    /** Fetch the RowNode for a given data-row ID, or null. */
-    getRowNodeById(rowId: string): RowNode<TRowData> | null;
-    /** Fetch the raw source data for a given data-row ID, or null. */
-    getRawRowById(rowId: string): TRowData | null;
-    /**
-     * Returns a map from a sticky-group row's visual index to the visual index of
-     * its last descendant. Absent when there are no sticky group rows.
-     */
-    getStickyGroupMeta?(): Map<number, number>;
-    /** Returns the group metadata for a row at the given visual index, or null. */
-    getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
+	/** Fetch a rendered row by its visual (display) index, or null if out of range. */
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	/** Total number of visual rows currently displayed (includes group/aggregate rows). */
+	getVisualRowCount(): number;
+	/** Resolve a visual-row ID to its current visual index, or -1 if not found. */
+	getVisualIndexById(visualRowId: string): number;
+	/** Resolve a data-row ID to its current visual index, or -1 if not found. */
+	getVisualIndexByRowId(rowId: string): number;
+	/** Fetch the RowNode for a given data-row ID, or null. */
+	getRowNodeById(rowId: string): RowNode<TRowData> | null;
+	/** Fetch the raw source data for a given data-row ID, or null. */
+	getRawRowById(rowId: string): TRowData | null;
+	/**
+	 * Returns a map from a sticky-group row's visual index to the visual index of
+	 * its last descendant. Absent when there are no sticky group rows.
+	 */
+	getStickyGroupMeta?(): Map<number, number>;
+	/** Returns the group metadata for a row at the given visual index, or null. */
+	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
 }
 
 export interface RowModelRefreshResult {
@@ -1136,7 +1136,6 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	public getVisualRowCount = (): number => {
 		return this.visualRows.length;
 	};
-
 
 	public getVisualIndexById = (visualRowId: string): number => {
 		const idx = this.visualRowIdToIndex.get(visualRowId);

@@ -128,8 +128,28 @@ describe('mountGridHost', () => {
 		});
 		const container1 = document.createElement('div');
 		const container2 = document.createElement('div');
-		vi.spyOn(container1, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, right: 500, bottom: 160, width: 500, height: 160, toJSON: () => ({}) });
-		vi.spyOn(container2, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, right: 500, bottom: 160, width: 500, height: 160, toJSON: () => ({}) });
+		vi.spyOn(container1, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		vi.spyOn(container2, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
 		document.body.appendChild(container1);
 		document.body.appendChild(container2);
 
@@ -157,7 +177,17 @@ describe('mountGridHost', () => {
 			getRowId: (row) => (row as { id: string }).id,
 		});
 		const container = document.createElement('div');
-		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, right: 500, bottom: 160, width: 500, height: 160, toJSON: () => ({}) });
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
 		document.body.appendChild(container);
 
 		const store = getStoreFromApi(api);

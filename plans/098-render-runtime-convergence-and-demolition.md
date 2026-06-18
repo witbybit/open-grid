@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Reduce rendering to one legal path: committed change set → invalidation → one frame arbiter → viewport/slot renderer → adapter flush. Delete every alternate scheduling, direct render, and hidden post-scroll path.
@@ -56,11 +55,13 @@ The implementation is not complete until these are removed or reduced to an expl
 - Process scroll, paint, adapter flush, and post-scroll work in a documented order with budgets.
 - Own phase transitions and epochs inside the runtime; callbacks cannot transition phases.
 - Capture reason traces for every scheduled frame in diagnostics builds.
+
 ### Workstream 2 — Collapse render execution
 
 - Merge or remove forwarding-only paint/orchestration/viewport coordinators.
 - Keep separate models and renderers, but make the execution path visually obvious in code.
 - Route all invalidation through typed change sets from Plan 097.
+
 ### Workstream 3 — Enforce scheduling authority
 
 - Inject one scheduler abstraction into the runtime only.

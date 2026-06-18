@@ -29,21 +29,21 @@ The failure is silent and can affect sum, average, count-derived state, custom a
 
 ```ts
 export type RowMutationImpact =
-  | 'value-only'
-  | 'formula-dependent'
-  | 'aggregation-input'
-  | 'sort-key'
-  | 'filter-key'
-  | 'group-key'
-  | 'tree-parent'
-  | 'structural';
+	| 'value-only'
+	| 'formula-dependent'
+	| 'aggregation-input'
+	| 'sort-key'
+	| 'filter-key'
+	| 'group-key'
+	| 'tree-parent'
+	| 'structural';
 ```
 
 Classify aggregation inputs before value-only fallback:
 
 ```ts
 if (matchesAny(changedFields, registry.aggregationSourceFields)) {
-  return 'aggregation-input';
+	return 'aggregation-input';
 }
 ```
 
@@ -52,11 +52,7 @@ if (matchesAny(changedFields, registry.aggregationSourceFields)) {
 For the first implementation, `aggregation-input` may trigger a full grouped-model refresh. Correctness is the gate.
 
 ```ts
-const requiresStructuralRefresh =
-  impact === 'aggregation-input' ||
-  impact === 'group-key' ||
-  impact === 'tree-parent' ||
-  impact === 'structural';
+const requiresStructuralRefresh = impact === 'aggregation-input' || impact === 'group-key' || impact === 'tree-parent' || impact === 'structural';
 ```
 
 ### 3. Incremental aggregate recomputation contract

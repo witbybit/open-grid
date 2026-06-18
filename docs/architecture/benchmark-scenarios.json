@@ -1,103 +1,103 @@
 {
-  "$comment": "Canonical benchmark scenario manifest for Plans 091–103. Each scenario defines the setup dimensions, the operations to measure, and which metric categories apply. Browser-based timing scenarios must be run in Chrome stable via the demo app; instrumentation-based scenarios run in Vitest/jsdom and produce comparable results across environments.",
-  "scenarioVersion": "1",
-  "capturedAt": "2026-06-18",
-  "branch": "rendering-architecture-v2-wip-3",
-  "scenarios": [
-    {
-      "id": "flat-10k",
-      "name": "Flat 10k rows, 5 columns — initial render + scroll",
-      "level": "foundation",
-      "dimensions": { "rows": 10000, "columns": 5, "pinLeft": 0, "pinRight": 0 },
-      "operations": ["initialRender", "scrollToBottom", "scrollToTop", "scrollMiddle"],
-      "metricCategories": ["rowPipeline", "stateReads", "slotRebinds", "cellWrites"]
-    },
-    {
-      "id": "flat-100k",
-      "name": "Flat 100k rows, 5 columns — scroll performance",
-      "level": "foundation",
-      "dimensions": { "rows": 100000, "columns": 5, "pinLeft": 0, "pinRight": 0 },
-      "operations": ["scrollSweep100"],
-      "metricCategories": ["rowPipeline", "stateReads", "slotRebinds"]
-    },
-    {
-      "id": "wide-1k-pinned",
-      "name": "Wide grid: 1k rows, 1k columns, 2 pin-left + 2 pin-right",
-      "level": "foundation",
-      "dimensions": { "rows": 1000, "columns": 1000, "pinLeft": 2, "pinRight": 2 },
-      "operations": ["initialRender", "horizontalScroll"],
-      "metricCategories": ["slotRebinds", "cellWrites"]
-    },
-    {
-      "id": "cell-updates-1k",
-      "name": "1000 cell updates — batched and targeted invalidation",
-      "level": "foundation",
-      "dimensions": { "rows": 10000, "columns": 5 },
-      "operations": ["batchedCellUpdate1000", "singleCellUpdate"],
-      "metricCategories": ["stateReads", "cellNotifications"]
-    },
-    {
-      "id": "grouping-100k",
-      "name": "Grouping + aggregation, 100k rows, 3 group levels",
-      "level": "reference",
-      "dimensions": { "rows": 100000, "columns": 5, "groupLevels": 3 },
-      "operations": ["initialRender", "expandAll", "collapseAll"],
-      "metricCategories": ["rowPipeline", "stateReads"]
-    },
-    {
-      "id": "custom-renderer-saturation",
-      "name": "Custom renderer saturation: 200 rows, 20 custom-renderer columns",
-      "level": "reference",
-      "dimensions": { "rows": 200, "columns": 20, "customRendererEveryN": 1 },
-      "operations": ["initialRender", "scroll10Pages"],
-      "metricCategories": ["slotRebinds", "warmCacheHits"]
-    },
-    {
-      "id": "row-model-filter-sort",
-      "name": "Filter + sort pipeline: 100k rows, text filter on name + numeric sort",
-      "level": "foundation",
-      "dimensions": { "rows": 100000, "columns": 5 },
-      "operations": ["applyTextFilter", "applySortAsc", "clearFilter"],
-      "metricCategories": ["rowPipeline"]
-    },
-    {
-      "id": "incremental-transaction",
-      "name": "applyTransaction: 1000 adds, 1000 updates, 1000 removes on 50k base",
-      "level": "foundation",
-      "dimensions": { "rows": 50000, "columns": 5 },
-      "operations": ["transactionAdd1000", "transactionUpdate1000", "transactionRemove1000"],
-      "metricCategories": ["rowPipeline", "stateReads"]
-    }
-  ],
-  "metricCategories": {
-    "rowPipeline": ["ROW_MUTATION_INCREMENTAL", "ROW_MUTATION_FULL_REBUILD"],
-    "stateReads": ["STATE_READS"],
-    "slotRebinds": ["SLOT_REBINDS"],
-    "cellWrites": ["cellTextWrites", "cellClassWrites", "cellWidthWrites", "cellLeftWrites"],
-    "warmCacheHits": ["warmHits", "warmMisses"],
-    "cellNotifications": ["notificationsFired"]
-  },
-  "correctnessBudgets": [
-    {
-      "id": "steady-scroll-zero-full-rebuild",
-      "description": "Scroll position changes must not trigger a full row pipeline rebuild",
-      "scenario": "flat-100k",
-      "operation": "scrollSweep100",
-      "assertion": "ROW_MUTATION_FULL_REBUILD === 0"
-    },
-    {
-      "id": "targeted-invalidation-no-fanout",
-      "description": "Single cell update must not notify unrelated cell subscriptions",
-      "scenario": "cell-updates-1k",
-      "operation": "singleCellUpdate",
-      "assertion": "unrelatedNotifications === 0"
-    },
-    {
-      "id": "filter-is-incremental-not-full",
-      "description": "Applying a filter after initial render must use incremental pipeline (not full rebuild from scratch)",
-      "scenario": "row-model-filter-sort",
-      "operation": "applyTextFilter",
-      "assertion": "ROW_MUTATION_INCREMENTAL >= 1 AND ROW_MUTATION_FULL_REBUILD <= 1"
-    }
-  ]
+	"$comment": "Canonical benchmark scenario manifest for Plans 091–103. Each scenario defines the setup dimensions, the operations to measure, and which metric categories apply. Browser-based timing scenarios must be run in Chrome stable via the demo app; instrumentation-based scenarios run in Vitest/jsdom and produce comparable results across environments.",
+	"scenarioVersion": "1",
+	"capturedAt": "2026-06-18",
+	"branch": "rendering-architecture-v2-wip-3",
+	"scenarios": [
+		{
+			"id": "flat-10k",
+			"name": "Flat 10k rows, 5 columns — initial render + scroll",
+			"level": "foundation",
+			"dimensions": { "rows": 10000, "columns": 5, "pinLeft": 0, "pinRight": 0 },
+			"operations": ["initialRender", "scrollToBottom", "scrollToTop", "scrollMiddle"],
+			"metricCategories": ["rowPipeline", "stateReads", "slotRebinds", "cellWrites"]
+		},
+		{
+			"id": "flat-100k",
+			"name": "Flat 100k rows, 5 columns — scroll performance",
+			"level": "foundation",
+			"dimensions": { "rows": 100000, "columns": 5, "pinLeft": 0, "pinRight": 0 },
+			"operations": ["scrollSweep100"],
+			"metricCategories": ["rowPipeline", "stateReads", "slotRebinds"]
+		},
+		{
+			"id": "wide-1k-pinned",
+			"name": "Wide grid: 1k rows, 1k columns, 2 pin-left + 2 pin-right",
+			"level": "foundation",
+			"dimensions": { "rows": 1000, "columns": 1000, "pinLeft": 2, "pinRight": 2 },
+			"operations": ["initialRender", "horizontalScroll"],
+			"metricCategories": ["slotRebinds", "cellWrites"]
+		},
+		{
+			"id": "cell-updates-1k",
+			"name": "1000 cell updates — batched and targeted invalidation",
+			"level": "foundation",
+			"dimensions": { "rows": 10000, "columns": 5 },
+			"operations": ["batchedCellUpdate1000", "singleCellUpdate"],
+			"metricCategories": ["stateReads", "cellNotifications"]
+		},
+		{
+			"id": "grouping-100k",
+			"name": "Grouping + aggregation, 100k rows, 3 group levels",
+			"level": "reference",
+			"dimensions": { "rows": 100000, "columns": 5, "groupLevels": 3 },
+			"operations": ["initialRender", "expandAll", "collapseAll"],
+			"metricCategories": ["rowPipeline", "stateReads"]
+		},
+		{
+			"id": "custom-renderer-saturation",
+			"name": "Custom renderer saturation: 200 rows, 20 custom-renderer columns",
+			"level": "reference",
+			"dimensions": { "rows": 200, "columns": 20, "customRendererEveryN": 1 },
+			"operations": ["initialRender", "scroll10Pages"],
+			"metricCategories": ["slotRebinds", "warmCacheHits"]
+		},
+		{
+			"id": "row-model-filter-sort",
+			"name": "Filter + sort pipeline: 100k rows, text filter on name + numeric sort",
+			"level": "foundation",
+			"dimensions": { "rows": 100000, "columns": 5 },
+			"operations": ["applyTextFilter", "applySortAsc", "clearFilter"],
+			"metricCategories": ["rowPipeline"]
+		},
+		{
+			"id": "incremental-transaction",
+			"name": "applyTransaction: 1000 adds, 1000 updates, 1000 removes on 50k base",
+			"level": "foundation",
+			"dimensions": { "rows": 50000, "columns": 5 },
+			"operations": ["transactionAdd1000", "transactionUpdate1000", "transactionRemove1000"],
+			"metricCategories": ["rowPipeline", "stateReads"]
+		}
+	],
+	"metricCategories": {
+		"rowPipeline": ["ROW_MUTATION_INCREMENTAL", "ROW_MUTATION_FULL_REBUILD"],
+		"stateReads": ["STATE_READS"],
+		"slotRebinds": ["SLOT_REBINDS"],
+		"cellWrites": ["cellTextWrites", "cellClassWrites", "cellWidthWrites", "cellLeftWrites"],
+		"warmCacheHits": ["warmHits", "warmMisses"],
+		"cellNotifications": ["notificationsFired"]
+	},
+	"correctnessBudgets": [
+		{
+			"id": "steady-scroll-zero-full-rebuild",
+			"description": "Scroll position changes must not trigger a full row pipeline rebuild",
+			"scenario": "flat-100k",
+			"operation": "scrollSweep100",
+			"assertion": "ROW_MUTATION_FULL_REBUILD === 0"
+		},
+		{
+			"id": "targeted-invalidation-no-fanout",
+			"description": "Single cell update must not notify unrelated cell subscriptions",
+			"scenario": "cell-updates-1k",
+			"operation": "singleCellUpdate",
+			"assertion": "unrelatedNotifications === 0"
+		},
+		{
+			"id": "filter-is-incremental-not-full",
+			"description": "Applying a filter after initial render must use incremental pipeline (not full rebuild from scratch)",
+			"scenario": "row-model-filter-sort",
+			"operation": "applyTextFilter",
+			"assertion": "ROW_MUTATION_INCREMENTAL >= 1 AND ROW_MUTATION_FULL_REBUILD <= 1"
+		}
+	]
 }

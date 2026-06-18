@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Establish one authoritative row-data model and one derived visual-row model with explicit incremental contracts. Remove mixed ownership between stores, pipelines, controllers, maps, and renderer-facing arrays.
@@ -55,17 +54,20 @@ The implementation is not complete until these are removed or reduced to an expl
 - Specify source identity, visual identity, stable source order, loading states, row count semantics, and mutation capabilities.
 - Separate client mutation support from server cache/block operations.
 - Define renderer-facing window and lookup APIs with version guarantees.
+
 ### Workstream 2 — Encapsulate the derived pipeline
 
 - Make filter, sort, group/tree, aggregate, flatten, and paginate stages explicit and independently testable.
 - Create typed mutation plans: value patch, reposition, membership change, aggregate recompute, hierarchy relocation, insert/remove, and full rebuild.
 - Require every fallback to report why incremental execution was unsafe.
+
 ### Workstream 3 — Choose scalable index structures
 
 - Benchmark arrays/maps against chunked or paged alternatives at 10k, 100k, and 1m rows.
 - Maintain stable source order on nodes/data store rather than rebuilding it.
 - Update only affected index ranges where arrays remain appropriate.
 - Keep the first implementation simple unless benchmarks prove a different structure is required.
+
 ### Workstream 4 — Unify client/server renderer semantics
 
 - Define placeholders, loading rows, unknown counts, refresh/purge, and stale request handling.

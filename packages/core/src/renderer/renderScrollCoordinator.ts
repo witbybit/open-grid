@@ -334,5 +334,4 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.deps.rowRenderer.currentWindow.scrollLeft = scrollLeft;
 		}
 	}
-
 }

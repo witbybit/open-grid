@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Replace broad store/state mutation and reaction-driven ownership with explicit domain commands. A command must mutate one authoritative model, produce a typed change set, and trigger invalidation/events from committed domain truth.
@@ -54,12 +53,14 @@ The implementation is not complete until these are removed or reduced to an expl
 - Create typed commands for rows, columns, selection, focus, editing, configuration, and viewport-affecting operations.
 - Define `GridChangeSet` with affected domains, row/column IDs, structural/geometry flags, event records, and persistence impact.
 - Define transaction merge rules and deterministic event ordering.
+
 ### Workstream 2 — Move ownership into models
 
 - Move version increments into the domain model that commits the mutation.
 - Make API methods dispatch commands rather than coordinating models directly.
 - Make invalidation consume change sets.
 - Keep public state snapshots as composed read models, not the primary mutation mechanism.
+
 ### Workstream 3 — Delete reaction ambiguity
 
 - Remove semantic reaction paths that inspect generic updated-key arrays.

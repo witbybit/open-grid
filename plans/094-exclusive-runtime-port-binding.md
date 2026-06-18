@@ -22,9 +22,7 @@ The deprecated `setRendererPorts()` path can also bypass binding generations ent
 ### 1. Explicit bind result
 
 ```ts
-export type RuntimePortBindResult =
-  | { ok: true; binding: RuntimePortBinding }
-  | { ok: false; reason: 'already-bound' | 'destroyed' };
+export type RuntimePortBindResult = { ok: true; binding: RuntimePortBinding } | { ok: false; reason: 'already-bound' | 'destroyed' };
 ```
 
 Concurrent binding must return `{ ok: false }` and leave the current ports untouched.

@@ -486,7 +486,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.getRowModel()?.getVisualRowCount() ?? 0;
 	};
 
-
 	public getVisualIndexById = (visualRowId: string): number | null => {
 		const idx = this.getRowModel()?.getVisualIndexById(visualRowId);
 		return idx !== undefined && idx >= 0 ? idx : null;

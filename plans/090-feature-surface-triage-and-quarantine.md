@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Stop feature breadth from controlling core architecture. Classify every feature, retain only those that validate the target engine, quarantine unstable implementations behind internal boundaries, and delete features whose cost exceeds current proof value.
@@ -54,11 +53,13 @@ The implementation is not complete until these are removed or reduced to an expl
 - For every feature, record architectural pressure, user value, implementation maturity, test depth, performance cost, and public API leakage.
 - Assign foundation/reference/incubating/deferred status.
 - Choose the minimal alpha feature matrix.
+
 ### Workstream 2 — Quarantine incubating work
 
 - Move experimental APIs behind internal exports or explicit experimental namespaces.
 - Prevent incubating features from adding exceptions to foundation models.
 - Require adapters/plugins for optional UI-heavy features where possible.
+
 ### Workstream 3 — Delete low-value complexity
 
 - Remove dead branches, duplicate controllers, abandoned feature flags, and premature compatibility aliases.

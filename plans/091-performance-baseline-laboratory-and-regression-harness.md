@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Turn performance from an architectural aspiration into a reproducible laboratory with fixed scenarios, budgets, traces, and CI regression gates. No optimization or complexity is accepted without measurable evidence.
@@ -59,11 +58,13 @@ The implementation is not complete until these are removed or reduced to an expl
 - 1k and 10k updates/sec batches.
 - Native, mixed, and full custom-renderer saturation.
 - SSRM block scrolling with latency and stale responses.
+
 ### Workstream 2 — Define budgets
 
 - Frame CPU percentiles, long frames, DOM creates/removes, cell writes, allocations, heap retention, mount counts, update latency, initial render, and bundle size.
 - Define hard correctness budgets such as zero steady-scroll DOM creation for native rows.
 - Define environment metadata and acceptable variance.
+
 ### Workstream 3 — Capture the pre-convergence baseline
 
 - Run every retained foundation/reference scenario before Plans 092–100 begin.

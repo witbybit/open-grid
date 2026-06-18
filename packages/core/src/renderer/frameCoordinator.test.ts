@@ -652,9 +652,7 @@ describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => 
 				return 0;
 			},
 		};
-		const coordinator = new DefaultFrameCoordinator(
-			makeBaseDeps({ onPostScrollWork, gridScheduler: gs, runtimeState: rs })
-		);
+		const coordinator = new DefaultFrameCoordinator(makeBaseDeps({ onPostScrollWork, gridScheduler: gs, runtimeState: rs }));
 
 		coordinator.requestPostScrollWork(); // epoch captured as 0
 
@@ -673,7 +671,10 @@ describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => 
 		const rafs: Array<() => void> = [];
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
-			raf: (cb) => { rafs.push(cb); return rafs.length; },
+			raf: (cb) => {
+				rafs.push(cb);
+				return rafs.length;
+			},
 		};
 		const coordinator = new DefaultFrameCoordinator(
 			makeBaseDeps({
@@ -702,10 +703,16 @@ describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => 
 				onScrollFrame: () => {
 					// Intentionally trying to re-transition (simulates old coordinator code)
 					// This is a double-transition into scroll-frame from scroll-frame — should fault.
-					try { rs.transitionTo('scroll-frame'); } catch { /* absorbed */ }
+					try {
+						rs.transitionTo('scroll-frame');
+					} catch {
+						/* absorbed */
+					}
 				},
 				runtimeState: rs,
-				onFault: (msg) => { faultMsg = msg; },
+				onFault: (msg) => {
+					faultMsg = msg;
+				},
 			})
 		);
 
@@ -722,7 +729,10 @@ describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => 
 		const rafs: Array<() => void> = [];
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
-			raf: (cb) => { rafs.push(cb); return rafs.length; },
+			raf: (cb) => {
+				rafs.push(cb);
+				return rafs.length;
+			},
 		};
 
 		const coordinator = new DefaultFrameCoordinator(
@@ -759,7 +769,10 @@ describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => 
 		const rafs: Array<() => void> = [];
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
-			raf: (cb) => { rafs.push(cb); return rafs.length; },
+			raf: (cb) => {
+				rafs.push(cb);
+				return rafs.length;
+			},
 		};
 
 		const coordinator = new DefaultFrameCoordinator(
@@ -800,7 +813,11 @@ describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => 
 		const rafs: Array<() => void> = [];
 		const gs: GridScheduler = {
 			...makeSyncScheduler(),
-			raf: (cb) => { rafCount.n++; rafs.push(cb); return rafCount.n; },
+			raf: (cb) => {
+				rafCount.n++;
+				rafs.push(cb);
+				return rafCount.n;
+			},
 		};
 
 		new DefaultFrameCoordinator(
@@ -843,9 +860,7 @@ describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => 
 			},
 			cancelRaf: vi.fn(),
 		};
-		const coordinator = new DefaultFrameCoordinator(
-			makeBaseDeps({ onPostScrollWork, gridScheduler: gs })
-		);
+		const coordinator = new DefaultFrameCoordinator(makeBaseDeps({ onPostScrollWork, gridScheduler: gs }));
 
 		coordinator.requestPostScrollWork();
 		coordinator.destroy(); // cancels the RAF

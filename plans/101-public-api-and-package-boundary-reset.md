@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Use the pre-release window to reduce the public surface to a coherent, durable API. Hide implementation details, separate stable and experimental exports, and make common application workflows simple without exposing the store or runtime.
@@ -55,12 +54,14 @@ The implementation is not complete until these are removed or reduced to an expl
 - Use the real application to document setup, data updates, selection, editing, filters, persistence, custom rendering, and teardown.
 - Identify boilerplate, internal reach-through, unstable callbacks, and missing transactional APIs.
 - Design from workflows rather than mirroring internals.
+
 ### Workstream 2 — Reset package exports
 
 - Create explicit stable, internal, and experimental entry points.
 - Remove compatibility aliases and deprecated methods.
 - Add API Extractor or equivalent snapshot tests for every public package.
 - Enforce no stable import can resolve an internal source file.
+
 ### Workstream 3 — Normalize contracts
 
 - Use consistent naming and return/error semantics.

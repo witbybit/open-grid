@@ -734,13 +734,13 @@ describe('Architecture guardrails', () => {
 			resolve(srcDir, 'renderer', 'frameCoordinator.ts'),
 			resolve(srcDir, 'renderer', 'gridScheduler.ts'),
 			// Known exceptions — to be eliminated in Stage B plans
-			resolve(srcDir, 'contextMenu.ts'),                          // focus + close delay
-			resolve(srcDir, 'export', 'csvExport.ts'),                  // URL.revokeObjectURL cleanup
-			resolve(srcDir, 'features', 'RowDragController.ts'),        // scroll-animation rAF loop
-			resolve(srcDir, 'persistence', 'statePersistence.ts'),      // debounced auto-save
-			resolve(srcDir, 'renderer', 'floatingFilterRenderer.ts'),   // filter debounce + focus
-			resolve(srcDir, 'renderer', 'headerMenuController.ts'),     // filter debounce
-			resolve(srcDir, 'renderer', 'scrollEngine.ts'),             // scroll-end timer
+			resolve(srcDir, 'contextMenu.ts'), // focus + close delay
+			resolve(srcDir, 'export', 'csvExport.ts'), // URL.revokeObjectURL cleanup
+			resolve(srcDir, 'features', 'RowDragController.ts'), // scroll-animation rAF loop
+			resolve(srcDir, 'persistence', 'statePersistence.ts'), // debounced auto-save
+			resolve(srcDir, 'renderer', 'floatingFilterRenderer.ts'), // filter debounce + focus
+			resolve(srcDir, 'renderer', 'headerMenuController.ts'), // filter debounce
+			resolve(srcDir, 'renderer', 'scrollEngine.ts'), // scroll-end timer
 		]);
 		const schedulingPattern = /\bsetTimeout\b|\brequestAnimationFrame\b|\brequestIdleCallback\b/;
 		const violators: string[] = [];
@@ -761,7 +761,15 @@ describe('Architecture guardrails', () => {
 		const indexPath = resolve(CORE_ROOT, 'src', 'index.ts');
 		const content = readFileSync(indexPath, 'utf-8');
 		// Renderer-internal types that must not appear in the public barrel
-		const internalRendererTypes = ['RenderEngine', 'ViewportRenderer', 'RowRenderer', 'CellRenderer', 'PortalMountManager', 'RowSlot', 'CellSlot'];
+		const internalRendererTypes = [
+			'RenderEngine',
+			'ViewportRenderer',
+			'RowRenderer',
+			'CellRenderer',
+			'PortalMountManager',
+			'RowSlot',
+			'CellSlot',
+		];
 		const violations: string[] = [];
 		for (const t of internalRendererTypes) {
 			// Match export { ... TypeName ... } or export type { ... TypeName ... }
@@ -779,7 +787,9 @@ describe('Architecture guardrails', () => {
 		expect(existsSync(registryPath), 'docs/architecture/feature-registry.json must exist').toBe(true);
 		const raw = readFileSync(registryPath, 'utf-8');
 		let registry: { features?: unknown[]; alphaFeatureMatrix?: unknown[] };
-		expect(() => { registry = JSON.parse(raw); }, 'feature-registry.json must be valid JSON').not.toThrow();
+		expect(() => {
+			registry = JSON.parse(raw);
+		}, 'feature-registry.json must be valid JSON').not.toThrow();
 		registry = JSON.parse(raw);
 		expect(Array.isArray(registry.features), 'feature-registry.json must have a features array').toBe(true);
 		expect(Array.isArray(registry.alphaFeatureMatrix), 'feature-registry.json must have an alphaFeatureMatrix array').toBe(true);
@@ -810,9 +820,7 @@ describe('Architecture guardrails', () => {
 				.map((f) => path.basename(f.knownCoupling!.split(' imports ')[0]))
 		);
 		const engineDir = resolve(srcDir, 'engine');
-		const engineFiles = collectSourceFiles(engineDir).filter(
-			(f) => !f.endsWith('.test.ts') && !knownCouplings.has(path.basename(f))
-		);
+		const engineFiles = collectSourceFiles(engineDir).filter((f) => !f.endsWith('.test.ts') && !knownCouplings.has(path.basename(f)));
 		const violators: string[] = [];
 		for (const file of engineFiles) {
 			const content = readFileSync(file, 'utf-8');
@@ -837,10 +845,7 @@ describe('Architecture guardrails', () => {
 		const foundationIds = registry.features.filter((f) => f.level === 'foundation').map((f) => f.id);
 		const matrixSet = new Set(registry.alphaFeatureMatrix);
 		const missing = foundationIds.filter((id) => !matrixSet.has(id));
-		expect(
-			missing,
-			`foundation features missing from alphaFeatureMatrix: ${missing.join(', ')}`
-		).toHaveLength(0);
+		expect(missing, `foundation features missing from alphaFeatureMatrix: ${missing.join(', ')}`).toHaveLength(0);
 	});
 
 	// ── Plan 091: performance baseline laboratory ─────────────────────────────
@@ -850,7 +855,9 @@ describe('Architecture guardrails', () => {
 		expect(existsSync(scenariosPath), 'docs/architecture/benchmark-scenarios.json must exist').toBe(true);
 		const raw = readFileSync(scenariosPath, 'utf-8');
 		let manifest: { scenarioVersion?: unknown; scenarios?: unknown[] };
-		expect(() => { manifest = JSON.parse(raw); }, 'benchmark-scenarios.json must be valid JSON').not.toThrow();
+		expect(() => {
+			manifest = JSON.parse(raw);
+		}, 'benchmark-scenarios.json must be valid JSON').not.toThrow();
 		manifest = JSON.parse(raw);
 		expect(typeof manifest.scenarioVersion, 'benchmark-scenarios.json must have a scenarioVersion field').toBe('string');
 		expect(Array.isArray(manifest.scenarios), 'benchmark-scenarios.json must have a scenarios array').toBe(true);
@@ -864,7 +871,9 @@ describe('Architecture guardrails', () => {
 		expect(existsSync(baselinePath), 'docs/architecture/baseline.json must exist').toBe(true);
 		const raw = readFileSync(baselinePath, 'utf-8');
 		let baseline: { capturedAt?: unknown; scenarios?: unknown[] };
-		expect(() => { baseline = JSON.parse(raw); }, 'baseline.json must be valid JSON').not.toThrow();
+		expect(() => {
+			baseline = JSON.parse(raw);
+		}, 'baseline.json must be valid JSON').not.toThrow();
 		baseline = JSON.parse(raw);
 		expect(typeof baseline.capturedAt, 'baseline.json must have a capturedAt field').toBe('string');
 		expect(Array.isArray(baseline.scenarios), 'baseline.json must have a scenarios array').toBe(true);
@@ -1176,15 +1185,15 @@ describe('Architecture guardrails', () => {
 	it('core/index.ts exports VisualRowModel (read-only renderer contract) not RowModel (Plan 101)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
 		expect(content).toContain('VisualRowModel');
-		expect(content).not.toContain("{ RowModel }");
+		expect(content).not.toContain('{ RowModel }');
 	});
 
 	it('AggregationDef is re-exported through rowModel.ts (stable path) not directly from rows/stages/ (Plan 101)', () => {
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		expect(rowModelContent).toContain("AggregationDef");
+		expect(rowModelContent).toContain('AggregationDef');
 		const indexContent = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
-		expect(indexContent).toContain("AggregationDef");
-		expect(indexContent).not.toContain("rows/stages/");
+		expect(indexContent).toContain('AggregationDef');
+		expect(indexContent).not.toContain('rows/stages/');
 	});
 
 	it('BatchCellValueUpdate is defined in api/GridApi.ts (public API location) not features/ (Plan 101)', () => {

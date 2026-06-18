@@ -46,11 +46,7 @@ const NAME_POOL = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 
 
 // ── Reference + invariant checker ────────────────────────────────────────────
 
-function checkInvariants(
-	controller: ClientRowModelController<TestRow>,
-	store: GridStore<TestRow>,
-	opLabel: string
-): void {
+function checkInvariants(controller: ClientRowModelController<TestRow>, store: GridStore<TestRow>, opLabel: string): void {
 	const allNodes = controller.getAllDataNodes!()!;
 	const state = store.getState();
 
@@ -69,14 +65,8 @@ function checkInvariants(
 	for (let i = 0; i < controller.getVisualRowCount(); i++) {
 		const row = controller.getVisualRow(i);
 		if (row?.kind !== 'data') continue;
-		expect(
-			controller.getVisualIndexByRowId(row.rowId),
-			`[${opLabel}] getVisualIndexByRowId('${row.rowId}') must be ${i}`
-		).toBe(i);
-		expect(
-			controller.getVisualIndexById(row.id),
-			`[${opLabel}] getVisualIndexById('${row.id}') must be ${i}`
-		).toBe(i);
+		expect(controller.getVisualIndexByRowId(row.rowId), `[${opLabel}] getVisualIndexByRowId('${row.rowId}') must be ${i}`).toBe(i);
+		expect(controller.getVisualIndexById(row.id), `[${opLabel}] getVisualIndexById('${row.id}') must be ${i}`).toBe(i);
 	}
 }
 

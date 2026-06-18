@@ -1187,7 +1187,13 @@ describe('Plan 083 — incremental index maintenance', () => {
 // ── Plan 092: aggregation input mutation correctness ──────────────────────────
 
 describe('Aggregation input mutation correctness (Plan 092)', () => {
-	interface AggRow { id: string; name: string; category: string; salary: number; bonus: number; }
+	interface AggRow {
+		id: string;
+		name: string;
+		category: string;
+		salary: number;
+		bonus: number;
+	}
 
 	function makeAggStore(rows: AggRow[], expanded = true) {
 		const store = new GridStore<AggRow>({
@@ -1491,4 +1497,3 @@ describe('ClientRowModelController – differential correctness (Plan 099)', () 
 		controller.dispose();
 	});
 });
-

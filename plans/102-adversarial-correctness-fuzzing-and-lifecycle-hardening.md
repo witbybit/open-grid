@@ -2,7 +2,6 @@
 
 > This is a **convergence plan**, not an additive feature plan. It is complete only when the target owner is authoritative, superseded mechanisms are deleted, architecture guards prevent regression, and behavioral/performance evidence passes. Merely adding the proposed abstraction beside existing paths is a failed implementation.
 
-
 ## Mission
 
 Prove that the consolidated engine remains correct under hostile operation ordering, random mutations, async races, renderer failures, remounts, and feature combinations. Replace happy-path confidence with adversarial evidence.
@@ -55,11 +54,13 @@ The implementation is not complete until these are removed or reduced to an expl
 - Grouped aggregate reference model.
 - Physical-slot ownership checker independent of DOM implementation.
 - Server request generation and stale-response oracle.
+
 ### Workstream 2 — Generate hostile sequences
 
 - Random row/column mutations, transactions, filter/sort changes, viewport movement, pinning, editing, undo/redo, host remount, and destroy.
 - Inject async renderer/editor/server completion at every lifecycle boundary.
 - Shrink failing sequences and persist them as regression cases.
+
 ### Workstream 3 — Harden lifecycle
 
 - Run mount/destroy loops under React Strict Mode.

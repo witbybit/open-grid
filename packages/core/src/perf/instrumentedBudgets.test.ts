@@ -34,7 +34,11 @@ function makeRows(count: number): BudgetRow[] {
 	}));
 }
 
-function makeStore(rowCount = 0): { store: GridStore<BudgetRow>; controller: ClientRowModelController<BudgetRow>; inst: RecordingGridInstrumentation } {
+function makeStore(rowCount = 0): {
+	store: GridStore<BudgetRow>;
+	controller: ClientRowModelController<BudgetRow>;
+	inst: RecordingGridInstrumentation;
+} {
 	const inst = new RecordingGridInstrumentation();
 	const store = new GridStore<BudgetRow>({
 		columns: [
@@ -81,8 +85,20 @@ describe('Budget: targeted cell invalidation — no unrelated subscription fanou
 		let relatedCalls = 0;
 		let unrelatedCalls = 0;
 
-		store.registerCellSubscription({ rowId: 'r5000', colField: 'value', onStoreChange: () => { relatedCalls++; } });
-		store.registerCellSubscription({ rowId: 'r5000', colField: 'status', onStoreChange: () => { unrelatedCalls++; } });
+		store.registerCellSubscription({
+			rowId: 'r5000',
+			colField: 'value',
+			onStoreChange: () => {
+				relatedCalls++;
+			},
+		});
+		store.registerCellSubscription({
+			rowId: 'r5000',
+			colField: 'status',
+			onStoreChange: () => {
+				unrelatedCalls++;
+			},
+		});
 
 		store.setCellValue('r5000', 'value', 999);
 		store.flushCellUpdatesSync();
