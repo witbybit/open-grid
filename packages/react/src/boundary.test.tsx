@@ -10,6 +10,42 @@ describe('React public boundary', () => {
 		expect((publicApi as Record<string, unknown>)['useGridKeySelector']).toBeTypeOf('function');
 	});
 
+	it('matches the reviewed alpha runtime export snapshot', () => {
+		expect(Object.keys(publicApi).sort()).toEqual([
+			'BUILTIN_COLUMN_TYPES',
+			'BUILT_IN_THEMES',
+			'BUILT_IN_THEME_METADATA',
+			'BUILT_IN_THEME_ORDER',
+			'CheckboxCellRenderer',
+			'DateCellEditor',
+			'DateCellRenderer',
+			'Grid',
+			'GridEventName',
+			'MultiSelectCellRenderer',
+			'TagsCellRenderer',
+			'createDropdownCellEditor',
+			'createDropdownCellRenderer',
+			'createLocalStorageAdapter',
+			'createMultiSelectCellEditor',
+			'createMultiSelectCellRenderer',
+			'createNumberCellEditor',
+			'createNumberCellRenderer',
+			'createTheme',
+			'dropdownColumnType',
+			'getBuiltInTheme',
+			'isBuiltInThemeName',
+			'isDomCellRenderer',
+			'multiSelectColumnType',
+			'numberColumnType',
+			'parseMultiValue',
+			'resolveColumnFilterDef',
+			'themeToCSSVariables',
+			'useGridApi',
+			'useGridKeySelector',
+			'useGridSelector',
+		]);
+	});
+
 	it('does not export incubating portal, formula, chart, or filter renderer helpers from the main entry', () => {
 		const removed = ['PortalCell', 'PortalManager', 'FormulaBar', 'ColumnFilterRenderer', 'ChartType', 'ChartTheme', 'ValueFormat'];
 		for (const name of removed) {
@@ -22,5 +58,9 @@ describe('React public boundary', () => {
 		expect((experimentalApi as Record<string, unknown>)['PortalManager']).toBeDefined();
 		expect((experimentalApi as Record<string, unknown>)['FormulaBar']).toBeDefined();
 		expect((experimentalApi as Record<string, unknown>)['ColumnFilterRenderer']).toBeDefined();
+	});
+
+	it('matches the reviewed experimental runtime export snapshot', () => {
+		expect(Object.keys(experimentalApi).sort()).toEqual(['ColumnFilterRenderer', 'FormulaBar', 'PortalCell', 'PortalManager']);
 	});
 });

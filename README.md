@@ -4,6 +4,16 @@ Open Grid is a lightweight, framework-agnostic grid engine for high-performance 
 
 ---
 
+## Alpha Status
+
+Open Grid is currently published as a pre-release alpha surface (`0.1.0-alpha.x`), not a stable `1.x` contract.
+
+- Use `@open-grid/react` for the supported React entrypoint and `@open-grid/core` for the supported headless entrypoint.
+- Incubating helpers live under `@open-grid/core/experimental` and `@open-grid/react/experimental`.
+- Anything under an `experimental` entry may change or be removed between alpha releases without compatibility guarantees.
+
+---
+
 ## Architecture
 
 The normative architecture constitution is at [docs/architecture/core-target.md](docs/architecture/core-target.md). It defines layer ownership, legal dependency directions, canonical execution flows, feature maturity levels, and the responsibility registry for all major production classes. Plans 089–103 converge the codebase toward that document.

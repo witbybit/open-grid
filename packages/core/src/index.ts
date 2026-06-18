@@ -58,15 +58,6 @@ export type { VisualRowModel } from './rowModel.js';
 export type { VisualRow, DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow } from './visualRow.js';
 export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';
 
-export {
-	canEditCell,
-	canFocusVisualRow,
-	isDataVisualRow,
-	isDataCellSelectable,
-	isEditableVisualRow,
-	isFullWidthVisualRow,
-	isSelectableVisualRow,
-} from './visualRow.js';
 export { isDomCellRenderer } from './columnDef.js';
 export type {
 	FilterModel,
@@ -112,15 +103,6 @@ export {
 	getFilterChipText,
 } from './filterOperations.js';
 export type { CsvExportOptions } from './export/csvExport.js';
-export {
-	parseVisualRowId,
-	toDataVisualRowId,
-	toDetailVisualRowId,
-	toFooterVisualRowId,
-	toGroupVisualRowId,
-	toLoadingVisualRowId,
-} from './rows/visualRowIds.js';
-export type { GroupPathItem } from './rows/visualRowIds.js';
 export type { IGridDatasource } from './serverRowModel.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
 export type { BatchCellValueUpdate } from './api/GridApi.js';

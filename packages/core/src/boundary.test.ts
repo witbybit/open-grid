@@ -50,8 +50,69 @@ describe('Public/internal boundary', () => {
 			expect(typeof publicApi.createClientGrid).toBe('function');
 		});
 
+		it('matches the reviewed alpha runtime export snapshot', () => {
+			expect(Object.keys(publicApi).sort()).toEqual([
+				'BUILT_IN_THEMES',
+				'BUILT_IN_THEME_METADATA',
+				'BUILT_IN_THEME_ORDER',
+				'COOL_BLUE_THEME',
+				'DARK_THEME',
+				'DATE_OPS',
+				'GRID_STATE_SCHEMA_VERSION',
+				'GridEventName',
+				'GridMetric',
+				'HIGH_CONTRAST_DARK_THEME',
+				'HIGH_CONTRAST_LIGHT_THEME',
+				'LIGHT_THEME',
+				'MINIMAL_MONOCHROME_THEME',
+				'NUMBER_OPS',
+				'RowNode',
+				'TEXT_OPS',
+				'ThemeManager',
+				'WARM_ORANGE_THEME',
+				'applyFilterToModel',
+				'buildFilterByValue',
+				'createApiFacade',
+				'createClientGrid',
+				'createLocalStorageAdapter',
+				'createServerGrid',
+				'createTheme',
+				'defaultOpForType',
+				'getBuiltInTheme',
+				'getFilterChipText',
+				'getOpMeta',
+				'getOpsForType',
+				'isBuiltInThemeName',
+				'isDomCellRenderer',
+				'isFilterableColumn',
+				'registerGridContextMenu',
+				'registerGridNavigation',
+				'resolveColumnFilterDef',
+				'themeToCSSVariables',
+				'validateSchemaVersion',
+			]);
+		});
+
 		it('does not export experimental style-rule compiler or concrete instrumentation helpers', () => {
-			for (const name of ['compileStyleRules', 'NoopGridInstrumentation', 'RecordingGridInstrumentation', 'NOOP_INSTRUMENTATION']) {
+			for (const name of [
+				'compileStyleRules',
+				'NoopGridInstrumentation',
+				'RecordingGridInstrumentation',
+				'NOOP_INSTRUMENTATION',
+				'canEditCell',
+				'canFocusVisualRow',
+				'isDataVisualRow',
+				'isDataCellSelectable',
+				'isEditableVisualRow',
+				'isFullWidthVisualRow',
+				'isSelectableVisualRow',
+				'parseVisualRowId',
+				'toDataVisualRowId',
+				'toDetailVisualRowId',
+				'toFooterVisualRowId',
+				'toGroupVisualRowId',
+				'toLoadingVisualRowId',
+			]) {
 				expect((publicApi as Record<string, unknown>)[name], `${name} must not be in public entry`).toBeUndefined();
 			}
 		});
@@ -63,11 +124,37 @@ describe('Public/internal boundary', () => {
 	});
 
 	describe('Experimental entry (@open-grid/core/experimental)', () => {
-		it('exports style-rule compiler and concrete instrumentation helpers', () => {
+		it('exports style-rule compiler, visual-row helpers, and concrete instrumentation helpers', () => {
 			expect(typeof (experimentalApi as Record<string, unknown>)['compileStyleRules']).toBe('function');
 			expect(typeof (experimentalApi as Record<string, unknown>)['NoopGridInstrumentation']).toBe('function');
 			expect(typeof (experimentalApi as Record<string, unknown>)['RecordingGridInstrumentation']).toBe('function');
 			expect((experimentalApi as Record<string, unknown>)['NOOP_INSTRUMENTATION']).toBeDefined();
+			expect(typeof (experimentalApi as Record<string, unknown>)['canEditCell']).toBe('function');
+			expect(typeof (experimentalApi as Record<string, unknown>)['isDataVisualRow']).toBe('function');
+			expect(typeof (experimentalApi as Record<string, unknown>)['parseVisualRowId']).toBe('function');
+			expect(typeof (experimentalApi as Record<string, unknown>)['toDataVisualRowId']).toBe('function');
+		});
+
+		it('matches the reviewed experimental runtime export snapshot', () => {
+			expect(Object.keys(experimentalApi).sort()).toEqual([
+				'NOOP_INSTRUMENTATION',
+				'NoopGridInstrumentation',
+				'RecordingGridInstrumentation',
+				'canEditCell',
+				'canFocusVisualRow',
+				'compileStyleRules',
+				'isDataCellSelectable',
+				'isDataVisualRow',
+				'isEditableVisualRow',
+				'isFullWidthVisualRow',
+				'isSelectableVisualRow',
+				'parseVisualRowId',
+				'toDataVisualRowId',
+				'toDetailVisualRowId',
+				'toFooterVisualRowId',
+				'toGroupVisualRowId',
+				'toLoadingVisualRowId',
+			]);
 		});
 	});
 
@@ -108,6 +195,10 @@ describe('Public/internal boundary', () => {
 			for (const name of rawInternals) {
 				expect((internalApi as Record<string, unknown>)[name], `${name} must not be in internal entry`).toBeUndefined();
 			}
+		});
+
+		it('matches the reviewed adapter-only runtime export snapshot', () => {
+			expect(Object.keys(internalApi).sort()).toEqual(['hasImperativeRendererCapability', 'mountGridHost']);
 		});
 	});
 
