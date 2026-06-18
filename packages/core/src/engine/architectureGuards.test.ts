@@ -40,6 +40,11 @@ function collectSourceFiles(root: string): string[] {
 	return files;
 }
 
+function parseAllowlistedFiles(fileContent: string): string[] {
+	const matches = [...fileContent.matchAll(/file:\s*'([^']+)'/g)];
+	return matches.map((match) => match[1]);
+}
+
 describe('Architecture guardrails', () => {
 	it('store.ts is below 950 lines (target 850)', () => {
 		const lines = countLines('store.ts');
@@ -1276,6 +1281,27 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('justification');
 	});
 
+	it('raw stateManager.setState writes stay inside the Plan 103 allowlist', () => {
+		const srcDir = resolve(CORE_ROOT, 'src');
+		const allowlistContent = readFileSync(resolve(srcDir, 'engine', 'gridDirectWriteAllowlist.ts'), 'utf-8');
+		const allowlistedFiles = new Set(parseAllowlistedFiles(allowlistContent));
+		const directWritePattern = /\bstateManager\.setState\(/;
+		const files = collectSourceFiles(srcDir).filter((file) => !file.endsWith('.test.ts'));
+		const violators: string[] = [];
+		for (const file of files) {
+			const rel = path.relative(srcDir, file).replace(/\\/g, '/');
+			const content = readFileSync(file, 'utf-8');
+			if (!directWritePattern.test(content)) continue;
+			if (!allowlistedFiles.has(rel)) {
+				violators.push(rel);
+			}
+		}
+		expect(
+			violators,
+			`New raw stateManager.setState sites must be added to the explicit Plan 103 allowlist with justification: ${violators.join(', ')}`
+		).toHaveLength(0);
+	});
+
 	it('floating filter renderer expresses filter intent through engine.setFilterModel (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'floatingFilterRenderer.ts'), 'utf-8');
 		expect(content).toContain('this.engine.setFilterModel(');
@@ -1319,14 +1345,26 @@ describe('Architecture guardrails', () => {
 
 	it('store UI compatibility helpers route through GridEngine intent methods (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain('this.engine.setRowOverscanPx(px);');
 		expect(content).toContain('this.engine.setSidebarOpenPanel(panelId);');
 		expect(content).toContain('this.engine.setSidebarOpenPanel(null);');
 		expect(content).toContain('this.engine.setChartOpen(true);');
 		expect(content).toContain('this.engine.setChartOpen(false);');
 		expect(content).toContain('this.engine.setThemeName(themeName);');
+		expect(content).not.toContain('this.setState({ rowOverscanPx: px })');
 		expect(content).not.toContain('this.setState({ sidebarOpenPanel:');
 		expect(content).not.toContain('this.setState({ chartOpen:');
 		expect(content).not.toContain('this.setState({ themeName');
+	});
+
+	it('GridStateFeatureController no longer contains raw write fallbacks (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'), 'utf-8');
+		expect(content).toContain('applyChange: (change: GridChange<TRowData>) => void;');
+		expect(content).not.toContain('applyChange?:');
+		expect(content).not.toContain('stateManager.setState(');
+		expect(content).not.toContain('invalidateGeometry(');
+		expect(content).not.toContain('invalidateViewport(');
+		expect(content).not.toContain('dispatchEvent(');
 	});
 
 	it('store pinned column sync routes through engine.setPinnedColumnsState (Plan 103)', () => {

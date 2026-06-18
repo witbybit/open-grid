@@ -400,10 +400,7 @@ export class GridEngine<TRowData = unknown> {
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
 		this.stateFeature = new GridStateFeatureController<TRowData>({
 			stateManager: this.stateManager,
-			invalidation: this.invalidation,
 			commandHistory: this.commandHistory,
-			eventBus: this.eventBus,
-			requestRender: (reason) => this.requestRender(reason),
 			applyChange: (change) => this.changeApplier.apply(change),
 		});
 		this.dataMutation = new DataMutationController<TRowData>({

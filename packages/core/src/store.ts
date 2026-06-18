@@ -221,7 +221,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setRowOverscanPx = (px: number): void => {
-		this.setState({ rowOverscanPx: px });
+		this.engine.setRowOverscanPx(px);
 	};
 
 	/**

@@ -32,11 +32,6 @@ export const GRID_DIRECT_WRITE_ALLOWLIST = [
 		justification: 'Legacy reaction-owned invalidation remains only for derived synchronization and is being reduced in Plan 105.',
 	},
 	{
-		file: 'features/GridStateFeatureController.ts',
-		kind: 'legacy-ui-state',
-		justification: 'Contains remaining UI-state setters not yet converted to typed commands.',
-	},
-	{
 		file: 'renderer/RenderInvalidationCoordinator.ts',
 		kind: 'render-authority',
 		justification: 'Renderer authority bridges state/event observations into frame-coordinated paint work.',

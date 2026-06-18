@@ -1,18 +1,13 @@
 import { GridEventName, type GridState } from '../store.js';
 import type { StateManager } from '../state/StateManager.js';
-import type { InvalidationManager } from '../renderer/invalidationManager.js';
 import type { CommandHistory } from '../commands/CommandHistory.js';
-import type { EventBus } from '../events/EventBus.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import type { GridChange } from '../engine/GridChangeApplier.js';
 
 export interface GridStateFeatureControllerDeps<TRowData = unknown> {
 	stateManager: StateManager<TRowData>;
-	invalidation: InvalidationManager;
 	commandHistory: CommandHistory;
-	eventBus: EventBus<TRowData>;
-	requestRender: (reason: string) => void;
-	applyChange?: (change: GridChange<TRowData>) => void;
+	applyChange: (change: GridChange<TRowData>) => void;
 }
 
 export class GridStateFeatureController<TRowData = unknown> {
@@ -23,7 +18,11 @@ export class GridStateFeatureController<TRowData = unknown> {
 	}
 
 	public setRowOverscanPx(px: number): void {
-		this.deps.stateManager.setState({ rowOverscanPx: px });
+		this.deps.applyChange({
+			reason: 'ui:set-row-overscan',
+			state: { rowOverscanPx: px },
+			requestRender: false,
+		});
 	}
 
 	public getColBuffer(): number {
@@ -31,89 +30,65 @@ export class GridStateFeatureController<TRowData = unknown> {
 	}
 
 	public setColBuffer(colBuffer: number): void {
-		this.deps.stateManager.setState({ colBuffer });
+		this.deps.applyChange({
+			reason: 'ui:set-col-buffer',
+			state: { colBuffer },
+			requestRender: false,
+		});
 	}
 
 	public setStyleRules(styleRules: GridState<TRowData>['styleRules']): void {
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'ui:set-style-rules',
-				state: { styleRules },
-				invalidations: [
-					{ kind: 'viewport', reason: 'style rules' },
-					{ kind: 'headers', reason: 'style rules' },
-					{ kind: 'overlay', reason: 'style rules' },
-				],
-				requestRender: true,
-			});
-			return;
-		}
-		this.deps.stateManager.setState({ styleRules });
-		this.deps.invalidation.invalidateViewport('style rules');
-		this.deps.invalidation.invalidateHeaders('style rules');
-		this.deps.invalidation.invalidateOverlay('style rules');
-		this.deps.requestRender('style rules');
+		this.deps.applyChange({
+			reason: 'ui:set-style-rules',
+			state: { styleRules },
+			invalidations: [
+				{ kind: 'viewport', reason: 'style rules' },
+				{ kind: 'headers', reason: 'style rules' },
+				{ kind: 'overlay', reason: 'style rules' },
+			],
+			requestRender: true,
+		});
 	}
 
 	public setShowFloatingFilters(enabled: boolean): void {
 		if (this.deps.stateManager.getState().showFloatingFilters === enabled) return;
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'ui:set-floating-filters',
-				state: { showFloatingFilters: enabled },
-				invalidations: [
-					{ kind: 'geometry', reason: 'showFloatingFilters' },
-					{ kind: 'viewport', reason: 'showFloatingFilters' },
-					{ kind: 'headers', reason: 'showFloatingFilters' },
-				],
-				requestRender: true,
-			});
-			return;
-		}
-		this.deps.stateManager.setState({ showFloatingFilters: enabled });
-		this.deps.invalidation.invalidateGeometry('showFloatingFilters');
-		this.deps.invalidation.invalidateViewport('showFloatingFilters');
-		this.deps.invalidation.invalidateHeaders('showFloatingFilters');
-		this.deps.requestRender('showFloatingFilters');
+		this.deps.applyChange({
+			reason: 'ui:set-floating-filters',
+			state: { showFloatingFilters: enabled },
+			invalidations: [
+				{ kind: 'geometry', reason: 'showFloatingFilters' },
+				{ kind: 'viewport', reason: 'showFloatingFilters' },
+				{ kind: 'headers', reason: 'showFloatingFilters' },
+			],
+			requestRender: true,
+		});
 	}
 
 	public setSidebarOpenPanel(panelId: string | null): void {
 		if (this.deps.stateManager.getState().sidebarOpenPanel === panelId) return;
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'ui:set-sidebar-panel',
-				state: { sidebarOpenPanel: panelId },
-				requestRender: false,
-			});
-			return;
-		}
-		this.deps.stateManager.setState({ sidebarOpenPanel: panelId });
+		this.deps.applyChange({
+			reason: 'ui:set-sidebar-panel',
+			state: { sidebarOpenPanel: panelId },
+			requestRender: false,
+		});
 	}
 
 	public setChartOpen(chartOpen: boolean): void {
 		if ((this.deps.stateManager.getState().chartOpen ?? false) === chartOpen) return;
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'ui:set-chart-open',
-				state: { chartOpen },
-				requestRender: false,
-			});
-			return;
-		}
-		this.deps.stateManager.setState({ chartOpen });
+		this.deps.applyChange({
+			reason: 'ui:set-chart-open',
+			state: { chartOpen },
+			requestRender: false,
+		});
 	}
 
 	public setThemeName(themeName: GridState<TRowData>['themeName']): void {
 		if (this.deps.stateManager.getState().themeName === themeName) return;
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'ui:set-theme',
-				state: { themeName },
-				requestRender: false,
-			});
-			return;
-		}
-		this.deps.stateManager.setState({ themeName });
+		this.deps.applyChange({
+			reason: 'ui:set-theme',
+			state: { themeName },
+			requestRender: false,
+		});
 	}
 
 	public resizeRow(rowId: string, height: number, undoable = true): void {
@@ -132,62 +107,41 @@ export class GridStateFeatureController<TRowData = unknown> {
 	}
 
 	public setRowHeights(rowHeights: Record<string, number>): void {
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'geometry:set-row-heights',
-				state: { rowHeights },
-				invalidations: [
-					{ kind: 'geometry', reason: 'row heights' },
-					{ kind: 'viewport', reason: 'row heights' },
-				],
-				domains: ['geometry'],
-				requestRender: true,
-			});
-			return;
-		}
-		this.deps.stateManager.setState({ rowHeights });
-		this.deps.invalidation.invalidateGeometry('row heights');
-		this.deps.invalidation.invalidateViewport('row heights');
-		this.deps.requestRender('row heights');
+		this.deps.applyChange({
+			reason: 'geometry:set-row-heights',
+			state: { rowHeights },
+			invalidations: [
+				{ kind: 'geometry', reason: 'row heights' },
+				{ kind: 'viewport', reason: 'row heights' },
+			],
+			domains: ['geometry'],
+			requestRender: true,
+		});
 	}
 
 	public setDefaultRowHeight(defaultRowHeight: number): void {
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'geometry:set-default-row-height',
-				state: { defaultRowHeight },
-				invalidations: [
-					{ kind: 'geometry', reason: 'default row height' },
-					{ kind: 'viewport', reason: 'default row height' },
-				],
-				domains: ['geometry'],
-				requestRender: true,
-			});
-			return;
-		}
-		this.deps.stateManager.setState({ defaultRowHeight });
-		this.deps.invalidation.invalidateGeometry('default row height');
-		this.deps.invalidation.invalidateViewport('default row height');
-		this.deps.requestRender('default row height');
+		this.deps.applyChange({
+			reason: 'geometry:set-default-row-height',
+			state: { defaultRowHeight },
+			invalidations: [
+				{ kind: 'geometry', reason: 'default row height' },
+				{ kind: 'viewport', reason: 'default row height' },
+			],
+			domains: ['geometry'],
+			requestRender: true,
+		});
 	}
 
 	public setSortModel(sortModel: SortModel | null, undoable = true): void {
 		const oldSort = this.deps.stateManager.getState().sortModel;
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'rows:set-sort-model',
-				state: { sortModel },
-				invalidations: [{ kind: 'headers' }, { kind: 'full' }],
-				domains: ['rows', 'sorting'],
-				events: [{ type: GridEventName.sortChanged, payload: { sortModel } as never }],
-				requestRender: true,
-			});
-		} else {
-			this.deps.stateManager.setState({ sortModel });
-			this.deps.invalidation.invalidateHeaders('sort');
-			this.deps.invalidation.invalidateFull('sort');
-			this.deps.requestRender('sort');
-		}
+		this.deps.applyChange({
+			reason: 'rows:set-sort-model',
+			state: { sortModel },
+			invalidations: [{ kind: 'headers' }, { kind: 'full' }],
+			domains: ['rows', 'sorting'],
+			events: [{ type: GridEventName.sortChanged, payload: { sortModel } as never }],
+			requestRender: true,
+		});
 
 		if (undoable) {
 			this.deps.commandHistory.add({
@@ -199,20 +153,14 @@ export class GridStateFeatureController<TRowData = unknown> {
 
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
 		const oldFilter = this.deps.stateManager.getState().filterModel;
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'rows:set-filter-model',
-				state: { filterModel },
-				invalidations: [{ kind: 'full' }],
-				domains: ['rows', 'filtering'],
-				events: [{ type: GridEventName.filterChanged, payload: { filterModel } as never }],
-				requestRender: true,
-			});
-		} else {
-			this.deps.stateManager.setState({ filterModel });
-			this.deps.invalidation.invalidateFull('filter');
-			this.deps.requestRender('filter');
-		}
+		this.deps.applyChange({
+			reason: 'rows:set-filter-model',
+			state: { filterModel },
+			invalidations: [{ kind: 'full' }],
+			domains: ['rows', 'filtering'],
+			events: [{ type: GridEventName.filterChanged, payload: { filterModel } as never }],
+			requestRender: true,
+		});
 
 		if (undoable) {
 			this.deps.commandHistory.add({
@@ -234,45 +182,23 @@ export class GridStateFeatureController<TRowData = unknown> {
 			totalRows: metrics?.totalRows ?? 0,
 			pageSize: current.pageSize,
 		};
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'rows:set-pagination-page',
-				state: { pagination: { pageSize: current.pageSize, page: nextPage } },
-				domains: ['rows'],
-				events: [{ type: GridEventName.paginationChanged, payload: payload as never }],
-				requestRender: true,
-			});
-			return;
-		}
-		this.deps.stateManager.setState({ pagination: { pageSize: current.pageSize, page: nextPage } });
-		this.deps.eventBus.dispatchEvent(GridEventName.paginationChanged, payload);
-		this.deps.requestRender('pagination');
+		this.deps.applyChange({
+			reason: 'rows:set-pagination-page',
+			state: { pagination: { pageSize: current.pageSize, page: nextPage } },
+			domains: ['rows'],
+			events: [{ type: GridEventName.paginationChanged, payload: payload as never }],
+			requestRender: true,
+		});
 	}
 
 	private applyRowHeight(rowId: string, height: number): void {
-		if (this.deps.applyChange) {
-			this.deps.applyChange({
-				reason: 'geometry:resize-row',
-				state: (state) => ({ rowHeights: { ...state.rowHeights, [rowId]: height } }),
-				invalidations: [{ kind: 'geometry' }, { kind: 'row', rowId, reason: 'row resize' }],
-				domains: ['geometry'],
-				events: [{ type: GridEventName.rowResized, payload: { rowId, height } as never }],
-				requestRender: true,
-			});
-		} else {
-			this.deps.stateManager.setState((state) => ({
-				rowHeights: {
-					...state.rowHeights,
-					[rowId]: height,
-				},
-			}));
-			this.deps.invalidation.invalidateGeometry('row resize');
-			this.deps.invalidation.invalidateRow(rowId, 'row resize');
-			this.deps.eventBus.dispatchEvent(GridEventName.rowResized, {
-				rowId,
-				height,
-			});
-			this.deps.requestRender('row resize');
-		}
+		this.deps.applyChange({
+			reason: 'geometry:resize-row',
+			state: (state) => ({ rowHeights: { ...state.rowHeights, [rowId]: height } }),
+			invalidations: [{ kind: 'geometry' }, { kind: 'row', rowId, reason: 'row resize' }],
+			domains: ['geometry'],
+			events: [{ type: GridEventName.rowResized, payload: { rowId, height } as never }],
+			requestRender: true,
+		});
 	}
 }

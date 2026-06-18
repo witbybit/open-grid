@@ -39,6 +39,8 @@ export type GridChangeReason =
 	| 'columns:set-pinned-counts'
 	| 'ui:set-style-rules'
 	| 'ui:set-floating-filters'
+	| 'ui:set-row-overscan'
+	| 'ui:set-col-buffer'
 	| 'ui:set-sidebar-panel'
 	| 'ui:set-chart-open'
 	| 'ui:set-theme';
