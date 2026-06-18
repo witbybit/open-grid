@@ -370,6 +370,70 @@ export function areRowHeightsEqual(current: Record<string, number>, next: Record
 	return true;
 }
 
+function buildPersistedStateRestoreOps(
+	api: {
+		setColumnOrder(fields: string[]): void;
+		setColumnsVisible(fields: string[], visible: boolean): void;
+		setColumnWidth(field: string, width: number): void;
+		setSortModel(model: any): void;
+		setFilterModel(model: any): void;
+		switchTheme(theme: string): void;
+		setGroupBy(fields: string[]): void;
+		setShowGroupFooter(enabled: boolean): void;
+		setStickyGroupRows(enabled: boolean): void;
+		setPinnedColumns(pins: any): void;
+	},
+	state: PersistedGridState,
+	columns: Array<{ field: string }>
+): Array<() => void> {
+	const ops: Array<() => void> = [];
+	const knownFields = new Set(columns.map((column) => column.field));
+
+	if (state.columnOrder) {
+		const validOrder = state.columnOrder.filter((field) => knownFields.has(field));
+		if (validOrder.length === columns.length) {
+			ops.push(() => api.setColumnOrder(validOrder));
+		}
+	}
+
+	if (state.columnVisibility) {
+		const hidden = Object.entries(state.columnVisibility)
+			.filter(([, visible]) => visible === false)
+			.map(([field]) => field)
+			.filter((field) => knownFields.has(field));
+		const visible = Object.entries(state.columnVisibility)
+			.filter(([, visible]) => visible === true)
+			.map(([field]) => field)
+			.filter((field) => knownFields.has(field));
+		if (hidden.length > 0) ops.push(() => api.setColumnsVisible(hidden, false));
+		if (visible.length > 0) ops.push(() => api.setColumnsVisible(visible, true));
+	}
+
+	if (state.columnWidths) {
+		for (const [field, width] of Object.entries(state.columnWidths)) {
+			if (knownFields.has(field)) {
+				ops.push(() => api.setColumnWidth(field, width));
+			}
+		}
+	}
+
+	if (state.sortModel !== undefined) {
+		const sortModel = state.sortModel;
+		if (sortModel === null || (Array.isArray(sortModel) && sortModel.every((sort) => knownFields.has(sort.colId)))) {
+			ops.push(() => api.setSortModel(sortModel));
+		}
+	}
+
+	if (state.filterModel !== undefined) ops.push(() => api.setFilterModel(state.filterModel));
+	if (state.themeName !== undefined && isBuiltInThemeName(state.themeName)) ops.push(() => api.switchTheme(state.themeName));
+	if (state.groupBy !== undefined) ops.push(() => api.setGroupBy(state.groupBy.filter((field) => knownFields.has(field))));
+	if (state.showGroupFooter !== undefined) ops.push(() => api.setShowGroupFooter(state.showGroupFooter));
+	if (state.enableStickyGroupRows !== undefined) ops.push(() => api.setStickyGroupRows(state.enableStickyGroupRows));
+	if (state.pinnedColumns !== undefined) ops.push(() => api.setPinnedColumns(state.pinnedColumns));
+
+	return ops;
+}
+
 /**
  * Apply a persisted state blob via GridApi method calls.
  * Returns true on success, false if the schema version is incompatible.
@@ -395,40 +459,32 @@ export function applyPersistedStateToApi<TRowData>(
 	if (versionError !== null) {
 		return false;
 	}
-	const columns = api.getState().columns;
-	const knownFields = new Set(columns.map((c: any) => c.field));
-	if (state.columnOrder) {
-		const validOrder = state.columnOrder.filter((f) => knownFields.has(f));
-		if (validOrder.length === columns.length) api.setColumnOrder(validOrder);
+	const originalState = api.getState();
+	const originalColumns = originalState.columns as Array<{ field: string }>;
+	let originalSnapshot: PersistedGridState | null = null;
+	try {
+		originalSnapshot = extractPersistedState(originalState);
+	} catch {
+		originalSnapshot = null;
 	}
-	if (state.columnVisibility) {
-		const hidden = Object.entries(state.columnVisibility)
-			.filter(([, v]) => v === false)
-			.map(([f]) => f)
-			.filter((f) => knownFields.has(f));
-		const visible = Object.entries(state.columnVisibility)
-			.filter(([, v]) => v === true)
-			.map(([f]) => f)
-			.filter((f) => knownFields.has(f));
-		if (hidden.length > 0) api.setColumnsVisible(hidden, false);
-		if (visible.length > 0) api.setColumnsVisible(visible, true);
-	}
-	if (state.columnWidths) {
-		for (const [field, width] of Object.entries(state.columnWidths)) {
-			if (knownFields.has(field)) api.setColumnWidth(field, width);
+	const applyOps = buildPersistedStateRestoreOps(api, state, originalColumns);
+
+	try {
+		for (const op of applyOps) {
+			op();
 		}
-	}
-	if (state.sortModel !== undefined) {
-		const sm = state.sortModel;
-		if (sm === null || (Array.isArray(sm) && sm.every((s) => knownFields.has(s.colId)))) {
-			api.setSortModel(sm);
+		return true;
+	} catch {
+		if (originalSnapshot !== null) {
+			try {
+				const rollbackOps = buildPersistedStateRestoreOps(api, originalSnapshot, originalColumns);
+				for (const rollback of rollbackOps) {
+					rollback();
+				}
+			} catch {
+				// Best-effort rollback only. The caller reports the failed restore attempt.
+			}
 		}
+		return false;
 	}
-	if (state.filterModel !== undefined) api.setFilterModel(state.filterModel);
-	if (state.themeName !== undefined && isBuiltInThemeName(state.themeName)) api.switchTheme(state.themeName);
-	if (state.groupBy !== undefined) api.setGroupBy(state.groupBy.filter((f) => knownFields.has(f)));
-	if (state.showGroupFooter !== undefined) api.setShowGroupFooter(state.showGroupFooter);
-	if (state.enableStickyGroupRows !== undefined) api.setStickyGroupRows(state.enableStickyGroupRows);
-	if (state.pinnedColumns !== undefined) api.setPinnedColumns(state.pinnedColumns);
-	return true;
 }

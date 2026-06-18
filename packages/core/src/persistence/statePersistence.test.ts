@@ -544,5 +544,51 @@ describe('statePersistence', () => {
 			expect(mockApi.setStickyGroupRows).toHaveBeenCalledWith(false);
 			expect(mockApi.setPinnedColumns).toHaveBeenCalledWith({ left: 1, right: 0 });
 		});
+
+		it('rolls back to the pre-restore snapshot if a setter throws mid-apply', () => {
+			const mockApi = {
+				getState: vi.fn(() => ({
+					columns: [{ field: 'id' }, { field: 'name' }],
+					columnWidths: { id: 75 },
+					sortModel: [{ colId: 'name', sort: 'desc' }],
+					filterModel: null,
+					themeName: 'dark',
+					groupBy: [],
+					showGroupFooter: false,
+					enableStickyGroupRows: true,
+					pinnedColumns: { left: 0, right: 0 },
+				})),
+				setColumnOrder: vi.fn(),
+				setColumnsVisible: vi.fn(),
+				setColumnWidth: vi
+					.fn()
+					.mockImplementationOnce(() => undefined)
+					.mockImplementationOnce(() => {
+						throw new Error('boom');
+					})
+					.mockImplementation(() => undefined),
+				setSortModel: vi.fn(),
+				setFilterModel: vi.fn(),
+				switchTheme: vi.fn(),
+				setGroupBy: vi.fn(),
+				setShowGroupFooter: vi.fn(),
+				setStickyGroupRows: vi.fn(),
+				setPinnedColumns: vi.fn(),
+			};
+
+			const result = applyPersistedStateToApi(mockApi, {
+				v: GRID_STATE_SCHEMA_VERSION,
+				columnWidths: { id: 120, name: 180 },
+				sortModel: [{ colId: 'id', sort: 'asc' }],
+				themeName: 'light',
+			});
+
+			expect(result).toBe(false);
+			expect(mockApi.setColumnWidth).toHaveBeenNthCalledWith(1, 'id', 120);
+			expect(mockApi.setColumnWidth).toHaveBeenNthCalledWith(3, 'id', 75);
+			expect(mockApi.setSortModel).not.toHaveBeenCalledWith([{ colId: 'id', sort: 'asc' }]);
+			expect(mockApi.setSortModel).toHaveBeenCalledWith([{ colId: 'name', sort: 'desc' }]);
+			expect(mockApi.switchTheme).toHaveBeenCalledWith('dark');
+		});
 	});
 });
