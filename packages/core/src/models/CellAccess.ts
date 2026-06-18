@@ -1,6 +1,8 @@
 import type { GridState } from '../state/GridState.js';
 import type { CellAccessRuntime } from '../engine/runtimePorts.js';
-import type { ColumnDef, GridCellAccess, RowNode } from '../store.js';
+import type { GridCellAccess } from '../api/GridApi.js';
+import type { ColumnDef } from '../columnDef.js';
+import type { RowNode } from '../rowNode.js';
 
 export class CellAccessModel<TRowData = unknown> {
 	constructor(private readonly runtime: CellAccessRuntime<TRowData>) {}

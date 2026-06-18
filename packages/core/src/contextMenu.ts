@@ -1,4 +1,4 @@
-import { GridCellPointer, GridPlugin, GridApi, GridPluginRuntime, GridSelectionState } from './store.js';
+import type { GridApi, GridCellPointer, GridPlugin, GridPluginRuntime, GridSelectionState } from './api/GridApi.js';
 import { exportToCsv } from './export/csvExport.js';
 import { attachRovingMenuKeyboard } from './menuKeyboardNav.js';
 import { isFilterableColumn, buildFilterByValue, applyFilterToModel } from './filterOperations.js';

@@ -1,6 +1,8 @@
-import { isDataCellSelectable, GridEventName } from '../store.js';
-import type { RowModel, RowSelectionGesture, RowSelectionGestureSource, RowSelectionChangeResult, RowSelectionScope } from '../store.js';
+import type { RowSelectionGesture, RowSelectionGestureSource, RowSelectionChangeResult, RowSelectionScope } from '../api/GridApi.js';
+import { GridEventName } from '../api/GridEvents.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
+import type { RowModel } from '../rowModel.js';
+import { isDataCellSelectable } from '../visualRow.js';
 
 export class RowSelectionFeatureController<TRowData = unknown> {
 	constructor(

@@ -1,11 +1,8 @@
 /**
  * Column definition types, cell renderer interfaces, and path utilities.
- *
- * Circular type-only imports from store.ts are intentional and safe — they are
- * erased at build time and TypeScript resolves them lazily.
  */
 import type { RowNode } from './rowNode.js';
-import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState } from './store.js';
+import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState } from './api/GridApi.js';
 import type { GroupVisualRow, DetailVisualRow } from './visualRow.js';
 
 // ─── Value getter / setter / validator params ─────────────────────────────────

@@ -1,4 +1,5 @@
-import { RowNode, validateRowIds } from '../store.js';
+import { validateRowIds } from '../ids.js';
+import { RowNode } from '../rowNode.js';
 
 export type RowUpdate<T> = (rows: T[]) => T[];
 

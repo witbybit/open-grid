@@ -1,7 +1,8 @@
-import { canEditCell, GridEventName } from '../store.js';
-import type { RowModel } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
 import type { DataModel } from '../models/DataModel.js';
+import type { RowModel } from '../rowModel.js';
+import { canEditCell } from '../visualRow.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;

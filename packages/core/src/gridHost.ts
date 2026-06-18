@@ -9,7 +9,7 @@ import type {
 	GridHeaderMenuMount,
 	GridHeaderMenuUnmount,
 } from './renderer/IGridRenderer.js';
-import type { GridApi } from './store.js';
+import type { GridApi } from './api/GridApi.js';
 import type { ColumnDef, InternalColumnDef } from './columnDef.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {

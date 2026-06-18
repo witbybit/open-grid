@@ -1,7 +1,7 @@
 import type { GridCellRange, GridRowsAccessor } from './api/GridApi.js';
 import type { VisualRow } from './visualRow.js';
 import type { RowNode } from './rowNode.js';
-import type { RowModel } from './store.js';
+import type { RowModel } from './rowModel.js';
 
 /** Minimal interface required to build a GridRowsAccessor from a GridStore. */
 export interface RowsAccessorSource<TRowData> {

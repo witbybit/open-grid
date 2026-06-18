@@ -1,4 +1,5 @@
-import type { GridState, ColumnDef } from '../store.js';
+import type { ColumnDef } from '../columnDef.js';
+import type { GridState } from '../state/GridState.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { isBuiltInThemeName, type BuiltInThemeName } from '../renderer/themes.js';
 
@@ -425,10 +426,22 @@ function buildPersistedStateRestoreOps(
 	}
 
 	if (state.filterModel !== undefined) ops.push(() => api.setFilterModel(state.filterModel));
-	if (state.themeName !== undefined && isBuiltInThemeName(state.themeName)) ops.push(() => api.switchTheme(state.themeName));
-	if (state.groupBy !== undefined) ops.push(() => api.setGroupBy(state.groupBy.filter((field) => knownFields.has(field))));
-	if (state.showGroupFooter !== undefined) ops.push(() => api.setShowGroupFooter(state.showGroupFooter));
-	if (state.enableStickyGroupRows !== undefined) ops.push(() => api.setStickyGroupRows(state.enableStickyGroupRows));
+	if (state.themeName !== undefined && isBuiltInThemeName(state.themeName)) {
+		const themeName = state.themeName;
+		ops.push(() => api.switchTheme(themeName));
+	}
+	if (state.groupBy !== undefined) {
+		const groupBy = state.groupBy;
+		ops.push(() => api.setGroupBy(groupBy.filter((field) => knownFields.has(field))));
+	}
+	if (state.showGroupFooter !== undefined) {
+		const showGroupFooter = state.showGroupFooter;
+		ops.push(() => api.setShowGroupFooter(showGroupFooter));
+	}
+	if (state.enableStickyGroupRows !== undefined) {
+		const enableStickyGroupRows = state.enableStickyGroupRows;
+		ops.push(() => api.setStickyGroupRows(enableStickyGroupRows));
+	}
 	if (state.pinnedColumns !== undefined) ops.push(() => api.setPinnedColumns(state.pinnedColumns));
 
 	return ops;

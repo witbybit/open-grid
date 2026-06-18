@@ -1,5 +1,6 @@
-import { RowNode, compilePathGetter, type ColumnDef } from '../store.js';
+import { compilePathGetter, type ColumnDef } from '../columnDef.js';
 import type { DataModelRuntime } from '../engine/runtimePorts.js';
+import { RowNode } from '../rowNode.js';
 
 export class DataModel<TRowData = unknown> {
 	private autoRowIdMap = new WeakMap<object, string>();

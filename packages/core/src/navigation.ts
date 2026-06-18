@@ -1,4 +1,5 @@
-import { GridEventName, GridCellPointer, GridPlugin, GridPluginRuntime } from './store.js';
+import type { GridCellPointer, GridPlugin, GridPluginRuntime } from './api/GridApi.js';
+import { GridEventName } from './api/GridEvents.js';
 
 export interface GridNavigationOptions {
 	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;

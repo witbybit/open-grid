@@ -1,8 +1,8 @@
-import { GridEventName } from '../store.js';
-import type { RowModel, RowModelRefreshResult } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { InvalidationManager } from '../renderer/invalidationManager.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
+import type { RowModel, RowModelRefreshResult } from '../rowModel.js';
 
 export interface GroupingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;

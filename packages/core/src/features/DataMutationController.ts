@@ -1,10 +1,11 @@
-import { GridEventName, type GridCellPointer, type RowModel } from '../store.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { ColumnModel } from '../models/ColumnModel.js';
 import type { EventBus } from '../events/EventBus.js';
 import type { CommandHistory } from '../commands/CommandHistory.js';
 import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
-import type { BatchCellValueUpdate } from '../api/GridApi.js';
+import type { BatchCellValueUpdate, GridCellPointer } from '../api/GridApi.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { RowModel } from '../rowModel.js';
 
 export type { BatchCellValueUpdate };
 

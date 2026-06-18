@@ -1,4 +1,4 @@
-import { GridEventName } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { RowModel } from '../rowModel.js';

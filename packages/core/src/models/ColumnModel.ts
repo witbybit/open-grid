@@ -5,7 +5,7 @@
 	type ColumnRenderPlan,
 	type ColumnRenderMode,
 	type CompiledGridPlan,
-} from '../store.js';
+} from '../columnDef.js';
 import type { ColumnModelRuntime } from '../engine/runtimePorts.js';
 import { IndexMapper } from './IndexMapper.js';
 

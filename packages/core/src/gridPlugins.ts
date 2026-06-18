@@ -1,7 +1,7 @@
 import { getPluginControllerFromApi } from './createGrid.js';
 import { GridContextMenuPlugin, type GridContextMenuOptions } from './contextMenu.js';
 import { GridNavigationController, type GridNavigationOptions } from './navigation.js';
-import type { GridApi } from './store.js';
+import type { GridApi } from './api/GridApi.js';
 
 export interface GridNavigationHandle {
 	handleKeyDown(event: KeyboardEvent): void;

@@ -1,6 +1,8 @@
 import { createFormulaRefKey } from '../ids.js';
-import type { GridCellRange, ColumnDef, RowModel } from '../store.js';
+import type { GridCellRange } from '../api/GridApi.js';
+import type { ColumnDef } from '../columnDef.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { RowModel } from '../rowModel.js';
 
 type FillDirection = 'DOWN' | 'UP' | 'RIGHT' | 'LEFT';
 

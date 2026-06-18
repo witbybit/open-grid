@@ -1,4 +1,6 @@
-import { GridEventName, type ColumnDef, type ColumnState } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { ColumnDef } from '../columnDef.js';
+import type { ColumnState } from '../state/GridState.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
 
 export class ColumnFeatureController<TRowData = unknown> {

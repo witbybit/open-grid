@@ -1,6 +1,8 @@
-import { RowNode, type ColumnDef, type VisualRow } from '../store.js';
+import type { ColumnDef } from '../columnDef.js';
 import type { SortModel, FilterModel, GroupRowMeta } from '../rowModel.js';
 import { applyClientFilterOnly, applyClientSortAndFilter } from '../rowModel.js';
+import { RowNode } from '../rowNode.js';
+import type { VisualRow } from '../visualRow.js';
 import { createRowPipelineContext } from './pipelineContext.js';
 import { groupStage } from './stages/groupStage.js';
 import { treeStage } from './stages/treeStage.js';
