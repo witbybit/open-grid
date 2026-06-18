@@ -19,8 +19,7 @@ export const GRID_DIRECT_WRITE_ALLOWLIST = [
 	{
 		file: 'engine/GridEngine.ts',
 		kind: 'bootstrap-derived',
-		justification:
-			'Construction/bootstrap, row-model registration, and the remaining centralized derived runtime writes remain here temporarily.',
+		justification: 'Construction/bootstrap and the remaining centralized derived runtime writes remain here temporarily.',
 	},
 	{
 		file: 'engine/CellNotificationController.ts',

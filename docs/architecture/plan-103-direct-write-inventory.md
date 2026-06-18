@@ -16,6 +16,8 @@ This is the first checked-in inventory for the Plan 103 convergence pass. It rec
     - Converted bulk row-height setters to `engine.setRowHeights(...)` / `engine.setDefaultRowHeight(...)`.
 - `engine/createRowModelRuntimes.ts`
   Centralized runtime bootstrap/loading/pagination writes behind named `GridEngine` allowlist methods so the factory no longer mutates state directly.
+- `engine/GridEngine.ts`
+  Converted `setData(...)`, range-selection commits, and row-model registration side effects onto `GridChangeApplier`.
 
 ## Current allowlist
 
@@ -24,13 +26,13 @@ The source-of-truth allowlist lives in [packages/core/src/engine/gridDirectWrite
 ## Remaining hot spots to convert next
 
 - `features/GridStateFeatureController.ts`
-    - `setRowOverscanPx`, `setColBuffer`, and compatibility fallbacks still write directly.
+  `setRowOverscanPx`, `setColBuffer`, and compatibility fallbacks still write directly.
 - `engine/GridEngine.ts`
-    - Bootstrap, row-model registration, selection application, and `setData(...)` still perform direct writes.
+  Bootstrap plus the remaining derived runtime helpers (`initializeRowModelState`, `bumpRowModelGlobalVersion`, `updateExpansionState`, `setRowModelLoadingState`, `setServerPaginationState`) still perform direct writes.
 - `store.ts`
-    - Panel/chart toggles, viewport pin sync, and theme switching still bypass typed commands.
+  Legacy facade compatibility still exists, but panel/chart/theme/pin sync now route through typed engine intent methods.
 - `renderer/RenderInvalidationCoordinator.ts`
-    - State-reaction invalidation remains active and will be reduced in Plan 105.
+  State-reaction invalidation remains active and will be reduced in Plan 105.
 
 ## Immediate count reduction from this pass
 

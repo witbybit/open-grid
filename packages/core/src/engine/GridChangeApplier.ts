@@ -32,6 +32,7 @@ export type GridChangeReason =
 	| 'rows:set-sort-model'
 	| 'rows:set-filter-model'
 	| 'rows:set-pagination-page'
+	| 'rows:register-model'
 	| 'geometry:resize-row'
 	| 'geometry:set-row-heights'
 	| 'geometry:set-default-row-height'

@@ -1347,4 +1347,11 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("reason: 'columns:set-data'");
 		expect(content).toContain("reason: 'selection:set-range'");
 	});
+
+	it('GridEngine row-model registration routes state effects through GridChangeApplier (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+		expect(content).toContain("reason: 'rows:register-model'");
+		expect(content).not.toContain("this.invalidation.invalidateFull('row model registered')");
+		expect(content).not.toContain("this.requestRender('row model registered')");
+	});
 });

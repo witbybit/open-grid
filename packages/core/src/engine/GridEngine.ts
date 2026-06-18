@@ -684,16 +684,19 @@ export class GridEngine<TRowData = unknown> {
 
 	public registerRowModel(rowModel: RowModel<TRowData>): void {
 		this.rowModel = rowModel;
-		this.rowModelVersion++;
-		this.geometryVersion++;
-		this.notifyDomainVersionListeners();
 		// Refresh coordinates
 		const state = this.stateManager.getState();
 		this.geometry.updateRows(this.getRowHeightsList(rowModel, state.rowHeights, state.defaultRowHeight), state.defaultRowHeight);
-		this.stateManager.setState({ globalVersion: state.globalVersion + 1 });
-		this.invalidation.invalidateGeometry('row model registered');
-		this.invalidation.invalidateFull('row model registered');
-		this.requestRender('row model registered');
+		this.changeApplier.apply({
+			reason: 'rows:register-model',
+			state: { globalVersion: state.globalVersion + 1 },
+			invalidations: [
+				{ kind: 'geometry', reason: 'row model registered' },
+				{ kind: 'full', reason: 'row model registered' },
+			],
+			domains: ['rows', 'geometry'],
+			requestRender: true,
+		});
 	}
 
 	public getRowModel(): RowModel<TRowData> | null {
