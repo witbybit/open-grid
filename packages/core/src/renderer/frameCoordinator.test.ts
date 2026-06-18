@@ -612,32 +612,32 @@ describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => 
 		coordinator = new DefaultFrameCoordinator(
 			makeBaseDeps({
 				onScrollFrame: () => {
-					// Proper state machine: idle → scroll-pending (increments epoch) → scroll-frame → post-scroll
-					rs.transitionTo('scroll-pending'); // epoch → 1
-					rs.transitionTo('scroll-frame');
-					// Request post-scroll work here so it captures the current (incremented) epoch.
-					coordinator.requestPostScrollWork(); // postScrollEpoch = 1
-					rs.transitionTo('post-scroll');
+					// FrameCoordinator has already transitioned to scroll-frame before calling this.
+					// Request post-scroll work — captures the current scroll epoch.
+					coordinator.requestPostScrollWork();
+					// FrameCoordinator transitions to post-scroll in its finally block after we return.
 				},
 				onPostScrollWork,
 				gridScheduler: gs,
 				runtimeState: rs,
+				// Use 1 quiet frame so the test doesn't need to fire 3 extra RAFs.
+				scrollEndQuietFrames: 1,
 			})
 		);
 
+		// Simulate markScrolling(): scroll-pending increments epoch to 1.
+		rs.transitionTo('scroll-pending');
 		coordinator.requestScrollFrame();
 
-		rafs[0]?.(); // scroll fires → post-scroll phase; post-scroll check retained (scrolling active)
-
-		// post-scroll hasn't run yet (still scrolling — rs.phase === 'post-scroll')
+		rafs[0]?.(); // scroll fires → FrameCoordinator: scroll-frame → onScrollFrame (captures epoch 1) → post-scroll
+		// post-scroll retained (still scrolling — rs.phase === 'post-scroll')
 		expect(onPostScrollWork).not.toHaveBeenCalled();
-		// A new RAF was scheduled inside requestPostScrollWork() during the scroll callback
+		// FrameCoordinator keeps RAF alive while isScrolling() — a new RAF was scheduled.
 		expect(rafs.length).toBeGreaterThanOrEqual(2);
 
-		// Simulate scroll end → idle
-		rs.transitionTo('idle');
-		rafs[rafs.length - 1]?.(); // fire the latest RAF → post-scroll now eligible
-
+		// Fire the quiet frame: FrameCoordinator detects scroll-end, transitions to idle, then
+		// post-scroll conditions are met → onPostScrollWork runs.
+		rafs[rafs.length - 1]?.();
 		expect(onPostScrollWork).toHaveBeenCalledTimes(1);
 	});
 
@@ -663,6 +663,173 @@ describe('DefaultFrameCoordinator – post-scroll durability (Plan 096)', () => 
 
 		capturedRaf?.(); // RAF fires with stale epoch
 		expect(onPostScrollWork).not.toHaveBeenCalled();
+	});
+
+	// ── Plan 098: Render Runtime Convergence ──────────────────────────────────────
+
+	it('[098] FrameCoordinator wraps onScrollFrame with scroll-frame/post-scroll phase transitions', () => {
+		const rs = new RenderRuntimeState();
+		const phases: string[] = [];
+		const rafs: Array<() => void> = [];
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			raf: (cb) => { rafs.push(cb); return rafs.length; },
+		};
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				onScrollFrame: () => {
+					phases.push(rs.phase); // should be 'scroll-frame' inside callback
+				},
+				runtimeState: rs,
+				gridScheduler: gs,
+			})
+		);
+
+		rs.transitionTo('scroll-pending');
+		coordinator.requestScrollFrame();
+		rafs[0]?.(); // fire RAF manually
+
+		expect(phases).toEqual(['scroll-frame']);
+		// FrameCoordinator transitions to post-scroll in finally block after callback returns
+		expect(rs.phase).toBe('post-scroll');
+	});
+
+	it('[098] onScrollFrame must not call transitionTo for scroll phases — FrameCoordinator owns them', () => {
+		const rs = new RenderRuntimeState();
+		let faultMsg = '';
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				onScrollFrame: () => {
+					// Intentionally trying to re-transition (simulates old coordinator code)
+					// This is a double-transition into scroll-frame from scroll-frame — should fault.
+					try { rs.transitionTo('scroll-frame'); } catch { /* absorbed */ }
+				},
+				runtimeState: rs,
+				onFault: (msg) => { faultMsg = msg; },
+			})
+		);
+
+		rs.transitionTo('scroll-pending');
+		// Should not throw — but runtime state may fault internally
+		expect(() => coordinator.requestScrollFrame()).not.toThrow();
+		// FrameCoordinator itself should not fault (the fault originates from runtimeState, not coordinator)
+		expect(faultMsg).toBe('');
+	});
+
+	it('[098] scroll-end detection fires onScrollEnd after N quiet frames', () => {
+		const rs = new RenderRuntimeState();
+		const onScrollEnd = vi.fn();
+		const rafs: Array<() => void> = [];
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			raf: (cb) => { rafs.push(cb); return rafs.length; },
+		};
+
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				gridScheduler: gs,
+				runtimeState: rs,
+				onScrollEnd,
+				scrollEndQuietFrames: 2,
+			})
+		);
+
+		rs.transitionTo('scroll-pending');
+		coordinator.requestScrollFrame();
+
+		// RAF 0: scroll frame fires, transitions to post-scroll
+		rafs[0]?.();
+		expect(onScrollEnd).not.toHaveBeenCalled();
+		expect(rs.phase).toBe('post-scroll');
+
+		// RAF 1: first quiet frame — count = 1, threshold = 2 — not yet
+		rafs[1]?.();
+		expect(onScrollEnd).not.toHaveBeenCalled();
+		expect(rs.phase).toBe('post-scroll');
+
+		// RAF 2: second quiet frame — count = 2 >= 2 → idle + onScrollEnd
+		rafs[2]?.();
+		expect(onScrollEnd).toHaveBeenCalledTimes(1);
+		expect(rs.phase).toBe('idle');
+	});
+
+	it('[098] scroll-end quiet counter resets when a new scroll frame arrives mid-detection', () => {
+		const rs = new RenderRuntimeState();
+		const onScrollEnd = vi.fn();
+		const rafs: Array<() => void> = [];
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			raf: (cb) => { rafs.push(cb); return rafs.length; },
+		};
+
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				gridScheduler: gs,
+				runtimeState: rs,
+				onScrollEnd,
+				scrollEndQuietFrames: 2,
+			})
+		);
+
+		rs.transitionTo('scroll-pending');
+		coordinator.requestScrollFrame();
+
+		// RAF 0: scroll frame → post-scroll
+		rafs[0]?.();
+
+		// RAF 1: first quiet frame — count = 1
+		rafs[1]?.();
+		expect(onScrollEnd).not.toHaveBeenCalled();
+
+		// New scroll arrives before threshold is reached — reset counter
+		rs.transitionTo('scroll-pending');
+		coordinator.requestScrollFrame();
+		rafs[2]?.(); // second scroll frame → resets quiet count to 0, transitions to post-scroll
+
+		expect(onScrollEnd).not.toHaveBeenCalled();
+		// Counter reset; two more quiet frames needed
+		rafs[3]?.();
+		expect(onScrollEnd).not.toHaveBeenCalled();
+		rafs[4]?.();
+		expect(onScrollEnd).toHaveBeenCalledTimes(1);
+	});
+
+	it('[098] RAF loop stays alive while isScrolling() even with no pending work', () => {
+		const rs = new RenderRuntimeState();
+		const rafCount = { n: 0 };
+		const rafs: Array<() => void> = [];
+		const gs: GridScheduler = {
+			...makeSyncScheduler(),
+			raf: (cb) => { rafCount.n++; rafs.push(cb); return rafCount.n; },
+		};
+
+		new DefaultFrameCoordinator(
+			makeBaseDeps({
+				gridScheduler: gs,
+				runtimeState: rs,
+				scrollEndQuietFrames: 3,
+			})
+		);
+
+		// One scroll frame → transitions to post-scroll → RAF loop must keep going
+		rs.transitionTo('scroll-pending');
+		const rafsBefore = rafCount.n;
+		// Manually schedule and fire
+		rafs.push((() => {}) as () => void); // placeholder
+		// Use a coordinator with captured state
+		const coordinator2 = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				gridScheduler: gs,
+				runtimeState: rs,
+				scrollEndQuietFrames: 3,
+			})
+		);
+		coordinator2.requestScrollFrame();
+		const afterRequest = rafCount.n;
+		expect(afterRequest).toBeGreaterThan(rafsBefore); // at least one RAF scheduled
+
+		rafs[rafs.length - 1]?.(); // fire scroll frame → post-scroll; keepAlive = true
+		expect(rafCount.n).toBeGreaterThan(afterRequest); // additional RAF was scheduled
 	});
 
 	it('destroy() cancels pending post-scroll work before it executes', () => {

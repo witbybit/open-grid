@@ -30,7 +30,6 @@ import { FilterChipBarRenderer } from './filterChipBarRenderer.js';
 import { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import { StatusBarRenderer } from './statusBarRenderer.js';
 import { PaginationBarRenderer } from './paginationBarRenderer.js';
-import type { GridLayoutPlan } from './layoutPlan.js';
 import { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import { RenderInvalidationCoordinator } from './RenderInvalidationCoordinator.js';
 import { ValidationTooltipController } from './ValidationTooltipController.js';
@@ -193,6 +192,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			onScrollFrame: () => this.flushScrollFrame(),
 			onPaintFrame: () => this.flushPaint(),
 			onPostScrollWork: () => this.flushPaint(),
+			onScrollEnd: () => this.scrollCoordinator.finishScrolling(),
 			onFault: (msg) => engine.runtimeFaults.report({ source: 'renderer', operation: 'frame-reentry', error: new Error(msg) }),
 			runtimeState: this.runtimeState,
 			gridScheduler: defaultGridScheduler,
@@ -287,9 +287,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
 		this.rowDrag = new RowDragController<TRowData>(engine);
 		const scrollState: RenderScrollCoordinatorState<TRowData> = {
-			scrollEndRafId: null,
-			scrollEndQuietFrames: 0,
-			scrollEndTickerActive: false,
 			viewportDirtyAfterScroll: false,
 			flushPendingAfterScroll: false,
 			needsPostScrollPortalFlush: false,
@@ -497,7 +494,6 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.stickyGroupRenderer.unmount();
 		this.layoutTransition.destroy();
 		this.frameCoordinator.destroy();
-		this.clearScrollEndTimer();
 		this.clearPostScrollDecorationTimer();
 		this.portalMountManager.releaseAll();
 
@@ -517,48 +513,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.scrollCoordinator.onScroll(scrollTop, scrollLeft, timestamp);
 	};
 
-	private markScrolling(): void {
-		this.scrollCoordinator.markScrolling();
-	}
-
-	private scheduleScrollEnd(): void {
-		this.scrollCoordinator.scheduleScrollEnd();
-	}
-
-	private finishScrolling(): void {
-		this.scrollCoordinator.finishScrolling();
-	}
-
-	private clearScrollEndTimer(): void {
-		this.scrollCoordinator.clearScrollEndTimer();
-	}
-
-	private flushPendingPortalReleasesAfterScroll(): void {
-		this.scrollCoordinator.flushPendingPortalReleasesAfterScroll();
-	}
-
-	private scheduleBudgetedPortalFlush(): void {
-		this.scrollCoordinator.scheduleBudgetedPortalFlush();
-	}
-
 	private clearPostScrollDecorationTimer(): void {
 		this.scrollCoordinator.clearPostScrollDecorationTimer();
 	}
 
-	private scheduleBudgetedDecoration(): void {
-		this.scrollCoordinator.scheduleBudgetedDecoration();
-	}
-
-	private restoreDeferredFocus(): void {
-		this.scrollCoordinator.restoreDeferredFocus();
-	}
-
 	private flushScrollFrame(): void {
 		this.scrollCoordinator.flushScrollFrame();
-	}
-
-	private syncCheapScrollOnly(layoutPlan: GridLayoutPlan): void {
-		this.scrollCoordinator.syncCheapScrollOnly(layoutPlan);
 	}
 
 	private updateCachedGeometryBoundsFromState(defaultColWidth: number, defaultRowHeight: number): void {

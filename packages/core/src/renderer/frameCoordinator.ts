@@ -15,6 +15,16 @@ import type { RenderRuntimeState } from './renderRuntimeState.js';
  *
  * post-scroll work captures the scroll epoch at scheduling time and silently
  * no-ops if a new scroll session has begun.
+ *
+ * Scroll-end detection: after requestScrollFrame() stops arriving, the
+ * coordinator counts quiet frames internally. After scrollEndQuietFrames
+ * consecutive RAF callbacks with no new scroll request, the runtime
+ * transitions to idle and onScrollEnd() fires. This eliminates any secondary
+ * RAF loop outside the coordinator.
+ *
+ * Phase transitions: the coordinator owns scroll-frame and post-scroll
+ * transitions around the onScrollFrame callback. Callbacks must not call
+ * transitionTo() themselves for those phases.
  */
 export interface FrameCoordinator {
 	/** Schedule a scroll frame (RAF-only). */
@@ -33,11 +43,24 @@ export interface FrameCoordinatorDeps {
 	onPaintFrame: () => void;
 	/** Distinct callback for post-scroll deferred work. Must not alias onPaintFrame. */
 	onPostScrollWork: () => void;
+	/**
+	 * Called when scroll ends — after scrollEndQuietFrames consecutive RAF callbacks
+	 * with no new scroll request. The runtime has already transitioned to idle before
+	 * this fires. Use it to flush deferred post-scroll work (portals, decoration, etc.).
+	 */
+	onScrollEnd?: () => void;
 	gridScheduler?: GridScheduler;
 	/** Called when a reentrancy or lifecycle violation is detected. Should not throw. */
 	onFault?: (msg: string) => void;
-	/** Authoritative render lifecycle state. When provided, every paint frame is wrapped in paint-frame phase transitions. */
+	/** Authoritative render lifecycle state. When provided, every paint frame is wrapped in paint-frame phase transitions,
+	 *  and scroll frames are wrapped in scroll-frame/post-scroll transitions. */
 	runtimeState?: RenderRuntimeState;
+	/**
+	 * Number of consecutive RAF callbacks without a new scroll request before scroll-end
+	 * is declared. Defaults to 3. Lower values detect scroll-end faster; higher values
+	 * add a buffer against momentary gaps between scroll events.
+	 */
+	scrollEndQuietFrames?: number;
 }
 
 export class DefaultFrameCoordinator implements FrameCoordinator {
@@ -48,10 +71,13 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 	private destroyed = false;
 	private rafId: number | null = null;
 	private postScrollEpoch = 0;
+	private scrollEndQuietCount = 0;
+	private readonly scrollEndQuietThreshold: number;
 	private readonly gs: GridScheduler;
 	private readonly onScrollFrame: () => void;
 	private readonly onPaintFrame: () => void;
 	private readonly onPostScrollWork: () => void;
+	private readonly onScrollEnd: (() => void) | undefined;
 	private readonly onFault: ((msg: string) => void) | undefined;
 	private readonly runtimeState: RenderRuntimeState | undefined;
 
@@ -60,8 +86,10 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 		this.onScrollFrame = deps.onScrollFrame;
 		this.onPaintFrame = deps.onPaintFrame;
 		this.onPostScrollWork = deps.onPostScrollWork;
+		this.onScrollEnd = deps.onScrollEnd;
 		this.onFault = deps.onFault;
 		this.runtimeState = deps.runtimeState;
+		this.scrollEndQuietThreshold = deps.scrollEndQuietFrames ?? 3;
 	}
 
 	requestScrollFrame(): void {
@@ -106,7 +134,32 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 		try {
 			if (this.pendingScroll) {
 				this.pendingScroll = false;
-				this.onScrollFrame();
+				// Reset quiet-frame counter: a new scroll frame means scrolling is still active.
+				this.scrollEndQuietCount = 0;
+				const rs = this.runtimeState;
+				// Runtime owns scroll-frame phase transition. The onScrollFrame callback
+				// must not call transitionTo('scroll-frame') or transitionTo('post-scroll').
+				if (rs && !rs.isDestroyed()) {
+					rs.transitionTo('scroll-frame');
+				}
+				try {
+					this.onScrollFrame();
+				} finally {
+					if (rs && !rs.isDestroyed()) {
+						rs.transitionTo('post-scroll');
+					}
+				}
+			} else if (this.runtimeState?.isScrolling()) {
+				// No new scroll frame arrived — count quiet frames for scroll-end detection.
+				// This path fires while the runtime is still in post-scroll (or scroll-pending)
+				// after the last visible scroll frame.
+				this.scrollEndQuietCount++;
+				if (this.scrollEndQuietCount >= this.scrollEndQuietThreshold) {
+					this.scrollEndQuietCount = 0;
+					// Runtime transitions to idle before notifying the scroll-end handler.
+					this.runtimeState.transitionTo('idle');
+					this.onScrollEnd?.();
+				}
 			}
 			if (this.pendingPaint) {
 				this.pendingPaint = false;
@@ -131,7 +184,10 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 			}
 		} finally {
 			this.inFrame = false;
-			if (this.pendingScroll || this.pendingPaint || this.pendingPostScroll) {
+			// Keep the RAF loop alive while scrolling (for scroll-end detection)
+			// or while there is pending work to flush.
+			const keepAlive = this.pendingScroll || this.pendingPaint || this.pendingPostScroll || (this.runtimeState?.isScrolling() ?? false);
+			if (keepAlive) {
 				this.scheduleFrame();
 			}
 		}
@@ -170,5 +226,6 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 		this.pendingScroll = false;
 		this.pendingPaint = false;
 		this.pendingPostScroll = false;
+		this.scrollEndQuietCount = 0;
 	}
 }

@@ -18,9 +18,6 @@ import { compileStyleRules } from '../styling/styleRules.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
-	scrollEndRafId: number | null;
-	scrollEndQuietFrames: number;
-	scrollEndTickerActive: boolean;
 	viewportDirtyAfterScroll: boolean;
 	flushPendingAfterScroll: boolean;
 	needsPostScrollPortalFlush: boolean;
@@ -89,7 +86,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		if (!changed) return;
 		this.markScrolling();
 		this.deps.requestScrollFrame();
-		this.scheduleScrollEnd();
+		// Scroll-end detection is now owned by FrameCoordinator (single RAF loop).
 	};
 
 	public updateCachedGeometryBoundsFromState(defaultColWidth: number, defaultRowHeight: number): void {
@@ -118,14 +115,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		if (sameRenderedWindow(this.deps.rowRenderer.currentWindow, nextWindow)) {
 			this.deps.renderStats.scrollFrames++;
 			this.deps.renderStats.sameWindowBailouts = (this.deps.renderStats.sameWindowBailouts || 0) + 1;
-			// Enter scroll-frame so frameEpoch advances and isFrameActive() is correct
-			// even for cheap same-window work.
-			this.deps.runtimeState.transitionTo('scroll-frame');
-			try {
-				this.syncCheapScrollOnly(layoutPlan);
-			} finally {
-				this.deps.runtimeState.transitionTo('post-scroll');
-			}
+			// Phase is already scroll-frame (set by FrameCoordinator before calling this callback).
+			// FrameCoordinator will transition to post-scroll in the finally block after we return.
+			this.syncCheapScrollOnly(layoutPlan);
 			return;
 		}
 
@@ -133,7 +125,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.state.activeRenderWindowBufIdx = candidateIdx;
 		}
 
-		this.deps.runtimeState.transitionTo('scroll-frame');
+		// Phase is already scroll-frame (set by FrameCoordinator before calling this callback).
 		this.deps.rowRenderer.currentScrollCellsPatched = 0;
 		this.deps.rowRenderer.currentScrollRowsRecycled = 0;
 		this.deps.rowRenderer.currentScrollRowsVisited = 0;
@@ -183,7 +175,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			}
 			this.deps.renderStats.cellsPatchedPerScrollFrame.push(this.deps.rowRenderer.currentScrollCellsPatched);
 			this.deps.renderStats.rowsRecycledPerScrollFrame.push(this.deps.rowRenderer.currentScrollRowsRecycled);
-			this.deps.runtimeState.transitionTo('post-scroll');
+			// FrameCoordinator transitions to post-scroll in its finally block after this callback returns.
 		}
 	};
 
@@ -203,9 +195,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	}
 
 	public finishScrolling(): void {
-		this.clearScrollEndTimer();
+		// FrameCoordinator has already transitioned to idle before calling this.
 		this.deps.viewportRenderer.setScrollingClass(false);
-		this.deps.runtimeState.transitionTo('idle');
 		this.deps.rowRenderer.programmaticScrollCell = null;
 		this.flushPendingPortalReleasesAfterScroll();
 		this.state.needsPostScrollPortalFlush = this.state.needsPostScrollPortalFlush || this.deps.portalMountManager.getDeferredCount() > 0;
@@ -228,22 +219,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		if (this.deps.overlayRenderer.overlayDirtyDuringScroll) {
 			this.deps.overlayRenderer.overlayDirtyDuringScroll = false;
 			this.deps.overlayRenderer.repaintOverlay();
-		}
-	}
-
-	public clearScrollEndTimer(): void {
-		this.state.scrollEndTickerActive = false;
-		if (this.state.scrollEndRafId !== null) {
-			this.deps.gridScheduler.cancelRaf(this.state.scrollEndRafId);
-			this.state.scrollEndRafId = null;
-		}
-	}
-
-	public scheduleScrollEnd(): void {
-		this.state.scrollEndQuietFrames = 0;
-		if (!this.state.scrollEndTickerActive) {
-			this.state.scrollEndTickerActive = true;
-			this.state.scrollEndRafId = this.deps.gridScheduler.raf(this.scrollEndTick);
 		}
 	}
 
@@ -360,19 +335,4 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		}
 	}
 
-	private readonly scrollEndTick = (): void => {
-		if (!this.deps.runtimeState.isScrolling()) {
-			this.state.scrollEndTickerActive = false;
-			this.state.scrollEndRafId = null;
-			return;
-		}
-		if (this.state.scrollEndQuietFrames >= 3) {
-			this.state.scrollEndTickerActive = false;
-			this.state.scrollEndRafId = null;
-			this.finishScrolling();
-			return;
-		}
-		this.state.scrollEndQuietFrames++;
-		this.state.scrollEndRafId = this.deps.gridScheduler.raf(this.scrollEndTick);
-	};
 }

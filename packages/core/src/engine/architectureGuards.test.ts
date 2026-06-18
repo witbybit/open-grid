@@ -87,7 +87,7 @@ describe('Architecture guardrails', () => {
 
 		const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
 		expect(engineContent).toContain('this.scrollCoordinator.flushScrollFrame()');
-		expect(engineContent).toContain('this.scrollCoordinator.syncCheapScrollOnly(layoutPlan)');
+		// syncCheapScrollOnly is called internally by renderScrollCoordinator, not forwarded from renderEngine
 		expect(engineContent).not.toContain('computeRenderWindowInto(');
 		expect(engineContent).not.toContain('sameRenderedWindow(');
 	});
@@ -984,12 +984,15 @@ describe('Architecture guardrails', () => {
 
 	// ── Plan 096: frame epoch and post-scroll durability ─────────────────────
 
-	it('renderScrollCoordinator enters scroll-frame for cheap same-window scroll (Plan 096)', () => {
-		const rscPath = resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts');
-		const content = readFileSync(rscPath, 'utf-8');
-		// The cheap path must enter a scroll-frame phase transition instead of being phaseless.
-		expect(content).toContain("transitionTo('scroll-frame')");
-		expect(content).toContain("transitionTo('post-scroll')");
+	it('FrameCoordinator owns scroll-frame/post-scroll transitions — not renderScrollCoordinator (Plan 096→098)', () => {
+		const rscContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts'), 'utf-8');
+		const fcContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts'), 'utf-8');
+		// Phase transitions must live in FrameCoordinator, not in the scroll coordinator callback.
+		expect(rscContent).not.toContain("transitionTo('scroll-frame')");
+		expect(rscContent).not.toContain("transitionTo('post-scroll')");
+		// FrameCoordinator wraps the onScrollFrame callback with the transitions.
+		expect(fcContent).toContain("transitionTo('scroll-frame')");
+		expect(fcContent).toContain("transitionTo('post-scroll')");
 	});
 
 	it('flushFrame retains pendingPostScroll when epoch is valid but scrolling is active (Plan 096)', () => {
@@ -1041,5 +1044,44 @@ describe('Architecture guardrails', () => {
 		expect(editCtrl).toContain("domains: ['editing']");
 		const selCtrl = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'RowSelectionFeatureController.ts'), 'utf-8');
 		expect(selCtrl).toContain("domains: ['selection']");
+	});
+
+	// ── Plan 098: render runtime convergence and demolition ──────────────────
+
+	it('FrameCoordinator absorbs scroll-end detection — no second RAF loop in renderScrollCoordinator (Plan 098)', () => {
+		const rscContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts'), 'utf-8');
+		// These fields and methods were removed in Plan 098 — FrameCoordinator owns scroll-end detection.
+		expect(rscContent).not.toContain('scrollEndRafId');
+		expect(rscContent).not.toContain('scrollEndTickerActive');
+		expect(rscContent).not.toContain('scrollEndTick');
+		expect(rscContent).not.toContain('scheduleScrollEnd');
+		expect(rscContent).not.toContain('clearScrollEndTimer');
+	});
+
+	it('FrameCoordinator scroll-end detection uses quiet-frame counter (Plan 098)', () => {
+		const fcContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts'), 'utf-8');
+		// Single RAF loop with scroll-end detection via quiet frame counting.
+		expect(fcContent).toContain('scrollEndQuietCount');
+		expect(fcContent).toContain('scrollEndQuietThreshold');
+		expect(fcContent).toContain('onScrollEnd');
+		// Scroll-end fires after transitioning to idle — safe ordering.
+		expect(fcContent).toContain("transitionTo('idle')");
+	});
+
+	it('FrameCoordinator keeps RAF alive while isScrolling (Plan 098)', () => {
+		const fcContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts'), 'utf-8');
+		// keepAlive logic: re-schedules if scrolling continues.
+		expect(fcContent).toContain('isScrolling()');
+		expect(fcContent).toContain('keepAlive');
+	});
+
+	it('renderEngine wires onScrollEnd to scrollCoordinator.finishScrolling (Plan 098)', () => {
+		const reContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
+		// onScrollEnd callback must delegate to finishScrolling.
+		expect(reContent).toContain('onScrollEnd');
+		expect(reContent).toContain('finishScrolling');
+		// Deleted forwarding methods must be gone.
+		expect(reContent).not.toContain('scheduleScrollEnd');
+		expect(reContent).not.toContain('clearScrollEndTimer');
 	});
 });

@@ -2729,9 +2729,9 @@ describe('RenderEngine', () => {
 		// reaches its steady-state size (full overscan above and below).
 		scrollViewport.scrollTop = 2400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
-		// Run the scroll frame only, then discard queued scroll-end callbacks.
-		if (callbacks.length > 0) callbacks.shift()!(0);
-		callbacks.length = 0;
+		// Drain all callbacks: scroll frame + scroll-end detection quiet frames. This lets
+		// FrameCoordinator's rafId reset to null so the second scroll can schedule cleanly.
+		while (callbacks.length > 0) callbacks.shift()!(0);
 
 		// Record the steady-state slot count (full overscan both ways).
 		const slotCountAtSteadyState = renderer.rowRenderer.rowSlotPool.count;
@@ -2745,9 +2745,8 @@ describe('RenderEngine', () => {
 		// middle zone. The slot pool should not grow since the window size stays constant.
 		scrollViewport.scrollTop = 2480;
 		scrollViewport.dispatchEvent(new Event('scroll'));
-		// Run the scroll frame only.
-		if (callbacks.length > 0) callbacks.shift()!(0);
-		callbacks.length = 0;
+		// Drain all callbacks: scroll frame + scroll-end detection quiet frames.
+		while (callbacks.length > 0) callbacks.shift()!(0);
 
 		// Slot count and DOM child count must be identical after steady-state scroll.
 		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotCountAtSteadyState);
