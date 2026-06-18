@@ -33,8 +33,12 @@ export type GridChangeReason =
 	| 'geometry:resize-row'
 	| 'geometry:set-row-heights'
 	| 'geometry:set-default-row-height'
+	| 'columns:set-pinned-counts'
 	| 'ui:set-style-rules'
-	| 'ui:set-floating-filters';
+	| 'ui:set-floating-filters'
+	| 'ui:set-sidebar-panel'
+	| 'ui:set-chart-open'
+	| 'ui:set-theme';
 
 export interface GridChange<TRowData = unknown> {
 	reason: GridChangeReason;

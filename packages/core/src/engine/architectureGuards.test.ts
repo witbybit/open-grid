@@ -1321,4 +1321,24 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('store.engine.setRowModelLoadingState(loading)');
 		expect(content).toContain('store.engine.setServerPaginationState(payload)');
 	});
+
+	it('store UI compatibility helpers route through GridEngine intent methods (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain('this.engine.setSidebarOpenPanel(panelId);');
+		expect(content).toContain('this.engine.setSidebarOpenPanel(null);');
+		expect(content).toContain('this.engine.setChartOpen(true);');
+		expect(content).toContain('this.engine.setChartOpen(false);');
+		expect(content).toContain('this.engine.setThemeName(themeName);');
+		expect(content).not.toContain('this.setState({ sidebarOpenPanel:');
+		expect(content).not.toContain('this.setState({ chartOpen:');
+		expect(content).not.toContain('this.setState({ themeName');
+	});
+
+	it('store pinned column sync routes through engine.setPinnedColumnsState (Plan 103)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain(
+			'this.engine.setPinnedColumnsState(this.viewportController.pinLeftColumns, this.viewportController.pinRightColumns);'
+		);
+		expect(content).not.toContain('this.engine.setState({');
+	});
 });

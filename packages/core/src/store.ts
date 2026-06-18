@@ -425,16 +425,16 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public saveNow = (): void => {};
 
 	public openPanel = (panelId: string): void => {
-		this.setState({ sidebarOpenPanel: panelId });
+		this.engine.setSidebarOpenPanel(panelId);
 	};
 
 	public closePanel = (): void => {
-		this.setState({ sidebarOpenPanel: null });
+		this.engine.setSidebarOpenPanel(null);
 	};
 
 	public togglePanel = (panelId: string): void => {
 		const current = this.state.sidebarOpenPanel;
-		this.setState({ sidebarOpenPanel: current === panelId ? null : panelId });
+		this.engine.setSidebarOpenPanel(current === panelId ? null : panelId);
 	};
 
 	public getOpenPanel = (): string | null => {
@@ -442,15 +442,15 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public openChart = (): void => {
-		this.setState({ chartOpen: true });
+		this.engine.setChartOpen(true);
 	};
 
 	public closeChart = (): void => {
-		this.setState({ chartOpen: false });
+		this.engine.setChartOpen(false);
 	};
 
 	public toggleChart = (): void => {
-		this.setState({ chartOpen: !this.state.chartOpen });
+		this.engine.setChartOpen(!this.state.chartOpen);
 	};
 
 	public isChartOpen = (): boolean => {
@@ -675,12 +675,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		if (pins.bottom !== undefined) this.viewportController.pinBottomRows = pins.bottom;
 		// Sync column pin counts into state so they can be subscribed to and persisted
 		if (pins.left !== undefined || pins.right !== undefined) {
-			this.engine.setState({
-				pinnedColumns: {
-					left: this.viewportController.pinLeftColumns,
-					right: this.viewportController.pinRightColumns,
-				},
-			});
+			this.engine.setPinnedColumnsState(this.viewportController.pinLeftColumns, this.viewportController.pinRightColumns);
 		}
 	};
 
@@ -911,7 +906,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public switchTheme = (themeName: string): void => {
 		if (!isBuiltInThemeName(themeName) || this.state.themeName === themeName) return;
-		this.setState({ themeName });
+		this.engine.setThemeName(themeName);
 		this.rendererPorts.theme.switchTheme(themeName);
 	};
 

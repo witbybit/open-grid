@@ -77,6 +77,45 @@ export class GridStateFeatureController<TRowData = unknown> {
 		this.deps.requestRender('showFloatingFilters');
 	}
 
+	public setSidebarOpenPanel(panelId: string | null): void {
+		if (this.deps.stateManager.getState().sidebarOpenPanel === panelId) return;
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'ui:set-sidebar-panel',
+				state: { sidebarOpenPanel: panelId },
+				requestRender: false,
+			});
+			return;
+		}
+		this.deps.stateManager.setState({ sidebarOpenPanel: panelId });
+	}
+
+	public setChartOpen(chartOpen: boolean): void {
+		if ((this.deps.stateManager.getState().chartOpen ?? false) === chartOpen) return;
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'ui:set-chart-open',
+				state: { chartOpen },
+				requestRender: false,
+			});
+			return;
+		}
+		this.deps.stateManager.setState({ chartOpen });
+	}
+
+	public setThemeName(themeName: GridState<TRowData>['themeName']): void {
+		if (this.deps.stateManager.getState().themeName === themeName) return;
+		if (this.deps.applyChange) {
+			this.deps.applyChange({
+				reason: 'ui:set-theme',
+				state: { themeName },
+				requestRender: false,
+			});
+			return;
+		}
+		this.deps.stateManager.setState({ themeName });
+	}
+
 	public resizeRow(rowId: string, height: number, undoable = true): void {
 		const state = this.deps.stateManager.getState();
 		const oldHeight = state.rowHeights[rowId] ?? state.defaultRowHeight;

@@ -484,7 +484,6 @@ export class GridEngine<TRowData = unknown> {
 	public subscribe(listener: Listener<TRowData>): () => void {
 		return this.stateManager.subscribe(listener);
 	}
-
 	public subscribeToKey(key: string, listener: Listener<TRowData>): () => void {
 		return this.stateManager.subscribeToKey(key, listener);
 	}
@@ -503,46 +502,33 @@ export class GridEngine<TRowData = unknown> {
 	public getRowId(row: TRowData): string {
 		return this.data.getRowId(row);
 	}
-
 	public isRowLoading(rowId: string): boolean {
 		return this.data.isRowLoading(rowId);
 	}
-
 	public getCellDisplayValue(rowId: string, colField: string): unknown {
 		return this.data.getCellValue(rowId, colField);
 	}
-
 	public getCachedDisplayValue(rowId: string, colField: string): string | undefined {
 		return this.data.getCachedDisplayValue(rowId, colField);
 	}
-
 	public getCheapDisplayValue(rowId: string, colField: string): string {
 		return this.data.getCheapDisplayValue(rowId, colField);
 	}
-
 	public getComputedCellValue(rowId: string, colField: string): unknown {
 		return this.data.getComputedCellValue(rowId, colField);
 	}
-
 	public getRawCellValue(rowId: string, colField: string): unknown {
 		return this.data.getRawCellValue(rowId, colField);
 	}
-
 	public getDisplayedColumns(): ColumnDef<TRowData>[] {
 		return this.columns.getDisplayedColumns().slice();
 	}
-
 	public getPinnedColumns(): { left: number; right: number } {
-		return {
-			left: this.viewport.pinLeftColumns,
-			right: this.viewport.pinRightColumns,
-		};
+		return { left: this.viewport.pinLeftColumns, right: this.viewport.pinRightColumns };
 	}
-
 	public getColumnIndex(colField: string): number {
 		return this.columns.getColumnIndex(colField);
 	}
-
 	public getColumnField(colIndex: number): string | null {
 		return this.columns.getColumnField(colIndex);
 	}
@@ -570,7 +556,6 @@ export class GridEngine<TRowData = unknown> {
 	public setRowOverscanPx(px: number): void {
 		this.stateFeature.setRowOverscanPx(px);
 	}
-
 	public getColBuffer(): number {
 		return this.stateFeature.getColBuffer();
 	}
@@ -618,6 +603,15 @@ export class GridEngine<TRowData = unknown> {
 	public setShowFloatingFilters(enabled: boolean): void {
 		this.stateFeature.setShowFloatingFilters(enabled);
 	}
+	public setSidebarOpenPanel(panelId: string | null): void {
+		this.stateFeature.setSidebarOpenPanel(panelId);
+	}
+	public setChartOpen(chartOpen: boolean): void {
+		this.stateFeature.setChartOpen(chartOpen);
+	}
+	public setThemeName(themeName: GridState<TRowData>['themeName']): void {
+		this.stateFeature.setThemeName(themeName);
+	}
 	public resizeRow(rowId: string, height: number, undoable = true): void {
 		this.stateFeature.resizeRow(rowId, height, undoable);
 	}
@@ -636,39 +630,44 @@ export class GridEngine<TRowData = unknown> {
 	public setPaginationPage(page: number, metrics?: { pageCount: number; totalRows: number }): void {
 		this.stateFeature.setPaginationPage(page, metrics);
 	}
+	public setPinnedColumnsState(left: number, right: number): void {
+		this.changeApplier.apply({
+			reason: 'columns:set-pinned-counts',
+			state: { pinnedColumns: { left, right } },
+			invalidations: [
+				{ kind: 'geometry', reason: 'pin' },
+				{ kind: 'viewport', reason: 'pin' },
+				{ kind: 'headers', reason: 'pin' },
+			],
+			domains: ['columns', 'geometry'],
+			requestRender: true,
+		});
+	}
 
 	public setGroupBy(colIds: string[]): void {
 		this.groupingFeature.setGroupBy(colIds);
 	}
-
 	public addGroupBy(colId: string, atIndex?: number): void {
 		this.groupingFeature.addGroupBy(colId, atIndex);
 	}
-
 	public removeGroupBy(colId: string): void {
 		this.groupingFeature.removeGroupBy(colId);
 	}
-
 	public moveGroupBy(colId: string, toIndex: number): void {
 		this.groupingFeature.moveGroupBy(colId, toIndex);
 	}
-
 	public setShowGroupPanel(enabled: boolean): void {
 		this.groupingFeature.setShowGroupPanel(enabled);
 	}
-
 	public setAggDefs(defs: import('../rows/stages/aggregateStage.js').AggregationDef<TRowData>[]): void {
 		this.groupingFeature.setAggDefs(defs);
 	}
-
 	public setShowGroupFooter(enabled: boolean): void {
 		this.groupingFeature.setShowGroupFooter(enabled);
 	}
-
 	public setStickyGroupRows(enabled: boolean): void {
 		this.groupingFeature.setStickyGroupRows(enabled);
 	}
-
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
 		this.dataMutation.applyCellValueChange(rowId, colField, value, { undoable });
 	}
