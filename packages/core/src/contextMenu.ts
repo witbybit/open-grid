@@ -347,6 +347,9 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			onClose: this.hide,
 		});
 
+		// Interaction-only animation staging: this is not grid render scheduling.
+		// We wait one frame so the initial placement styles commit before toggling
+		// the visible class, allowing the menu entrance transition to animate.
 		if (typeof requestAnimationFrame !== 'undefined') {
 			requestAnimationFrame(() => {
 				menu.classList.add('og-visible');

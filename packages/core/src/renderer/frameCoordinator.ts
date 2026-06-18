@@ -101,9 +101,7 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 	requestPaintFrame(): void {
 		if (this.destroyed || this.pendingPaint) return;
 		this.pendingPaint = true;
-		this.gs.microtask(() => {
-			if (!this.destroyed) this.scheduleFrame();
-		});
+		this.scheduleFrame();
 	}
 
 	requestPostScrollWork(): void {

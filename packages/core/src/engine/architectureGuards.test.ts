@@ -814,6 +814,29 @@ describe('Architecture guardrails', () => {
 		).toHaveLength(0);
 	});
 
+	it('contextMenu rAF is documented as interaction-only animation staging, not render scheduling (Plan 111)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'contextMenu.ts'), 'utf-8');
+		expect(content).toContain('Interaction-only animation staging');
+		expect(content).toContain("menu.classList.add('og-visible')");
+	});
+
+	it('RowDragController rAF usage is documented as interaction-only, not render scheduling (Plan 111)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'RowDragController.ts'), 'utf-8');
+		expect(content).toContain('Interaction-only row-reorder animation staging');
+		expect(content).toContain('Interaction-only drag auto-scroll loop');
+		expect((content.match(/\brequestAnimationFrame\b/g) ?? []).length).toBe(4);
+	});
+
+	it('direct requestAnimationFrame usage is limited to gridScheduler and documented interaction exceptions (Plan 111)', () => {
+		const srcDir = resolve(CORE_ROOT, 'src');
+		const allFiles = collectSourceFiles(srcDir).filter((file) => !file.endsWith('.test.ts'));
+		const rafUsers = allFiles
+			.filter((file) => readFileSync(file, 'utf-8').includes('requestAnimationFrame'))
+			.map((file) => path.relative(srcDir, file).replaceAll('\\', '/'))
+			.sort();
+		expect(rafUsers).toEqual(['contextMenu.ts', 'features/RowDragController.ts', 'renderer/gridScheduler.ts']);
+	});
+
 	it('public index.ts does not re-export internal renderer or engine types (Plan 089)', () => {
 		const indexPath = resolve(CORE_ROOT, 'src', 'index.ts');
 		const content = readFileSync(indexPath, 'utf-8');
@@ -991,6 +1014,15 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(fcPath, 'utf-8');
 		expect(content).toContain('scheduleFrame()');
 		expect(content).toContain('flushFrame()');
+	});
+
+	it('DefaultFrameCoordinator paint scheduling no longer inserts a microtask hop before RAF (Plan 111)', () => {
+		const fcPath = resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts');
+		const content = readFileSync(fcPath, 'utf-8');
+		expect(content).toContain('requestPaintFrame(): void {');
+		expect(content).toContain('this.pendingPaint = true;');
+		expect(content).toContain('this.scheduleFrame();');
+		expect(content).not.toContain('this.gs.microtask(() => {');
 	});
 
 	// ── Plan 094: exclusive runtime port binding ──────────────────────────────

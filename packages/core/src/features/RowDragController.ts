@@ -314,6 +314,7 @@ export class RowDragController<TRowData = unknown> {
 	private playFlipAnimation(before: Map<string, number>): void {
 		const container = this.container;
 		if (!container) return;
+		// Interaction-only row-reorder animation staging: this is not grid render scheduling.
 		// Double RAF: first frame the renderer re-positions rows, second frame DOM is settled.
 		requestAnimationFrame(() =>
 			requestAnimationFrame(() => {
@@ -408,6 +409,7 @@ export class RowDragController<TRowData = unknown> {
 
 	private startAutoScroll(rate: number): void {
 		this.stopAutoScroll();
+		// Interaction-only drag auto-scroll loop: this is user-driven pointer behavior, not grid rendering.
 		const scroll = (): void => {
 			if (!this.drag || !this.scrollViewport) return;
 			this.scrollViewport.scrollTop += rate;
