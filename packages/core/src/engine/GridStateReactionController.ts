@@ -121,7 +121,6 @@ export class GridStateReactionController<TRowData = unknown> {
 
 		if (updatedSet.has('selection')) {
 			this.deps.selection.setSelection(currState.selection);
-			this.deps.invalidation.invalidateOverlay('selection');
 			// selectionVersion is incremented by the mutation site (applySelectionRange or
 			// GridChange.domains: ['selection']), not by key observation.
 		}
@@ -174,11 +173,9 @@ export class GridStateReactionController<TRowData = unknown> {
 		if (updatedSet.has('selection')) {
 			if (prevState.selection.focus) {
 				notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
-				this.deps.invalidation.invalidateCell(prevState.selection.focus.rowId, prevState.selection.focus.colField, 'focus');
 			}
 			if (currState.selection.focus) {
 				notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
-				this.deps.invalidation.invalidateCell(currState.selection.focus.rowId, currState.selection.focus.colField, 'focus');
 			}
 		}
 
@@ -202,7 +199,6 @@ export class GridStateReactionController<TRowData = unknown> {
 						const col = displayedColumns[colIdx];
 						if (visualRow?.kind === 'data' && col) {
 							notifyCellOnce(visualRow.rowId, col.field);
-							this.deps.invalidation.invalidateCell(visualRow.rowId, col.field, 'selection');
 						}
 					}
 				);
@@ -235,7 +231,6 @@ export class GridStateReactionController<TRowData = unknown> {
 				selection: currState.selection,
 				result: this.deps.selection.describeChange(prevState.selection, currState.selection, this.deps.getRowModel(), currState.columns),
 			});
-			this.deps.requestRender('selection');
 		}
 	};
 

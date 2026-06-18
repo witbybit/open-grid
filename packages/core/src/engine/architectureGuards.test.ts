@@ -1434,6 +1434,25 @@ describe('Architecture guardrails', () => {
 		expect(stateFeature).toContain('applyChange: (change: GridChange<TRowData>) => GridCommitResult;');
 	});
 
+	it('CommandHistory reports rejected or faulted commit outcomes instead of dropping them (Plan 104)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'commands', 'CommandHistory.ts'), 'utf-8');
+		expect(content).toContain('import type { GridCommitResult }');
+		expect(content).toContain('isGridCommitResult');
+		expect(content).toContain("result.status === 'faulted'");
+		expect(content).toContain("this.reportCommitOutcome('undo', result);");
+		expect(content).toContain("this.reportCommitOutcome('redo', result);");
+	});
+
+	it('GridStateReactionController no longer owns selection invalidation or render requests (Plan 105)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridStateReactionController.ts'), 'utf-8');
+		expect(content).toContain('GridEventName.selectionChanged');
+		expect(content).not.toContain("invalidateOverlay('selection')");
+		expect(content).not.toContain("invalidateCell(prevState.selection.focus.rowId, prevState.selection.focus.colField, 'focus')");
+		expect(content).not.toContain("invalidateCell(currState.selection.focus.rowId, currState.selection.focus.colField, 'focus')");
+		expect(content).not.toContain("invalidateCell(visualRow.rowId, col.field, 'selection')");
+		expect(content).not.toContain("requestRender('selection')");
+	});
+
 	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {
 		const files = [
 			resolve(CORE_ROOT, 'src', 'features', 'ColumnFeatureController.ts'),
