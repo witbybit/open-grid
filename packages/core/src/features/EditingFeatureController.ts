@@ -97,7 +97,10 @@ export class EditingFeatureController<TRowData = unknown> {
 					this.ctx.applyChange({
 						reason: 'editing:validation',
 						state: { activeEdit: { ...activeEdit, validationError: error } },
-						requestRender: false,
+						invalidations: [
+							{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
+							{ kind: 'overlay', reason: 'edit stopped' },
+						],
 					});
 					this.notifyCellChange(rowId, colField);
 				}
@@ -127,7 +130,10 @@ export class EditingFeatureController<TRowData = unknown> {
 					this.ctx.applyChange({
 						reason: 'editing:save-failed',
 						state: { activeEdit: { ...activeEdit, validationError: 'Save failed' } },
-						requestRender: false,
+						invalidations: [
+							{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
+							{ kind: 'overlay', reason: 'edit stopped' },
+						],
 					});
 					this.notifyCellChange(rowId, colField);
 				}

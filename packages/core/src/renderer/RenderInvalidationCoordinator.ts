@@ -37,10 +37,6 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 			this.deps.engine.invalidation.invalidateHeaders('headers');
 			this.requestFlushGated('headers');
 		};
-		const invalidateOverlay = () => {
-			this.deps.engine.invalidation.invalidateOverlay('overlay');
-			this.requestFlushGated('overlay');
-		};
 		const invalidateViewport = () => {
 			this.deps.engine.invalidation.invalidateViewport('viewport');
 			this.requestViewportFlushOrDefer('viewport');
@@ -110,13 +106,6 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		// model re-runs the pipeline with the new window on the same event; this just keeps
 		// the viewport from showing the middle of the freshly-sliced page.
 		this.unsubscribers.push(this.deps.engine.eventBus.addEventListener(GridEventName.paginationChanged, () => this.deps.resetScroll()));
-		this.unsubscribers.push(this.deps.engine.stateManager.subscribeToKey('activeEdit', invalidateOverlay));
-		this.unsubscribers.push(
-			this.deps.engine.stateManager.subscribeToKey('validationErrors', () => {
-				this.deps.engine.invalidation.invalidateViewport('validation');
-				this.requestFlushGated('validation');
-			})
-		);
 		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.selectionChanged, (event) => {
 				const { result, selection } = event.payload;
@@ -134,11 +123,6 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 				if (selection?.focus && selection.source !== 'pointer') {
 					this.deps.scrollCellIntoView(selection.focus.rowId, selection.focus.colField);
 				}
-				this.requestFlushGated('selection');
-			})
-		);
-		this.unsubscribers.push(
-			this.deps.engine.eventBus.addEventListener(GridEventName.rowSelectionChanged, () => {
 				this.requestFlushGated('selection');
 			})
 		);

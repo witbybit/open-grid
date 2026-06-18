@@ -1453,6 +1453,17 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain("requestRender('selection')");
 	});
 
+	it('RenderInvalidationCoordinator no longer infers edit/validation paints from state keys (Plan 105)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
+		expect(content).not.toContain("subscribeToKey('activeEdit'");
+		expect(content).not.toContain("subscribeToKey('validationErrors'");
+	});
+
+	it('RenderInvalidationCoordinator no longer requests selection flushes from rowSelectionChanged directly (Plan 105)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
+		expect(content).not.toContain('GridEventName.rowSelectionChanged');
+	});
+
 	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {
 		const files = [
 			resolve(CORE_ROOT, 'src', 'features', 'ColumnFeatureController.ts'),
