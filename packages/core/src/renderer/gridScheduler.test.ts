@@ -90,7 +90,7 @@ describe('DefaultFrameCoordinator with GridScheduler', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('multiple requestPaintFrame calls before RAF flush coalesce into one paint', () => {
+	it('multiple requestPaintFrame calls before RAF flush coalesce into one paint', async () => {
 		const onPaintFrame = vi.fn();
 		const mockScheduler = new DefaultGridScheduler();
 		let capturedRaf: (() => void) | null = null;
@@ -110,6 +110,8 @@ describe('DefaultFrameCoordinator with GridScheduler', () => {
 		coordinator.requestPaintFrame();
 
 		expect(onPaintFrame).not.toHaveBeenCalled();
+		// Microtask coalescence: all three requests schedule one microtask batch
+		await Promise.resolve();
 		capturedRaf?.();
 		expect(onPaintFrame).toHaveBeenCalledTimes(1);
 	});

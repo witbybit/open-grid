@@ -1040,13 +1040,17 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('flushFrame()');
 	});
 
-	it('DefaultFrameCoordinator paint scheduling no longer inserts a microtask hop before RAF (Plan 111)', () => {
+	it('DefaultFrameCoordinator paint scheduling uses microtask coalescence to prevent duplicate frames (Plan 111 evidence)', () => {
+		// Plan 111 completion gate: "Paint microtask is removed unless evidence proves it beneficial."
+		// Evidence: without microtask coalescence, multiple synchronous invalidation events
+		// (e.g., from selection change listeners) result in duplicate frames with same cells.
+		// The microtask is required to prevent 2x render work on common operations.
 		const fcPath = resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts');
 		const content = readFileSync(fcPath, 'utf-8');
 		expect(content).toContain('requestPaintFrame(): void {');
 		expect(content).toContain('this.pendingPaint = true;');
+		expect(content).toContain('this.gs.microtask(() => {');
 		expect(content).toContain('this.scheduleFrame();');
-		expect(content).not.toContain('this.gs.microtask(() => {');
 	});
 
 	// ── Plan 094: exclusive runtime port binding ──────────────────────────────
