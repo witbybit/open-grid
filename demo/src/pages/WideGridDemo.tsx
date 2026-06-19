@@ -80,11 +80,10 @@ export default function WideGridDemo({ onGridReady, editTrigger, arrowKeyNavigat
 	);
 
 	// Subscribe to viewport changes to update the badge.
-	// Use visibleRowRange as a proxy for viewport changes (which includes column range updates).
 	useEffect(() => {
 		if (!api) return;
 		let rafId = requestAnimationFrame(() => setVisibleRange(api.getVisibleColumnRange()));
-		const unsub = api.subscribeToKey('visibleRowRange', () => setVisibleRange(api.getVisibleColumnRange()));
+		const unsub = api.subscribe(() => setVisibleRange(api.getVisibleColumnRange()));
 		return () => {
 			cancelAnimationFrame(rafId);
 			unsub();

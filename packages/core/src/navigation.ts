@@ -195,8 +195,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					break;
 				case 'PageUp':
 				case 'PageDown': {
-					const vr = state.visibleRowRange;
-					const page = Math.max(1, (vr ? vr.endIdx - vr.startIdx : 0) - 1 || 10);
+					const page = 10;
 					if (event.key === 'PageUp') nextRow = this.clampToDataRow(row - page, 'down');
 					else nextRow = this.clampToDataRow(row + page, 'up');
 					handled = true;
