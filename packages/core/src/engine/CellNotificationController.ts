@@ -132,16 +132,7 @@ export class CellNotificationController<TRowData = unknown> {
 	}
 
 	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
-		for (const rowId of changes.keys()) {
-			this.deps.rowVersions.set(rowId, (this.deps.rowVersions.get(rowId) ?? 0) + 1);
-		}
-
-		for (const [rowId, fields] of changes) {
-			for (const colField of fields) {
-				this.deps.data.clearValueGetterCache(rowId, colField);
-				this.notifyCellSubscribers(rowId, colField);
-			}
-		}
+		this.publishCommittedCellChanges(changes);
 
 		const hasRenderConsumer =
 			this.deps.eventBus.hasListeners(GridEventName.cellInvalidated) || this.deps.eventBus.hasListeners(GridEventName.renderInvalidated);
@@ -154,6 +145,19 @@ export class CellNotificationController<TRowData = unknown> {
 			this.deps.invalidation.invalidateRow(rowId, 'cell');
 		}
 		this.deps.requestRender('bulk-cell-change');
+	}
+
+	public publishCommittedCellChanges(changes: Map<string, Set<string>>): void {
+		for (const rowId of changes.keys()) {
+			this.deps.rowVersions.set(rowId, (this.deps.rowVersions.get(rowId) ?? 0) + 1);
+		}
+
+		for (const [rowId, fields] of changes) {
+			for (const colField of fields) {
+				this.deps.data.clearValueGetterCache(rowId, colField);
+				this.notifyCellSubscribers(rowId, colField);
+			}
+		}
 	}
 
 	public notifyCellChange(rowId: string, colField: string): void {

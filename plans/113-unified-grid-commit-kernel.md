@@ -15,12 +15,16 @@ Replace split logical-commit coordination with one authoritative `GridCommitKern
 ### Progress notes
 
 - `SpreadsheetFillEngine` now routes logical fill writes through `batchCellValues(...)` instead of owning custom undo registration
-- `DataMutationController` no longer registers history directly with `CommandHistory`; history now registers through `GridChangeApplier`
-- executable history replay is covered in `GridChangeApplier.test.ts`
-- async edit commit now registers undo history only after save success, so failed saves do not leak undo entries
+- `GridCommitKernel` now accepts mixed state + domain commits and applies them through one protected commit path
+- `GridCommitKernel.registerHistory()` and executable history escape hatches are removed; history registration is kernel-owned only
+- `GridCommitResult` now carries rejection detail for rejected and partially accepted mutation sets
+- `DataMutationController` is reduced to execution/formula invalidation work and no longer owns history/event publication
+- async edit commit now invokes async `valueSetter` exactly once, commits through one mixed kernel commit, and closes the editor in that same logical operation
+- committed cell publication re-enters the existing batching gate through the engine so kernel-owned commits preserve store batching semantics
 - row-order publication now routes through `GridEngine.setRowOrder(...)` instead of `RowDragController` mutating the row model and dispatching events directly
 - persisted state restore now batches replayed API operations and clears history on success so hydration does not create synthetic undo entries
-- `GridCommitKernel` and `GridCommit` are now first-class exports in the kernel module, with compatibility aliases preserved while engine/context types migrate onto commit terminology
+- `GridCommitKernel` and `GridCommit` are first-class exports in the kernel module, with compatibility aliases preserved while engine/context types migrate onto commit terminology
+- focused kernel/editing/clipboard/fill suites and the full `@open-grid/core` test suite are green after the convergence pass
 
 ## Problem
 
@@ -129,3 +133,7 @@ Convert these flows first:
 - `GridCommitKernel` exists and is the only owner of logical commits
 - first-class edit/batch/paste/fill flows enter through `GridCommit`
 - feature controllers no longer manually assemble history/invalidation/render publication
+
+## Completion
+
+Completed on 2026-06-19.

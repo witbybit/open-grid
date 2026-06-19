@@ -193,33 +193,6 @@ describe('GridChangeApplier', () => {
 		expect(stateManager.getState().columnWidths).toEqual({ name: 200 });
 	});
 
-	it('replays executable history mutations through kernel-owned history registration', () => {
-		const { applier, commandHistory } = makeApplier();
-		const callOrder: string[] = [];
-
-		applier.registerHistory({
-			undo: {
-				reason: 'data:set-cell-value:undo',
-				run: () => {
-					callOrder.push('undo');
-				},
-				requestRender: false,
-			},
-			redo: {
-				reason: 'data:set-cell-value:redo',
-				run: () => {
-					callOrder.push('redo');
-				},
-				requestRender: false,
-			},
-		});
-
-		commandHistory.undo();
-		commandHistory.redo();
-
-		expect(callOrder).toEqual(['undo', 'redo']);
-	});
-
 	it('commits row-order domain mutations through registered executors with inverse history', () => {
 		const stateManager = new StateManager<TestRow>({
 			columns: [],
@@ -292,7 +265,7 @@ describe('GridChangeApplier', () => {
 		expect(rowOrder).toEqual(['3', '1', '2']);
 	});
 
-	it('rejects mixed state and domain mutation commits for now', () => {
+	it('supports mixed state and domain mutation commits atomically', () => {
 		const stateManager = new StateManager<TestRow>({
 			columns: [],
 			selection: { focus: null, anchor: null, range: null, bounds: null, source: 'api' },
@@ -332,7 +305,8 @@ describe('GridChangeApplier', () => {
 				state: { colBuffer: 2 },
 				domainMutations: [{ kind: 'row-order', rowIds: ['1'] }],
 			})
-		).toEqual({ status: 'rejected', reason: 'mixed state and domain mutations are not yet supported' });
+		).toEqual({ status: 'committed', changeId: 1, faults: [], rejectedMutations: undefined });
+		expect(stateManager.getState().colBuffer).toBe(2);
 	});
 
 	it('commitDetailed exposes row-transaction mutation results from typed executors', () => {
@@ -467,18 +441,16 @@ describe('GridChangeApplier', () => {
 			['1:name', 'Alpha'],
 			['2:name', 'Beta'],
 		]);
-		const applyBatchCellValues = vi.fn((updates: Array<{ rowId: string; colField: string; value: unknown }>) =>
-			updates.map((update) => ({
-				applied: true,
-				rowId: update.rowId,
-				colField: update.colField,
-				oldRawValue: rowValues.get(`${update.rowId}:${update.colField}`),
-				oldComputedValue: rowValues.get(`${update.rowId}:${update.colField}`),
-				newRawValue: update.value,
-				newComputedValue: update.value,
-				invalidatedCells: [{ rowId: update.rowId, colField: update.colField }],
-			}))
-		);
+		const applyCellValueChange = vi.fn((rowId: string, colField: string, value: unknown) => ({
+			applied: true,
+			rowId,
+			colField,
+			oldRawValue: rowValues.get(`${rowId}:${colField}`),
+			oldComputedValue: rowValues.get(`${rowId}:${colField}`),
+			newRawValue: value,
+			newComputedValue: value,
+			invalidatedCells: [{ rowId, colField }],
+		}));
 		const kernel = new GridCommitKernel<TestRow>({
 			stateManager: new StateManager<TestRow>({
 				columns: [],
@@ -515,7 +487,7 @@ describe('GridChangeApplier', () => {
 				getRawCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
 				getStoredCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
 				getColumnDef: () => ({ field: 'name' }) as any,
-				applyBatchCellValues,
+				applyCellValueChange,
 			},
 			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TestRow>(),
 		});
@@ -533,8 +505,12 @@ describe('GridChangeApplier', () => {
 			],
 		});
 
-		expect(result).toEqual({ status: 'rejected', reason: 'row unavailable' });
-		expect(applyBatchCellValues).not.toHaveBeenCalled();
+		expect(result).toEqual({
+			status: 'rejected',
+			reason: 'row unavailable',
+			rejections: [{ mutationKind: 'batch-cell', reason: 'row unavailable', index: 1 }],
+		});
+		expect(applyCellValueChange).not.toHaveBeenCalled();
 	});
 
 	it('commits non-atomic batch-cell mutations with committed and rejected subsets', () => {

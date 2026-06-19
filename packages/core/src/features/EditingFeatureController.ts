@@ -1,24 +1,17 @@
 import { GridEventName } from '../api/GridEvents.js';
+import { getValueByPath } from '../columnDef.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { RowModel } from '../rowModel.js';
 import { canEditCell } from '../visualRow.js';
-import type { CellValueChangeOptions, CellValueChangeResult } from './DataMutationController.js';
-import { createCellValueMutationHistory } from '../engine/GridDomainMutation.js';
-import type { GridHistoryEntry } from '../engine/GridChangeApplier.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
 	notifyCellChange: (rowId: string, colField: string) => void;
-	applyCellValueChange: (rowId: string, colField: string, value: unknown, options?: CellValueChangeOptions) => CellValueChangeResult;
-	registerHistory: (history: GridHistoryEntry<TRowData>) => void;
-	/** Called when an edit commits successfully — removes any persistent validation error for the cell. */
 	clearValidationError?: (rowId: string, colField: string) => void;
-	/** Called when an edit fails validation — persists the error indicator even after the editor closes. */
 	setValidationError?: (rowId: string, colField: string, error: string) => void;
-	/** Runs full validation (column + row) after the new value has been written to the data model. */
 	validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
 }
 
@@ -27,13 +20,6 @@ export class EditingFeatureController<TRowData = unknown> {
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
 	private readonly notifyCellChange: (rowId: string, colField: string) => void;
-	private readonly applyCellValueChange: (
-		rowId: string,
-		colField: string,
-		value: unknown,
-		options?: CellValueChangeOptions
-	) => CellValueChangeResult;
-	private readonly registerHistory: (history: GridHistoryEntry<TRowData>) => void;
 	private readonly clearValidationError?: (rowId: string, colField: string) => void;
 	private readonly setValidationError?: (rowId: string, colField: string, error: string) => void;
 	private readonly validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
@@ -43,8 +29,6 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.getRowModel = deps.getRowModel;
 		this.data = deps.data;
 		this.notifyCellChange = deps.notifyCellChange;
-		this.applyCellValueChange = deps.applyCellValueChange;
-		this.registerHistory = deps.registerHistory;
 		this.clearValidationError = deps.clearValidationError;
 		this.setValidationError = deps.setValidationError;
 		this.validateCellPostCommit = deps.validateCellPostCommit;
@@ -116,16 +100,13 @@ export class EditingFeatureController<TRowData = unknown> {
 					});
 					this.notifyCellChange(rowId, colField);
 				}
-				// Persist the error so the red-border indicator survives after the editor closes
 				this.setValidationError?.(rowId, colField, error);
 				return false;
 			}
 		}
 
-		const writeResult = this.applyCellValueChange(rowId, colField, value, {
-			undoable: false,
-			source: 'edit',
-		});
+		let committedValue = value;
+		let bypassValueSetter = false;
 
 		if (col?.valueSetter) {
 			let didAbort = false;
@@ -133,37 +114,45 @@ export class EditingFeatureController<TRowData = unknown> {
 				didAbort = true;
 			};
 			let success = true;
+			const draftRow = { ...(row as Record<string, unknown>) } as TRowData;
 			try {
-				success = await col.valueSetter({ value, oldValue, row, colField, abort });
+				success = await col.valueSetter({ value, oldValue, row: draftRow, colField, abort });
 			} catch {
 				success = false;
 			}
 			if (!success || didAbort) {
-				if (writeResult.applied) {
-					this.applyCellValueChange(rowId, colField, oldValue, { undoable: false, source: 'edit' });
-				}
-				const activeEdit = this.ctx.getState().activeEdit;
-				if (activeEdit?.rowId === rowId && activeEdit?.colField === colField) {
-					this.ctx.applyChange({
-						reason: 'editing:save-failed',
-						state: { activeEdit: { ...activeEdit, validationError: 'Save failed' } },
-						invalidations: [
-							{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
-							{ kind: 'overlay', reason: 'edit stopped' },
-						],
-					});
-					this.notifyCellChange(rowId, colField);
-				}
 				return false;
 			}
+			committedValue = getValueByPath(draftRow, colField);
+			bypassValueSetter = true;
 		}
 
-		if (writeResult.applied) {
-			this.registerHistory(createCellValueMutationHistory('data:set-cell-value', rowId, colField, oldValue, value));
+		const result = this.ctx.applyChange({
+			reason: 'data:set-cell-value',
+			state: { activeEdit: null },
+			domainMutations: [
+				{
+					kind: 'cell-value',
+					rowId,
+					colField,
+					value: committedValue,
+					source: 'edit',
+					bypassValueSetter,
+				},
+			],
+			invalidations: [
+				{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
+				{ kind: 'overlay', reason: 'edit stopped' },
+			],
+			domains: ['editing'],
+			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel: false } }],
+		});
+
+		if (result.status !== 'committed' && result.status !== 'noop') {
+			return false;
 		}
 
-		this.stopEdit(false);
-		// Run full validation (column + row) against the committed value, or just clear if no validator.
+		this.notifyCellChange(rowId, colField);
 		if (this.validateCellPostCommit) {
 			await this.validateCellPostCommit(rowId, colField);
 		} else {

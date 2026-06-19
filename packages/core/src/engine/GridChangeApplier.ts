@@ -88,7 +88,6 @@ export type GridChangePrecondition<TRowData = unknown> = GridCommitPrecondition<
 export interface GridHistoryMutation<TRowData = unknown> {
 	reason: GridCommitReason;
 	state?: GridStateUpdater<TRowData>;
-	run?: () => unknown;
 	domainMutations?: readonly GridDomainMutation<TRowData>[];
 	invalidations?: GridInvalidation[];
 	domains?: ReadonlyArray<keyof GridDomainVersions>;
@@ -101,10 +100,17 @@ export interface GridHistoryEntry<TRowData = unknown> {
 	redo: GridHistoryMutation<TRowData>;
 }
 
+type GridCommitRejectionReason = string & {};
+
 export type GridCommitResult =
-	| { status: 'committed'; changeId: number; faults: readonly RuntimeFault[] }
+	| {
+			status: 'committed';
+			changeId: number;
+			faults: readonly RuntimeFault[];
+			rejectedMutations?: readonly import('./GridDomainMutation.js').GridMutationRejection[];
+	  }
 	| { status: 'noop' }
-	| { status: 'rejected'; reason: string }
+	| { status: 'rejected'; reason: GridCommitRejectionReason; rejections?: readonly import('./GridDomainMutation.js').GridMutationRejection[] }
 	| { status: 'failed-before-commit'; fault: RuntimeFault };
 
 interface GridCommitRecord<TRowData = unknown> {
@@ -143,7 +149,7 @@ export interface GridCommitKernelDeps<TRowData = unknown> {
 	invalidation: InvalidationManager;
 	eventBus: EventBus<TRowData>;
 	commandHistory: CommandHistory;
-	requestRender: (reason: string) => void;
+	requestRender: (commitReason: string) => void;
 	commitContext?: GridCommitContext<TRowData>;
 	domainMutationExecutorRegistry?: GridDomainMutationExecutorRegistry<TRowData>;
 	incrementDomain?: (domain: keyof GridDomainVersions) => void;
@@ -157,17 +163,6 @@ export class GridCommitKernel<TRowData = unknown> {
 
 	constructor(private readonly deps: GridCommitKernelDeps<TRowData>) {}
 
-	registerHistory(history: GridHistoryEntry<TRowData>): void {
-		this.deps.commandHistory.add({
-			undo: () => {
-				this.applyHistoryMutation(history.undo);
-			},
-			redo: () => {
-				this.applyHistoryMutation(history.redo);
-			},
-		});
-	}
-
 	commit(change: GridCommit<TRowData>): GridCommitResult {
 		return this.commitDetailed(change).result;
 	}
@@ -179,23 +174,52 @@ export class GridCommitKernel<TRowData = unknown> {
 		const domainMutationResolution = this.resolveDomainMutations(change);
 		if (domainMutationResolution.status !== 'ok') return { result: domainMutationResolution.result, appliedMutations: [] };
 
-		const record = this.toCommitRecord(change, domainMutationResolution.appliedMutations);
-		if (!record) return { result: { status: 'noop' }, appliedMutations: domainMutationResolution.appliedMutations };
-
+		const appliedMutations: AppliedDomainMutation<TRowData>[] = [];
+		let failureOperation: string | null = null;
 		try {
-			// 1. Commit domain state atomically.
-			if (record.state !== undefined) {
-				this.deps.stateManager.setState(record.state);
+			for (const preparedMutation of domainMutationResolution.preparedMutations) {
+				failureOperation = `apply-domain:${preparedMutation.mutation.kind}`;
+				appliedMutations.push(preparedMutation.apply(this.deps.commitContext!));
+			}
+			if (change.state !== undefined) {
+				failureOperation = 'commit-state';
+				this.deps.stateManager.setState(change.state);
 			}
 		} catch (error) {
+			const primaryFault = this.reportFault(failureOperation ?? 'commit-domain', error, { reason: change.reason });
+			const rollbackFaults: RuntimeFault[] = [];
+			for (let index = appliedMutations.length - 1; index >= 0; index--) {
+				const preparedMutation = domainMutationResolution.preparedMutations[index];
+				const appliedMutation = appliedMutations[index];
+				if (!preparedMutation?.rollback || !appliedMutation) continue;
+				try {
+					preparedMutation.rollback(appliedMutation, this.deps.commitContext!);
+				} catch (rollbackError) {
+					rollbackFaults.push(
+						this.reportFault(`rollback-domain:${preparedMutation.mutation.kind}`, rollbackError, { reason: change.reason })
+					);
+				}
+			}
+			if (rollbackFaults.length === 0) {
+				return {
+					result: { status: 'failed-before-commit', fault: primaryFault },
+					appliedMutations: [],
+				};
+			}
+			const committedChangeId = this.nextChangeId++;
 			return {
 				result: {
-					status: 'failed-before-commit',
-					fault: this.reportFault('commit-state', error, { reason: record.reason }),
+					status: 'committed',
+					changeId: committedChangeId,
+					faults: [primaryFault, ...rollbackFaults],
+					rejectedMutations: this.collectRejectedMutations(appliedMutations),
 				},
-				appliedMutations: domainMutationResolution.appliedMutations,
+				appliedMutations,
 			};
 		}
+
+		const record = this.toCommitRecord(change, appliedMutations);
+		if (!record) return { result: { status: 'noop' }, appliedMutations };
 
 		const faults: RuntimeFault[] = [];
 		const isolate = (operation: string, work: () => void): void => {
@@ -220,6 +244,12 @@ export class GridCommitKernel<TRowData = unknown> {
 				for (const invalidation of record.invalidations) {
 					this.deps.invalidation.invalidate(invalidation);
 				}
+			});
+		}
+		const cellChanges = this.mergeCellChanges(appliedMutations);
+		if (cellChanges.size > 0 && this.deps.commitContext?.publishCommittedCellChanges) {
+			isolate('publish-cell-changes', () => {
+				this.deps.commitContext!.publishCommittedCellChanges!(cellChanges);
 			});
 		}
 		// 4. Register a bounded history record.
@@ -251,8 +281,13 @@ export class GridCommitKernel<TRowData = unknown> {
 		}
 
 		return {
-			result: { status: 'committed', changeId: record.changeId, faults },
-			appliedMutations: domainMutationResolution.appliedMutations,
+			result: {
+				status: 'committed',
+				changeId: record.changeId,
+				faults,
+				rejectedMutations: this.collectRejectedMutations(appliedMutations),
+			},
+			appliedMutations,
 		};
 	}
 
@@ -317,17 +352,6 @@ export class GridCommitKernel<TRowData = unknown> {
 	}
 
 	private applyHistoryMutation(change: GridHistoryMutation<TRowData>): GridCommitResult {
-		if (change.run) {
-			try {
-				const result = change.run();
-				return this.normalizeHistoryExecutionResult(result);
-			} catch (error) {
-				return {
-					status: 'failed-before-commit',
-					fault: this.reportFault('history-run', error, { reason: change.reason }),
-				};
-			}
-		}
 		return this.commit({
 			reason: change.reason,
 			state: change.state,
@@ -341,15 +365,12 @@ export class GridCommitKernel<TRowData = unknown> {
 
 	private resolveDomainMutations(
 		change: GridCommit<TRowData>
-	): { status: 'ok'; appliedMutations: readonly AppliedDomainMutation<TRowData>[] } | { status: 'rejected'; result: GridCommitResult } {
+	): { status: 'ok'; preparedMutations: readonly PreparedDomainMutation<TRowData>[] } | { status: 'rejected'; result: GridCommitResult } {
 		if (!change.domainMutations || change.domainMutations.length === 0) {
-			return { status: 'ok', appliedMutations: [] };
+			return { status: 'ok', preparedMutations: [] };
 		}
 		if (!this.deps.commitContext || !this.deps.domainMutationExecutorRegistry) {
 			return { status: 'rejected', result: { status: 'rejected', reason: 'domain mutation registry unavailable' } };
-		}
-		if (change.state !== undefined) {
-			return { status: 'rejected', result: { status: 'rejected', reason: 'mixed state and domain mutations are not yet supported' } };
 		}
 
 		const preparedMutations: PreparedDomainMutation<TRowData>[] = [];
@@ -362,24 +383,37 @@ export class GridCommitKernel<TRowData = unknown> {
 					result: { status: 'rejected', reason: `no executor registered for domain mutation "${mutation.kind}"` },
 				};
 			}
-			const validation = executor.validate(mutation as never, this.deps.commitContext);
+			let validation;
+			try {
+				validation = executor.validate(mutation as never, this.deps.commitContext);
+			} catch (error) {
+				return {
+					status: 'rejected',
+					result: {
+						status: 'failed-before-commit',
+						fault: this.reportFault(`validate-domain:${mutation.kind}`, error, { reason: change.reason, index }),
+					},
+				};
+			}
 			if (!validation.ok) {
 				return {
 					status: 'rejected',
-					result: { status: 'rejected', reason: validation.reason },
+					result: { status: 'rejected', reason: validation.reason, rejections: validation.rejection ? [validation.rejection] : undefined },
 				};
 			}
-			preparedMutations.push(executor.prepare(mutation as never, this.deps.commitContext));
+			try {
+				preparedMutations.push(executor.prepare(mutation as never, this.deps.commitContext));
+			} catch (error) {
+				return {
+					status: 'rejected',
+					result: {
+						status: 'failed-before-commit',
+						fault: this.reportFault(`prepare-domain:${mutation.kind}`, error, { reason: change.reason, index }),
+					},
+				};
+			}
 		}
-
-		const appliedMutations: AppliedDomainMutation<TRowData>[] = [];
-		for (let index = 0; index < change.domainMutations.length; index++) {
-			const mutation = change.domainMutations[index]!;
-			const executor = this.deps.domainMutationExecutorRegistry.resolve(mutation);
-			if (!executor) continue;
-			appliedMutations.push(executor.apply(preparedMutations[index] as never, this.deps.commitContext));
-		}
-		return { status: 'ok', appliedMutations };
+		return { status: 'ok', preparedMutations };
 	}
 
 	private mergeHistoryEntries(
@@ -390,29 +424,16 @@ export class GridCommitKernel<TRowData = unknown> {
 		const mutationHistories = appliedMutations
 			.map((mutation) => mutation.history)
 			.filter((entry): entry is GridHistoryEntry<TRowData> => entry !== undefined);
-		if (mutationHistories.length === 0) return history;
-		if (history) return history;
-		if (mutationHistories.length === 1) return mutationHistories[0];
+		const allHistories = history ? [...mutationHistories, history] : mutationHistories;
+		if (allHistories.length === 0) return undefined;
+		if (allHistories.length === 1) return allHistories[0];
 
 		return {
-			undo: {
+			undo: this.combineHistoryMutations(reason, allHistories.map((entry) => entry.undo).reverse()),
+			redo: this.combineHistoryMutations(
 				reason,
-				run: () => {
-					for (let index = mutationHistories.length - 1; index >= 0; index--) {
-						this.applyHistoryMutation(mutationHistories[index]!.undo);
-					}
-				},
-				requestRender: false,
-			},
-			redo: {
-				reason,
-				run: () => {
-					for (const entry of mutationHistories) {
-						this.applyHistoryMutation(entry.redo);
-					}
-				},
-				requestRender: false,
-			},
+				allHistories.map((entry) => entry.redo)
+			),
 		};
 	}
 
@@ -426,16 +447,6 @@ export class GridCommitKernel<TRowData = unknown> {
 			};
 		}
 		return { ...left, ...right };
-	}
-
-	private normalizeHistoryExecutionResult(result: unknown): GridCommitResult {
-		if (this.isGridCommitResult(result)) return result;
-		return { status: 'committed', changeId: this.nextChangeId++, faults: [] };
-	}
-
-	private isGridCommitResult(result: unknown): result is GridCommitResult {
-		if (!result || typeof result !== 'object' || !('status' in result)) return false;
-		return result.status === 'committed' || result.status === 'noop' || result.status === 'rejected' || result.status === 'failed-before-commit';
 	}
 
 	private reportFault(operation: string, error: unknown, context?: Record<string, unknown>): RuntimeFault {
@@ -456,6 +467,55 @@ export class GridCommitKernel<TRowData = unknown> {
 			error,
 			context,
 		};
+	}
+
+	private combineHistoryMutations(reason: GridCommitReason, mutations: readonly GridHistoryMutation<TRowData>[]): GridHistoryMutation<TRowData> {
+		let state: GridStateUpdater<TRowData> | undefined;
+		const domainMutations: GridDomainMutation<TRowData>[] = [];
+		const invalidations: GridInvalidation[] = [];
+		const domains: Array<keyof GridDomainVersions> = [];
+		const events: GridCommitEvent<TRowData>[] = [];
+		for (const mutation of mutations) {
+			if (mutation.state !== undefined) {
+				state = state === undefined ? mutation.state : this.composeStateUpdaters(state, mutation.state);
+			}
+			if (mutation.domainMutations) domainMutations.push(...mutation.domainMutations);
+			if (mutation.invalidations) invalidations.push(...mutation.invalidations);
+			if (mutation.domains) domains.push(...mutation.domains);
+			if (mutation.events) events.push(...mutation.events);
+		}
+		return {
+			reason,
+			state,
+			domainMutations: domainMutations.length > 0 ? domainMutations : undefined,
+			invalidations: invalidations.length > 0 ? invalidations : undefined,
+			domains: domains.length > 0 ? domains : undefined,
+			events: events.length > 0 ? events : undefined,
+			requestRender: false,
+		};
+	}
+
+	private collectRejectedMutations(
+		appliedMutations: readonly AppliedDomainMutation<TRowData>[]
+	): readonly import('./GridDomainMutation.js').GridMutationRejection[] | undefined {
+		const rejections = appliedMutations.flatMap((mutation) => mutation.rejections ?? []);
+		return rejections.length > 0 ? rejections : undefined;
+	}
+
+	private mergeCellChanges(appliedMutations: readonly AppliedDomainMutation<TRowData>[]): Map<string, Set<string>> {
+		const merged = new Map<string, Set<string>>();
+		for (const mutation of appliedMutations) {
+			if (!mutation.cellChanges) continue;
+			for (const [rowId, fields] of mutation.cellChanges) {
+				let target = merged.get(rowId);
+				if (!target) {
+					target = new Set<string>();
+					merged.set(rowId, target);
+				}
+				for (const field of fields) target.add(field);
+			}
+		}
+		return merged;
 	}
 }
 

@@ -358,7 +358,7 @@ export class GridEngine<TRowData = unknown> {
 				getStoredCellValue: (rowId, colField) => this.data.getStoredCellValue(rowId, colField),
 				getColumnDef: (colField) => this.columns.getColumnDef(colField),
 				applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
-				applyBatchCellValues: (updates, options) => this.dataMutation.applyBatchCellValues(updates, options),
+				publishCommittedCellChanges: (changes) => this.publishCommittedCellChanges(changes),
 			},
 			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TRowData>(),
 			incrementDomain: (domain) => this.incrementDomain(domain),
@@ -408,8 +408,6 @@ export class GridEngine<TRowData = unknown> {
 			getRowModel: () => this.rowModel,
 			data: this.data,
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
-			applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
-			registerHistory: (history) => this.changeApplier.registerHistory(history),
 			clearValidationError: (rowId, colField) => this.validationFeature._setCellError(rowId, colField, null),
 			setValidationError: (rowId, colField, error) => this.validationFeature._setCellError(rowId, colField, error),
 			validateCellPostCommit: (rowId, colField) => this.validationFeature.validateCell(rowId, colField).then(() => undefined),
@@ -422,15 +420,9 @@ export class GridEngine<TRowData = unknown> {
 		this.dataMutation = new DataMutationController<TRowData>({
 			data: this.data,
 			columns: this.columns,
-			eventBus: this.eventBus,
 			getRowModel: () => this.rowModel,
-			registerHistory: (history) => this.changeApplier.registerHistory(history),
 			syncFormulaForCell: (rowId, colField, value) => this.syncFormulaForCell(rowId, colField, value),
 			invalidateFormulaCell: (rowId, colField) => this.invalidateFormulaCell(rowId, colField),
-			getBatchedUpdates: () => this.batchedUpdates,
-			enqueueCellUpdate: (rowId, colField) => this.enqueueCellUpdate(rowId, colField),
-			scheduleBatchFlush: () => this.scheduleBatchFlush(),
-			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
 		});
 
 		// Link sub-models back to this engine context
@@ -868,6 +860,19 @@ export class GridEngine<TRowData = unknown> {
 
 	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
 		this.cellNotifications.notifyBulkCellChange(changes);
+	}
+
+	public publishCommittedCellChanges(changes: Map<string, Set<string>>): void {
+		if (this.batchedUpdates) {
+			for (const [rowId, fields] of changes) {
+				for (const colField of fields) {
+					this.enqueueCellUpdate(rowId, colField);
+				}
+			}
+			this.scheduleBatchFlush();
+			return;
+		}
+		this.cellNotifications.publishCommittedCellChanges(changes);
 	}
 
 	public notifyCellChange(rowId: string, colField: string): void {

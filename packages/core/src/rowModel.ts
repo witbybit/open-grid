@@ -124,7 +124,7 @@ export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
 	purgeCache?(): void;
 	setDatasource?(datasource: import('./serverRowModel.js').IGridDatasource<TRowData>, blockSize?: number): void;
 	goToPage?(page: number): void;
-	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
+	setCellValue?(rowId: string, colField: string, value: unknown, options?: { bypassValueSetter?: boolean }): boolean;
 	loadVisibleBlocks?(startRow: number, endRow: number): void;
 }
 
@@ -1236,14 +1236,16 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		return ids;
 	};
 
-	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
+	public setCellValue = (rowId: string, colField: string, value: unknown, options?: { bypassValueSetter?: boolean }): boolean => {
 		const node = this.getRowNodeById(rowId);
 		if (!node) return false;
 
 		const col = this.runtime.getColumnDef(colField);
 		const oldValue = this.runtime.getCellValue(rowId, colField);
 		const updatedRow = { ...node.data };
-		if (col?.valueSetter) {
+		if (options?.bypassValueSetter === true) {
+			setValueByPath(updatedRow, colField, value);
+		} else if (col?.valueSetter) {
 			// Sync path: call valueSetter with params. Async setters are handled by commitEdit.
 			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
 			if (result === false || (result instanceof Promise && false)) return false;

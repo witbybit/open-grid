@@ -48,8 +48,6 @@ function makeEditingFeature(store: GridStore<TestRow>): EditingFeatureController
 		getRowModel: () => engine.getRowModel(),
 		data: engine.data,
 		notifyCellChange: (rowId, colField) => engine.notifyCellChange(rowId, colField),
-		applyCellValueChange: (rowId, colField, value, options) => engine.dataMutation.applyCellValueChange(rowId, colField, value, options),
-		registerHistory: (history) => engine.changeApplier.registerHistory(history),
 	};
 	return new EditingFeatureController(deps);
 }
@@ -165,13 +163,44 @@ describe('EditingFeatureController', () => {
 		const store = makeStore();
 		const ctrl = makeController(store);
 		const feature = makeEditingFeature(store);
-		const stopSpy = vi.spyOn(feature, 'stopEdit');
+		const engine = (store as any).engine;
 
 		feature.startEdit('1', 'name');
 		const result = await feature.commitEdit('1', 'name', 'Updated Name');
 
 		expect(result).toBe(true);
-		expect(stopSpy).toHaveBeenCalledWith(false);
+		expect(store.getState().activeEdit).toBeNull();
+		expect(store.canUndo()).toBe(true);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('commitEdit invokes async valueSetter exactly once and commits through history once', async () => {
+		const valueSetter = vi.fn(async ({ row }) => {
+			row.name = 'Server Accepted';
+			return true;
+		});
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 50 },
+			{
+				field: 'name',
+				header: 'Name',
+				width: 150,
+				valueSetter,
+			},
+			{ field: 'price', header: 'Price', width: 100 },
+		]);
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+		const engine = (store as any).engine;
+
+		feature.startEdit('1', 'name');
+		const result = await feature.commitEdit('1', 'name', 'Updated Name');
+
+		expect(result).toBe(true);
+		expect(valueSetter).toHaveBeenCalledTimes(1);
+		expect(engine.getRawCellValue('1', 'name')).toBe('Server Accepted');
 		expect(store.canUndo()).toBe(true);
 
 		ctrl.dispose();
