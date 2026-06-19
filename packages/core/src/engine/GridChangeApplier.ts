@@ -1,4 +1,4 @@
-import type { GridState, GridStateUpdater } from '../state/GridState.js';
+import type { InternalGridState, GridStateUpdater } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import type { StateManager } from '../state/StateManager.js';
 import type { InvalidationManager, GridInvalidation } from '../renderer/invalidationManager.js';
@@ -60,7 +60,7 @@ export type GridChangeEvent<TRowData = unknown, K extends keyof GridEventPayload
 	};
 }[K];
 
-export type GridChangePrecondition<TRowData = unknown> = (state: Readonly<GridState<TRowData>>) => true | string;
+export type GridChangePrecondition<TRowData = unknown> = (state: Readonly<InternalGridState<TRowData>>) => true | string;
 
 export interface GridHistoryMutation<TRowData = unknown> {
 	reason: GridChangeReason;

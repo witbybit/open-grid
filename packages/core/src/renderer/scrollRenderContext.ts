@@ -1,11 +1,11 @@
 import type { CompiledGridPlan } from '../columnDef.js';
 import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 
 export interface ScrollRenderContext<TRowData = unknown> {
 	isScrolling: boolean;
 
-	state?: GridState<TRowData>;
+	state?: InternalGridState<TRowData>;
 	stateVersion: number;
 	// Per-row version map: rowId → version bumped on each row data mutation.
 	// Used by the freeze check to thaw only cells whose row actually changed.

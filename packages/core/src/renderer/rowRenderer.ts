@@ -6,7 +6,7 @@ import type { InvalidationFrame } from './invalidationManager.js';
 import { SelectionPaintManager } from './selectionPaintManager.js';
 import { type ColumnDef, type GridCellClassParams } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import type { GridCellPointer } from '../api/GridApi.js';
 import type { ViewportRenderer } from './viewportRenderer.js';

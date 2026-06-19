@@ -3,7 +3,7 @@ import { createEditRendererKey, createSlotRendererKey } from './identityKeys.js'
 import { reportRendererFault } from './rendererFaults.js';
 import type { CellRendererPhase, ColumnDef, GridCellClassParams, InternalColumnDef } from '../columnDef.js';
 import type { GridCellPointer } from '../api/GridApi.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import type { CellSlot, CellContentMode } from './cellSlot.js';
 import type { CellRenderer } from './cellRenderer.js';
@@ -60,7 +60,7 @@ export interface BindCellFullRequest<TRowData = unknown> {
 	pinRightStart: number;
 	pinRightBaseLeft: number;
 	plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>;
-	state: GridState<TRowData>;
+	state: InternalGridState<TRowData>;
 	ctx?: ScrollRenderContext<TRowData>;
 	phase?: CellRendererPhase;
 }

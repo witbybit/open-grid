@@ -1,5 +1,5 @@
 import { GridEventName } from '../api/GridEvents.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 import type { RowModel } from '../rowModel.js';
 import type { StateManager } from '../state/StateManager.js';
 import type { DataModel } from '../models/DataModel.js';
@@ -44,7 +44,7 @@ export class GridStateReactionController<TRowData = unknown> {
 	// Live data updates (updateRows) also bump globalVersion but must NOT shift bounds.
 	private pendingStructuralBoundsUpdate = false;
 
-	public handleStateChanges = (prevState: GridState<TRowData>, updatedKeys: string[]): void => {
+	public handleStateChanges = (prevState: InternalGridState<TRowData>, updatedKeys: string[]): void => {
 		const stateManager = this.deps.getStateManager();
 		let currState = stateManager.getState();
 		const updatedSet = new Set(updatedKeys);
@@ -247,7 +247,7 @@ export class GridStateReactionController<TRowData = unknown> {
 	}
 
 	private getSelectionNotificationViewport(
-		state: GridState<TRowData>,
+		state: InternalGridState<TRowData>,
 		rowModel: RowModel<TRowData>
 	): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
 		const rowCount = rowModel.getVisualRowCount();

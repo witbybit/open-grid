@@ -12,7 +12,7 @@ import type {
 	RowSelectionScope,
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
-import type { GridState, Listener } from '../state/GridState.js';
+import type { InternalGridState, Listener } from '../state/GridState.js';
 import type { RowModel, VisualRowModel } from '../rowModel.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
@@ -288,7 +288,7 @@ export class GridEngine<TRowData = unknown> {
 		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
 
 		// Set initial state
-		const initialState: GridState<TRowData> = {
+		const initialState: InternalGridState<TRowData> = {
 			columns: config.columns || [],
 			selection: initialSelection,
 			selectedRowIds: config.selectedRowIds ?? [],
@@ -444,12 +444,15 @@ export class GridEngine<TRowData = unknown> {
 		this.commandHistory.clear();
 	}
 
-	public getState(): GridState<TRowData> {
+	public getState(): InternalGridState<TRowData> {
 		return this.stateManager.getState();
 	}
 
-	public initializeRowModelState(model: { columns?: GridState<TRowData>['columns']; getRowId?: ((row: TRowData) => string) | undefined }): void {
-		const nextState: Partial<GridState<TRowData>> = {};
+	public initializeRowModelState(model: {
+		columns?: InternalGridState<TRowData>['columns'];
+		getRowId?: ((row: TRowData) => string) | undefined;
+	}): void {
+		const nextState: Partial<InternalGridState<TRowData>> = {};
 		if (model.columns) nextState.columns = model.columns;
 		if (model.getRowId !== undefined) nextState.getRowId = model.getRowId;
 		if (Object.keys(nextState).length === 0) return;
@@ -469,7 +472,7 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
-	public updateExpansionState(updater: (expansion: GridState<TRowData>['expansion']) => GridState<TRowData>['expansion']): void {
+	public updateExpansionState(updater: (expansion: InternalGridState<TRowData>['expansion']) => InternalGridState<TRowData>['expansion']): void {
 		this.changeApplier.apply({
 			reason: 'rows:update-expansion',
 			state: (state) => ({ expansion: updater(state.expansion) }),
@@ -487,7 +490,7 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
-	public setServerPaginationState(payload: NonNullable<GridState<TRowData>['serverPagination']>): void {
+	public setServerPaginationState(payload: NonNullable<InternalGridState<TRowData>['serverPagination']>): void {
 		this.changeApplier.apply({
 			reason: 'rows:set-server-pagination',
 			state: { serverPagination: payload },
@@ -495,7 +498,10 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
-	public setVisibleRanges(visibleRowRange: GridState<TRowData>['visibleRowRange'], visibleColRange: GridState<TRowData>['visibleColRange']): void {
+	public setVisibleRanges(
+		visibleRowRange: InternalGridState<TRowData>['visibleRowRange'],
+		visibleColRange: InternalGridState<TRowData>['visibleColRange']
+	): void {
 		this.changeApplier.apply({
 			reason: 'viewport:set-visible-ranges',
 			state: { visibleRowRange, visibleColRange },
@@ -620,7 +626,7 @@ export class GridEngine<TRowData = unknown> {
 	public setColumnReorderEnabled(enabled: boolean): void {
 		this.columnFeature.setColumnReorderEnabled(enabled);
 	}
-	public setStyleRules(styleRules: GridState<TRowData>['styleRules']): void {
+	public setStyleRules(styleRules: InternalGridState<TRowData>['styleRules']): void {
 		this.stateFeature.setStyleRules(styleRules);
 	}
 	public setShowFloatingFilters(enabled: boolean): void {
@@ -635,7 +641,7 @@ export class GridEngine<TRowData = unknown> {
 	public setChartOpen(chartOpen: boolean): void {
 		this.stateFeature.setChartOpen(chartOpen);
 	}
-	public setThemeName(themeName: GridState<TRowData>['themeName']): void {
+	public setThemeName(themeName: InternalGridState<TRowData>['themeName']): void {
 		this.stateFeature.setThemeName(themeName);
 	}
 	public resizeRow(rowId: string, height: number, undoable = true): void {

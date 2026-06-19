@@ -1,6 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import type { CellSlot } from './cellSlot.js';
 import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './rowCellBinder.js';
@@ -20,7 +20,7 @@ export interface RowCellLaneFullBindRequest<TRowData = unknown> {
 	pinRightStart: number;
 	pinRightBaseLeft: number;
 	plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>;
-	state: GridState<TRowData>;
+	state: InternalGridState<TRowData>;
 	isScrollFrameActive: boolean;
 	ctx?: ScrollRenderContext<TRowData>;
 	phase?: CellRendererPhase;
@@ -71,7 +71,7 @@ export interface BindAllDataCellsRequest<TRowData = unknown> {
 	plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>;
 	isScrollFrameActive: boolean;
 	ctx?: ScrollRenderContext<TRowData>;
-	state: GridState<TRowData>;
+	state: InternalGridState<TRowData>;
 	isRowRebind: boolean;
 }
 

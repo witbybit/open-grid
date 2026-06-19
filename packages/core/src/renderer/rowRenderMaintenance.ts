@@ -1,6 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { InvalidationFrame } from './invalidationManager.js';
@@ -25,7 +25,7 @@ export interface RowCellBindRequest<TRowData = unknown> {
 	pinRightStart: number;
 	pinRightBaseLeft: number;
 	plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>;
-	state: GridState<TRowData>;
+	state: InternalGridState<TRowData>;
 	isScrollFrameActive: boolean;
 	ctx?: ScrollRenderContext<TRowData>;
 	phase?: CellRendererPhase;
