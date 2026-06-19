@@ -1189,13 +1189,13 @@ describe('Architecture guardrails', () => {
 
 	// ── Plan 097: canonical domain command and mutation boundary ─────────────
 
-	it('GridChange.domains field is declared on GridChangeApplier (Plan 097)', () => {
+	it('GridCommit.domains field is declared on the commit kernel module (Plan 097)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
 		expect(content).toContain('domains?: ReadonlyArray<keyof GridDomainVersions>');
 		expect(content).toContain('incrementDomain?:');
 	});
 
-	it('GridChangeApplier.apply increments declared domains before events (Plan 097)', () => {
+	it('GridCommitKernel.commit increments declared domains before events (Plan 097)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
 		// Domain increments must precede event dispatch — enforced by comment order in apply()
 		expect(content).toContain('Increment declared domain versions');
@@ -1603,7 +1603,7 @@ describe('Architecture guardrails', () => {
 
 	it('GridStateFeatureController no longer contains raw write fallbacks (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'), 'utf-8');
-		expect(content).toContain('applyChange: (change: GridChange<TRowData>) => GridCommitResult;');
+		expect(content).toContain('applyChange: (change: GridCommit<TRowData>) => GridCommitResult;');
 		expect(content).not.toContain('applyChange?:');
 		expect(content).not.toContain('stateManager.setState(');
 		expect(content).not.toContain('invalidateGeometry(');
@@ -1619,20 +1619,20 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('this.engine.setState(');
 	});
 
-	it('GridEngine setData and range selection route through GridChangeApplier (Plan 103)', () => {
+	it('GridEngine setData and range selection route through GridCommitKernel (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 		expect(content).toContain("reason: 'columns:set-data'");
 		expect(content).toContain("reason: 'selection:set-range'");
 	});
 
-	it('GridEngine row-model registration routes state effects through GridChangeApplier (Plan 103)', () => {
+	it('GridEngine row-model registration routes state effects through GridCommitKernel (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 		expect(content).toContain("reason: 'rows:register-model'");
 		expect(content).not.toContain("this.invalidation.invalidateFull('row model registered')");
 		expect(content).not.toContain("this.requestRender('row model registered')");
 	});
 
-	it('GridEngine row-model helper commits route through GridChangeApplier (Plan 103)', () => {
+	it('GridEngine row-model helper commits route through GridCommitKernel (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 		expect(content).toContain("reason: 'rows:initialize-model'");
 		expect(content).toContain("reason: 'rows:bump-global-version'");
@@ -1652,8 +1652,10 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('this.engine.stateManager.setState({');
 	});
 
-	it('GridChangeApplier exposes explicit commit results and non-recursive history records (Plan 104)', () => {
+	it('GridCommitKernel exposes explicit commit results and non-recursive history records (Plan 104)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
+		expect(content).toContain('export class GridCommitKernel<TRowData = unknown>');
+		expect(content).toContain('commit(change: GridCommit<TRowData>): GridCommitResult');
 		expect(content).toContain('apply(change: GridChange<TRowData>): GridCommitResult');
 		expect(content).toContain("status: 'committed'");
 		expect(content).toContain("status: 'noop'");
@@ -1661,7 +1663,7 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("status: 'failed-before-commit'");
 		expect(content).toContain('faults: readonly RuntimeFault[]');
 		expect(content).toContain('history?: GridHistoryEntry<TRowData>;');
-		expect(content).toContain('events?: GridChangeEvent<TRowData>[];');
+		expect(content).toContain('events?: GridCommitEvent<TRowData>[];');
 		expect(content).not.toContain('undo?: GridChange<TRowData>;');
 		expect(content).not.toContain('redo?: GridChange<TRowData>;');
 	});
@@ -1669,8 +1671,8 @@ describe('Architecture guardrails', () => {
 	it('feature mutation contexts surface GridCommitResult explicitly (Plan 104)', () => {
 		const featureCtx = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridFeatureContext.ts'), 'utf-8');
 		const stateFeature = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'), 'utf-8');
-		expect(featureCtx).toContain('applyChange: (change: GridChange<TRowData>) => GridCommitResult;');
-		expect(stateFeature).toContain('applyChange: (change: GridChange<TRowData>) => GridCommitResult;');
+		expect(featureCtx).toContain('applyChange: (change: GridCommit<TRowData>) => GridCommitResult;');
+		expect(stateFeature).toContain('applyChange: (change: GridCommit<TRowData>) => GridCommitResult;');
 	});
 
 	it('CommandHistory reports rejected and failed-before-commit outcomes instead of dropping them (Plan 104)', () => {

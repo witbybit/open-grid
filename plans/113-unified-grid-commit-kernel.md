@@ -20,6 +20,7 @@ Replace split logical-commit coordination with one authoritative `GridCommitKern
 - async edit commit now registers undo history only after save success, so failed saves do not leak undo entries
 - row-order publication now routes through `GridEngine.setRowOrder(...)` instead of `RowDragController` mutating the row model and dispatching events directly
 - persisted state restore now batches replayed API operations and clears history on success so hydration does not create synthetic undo entries
+- `GridCommitKernel` and `GridCommit` are now first-class exports in the kernel module, with compatibility aliases preserved while engine/context types migrate onto commit terminology
 
 ## Problem
 

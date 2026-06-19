@@ -7,7 +7,7 @@ import type { CommandHistory } from '../commands/CommandHistory.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { RuntimeFault, RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 
-export type GridChangeReason =
+export type GridCommitReason =
 	| 'columns:set-data'
 	| 'columns:resize'
 	| 'columns:order'
@@ -61,22 +61,30 @@ export type GridChangeReason =
 	| 'viewport:set-visible-ranges'
 	| (string & {});
 
-export type GridChangeEvent<TRowData = unknown, K extends keyof GridEventPayloadMap<TRowData> = keyof GridEventPayloadMap<TRowData>> = {
+export type GridChangeReason = GridCommitReason;
+
+export type GridCommitEvent<TRowData = unknown, K extends keyof GridEventPayloadMap<TRowData> = keyof GridEventPayloadMap<TRowData>> = {
 	[Type in K]: {
 		type: Type;
 		payload: GridEventPayloadMap<TRowData>[Type];
 	};
 }[K];
 
-export type GridChangePrecondition<TRowData = unknown> = (state: Readonly<InternalGridState<TRowData>>) => true | string;
+export type GridChangeEvent<
+	TRowData = unknown,
+	K extends keyof GridEventPayloadMap<TRowData> = keyof GridEventPayloadMap<TRowData>,
+> = GridCommitEvent<TRowData, K>;
+
+export type GridCommitPrecondition<TRowData = unknown> = (state: Readonly<InternalGridState<TRowData>>) => true | string;
+export type GridChangePrecondition<TRowData = unknown> = GridCommitPrecondition<TRowData>;
 
 export interface GridHistoryMutation<TRowData = unknown> {
-	reason: GridChangeReason;
+	reason: GridCommitReason;
 	state?: GridStateUpdater<TRowData>;
 	run?: () => unknown;
 	invalidations?: GridInvalidation[];
 	domains?: ReadonlyArray<keyof GridDomainVersions>;
-	events?: GridChangeEvent<TRowData>[];
+	events?: GridCommitEvent<TRowData>[];
 	requestRender?: boolean;
 }
 
@@ -93,28 +101,30 @@ export type GridCommitResult =
 
 interface GridCommitRecord<TRowData = unknown> {
 	changeId: number;
-	reason: GridChangeReason;
+	reason: GridCommitReason;
 	state?: GridStateUpdater<TRowData>;
 	invalidations: GridInvalidation[];
 	domains: ReadonlyArray<keyof GridDomainVersions>;
-	events: GridChangeEvent<TRowData>[];
+	events: GridCommitEvent<TRowData>[];
 	history?: GridHistoryEntry<TRowData>;
 	requestRender: boolean;
 }
 
-export interface GridChange<TRowData = unknown> {
-	reason: GridChangeReason;
+export interface GridCommit<TRowData = unknown> {
+	reason: GridCommitReason;
 	state?: GridStateUpdater<TRowData>;
 	invalidations?: GridInvalidation[];
 	// Domain increments are declared on the change and applied by the commit protocol.
 	domains?: ReadonlyArray<keyof GridDomainVersions>;
-	events?: GridChangeEvent<TRowData>[];
+	events?: GridCommitEvent<TRowData>[];
 	history?: GridHistoryEntry<TRowData>;
-	precondition?: GridChangePrecondition<TRowData>;
+	precondition?: GridCommitPrecondition<TRowData>;
 	requestRender?: boolean;
 }
 
-export interface GridChangeApplierDeps<TRowData = unknown> {
+export interface GridChange<TRowData = unknown> extends GridCommit<TRowData> {}
+
+export interface GridCommitKernelDeps<TRowData = unknown> {
 	stateManager: StateManager<TRowData>;
 	invalidation: InvalidationManager;
 	eventBus: EventBus<TRowData>;
@@ -124,10 +134,12 @@ export interface GridChangeApplierDeps<TRowData = unknown> {
 	faultReporter?: RuntimeFaultReporter<TRowData>;
 }
 
-export class GridChangeApplier<TRowData = unknown> {
+export type GridChangeApplierDeps<TRowData = unknown> = GridCommitKernelDeps<TRowData>;
+
+export class GridCommitKernel<TRowData = unknown> {
 	private nextChangeId = 1;
 
-	constructor(private readonly deps: GridChangeApplierDeps<TRowData>) {}
+	constructor(private readonly deps: GridCommitKernelDeps<TRowData>) {}
 
 	registerHistory(history: GridHistoryEntry<TRowData>): void {
 		this.deps.commandHistory.add({
@@ -140,7 +152,7 @@ export class GridChangeApplier<TRowData = unknown> {
 		});
 	}
 
-	apply(change: GridChange<TRowData>): GridCommitResult {
+	commit(change: GridCommit<TRowData>): GridCommitResult {
 		const validation = this.validate(change);
 		if (validation.status === 'rejected') return validation.result;
 
@@ -215,7 +227,11 @@ export class GridChangeApplier<TRowData = unknown> {
 		return { status: 'committed', changeId: record.changeId, faults };
 	}
 
-	private validate(change: GridChange<TRowData>): { status: 'ok' } | { status: 'rejected'; result: GridCommitResult } {
+	apply(change: GridChange<TRowData>): GridCommitResult {
+		return this.commit(change);
+	}
+
+	private validate(change: GridCommit<TRowData>): { status: 'ok' } | { status: 'rejected'; result: GridCommitResult } {
 		if (!change.precondition) return { status: 'ok' };
 		try {
 			const result = change.precondition(this.deps.stateManager.getState());
@@ -232,7 +248,7 @@ export class GridChangeApplier<TRowData = unknown> {
 		}
 	}
 
-	private toCommitRecord(change: GridChange<TRowData>): GridCommitRecord<TRowData> | null {
+	private toCommitRecord(change: GridCommit<TRowData>): GridCommitRecord<TRowData> | null {
 		const record: GridCommitRecord<TRowData> = {
 			changeId: this.nextChangeId++,
 			reason: change.reason,
@@ -267,7 +283,7 @@ export class GridChangeApplier<TRowData = unknown> {
 				};
 			}
 		}
-		return this.apply({
+		return this.commit({
 			reason: change.reason,
 			state: change.state,
 			invalidations: change.invalidations,
@@ -307,3 +323,5 @@ export class GridChangeApplier<TRowData = unknown> {
 		};
 	}
 }
+
+export class GridChangeApplier<TRowData = unknown> extends GridCommitKernel<TRowData> {}

@@ -31,7 +31,7 @@ import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { InvalidationManager } from '../renderer/invalidationManager.js';
-import { GridChangeApplier } from './GridChangeApplier.js';
+import { GridCommitKernel } from './GridChangeApplier.js';
 import { ColumnFeatureController } from '../features/ColumnFeatureController.js';
 import { GroupingFeatureController } from '../features/GroupingFeatureController.js';
 import { EditingFeatureController } from '../features/EditingFeatureController.js';
@@ -63,7 +63,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly eventBus: EventBus<TRowData>;
 	public readonly runtimeFaults: RuntimeFaultReporter<TRowData>;
 	public readonly invalidation: InvalidationManager;
-	public readonly changeApplier: GridChangeApplier<TRowData>;
+	public readonly changeApplier: GridCommitKernel<TRowData>;
 	public readonly columnFeature: ColumnFeatureController<TRowData>;
 	public readonly columnAutoSize: ColumnAutoSizeController<TRowData>;
 	public readonly clipboard: ClipboardController<TRowData>;
@@ -343,7 +343,7 @@ export class GridEngine<TRowData = unknown> {
 		);
 
 		// Initialize changeApplier after stateManager is available
-		this.changeApplier = new GridChangeApplier<TRowData>({
+		this.changeApplier = new GridCommitKernel<TRowData>({
 			stateManager: this.stateManager,
 			invalidation: this.invalidation,
 			eventBus: this.eventBus,
@@ -357,7 +357,7 @@ export class GridEngine<TRowData = unknown> {
 		const featureContext = {
 			columns: this.columns,
 			getState: () => this.stateManager.getState(),
-			applyChange: (change: import('./GridChangeApplier.js').GridChange<TRowData>) => this.changeApplier.apply(change),
+			applyChange: (change: import('./GridChangeApplier.js').GridCommit<TRowData>) => this.changeApplier.commit(change),
 		};
 		this.columnFeature = new ColumnFeatureController<TRowData>(featureContext);
 		this.columnAutoSize = new ColumnAutoSizeController<TRowData>({
@@ -406,7 +406,7 @@ export class GridEngine<TRowData = unknown> {
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
 		this.stateFeature = new GridStateFeatureController<TRowData>({
 			stateManager: this.stateManager,
-			applyChange: (change) => this.changeApplier.apply(change),
+			applyChange: (change) => this.changeApplier.commit(change),
 		});
 		this.dataMutation = new DataMutationController<TRowData>({
 			data: this.data,
