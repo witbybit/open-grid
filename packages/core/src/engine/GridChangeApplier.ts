@@ -70,6 +70,8 @@ export type GridCommitReason =
 
 export type GridChangeReason = GridCommitReason;
 
+export type GridHistoryPolicy = 'record' | 'suppress';
+
 export type GridCommitEvent<TRowData = unknown, K extends keyof GridEventPayloadMap<TRowData> = keyof GridEventPayloadMap<TRowData>> = {
 	[Type in K]: {
 		type: Type;
@@ -93,6 +95,7 @@ export interface GridHistoryMutation<TRowData = unknown> {
 	domains?: ReadonlyArray<keyof GridDomainVersions>;
 	events?: GridCommitEvent<TRowData>[];
 	requestRender?: boolean;
+	historyPolicy?: GridHistoryPolicy;
 }
 
 export interface GridHistoryEntry<TRowData = unknown> {
@@ -140,6 +143,7 @@ export interface GridCommit<TRowData = unknown> {
 	history?: GridHistoryEntry<TRowData>;
 	precondition?: GridCommitPrecondition<TRowData>;
 	requestRender?: boolean;
+	historyPolicy?: GridHistoryPolicy;
 }
 
 export interface GridChange<TRowData = unknown> extends GridCommit<TRowData> {}
@@ -164,6 +168,7 @@ class GridCommitRejectedError {
 
 export class GridCommitKernel<TRowData = unknown> {
 	private nextChangeId = 1;
+	private isReplayingHistory = false;
 
 	constructor(private readonly deps: GridCommitKernelDeps<TRowData>) {}
 
@@ -274,12 +279,8 @@ export class GridCommitKernel<TRowData = unknown> {
 		if (record.history) {
 			isolate('register-history', () => {
 				this.deps.commandHistory.add({
-					undo: () => {
-						this.applyHistoryMutation(record.history!.undo);
-					},
-					redo: () => {
-						this.applyHistoryMutation(record.history!.redo);
-					},
+					undo: () => this.applyHistoryMutation(record.history!.undo),
+					redo: () => this.applyHistoryMutation(record.history!.redo),
 				});
 			});
 		}
@@ -344,7 +345,8 @@ export class GridCommitKernel<TRowData = unknown> {
 		const invalidations = [...appliedMutations.flatMap((mutation) => mutation.invalidations ?? []), ...(change.invalidations ?? [])];
 		const domains = [...appliedMutations.flatMap((mutation) => mutation.domains ?? []), ...(change.domains ?? [])];
 		const events = [...appliedMutations.flatMap((mutation) => mutation.events ?? []), ...(change.events ?? [])];
-		const history = this.mergeHistoryEntries(change.reason, appliedMutations, change.history);
+		const shouldSuppressHistory = change.historyPolicy === 'suppress' || this.isReplayingHistory;
+		const history = shouldSuppressHistory ? undefined : this.mergeHistoryEntries(change.reason, appliedMutations, change.history);
 		const semanticWork =
 			appliedMutations.some((mutation) => mutation.noop !== true) ||
 			mergedState !== undefined ||
@@ -370,15 +372,22 @@ export class GridCommitKernel<TRowData = unknown> {
 	}
 
 	private applyHistoryMutation(change: GridHistoryMutation<TRowData>): GridCommitResult {
-		return this.commit({
-			reason: change.reason,
-			state: change.state,
-			domainMutations: change.domainMutations,
-			invalidations: change.invalidations,
-			domains: change.domains,
-			events: change.events,
-			requestRender: change.requestRender,
-		});
+		const wasReplaying = this.isReplayingHistory;
+		this.isReplayingHistory = true;
+		try {
+			return this.commit({
+				reason: change.reason,
+				state: change.state,
+				domainMutations: change.domainMutations,
+				invalidations: change.invalidations,
+				domains: change.domains,
+				events: change.events,
+				requestRender: change.requestRender,
+				historyPolicy: 'suppress',
+			});
+		} finally {
+			this.isReplayingHistory = wasReplaying;
+		}
 	}
 
 	private resolveDomainMutations(
