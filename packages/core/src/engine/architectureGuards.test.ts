@@ -1769,7 +1769,8 @@ describe('Architecture guardrails', () => {
 		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
 		const createGridContent = readFileSync(resolve(CORE_ROOT, 'src', 'createGrid.ts'), 'utf-8');
 		expect(snapshotBuilder).toContain('export function createGridStateSnapshot');
-		expect(storeContent).toContain('createGridStateSnapshot(this.state)');
+		expect(storeContent).toContain('const snapshot = createGridStateSnapshot(currentState);');
+		expect(storeContent).toContain('this.cachedStateSnapshotState === currentState');
 		expect(createGridContent).not.toContain('function createGridStateSnapshot');
 		expect(createGridContent).toContain('getStateSnapshot: () => store.getStateSnapshot()');
 	});

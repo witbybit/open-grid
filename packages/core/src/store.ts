@@ -121,6 +121,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private portBindingGeneration = 0;
 	private activeBindingGeneration: number | null = null;
 	private storeDestroyed = false;
+	private cachedStateSnapshotState: InternalGridState<TRowData> | null = null;
+	private cachedStateSnapshot: GridStateSnapshot<TRowData> | null = null;
 
 	constructor(initialState: Partial<GridInitialState<TRowData>> = {}, engineOptions?: { rowValidator?: RowValidator<TRowData> }) {
 		validateColumns(initialState.columns || []);
@@ -194,7 +196,16 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getPluginController = (): GridPluginController<TRowData> => this.pluginRegistry;
 	public getState = (): InternalGridState<TRowData> => this.engine.getState();
 
-	public getStateSnapshot = (): GridStateSnapshot<TRowData> => createGridStateSnapshot(this.state);
+	public getStateSnapshot = (): GridStateSnapshot<TRowData> => {
+		const currentState = this.state;
+		if (this.cachedStateSnapshotState === currentState && this.cachedStateSnapshot) {
+			return this.cachedStateSnapshot;
+		}
+		const snapshot = createGridStateSnapshot(currentState);
+		this.cachedStateSnapshotState = currentState;
+		this.cachedStateSnapshot = snapshot;
+		return snapshot;
+	};
 
 	public getRowId = (row: TRowData): string => this.engine.getRowId(row);
 

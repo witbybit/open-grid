@@ -155,6 +155,28 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it('getStateSnapshot is referentially stable until state changes', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+		});
+
+		const first = store.getStateSnapshot();
+		const second = store.getStateSnapshot();
+		expect(second).toBe(first);
+
+		store.setShowFilterChipBar(true);
+
+		const third = store.getStateSnapshot();
+		const fourth = store.getStateSnapshot();
+		expect(third).not.toBe(first);
+		expect(fourth).toBe(third);
+
+		store.destroy();
+	});
+
 	it('should expose precise selection change invalidation results', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 150 }],
