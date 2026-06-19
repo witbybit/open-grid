@@ -354,6 +354,9 @@ export class GridCommitKernel<TRowData = unknown> {
 			domains.length > 0 ||
 			events.length > 0 ||
 			history !== undefined;
+		const hasInvalidations = invalidations.length > 0 || appliedMutations.some((mutation) => mutation.requestRender === true);
+		const shouldScheduleRender =
+			change.requestRender === false ? false : hasInvalidations || change.requestRender === true;
 		const record: GridCommitRecord<TRowData> = {
 			changeId: this.nextChangeId++,
 			reason: change.reason,
@@ -362,8 +365,7 @@ export class GridCommitKernel<TRowData = unknown> {
 			domains,
 			events,
 			history,
-			requestRender:
-				change.requestRender === false ? false : semanticWork || appliedMutations.some((mutation) => mutation.requestRender === true),
+			requestRender: shouldScheduleRender,
 		};
 
 		const hasWork = semanticWork || record.requestRender;

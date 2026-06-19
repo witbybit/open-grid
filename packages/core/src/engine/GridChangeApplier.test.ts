@@ -751,6 +751,7 @@ describe('GridChangeApplier', () => {
 		const result = applier.apply({
 			reason: 'listener-fault',
 			state: { columnWidths: { name: 200 } },
+			invalidations: [{ kind: 'geometry' }],
 			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 200 } }],
 		});
 
@@ -771,6 +772,7 @@ describe('GridChangeApplier', () => {
 		const result = applier.apply({
 			reason: 'render-fault',
 			state: { columnWidths: { name: 220 } },
+			invalidations: [{ kind: 'geometry' }],
 			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 220 } }],
 		});
 
@@ -875,6 +877,7 @@ describe('GridChangeApplier', () => {
 		const result = applier.apply({
 			reason: 'history-fault',
 			state: { columnWidths: { name: 230 } },
+			invalidations: [{ kind: 'geometry' }],
 			history: {
 				undo: { reason: 'history-fault:undo', state: { columnWidths: {} }, requestRender: false },
 				redo: { reason: 'history-fault:redo', state: { columnWidths: { name: 230 } }, requestRender: false },
