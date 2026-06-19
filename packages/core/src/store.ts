@@ -633,9 +633,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public applyTransaction = (transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null => {
-		const rowModel = this.getRowModel();
-		if (!rowModel?.applyTransaction) return null;
-		return rowModel.applyTransaction(transaction);
+		return this.engine.applyTransaction(transaction);
 	};
 
 	public transaction = (transaction: GridTransaction<TRowData>): RowNodeTransaction<TRowData> | null => {

@@ -36,6 +36,7 @@ export type GridChangeReason =
 	| 'rows:initialize-model'
 	| 'rows:bump-global-version'
 	| 'rows:set-order'
+	| 'rows:apply-transaction'
 	| 'rows:update-expansion'
 	| 'rows:set-loading-state'
 	| 'rows:set-server-pagination'

@@ -6,6 +6,8 @@ import type {
 	GridCellPointer,
 	GridCellRange,
 	GridSelectionSource,
+	RowDataTransaction,
+	RowNodeTransaction,
 	RowSelectionChangeResult,
 	RowSelectionGesture,
 	RowSelectionGestureSource,
@@ -490,6 +492,12 @@ export class GridEngine<TRowData = unknown> {
 			events: emitEvent ? [{ type: GridEventName.rowOrderChanged, payload: { rowIds } }] : [],
 			requestRender: true,
 		});
+	}
+
+	public applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null {
+		const rowModel = this.getRowModel();
+		if (!rowModel?.applyTransaction) return null;
+		return rowModel.applyTransaction(transaction);
 	}
 
 	public updateExpansionState(updater: (expansion: InternalGridState<TRowData>['expansion']) => InternalGridState<TRowData>['expansion']): void {

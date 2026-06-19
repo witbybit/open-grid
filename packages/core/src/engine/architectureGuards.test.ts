@@ -353,6 +353,11 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('rowModel.setRowOrder(');
 	});
 
+	it('GridStore does not call rowModel.applyTransaction directly', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).not.toContain('rowModel.applyTransaction(');
+	});
+
 	it('GridFeatureContext does not expose raw side-effect primitives', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridFeatureContext.ts'), 'utf-8');
 		expect(content).not.toContain('stateManager:');
