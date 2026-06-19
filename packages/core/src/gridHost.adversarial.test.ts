@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createClientGrid } from './createGrid.js';
 import { mountGridHost } from './gridHost.js';
-import { resolveGridInternalRuntime } from './internal/apiInternalBridge.js';
+import { resolveGridHostComposition } from './internal/apiInternalBridge.js';
 
 class TestResizeObserver {
 	public static instances: TestResizeObserver[] = [];
@@ -82,7 +82,7 @@ describe('mountGridHost adversarial lifecycle', () => {
 			rows: [{ id: 'row-1', name: 'Row 1' }],
 			getRowId: (row) => row.id,
 		});
-		const runtime = resolveGridInternalRuntime(api);
+		const runtime = resolveGridHostComposition(api);
 		const container1 = createContainer(500, 180);
 		const container2 = createContainer(700, 260);
 
@@ -120,7 +120,7 @@ describe('mountGridHost adversarial lifecycle', () => {
 			rows: [{ id: 'row-1', name: 'Row 1' }],
 			getRowId: (row) => row.id,
 		});
-		const runtime = resolveGridInternalRuntime(api);
+		const runtime = resolveGridHostComposition(api);
 
 		const host1 = mountGridHost(api, createContainer());
 		host1.destroy();
@@ -148,7 +148,7 @@ describe('mountGridHost adversarial lifecycle', () => {
 			rows: Array.from({ length: 25 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			getRowId: (row) => row.id,
 		});
-		const runtime = resolveGridInternalRuntime(api);
+		const runtime = resolveGridHostComposition(api);
 
 		for (let iteration = 0; iteration < 20; iteration++) {
 			const host = mountGridHost(api, createContainer(480 + iteration, 180 + iteration));

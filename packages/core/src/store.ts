@@ -426,7 +426,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		exportToCsv(this, options);
 	};
 
-	// All persistence methods are overridden by createApiFacade when an adapter is configured.
+	// All persistence methods are overridden by the private runtime composition root when an adapter is configured.
 	public hasPersistence = (): boolean => false;
 	public clearPersistedState = (): void => {};
 	public setAutoSave = (_enabled: boolean): void => {};

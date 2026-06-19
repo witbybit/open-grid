@@ -8,24 +8,43 @@ Finalize the permanent internal runtime composition object so its name, dependen
 
 - **Priority**: P1
 - **Effort**: L
-- **Risk**: MEDIUM — internal rename/decomposition with broad touch points
-- **Depends on**: Plans 113–116
+- **Risk**: MEDIUM - internal rename/decomposition with broad touch points
+- **Depends on**: Plans 113-116
 - **Category**: runtime composition, dependency narrowing, adapter boundary
+- **State**: DONE on 2026-06-19
 
 ## Problem
 
-The codebase now treats `GridStore` as a private runtime composition root in practice, but the name and dependency shape still carry legacy "store facade" baggage.
+The codebase already treated `GridStore` as a private runtime composition root in practice, but the surrounding wiring still mixed public factory concerns and private runtime composition concerns in the same module.
 
 ## Target end state
 
-Use this target:
+The runtime composition object should be private, explicit, and adapter-facing only through narrow capabilities.
 
-> `GridStore` becomes a private runtime composition root and should be renamed to `GridKernel` or `GridRuntime` if that yields a clearer boundary.
+For Plan 117, the least-disruptive honest outcome was:
+
+- keep `GridStore` private
+- make runtime composition explicit in a private internal module
+- make host/plugin bridge capabilities more precise
+- remove composition-only helpers from the public package surface
+
+## Outcome
+
+Plan 117 is implemented.
+
+Delivered:
+
+- runtime composition is now built in private [packages/core/src/internal/createGridRuntimeComposition.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/internal/createGridRuntimeComposition.ts)
+- the public package no longer exports `createApiFacade`
+- the internal bridge now models explicit composition roles with `GridRuntimeComposition` and `GridHostComposition`
+- host wiring resolves the narrow host composition handle instead of a broader runtime bundle name
+- create-grid factory code now delegates API/runtime registration to the private composition root instead of owning that wiring inline
+- comments and guards now describe the object as a private runtime composition root rather than a public/store facade
 
 ## Non-negotiable invariants
 
 - no public export
-- no reverse lookup from public API
+- no reverse lookup from public API in public/app code
 - no raw mutation API
 - no application or demo usage
 - adapters receive narrow host capabilities only
@@ -42,33 +61,36 @@ Use this target:
 
 ### 1. Decide on naming
 
-Pick one:
+Decision:
 
-- keep `GridStore` privately if it remains the least disruptive honest name
-- or rename to `GridKernel` / `GridRuntime` if that better reflects responsibility
+- kept `GridStore` as the private concrete type for now
+- renamed the bridge-facing composition concepts instead: `GridRuntimeComposition`, `GridHostComposition`
 
 ### 2. Narrow dependency injection
 
-Reduce full-root dependencies in:
+Delivered:
 
-- feature controllers
-- host/adapter wiring
-- plugin/runtime composition
+- host wiring now consumes `GridHostComposition`
+- plugin-controller recovery remains narrow through `resolveGridPluginController(...)`
+- the public factory module no longer contains the full API/runtime composition implementation
 
 ### 3. Remove remaining reverse-lookup assumptions
 
-Audit internal bridges, tests, and helpers for lingering assumptions that the public API can recover the full runtime root.
+Delivered:
+
+- internal tests/guards now assert against the new composition names
+- public/internal entry tests confirm the bridge helpers remain non-exported
+- no public API surface exposes the composition helper
 
 ### 4. Make the composition role explicit
 
-Ensure the runtime root is clearly:
+Delivered:
 
-- engine composition
-- plugin/runtime binding
-- host/runtime binding
-- diagnostics/instrumentation composition
-
-and not an accidental mutation or service-locator abstraction.
+- private runtime composition is now responsible for:
+    - public API facade creation
+    - runtime bridge registration
+    - host composition binding
+    - plugin controller attachment
 
 ## Verification
 
@@ -77,8 +99,19 @@ and not an accidental mutation or service-locator abstraction.
 - demo/application code imports no runtime internals
 - architecture guards enforce the private runtime-root boundary
 
+Verification completed:
+
+- `corepack pnpm --filter @open-grid/core exec vitest run src/boundary.test.ts src/gridHost.test.ts src/gridHost.adversarial.test.ts src/engine/architectureGuards.test.ts`
+- `corepack pnpm --filter @open-grid/core exec vitest run src/persistence/statePersistence.test.ts src/store.test.ts`
+- `corepack pnpm --filter @open-grid/core build`
+
 ## Completion gate
 
 - the runtime composition object has an honest role and boundary
 - the adapter/runtime relationship is narrow and explicit
 - no public or application code depends on the concrete runtime root
+
+## Notes
+
+- This plan deliberately did not rename `GridStore` to `GridKernel` or `GridRuntime`; the clearer win was separating runtime-composition concepts and removing public composition leakage first.
+- The new internal composition root is private implementation detail only and is not exported from package entrypoints.

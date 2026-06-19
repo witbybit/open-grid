@@ -10,7 +10,7 @@ import type {
 } from './renderer/IGridRenderer.js';
 import type { GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
 import type { ColumnDef, InternalColumnDef } from './columnDef.js';
-import { resolveGridInternalRuntime } from './internal/apiInternalBridge.js';
+import { resolveGridHostComposition } from './internal/apiInternalBridge.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
 	return (column as InternalColumnDef<TRowData>).cellRendererCapabilities?.imperativeUpdate === true;
@@ -89,9 +89,9 @@ export function mountGridHost<TRowData>(
 	container: HTMLElement,
 	options: GridHostOptions<TRowData> = {}
 ): GridHostWithAdapter<TRowData> {
-	const runtime = resolveGridInternalRuntime(api);
-	const engine = runtime.engine;
-	const internalApi = runtime.api;
+	const host = resolveGridHostComposition(api);
+	const engine = host.engine;
+	const internalApi = host.api;
 	const renderEngine = new RenderEngine(engine, internalApi);
 
 	renderEngine.onMountCellContent = options.cellContent?.mountCellContent;
@@ -129,7 +129,7 @@ export function mountGridHost<TRowData>(
 		internalApi.setViewportPins(options.pins);
 	}
 
-	runtime.setContainerElement(container);
+	host.setContainerElement(container);
 	renderEngine.mount(container);
 
 	const observer = new ResizeObserver((entries) => {

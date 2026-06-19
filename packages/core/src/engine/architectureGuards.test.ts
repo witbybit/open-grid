@@ -1590,31 +1590,49 @@ describe('Architecture guardrails', () => {
 
 	it('internal entry stays adapter-only and does not expose runtime bridge helpers (Plan 112)', () => {
 		const internalEntry = readFileSync(resolve(CORE_ROOT, 'src', 'internal.ts'), 'utf-8');
-		expect(internalEntry).not.toContain('resolveGridInternalRuntime');
-		expect(internalEntry).not.toContain('registerGridInternalRuntime');
+		expect(internalEntry).not.toContain('resolveGridRuntimeComposition');
+		expect(internalEntry).not.toContain('resolveGridHostComposition');
+		expect(internalEntry).not.toContain('registerGridRuntimeComposition');
 		expect(internalEntry).not.toContain('resolveGridPluginController');
 		expect(internalEntry).not.toContain('GridStore');
 	});
 
-	it('internal runtime bridge stores a narrow runtime handle instead of GridStore (Plan 112)', () => {
+	it('internal runtime bridge stores a composed private runtime handle instead of GridStore (Plans 112/117)', () => {
 		const bridge = readFileSync(resolve(CORE_ROOT, 'src', 'internal', 'apiInternalBridge.ts'), 'utf-8');
-		expect(bridge).toContain('export interface GridInternalRuntime');
+		expect(bridge).toContain('export interface GridHostComposition');
+		expect(bridge).toContain('export interface GridRuntimeComposition');
+		expect(bridge).toContain('host: GridHostComposition<TRowData>;');
 		expect(bridge).toContain('api: InternalGridApi<TRowData>;');
 		expect(bridge).toContain('pluginController: GridPluginController<TRowData>;');
 		expect(bridge).toContain('setContainerElement(container: HTMLElement): void;');
-		expect(bridge).toContain('registerGridInternalRuntime');
-		expect(bridge).toContain('resolveGridInternalRuntime');
+		expect(bridge).toContain('registerGridRuntimeComposition');
+		expect(bridge).toContain('resolveGridRuntimeComposition');
+		expect(bridge).toContain('resolveGridHostComposition');
 		expect(bridge).not.toContain("from '../store.js'");
 		expect(bridge).not.toContain('WeakMap<GridApi<unknown>, GridStore<unknown>>');
 	});
 
-	it('gridHost mounts against the internal runtime handle instead of a concrete GridStore (Plan 112)', () => {
+	it('gridHost mounts against the host composition handle instead of a concrete GridStore (Plans 112/117)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'gridHost.ts'), 'utf-8');
-		expect(content).toContain('resolveGridInternalRuntime(api)');
-		expect(content).toContain('const internalApi = runtime.api;');
-		expect(content).toContain('runtime.setContainerElement(container);');
+		expect(content).toContain('resolveGridHostComposition(api)');
+		expect(content).toContain('const internalApi = host.api;');
+		expect(content).toContain('host.setContainerElement(container);');
 		expect(content).not.toContain('resolveGridInternalStore(api)');
 		expect(content).not.toContain('const store =');
+	});
+
+	it('public core entry does not export createApiFacade (Plan 117)', () => {
+		const coreIndex = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
+		expect(coreIndex).not.toContain('createApiFacade');
+	});
+
+	it('private runtime composition root is created from an internal module (Plan 117)', () => {
+		const createGrid = readFileSync(resolve(CORE_ROOT, 'src', 'createGrid.ts'), 'utf-8');
+		const composition = readFileSync(resolve(CORE_ROOT, 'src', 'internal', 'createGridRuntimeComposition.ts'), 'utf-8');
+		expect(createGrid).toContain("from './internal/createGridRuntimeComposition.js'");
+		expect(createGrid).toContain('createGridRuntimeComposition({');
+		expect(composition).toContain('export function createGridRuntimeComposition');
+		expect(composition).toContain('registerGridRuntimeComposition');
 	});
 
 	it('gridHost adapter types do not depend on store.ts type exports (Plan 112)', () => {
@@ -1767,12 +1785,12 @@ describe('Architecture guardrails', () => {
 	it('public snapshot creation is centralized in createGridStateSnapshot (Plan 115)', () => {
 		const snapshotBuilder = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'createGridStateSnapshot.ts'), 'utf-8');
 		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
-		const createGridContent = readFileSync(resolve(CORE_ROOT, 'src', 'createGrid.ts'), 'utf-8');
+		const runtimeCompositionContent = readFileSync(resolve(CORE_ROOT, 'src', 'internal', 'createGridRuntimeComposition.ts'), 'utf-8');
 		expect(snapshotBuilder).toContain('export function createGridStateSnapshot');
 		expect(storeContent).toContain('const snapshot = createGridStateSnapshot(currentState);');
 		expect(storeContent).toContain('this.cachedStateSnapshotState === currentState');
-		expect(createGridContent).not.toContain('function createGridStateSnapshot');
-		expect(createGridContent).toContain('getStateSnapshot: () => store.getStateSnapshot()');
+		expect(runtimeCompositionContent).not.toContain('function createGridStateSnapshot');
+		expect(runtimeCompositionContent).toContain('getStateSnapshot: () => store.getStateSnapshot()');
 	});
 
 	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {

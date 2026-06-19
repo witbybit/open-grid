@@ -78,7 +78,6 @@ describe('Public/internal boundary', () => {
 				'WARM_ORANGE_THEME',
 				'applyFilterToModel',
 				'buildFilterByValue',
-				'createApiFacade',
 				'createClientGrid',
 				'createLocalStorageAdapter',
 				'createServerGrid',
@@ -207,8 +206,9 @@ describe('Public/internal boundary', () => {
 		});
 
 		it('does not export runtime bridge escape hatches', () => {
-			expect((internalApi as Record<string, unknown>)['resolveGridInternalRuntime']).toBeUndefined();
-			expect((internalApi as Record<string, unknown>)['registerGridInternalRuntime']).toBeUndefined();
+			expect((internalApi as Record<string, unknown>)['resolveGridRuntimeComposition']).toBeUndefined();
+			expect((internalApi as Record<string, unknown>)['resolveGridHostComposition']).toBeUndefined();
+			expect((internalApi as Record<string, unknown>)['registerGridRuntimeComposition']).toBeUndefined();
 			expect((internalApi as Record<string, unknown>)['resolveGridPluginController']).toBeUndefined();
 		});
 	});

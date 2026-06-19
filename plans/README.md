@@ -117,7 +117,7 @@
 | 114 | [Typed Domain Mutation Executors](./114-typed-domain-mutation-executors.md)                                                   | DONE        | working tree |
 | 115 | [Public Snapshot and Runtime State Closure](./115-public-snapshot-and-runtime-state-closure.md)                               | DONE        | working tree |
 | 116 | [Persistence Commit Restore and Schema Hardening](./116-persistence-commit-restore-and-schema-hardening.md)                   | DONE        | working tree |
-| 117 | [Private Runtime Composition Root](./117-private-runtime-composition-root.md)                                                 | TODO        | working tree |
+| 117 | [Private Runtime Composition Root](./117-private-runtime-composition-root.md)                                                 | DONE        | working tree |
 
 ## Execution order
 
@@ -331,6 +331,8 @@
 - Plan 115 is implemented on 2026-06-19: public runtime-state access is now canonicalized around immutable `GridStateSnapshot`. Snapshot creation is centralized in `api/createGridStateSnapshot.ts`, `GridStore.getStateSnapshot()` and the public API facade both route through it, public `subscribe(...)` and `subscribeToKey(...)` now expose snapshot-based contracts, persisted restore rollback uses `getStateSnapshot()` plus `getGridState()` instead of raw mutable state, and the legacy `GridState = InternalGridState` compatibility alias is removed. Focused store/persistence/architecture suites and `@open-grid/core` build are green.
 
 - Plan 116 is implemented on 2026-06-19: persisted state is now a strict versioned envelope, `PersistedGridState = { v, state }`, with up-front payload validation in `statePersistence.ts`. Missing-version, malformed, and runtime-only persisted fields are rejected before any restore setters run. `createGrid.ts` no longer uses the old synchronous startup merge shortcut; both sync and async persistence loads converge on `api.applyGridState(...)`. Public restore is wrapped in persistence-controller autosave suspension so startup hydration does not immediately re-save loaded state. Restore failures now surface through runtime faults instead of `console.warn` / `console.error`. Focused persistence/store/boundary suites, architecture guards, and `@open-grid/core` build are green.
+
+- Plan 117 is implemented on 2026-06-19: private runtime composition is now centralized in `packages/core/src/internal/createGridRuntimeComposition.ts`. The public package no longer exports `createApiFacade`, and the bridge vocabulary now reflects explicit composition roles with `GridRuntimeComposition` and `GridHostComposition` in `internal/apiInternalBridge.ts`. `gridHost.ts` mounts against `resolveGridHostComposition(api)` instead of the older broader runtime-handle naming, while plugin-controller recovery stays narrow through `resolveGridPluginController(...)`. Focused boundary/grid-host/architecture suites, additional store/persistence regression suites, and `@open-grid/core` build are green.
 
 ## Plans 079–088 notes
 

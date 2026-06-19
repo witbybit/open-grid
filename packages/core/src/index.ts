@@ -1,4 +1,4 @@
-export { createApiFacade, createClientGrid, createServerGrid, createLocalStorageAdapter } from './createGrid.js';
+export { createClientGrid, createServerGrid, createLocalStorageAdapter } from './createGrid.js';
 export type { ClientGridOptions, ServerGridOptions, GridPersistenceAdapter, PersistedGridState } from './createGrid.js';
 export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 export { GRID_STATE_SCHEMA_VERSION, validateSchemaVersion } from './persistence/statePersistence.js';

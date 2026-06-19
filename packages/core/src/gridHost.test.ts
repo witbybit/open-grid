@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createClientGrid } from './createGrid.js';
 import { mountGridHost } from './gridHost.js';
-import { resolveGridInternalRuntime } from './internal/apiInternalBridge.js';
+import { resolveGridHostComposition } from './internal/apiInternalBridge.js';
 import { GridStore } from './store.js';
 import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 
@@ -191,7 +191,7 @@ describe('mountGridHost', () => {
 		});
 		document.body.appendChild(container);
 
-		const runtime = resolveGridInternalRuntime(api);
+		const runtime = resolveGridHostComposition(api);
 
 		const host = mountGridHost(api, container);
 		host.destroy(); // first destroy — OK

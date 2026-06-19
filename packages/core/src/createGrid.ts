@@ -1,37 +1,18 @@
-import { ClientRowModelController, type ClientRowModelOptions, type FilterModel, type SortModel } from './rowModel.js';
+import { ClientRowModelController, type ClientRowModelOptions } from './rowModel.js';
 import type { RowValidator } from './features/ValidationManager.js';
-import { ServerRowModelController, type IGridDatasource, type ServerRowModelOptions } from './serverRowModel.js';
+import { ServerRowModelController, type ServerRowModelOptions } from './serverRowModel.js';
 import { GridStore } from './store.js';
-import type {
-	CsvExportOptions,
-	GridApi,
-	GridCellPointer,
-	GridSnapshotKeyListener,
-	GridSnapshotListener,
-	GridSelectionSource,
-	GridStateSnapshot,
-	RowDataTransaction,
-	RowNodeTransaction,
-	RowSelectionMode,
-	RowSelectionOptions,
-	RowSelectionGesture,
-	SelectRowsOptions,
-	SelectAllRowsOptions,
-} from './api/GridApi.js';
+import type { GridApi, RowSelectionMode, RowSelectionOptions } from './api/GridApi.js';
 import type { ColumnDef } from './columnDef.js';
-import type { GridInitialState, ColumnState } from './state/GridState.js';
-import { registerGridInternalRuntime } from './internal/apiInternalBridge.js';
-import { exportToCsv } from './export/csvExport.js';
+import type { GridInitialState } from './state/GridState.js';
 import {
 	type GridPersistenceAdapter,
 	type PersistedGridState,
 	type PersistenceController,
-	type PersistenceStatus,
 	createLocalStorageAdapter,
 	createPersistenceSubscription,
 } from './persistence/statePersistence.js';
-import type { ThemeTokens } from './renderer/themes.js';
-import type { GridInstrumentation } from './diagnostics/GridInstrumentation.js';
+import { createGridRuntimeComposition } from './internal/createGridRuntimeComposition.js';
 
 export type { GridPersistenceAdapter, PersistedGridState };
 export { createLocalStorageAdapter };
@@ -128,164 +109,6 @@ function withRowSelectionColumn<TRowData>(
 	return { columns: nextColumns, initialState: nextInitial };
 }
 
-export function createApiFacade<TRowData>(
-	store: GridStore<TRowData>,
-	destroy: () => void,
-	persistenceAdapter?: GridPersistenceAdapter,
-	persistenceController?: PersistenceController
-): GridApi<TRowData> {
-	const api = {
-		getStateSnapshot: () => store.getStateSnapshot(),
-		getRowId: (row: TRowData) => store.getRowId(row),
-		isRowLoading: (rowId: string) => store.isRowLoading(rowId),
-		getDataRowAtVisualIndex: (index: number) => store.getDataRowAtVisualIndex(index),
-		getDataRowNodeAtVisualIndex: (index: number) => store.getDataRowNodeAtVisualIndex(index),
-		setRows: (rows: TRowData[]) => store.setRows(rows),
-		updateRows: (updater: (rows: TRowData[]) => TRowData[]) => store.updateRows(updater),
-		applyTransaction: (transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null => store.applyTransaction(transaction),
-		getRowOrder: () => store.getRowOrder(),
-		setRowOrder: (rowIds: string[]) => store.setRowOrder(rowIds),
-		refreshRows: () => store.refreshRows(),
-		setRowHeights: (rowHeights: Record<string, number> | undefined) => store.setRowHeights(rowHeights),
-		setDefaultRowHeight: (defaultRowHeight?: number | undefined) => store.setDefaultRowHeight(defaultRowHeight),
-		purgeCache: () => store.purgeCache(),
-		setServerDatasource: (datasource: IGridDatasource<TRowData>, blockSize?: number) => store.setServerDatasource(datasource, blockSize),
-		goToPage: (page: number) => store.goToPage(page),
-		getCellValue: (rowId: string, colField: string) => store.getCellValue(rowId, colField),
-		getFormula: (rowId: string, colField: string) => store.getFormula(rowId, colField),
-		hasFormula: (rowId: string, colField: string) => store.hasFormula(rowId, colField),
-		setFormula: (rowId: string, colField: string, formula: string) => store.setFormula(rowId, colField, formula),
-		clearFormula: (rowId: string, colField: string) => store.clearFormula(rowId, colField),
-		setCellValue: (rowId: string, colField: string, value: unknown) => store.setCellValue(rowId, colField, value),
-		batchCellValues: (updates: { rowId: string; colField: string; value: unknown }[], source?: 'paste' | 'api' | 'fill') =>
-			store.batchCellValues(updates, source),
-		selectCell: (pointer: GridCellPointer | null, source?: GridSelectionSource) => store.selectCell(pointer, source),
-		selectRange: (start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource) =>
-			store.selectRange(start, end, source),
-		extendSelection: (end: GridCellPointer, source?: GridSelectionSource) => store.extendSelection(end, source),
-		setColumns: (columns: ColumnDef<TRowData>[]) => store.setColumns(columns),
-		setColumnWidth: (colField: string, width: number) => store.setColumnWidth(colField, width),
-		autoSizeColumn: (colField: string, options?: Parameters<typeof store.autoSizeColumn>[1]) => store.autoSizeColumn(colField, options),
-		autoSizeAllColumns: (options?: Parameters<typeof store.autoSizeAllColumns>[0]) => store.autoSizeAllColumns(options),
-		getColumnDistinctValues: (colField: string) => store.getColumnDistinctValues(colField),
-		copySelectedRange: () => store.copySelectedRange(),
-		pasteFromClipboard: () => store.pasteFromClipboard(),
-		copyRange: (minRow: number, maxRow: number, minCol: number, maxCol: number) => store.copyRange(minRow, maxRow, minCol, maxCol),
-		setColumnVisible: (colField: string, visible: boolean) => store.setColumnVisible(colField, visible),
-		setColumnsVisible: (colFields: string[], visible: boolean) => store.setColumnsVisible(colFields, visible),
-		getColumns: () => store.getColumns(),
-		getDisplayedColumns: () => store.getDisplayedColumns(),
-		setPinnedColumns: (pins: { left?: number; right?: number }) => store.setPinnedColumns(pins),
-		getPinnedColumns: () => store.getPinnedColumns(),
-		moveColumn: (colField: string, toIndex: number) => store.moveColumn(colField, toIndex),
-		setColumnOrder: (colFields: string[]) => store.setColumnOrder(colFields),
-		setColumnReorderEnabled: (enabled: boolean) => store.setColumnReorderEnabled(enabled),
-		setRowHeight: (rowId: string, height: number) => store.setRowHeight(rowId, height),
-		setSortModel: (sortModel: SortModel | null) => store.setSortModel(sortModel),
-		setFilterModel: (filterModel: FilterModel | null) => store.setFilterModel(filterModel),
-		setGroupBy: (colIds: string[]) => store.setGroupBy(colIds),
-		getGroupBy: () => store.getGroupBy(),
-		addGroupBy: (colId: string, atIndex?: number) => store.addGroupBy(colId, atIndex),
-		removeGroupBy: (colId: string) => store.removeGroupBy(colId),
-		moveGroupBy: (colId: string, toIndex: number) => store.moveGroupBy(colId, toIndex),
-		setAggDefs: (defs: Parameters<typeof store.setAggDefs>[0]) => store.setAggDefs(defs),
-		getAggDefs: () => store.getAggDefs(),
-		expandAllGroups: () => store.expandAllGroups(),
-		collapseAllGroups: () => store.collapseAllGroups(),
-		setShowGroupFooter: (enabled: boolean) => store.setShowGroupFooter(enabled),
-		setStickyGroupRows: (enabled: boolean) => store.setStickyGroupRows(enabled),
-		setShowGroupPanel: (enabled: boolean) => store.setShowGroupPanel(enabled),
-		setShowFloatingFilters: (enabled: boolean) => store.setShowFloatingFilters(enabled),
-		setShowFilterChipBar: (enabled: boolean) => store.setShowFilterChipBar(enabled),
-		exportCsv: (options?: CsvExportOptions) => exportToCsv(store, options),
-		setStyleRules: (styleRules: GridInitialState<TRowData>['styleRules']) => store.setStyleRules(styleRules),
-		addEventListener: store.addEventListener,
-		dispatchEvent: store.dispatchEvent,
-		startEditing: (rowId: string, colField: string) => store.startEditing(rowId, colField),
-		stopEditing: (cancel?: boolean) => store.stopEditing(cancel),
-		commitEdit: (rowId: string, colField: string, value: unknown) => store.commitEdit(rowId, colField, value),
-		validateCell: (rowId: string, colField: string) => store.validateCell(rowId, colField),
-		validateGrid: () => store.validateGrid(),
-		setCellValidationError: (rowId: string, colField: string, error: string) => store.setCellValidationError(rowId, colField, error),
-		clearCellValidationError: (rowId: string, colField: string) => store.clearCellValidationError(rowId, colField),
-		clearValidationErrors: () => store.clearValidationErrors(),
-		getCellValidationError: (rowId: string, colField: string) => store.getCellValidationError(rowId, colField),
-		hasValidationErrors: () => store.hasValidationErrors(),
-		getAllValidationErrors: () => store.getAllValidationErrors(),
-		getVisibleColumnRange: () => store.getVisibleColumnRange(),
-		getColumnState: () => store.getColumnState(),
-		applyColumnState: (states: ColumnState[], opts?: { applyOrder?: boolean }) => store.applyColumnState(states, opts),
-		getGridState: () => store.getGridState(),
-		applyGridState: (state: PersistedGridState) =>
-			persistenceController ? persistenceController.suspendAutoSave(() => store.applyGridState(state)) : store.applyGridState(state),
-		toggleGroupExpanded: (groupId: string) => store.toggleGroupExpanded(groupId),
-		toggleDetailExpanded: (rowId: string) => store.toggleDetailExpanded(rowId),
-		isGroupExpanded: (groupId: string) => store.isGroupExpanded(groupId),
-		isDetailExpanded: (rowId: string) => store.isDetailExpanded(rowId),
-		getRowNodeById: (rowId: string) => store.getRowNodeById(rowId),
-		getRawRowById: (rowId: string) => store.getRawRowById(rowId),
-		applyRowSelectionGesture: (gesture: RowSelectionGesture) => store.applyRowSelectionGesture(gesture),
-		selectRows: (rowIds: string[], options?: SelectRowsOptions) => store.selectRows(rowIds, options),
-		deselectRows: (rowIds: string[]) => store.deselectRows(rowIds),
-		toggleRowSelection: (rowId: string) => store.toggleRowSelection(rowId),
-		selectAllRows: (options?: SelectAllRowsOptions) => store.selectAllRows(options),
-		clearRowSelection: () => store.clearRowSelection(),
-		getSelectedRowIds: () => store.getSelectedRowIds(),
-		rows: () => store.rows(),
-		subscribe: (listener: GridSnapshotListener<TRowData>) => store.subscribe(listener),
-		subscribeToKey: <K extends keyof GridStateSnapshot<TRowData>>(key: K, listener: GridSnapshotKeyListener<TRowData, K>) =>
-			store.subscribeToKey(key, listener),
-		subscribeToDomainVersions: (listener: Parameters<typeof store.subscribeToDomainVersions>[0]) => store.subscribeToDomainVersions(listener),
-		subscribeDomain: (domain: Parameters<typeof store.subscribeDomain>[0], listener: Parameters<typeof store.subscribeDomain>[1]) =>
-			store.subscribeDomain(domain, listener),
-		getColumnIndex: (colField: string) => store.getColumnIndex(colField),
-		getColumnField: (colIndex: number) => store.getColumnField(colIndex),
-		getColumnDef: (colField: string) => store.getColumnDef(colField),
-		openPanel: (panelId: string) => store.openPanel(panelId),
-		closePanel: () => store.closePanel(),
-		togglePanel: (panelId: string) => store.togglePanel(panelId),
-		getOpenPanel: () => store.getOpenPanel(),
-		isChartOpen: () => store.isChartOpen(),
-		openChart: () => store.openChart(),
-		closeChart: () => store.closeChart(),
-		toggleChart: () => store.toggleChart(),
-		undo: () => store.undo(),
-		redo: () => store.redo(),
-		canUndo: () => store.canUndo(),
-		canRedo: () => store.canRedo(),
-		hasPersistence: (): boolean => persistenceAdapter !== undefined,
-		clearPersistedState: (): void | Promise<void> => persistenceAdapter?.clear?.(),
-		setAutoSave: (enabled: boolean): void => persistenceController?.setAutoSave(enabled),
-		isAutoSaveEnabled: (): boolean => persistenceController?.isAutoSaveEnabled() ?? true,
-		getPersistenceStatus: (): PersistenceStatus => persistenceController?.getStatus() ?? { status: 'idle', autoSave: true },
-		subscribeToPersistenceStatus: (listener: (status: PersistenceStatus) => void): (() => void) =>
-			persistenceController?.onStatusChange(listener) ?? (() => {}),
-		saveNow: (): void => persistenceController?.saveNow(),
-		getRuntimeFaults: () => store.getRuntimeFaults(),
-		clearRuntimeFaults: () => store.clearRuntimeFaults(),
-		getInstrumentation: () => store.getInstrumentation(),
-		setInstrumentation: (inst: GridInstrumentation) => store.setInstrumentation(inst),
-		flushCellUpdatesSync: () => store.flushCellUpdatesSync(),
-		getTheme: () => store.getTheme(),
-		getThemeName: () => store.getThemeName(),
-		getAvailableThemes: () => store.getAvailableThemes(),
-		switchTheme: (themeName: string) => store.switchTheme(themeName),
-		mergeTheme: (partial: Partial<ThemeTokens>) => store.mergeTheme(partial),
-		onThemeChange: (listener: (theme: ThemeTokens) => void) => store.onThemeChange(listener),
-		getContainer: () => store.getContainerElement(),
-		destroy,
-	};
-
-	const frozen = Object.freeze(api) as GridApi<TRowData>;
-	registerGridInternalRuntime(frozen, {
-		engine: store.engine,
-		api: store,
-		pluginController: store.getPluginController(),
-		setContainerElement: (container) => store.setContainerElement(container),
-	});
-	return frozen;
-}
-
 function wireGridPersistence<TRowData>(
 	options: { columns: ColumnDef<TRowData>[]; initialState?: Partial<GridInitialState<TRowData>>; persistence?: string | GridPersistenceAdapter },
 	store: GridStore<TRowData>
@@ -347,16 +170,16 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 
 	const controller = new ClientRowModelController<TRowData>(store.getClientRowModelRuntime(), { ...options, columns: resolvedColumns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, store);
-	const api = createApiFacade(
+	const api = createGridRuntimeComposition({
 		store,
-		() => {
+		destroy: () => {
 			persistenceController?.destroy();
 			controller.dispose();
 			store.destroy();
 		},
-		adapter,
-		persistenceController
-	);
+		persistenceAdapter: adapter,
+		persistenceController,
+	});
 
 	if (loadedPersistedState) {
 		api.applyGridState(loadedPersistedState);
@@ -417,16 +240,16 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 
 	const controller = new ServerRowModelController<TRowData>(store.getServerRowModelRuntime(), { ...options, columns: selected.columns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, store);
-	const api = createApiFacade(
+	const api = createGridRuntimeComposition({
 		store,
-		() => {
+		destroy: () => {
 			persistenceController?.destroy();
 			controller.dispose();
 			store.destroy();
 		},
-		adapter,
-		persistenceController
-	);
+		persistenceAdapter: adapter,
+		persistenceController,
+	});
 
 	if (loadedPersistedState) {
 		api.applyGridState(loadedPersistedState);
