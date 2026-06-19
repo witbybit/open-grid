@@ -44,6 +44,39 @@ export interface DataMutationDeps<TRowData = unknown> {
 export class DataMutationController<TRowData = unknown> {
 	constructor(private readonly deps: DataMutationDeps<TRowData>) {}
 
+	registerCellValueHistory(rowId: string, colField: string, oldValue: unknown, newValue: unknown): void {
+		this.deps.registerHistory({
+			undo: {
+				reason: 'data:set-cell-value:undo',
+				run: () => this.applyCellValueChange(rowId, colField, oldValue, { undoable: false, source: 'undo' }),
+				requestRender: false,
+			},
+			redo: {
+				reason: 'data:set-cell-value:redo',
+				run: () => this.applyCellValueChange(rowId, colField, newValue, { undoable: false, source: 'redo' }),
+				requestRender: false,
+			},
+		});
+	}
+
+	registerBatchCellValueHistory(updates: ReadonlyArray<{ rowId: string; colField: string; oldValue: unknown; newValue: unknown }>): void {
+		if (updates.length === 0) return;
+		const undoUpdates = updates.map((update) => ({ rowId: update.rowId, colField: update.colField, value: update.oldValue }));
+		const redoUpdates = updates.map((update) => ({ rowId: update.rowId, colField: update.colField, value: update.newValue }));
+		this.deps.registerHistory({
+			undo: {
+				reason: 'data:batch-cell-values:undo',
+				run: () => this.applyBatchCellValues(undoUpdates, { undoable: false, source: 'undo' }),
+				requestRender: false,
+			},
+			redo: {
+				reason: 'data:batch-cell-values:redo',
+				run: () => this.applyBatchCellValues(redoUpdates, { undoable: false, source: 'redo' }),
+				requestRender: false,
+			},
+		});
+	}
+
 	applyCellValueChange(rowId: string, colField: string, value: unknown, options: CellValueChangeOptions = {}): CellValueChangeResult {
 		const { undoable = true, emitEvent = true, notify = true } = options;
 
@@ -114,19 +147,7 @@ export class DataMutationController<TRowData = unknown> {
 		}
 
 		if (undoable) {
-			const capturedOldRaw = oldRawValue;
-			this.deps.registerHistory({
-				undo: {
-					reason: 'data:set-cell-value:undo',
-					run: () => this.applyCellValueChange(rowId, colField, capturedOldRaw, { undoable: false, source: 'undo' }),
-					requestRender: false,
-				},
-				redo: {
-					reason: 'data:set-cell-value:redo',
-					run: () => this.applyCellValueChange(rowId, colField, value, { undoable: false, source: 'redo' }),
-					requestRender: false,
-				},
-			});
+			this.registerCellValueHistory(rowId, colField, oldRawValue, value);
 		}
 
 		const newComputedValue = this.deps.data.getCellValue(rowId, colField);
@@ -199,20 +220,9 @@ export class DataMutationController<TRowData = unknown> {
 		if (undoable) {
 			const applied = results.filter((r) => r.applied);
 			if (applied.length > 0) {
-				const undoUpdates = applied.map((r) => ({ rowId: r.rowId, colField: r.colField, value: r.oldRawValue }));
-				const redoUpdates = applied.map((r) => ({ rowId: r.rowId, colField: r.colField, value: r.newRawValue }));
-				this.deps.registerHistory({
-					undo: {
-						reason: 'data:batch-cell-values:undo',
-						run: () => this.applyBatchCellValues(undoUpdates, { undoable: false, source: 'undo' }),
-						requestRender: false,
-					},
-					redo: {
-						reason: 'data:batch-cell-values:redo',
-						run: () => this.applyBatchCellValues(redoUpdates, { undoable: false, source: 'redo' }),
-						requestRender: false,
-					},
-				});
+				this.registerBatchCellValueHistory(
+					applied.map((r) => ({ rowId: r.rowId, colField: r.colField, oldValue: r.oldRawValue, newValue: r.newRawValue }))
+				);
 			}
 		}
 	}

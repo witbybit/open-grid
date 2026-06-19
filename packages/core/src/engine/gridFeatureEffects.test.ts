@@ -248,6 +248,7 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const result = await store.commitEdit('1', 'name', 'New Value');
 
 			expect(result).toBe(false);
+			expect(store.canUndo()).toBe(false);
 
 			ctrl.dispose();
 			store.destroy();
@@ -262,6 +263,7 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 
 			expect(result).toBe(true);
 			expect(store.getState().activeEdit).toBeNull();
+			expect(store.canUndo()).toBe(true);
 
 			ctrl.dispose();
 			store.destroy();

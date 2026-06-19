@@ -48,7 +48,9 @@ function makeEditingFeature(store: GridStore<TestRow>): EditingFeatureController
 		getRowModel: () => engine.getRowModel(),
 		data: engine.data,
 		notifyCellChange: (rowId, colField) => engine.notifyCellChange(rowId, colField),
-		setCellValue: (rowId, colField, value, undoable) => engine.setCellValue(rowId, colField, value, undoable),
+		applyCellValueChange: (rowId, colField, value, options) => engine.dataMutation.applyCellValueChange(rowId, colField, value, options),
+		registerCellValueHistory: (rowId, colField, oldValue, newValue) =>
+			engine.dataMutation.registerCellValueHistory(rowId, colField, oldValue, newValue),
 	};
 	return new EditingFeatureController(deps);
 }
@@ -154,6 +156,7 @@ describe('EditingFeatureController', () => {
 		const result = await feature.commitEdit('1', 'name', 'New Name');
 
 		expect(result).toBe(false);
+		expect(store.canUndo()).toBe(false);
 
 		ctrl.dispose();
 		store.destroy();
@@ -170,6 +173,7 @@ describe('EditingFeatureController', () => {
 
 		expect(result).toBe(true);
 		expect(stopSpy).toHaveBeenCalledWith(false);
+		expect(store.canUndo()).toBe(true);
 
 		ctrl.dispose();
 		store.destroy();

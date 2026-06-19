@@ -348,6 +348,11 @@ describe('Architecture guardrails', () => {
 		}
 	});
 
+	it('RowDragController does not reorder rows by calling rowModel.setRowOrder directly', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'RowDragController.ts'), 'utf-8');
+		expect(content).not.toContain('rowModel.setRowOrder(');
+	});
+
 	it('GridFeatureContext does not expose raw side-effect primitives', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridFeatureContext.ts'), 'utf-8');
 		expect(content).not.toContain('stateManager:');

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { GridStore, GridEventName, validateColumns, validateRowIds } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
+import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 
 interface TestRow {
 	id: string;
@@ -1219,6 +1220,31 @@ describe('GridStore undo and redo functionality', () => {
 		controller.dispose();
 	});
 
+	it('setRowOrder publishes row order changes through the engine commit path', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alpha', price: 10 },
+				{ id: '2', name: 'Beta', price: 20 },
+				{ id: '3', name: 'Gamma', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+		const listener = vi.fn();
+		store.addEventListener(GridEventName.rowOrderChanged, listener);
+
+		store.setRowOrder(['3', '1', '2']);
+
+		expect(listener).toHaveBeenCalledOnce();
+		expect(listener).toHaveBeenCalledWith(expect.objectContaining({ payload: { rowIds: ['3', '1', '2'] } }));
+		expect((store as any).engine.getRowModel()?.getRowOrder()).toEqual(['3', '1', '2']);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('should support undo and redo for sort and filter models', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name' }],
@@ -1685,6 +1711,31 @@ describe('GridStore undo and redo functionality', () => {
 		expect(store.canUndo()).toBe(false);
 
 		controller.dispose();
+	});
+	it('applyGridState restores persisted state without leaving undo history', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Alpha', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.applyGridState({
+			v: GRID_STATE_SCHEMA_VERSION,
+			columnWidths: { name: 180 },
+			columnOrder: ['price', 'name'],
+		});
+
+		expect(store.getState().columnWidths.name).toBe(180);
+		expect(store.getState().columns.map((column) => column.field)).toEqual(['price', 'name']);
+		expect(store.canUndo()).toBe(false);
+
+		controller.dispose();
+		store.destroy();
 	});
 });
 

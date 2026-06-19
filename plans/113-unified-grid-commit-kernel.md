@@ -17,6 +17,9 @@ Replace split logical-commit coordination with one authoritative `GridCommitKern
 - `SpreadsheetFillEngine` now routes logical fill writes through `batchCellValues(...)` instead of owning custom undo registration
 - `DataMutationController` no longer registers history directly with `CommandHistory`; history now registers through `GridChangeApplier`
 - executable history replay is covered in `GridChangeApplier.test.ts`
+- async edit commit now registers undo history only after save success, so failed saves do not leak undo entries
+- row-order publication now routes through `GridEngine.setRowOrder(...)` instead of `RowDragController` mutating the row model and dispatching events directly
+- persisted state restore now batches replayed API operations and clears history on success so hydration does not create synthetic undo entries
 
 ## Problem
 

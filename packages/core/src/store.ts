@@ -578,14 +578,20 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return extractPersistedState(this.engine.getState());
 	};
 	public applyGridState = (state: PersistedGridState): void => {
-		if (!applyPersistedStateToApi(this, state)) {
-			const blobV = (state as any).v ?? 'undefined';
-			this.reportRuntimeFault({
-				source: 'persistence',
-				operation: 'applyGridState',
-				error: new Error(`Schema version mismatch (blob v=${blobV}, expected v=${GRID_STATE_SCHEMA_VERSION}).`),
-			});
+		let applied = false;
+		this.engine.batch(() => {
+			applied = applyPersistedStateToApi(this, state);
+		});
+		if (applied) {
+			this.engine.commandHistory.clear();
+			return;
 		}
+		const blobV = (state as any).v ?? 'undefined';
+		this.reportRuntimeFault({
+			source: 'persistence',
+			operation: 'applyGridState',
+			error: new Error(`Schema version mismatch (blob v=${blobV}, expected v=${GRID_STATE_SCHEMA_VERSION}).`),
+		});
 	};
 
 	public registerRowModel = (rowModel: RowModel<TRowData>): void => {
@@ -619,7 +625,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getRowOrder = (): string[] => this.getRowModel()?.getRowOrder?.() ?? [];
 	public setRowOrder = (rowIds: string[]): void => {
-		this.getRowModel()?.setRowOrder?.(rowIds);
+		this.engine.setRowOrder(rowIds);
 	};
 
 	public updateRows = (updater: (rows: TRowData[]) => TRowData[]): void => {

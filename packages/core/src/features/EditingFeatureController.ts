@@ -3,13 +3,15 @@ import type { GridFeatureContext } from './GridFeatureContext.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { RowModel } from '../rowModel.js';
 import { canEditCell } from '../visualRow.js';
+import type { CellValueChangeOptions, CellValueChangeResult } from './DataMutationController.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
 	notifyCellChange: (rowId: string, colField: string) => void;
-	setCellValue: (rowId: string, colField: string, value: unknown, undoable?: boolean) => void;
+	applyCellValueChange: (rowId: string, colField: string, value: unknown, options?: CellValueChangeOptions) => CellValueChangeResult;
+	registerCellValueHistory: (rowId: string, colField: string, oldValue: unknown, newValue: unknown) => void;
 	/** Called when an edit commits successfully — removes any persistent validation error for the cell. */
 	clearValidationError?: (rowId: string, colField: string) => void;
 	/** Called when an edit fails validation — persists the error indicator even after the editor closes. */
@@ -23,7 +25,13 @@ export class EditingFeatureController<TRowData = unknown> {
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
 	private readonly notifyCellChange: (rowId: string, colField: string) => void;
-	private readonly setCellValue: (rowId: string, colField: string, value: unknown, undoable?: boolean) => void;
+	private readonly applyCellValueChange: (
+		rowId: string,
+		colField: string,
+		value: unknown,
+		options?: CellValueChangeOptions
+	) => CellValueChangeResult;
+	private readonly registerCellValueHistory: (rowId: string, colField: string, oldValue: unknown, newValue: unknown) => void;
 	private readonly clearValidationError?: (rowId: string, colField: string) => void;
 	private readonly setValidationError?: (rowId: string, colField: string, error: string) => void;
 	private readonly validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
@@ -33,7 +41,8 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.getRowModel = deps.getRowModel;
 		this.data = deps.data;
 		this.notifyCellChange = deps.notifyCellChange;
-		this.setCellValue = deps.setCellValue;
+		this.applyCellValueChange = deps.applyCellValueChange;
+		this.registerCellValueHistory = deps.registerCellValueHistory;
 		this.clearValidationError = deps.clearValidationError;
 		this.setValidationError = deps.setValidationError;
 		this.validateCellPostCommit = deps.validateCellPostCommit;
@@ -111,7 +120,10 @@ export class EditingFeatureController<TRowData = unknown> {
 			}
 		}
 
-		this.setCellValue(rowId, colField, value);
+		const writeResult = this.applyCellValueChange(rowId, colField, value, {
+			undoable: false,
+			source: 'edit',
+		});
 
 		if (col?.valueSetter) {
 			let didAbort = false;
@@ -125,7 +137,9 @@ export class EditingFeatureController<TRowData = unknown> {
 				success = false;
 			}
 			if (!success || didAbort) {
-				this.setCellValue(rowId, colField, oldValue, false);
+				if (writeResult.applied) {
+					this.applyCellValueChange(rowId, colField, oldValue, { undoable: false, source: 'edit' });
+				}
 				const activeEdit = this.ctx.getState().activeEdit;
 				if (activeEdit?.rowId === rowId && activeEdit?.colField === colField) {
 					this.ctx.applyChange({
@@ -140,6 +154,10 @@ export class EditingFeatureController<TRowData = unknown> {
 				}
 				return false;
 			}
+		}
+
+		if (writeResult.applied) {
+			this.registerCellValueHistory(rowId, colField, oldValue, value);
 		}
 
 		this.stopEdit(false);

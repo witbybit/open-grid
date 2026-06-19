@@ -270,8 +270,7 @@ export class RowDragController<TRowData = unknown> {
 					this.container?.classList.remove('og-row-dragging');
 					this.drag = null;
 
-					rowModel.setRowOrder(newOrder);
-					this.engine.eventBus.dispatchEvent(GridEventName.rowOrderChanged, { rowIds: newOrder });
+					this.engine.setRowOrder(newOrder);
 					this.playFlipAnimation(before);
 					return;
 				}

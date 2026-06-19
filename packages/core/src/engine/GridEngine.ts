@@ -394,7 +394,9 @@ export class GridEngine<TRowData = unknown> {
 			getRowModel: () => this.rowModel,
 			data: this.data,
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
-			setCellValue: (rowId, colField, value, undoable) => this.setCellValue(rowId, colField, value, undoable),
+			applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
+			registerCellValueHistory: (rowId, colField, oldValue, newValue) =>
+				this.dataMutation.registerCellValueHistory(rowId, colField, oldValue, newValue),
 			clearValidationError: (rowId, colField) => this.validationFeature._setCellError(rowId, colField, null),
 			setValidationError: (rowId, colField, error) => this.validationFeature._setCellError(rowId, colField, error),
 			validateCellPostCommit: (rowId, colField) => this.validationFeature.validateCell(rowId, colField).then(() => undefined),
@@ -469,6 +471,24 @@ export class GridEngine<TRowData = unknown> {
 			state: (state) => ({ globalVersion: state.globalVersion + 1 }),
 			domains: ['rows'],
 			requestRender: false,
+		});
+	}
+
+	public setRowOrder(rowIds: string[], emitEvent = true): void {
+		const rowModel = this.getRowModel();
+		if (!rowModel?.setRowOrder || !rowModel.getRowOrder) return;
+		const currentOrder = rowModel.getRowOrder();
+		if (currentOrder.length === rowIds.length && currentOrder.every((rowId, index) => rowId === rowIds[index])) return;
+
+		rowModel.setRowOrder(rowIds);
+
+		this.changeApplier.apply({
+			reason: 'rows:set-order',
+			state: (state) => ({ globalVersion: state.globalVersion + 1 }),
+			invalidations: [{ kind: 'full', reason: 'row order changed' }],
+			domains: ['rows'],
+			events: emitEvent ? [{ type: GridEventName.rowOrderChanged, payload: { rowIds } }] : [],
+			requestRender: true,
 		});
 	}
 
