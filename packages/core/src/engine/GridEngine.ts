@@ -381,6 +381,7 @@ export class GridEngine<TRowData = unknown> {
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			invalidation: this.invalidation,
+			requestRender: (reason) => this.requestRender(reason),
 		});
 		this.validationFeature = new ValidationManager<TRowData>({
 			ctx: featureContext,
@@ -463,9 +464,8 @@ export class GridEngine<TRowData = unknown> {
 		this.changeApplier.apply({
 			reason: 'rows:bump-global-version',
 			state: (state) => ({ globalVersion: state.globalVersion + 1 }),
-			invalidations: [{ kind: 'viewport', reason: 'data' }],
 			domains: ['rows'],
-			requestRender: true,
+			requestRender: false,
 		});
 	}
 

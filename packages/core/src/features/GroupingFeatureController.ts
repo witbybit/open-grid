@@ -8,17 +8,20 @@ export interface GroupingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	invalidation: InvalidationManager;
+	requestRender?: (reason: string) => void;
 }
 
 export class GroupingFeatureController<TRowData = unknown> {
 	private readonly ctx: GridFeatureContext<TRowData>;
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly invalidation: InvalidationManager;
+	private readonly requestRender: (reason: string) => void;
 
 	constructor(deps: GroupingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
 		this.getRowModel = deps.getRowModel;
 		this.invalidation = deps.invalidation;
+		this.requestRender = deps.requestRender ?? (() => {});
 	}
 
 	public applyRowModelRefreshInvalidation(result: RowModelRefreshResult | void, reason: 'group expansion' | 'detail', groupId?: string): void {
@@ -35,6 +38,7 @@ export class GroupingFeatureController<TRowData = unknown> {
 			this.invalidation.invalidateGeometry(reason);
 		}
 		this.invalidation.invalidateViewport(reason);
+		this.requestRender(reason);
 	}
 
 	public setGroupBy(colIds: string[]): void {

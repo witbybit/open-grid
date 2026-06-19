@@ -1,5 +1,5 @@
 import type { ColumnDef } from '../columnDef.js';
-import type { GridState } from '../state/GridState.js';
+import type { GridInitialState, GridState } from '../state/GridState.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { isBuiltInThemeName, type BuiltInThemeName } from '../renderer/themes.js';
 
@@ -168,16 +168,16 @@ export function extractPersistedState(state: GridState): PersistedGridState {
  */
 export function applyPersistedState<TRowData>(
 	saved: PersistedGridState,
-	initial: Partial<GridState<TRowData>>,
+	initial: Partial<GridInitialState<TRowData>>,
 	columns: ColumnDef<unknown>[]
-): Partial<GridState<TRowData>> | null {
+): Partial<GridInitialState<TRowData>> | null {
 	const versionError = validateSchemaVersion(saved);
 	if (versionError !== null) {
 		console.error(versionError);
 		return null;
 	}
 	const knownFields = new Set(columns.map((c) => c.field));
-	const result: Partial<GridState<TRowData>> = { ...initial };
+	const result: Partial<GridInitialState<TRowData>> = { ...initial };
 
 	// Column widths — merge, persisted overrides defaults
 	if (saved.columnWidths) {
@@ -198,7 +198,7 @@ export function applyPersistedState<TRowData>(
 			const colMap = new Map(baseColumns.map((c) => [c.field, c]));
 			const reordered = validOrder.map((f) => colMap.get(f)).filter((c): c is ColumnDef<unknown> => !!c);
 			if (reordered.length === columns.length) {
-				result.columns = reordered as unknown as GridState<TRowData>['columns'];
+				result.columns = reordered as unknown as GridInitialState<TRowData>['columns'];
 			}
 		}
 	}
@@ -211,24 +211,24 @@ export function applyPersistedState<TRowData>(
 			if (savedVis === false) return { ...col, hide: true };
 			if (savedVis === true && col.hide) return { ...col, hide: false };
 			return col;
-		}) as unknown as GridState<TRowData>['columns'];
+		}) as unknown as GridInitialState<TRowData>['columns'];
 	}
 
 	// Sort model
 	if (saved.sortModel !== undefined) {
 		const sm = saved.sortModel;
 		if (sm === null || (Array.isArray(sm) && sm.every((s) => knownFields.has(s.colId)))) {
-			result.sortModel = sm as GridState<TRowData>['sortModel'];
+			result.sortModel = sm as GridInitialState<TRowData>['sortModel'];
 		}
 	}
 
 	// Filter model
 	if (saved.filterModel !== undefined) {
-		result.filterModel = saved.filterModel as GridState<TRowData>['filterModel'];
+		result.filterModel = saved.filterModel as GridInitialState<TRowData>['filterModel'];
 	}
 
 	if (saved.themeName !== undefined && isBuiltInThemeName(saved.themeName)) {
-		result.themeName = saved.themeName as GridState<TRowData>['themeName'];
+		result.themeName = saved.themeName as GridInitialState<TRowData>['themeName'];
 	}
 
 	// Group by — only restore fields that still exist in schema

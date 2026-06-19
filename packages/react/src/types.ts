@@ -7,6 +7,7 @@ import type {
 	IGridDatasource,
 	GridApi,
 	GridCellClickParams,
+	GridInitialState,
 	GridState,
 	GridStateSnapshot,
 	ColumnFilter,
@@ -81,6 +82,7 @@ export type {
 	IGridDatasource as GridDatasource,
 	GridApi,
 	GridCellClickParams,
+	GridInitialState,
 	GridState,
 	GridStateSnapshot,
 	VisualRow,
@@ -108,11 +110,11 @@ export type {
 export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;
 
 /**
- * Fields from GridState that can be configured as top-level props on the public
+ * Fields from GridInitialState that can be configured as top-level props on the public
  * Grid component. Sourced from the canonical GridState type so these never drift
  * out of sync with the core.
  */
-type GridRenderOptions<TRowData> = Pick<GridState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;
+type GridRenderOptions<TRowData> = Pick<GridInitialState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;
 
 export type GridMode = 'client' | 'server';
 

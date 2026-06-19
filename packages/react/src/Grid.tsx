@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useInsertionEffect, type PropsWithChildren 
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
 import { resolveColumnTypes } from './resolveColumnTypes.js';
-import type { ColumnDef, GridState, GridPersistenceAdapter, GridDatasource, RowSelectionMode, RowSelectionOptions } from './types.js';
+import type { ColumnDef, GridInitialState, GridPersistenceAdapter, GridDatasource, RowSelectionMode, RowSelectionOptions } from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
 import type { RowValidator } from '@open-grid/core';
 
@@ -23,12 +23,12 @@ export interface GridPaginationConfig {
 interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	columns: ColumnDef<TRowData>[];
 	getRowId?: (row: TRowData) => string;
-	initialState?: Partial<GridState<TRowData>>;
+	initialState?: Partial<GridInitialState<TRowData>>;
 	persistence?: string | GridPersistenceAdapter;
 	rowOverscanPx?: number;
 	colBuffer?: number;
 	overscanAdaptive?: boolean;
-	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
+	runtimeLimits?: GridInitialState<TRowData>['runtimeLimits'];
 	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
 	styleRules?: StyleRule<TRowData>[];
 	/** Grid-level cross-field validator. Runs after per-column valueValidators. */
@@ -80,7 +80,7 @@ function createInitialState<TRowData>(
 	}
 ) {
 	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits } = base;
-	const merged: Partial<GridState<TRowData>> = {
+	const merged: Partial<GridInitialState<TRowData>> = {
 		rowOverscanPx,
 		overscanAdaptive,
 		colBuffer,

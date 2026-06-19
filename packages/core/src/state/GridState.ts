@@ -125,7 +125,11 @@ export interface GridUIState {
  * reads or writes `GridState` fields continues to compile unchanged.
  * Future: callers will migrate to reading from the specific slice they need.
  */
-export type GridState<TRowData = unknown> = GridModelState<TRowData> & GridRuntimeState & GridUIState;
+export type InternalGridState<TRowData = unknown> = GridModelState<TRowData> & GridRuntimeState & GridUIState;
+
+export type GridInitialState<TRowData = unknown> = GridModelState<TRowData> & Omit<GridUIState, never> & Partial<Pick<GridRuntimeState, 'selection'>>;
+
+export type GridState<TRowData = unknown> = InternalGridState<TRowData>;
 
 /** Serializable snapshot of a single column's user-configurable state. */
 export interface ColumnState {
@@ -147,6 +151,8 @@ export interface GridCellRangeBounds {
 	maxCol: number;
 }
 
-export type GridStateUpdater<TRowData = unknown> = Partial<GridState<TRowData>> | ((state: GridState<TRowData>) => Partial<GridState<TRowData>>);
+export type GridStateUpdater<TRowData = unknown> =
+	| Partial<InternalGridState<TRowData>>
+	| ((state: InternalGridState<TRowData>) => Partial<InternalGridState<TRowData>>);
 
-export type Listener<TRowData = unknown> = (state: GridState<TRowData>) => void;
+export type Listener<TRowData = unknown> = (state: InternalGridState<TRowData>) => void;

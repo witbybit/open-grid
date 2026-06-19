@@ -17,7 +17,7 @@ import type {
 	SelectAllRowsOptions,
 } from './api/GridApi.js';
 import type { ColumnDef } from './columnDef.js';
-import type { GridState, ColumnState, Listener } from './state/GridState.js';
+import type { GridInitialState, InternalGridState, GridState, ColumnState, Listener } from './state/GridState.js';
 import { registerGridInternalStore } from './internal/apiInternalBridge.js';
 import { exportToCsv } from './export/csvExport.js';
 import {
@@ -35,7 +35,7 @@ import type { GridInstrumentation } from './diagnostics/GridInstrumentation.js';
 export type { GridPersistenceAdapter, PersistedGridState };
 export { createLocalStorageAdapter };
 
-function createGridStateSnapshot<TRowData>(state: GridState<TRowData>): GridStateSnapshot<TRowData> {
+function createGridStateSnapshot<TRowData>(state: InternalGridState<TRowData>): GridStateSnapshot<TRowData> {
 	return {
 		columns: state.columns.slice(),
 		sortModel: state.sortModel,
@@ -60,7 +60,7 @@ function createGridStateSnapshot<TRowData>(state: GridState<TRowData>): GridStat
 
 export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowData> {
 	getRowId?: (row: TRowData) => string;
-	initialState?: Partial<GridState<TRowData>>;
+	initialState?: Partial<GridInitialState<TRowData>>;
 	/**
 	 * Enable first-class row selection. When set to `'multiple'`, a built-in checkbox
 	 * column is automatically prepended and pinned to the left — no need to add a
@@ -90,7 +90,7 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 }
 
 export interface ServerGridOptions<TRowData> extends ServerRowModelOptions<TRowData> {
-	initialState?: Partial<GridState<TRowData>>;
+	initialState?: Partial<GridInitialState<TRowData>>;
 	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	/**
 	 * Persistence adapter — same interface as client grid.
@@ -118,14 +118,14 @@ function normalizeRowSelection(rowSelection?: RowSelectionMode | RowSelectionOpt
 
 function withRowSelectionColumn<TRowData>(
 	columns: Array<ColumnDef<TRowData>>,
-	initialState: Partial<GridState<TRowData>>,
+	initialState: Partial<GridInitialState<TRowData>>,
 	rowSelection?: RowSelectionMode | RowSelectionOptions
-): { columns: Array<ColumnDef<TRowData>>; initialState: Partial<GridState<TRowData>> } {
+): { columns: Array<ColumnDef<TRowData>>; initialState: Partial<GridInitialState<TRowData>> } {
 	const normalized = normalizeRowSelection(rowSelection);
 	if (!normalized) return { columns, initialState };
 
 	let nextColumns = columns;
-	let nextInitial: Partial<GridState<TRowData>> = { ...initialState, rowSelection: normalized };
+	let nextInitial: Partial<GridInitialState<TRowData>> = { ...initialState, rowSelection: normalized };
 	if (normalized.mode === 'multiple' && !columns.some((column) => column.checkboxSelection)) {
 		const checkboxCol = {
 			field: '__rowSelect__',
@@ -220,7 +220,7 @@ export function createApiFacade<TRowData>(
 		setShowFloatingFilters: (enabled: boolean) => store.setShowFloatingFilters(enabled),
 		setShowFilterChipBar: (enabled: boolean) => store.setShowFilterChipBar(enabled),
 		exportCsv: (options?: CsvExportOptions) => exportToCsv(store, options),
-		setStyleRules: (styleRules: GridState<TRowData>['styleRules']) => store.setStyleRules(styleRules),
+		setStyleRules: (styleRules: GridInitialState<TRowData>['styleRules']) => store.setStyleRules(styleRules),
 		addEventListener: store.addEventListener,
 		dispatchEvent: store.dispatchEvent,
 		startEditing: (rowId: string, colField: string) => store.startEditing(rowId, colField),
@@ -302,7 +302,7 @@ export function createApiFacade<TRowData>(
 }
 
 function wireGridPersistence<TRowData>(
-	options: { columns: ColumnDef<TRowData>[]; initialState?: Partial<GridState<TRowData>>; persistence?: string | GridPersistenceAdapter },
+	options: { columns: ColumnDef<TRowData>[]; initialState?: Partial<GridInitialState<TRowData>>; persistence?: string | GridPersistenceAdapter },
 	store: GridStore<TRowData>
 ): PersistenceController | undefined {
 	const { persistence: rawPersistence } = options;
@@ -322,7 +322,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 	const adapter = typeof rawPersistence === 'string' ? createLocalStorageAdapter(rawPersistence) : rawPersistence;
 
 	let columns = options.columns;
-	let mergedInitial: Partial<GridState<TRowData>> = options.initialState ?? {};
+	let mergedInitial: Partial<GridInitialState<TRowData>> = options.initialState ?? {};
 	let asyncLoad: Promise<PersistedGridState | null> | undefined;
 
 	if (adapter) {
@@ -331,7 +331,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 			asyncLoad = loaded;
 		} else if (loaded) {
 			const applied = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]);
-			if (applied !== null) mergedInitial = applied as Partial<GridState<TRowData>>;
+			if (applied !== null) mergedInitial = applied as Partial<GridInitialState<TRowData>>;
 		}
 	}
 	// Apply row selection after persistence so restored column state cannot hide the built-in selector.
@@ -390,7 +390,7 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 	const { persistence: rawPersistence } = options;
 	const adapter = typeof rawPersistence === 'string' ? createLocalStorageAdapter(rawPersistence) : rawPersistence;
 
-	let mergedInitial: Partial<GridState<TRowData>> = options.initialState ?? {};
+	let mergedInitial: Partial<GridInitialState<TRowData>> = options.initialState ?? {};
 	let asyncLoad: Promise<PersistedGridState | null> | undefined;
 
 	if (adapter) {
@@ -399,7 +399,7 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 			asyncLoad = loaded;
 		} else if (loaded) {
 			const applied = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]);
-			if (applied !== null) mergedInitial = applied as Partial<GridState<TRowData>>;
+			if (applied !== null) mergedInitial = applied as Partial<GridInitialState<TRowData>>;
 		}
 	}
 	const selected = withRowSelectionColumn(options.columns, mergedInitial, options.rowSelection);

@@ -54,7 +54,7 @@ export type {
 	GridStyleRule,
 	ValueGetterParams,
 } from './columnDef.js';
-export type { GridState, Listener } from './state/GridState.js';
+export type { GridInitialState, GridState, Listener } from './state/GridState.js';
 export type { VisualRowModel } from './rowModel.js';
 export type { VisualRow, DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow } from './visualRow.js';
 export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';
