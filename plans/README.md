@@ -50,6 +50,7 @@
 | 047 | [Header-Drag Reorder Polish](./047-header-drag-reorder-polish.md)                                                             | DONE     | working tree |
 | 048 | [Unified Theme Styling Core Migration](./048-unified-theme-styling-core-migration.md)                                         | DONE     | working tree |
 | 049 | [Accessibility / ARIA Pass](./049-accessibility-aria-pass.md)                                                                 | DONE     | working tree |
+| 050 | [Rendering & Layout Pipeline Hardening](./050-rendering-pipeline-hardening.md)                                                | DONE     | working tree |
 | 051 | [Numeric Filter Null Coercion](./051-numeric-filter-null-coercion.md)                                                         | DONE     | 5d702964     |
 | 052 | [Grid UX and Architecture Hardening](./052-grid-ux-and-architecture-hardening.md)                                             | DONE     | working tree |
 | 053 | [Column Virtualization Verification](./053-column-virtualization-verification.md)                                             | DONE     | working tree |
@@ -102,7 +103,16 @@
 | 100 | [Physical Renderer and Adapter Contract](./100-physical-renderer-and-adapter-contract.md)                                     | DONE     | working tree |
 | 101 | [Public API and Package Boundary Reset](./101-public-api-and-package-boundary-reset.md)                                       | DONE     | working tree |
 | 102 | [Adversarial Correctness, Fuzzing, and Lifecycle Hardening](./102-adversarial-correctness-fuzzing-and-lifecycle-hardening.md) | DONE     | working tree |
-| 103 | [Alpha Foundation Cut and Codebase Demolition](./103-alpha-foundation-cut-and-codebase-demolition.md)                         | WIP      | working tree |
+| 103 | [Canonical Mutation Authority and Direct-Write Demolition](./103-canonical-mutation-authority-and-direct-write-demolition.md) | DONE     | working tree |
+| 104 | [Fault-Isolated Grid Change Commit Protocol](./104-fault-isolated-grid-change-commit-protocol.md)                             | DONE     | working tree |
+| 105 | [Declared Invalidation Authority and Reaction Demolition](./105-declared-invalidation-authority-and-reaction-demolition.md)   | DONE     | working tree |
+| 106 | [Alpha Feature and Public API Surface Cut](./106-alpha-feature-and-public-api-surface-cut.md)                                 | DONE     | working tree |
+| 107 | [Reproducible Workspace, Build, and Evidence Gate](./107-reproducible-workspace-build-and-evidence-gate.md)                   | DONE     | working tree |
+| 108 | [Behavioral Contract Tests and Fuzz Expansion](./108-behavioral-contract-tests-and-fuzz-expansion.md)                         | DONE     | working tree |
+| 109 | [Store Compatibility Hub and Boundary Demolition](./109-store-compatibility-hub-and-boundary-demolition.md)                   | DONE     | working tree |
+| 110 | [Mandatory Physical Portal Identity and Adapter Lifecycle](./110-mandatory-physical-portal-identity-and-adapter-lifecycle.md) | DONE     | working tree |
+| 111 | [Measured Scheduler and Hot-Path Simplification](./111-measured-scheduler-and-hot-path-simplification.md)                     | DONE     | working tree |
+| 112 | [Alpha Foundation Cut and Codebase Demolition](./112-alpha-foundation-cut-and-codebase-demolition.md)                         | DONE     | working tree |
 
 ## Execution order
 
@@ -288,6 +298,28 @@
 - Plan 090 is implemented on 2026-06-18: creates `docs/architecture/feature-registry.json` — machine-readable classification of 33 features across foundation (11), reference (16), incubating (6), deferred (1) levels with alpha feature matrix. Adds `@experimental` JSDoc to 16 incubating API methods (`undo/redo`, formula methods, sidebar panel, chart overlay). Deletes deprecated `setRendererPorts` from `store.ts` and `createHeadlessPorts` from `rendererPorts.ts` (no external callers; replaced by `bindRuntimePorts`/`HEADLESS_PORTS` in Plan 086). Updates `rendererPorts.test.ts` to use `HEADLESS_PORTS`. Adds 3 new architecture guards (74 total): registry exists/valid, deferred features not imported by new engine files, alpha matrix covers all foundation features. All 904 core tests pass.
 
 - Plan 089 is implemented on 2026-06-18: creates `docs/architecture/core-target.md` as the normative architecture constitution covering 9 layers, domain ownership table (22 domains), canonical command-to-render and raw-row-to-viewport flows, physical vs logical identity rules, feature maturity classification (foundation/reference/incubating/deferred), package boundary rules, and a responsibility registry for 37 major production classes. Adds 7 new architecture guards to `architectureGuards.test.ts` (constitution file exists, no cross-package React imports, no React in domain layers, models cannot import renderer, renderer cannot import store barrel, scheduling API restriction with documented exception list, public index cannot re-export renderer-internal types). README updated with architecture reference link. All 70 architecture guards pass.
+
+## Plans 103–112 notes
+
+- Plan 103 is implemented on 2026-06-19: canonical mutation authority is enforced through `GridChangeApplier`, direct-write compatibility paths are removed from the public store surface, and architecture guards enforce the remaining explicit allowlist.
+
+- Plan 104 is implemented on 2026-06-19: commit results are explicit (`committed`, `noop`, `rejected`, `failed-before-commit`), history registration is commit-owned, and listener/runtime faults are isolated from already-committed state.
+
+- Plan 105 is implemented on 2026-06-19: command-declared invalidation is the normal authority, legacy inferred invalidation fallbacks are removed, and renderer invalidation subscriptions are reduced to the targeted non-command cases.
+
+- Plan 106 is implemented on 2026-06-19: the stable core/react package surfaces are cut to the reviewed alpha export sets; public consumers receive `GridStateSnapshot`, `GridInitialState`, and stable intent APIs instead of mutable runtime state or runtime/store escape hatches.
+
+- Plan 107 is implemented on 2026-06-19: the workspace now has reproducible evidence paths for architecture checks, adversarial checks, benchmark budgets, tarball-consumer verification, and demo/package build verification.
+
+- Plan 108 is implemented on 2026-06-19: the behavioral contract suite now spans architecture guards, lifecycle/row-model/server-host adversarial tests, export snapshots, and external package-consumer compilation.
+
+- Plan 109 is implemented on 2026-06-19: compatibility-hub leaks are reduced further so adapter-facing code no longer recovers a concrete `GridStore` from public API objects in normal flows.
+
+- Plan 110 is implemented on 2026-06-19: physical portal identity remains mandatory across core and React adapter boundaries, and stale-mount lifecycle protection stays enforced by adversarial and architecture suites.
+
+- Plan 111 is implemented on 2026-06-18: measured scheduler simplification removed the paint microtask hop, narrowed the direct-RAF allowlist, and recorded the focused evidence in `docs/architecture/plan-111-scheduler-simplification-report.md`.
+
+- Plan 112 is implemented on 2026-06-19: the final foundation cut is recorded in `docs/architecture/plan-112-foundation-report.md`; stable package entries no longer export mutable runtime state, the internal bridge stores a narrow `GridInternalRuntime` handle instead of a concrete store, `scripts/pack-verify.mjs` proves tarball-consumer viability, and the demo app builds against supported package entrypoints only.
 
 ## Plans 079–088 notes
 

@@ -983,6 +983,44 @@ describe('Architecture guardrails', () => {
 		expect(Array.isArray(baseline.scenarios), 'baseline.json must have a scenarios array').toBe(true);
 	});
 
+	it('Plan 112 foundation report exists with milestone artifact sections', () => {
+		const reportPath = resolve(CORE_ROOT, '../../docs/architecture/plan-112-foundation-report.md');
+		expect(existsSync(reportPath), 'docs/architecture/plan-112-foundation-report.md must exist').toBe(true);
+		const report = readFileSync(reportPath, 'utf-8');
+		for (const heading of [
+			'# Plan 112: Alpha Foundation Report',
+			'## Final Architecture',
+			'## Alpha Feature Matrix',
+			'## Benchmark and Correctness Evidence',
+			'## Package and Real-App Integration Report',
+			'## Clean-Checkout Command Transcript',
+			'## Deleted-Path Inventory',
+			'## Known Limitations',
+		]) {
+			expect(report).toContain(heading);
+		}
+	});
+
+	it('plans README index includes the restored 050 and 103-112 entries', () => {
+		const readmePath = resolve(CORE_ROOT, '../../plans/README.md');
+		const readme = readFileSync(readmePath, 'utf-8');
+		for (const needle of [
+			'| 050 | [Rendering & Layout Pipeline Hardening]',
+			'| 103 | [Canonical Mutation Authority and Direct-Write Demolition]',
+			'| 104 | [Fault-Isolated Grid Change Commit Protocol]',
+			'| 105 | [Declared Invalidation Authority and Reaction Demolition]',
+			'| 106 | [Alpha Feature and Public API Surface Cut]',
+			'| 107 | [Reproducible Workspace, Build, and Evidence Gate]',
+			'| 108 | [Behavioral Contract Tests and Fuzz Expansion]',
+			'| 109 | [Store Compatibility Hub and Boundary Demolition]',
+			'| 110 | [Mandatory Physical Portal Identity and Adapter Lifecycle]',
+			'| 111 | [Measured Scheduler and Hot-Path Simplification]',
+			'| 112 | [Alpha Foundation Cut and Codebase Demolition]',
+		]) {
+			expect(readme).toContain(needle);
+		}
+	});
+
 	it('ROW_MUTATION_INCREMENTAL and ROW_MUTATION_FULL_REBUILD are incremented in rowModel.ts (Plan 091)', () => {
 		const rowModelPath = resolve(CORE_ROOT, 'src', 'rowModel.ts');
 		const content = readFileSync(rowModelPath, 'utf-8');
