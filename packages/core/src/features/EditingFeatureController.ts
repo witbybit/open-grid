@@ -4,6 +4,8 @@ import type { DataModel } from '../models/DataModel.js';
 import type { RowModel } from '../rowModel.js';
 import { canEditCell } from '../visualRow.js';
 import type { CellValueChangeOptions, CellValueChangeResult } from './DataMutationController.js';
+import { createCellValueMutationHistory } from '../engine/GridDomainMutation.js';
+import type { GridHistoryEntry } from '../engine/GridChangeApplier.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
@@ -11,7 +13,7 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	data: DataModel<TRowData>;
 	notifyCellChange: (rowId: string, colField: string) => void;
 	applyCellValueChange: (rowId: string, colField: string, value: unknown, options?: CellValueChangeOptions) => CellValueChangeResult;
-	registerCellValueHistory: (rowId: string, colField: string, oldValue: unknown, newValue: unknown) => void;
+	registerHistory: (history: GridHistoryEntry<TRowData>) => void;
 	/** Called when an edit commits successfully — removes any persistent validation error for the cell. */
 	clearValidationError?: (rowId: string, colField: string) => void;
 	/** Called when an edit fails validation — persists the error indicator even after the editor closes. */
@@ -31,7 +33,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		value: unknown,
 		options?: CellValueChangeOptions
 	) => CellValueChangeResult;
-	private readonly registerCellValueHistory: (rowId: string, colField: string, oldValue: unknown, newValue: unknown) => void;
+	private readonly registerHistory: (history: GridHistoryEntry<TRowData>) => void;
 	private readonly clearValidationError?: (rowId: string, colField: string) => void;
 	private readonly setValidationError?: (rowId: string, colField: string, error: string) => void;
 	private readonly validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
@@ -42,7 +44,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.data = deps.data;
 		this.notifyCellChange = deps.notifyCellChange;
 		this.applyCellValueChange = deps.applyCellValueChange;
-		this.registerCellValueHistory = deps.registerCellValueHistory;
+		this.registerHistory = deps.registerHistory;
 		this.clearValidationError = deps.clearValidationError;
 		this.setValidationError = deps.setValidationError;
 		this.validateCellPostCommit = deps.validateCellPostCommit;
@@ -157,7 +159,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		}
 
 		if (writeResult.applied) {
-			this.registerCellValueHistory(rowId, colField, oldValue, value);
+			this.registerHistory(createCellValueMutationHistory('data:set-cell-value', rowId, colField, oldValue, value));
 		}
 
 		this.stopEdit(false);

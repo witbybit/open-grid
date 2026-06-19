@@ -369,6 +369,12 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }]");
 	});
 
+	it('cell mutation history helpers are owned by the executor layer, not DataMutationController', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'DataMutationController.ts'), 'utf-8');
+		expect(content).not.toContain('registerCellValueHistory(');
+		expect(content).not.toContain('registerBatchCellValueHistory(');
+	});
+
 	it('GridStore does not call rowModel.applyTransaction directly', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
 		expect(content).not.toContain('rowModel.applyTransaction(');

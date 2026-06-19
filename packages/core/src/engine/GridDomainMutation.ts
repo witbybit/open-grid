@@ -108,7 +108,7 @@ function createRowOrderHistory<TRowData>(reason: GridCommitReason, currentOrder:
 	};
 }
 
-function createCellValueHistory<TRowData>(
+export function createCellValueMutationHistory<TRowData>(
 	reason: GridCommitReason,
 	rowId: string,
 	colField: string,
@@ -129,7 +129,7 @@ function createCellValueHistory<TRowData>(
 	};
 }
 
-function createBatchCellHistory<TRowData>(
+export function createBatchCellMutationHistory<TRowData>(
 	reason: GridCommitReason,
 	updates: ReadonlyArray<{ rowId: string; colField: string; oldValue: unknown; newValue: unknown }>
 ): GridHistoryEntry<TRowData> {
@@ -237,7 +237,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 				noop: !result.applied,
 				history:
 					result.applied && prepared.mutation.undoable !== false
-						? createCellValueHistory<TRowData>(
+						? createCellValueMutationHistory<TRowData>(
 								'data:set-cell-value',
 								prepared.mutation.rowId,
 								prepared.mutation.colField,
@@ -282,7 +282,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 				noop: applied.length === 0,
 				history:
 					applied.length > 0 && prepared.mutation.undoable !== false
-						? createBatchCellHistory<TRowData>(
+						? createBatchCellMutationHistory<TRowData>(
 								'data:batch-cell-values',
 								applied.map((result) => ({
 									rowId: result.rowId,

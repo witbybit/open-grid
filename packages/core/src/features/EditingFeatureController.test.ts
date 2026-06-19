@@ -49,8 +49,7 @@ function makeEditingFeature(store: GridStore<TestRow>): EditingFeatureController
 		data: engine.data,
 		notifyCellChange: (rowId, colField) => engine.notifyCellChange(rowId, colField),
 		applyCellValueChange: (rowId, colField, value, options) => engine.dataMutation.applyCellValueChange(rowId, colField, value, options),
-		registerCellValueHistory: (rowId, colField, oldValue, newValue) =>
-			engine.dataMutation.registerCellValueHistory(rowId, colField, oldValue, newValue),
+		registerHistory: (history) => engine.changeApplier.registerHistory(history),
 	};
 	return new EditingFeatureController(deps);
 }

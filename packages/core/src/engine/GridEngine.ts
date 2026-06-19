@@ -405,8 +405,7 @@ export class GridEngine<TRowData = unknown> {
 			data: this.data,
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
 			applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
-			registerCellValueHistory: (rowId, colField, oldValue, newValue) =>
-				this.dataMutation.registerCellValueHistory(rowId, colField, oldValue, newValue),
+			registerHistory: (history) => this.changeApplier.registerHistory(history),
 			clearValidationError: (rowId, colField) => this.validationFeature._setCellError(rowId, colField, null),
 			setValidationError: (rowId, colField, error) => this.validationFeature._setCellError(rowId, colField, error),
 			validateCellPostCommit: (rowId, colField) => this.validationFeature.validateCell(rowId, colField).then(() => undefined),
