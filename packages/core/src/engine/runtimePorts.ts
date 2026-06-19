@@ -4,12 +4,12 @@ import type { ColumnDef, CompiledGridPlan } from '../columnDef.js';
 import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import type { GeometryModel } from '../models/GeometryModel.js';
 import type { RowModel } from '../rowModel.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 
 export interface DataModelRuntime<TRowData = unknown> {
-	getState: () => GridState<TRowData>;
+	getState: () => InternalGridState<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	getColumnDef: (colField: string) => ColumnDef<TRowData> | undefined;
 	hasFormula: (rowId: string, colField: string) => boolean;
@@ -37,7 +37,7 @@ export interface CellAccessRuntime<TRowData = unknown> {
 	getColumnDef: (colField: string) => ColumnDef<TRowData> | undefined;
 	getCellValue: (rowId: string, colField: string) => unknown;
 	getRawCellValue: (rowId: string, colField: string) => unknown;
-	getState: () => GridState<TRowData>;
+	getState: () => InternalGridState<TRowData>;
 	isRowSelected: (rowIndex: number) => boolean;
 	isRowLoading: (rowId: string) => boolean;
 }
@@ -45,7 +45,7 @@ export interface CellAccessRuntime<TRowData = unknown> {
 export type RowsUpdatedPayload<TRowData = unknown> = GridEventPayloadMap<TRowData>[GridEventName.rowsUpdated];
 
 export interface RowModelRuntimeBase<TRowData = unknown> {
-	getState: () => GridState<TRowData>;
+	getState: () => InternalGridState<TRowData>;
 	initializeModel: (model: { columns?: ColumnDef<TRowData>[]; getRowId?: ((row: TRowData) => string) | undefined }) => void;
 	registerRowModel: (rowModel: RowModel<TRowData>) => void;
 	addEventListener: <K extends keyof GridEventPayloadMap<TRowData>>(
@@ -71,7 +71,7 @@ export interface RowModelMutationRuntime<TRowData = unknown> {
 }
 
 export interface ClientRowModelRuntime<TRowData = unknown> extends RowModelRuntimeBase<TRowData>, RowModelMutationRuntime<TRowData> {
-	updateExpansion: (updater: (expansion: GridState<TRowData>['expansion']) => GridState<TRowData>['expansion']) => void;
+	updateExpansion: (updater: (expansion: InternalGridState<TRowData>['expansion']) => InternalGridState<TRowData>['expansion']) => void;
 }
 
 export interface ServerRowModelRuntime<TRowData = unknown> extends RowModelRuntimeBase<TRowData> {
@@ -88,7 +88,7 @@ export interface ServerRowModelRuntime<TRowData = unknown> extends RowModelRunti
 export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
 	initializeRowModelState: (model: { columns?: ColumnDef<TRowData>[]; getRowId?: ((row: TRowData) => string) | undefined }) => void;
 	bumpRowModelGlobalVersion: () => void;
-	updateExpansionState: (updater: (expansion: GridState<TRowData>['expansion']) => GridState<TRowData>['expansion']) => void;
+	updateExpansionState: (updater: (expansion: InternalGridState<TRowData>['expansion']) => InternalGridState<TRowData>['expansion']) => void;
 	clearFormulas: () => void;
 	syncFormulaForCell: (rowId: string, colField: string, value: unknown) => void;
 	invalidateFormulaCell: (rowId: string, colField: string) => FormulaCellCoordinate[];
@@ -103,7 +103,7 @@ export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
 
 export interface RowModelRuntimeStoreBridge<TRowData = unknown> {
 	engine: RowModelRuntimeEngineBridge<TRowData>;
-	getState: () => GridState<TRowData>;
+	getState: () => InternalGridState<TRowData>;
 	registerRowModel: (rowModel: RowModel<TRowData>) => void;
 	addEventListener: <K extends keyof GridEventPayloadMap<TRowData>>(
 		type: K,

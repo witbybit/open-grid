@@ -1,9 +1,9 @@
-import type { GridState, GridStateUpdater, Listener } from './GridState.js';
+import type { InternalGridState, GridStateUpdater, Listener } from './GridState.js';
 import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import { type GridInstrumentation, GridMetric, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
 
 export class StateManager<TRowData = unknown> {
-	private state: GridState<TRowData>;
+	private state: InternalGridState<TRowData>;
 	private listeners = new Set<Listener<TRowData>>();
 	private keyListeners = new Map<string, Set<Listener<TRowData>>>();
 
@@ -11,14 +11,14 @@ export class StateManager<TRowData = unknown> {
 	// Keys touched inside an open transaction — used to drive notifyChanges at commit.
 	// Using a Set avoids the repeated object spread that batchedStateUpdates previously required.
 	private batchedKeys = new Set<string>();
-	private preTransactionState: GridState<TRowData> | null = null;
-	private onChangesCallback?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void;
+	private preTransactionState: InternalGridState<TRowData> | null = null;
+	private onChangesCallback?: (prevState: InternalGridState<TRowData>, affectedKeys: string[]) => void;
 	private readonly faultReporter?: RuntimeFaultReporter<TRowData>;
 	public instrumentation: GridInstrumentation;
 
 	constructor(
-		initialState: GridState<TRowData>,
-		onChanges?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void,
+		initialState: InternalGridState<TRowData>,
+		onChanges?: (prevState: InternalGridState<TRowData>, affectedKeys: string[]) => void,
 		faultReporter?: RuntimeFaultReporter<TRowData>,
 		instrumentation?: GridInstrumentation
 	) {
@@ -28,7 +28,7 @@ export class StateManager<TRowData = unknown> {
 		this.instrumentation = instrumentation ?? NOOP_INSTRUMENTATION;
 	}
 
-	public getState(): GridState<TRowData> {
+	public getState(): InternalGridState<TRowData> {
 		this.instrumentation.increment(GridMetric.STATE_READS);
 		return this.state;
 	}
@@ -49,13 +49,15 @@ export class StateManager<TRowData = unknown> {
 		this.notifyChanges(prevState, affectedKeys);
 	};
 
-	public setDerivedState(updater: GridStateUpdater<TRowData>, prevStateForListeners: GridState<TRowData>): string[] {
+	public setDerivedState(updater: GridStateUpdater<TRowData>, prevStateForListeners: InternalGridState<TRowData>): string[] {
 		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
 		const affectedKeys = Object.keys(nextState);
 		if (affectedKeys.length === 0) return [];
 
 		this.state = { ...this.state, ...nextState };
-		return affectedKeys.filter((key) => prevStateForListeners[key as keyof GridState<TRowData>] !== this.state[key as keyof GridState<TRowData>]);
+		return affectedKeys.filter(
+			(key) => prevStateForListeners[key as keyof InternalGridState<TRowData>] !== this.state[key as keyof InternalGridState<TRowData>]
+		);
 	}
 
 	public startTransaction = (): void => {
@@ -94,10 +96,10 @@ export class StateManager<TRowData = unknown> {
 		}
 	};
 
-	private notifyChanges(prevState: GridState<TRowData>, affectedKeys: string[]): void {
+	private notifyChanges(prevState: InternalGridState<TRowData>, affectedKeys: string[]): void {
 		const updatedKeys = new Set<string>();
 		for (const key of affectedKeys) {
-			if (prevState[key as keyof GridState<TRowData>] !== this.state[key as keyof GridState<TRowData>]) {
+			if (prevState[key as keyof InternalGridState<TRowData>] !== this.state[key as keyof InternalGridState<TRowData>]) {
 				updatedKeys.add(key);
 			}
 		}
@@ -172,7 +174,7 @@ export class StateManager<TRowData = unknown> {
 		};
 	};
 
-	public triggerKeyChange(key: string, prevState: GridState<TRowData>): void {
+	public triggerKeyChange(key: string, prevState: InternalGridState<TRowData>): void {
 		const targeted = this.keyListeners.get(key);
 		if (targeted) {
 			targeted.forEach((listener) => {
