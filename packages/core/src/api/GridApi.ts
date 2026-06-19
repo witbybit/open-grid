@@ -154,7 +154,6 @@ export interface GridStateSnapshot<TRowData = unknown> {
 	readonly loading?: boolean;
 	readonly pagination?: { pageSize: number; page?: number };
 	readonly enableColumnReorder: boolean;
-	readonly globalVersion: number;
 	readonly themeName?: BuiltInThemeName;
 	readonly sidebarOpenPanel?: string | null;
 	readonly chartOpen?: boolean;
@@ -162,7 +161,6 @@ export interface GridStateSnapshot<TRowData = unknown> {
 	readonly showGroupFooter?: boolean;
 	readonly enableStickyGroupRows?: boolean;
 	readonly masterDetailEnabled?: boolean;
-	readonly visibleRowRange?: ViewportRange;
 }
 
 export type GridSnapshotListener<TRowData = unknown> = (snapshot: GridStateSnapshot<TRowData>) => void;

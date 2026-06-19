@@ -1,15 +1,10 @@
 import type { ColumnDef } from '../columnDef.js';
 import type { FilterModel, SortModel } from '../rowModel.js';
 import type { InternalGridState } from '../state/GridState.js';
-import type { ViewportRange } from '../viewportController.js';
 import type { ActiveEditState, GridSelectionState, GridStateSnapshot } from './GridApi.js';
 
 function freezeCopy<T extends object>(value: T): Readonly<T> {
 	return Object.freeze({ ...value });
-}
-
-function cloneViewportRange(range: ViewportRange | undefined): ViewportRange | undefined {
-	return range ? freezeCopy(range) : undefined;
 }
 
 function cloneSelection(selection: GridSelectionState): GridSelectionState {
@@ -71,7 +66,6 @@ export function createGridStateSnapshot<TRowData>(state: InternalGridState<TRowD
 		loading: state.loading,
 		pagination: state.pagination ? freezeCopy(state.pagination) : undefined,
 		enableColumnReorder: state.enableColumnReorder,
-		globalVersion: state.globalVersion,
 		themeName: state.themeName,
 		sidebarOpenPanel: state.sidebarOpenPanel,
 		chartOpen: state.chartOpen,
@@ -79,6 +73,5 @@ export function createGridStateSnapshot<TRowData>(state: InternalGridState<TRowD
 		showGroupFooter: state.showGroupFooter,
 		enableStickyGroupRows: state.enableStickyGroupRows,
 		masterDetailEnabled: state.masterDetailEnabled,
-		visibleRowRange: cloneViewportRange(state.visibleRowRange),
 	});
 }
