@@ -79,13 +79,12 @@ export default function WideGridDemo({ onGridReady, editTrigger, arrowKeyNavigat
 		[onGridReady]
 	);
 
-	// Subscribe to column range changes to update the badge.
-	// subscribeToKey is level-triggered (fires on future changes only), so we also schedule
-	// a rAF read after mount — by that point ResizeObserver + first render will have fired.
+	// Subscribe to viewport changes to update the badge.
+	// Use visibleRowRange as a proxy for viewport changes (which includes column range updates).
 	useEffect(() => {
 		if (!api) return;
 		let rafId = requestAnimationFrame(() => setVisibleRange(api.getVisibleColumnRange()));
-		const unsub = api.subscribeToKey('visibleColRange', () => setVisibleRange(api.getVisibleColumnRange()));
+		const unsub = api.subscribeToKey('visibleRowRange', () => setVisibleRange(api.getVisibleColumnRange()));
 		return () => {
 			cancelAnimationFrame(rafId);
 			unsub();
