@@ -413,7 +413,15 @@ describe('GridChangeApplier', () => {
 			requestRender: vi.fn(),
 			commitContext: {
 				getState: () => ({}) as GridState<TestRow>,
-				getRowModel: () => null,
+				getRowModel: () =>
+					({
+						getRawRowById: (rowId: string) => (rowId === '1' ? ({ id: '1', name: rowValues.get('1:name') } as TestRow) : null),
+						setCellValue: () => true,
+					}) as any,
+				getCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
+				getRawCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
+				getStoredCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
+				getColumnDef: () => ({ field: 'name' }) as any,
 				applyCellValueChange: (rowId, colField, value) => {
 					const key = `${rowId}:${colField}`;
 					const oldRawValue = rowValues.get(key);
@@ -451,6 +459,230 @@ describe('GridChangeApplier', () => {
 
 		expect(result.status).toBe('committed');
 		expect(rowValues.get('1:name')).toBe('Beta');
+	});
+
+	it('rejects atomic batch-cell mutations before writes when a prepared update is invalid', () => {
+		const rowValues = new Map([
+			['1:name', 'Alpha'],
+			['2:name', 'Beta'],
+		]);
+		const applyBatchCellValues = vi.fn((updates: Array<{ rowId: string; colField: string; value: unknown }>) =>
+			updates.map((update) => ({
+				applied: true,
+				rowId: update.rowId,
+				colField: update.colField,
+				oldRawValue: rowValues.get(`${update.rowId}:${update.colField}`),
+				oldComputedValue: rowValues.get(`${update.rowId}:${update.colField}`),
+				newRawValue: update.value,
+				newComputedValue: update.value,
+				invalidatedCells: [{ rowId: update.rowId, colField: update.colField }],
+			}))
+		);
+		const kernel = new GridCommitKernel<TestRow>({
+			stateManager: new StateManager<TestRow>({
+				columns: [],
+				selection: { focus: null, anchor: null, range: null, bounds: null, source: 'api' },
+				selectedRowIds: [],
+				rowHeights: {},
+				columnWidths: {},
+				defaultRowHeight: 40,
+				defaultColWidth: 100,
+				enableColumnReorder: true,
+				activeEdit: null,
+				sortModel: null,
+				filterModel: null,
+				globalVersion: 0,
+				visibleRowRange: { startIdx: 0, endIdx: 0 },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				expansion: { groups: {}, treeRows: {}, details: {} },
+				rowOverscanPx: 400,
+				colBuffer: 1,
+			} as unknown as GridState<TestRow>),
+			invalidation: new InvalidationManager(),
+			eventBus: new EventBus<TestRow>(),
+			commandHistory: new CommandHistory(),
+			requestRender: vi.fn(),
+			commitContext: {
+				getState: () => ({}) as GridState<TestRow>,
+				getRowModel: () =>
+					({
+						getRawRowById: (rowId: string) =>
+							rowId === '1' || rowId === '2' ? ({ id: rowId, name: rowValues.get(`${rowId}:name`) } as TestRow) : null,
+						setCellValue: () => true,
+					}) as any,
+				getCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
+				getRawCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
+				getStoredCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
+				getColumnDef: () => ({ field: 'name' }) as any,
+				applyBatchCellValues,
+			},
+			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TestRow>(),
+		});
+
+		const result = kernel.commit({
+			reason: 'data:batch-cell-values',
+			domainMutations: [
+				{
+					kind: 'batch-cell',
+					updates: [
+						{ rowId: '1', colField: 'name', value: 'Alpha 2' },
+						{ rowId: 'missing', colField: 'name', value: 'Ghost' },
+					],
+				},
+			],
+		});
+
+		expect(result).toEqual({ status: 'rejected', reason: 'row unavailable' });
+		expect(applyBatchCellValues).not.toHaveBeenCalled();
+	});
+
+	it('commits non-atomic batch-cell mutations with committed and rejected subsets', () => {
+		const rowValues = new Map([
+			['1:name', 'Alpha'],
+			['2:name', 'Beta'],
+		]);
+		const commandHistory = new CommandHistory();
+		const kernel = new GridCommitKernel<TestRow>({
+			stateManager: new StateManager<TestRow>({
+				columns: [],
+				selection: { focus: null, anchor: null, range: null, bounds: null, source: 'api' },
+				selectedRowIds: [],
+				rowHeights: {},
+				columnWidths: {},
+				defaultRowHeight: 40,
+				defaultColWidth: 100,
+				enableColumnReorder: true,
+				activeEdit: null,
+				sortModel: null,
+				filterModel: null,
+				globalVersion: 0,
+				visibleRowRange: { startIdx: 0, endIdx: 0 },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				expansion: { groups: {}, treeRows: {}, details: {} },
+				rowOverscanPx: 400,
+				colBuffer: 1,
+			} as unknown as GridState<TestRow>),
+			invalidation: new InvalidationManager(),
+			eventBus: new EventBus<TestRow>(),
+			commandHistory,
+			requestRender: vi.fn(),
+			commitContext: {
+				getState: () => ({}) as GridState<TestRow>,
+				getRowModel: () =>
+					({
+						getRawRowById: (rowId: string) => (rowId === '1' ? ({ id: rowId, name: rowValues.get(`${rowId}:name`) } as TestRow) : null),
+						setCellValue: () => true,
+					}) as any,
+				getCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
+				getRawCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
+				getStoredCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
+				getColumnDef: () => ({ field: 'name' }) as any,
+				applyBatchCellValues: (updates) =>
+					updates.map((update) => {
+						const key = `${update.rowId}:${update.colField}`;
+						const oldValue = rowValues.get(key);
+						if (oldValue === update.value) {
+							return {
+								applied: false,
+								rowId: update.rowId,
+								colField: update.colField,
+								oldRawValue: oldValue,
+								oldComputedValue: oldValue,
+								newRawValue: update.value,
+								invalidatedCells: [],
+							};
+						}
+						rowValues.set(key, update.value as string);
+						return {
+							applied: true,
+							rowId: update.rowId,
+							colField: update.colField,
+							oldRawValue: oldValue,
+							oldComputedValue: oldValue,
+							newRawValue: update.value,
+							newComputedValue: update.value,
+							invalidatedCells: [{ rowId: update.rowId, colField: update.colField }],
+						};
+					}),
+				applyCellValueChange: (rowId, colField, value) => {
+					const key = `${rowId}:${colField}`;
+					const oldValue = rowValues.get(key);
+					if (oldValue === value) {
+						return {
+							applied: false,
+							rowId,
+							colField,
+							oldRawValue: oldValue,
+							oldComputedValue: oldValue,
+							newRawValue: value,
+							invalidatedCells: [],
+						};
+					}
+					rowValues.set(key, value as string);
+					return {
+						applied: true,
+						rowId,
+						colField,
+						oldRawValue: oldValue,
+						oldComputedValue: oldValue,
+						newRawValue: value,
+						newComputedValue: value,
+						invalidatedCells: [{ rowId, colField }],
+					};
+				},
+			},
+			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TestRow>(),
+		});
+
+		const execution = kernel.commitDetailed({
+			reason: 'data:batch-cell-values',
+			domainMutations: [
+				{
+					kind: 'batch-cell',
+					atomic: false,
+					updates: [
+						{ rowId: '1', colField: 'name', value: 'Alpha Updated' },
+						{ rowId: 'missing', colField: 'name', value: 'Ghost' },
+					],
+				},
+			],
+		});
+
+		expect(execution.result.status).toBe('committed');
+		expect(rowValues.get('1:name')).toBe('Alpha Updated');
+		expect(rowValues.get('2:name')).toBe('Beta');
+		expect(execution.appliedMutations[0]?.result).toEqual({
+			results: [
+				{
+					applied: true,
+					rowId: '1',
+					colField: 'name',
+					oldRawValue: 'Alpha',
+					oldComputedValue: 'Alpha',
+					newRawValue: 'Alpha Updated',
+					newComputedValue: 'Alpha Updated',
+					invalidatedCells: [{ rowId: '1', colField: 'name' }],
+				},
+			],
+			committed: [
+				{
+					applied: true,
+					rowId: '1',
+					colField: 'name',
+					oldRawValue: 'Alpha',
+					oldComputedValue: 'Alpha',
+					newRawValue: 'Alpha Updated',
+					newComputedValue: 'Alpha Updated',
+					invalidatedCells: [{ rowId: '1', colField: 'name' }],
+				},
+			],
+			rejected: [{ index: 1, update: { rowId: 'missing', colField: 'name', value: 'Ghost' }, reason: 'row unavailable' }],
+		});
+		expect(commandHistory.canUndo()).toBe(true);
+
+		commandHistory.undo();
+		expect(rowValues.get('1:name')).toBe('Alpha');
+		expect(rowValues.get('2:name')).toBe('Beta');
 	});
 
 	it('requestRender: false skips render request', () => {

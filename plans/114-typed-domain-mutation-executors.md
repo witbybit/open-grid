@@ -19,6 +19,8 @@ Introduce typed domain mutation executors so cell and row mutation semantics are
 - `row-order` is the first production executor-backed mutation and now supports inverse history through the kernel
 - `row-transaction` now routes through a typed executor and `commitDetailed(...)`, preserving `RowNodeTransaction` results for engine/store callers
 - `cell-value` and `batch-cell` now route through typed executors, and cell/batch inverse history is constructed from shared executor-layer helpers instead of controller-specific helper methods
+- cell executors now perform read-side preflight through `GridCommitContext` so missing rows and synchronous `valueSetter` rejections can be surfaced before commit instead of being discovered only after mutation time
+- batch executors now distinguish `atomic: true` vs `atomic: false`, reject invalid atomic batches before writes, report committed/rejected subsets for non-atomic batches, and scope inverse history to the committed subset only
 
 ## Problem
 

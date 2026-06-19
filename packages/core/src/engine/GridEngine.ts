@@ -353,6 +353,10 @@ export class GridEngine<TRowData = unknown> {
 			commitContext: {
 				getState: () => this.stateManager.getState(),
 				getRowModel: () => this.rowModel,
+				getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),
+				getRawCellValue: (rowId, colField) => this.data.getRawCellValue(rowId, colField),
+				getStoredCellValue: (rowId, colField) => this.data.getStoredCellValue(rowId, colField),
+				getColumnDef: (colField) => this.columns.getColumnDef(colField),
 				applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
 				applyBatchCellValues: (updates, options) => this.dataMutation.applyBatchCellValues(updates, options),
 			},
