@@ -621,7 +621,7 @@ export interface GridPluginRuntime<TRowData = unknown> extends GridApi<TRowData>
 	getVisualIndexByRowId(rowId: string): number | null;
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
-	getRowModel(): import('../store.js').RowModel<TRowData> | null;
+	getRowModel(): import('../rowModel.js').RowModel<TRowData> | null;
 	reportRuntimeFault(fault: RuntimeFaultInput): RuntimeFault;
 }
 
@@ -667,9 +667,9 @@ export interface GridHostRuntime<TRowData = unknown> {
 	isBindingCurrent(binding: RuntimePortBinding): boolean;
 }
 
-export interface GridStoreRuntime<TRowData = unknown> {
-	registerRowModel(rowModel: import('../store.js').RowModel<TRowData>): void;
-	getRowModel(): import('../store.js').RowModel<TRowData> | null;
+export interface GridCompositionRuntime<TRowData = unknown> {
+	registerRowModel(rowModel: import('../rowModel.js').RowModel<TRowData>): void;
+	getRowModel(): import('../rowModel.js').RowModel<TRowData> | null;
 	triggerCellNotifications(rowId: string): void;
 	batchedUpdates: boolean;
 	registerCellSubscription(sub: CellSubscription): void;
@@ -682,9 +682,9 @@ export interface GridStoreRuntime<TRowData = unknown> {
  * Internal API intended for the rendering engine and custom framework adapters.
  * Plugin code should use GridPluginRuntime instead of sharing this broader surface.
  *
- * Access this from internal composition roots such as store-owned renderer/host wiring.
+ * Access this from internal composition roots such as runtime-owned renderer/host wiring.
  */
-export interface InternalGridApi<TRowData = unknown> extends GridRendererApi<TRowData>, GridHostRuntime<TRowData>, GridStoreRuntime<TRowData> {
+export interface InternalGridApi<TRowData = unknown> extends GridRendererApi<TRowData>, GridHostRuntime<TRowData>, GridCompositionRuntime<TRowData> {
 	// ── Renderer-level display value access ──────────────────────────────────
 	getCachedDisplayValue(rowId: string, colField: string): string | undefined;
 	getCheapDisplayValue(rowId: string, colField: string): string;
@@ -717,8 +717,8 @@ export interface InternalGridApi<TRowData = unknown> extends GridRendererApi<TRo
 	subscribeToHeaders(listener: GridSnapshotListener<TRowData>): () => void;
 
 	// ── Store / engine internals ─────────────────────────────────────────────
-	registerRowModel(rowModel: import('../store.js').RowModel<TRowData>): void;
-	getRowModel(): import('../store.js').RowModel<TRowData> | null;
+	registerRowModel(rowModel: import('../rowModel.js').RowModel<TRowData>): void;
+	getRowModel(): import('../rowModel.js').RowModel<TRowData> | null;
 	setViewportPins(pins: { left?: number; right?: number; top?: number; bottom?: number }): void;
 	setViewportSize(width: number, height: number): boolean;
 	updateVisibleRanges(): boolean;

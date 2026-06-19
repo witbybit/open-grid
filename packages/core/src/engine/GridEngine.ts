@@ -291,13 +291,11 @@ export class GridEngine<TRowData = unknown> {
 			geometry: this.geometry,
 			viewport: this.viewport,
 			selection: this.selection,
-			invalidation: this.invalidation,
 			eventBus: this.eventBus,
 			cellNotifications: this.cellNotifications,
 			getRowModel: () => this.rowModel,
 			getRowHeightsList: (rowModel, rowHeightsRecord, defaultRowHeight) => this.getRowHeightsList(rowModel, rowHeightsRecord, defaultRowHeight),
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
-			requestRender: (reason) => this.requestRender(reason),
 		});
 
 		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');

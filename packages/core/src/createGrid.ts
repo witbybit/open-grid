@@ -1,7 +1,7 @@
 import { ClientRowModelController, type ClientRowModelOptions } from './rowModel.js';
 import type { RowValidator } from './features/ValidationManager.js';
 import { ServerRowModelController, type ServerRowModelOptions } from './serverRowModel.js';
-import { GridStore } from './store.js';
+import { GridStore as GridRuntime } from './store.js';
 import type { GridApi, RowSelectionMode, RowSelectionOptions } from './api/GridApi.js';
 import type { ColumnDef } from './columnDef.js';
 import type { GridInitialState } from './state/GridState.js';
@@ -111,7 +111,7 @@ function withRowSelectionColumn<TRowData>(
 
 function wireGridPersistence<TRowData>(
 	options: { columns: ColumnDef<TRowData>[]; initialState?: Partial<GridInitialState<TRowData>>; persistence?: string | GridPersistenceAdapter },
-	store: GridStore<TRowData>
+	runtime: GridRuntime<TRowData>
 ): PersistenceController | undefined {
 	const { persistence: rawPersistence } = options;
 	if (!rawPersistence) return undefined;
@@ -119,8 +119,8 @@ function wireGridPersistence<TRowData>(
 	return createPersistenceSubscription(
 		adapter,
 		// Wrap subscribeToKey — persistence listener only needs () => void, extra args are ignored at runtime
-		(key, cb) => store.engine.subscribeToKey(key, () => cb()),
-		() => store.getGridState(),
+		(key, cb) => runtime.engine.subscribeToKey(key, () => cb()),
+		() => runtime.getGridState(),
 		adapter.debounceMs ?? 500
 	);
 }
@@ -158,7 +158,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 			mergedInitial = { ...mergedInitial, pinnedColumns: { left: leftCols.length, right: rightCols.length } };
 		}
 	}
-	const store = new GridStore<TRowData>(
+	const runtime = new GridRuntime<TRowData>(
 		{
 			columns: resolvedColumns,
 			getRowId: options.getRowId,
@@ -168,14 +168,14 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 		{ rowValidator: options.rowValidator }
 	);
 
-	const controller = new ClientRowModelController<TRowData>(store.getClientRowModelRuntime(), { ...options, columns: resolvedColumns });
-	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, store);
+	const controller = new ClientRowModelController<TRowData>(runtime.getClientRowModelRuntime(), { ...options, columns: resolvedColumns });
+	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
 	const api = createGridRuntimeComposition({
-		store,
+		runtime,
 		destroy: () => {
 			persistenceController?.destroy();
 			controller.dispose();
-			store.destroy();
+			runtime.destroy();
 		},
 		persistenceAdapter: adapter,
 		persistenceController,
@@ -228,7 +228,7 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 			mergedInitial = { ...mergedInitial, pinnedColumns: { left: leftCols.length, right: rightCols.length } };
 		}
 	}
-	const store = new GridStore<TRowData>(
+	const runtime = new GridRuntime<TRowData>(
 		{
 			columns: serverResolvedColumns,
 			getRowId: options.getRowId,
@@ -238,14 +238,14 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 		{ rowValidator: options.rowValidator }
 	);
 
-	const controller = new ServerRowModelController<TRowData>(store.getServerRowModelRuntime(), { ...options, columns: selected.columns });
-	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, store);
+	const controller = new ServerRowModelController<TRowData>(runtime.getServerRowModelRuntime(), { ...options, columns: selected.columns });
+	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
 	const api = createGridRuntimeComposition({
-		store,
+		runtime,
 		destroy: () => {
 			persistenceController?.destroy();
 			controller.dispose();
-			store.destroy();
+			runtime.destroy();
 		},
 		persistenceAdapter: adapter,
 		persistenceController,

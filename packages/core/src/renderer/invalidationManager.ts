@@ -129,16 +129,37 @@ export function normalizeInvalidationPlan(plan: readonly GridInvalidation[]): No
 	for (const entry of plan) {
 		addReason(entry.reason);
 
-		if (entry.kind === 'full') { fullReason = fullReason ?? entry.reason; continue; }
-		if (entry.kind === 'viewport') { viewportReason = viewportReason ?? entry.reason; continue; }
-		if (entry.kind === 'geometry') { geometry = true; geometryReason = geometryReason ?? entry.reason; continue; }
-		if (entry.kind === 'headers') { headers = true; headersReason = headersReason ?? entry.reason; continue; }
-		if (entry.kind === 'overlay') { overlay = true; overlayReason = overlayReason ?? entry.reason; continue; }
+		if (entry.kind === 'full') {
+			fullReason = fullReason ?? entry.reason;
+			continue;
+		}
+		if (entry.kind === 'viewport') {
+			viewportReason = viewportReason ?? entry.reason;
+			continue;
+		}
+		if (entry.kind === 'geometry') {
+			geometry = true;
+			geometryReason = geometryReason ?? entry.reason;
+			continue;
+		}
+		if (entry.kind === 'headers') {
+			headers = true;
+			headersReason = headersReason ?? entry.reason;
+			continue;
+		}
+		if (entry.kind === 'overlay') {
+			overlay = true;
+			overlayReason = overlayReason ?? entry.reason;
+			continue;
+		}
 
 		if (entry.kind === 'cell') {
 			if (!skipRowLevel) {
 				let cols = cellsByRowId.get(entry.rowId);
-				if (!cols) { cols = new Set(); cellsByRowId.set(entry.rowId, cols); }
+				if (!cols) {
+					cols = new Set();
+					cellsByRowId.set(entry.rowId, cols);
+				}
 				cols.add(entry.colId);
 			}
 		} else if (entry.kind === 'row') {
@@ -169,7 +190,27 @@ export function normalizeInvalidationPlan(plan: readonly GridInvalidation[]): No
 		}
 	}
 
-	return { full: hasFull, fullReason, viewport: hasViewport, viewportReason, geometry, geometryReason, headers, headersReason, overlay, overlayReason, cellsByRowId, rows, rowReasons, columns, columnReasons, groups, groupReasons, rowRanges, reasons };
+	return {
+		full: hasFull,
+		fullReason,
+		viewport: hasViewport,
+		viewportReason,
+		geometry,
+		geometryReason,
+		headers,
+		headersReason,
+		overlay,
+		overlayReason,
+		cellsByRowId,
+		rows,
+		rowReasons,
+		columns,
+		columnReasons,
+		groups,
+		groupReasons,
+		rowRanges,
+		reasons,
+	};
 }
 
 export interface InvalidationFrame {

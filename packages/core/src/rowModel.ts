@@ -126,7 +126,9 @@ export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
 	setRows?(rows: TRowData[]): void;
 	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
 	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
-	captureTransactionSnapshot?(mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>): import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TRowData>;
+	captureTransactionSnapshot?(
+		mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>
+	): import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TRowData>;
 	restoreTransactionSnapshot?(snapshot: import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TRowData>): void;
 	getRowOrder?(): string[];
 	setRowOrder?(rowIds: string[]): void;

@@ -466,8 +466,8 @@ describe('Architecture guardrails', () => {
 		expect(runtimePorts).toContain('export interface ServerRowModelRuntime');
 
 		const createGrid = readFileSync(resolve(CORE_ROOT, 'src', 'createGrid.ts'), 'utf-8');
-		expect(createGrid).toContain('store.getClientRowModelRuntime()');
-		expect(createGrid).toContain('store.getServerRowModelRuntime()');
+		expect(createGrid).toContain('runtime.getClientRowModelRuntime()');
+		expect(createGrid).toContain('runtime.getServerRowModelRuntime()');
 		expect(createGrid).not.toContain('new ClientRowModelController<TRowData>(store,');
 		expect(createGrid).not.toContain('new ServerRowModelController<TRowData>(store,');
 	});
@@ -1477,7 +1477,7 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('getVisualIndexByRowId');
 	});
 
-	it('deprecated batch() callback is removed from GridStoreRuntime interface (Plan 103)', () => {
+	it('deprecated batch() callback is removed from GridCompositionRuntime interface (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
 		// The @deprecated batch(callback) escape hatch must no longer be on the interface.
 		expect(content).not.toContain('batch(callback: () => void): void;');
@@ -1738,6 +1738,8 @@ describe('Architecture guardrails', () => {
 	it('GridStateReactionController no longer owns selection invalidation or render requests (Plan 105)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridStateReactionController.ts'), 'utf-8');
 		expect(content).toContain('GridEventName.selectionChanged');
+		expect(content).not.toContain('invalidation: InvalidationManager');
+		expect(content).not.toContain('requestRender: (reason: string) => void;');
 		expect(content).not.toContain("invalidateOverlay('selection')");
 		expect(content).not.toContain("invalidateCell(prevState.selection.focus.rowId, prevState.selection.focus.colField, 'focus')");
 		expect(content).not.toContain("invalidateCell(currState.selection.focus.rowId, currState.selection.focus.colField, 'focus')");
@@ -1799,7 +1801,7 @@ describe('Architecture guardrails', () => {
 		expect(storeContent).toContain('const snapshot = createGridStateSnapshot(currentState);');
 		expect(storeContent).toContain('this.cachedStateSnapshotState === currentState');
 		expect(runtimeCompositionContent).not.toContain('function createGridStateSnapshot');
-		expect(runtimeCompositionContent).toContain('getStateSnapshot: () => store.getStateSnapshot()');
+		expect(runtimeCompositionContent).toContain('getStateSnapshot: () => runtime.getStateSnapshot()');
 	});
 
 	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {

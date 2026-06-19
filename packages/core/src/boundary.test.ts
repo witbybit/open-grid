@@ -11,6 +11,10 @@ describe('Public/internal boundary', () => {
 			expect((publicApi as Record<string, unknown>)['GridStore']).toBeUndefined();
 		});
 
+		it('does not export GridRuntime', () => {
+			expect((publicApi as Record<string, unknown>)['GridRuntime']).toBeUndefined();
+		});
+
 		it('does not export mutable GridState aliases', () => {
 			expect((publicApi as Record<string, unknown>)['GridState']).toBeUndefined();
 			expect((publicApi as Record<string, unknown>)['InternalGridState']).toBeUndefined();
@@ -175,6 +179,7 @@ describe('Public/internal boundary', () => {
 		it('does not export raw store, engine, model, or renderer classes', () => {
 			const rawInternals = [
 				'GridStore',
+				'GridRuntime',
 				'GridEngine',
 				'StateManager',
 				'CommandHistory',

@@ -94,20 +94,4 @@ export class DataMutationController<TRowData = unknown> {
 			invalidatedCells,
 		};
 	}
-
-	applyBatchCellValues(
-		updates: BatchCellValueUpdate[],
-		options: Pick<CellValueChangeOptions, 'bypassValueSetter' | 'source'> = {}
-	): CellValueChangeResult[] {
-		if (updates.length === 0) return [];
-		const { source } = options;
-
-		const results = updates.map((u) =>
-			this.applyCellValueChange(u.rowId, u.colField, u.value, {
-				bypassValueSetter: options.bypassValueSetter,
-				source,
-			})
-		);
-		return results;
-	}
 }

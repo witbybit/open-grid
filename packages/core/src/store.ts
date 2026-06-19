@@ -108,6 +108,12 @@ import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './feature
 
 export { validateRowIds } from './ids.js';
 
+/**
+ * Internal runtime composition root.
+ *
+ * This class is used by core implementation wiring and test fixtures.
+ * The supported external surface is the frozen GridApi returned by createGrid().
+ */
 export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> {
 	public engine: GridEngine<TRowData>;
 

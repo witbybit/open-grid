@@ -356,8 +356,7 @@ export class GridCommitKernel<TRowData = unknown> {
 			events.length > 0 ||
 			history !== undefined;
 		const hasInvalidations = invalidations.length > 0 || appliedMutations.some((mutation) => mutation.requestRender === true);
-		const shouldScheduleRender =
-			change.requestRender === false ? false : hasInvalidations || change.requestRender === true;
+		const shouldScheduleRender = change.requestRender === false ? false : hasInvalidations || change.requestRender === true;
 		const record: GridCommitRecord<TRowData> = {
 			changeId: this.nextChangeId++,
 			reason: change.reason,

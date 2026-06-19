@@ -353,7 +353,7 @@ describe('statePersistence', () => {
 				enableStickyGroupRows: false,
 				pinnedColumns: { left: 0, right: 0 },
 				...partial,
-			} as InternalGridState);
+			}) as InternalGridState;
 
 		it('rejects malformed payloads and returns ok: false', () => {
 			const result = preparePersistedGridStateRestore({ v: GRID_STATE_SCHEMA_VERSION } as PersistedGridState, makeCurrent());

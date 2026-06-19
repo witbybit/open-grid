@@ -7,7 +7,6 @@ import type { ColumnModel } from '../models/ColumnModel.js';
 import type { GeometryModel } from '../models/GeometryModel.js';
 import type { ViewportModel } from '../models/ViewportModel.js';
 import type { SelectionModel } from '../models/SelectionModel.js';
-import type { InvalidationManager } from '../renderer/invalidationManager.js';
 import type { EventBus } from '../events/EventBus.js';
 import type { CellNotificationController } from './CellNotificationController.js';
 
@@ -25,13 +24,11 @@ export interface GridStateReactionControllerDeps<TRowData = unknown> {
 	geometry: GeometryModel;
 	viewport: ViewportModel<TRowData>;
 	selection: SelectionModel;
-	invalidation: InvalidationManager;
 	eventBus: EventBus<TRowData>;
 	cellNotifications: CellNotificationController<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	getRowHeightsList: (rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number) => number[];
 	notifyCellChange: (rowId: string, colField: string) => void;
-	requestRender: (reason: string) => void;
 }
 
 export class GridStateReactionController<TRowData = unknown> {
