@@ -554,7 +554,7 @@ describe('GridStore generic row-store functionality', () => {
 		});
 
 		// 1. Enter edit state
-		store.setState({
+		store.engine.stateManager.setState({
 			activeEdit: {
 				rowId: '1',
 				colField: 'name',
@@ -567,7 +567,7 @@ describe('GridStore generic row-store functionality', () => {
 		expect(store.getCellValue('1', 'name')).toBe('Keyboard');
 
 		// 2. Commit edit (set value then call stopEditing)
-		store.setState({
+		store.engine.stateManager.setState({
 			activeEdit: {
 				rowId: '1',
 				colField: 'name',
@@ -920,8 +920,8 @@ describe('RowNode path getters and state batching', () => {
 
 		store.engine.stateManager.startTransaction();
 		store.selectCell({ rowId: '1', colField: 'name' });
-		store.setState({ defaultRowHeight: 50 });
-		store.setState({ defaultColWidth: 120 });
+		store.engine.stateManager.setState({ defaultRowHeight: 50 });
+		store.engine.stateManager.setState({ defaultColWidth: 120 });
 
 		// Listeners must not be notified during a transaction
 		expect(listener).toHaveBeenCalledTimes(0);

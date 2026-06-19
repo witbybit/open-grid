@@ -44,7 +44,7 @@ describe('GroupingFeatureController', () => {
 	describe('setGroupBy', () => {
 		it('clears expansion.groups', () => {
 			const store = makeStore();
-			store.setState((s) => ({
+			store.engine.stateManager.setState((s) => ({
 				...s,
 				expansion: { groups: { 'group-1': true as const }, treeRows: {}, details: {} },
 			}));

@@ -103,7 +103,7 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 		it('clears expansion.groups', () => {
 			const store = makeStore();
 			// Set some initial expansion state
-			store.setState((s) => ({
+			store.engine.stateManager.setState((s) => ({
 				...s,
 				expansion: { groups: { 'group-1': true as const }, treeRows: {}, details: {} },
 			}));

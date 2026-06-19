@@ -13,7 +13,7 @@ import type { CsvExportOptions } from '../export/csvExport.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
-import type { GridState, GridStateUpdater, Listener, ColumnState, GridCellRangeBounds } from '../state/GridState.js';
+import type { GridState, Listener, ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 
 export type { CsvExportOptions };
@@ -260,7 +260,7 @@ export interface GridTransaction<TRowData = unknown> {
 }
 
 // Re-export state types so importers of GridApi.ts also get them
-export type { GridState, GridStateUpdater, Listener, ColumnState, GridCellRangeBounds };
+export type { GridState, Listener, ColumnState, GridCellRangeBounds };
 
 // ── Cell renderer / editor props ─────────────────────────────────────────────
 
@@ -643,7 +643,6 @@ export interface GridHostRuntime<TRowData = unknown> {
 }
 
 export interface GridStoreRuntime<TRowData = unknown> {
-	setState(updater: GridStateUpdater<TRowData>): void;
 	registerRowModel(rowModel: import('../store.js').RowModel<TRowData>): void;
 	getRowModel(): import('../store.js').RowModel<TRowData> | null;
 	triggerCellNotifications(rowId: string): void;
@@ -693,7 +692,6 @@ export interface InternalGridApi<TRowData = unknown> extends GridRendererApi<TRo
 	subscribeToHeaders(listener: Listener<TRowData>): () => void;
 
 	// ── Store / engine internals ─────────────────────────────────────────────
-	setState(updater: GridStateUpdater<TRowData>): void;
 	registerRowModel(rowModel: import('../store.js').RowModel<TRowData>): void;
 	getRowModel(): import('../store.js').RowModel<TRowData> | null;
 	setViewportPins(pins: { left?: number; right?: number; top?: number; bottom?: number }): void;

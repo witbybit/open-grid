@@ -96,7 +96,7 @@ import type {
 	InternalGridApi,
 	GridApi,
 } from './api/GridApi.js';
-import type { GridState, GridStateUpdater, Listener, ColumnState } from './state/GridState.js';
+import type { GridState, Listener, ColumnState } from './state/GridState.js';
 import type { GridEventPayloadMap, GridEventListener } from './api/GridEvents.js';
 import { GridEventName } from './api/GridEvents.js';
 import { GridPluginRegistry } from './plugins/GridPluginRegistry.js';
@@ -191,8 +191,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getPluginController = (): GridPluginController<TRowData> => this.pluginRegistry;
 
 	public getState = (): GridState<TRowData> => this.engine.getState();
-
-	public setState = (updater: GridStateUpdater<TRowData>): void => this.engine.setState(updater);
 
 	public getRowId = (row: TRowData): string => this.engine.getRowId(row);
 

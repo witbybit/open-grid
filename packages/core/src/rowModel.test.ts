@@ -422,7 +422,7 @@ describe('ClientRowModelController', () => {
 		expect(controller.getVisualRowCount()).toBe(1);
 		expect(controller.getVisualRow(0)?.id).toBe('row:p');
 
-		store.setState({ expansion: { ...store.getState().expansion, treeRows: { p: true } } });
+		store.engine.stateManager.setState({ expansion: { ...store.getState().expansion, treeRows: { p: true } } });
 		controller.refresh('expansion');
 		expect(controller.getVisualRowCount()).toBe(2);
 		expect(controller.getVisualRow(1)?.id).toBe('row:c');
@@ -503,7 +503,7 @@ describe('GroupRowMeta', () => {
 			columns: store.getState().columns,
 		});
 		const groupId = groupIdAt(ctrl, 0);
-		store.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		const meta = ctrl.getGroupMeta(groupId);
@@ -522,7 +522,7 @@ describe('GroupRowMeta', () => {
 			columns: store.getState().columns,
 		});
 		const groupId = groupIdAt(ctrl, 0);
-		store.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		const byId = ctrl.getGroupMeta(groupId);
@@ -542,7 +542,7 @@ describe('GroupRowMeta', () => {
 		});
 		const idA = groupIdAt(ctrl, 0);
 		const idB = groupIdAt(ctrl, 1);
-		store.setState({ expansion: { groups: { [idA]: true, [idB]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [idA]: true, [idB]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		expect(ctrl.getGroupMeta(idA)!.visibleDescendantRowIds).toEqual(['1']);
@@ -571,10 +571,10 @@ describe('GroupRowMeta', () => {
 		});
 		// Expand outer first to reveal the inner group at index 1
 		const outer = groupIdAt(ctrl, 0);
-		store.setState({ expansion: { groups: { [outer]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [outer]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 		const inner = groupIdAt(ctrl, 1);
-		store.setState({ expansion: { groups: { [outer]: true, [inner]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [outer]: true, [inner]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		const outerMeta = ctrl.getGroupMeta(outer);
@@ -600,7 +600,7 @@ describe('GroupRowMeta', () => {
 			columns: store.getState().columns,
 		});
 		const groupId = groupIdAt(ctrl, 0);
-		store.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		const meta = ctrl.getGroupMeta(groupId);
@@ -1069,7 +1069,7 @@ describe('Numeric Filter Null Safety', () => {
 		});
 
 		// 1. Filter: value < 5
-		store.setState({
+		store.engine.stateManager.setState({
 			filterModel: { value: { type: 'number', operator: 'lt', value: 5 } },
 		});
 		controller.refresh();
@@ -1078,7 +1078,7 @@ describe('Numeric Filter Null Safety', () => {
 		expect(controller.getVisualRow(0)?.rowId).toBe('5');
 
 		// 2. Filter: value >= 0
-		store.setState({
+		store.engine.stateManager.setState({
 			filterModel: { value: { type: 'number', operator: 'gte', value: 0 } },
 		});
 		controller.refresh();

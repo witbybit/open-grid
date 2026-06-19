@@ -78,7 +78,7 @@ describe('GridChangeApplier', () => {
 			state: { columnWidths: { name: 200 } },
 		});
 
-		expect(result).toEqual({ status: 'committed', changeId: 1 });
+		expect(result).toEqual({ status: 'committed', changeId: 1, faults: [] });
 		expect(stateManager.getState().columnWidths).toEqual({ name: 200 });
 	});
 
@@ -108,7 +108,7 @@ describe('GridChangeApplier', () => {
 		expect(requestRender).not.toHaveBeenCalled();
 	});
 
-	it('faults when a precondition throws without committing state', () => {
+	it('fails-before-commit when a precondition throws without committing state', () => {
 		const { applier, stateManager, faultReporter } = makeApplier();
 
 		const result = applier.apply({
@@ -119,7 +119,7 @@ describe('GridChangeApplier', () => {
 			state: { columnWidths: { name: 250 } },
 		});
 
-		expect(result.status).toBe('faulted');
+		expect(result.status).toBe('failed-before-commit');
 		expect(stateManager.getState().columnWidths).toEqual({});
 		expect(faultReporter.snapshot()[0]?.operation).toBe('validate-precondition');
 	});
@@ -216,13 +216,13 @@ describe('GridChangeApplier', () => {
 			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 200 } }],
 		});
 
-		expect(result).toEqual({ status: 'committed', changeId: 1 });
+		expect(result).toEqual({ status: 'committed', changeId: 1, faults: [] });
 		expect(requestRender).toHaveBeenCalledWith('listener-fault');
 		expect(faultReporter.snapshot()).toHaveLength(1);
 		expect(faultReporter.snapshot()[0]?.source).toBe('event-bus');
 	});
 
-	it('post-commit phase faults return faulted but preserve later completion steps', () => {
+	it('post-commit phase faults return committed-with-faults but preserve later completion steps', () => {
 		const { applier, eventBus, requestRender, stateManager, faultReporter } = makeApplier();
 		const dispatchSpy = vi.spyOn(eventBus, 'dispatchEvent');
 
@@ -236,8 +236,9 @@ describe('GridChangeApplier', () => {
 			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 220 } }],
 		});
 
-		expect(result.status).toBe('faulted');
+		expect(result.status).toBe('committed');
 		expect(result.changeId).toBe(1);
+		expect(result.faults).toHaveLength(1);
 		expect(stateManager.getState().columnWidths).toEqual({ name: 220 });
 		expect(dispatchSpy).toHaveBeenCalledWith(GridEventName.columnResized, { colField: 'name', width: 220 });
 		expect(faultReporter.snapshot()[0]?.source).toBe('grid-change');
@@ -277,7 +278,8 @@ describe('GridChangeApplier', () => {
 			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 200 } }],
 		});
 
-		expect(result.status).toBe('faulted');
+		expect(result.status).toBe('committed');
+		expect(result.faults).toHaveLength(1);
 		expect(callOrder).toEqual(['domains', 'invalidation', 'history', 'render', 'event']);
 		expect(faultReporter.snapshot()[0]?.operation).toBe('publish-domains');
 	});
@@ -311,7 +313,8 @@ describe('GridChangeApplier', () => {
 			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 210 } }],
 		});
 
-		expect(result.status).toBe('faulted');
+		expect(result.status).toBe('committed');
+		expect(result.faults).toHaveLength(1);
 		expect(callOrder).toEqual(['invalidation', 'history', 'render', 'event']);
 		expect(faultReporter.snapshot()[0]?.operation).toBe('apply-invalidations');
 	});
@@ -341,9 +344,29 @@ describe('GridChangeApplier', () => {
 			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 230 } }],
 		});
 
-		expect(result.status).toBe('faulted');
+		expect(result.status).toBe('committed');
+		expect(result.faults).toHaveLength(1);
 		expect(callOrder).toEqual(['history', 'render', 'event']);
 		expect(faultReporter.snapshot()[0]?.operation).toBe('register-history');
+	});
+
+	it('state commit faults return failed-before-commit and do not publish follow-up phases', () => {
+		const { applier, stateManager, requestRender, incrementDomain } = makeApplier();
+		const originalSetState = stateManager.setState;
+		stateManager.setState = vi.fn(() => {
+			throw new Error('write failed');
+		}) as typeof originalSetState;
+
+		const result = applier.apply({
+			reason: 'state-fault',
+			state: { columnWidths: { name: 260 } },
+			domains: ['columns'],
+		});
+
+		expect(result.status).toBe('failed-before-commit');
+		expect(requestRender).not.toHaveBeenCalled();
+		expect(incrementDomain).not.toHaveBeenCalled();
+		expect(stateManager.getState().columnWidths).toEqual({});
 	});
 
 	it('multiple invalidations of different kinds are all applied', () => {

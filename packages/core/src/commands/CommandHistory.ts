@@ -28,8 +28,13 @@ export class CommandHistory {
 			try {
 				const result = entry.undo();
 				this.reportCommitOutcome('undo', result);
-				this.redoStack.push(entry);
+				if (this.didSucceed(result)) {
+					this.redoStack.push(entry);
+				} else {
+					this.undoStack.push(entry);
+				}
 			} catch (e) {
+				this.undoStack.push(entry);
 				this.faultReporter?.report({ source: 'command-history', operation: 'undo', error: e });
 			}
 		}
@@ -41,8 +46,13 @@ export class CommandHistory {
 			try {
 				const result = entry.redo();
 				this.reportCommitOutcome('redo', result);
-				this.undoStack.push(entry);
+				if (this.didSucceed(result)) {
+					this.undoStack.push(entry);
+				} else {
+					this.redoStack.push(entry);
+				}
 			} catch (e) {
+				this.redoStack.push(entry);
 				this.faultReporter?.report({ source: 'command-history', operation: 'redo', error: e });
 			}
 		}
@@ -62,15 +72,32 @@ export class CommandHistory {
 	}
 
 	private reportCommitOutcome(operation: 'undo' | 'redo', result: unknown): void {
-		if (!this.isGridCommitResult(result) || result.status === 'committed' || result.status === 'noop') return;
-		if (result.status === 'faulted') {
+		if (!this.isGridCommitResult(result) || result.status === 'noop') return;
+		if (result.status === 'committed') {
+			if (result.faults.length === 0) return;
+			this.faultReporter?.report({
+				source: 'command-history',
+				operation,
+				error: result.faults[0]?.error ?? new Error(`Command history ${operation} committed with runtime faults.`),
+				context: {
+					status: result.status,
+					changeId: result.changeId,
+					faults: result.faults.map((fault) => ({
+						id: fault.id,
+						operation: fault.operation,
+						source: fault.source,
+					})),
+				},
+			});
+			return;
+		}
+		if (result.status === 'failed-before-commit') {
 			this.faultReporter?.report({
 				source: 'command-history',
 				operation,
 				error: result.fault.error,
 				context: {
 					status: result.status,
-					changeId: result.changeId,
 					faultOperation: result.fault.operation,
 				},
 			});
@@ -86,6 +113,10 @@ export class CommandHistory {
 
 	private isGridCommitResult(result: unknown): result is GridCommitResult {
 		if (!result || typeof result !== 'object' || !('status' in result)) return false;
-		return result.status === 'committed' || result.status === 'noop' || result.status === 'rejected' || result.status === 'faulted';
+		return result.status === 'committed' || result.status === 'noop' || result.status === 'rejected' || result.status === 'failed-before-commit';
+	}
+
+	private didSucceed(result: unknown): boolean {
+		return !this.isGridCommitResult(result) || result.status === 'committed' || result.status === 'noop';
 	}
 }

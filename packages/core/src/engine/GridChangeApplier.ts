@@ -77,10 +77,10 @@ export interface GridHistoryEntry<TRowData = unknown> {
 }
 
 export type GridCommitResult =
-	| { status: 'committed'; changeId: number }
+	| { status: 'committed'; changeId: number; faults: readonly RuntimeFault[] }
 	| { status: 'noop' }
 	| { status: 'rejected'; reason: string }
-	| { status: 'faulted'; changeId?: number; fault: RuntimeFault };
+	| { status: 'failed-before-commit'; fault: RuntimeFault };
 
 interface GridCommitRecord<TRowData = unknown> {
 	changeId: number;
@@ -134,17 +134,17 @@ export class GridChangeApplier<TRowData = unknown> {
 			}
 		} catch (error) {
 			return {
-				status: 'faulted',
+				status: 'failed-before-commit',
 				fault: this.reportFault('commit-state', error, { reason: record.reason }),
 			};
 		}
 
-		let firstFault: RuntimeFault | null = null;
+		const faults: RuntimeFault[] = [];
 		const isolate = (operation: string, work: () => void): void => {
 			try {
 				work();
 			} catch (error) {
-				firstFault ??= this.reportFault(operation, error, { reason: record.reason, changeId: record.changeId });
+				faults.push(this.reportFault(operation, error, { reason: record.reason, changeId: record.changeId }));
 			}
 		};
 
@@ -192,10 +192,7 @@ export class GridChangeApplier<TRowData = unknown> {
 			});
 		}
 
-		if (firstFault) {
-			return { status: 'faulted', changeId: record.changeId, fault: firstFault };
-		}
-		return { status: 'committed', changeId: record.changeId };
+		return { status: 'committed', changeId: record.changeId, faults };
 	}
 
 	private validate(change: GridChange<TRowData>): { status: 'ok' } | { status: 'rejected'; result: GridCommitResult } {
@@ -208,7 +205,7 @@ export class GridChangeApplier<TRowData = unknown> {
 			return {
 				status: 'rejected',
 				result: {
-					status: 'faulted',
+					status: 'failed-before-commit',
 					fault: this.reportFault('validate-precondition', error, { reason: change.reason }),
 				},
 			};

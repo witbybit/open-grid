@@ -1484,9 +1484,9 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('this.setState({ themeName');
 	});
 
-	it('store raw mutation surface is reduced to the explicit compatibility setState API (Plan 103)', () => {
+	it('store raw mutation surface no longer exposes compatibility setState forwarding (Plan 112 pre-gate)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
-		expect(content).toContain('public setState = (updater: GridStateUpdater<TRowData>): void => this.engine.setState(updater);');
+		expect(content).not.toContain('public setState =');
 		expect(content).not.toContain('private set state(');
 	});
 
@@ -1505,7 +1505,7 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain(
 			'this.engine.setPinnedColumnsState(this.viewportController.pinLeftColumns, this.viewportController.pinRightColumns);'
 		);
-		expect(content).not.toContain('this.engine.setState({');
+		expect(content).not.toContain('this.engine.setState(');
 	});
 
 	it('GridEngine setData and range selection route through GridChangeApplier (Plan 103)', () => {
@@ -1547,7 +1547,8 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("status: 'committed'");
 		expect(content).toContain("status: 'noop'");
 		expect(content).toContain("status: 'rejected'");
-		expect(content).toContain("status: 'faulted'");
+		expect(content).toContain("status: 'failed-before-commit'");
+		expect(content).toContain('faults: readonly RuntimeFault[]');
 		expect(content).toContain('history?: GridHistoryEntry<TRowData>;');
 		expect(content).toContain('events?: GridChangeEvent<TRowData>[];');
 		expect(content).not.toContain('undo?: GridChange<TRowData>;');
@@ -1561,11 +1562,12 @@ describe('Architecture guardrails', () => {
 		expect(stateFeature).toContain('applyChange: (change: GridChange<TRowData>) => GridCommitResult;');
 	});
 
-	it('CommandHistory reports rejected or faulted commit outcomes instead of dropping them (Plan 104)', () => {
+	it('CommandHistory reports rejected and failed-before-commit outcomes instead of dropping them (Plan 104)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'commands', 'CommandHistory.ts'), 'utf-8');
 		expect(content).toContain('import type { GridCommitResult }');
 		expect(content).toContain('isGridCommitResult');
-		expect(content).toContain("result.status === 'faulted'");
+		expect(content).toContain("result.status === 'failed-before-commit'");
+		expect(content).toContain("result.status === 'committed'");
 		expect(content).toContain("this.reportCommitOutcome('undo', result);");
 		expect(content).toContain("this.reportCommitOutcome('redo', result);");
 	});

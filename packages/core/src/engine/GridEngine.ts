@@ -12,7 +12,7 @@ import type {
 	RowSelectionScope,
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
-import type { GridState, GridStateUpdater, Listener } from '../state/GridState.js';
+import type { GridState, Listener } from '../state/GridState.js';
 import type { RowModel, VisualRowModel } from '../rowModel.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
@@ -401,7 +401,6 @@ export class GridEngine<TRowData = unknown> {
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
 		this.stateFeature = new GridStateFeatureController<TRowData>({
 			stateManager: this.stateManager,
-			commandHistory: this.commandHistory,
 			applyChange: (change) => this.changeApplier.apply(change),
 		});
 		this.dataMutation = new DataMutationController<TRowData>({
@@ -446,9 +445,6 @@ export class GridEngine<TRowData = unknown> {
 
 	public getState(): GridState<TRowData> {
 		return this.stateManager.getState();
-	}
-	public setState(updater: GridStateUpdater<TRowData>): void {
-		this.stateManager.setState(updater);
 	}
 
 	public initializeRowModelState(model: { columns?: GridState<TRowData>['columns']; getRowId?: ((row: TRowData) => string) | undefined }): void {

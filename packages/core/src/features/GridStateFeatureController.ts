@@ -1,13 +1,11 @@
 import { GridEventName } from '../api/GridEvents.js';
 import type { StateManager } from '../state/StateManager.js';
-import type { CommandHistory } from '../commands/CommandHistory.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import type { GridChange, GridCommitResult } from '../engine/GridChangeApplier.js';
 import type { GridState } from '../state/GridState.js';
 
 export interface GridStateFeatureControllerDeps<TRowData = unknown> {
 	stateManager: StateManager<TRowData>;
-	commandHistory: CommandHistory;
 	applyChange: (change: GridChange<TRowData>) => GridCommitResult;
 }
 
@@ -111,15 +109,7 @@ export class GridStateFeatureController<TRowData = unknown> {
 		const state = this.deps.stateManager.getState();
 		const oldHeight = state.rowHeights[rowId] ?? state.defaultRowHeight;
 		if (oldHeight === height) return;
-
-		this.applyRowHeight(rowId, height);
-
-		if (undoable) {
-			this.deps.commandHistory.add({
-				undo: () => this.applyRowHeight(rowId, oldHeight),
-				redo: () => this.applyRowHeight(rowId, height),
-			});
-		}
+		this.applyRowHeight(rowId, height, undoable ? oldHeight : null);
 	}
 
 	public setRowHeights(rowHeights: Record<string, number>): void {
@@ -156,15 +146,28 @@ export class GridStateFeatureController<TRowData = unknown> {
 			invalidations: [{ kind: 'headers' }, { kind: 'full' }],
 			domains: ['rows', 'sorting'],
 			events: [{ type: GridEventName.sortChanged, payload: { sortModel } }],
+			history: undoable
+				? {
+						undo: {
+							reason: 'rows:set-sort-model',
+							state: { sortModel: oldSort },
+							invalidations: [{ kind: 'headers' }, { kind: 'full' }],
+							domains: ['rows', 'sorting'],
+							events: [{ type: GridEventName.sortChanged, payload: { sortModel: oldSort } }],
+							requestRender: true,
+						},
+						redo: {
+							reason: 'rows:set-sort-model',
+							state: { sortModel },
+							invalidations: [{ kind: 'headers' }, { kind: 'full' }],
+							domains: ['rows', 'sorting'],
+							events: [{ type: GridEventName.sortChanged, payload: { sortModel } }],
+							requestRender: true,
+						},
+					}
+				: undefined,
 			requestRender: true,
 		});
-
-		if (undoable) {
-			this.deps.commandHistory.add({
-				undo: () => this.setSortModel(oldSort, false),
-				redo: () => this.setSortModel(sortModel, false),
-			});
-		}
 	}
 
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
@@ -175,15 +178,28 @@ export class GridStateFeatureController<TRowData = unknown> {
 			invalidations: [{ kind: 'full' }],
 			domains: ['rows', 'filtering'],
 			events: [{ type: GridEventName.filterChanged, payload: { filterModel } }],
+			history: undoable
+				? {
+						undo: {
+							reason: 'rows:set-filter-model',
+							state: { filterModel: oldFilter },
+							invalidations: [{ kind: 'full' }],
+							domains: ['rows', 'filtering'],
+							events: [{ type: GridEventName.filterChanged, payload: { filterModel: oldFilter } }],
+							requestRender: true,
+						},
+						redo: {
+							reason: 'rows:set-filter-model',
+							state: { filterModel },
+							invalidations: [{ kind: 'full' }],
+							domains: ['rows', 'filtering'],
+							events: [{ type: GridEventName.filterChanged, payload: { filterModel } }],
+							requestRender: true,
+						},
+					}
+				: undefined,
 			requestRender: true,
 		});
-
-		if (undoable) {
-			this.deps.commandHistory.add({
-				undo: () => this.setFilterModel(oldFilter, false),
-				redo: () => this.setFilterModel(filterModel, false),
-			});
-		}
 	}
 
 	public setPaginationPage(page: number, metrics?: { pageCount: number; totalRows: number }): void {
@@ -207,13 +223,34 @@ export class GridStateFeatureController<TRowData = unknown> {
 		});
 	}
 
-	private applyRowHeight(rowId: string, height: number): void {
+	private applyRowHeight(rowId: string, height: number, undoHeight: number | null = null): void {
 		this.deps.applyChange({
 			reason: 'geometry:resize-row',
 			state: (state) => ({ rowHeights: { ...state.rowHeights, [rowId]: height } }),
 			invalidations: [{ kind: 'geometry' }, { kind: 'row', rowId, reason: 'row resize' }],
 			domains: ['geometry'],
 			events: [{ type: GridEventName.rowResized, payload: { rowId, height } }],
+			history:
+				undoHeight === null
+					? undefined
+					: {
+							undo: {
+								reason: 'geometry:resize-row',
+								state: (state) => ({ rowHeights: { ...state.rowHeights, [rowId]: undoHeight } }),
+								invalidations: [{ kind: 'geometry' }, { kind: 'row', rowId, reason: 'row resize' }],
+								domains: ['geometry'],
+								events: [{ type: GridEventName.rowResized, payload: { rowId, height: undoHeight } }],
+								requestRender: true,
+							},
+							redo: {
+								reason: 'geometry:resize-row',
+								state: (state) => ({ rowHeights: { ...state.rowHeights, [rowId]: height } }),
+								invalidations: [{ kind: 'geometry' }, { kind: 'row', rowId, reason: 'row resize' }],
+								domains: ['geometry'],
+								events: [{ type: GridEventName.rowResized, payload: { rowId, height } }],
+								requestRender: true,
+							},
+						},
 			requestRender: true,
 		});
 	}

@@ -236,7 +236,7 @@ describe('RenderEngine', () => {
 
 		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).not.toBeNull();
 
-		store.setState({ columns: [{ field: 'risk', header: 'Risk', width: 120 }] });
+		store.engine.stateManager.setState({ columns: [{ field: 'risk', header: 'Risk', width: 120 }] });
 		renderer.fullPaint();
 
 		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).toBeNull();
@@ -350,7 +350,7 @@ describe('RenderEngine', () => {
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
 
-		store.setState({ defaultRowHeight: 48 });
+		store.engine.stateManager.setState({ defaultRowHeight: 48 });
 
 		expect(inst.get(GridMetric.LEGACY_INFERRED_INVALIDATIONS)).toBeGreaterThan(0);
 		expect(inst.snapshot().fallbacks).toContainEqual({
@@ -551,7 +551,7 @@ describe('RenderEngine', () => {
 		renderer.mount(container);
 
 		store.selectCell({ rowId: 'row-1', colField: 'status' });
-		store.setState({ activeEdit: { rowId: 'row-1', colField: 'status' } });
+		store.engine.stateManager.setState({ activeEdit: { rowId: 'row-1', colField: 'status' } });
 		renderer.fullPaint();
 
 		const cell = container.querySelector('.og-cell[data-col-field="status"]') as HTMLDivElement;
@@ -1053,7 +1053,7 @@ describe('RenderEngine', () => {
 		renderer.fullPaint();
 		const before = renderer.getRenderStats();
 
-		store.setState((state) => ({ globalVersion: state.globalVersion + 1 }));
+		store.engine.stateManager.setState((state) => ({ globalVersion: state.globalVersion + 1 }));
 		await Promise.resolve();
 		await Promise.resolve();
 		const afterData = renderer.getRenderStats();
@@ -1063,7 +1063,7 @@ describe('RenderEngine', () => {
 		expect(afterData.headerPaints - before.headerPaints).toBe(0);
 		expect(afterData.overlayPaints - before.overlayPaints).toBe(0);
 
-		store.setState({ visibleRowRange: { startIdx: 50, endIdx: 75 } });
+		store.engine.stateManager.setState({ visibleRowRange: { startIdx: 50, endIdx: 75 } });
 		await Promise.resolve();
 		await Promise.resolve();
 		const afterViewport = renderer.getRenderStats();
@@ -2354,7 +2354,7 @@ describe('RenderEngine', () => {
 
 		// Transition loading to false and supply rows
 		store.setRows([{ id: 'row-0', a: 'A0' }]);
-		store.setState({ loading: false });
+		store.engine.stateManager.setState({ loading: false });
 
 		// Wait for render scheduler frame
 		await Promise.resolve();
