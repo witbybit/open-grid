@@ -1,11 +1,11 @@
 import type { ColumnDef } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
 
 interface ClipboardContext<TRowData> {
-	getState(): GridState<TRowData>;
+	getState(): InternalGridState<TRowData>;
 	getVisualRow(rowIdx: number): VisualRow<TRowData> | null;
 	getVisualIndexByRowId(rowId: string): number | null;
 	getColumnIndex(colField: string): number;
@@ -119,7 +119,7 @@ export class ClipboardController<TRowData = unknown> {
 		});
 	}
 
-	private _buildTsv(minRow: number, maxRow: number, minCol: number, maxCol: number, state: GridState<TRowData>): CopyResult | null {
+	private _buildTsv(minRow: number, maxRow: number, minCol: number, maxCol: number, state: InternalGridState<TRowData>): CopyResult | null {
 		const cells: Array<{ rowId: string; colField: string }> = [];
 		const rows: string[] = [];
 
@@ -145,7 +145,7 @@ export class ClipboardController<TRowData = unknown> {
 		};
 	}
 
-	private _getCellText(rowId: string, colField: string, state: GridState<TRowData>): string {
+	private _getCellText(rowId: string, colField: string, state: InternalGridState<TRowData>): string {
 		const col = state.columns.find((c) => c.field === colField) as ColumnDef<TRowData> | undefined;
 		if (col?.onCopy) {
 			const row = this.c.getRawRowById(rowId);

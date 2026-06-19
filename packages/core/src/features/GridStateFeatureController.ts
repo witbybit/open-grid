@@ -2,7 +2,7 @@ import { GridEventName } from '../api/GridEvents.js';
 import type { StateManager } from '../state/StateManager.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import type { GridChange, GridCommitResult } from '../engine/GridChangeApplier.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 
 export interface GridStateFeatureControllerDeps<TRowData = unknown> {
 	stateManager: StateManager<TRowData>;
@@ -36,7 +36,7 @@ export class GridStateFeatureController<TRowData = unknown> {
 		});
 	}
 
-	public setStyleRules(styleRules: GridState<TRowData>['styleRules']): void {
+	public setStyleRules(styleRules: InternalGridState<TRowData>['styleRules']): void {
 		this.deps.applyChange({
 			reason: 'ui:set-style-rules',
 			state: { styleRules },
@@ -96,7 +96,7 @@ export class GridStateFeatureController<TRowData = unknown> {
 		});
 	}
 
-	public setThemeName(themeName: GridState<TRowData>['themeName']): void {
+	public setThemeName(themeName: InternalGridState<TRowData>['themeName']): void {
 		if (this.deps.stateManager.getState().themeName === themeName) return;
 		this.deps.applyChange({
 			reason: 'ui:set-theme',

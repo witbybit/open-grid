@@ -8,7 +8,6 @@ import type {
 	GridApi,
 	GridCellClickParams,
 	GridInitialState,
-	GridState,
 	GridStateSnapshot,
 	ColumnFilter,
 	FilterCondition,
@@ -83,7 +82,6 @@ export type {
 	GridApi,
 	GridCellClickParams,
 	GridInitialState,
-	GridState,
 	GridStateSnapshot,
 	VisualRow,
 	DataVisualRow,
@@ -111,7 +109,7 @@ export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;
 
 /**
  * Fields from GridInitialState that can be configured as top-level props on the public
- * Grid component. Sourced from the canonical GridState type so these never drift
+ * Grid component. Sourced from the canonical GridInitialState type so these never drift
  * out of sync with the core.
  */
 type GridRenderOptions<TRowData> = Pick<GridInitialState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;

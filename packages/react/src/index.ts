@@ -74,7 +74,6 @@ export type {
 	GridDatasource,
 	GridApi,
 	GridCellClickParams,
-	GridState,
 	GridStateSnapshot,
 	VisualRow,
 	DataVisualRow,

@@ -13,7 +13,7 @@ import type { CsvExportOptions } from '../export/csvExport.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
-import type { GridState, Listener, ColumnState, GridCellRangeBounds } from '../state/GridState.js';
+import type { Listener, ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 
 export type { CsvExportOptions };
@@ -280,8 +280,8 @@ export interface GridTransaction<TRowData = unknown> {
 	pins?: { left?: number; right?: number; top?: number; bottom?: number };
 }
 
-// Re-export state types so importers of GridApi.ts also get them
-export type { GridState, Listener, ColumnState, GridCellRangeBounds };
+// Re-export stable state-adjacent types so importers of GridApi.ts also get them.
+export type { Listener, ColumnState, GridCellRangeBounds };
 
 // ── Cell renderer / editor props ─────────────────────────────────────────────
 

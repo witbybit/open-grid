@@ -17,7 +17,7 @@ import type {
 	SelectAllRowsOptions,
 } from './api/GridApi.js';
 import type { ColumnDef } from './columnDef.js';
-import type { GridInitialState, InternalGridState, GridState, ColumnState, Listener } from './state/GridState.js';
+import type { GridInitialState, InternalGridState, ColumnState, Listener } from './state/GridState.js';
 import { registerGridInternalStore } from './internal/apiInternalBridge.js';
 import { exportToCsv } from './export/csvExport.js';
 import {

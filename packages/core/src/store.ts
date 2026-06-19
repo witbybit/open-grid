@@ -69,7 +69,7 @@ export type { PersistedGridState as SerializableGridState } from './persistence/
 // ── Extracted modules — re-export for backward compat ────────────────────────
 export * from './api/GridApi.js';
 export * from './api/GridEvents.js';
-export * from './state/GridState.js';
+export type { GridInitialState, Listener, ColumnState, GridCellRangeBounds } from './state/GridState.js';
 // ── Internal imports (for use by definitions in this file) ───────────────────
 import { RowNode } from './rowNode.js';
 import type { ColumnDef, GridStyleRule } from './columnDef.js';
@@ -96,7 +96,7 @@ import type {
 	GridApi,
 	GridStateSnapshot,
 } from './api/GridApi.js';
-import type { GridState, Listener, ColumnState } from './state/GridState.js';
+import type { InternalGridState, GridInitialState, Listener, ColumnState } from './state/GridState.js';
 import type { GridEventPayloadMap, GridEventListener } from './api/GridEvents.js';
 import { GridEventName } from './api/GridEvents.js';
 import { GridPluginRegistry } from './plugins/GridPluginRegistry.js';
@@ -119,7 +119,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private activeBindingGeneration: number | null = null;
 	private storeDestroyed = false;
 
-	constructor(initialState: Partial<GridState<TRowData>> = {}, engineOptions?: { rowValidator?: RowValidator<TRowData> }) {
+	constructor(initialState: Partial<GridInitialState<TRowData>> = {}, engineOptions?: { rowValidator?: RowValidator<TRowData> }) {
 		validateColumns(initialState.columns || []);
 		this.engine = new GridEngine<TRowData>({
 			rowValidator: engineOptions?.rowValidator,
@@ -184,12 +184,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		});
 	}
 
-	private get state(): GridState<TRowData> {
+	private get state(): InternalGridState<TRowData> {
 		return this.engine.getState();
 	}
 
 	public getPluginController = (): GridPluginController<TRowData> => this.pluginRegistry;
-	public getState = (): GridState<TRowData> => this.engine.getState();
+	public getState = (): InternalGridState<TRowData> => this.engine.getState();
 
 	public getStateSnapshot = (): GridStateSnapshot<TRowData> => ({
 		columns: this.state.columns.slice(),
@@ -575,7 +575,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		}
 	};
 	public getGridState = (): PersistedGridState => {
-		return extractPersistedState(this.engine.getState() as GridState);
+		return extractPersistedState(this.engine.getState());
 	};
 	public applyGridState = (state: PersistedGridState): void => {
 		if (!applyPersistedStateToApi(this, state)) {

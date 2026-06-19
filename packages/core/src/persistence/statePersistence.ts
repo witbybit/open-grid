@@ -1,5 +1,5 @@
 import type { ColumnDef } from '../columnDef.js';
-import type { GridInitialState, GridState } from '../state/GridState.js';
+import type { GridInitialState, InternalGridState } from '../state/GridState.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { isBuiltInThemeName, type BuiltInThemeName } from '../renderer/themes.js';
 
@@ -137,8 +137,8 @@ export function createLocalStorageAdapter(key: string): GridPersistenceAdapter {
 	};
 }
 
-/** Extract the subset of GridState that should be persisted. */
-export function extractPersistedState(state: GridState): PersistedGridState {
+/** Extract the persisted subset of internal runtime state. */
+export function extractPersistedState<TRowData>(state: InternalGridState<TRowData>): PersistedGridState {
 	const columnOrder = state.columns.map((c) => c.field);
 	const columnVisibility: Record<string, boolean> = {};
 	for (const col of state.columns) {
