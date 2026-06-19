@@ -18,11 +18,6 @@ interface FillSeries {
 	step: number;
 }
 
-interface FillRecord extends CapturedCell {
-	rowId: string;
-	colField: string;
-}
-
 export class SpreadsheetFillEngine<TRowData = unknown> {
 	constructor(private readonly engine: GridEngine<TRowData>) {}
 
@@ -43,22 +38,18 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		else if (targetBounds.minCol > sourceBounds.maxCol) direction = 'RIGHT';
 		else if (targetBounds.maxCol < sourceBounds.minCol) direction = 'LEFT';
 
-		const oldValueRecord: FillRecord[] = [];
-		const newValueRecord: FillRecord[] = [];
+		const updates: GridCellRangeFillUpdate[] = [];
 
 		if (direction === 'DOWN' || direction === 'UP') {
-			this.fillRows(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
+			this.fillRows(direction, sourceBounds, targetBounds, rowModel, columns, updates);
 		}
 
 		if (direction === 'RIGHT' || direction === 'LEFT') {
-			this.fillColumns(direction, sourceBounds, targetBounds, rowModel, columns, oldValueRecord, newValueRecord);
+			this.fillColumns(direction, sourceBounds, targetBounds, rowModel, columns, updates);
 		}
 
-		if (newValueRecord.length > 0) {
-			this.engine.commandHistory.add({
-				undo: () => this.restoreRecords(oldValueRecord),
-				redo: () => this.restoreRecords(newValueRecord),
-			});
+		if (updates.length > 0) {
+			this.engine.batchCellValues(updates, 'fill');
 		}
 	}
 
@@ -68,8 +59,7 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		targetBounds: GridBounds,
 		rowModel: RowModel<TRowData>,
 		columns: ColumnDef<TRowData>[],
-		oldValueRecord: FillRecord[],
-		newValueRecord: FillRecord[]
+		updates: GridCellRangeFillUpdate[]
 	): void {
 		const fillRows = this.buildOrderedIndexes(targetBounds.minRow, targetBounds.maxRow, direction === 'UP');
 		for (let c = targetBounds.minCol; c <= targetBounds.maxCol; c++) {
@@ -91,7 +81,7 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 				const srcItem = sourceValues[idx % sourceValues.length];
 				const deltaRow = r - (direction === 'DOWN' ? sourceBounds.maxRow : sourceBounds.minRow);
-				this.applyFillValue(visualRow.rowId, col.field, idx, srcItem, series, deltaRow, 0, rowModel, columns, oldValueRecord, newValueRecord);
+				this.applyFillValue(visualRow.rowId, col.field, idx, srcItem, series, deltaRow, 0, rowModel, columns, updates);
 			});
 		}
 	}
@@ -102,8 +92,7 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		targetBounds: GridBounds,
 		rowModel: RowModel<TRowData>,
 		columns: ColumnDef<TRowData>[],
-		oldValueRecord: FillRecord[],
-		newValueRecord: FillRecord[]
+		updates: GridCellRangeFillUpdate[]
 	): void {
 		const fillCols = this.buildOrderedIndexes(targetBounds.minCol, targetBounds.maxCol, direction === 'LEFT');
 		for (let r = targetBounds.minRow; r <= targetBounds.maxRow; r++) {
@@ -125,17 +114,7 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 				const srcItem = sourceValues[idx % sourceValues.length];
 				const deltaCol = c - (direction === 'RIGHT' ? sourceBounds.maxCol : sourceBounds.minCol);
-				this.applyFillValue(visualRow.rowId, col.field, idx, srcItem, series, 0, deltaCol, rowModel, columns, oldValueRecord, newValueRecord);
-			});
-		}
-	}
-
-	private restoreRecords(records: FillRecord[]): void {
-		for (const item of records) {
-			const restoreValue = item.hasFormula && item.formula ? item.formula : item.value;
-			this.engine.dataMutation.applyCellValueChange(item.rowId, item.colField, restoreValue, {
-				undoable: false,
-				source: 'undo',
+				this.applyFillValue(visualRow.rowId, col.field, idx, srcItem, series, 0, deltaCol, rowModel, columns, updates);
 			});
 		}
 	}
@@ -202,10 +181,8 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		deltaCol: number,
 		rowModel: RowModel<TRowData>,
 		columns: ColumnDef<TRowData>[],
-		oldValueRecord: FillRecord[],
-		newValueRecord: FillRecord[]
+		updates: GridCellRangeFillUpdate[]
 	): void {
-		const oldValue = this.captureCell(rowId, colField);
 		let nextValue = source.value;
 		let nextFormula: string | undefined;
 
@@ -217,19 +194,10 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 			nextValue = Number.isInteger(finalVal) ? finalVal : parseFloat(finalVal.toFixed(4));
 		}
 
-		const result = this.engine.dataMutation.applyCellValueChange(rowId, colField, nextValue, {
-			undoable: false,
-			source: 'fill',
-		});
-		if (!result.applied) return;
-
-		oldValueRecord.push({ rowId, colField, ...oldValue });
-		newValueRecord.push({
+		updates.push({
 			rowId,
 			colField,
-			value: nextFormula ? undefined : nextValue,
-			hasFormula: !!nextFormula,
-			formula: nextFormula,
+			value: nextFormula ?? nextValue,
 		});
 	}
 
@@ -277,4 +245,10 @@ interface GridBounds {
 	maxRow: number;
 	minCol: number;
 	maxCol: number;
+}
+
+interface GridCellRangeFillUpdate {
+	rowId: string;
+	colField: string;
+	value: unknown;
 }

@@ -407,9 +407,9 @@ export class GridEngine<TRowData = unknown> {
 		this.dataMutation = new DataMutationController<TRowData>({
 			data: this.data,
 			columns: this.columns,
-			commandHistory: this.commandHistory,
 			eventBus: this.eventBus,
 			getRowModel: () => this.rowModel,
+			registerHistory: (history) => this.changeApplier.registerHistory(history),
 			syncFormulaForCell: (rowId, colField, value) => this.syncFormulaForCell(rowId, colField, value),
 			invalidateFormulaCell: (rowId, colField) => this.invalidateFormulaCell(rowId, colField),
 			getBatchedUpdates: () => this.batchedUpdates,

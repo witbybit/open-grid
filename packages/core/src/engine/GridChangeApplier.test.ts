@@ -191,6 +191,33 @@ describe('GridChangeApplier', () => {
 		expect(stateManager.getState().columnWidths).toEqual({ name: 200 });
 	});
 
+	it('replays executable history mutations through kernel-owned history registration', () => {
+		const { applier, commandHistory } = makeApplier();
+		const callOrder: string[] = [];
+
+		applier.registerHistory({
+			undo: {
+				reason: 'data:set-cell-value:undo',
+				run: () => {
+					callOrder.push('undo');
+				},
+				requestRender: false,
+			},
+			redo: {
+				reason: 'data:set-cell-value:redo',
+				run: () => {
+					callOrder.push('redo');
+				},
+				requestRender: false,
+			},
+		});
+
+		commandHistory.undo();
+		commandHistory.redo();
+
+		expect(callOrder).toEqual(['undo', 'redo']);
+	});
+
 	it('requestRender: false skips render request', () => {
 		const { applier, requestRender } = makeApplier();
 

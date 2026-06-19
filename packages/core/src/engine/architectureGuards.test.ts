@@ -340,6 +340,14 @@ describe('Architecture guardrails', () => {
 		expect(content, 'fillRange.ts must not call data.setCellValue').not.toContain('data.setCellValue');
 	});
 
+	it('feature mutation helpers do not register history directly', () => {
+		const files = ['features/DataMutationController.ts', 'spreadsheet/fillRange.ts'];
+		for (const file of files) {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
+			expect(content, `${file} must not call commandHistory.add directly`).not.toContain('commandHistory.add');
+		}
+	});
+
 	it('GridFeatureContext does not expose raw side-effect primitives', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridFeatureContext.ts'), 'utf-8');
 		expect(content).not.toContain('stateManager:');

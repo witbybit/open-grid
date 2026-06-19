@@ -12,6 +12,12 @@ Replace split logical-commit coordination with one authoritative `GridCommitKern
 - **Depends on**: Plan 112
 - **Category**: architecture, commits, correctness, history, events
 
+### Progress notes
+
+- `SpreadsheetFillEngine` now routes logical fill writes through `batchCellValues(...)` instead of owning custom undo registration
+- `DataMutationController` no longer registers history directly with `CommandHistory`; history now registers through `GridChangeApplier`
+- executable history replay is covered in `GridChangeApplier.test.ts`
+
 ## Problem
 
 The grid foundation is stronger after Plan 112, but commit ownership is still not fully unified:

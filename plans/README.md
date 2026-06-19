@@ -1,123 +1,123 @@
 # Plans
 
-| #   | Plan                                                                                                                          | Status   | Commit       |
-| --- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | ------------ |
-| 001 | [Row Multi-Select](./001-row-multiselect.md)                                                                                  | DONE     | 3d32692      |
-| 002 | [ColumnType Registry](./002-column-type-registry.md)                                                                          | DONE     | 970c777      |
-| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                                                             | DONE     | 970c777      |
-| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                                                                   | DONE     | 970c777      |
-| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                                                                   | DONE     | 66c92c2      |
-| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                                                           | DONE     | 66c92c2      |
-| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)                                             | DONE     | 66c92c2      |
-| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)                                               | DONE     | 66c92c2      |
-| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                                                       | DONE     | working tree |
-| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                                                           | DONE     | 53fe61f      |
-| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                                                       | DONE     | 39c83e3      |
-| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)                                                     | DONE     | 39c83e3      |
-| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                                                         | DONE     | 94c9453      |
-| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                                                                     | DONE     | 94c9453      |
-| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                                                               | DONE     | 0f93724      |
-| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                                                           | DONE     | 6b3ecc5      |
-| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                                                             | DONE     | bb60b76      |
-| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)                                             | DONE     | 4ee5ea4      |
-| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md)                                         | DONE     | 37a3494      |
-| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)                                               | DONE     | e530b52      |
-| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)                                                     | DONE     | 15e4809      |
-| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                                                                 | DONE     | 15e4809      |
-| 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md)                                       | DONE     | 05f3eed      |
-| 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)                                             | DONE     | 9a1b82a      |
-| 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md)                                     | DONE     | 04b846d      |
-| 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)                                        | DONE     | 10ef28a      |
-| 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md)                               | DONE     | 1015f23      |
-| 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                                                     | REJECTED | e86e886      |
-| 029 | [React Hook Lifecycle Contract Hardening](./029-react-hook-lifecycle-contract-hardening.md)                                   | DONE     | d79c342      |
-| 030 | [Single Grid Entrypoint Migration](./030-single-grid-entrypoint-migration.md)                                                 | DONE     | 4fd7cff      |
-| 031 | [Runtime Fault Surface Completion](./031-runtime-fault-surface-completion.md)                                                 | DONE     | 4d3b9fc      |
-| 032 | [Single Grid Entrypoint Lockdown](./032-single-grid-entrypoint-lockdown.md)                                                   | DONE     | c5903df      |
-| 033 | [Plan Reconciliation And Release Hardening](./033-plan-reconciliation-and-release-hardening.md)                               | DONE     | 54d4803      |
-| 034 | [Server Grid Polish Foundation](./034-server-grid-polish-foundation.md)                                                       | DONE     | working tree |
-| 035 | [Phase 6 Legacy Layout Cleanup](./035-phase6-legacy-layout-cleanup.md)                                                        | DONE     | working tree |
-| 037 | [Coordinator Unit Tests](./037-coordinator-unit-tests.md)                                                                     | DONE     | working tree |
-| 038 | [store.ts Line Budget](./038-store-ts-line-budget.md)                                                                         | DONE     | working tree |
-| 039 | [Grid Layout Animation + Chrome Hardening](./039-grid-layout-animation-chrome-hardening.md)                                   | DONE     | working tree |
-| 040 | [Core-Owned Architecture North-Star](./040-core-owned-architecture-north-star.md)                                             | DONE     | working tree |
-| 041 | [Core Client Pagination (pipeline window)](./041-core-client-pagination-pipeline-window.md)                                   | DONE     | working tree |
-| 042 | [React Pagination + Status Bar Teardown](./042-react-pagination-statusbar-teardown.md)                                        | DONE     | working tree |
-| 043 | [Row Lifecycle Exit Animation](./043-row-lifecycle-exit-animation.md)                                                         | DONE     | working tree |
-| 044 | [Animated Column Pinning](./044-animated-column-pinning.md)                                                                   | DONE     | working tree |
-| 045 | [Detail Height Animation](./045-detail-height-animation.md)                                                                   | DONE     | working tree |
-| 046 | [Menu Modernization (shadcn)](./046-menu-modernization.md)                                                                    | DONE     | working tree |
-| 047 | [Header-Drag Reorder Polish](./047-header-drag-reorder-polish.md)                                                             | DONE     | working tree |
-| 048 | [Unified Theme Styling Core Migration](./048-unified-theme-styling-core-migration.md)                                         | DONE     | working tree |
-| 049 | [Accessibility / ARIA Pass](./049-accessibility-aria-pass.md)                                                                 | DONE     | working tree |
-| 050 | [Rendering & Layout Pipeline Hardening](./050-rendering-pipeline-hardening.md)                                                | DONE     | working tree |
-| 051 | [Numeric Filter Null Coercion](./051-numeric-filter-null-coercion.md)                                                         | DONE     | 5d702964     |
-| 052 | [Grid UX and Architecture Hardening](./052-grid-ux-and-architecture-hardening.md)                                             | DONE     | working tree |
-| 053 | [Column Virtualization Verification](./053-column-virtualization-verification.md)                                             | DONE     | working tree |
-| 054 | [Multi-Level Column Headers](./054-multi-level-column-headers.md)                                                             | DONE     | working tree |
-| 055 | [State Serialization Schema Versioning](./055-state-schema-versioning.md)                                                     | DONE     | ecbd712b     |
-| 056 | [valueFormatter Column Option](./056-value-formatter.md)                                                                      | DONE     | 507525e2     |
-| 057 | [Column Auto-Size](./057-column-auto-size.md)                                                                                 | DONE     | working tree |
-| 058 | [Grid-Level Clipboard](./058-grid-clipboard.md)                                                                               | DONE     | working tree |
-| 059 | [Advanced Filter Types (Set + Date)](./059-advanced-filter-types.md)                                                          | DONE     | working tree |
-| 060 | [Floating Filters](./060-floating-filters.md)                                                                                 | TODO     | working tree |
-| 061 | [React Hook Surface](./061-react-hook-surface.md)                                                                             | TODO     | working tree |
-| 062 | [XLSX Export](./062-xlsx-export.md)                                                                                           | TODO     | working tree |
-| 063 | [Row Drag-and-Drop](./063-row-drag-drop.md)                                                                                   | TODO     | working tree |
-| 064 | [SSRM Server-Push Filter/Sort](./064-ssrm-server-push-filter-sort.md)                                                         | TODO     | working tree |
-| 065 | [Single Render Runtime Phase Authority](./065-render-runtime-phase-authority.md)                                              | DONE     | b6e75513     |
-| 066 | [Unified Frame Coordinator and Invalidation Flow](./066-frame-coordinator-and-invalidation-unification.md)                    | DONE     | 0fbd27e2     |
-| 067 | [Portal Ownership and Single Edit Lifecycle](./067-portal-ownership-and-edit-lifecycle.md)                                    | DONE     | f14cfd80     |
-| 068 | [Incremental Row Mutation Pipeline](./068-incremental-row-mutation-pipeline.md)                                               | DONE     | 062bcc88     |
-| 069 | [Domain State Versions and Exception-Safe Transactions](./069-domain-state-versions-and-safe-transactions.md)                 | DONE     | bcdd41ac     |
-| 070 | [Explicit Renderer and Host Runtime Ports](./070-explicit-renderer-runtime-ports.md)                                          | DONE     | d8f7375f     |
-| 071 | [Decompose the Core Store Type Hub](./071-core-type-boundary-decomposition.md)                                                | DONE     | cc42597b     |
-| 072 | [Centralized Runtime Instrumentation Sink](./072-centralized-runtime-instrumentation.md)                                      | DONE     | f777fe19     |
-| 073 | [Incremental Active Slot Index](./073-incremental-active-slot-index.md)                                                       | DONE     | 76a24b69     |
-| 074 | [Runtime Contract Documentation Cleanup](./074-runtime-contract-documentation-cleanup.md)                                     | DONE     | 8cf8abd7     |
-| 075 | [Formula Bar + Cross-Cell Formulas](./075-formula-bar-cross-cell-formulas.md)                                                 | TODO     | —            |
-| 076 | [Named Column Views / Profiles](./076-named-column-views-profiles.md)                                                         | TODO     | —            |
-| 077 | [Advanced Cell Editors](./077-advanced-cell-editors.md)                                                                       | TODO     | —            |
-| 078 | [Advanced Column Filter API](./078-advanced-column-filter-api.md)                                                             | DONE     | —            |
-| 079 | [Paint Frame Runtime Integration](./079-paint-frame-runtime-integration.md)                                                   | DONE     | working tree |
-| 080 | [Real Post-Scroll Queue and Scheduler Authority](./080-post-scroll-queue-and-scheduler-authority.md)                          | DONE     | working tree |
-| 081 | [Portal Mount Identity and Generation Contract](./081-portal-mount-identity-and-generation-contract.md)                       | DONE     | working tree |
-| 082 | [Derived Row Dependency Closure](./082-derived-row-dependency-closure.md)                                                     | DONE     | working tree |
-| 083 | [Large-Model Incremental Index Maintenance](./083-large-model-incremental-index-maintenance.md)                               | DONE     | working tree |
-| 084 | [Domain State Versions and Targeted Notification](./084-domain-state-versions-and-targeted-notification.md)                   | DONE     | working tree |
-| 085 | [Instrumentation Consolidation and Production No-Op](./085-instrumentation-consolidation-and-production-noop.md)              | DONE     | working tree |
-| 086 | [Runtime Port Binding Lifecycle](./086-runtime-port-binding-lifecycle.md)                                                     | DONE     | working tree |
-| 087 | [Store Compatibility Boundary Enforcement](./087-store-boundary-enforcement.md)                                               | DONE     | working tree |
-| 088 | [Runtime Contract Comment Cleanup](./088-runtime-contract-comment-cleanup.md)                                                 | DONE     | working tree |
-| 089 | [Open Grid Core Architecture Target](./089-open-grid-core-architecture-target.md)                                             | DONE     | working tree |
-| 090 | [Feature Surface Triage and Quarantine](./090-feature-surface-triage-and-quarantine.md)                                       | DONE     | working tree |
-| 091 | [Performance Baseline Laboratory](./091-performance-baseline-laboratory.md)                                                   | DONE     | working tree |
-| 092 | [Aggregation Input Mutation Correctness](./092-aggregation-input-mutation-correctness.md)                                     | DONE     | working tree |
-| 093 | [Single RAF Frame Arbitration](./093-single-raf-frame-arbitration.md)                                                         | DONE     | working tree |
-| 094 | [Exclusive Runtime Port Binding](./094-exclusive-runtime-port-binding.md)                                                     | DONE     | working tree |
-| 095 | [Portal Flush Phase Contract](./095-portal-flush-phase-contract.md)                                                           | DONE     | working tree |
-| 096 | [Frame Epoch and Post-Scroll Durability](./096-frame-epoch-and-post-scroll-durability.md)                                     | DONE     | working tree |
-| 097 | [Canonical Domain Command and Mutation Boundary](./097-canonical-domain-command-and-mutation-boundary.md)                     | DONE     | working tree |
-| 098 | [Render Runtime Convergence and Demolition](./098-render-runtime-convergence-and-demolition.md)                               | DONE     | working tree |
-| 099 | [Row Model and Derived Data Authority](./099-row-model-and-derived-data-authority.md)                                         | DONE     | working tree |
-| 100 | [Physical Renderer and Adapter Contract](./100-physical-renderer-and-adapter-contract.md)                                     | DONE     | working tree |
-| 101 | [Public API and Package Boundary Reset](./101-public-api-and-package-boundary-reset.md)                                       | DONE     | working tree |
-| 102 | [Adversarial Correctness, Fuzzing, and Lifecycle Hardening](./102-adversarial-correctness-fuzzing-and-lifecycle-hardening.md) | DONE     | working tree |
-| 103 | [Canonical Mutation Authority and Direct-Write Demolition](./103-canonical-mutation-authority-and-direct-write-demolition.md) | DONE     | working tree |
-| 104 | [Fault-Isolated Grid Change Commit Protocol](./104-fault-isolated-grid-change-commit-protocol.md)                             | DONE     | working tree |
-| 105 | [Declared Invalidation Authority and Reaction Demolition](./105-declared-invalidation-authority-and-reaction-demolition.md)   | DONE     | working tree |
-| 106 | [Alpha Feature and Public API Surface Cut](./106-alpha-feature-and-public-api-surface-cut.md)                                 | DONE     | working tree |
-| 107 | [Reproducible Workspace, Build, and Evidence Gate](./107-reproducible-workspace-build-and-evidence-gate.md)                   | DONE     | working tree |
-| 108 | [Behavioral Contract Tests and Fuzz Expansion](./108-behavioral-contract-tests-and-fuzz-expansion.md)                         | DONE     | working tree |
-| 109 | [Store Compatibility Hub and Boundary Demolition](./109-store-compatibility-hub-and-boundary-demolition.md)                   | DONE     | working tree |
-| 110 | [Mandatory Physical Portal Identity and Adapter Lifecycle](./110-mandatory-physical-portal-identity-and-adapter-lifecycle.md) | DONE     | working tree |
-| 111 | [Measured Scheduler and Hot-Path Simplification](./111-measured-scheduler-and-hot-path-simplification.md)                     | DONE     | working tree |
-| 112 | [Alpha Foundation Cut and Codebase Demolition](./112-alpha-foundation-cut-and-codebase-demolition.md)                         | DONE     | working tree |
-| 113 | [Unified Grid Commit Kernel](./113-unified-grid-commit-kernel.md)                                                             | TODO     | working tree |
-| 114 | [Typed Domain Mutation Executors](./114-typed-domain-mutation-executors.md)                                                   | TODO     | working tree |
-| 115 | [Public Snapshot and Runtime State Closure](./115-public-snapshot-and-runtime-state-closure.md)                               | TODO     | working tree |
-| 116 | [Persistence Commit Restore and Schema Hardening](./116-persistence-commit-restore-and-schema-hardening.md)                   | TODO     | working tree |
-| 117 | [Private Runtime Composition Root](./117-private-runtime-composition-root.md)                                                 | TODO     | working tree |
+| #   | Plan                                                                                                                          | Status      | Commit       |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------ |
+| 001 | [Row Multi-Select](./001-row-multiselect.md)                                                                                  | DONE        | 3d32692      |
+| 002 | [ColumnType Registry](./002-column-type-registry.md)                                                                          | DONE        | 970c777      |
+| 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                                                             | DONE        | 970c777      |
+| 004 | [Declarative Style Rules](./004-declarative-style-rules.md)                                                                   | DONE        | 970c777      |
+| 005 | [Row Selection Class Set](./005-row-selection-class-set.md)                                                                   | DONE        | 66c92c2      |
+| 006 | [Aggregation Stage Streaming](./006-aggregation-stage-streaming.md)                                                           | DONE        | 66c92c2      |
+| 007 | [Grouped Pipeline Filter Allocation](./007-grouped-pipeline-filter-allocation.md)                                             | DONE        | 66c92c2      |
+| 008 | [Row Transaction Diff Optimization](./008-row-transaction-diff-optimization.md)                                               | DONE        | 66c92c2      |
+| 009 | [Rendering Layout Architecture](./009-rendering-layout-architecture.md)                                                       | DONE        | working tree |
+| 010 | [Core Architecture Hardening](./010-core-architecture-hardening.md)                                                           | DONE        | 53fe61f      |
+| 011 | [Feature Boundary Architecture](./011-feature-boundary-architecture.md)                                                       | DONE        | 39c83e3      |
+| 012 | [Data Mutation Kernel Hardening](./012-data-mutation-kernel-hardening.md)                                                     | DONE        | 39c83e3      |
+| 013 | [Thin Engine Effects Boundary](./013-thin-engine-effects-boundary.md)                                                         | DONE        | 94c9453      |
+| 014 | [Runtime Port Inversion](./014-runtime-port-inversion.md)                                                                     | DONE        | 94c9453      |
+| 015 | [Internal Adapter Boundary](./015-internal-adapter-boundary.md)                                                               | DONE        | 0f93724      |
+| 016 | [Store Runtime Decomposition](./016-store-runtime-decomposition.md)                                                           | DONE        | 6b3ecc5      |
+| 017 | [Row Model Runtime Boundary](./017-row-model-runtime-boundary.md)                                                             | DONE        | bb60b76      |
+| 018 | [Runtime Fault Diagnostics Boundary](./018-runtime-fault-diagnostics-boundary.md)                                             | DONE        | 4ee5ea4      |
+| 019 | [Render Engine Orchestration Boundary](./019-render-engine-orchestration-boundary.md)                                         | DONE        | 37a3494      |
+| 020 | [Row Renderer Maintenance Boundary](./020-row-renderer-maintenance-boundary.md)                                               | DONE        | e530b52      |
+| 021 | [Row Cell Binding Lane Boundary](./021-row-cell-binding-lane-boundary.md)                                                     | DONE        | 15e4809      |
+| 022 | [Row Cell Binder Boundary](./022-row-cell-binder-boundary.md)                                                                 | DONE        | 15e4809      |
+| 023 | [Row Renderer Runtime Adapter Boundary](./023-row-renderer-runtime-adapter-boundary.md)                                       | DONE        | 05f3eed      |
+| 024 | [Row Renderer Runtime Host Contract](./024-row-renderer-runtime-host-contract.md)                                             | DONE        | 9a1b82a      |
+| 025 | [Render Engine Scroll Frame Coordinator](./025-render-engine-scroll-frame-coordinator.md)                                     | DONE        | 04b846d      |
+| 026 | [Render Engine Paint Pipeline Coordinator](./026-render-paint-pipeline-coordinator.md)                                        | DONE        | 10ef28a      |
+| 027 | [Render Engine Viewport/Layout Coordinator](./027-render-engine-viewport-layout-coordinator.md)                               | DONE        | 1015f23      |
+| 028 | [Public React Surface Hardening](./028-public-react-surface-hardening.md)                                                     | REJECTED    | e86e886      |
+| 029 | [React Hook Lifecycle Contract Hardening](./029-react-hook-lifecycle-contract-hardening.md)                                   | DONE        | d79c342      |
+| 030 | [Single Grid Entrypoint Migration](./030-single-grid-entrypoint-migration.md)                                                 | DONE        | 4fd7cff      |
+| 031 | [Runtime Fault Surface Completion](./031-runtime-fault-surface-completion.md)                                                 | DONE        | 4d3b9fc      |
+| 032 | [Single Grid Entrypoint Lockdown](./032-single-grid-entrypoint-lockdown.md)                                                   | DONE        | c5903df      |
+| 033 | [Plan Reconciliation And Release Hardening](./033-plan-reconciliation-and-release-hardening.md)                               | DONE        | 54d4803      |
+| 034 | [Server Grid Polish Foundation](./034-server-grid-polish-foundation.md)                                                       | DONE        | working tree |
+| 035 | [Phase 6 Legacy Layout Cleanup](./035-phase6-legacy-layout-cleanup.md)                                                        | DONE        | working tree |
+| 037 | [Coordinator Unit Tests](./037-coordinator-unit-tests.md)                                                                     | DONE        | working tree |
+| 038 | [store.ts Line Budget](./038-store-ts-line-budget.md)                                                                         | DONE        | working tree |
+| 039 | [Grid Layout Animation + Chrome Hardening](./039-grid-layout-animation-chrome-hardening.md)                                   | DONE        | working tree |
+| 040 | [Core-Owned Architecture North-Star](./040-core-owned-architecture-north-star.md)                                             | DONE        | working tree |
+| 041 | [Core Client Pagination (pipeline window)](./041-core-client-pagination-pipeline-window.md)                                   | DONE        | working tree |
+| 042 | [React Pagination + Status Bar Teardown](./042-react-pagination-statusbar-teardown.md)                                        | DONE        | working tree |
+| 043 | [Row Lifecycle Exit Animation](./043-row-lifecycle-exit-animation.md)                                                         | DONE        | working tree |
+| 044 | [Animated Column Pinning](./044-animated-column-pinning.md)                                                                   | DONE        | working tree |
+| 045 | [Detail Height Animation](./045-detail-height-animation.md)                                                                   | DONE        | working tree |
+| 046 | [Menu Modernization (shadcn)](./046-menu-modernization.md)                                                                    | DONE        | working tree |
+| 047 | [Header-Drag Reorder Polish](./047-header-drag-reorder-polish.md)                                                             | DONE        | working tree |
+| 048 | [Unified Theme Styling Core Migration](./048-unified-theme-styling-core-migration.md)                                         | DONE        | working tree |
+| 049 | [Accessibility / ARIA Pass](./049-accessibility-aria-pass.md)                                                                 | DONE        | working tree |
+| 050 | [Rendering & Layout Pipeline Hardening](./050-rendering-pipeline-hardening.md)                                                | DONE        | working tree |
+| 051 | [Numeric Filter Null Coercion](./051-numeric-filter-null-coercion.md)                                                         | DONE        | 5d702964     |
+| 052 | [Grid UX and Architecture Hardening](./052-grid-ux-and-architecture-hardening.md)                                             | DONE        | working tree |
+| 053 | [Column Virtualization Verification](./053-column-virtualization-verification.md)                                             | DONE        | working tree |
+| 054 | [Multi-Level Column Headers](./054-multi-level-column-headers.md)                                                             | DONE        | working tree |
+| 055 | [State Serialization Schema Versioning](./055-state-schema-versioning.md)                                                     | DONE        | ecbd712b     |
+| 056 | [valueFormatter Column Option](./056-value-formatter.md)                                                                      | DONE        | 507525e2     |
+| 057 | [Column Auto-Size](./057-column-auto-size.md)                                                                                 | DONE        | working tree |
+| 058 | [Grid-Level Clipboard](./058-grid-clipboard.md)                                                                               | DONE        | working tree |
+| 059 | [Advanced Filter Types (Set + Date)](./059-advanced-filter-types.md)                                                          | DONE        | working tree |
+| 060 | [Floating Filters](./060-floating-filters.md)                                                                                 | TODO        | working tree |
+| 061 | [React Hook Surface](./061-react-hook-surface.md)                                                                             | TODO        | working tree |
+| 062 | [XLSX Export](./062-xlsx-export.md)                                                                                           | TODO        | working tree |
+| 063 | [Row Drag-and-Drop](./063-row-drag-drop.md)                                                                                   | TODO        | working tree |
+| 064 | [SSRM Server-Push Filter/Sort](./064-ssrm-server-push-filter-sort.md)                                                         | TODO        | working tree |
+| 065 | [Single Render Runtime Phase Authority](./065-render-runtime-phase-authority.md)                                              | DONE        | b6e75513     |
+| 066 | [Unified Frame Coordinator and Invalidation Flow](./066-frame-coordinator-and-invalidation-unification.md)                    | DONE        | 0fbd27e2     |
+| 067 | [Portal Ownership and Single Edit Lifecycle](./067-portal-ownership-and-edit-lifecycle.md)                                    | DONE        | f14cfd80     |
+| 068 | [Incremental Row Mutation Pipeline](./068-incremental-row-mutation-pipeline.md)                                               | DONE        | 062bcc88     |
+| 069 | [Domain State Versions and Exception-Safe Transactions](./069-domain-state-versions-and-safe-transactions.md)                 | DONE        | bcdd41ac     |
+| 070 | [Explicit Renderer and Host Runtime Ports](./070-explicit-renderer-runtime-ports.md)                                          | DONE        | d8f7375f     |
+| 071 | [Decompose the Core Store Type Hub](./071-core-type-boundary-decomposition.md)                                                | DONE        | cc42597b     |
+| 072 | [Centralized Runtime Instrumentation Sink](./072-centralized-runtime-instrumentation.md)                                      | DONE        | f777fe19     |
+| 073 | [Incremental Active Slot Index](./073-incremental-active-slot-index.md)                                                       | DONE        | 76a24b69     |
+| 074 | [Runtime Contract Documentation Cleanup](./074-runtime-contract-documentation-cleanup.md)                                     | DONE        | 8cf8abd7     |
+| 075 | [Formula Bar + Cross-Cell Formulas](./075-formula-bar-cross-cell-formulas.md)                                                 | TODO        | —            |
+| 076 | [Named Column Views / Profiles](./076-named-column-views-profiles.md)                                                         | TODO        | —            |
+| 077 | [Advanced Cell Editors](./077-advanced-cell-editors.md)                                                                       | TODO        | —            |
+| 078 | [Advanced Column Filter API](./078-advanced-column-filter-api.md)                                                             | DONE        | —            |
+| 079 | [Paint Frame Runtime Integration](./079-paint-frame-runtime-integration.md)                                                   | DONE        | working tree |
+| 080 | [Real Post-Scroll Queue and Scheduler Authority](./080-post-scroll-queue-and-scheduler-authority.md)                          | DONE        | working tree |
+| 081 | [Portal Mount Identity and Generation Contract](./081-portal-mount-identity-and-generation-contract.md)                       | DONE        | working tree |
+| 082 | [Derived Row Dependency Closure](./082-derived-row-dependency-closure.md)                                                     | DONE        | working tree |
+| 083 | [Large-Model Incremental Index Maintenance](./083-large-model-incremental-index-maintenance.md)                               | DONE        | working tree |
+| 084 | [Domain State Versions and Targeted Notification](./084-domain-state-versions-and-targeted-notification.md)                   | DONE        | working tree |
+| 085 | [Instrumentation Consolidation and Production No-Op](./085-instrumentation-consolidation-and-production-noop.md)              | DONE        | working tree |
+| 086 | [Runtime Port Binding Lifecycle](./086-runtime-port-binding-lifecycle.md)                                                     | DONE        | working tree |
+| 087 | [Store Compatibility Boundary Enforcement](./087-store-boundary-enforcement.md)                                               | DONE        | working tree |
+| 088 | [Runtime Contract Comment Cleanup](./088-runtime-contract-comment-cleanup.md)                                                 | DONE        | working tree |
+| 089 | [Open Grid Core Architecture Target](./089-open-grid-core-architecture-target.md)                                             | DONE        | working tree |
+| 090 | [Feature Surface Triage and Quarantine](./090-feature-surface-triage-and-quarantine.md)                                       | DONE        | working tree |
+| 091 | [Performance Baseline Laboratory](./091-performance-baseline-laboratory.md)                                                   | DONE        | working tree |
+| 092 | [Aggregation Input Mutation Correctness](./092-aggregation-input-mutation-correctness.md)                                     | DONE        | working tree |
+| 093 | [Single RAF Frame Arbitration](./093-single-raf-frame-arbitration.md)                                                         | DONE        | working tree |
+| 094 | [Exclusive Runtime Port Binding](./094-exclusive-runtime-port-binding.md)                                                     | DONE        | working tree |
+| 095 | [Portal Flush Phase Contract](./095-portal-flush-phase-contract.md)                                                           | DONE        | working tree |
+| 096 | [Frame Epoch and Post-Scroll Durability](./096-frame-epoch-and-post-scroll-durability.md)                                     | DONE        | working tree |
+| 097 | [Canonical Domain Command and Mutation Boundary](./097-canonical-domain-command-and-mutation-boundary.md)                     | DONE        | working tree |
+| 098 | [Render Runtime Convergence and Demolition](./098-render-runtime-convergence-and-demolition.md)                               | DONE        | working tree |
+| 099 | [Row Model and Derived Data Authority](./099-row-model-and-derived-data-authority.md)                                         | DONE        | working tree |
+| 100 | [Physical Renderer and Adapter Contract](./100-physical-renderer-and-adapter-contract.md)                                     | DONE        | working tree |
+| 101 | [Public API and Package Boundary Reset](./101-public-api-and-package-boundary-reset.md)                                       | DONE        | working tree |
+| 102 | [Adversarial Correctness, Fuzzing, and Lifecycle Hardening](./102-adversarial-correctness-fuzzing-and-lifecycle-hardening.md) | DONE        | working tree |
+| 103 | [Canonical Mutation Authority and Direct-Write Demolition](./103-canonical-mutation-authority-and-direct-write-demolition.md) | DONE        | working tree |
+| 104 | [Fault-Isolated Grid Change Commit Protocol](./104-fault-isolated-grid-change-commit-protocol.md)                             | DONE        | working tree |
+| 105 | [Declared Invalidation Authority and Reaction Demolition](./105-declared-invalidation-authority-and-reaction-demolition.md)   | DONE        | working tree |
+| 106 | [Alpha Feature and Public API Surface Cut](./106-alpha-feature-and-public-api-surface-cut.md)                                 | DONE        | working tree |
+| 107 | [Reproducible Workspace, Build, and Evidence Gate](./107-reproducible-workspace-build-and-evidence-gate.md)                   | DONE        | working tree |
+| 108 | [Behavioral Contract Tests and Fuzz Expansion](./108-behavioral-contract-tests-and-fuzz-expansion.md)                         | DONE        | working tree |
+| 109 | [Store Compatibility Hub and Boundary Demolition](./109-store-compatibility-hub-and-boundary-demolition.md)                   | DONE        | working tree |
+| 110 | [Mandatory Physical Portal Identity and Adapter Lifecycle](./110-mandatory-physical-portal-identity-and-adapter-lifecycle.md) | DONE        | working tree |
+| 111 | [Measured Scheduler and Hot-Path Simplification](./111-measured-scheduler-and-hot-path-simplification.md)                     | DONE        | working tree |
+| 112 | [Alpha Foundation Cut and Codebase Demolition](./112-alpha-foundation-cut-and-codebase-demolition.md)                         | DONE        | working tree |
+| 113 | [Unified Grid Commit Kernel](./113-unified-grid-commit-kernel.md)                                                             | IN PROGRESS | working tree |
+| 114 | [Typed Domain Mutation Executors](./114-typed-domain-mutation-executors.md)                                                   | TODO        | working tree |
+| 115 | [Public Snapshot and Runtime State Closure](./115-public-snapshot-and-runtime-state-closure.md)                               | TODO        | working tree |
+| 116 | [Persistence Commit Restore and Schema Hardening](./116-persistence-commit-restore-and-schema-hardening.md)                   | TODO        | working tree |
+| 117 | [Private Runtime Composition Root](./117-private-runtime-composition-root.md)                                                 | TODO        | working tree |
 
 ## Execution order
 

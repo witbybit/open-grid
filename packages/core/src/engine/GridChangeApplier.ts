@@ -39,6 +39,12 @@ export type GridChangeReason =
 	| 'rows:set-loading-state'
 	| 'rows:set-server-pagination'
 	| 'rows:register-model'
+	| 'data:set-cell-value'
+	| 'data:set-cell-value:undo'
+	| 'data:set-cell-value:redo'
+	| 'data:batch-cell-values'
+	| 'data:batch-cell-values:undo'
+	| 'data:batch-cell-values:redo'
 	| 'geometry:resize-row'
 	| 'geometry:set-row-heights'
 	| 'geometry:set-default-row-height'
@@ -65,6 +71,7 @@ export type GridChangePrecondition<TRowData = unknown> = (state: Readonly<Intern
 export interface GridHistoryMutation<TRowData = unknown> {
 	reason: GridChangeReason;
 	state?: GridStateUpdater<TRowData>;
+	run?: () => unknown;
 	invalidations?: GridInvalidation[];
 	domains?: ReadonlyArray<keyof GridDomainVersions>;
 	events?: GridChangeEvent<TRowData>[];
@@ -119,6 +126,17 @@ export class GridChangeApplier<TRowData = unknown> {
 	private nextChangeId = 1;
 
 	constructor(private readonly deps: GridChangeApplierDeps<TRowData>) {}
+
+	registerHistory(history: GridHistoryEntry<TRowData>): void {
+		this.deps.commandHistory.add({
+			undo: () => {
+				this.applyHistoryMutation(history.undo);
+			},
+			redo: () => {
+				this.applyHistoryMutation(history.redo);
+			},
+		});
+	}
 
 	apply(change: GridChange<TRowData>): GridCommitResult {
 		const validation = this.validate(change);
@@ -236,6 +254,17 @@ export class GridChangeApplier<TRowData = unknown> {
 	}
 
 	private applyHistoryMutation(change: GridHistoryMutation<TRowData>): GridCommitResult {
+		if (change.run) {
+			try {
+				const result = change.run();
+				return this.normalizeHistoryExecutionResult(result);
+			} catch (error) {
+				return {
+					status: 'failed-before-commit',
+					fault: this.reportFault('history-run', error, { reason: change.reason }),
+				};
+			}
+		}
 		return this.apply({
 			reason: change.reason,
 			state: change.state,
@@ -244,6 +273,16 @@ export class GridChangeApplier<TRowData = unknown> {
 			events: change.events,
 			requestRender: change.requestRender,
 		});
+	}
+
+	private normalizeHistoryExecutionResult(result: unknown): GridCommitResult {
+		if (this.isGridCommitResult(result)) return result;
+		return { status: 'committed', changeId: this.nextChangeId++, faults: [] };
+	}
+
+	private isGridCommitResult(result: unknown): result is GridCommitResult {
+		if (!result || typeof result !== 'object' || !('status' in result)) return false;
+		return result.status === 'committed' || result.status === 'noop' || result.status === 'rejected' || result.status === 'failed-before-commit';
 	}
 
 	private reportFault(operation: string, error: unknown, context?: Record<string, unknown>): RuntimeFault {
