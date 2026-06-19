@@ -159,4 +159,40 @@ describe('RowDataStore.applyTransaction', () => {
 		expect(store.getNode('a')!.data.profile.stats.score).toBe(1);
 		expect(store.getNode('a')!.data).not.toBe(rows[0]);
 	});
+
+	it('restores original row node identities, deep data, added/removal state, and source order', () => {
+		type NestedRow = { id: string; category: string; profile: { name: string; stats: { score: number } } };
+		const store = new RowDataStore<NestedRow>((row) => row.id);
+		store.setRows([
+			{ id: 'a', category: 'A', profile: { name: 'Alice', stats: { score: 1 } } },
+			{ id: 'b', category: 'B', profile: { name: 'Bob', stats: { score: 2 } } },
+		]);
+
+		const originalNodeA = store.getNode('a');
+		const originalNodeB = store.getNode('b');
+		const snapshot = store.captureTransactionSnapshot();
+
+		store.applyTransaction({
+			remove: [{ id: 'a', category: 'A', profile: { name: 'Alice', stats: { score: 1 } } }],
+			update: [{ id: 'b', category: 'C', profile: { name: 'Bobby', stats: { score: 20 } } }],
+			add: [{ id: 'c', category: 'D', profile: { name: 'Cara', stats: { score: 3 } } }],
+			addIndex: 0,
+		});
+
+		expect(store.getNode('a')).toBeNull();
+		expect(store.getNode('c')).not.toBeNull();
+		expect(store.getSourceOrder()).toEqual(['c', 'b']);
+
+		store.restoreTransactionSnapshot(snapshot);
+
+		expect(store.getNode('a')).toBe(originalNodeA);
+		expect(store.getNode('b')).toBe(originalNodeB);
+		expect(store.getNode('c')).toBeNull();
+		expect(store.getSourceOrder()).toEqual(['a', 'b']);
+		expect(store.getNode('a')!.data.profile.name).toBe('Alice');
+		expect(store.getNode('a')!.data.profile.stats.score).toBe(1);
+		expect(store.getNode('b')!.data.category).toBe('B');
+		expect(store.getNode('b')!.data.profile.name).toBe('Bob');
+		expect(store.getNode('b')!.data.profile.stats.score).toBe(2);
+	});
 });

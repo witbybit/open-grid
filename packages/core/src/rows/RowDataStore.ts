@@ -24,7 +24,8 @@ export interface StoreTransactionResult<T> {
 }
 
 export interface RowDataStoreTransactionSnapshot<T> {
-	readonly rows: readonly T[];
+	readonly nodesById: ReadonlyMap<string, RowNode<T>>;
+	readonly rowDataById: ReadonlyMap<string, T>;
 	readonly sourceOrder: readonly string[];
 }
 
@@ -239,14 +240,18 @@ export class RowDataStore<T> {
 
 	public captureTransactionSnapshot(): RowDataStoreTransactionSnapshot<T> {
 		return {
-			rows: structuredClone(this.sourceOrder.map((id) => this.rowsById.get(id)!.data)),
+			nodesById: new Map(this.rowsById),
+			rowDataById: new Map(this.sourceOrder.map((id) => [id, structuredClone(this.rowsById.get(id)!.data)])),
 			sourceOrder: this.sourceOrder.slice(),
 		};
 	}
 
 	public restoreTransactionSnapshot(snapshot: RowDataStoreTransactionSnapshot<T>): void {
-		this.setRows([...snapshot.rows]);
-		this.setRowOrder([...snapshot.sourceOrder]);
+		for (const [id, node] of snapshot.nodesById) {
+			node.setData(structuredClone(snapshot.rowDataById.get(id)!));
+		}
+		this.rowsById = new Map(snapshot.nodesById);
+		this.sourceOrder = snapshot.sourceOrder.slice();
 	}
 
 	/** Reorder rows by providing a new array of row IDs. IDs not present in the store are silently dropped. */

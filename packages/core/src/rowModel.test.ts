@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GridStore, isEditableVisualRow, isFullWidthVisualRow } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
@@ -1042,6 +1042,79 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 		// Both rows should be visible (full rebuild correctly groups them)
 		expect(ctrl.getRowNodeById('1')).not.toBeNull();
 		expect(ctrl.getRowNodeById('2')).not.toBeNull();
+	});
+});
+
+describe('row-transaction rollback restores full client row-model identity', () => {
+	it('restores removed row identities, deep row data, added-node removal, source order, and grouped output after a failed mixed commit', () => {
+		type RollbackRow = {
+			id: string;
+			category: string;
+			profile: { name: string; stats: { score: number } };
+		};
+
+		const store = new GridStore<RollbackRow>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'profile.name', header: 'Name' },
+			],
+			rowModelConfig: {
+				type: 'client',
+				grouping: { model: [{ colId: 'category' }], defaultExpanded: true },
+			},
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'row-1', category: 'A', profile: { name: 'Alice', stats: { score: 1 } } },
+				{ id: 'row-2', category: 'B', profile: { name: 'Bob', stats: { score: 2 } } },
+			],
+			columns: store.getState().columns,
+		});
+
+		const originalNode1 = store.getRowNodeById('row-1');
+		const originalNode2 = store.getRowNodeById('row-2');
+		const originalVisualIds = Array.from({ length: store.getVisualRowCount() }, (_, index) => store.getVisualRow(index)?.id);
+		const originalRowOrder = store.getRowOrder();
+
+		const originalSetState = store.engine.stateManager.setState;
+		store.engine.stateManager.setState = vi.fn(() => {
+			throw new Error('forced mixed-commit failure');
+		}) as typeof originalSetState;
+
+		const result = store.engine.changeApplier.commit({
+			reason: 'rows:apply-transaction',
+			domainMutations: [
+				{
+					kind: 'row-transaction',
+					transaction: {
+						remove: [{ id: 'row-1', category: 'A', profile: { name: 'Alice', stats: { score: 1 } } }],
+						update: [{ id: 'row-2', category: 'C', profile: { name: 'Bobby', stats: { score: 20 } } }],
+						add: [{ id: 'row-3', category: 'D', profile: { name: 'Cara', stats: { score: 3 } } }],
+						addIndex: 0,
+					},
+				},
+			],
+			state: { columnWidths: { category: 222 } },
+		});
+
+		store.engine.stateManager.setState = originalSetState;
+
+		expect(result.status).toBe('failed-before-commit');
+		expect(store.getRowNodeById('row-1')).toBe(originalNode1);
+		expect(store.getRowNodeById('row-2')).toBe(originalNode2);
+		expect(store.getRowNodeById('row-3')).toBeNull();
+		expect(store.getRowOrder()).toEqual(originalRowOrder);
+		expect(store.getRowNodeById('row-1')!.data.profile.name).toBe('Alice');
+		expect(store.getRowNodeById('row-1')!.data.profile.stats.score).toBe(1);
+		expect(store.getRowNodeById('row-2')!.data.category).toBe('B');
+		expect(store.getRowNodeById('row-2')!.data.profile.name).toBe('Bob');
+		expect(store.getRowNodeById('row-2')!.data.profile.stats.score).toBe(2);
+
+		const restoredVisualIds = Array.from({ length: store.getVisualRowCount() }, (_, index) => store.getVisualRow(index)?.id);
+		expect(restoredVisualIds).toEqual(originalVisualIds);
+
+		controller.dispose();
 	});
 });
 
