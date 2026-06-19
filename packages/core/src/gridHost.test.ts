@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createClientGrid } from './createGrid.js';
 import { mountGridHost } from './gridHost.js';
-import { resolveGridInternalStore } from './internal/apiInternalBridge.js';
+import { resolveGridInternalRuntime } from './internal/apiInternalBridge.js';
 import { GridStore } from './store.js';
 import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 
@@ -191,13 +191,13 @@ describe('mountGridHost', () => {
 		});
 		document.body.appendChild(container);
 
-		const store = resolveGridInternalStore(api);
+		const runtime = resolveGridInternalRuntime(api);
 
 		const host = mountGridHost(api, container);
 		host.destroy(); // first destroy — OK
 		host.destroy(); // second destroy — stale token fault
 
-		const faults = store.engine.runtimeFaults.snapshot();
+		const faults = runtime.engine.runtimeFaults.snapshot();
 		expect(faults.some((f) => f.operation === 'unbindRuntimePorts')).toBe(true);
 		api.destroy();
 	});

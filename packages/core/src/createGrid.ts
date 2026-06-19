@@ -18,7 +18,7 @@ import type {
 } from './api/GridApi.js';
 import type { ColumnDef } from './columnDef.js';
 import type { GridInitialState, InternalGridState, ColumnState, Listener } from './state/GridState.js';
-import { registerGridInternalStore } from './internal/apiInternalBridge.js';
+import { registerGridInternalRuntime } from './internal/apiInternalBridge.js';
 import { exportToCsv } from './export/csvExport.js';
 import {
 	type GridPersistenceAdapter,
@@ -297,7 +297,12 @@ export function createApiFacade<TRowData>(
 	};
 
 	const frozen = Object.freeze(api) as GridApi<TRowData>;
-	registerGridInternalStore(frozen, store);
+	registerGridInternalRuntime(frozen, {
+		engine: store.engine,
+		api: store,
+		pluginController: store.getPluginController(),
+		setContainerElement: (container) => store.setContainerElement(container),
+	});
 	return frozen;
 }
 

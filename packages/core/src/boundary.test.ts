@@ -206,8 +206,8 @@ describe('Public/internal boundary', () => {
 		});
 
 		it('does not export runtime bridge escape hatches', () => {
-			expect((internalApi as Record<string, unknown>)['resolveGridInternalStore']).toBeUndefined();
-			expect((internalApi as Record<string, unknown>)['registerGridInternalStore']).toBeUndefined();
+			expect((internalApi as Record<string, unknown>)['resolveGridInternalRuntime']).toBeUndefined();
+			expect((internalApi as Record<string, unknown>)['registerGridInternalRuntime']).toBeUndefined();
 			expect((internalApi as Record<string, unknown>)['resolveGridPluginController']).toBeUndefined();
 		});
 	});

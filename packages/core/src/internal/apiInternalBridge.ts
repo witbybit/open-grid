@@ -1,20 +1,27 @@
-import type { GridApi, GridPluginController } from '../api/GridApi.js';
-import type { GridStore } from '../store.js';
+import type { GridApi, GridPluginController, InternalGridApi } from '../api/GridApi.js';
+import type { GridEngine } from '../engine/GridEngine.js';
 
-const apiStoreMap = new WeakMap<GridApi<unknown>, GridStore<unknown>>();
-
-export function registerGridInternalStore<TRowData>(api: GridApi<TRowData>, store: GridStore<TRowData>): void {
-	apiStoreMap.set(api as GridApi<unknown>, store as GridStore<unknown>);
+export interface GridInternalRuntime<TRowData = unknown> {
+	engine: GridEngine<TRowData>;
+	api: InternalGridApi<TRowData>;
+	pluginController: GridPluginController<TRowData>;
+	setContainerElement(container: HTMLElement): void;
 }
 
-export function resolveGridInternalStore<TRowData>(api: GridApi<TRowData>): GridStore<TRowData> {
-	const store = apiStoreMap.get(api as GridApi<unknown>);
-	if (!store) {
+const apiRuntimeMap = new WeakMap<GridApi<unknown>, GridInternalRuntime<unknown>>();
+
+export function registerGridInternalRuntime<TRowData>(api: GridApi<TRowData>, runtime: GridInternalRuntime<TRowData>): void {
+	apiRuntimeMap.set(api as GridApi<unknown>, runtime as GridInternalRuntime<unknown>);
+}
+
+export function resolveGridInternalRuntime<TRowData>(api: GridApi<TRowData>): GridInternalRuntime<TRowData> {
+	const runtime = apiRuntimeMap.get(api as GridApi<unknown>);
+	if (!runtime) {
 		throw new Error('Invalid GridApi. This API was not created by Open Grid.');
 	}
-	return store as GridStore<TRowData>;
+	return runtime as GridInternalRuntime<TRowData>;
 }
 
 export function resolveGridPluginController<TRowData>(api: GridApi<TRowData>): GridPluginController<TRowData> {
-	return resolveGridInternalStore(api).getPluginController();
+	return resolveGridInternalRuntime(api).pluginController;
 }

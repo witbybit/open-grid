@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createClientGrid } from './createGrid.js';
 import { mountGridHost } from './gridHost.js';
-import { resolveGridInternalStore } from './internal/apiInternalBridge.js';
+import { resolveGridInternalRuntime } from './internal/apiInternalBridge.js';
 
 class TestResizeObserver {
 	public static instances: TestResizeObserver[] = [];
@@ -82,7 +82,7 @@ describe('mountGridHost adversarial lifecycle', () => {
 			rows: [{ id: 'row-1', name: 'Row 1' }],
 			getRowId: (row) => row.id,
 		});
-		const store = resolveGridInternalStore(api);
+		const runtime = resolveGridInternalRuntime(api);
 		const container1 = createContainer(500, 180);
 		const container2 = createContainer(700, 260);
 
@@ -93,8 +93,8 @@ describe('mountGridHost adversarial lifecycle', () => {
 		const host2 = mountGridHost(api, container2);
 		const observer2 = TestResizeObserver.instances[1];
 
-		const setViewportSizeSpy = vi.spyOn(store, 'setViewportSize').mockReturnValue(true);
-		const updateVisibleRangesSpy = vi.spyOn(store, 'updateVisibleRanges').mockReturnValue(true);
+		const setViewportSizeSpy = vi.spyOn(runtime.api, 'setViewportSize').mockReturnValue(true);
+		const updateVisibleRangesSpy = vi.spyOn(runtime.api, 'updateVisibleRanges').mockReturnValue(true);
 
 		observer1.emit(333, 111);
 		expect(setViewportSizeSpy).not.toHaveBeenCalled();
@@ -120,7 +120,7 @@ describe('mountGridHost adversarial lifecycle', () => {
 			rows: [{ id: 'row-1', name: 'Row 1' }],
 			getRowId: (row) => row.id,
 		});
-		const store = resolveGridInternalStore(api);
+		const runtime = resolveGridInternalRuntime(api);
 
 		const host1 = mountGridHost(api, createContainer());
 		host1.destroy();
@@ -128,7 +128,7 @@ describe('mountGridHost adversarial lifecycle', () => {
 		const host2 = mountGridHost(api, createContainer());
 		host1.destroy();
 
-		const faults = store.getRuntimeFaults();
+		const faults = runtime.api.getRuntimeFaults();
 		expect(faults.some((fault) => fault.operation === 'unbindRuntimePorts')).toBe(true);
 		expect(host2.getRenderStats()).toBeTruthy();
 
@@ -148,7 +148,7 @@ describe('mountGridHost adversarial lifecycle', () => {
 			rows: Array.from({ length: 25 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
 			getRowId: (row) => row.id,
 		});
-		const store = resolveGridInternalStore(api);
+		const runtime = resolveGridInternalRuntime(api);
 
 		for (let iteration = 0; iteration < 20; iteration++) {
 			const host = mountGridHost(api, createContainer(480 + iteration, 180 + iteration));
@@ -158,7 +158,7 @@ describe('mountGridHost adversarial lifecycle', () => {
 			host.destroy();
 		}
 
-		expect(store.getRuntimeFaults()).toEqual([]);
+		expect(runtime.api.getRuntimeFaults()).toEqual([]);
 		api.destroy();
 	});
 });

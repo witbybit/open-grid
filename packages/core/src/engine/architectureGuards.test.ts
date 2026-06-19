@@ -1511,10 +1511,38 @@ describe('Architecture guardrails', () => {
 
 	it('internal entry stays adapter-only and does not expose runtime bridge helpers (Plan 112)', () => {
 		const internalEntry = readFileSync(resolve(CORE_ROOT, 'src', 'internal.ts'), 'utf-8');
-		expect(internalEntry).not.toContain('resolveGridInternalStore');
-		expect(internalEntry).not.toContain('registerGridInternalStore');
+		expect(internalEntry).not.toContain('resolveGridInternalRuntime');
+		expect(internalEntry).not.toContain('registerGridInternalRuntime');
 		expect(internalEntry).not.toContain('resolveGridPluginController');
 		expect(internalEntry).not.toContain('GridStore');
+	});
+
+	it('internal runtime bridge stores a narrow runtime handle instead of GridStore (Plan 112)', () => {
+		const bridge = readFileSync(resolve(CORE_ROOT, 'src', 'internal', 'apiInternalBridge.ts'), 'utf-8');
+		expect(bridge).toContain('export interface GridInternalRuntime');
+		expect(bridge).toContain('api: InternalGridApi<TRowData>;');
+		expect(bridge).toContain('pluginController: GridPluginController<TRowData>;');
+		expect(bridge).toContain('setContainerElement(container: HTMLElement): void;');
+		expect(bridge).toContain('registerGridInternalRuntime');
+		expect(bridge).toContain('resolveGridInternalRuntime');
+		expect(bridge).not.toContain("from '../store.js'");
+		expect(bridge).not.toContain('WeakMap<GridApi<unknown>, GridStore<unknown>>');
+	});
+
+	it('gridHost mounts against the internal runtime handle instead of a concrete GridStore (Plan 112)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'gridHost.ts'), 'utf-8');
+		expect(content).toContain('resolveGridInternalRuntime(api)');
+		expect(content).toContain('const internalApi = runtime.api;');
+		expect(content).toContain('runtime.setContainerElement(container);');
+		expect(content).not.toContain('resolveGridInternalStore(api)');
+		expect(content).not.toContain('const store =');
+	});
+
+	it('gridHost adapter types do not depend on store.ts type exports (Plan 112)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'gridHost.ts'), 'utf-8');
+		expect(content).toContain("import type { GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';");
+		expect(content).not.toContain("import('./store.js').GridCellPointer");
+		expect(content).not.toContain("import('./store.js').GridCellAccess");
 	});
 
 	it('GridStateFeatureController no longer contains raw write fallbacks (Plan 103)', () => {
