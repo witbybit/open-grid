@@ -29,13 +29,34 @@ export interface BatchCellMutation {
 	source?: CellValueChangeOptions['source'];
 }
 
+export interface RowModelTransactionSnapshot<TRowData = unknown> {
+	rows: readonly TRowData[];
+	rowOrder: readonly string[];
+}
+
+export interface RowTransactionResult<TRowData = unknown> {
+	added: readonly TRowData[];
+	updated: readonly TRowData[];
+	removed: readonly TRowData[];
+	rejected: readonly RowTransactionRejection[];
+}
+
+export interface RowTransactionRejection {
+	rowId?: string;
+	reason: string;
+	index?: number;
+}
+
+export interface TransactionalRowModel<TRowData = unknown> {
+	captureTransactionSnapshot(mutation: RowTransactionMutation<TRowData>): RowModelTransactionSnapshot<TRowData>;
+	applyTransaction(mutation: RowDataTransaction<TRowData>): RowTransactionResult<TRowData>;
+	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
+}
+
 export interface RowTransactionMutation<TRowData = unknown> {
 	kind: 'row-transaction';
 	transaction: RowDataTransaction<TRowData>;
-	restoreSnapshot?: {
-		rows: readonly TRowData[];
-		rowOrder: readonly string[];
-	};
+	restoreSnapshot?: RowModelTransactionSnapshot<TRowData>;
 }
 
 export interface RowOrderMutation {
