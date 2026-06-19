@@ -549,12 +549,11 @@ describe('Architecture guardrails', () => {
 		expect(storeContent).not.toContain('export enum GridEventName');
 	});
 
-	it('GridState is defined in state/GridState.ts, not store.ts', () => {
+	it('legacy GridState compatibility alias is removed from the runtime state module', () => {
 		const stateContent = readFileSync(resolve(CORE_ROOT, 'src', 'state', 'GridState.ts'), 'utf-8');
-		// GridState is a composed type alias (not an interface)
-		expect(stateContent).toContain('export type GridState');
+		expect(stateContent).not.toContain('export type GridState<');
 		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
-		expect(storeContent).not.toContain('export type GridState');
+		expect(storeContent).not.toContain('export type GridState<');
 		expect(storeContent).not.toContain('export interface GridState');
 	});
 
@@ -1576,9 +1575,11 @@ describe('Architecture guardrails', () => {
 		const reactTypes = readFileSync(resolve(REACT_ROOT, 'src', 'types.ts'), 'utf-8');
 
 		expect(coreIndex).not.toContain('GridInitialState, GridState, Listener');
+		expect(coreIndex).not.toContain('GridInitialState, Listener');
 		expect(coreIndex).not.toContain('export type { InternalGridState');
 		expect(coreStore).not.toContain("export * from './state/GridState.js';");
 		expect(coreStore).not.toContain('export type { GridInitialState, GridState');
+		expect(coreStore).not.toContain('export type { GridInitialState, Listener');
 		expect(coreStore).not.toContain('export type { InternalGridState');
 		expect(gridApi).not.toContain('export type { GridState,');
 		expect(gridApi).not.toContain('export type { InternalGridState');
@@ -1761,6 +1762,16 @@ describe('Architecture guardrails', () => {
 		const ricContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
 		const subscriptions = [...ricContent.matchAll(/subscribeToKey\('([^']+)'/g)].map((match) => match[1]);
 		expect(subscriptions).toEqual(['columns', 'expansion']);
+	});
+
+	it('public snapshot creation is centralized in createGridStateSnapshot (Plan 115)', () => {
+		const snapshotBuilder = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'createGridStateSnapshot.ts'), 'utf-8');
+		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		const createGridContent = readFileSync(resolve(CORE_ROOT, 'src', 'createGrid.ts'), 'utf-8');
+		expect(snapshotBuilder).toContain('export function createGridStateSnapshot');
+		expect(storeContent).toContain('createGridStateSnapshot(this.state)');
+		expect(createGridContent).not.toContain('function createGridStateSnapshot');
+		expect(createGridContent).toContain('getStateSnapshot: () => store.getStateSnapshot()');
 	});
 
 	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {

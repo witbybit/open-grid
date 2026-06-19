@@ -4,9 +4,10 @@ import { StateManager } from '../state/StateManager.js';
 import { InvalidationManager } from '../renderer/invalidationManager.js';
 import { EventBus } from '../events/EventBus.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
-import { GridEventName, type GridState } from '../store.js';
+import { GridEventName } from '../store.js';
 import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import { createDefaultGridDomainMutationExecutorRegistry } from './GridDomainMutation.js';
+import type { InternalGridState } from '../state/GridState.js';
 
 type TestRow = { id: string; name: string };
 
@@ -38,7 +39,7 @@ function makeApplier(): {
 		expansion: { groups: {}, treeRows: {}, details: {} },
 		rowOverscanPx: 400,
 		colBuffer: 1,
-	} as unknown as GridState<TestRow>);
+	} as unknown as InternalGridState<TestRow>);
 
 	const invalidation = new InvalidationManager();
 	const eventBus = new EventBus<TestRow>();
@@ -238,7 +239,7 @@ describe('GridChangeApplier', () => {
 			expansion: { groups: {}, treeRows: {}, details: {} },
 			rowOverscanPx: 400,
 			colBuffer: 1,
-		} as unknown as GridState<TestRow>);
+		} as unknown as InternalGridState<TestRow>);
 		const invalidation = new InvalidationManager();
 		const eventBus = new EventBus<TestRow>();
 		const faultReporter = new RuntimeFaultReporter<TestRow>({ log: () => undefined });
@@ -310,7 +311,7 @@ describe('GridChangeApplier', () => {
 			expansion: { groups: {}, treeRows: {}, details: {} },
 			rowOverscanPx: 400,
 			colBuffer: 1,
-		} as unknown as GridState<TestRow>);
+		} as unknown as InternalGridState<TestRow>);
 		const deps: GridCommitKernelDeps<TestRow> = {
 			stateManager,
 			invalidation: new InvalidationManager(),
@@ -353,7 +354,7 @@ describe('GridChangeApplier', () => {
 			expansion: { groups: {}, treeRows: {}, details: {} },
 			rowOverscanPx: 400,
 			colBuffer: 1,
-		} as unknown as GridState<TestRow>);
+		} as unknown as InternalGridState<TestRow>);
 		const resultPayload = {
 			add: [{ id: '2' }],
 			remove: [],
@@ -406,13 +407,13 @@ describe('GridChangeApplier', () => {
 				expansion: { groups: {}, treeRows: {}, details: {} },
 				rowOverscanPx: 400,
 				colBuffer: 1,
-			} as unknown as GridState<TestRow>),
+			} as unknown as InternalGridState<TestRow>),
 			invalidation: new InvalidationManager(),
 			eventBus: new EventBus<TestRow>(),
 			commandHistory: new CommandHistory(),
 			requestRender: vi.fn(),
 			commitContext: {
-				getState: () => ({}) as GridState<TestRow>,
+				getState: () => ({}) as InternalGridState<TestRow>,
 				getRowModel: () =>
 					({
 						getRawRowById: (rowId: string) => (rowId === '1' ? ({ id: '1', name: rowValues.get('1:name') } as TestRow) : null),
@@ -497,13 +498,13 @@ describe('GridChangeApplier', () => {
 				expansion: { groups: {}, treeRows: {}, details: {} },
 				rowOverscanPx: 400,
 				colBuffer: 1,
-			} as unknown as GridState<TestRow>),
+			} as unknown as InternalGridState<TestRow>),
 			invalidation: new InvalidationManager(),
 			eventBus: new EventBus<TestRow>(),
 			commandHistory: new CommandHistory(),
 			requestRender: vi.fn(),
 			commitContext: {
-				getState: () => ({}) as GridState<TestRow>,
+				getState: () => ({}) as InternalGridState<TestRow>,
 				getRowModel: () =>
 					({
 						getRawRowById: (rowId: string) =>
@@ -561,13 +562,13 @@ describe('GridChangeApplier', () => {
 				expansion: { groups: {}, treeRows: {}, details: {} },
 				rowOverscanPx: 400,
 				colBuffer: 1,
-			} as unknown as GridState<TestRow>),
+			} as unknown as InternalGridState<TestRow>),
 			invalidation: new InvalidationManager(),
 			eventBus: new EventBus<TestRow>(),
 			commandHistory,
 			requestRender: vi.fn(),
 			commitContext: {
-				getState: () => ({}) as GridState<TestRow>,
+				getState: () => ({}) as InternalGridState<TestRow>,
 				getRowModel: () =>
 					({
 						getRawRowById: (rowId: string) => (rowId === '1' ? ({ id: rowId, name: rowValues.get(`${rowId}:name`) } as TestRow) : null),

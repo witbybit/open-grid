@@ -13,7 +13,7 @@ import type { CsvExportOptions } from '../export/csvExport.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
-import type { Listener, ColumnState, GridCellRangeBounds } from '../state/GridState.js';
+import type { ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 
 export type { CsvExportOptions };
@@ -165,6 +165,12 @@ export interface GridStateSnapshot<TRowData = unknown> {
 	readonly visibleRowRange?: ViewportRange;
 }
 
+export type GridSnapshotListener<TRowData = unknown> = (snapshot: GridStateSnapshot<TRowData>) => void;
+
+export type GridSnapshotKeyListener<TRowData = unknown, K extends keyof GridStateSnapshot<TRowData> = keyof GridStateSnapshot<TRowData>> = (
+	value: GridStateSnapshot<TRowData>[K]
+) => void;
+
 export interface GridPlugin<TRowData = unknown> {
 	readonly name: string;
 	onInit?(api: GridPluginRuntime<TRowData>): void;
@@ -281,7 +287,7 @@ export interface GridTransaction<TRowData = unknown> {
 }
 
 // Re-export stable state-adjacent types so importers of GridApi.ts also get them.
-export type { Listener, ColumnState, GridCellRangeBounds };
+export type { ColumnState, GridCellRangeBounds };
 
 // ── Cell renderer / editor props ─────────────────────────────────────────────
 
@@ -529,8 +535,8 @@ export interface GridApi<TRowData = unknown> {
 	getGridState(): PersistedGridState;
 	/** Apply a serializable grid state snapshot, updating all covered fields. Unknown fields are ignored. */
 	applyGridState(state: PersistedGridState): void;
-	subscribe(listener: Listener<TRowData>): () => void;
-	subscribeToKey(key: string, listener: Listener<TRowData>): () => void;
+	subscribe(listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToKey<K extends keyof GridStateSnapshot<TRowData>>(key: K, listener: GridSnapshotKeyListener<TRowData, K>): () => void;
 	/** Subscribe to domain version changes. Fires once per committed logical mutation in any domain.
 	 *  Prefer this over broad `subscribe()` for consumers that only need to know *that* something changed. */
 	subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void;
@@ -639,14 +645,14 @@ export interface GridRendererApi<TRowData = unknown> extends GridApi<TRowData> {
 	getVisualRowCount(): number;
 	getVisualIndexById(visualRowId: string): number | null;
 	getVisualIndexByRowId(rowId: string): number | null;
-	subscribeToViewport(listener: Listener<TRowData>): () => void;
-	subscribeToSelection(listener: Listener<TRowData>): () => void;
-	subscribeToFocusedCell(listener: Listener<TRowData>): () => void;
-	subscribeToEditingCell(listener: Listener<TRowData>): () => void;
+	subscribeToViewport(listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToSelection(listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToFocusedCell(listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToEditingCell(listener: GridSnapshotListener<TRowData>): () => void;
 	subscribeToCell(rowId: string, colField: string, listener: () => void): () => void;
-	subscribeToRow(rowId: string, listener: Listener<TRowData>): () => void;
-	subscribeToColumn(colField: string, listener: Listener<TRowData>): () => void;
-	subscribeToHeaders(listener: Listener<TRowData>): () => void;
+	subscribeToRow(rowId: string, listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToColumn(colField: string, listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToHeaders(listener: GridSnapshotListener<TRowData>): () => void;
 }
 
 export interface GridHostRuntime<TRowData = unknown> {
@@ -703,14 +709,14 @@ export interface InternalGridApi<TRowData = unknown> extends GridRendererApi<TRo
 	getVisualIndexByRowId(rowId: string): number | null;
 
 	// ── Fine-grained subscriptions (used by cell/row portals) ────────────────
-	subscribeToViewport(listener: Listener<TRowData>): () => void;
-	subscribeToSelection(listener: Listener<TRowData>): () => void;
-	subscribeToFocusedCell(listener: Listener<TRowData>): () => void;
-	subscribeToEditingCell(listener: Listener<TRowData>): () => void;
+	subscribeToViewport(listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToSelection(listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToFocusedCell(listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToEditingCell(listener: GridSnapshotListener<TRowData>): () => void;
 	subscribeToCell(rowId: string, colField: string, listener: () => void): () => void;
-	subscribeToRow(rowId: string, listener: Listener<TRowData>): () => void;
-	subscribeToColumn(colField: string, listener: Listener<TRowData>): () => void;
-	subscribeToHeaders(listener: Listener<TRowData>): () => void;
+	subscribeToRow(rowId: string, listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToColumn(colField: string, listener: GridSnapshotListener<TRowData>): () => void;
+	subscribeToHeaders(listener: GridSnapshotListener<TRowData>): () => void;
 
 	// ── Store / engine internals ─────────────────────────────────────────────
 	registerRowModel(rowModel: import('../store.js').RowModel<TRowData>): void;

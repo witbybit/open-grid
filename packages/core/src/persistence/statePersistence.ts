@@ -454,7 +454,8 @@ function buildPersistedStateRestoreOps(
  */
 export function applyPersistedStateToApi<TRowData>(
 	api: {
-		getState(): any;
+		getStateSnapshot(): { columns: ReadonlyArray<{ field: string }> };
+		getGridState(): PersistedGridState;
 		setColumnOrder(fields: string[]): void;
 		setColumnsVisible(fields: string[], visible: boolean): void;
 		setColumnWidth(field: string, width: number): void;
@@ -472,14 +473,9 @@ export function applyPersistedStateToApi<TRowData>(
 	if (versionError !== null) {
 		return false;
 	}
-	const originalState = api.getState();
-	const originalColumns = originalState.columns as Array<{ field: string }>;
-	let originalSnapshot: PersistedGridState | null = null;
-	try {
-		originalSnapshot = extractPersistedState(originalState);
-	} catch {
-		originalSnapshot = null;
-	}
+	const originalSnapshotState = api.getStateSnapshot();
+	const originalColumns = originalSnapshotState.columns as Array<{ field: string }>;
+	const originalSnapshot = api.getGridState();
 	const applyOps = buildPersistedStateRestoreOps(api, state, originalColumns);
 
 	try {

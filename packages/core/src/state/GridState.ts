@@ -120,16 +120,13 @@ export interface GridUIState {
 }
 
 /**
- * Full grid state: intersection of model, runtime, and UI slices.
- * Preserved as a single type for backward compat — all existing code that
- * reads or writes `GridState` fields continues to compile unchanged.
- * Future: callers will migrate to reading from the specific slice they need.
+ * Full internal grid state: intersection of model, runtime, and UI slices.
+ * This is an implementation detail used inside the core runtime, not a stable
+ * public snapshot contract.
  */
 export type InternalGridState<TRowData = unknown> = GridModelState<TRowData> & GridRuntimeState & GridUIState;
 
 export type GridInitialState<TRowData = unknown> = GridModelState<TRowData> & Omit<GridUIState, never> & Partial<Pick<GridRuntimeState, 'selection'>>;
-
-export type GridState<TRowData = unknown> = InternalGridState<TRowData>;
 
 /** Serializable snapshot of a single column's user-configurable state. */
 export interface ColumnState {

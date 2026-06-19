@@ -3,6 +3,7 @@ import { GridStore, GridEventName, validateColumns, validateRowIds } from './sto
 import { ClientRowModelController } from './rowModel.js';
 import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
+import type { ActiveEditState, ColumnDef } from './api/GridApi.js';
 
 interface TestRow {
 	id: string;
@@ -88,6 +89,69 @@ describe('GridStore generic row-store functionality', () => {
 
 		unsubscribers.forEach((unsubscribe) => unsubscribe());
 		controller.dispose();
+		store.destroy();
+	});
+
+	it('getStateSnapshot returns immutable defensive copies of public state', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+			filterModel: { name: { type: 'text', operator: 'contains', value: 'A' } },
+			selectedRowIds: ['1'],
+			activeEdit: { rowId: '1', colField: 'name', validationError: 'Required' },
+			pagination: { pageSize: 25, page: 2 },
+			groupBy: ['name'],
+		});
+		const snapshot = store.getStateSnapshot();
+		const liveBefore = store.getState();
+
+		expect(() => {
+			(snapshot.columns as ColumnDef<TestRow>[])[0]!.header = 'Mutated';
+		}).toThrow();
+		expect(() => {
+			(snapshot.sortModel as NonNullable<typeof snapshot.sortModel>)![0]!.sort = 'desc';
+		}).toThrow();
+		expect(() => {
+			(snapshot.filterModel as Record<string, any>).name.value = 'Changed';
+		}).toThrow();
+		expect(() => {
+			(snapshot.selection as any).focus = { rowId: 'x', colField: 'y' };
+		}).toThrow();
+		expect(() => {
+			(snapshot.selectedRowIds as string[]).push('2');
+		}).toThrow();
+		expect(() => {
+			(snapshot.activeEdit as ActiveEditState).validationError = null;
+		}).toThrow();
+		expect(() => {
+			(snapshot.pagination as { pageSize: number; page?: number }).page = 99;
+		}).toThrow();
+		expect(() => {
+			(snapshot.groupBy as string[]).push('id');
+		}).toThrow();
+
+		const liveAfter = store.getState();
+		const freshSnapshot = store.getStateSnapshot();
+
+		expect(liveAfter.columns[0]?.header).toBe(liveBefore.columns[0]?.header);
+		expect(liveAfter.sortModel).toEqual([{ colId: 'name', sort: 'asc' }]);
+		expect(liveAfter.filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'A' } });
+		expect(liveAfter.selection.focus).toBeNull();
+		expect(liveAfter.selectedRowIds).toEqual(['1']);
+		expect(liveAfter.activeEdit?.validationError).toBe('Required');
+		expect(liveAfter.pagination?.page).toBe(2);
+		expect(liveAfter.groupBy).toEqual(['name']);
+		expect(freshSnapshot.columns[0]?.header).toBe('ID');
+		expect(freshSnapshot.sortModel).toEqual([{ colId: 'name', sort: 'asc' }]);
+		expect(freshSnapshot.filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'A' } });
+		expect(freshSnapshot.selectedRowIds).toEqual(['1']);
+		expect(freshSnapshot.activeEdit?.validationError).toBe('Required');
+		expect(freshSnapshot.pagination?.page).toBe(2);
+		expect(freshSnapshot.groupBy).toEqual(['name']);
+
 		store.destroy();
 	});
 

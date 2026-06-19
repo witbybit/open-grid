@@ -12,6 +12,14 @@ Finish the public runtime-state boundary so stable listeners and snapshots expos
 - **Depends on**: Plans 113–114
 - **Category**: public API, snapshots, immutability, boundaries
 
+### Progress notes
+
+- introduced one canonical public snapshot builder in `api/createGridStateSnapshot.ts` and routed both `GridStore.getStateSnapshot()` and the public API facade through it
+- public `subscribe(...)` and `subscribeToKey(...)` now expose immutable `GridStateSnapshot` data instead of `InternalGridState`, and key subscriptions are typed against `keyof GridStateSnapshot`
+- persisted restore rollback no longer depends on raw `getState()`; it uses `getStateSnapshot()` plus `getGridState()` to stay on the public snapshot/persisted-state side of the boundary
+- removed the `GridState = InternalGridState` compatibility alias and migrated remaining tests to `InternalGridState` / `GridInitialState`
+- added verification that snapshot mutation attempts do not mutate live runtime state and architecture guards that snapshot creation stays centralized
+
 ## Problem
 
 Plan 112 removed the major stable `GridState` export leak, but the boundary is still not fully canonical:

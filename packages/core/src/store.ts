@@ -69,7 +69,7 @@ export type { PersistedGridState as SerializableGridState } from './persistence/
 // ── Extracted modules — re-export for backward compat ────────────────────────
 export * from './api/GridApi.js';
 export * from './api/GridEvents.js';
-export type { GridInitialState, Listener, ColumnState, GridCellRangeBounds } from './state/GridState.js';
+export type { GridInitialState, ColumnState, GridCellRangeBounds } from './state/GridState.js';
 // ── Internal imports (for use by definitions in this file) ───────────────────
 import { RowNode } from './rowNode.js';
 import type { ColumnDef, GridStyleRule } from './columnDef.js';
@@ -94,9 +94,12 @@ import type {
 	SelectAllRowsOptions,
 	InternalGridApi,
 	GridApi,
+	GridSnapshotKeyListener,
+	GridSnapshotListener,
 	GridStateSnapshot,
 } from './api/GridApi.js';
-import type { InternalGridState, GridInitialState, Listener, ColumnState } from './state/GridState.js';
+import { createGridStateSnapshot } from './api/createGridStateSnapshot.js';
+import type { InternalGridState, GridInitialState, ColumnState } from './state/GridState.js';
 import type { GridEventPayloadMap, GridEventListener } from './api/GridEvents.js';
 import { GridEventName } from './api/GridEvents.js';
 import { GridPluginRegistry } from './plugins/GridPluginRegistry.js';
@@ -191,26 +194,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getPluginController = (): GridPluginController<TRowData> => this.pluginRegistry;
 	public getState = (): InternalGridState<TRowData> => this.engine.getState();
 
-	public getStateSnapshot = (): GridStateSnapshot<TRowData> => ({
-		columns: this.state.columns.slice(),
-		sortModel: this.state.sortModel,
-		filterModel: this.state.filterModel,
-		selection: this.state.selection,
-		selectedRowIds: this.state.selectedRowIds.slice(),
-		activeEdit: this.state.activeEdit,
-		loading: this.state.loading,
-		pagination: this.state.pagination ? { ...this.state.pagination } : undefined,
-		enableColumnReorder: this.state.enableColumnReorder,
-		globalVersion: this.state.globalVersion,
-		themeName: this.state.themeName,
-		sidebarOpenPanel: this.state.sidebarOpenPanel,
-		chartOpen: this.state.chartOpen,
-		groupBy: this.state.groupBy?.slice(),
-		showGroupFooter: this.state.showGroupFooter,
-		enableStickyGroupRows: this.state.enableStickyGroupRows,
-		masterDetailEnabled: this.state.masterDetailEnabled,
-		visibleRowRange: this.state.visibleRowRange,
-	});
+	public getStateSnapshot = (): GridStateSnapshot<TRowData> => createGridStateSnapshot(this.state);
 
 	public getRowId = (row: TRowData): string => this.engine.getRowId(row);
 
@@ -726,12 +710,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.viewportController.updateVisibleRanges();
 	};
 
-	public subscribe = (listener: Listener<TRowData>): (() => void) => {
-		return this.engine.subscribe(listener);
+	public subscribe = (listener: GridSnapshotListener<TRowData>): (() => void) => {
+		return this.engine.subscribe(() => listener(this.getStateSnapshot()));
 	};
 
-	public subscribeToKey = (key: string, listener: Listener<TRowData>): (() => void) => {
-		return this.engine.subscribeToKey(key, listener);
+	public subscribeToKey = <K extends keyof GridStateSnapshot<TRowData>>(key: K, listener: GridSnapshotKeyListener<TRowData, K>): (() => void) => {
+		return this.engine.subscribeToKey(key as string, () => listener(this.getStateSnapshot()[key]));
 	};
 
 	public subscribeToDomainVersions = (listener: (v: GridDomainVersions) => void): (() => void) => {
@@ -742,25 +726,23 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.subscribeDomain(domain, listener);
 	};
 
-	public subscribeToViewport = (listener: Listener<TRowData>): (() => void) => {
-		const unsubscribeRows = this.subscribeToKey('visibleRowRange', listener);
-		const unsubscribeCols = this.subscribeToKey('visibleColRange', listener);
+	public subscribeToViewport = (listener: GridSnapshotListener<TRowData>): (() => void) => {
+		const unsubscribeRows = this.engine.subscribeToKey('visibleRowRange', () => listener(this.getStateSnapshot()));
 		return () => {
 			unsubscribeRows();
-			unsubscribeCols();
 		};
 	};
 
-	public subscribeToSelection = (listener: Listener<TRowData>): (() => void) => {
-		return this.subscribeToKey('selection', listener);
+	public subscribeToSelection = (listener: GridSnapshotListener<TRowData>): (() => void) => {
+		return this.engine.subscribeToKey('selection', () => listener(this.getStateSnapshot()));
 	};
 
-	public subscribeToFocusedCell = (listener: Listener<TRowData>): (() => void) => {
-		return this.subscribeToKey('selection', listener);
+	public subscribeToFocusedCell = (listener: GridSnapshotListener<TRowData>): (() => void) => {
+		return this.engine.subscribeToKey('selection', () => listener(this.getStateSnapshot()));
 	};
 
-	public subscribeToEditingCell = (listener: Listener<TRowData>): (() => void) => {
-		return this.subscribeToKey('activeEdit', listener);
+	public subscribeToEditingCell = (listener: GridSnapshotListener<TRowData>): (() => void) => {
+		return this.engine.subscribeToKey('activeEdit', () => listener(this.getStateSnapshot()));
 	};
 
 	public subscribeToCell = (rowId: string, colField: string, listener: () => void): (() => void) => {
@@ -769,11 +751,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return () => this.unregisterCellSubscription(sub);
 	};
 
-	public subscribeToRow = (rowId: string, listener: Listener<TRowData>): (() => void) => {
-		const unsubscribeData = this.subscribeToKey('globalVersion', listener);
-		const unsubscribeHeights = this.subscribeToKey('rowHeights', listener);
+	public subscribeToRow = (rowId: string, listener: GridSnapshotListener<TRowData>): (() => void) => {
+		const notify = (): void => listener(this.getStateSnapshot());
+		const unsubscribeData = this.engine.subscribeToKey('globalVersion', notify);
+		const unsubscribeHeights = this.engine.subscribeToKey('rowHeights', notify);
 		const unsubscribeEvent = this.addEventListener(GridEventName.rowResized, (event) => {
-			if (event.payload.rowId === rowId) listener(this.getState());
+			if (event.payload.rowId === rowId) notify();
 		});
 		return () => {
 			unsubscribeData();
@@ -782,11 +765,12 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		};
 	};
 
-	public subscribeToColumn = (colField: string, listener: Listener<TRowData>): (() => void) => {
-		const unsubscribeColumns = this.subscribeToKey('columns', listener);
-		const unsubscribeWidths = this.subscribeToKey('columnWidths', listener);
+	public subscribeToColumn = (colField: string, listener: GridSnapshotListener<TRowData>): (() => void) => {
+		const notify = (): void => listener(this.getStateSnapshot());
+		const unsubscribeColumns = this.engine.subscribeToKey('columns', notify);
+		const unsubscribeWidths = this.engine.subscribeToKey('columnWidths', notify);
 		const unsubscribeEvent = this.addEventListener(GridEventName.columnResized, (event) => {
-			if (event.payload.colField === colField) listener(this.getState());
+			if (event.payload.colField === colField) notify();
 		});
 		return () => {
 			unsubscribeColumns();
@@ -795,10 +779,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		};
 	};
 
-	public subscribeToHeaders = (listener: Listener<TRowData>): (() => void) => {
-		const unsubscribeColumns = this.subscribeToKey('columns', listener);
-		const unsubscribeWidths = this.subscribeToKey('columnWidths', listener);
-		const unsubscribeSort = this.subscribeToKey('sortModel', listener);
+	public subscribeToHeaders = (listener: GridSnapshotListener<TRowData>): (() => void) => {
+		const notify = (): void => listener(this.getStateSnapshot());
+		const unsubscribeColumns = this.engine.subscribeToKey('columns', notify);
+		const unsubscribeWidths = this.engine.subscribeToKey('columnWidths', notify);
+		const unsubscribeSort = this.engine.subscribeToKey('sortModel', notify);
 		return () => {
 			unsubscribeColumns();
 			unsubscribeWidths();

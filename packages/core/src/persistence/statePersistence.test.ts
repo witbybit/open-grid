@@ -10,7 +10,8 @@ import {
 	GRID_STATE_SCHEMA_VERSION,
 	type PersistedGridState,
 } from './statePersistence.js';
-import type { GridState, ColumnDef } from '../store.js';
+import type { ColumnDef } from '../store.js';
+import type { GridInitialState, InternalGridState } from '../state/GridState.js';
 
 describe('statePersistence', () => {
 	describe('schema versioning', () => {
@@ -69,7 +70,8 @@ describe('statePersistence', () => {
 
 		it('applyPersistedStateToApi returns false for version-mismatched blob', () => {
 			const mockApi = {
-				getState: vi.fn(() => ({ columns: [{ field: 'id' }] })),
+				getStateSnapshot: vi.fn(() => ({ columns: [{ field: 'id' }] })),
+				getGridState: vi.fn(() => ({ v: GRID_STATE_SCHEMA_VERSION })),
 				setColumnOrder: vi.fn(),
 				setColumnsVisible: vi.fn(),
 				setColumnWidth: vi.fn(),
@@ -87,7 +89,8 @@ describe('statePersistence', () => {
 
 		it('applyPersistedStateToApi returns true for correct version', () => {
 			const mockApi = {
-				getState: vi.fn(() => ({ columns: [{ field: 'id' }] })),
+				getStateSnapshot: vi.fn(() => ({ columns: [{ field: 'id' }] })),
+				getGridState: vi.fn(() => ({ v: GRID_STATE_SCHEMA_VERSION })),
 				setColumnOrder: vi.fn(),
 				setColumnsVisible: vi.fn(),
 				setColumnWidth: vi.fn(),
@@ -137,7 +140,7 @@ describe('statePersistence', () => {
 				selection: null,
 				selectedRowIds: ['123'],
 				rowHeights: { '1': 45 },
-			} as unknown as GridState;
+			} as unknown as InternalGridState;
 
 			const result = extractPersistedState(dummyState);
 
@@ -161,7 +164,7 @@ describe('statePersistence', () => {
 				columns: [{ field: 'id', header: 'ID', width: 50 }] as ColumnDef<any>[],
 				columnWidths: {},
 				pinnedColumns: { left: 0, right: 0 },
-			} as unknown as GridState;
+			} as unknown as InternalGridState;
 
 			const result = extractPersistedState(dummyState);
 
@@ -182,7 +185,7 @@ describe('statePersistence', () => {
 			const saved: PersistedGridState = {
 				columnWidths: { id: 60, name: 120, unknownCol: 200 },
 			};
-			const initial: Partial<GridState> = {
+			const initial: Partial<GridInitialState> = {
 				columnWidths: { age: 90 },
 			};
 
@@ -199,7 +202,7 @@ describe('statePersistence', () => {
 			const saved: PersistedGridState = {
 				columnOrder: ['age', 'id', 'name'],
 			};
-			const initial: Partial<GridState> = {};
+			const initial: Partial<GridInitialState> = {};
 
 			const result = applyPersistedState(saved, initial, defaultColumns);
 
@@ -210,7 +213,7 @@ describe('statePersistence', () => {
 			const saved: PersistedGridState = {
 				columnOrder: ['age', 'id'], // incomplete
 			};
-			const initial: Partial<GridState> = {};
+			const initial: Partial<GridInitialState> = {};
 
 			const result = applyPersistedState(saved, initial, defaultColumns);
 
@@ -221,7 +224,7 @@ describe('statePersistence', () => {
 			const saved: PersistedGridState = {
 				columnVisibility: { name: false, age: true },
 			};
-			const initial: Partial<GridState> = {};
+			const initial: Partial<GridInitialState> = {};
 
 			const result = applyPersistedState(saved, initial, defaultColumns);
 
@@ -240,7 +243,7 @@ describe('statePersistence', () => {
 				enableStickyGroupRows: true,
 				pinnedColumns: { left: 2, right: 1 },
 			};
-			const initial: Partial<GridState> = {};
+			const initial: Partial<GridInitialState> = {};
 
 			const result = applyPersistedState(saved, initial, defaultColumns);
 
@@ -257,7 +260,7 @@ describe('statePersistence', () => {
 			const saved: PersistedGridState = {
 				themeName: 'invalid-theme' as any,
 			};
-			const initial: Partial<GridState> = {};
+			const initial: Partial<GridInitialState> = {};
 
 			const result = applyPersistedState(saved, initial, defaultColumns);
 
@@ -501,9 +504,10 @@ describe('statePersistence', () => {
 	describe('applyPersistedStateToApi', () => {
 		it('should invoke API methods for valid saved keys', () => {
 			const mockApi = {
-				getState: vi.fn(() => ({
+				getStateSnapshot: vi.fn(() => ({
 					columns: [{ field: 'id' }, { field: 'name' }],
 				})),
+				getGridState: vi.fn(() => ({ v: GRID_STATE_SCHEMA_VERSION })),
 				setColumnOrder: vi.fn(),
 				setColumnsVisible: vi.fn(),
 				setColumnWidth: vi.fn(),
@@ -547,8 +551,11 @@ describe('statePersistence', () => {
 
 		it('rolls back to the pre-restore snapshot if a setter throws mid-apply', () => {
 			const mockApi = {
-				getState: vi.fn(() => ({
+				getStateSnapshot: vi.fn(() => ({
 					columns: [{ field: 'id' }, { field: 'name' }],
+				})),
+				getGridState: vi.fn(() => ({
+					v: GRID_STATE_SCHEMA_VERSION,
 					columnWidths: { id: 75 },
 					sortModel: [{ colId: 'name', sort: 'desc' }],
 					filterModel: null,

@@ -115,7 +115,7 @@
 | 112 | [Alpha Foundation Cut and Codebase Demolition](./112-alpha-foundation-cut-and-codebase-demolition.md)                         | DONE        | working tree |
 | 113 | [Unified Grid Commit Kernel](./113-unified-grid-commit-kernel.md)                                                             | IN PROGRESS | working tree |
 | 114 | [Typed Domain Mutation Executors](./114-typed-domain-mutation-executors.md)                                                   | DONE        | working tree |
-| 115 | [Public Snapshot and Runtime State Closure](./115-public-snapshot-and-runtime-state-closure.md)                               | TODO        | working tree |
+| 115 | [Public Snapshot and Runtime State Closure](./115-public-snapshot-and-runtime-state-closure.md)                               | DONE        | working tree |
 | 116 | [Persistence Commit Restore and Schema Hardening](./116-persistence-commit-restore-and-schema-hardening.md)                   | TODO        | working tree |
 | 117 | [Private Runtime Composition Root](./117-private-runtime-composition-root.md)                                                 | TODO        | working tree |
 
@@ -327,6 +327,8 @@
 - Plan 112 is implemented on 2026-06-19: the final foundation cut is recorded in `docs/architecture/plan-112-foundation-report.md`; stable package entries no longer export mutable runtime state, the internal bridge stores a narrow `GridInternalRuntime` handle instead of a concrete store, `scripts/pack-verify.mjs` proves tarball-consumer viability, and the demo app builds against supported package entrypoints only.
 
 - Plan 114 is implemented on 2026-06-19: typed domain mutation executors now cover cell, batch, row-transaction, and row-order commits behind `GridCommitKernel`. `GridCommitContext` gained read-side mutation preview hooks (`getCellValue`, `getRawCellValue`, `getStoredCellValue`, `getColumnDef`) so executors can preflight row existence and synchronous `valueSetter` rejection before commit. `batch-cell` now distinguishes `atomic: true` and `atomic: false`: invalid atomic batches are rejected before writes, non-atomic batches report committed/rejected subsets explicitly, and inverse history is scoped to the committed subset only. Focused kernel/store/architecture suites and `@open-grid/core` build are green.
+
+- Plan 115 is implemented on 2026-06-19: public runtime-state access is now canonicalized around immutable `GridStateSnapshot`. Snapshot creation is centralized in `api/createGridStateSnapshot.ts`, `GridStore.getStateSnapshot()` and the public API facade both route through it, public `subscribe(...)` and `subscribeToKey(...)` now expose snapshot-based contracts, persisted restore rollback uses `getStateSnapshot()` plus `getGridState()` instead of raw mutable state, and the legacy `GridState = InternalGridState` compatibility alias is removed. Focused store/persistence/architecture suites and `@open-grid/core` build are green.
 
 ## Plans 079–088 notes
 

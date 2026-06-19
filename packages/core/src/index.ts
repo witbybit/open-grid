@@ -15,6 +15,8 @@ export type {
 	CellState,
 	ColumnState,
 	GridApi,
+	GridSnapshotKeyListener,
+	GridSnapshotListener,
 	GridStateSnapshot,
 	GridCellAccess,
 	GridCellClickParams,
@@ -54,7 +56,7 @@ export type {
 	GridStyleRule,
 	ValueGetterParams,
 } from './columnDef.js';
-export type { GridInitialState, Listener } from './state/GridState.js';
+export type { GridInitialState } from './state/GridState.js';
 export type { VisualRowModel } from './rowModel.js';
 export type { VisualRow, DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow } from './visualRow.js';
 export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';

@@ -1,11 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { StateManager } from './StateManager.js';
-import type { GridState } from '../store.js';
+import type { InternalGridState } from './GridState.js';
 
-type TestState = Pick<GridState, 'defaultRowHeight' | 'defaultColWidth' | 'globalVersion'>;
+type TestState = Pick<InternalGridState, 'defaultRowHeight' | 'defaultColWidth' | 'globalVersion'>;
 
 function makeManager(initial?: Partial<TestState>) {
-	return new StateManager<unknown>({ defaultRowHeight: 40, defaultColWidth: 100, globalVersion: 0, ...initial } as GridState<unknown>);
+	return new StateManager<unknown>({
+		defaultRowHeight: 40,
+		defaultColWidth: 100,
+		globalVersion: 0,
+		...initial,
+	} as InternalGridState<unknown>);
 }
 
 describe('StateManager.transaction()', () => {

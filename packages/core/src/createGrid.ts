@@ -6,6 +6,8 @@ import type {
 	CsvExportOptions,
 	GridApi,
 	GridCellPointer,
+	GridSnapshotKeyListener,
+	GridSnapshotListener,
 	GridSelectionSource,
 	GridStateSnapshot,
 	RowDataTransaction,
@@ -17,7 +19,7 @@ import type {
 	SelectAllRowsOptions,
 } from './api/GridApi.js';
 import type { ColumnDef } from './columnDef.js';
-import type { GridInitialState, InternalGridState, ColumnState, Listener } from './state/GridState.js';
+import type { GridInitialState, ColumnState } from './state/GridState.js';
 import { registerGridInternalRuntime } from './internal/apiInternalBridge.js';
 import { exportToCsv } from './export/csvExport.js';
 import {
@@ -34,29 +36,6 @@ import type { GridInstrumentation } from './diagnostics/GridInstrumentation.js';
 
 export type { GridPersistenceAdapter, PersistedGridState };
 export { createLocalStorageAdapter };
-
-function createGridStateSnapshot<TRowData>(state: InternalGridState<TRowData>): GridStateSnapshot<TRowData> {
-	return {
-		columns: state.columns.slice(),
-		sortModel: state.sortModel,
-		filterModel: state.filterModel,
-		selection: state.selection,
-		selectedRowIds: state.selectedRowIds.slice(),
-		activeEdit: state.activeEdit,
-		loading: state.loading,
-		pagination: state.pagination ? { ...state.pagination } : undefined,
-		enableColumnReorder: state.enableColumnReorder,
-		globalVersion: state.globalVersion,
-		themeName: state.themeName,
-		sidebarOpenPanel: state.sidebarOpenPanel,
-		chartOpen: state.chartOpen,
-		groupBy: state.groupBy?.slice(),
-		showGroupFooter: state.showGroupFooter,
-		enableStickyGroupRows: state.enableStickyGroupRows,
-		masterDetailEnabled: state.masterDetailEnabled,
-		visibleRowRange: state.visibleRowRange,
-	};
-}
 
 export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowData> {
 	getRowId?: (row: TRowData) => string;
@@ -157,7 +136,7 @@ export function createApiFacade<TRowData>(
 	persistenceController?: PersistenceController
 ): GridApi<TRowData> {
 	const api = {
-		getStateSnapshot: () => createGridStateSnapshot(store.getState()),
+		getStateSnapshot: () => store.getStateSnapshot(),
 		getRowId: (row: TRowData) => store.getRowId(row),
 		isRowLoading: (rowId: string) => store.isRowLoading(rowId),
 		getDataRowAtVisualIndex: (index: number) => store.getDataRowAtVisualIndex(index),
@@ -253,8 +232,9 @@ export function createApiFacade<TRowData>(
 		clearRowSelection: () => store.clearRowSelection(),
 		getSelectedRowIds: () => store.getSelectedRowIds(),
 		rows: () => store.rows(),
-		subscribe: (listener: Listener<TRowData>) => store.subscribe(listener),
-		subscribeToKey: (key: string, listener: Listener<TRowData>) => store.subscribeToKey(key, listener),
+		subscribe: (listener: GridSnapshotListener<TRowData>) => store.subscribe(listener),
+		subscribeToKey: <K extends keyof GridStateSnapshot<TRowData>>(key: K, listener: GridSnapshotKeyListener<TRowData, K>) =>
+			store.subscribeToKey(key, listener),
 		subscribeToDomainVersions: (listener: Parameters<typeof store.subscribeToDomainVersions>[0]) => store.subscribeToDomainVersions(listener),
 		subscribeDomain: (domain: Parameters<typeof store.subscribeDomain>[0], listener: Parameters<typeof store.subscribeDomain>[1]) =>
 			store.subscribeDomain(domain, listener),
@@ -316,7 +296,7 @@ function wireGridPersistence<TRowData>(
 	return createPersistenceSubscription(
 		adapter,
 		// Wrap subscribeToKey — persistence listener only needs () => void, extra args are ignored at runtime
-		(key, cb) => store.subscribeToKey(key, cb as Parameters<typeof store.subscribeToKey>[1]),
+		(key, cb) => store.engine.subscribeToKey(key, () => cb()),
 		() => store.getGridState(),
 		adapter.debounceMs ?? 500
 	);
