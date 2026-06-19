@@ -113,6 +113,11 @@
 | 110 | [Mandatory Physical Portal Identity and Adapter Lifecycle](./110-mandatory-physical-portal-identity-and-adapter-lifecycle.md) | DONE     | working tree |
 | 111 | [Measured Scheduler and Hot-Path Simplification](./111-measured-scheduler-and-hot-path-simplification.md)                     | DONE     | working tree |
 | 112 | [Alpha Foundation Cut and Codebase Demolition](./112-alpha-foundation-cut-and-codebase-demolition.md)                         | DONE     | working tree |
+| 113 | [Unified Grid Commit Kernel](./113-unified-grid-commit-kernel.md)                                                             | TODO     | working tree |
+| 114 | [Typed Domain Mutation Executors](./114-typed-domain-mutation-executors.md)                                                   | TODO     | working tree |
+| 115 | [Public Snapshot and Runtime State Closure](./115-public-snapshot-and-runtime-state-closure.md)                               | TODO     | working tree |
+| 116 | [Persistence Commit Restore and Schema Hardening](./116-persistence-commit-restore-and-schema-hardening.md)                   | TODO     | working tree |
+| 117 | [Private Runtime Composition Root](./117-private-runtime-composition-root.md)                                                 | TODO     | working tree |
 
 ## Execution order
 
