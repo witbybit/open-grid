@@ -19,8 +19,11 @@ Replace split logical-commit coordination with one authoritative `GridCommitKern
 - `GridCommitKernel.registerHistory()` and executable history escape hatches are removed; history registration is kernel-owned only
 - `GridCommitResult` now carries rejection detail for rejected and partially accepted mutation sets
 - `DataMutationController` is reduced to execution/formula invalidation work and no longer owns history/event publication
+- sync cell writes no longer preview-execute user `valueSetter` logic during validation or preparation
 - async edit commit now invokes async `valueSetter` exactly once, commits through one mixed kernel commit, and closes the editor in that same logical operation
 - committed cell publication re-enters the existing batching gate through the engine so kernel-owned commits preserve store batching semantics
+- invalidation publication now routes through `InvalidationManager.applyPlan(...)`, and domain version publication routes through one atomic `publishDomains(...)` step
+- row transactions now create reversible kernel-owned history using a typed restore snapshot when the row model supports exact restore
 - row-order publication now routes through `GridEngine.setRowOrder(...)` instead of `RowDragController` mutating the row model and dispatching events directly
 - persisted state restore now batches replayed API operations and clears history on success so hydration does not create synthetic undo entries
 - `GridCommitKernel` and `GridCommit` are first-class exports in the kernel module, with compatibility aliases preserved while engine/context types migrate onto commit terminology

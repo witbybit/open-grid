@@ -18,7 +18,7 @@ function makeApplier(): {
 	eventBus: EventBus<TestRow>;
 	commandHistory: CommandHistory;
 	requestRender: ReturnType<typeof vi.fn>;
-	incrementDomain: ReturnType<typeof vi.fn>;
+	publishDomains: ReturnType<typeof vi.fn>;
 	faultReporter: RuntimeFaultReporter<TestRow>;
 } {
 	const stateManager = new StateManager<TestRow>({
@@ -47,7 +47,7 @@ function makeApplier(): {
 	eventBus.setRuntimeFaultReporter(faultReporter);
 	const commandHistory = new CommandHistory(faultReporter);
 	const requestRender = vi.fn();
-	const incrementDomain = vi.fn();
+	const publishDomains = vi.fn();
 
 	const deps: GridChangeApplierDeps<TestRow> = {
 		stateManager,
@@ -55,7 +55,7 @@ function makeApplier(): {
 		eventBus,
 		commandHistory,
 		requestRender,
-		incrementDomain,
+		publishDomains,
 		faultReporter,
 	};
 
@@ -66,7 +66,7 @@ function makeApplier(): {
 		eventBus,
 		commandHistory,
 		requestRender,
-		incrementDomain,
+		publishDomains,
 		faultReporter,
 	};
 }
@@ -127,7 +127,7 @@ describe('GridChangeApplier', () => {
 	});
 
 	it('applies commit phases in deterministic order: state -> domains -> invalidations -> history -> render -> events', () => {
-		const { applier, stateManager, invalidation, eventBus, requestRender, incrementDomain, commandHistory } = makeApplier();
+		const { applier, stateManager, invalidation, eventBus, requestRender, publishDomains, commandHistory } = makeApplier();
 		const callOrder: string[] = [];
 
 		const origSetState = stateManager.setState;
@@ -135,7 +135,7 @@ describe('GridChangeApplier', () => {
 			callOrder.push('state');
 			return origSetState(...args);
 		});
-		incrementDomain.mockImplementation(() => {
+		publishDomains.mockImplementation(() => {
 			callOrder.push('domains');
 		});
 		vi.spyOn(invalidation, 'invalidate').mockImplementation(() => {
@@ -218,7 +218,7 @@ describe('GridChangeApplier', () => {
 		const faultReporter = new RuntimeFaultReporter<TestRow>({ log: () => undefined });
 		const commandHistory = new CommandHistory(faultReporter);
 		const requestRender = vi.fn();
-		const incrementDomain = vi.fn();
+		const publishDomains = vi.fn();
 		let rowOrder = ['1', '2', '3'];
 		const rowModel = {
 			getRowOrder: () => rowOrder.slice(),
@@ -238,7 +238,7 @@ describe('GridChangeApplier', () => {
 				getRowModel: () => rowModel as any,
 			},
 			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TestRow>(),
-			incrementDomain,
+			publishDomains,
 			faultReporter,
 		};
 
@@ -253,7 +253,7 @@ describe('GridChangeApplier', () => {
 
 		expect(result.status).toBe('committed');
 		expect(rowOrder).toEqual(['3', '1', '2']);
-		expect(incrementDomain).toHaveBeenCalledWith('rows');
+		expect(publishDomains).toHaveBeenCalledWith(['rows']);
 		expect(requestRender).toHaveBeenCalledWith('rows:set-order');
 		expect(eventSpy).toHaveBeenCalledOnce();
 		expect(commandHistory.canUndo()).toBe(true);
@@ -358,6 +358,73 @@ describe('GridChangeApplier', () => {
 		expect(execution.result.status).toBe('committed');
 		expect(rowModel.applyTransaction).toHaveBeenCalledOnce();
 		expect(execution.appliedMutations[0]?.result).toBe(resultPayload);
+	});
+
+	it('row-transaction commits create undo history that restores previous rows and order', () => {
+		const stateManager = new StateManager<TestRow>({
+			columns: [],
+			selection: { focus: null, anchor: null, range: null, bounds: null, source: 'api' },
+			selectedRowIds: [],
+			rowHeights: {},
+			columnWidths: {},
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			enableColumnReorder: true,
+			activeEdit: null,
+			sortModel: null,
+			filterModel: null,
+			globalVersion: 0,
+			visibleRowRange: { startIdx: 0, endIdx: 0 },
+			visibleColRange: { startIdx: 0, endIdx: 0 },
+			expansion: { groups: {}, treeRows: {}, details: {} },
+			rowOverscanPx: 400,
+			colBuffer: 1,
+		} as unknown as InternalGridState<TestRow>);
+		let rows: TestRow[] = [{ id: '1', name: 'A' }];
+		let rowOrder = ['1'];
+		const rowModel = {
+			applyTransaction: vi.fn((transaction: { add?: TestRow[] }) => {
+				if (transaction.add) {
+					rows = rows.concat(transaction.add);
+					rowOrder = rowOrder.concat(transaction.add.map((row) => row.id));
+				}
+				return { add: transaction.add?.map((row) => ({ id: row.id })) ?? [], remove: [], update: [] };
+			}),
+			getAllDataNodes: () => rows.map((row) => ({ id: row.id, data: row })),
+			getRowOrder: () => rowOrder.slice(),
+			setRows: (nextRows: TestRow[]) => {
+				rows = nextRows.slice();
+			},
+			setRowOrder: (nextOrder: string[]) => {
+				rowOrder = nextOrder.slice();
+			},
+		};
+		const commandHistory = new CommandHistory();
+		const kernel = new GridCommitKernel<TestRow>({
+			stateManager,
+			invalidation: new InvalidationManager(),
+			eventBus: new EventBus<TestRow>(),
+			commandHistory,
+			requestRender: vi.fn(),
+			commitContext: {
+				getState: () => stateManager.getState(),
+				getRowModel: () => rowModel as any,
+			},
+			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TestRow>(),
+		});
+
+		const result = kernel.commit({
+			reason: 'rows:apply-transaction',
+			domainMutations: [{ kind: 'row-transaction', transaction: { add: [{ id: '2', name: 'B' }] } }],
+		});
+
+		expect(result.status).toBe('committed');
+		expect(rows.map((row) => row.id)).toEqual(['1', '2']);
+		expect(commandHistory.canUndo()).toBe(true);
+
+		commandHistory.undo();
+		expect(rows.map((row) => row.id)).toEqual(['1']);
+		expect(rowOrder).toEqual(['1']);
 	});
 
 	it('commits cell-value domain mutations through typed executors with inverse history', () => {
@@ -717,10 +784,10 @@ describe('GridChangeApplier', () => {
 	});
 
 	it('domain publication faults do not block invalidations, history, render, or events', () => {
-		const { applier, invalidation, eventBus, requestRender, incrementDomain, commandHistory, faultReporter } = makeApplier();
+		const { applier, invalidation, eventBus, requestRender, publishDomains, commandHistory, faultReporter } = makeApplier();
 		const callOrder: string[] = [];
 
-		incrementDomain.mockImplementation(() => {
+		publishDomains.mockImplementation(() => {
 			callOrder.push('domains');
 			throw new Error('domain failed');
 		});
@@ -822,7 +889,7 @@ describe('GridChangeApplier', () => {
 	});
 
 	it('state commit faults return failed-before-commit and do not publish follow-up phases', () => {
-		const { applier, stateManager, requestRender, incrementDomain } = makeApplier();
+		const { applier, stateManager, requestRender, publishDomains } = makeApplier();
 		const originalSetState = stateManager.setState;
 		stateManager.setState = vi.fn(() => {
 			throw new Error('write failed');
@@ -836,7 +903,7 @@ describe('GridChangeApplier', () => {
 
 		expect(result.status).toBe('failed-before-commit');
 		expect(requestRender).not.toHaveBeenCalled();
-		expect(incrementDomain).not.toHaveBeenCalled();
+		expect(publishDomains).not.toHaveBeenCalled();
 		expect(stateManager.getState().columnWidths).toEqual({});
 	});
 

@@ -121,6 +121,39 @@ export class InvalidationManager {
 		}
 	}
 
+	public applyPlan(plan: readonly GridInvalidation[]): void {
+		if (plan.length === 0) return;
+		const hasFull = plan.some((entry) => entry.kind === 'full');
+		const hasViewport = !hasFull && plan.some((entry) => entry.kind === 'viewport');
+		for (const invalidation of plan) {
+			if (
+				hasFull &&
+				(invalidation.kind === 'cell' ||
+					invalidation.kind === 'row' ||
+					invalidation.kind === 'row-range' ||
+					invalidation.kind === 'column' ||
+					invalidation.kind === 'group' ||
+					invalidation.kind === 'headers' ||
+					invalidation.kind === 'overlay' ||
+					invalidation.kind === 'geometry' ||
+					invalidation.kind === 'viewport')
+			) {
+				if (invalidation.kind === 'geometry' || invalidation.kind === 'headers' || invalidation.kind === 'overlay') {
+					this.addReason(invalidation.reason);
+					this.addInvalidation(this.getInvalidationKey(invalidation), invalidation);
+					if (invalidation.kind === 'geometry') this.geometry = true;
+					if (invalidation.kind === 'headers') this.headers = true;
+					if (invalidation.kind === 'overlay') this.overlay = true;
+				}
+				continue;
+			}
+			if (hasViewport && (invalidation.kind === 'cell' || invalidation.kind === 'row' || invalidation.kind === 'row-range')) {
+				continue;
+			}
+			this.invalidate(invalidation);
+		}
+	}
+
 	public invalidateFull(reason?: GridInvalidationReason): void {
 		this.full = true;
 		this.addReason(reason);

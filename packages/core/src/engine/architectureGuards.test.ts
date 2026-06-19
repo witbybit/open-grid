@@ -1213,7 +1213,7 @@ describe('Architecture guardrails', () => {
 	it('GridCommit.domains field is declared on the commit kernel module (Plan 097)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
 		expect(content).toContain('domains?: ReadonlyArray<keyof GridDomainVersions>');
-		expect(content).toContain('incrementDomain?:');
+		expect(content).toContain('publishDomains?:');
 	});
 
 	it('GridCommitKernel.commit increments declared domains before events (Plan 097)', () => {

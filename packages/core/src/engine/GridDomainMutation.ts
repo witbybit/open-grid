@@ -32,6 +32,10 @@ export interface BatchCellMutation {
 export interface RowTransactionMutation<TRowData = unknown> {
 	kind: 'row-transaction';
 	transaction: RowDataTransaction<TRowData>;
+	restoreSnapshot?: {
+		rows: readonly TRowData[];
+		rowOrder: readonly string[];
+	};
 }
 
 export interface RowOrderMutation {
@@ -168,6 +172,10 @@ function createEventsFromResults<TRowData>(results: readonly CellValueChangeResu
 				newValue: result.newComputedValue,
 			},
 		}));
+}
+
+function cloneRows<TRowData>(rows: readonly TRowData[]): TRowData[] {
+	return rows.map((row) => ({ ...(row as Record<string, unknown>) }) as TRowData);
 }
 
 function rollbackAppliedCellResults<TRowData>(
@@ -619,7 +627,8 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 	const rowOrderExecutor = createRowOrderMutationExecutor<TRowData>();
 	const rowTransactionExecutor: GridDomainMutationExecutor<TRowData, RowTransactionMutation<TRowData>> = {
 		validate(_mutation, context) {
-			if (!context.getRowModel()?.applyTransaction) {
+			const rowModel = context.getRowModel();
+			if (!rowModel?.applyTransaction && !(_mutation.restoreSnapshot && rowModel?.setRows && rowModel?.setRowOrder)) {
 				return {
 					ok: false,
 					reason: 'row model unavailable',
@@ -628,9 +637,13 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 			}
 			return { ok: true };
 		},
-		prepare(mutation) {
+		prepare(mutation, context) {
 			const transaction = mutation.transaction;
-			const hasWork = (transaction.add?.length ?? 0) > 0 || (transaction.remove?.length ?? 0) > 0 || (transaction.update?.length ?? 0) > 0;
+			const hasWork =
+				mutation.restoreSnapshot !== undefined ||
+				(transaction.add?.length ?? 0) > 0 ||
+				(transaction.remove?.length ?? 0) > 0 ||
+				(transaction.update?.length ?? 0) > 0;
 			if (!hasWork) {
 				return {
 					mutation,
@@ -640,19 +653,67 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					apply: () => ({ noop: true, result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData> }),
 				};
 			}
+			const preparedRestoreSnapshot =
+				mutation.restoreSnapshot ??
+				(() => {
+					const rowModel = context.getRowModel();
+					if (!rowModel?.getAllDataNodes || !rowModel?.getRowOrder) return undefined;
+					return {
+						rows: cloneRows(rowModel.getAllDataNodes().map((node) => node.data)),
+						rowOrder: rowModel.getRowOrder().slice(),
+					};
+				})();
 			return {
 				mutation,
 				domains: ['rows', 'geometry'],
 				events: [],
 				requestRender: true,
 				apply(context) {
-					const result = context.getRowModel()?.applyTransaction?.(mutation.transaction) ?? { add: [], remove: [], update: [] };
+					const rowModel = context.getRowModel();
+					if (preparedRestoreSnapshot && mutation.restoreSnapshot && rowModel?.setRows && rowModel?.setRowOrder) {
+						rowModel.setRows(cloneRows(preparedRestoreSnapshot.rows));
+						rowModel.setRowOrder(preparedRestoreSnapshot.rowOrder.slice());
+						return {
+							domains: ['rows', 'geometry'],
+							invalidations: [{ kind: 'full', reason: 'data' }],
+							requestRender: true,
+							result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData>,
+						};
+					}
+					const result = rowModel?.applyTransaction?.(mutation.transaction) ?? { add: [], remove: [], update: [] };
 					return {
 						domains: ['rows', 'geometry'],
 						invalidations: [{ kind: 'full', reason: 'data' }],
+						history: preparedRestoreSnapshot
+							? {
+									undo: {
+										reason: 'rows:apply-transaction',
+										domainMutations: [
+											{
+												kind: 'row-transaction',
+												transaction: { update: [] },
+												restoreSnapshot: preparedRestoreSnapshot,
+											},
+										],
+										requestRender: false,
+									},
+									redo: {
+										reason: 'rows:apply-transaction',
+										domainMutations: [mutation],
+										requestRender: false,
+									},
+								}
+							: undefined,
 						requestRender: true,
 						result,
 					};
+				},
+				rollback(_applied, context) {
+					if (!preparedRestoreSnapshot) return;
+					const rowModel = context.getRowModel();
+					if (!rowModel?.setRows || !rowModel?.setRowOrder) return;
+					rowModel.setRows(cloneRows(preparedRestoreSnapshot.rows));
+					rowModel.setRowOrder(preparedRestoreSnapshot.rowOrder.slice());
 				},
 			};
 		},

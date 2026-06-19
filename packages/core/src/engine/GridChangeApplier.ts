@@ -152,7 +152,7 @@ export interface GridCommitKernelDeps<TRowData = unknown> {
 	requestRender: (commitReason: string) => void;
 	commitContext?: GridCommitContext<TRowData>;
 	domainMutationExecutorRegistry?: GridDomainMutationExecutorRegistry<TRowData>;
-	incrementDomain?: (domain: keyof GridDomainVersions) => void;
+	publishDomains?: (domains: readonly (keyof GridDomainVersions)[]) => void;
 	faultReporter?: RuntimeFaultReporter<TRowData>;
 }
 
@@ -253,19 +253,15 @@ export class GridCommitKernel<TRowData = unknown> {
 		};
 
 		// 2. Increment declared domain versions before consumer-visible effects.
-		if (record.domains.length > 0 && this.deps.incrementDomain) {
+		if (record.domains.length > 0 && this.deps.publishDomains) {
 			isolate('publish-domains', () => {
-				for (const domain of record.domains) {
-					this.deps.incrementDomain!(domain);
-				}
+				this.deps.publishDomains!(record.domains);
 			});
 		}
 		// 3. Apply invalidation plan.
 		if (record.invalidations.length > 0) {
 			isolate('apply-invalidations', () => {
-				for (const invalidation of record.invalidations) {
-					this.deps.invalidation.invalidate(invalidation);
-				}
+				this.deps.invalidation.applyPlan(record.invalidations);
 			});
 		}
 		const cellChanges = this.mergeCellChanges(appliedMutations);

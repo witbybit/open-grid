@@ -135,43 +135,55 @@ export class GridEngine<TRowData = unknown> {
 		};
 	}
 
-	private notifyDomainVersionListeners(domain?: keyof GridDomainVersions): void {
+	private notifyDomainVersionListeners(domains?: readonly (keyof GridDomainVersions)[]): void {
 		const v = this.getDomainVersions();
 		this.domainVersionListeners.forEach((l) => l(v));
-		if (domain) {
-			const set = this.domainListeners.get(domain);
-			if (set) {
-				const version = v[domain];
-				set.forEach((l) => l(version));
+		if (domains) {
+			for (const domain of domains) {
+				const set = this.domainListeners.get(domain);
+				if (set) {
+					const version = v[domain];
+					set.forEach((l) => l(version));
+				}
 			}
 		}
 	}
 
 	public incrementDomain(domain: keyof GridDomainVersions): void {
-		switch (domain) {
-			case 'columns':
-				this.columnVersion++;
-				break;
-			case 'rows':
-				this.rowModelVersion++;
-				break;
-			case 'geometry':
-				this.geometryVersion++;
-				break;
-			case 'selection':
-				this.selectionVersion++;
-				break;
-			case 'editing':
-				this.editingVersion++;
-				break;
-			case 'filtering':
-				this.filteringVersion++;
-				break;
-			case 'sorting':
-				this.sortingVersion++;
-				break;
+		this.publishDomains([domain]);
+	}
+
+	public publishDomains(domains: readonly (keyof GridDomainVersions)[]): void {
+		if (domains.length === 0) return;
+		const uniqueDomains = Array.from(new Set(domains));
+		for (const domain of uniqueDomains) {
+			switch (domain) {
+				case 'columns':
+					this.columnVersion++;
+					break;
+				case 'rows':
+					this.rowModelVersion++;
+					break;
+				case 'geometry':
+					this.geometryVersion++;
+					break;
+				case 'selection':
+					this.selectionVersion++;
+					break;
+				case 'editing':
+					this.editingVersion++;
+					break;
+				case 'filtering':
+					this.filteringVersion++;
+					break;
+				case 'sorting':
+					this.sortingVersion++;
+					break;
+				case 'styling':
+					break;
+			}
 		}
-		this.notifyDomainVersionListeners(domain);
+		this.notifyDomainVersionListeners(uniqueDomains);
 	}
 
 	// Per-row version map: rowId → version, bumped on each row data mutation.
@@ -361,7 +373,7 @@ export class GridEngine<TRowData = unknown> {
 				publishCommittedCellChanges: (changes) => this.publishCommittedCellChanges(changes),
 			},
 			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TRowData>(),
-			incrementDomain: (domain) => this.incrementDomain(domain),
+			publishDomains: (domains) => this.publishDomains(domains),
 			faultReporter: this.runtimeFaults,
 		});
 
