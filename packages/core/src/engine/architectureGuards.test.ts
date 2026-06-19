@@ -363,6 +363,12 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("domainMutations: [{ kind: 'row-transaction', transaction }]");
 	});
 
+	it('GridEngine cell mutations route through typed domain mutations', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+		expect(content).toContain("domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }]");
+		expect(content).toContain("domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }]");
+	});
+
 	it('GridStore does not call rowModel.applyTransaction directly', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
 		expect(content).not.toContain('rowModel.applyTransaction(');

@@ -380,9 +380,77 @@ describe('GridChangeApplier', () => {
 			domainMutations: [{ kind: 'row-transaction', transaction: { add: [{ id: '2', name: 'B' } as TestRow] } }],
 		});
 
-		expect(execution.result.status).toBe('noop');
+		expect(execution.result.status).toBe('committed');
 		expect(rowModel.applyTransaction).toHaveBeenCalledOnce();
 		expect(execution.appliedMutations[0]?.result).toBe(resultPayload);
+	});
+
+	it('commits cell-value domain mutations through typed executors with inverse history', () => {
+		const rowValues = new Map([['1:name', 'Alpha']]);
+		const kernel = new GridCommitKernel<TestRow>({
+			stateManager: new StateManager<TestRow>({
+				columns: [],
+				selection: { focus: null, anchor: null, range: null, bounds: null, source: 'api' },
+				selectedRowIds: [],
+				rowHeights: {},
+				columnWidths: {},
+				defaultRowHeight: 40,
+				defaultColWidth: 100,
+				enableColumnReorder: true,
+				activeEdit: null,
+				sortModel: null,
+				filterModel: null,
+				globalVersion: 0,
+				visibleRowRange: { startIdx: 0, endIdx: 0 },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				expansion: { groups: {}, treeRows: {}, details: {} },
+				rowOverscanPx: 400,
+				colBuffer: 1,
+			} as unknown as GridState<TestRow>),
+			invalidation: new InvalidationManager(),
+			eventBus: new EventBus<TestRow>(),
+			commandHistory: new CommandHistory(),
+			requestRender: vi.fn(),
+			commitContext: {
+				getState: () => ({}) as GridState<TestRow>,
+				getRowModel: () => null,
+				applyCellValueChange: (rowId, colField, value) => {
+					const key = `${rowId}:${colField}`;
+					const oldRawValue = rowValues.get(key);
+					if (oldRawValue === value) {
+						return {
+							applied: false,
+							rowId,
+							colField,
+							oldRawValue,
+							oldComputedValue: oldRawValue,
+							newRawValue: value,
+							invalidatedCells: [],
+						};
+					}
+					rowValues.set(key, value as string);
+					return {
+						applied: true,
+						rowId,
+						colField,
+						oldRawValue,
+						oldComputedValue: oldRawValue,
+						newRawValue: value,
+						newComputedValue: value,
+						invalidatedCells: [{ rowId, colField }],
+					};
+				},
+			},
+			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TestRow>(),
+		});
+
+		const result = kernel.commit({
+			reason: 'data:set-cell-value',
+			domainMutations: [{ kind: 'cell-value', rowId: '1', colField: 'name', value: 'Beta' }],
+		});
+
+		expect(result.status).toBe('committed');
+		expect(rowValues.get('1:name')).toBe('Beta');
 	});
 
 	it('requestRender: false skips render request', () => {

@@ -353,6 +353,8 @@ export class GridEngine<TRowData = unknown> {
 			commitContext: {
 				getState: () => this.stateManager.getState(),
 				getRowModel: () => this.rowModel,
+				applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
+				applyBatchCellValues: (updates, options) => this.dataMutation.applyBatchCellValues(updates, options),
 			},
 			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TRowData>(),
 			incrementDomain: (domain) => this.incrementDomain(domain),
@@ -727,11 +729,17 @@ export class GridEngine<TRowData = unknown> {
 		this.groupingFeature.setStickyGroupRows(enabled);
 	}
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
-		this.dataMutation.applyCellValueChange(rowId, colField, value, { undoable });
+		this.changeApplier.commit({
+			reason: 'data:set-cell-value',
+			domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
+		});
 	}
 
 	public batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill' = 'api'): void {
-		this.dataMutation.applyBatchCellValues(updates, { undoable: true, source });
+		this.changeApplier.commit({
+			reason: 'data:batch-cell-values',
+			domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
+		});
 	}
 
 	public startEdit(rowId: string, colField: string): void {

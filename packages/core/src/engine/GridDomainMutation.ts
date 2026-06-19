@@ -5,6 +5,7 @@ import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { InternalGridState, GridStateUpdater } from '../state/GridState.js';
 import type { GridInvalidation } from '../renderer/invalidationManager.js';
 import type { GridCommitEvent, GridCommitReason, GridHistoryEntry } from './GridChangeApplier.js';
+import type { BatchCellValueUpdate, CellValueChangeOptions, CellValueChangeResult } from '../features/DataMutationController.js';
 
 export type GridDomain = keyof GridDomainVersions;
 
@@ -13,12 +14,16 @@ export interface CellValueMutation {
 	rowId: string;
 	colField: string;
 	value: unknown;
+	undoable?: boolean;
+	source?: CellValueChangeOptions['source'];
 }
 
 export interface BatchCellMutation {
 	kind: 'batch-cell';
-	updates: ReadonlyArray<{ rowId: string; colField: string; value: unknown }>;
+	updates: ReadonlyArray<BatchCellValueUpdate>;
 	atomic?: boolean;
+	undoable?: boolean;
+	source?: CellValueChangeOptions['source'];
 }
 
 export interface RowTransactionMutation<TRowData = unknown> {
@@ -45,6 +50,11 @@ export type GridMutationValidationResult = { ok: true } | { ok: false; reason: s
 export interface GridCommitContext<TRowData = unknown> {
 	getState(): Readonly<InternalGridState<TRowData>>;
 	getRowModel(): RowModel<TRowData> | null;
+	applyCellValueChange?: (rowId: string, colField: string, value: unknown, options?: CellValueChangeOptions) => CellValueChangeResult;
+	applyBatchCellValues?: (
+		updates: BatchCellValueUpdate[],
+		options?: Pick<CellValueChangeOptions, 'undoable' | 'source'>
+	) => CellValueChangeResult[];
 }
 
 export interface PreparedDomainMutation<TRowData = unknown, TMutation extends GridDomainMutation<TRowData> = GridDomainMutation<TRowData>> {
@@ -93,6 +103,59 @@ function createRowOrderHistory<TRowData>(reason: GridCommitReason, currentOrder:
 		redo: {
 			reason,
 			domainMutations: [{ kind: 'row-order', rowIds: nextOrder, emitEvent: true }],
+			requestRender: false,
+		},
+	};
+}
+
+function createCellValueHistory<TRowData>(
+	reason: GridCommitReason,
+	rowId: string,
+	colField: string,
+	oldValue: unknown,
+	newValue: unknown
+): GridHistoryEntry<TRowData> {
+	return {
+		undo: {
+			reason,
+			domainMutations: [{ kind: 'cell-value', rowId, colField, value: oldValue, undoable: false, source: 'undo' }],
+			requestRender: false,
+		},
+		redo: {
+			reason,
+			domainMutations: [{ kind: 'cell-value', rowId, colField, value: newValue, undoable: false, source: 'redo' }],
+			requestRender: false,
+		},
+	};
+}
+
+function createBatchCellHistory<TRowData>(
+	reason: GridCommitReason,
+	updates: ReadonlyArray<{ rowId: string; colField: string; oldValue: unknown; newValue: unknown }>
+): GridHistoryEntry<TRowData> {
+	return {
+		undo: {
+			reason,
+			domainMutations: [
+				{
+					kind: 'batch-cell',
+					updates: updates.map((update) => ({ rowId: update.rowId, colField: update.colField, value: update.oldValue })),
+					undoable: false,
+					source: 'undo',
+				},
+			],
+			requestRender: false,
+		},
+		redo: {
+			reason,
+			domainMutations: [
+				{
+					kind: 'batch-cell',
+					updates: updates.map((update) => ({ rowId: update.rowId, colField: update.colField, value: update.newValue })),
+					undoable: false,
+					source: 'redo',
+				},
+			],
 			requestRender: false,
 		},
 	};
@@ -150,6 +213,90 @@ export function createRowOrderMutationExecutor<TRowData = unknown>(
 }
 
 export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unknown>(): GridDomainMutationExecutorRegistry<TRowData> {
+	const cellValueExecutor: GridDomainMutationExecutor<TRowData, CellValueMutation> = {
+		validate(_mutation, context) {
+			if (!context.applyCellValueChange) {
+				return {
+					ok: false,
+					reason: 'cell mutation runtime unavailable',
+					rejection: { mutationKind: 'cell-value', reason: 'cell mutation runtime unavailable' },
+				};
+			}
+			return { ok: true };
+		},
+		prepare(mutation) {
+			return { mutation, requestRender: false };
+		},
+		apply(prepared, context) {
+			if (!context.applyCellValueChange) return { noop: true };
+			const result = context.applyCellValueChange(prepared.mutation.rowId, prepared.mutation.colField, prepared.mutation.value, {
+				undoable: false,
+				source: prepared.mutation.source ?? 'api',
+			});
+			return {
+				noop: !result.applied,
+				history:
+					result.applied && prepared.mutation.undoable !== false
+						? createCellValueHistory<TRowData>(
+								'data:set-cell-value',
+								prepared.mutation.rowId,
+								prepared.mutation.colField,
+								result.oldRawValue,
+								prepared.mutation.value
+							)
+						: undefined,
+				requestRender: false,
+				result,
+			};
+		},
+	};
+	const batchCellExecutor: GridDomainMutationExecutor<TRowData, BatchCellMutation> = {
+		validate(mutation, context) {
+			if (!context.applyBatchCellValues) {
+				return {
+					ok: false,
+					reason: 'batch cell mutation runtime unavailable',
+					rejection: { mutationKind: 'batch-cell', reason: 'batch cell mutation runtime unavailable' },
+				};
+			}
+			if (mutation.atomic === false) {
+				return {
+					ok: false,
+					reason: 'non-atomic batch cell mutations are not yet supported',
+					rejection: { mutationKind: 'batch-cell', reason: 'non-atomic batch cell mutations are not yet supported' },
+				};
+			}
+			return { ok: true };
+		},
+		prepare(mutation) {
+			return { mutation, requestRender: false };
+		},
+		apply(prepared, context) {
+			if (!context.applyBatchCellValues) return { noop: true };
+			const results = context.applyBatchCellValues(prepared.mutation.updates.slice(), {
+				undoable: false,
+				source: prepared.mutation.source ?? 'api',
+			});
+			const applied = results.filter((result) => result.applied);
+			return {
+				noop: applied.length === 0,
+				history:
+					applied.length > 0 && prepared.mutation.undoable !== false
+						? createBatchCellHistory<TRowData>(
+								'data:batch-cell-values',
+								applied.map((result) => ({
+									rowId: result.rowId,
+									colField: result.colField,
+									oldValue: result.oldRawValue,
+									newValue: result.newRawValue,
+								}))
+							)
+						: undefined,
+				requestRender: false,
+				result: results,
+			};
+		},
+	};
 	const rowOrderExecutor = createRowOrderMutationExecutor<TRowData>();
 	const rowTransactionExecutor: GridDomainMutationExecutor<TRowData, RowTransactionMutation<TRowData>> = {
 		validate(_mutation, context) {
@@ -192,6 +339,12 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 	};
 	return {
 		resolve(mutation) {
+			if (mutation.kind === 'cell-value') {
+				return cellValueExecutor as GridDomainMutationExecutor<TRowData, typeof mutation>;
+			}
+			if (mutation.kind === 'batch-cell') {
+				return batchCellExecutor as GridDomainMutationExecutor<TRowData, typeof mutation>;
+			}
 			if (mutation.kind === 'row-order') {
 				return rowOrderExecutor as GridDomainMutationExecutor<TRowData, typeof mutation>;
 			}

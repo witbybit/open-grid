@@ -164,8 +164,11 @@ export class DataMutationController<TRowData = unknown> {
 		};
 	}
 
-	applyBatchCellValues(updates: BatchCellValueUpdate[], options: Pick<CellValueChangeOptions, 'undoable' | 'source'> = {}): void {
-		if (updates.length === 0) return;
+	applyBatchCellValues(
+		updates: BatchCellValueUpdate[],
+		options: Pick<CellValueChangeOptions, 'undoable' | 'source'> = {}
+	): CellValueChangeResult[] {
+		if (updates.length === 0) return [];
 		const { undoable = true, source } = options;
 
 		// Snapshot old computed values before any writes so cellValueChanged events
@@ -225,5 +228,7 @@ export class DataMutationController<TRowData = unknown> {
 				);
 			}
 		}
+
+		return results;
 	}
 }

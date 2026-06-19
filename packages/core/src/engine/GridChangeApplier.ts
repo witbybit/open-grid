@@ -293,7 +293,12 @@ export class GridCommitKernel<TRowData = unknown> {
 		const events = [...appliedMutations.flatMap((mutation) => mutation.events ?? []), ...(change.events ?? [])];
 		const history = this.mergeHistoryEntries(change.reason, appliedMutations, change.history);
 		const semanticWork =
-			mergedState !== undefined || invalidations.length > 0 || domains.length > 0 || events.length > 0 || history !== undefined;
+			appliedMutations.some((mutation) => mutation.noop !== true) ||
+			mergedState !== undefined ||
+			invalidations.length > 0 ||
+			domains.length > 0 ||
+			events.length > 0 ||
+			history !== undefined;
 		const record: GridCommitRecord<TRowData> = {
 			changeId: this.nextChangeId++,
 			reason: change.reason,
