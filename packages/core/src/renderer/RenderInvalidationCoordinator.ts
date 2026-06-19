@@ -30,13 +30,6 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		if (this.unsubscribers.length > 0) return;
 
 		this.unsubscribers.push(
-			this.deps.engine.stateManager.subscribeToKey('columns', () => {
-				this.deps.portalMountManager.releaseAll();
-				this.deps.engine.invalidation.invalidateFull('state');
-				this.requestFlushGated('state');
-			})
-		);
-		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.sortChanged, () => {
 				this.deps.layoutTransition.captureSnapshot('sort');
 			})

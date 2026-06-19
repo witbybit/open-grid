@@ -1788,7 +1788,7 @@ describe('Architecture guardrails', () => {
 	it('RenderInvalidationCoordinator only keeps targeted state subscriptions for non-command animation hooks', () => {
 		const ricContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
 		const subscriptions = [...ricContent.matchAll(/subscribeToKey\('([^']+)'/g)].map((match) => match[1]);
-		expect(subscriptions).toEqual(['columns', 'expansion']);
+		expect(subscriptions).toEqual(['expansion']);
 	});
 
 	it('public snapshot creation is centralized in createGridStateSnapshot (Plan 115)', () => {
