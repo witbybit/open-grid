@@ -133,7 +133,7 @@ export default function InfiniteServerScroll({
 			setSeverityStats({ totalLoaded: 0, criticalError: 0, warning: 0, infoDebug: 0 });
 		};
 		const syncLoading = () => {
-			setIsLoading(!!api.getState().loading);
+			setIsLoading(!!api.getStateSnapshot().loading);
 		};
 
 		refreshSeverityStats();
@@ -214,7 +214,7 @@ export default function InfiniteServerScroll({
 						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged: () => {} }}
 						onGridReady={(event) => {
 							setApi(event.api);
-							setIsLoading(!!event.api.getState().loading);
+							setIsLoading(!!event.api.getStateSnapshot().loading);
 							onGridReady?.(event);
 						}}
 					/>

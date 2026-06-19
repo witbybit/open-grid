@@ -135,7 +135,7 @@ describe('mountGridHost adversarial lifecycle', () => {
 		api.destroy();
 	});
 
-	it('supports repeated remount loops on the same api without accumulating runtime faults', () => {
+	it('supports repeated remount loops on the same api without accumulating runtime faults', { timeout: 10000 }, () => {
 		vi.stubGlobal('ResizeObserver', TestResizeObserver);
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);

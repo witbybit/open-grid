@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Grid, GridEventName, type GridApi, type GridReadyEvent, type GridState } from '@open-grid/react';
+import { Grid, GridEventName, type GridApi, type GridReadyEvent, type GridStateSnapshot } from '@open-grid/react';
 import { AlertTriangle, BarChart3, Gauge, Play, ShieldCheck, Star } from 'lucide-react';
 import { createCustomColumns, generateCustomShowcaseRows } from './demoGridConfigs';
 import type { CustomShowcaseRow } from '../components/GridShared';
@@ -24,7 +24,7 @@ export default function CustomEditorRenderer({
 	const columns = useMemo(() => createCustomColumns(), []);
 	const rows = useMemo(() => generateCustomShowcaseRows(50), []);
 	const [api, setApi] = useState<GridApi<CustomShowcaseRow> | null>(null);
-	const [selectedRange, setSelectedRange] = useState<GridState<CustomShowcaseRow>['selection']['range']>(null);
+	const [selectedRange, setSelectedRange] = useState<GridStateSnapshot<CustomShowcaseRow>['selection']['range']>(null);
 	const [telemetry, setTelemetry] = useState({
 		totalAssets: 0,
 		totalValuation: 0,
@@ -69,7 +69,7 @@ export default function CustomEditorRenderer({
 				inactiveCount: inactive,
 			});
 		};
-		const updateSelection = () => setSelectedRange(api.getState().selection.range);
+		const updateSelection = () => setSelectedRange(api.getStateSnapshot().selection.range);
 		calculateTelemetry();
 		updateSelection();
 		const unsubValue = api.addEventListener(GridEventName.cellValueChanged, calculateTelemetry);

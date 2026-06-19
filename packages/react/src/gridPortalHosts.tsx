@@ -57,7 +57,7 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 	// activeEdit subscription lives here — only this mounted instance subscribes, not every cell
 	const activeEditState = useSyncExternalStore(
 		(cb) => api.subscribeToKey('activeEdit', () => cb()),
-		() => api.getState().activeEdit as ActiveEditState | null
+		() => api.getStateSnapshot().activeEdit as ActiveEditState | null
 	);
 	const validationError =
 		activeEditState?.rowId === rowId && activeEditState?.colField === colField ? (activeEditState.validationError ?? null) : null;
@@ -231,8 +231,8 @@ function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { 
 	const depth = visualRow.depth;
 	const selectedRowIds = useSyncExternalStore(
 		useCallback((onStoreChange) => api.subscribeToKey('selectedRowIds', onStoreChange), [api]),
-		() => api.getState().selectedRowIds,
-		() => api.getState().selectedRowIds
+		() => api.getStateSnapshot().selectedRowIds,
+		() => api.getStateSnapshot().selectedRowIds
 	);
 	const adapterHandle = useContext(GridAdapterContext);
 	const descendantIds = adapterHandle?.getGroupVisibleDescendantRowIds(visualRow.groupId) ?? [];

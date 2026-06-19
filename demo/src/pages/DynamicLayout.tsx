@@ -37,7 +37,7 @@ export default function DynamicLayout({
 
 	useEffect(() => {
 		if (!api) return;
-		const update = () => setFocusedCell(api.getState().selection.focus);
+		const update = () => setFocusedCell(api.getStateSnapshot().selection.focus);
 		update();
 		return api.subscribeToKey('selection', update);
 	}, [api]);

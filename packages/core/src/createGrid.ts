@@ -8,6 +8,7 @@ import type {
 	GridCellPointer,
 	GridPluginController,
 	GridSelectionSource,
+	GridStateSnapshot,
 	RowDataTransaction,
 	RowNodeTransaction,
 	RowSelectionMode,
@@ -59,6 +60,29 @@ import type { GridInstrumentation } from './diagnostics/GridInstrumentation.js';
 
 export type { GridPersistenceAdapter, PersistedGridState };
 export { createLocalStorageAdapter };
+
+function createGridStateSnapshot<TRowData>(state: GridState<TRowData>): GridStateSnapshot<TRowData> {
+	return {
+		columns: state.columns.slice(),
+		sortModel: state.sortModel,
+		filterModel: state.filterModel,
+		selection: state.selection,
+		selectedRowIds: state.selectedRowIds.slice(),
+		activeEdit: state.activeEdit,
+		loading: state.loading,
+		pagination: state.pagination ? { ...state.pagination } : undefined,
+		enableColumnReorder: state.enableColumnReorder,
+		globalVersion: state.globalVersion,
+		themeName: state.themeName,
+		sidebarOpenPanel: state.sidebarOpenPanel,
+		chartOpen: state.chartOpen,
+		groupBy: state.groupBy?.slice(),
+		showGroupFooter: state.showGroupFooter,
+		enableStickyGroupRows: state.enableStickyGroupRows,
+		masterDetailEnabled: state.masterDetailEnabled,
+		visibleRowRange: state.visibleRowRange,
+	};
+}
 
 export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowData> {
 	getRowId?: (row: TRowData) => string;
@@ -159,7 +183,7 @@ export function createApiFacade<TRowData>(
 	persistenceController?: PersistenceController
 ): GridApi<TRowData> {
 	const api = {
-		getState: () => store.getState(),
+		getStateSnapshot: () => createGridStateSnapshot(store.getState()),
 		getRowId: (row: TRowData) => store.getRowId(row),
 		isRowLoading: (rowId: string) => store.isRowLoading(rowId),
 		getDataRowAtVisualIndex: (index: number) => store.getDataRowAtVisualIndex(index),

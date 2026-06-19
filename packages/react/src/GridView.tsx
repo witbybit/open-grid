@@ -283,7 +283,7 @@ export function GridView<TRowData = unknown>({
 			const { cellEl, pointer } = target;
 
 			isGridActiveRef.current = true;
-			const state = api.getState();
+			const state = api.getStateSnapshot();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
@@ -326,7 +326,7 @@ export function GridView<TRowData = unknown>({
 
 			if (!navigation) return;
 
-			const state = api.getState();
+			const state = api.getStateSnapshot();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
@@ -342,7 +342,7 @@ export function GridView<TRowData = unknown>({
 			if (!target) return;
 			const { pointer } = target;
 
-			const state = api.getState();
+			const state = api.getStateSnapshot();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 

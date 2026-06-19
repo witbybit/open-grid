@@ -15,6 +15,7 @@ export type {
 	CellState,
 	ColumnState,
 	GridApi,
+	GridStateSnapshot,
 	GridCellAccess,
 	GridCellClickParams,
 	ActiveEditState,

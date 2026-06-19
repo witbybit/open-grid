@@ -58,7 +58,7 @@ export default function SpreadsheetWorkspace({
 	useEffect(() => {
 		if (!api) return;
 		const readSelection = () => {
-			const selection = api.getState().selection;
+			const selection = api.getStateSnapshot().selection;
 			setFocusedCell((selection.focus ?? null) as CellPointer | null);
 			setSelectedRange((selection.range ?? null) as SelectionRange | null);
 		};
@@ -130,7 +130,7 @@ export default function SpreadsheetWorkspace({
 	const handleApplyToSelection = useCallback(
 		(mapValue: (value: number) => unknown, emptyValue?: unknown) => {
 			if (!api) return;
-			const range = api.getState().selection.range as SelectionRange | null;
+			const range = api.getStateSnapshot().selection.range as SelectionRange | null;
 			if (!range) {
 				alert('Please select a range of cells first.');
 				return;
@@ -157,7 +157,7 @@ export default function SpreadsheetWorkspace({
 
 	const handleApplyCompoundToSelection = useCallback(() => {
 		if (!api) return;
-		const range = api.getState().selection.range as SelectionRange | null;
+		const range = api.getStateSnapshot().selection.range as SelectionRange | null;
 		if (!range) {
 			alert('Please select a range of cells to populate compound projections.');
 			return;
@@ -411,7 +411,7 @@ export default function SpreadsheetWorkspace({
 }
 
 function getFieldsInRange(api: GridApi<SpreadsheetRow>, range: SelectionRange) {
-	const state = api.getState();
+	const state = api.getStateSnapshot();
 	const startColIdx = state.columns.findIndex((column) => column.field === range.start.colField);
 	const endColIdx = state.columns.findIndex((column) => column.field === range.end.colField);
 	if (startColIdx === -1 || endColIdx === -1) return [];
@@ -422,7 +422,7 @@ function getFieldsInRange(api: GridApi<SpreadsheetRow>, range: SelectionRange) {
 
 function mutateSelection(api: GridApi<SpreadsheetRow>, bounds: { minCol: number; maxCol: number } | undefined, mutate: (value: number) => unknown) {
 	if (!bounds) return;
-	const columns = api.getState().columns;
+	const columns = api.getStateSnapshot().columns;
 	const rowIds = api.rows().getSelectedIds();
 	for (const rowId of rowIds) {
 		for (let colIndex = bounds.minCol; colIndex <= bounds.maxCol; colIndex++) {

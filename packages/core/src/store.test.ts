@@ -599,7 +599,7 @@ describe('GridStore generic row-store functionality', () => {
 
 		expect(initSpy).toHaveBeenCalledWith(
 			expect.objectContaining({
-				getState: expect.any(Function),
+				getStateSnapshot: expect.any(Function),
 				getRowModel: expect.any(Function),
 				getVisualRow: expect.any(Function),
 				getCellState: expect.any(Function),

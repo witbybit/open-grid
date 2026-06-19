@@ -1,4 +1,4 @@
-import { GridApi, GridNavigationHandle, GridNavigationOptions, GridState, registerGridNavigation } from '@open-grid/core';
+import { GridApi, GridNavigationHandle, GridNavigationOptions, GridStateSnapshot, registerGridNavigation } from '@open-grid/core';
 import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { GridApiContext } from './gridContext.js';
 
@@ -15,12 +15,15 @@ export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
 /**
  * Custom selector hook utilizing useSyncExternalStore for targeted re-renders.
  */
-export function useGridSelector<T, TRowData = unknown>(selector: (state: GridState<TRowData>) => T, isEqual?: (left: T, right: T) => boolean): T {
+export function useGridSelector<T, TRowData = unknown>(
+	selector: (state: GridStateSnapshot<TRowData>) => T,
+	isEqual?: (left: T, right: T) => boolean
+): T {
 	return useGridSelectorWithEquality(selector, isEqual);
 }
 
 function useGridSelectorWithEquality<T, TRowData = unknown>(
-	selector: (state: GridState<TRowData>) => T,
+	selector: (state: GridStateSnapshot<TRowData>) => T,
 	isEqual: (left: T, right: T) => boolean = Object.is
 ): T {
 	const api = useGridApi<TRowData>();
@@ -32,7 +35,7 @@ function useGridSelectorWithEquality<T, TRowData = unknown>(
 	const snapshotRef = useRef<{ hasValue: boolean; value: T }>({ hasValue: false, value: undefined as T });
 
 	const getSnapshot = useCallback(() => {
-		const next = selectorRef.current(api.getState());
+		const next = selectorRef.current(api.getStateSnapshot());
 		const previous = snapshotRef.current;
 		if (previous.hasValue && isEqualRef.current(previous.value, next)) {
 			return previous.value;
@@ -46,20 +49,20 @@ function useGridSelectorWithEquality<T, TRowData = unknown>(
 
 /**
  * Targeted selector for individual keys to achieve optimal performance.
- * The `key` must be a valid key of GridState — this drives fine-grained subscriptions
+ * The `key` must be a valid key of GridStateSnapshot — this drives fine-grained subscriptions
  * so the component only re-renders when that specific slice changes.
  */
 export function useGridKeySelector<T, TRowData = unknown>(
-	key: keyof GridState<TRowData>,
-	selector: (state: GridState<TRowData>) => T,
+	key: keyof GridStateSnapshot<TRowData>,
+	selector: (state: GridStateSnapshot<TRowData>) => T,
 	isEqual?: (left: T, right: T) => boolean
 ): T {
 	return useGridKeySelectorWithEquality(key, selector, isEqual);
 }
 
 function useGridKeySelectorWithEquality<T, TRowData = unknown>(
-	key: keyof GridState<TRowData>,
-	selector: (state: GridState<TRowData>) => T,
+	key: keyof GridStateSnapshot<TRowData>,
+	selector: (state: GridStateSnapshot<TRowData>) => T,
 	isEqual: (left: T, right: T) => boolean = Object.is
 ): T {
 	const api = useGridApi<TRowData>();
@@ -73,7 +76,7 @@ function useGridKeySelectorWithEquality<T, TRowData = unknown>(
 	const subscribe = useCallback((onStoreChange: () => void) => api.subscribeToKey(key, onStoreChange), [api, key]);
 
 	const getSnapshot = useCallback(() => {
-		const next = selectorRef.current(api.getState());
+		const next = selectorRef.current(api.getStateSnapshot());
 		const previous = snapshotRef.current;
 		if (previous.hasValue && isEqualRef.current(previous.value, next)) {
 			return previous.value;

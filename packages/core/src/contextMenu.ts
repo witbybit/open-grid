@@ -64,7 +64,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	public show(rowId: string, colField: string, clientX: number, clientY: number): void {
 		if (this.options.disabled) return;
 
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		let inSelection = false;
 		if (state.selection.bounds) {
 			const rowModel = this.runtime.getRowModel();
@@ -143,7 +143,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		menu.className = 'og-context-menu';
 		this.menuElement = menu;
 
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		const params: ContextMenuParams<TRowData> = {
 			rowId,
 			colField,
@@ -381,7 +381,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		if (!bounds) return;
 
 		const updates: { rowId: string; colField: string; value: unknown }[] = [];
-		const columns = params.api.getState().columns;
+		const columns = params.api.getStateSnapshot().columns;
 		for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
 			const visualRow = this.runtime.getVisualRow(r);
 			if (visualRow?.kind !== 'data') continue;
@@ -396,7 +396,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	private selectAll(params: ContextMenuParams<TRowData>): void {
-		const state = params.api.getState();
+		const state = params.api.getStateSnapshot();
 		const columns = state.columns;
 		const rowCount = this.runtime.getVisualRowCount();
 		if (columns.length === 0 || rowCount === 0) return;
@@ -423,7 +423,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		}
 		if (rowIds.length === 0) return;
 
-		const state = params.api.getState();
+		const state = params.api.getStateSnapshot();
 		const colFields = state.columns.slice(bounds.minCol, bounds.maxCol + 1).map((c) => c.field);
 
 		exportToCsv(this.runtime, { fileName: 'export-selection.csv', rowIds, columns: colFields });
@@ -437,7 +437,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	private hasColumnFilter(colField: string): boolean {
-		return !!this.runtime.getState().filterModel?.[colField];
+		return !!this.runtime.getStateSnapshot().filterModel?.[colField];
 	}
 
 	private filterByValue(params: ContextMenuParams<TRowData>, exclude: boolean): void {
@@ -445,11 +445,11 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const col = api.getColumnDef(colField);
 		if (!col) return;
 		const rawValue = api.getCellValue(rowId, colField);
-		api.setFilterModel(buildFilterByValue(col, rawValue, exclude, api.getState().filterModel));
+		api.setFilterModel(buildFilterByValue(col, rawValue, exclude, api.getStateSnapshot().filterModel));
 	}
 
 	private clearColumnFilter(params: ContextMenuParams<TRowData>): void {
 		const { colField, api } = params;
-		api.setFilterModel(applyFilterToModel(colField, null, api.getState().filterModel));
+		api.setFilterModel(applyFilterToModel(colField, null, api.getStateSnapshot().filterModel));
 	}
 }

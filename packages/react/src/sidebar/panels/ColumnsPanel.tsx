@@ -100,7 +100,7 @@ const EMPTY_GROUP_BY: string[] = [];
 
 export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	const stateColumns = useGridKeySelector<ColumnDef<any>[]>('columns', (s) => s.columns as ColumnDef<any>[]);
-	const stateGroupBy = useGridKeySelector<string[] | undefined>('groupBy', (s) => s.groupBy);
+	const stateGroupBy = useGridKeySelector<string[] | undefined>('groupBy', (s) => (s.groupBy ? [...s.groupBy] : undefined));
 	const showGroupFooter = useGridKeySelector<boolean>('showGroupFooter', (s) => !!s.showGroupFooter);
 	const enableStickyGroupRows = useGridKeySelector<boolean>('enableStickyGroupRows', (s) => !!s.enableStickyGroupRows);
 	// Subscribe to themeName so the panel re-renders when the theme changes.

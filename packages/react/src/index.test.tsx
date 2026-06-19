@@ -117,10 +117,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(screen.getByTestId('api-register-row-model').textContent).toBe('no');
 
 		fireEvent.click(screen.getByTestId('move-column'));
-		expect(grid.api.getState().columns.map((column) => column.field)).toEqual(['name', 'id']);
+		expect(grid.api.getStateSnapshot().columns.map((column) => column.field)).toEqual(['name', 'id']);
 
 		fireEvent.click(screen.getByTestId('disable-reorder'));
-		expect(grid.api.getState().enableColumnReorder).toBe(false);
+		expect(grid.api.getStateSnapshot().enableColumnReorder).toBe(false);
 
 		grid.api.destroy();
 	});
@@ -373,7 +373,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		fireEvent.keyDown(input, { key: 'Enter' });
 
 		expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
-		expect(grid.api.getState().activeEdit).toBeNull();
+		expect(grid.api.getStateSnapshot().activeEdit).toBeNull();
 
 		grid.api.destroy();
 	});
@@ -722,7 +722,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		);
 
 		fireEvent.mouseDown(container.querySelector('.og-cell[data-col-field="name"]')!);
-		expect(grid.api.getState().selection.focus).toBeNull();
+		expect(grid.api.getStateSnapshot().selection.focus).toBeNull();
 
 		unmount();
 		grid.api.destroy();
@@ -845,12 +845,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const childCell = (await screen.findByText('Child A')).closest('.og-cell') as HTMLElement;
 		fireEvent.mouseDown(childCell);
 		fireEvent.click(childCell);
-		expect(childGrid.api.getState().selection.focus).toEqual({ rowId: 'c1', colField: 'name' });
+		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual({ rowId: 'c1', colField: 'name' });
 
 		fireEvent.keyDown(window, { key: 'ArrowDown' });
 
-		expect(parentGrid.api.getState().selection.focus).toEqual({ rowId: 'p1', colField: 'name' });
-		expect(childGrid.api.getState().selection.focus).toEqual({ rowId: 'c2', colField: 'name' });
+		expect(parentGrid.api.getStateSnapshot().selection.focus).toEqual({ rowId: 'p1', colField: 'name' });
+		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual({ rowId: 'c2', colField: 'name' });
 
 		unmount();
 		parentGrid.api.destroy();

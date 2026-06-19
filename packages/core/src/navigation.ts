@@ -41,7 +41,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	}
 
 	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		const visualRow = this.runtime.getVisualRow(rowIdx);
 		const col = state.columns[colIdx];
 		if (!visualRow || !col) return null;
@@ -108,7 +108,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	 * Handle standard keyboard movements and selection expansions.
 	 */
 	public handleKeyDown = (event: KeyboardEvent): void => {
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		const active = state.selection.focus;
 		if (!active) return;
 
@@ -213,7 +213,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 								if (currentVisualRow.kind === 'group') {
 									this.runtime.toggleGroupExpanded(currentVisualRow.id);
 								} else if (currentVisualRow.kind === 'data') {
-									if (this.runtime.getState().masterDetailEnabled) {
+									if (this.runtime.getStateSnapshot().masterDetailEnabled) {
 										this.runtime.toggleDetailExpanded(active.rowId);
 									} else {
 										let parentGroupRowId: string | null = null;
@@ -406,7 +406,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			return; // do not move cell focus
 		}
 
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		const prevFocus = state.selection.focus;
 		const trigger = this.options.editTrigger ?? 'doubleClick';
 
@@ -447,7 +447,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		const trigger = this.options.editTrigger ?? 'doubleClick';
 		if (trigger !== 'singleClick') return;
 
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		const range = state.selection.range;
 		// Only enter editing if the selection is a single cell (not a multi-cell range drag)
 		const isSingleCell = !range || (range.start.rowId === range.end.rowId && range.start.colField === range.end.colField);

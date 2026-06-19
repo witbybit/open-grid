@@ -119,7 +119,7 @@ export default function App() {
 
 	useEffect(() => {
 		if (!activeApi) return;
-		const columns = activeApi.getState().columns;
+		const columns = activeApi.getStateSnapshot().columns;
 		if (columns.length > 0 && !columns.some((column) => column.field === sortField)) {
 			setSortField(columns[0].field);
 		}
@@ -167,7 +167,7 @@ export default function App() {
 	const applySpreadsheetRangeAction = useCallback(
 		(action: 'fill' | 'clear' | 'addPercent' | 'sum') => {
 			if (!activeApi) return;
-			const state = activeApi.getState();
+			const state = activeApi.getStateSnapshot();
 			const range = state.selection.range;
 			if (!range) {
 				window.alert('Please select a range of cells first using click-and-drag or Shift+Arrows.');

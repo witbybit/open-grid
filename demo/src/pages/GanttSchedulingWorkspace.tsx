@@ -78,7 +78,7 @@ export default function GanttSchedulingWorkspace({
 
 	useEffect(() => {
 		if (!api) return;
-		const readSelection = () => setSelectedRange(api.getState().selection.range ?? null);
+		const readSelection = () => setSelectedRange(api.getStateSnapshot().selection.range ?? null);
 		readSelection();
 		const unsubSelection = api.subscribeToKey('selection', readSelection);
 		const unsubCell = api.addEventListener(GridEventName.cellValueChanged, () => setRevision((value) => value + 1));
@@ -125,7 +125,7 @@ export default function GanttSchedulingWorkspace({
 
 	const handleBatchExpedite = useCallback(() => {
 		if (!api) return;
-		const range = api.getState().selection.range;
+		const range = api.getStateSnapshot().selection.range;
 		if (!range) {
 			alert('Please select a range of cells using drag selection first.');
 			return;

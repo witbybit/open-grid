@@ -98,7 +98,7 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 	// interactions (cell click, drag, sort/filter model change) but NOT by live data.
 	const updateStatsAndChart = useCallback(() => {
 		if (!api) return;
-		const state = api.getState();
+		const state = api.getStateSnapshot();
 		const range = state.selection.range;
 		if (range) {
 			selectedRowIdsRef.current = api.rows().inRange(range).getIds();

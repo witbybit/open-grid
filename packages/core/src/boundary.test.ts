@@ -213,6 +213,7 @@ describe('Public/internal boundary', () => {
 			const internalOnlyMethods = [
 				'store',
 				'engine',
+				'getState',
 				'getRenderStats',
 				'resetRenderStats',
 				'getVisualRow',
@@ -230,6 +231,18 @@ describe('Public/internal boundary', () => {
 			for (const method of internalOnlyMethods) {
 				expect(api[method], `${method} must not be on public GridApi`).toBeUndefined();
 			}
+		});
+
+		it('exposes getStateSnapshot on the public API', () => {
+			const api = createClientGrid({ columns: [{ field: 'id' }], rows: [] });
+			expect(typeof api.getStateSnapshot).toBe('function');
+			expect(api.getStateSnapshot()).toEqual(
+				expect.objectContaining({
+					columns: expect.any(Array),
+					selection: expect.any(Object),
+					selectedRowIds: expect.any(Array),
+				})
+			);
 		});
 
 		it('getStoreFromApi returns a store for a valid API', () => {

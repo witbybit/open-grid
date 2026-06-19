@@ -144,6 +144,27 @@ export interface GridSelectionState {
 	source: GridSelectionSource;
 }
 
+export interface GridStateSnapshot<TRowData = unknown> {
+	readonly columns: readonly ColumnDef<TRowData>[];
+	readonly sortModel: SortModel | null;
+	readonly filterModel: FilterModel | null;
+	readonly selection: GridSelectionState;
+	readonly selectedRowIds: readonly string[];
+	readonly activeEdit: ActiveEditState | null;
+	readonly loading?: boolean;
+	readonly pagination?: { pageSize: number; page?: number };
+	readonly enableColumnReorder: boolean;
+	readonly globalVersion: number;
+	readonly themeName?: BuiltInThemeName;
+	readonly sidebarOpenPanel?: string | null;
+	readonly chartOpen?: boolean;
+	readonly groupBy?: readonly string[];
+	readonly showGroupFooter?: boolean;
+	readonly enableStickyGroupRows?: boolean;
+	readonly masterDetailEnabled?: boolean;
+	readonly visibleRowRange?: ViewportRange;
+}
+
 export interface GridPlugin<TRowData = unknown> {
 	readonly name: string;
 	onInit?(api: GridPluginRuntime<TRowData>): void;
@@ -340,7 +361,7 @@ export interface HeaderMenuRendererProps<TRowData = unknown> {
  * Public, pristine API intended for application developers.
  */
 export interface GridApi<TRowData = unknown> {
-	getState(): GridState<TRowData>;
+	getStateSnapshot(): GridStateSnapshot<TRowData>;
 	getRowId(row: TRowData): string;
 	isRowLoading(rowId: string): boolean;
 	getDataRowAtVisualIndex(index: number): TRowData | null;

@@ -197,7 +197,7 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 	// Subscribe to rowSelectionChanged for the event log
 	useEffect(() => {
 		if (!api) return;
-		const readSelection = () => setSelectedCount(api.getState().selectedRowIds.length);
+		const readSelection = () => setSelectedCount(api.getStateSnapshot().selectedRowIds.length);
 		readSelection();
 		const unsubKey = api.subscribeToKey('selectedRowIds', readSelection);
 		const unsubEvent = api.addEventListener(GridEventName.rowSelectionChanged, (event) => {

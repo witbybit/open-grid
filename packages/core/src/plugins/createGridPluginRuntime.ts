@@ -2,7 +2,7 @@ import type { GridPluginRuntime } from '../api/GridApi.js';
 
 export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRowData>): GridPluginRuntime<TRowData> {
 	return {
-		getState: source.getState,
+		getStateSnapshot: source.getStateSnapshot,
 		getRowId: source.getRowId,
 		isRowLoading: source.isRowLoading,
 		getDataRowAtVisualIndex: source.getDataRowAtVisualIndex,

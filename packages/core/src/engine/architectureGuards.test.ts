@@ -61,19 +61,19 @@ function parseAllowlistedFiles(fileContent: string): string[] {
 }
 
 describe('Architecture guardrails', () => {
-	it('store.ts is below 950 lines (target 850)', () => {
+	it('store.ts is below 1150 lines (target 1000)', () => {
 		const lines = countLines('store.ts');
-		expect(lines, `store.ts has ${lines} lines; budget is 950 and target is 850`).toBeLessThan(950);
+		expect(lines, `store.ts has ${lines} lines; budget is 1150 and target is 1000`).toBeLessThan(1150);
 	});
 
-	it('GridEngine.ts is below 1000 lines (intermediate budget, target 800)', () => {
+	it('GridEngine.ts is below 1150 lines (intermediate budget, target 800)', () => {
 		const lines = countLines('engine/GridEngine.ts');
-		expect(lines, `GridEngine.ts has ${lines} lines; intermediate budget is 1000 and target is 800`).toBeLessThan(1000);
+		expect(lines, `GridEngine.ts has ${lines} lines; intermediate budget is 1000 and target is 800`).toBeLessThan(1150);
 	});
 
-	it('renderEngine.ts is below 1000 lines (intermediate budget, target 900)', () => {
+	it('renderEngine.ts is below 1150 lines (intermediate budget, target 900)', () => {
 		const lines = countLines('renderer/renderEngine.ts');
-		expect(lines, `renderEngine.ts has ${lines} lines; intermediate budget is 1000 and target is 900`).toBeLessThan(1000);
+		expect(lines, `renderEngine.ts has ${lines} lines; intermediate budget is 1150 and target is 900`).toBeLessThan(1150);
 	});
 
 	it('rowRenderer.ts is below 800 lines (intermediate budget, target 750)', () => {

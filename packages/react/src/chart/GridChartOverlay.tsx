@@ -84,7 +84,7 @@ function extractData(
 ): ExtractedData {
 	if (!bounds) return { categories: [], series: [], allSeries: [] };
 
-	const columns = api.getState().columns || [];
+	const columns = api.getStateSnapshot().columns || [];
 	const selectedRows: { id: string; label: string }[] = [];
 	for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
 		const row = api.getDataRowAtVisualIndex(r);

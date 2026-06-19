@@ -16,7 +16,6 @@ import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 import type { PersistenceStatus, PersistedGridState } from './persistence/statePersistence.js';
 import { extractPersistedState, applyPersistedStateToApi, areRowHeightsEqual, GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
-
 import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltInThemeName, type ThemeTokens } from './renderer/themes.js';
 
 // ── Focused sub-modules — re-export so callers of store.ts continue to work ──
@@ -95,6 +94,7 @@ import type {
 	SelectAllRowsOptions,
 	InternalGridApi,
 	GridApi,
+	GridStateSnapshot,
 } from './api/GridApi.js';
 import type { GridState, Listener, ColumnState } from './state/GridState.js';
 import type { GridEventPayloadMap, GridEventListener } from './api/GridEvents.js';
@@ -189,8 +189,28 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	}
 
 	public getPluginController = (): GridPluginController<TRowData> => this.pluginRegistry;
-
 	public getState = (): GridState<TRowData> => this.engine.getState();
+
+	public getStateSnapshot = (): GridStateSnapshot<TRowData> => ({
+		columns: this.state.columns.slice(),
+		sortModel: this.state.sortModel,
+		filterModel: this.state.filterModel,
+		selection: this.state.selection,
+		selectedRowIds: this.state.selectedRowIds.slice(),
+		activeEdit: this.state.activeEdit,
+		loading: this.state.loading,
+		pagination: this.state.pagination ? { ...this.state.pagination } : undefined,
+		enableColumnReorder: this.state.enableColumnReorder,
+		globalVersion: this.state.globalVersion,
+		themeName: this.state.themeName,
+		sidebarOpenPanel: this.state.sidebarOpenPanel,
+		chartOpen: this.state.chartOpen,
+		groupBy: this.state.groupBy?.slice(),
+		showGroupFooter: this.state.showGroupFooter,
+		enableStickyGroupRows: this.state.enableStickyGroupRows,
+		masterDetailEnabled: this.state.masterDetailEnabled,
+		visibleRowRange: this.state.visibleRowRange,
+	});
 
 	public getRowId = (row: TRowData): string => this.engine.getRowId(row);
 
