@@ -28,7 +28,6 @@ import {
 	type PersistenceController,
 	type PersistenceStatus,
 	createLocalStorageAdapter,
-	applyPersistedState,
 	createPersistenceSubscription,
 } from './persistence/statePersistence.js';
 import type { ThemeTokens } from './renderer/themes.js';
@@ -217,7 +216,8 @@ export function createApiFacade<TRowData>(
 		getColumnState: () => store.getColumnState(),
 		applyColumnState: (states: ColumnState[], opts?: { applyOrder?: boolean }) => store.applyColumnState(states, opts),
 		getGridState: () => store.getGridState(),
-		applyGridState: (state: PersistedGridState) => store.applyGridState(state),
+		applyGridState: (state: PersistedGridState) =>
+			persistenceController ? persistenceController.suspendAutoSave(() => store.applyGridState(state)) : store.applyGridState(state),
 		toggleGroupExpanded: (groupId: string) => store.toggleGroupExpanded(groupId),
 		toggleDetailExpanded: (rowId: string) => store.toggleDetailExpanded(rowId),
 		isGroupExpanded: (groupId: string) => store.isGroupExpanded(groupId),
@@ -308,6 +308,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 
 	let columns = options.columns;
 	let mergedInitial: Partial<GridInitialState<TRowData>> = options.initialState ?? {};
+	let loadedPersistedState: PersistedGridState | null = null;
 	let asyncLoad: Promise<PersistedGridState | null> | undefined;
 
 	if (adapter) {
@@ -315,11 +316,10 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 		if (loaded instanceof Promise) {
 			asyncLoad = loaded;
 		} else if (loaded) {
-			const applied = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]);
-			if (applied !== null) mergedInitial = applied as Partial<GridInitialState<TRowData>>;
+			loadedPersistedState = loaded;
 		}
 	}
-	// Apply row selection after persistence so restored column state cannot hide the built-in selector.
+	// Apply row selection before persisted restore so startup hydration never depends on a persistence-only state merge path.
 	const selected = withRowSelectionColumn(mergedInitial.columns ?? columns, mergedInitial, options.rowSelection);
 	columns = selected.columns;
 	mergedInitial = selected.initialState;
@@ -358,6 +358,10 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 		persistenceController
 	);
 
+	if (loadedPersistedState) {
+		api.applyGridState(loadedPersistedState);
+	}
+
 	if (asyncLoad) {
 		asyncLoad
 			.then((saved) => {
@@ -376,6 +380,7 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 	const adapter = typeof rawPersistence === 'string' ? createLocalStorageAdapter(rawPersistence) : rawPersistence;
 
 	let mergedInitial: Partial<GridInitialState<TRowData>> = options.initialState ?? {};
+	let loadedPersistedState: PersistedGridState | null = null;
 	let asyncLoad: Promise<PersistedGridState | null> | undefined;
 
 	if (adapter) {
@@ -383,8 +388,7 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 		if (loaded instanceof Promise) {
 			asyncLoad = loaded;
 		} else if (loaded) {
-			const applied = applyPersistedState(loaded, mergedInitial, options.columns as unknown as ColumnDef<unknown>[]);
-			if (applied !== null) mergedInitial = applied as Partial<GridInitialState<TRowData>>;
+			loadedPersistedState = loaded;
 		}
 	}
 	const selected = withRowSelectionColumn(options.columns, mergedInitial, options.rowSelection);
@@ -423,6 +427,10 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 		adapter,
 		persistenceController
 	);
+
+	if (loadedPersistedState) {
+		api.applyGridState(loadedPersistedState);
+	}
 
 	if (asyncLoad) {
 		asyncLoad

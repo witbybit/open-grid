@@ -1836,16 +1836,21 @@ describe('GridStore undo and redo functionality', () => {
 			rows: [{ id: '1', name: 'Alpha', price: 10 }],
 			columns: store.getState().columns,
 		});
+		const subscriber = vi.fn();
+		store.subscribe(subscriber);
 
 		store.applyGridState({
 			v: GRID_STATE_SCHEMA_VERSION,
-			columnWidths: { name: 180 },
-			columnOrder: ['price', 'name'],
+			state: {
+				columnWidths: { name: 180 },
+				columnOrder: ['price', 'name'],
+			},
 		});
 
 		expect(store.getState().columnWidths.name).toBe(180);
 		expect(store.getState().columns.map((column) => column.field)).toEqual(['price', 'name']);
 		expect(store.canUndo()).toBe(false);
+		expect(subscriber).toHaveBeenCalledTimes(1);
 
 		controller.dispose();
 		store.destroy();

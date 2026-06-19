@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as publicApi from './index.js';
 import * as experimentalApi from './experimental.js';
 import * as internalApi from './internal.js';
 import { createClientGrid } from './createGrid.js';
+import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 
 describe('Public/internal boundary', () => {
 	describe('Public entry (@open-grid/core)', () => {
@@ -270,6 +271,55 @@ describe('Public/internal boundary', () => {
 			const names = Object.getOwnPropertyNames(api);
 			expect(names).not.toContain('__getEngine');
 			expect(names).not.toContain('__getInternalApi');
+		});
+
+		it('restores loaded persisted state without immediately auto-saving it again', () => {
+			const adapter = {
+				load: vi.fn(() => ({
+					v: GRID_STATE_SCHEMA_VERSION,
+					state: {
+						columnWidths: { id: 180 },
+					},
+				})),
+				save: vi.fn(),
+			};
+
+			const api = createClientGrid({
+				columns: [{ field: 'id', width: 100 }],
+				rows: [{ id: '1' }],
+				persistence: adapter,
+			});
+
+			expect(api.getGridState().state.columnWidths?.id).toBe(180);
+			expect(adapter.save).not.toHaveBeenCalled();
+		});
+
+		it('reports a runtime fault for invalid loaded persisted state', () => {
+			const adapter = {
+				load: vi.fn(() => ({
+					v: GRID_STATE_SCHEMA_VERSION,
+					state: {
+						selection: { focus: null },
+					},
+				})),
+				save: vi.fn(),
+			};
+
+			const api = createClientGrid({
+				columns: [{ field: 'id', width: 100 }],
+				rows: [{ id: '1' }],
+				persistence: adapter as any,
+			});
+
+			expect(api.getRuntimeFaults()).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						source: 'persistence',
+						operation: 'applyGridState',
+					}),
+				])
+			);
+			expect(adapter.save).not.toHaveBeenCalled();
 		});
 	});
 });
