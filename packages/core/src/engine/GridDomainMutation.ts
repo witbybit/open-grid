@@ -649,7 +649,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 	const rowTransactionExecutor: GridDomainMutationExecutor<TRowData, RowTransactionMutation<TRowData>> = {
 		validate(_mutation, context) {
 			const rowModel = context.getRowModel();
-			if (!rowModel?.applyTransaction && !(_mutation.restoreSnapshot && rowModel?.setRows && rowModel?.setRowOrder)) {
+			if (!rowModel?.applyTransaction) {
 				return {
 					ok: false,
 					reason: 'row model unavailable',
@@ -674,10 +674,11 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					apply: () => ({ noop: true, result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData> }),
 				};
 			}
+			const rowModel = context.getRowModel();
 			const preparedRestoreSnapshot =
 				mutation.restoreSnapshot ??
+				rowModel?.captureTransactionSnapshot?.(mutation) ??
 				(() => {
-					const rowModel = context.getRowModel();
 					if (!rowModel?.getAllDataNodes || !rowModel?.getRowOrder) return undefined;
 					return {
 						rows: cloneRows(rowModel.getAllDataNodes().map((node) => node.data)),
@@ -691,9 +692,8 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 				requestRender: true,
 				apply(context) {
 					const rowModel = context.getRowModel();
-					if (preparedRestoreSnapshot && mutation.restoreSnapshot && rowModel?.setRows && rowModel?.setRowOrder) {
-						rowModel.setRows(cloneRows(preparedRestoreSnapshot.rows));
-						rowModel.setRowOrder(preparedRestoreSnapshot.rowOrder.slice());
+					if (preparedRestoreSnapshot && mutation.restoreSnapshot) {
+						rowModel?.restoreTransactionSnapshot?.(preparedRestoreSnapshot);
 						return {
 							domains: ['rows', 'geometry'],
 							invalidations: [{ kind: 'full', reason: 'data' }],
@@ -732,9 +732,12 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 				rollback(_applied, context) {
 					if (!preparedRestoreSnapshot) return;
 					const rowModel = context.getRowModel();
-					if (!rowModel?.setRows || !rowModel?.setRowOrder) return;
-					rowModel.setRows(cloneRows(preparedRestoreSnapshot.rows));
-					rowModel.setRowOrder(preparedRestoreSnapshot.rowOrder.slice());
+					if (rowModel?.restoreTransactionSnapshot) {
+						rowModel.restoreTransactionSnapshot(preparedRestoreSnapshot);
+					} else if (rowModel?.setRows && rowModel?.setRowOrder && 'rows' in preparedRestoreSnapshot && 'rowOrder' in preparedRestoreSnapshot) {
+						rowModel.setRows(cloneRows((preparedRestoreSnapshot as any).rows));
+						rowModel.setRowOrder((preparedRestoreSnapshot as any).rowOrder.slice());
+					}
 				},
 			};
 		},
