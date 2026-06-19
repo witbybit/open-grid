@@ -335,7 +335,7 @@ describe('GridChangeApplier', () => {
 			update: [],
 		};
 		const rowModel = {
-			captureTransactionSnapshot: vi.fn(() => ({ modelType: 'test', rows: [], rowOrder: [] })),
+			captureTransactionSnapshot: vi.fn(() => ({ modelType: 'test', snapshot: {} })),
 			applyTransaction: vi.fn(() => resultPayload),
 			restoreTransactionSnapshot: vi.fn(),
 		};
@@ -387,8 +387,10 @@ describe('GridChangeApplier', () => {
 		const rowModel = {
 			captureTransactionSnapshot: vi.fn(() => ({
 				modelType: 'test',
-				rows: rows.slice(),
-				rowOrder: rowOrder.slice(),
+				snapshot: {
+					rows: rows.slice(),
+					rowOrder: rowOrder.slice(),
+				},
 			})),
 			applyTransaction: vi.fn((transaction: { add?: TestRow[] }) => {
 				if (transaction.add) {
@@ -397,9 +399,9 @@ describe('GridChangeApplier', () => {
 				}
 				return { add: transaction.add?.map((row) => ({ id: row.id })) ?? [], remove: [], update: [] };
 			}),
-			restoreTransactionSnapshot: vi.fn((snapshot: { rows: TestRow[]; rowOrder: string[] }) => {
-				rows = snapshot.rows.slice();
-				rowOrder = snapshot.rowOrder.slice();
+			restoreTransactionSnapshot: vi.fn((snapshot: { snapshot: { rows: TestRow[]; rowOrder: string[] } }) => {
+				rows = snapshot.snapshot.rows.slice();
+				rowOrder = snapshot.snapshot.rowOrder.slice();
 			}),
 		};
 		const commandHistory = new CommandHistory();

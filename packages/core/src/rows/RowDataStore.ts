@@ -23,6 +23,11 @@ export interface StoreTransactionResult<T> {
 	changedValuesByRow: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
 }
 
+export interface RowDataStoreTransactionSnapshot<T> {
+	readonly rows: readonly T[];
+	readonly sourceOrder: readonly string[];
+}
+
 const hasOwn = Object.prototype.hasOwnProperty;
 
 function diffRows(prevRow: unknown, nextRow: unknown): RowDiff | null {
@@ -230,6 +235,18 @@ export class RowDataStore<T> {
 
 	public getSourceOrder(): string[] {
 		return this.sourceOrder.slice();
+	}
+
+	public captureTransactionSnapshot(): RowDataStoreTransactionSnapshot<T> {
+		return {
+			rows: structuredClone(this.sourceOrder.map((id) => this.rowsById.get(id)!.data)),
+			sourceOrder: this.sourceOrder.slice(),
+		};
+	}
+
+	public restoreTransactionSnapshot(snapshot: RowDataStoreTransactionSnapshot<T>): void {
+		this.setRows([...snapshot.rows]);
+		this.setRowOrder([...snapshot.sourceOrder]);
 	}
 
 	/** Reorder rows by providing a new array of row IDs. IDs not present in the store are silently dropped. */

@@ -31,8 +31,7 @@ export interface BatchCellMutation {
 
 export interface RowModelTransactionSnapshot<TRowData = unknown> {
 	readonly modelType: string;
-	rows: readonly TRowData[];
-	rowOrder: readonly string[];
+	readonly snapshot: unknown;
 }
 
 export interface RowTransactionResult<TRowData = unknown> {
@@ -194,10 +193,6 @@ function createEventsFromResults<TRowData>(results: readonly CellValueChangeResu
 				newValue: result.newComputedValue,
 			},
 		}));
-}
-
-function cloneRows<TRowData>(rows: readonly TRowData[]): TRowData[] {
-	return rows.map((row) => ({ ...(row as Record<string, unknown>) }) as TRowData);
 }
 
 function rollbackAppliedCellResults<TRowData>(

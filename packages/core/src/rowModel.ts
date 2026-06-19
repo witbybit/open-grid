@@ -9,6 +9,7 @@ import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows
 import { RowDependencyRegistry, classifyMutation } from './rows/rowMutationClassifier.js';
 import type { PageWindow } from './rows/pageModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
+import type { RowDataStoreTransactionSnapshot } from './rows/RowDataStore.js';
 import { toDataVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
 import {
@@ -47,6 +48,13 @@ export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
 	columns: Array<ColumnDef<TData>>;
 }
+
+type ClientRowModelTransactionSnapshot<TData> = import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TData> & {
+	readonly modelType: 'client';
+	readonly snapshot: {
+		readonly dataStore: RowDataStoreTransactionSnapshot<TData>;
+	};
+};
 
 export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
 export type { AggregationDef } from './rows/stages/aggregateStage.js';
@@ -1071,17 +1079,21 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	public captureTransactionSnapshot = (
 		_mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TData>
 	): import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TData> => {
-		const nodes = this.dataStore.getAllNodes();
 		return {
 			modelType: 'client',
-			rows: nodes.map((n) => ({ ...(n.data as Record<string, unknown>) }) as TData),
-			rowOrder: this.dataStore.getSourceOrder(),
+			snapshot: {
+				dataStore: this.dataStore.captureTransactionSnapshot(),
+			},
 		};
 	};
 
 	public restoreTransactionSnapshot = (snapshot: import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TData>): void => {
-		this.dataStore.setRows(snapshot.rows as TData[]);
-		this.dataStore.setRowOrder(snapshot.rowOrder as string[]);
+		if (snapshot.modelType !== 'client') {
+			throw new Error(`Open Grid: cannot restore ${snapshot.modelType} snapshot into client row model.`);
+		}
+		const clientSnapshot = snapshot as ClientRowModelTransactionSnapshot<TData>;
+		this.dataStore.restoreTransactionSnapshot(clientSnapshot.snapshot.dataStore);
+		this.runtime.clearFormulas();
 		this.refresh('bulk');
 	};
 

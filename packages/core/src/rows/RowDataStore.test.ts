@@ -141,4 +141,22 @@ describe('RowDataStore.applyTransaction', () => {
 		expect(result.changedValuesByRow.get('a')?.get('age')).toEqual({ oldValue: 30, newValue: undefined });
 		expect(result.changedValuesByRow.get('a')?.get('note')).toEqual({ oldValue: undefined, newValue: 'new' });
 	});
+
+	it('captures and restores nested row data without aliasing the original objects', () => {
+		type NestedRow = { id: string; profile: { name: string; stats: { score: number } } };
+		const store = new RowDataStore<NestedRow>((row) => row.id);
+		const rows: NestedRow[] = [{ id: 'a', profile: { name: 'Alice', stats: { score: 1 } } }];
+		store.setRows(rows);
+
+		const snapshot = store.captureTransactionSnapshot();
+
+		rows[0]!.profile.stats.score = 99;
+		store.getNode('a')!.data.profile.name = 'Mutated';
+
+		store.restoreTransactionSnapshot(snapshot);
+
+		expect(store.getNode('a')!.data.profile.name).toBe('Alice');
+		expect(store.getNode('a')!.data.profile.stats.score).toBe(1);
+		expect(store.getNode('a')!.data).not.toBe(rows[0]);
+	});
 });
