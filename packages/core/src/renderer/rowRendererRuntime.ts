@@ -25,6 +25,7 @@ import {
 import type { RowSlot } from './rowSlot.js';
 import type { RenderWindow } from './renderWindow.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
+import { reportRendererFault } from './rendererFaults.js';
 
 export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	engine: GridEngine<TRowData>;
@@ -230,8 +231,20 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 		const container = this.getCellPortalHost(cell) ?? cell;
 		const isDeferred = forceDeferred ?? this.deps.stateHost.runtimeState.isScrolling();
 		const activeIdentity = this.deps.portalMountManager.getActiveIdentity(cellKey);
-		const rowSlotId = activeIdentity?.rowSlotId ?? '__unknown_slot__';
-		const slotGeneration = activeIdentity?.slotGeneration ?? 0;
+		if (!activeIdentity) {
+			reportRendererFault(
+				this.deps.engine,
+				'release-cell-portal-without-identity',
+				new Error(`Missing pooled portal identity for ${cellKey}`),
+				{
+					cellKey,
+					reason,
+				}
+			);
+			return;
+		}
+		const rowSlotId = activeIdentity.rowSlotId;
+		const slotGeneration = activeIdentity.slotGeneration;
 
 		if (isDeferred) {
 			this.deps.stateHost.currentScrollPortalOps++;

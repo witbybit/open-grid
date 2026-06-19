@@ -367,28 +367,6 @@ function previewCellValueMutation<TRowData>(context: GridCommitContext<TRowData>
 		};
 	}
 
-	if (!mutation.bypassValueSetter && column?.valueSetter) {
-		const draftRow = { ...(row as Record<string, unknown>) } as TRowData;
-		const result = column.valueSetter({
-			value: mutation.value,
-			oldValue: oldComputedValue,
-			row: draftRow,
-			colField: mutation.colField,
-			abort: () => undefined,
-		});
-		if (!(result instanceof Promise) && !result) {
-			return {
-				rowId: mutation.rowId,
-				colField: mutation.colField,
-				value: mutation.value,
-				oldRawValue,
-				oldComputedValue,
-				status: 'rejected',
-				reason: 'value setter rejected change',
-			};
-		}
-	}
-
 	return {
 		rowId: mutation.rowId,
 		colField: mutation.colField,
@@ -448,7 +426,16 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 						source: mutation.source ?? 'api',
 					});
 					if (!result.applied) {
-						throw new Error('prepared cell mutation did not apply');
+						return {
+							noop: true,
+							rejections: [
+								{
+									mutationKind: 'cell-value',
+									reason: 'value setter rejected change',
+								},
+							],
+							result,
+						};
 					}
 					return {
 						domains: ['rows'],
@@ -568,9 +555,23 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 						if (!result.applied) {
 							if (mutation.atomic !== false) {
 								rollbackAppliedCellResults(committed, commitContext, 'undo');
-								throw new Error(`atomic batch apply failed at index ${index}`);
+								return {
+									noop: true,
+									rejections: [
+										{
+											mutationKind: 'batch-cell',
+											index,
+											reason: 'value setter rejected change',
+										},
+									],
+									result: {
+										results,
+										committed: [],
+										rejected: [{ index, update, reason: 'value setter rejected change' }],
+									} satisfies BatchCellMutationExecutionResult,
+								};
 							}
-							rejected.push({ index, update, reason: 'prepared cell mutation did not apply' });
+							rejected.push({ index, update, reason: 'value setter rejected change' });
 							continue;
 						}
 						results.push(result);

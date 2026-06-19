@@ -158,6 +158,10 @@ export interface GridCommitKernelDeps<TRowData = unknown> {
 
 export type GridChangeApplierDeps<TRowData = unknown> = GridCommitKernelDeps<TRowData>;
 
+class GridCommitRejectedError {
+	constructor(readonly rejections: readonly import('./GridDomainMutation.js').GridMutationRejection[]) {}
+}
+
 export class GridCommitKernel<TRowData = unknown> {
 	private nextChangeId = 1;
 
@@ -179,14 +183,22 @@ export class GridCommitKernel<TRowData = unknown> {
 		try {
 			for (const preparedMutation of domainMutationResolution.preparedMutations) {
 				failureOperation = `apply-domain:${preparedMutation.mutation.kind}`;
-				appliedMutations.push(preparedMutation.apply(this.deps.commitContext!));
+				const appliedMutation = preparedMutation.apply(this.deps.commitContext!);
+				if (appliedMutation.noop === true && (appliedMutation.rejections?.length ?? 0) > 0) {
+					throw new GridCommitRejectedError(appliedMutation.rejections!);
+				}
+				appliedMutations.push(appliedMutation);
 			}
 			if (change.state !== undefined) {
 				failureOperation = 'commit-state';
 				this.deps.stateManager.setState(change.state);
 			}
 		} catch (error) {
-			const primaryFault = this.reportFault(failureOperation ?? 'commit-domain', error, { reason: change.reason });
+			const primaryRejections = error instanceof GridCommitRejectedError ? error.rejections : undefined;
+			const primaryFault =
+				error instanceof GridCommitRejectedError
+					? null
+					: this.reportFault(failureOperation ?? 'commit-domain', error, { reason: change.reason });
 			const rollbackFaults: RuntimeFault[] = [];
 			for (let index = appliedMutations.length - 1; index >= 0; index--) {
 				const preparedMutation = domainMutationResolution.preparedMutations[index];
@@ -201,8 +213,18 @@ export class GridCommitKernel<TRowData = unknown> {
 				}
 			}
 			if (rollbackFaults.length === 0) {
+				if (primaryRejections) {
+					return {
+						result: {
+							status: 'rejected',
+							reason: primaryRejections[0]?.reason ?? 'mutation rejected',
+							rejections: primaryRejections,
+						},
+						appliedMutations: [],
+					};
+				}
 				return {
-					result: { status: 'failed-before-commit', fault: primaryFault },
+					result: { status: 'failed-before-commit', fault: primaryFault! },
 					appliedMutations: [],
 				};
 			}
@@ -211,7 +233,7 @@ export class GridCommitKernel<TRowData = unknown> {
 				result: {
 					status: 'committed',
 					changeId: committedChangeId,
-					faults: [primaryFault, ...rollbackFaults],
+					faults: primaryFault ? [primaryFault, ...rollbackFaults] : rollbackFaults,
 					rejectedMutations: this.collectRejectedMutations(appliedMutations),
 				},
 				appliedMutations,

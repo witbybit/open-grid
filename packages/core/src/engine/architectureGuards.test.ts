@@ -1374,6 +1374,15 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('slotGeneration,');
 	});
 
+	it('pooled portal identity fallbacks are deleted from renderer release paths', () => {
+		const portalManager = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
+		const rowRuntime = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRendererRuntime.ts'), 'utf-8');
+		expect(portalManager).not.toContain('slotGeneration ?? 0');
+		expect(portalManager).not.toContain('__unknown_slot__');
+		expect(rowRuntime).not.toContain('slotGeneration ?? 0');
+		expect(rowRuntime).not.toContain('__unknown_slot__');
+	});
+
 	// ── Plan 101: public API and package boundary reset ───────────────────────
 
 	it('core/index.ts does not import from rows/stages/ internal path (Plan 101)', () => {

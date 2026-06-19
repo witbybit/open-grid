@@ -13,6 +13,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { CustomRendererManager, type ReleaseReason } from './customRendererManager.js';
 import { DomCellRendererManager } from './domCellRendererManager.js';
+import { reportRendererFault } from './rendererFaults.js';
 import {
 	createEditRendererKey,
 	createSlotRendererKey,
@@ -138,6 +139,11 @@ export class PortalMountManager<TRowData = unknown> {
 		return this.activeIdentityByKey.get(cellKey);
 	}
 
+	private reportMissingPooledIdentity(operation: string, cellKey: string): void {
+		if (!this.engine) return;
+		reportRendererFault(this.engine, operation, new Error(`Missing pooled portal identity for ${cellKey}`), { cellKey });
+	}
+
 	private mountCellReal(mount: GridCellContentMount<TRowData>): void {
 		this.activeIdentityByKey.set(mount.cellKey, {
 			rowSlotId: mount.rowSlotId,
@@ -213,13 +219,17 @@ export class PortalMountManager<TRowData = unknown> {
 			if (originalUnmount) {
 				this.onUnmountCellContent?.(originalUnmount);
 			} else {
+				if (!activeIdentity) {
+					this.reportMissingPooledIdentity('portal-unmount-without-identity', cellKey);
+					return;
+				}
 				const container = this.mountedCells.get(cellKey);
 				this.onUnmountCellContent?.({
 					cellKey,
 					container,
 					flushSync: false,
-					rowSlotId: activeIdentity?.rowSlotId ?? '__unknown_slot__',
-					slotGeneration: activeIdentity?.slotGeneration ?? 0,
+					rowSlotId: activeIdentity.rowSlotId,
+					slotGeneration: activeIdentity.slotGeneration,
 				});
 			}
 		}

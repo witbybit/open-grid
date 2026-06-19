@@ -92,6 +92,58 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it('executes a sync valueSetter exactly once for a direct cell write', () => {
+		const valueSetter = vi.fn(({ row, value }) => {
+			row.name = `${String(value)} accepted`;
+			return true;
+		});
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150, valueSetter },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.setCellValue('1', 'name', 'Product Updated');
+		store.flushCellUpdatesSync();
+
+		expect(valueSetter).toHaveBeenCalledTimes(1);
+		expect((store as any).engine.getRawCellValue('1', 'name')).toBe('Product Updated accepted');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('rejects a sync valueSetter write without mutating data or history', () => {
+		const valueSetter = vi.fn(() => false);
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150, valueSetter },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.setCellValue('1', 'name', 'Rejected');
+		store.flushCellUpdatesSync();
+
+		expect(valueSetter).toHaveBeenCalledTimes(1);
+		expect((store as any).engine.getRawCellValue('1', 'name')).toBe('Product A');
+		expect(store.canUndo()).toBe(false);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('getStateSnapshot returns immutable defensive copies of public state', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
