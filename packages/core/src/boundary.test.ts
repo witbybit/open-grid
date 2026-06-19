@@ -10,6 +10,11 @@ describe('Public/internal boundary', () => {
 			expect((publicApi as Record<string, unknown>)['GridStore']).toBeUndefined();
 		});
 
+		it('does not export mutable GridState aliases', () => {
+			expect((publicApi as Record<string, unknown>)['GridState']).toBeUndefined();
+			expect((publicApi as Record<string, unknown>)['InternalGridState']).toBeUndefined();
+		});
+
 		it('does not export RenderEngine / GridEngine', () => {
 			expect((publicApi as Record<string, unknown>)['RenderEngine']).toBeUndefined();
 			expect((publicApi as Record<string, unknown>)['GridEngine']).toBeUndefined();
@@ -198,6 +203,12 @@ describe('Public/internal boundary', () => {
 
 		it('matches the reviewed adapter-only runtime export snapshot', () => {
 			expect(Object.keys(internalApi).sort()).toEqual(['hasImperativeRendererCapability', 'mountGridHost']);
+		});
+
+		it('does not export runtime bridge escape hatches', () => {
+			expect((internalApi as Record<string, unknown>)['resolveGridInternalStore']).toBeUndefined();
+			expect((internalApi as Record<string, unknown>)['registerGridInternalStore']).toBeUndefined();
+			expect((internalApi as Record<string, unknown>)['resolveGridPluginController']).toBeUndefined();
 		});
 	});
 

@@ -1490,6 +1490,33 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('private set state(');
 	});
 
+	it('stable package entrypoints do not re-export mutable runtime state aliases (Plan 112 pre-gate)', () => {
+		const coreIndex = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
+		const coreStore = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		const gridApi = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		const reactIndex = readFileSync(resolve(REACT_ROOT, 'src', 'index.ts'), 'utf-8');
+		const reactTypes = readFileSync(resolve(REACT_ROOT, 'src', 'types.ts'), 'utf-8');
+
+		expect(coreIndex).not.toContain('GridInitialState, GridState, Listener');
+		expect(coreIndex).not.toContain('export type { InternalGridState');
+		expect(coreStore).not.toContain("export * from './state/GridState.js';");
+		expect(coreStore).not.toContain('export type { GridInitialState, GridState');
+		expect(coreStore).not.toContain('export type { InternalGridState');
+		expect(gridApi).not.toContain('export type { GridState,');
+		expect(gridApi).not.toContain('export type { InternalGridState');
+		expect(reactIndex).not.toContain('GridApi,\n\tGridCellClickParams,\n\tGridState,');
+		expect(reactTypes).not.toContain('GridInitialState,\n\tGridState,');
+		expect(reactTypes).not.toContain('InternalGridState');
+	});
+
+	it('internal entry stays adapter-only and does not expose runtime bridge helpers (Plan 112)', () => {
+		const internalEntry = readFileSync(resolve(CORE_ROOT, 'src', 'internal.ts'), 'utf-8');
+		expect(internalEntry).not.toContain('resolveGridInternalStore');
+		expect(internalEntry).not.toContain('registerGridInternalStore');
+		expect(internalEntry).not.toContain('resolveGridPluginController');
+		expect(internalEntry).not.toContain('GridStore');
+	});
+
 	it('GridStateFeatureController no longer contains raw write fallbacks (Plan 103)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'), 'utf-8');
 		expect(content).toContain('applyChange: (change: GridChange<TRowData>) => GridCommitResult;');
