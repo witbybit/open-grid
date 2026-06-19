@@ -334,6 +334,57 @@ describe('GridChangeApplier', () => {
 		).toEqual({ status: 'rejected', reason: 'mixed state and domain mutations are not yet supported' });
 	});
 
+	it('commitDetailed exposes row-transaction mutation results from typed executors', () => {
+		const stateManager = new StateManager<TestRow>({
+			columns: [],
+			selection: { focus: null, anchor: null, range: null, bounds: null, source: 'api' },
+			selectedRowIds: [],
+			rowHeights: {},
+			columnWidths: {},
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			enableColumnReorder: true,
+			activeEdit: null,
+			sortModel: null,
+			filterModel: null,
+			globalVersion: 0,
+			visibleRowRange: { startIdx: 0, endIdx: 0 },
+			visibleColRange: { startIdx: 0, endIdx: 0 },
+			expansion: { groups: {}, treeRows: {}, details: {} },
+			rowOverscanPx: 400,
+			colBuffer: 1,
+		} as unknown as GridState<TestRow>);
+		const resultPayload = {
+			add: [{ id: '2' }],
+			remove: [],
+			update: [],
+		};
+		const rowModel = {
+			applyTransaction: vi.fn(() => resultPayload),
+		};
+		const kernel = new GridCommitKernel<TestRow>({
+			stateManager,
+			invalidation: new InvalidationManager(),
+			eventBus: new EventBus<TestRow>(),
+			commandHistory: new CommandHistory(),
+			requestRender: vi.fn(),
+			commitContext: {
+				getState: () => stateManager.getState(),
+				getRowModel: () => rowModel as any,
+			},
+			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TestRow>(),
+		});
+
+		const execution = kernel.commitDetailed({
+			reason: 'rows:apply-transaction',
+			domainMutations: [{ kind: 'row-transaction', transaction: { add: [{ id: '2', name: 'B' } as TestRow] } }],
+		});
+
+		expect(execution.result.status).toBe('noop');
+		expect(rowModel.applyTransaction).toHaveBeenCalledOnce();
+		expect(execution.appliedMutations[0]?.result).toBe(resultPayload);
+	});
+
 	it('requestRender: false skips render request', () => {
 		const { applier, requestRender } = makeApplier();
 

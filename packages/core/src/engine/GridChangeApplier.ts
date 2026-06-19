@@ -118,6 +118,11 @@ interface GridCommitRecord<TRowData = unknown> {
 	requestRender: boolean;
 }
 
+export interface GridCommitExecution<TRowData = unknown> {
+	result: GridCommitResult;
+	appliedMutations: readonly AppliedDomainMutation<TRowData>[];
+}
+
 export interface GridCommit<TRowData = unknown> {
 	reason: GridCommitReason;
 	state?: GridStateUpdater<TRowData>;
@@ -164,14 +169,18 @@ export class GridCommitKernel<TRowData = unknown> {
 	}
 
 	commit(change: GridCommit<TRowData>): GridCommitResult {
+		return this.commitDetailed(change).result;
+	}
+
+	commitDetailed(change: GridCommit<TRowData>): GridCommitExecution<TRowData> {
 		const validation = this.validate(change);
-		if (validation.status === 'rejected') return validation.result;
+		if (validation.status === 'rejected') return { result: validation.result, appliedMutations: [] };
 
 		const domainMutationResolution = this.resolveDomainMutations(change);
-		if (domainMutationResolution.status !== 'ok') return domainMutationResolution.result;
+		if (domainMutationResolution.status !== 'ok') return { result: domainMutationResolution.result, appliedMutations: [] };
 
 		const record = this.toCommitRecord(change, domainMutationResolution.appliedMutations);
-		if (!record) return { status: 'noop' };
+		if (!record) return { result: { status: 'noop' }, appliedMutations: domainMutationResolution.appliedMutations };
 
 		try {
 			// 1. Commit domain state atomically.
@@ -180,8 +189,11 @@ export class GridCommitKernel<TRowData = unknown> {
 			}
 		} catch (error) {
 			return {
-				status: 'failed-before-commit',
-				fault: this.reportFault('commit-state', error, { reason: record.reason }),
+				result: {
+					status: 'failed-before-commit',
+					fault: this.reportFault('commit-state', error, { reason: record.reason }),
+				},
+				appliedMutations: domainMutationResolution.appliedMutations,
 			};
 		}
 
@@ -238,7 +250,10 @@ export class GridCommitKernel<TRowData = unknown> {
 			});
 		}
 
-		return { status: 'committed', changeId: record.changeId, faults };
+		return {
+			result: { status: 'committed', changeId: record.changeId, faults },
+			appliedMutations: domainMutationResolution.appliedMutations,
+		};
 	}
 
 	apply(change: GridChange<TRowData>): GridCommitResult {

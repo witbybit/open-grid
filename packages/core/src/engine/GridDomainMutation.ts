@@ -151,10 +151,52 @@ export function createRowOrderMutationExecutor<TRowData = unknown>(
 
 export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unknown>(): GridDomainMutationExecutorRegistry<TRowData> {
 	const rowOrderExecutor = createRowOrderMutationExecutor<TRowData>();
+	const rowTransactionExecutor: GridDomainMutationExecutor<TRowData, RowTransactionMutation<TRowData>> = {
+		validate(_mutation, context) {
+			const rowModel = context.getRowModel();
+			if (!rowModel?.applyTransaction) {
+				return {
+					ok: false,
+					reason: 'row model unavailable',
+					rejection: { mutationKind: 'row-transaction', reason: 'row model unavailable' },
+				};
+			}
+			return { ok: true };
+		},
+		prepare(mutation) {
+			const transaction = mutation.transaction;
+			const hasWork = (transaction.add?.length ?? 0) > 0 || (transaction.remove?.length ?? 0) > 0 || (transaction.update?.length ?? 0) > 0;
+			if (!hasWork) {
+				return { mutation, noop: true };
+			}
+			return {
+				mutation,
+				requestRender: false,
+			};
+		},
+		apply(prepared, context) {
+			if (prepared.noop) {
+				return {
+					noop: true,
+					result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData>,
+				};
+			}
+			const rowModel = context.getRowModel();
+			const result = rowModel?.applyTransaction?.(prepared.mutation.transaction) ?? { add: [], remove: [], update: [] };
+			return {
+				noop: false,
+				requestRender: false,
+				result,
+			};
+		},
+	};
 	return {
 		resolve(mutation) {
 			if (mutation.kind === 'row-order') {
 				return rowOrderExecutor as GridDomainMutationExecutor<TRowData, typeof mutation>;
+			}
+			if (mutation.kind === 'row-transaction') {
+				return rowTransactionExecutor as GridDomainMutationExecutor<TRowData, typeof mutation>;
 			}
 			return null;
 		},

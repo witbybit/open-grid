@@ -490,9 +490,12 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null {
-		const rowModel = this.getRowModel();
-		if (!rowModel?.applyTransaction) return null;
-		return rowModel.applyTransaction(transaction);
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'rows:apply-transaction',
+			domainMutations: [{ kind: 'row-transaction', transaction }],
+		});
+		const result = execution.appliedMutations[0]?.result as RowNodeTransaction<TRowData> | undefined;
+		return result ?? null;
 	}
 
 	public updateExpansionState(updater: (expansion: InternalGridState<TRowData>['expansion']) => InternalGridState<TRowData>['expansion']): void {
