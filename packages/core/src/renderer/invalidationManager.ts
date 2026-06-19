@@ -53,6 +53,125 @@ export interface InvalidatedRowRange {
 	reason?: GridInvalidationReason;
 }
 
+export interface NormalizedInvalidationPlan {
+	readonly full: boolean;
+	readonly fullReason?: GridInvalidationReason;
+	readonly viewport: boolean;
+	readonly viewportReason?: GridInvalidationReason;
+	readonly geometry: boolean;
+	readonly geometryReason?: GridInvalidationReason;
+	readonly headers: boolean;
+	readonly headersReason?: GridInvalidationReason;
+	readonly overlay: boolean;
+	readonly overlayReason?: GridInvalidationReason;
+	readonly cellsByRowId: ReadonlyMap<string, ReadonlySet<string>>;
+	readonly rows: ReadonlySet<string>;
+	readonly rowReasons: ReadonlyMap<string, GridInvalidationReason>;
+	readonly columns: ReadonlySet<string>;
+	readonly columnReasons: ReadonlyMap<string, GridInvalidationReason>;
+	readonly groups: ReadonlySet<string>;
+	readonly groupReasons: ReadonlyMap<string, GridInvalidationReason>;
+	readonly rowRanges: readonly InvalidatedRowRange[];
+	readonly reasons: readonly GridInvalidationReason[];
+}
+
+export function normalizeInvalidationPlan(plan: readonly GridInvalidation[]): NormalizedInvalidationPlan {
+	if (plan.length === 0) {
+		return {
+			full: false,
+			viewport: false,
+			geometry: false,
+			headers: false,
+			overlay: false,
+			cellsByRowId: new Map(),
+			rows: new Set(),
+			rowReasons: new Map(),
+			columns: new Set(),
+			columnReasons: new Map(),
+			groups: new Set(),
+			groupReasons: new Map(),
+			rowRanges: [],
+			reasons: [],
+		} as NormalizedInvalidationPlan;
+	}
+
+	// Pre-scan to determine supersession flags before populating row-level entries.
+	// full supersedes everything; viewport supersedes row/cell/range but not column/group.
+	const hasFull = plan.some((e) => e.kind === 'full');
+	const hasViewport = !hasFull && plan.some((e) => e.kind === 'viewport');
+	const skipRowLevel = hasFull || hasViewport;
+	const skipColumnLevel = hasFull;
+
+	let fullReason: GridInvalidationReason | undefined;
+	let viewportReason: GridInvalidationReason | undefined;
+	let geometry = false;
+	let geometryReason: GridInvalidationReason | undefined;
+	let headers = false;
+	let headersReason: GridInvalidationReason | undefined;
+	let overlay = false;
+	let overlayReason: GridInvalidationReason | undefined;
+
+	const cellsByRowId = new Map<string, Set<string>>();
+	const rows = new Set<string>();
+	const rowReasons = new Map<string, GridInvalidationReason>();
+	const columns = new Set<string>();
+	const columnReasons = new Map<string, GridInvalidationReason>();
+	const groups = new Set<string>();
+	const groupReasons = new Map<string, GridInvalidationReason>();
+	const rowRanges: InvalidatedRowRange[] = [];
+	const rowRangeKeys = new Set<string>();
+	const reasons: GridInvalidationReason[] = [];
+
+	const addReason = (reason?: GridInvalidationReason) => {
+		if (reason && !reasons.includes(reason)) reasons.push(reason);
+	};
+
+	for (const entry of plan) {
+		addReason(entry.reason);
+
+		if (entry.kind === 'full') { fullReason = fullReason ?? entry.reason; continue; }
+		if (entry.kind === 'viewport') { viewportReason = viewportReason ?? entry.reason; continue; }
+		if (entry.kind === 'geometry') { geometry = true; geometryReason = geometryReason ?? entry.reason; continue; }
+		if (entry.kind === 'headers') { headers = true; headersReason = headersReason ?? entry.reason; continue; }
+		if (entry.kind === 'overlay') { overlay = true; overlayReason = overlayReason ?? entry.reason; continue; }
+
+		if (entry.kind === 'cell') {
+			if (!skipRowLevel) {
+				let cols = cellsByRowId.get(entry.rowId);
+				if (!cols) { cols = new Set(); cellsByRowId.set(entry.rowId, cols); }
+				cols.add(entry.colId);
+			}
+		} else if (entry.kind === 'row') {
+			if (!skipRowLevel) {
+				rows.add(entry.rowId);
+				if (entry.reason && !rowReasons.has(entry.rowId)) rowReasons.set(entry.rowId, entry.reason);
+			}
+		} else if (entry.kind === 'row-range') {
+			if (!skipRowLevel) {
+				const start = Math.max(0, Math.min(entry.startIndex, entry.endIndex));
+				const end = Math.max(0, Math.max(entry.startIndex, entry.endIndex));
+				const key = `${start}\0${end}`;
+				if (!rowRangeKeys.has(key)) {
+					rowRangeKeys.add(key);
+					rowRanges.push({ startIndex: start, endIndex: end, reason: entry.reason });
+				}
+			}
+		} else if (entry.kind === 'column') {
+			if (!skipColumnLevel) {
+				columns.add(entry.colId);
+				if (entry.reason && !columnReasons.has(entry.colId)) columnReasons.set(entry.colId, entry.reason);
+			}
+		} else if (entry.kind === 'group') {
+			if (!skipColumnLevel) {
+				groups.add(entry.groupId);
+				if (entry.reason && !groupReasons.has(entry.groupId)) groupReasons.set(entry.groupId, entry.reason);
+			}
+		}
+	}
+
+	return { full: hasFull, fullReason, viewport: hasViewport, viewportReason, geometry, geometryReason, headers, headersReason, overlay, overlayReason, cellsByRowId, rows, rowReasons, columns, columnReasons, groups, groupReasons, rowRanges, reasons };
+}
+
 export interface InvalidationFrame {
 	full: boolean;
 	cellsByRowId: Map<string, Set<string>>;
@@ -121,36 +240,70 @@ export class InvalidationManager {
 		}
 	}
 
-	public applyPlan(plan: readonly GridInvalidation[]): void {
-		if (plan.length === 0) return;
-		const hasFull = plan.some((entry) => entry.kind === 'full');
-		const hasViewport = !hasFull && plan.some((entry) => entry.kind === 'viewport');
-		for (const invalidation of plan) {
-			if (
-				hasFull &&
-				(invalidation.kind === 'cell' ||
-					invalidation.kind === 'row' ||
-					invalidation.kind === 'row-range' ||
-					invalidation.kind === 'column' ||
-					invalidation.kind === 'group' ||
-					invalidation.kind === 'headers' ||
-					invalidation.kind === 'overlay' ||
-					invalidation.kind === 'geometry' ||
-					invalidation.kind === 'viewport')
-			) {
-				if (invalidation.kind === 'geometry' || invalidation.kind === 'headers' || invalidation.kind === 'overlay') {
-					this.addReason(invalidation.reason);
-					this.addInvalidation(this.getInvalidationKey(invalidation), invalidation);
-					if (invalidation.kind === 'geometry') this.geometry = true;
-					if (invalidation.kind === 'headers') this.headers = true;
-					if (invalidation.kind === 'overlay') this.overlay = true;
+	public applyNormalizedPlan(plan: NormalizedInvalidationPlan): void {
+		const hasWork =
+			plan.full ||
+			plan.viewport ||
+			plan.geometry ||
+			plan.headers ||
+			plan.overlay ||
+			plan.cellsByRowId.size > 0 ||
+			plan.rows.size > 0 ||
+			plan.columns.size > 0 ||
+			plan.groups.size > 0 ||
+			plan.rowRanges.length > 0;
+		if (!hasWork) return;
+
+		for (const reason of plan.reasons) {
+			this.addReason(reason);
+		}
+
+		if (plan.full) {
+			this.full = true;
+			this.addInvalidation('full', { kind: 'full', reason: plan.fullReason });
+		} else if (plan.viewport) {
+			this.viewport = true;
+			this.addInvalidation('viewport', { kind: 'viewport', reason: plan.viewportReason });
+		}
+
+		if (plan.geometry) {
+			this.geometry = true;
+			this.addInvalidation('geometry', { kind: 'geometry', reason: plan.geometryReason });
+		}
+		if (plan.headers) {
+			this.headers = true;
+			this.addInvalidation('headers', { kind: 'headers', reason: plan.headersReason });
+		}
+		if (plan.overlay) {
+			this.overlay = true;
+			this.addInvalidation('overlay', { kind: 'overlay', reason: plan.overlayReason });
+		}
+
+		if (!plan.full) {
+			if (!plan.viewport) {
+				for (const [rowId, colIds] of plan.cellsByRowId) {
+					for (const colId of colIds) {
+						this.addCell(rowId, colId);
+						this.addInvalidation(`cell\0${rowId}\0${colId}`, { kind: 'cell', rowId, colId });
+					}
 				}
-				continue;
+				for (const rowId of plan.rows) {
+					this.rows.add(rowId);
+					this.addInvalidation(`row\0${rowId}`, { kind: 'row', rowId, reason: plan.rowReasons.get(rowId) });
+				}
+				for (const range of plan.rowRanges) {
+					this.addRowRange(range.startIndex, range.endIndex, range.reason);
+					this.addInvalidation(`row-range\0${range.startIndex}\0${range.endIndex}`, { kind: 'row-range', ...range });
+				}
 			}
-			if (hasViewport && (invalidation.kind === 'cell' || invalidation.kind === 'row' || invalidation.kind === 'row-range')) {
-				continue;
+			for (const colId of plan.columns) {
+				this.columns.add(colId);
+				this.addInvalidation(`column\0${colId}`, { kind: 'column', colId, reason: plan.columnReasons.get(colId) });
 			}
-			this.invalidate(invalidation);
+			for (const groupId of plan.groups) {
+				this.groups.add(groupId);
+				this.addInvalidation(`group\0${groupId}`, { kind: 'group', groupId, reason: plan.groupReasons.get(groupId) });
+			}
 		}
 	}
 

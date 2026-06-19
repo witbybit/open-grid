@@ -1,7 +1,7 @@
 import type { InternalGridState, GridStateUpdater } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import type { StateManager } from '../state/StateManager.js';
-import type { InvalidationManager, GridInvalidation } from '../renderer/invalidationManager.js';
+import { normalizeInvalidationPlan, type InvalidationManager, type GridInvalidation } from '../renderer/invalidationManager.js';
 import type { EventBus } from '../events/EventBus.js';
 import type { CommandHistory } from '../commands/CommandHistory.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
@@ -263,10 +263,11 @@ export class GridCommitKernel<TRowData = unknown> {
 				this.deps.publishDomains!(record.domains);
 			});
 		}
-		// 3. Apply invalidation plan.
+		// 3. Normalize then apply invalidation plan atomically.
 		if (record.invalidations.length > 0) {
 			isolate('apply-invalidations', () => {
-				this.deps.invalidation.applyPlan(record.invalidations);
+				const normalized = normalizeInvalidationPlan(record.invalidations);
+				this.deps.invalidation.applyNormalizedPlan(normalized);
 			});
 		}
 		const cellChanges = this.mergeCellChanges(appliedMutations);

@@ -15,7 +15,7 @@ import { createRowsAccessor } from './rowsAccessor.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 import type { PersistenceStatus, PersistedGridState } from './persistence/statePersistence.js';
-import { extractPersistedState, applyPersistedStateToApi, areRowHeightsEqual } from './persistence/statePersistence.js';
+import { extractPersistedState, preparePersistedGridStateRestore, areRowHeightsEqual } from './persistence/statePersistence.js';
 import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltInThemeName, type ThemeTokens } from './renderer/themes.js';
 
 // ── Focused sub-modules — re-export so callers of store.ts continue to work ──
@@ -573,20 +573,36 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return extractPersistedState(this.engine.getState());
 	};
 	public applyGridState = (state: PersistedGridState): void => {
-		let restoreResult!: { ok: true } | { ok: false; error: Error };
-		this.engine.batch(() => {
-			restoreResult = applyPersistedStateToApi(this, state);
-		});
-		if (restoreResult.ok) {
-			this.engine.commandHistory.clear();
+		const prepared = preparePersistedGridStateRestore(state, this.engine.getState());
+		if (!prepared.ok) {
+			this.reportRuntimeFault({
+				source: 'persistence',
+				operation: 'applyGridState',
+				error: new Error(prepared.reason),
+				context: { persistedStateVersion: (state as { v?: unknown }).v },
+			});
 			return;
 		}
-		this.reportRuntimeFault({
-			source: 'persistence',
-			operation: 'applyGridState',
-			error: restoreResult.error,
-			context: { persistedStateVersion: (state as { v?: unknown }).v },
+
+		const result = this.engine.changeApplier.commit({
+			reason: 'persistence:restore',
+			state: prepared.restore.stateMutation,
+			domains: ['columns', 'rows'],
+			invalidations: [{ kind: 'full', reason: 'set data' }],
+			historyPolicy: 'suppress',
+			requestRender: true,
 		});
+
+		if (result.status === 'committed') {
+			this.engine.commandHistory.clear();
+		} else if (result.status !== 'noop') {
+			this.reportRuntimeFault({
+				source: 'persistence',
+				operation: 'applyGridState',
+				error: new Error(result.status === 'rejected' ? result.reason : 'persistence restore commit failed'),
+				context: { persistedStateVersion: (state as { v?: unknown }).v },
+			});
+		}
 	};
 
 	public registerRowModel = (rowModel: RowModel<TRowData>): void => {

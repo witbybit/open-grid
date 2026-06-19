@@ -533,132 +533,83 @@ export function areRowHeightsEqual(current: Record<string, number>, next: Record
 	return true;
 }
 
-function buildPersistedStateRestoreOps(
-	api: {
-		setColumnOrder(fields: string[]): void;
-		setColumnsVisible(fields: string[], visible: boolean): void;
-		setColumnWidth(field: string, width: number): void;
-		setSortModel(model: any): void;
-		setFilterModel(model: any): void;
-		switchTheme(theme: string): void;
-		setGroupBy(fields: string[]): void;
-		setShowGroupFooter(enabled: boolean): void;
-		setStickyGroupRows(enabled: boolean): void;
-		setPinnedColumns(pins: any): void;
-	},
-	state: SerializedGridState,
-	columns: Array<{ field: string }>
-): Array<() => void> {
-	const ops: Array<() => void> = [];
-	const knownFields = new Set(columns.map((column) => column.field));
-
-	if (state.columnOrder) {
-		const validOrder = state.columnOrder.filter((field) => knownFields.has(field));
-		if (validOrder.length === columns.length) {
-			ops.push(() => api.setColumnOrder(validOrder));
-		}
-	}
-
-	if (state.columnVisibility) {
-		const hidden = Object.entries(state.columnVisibility)
-			.filter(([, visible]) => visible === false)
-			.map(([field]) => field)
-			.filter((field) => knownFields.has(field));
-		const visible = Object.entries(state.columnVisibility)
-			.filter(([, visible]) => visible === true)
-			.map(([field]) => field)
-			.filter((field) => knownFields.has(field));
-		if (hidden.length > 0) ops.push(() => api.setColumnsVisible(hidden, false));
-		if (visible.length > 0) ops.push(() => api.setColumnsVisible(visible, true));
-	}
-
-	if (state.columnWidths) {
-		for (const [field, width] of Object.entries(state.columnWidths)) {
-			if (knownFields.has(field)) {
-				ops.push(() => api.setColumnWidth(field, width));
-			}
-		}
-	}
-
-	if (state.sortModel !== undefined) {
-		const sortModel = state.sortModel;
-		if (sortModel === null || (Array.isArray(sortModel) && sortModel.every((sort) => knownFields.has(sort.colId)))) {
-			ops.push(() => api.setSortModel(sortModel));
-		}
-	}
-
-	if (state.filterModel !== undefined) ops.push(() => api.setFilterModel(state.filterModel));
-	if (state.themeName !== undefined && isBuiltInThemeName(state.themeName)) {
-		const themeName = state.themeName;
-		ops.push(() => api.switchTheme(themeName));
-	}
-	if (state.groupBy !== undefined) {
-		const groupBy = state.groupBy;
-		ops.push(() => api.setGroupBy(groupBy.filter((field) => knownFields.has(field))));
-	}
-	if (state.showGroupFooter !== undefined) {
-		const showGroupFooter = state.showGroupFooter;
-		ops.push(() => api.setShowGroupFooter(showGroupFooter));
-	}
-	if (state.enableStickyGroupRows !== undefined) {
-		const enableStickyGroupRows = state.enableStickyGroupRows;
-		ops.push(() => api.setStickyGroupRows(enableStickyGroupRows));
-	}
-	if (state.pinnedColumns !== undefined) ops.push(() => api.setPinnedColumns(state.pinnedColumns));
-
-	return ops;
+export interface PreparedPersistedStateRestore<TRowData = unknown> {
+	readonly stateMutation: Partial<InternalGridState<TRowData>>;
 }
 
-/**
- * Apply a persisted state blob via GridApi method calls.
- * Returns true on success, false if the schema version is incompatible.
- * The caller should report a runtime fault when this returns false.
- */
-export function applyPersistedStateToApi<TRowData>(
-	api: {
-		getStateSnapshot(): { columns: ReadonlyArray<{ field: string }> };
-		getGridState(): PersistedGridState;
-		setColumnOrder(fields: string[]): void;
-		setColumnsVisible(fields: string[], visible: boolean): void;
-		setColumnWidth(field: string, width: number): void;
-		setSortModel(model: any): void;
-		setFilterModel(model: any): void;
-		switchTheme(theme: string): void;
-		setGroupBy(fields: string[]): void;
-		setShowGroupFooter(enabled: boolean): void;
-		setStickyGroupRows(enabled: boolean): void;
-		setPinnedColumns(pins: any): void;
-	},
-	state: PersistedGridState
-) {
-	const parsed = parsePersistedGridState(state);
-	if (!parsed.ok) {
-		return { ok: false as const, error: new Error(parsed.error) };
-	}
-	const originalSnapshotState = api.getStateSnapshot();
-	const originalColumns = originalSnapshotState.columns as Array<{ field: string }>;
-	const originalSnapshot = api.getGridState();
-	const applyOps = buildPersistedStateRestoreOps(api, parsed.value.state, originalColumns);
+export type ApplyGridStateResult =
+	| { status: 'applied'; changeId: number }
+	| { status: 'rejected'; reason: string }
+	| { status: 'failed'; error: Error };
 
-	try {
-		for (const op of applyOps) {
-			op();
+/**
+ * Validate a persisted state blob and compute the atomic state mutation needed to
+ * restore it. The caller executes this as a single GridCommitKernel commit — no
+ * intermediate state is ever exposed and no rollback loop is needed.
+ */
+export function preparePersistedGridStateRestore<TRowData>(
+	persisted: PersistedGridState,
+	current: InternalGridState<TRowData>
+): { ok: true; restore: PreparedPersistedStateRestore<TRowData> } | { ok: false; reason: string } {
+	const parsed = parsePersistedGridState(persisted);
+	if (!parsed.ok) return { ok: false, reason: parsed.error };
+
+	const s = parsed.value.state;
+	const knownFields = new Set(current.columns.map((c) => c.field));
+
+	let columns = current.columns as import('../columnDef.js').ColumnDef<TRowData>[];
+	let columnWidths = { ...current.columnWidths };
+
+	if (s.columnOrder) {
+		const validOrder = s.columnOrder.filter((f) => knownFields.has(f));
+		if (validOrder.length === columns.length) {
+			const colMap = new Map(columns.map((c) => [c.field, c]));
+			const reordered = validOrder.map((f) => colMap.get(f)).filter((c): c is import('../columnDef.js').ColumnDef<TRowData> => !!c);
+			if (reordered.length === columns.length) columns = reordered;
 		}
-		return { ok: true as const };
-	} catch (error) {
-		if (originalSnapshot !== null) {
-			try {
-				const rollbackOps = buildPersistedStateRestoreOps(api, originalSnapshot.state, originalColumns);
-				for (const rollback of rollbackOps) {
-					rollback();
-				}
-			} catch {
-				// Best-effort rollback only. The caller reports the failed restore attempt.
-			}
-		}
-		return {
-			ok: false as const,
-			error: error instanceof Error ? error : new Error('[open-grid] failed to apply persisted grid state through GridApi restore operations.'),
-		};
 	}
+
+	if (s.columnVisibility) {
+		columns = columns.map((col) => {
+			const savedVis = s.columnVisibility![col.field];
+			if (savedVis === false) return { ...col, hide: true };
+			if (savedVis === true && col.hide) return { ...col, hide: false };
+			return col;
+		});
+	}
+
+	if (s.columnWidths) {
+		for (const [field, width] of Object.entries(s.columnWidths)) {
+			if (knownFields.has(field)) columnWidths[field] = width;
+		}
+	}
+
+	const stateMutation: Partial<InternalGridState<TRowData>> = { columns, columnWidths };
+
+	if (s.sortModel !== undefined) {
+		const sm = s.sortModel;
+		if (sm === null || (Array.isArray(sm) && sm.every((sort) => knownFields.has(sort.colId)))) {
+			stateMutation.sortModel = sm as SortModel | null;
+		}
+	}
+	if (s.filterModel !== undefined) {
+		stateMutation.filterModel = s.filterModel as FilterModel | null;
+	}
+	if (s.themeName !== undefined && isBuiltInThemeName(s.themeName)) {
+		stateMutation.themeName = s.themeName;
+	}
+	if (s.groupBy !== undefined) {
+		stateMutation.groupBy = s.groupBy.filter((f) => knownFields.has(f));
+	}
+	if (s.showGroupFooter !== undefined) {
+		stateMutation.showGroupFooter = s.showGroupFooter;
+	}
+	if (s.enableStickyGroupRows !== undefined) {
+		stateMutation.enableStickyGroupRows = s.enableStickyGroupRows;
+	}
+	if (s.pinnedColumns !== undefined) {
+		stateMutation.pinnedColumns = s.pinnedColumns;
+	}
+
+	return { ok: true, restore: { stateMutation } };
 }

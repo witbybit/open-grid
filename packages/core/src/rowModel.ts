@@ -1068,6 +1068,23 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		}
 	}
 
+	public captureTransactionSnapshot = (
+		_mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TData>
+	): import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TData> => {
+		const nodes = this.dataStore.getAllNodes();
+		return {
+			modelType: 'client',
+			rows: nodes.map((n) => ({ ...(n.data as Record<string, unknown>) }) as TData),
+			rowOrder: this.dataStore.getSourceOrder(),
+		};
+	};
+
+	public restoreTransactionSnapshot = (snapshot: import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TData>): void => {
+		this.dataStore.setRows(snapshot.rows as TData[]);
+		this.dataStore.setRowOrder(snapshot.rowOrder as string[]);
+		this.refresh('bulk');
+	};
+
 	public applyTransaction = (transaction: RowDataTransaction<TData>): RowNodeTransaction<TData> => {
 		const result = this.dataStore.applyTransaction(transaction);
 

@@ -30,6 +30,7 @@ export interface BatchCellMutation {
 }
 
 export interface RowModelTransactionSnapshot<TRowData = unknown> {
+	readonly modelType: string;
 	rows: readonly TRowData[];
 	rowOrder: readonly string[];
 }
@@ -649,11 +650,11 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 	const rowTransactionExecutor: GridDomainMutationExecutor<TRowData, RowTransactionMutation<TRowData>> = {
 		validate(_mutation, context) {
 			const rowModel = context.getRowModel();
-			if (!rowModel?.applyTransaction) {
+			if (!rowModel?.captureTransactionSnapshot || !rowModel?.applyTransaction || !rowModel?.restoreTransactionSnapshot) {
 				return {
 					ok: false,
-					reason: 'row model unavailable',
-					rejection: { mutationKind: 'row-transaction', reason: 'row model unavailable' },
+					reason: 'row model does not implement TransactionalRowModel',
+					rejection: { mutationKind: 'row-transaction', reason: 'row model does not implement TransactionalRowModel' },
 				};
 			}
 			return { ok: true };
@@ -675,16 +676,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 				};
 			}
 			const rowModel = context.getRowModel();
-			const preparedRestoreSnapshot =
-				mutation.restoreSnapshot ??
-				rowModel?.captureTransactionSnapshot?.(mutation) ??
-				(() => {
-					if (!rowModel?.getAllDataNodes || !rowModel?.getRowOrder) return undefined;
-					return {
-						rows: cloneRows(rowModel.getAllDataNodes().map((node) => node.data)),
-						rowOrder: rowModel.getRowOrder().slice(),
-					};
-				})();
+			const preparedRestoreSnapshot = mutation.restoreSnapshot ?? rowModel!.captureTransactionSnapshot!(mutation);
 			return {
 				mutation,
 				domains: ['rows', 'geometry'],
@@ -692,8 +684,8 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 				requestRender: true,
 				apply(context) {
 					const rowModel = context.getRowModel();
-					if (preparedRestoreSnapshot && mutation.restoreSnapshot) {
-						rowModel?.restoreTransactionSnapshot?.(preparedRestoreSnapshot);
+					if (mutation.restoreSnapshot) {
+						rowModel!.restoreTransactionSnapshot!(preparedRestoreSnapshot);
 						return {
 							domains: ['rows', 'geometry'],
 							invalidations: [{ kind: 'full', reason: 'data' }],
@@ -701,43 +693,34 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 							result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData>,
 						};
 					}
-					const result = rowModel?.applyTransaction?.(mutation.transaction) ?? { add: [], remove: [], update: [] };
+					const result = rowModel!.applyTransaction!(mutation.transaction);
 					return {
 						domains: ['rows', 'geometry'],
 						invalidations: [{ kind: 'full', reason: 'data' }],
-						history: preparedRestoreSnapshot
-							? {
-									undo: {
-										reason: 'rows:apply-transaction',
-										domainMutations: [
-											{
-												kind: 'row-transaction',
-												transaction: { update: [] },
-												restoreSnapshot: preparedRestoreSnapshot,
-											},
-										],
-										requestRender: false,
+						history: {
+							undo: {
+								reason: 'rows:apply-transaction',
+								domainMutations: [
+									{
+										kind: 'row-transaction',
+										transaction: { update: [] },
+										restoreSnapshot: preparedRestoreSnapshot,
 									},
-									redo: {
-										reason: 'rows:apply-transaction',
-										domainMutations: [mutation],
-										requestRender: false,
-									},
-								}
-							: undefined,
+								],
+								requestRender: false,
+							},
+							redo: {
+								reason: 'rows:apply-transaction',
+								domainMutations: [mutation],
+								requestRender: false,
+							},
+						},
 						requestRender: true,
 						result,
 					};
 				},
 				rollback(_applied, context) {
-					if (!preparedRestoreSnapshot) return;
-					const rowModel = context.getRowModel();
-					if (rowModel?.restoreTransactionSnapshot) {
-						rowModel.restoreTransactionSnapshot(preparedRestoreSnapshot);
-					} else if (rowModel?.setRows && rowModel?.setRowOrder && 'rows' in preparedRestoreSnapshot && 'rowOrder' in preparedRestoreSnapshot) {
-						rowModel.setRows(cloneRows((preparedRestoreSnapshot as any).rows));
-						rowModel.setRowOrder((preparedRestoreSnapshot as any).rowOrder.slice());
-					}
+					context.getRowModel()!.restoreTransactionSnapshot!(preparedRestoreSnapshot);
 				},
 			};
 		},

@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	GRID_STATE_SCHEMA_VERSION,
 	applyPersistedState,
-	applyPersistedStateToApi,
 	areRowHeightsEqual,
 	createLocalStorageAdapter,
 	createPersistenceSubscription,
 	extractPersistedState,
+	preparePersistedGridStateRestore,
 	type PersistedGridState,
 	type SerializedGridState,
 	validateSchemaVersion,
@@ -338,47 +338,29 @@ describe('statePersistence', () => {
 		});
 	});
 
-	describe('applyPersistedStateToApi', () => {
-		it('rejects malformed payloads before invoking any API setter', () => {
-			const mockApi = {
-				getStateSnapshot: vi.fn(() => ({ columns: [{ field: 'id' }] })),
-				getGridState: vi.fn(() => wrapState({})),
-				setColumnOrder: vi.fn(),
-				setColumnsVisible: vi.fn(),
-				setColumnWidth: vi.fn(),
-				setSortModel: vi.fn(),
-				setFilterModel: vi.fn(),
-				switchTheme: vi.fn(),
-				setGroupBy: vi.fn(),
-				setShowGroupFooter: vi.fn(),
-				setStickyGroupRows: vi.fn(),
-				setPinnedColumns: vi.fn(),
-			};
+	describe('preparePersistedGridStateRestore', () => {
+		const makeCurrent = (partial?: Partial<InternalGridState>): InternalGridState =>
+			({
+				columns: [
+					{ field: 'id', header: 'ID', width: 100 },
+					{ field: 'name', header: 'Name', width: 150 },
+				],
+				columnWidths: {},
+				sortModel: null,
+				filterModel: null,
+				groupBy: [],
+				showGroupFooter: false,
+				enableStickyGroupRows: false,
+				pinnedColumns: { left: 0, right: 0 },
+				...partial,
+			} as InternalGridState);
 
-			const result = applyPersistedStateToApi(mockApi, { v: GRID_STATE_SCHEMA_VERSION } as PersistedGridState);
-
+		it('rejects malformed payloads and returns ok: false', () => {
+			const result = preparePersistedGridStateRestore({ v: GRID_STATE_SCHEMA_VERSION } as PersistedGridState, makeCurrent());
 			expect(result.ok).toBe(false);
-			expect(mockApi.setColumnOrder).not.toHaveBeenCalled();
 		});
 
-		it('invokes API methods for valid persisted keys', () => {
-			const mockApi = {
-				getStateSnapshot: vi.fn(() => ({
-					columns: [{ field: 'id' }, { field: 'name' }],
-				})),
-				getGridState: vi.fn(() => wrapState({})),
-				setColumnOrder: vi.fn(),
-				setColumnsVisible: vi.fn(),
-				setColumnWidth: vi.fn(),
-				setSortModel: vi.fn(),
-				setFilterModel: vi.fn(),
-				switchTheme: vi.fn(),
-				setGroupBy: vi.fn(),
-				setShowGroupFooter: vi.fn(),
-				setStickyGroupRows: vi.fn(),
-				setPinnedColumns: vi.fn(),
-			};
-
+		it('returns ok: true with stateMutation containing all valid persisted fields', () => {
 			const saved = wrapState({
 				columnOrder: ['name', 'id'],
 				columnVisibility: { name: true, id: false },
@@ -392,65 +374,33 @@ describe('statePersistence', () => {
 				pinnedColumns: { left: 1, right: 0 },
 			});
 
-			expect(applyPersistedStateToApi(mockApi, saved)).toEqual({ ok: true });
-			expect(mockApi.setColumnOrder).toHaveBeenCalledWith(['name', 'id']);
-			expect(mockApi.setColumnsVisible).toHaveBeenCalledWith(['id'], false);
-			expect(mockApi.setColumnsVisible).toHaveBeenCalledWith(['name'], true);
-			expect(mockApi.setColumnWidth).toHaveBeenCalledWith('id', 50);
-			expect(mockApi.setSortModel).toHaveBeenCalledWith([{ colId: 'id', sort: 'asc' }]);
-			expect(mockApi.switchTheme).toHaveBeenCalledWith('light');
+			const result = preparePersistedGridStateRestore(saved, makeCurrent());
+
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			const { stateMutation } = result.restore;
+			expect(stateMutation.columns?.map((c) => c.field)).toEqual(['name', 'id']);
+			expect(stateMutation.columns?.find((c) => c.field === 'id')?.hide).toBe(true);
+			expect(stateMutation.columnWidths?.['id']).toBe(50);
+			expect(stateMutation.sortModel).toEqual([{ colId: 'id', sort: 'asc' }]);
+			expect(stateMutation.themeName).toBe('light');
+			expect(stateMutation.groupBy).toContain('name');
+			expect(stateMutation.showGroupFooter).toBe(true);
+			expect(stateMutation.pinnedColumns).toEqual({ left: 1, right: 0 });
 		});
 
-		it('rolls back to the pre-restore snapshot if a setter throws mid-apply', () => {
-			const mockApi = {
-				getStateSnapshot: vi.fn(() => ({
-					columns: [{ field: 'id' }, { field: 'name' }],
-				})),
-				getGridState: vi.fn(() =>
-					wrapState({
-						columnWidths: { id: 75 },
-						sortModel: [{ colId: 'name', sort: 'desc' }],
-						filterModel: null,
-						themeName: 'dark',
-						groupBy: [],
-						showGroupFooter: false,
-						enableStickyGroupRows: true,
-						pinnedColumns: { left: 0, right: 0 },
-					})
-				),
-				setColumnOrder: vi.fn(),
-				setColumnsVisible: vi.fn(),
-				setColumnWidth: vi
-					.fn()
-					.mockImplementationOnce(() => undefined)
-					.mockImplementationOnce(() => {
-						throw new Error('boom');
-					})
-					.mockImplementation(() => undefined),
-				setSortModel: vi.fn(),
-				setFilterModel: vi.fn(),
-				switchTheme: vi.fn(),
-				setGroupBy: vi.fn(),
-				setShowGroupFooter: vi.fn(),
-				setStickyGroupRows: vi.fn(),
-				setPinnedColumns: vi.fn(),
-			};
+		it('omits unknown column fields from stateMutation', () => {
+			const saved = wrapState({
+				columnWidths: { id: 120, unknown: 180 },
+			});
 
-			const result = applyPersistedStateToApi(
-				mockApi,
-				wrapState({
-					columnWidths: { id: 120, name: 180 },
-					sortModel: [{ colId: 'id', sort: 'asc' }],
-					themeName: 'light',
-				})
-			);
+			const result = preparePersistedGridStateRestore(saved, makeCurrent());
 
-			expect(result.ok).toBe(false);
-			expect(mockApi.setColumnWidth).toHaveBeenNthCalledWith(1, 'id', 120);
-			expect(mockApi.setColumnWidth).toHaveBeenNthCalledWith(3, 'id', 75);
-			expect(mockApi.setSortModel).not.toHaveBeenCalledWith([{ colId: 'id', sort: 'asc' }]);
-			expect(mockApi.setSortModel).toHaveBeenCalledWith([{ colId: 'name', sort: 'desc' }]);
-			expect(mockApi.switchTheme).toHaveBeenCalledWith('dark');
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			const { stateMutation } = result.restore;
+			expect(stateMutation.columnWidths?.['id']).toBe(120);
+			expect(stateMutation.columnWidths?.['unknown']).toBeUndefined();
 		});
 	});
 

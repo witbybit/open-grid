@@ -72,13 +72,15 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const ctrl = makeController(store);
 			const engine = (store as any).engine;
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			store.setColumnWidth('name', 200);
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'geometry' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'column', colId: 'name' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.geometry).toBe(true);
+			expect(plan.headers).toBe(true);
+			expect(plan.columns.has('name')).toBe(true);
 
 			ctrl.dispose();
 			store.destroy();
@@ -118,14 +120,16 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const store = makeStore();
 			const engine = (store as any).engine;
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			store.setGroupBy(['name']);
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'geometry' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'viewport' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'overlay' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.geometry).toBe(true);
+			expect(plan.viewport).toBe(true);
+			expect(plan.headers).toBe(true);
+			expect(plan.overlay).toBe(true);
 
 			store.destroy();
 		});
@@ -165,12 +169,14 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const store = makeStore();
 			const engine = (store as any).engine;
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			store.setAggDefs([] as any[]);
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'viewport' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'overlay' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.viewport).toBe(true);
+			expect(plan.overlay).toBe(true);
 
 			store.destroy();
 		});
@@ -287,13 +293,15 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const ctrl = makeController(store);
 			const engine = (store as any).engine;
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			store.applyRowSelectionGesture({ kind: 'replace', rowIds: ['1', '3'] });
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'row', rowId: '1' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'row', rowId: '3' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.rows.has('1')).toBe(true);
+			expect(plan.rows.has('3')).toBe(true);
+			expect(plan.headers).toBe(true);
 
 			ctrl.dispose();
 			store.destroy();

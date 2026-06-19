@@ -138,7 +138,7 @@ describe('GridChangeApplier', () => {
 		publishDomains.mockImplementation(() => {
 			callOrder.push('domains');
 		});
-		vi.spyOn(invalidation, 'invalidate').mockImplementation(() => {
+		vi.spyOn(invalidation, 'applyNormalizedPlan').mockImplementation(() => {
 			callOrder.push('invalidation');
 		});
 		vi.spyOn(commandHistory, 'add').mockImplementation(() => {
@@ -335,7 +335,9 @@ describe('GridChangeApplier', () => {
 			update: [],
 		};
 		const rowModel = {
+			captureTransactionSnapshot: vi.fn(() => ({ modelType: 'test', rows: [], rowOrder: [] })),
 			applyTransaction: vi.fn(() => resultPayload),
+			restoreTransactionSnapshot: vi.fn(),
 		};
 		const kernel = new GridCommitKernel<TestRow>({
 			stateManager,
@@ -383,6 +385,11 @@ describe('GridChangeApplier', () => {
 		let rows: TestRow[] = [{ id: '1', name: 'A' }];
 		let rowOrder = ['1'];
 		const rowModel = {
+			captureTransactionSnapshot: vi.fn(() => ({
+				modelType: 'test',
+				rows: rows.slice(),
+				rowOrder: rowOrder.slice(),
+			})),
 			applyTransaction: vi.fn((transaction: { add?: TestRow[] }) => {
 				if (transaction.add) {
 					rows = rows.concat(transaction.add);
@@ -390,14 +397,10 @@ describe('GridChangeApplier', () => {
 				}
 				return { add: transaction.add?.map((row) => ({ id: row.id })) ?? [], remove: [], update: [] };
 			}),
-			getAllDataNodes: () => rows.map((row) => ({ id: row.id, data: row })),
-			getRowOrder: () => rowOrder.slice(),
-			setRows: (nextRows: TestRow[]) => {
-				rows = nextRows.slice();
-			},
-			setRowOrder: (nextOrder: string[]) => {
-				rowOrder = nextOrder.slice();
-			},
+			restoreTransactionSnapshot: vi.fn((snapshot: { rows: TestRow[]; rowOrder: string[] }) => {
+				rows = snapshot.rows.slice();
+				rowOrder = snapshot.rowOrder.slice();
+			}),
 		};
 		const commandHistory = new CommandHistory();
 		const kernel = new GridCommitKernel<TestRow>({
@@ -793,7 +796,7 @@ describe('GridChangeApplier', () => {
 			callOrder.push('domains');
 			throw new Error('domain failed');
 		});
-		vi.spyOn(invalidation, 'invalidate').mockImplementation(() => {
+		vi.spyOn(invalidation, 'applyNormalizedPlan').mockImplementation(() => {
 			callOrder.push('invalidation');
 		});
 		vi.spyOn(commandHistory, 'add').mockImplementation(() => {
@@ -828,7 +831,7 @@ describe('GridChangeApplier', () => {
 		const { applier, invalidation, eventBus, requestRender, commandHistory, faultReporter } = makeApplier();
 		const callOrder: string[] = [];
 
-		vi.spyOn(invalidation, 'invalidate').mockImplementation(() => {
+		vi.spyOn(invalidation, 'applyNormalizedPlan').mockImplementation(() => {
 			callOrder.push('invalidation');
 			throw new Error('invalidate failed');
 		});
@@ -912,17 +915,18 @@ describe('GridChangeApplier', () => {
 
 	it('multiple invalidations of different kinds are all applied', () => {
 		const { applier, invalidation } = makeApplier();
-		const spyInvalidate = vi.spyOn(invalidation, 'invalidate');
+		const spyApply = vi.spyOn(invalidation, 'applyNormalizedPlan');
 
 		applier.apply({
 			reason: 'multi-invalidate',
 			invalidations: [{ kind: 'geometry' }, { kind: 'headers' }, { kind: 'viewport' }, { kind: 'column', colId: 'name' }],
 		});
 
-		expect(spyInvalidate).toHaveBeenCalledTimes(4);
-		expect(spyInvalidate).toHaveBeenCalledWith({ kind: 'geometry' });
-		expect(spyInvalidate).toHaveBeenCalledWith({ kind: 'headers' });
-		expect(spyInvalidate).toHaveBeenCalledWith({ kind: 'viewport' });
-		expect(spyInvalidate).toHaveBeenCalledWith({ kind: 'column', colId: 'name' });
+		expect(spyApply).toHaveBeenCalledTimes(1);
+		const plan = spyApply.mock.calls[0][0];
+		expect(plan.geometry).toBe(true);
+		expect(plan.headers).toBe(true);
+		expect(plan.viewport).toBe(true);
+		expect(plan.columns.has('name')).toBe(true);
 	});
 });
