@@ -10,7 +10,6 @@ export const enum GridMetric {
 	STATE_READS = 'stateReads',
 
 	// Row mutation classification (ClientRowModelController)
-	LEGACY_INFERRED_INVALIDATIONS = 'legacyInferredInvalidations',
 	ROW_MUTATION_INCREMENTAL = 'rowMutationIncremental',
 	ROW_MUTATION_FULL_REBUILD = 'rowMutationFullRebuild',
 

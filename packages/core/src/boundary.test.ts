@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as publicApi from './index.js';
 import * as experimentalApi from './experimental.js';
 import * as internalApi from './internal.js';
-import { createClientGrid, getStoreFromApi } from './createGrid.js';
+import { createClientGrid } from './createGrid.js';
 
 describe('Public/internal boundary', () => {
 	describe('Public entry (@open-grid/core)', () => {
@@ -190,7 +190,6 @@ describe('Public/internal boundary', () => {
 				'OverlayRenderer',
 				'RowRenderer',
 				'ViewportRenderer',
-				'getStoreFromApi',
 			];
 			for (const name of rawInternals) {
 				expect((internalApi as Record<string, unknown>)[name], `${name} must not be in internal entry`).toBeUndefined();
@@ -243,21 +242,6 @@ describe('Public/internal boundary', () => {
 					selectedRowIds: expect.any(Array),
 				})
 			);
-		});
-
-		it('getStoreFromApi returns a store for a valid API', () => {
-			const api = createClientGrid({ columns: [{ field: 'id' }], rows: [] });
-			const store = getStoreFromApi(api);
-			expect(typeof store.getState).toBe('function');
-		});
-
-		it('getStoreFromApi throws for a plain object', () => {
-			expect(() => getStoreFromApi({} as never)).toThrow('Invalid GridApi');
-		});
-
-		it('getStoreFromApi throws for a frozen plain object', () => {
-			const fake = Object.freeze({ getState: () => ({}) });
-			expect(() => getStoreFromApi(fake as never)).toThrow('Invalid GridApi');
 		});
 
 		it('public API has no __getEngine escape hatch', () => {

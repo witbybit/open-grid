@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type RowModel, type VisualRow, type RowModelRefreshResult } from '../store.js';
-import { GridMetric, RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
+import { RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { RenderEngine } from './renderEngine.js';
 import { ServerRowModelController } from '../serverRowModel.js';
 
@@ -236,7 +236,7 @@ describe('RenderEngine', () => {
 
 		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).not.toBeNull();
 
-		store.engine.stateManager.setState({ columns: [{ field: 'risk', header: 'Risk', width: 120 }] });
+		store.setColumns([{ field: 'risk', header: 'Risk', width: 120 }]);
 		renderer.fullPaint();
 
 		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).toBeNull();
@@ -319,7 +319,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('records legacy inferred invalidations for compatibility state writes', () => {
+	it('uses explicit geometry invalidations for default row height changes', () => {
 		const store = new GridStore<{ id: string; name: string }>({
 			columns: [{ field: 'name', header: 'Name', width: 120 }],
 			defaultRowHeight: 40,
@@ -350,20 +350,19 @@ describe('RenderEngine', () => {
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
 
-		store.engine.stateManager.setState({ defaultRowHeight: 48 });
+		const before = renderer.getRenderStats();
+		store.setDefaultRowHeight(48);
 
-		expect(inst.get(GridMetric.LEGACY_INFERRED_INVALIDATIONS)).toBeGreaterThan(0);
-		expect(inst.snapshot().fallbacks).toContainEqual({
-			component: 'RenderInvalidationCoordinator',
-			reason: 'legacy-inferred-invalidation:defaultRowHeight',
-		});
+		expect(store.getState().defaultRowHeight).toBe(48);
+		expect(renderer.getRenderStats().fullPaints).toBeGreaterThanOrEqual(before.fullPaints);
+		expect(inst.snapshot().fallbacks).toEqual([]);
 
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
 	});
 
-	it('keeps migrated command-owned invalidations off the legacy inferred path', () => {
+	it('keeps command-owned invalidations off the fallback instrumentation path', () => {
 		const store = new GridStore<{ id: string; name: string }>({
 			columns: [{ field: 'name', header: 'Name', width: 120 }],
 			defaultRowHeight: 40,
@@ -397,7 +396,6 @@ describe('RenderEngine', () => {
 		store.setShowFilterChipBar(true);
 		store.setColumnReorderEnabled(false);
 
-		expect(inst.get(GridMetric.LEGACY_INFERRED_INVALIDATIONS)).toBe(0);
 		expect(inst.snapshot().fallbacks).toEqual([]);
 
 		renderer.unmount();
@@ -1009,7 +1007,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('does not full paint or recompute geometry for server block data updates during viewport recycling', async () => {
+	it('does not full paint or recompute geometry for explicit viewport/data invalidations during viewport recycling', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
 			return 1;
@@ -1053,7 +1051,7 @@ describe('RenderEngine', () => {
 		renderer.fullPaint();
 		const before = renderer.getRenderStats();
 
-		store.engine.stateManager.setState((state) => ({ globalVersion: state.globalVersion + 1 }));
+		store.engine.setRowModelLoadingState(true);
 		await Promise.resolve();
 		await Promise.resolve();
 		const afterData = renderer.getRenderStats();
@@ -1063,7 +1061,7 @@ describe('RenderEngine', () => {
 		expect(afterData.headerPaints - before.headerPaints).toBe(0);
 		expect(afterData.overlayPaints - before.overlayPaints).toBe(0);
 
-		store.engine.stateManager.setState({ visibleRowRange: { startIdx: 50, endIdx: 75 } });
+		store.engine.setVisibleRanges({ startIdx: 50, endIdx: 75 }, store.getState().visibleColRange);
 		await Promise.resolve();
 		await Promise.resolve();
 		const afterViewport = renderer.getRenderStats();
@@ -2354,7 +2352,7 @@ describe('RenderEngine', () => {
 
 		// Transition loading to false and supply rows
 		store.setRows([{ id: 'row-0', a: 'A0' }]);
-		store.engine.stateManager.setState({ loading: false });
+		store.engine.setRowModelLoadingState(false);
 
 		// Wait for render scheduler frame
 		await Promise.resolve();

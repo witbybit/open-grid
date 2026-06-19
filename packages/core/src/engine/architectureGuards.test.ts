@@ -1610,37 +1610,22 @@ describe('Architecture guardrails', () => {
 		expect(ricContent).not.toContain("subscribeToKey('showFilterChipBar'");
 	});
 
-	it('RenderInvalidationCoordinator surfaces remaining inferred invalidation fallbacks explicitly (Plan 105)', () => {
+	it('RenderInvalidationCoordinator no longer records legacy inferred invalidation fallbacks (Plan 105)', () => {
 		const diagnosticsContent = readFileSync(resolve(CORE_ROOT, 'src', 'diagnostics', 'GridInstrumentation.ts'), 'utf-8');
 		const ricContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
 		const columnContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'ColumnFeatureController.ts'), 'utf-8');
-		expect(diagnosticsContent).toContain("LEGACY_INFERRED_INVALIDATIONS = 'legacyInferredInvalidations'");
 		expect(columnContent).toContain("reason: 'columns:reorder-toggle'");
 		expect(columnContent).toContain("{ kind: 'headers' }");
-		expect(ricContent).toContain('recordLegacyInferredInvalidation(');
-		expect(ricContent).toContain('GridMetric.LEGACY_INFERRED_INVALIDATIONS');
-		expect(ricContent).toContain("component: 'RenderInvalidationCoordinator'");
-		expect(ricContent).toContain('legacy-inferred-invalidation:');
+		expect(diagnosticsContent).not.toContain('LEGACY_INFERRED_INVALIDATIONS');
+		expect(ricContent).not.toContain('recordLegacyInferredInvalidation(');
+		expect(ricContent).not.toContain('legacy-inferred-invalidation:');
 		expect(ricContent).not.toContain("subscribeToKey('enableColumnReorder'");
 	});
 
-	it('RenderInvalidationCoordinator legacy state-key subscriptions are explicitly allowlisted while Plan 105 completes', () => {
+	it('RenderInvalidationCoordinator only keeps targeted state subscriptions for non-command animation hooks', () => {
 		const ricContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
 		const subscriptions = [...ricContent.matchAll(/subscribeToKey\('([^']+)'/g)].map((match) => match[1]);
-		expect(subscriptions).toEqual([
-			'defaultRowHeight',
-			'defaultColWidth',
-			'globalVersion',
-			'loading',
-			'visibleRowRange',
-			'visibleColRange',
-			'columns',
-			'columnWidths',
-			'rowHeights',
-			'sortModel',
-			'expansion',
-			'pinnedColumns',
-		]);
+		expect(subscriptions).toEqual(['columns', 'expansion']);
 	});
 
 	it('production feature changes no longer rely on as never event payload casts (Plan 104)', () => {

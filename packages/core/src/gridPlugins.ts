@@ -1,7 +1,7 @@
-import { getPluginControllerFromApi } from './createGrid.js';
 import { GridContextMenuPlugin, type GridContextMenuOptions } from './contextMenu.js';
 import { GridNavigationController, type GridNavigationOptions } from './navigation.js';
 import type { GridApi } from './api/GridApi.js';
+import { resolveGridPluginController } from './internal/apiInternalBridge.js';
 
 export interface GridNavigationHandle {
 	handleKeyDown(event: KeyboardEvent): void;
@@ -20,7 +20,7 @@ export interface GridContextMenuHandle<TRowData = unknown> {
 }
 
 export function registerGridNavigation<TRowData>(api: GridApi<TRowData>, options: GridNavigationOptions = {}): GridNavigationHandle {
-	const pluginController = getPluginControllerFromApi(api);
+	const pluginController = resolveGridPluginController(api);
 	const controller = new GridNavigationController<TRowData>(options);
 	pluginController.registerPlugin(controller);
 
@@ -42,7 +42,7 @@ export function registerGridContextMenu<TRowData>(
 	api: GridApi<TRowData>,
 	options: GridContextMenuOptions<TRowData> = {}
 ): GridContextMenuHandle<TRowData> {
-	const pluginController = getPluginControllerFromApi(api);
+	const pluginController = resolveGridPluginController(api);
 	const plugin = new GridContextMenuPlugin<TRowData>(options);
 	pluginController.registerPlugin(plugin);
 

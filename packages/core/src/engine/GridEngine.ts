@@ -463,8 +463,9 @@ export class GridEngine<TRowData = unknown> {
 		this.changeApplier.apply({
 			reason: 'rows:bump-global-version',
 			state: (state) => ({ globalVersion: state.globalVersion + 1 }),
+			invalidations: [{ kind: 'viewport', reason: 'data' }],
 			domains: ['rows'],
-			requestRender: false,
+			requestRender: true,
 		});
 	}
 
@@ -480,8 +481,9 @@ export class GridEngine<TRowData = unknown> {
 		this.changeApplier.apply({
 			reason: 'rows:set-loading-state',
 			state: (state) => ({ loading, globalVersion: state.globalVersion + 1 }),
+			invalidations: [{ kind: 'viewport', reason: 'loading' }],
 			domains: ['rows', 'geometry'],
-			requestRender: false,
+			requestRender: true,
 		});
 	}
 
@@ -497,7 +499,8 @@ export class GridEngine<TRowData = unknown> {
 		this.changeApplier.apply({
 			reason: 'viewport:set-visible-ranges',
 			state: { visibleRowRange, visibleColRange },
-			requestRender: false,
+			invalidations: [{ kind: 'viewport', reason: 'viewport' }],
+			requestRender: true,
 		});
 	}
 

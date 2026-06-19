@@ -6,7 +6,6 @@ import type {
 	CsvExportOptions,
 	GridApi,
 	GridCellPointer,
-	GridPluginController,
 	GridSelectionSource,
 	GridStateSnapshot,
 	RowDataTransaction,
@@ -19,32 +18,7 @@ import type {
 } from './api/GridApi.js';
 import type { ColumnDef } from './columnDef.js';
 import type { GridState, ColumnState, Listener } from './state/GridState.js';
-
-// WeakMap reverse-lookup: maps a public GridApi to the internal GridStore that backs it.
-// This is the canonical way for framework adapters to recover the store from a public API handle.
-const apiStoreMap = new WeakMap<GridApi<unknown>, GridStore<unknown>>();
-
-/**
- * Recover the internal GridStore from a public GridApi handle.
- * Only works for APIs created by Open Grid factory functions.
- * Framework adapters (e.g. @open-grid/react) use this to access renderer-level internals
- * without exposing GridStore on the public GridApi type.
- *
- * @throws if the api was not created by Open Grid.
- */
-export function getStoreFromApi<TRowData>(api: GridApi<TRowData>): GridStore<TRowData> {
-	const store = apiStoreMap.get(api as GridApi<unknown>);
-
-	if (!store) {
-		throw new Error('Invalid GridApi. This API was not created by Open Grid.');
-	}
-
-	return store as GridStore<TRowData>;
-}
-
-export function getPluginControllerFromApi<TRowData>(api: GridApi<TRowData>): GridPluginController<TRowData> {
-	return getStoreFromApi(api).getPluginController();
-}
+import { registerGridInternalStore } from './internal/apiInternalBridge.js';
 import { exportToCsv } from './export/csvExport.js';
 import {
 	type GridPersistenceAdapter,
@@ -323,7 +297,7 @@ export function createApiFacade<TRowData>(
 	};
 
 	const frozen = Object.freeze(api) as GridApi<TRowData>;
-	apiStoreMap.set(frozen as unknown as GridApi<unknown>, store as unknown as GridStore<unknown>);
+	registerGridInternalStore(frozen, store);
 	return frozen;
 }
 

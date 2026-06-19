@@ -1,4 +1,3 @@
-import { getStoreFromApi } from './createGrid.js';
 import { RenderEngine } from './renderer/renderEngine.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
 import type {
@@ -11,6 +10,7 @@ import type {
 } from './renderer/IGridRenderer.js';
 import type { GridApi } from './api/GridApi.js';
 import type { ColumnDef, InternalColumnDef } from './columnDef.js';
+import { resolveGridInternalStore } from './internal/apiInternalBridge.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
 	return (column as InternalColumnDef<TRowData>).cellRendererCapabilities?.imperativeUpdate === true;
@@ -89,7 +89,7 @@ export function mountGridHost<TRowData>(
 	container: HTMLElement,
 	options: GridHostOptions<TRowData> = {}
 ): GridHostWithAdapter<TRowData> {
-	const store = getStoreFromApi(api);
+	const store = resolveGridInternalStore(api);
 	const engine = store.engine;
 	const internalApi = store;
 	const renderEngine = new RenderEngine(engine, internalApi);

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createClientGrid, getStoreFromApi } from './createGrid.js';
+import { createClientGrid } from './createGrid.js';
 import { mountGridHost } from './gridHost.js';
+import { resolveGridInternalStore } from './internal/apiInternalBridge.js';
 import { GridStore } from './store.js';
 import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 
@@ -190,7 +191,7 @@ describe('mountGridHost', () => {
 		});
 		document.body.appendChild(container);
 
-		const store = getStoreFromApi(api);
+		const store = resolveGridInternalStore(api);
 
 		const host = mountGridHost(api, container);
 		host.destroy(); // first destroy — OK
