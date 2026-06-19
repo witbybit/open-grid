@@ -40,6 +40,7 @@ import { RowSelectionFeatureController } from '../features/RowSelectionFeatureCo
 import { DataMutationController } from '../features/DataMutationController.js';
 import { GridStateFeatureController } from '../features/GridStateFeatureController.js';
 import { CellNotificationController } from './CellNotificationController.js';
+import { createDefaultGridDomainMutationExecutorRegistry } from './GridDomainMutation.js';
 import { GridStateReactionController } from './GridStateReactionController.js';
 import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import { ColumnAutoSizeController } from '../features/ColumnAutoSizeController.js';
@@ -349,6 +350,11 @@ export class GridEngine<TRowData = unknown> {
 			eventBus: this.eventBus,
 			commandHistory: this.commandHistory,
 			requestRender: (reason) => this.requestRender(reason),
+			commitContext: {
+				getState: () => this.stateManager.getState(),
+				getRowModel: () => this.rowModel,
+			},
+			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TRowData>(),
 			incrementDomain: (domain) => this.incrementDomain(domain),
 			faultReporter: this.runtimeFaults,
 		});
@@ -477,20 +483,9 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public setRowOrder(rowIds: string[], emitEvent = true): void {
-		const rowModel = this.getRowModel();
-		if (!rowModel?.setRowOrder || !rowModel.getRowOrder) return;
-		const currentOrder = rowModel.getRowOrder();
-		if (currentOrder.length === rowIds.length && currentOrder.every((rowId, index) => rowId === rowIds[index])) return;
-
-		rowModel.setRowOrder(rowIds);
-
-		this.changeApplier.apply({
+		this.changeApplier.commit({
 			reason: 'rows:set-order',
-			state: (state) => ({ globalVersion: state.globalVersion + 1 }),
-			invalidations: [{ kind: 'full', reason: 'row order changed' }],
-			domains: ['rows'],
-			events: emitEvent ? [{ type: GridEventName.rowOrderChanged, payload: { rowIds } }] : [],
-			requestRender: true,
+			domainMutations: [{ kind: 'row-order', rowIds, emitEvent }],
 		});
 	}
 

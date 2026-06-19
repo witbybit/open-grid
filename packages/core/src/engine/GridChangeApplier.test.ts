@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GridChangeApplier, type GridChangeApplierDeps } from './GridChangeApplier.js';
+import { GridChangeApplier, GridCommitKernel, type GridChangeApplierDeps, type GridCommitKernelDeps } from './GridChangeApplier.js';
 import { StateManager } from '../state/StateManager.js';
 import { InvalidationManager } from '../renderer/invalidationManager.js';
 import { EventBus } from '../events/EventBus.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
 import { GridEventName, type GridState } from '../store.js';
 import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
+import { createDefaultGridDomainMutationExecutorRegistry } from './GridDomainMutation.js';
 
 type TestRow = { id: string; name: string };
 
@@ -216,6 +217,121 @@ describe('GridChangeApplier', () => {
 		commandHistory.redo();
 
 		expect(callOrder).toEqual(['undo', 'redo']);
+	});
+
+	it('commits row-order domain mutations through registered executors with inverse history', () => {
+		const stateManager = new StateManager<TestRow>({
+			columns: [],
+			selection: { focus: null, anchor: null, range: null, bounds: null, source: 'api' },
+			selectedRowIds: [],
+			rowHeights: {},
+			columnWidths: {},
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			enableColumnReorder: true,
+			activeEdit: null,
+			sortModel: null,
+			filterModel: null,
+			globalVersion: 0,
+			visibleRowRange: { startIdx: 0, endIdx: 0 },
+			visibleColRange: { startIdx: 0, endIdx: 0 },
+			expansion: { groups: {}, treeRows: {}, details: {} },
+			rowOverscanPx: 400,
+			colBuffer: 1,
+		} as unknown as GridState<TestRow>);
+		const invalidation = new InvalidationManager();
+		const eventBus = new EventBus<TestRow>();
+		const faultReporter = new RuntimeFaultReporter<TestRow>({ log: () => undefined });
+		const commandHistory = new CommandHistory(faultReporter);
+		const requestRender = vi.fn();
+		const incrementDomain = vi.fn();
+		let rowOrder = ['1', '2', '3'];
+		const rowModel = {
+			getRowOrder: () => rowOrder.slice(),
+			setRowOrder: (rowIds: string[]) => {
+				rowOrder = rowIds.slice();
+			},
+		};
+
+		const deps: GridCommitKernelDeps<TestRow> = {
+			stateManager,
+			invalidation,
+			eventBus,
+			commandHistory,
+			requestRender,
+			commitContext: {
+				getState: () => stateManager.getState(),
+				getRowModel: () => rowModel as any,
+			},
+			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TestRow>(),
+			incrementDomain,
+			faultReporter,
+		};
+
+		const kernel = new GridCommitKernel(deps);
+		const eventSpy = vi.fn();
+		eventBus.addEventListener(GridEventName.rowOrderChanged, eventSpy);
+
+		const result = kernel.commit({
+			reason: 'rows:set-order',
+			domainMutations: [{ kind: 'row-order', rowIds: ['3', '1', '2'] }],
+		});
+
+		expect(result.status).toBe('committed');
+		expect(rowOrder).toEqual(['3', '1', '2']);
+		expect(incrementDomain).toHaveBeenCalledWith('rows');
+		expect(requestRender).toHaveBeenCalledWith('rows:set-order');
+		expect(eventSpy).toHaveBeenCalledOnce();
+		expect(commandHistory.canUndo()).toBe(true);
+
+		commandHistory.undo();
+		expect(rowOrder).toEqual(['1', '2', '3']);
+
+		commandHistory.redo();
+		expect(rowOrder).toEqual(['3', '1', '2']);
+	});
+
+	it('rejects mixed state and domain mutation commits for now', () => {
+		const stateManager = new StateManager<TestRow>({
+			columns: [],
+			selection: { focus: null, anchor: null, range: null, bounds: null, source: 'api' },
+			selectedRowIds: [],
+			rowHeights: {},
+			columnWidths: {},
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			enableColumnReorder: true,
+			activeEdit: null,
+			sortModel: null,
+			filterModel: null,
+			globalVersion: 0,
+			visibleRowRange: { startIdx: 0, endIdx: 0 },
+			visibleColRange: { startIdx: 0, endIdx: 0 },
+			expansion: { groups: {}, treeRows: {}, details: {} },
+			rowOverscanPx: 400,
+			colBuffer: 1,
+		} as unknown as GridState<TestRow>);
+		const deps: GridCommitKernelDeps<TestRow> = {
+			stateManager,
+			invalidation: new InvalidationManager(),
+			eventBus: new EventBus<TestRow>(),
+			commandHistory: new CommandHistory(),
+			requestRender: vi.fn(),
+			commitContext: {
+				getState: () => stateManager.getState(),
+				getRowModel: () => ({ getRowOrder: () => ['1'], setRowOrder: () => undefined }) as any,
+			},
+			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TestRow>(),
+		};
+		const kernel = new GridCommitKernel(deps);
+
+		expect(
+			kernel.commit({
+				reason: 'rows:set-order',
+				state: { colBuffer: 2 },
+				domainMutations: [{ kind: 'row-order', rowIds: ['1'] }],
+			})
+		).toEqual({ status: 'rejected', reason: 'mixed state and domain mutations are not yet supported' });
 	});
 
 	it('requestRender: false skips render request', () => {

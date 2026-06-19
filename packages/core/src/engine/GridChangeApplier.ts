@@ -6,6 +6,13 @@ import type { EventBus } from '../events/EventBus.js';
 import type { CommandHistory } from '../commands/CommandHistory.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { RuntimeFault, RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
+import type {
+	AppliedDomainMutation,
+	GridCommitContext,
+	GridDomainMutation,
+	GridDomainMutationExecutorRegistry,
+	PreparedDomainMutation,
+} from './GridDomainMutation.js';
 
 export type GridCommitReason =
 	| 'columns:set-data'
@@ -82,6 +89,7 @@ export interface GridHistoryMutation<TRowData = unknown> {
 	reason: GridCommitReason;
 	state?: GridStateUpdater<TRowData>;
 	run?: () => unknown;
+	domainMutations?: readonly GridDomainMutation<TRowData>[];
 	invalidations?: GridInvalidation[];
 	domains?: ReadonlyArray<keyof GridDomainVersions>;
 	events?: GridCommitEvent<TRowData>[];
@@ -113,6 +121,7 @@ interface GridCommitRecord<TRowData = unknown> {
 export interface GridCommit<TRowData = unknown> {
 	reason: GridCommitReason;
 	state?: GridStateUpdater<TRowData>;
+	domainMutations?: readonly GridDomainMutation<TRowData>[];
 	invalidations?: GridInvalidation[];
 	// Domain increments are declared on the change and applied by the commit protocol.
 	domains?: ReadonlyArray<keyof GridDomainVersions>;
@@ -130,6 +139,8 @@ export interface GridCommitKernelDeps<TRowData = unknown> {
 	eventBus: EventBus<TRowData>;
 	commandHistory: CommandHistory;
 	requestRender: (reason: string) => void;
+	commitContext?: GridCommitContext<TRowData>;
+	domainMutationExecutorRegistry?: GridDomainMutationExecutorRegistry<TRowData>;
 	incrementDomain?: (domain: keyof GridDomainVersions) => void;
 	faultReporter?: RuntimeFaultReporter<TRowData>;
 }
@@ -156,7 +167,10 @@ export class GridCommitKernel<TRowData = unknown> {
 		const validation = this.validate(change);
 		if (validation.status === 'rejected') return validation.result;
 
-		const record = this.toCommitRecord(change);
+		const domainMutationResolution = this.resolveDomainMutations(change);
+		if (domainMutationResolution.status !== 'ok') return domainMutationResolution.result;
+
+		const record = this.toCommitRecord(change, domainMutationResolution.appliedMutations);
 		if (!record) return { status: 'noop' };
 
 		try {
@@ -248,25 +262,36 @@ export class GridCommitKernel<TRowData = unknown> {
 		}
 	}
 
-	private toCommitRecord(change: GridCommit<TRowData>): GridCommitRecord<TRowData> | null {
+	private toCommitRecord(
+		change: GridCommit<TRowData>,
+		appliedMutations: readonly AppliedDomainMutation<TRowData>[] = []
+	): GridCommitRecord<TRowData> | null {
+		const mutationState = appliedMutations
+			.map((mutation) => mutation.state)
+			.filter((state): state is GridStateUpdater<TRowData> => state !== undefined);
+		const mergedState =
+			mutationState.length === 0
+				? change.state
+				: mutationState.reduce<GridStateUpdater<TRowData>>((acc, next) => this.composeStateUpdaters(acc, next), change.state ?? {});
+		const invalidations = [...appliedMutations.flatMap((mutation) => mutation.invalidations ?? []), ...(change.invalidations ?? [])];
+		const domains = [...appliedMutations.flatMap((mutation) => mutation.domains ?? []), ...(change.domains ?? [])];
+		const events = [...appliedMutations.flatMap((mutation) => mutation.events ?? []), ...(change.events ?? [])];
+		const history = this.mergeHistoryEntries(change.reason, appliedMutations, change.history);
+		const semanticWork =
+			mergedState !== undefined || invalidations.length > 0 || domains.length > 0 || events.length > 0 || history !== undefined;
 		const record: GridCommitRecord<TRowData> = {
 			changeId: this.nextChangeId++,
 			reason: change.reason,
-			state: change.state,
-			invalidations: change.invalidations ?? [],
-			domains: change.domains ?? [],
-			events: change.events ?? [],
-			history: change.history,
-			requestRender: change.requestRender !== false,
+			state: mergedState,
+			invalidations,
+			domains,
+			events,
+			history,
+			requestRender:
+				change.requestRender === false ? false : semanticWork || appliedMutations.some((mutation) => mutation.requestRender === true),
 		};
 
-		const hasWork =
-			record.state !== undefined ||
-			record.invalidations.length > 0 ||
-			record.domains.length > 0 ||
-			record.events.length > 0 ||
-			record.history !== undefined ||
-			record.requestRender;
+		const hasWork = semanticWork || record.requestRender;
 
 		return hasWork ? record : null;
 	}
@@ -286,11 +311,101 @@ export class GridCommitKernel<TRowData = unknown> {
 		return this.commit({
 			reason: change.reason,
 			state: change.state,
+			domainMutations: change.domainMutations,
 			invalidations: change.invalidations,
 			domains: change.domains,
 			events: change.events,
 			requestRender: change.requestRender,
 		});
+	}
+
+	private resolveDomainMutations(
+		change: GridCommit<TRowData>
+	): { status: 'ok'; appliedMutations: readonly AppliedDomainMutation<TRowData>[] } | { status: 'rejected'; result: GridCommitResult } {
+		if (!change.domainMutations || change.domainMutations.length === 0) {
+			return { status: 'ok', appliedMutations: [] };
+		}
+		if (!this.deps.commitContext || !this.deps.domainMutationExecutorRegistry) {
+			return { status: 'rejected', result: { status: 'rejected', reason: 'domain mutation registry unavailable' } };
+		}
+		if (change.state !== undefined) {
+			return { status: 'rejected', result: { status: 'rejected', reason: 'mixed state and domain mutations are not yet supported' } };
+		}
+
+		const preparedMutations: PreparedDomainMutation<TRowData>[] = [];
+		for (let index = 0; index < change.domainMutations.length; index++) {
+			const mutation = change.domainMutations[index]!;
+			const executor = this.deps.domainMutationExecutorRegistry.resolve(mutation);
+			if (!executor) {
+				return {
+					status: 'rejected',
+					result: { status: 'rejected', reason: `no executor registered for domain mutation "${mutation.kind}"` },
+				};
+			}
+			const validation = executor.validate(mutation as never, this.deps.commitContext);
+			if (!validation.ok) {
+				return {
+					status: 'rejected',
+					result: { status: 'rejected', reason: validation.reason },
+				};
+			}
+			preparedMutations.push(executor.prepare(mutation as never, this.deps.commitContext));
+		}
+
+		const appliedMutations: AppliedDomainMutation<TRowData>[] = [];
+		for (let index = 0; index < change.domainMutations.length; index++) {
+			const mutation = change.domainMutations[index]!;
+			const executor = this.deps.domainMutationExecutorRegistry.resolve(mutation);
+			if (!executor) continue;
+			appliedMutations.push(executor.apply(preparedMutations[index] as never, this.deps.commitContext));
+		}
+		return { status: 'ok', appliedMutations };
+	}
+
+	private mergeHistoryEntries(
+		reason: GridCommitReason,
+		appliedMutations: readonly AppliedDomainMutation<TRowData>[],
+		history?: GridHistoryEntry<TRowData>
+	): GridHistoryEntry<TRowData> | undefined {
+		const mutationHistories = appliedMutations
+			.map((mutation) => mutation.history)
+			.filter((entry): entry is GridHistoryEntry<TRowData> => entry !== undefined);
+		if (mutationHistories.length === 0) return history;
+		if (history) return history;
+		if (mutationHistories.length === 1) return mutationHistories[0];
+
+		return {
+			undo: {
+				reason,
+				run: () => {
+					for (let index = mutationHistories.length - 1; index >= 0; index--) {
+						this.applyHistoryMutation(mutationHistories[index]!.undo);
+					}
+				},
+				requestRender: false,
+			},
+			redo: {
+				reason,
+				run: () => {
+					for (const entry of mutationHistories) {
+						this.applyHistoryMutation(entry.redo);
+					}
+				},
+				requestRender: false,
+			},
+		};
+	}
+
+	private composeStateUpdaters(left: GridStateUpdater<TRowData>, right: GridStateUpdater<TRowData>): GridStateUpdater<TRowData> {
+		if (typeof left === 'function' || typeof right === 'function') {
+			return (state) => {
+				const leftValue = typeof left === 'function' ? left(state) : left;
+				const baseState = { ...state, ...leftValue };
+				const rightValue = typeof right === 'function' ? right(baseState) : right;
+				return { ...leftValue, ...rightValue };
+			};
+		}
+		return { ...left, ...right };
 	}
 
 	private normalizeHistoryExecutionResult(result: unknown): GridCommitResult {

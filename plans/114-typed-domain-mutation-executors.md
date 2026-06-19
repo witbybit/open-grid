@@ -12,6 +12,12 @@ Introduce typed domain mutation executors so cell and row mutation semantics are
 - **Depends on**: Plan 113
 - **Category**: data mutation, row model, validation, history
 
+### Progress notes
+
+- introduced `GridDomainMutation`, `GridCommitContext`, `PreparedDomainMutation`, `AppliedDomainMutation`, and executor/registry interfaces
+- `GridCommitKernel` now accepts `domainMutations` and resolves typed executors before publication
+- `row-order` is the first production executor-backed mutation and now supports inverse history through the kernel
+
 ## Problem
 
 If `GridCommitKernel` absorbs all mutation semantics directly, it becomes another god object. The kernel should own commit protocol, not row-model implementation details.

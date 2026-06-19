@@ -1245,6 +1245,33 @@ describe('GridStore undo and redo functionality', () => {
 		store.destroy();
 	});
 
+	it('setRowOrder supports undo and redo through domain-mutation history', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alpha', price: 10 },
+				{ id: '2', name: 'Beta', price: 20 },
+				{ id: '3', name: 'Gamma', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.setRowOrder(['3', '1', '2']);
+		expect(store.getRowOrder()).toEqual(['3', '1', '2']);
+		expect(store.canUndo()).toBe(true);
+
+		store.undo();
+		expect(store.getRowOrder()).toEqual(['1', '2', '3']);
+
+		store.redo();
+		expect(store.getRowOrder()).toEqual(['3', '1', '2']);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('should support undo and redo for sort and filter models', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name' }],
