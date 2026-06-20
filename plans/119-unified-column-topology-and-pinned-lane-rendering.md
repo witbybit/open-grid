@@ -46,33 +46,33 @@ Create one authoritative topology:
 
 ```ts
 interface CompiledColumnTopology {
-  readonly version: number;
-  readonly geometryVersion: number;
+	readonly version: number;
+	readonly geometryVersion: number;
 
-  readonly left: readonly ColumnPlacement[];
-  readonly center: readonly ColumnPlacement[];
-  readonly right: readonly ColumnPlacement[];
+	readonly left: readonly ColumnPlacement[];
+	readonly center: readonly ColumnPlacement[];
+	readonly right: readonly ColumnPlacement[];
 
-  readonly byColumnId: ReadonlyMap<string, ColumnPlacement>;
+	readonly byColumnId: ReadonlyMap<string, ColumnPlacement>;
 
-  readonly pinLeftWidth: number;
-  readonly pinRightWidth: number;
-  readonly centerViewportLeft: number;
-  readonly centerViewportWidth: number;
-  readonly totalContentWidth: number;
+	readonly pinLeftWidth: number;
+	readonly pinRightWidth: number;
+	readonly centerViewportLeft: number;
+	readonly centerViewportWidth: number;
+	readonly totalContentWidth: number;
 }
 ```
 
 ```ts
 interface ColumnPlacement {
-  readonly columnId: string;
-  readonly column: ColumnDef;
-  readonly lane: 'left' | 'center' | 'right';
-  readonly laneIndex: number;
-  readonly absoluteIndex: number;
-  readonly absoluteLeft: number;
-  readonly laneOffset: number;
-  readonly width: number;
+	readonly columnId: string;
+	readonly column: ColumnDef;
+	readonly lane: 'left' | 'center' | 'right';
+	readonly laneIndex: number;
+	readonly absoluteIndex: number;
+	readonly absoluteLeft: number;
+	readonly laneOffset: number;
+	readonly width: number;
 }
 ```
 
@@ -139,10 +139,10 @@ Add a topology stamp consumed by renderers:
 
 ```ts
 interface ColumnTopologyStamp {
-  readonly topologyVersion: number;
-  readonly geometryVersion: number;
-  readonly centerVisibleStart: number;
-  readonly centerVisibleEnd: number;
+	readonly topologyVersion: number;
+	readonly geometryVersion: number;
+	readonly centerVisibleStart: number;
+	readonly centerVisibleEnd: number;
 }
 ```
 
@@ -165,8 +165,8 @@ Create stable header identities.
 
 ```ts
 interface LeafHeaderIdentity {
-  readonly kind: 'leaf';
-  readonly columnId: string;
+	readonly kind: 'leaf';
+	readonly columnId: string;
 }
 ```
 
@@ -176,12 +176,12 @@ A group split across lanes or visible segments requires segment identity:
 
 ```ts
 interface GroupHeaderIdentity {
-  readonly kind: 'group-segment';
-  readonly groupId: string;
-  readonly depth: number;
-  readonly lane: CellLane;
-  readonly firstColumnId: string;
-  readonly lastColumnId: string;
+	readonly kind: 'group-segment';
+	readonly groupId: string;
+	readonly depth: number;
+	readonly lane: CellLane;
+	readonly firstColumnId: string;
+	readonly lastColumnId: string;
 }
 ```
 
@@ -195,12 +195,12 @@ Create a stable `HeaderView`:
 
 ```ts
 class HeaderView {
-  readonly identity: HeaderViewIdentity;
-  readonly element: HTMLElement;
+	readonly identity: HeaderViewIdentity;
+	readonly element: HTMLElement;
 
-  refresh(context: HeaderRenderContext): void;
-  relocate(placement: HeaderPlacement): void;
-  destroy(): void;
+	refresh(context: HeaderRenderContext): void;
+	relocate(placement: HeaderPlacement): void;
+	destroy(): void;
 }
 ```
 
@@ -212,11 +212,11 @@ Use a viewport-width root:
 
 ```html
 <div class="og-header-viewport">
-  <div class="og-header-lane-left"></div>
-  <div class="og-header-center-clip">
-    <div class="og-header-center-content"></div>
-  </div>
-  <div class="og-header-lane-right"></div>
+	<div class="og-header-lane-left"></div>
+	<div class="og-header-center-clip">
+		<div class="og-header-center-content"></div>
+	</div>
+	<div class="og-header-lane-right"></div>
 </div>
 ```
 
@@ -236,13 +236,13 @@ Required CSS properties:
 .og-header-lane-left,
 .og-header-center-clip,
 .og-header-lane-right {
-  overflow: hidden;
+	overflow: hidden;
 }
 
 .og-header-lane-left,
 .og-header-lane-right,
 .og-header-center-clip {
-  contain: layout paint;
+	contain: layout paint;
 }
 ```
 
@@ -305,9 +305,9 @@ Prefer a shared primitive:
 
 ```ts
 class ColumnLaneSurface<TView> {
-  reconcile(topology, visibleCenterRange): void;
-  syncCenterScroll(scrollLeft): void;
-  destroy(): void;
+	reconcile(topology, visibleCenterRange): void;
+	syncCenterScroll(scrollLeft): void;
+	destroy(): void;
 }
 ```
 
@@ -331,9 +331,9 @@ Define:
 
 ```ts
 interface ColumnTopologyDiff {
-  readonly retained: readonly ColumnTopologyMove[];
-  readonly entered: readonly ColumnPlacement[];
-  readonly exited: readonly ColumnPlacement[];
+	readonly retained: readonly ColumnTopologyMove[];
+	readonly entered: readonly ColumnPlacement[];
+	readonly exited: readonly ColumnPlacement[];
 }
 ```
 
@@ -347,7 +347,7 @@ Default:
 
 ```css
 .og-header-cell-movable {
-  transition: none;
+	transition: none;
 }
 ```
 
@@ -355,7 +355,7 @@ Enable animation only while explicit column-drag/reorder preview is active:
 
 ```css
 .og-column-reorder-active .og-header-cell-movable {
-  transition: transform 180ms cubic-bezier(...);
+	transition: transform 180ms cubic-bezier(...);
 }
 ```
 
@@ -480,17 +480,17 @@ No regression may be hidden by increased overscan or disabling virtualization.
 Add or consolidate:
 
 ```ts
-GridMetric.COLUMN_TOPOLOGY_COMPILED
-GridMetric.COLUMN_TOPOLOGY_RECONCILED
-GridMetric.HEADER_VIEW_CREATED
-GridMetric.HEADER_VIEW_DESTROYED
-GridMetric.HEADER_VIEW_RELOCATED
-GridMetric.FLOATING_FILTER_VIEW_CREATED
-GridMetric.FLOATING_FILTER_VIEW_DESTROYED
-GridMetric.FLOATING_FILTER_VIEW_RELOCATED
-GridMetric.PINNED_LANE_WRITE_DURING_SCROLL
-GridMetric.STALE_TOPOLOGY_OPERATION_REJECTED
-GridMetric.LANE_CLIP_VIOLATION
+GridMetric.COLUMN_TOPOLOGY_COMPILED;
+GridMetric.COLUMN_TOPOLOGY_RECONCILED;
+GridMetric.HEADER_VIEW_CREATED;
+GridMetric.HEADER_VIEW_DESTROYED;
+GridMetric.HEADER_VIEW_RELOCATED;
+GridMetric.FLOATING_FILTER_VIEW_CREATED;
+GridMetric.FLOATING_FILTER_VIEW_DESTROYED;
+GridMetric.FLOATING_FILTER_VIEW_RELOCATED;
+GridMetric.PINNED_LANE_WRITE_DURING_SCROLL;
+GridMetric.STALE_TOPOLOGY_OPERATION_REJECTED;
+GridMetric.LANE_CLIP_VIOLATION;
 ```
 
 Normal scenarios must keep:

@@ -56,11 +56,11 @@ Each `RowSlot` owns one physical cell view for each currently rendered column:
 
 ```ts
 class RowSlot<TRowData> {
-  readonly cellsByColumnId: Map<string, CellView<TRowData>>;
+	readonly cellsByColumnId: Map<string, CellView<TRowData>>;
 
-  readonly leftPlacement: CellView<TRowData>[];
-  readonly centerPlacement: CellView<TRowData>[];
-  readonly rightPlacement: CellView<TRowData>[];
+	readonly leftPlacement: CellView<TRowData>[];
+	readonly centerPlacement: CellView<TRowData>[];
+	readonly rightPlacement: CellView<TRowData>[];
 }
 ```
 
@@ -95,11 +95,11 @@ Moving a column from center to left must move the same DOM cell and portal host.
 
 ```ts
 interface CellInstanceIdentity {
-  readonly cellInstanceId: string;
-  readonly rowSlotId: string;
-  readonly columnId: string;
-  readonly cellGeneration: number;
-  readonly rowBindingGeneration: number;
+	readonly cellInstanceId: string;
+	readonly rowSlotId: string;
+	readonly columnId: string;
+	readonly cellGeneration: number;
+	readonly rowBindingGeneration: number;
 }
 ```
 
@@ -116,10 +116,10 @@ Semantics:
 type CellLane = 'left' | 'center' | 'right';
 
 interface CellPlacement {
-  readonly lane: CellLane;
-  readonly laneIndex: number;
-  readonly laneOffset: number;
-  readonly width: number;
+	readonly lane: CellLane;
+	readonly laneIndex: number;
+	readonly laneOffset: number;
+	readonly width: number;
 }
 ```
 
@@ -127,13 +127,13 @@ interface CellPlacement {
 
 ```ts
 interface CellRendererHandle<TRowData> {
-  mount(context: CellRenderContext<TRowData>): void;
+	mount(context: CellRenderContext<TRowData>): void;
 
-  refresh(context: CellRenderContext<TRowData>): boolean;
+	refresh(context: CellRenderContext<TRowData>): boolean;
 
-  relocate?(placement: CellPlacement): void;
+	relocate?(placement: CellPlacement): void;
 
-  destroy(): void;
+	destroy(): void;
 }
 ```
 
@@ -151,22 +151,22 @@ Implementations may include:
 
 ```ts
 class CellView<TRowData> {
-  readonly identity: CellInstanceIdentity;
-  readonly element: HTMLElement;
-  readonly textLayer: HTMLElement;
-  readonly domLayer: HTMLElement;
-  readonly portalHost: HTMLElement;
+	readonly identity: CellInstanceIdentity;
+	readonly element: HTMLElement;
+	readonly textLayer: HTMLElement;
+	readonly domLayer: HTMLElement;
+	readonly portalHost: HTMLElement;
 
-  readonly columnId: string;
+	readonly columnId: string;
 
-  placement: CellPlacement;
-  renderer: CellRendererHandle<TRowData> | null;
+	placement: CellPlacement;
+	renderer: CellRendererHandle<TRowData> | null;
 
-  bindRow(context: CellRenderContext<TRowData>): void;
-  refresh(context: CellRenderContext<TRowData>): void;
-  relocate(placement: CellPlacement): void;
-  switchRenderer(next: CellRendererDescriptor<TRowData>): void;
-  destroy(): void;
+	bindRow(context: CellRenderContext<TRowData>): void;
+	refresh(context: CellRenderContext<TRowData>): void;
+	relocate(placement: CellPlacement): void;
+	switchRenderer(next: CellRendererDescriptor<TRowData>): void;
+	destroy(): void;
 }
 ```
 
@@ -189,9 +189,9 @@ All mount, refresh, release, async completion, imperative update, and editor ope
 
 ```ts
 interface PhysicalCellToken {
-  readonly cellInstanceId: string;
-  readonly cellGeneration: number;
-  readonly rowBindingGeneration: number;
+	readonly cellInstanceId: string;
+	readonly cellGeneration: number;
+	readonly rowBindingGeneration: number;
 }
 ```
 
@@ -232,7 +232,7 @@ Existing lane arrays may temporarily store `CellView`, but must stop creating in
 Add:
 
 ```ts
-cellsByColumnId: Map<string, CellView<TRowData>>
+cellsByColumnId: Map<string, CellView<TRowData>>;
 ```
 
 For each row slot topology reconciliation:
@@ -306,12 +306,7 @@ The portal host remains stable.
 Use persistent layers and explicit mode:
 
 ```ts
-type CellContentMode =
-  | 'text'
-  | 'dom'
-  | 'portal'
-  | 'loading'
-  | 'empty';
+type CellContentMode = 'text' | 'dom' | 'portal' | 'loading' | 'empty';
 ```
 
 Required transition ordering:
@@ -385,17 +380,17 @@ Define `CellRenderContext` with explicit fields and versions:
 
 ```ts
 interface CellRenderContext<TRowData> {
-  readonly rowId: string;
-  readonly visualRowId: string;
-  readonly rowNode: RowNode<TRowData>;
-  readonly columnId: string;
-  readonly value: unknown;
-  readonly formattedValue: string;
-  readonly selected: boolean;
-  readonly focused: boolean;
-  readonly editing: boolean;
-  readonly loading: boolean;
-  readonly rowBindingGeneration: number;
+	readonly rowId: string;
+	readonly visualRowId: string;
+	readonly rowNode: RowNode<TRowData>;
+	readonly columnId: string;
+	readonly value: unknown;
+	readonly formattedValue: string;
+	readonly selected: boolean;
+	readonly focused: boolean;
+	readonly editing: boolean;
+	readonly loading: boolean;
+	readonly rowBindingGeneration: number;
 }
 ```
 
@@ -499,15 +494,15 @@ Do not increase overscan, force full redraw, or weaken budgets to hide lifecycle
 Add or consolidate metrics:
 
 ```ts
-GridMetric.CELL_VIEW_CREATED
-GridMetric.CELL_VIEW_DESTROYED
-GridMetric.CELL_VIEW_RELOCATED
-GridMetric.CELL_RENDERER_MOUNTED
-GridMetric.CELL_RENDERER_REFRESHED
-GridMetric.CELL_RENDERER_RECREATED
-GridMetric.PORTAL_HOST_RELOCATED
-GridMetric.STALE_CELL_OPERATION_REJECTED
-GridMetric.CONTENT_BLANK_TRANSITION
+GridMetric.CELL_VIEW_CREATED;
+GridMetric.CELL_VIEW_DESTROYED;
+GridMetric.CELL_VIEW_RELOCATED;
+GridMetric.CELL_RENDERER_MOUNTED;
+GridMetric.CELL_RENDERER_REFRESHED;
+GridMetric.CELL_RENDERER_RECREATED;
+GridMetric.PORTAL_HOST_RELOCATED;
+GridMetric.STALE_CELL_OPERATION_REJECTED;
+GridMetric.CONTENT_BLANK_TRANSITION;
 ```
 
 `CONTENT_BLANK_TRANSITION` must remain zero in supported scenarios.

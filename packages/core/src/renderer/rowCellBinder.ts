@@ -6,7 +6,14 @@ import type { GridCellPointer } from '../api/GridApi.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import type { CellSlot, CellContentMode } from './cellSlot.js';
-import { TextRendererHandle, FallbackRendererHandle, PortalRendererHandle, LoadingRendererHandle, CustomRendererHandle, type CellPlacement } from './cellRendererHandle.js';
+import {
+	TextRendererHandle,
+	FallbackRendererHandle,
+	PortalRendererHandle,
+	LoadingRendererHandle,
+	CustomRendererHandle,
+	type CellPlacement,
+} from './cellRendererHandle.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
@@ -132,12 +139,7 @@ function getScrollMountValue<TRowData>(
  * Destroys the previous handle when the renderer kind changes or the portal key rotates.
  * Text/fallback handles are updated in-place to avoid allocation when kind is stable.
  */
-function assignRendererHandle<TRowData>(
-	cellSlot: CellSlot<TRowData>,
-	contentMode: CellContentMode,
-	formattedValue: string,
-	portalKey: string
-): void {
+function assignRendererHandle<TRowData>(cellSlot: CellSlot<TRowData>, contentMode: CellContentMode, formattedValue: string, portalKey: string): void {
 	const existing = cellSlot.renderer;
 
 	if (contentMode === 'text') {
@@ -346,7 +348,9 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		return;
 	}
 
-	const stableKey = access.isEditing ? createEditRendererKey(node.id, col.field) : createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
+	const stableKey = access.isEditing
+		? createEditRendererKey(node.id, col.field)
+		: createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
 	let contentMode: CellContentMode = 'empty';
 	let formattedValue = '';
 

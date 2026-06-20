@@ -234,4 +234,3 @@ describe('RowRendererRuntimeBridge – applyFocus', () => {
 		expect(renderStats.focusCallsDuringScroll).toBe(1);
 	});
 });
-
