@@ -1227,6 +1227,13 @@ export const CORE_STYLES = `
     transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, opacity 0.15s ease;
   }
 
+  /* Suppress transform transitions while scrolling. New header cells entering the
+     visible range during horizontal scroll would otherwise slide in from left: 0
+     instead of appearing immediately at their content-space position. */
+  .og-is-scrolling .og-header-cell-movable {
+    transition: none;
+  }
+
   .og-header-cell-dragging {
     cursor: grabbing;
     opacity: 0.95;
