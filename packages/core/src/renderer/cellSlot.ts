@@ -51,6 +51,13 @@ export class CellSlot<TRowData = unknown> {
 	 * the common case — never pay the extra DOM node (+50% viewport node count).
 	 */
 	public portalHostElement: HTMLDivElement | null = null;
+	/**
+	 * Incremented each time this cell is hot-unbound (recycled to a different logical row).
+	 * Consumers can capture this at mount time and compare later to detect stale deferred
+	 * operations against a cell that has since been rebound to another row.
+	 * Unlike slot.generation (which is per-slot), this is per-cell.
+	 */
+	public rowBindingGeneration = 0;
 
 	/**
 	 * Authoritative identity for this bound slot.
@@ -336,6 +343,7 @@ export class CellSlot<TRowData = unknown> {
 	}
 
 	public unbindHot(): void {
+		this.rowBindingGeneration++;
 		this.binding = null;
 		this.colIndex = -1;
 		this.colField = '';

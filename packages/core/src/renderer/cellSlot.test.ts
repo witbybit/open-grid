@@ -57,6 +57,52 @@ describe('CellSlot.cellInstanceId — Plan 118 physical identity', () => {
 	});
 });
 
+describe('CellSlot.rowBindingGeneration — Plan 118 WS1 per-cell row binding tracking', () => {
+	it('starts at 0 on construction', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		expect(slot.rowBindingGeneration).toBe(0);
+	});
+
+	it('increments on each unbindHot() call', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.unbindHot();
+		expect(slot.rowBindingGeneration).toBe(1);
+		slot.unbindHot();
+		expect(slot.rowBindingGeneration).toBe(2);
+	});
+
+	it('does not change on update() — rebinding to the same or new row does not increment', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'text', 'Alice', 'Alice');
+		expect(slot.rowBindingGeneration).toBe(0);
+	});
+
+	it('does not change on unbindCold() — cold unbind is destroy, not rebind', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.unbindHot();
+		const gen = slot.rowBindingGeneration;
+		slot.unbindCold();
+		expect(slot.rowBindingGeneration).toBe(gen);
+	});
+
+	it('does not change on reset()', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.unbindHot();
+		const gen = slot.rowBindingGeneration;
+		slot.reset();
+		expect(slot.rowBindingGeneration).toBe(gen);
+	});
+
+	it('cellInstanceId remains stable while rowBindingGeneration increments — they are independent', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		const id = slot.cellInstanceId;
+		slot.unbindHot();
+		slot.unbindHot();
+		expect(slot.cellInstanceId).toBe(id);
+		expect(slot.rowBindingGeneration).toBe(2);
+	});
+});
+
 describe('CellSlot WS6 — non-blanking text→portal transition', () => {
 	it('does not clear textContent when transitioning to portal mode', () => {
 		const slot = new CellSlot(document.createElement('div'));
