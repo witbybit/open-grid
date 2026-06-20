@@ -73,6 +73,9 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		this.filterLayer = filterLayer;
 		this.filterLeftLayer = filterLeftLayer;
 		this.filterRightLayer = filterRightLayer;
+		// Clip filter cells that overflow the pinned lane width during pin/unpin transitions.
+		filterLeftLayer.style.overflow = 'hidden';
+		filterRightLayer.style.overflow = 'hidden';
 		this.clearCells();
 
 		// Re-render on filter model change (values may change from outside)

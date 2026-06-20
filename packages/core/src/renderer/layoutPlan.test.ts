@@ -428,4 +428,80 @@ describe('GridLayoutPlan', () => {
 			store.destroy();
 		});
 	});
+
+	describe('Plan 119 — stable header cell identity', () => {
+		it('leaf header cells use column field as id (stable across pin/unpin)', () => {
+			const store = new GridStore<{ id: string; a: string; b: string }>({
+				getRowId: (r) => r.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 100 },
+					{ field: 'b', header: 'B', width: 100 },
+				],
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(300, 300);
+
+			const before = computeGridLayoutPlan(store.engine);
+			const leafBefore = before.headerBands[0].cells;
+			expect(leafBefore[0].id).toBe('a');
+			expect(leafBefore[1].id).toBe('b');
+
+			store.setViewportPins({ left: 1, right: 0 });
+			const after = computeGridLayoutPlan(store.engine);
+			const leafAfter = after.headerBands[0].cells;
+			// IDs are unchanged even though colStart values may differ
+			expect(leafAfter[0].id).toBe('a');
+			expect(leafAfter[1].id).toBe('b');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('group cell id encodes first+last column fields (stable when no pin boundary change)', () => {
+			const store = new GridStore<{ id: string; a: string; b: string; c: string }>({
+				getRowId: (r) => r.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 80, headerGroup: 'Revenue' },
+					{ field: 'b', header: 'B', width: 80, headerGroup: 'Revenue' },
+					{ field: 'c', header: 'C', width: 80 },
+				],
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(400, 300);
+
+			const plan = computeGridLayoutPlan(store.engine);
+			const groupCell = plan.headerBands[0].cells[0];
+			// Stable key: grp:depth:firstField:lastField
+			expect(groupCell.id).toBe('grp:0:a:b');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('group cell id changes when pin boundary splits the span (correct invalidation)', () => {
+			const store = new GridStore<{ id: string; a: string; b: string }>({
+				getRowId: (r) => r.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 100, headerGroup: 'Sales' },
+					{ field: 'b', header: 'B', width: 100, headerGroup: 'Sales' },
+				],
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(300, 300);
+
+			const unpinned = computeGridLayoutPlan(store.engine);
+			expect(unpinned.headerBands[0].cells).toHaveLength(1);
+			expect(unpinned.headerBands[0].cells[0].id).toBe('grp:0:a:b');
+
+			store.setViewportPins({ left: 1, right: 0 });
+			const pinned = computeGridLayoutPlan(store.engine);
+			// Span splits into two cells — each has its own stable id reflecting its extent
+			expect(pinned.headerBands[0].cells).toHaveLength(2);
+			expect(pinned.headerBands[0].cells[0].id).toBe('grp:0:a:a');
+			expect(pinned.headerBands[0].cells[1].id).toBe('grp:0:b:b');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+	});
 });

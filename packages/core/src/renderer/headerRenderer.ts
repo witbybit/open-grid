@@ -11,7 +11,8 @@ export class HeaderRenderer<TRowData = unknown> {
 	private readonly columnInteractionsGetter: () => ColumnInteractionController<TRowData>;
 	private readonly showHeaderMenu: (cell: HTMLElement, colField: string) => void;
 
-	// Keyed by "${depth}:${colStart}" to support multi-band group headers
+	// Keyed by cell.id — leaf: column field; group: "grp:depth:firstField:lastField".
+	// Stable across pin/unpin so the DOM element is relocated rather than destroyed+recreated.
 	private headerCells = new Map<string, HTMLDivElement>();
 	private headerLayer: HTMLDivElement | null = null;
 	private headerLeftLayer: HTMLDivElement | null = null;
@@ -32,6 +33,7 @@ export class HeaderRenderer<TRowData = unknown> {
 	}
 
 	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
+	private lastTopologyVersion = -1;
 	private lastHeaderScrollLeft = 0;
 	private lastSyncedViewportWidth = -1;
 	private lastHeaderLeftTransform = '';
@@ -53,6 +55,9 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.headerLayer = headerLayer;
 		this.headerLeftLayer = headerLeftLayer;
 		this.headerRightLayer = headerRightLayer;
+		// Clip cells that overflow the pinned lane width during pin/unpin transitions.
+		headerLeftLayer.style.overflow = 'hidden';
+		headerRightLayer.style.overflow = 'hidden';
 		this.clearHeaderCells();
 	}
 
@@ -69,6 +74,7 @@ export class HeaderRenderer<TRowData = unknown> {
 		}
 		this.headerCells.clear();
 		this.lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
+		this.lastTopologyVersion = -1;
 		this.lastSyncedViewportWidth = -1;
 		this.lastHeaderScrollLeft = 0;
 		this.lastHeaderLeftTransform = '';
@@ -129,13 +135,15 @@ export class HeaderRenderer<TRowData = unknown> {
 		const { pinLeftCount: pinLeft, pinRightCount: pinRight } = layoutPlan.columns;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
 		const colEnd = range?.endIdx ?? layoutPlan.columns.colEnd;
+		const topologyVersion = this.engine.columns.getCompiledPlan().version;
 
 		if (
 			colStart === this.lastHeaderVisibleRange.startIdx &&
 			colEnd === this.lastHeaderVisibleRange.endIdx &&
 			pinLeft === this.lastHeaderVisibleRange.pinLeft &&
 			pinRight === this.lastHeaderVisibleRange.pinRight &&
-			colCount === this.lastHeaderVisibleRange.colCount
+			colCount === this.lastHeaderVisibleRange.colCount &&
+			topologyVersion === this.lastTopologyVersion
 		) {
 			return false;
 		}
@@ -191,7 +199,9 @@ export class HeaderRenderer<TRowData = unknown> {
 		rendered.clear();
 
 		const renderCell = (cell: HeaderCellLayout) => {
-			const cellKey = `${cell.depth}:${cell.colStart}`;
+			// cell.id is stable across pin/unpin: column field for leaves,
+			// "grp:depth:firstField:lastField" for group spans.
+			const cellKey = cell.id;
 
 			let headerCell = this.headerCells.get(cellKey);
 			if (!headerCell) {
@@ -398,6 +408,7 @@ export class HeaderRenderer<TRowData = unknown> {
 
 		this.lastHeaderScrollLeft = layoutPlan.viewport.scrollLeft;
 		this.lastSyncedViewportWidth = layoutPlan.viewport.clientWidth;
+		this.lastTopologyVersion = this.engine.columns.getCompiledPlan().version;
 		this.lastHeaderVisibleRange = {
 			startIdx: colStart,
 			endIdx: colEnd,

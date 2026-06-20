@@ -218,7 +218,7 @@ function buildHeaderBands<TRowData>(
 			const width = rightEdge - left;
 
 			cells.push({
-				id: `grp-${d}-${i}`,
+				id: `grp:${d}:${columns[i].field}:${columns[j - 1].field}`,
 				field: '',
 				label: groupName,
 				depth: d,
