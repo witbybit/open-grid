@@ -9,6 +9,7 @@ export interface RendererInstance<TRowData = unknown> {
 	cellKey: string;
 	rowSlotId: string;
 	slotGeneration: number;
+	cellRowBindingGeneration: number;
 	container: HTMLDivElement;
 	value: unknown;
 	node: RowNode<TRowData>;
@@ -27,6 +28,7 @@ export interface AcquireRendererParams<TRowData = unknown> {
 	cellKey: string;
 	rowSlotId: string;
 	slotGeneration: number;
+	cellRowBindingGeneration: number;
 	parentContainer: HTMLElement;
 	value: unknown;
 	node: RowNode<TRowData>;
@@ -191,6 +193,7 @@ export class CustomRendererManager<TRowData = unknown> {
 			cellKey: params.cellKey,
 			rowSlotId: params.rowSlotId,
 			slotGeneration: params.slotGeneration,
+			cellRowBindingGeneration: params.cellRowBindingGeneration,
 			container,
 			value: params.value,
 			node: params.node,
@@ -365,13 +368,15 @@ export class CustomRendererManager<TRowData = unknown> {
 			instance.phase !== params.phase ||
 			instance.isScrolling !== params.isScrolling ||
 			instance.rendererKey !== params.rendererKey ||
-			instance.cellKey !== params.cellKey;
+			instance.cellKey !== params.cellKey ||
+			instance.cellRowBindingGeneration !== params.cellRowBindingGeneration;
 
 		this.unregisterActive(instance);
 		instance.rendererKey = params.rendererKey;
 		instance.cellKey = params.cellKey;
 		instance.rowSlotId = params.rowSlotId;
 		instance.slotGeneration = params.slotGeneration;
+		instance.cellRowBindingGeneration = params.cellRowBindingGeneration;
 		instance.value = params.value;
 		instance.node = params.node;
 		instance.col = params.col;

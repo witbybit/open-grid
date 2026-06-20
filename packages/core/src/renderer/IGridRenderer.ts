@@ -53,6 +53,13 @@ export interface GridCellContentMount<TRowData = unknown> {
 	rowSlotId: string;
 	/** Generation counter from the physical slot — incremented on each row rebind. Required for stale-mount detection. */
 	slotGeneration: number;
+	/**
+	 * Per-cell row-binding generation (from CellSlot.rowBindingGeneration).
+	 * Increments on each unbindHot() of this specific cell — more granular than slotGeneration
+	 * (which is shared by all cells in a row slot). Optional for back-compat with call sites
+	 * that do not have access to the CellSlot directly.
+	 */
+	cellRowBindingGeneration?: number;
 	isEditing: boolean;
 	isLoading: boolean;
 	phase?: CellRendererPhase;
