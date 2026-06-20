@@ -119,7 +119,8 @@ export interface GridDomainMutationExecutorRegistry<TRowData = unknown> {
 function getRowOrderCapableModel<TRowData>(context: GridCommitContext<TRowData>): RowOrderCapableModel | null {
 	const rowModel = context.getRowModel();
 	if (!rowModel) return null;
-	if (typeof rowModel.getRowOrder !== 'function' || typeof rowModel.setRowOrder !== 'function') {
+	const candidate = rowModel as Partial<RowOrderCapableModel>;
+	if (typeof candidate.getRowOrder !== 'function' || typeof candidate.setRowOrder !== 'function') {
 		return null;
 	}
 	return rowModel as unknown as RowOrderCapableModel;
@@ -128,14 +129,15 @@ function getRowOrderCapableModel<TRowData>(context: GridCommitContext<TRowData>)
 function getTransactionalRowModel<TRowData>(context: GridCommitContext<TRowData>): TransactionalRowModel<TRowData> | null {
 	const rowModel = context.getRowModel();
 	if (!rowModel) return null;
+	const candidate = rowModel as Partial<TransactionalRowModel<TRowData>>;
 	if (
-		typeof rowModel.captureTransactionSnapshot !== 'function' ||
-		typeof rowModel.applyTransaction !== 'function' ||
-		typeof rowModel.restoreTransactionSnapshot !== 'function'
+		typeof candidate.captureTransactionSnapshot !== 'function' ||
+		typeof candidate.applyTransaction !== 'function' ||
+		typeof candidate.restoreTransactionSnapshot !== 'function'
 	) {
 		return null;
 	}
-	return rowModel as TransactionalRowModel<TRowData>;
+	return rowModel as unknown as TransactionalRowModel<TRowData>;
 }
 
 interface CellValueMutationPreview {
@@ -357,7 +359,15 @@ function previewCellValueMutation<TRowData>(context: GridCommitContext<TRowData>
 	const getStoredCellValue = context.getStoredCellValue;
 	const getColumnDef = context.getColumnDef;
 
-	if (!rowModel?.setCellValue || !getCellValue || !getRawCellValue || !getStoredCellValue || !getColumnDef) {
+	const writableRowModel = rowModel as Partial<import('../rowModel.js').CellValueWritableRowModel<TRowData>> | null;
+	if (
+		!writableRowModel ||
+		typeof writableRowModel.setCellValue !== 'function' ||
+		!getCellValue ||
+		!getRawCellValue ||
+		!getStoredCellValue ||
+		!getColumnDef
+	) {
 		return {
 			rowId: mutation.rowId,
 			colField: mutation.colField,
@@ -369,7 +379,8 @@ function previewCellValueMutation<TRowData>(context: GridCommitContext<TRowData>
 		};
 	}
 
-	const row = rowModel.getRawRowById?.(mutation.rowId);
+	const activeRowModel = rowModel!;
+	const row = activeRowModel.getRawRowById?.(mutation.rowId);
 	if (!row) {
 		return {
 			rowId: mutation.rowId,

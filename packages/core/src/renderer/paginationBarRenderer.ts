@@ -1,5 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
+import type { DataRowCountModel, PageWindowCapableRowModel, ServerControllableRowModel } from '../rowModel.js';
 
 /**
  * Pagination bar — chrome docked at the bottom of the grid.
@@ -40,22 +41,34 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		this.bar = null;
 	}
 
-	private getPageWindowCapableRowModel(): {
-		getPageWindow(): { page: number; pageSize: number; totalRows: number; pageCount: number } | null;
-	} | null {
+	private getPageWindowCapableRowModel(): PageWindowCapableRowModel | null {
 		const rowModel = this.engine.getRowModel();
-		if (!rowModel || typeof rowModel.getPageWindow !== 'function') {
+		if (!rowModel) {
 			return null;
 		}
-		return rowModel as { getPageWindow(): { page: number; pageSize: number; totalRows: number; pageCount: number } | null };
+		const candidate = rowModel as unknown as Partial<PageWindowCapableRowModel>;
+		if (typeof candidate.getPageWindow !== 'function') {
+			return null;
+		}
+		return rowModel as unknown as PageWindowCapableRowModel;
 	}
 
-	private getPageNavigationCapableRowModel(): { goToPage(page: number): void } | null {
+	private getPageNavigationCapableRowModel(): ServerControllableRowModel<TRowData> | null {
 		const rowModel = this.engine.getRowModel();
-		if (!rowModel || typeof rowModel.goToPage !== 'function') {
+		if (!rowModel) {
 			return null;
 		}
-		return rowModel as { goToPage(page: number): void };
+		const candidate = rowModel as unknown as Partial<ServerControllableRowModel<TRowData>>;
+		if (typeof candidate.goToPage !== 'function') {
+			return null;
+		}
+		return rowModel as unknown as ServerControllableRowModel<TRowData>;
+	}
+
+	private getDataRowCount(rowModel: ReturnType<GridEngine<TRowData>['getRowModel']>): number {
+		if (!rowModel) return 0;
+		const candidate = rowModel as unknown as Partial<DataRowCountModel>;
+		return typeof candidate.getDataRowCount === 'function' ? candidate.getDataRowCount() : rowModel.getVisualRowCount();
 	}
 
 	private getModel(): { page: number; pageSize: number; totalRows: number; pageCount: number } {
@@ -74,7 +87,7 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		if (pageWindow) {
 			return { page: pageWindow.page, pageSize: pageWindow.pageSize, totalRows: pageWindow.totalRows, pageCount: pageWindow.pageCount };
 		}
-		const totalRows = rowModel?.getVisualRowCount?.() ?? rowModel?.getDataRowCount?.() ?? 0;
+		const totalRows = this.getDataRowCount(rowModel);
 		const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
 		const page = Math.min(Math.max(0, state.pagination?.page ?? 0), pageCount - 1);
 		return { page, pageSize, totalRows, pageCount };

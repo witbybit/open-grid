@@ -131,10 +131,14 @@ export class RowRenderer<TRowData = unknown> {
 	private readonly _deltaScratch = createEmptyViewportDelta();
 	private getVisibleBlockLoadCapableRowModel(): { loadVisibleBlocks(startRow: number, endRow: number): void } | null {
 		const rowModel = this.engine.getRowModel();
-		if (!rowModel || typeof rowModel.loadVisibleBlocks !== 'function') {
+		if (!rowModel) {
 			return null;
 		}
-		return rowModel as { loadVisibleBlocks(startRow: number, endRow: number): void };
+		const candidate = rowModel as unknown as { loadVisibleBlocks?: (startRow: number, endRow: number) => void };
+		if (typeof candidate.loadVisibleBlocks !== 'function') {
+			return null;
+		}
+		return rowModel as unknown as { loadVisibleBlocks(startRow: number, endRow: number): void };
 	}
 
 	// Pre-allocated scratch object for cell styleSlot callbacks — mutated in place before each call

@@ -15,7 +15,7 @@ import type {
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { InternalGridState, Listener } from '../state/GridState.js';
-import type { RowModel, VisualRowModel } from '../rowModel.js';
+import type { AllDataNodesCapableRowModel, RowModel, VisualRowModel } from '../rowModel.js';
 import type { RowNode } from '../rowNode.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
@@ -82,10 +82,10 @@ export class GridEngine<TRowData = unknown> {
 
 	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
 		const rowModel = this.rowModel;
-		if (!rowModel || typeof rowModel.getAllDataNodes !== 'function') {
+		if (!rowModel || typeof (rowModel as unknown as Partial<AllDataNodesCapableRowModel<TRowData>>).getAllDataNodes !== 'function') {
 			return [];
 		}
-		return rowModel.getAllDataNodes();
+		return (rowModel as unknown as AllDataNodesCapableRowModel<TRowData>).getAllDataNodes();
 	}
 
 	private rowModel: RowModel<TRowData> | null = null;

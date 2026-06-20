@@ -1,7 +1,16 @@
 import { type ColumnDef, setValueByPath } from './columnDef.js';
 import { GridEventName } from './api/GridEvents.js';
 import type { ServerRowModelRuntime } from './engine/runtimePorts.js';
-import type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
+import type {
+	CellValueWritableRowModel,
+	DataRowCountModel,
+	RowModel,
+	RowRefreshReason,
+	RowModelRefreshResult,
+	SelectableDataRowModel,
+	ServerControllableRowModel,
+	VisibleBlockLoadCapableRowModel,
+} from './rowModel.js';
 import type { RowSelectionScope } from './api/GridApi.js';
 import { RowNode } from './rowNode.js';
 import { toDataVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
@@ -37,7 +46,15 @@ export interface ServerRowModelOptions<TData = unknown> {
 	pagination?: { pageSize: number; initialPage?: number };
 }
 
-export class ServerRowModelController<TData = unknown> implements RowModel<TData> {
+export class ServerRowModelController<TData = unknown>
+	implements
+		RowModel<TData>,
+		DataRowCountModel,
+		SelectableDataRowModel,
+		ServerControllableRowModel<TData>,
+		CellValueWritableRowModel<TData>,
+		VisibleBlockLoadCapableRowModel
+{
 	private readonly runtime: ServerRowModelRuntime<TData>;
 	private datasource: IGridDatasource<TData>;
 	private blockSize: number;

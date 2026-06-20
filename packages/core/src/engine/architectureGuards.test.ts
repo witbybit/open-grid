@@ -366,7 +366,7 @@ describe('Architecture guardrails', () => {
 	it('row-transaction executor narrows to TransactionalRowModel instead of optional row-model hooks', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts'), 'utf-8');
 		expect(content).toContain('function getTransactionalRowModel<TRowData>(');
-		expect(content).toContain('return rowModel as TransactionalRowModel<TRowData>;');
+		expect(content).toContain('return rowModel as unknown as TransactionalRowModel<TRowData>;');
 		expect(content).not.toContain('rowModel!.captureTransactionSnapshot!(mutation)');
 		expect(content).not.toContain('rowModel!.applyTransaction!(mutation.transaction)');
 		expect(content).not.toContain('context.getRowModel()!.restoreTransactionSnapshot!(preparedRestoreSnapshot)');
@@ -1379,6 +1379,27 @@ describe('Architecture guardrails', () => {
 	it('RowModel extends VisualRowModel (Plan 099)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(content).toContain('RowModel<TRowData = unknown> extends VisualRowModel<TRowData>');
+	});
+
+	it('RowModel is the slim shared contract; optional mutation/paging hooks live in named capabilities', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		const rowModelSection = content.slice(content.indexOf('export interface RowModel<TRowData = unknown>'));
+		expect(content).toContain('export interface RowExpansionCapableModel<TRowData = unknown>');
+		expect(content).toContain('export interface SelectableDataRowModel');
+		expect(content).toContain('export interface PageWindowCapableRowModel');
+		expect(content).toContain('export interface AllDataNodesCapableRowModel<TRowData = unknown>');
+		expect(content).toContain('export interface VisibleBlockLoadCapableRowModel');
+		expect(rowModelSection).not.toContain('getSelectableDataRowIds?');
+		expect(rowModelSection).not.toContain('getPageWindow?');
+		expect(rowModelSection).not.toContain('getAllDataNodes?');
+		expect(rowModelSection).not.toContain('setRows?');
+		expect(rowModelSection).not.toContain('updateRows?');
+		expect(rowModelSection).not.toContain('getRowOrder?');
+		expect(rowModelSection).not.toContain('setRowOrder?');
+		expect(rowModelSection).not.toContain('setDatasource?');
+		expect(rowModelSection).not.toContain('goToPage?');
+		expect(rowModelSection).not.toContain('setCellValue?');
+		expect(rowModelSection).not.toContain('loadVisibleBlocks?');
 	});
 
 	it('GridEngine exposes getVisualRowModel() for renderer-agnostic row access (Plan 099)', () => {

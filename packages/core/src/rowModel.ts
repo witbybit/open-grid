@@ -115,6 +115,31 @@ export interface RowExpansionCapableModel<TRowData = unknown> {
 	toggleDetailExpanded(rowId: string): RowModelRefreshResult | void;
 }
 
+export interface RowExpansionStateReadableModel {
+	isGroupExpanded(groupId: string): boolean;
+	isDetailExpanded(rowId: string): boolean;
+}
+
+export interface DataRowCountModel {
+	getDataRowCount(): number;
+}
+
+export interface SelectableDataRowModel {
+	getSelectableDataRowIds(scope?: RowSelectionScope): string[];
+}
+
+export interface PageWindowCapableRowModel {
+	getPageWindow(): PageWindow | null;
+}
+
+export interface AllDataNodesCapableRowModel<TRowData = unknown> {
+	getAllDataNodes(): RowNode<TRowData>[];
+}
+
+export interface GroupMetaCapableRowModel {
+	getGroupMeta(groupId: string): GroupRowMeta | null;
+}
+
 export interface RowOrderCapableModel {
 	getRowOrder(): string[];
 	setRowOrder(rowIds: string[]): void;
@@ -135,36 +160,13 @@ export interface ServerControllableRowModel<TRowData = unknown> {
 	goToPage(page: number): void;
 }
 
-/** Full row-model contract. Extends VisualRowModel with mutation, selection, and server APIs. */
+export interface VisibleBlockLoadCapableRowModel {
+	loadVisibleBlocks(startRow: number, endRow: number): void;
+}
+
+/** Shared row-model contract used across engine and rendering code. */
 export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
-	getDataRowCount?(): number;
-	getSelectableDataRowIds?(scope?: RowSelectionScope): string[];
-	toggleGroupExpanded?(groupId: string): RowModelRefreshResult | void;
-	toggleDetailExpanded?(rowId: string): RowModelRefreshResult | void;
-	isGroupExpanded?(groupId: string): boolean;
-	isDetailExpanded?(rowId: string): boolean;
-	expandAllGroups?(): RowModelRefreshResult | void;
-	collapseAllGroups?(): RowModelRefreshResult | void;
-	/** The active client page-window, or null when pagination is off. */
-	getPageWindow?(): PageWindow | null;
-	/** Returns all data nodes (unfiltered) for distinct-value computation. */
-	getAllDataNodes?(): RowNode<TRowData>[];
-	getGroupMeta?(groupId: string): GroupRowMeta | null;
-	setRows?(rows: TRowData[]): void;
-	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
-	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
-	captureTransactionSnapshot?(
-		mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>
-	): import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TRowData>;
-	restoreTransactionSnapshot?(snapshot: import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TRowData>): void;
-	getRowOrder?(): string[];
-	setRowOrder?(rowIds: string[]): void;
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
-	purgeCache?(): void;
-	setDatasource?(datasource: import('./serverRowModel.js').IGridDatasource<TRowData>, blockSize?: number): void;
-	goToPage?(page: number): void;
-	setCellValue?(rowId: string, colField: string, value: unknown, options?: { bypassValueSetter?: boolean }): boolean;
-	loadVisibleBlocks?(startRow: number, endRow: number): void;
 }
 
 export interface GroupRowMeta {
@@ -588,7 +590,19 @@ export function applyClientSortAndFilter<TData>(
 	return result;
 }
 
-export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
+export class ClientRowModelController<TData = unknown>
+	implements
+		RowModel<TData>,
+		DataRowCountModel,
+		SelectableDataRowModel,
+		RowExpansionCapableModel<TData>,
+		RowExpansionStateReadableModel,
+		PageWindowCapableRowModel,
+		AllDataNodesCapableRowModel<TData>,
+		GroupMetaCapableRowModel,
+		ClientMutableRowModel<TData>,
+		CellValueWritableRowModel<TData>
+{
 	private readonly runtime: ClientRowModelRuntime<TData>;
 	private dataStore: RowDataStore<TData>;
 	private visualRows: Array<VisualRow<TData>> = [];

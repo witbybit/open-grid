@@ -35,10 +35,14 @@ export class DataMutationController<TRowData = unknown> {
 
 	private getCellValueWritableRowModel(): CellValueWritableRowModel<TRowData> | null {
 		const rowModel = this.deps.getRowModel();
-		if (!rowModel || typeof rowModel.setCellValue !== 'function') {
+		if (!rowModel) {
 			return null;
 		}
-		return rowModel as CellValueWritableRowModel<TRowData>;
+		const candidate = rowModel as unknown as Partial<CellValueWritableRowModel<TRowData>>;
+		if (typeof candidate.setCellValue !== 'function') {
+			return null;
+		}
+		return rowModel as unknown as CellValueWritableRowModel<TRowData>;
 	}
 
 	applyCellValueChange(rowId: string, colField: string, value: unknown, options: CellValueChangeOptions = {}): CellValueChangeResult {

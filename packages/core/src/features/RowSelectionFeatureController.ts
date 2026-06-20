@@ -1,7 +1,7 @@
 import type { RowSelectionGesture, RowSelectionGestureSource, RowSelectionChangeResult, RowSelectionScope } from '../api/GridApi.js';
 import { GridEventName } from '../api/GridEvents.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
-import type { RowModel } from '../rowModel.js';
+import type { RowModel, SelectableDataRowModel } from '../rowModel.js';
 import { isDataCellSelectable } from '../visualRow.js';
 
 export class RowSelectionFeatureController<TRowData = unknown> {
@@ -14,8 +14,10 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 		const allIds: string[] = [];
 		const rowModel = this.getRowModel();
 		if (!rowModel) return allIds;
-		if (rowModel.getSelectableDataRowIds) {
-			return rowModel.getSelectableDataRowIds(scope ?? this.ctx.getState().rowSelection?.selectAllScope ?? 'page');
+		if (typeof (rowModel as unknown as Partial<SelectableDataRowModel>).getSelectableDataRowIds === 'function') {
+			return (rowModel as unknown as SelectableDataRowModel).getSelectableDataRowIds(
+				scope ?? this.ctx.getState().rowSelection?.selectAllScope ?? 'page'
+			);
 		}
 		const count = rowModel.getVisualRowCount();
 		for (let i = 0; i < count; i++) {

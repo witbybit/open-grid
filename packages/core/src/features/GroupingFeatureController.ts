@@ -27,15 +27,16 @@ export class GroupingFeatureController<TRowData = unknown> {
 	private getExpansionCapableRowModel(): RowExpansionCapableModel<TRowData> | null {
 		const rowModel = this.getRowModel();
 		if (!rowModel) return null;
+		const candidate = rowModel as unknown as Partial<RowExpansionCapableModel<TRowData>>;
 		if (
-			typeof rowModel.expandAllGroups !== 'function' ||
-			typeof rowModel.collapseAllGroups !== 'function' ||
-			typeof rowModel.toggleGroupExpanded !== 'function' ||
-			typeof rowModel.toggleDetailExpanded !== 'function'
+			typeof candidate.expandAllGroups !== 'function' ||
+			typeof candidate.collapseAllGroups !== 'function' ||
+			typeof candidate.toggleGroupExpanded !== 'function' ||
+			typeof candidate.toggleDetailExpanded !== 'function'
 		) {
 			return null;
 		}
-		return rowModel as RowExpansionCapableModel<TRowData>;
+		return rowModel as unknown as RowExpansionCapableModel<TRowData>;
 	}
 
 	public applyRowModelRefreshInvalidation(result: RowModelRefreshResult | void, reason: 'group expansion' | 'detail', groupId?: string): void {

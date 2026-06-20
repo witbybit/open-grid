@@ -1,5 +1,6 @@
 import type { InvalidationFrame } from './invalidationManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { SelectableDataRowModel } from '../rowModel.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
 import { computeGridLayoutPlan, getRightPinnedLaneScreenLeft, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
 import { reportRendererFault } from './rendererFaults.js';
@@ -15,6 +16,22 @@ export class HeaderRenderer<TRowData = unknown> {
 	private headerLayer: HTMLDivElement | null = null;
 	private headerLeftLayer: HTMLDivElement | null = null;
 	private headerRightLayer: HTMLDivElement | null = null;
+
+	private getSelectableDataRowIds(scope: import('../api/GridApi.js').RowSelectionScope): string[] {
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return [];
+		const candidate = rowModel as unknown as Partial<SelectableDataRowModel>;
+		if (typeof candidate.getSelectableDataRowIds === 'function') {
+			return candidate.getSelectableDataRowIds(scope);
+		}
+		const ids: string[] = [];
+		const vCount = rowModel.getVisualRowCount();
+		for (let i = 0; i < vCount; i++) {
+			const row = rowModel.getVisualRow(i);
+			if (row?.kind === 'data') ids.push(row.rowId);
+		}
+		return ids;
+	}
 
 	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
 	private lastHeaderScrollLeft = 0;
@@ -274,7 +291,7 @@ export class HeaderRenderer<TRowData = unknown> {
 							if ((e.target as HTMLInputElement).checked) {
 								this.engine.selectAllDataRows('headerCheckbox', scope);
 							} else {
-								const ids = this.engine.getRowModel()?.getSelectableDataRowIds?.(scope) ?? [];
+								const ids = this.getSelectableDataRowIds(scope);
 								if (ids.length > 0) this.engine.deselectRowIds(ids, 'headerCheckbox');
 								else this.engine.clearRowSelection('headerCheckbox');
 							}
@@ -282,20 +299,8 @@ export class HeaderRenderer<TRowData = unknown> {
 						if (textSpan) textSpan.textContent = '';
 						headerCell.insertBefore(checkbox, textSpan);
 					}
-					const rowModel = this.engine.getRowModel();
 					const scope = state.rowSelection?.selectAllScope ?? 'page';
-					const scopedIds =
-						rowModel?.getSelectableDataRowIds?.(scope) ??
-						(() => {
-							const ids: string[] = [];
-							if (!rowModel) return ids;
-							const vCount = rowModel.getVisualRowCount();
-							for (let i = 0; i < vCount; i++) {
-								const row = rowModel.getVisualRow(i);
-								if (row?.kind === 'data') ids.push(row.rowId);
-							}
-							return ids;
-						})();
+					const scopedIds = this.getSelectableDataRowIds(scope);
 					const totalDataRows = scopedIds.length;
 					const scopedSet = new Set(scopedIds);
 					const selectedCount = state.selectedRowIds.filter((rowId) => scopedSet.has(rowId)).length;

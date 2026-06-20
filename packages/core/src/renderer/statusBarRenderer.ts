@@ -1,5 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
+import type { DataRowCountModel, RowModel } from '../rowModel.js';
 
 /**
  * Status bar — read-only chrome docked at the bottom of the grid.
@@ -45,10 +46,16 @@ export class StatusBarRenderer<TRowData = unknown> {
 		return n.toLocaleString();
 	}
 
+	private getDataRowCount(rowModel: RowModel<TRowData> | null): number {
+		if (!rowModel) return 0;
+		const candidate = rowModel as unknown as Partial<DataRowCountModel>;
+		return typeof candidate.getDataRowCount === 'function' ? candidate.getDataRowCount() : rowModel.getVisualRowCount();
+	}
+
 	public render(): void {
 		if (!this.bar) return;
 		const rowModel = this.engine.getRowModel();
-		const totalRows = rowModel?.getDataRowCount?.() ?? rowModel?.getVisualRowCount?.() ?? 0;
+		const totalRows = this.getDataRowCount(rowModel);
 		const selectedCount = this.engine.stateManager.getState().selectedRowIds?.length ?? 0;
 
 		const panels: Array<{ label: string; value: string }> = [{ label: 'Rows', value: this.formatNumber(totalRows) }];

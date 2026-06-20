@@ -1,4 +1,11 @@
-import type { FilterModel, SortModel, RowModel, ClientMutableRowModel, ServerControllableRowModel } from './rowModel.js';
+import type {
+	FilterModel,
+	SortModel,
+	RowModel,
+	ClientMutableRowModel,
+	ServerControllableRowModel,
+	RowExpansionStateReadableModel,
+} from './rowModel.js';
 import type { GridDomainVersions } from './state/GridDomainVersions.js';
 import type { RowValidator } from './features/ValidationManager.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
@@ -489,11 +496,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public isGroupExpanded = (groupId: string): boolean => {
-		return this.getRowModel()?.isGroupExpanded?.(groupId) ?? false;
+		return this.getExpansionStateReadableRowModel()?.isGroupExpanded(groupId) ?? false;
 	};
 
 	public isDetailExpanded = (rowId: string): boolean => {
-		return this.getRowModel()?.isDetailExpanded?.(rowId) ?? false;
+		return this.getExpansionStateReadableRowModel()?.isDetailExpanded(rowId) ?? false;
 	};
 
 	public getVisualRow = (index: number): VisualRow<TRowData> | null => {
@@ -622,19 +629,31 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private getClientMutableRowModel(): ClientMutableRowModel<TRowData> | null {
 		const rowModel = this.getRowModel();
 		if (!rowModel) return null;
-		if (typeof rowModel.setRows !== 'function' || typeof rowModel.updateRows !== 'function' || typeof rowModel.getRowOrder !== 'function') {
+		const candidate = rowModel as unknown as Partial<ClientMutableRowModel<TRowData>>;
+		if (typeof candidate.setRows !== 'function' || typeof candidate.updateRows !== 'function' || typeof candidate.getRowOrder !== 'function') {
 			return null;
 		}
-		return rowModel as ClientMutableRowModel<TRowData>;
+		return rowModel as unknown as ClientMutableRowModel<TRowData>;
 	}
 
 	private getServerControllableRowModel(): ServerControllableRowModel<TRowData> | null {
 		const rowModel = this.getRowModel();
 		if (!rowModel) return null;
-		if (typeof rowModel.purgeCache !== 'function' || typeof rowModel.setDatasource !== 'function' || typeof rowModel.goToPage !== 'function') {
+		const candidate = rowModel as unknown as Partial<ServerControllableRowModel<TRowData>>;
+		if (typeof candidate.purgeCache !== 'function' || typeof candidate.setDatasource !== 'function' || typeof candidate.goToPage !== 'function') {
 			return null;
 		}
-		return rowModel as ServerControllableRowModel<TRowData>;
+		return rowModel as unknown as ServerControllableRowModel<TRowData>;
+	}
+
+	private getExpansionStateReadableRowModel(): RowExpansionStateReadableModel | null {
+		const rowModel = this.getRowModel();
+		if (!rowModel) return null;
+		const candidate = rowModel as unknown as Partial<RowExpansionStateReadableModel>;
+		if (typeof candidate.isGroupExpanded !== 'function' || typeof candidate.isDetailExpanded !== 'function') {
+			return null;
+		}
+		return rowModel as unknown as RowExpansionStateReadableModel;
 	}
 
 	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);

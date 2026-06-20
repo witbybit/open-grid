@@ -1,5 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
+import type { RowOrderCapableModel } from '../rowModel.js';
 
 interface DragState {
 	pointerId: number;
@@ -29,6 +30,16 @@ export class RowDragController<TRowData = unknown> {
 	private scrollViewport: HTMLElement | null = null;
 
 	constructor(private readonly engine: GridEngine<TRowData>) {}
+
+	private getRowOrderCapableRowModel(): RowOrderCapableModel | null {
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return null;
+		const candidate = rowModel as unknown as Partial<RowOrderCapableModel>;
+		if (typeof candidate.setRowOrder !== 'function' || typeof candidate.getRowOrder !== 'function') {
+			return null;
+		}
+		return rowModel as unknown as RowOrderCapableModel;
+	}
 
 	public mount(container: HTMLElement, scrollViewport: HTMLElement): void {
 		this.container = container;
@@ -242,8 +253,8 @@ export class RowDragController<TRowData = unknown> {
 		const mode = state.rowDragMode ?? 'managed';
 
 		if (mode === 'managed' && overVisualIndex !== null && overVisualIndex !== fromVi) {
-			const rowModel = this.engine.getRowModel();
-			if (rowModel?.setRowOrder && rowModel?.getRowOrder) {
+			const rowModel = this.getRowOrderCapableRowModel();
+			if (rowModel) {
 				// Snapshot BEFORE any state changes for FLIP
 				const before = this.snapshotRowPositions();
 
