@@ -73,7 +73,6 @@ export class RowRenderer<TRowData = unknown> {
 
 	public dirtyCellsAfterScroll = new Set<HTMLDivElement>();
 	public dirtyRowsAfterScroll = new Set<number>();
-	public pendingPortalReleasesAfterScroll = new Map<string, GridCellContentUnmount>();
 
 	public styleVersion = 0;
 	public selectionVersion = 0;
@@ -215,7 +214,6 @@ export class RowRenderer<TRowData = unknown> {
 		this.clearActiveRows();
 		this.dirtyCellsAfterScroll.clear();
 		this.dirtyRowsAfterScroll.clear();
-		this.pendingPortalReleasesAfterScroll.clear();
 		this.deferredFocusCell = null;
 		this.programmaticScrollCell = null;
 		this.currentWindow = null;
@@ -582,10 +580,6 @@ export class RowRenderer<TRowData = unknown> {
 	}
 
 	// ── Misc helpers ─────────────────────────────────────────────────────────────────
-
-	public cancelPendingPortalRelease(cellKey: string): void {
-		this.runtime.cancelPendingPortalRelease(cellKey);
-	}
 
 	private releaseRowPortal(slot: RowSlot<TRowData>): boolean {
 		// Delegate to FullWidthRowRenderer which owns the portal host lifecycle.

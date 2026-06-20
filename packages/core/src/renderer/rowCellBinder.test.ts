@@ -41,7 +41,6 @@ describe('bindCellDuringScroll', () => {
 			getCellPortalHost: () => null,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
-			cancelPendingPortalRelease: vi.fn(),
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),

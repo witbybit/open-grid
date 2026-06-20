@@ -37,7 +37,6 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	getCellPortalHost: (cell: HTMLDivElement) => HTMLDivElement | null;
 	markCellDirtyAfterScroll: (cell: HTMLDivElement) => void;
 	releaseCellPortal: (cell: HTMLDivElement, forceDeferred?: boolean, reason?: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated') => void;
-	cancelPendingPortalRelease: (cellKey: string) => void;
 	incrementStyleHookCallsDuringScroll: () => void;
 	incrementCellsBoundDuringScroll: () => void;
 	incrementCurrentScrollCellsWritten: () => void;
@@ -303,7 +302,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		}
 		const portalHost = deps.ensureCellPortalHost(cellSlot.element);
 		deps.cellRenderer.showPortalContent(cellSlot.element);
-		deps.cancelPendingPortalRelease(stableKey);
 		deps.portalMountManager.mountCell({
 			cellKey: stableKey,
 			container: portalHost,
@@ -493,7 +491,6 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	if (isPortalFrozen || isStaleFrozen) {
 		deps.cellRenderer.showPortalContent(cellSlot.element);
-		deps.cancelPendingPortalRelease(cellKey);
 		contentMode = 'portal';
 
 		if (isPortalFrozen && scrollMode === 'custom-live') {

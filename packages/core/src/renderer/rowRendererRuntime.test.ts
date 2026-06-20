@@ -34,7 +34,6 @@ function makeStateHost(overrides?: Partial<RowRendererRuntimeStateHost<unknown>>
 		dirtyRowsAfterScroll: new Set(),
 		dirtyBuckets: [[], [], [], []],
 		activeRows: new Map(),
-		pendingPortalReleasesAfterScroll: new Map(),
 		programmaticScrollCell: null,
 		deferredFocusCell: null,
 		runtimeState: makeIdleState(),
@@ -236,23 +235,3 @@ describe('RowRendererRuntimeBridge – applyFocus', () => {
 	});
 });
 
-// ─── cancelPendingPortalRelease ───────────────────────────────────────────────
-
-describe('RowRendererRuntimeBridge – cancelPendingPortalRelease', () => {
-	it('removes the key from pendingPortalReleasesAfterScroll', () => {
-		const { bridge, stateHost } = makeBridge();
-		stateHost.pendingPortalReleasesAfterScroll.set('key-abc', {});
-
-		bridge.cancelPendingPortalRelease('key-abc');
-
-		expect(stateHost.pendingPortalReleasesAfterScroll.has('key-abc')).toBe(false);
-	});
-
-	it('is a no-op when the key does not exist', () => {
-		const { bridge, stateHost } = makeBridge();
-
-		bridge.cancelPendingPortalRelease('nonexistent');
-
-		expect(stateHost.pendingPortalReleasesAfterScroll.size).toBe(0);
-	});
-});

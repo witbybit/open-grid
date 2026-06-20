@@ -49,7 +49,6 @@ export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	getCellPortalHost: (cell: HTMLDivElement) => HTMLDivElement | null;
 	markCellDirtyAfterScroll: (cell: HTMLDivElement) => void;
 	releaseCellPortal: (cell: HTMLDivElement, forceDeferred?: boolean, reason?: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated') => void;
-	cancelPendingPortalRelease: (cellKey: string) => void;
 	applyFocus: (cell: HTMLDivElement) => void;
 	isEditorInteractiveElement: (el: Element | null) => boolean;
 	isScrolling: boolean;
@@ -74,7 +73,6 @@ export interface RowRendererRuntimeStateHost<TRowData = unknown> {
 	dirtyRowsAfterScroll: Set<number>;
 	dirtyBuckets: [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]];
 	activeRows: Map<number, RowSlot<TRowData>>;
-	pendingPortalReleasesAfterScroll: Map<string, unknown>;
 	programmaticScrollCell: GridCellPointer | null;
 	deferredFocusCell: HTMLDivElement | null;
 	runtimeState: RenderRuntimeState;
@@ -121,7 +119,6 @@ function createRowCellBinderDeps<TRowData>(args: RowRendererRuntimeArgs<TRowData
 		getCellPortalHost: args.getCellPortalHost,
 		markCellDirtyAfterScroll: args.markCellDirtyAfterScroll,
 		releaseCellPortal: args.releaseCellPortal,
-		cancelPendingPortalRelease: args.cancelPendingPortalRelease,
 		incrementStyleHookCallsDuringScroll: () => {
 			if (args.renderStats) args.renderStats.styleHookCallsDuringScroll++;
 		},
@@ -268,10 +265,6 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 		}
 	}
 
-	public cancelPendingPortalRelease(cellKey: string): void {
-		this.deps.stateHost.pendingPortalReleasesAfterScroll.delete(cellKey);
-	}
-
 	public applyFocus(cell: HTMLDivElement): void {
 		if (this.deps.stateHost.runtimeState.isScrolling()) {
 			this.deps.stateHost.deferredFocusCell = cell;
@@ -306,7 +299,6 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 			getCellPortalHost: (cell) => this.getCellPortalHost(cell),
 			markCellDirtyAfterScroll: (cell) => this.markCellDirtyAfterScroll(cell),
 			releaseCellPortal: (cell, forceDeferred, reason) => this.releaseCellPortal(cell, forceDeferred, reason),
-			cancelPendingPortalRelease: (cellKey) => this.cancelPendingPortalRelease(cellKey),
 			applyFocus: (cell) => this.applyFocus(cell),
 			isEditorInteractiveElement: (el) => this.isEditorInteractiveElement(el),
 			isScrolling: this.deps.stateHost.runtimeState.isScrolling(),

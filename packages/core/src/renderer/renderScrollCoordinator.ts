@@ -198,7 +198,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		// FrameCoordinator has already transitioned to idle before calling this.
 		this.deps.viewportRenderer.setScrollingClass(false);
 		this.deps.rowRenderer.programmaticScrollCell = null;
-		this.flushPendingPortalReleasesAfterScroll();
 		this.state.needsPostScrollPortalFlush = this.state.needsPostScrollPortalFlush || this.deps.portalMountManager.getDeferredCount() > 0;
 		if (this.state.needsPostScrollPortalFlush) {
 			this.scheduleBudgetedPortalFlush();
@@ -220,14 +219,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.deps.overlayRenderer.overlayDirtyDuringScroll = false;
 			this.deps.overlayRenderer.repaintOverlay();
 		}
-	}
-
-	public flushPendingPortalReleasesAfterScroll(): void {
-		if (this.deps.rowRenderer.pendingPortalReleasesAfterScroll.size === 0) return;
-		const pending = Array.from(this.deps.rowRenderer.pendingPortalReleasesAfterScroll.values());
-		this.deps.rowRenderer.pendingPortalReleasesAfterScroll.clear();
-		this.deps.portalMountManager.releaseCells(pending, false);
-		this.state.needsPostScrollPortalFlush = true;
 	}
 
 	public scheduleBudgetedPortalFlush(): void {
