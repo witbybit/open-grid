@@ -95,7 +95,7 @@ export interface BindAllLoadingCellsRequest<TRowData = unknown> {
  * to new columns by `ensure*`). Rebuilding the map from lane arrays before the next full
  * paint keeps reconcileTopology's field lookups correct.
  */
-function syncCellsByColumnId<TRowData>(slot: RowSlot<TRowData>): void {
+export function syncCellsByColumnId<TRowData>(slot: RowSlot<TRowData>): void {
 	slot.cellsByColumnId.clear();
 	for (const cell of slot.leftCells) {
 		if (cell.colField) slot.cellsByColumnId.set(cell.colField, cell);
