@@ -1,6 +1,7 @@
 import { GridEventName } from '../api/GridEvents.js';
 import type { BatchCellValueUpdate, GridCellPointer, RowDataTransaction, RowNodeTransaction } from '../api/GridApi.js';
 import type { RowModel } from '../rowModel.js';
+import type { RowOrderCapableModel } from '../rowModel.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { InternalGridState, GridStateUpdater } from '../state/GridState.js';
@@ -115,18 +116,13 @@ export interface GridDomainMutationExecutorRegistry<TRowData = unknown> {
 	resolve<TMutation extends GridDomainMutation<TRowData>>(mutation: TMutation): GridDomainMutationExecutor<TRowData, TMutation> | null;
 }
 
-interface RowOrderCapableModel<TRowData = unknown> {
-	getRowOrder(): string[];
-	setRowOrder(rowIds: string[]): void;
-}
-
-function getRowOrderCapableModel<TRowData>(context: GridCommitContext<TRowData>): RowOrderCapableModel<TRowData> | null {
+function getRowOrderCapableModel<TRowData>(context: GridCommitContext<TRowData>): RowOrderCapableModel | null {
 	const rowModel = context.getRowModel();
 	if (!rowModel) return null;
 	if (typeof rowModel.getRowOrder !== 'function' || typeof rowModel.setRowOrder !== 'function') {
 		return null;
 	}
-	return rowModel as unknown as RowOrderCapableModel<TRowData>;
+	return rowModel as unknown as RowOrderCapableModel;
 }
 
 function getTransactionalRowModel<TRowData>(context: GridCommitContext<TRowData>): TransactionalRowModel<TRowData> | null {

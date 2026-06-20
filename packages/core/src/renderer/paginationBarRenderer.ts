@@ -40,6 +40,24 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		this.bar = null;
 	}
 
+	private getPageWindowCapableRowModel(): {
+		getPageWindow(): { page: number; pageSize: number; totalRows: number; pageCount: number } | null;
+	} | null {
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel || typeof rowModel.getPageWindow !== 'function') {
+			return null;
+		}
+		return rowModel as { getPageWindow(): { page: number; pageSize: number; totalRows: number; pageCount: number } | null };
+	}
+
+	private getPageNavigationCapableRowModel(): { goToPage(page: number): void } | null {
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel || typeof rowModel.goToPage !== 'function') {
+			return null;
+		}
+		return rowModel as { goToPage(page: number): void };
+	}
+
 	private getModel(): { page: number; pageSize: number; totalRows: number; pageCount: number } {
 		const state = this.engine.stateManager.getState();
 		const pageSize = Math.max(1, state.pagination?.pageSize ?? 100);
@@ -52,7 +70,7 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		}
 		// Client pagination: the row pipeline's page window is authoritative — its
 		// total is the post-filter/post-group visible count, the correct denominator.
-		const pageWindow = rowModel?.getPageWindow?.();
+		const pageWindow = this.getPageWindowCapableRowModel()?.getPageWindow();
 		if (pageWindow) {
 			return { page: pageWindow.page, pageSize: pageWindow.pageSize, totalRows: pageWindow.totalRows, pageCount: pageWindow.pageCount };
 		}
@@ -65,10 +83,10 @@ export class PaginationBarRenderer<TRowData = unknown> {
 	private goToPage(page: number): void {
 		const { pageSize, totalRows, pageCount } = this.getModel();
 		const next = Math.min(Math.max(0, page), pageCount - 1);
-		const rowModel = this.engine.getRowModel();
 		// Server row model owns its paging (loads blocks + dispatches paginationChanged).
-		if (rowModel?.goToPage) {
-			rowModel.goToPage(next);
+		const pagingRowModel = this.getPageNavigationCapableRowModel();
+		if (pagingRowModel) {
+			pagingRowModel.goToPage(next);
 			this.render();
 			return;
 		}

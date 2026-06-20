@@ -54,6 +54,15 @@ export interface ViewportDelta {
 	hasChanges: boolean;
 }
 
+function getStickyGroupMeta(
+	rowModel: Pick<import('../rowModel.js').VisualRowModel<unknown>, 'getStickyGroupMeta'> | null
+): Map<number, number> | null {
+	if (!rowModel || typeof rowModel.getStickyGroupMeta !== 'function') {
+		return null;
+	}
+	return rowModel.getStickyGroupMeta() ?? null;
+}
+
 /** Element-wise equality for sticky stack membership/state; pixel movement is handled by the sticky layer. */
 function sameStickyStack(a: StickyGroupStackItem[] | undefined, b: StickyGroupStackItem[] | undefined): boolean {
 	const an = a ? a.length : 0;
@@ -336,7 +345,7 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	stickyGroupStack.length = 0;
 
 	if (state.enableStickyGroupRows && rowCount > 0) {
-		const stickyMeta = rowModel?.getStickyGroupMeta?.();
+		const stickyMeta = getStickyGroupMeta(rowModel);
 		if (stickyMeta && stickyMeta.size > 0) {
 			// stickyMeta is built during the DFS flatten, so group indices — and therefore
 			// group tops — ascend in iteration order. That allows two cuts vs scanning every

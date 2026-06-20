@@ -2,7 +2,7 @@ import type { DataModel } from '../models/DataModel.js';
 import type { ColumnModel } from '../models/ColumnModel.js';
 import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import type { BatchCellValueUpdate, GridCellPointer } from '../api/GridApi.js';
-import type { RowModel } from '../rowModel.js';
+import type { RowModel, CellValueWritableRowModel } from '../rowModel.js';
 
 export type { BatchCellValueUpdate };
 
@@ -33,6 +33,14 @@ export interface DataMutationDeps<TRowData = unknown> {
 export class DataMutationController<TRowData = unknown> {
 	constructor(private readonly deps: DataMutationDeps<TRowData>) {}
 
+	private getCellValueWritableRowModel(): CellValueWritableRowModel<TRowData> | null {
+		const rowModel = this.deps.getRowModel();
+		if (!rowModel || typeof rowModel.setCellValue !== 'function') {
+			return null;
+		}
+		return rowModel as CellValueWritableRowModel<TRowData>;
+	}
+
 	applyCellValueChange(rowId: string, colField: string, value: unknown, options: CellValueChangeOptions = {}): CellValueChangeResult {
 		const notApplied = (oldRawValue: unknown, oldComputedValue: unknown): CellValueChangeResult => ({
 			applied: false,
@@ -51,8 +59,8 @@ export class DataMutationController<TRowData = unknown> {
 		const oldStoredValue = col?.valueGetter ? this.deps.data.getStoredCellValue(rowId, colField) : oldRawValue;
 		if (oldStoredValue === value) return notApplied(oldRawValue, oldComputedValue);
 
-		const rowModel = this.deps.getRowModel();
-		if (!rowModel?.setCellValue) return notApplied(oldRawValue, oldComputedValue);
+		const rowModel = this.getCellValueWritableRowModel();
+		if (!rowModel) return notApplied(oldRawValue, oldComputedValue);
 
 		const writeApplied = rowModel.setCellValue(rowId, colField, value, { bypassValueSetter: options.bypassValueSetter === true });
 		if (!writeApplied) return notApplied(oldRawValue, oldComputedValue);

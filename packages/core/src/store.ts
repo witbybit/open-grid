@@ -1,4 +1,4 @@
-import type { FilterModel, SortModel, RowModel } from './rowModel.js';
+import type { FilterModel, SortModel, RowModel, ClientMutableRowModel, ServerControllableRowModel } from './rowModel.js';
 import type { GridDomainVersions } from './state/GridDomainVersions.js';
 import type { RowValidator } from './features/ValidationManager.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
@@ -107,18 +107,6 @@ import { createGridPluginRuntime } from './plugins/createGridPluginRuntime.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './features/ColumnAutoSizeController.js';
 
 export { validateRowIds } from './ids.js';
-
-type ClientMutableRowModel<TRowData = unknown> = Pick<RowModel<TRowData>, 'setRows' | 'updateRows' | 'getRowOrder' | 'refresh'> & {
-	setRows(rows: TRowData[]): void;
-	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
-	getRowOrder(): string[];
-};
-
-type ServerControllableRowModel<TRowData = unknown> = Pick<RowModel<TRowData>, 'purgeCache' | 'setDatasource' | 'goToPage'> & {
-	purgeCache(): void;
-	setDatasource(datasource: IGridDatasource<TRowData>, blockSize?: number): void;
-	goToPage(page: number): void;
-};
 
 /**
  * Internal runtime composition root.

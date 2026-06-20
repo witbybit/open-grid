@@ -129,6 +129,13 @@ export class RowRenderer<TRowData = unknown> {
 	private readonly _rowIndicesScratch: number[] = [];
 	// Reusable scratch for diffRenderWindow() — avoids six array allocations per frame.
 	private readonly _deltaScratch = createEmptyViewportDelta();
+	private getVisibleBlockLoadCapableRowModel(): { loadVisibleBlocks(startRow: number, endRow: number): void } | null {
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel || typeof rowModel.loadVisibleBlocks !== 'function') {
+			return null;
+		}
+		return rowModel as { loadVisibleBlocks(startRow: number, endRow: number): void };
+	}
 
 	// Pre-allocated scratch object for cell styleSlot callbacks — mutated in place before each call
 	// to eliminate per-cell object literal allocation during decoration passes.
@@ -288,8 +295,8 @@ export class RowRenderer<TRowData = unknown> {
 		}
 
 		// Load visible blocks if server row model (server-specific, not in VisualRowModel)
-		const fullRowModel = this.engine.getRowModel();
-		if (fullRowModel && typeof fullRowModel.loadVisibleBlocks === 'function') {
+		const fullRowModel = this.getVisibleBlockLoadCapableRowModel();
+		if (fullRowModel) {
 			fullRowModel.loadVisibleBlocks(nextWindow.rowStart, nextWindow.rowEnd);
 		}
 		// Renderer-facing visual row access uses the stable VisualRowModel contract.

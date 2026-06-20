@@ -16,6 +16,7 @@ import type {
 import type { ColumnDef } from '../columnDef.js';
 import type { InternalGridState, Listener } from '../state/GridState.js';
 import type { RowModel, VisualRowModel } from '../rowModel.js';
+import type { RowNode } from '../rowNode.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
 import { EventBus } from '../events/EventBus.js';
@@ -78,6 +79,14 @@ export class GridEngine<TRowData = unknown> {
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 	private readonly stateReactions: GridStateReactionController<TRowData>;
+
+	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
+		const rowModel = this.rowModel;
+		if (!rowModel || typeof rowModel.getAllDataNodes !== 'function') {
+			return [];
+		}
+		return rowModel.getAllDataNodes();
+	}
 
 	private rowModel: RowModel<TRowData> | null = null;
 
@@ -648,7 +657,7 @@ export class GridEngine<TRowData = unknown> {
 		return this.clipboard.copyRange(minRow, maxRow, minCol, maxCol);
 	}
 	public getColumnDistinctValues(colField: string): (string | number | null)[] {
-		return computeDistinctValues(this.rowModel?.getAllDataNodes?.() ?? [], colField);
+		return computeDistinctValues(this.getDistinctValueSourceNodes(), colField);
 	}
 	public moveColumn(colField: string, toIndex: number): void {
 		this.columnFeature.moveColumn(colField, toIndex);

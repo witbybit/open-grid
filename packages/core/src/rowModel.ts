@@ -108,6 +108,33 @@ export interface RowModelRefreshResult {
 	groupId?: string;
 }
 
+export interface RowExpansionCapableModel<TRowData = unknown> {
+	expandAllGroups(): RowModelRefreshResult | void;
+	collapseAllGroups(): RowModelRefreshResult | void;
+	toggleGroupExpanded(groupId: string): RowModelRefreshResult | void;
+	toggleDetailExpanded(rowId: string): RowModelRefreshResult | void;
+}
+
+export interface RowOrderCapableModel {
+	getRowOrder(): string[];
+	setRowOrder(rowIds: string[]): void;
+}
+
+export interface CellValueWritableRowModel<TRowData = unknown> {
+	setCellValue(rowId: string, colField: string, value: unknown, options?: { bypassValueSetter?: boolean }): boolean;
+}
+
+export interface ClientMutableRowModel<TRowData = unknown> extends RowOrderCapableModel {
+	setRows(rows: TRowData[]): void;
+	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
+}
+
+export interface ServerControllableRowModel<TRowData = unknown> {
+	purgeCache(): void;
+	setDatasource(datasource: import('./serverRowModel.js').IGridDatasource<TRowData>, blockSize?: number): void;
+	goToPage(page: number): void;
+}
+
 /** Full row-model contract. Extends VisualRowModel with mutation, selection, and server APIs. */
 export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
 	getDataRowCount?(): number;
