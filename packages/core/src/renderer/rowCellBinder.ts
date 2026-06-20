@@ -298,7 +298,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			if (cellSlot.lastPortalKey) {
 				deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 			}
-			cellSlot.contentElement.textContent = '';
+			// Text content is left in place — CSS hides .og-cell-content when data-content-mode="portal".
+			// It will be cleared lazily when the cell transitions to a non-portal, non-text mode.
 		}
 		const portalHost = deps.ensureCellPortalHost(cellSlot.element);
 		deps.cellRenderer.showPortalContent(cellSlot.element);

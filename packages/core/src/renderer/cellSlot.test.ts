@@ -57,6 +57,46 @@ describe('CellSlot.cellInstanceId — Plan 118 physical identity', () => {
 	});
 });
 
+describe('CellSlot WS6 — non-blanking text→portal transition', () => {
+	it('does not clear textContent when transitioning to portal mode', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		// Establish text content
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'text', 42, '$42.00');
+		expect(slot.contentElement.textContent).toBe('$42.00');
+
+		// Transition to portal mode — text must survive so CSS can hide it rather than blank it
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'portal', 42, '', 'C4:ci1:price');
+		expect(slot.contentElement.textContent).toBe('$42.00');
+	});
+
+	it('clears textContent when transitioning to empty mode (not portal)', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'text', 42, '$42.00');
+
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'empty', undefined, '');
+		expect(slot.contentElement.textContent).toBe('');
+	});
+
+	it('retains correct text when transitioning portal → text with same value', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'text', 42, '$42.00');
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'portal', 42, '', 'C4:ci1:price');
+
+		// Back to text with same value — should still be correct (no DOM write needed)
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'text', 42, '$42.00');
+		expect(slot.contentElement.textContent).toBe('$42.00');
+	});
+
+	it('writes new text when transitioning portal → text with different value', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'text', 42, '$42.00');
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'portal', 42, '', 'C4:ci1:price');
+
+		slot.update(0, 'price', 0, 'r1', 0, -1, 100, 'og-cell', 'text', 99, '$99.00');
+		expect(slot.contentElement.textContent).toBe('$99.00');
+	});
+});
+
 describe('CellSlot transient style reset', () => {
 	it('clears stale visibility on hot rebind', () => {
 		const slot = new CellSlot(document.createElement('div'));

@@ -285,7 +285,10 @@ export class CellSlot<TRowData = unknown> {
 				} else {
 					cellSlotWriteStats.cellDomReadsAvoided++;
 				}
-			} else {
+			} else if (contentMode !== 'portal') {
+				// Portal mode leaves existing text in the DOM — CSS hides .og-cell-content via
+				// [data-content-mode="portal"] > .og-cell-content { display: none }.
+				// Text is cleared lazily when the cell transitions to empty/loading/pending.
 				if (this.lastFormattedValue !== '') {
 					this.lastFormattedValue = '';
 					this.contentElement.textContent = '';
