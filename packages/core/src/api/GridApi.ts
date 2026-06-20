@@ -161,6 +161,7 @@ export interface GridStateSnapshot<TRowData = unknown> {
 	readonly showGroupFooter?: boolean;
 	readonly enableStickyGroupRows?: boolean;
 	readonly masterDetailEnabled?: boolean;
+	readonly globalVersion: number;
 }
 
 export type GridSnapshotListener<TRowData = unknown> = (snapshot: GridStateSnapshot<TRowData>) => void;

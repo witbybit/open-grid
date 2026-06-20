@@ -73,5 +73,6 @@ export function createGridStateSnapshot<TRowData>(state: InternalGridState<TRowD
 		showGroupFooter: state.showGroupFooter,
 		enableStickyGroupRows: state.enableStickyGroupRows,
 		masterDetailEnabled: state.masterDetailEnabled,
+		globalVersion: state.globalVersion,
 	});
 }

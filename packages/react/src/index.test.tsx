@@ -601,10 +601,15 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		act(() => {
 			grid.api.setColumns(nativeColumns);
 		});
-		await screen.findByText('CRITICAL');
-		await screen.findByText('Auth');
-		expect(screen.queryByTestId('severity-renderer')).toBeNull();
-		expect(screen.queryByTestId('service-renderer')).toBeNull();
+		// waitFor lets the event loop advance (RAF fires → fullPaint → portals released → React re-renders).
+		// Using findByText('CRITICAL') would resolve immediately from the still-mounted portal (same text),
+		// so we poll for the portal's *absence* instead, which requires the async release cycle to complete.
+		await waitFor(() => {
+			expect(screen.queryByTestId('severity-renderer')).toBeNull();
+			expect(screen.queryByTestId('service-renderer')).toBeNull();
+		});
+		expect(screen.getByText('CRITICAL')).toBeTruthy();
+		expect(screen.getByText('Auth')).toBeTruthy();
 
 		// Restore custom renderer columns — portals must be re-mounted with correct values.
 		act(() => {
