@@ -35,9 +35,15 @@ export class RowSlot<TRowData = unknown> {
 	public pinRightContainerLeft = -1;
 	public pinRightContainerTransform = '';
 
-	// ── Lane-based cell slots ───────────────────────────────────────────────────────
-	// Three fixed-length arrays — one per pin lane. During normal scroll none of these
-	// change length, so zero cell DOM append/remove occurs.
+	// ── Stable cell ownership — keyed by column field ───────────────────────────────
+	// This map is the lifecycle owner for all cell slots in this row slot.
+	// Lane arrays below are derived placement views rebuilt each frame by reconcileTopology.
+	// A column moving between lanes relocates its CellSlot — it does not destroy and recreate it.
+	public readonly cellsByColumnId: Map<string, CellSlot<TRowData>> = new Map();
+
+	// ── Lane-based cell slots (derived from cellsByColumnId) ─────────────────────────
+	// Three ordered arrays — one per pin lane. Rebuilt each frame by reconcileTopology.
+	// During normal scroll none of these change length, so zero cell DOM append/remove occurs.
 	//
 	// Indices:
 	//   leftCells[i]   ↔  columns[i]                   (i in 0..pinLeftCount-1)
@@ -254,12 +260,17 @@ export class RowSlot<TRowData = unknown> {
 		this.pinLeftCount = 0;
 		this.pinRightStart = Number.MAX_SAFE_INTEGER;
 
-		// Unbind all cell slots (element will be removed by pool)
-		for (const cell of this.leftCells) cell.unbindCold();
+		// Unbind all cell slots. After a scroll frame the lane arrays may contain cells
+		// that aren't in cellsByColumnId (scroll drift), so union both sources.
+		const allCells = new Set<CellSlot<TRowData>>();
+		for (const cell of this.cellsByColumnId.values()) allCells.add(cell);
+		for (const cell of this.leftCells) allCells.add(cell);
+		for (const cell of this.centerCells) allCells.add(cell);
+		for (const cell of this.rightCells) allCells.add(cell);
+		for (const cell of allCells) cell.unbindCold();
+		this.cellsByColumnId.clear();
 		this.leftCells.length = 0;
-		for (const cell of this.centerCells) cell.unbindCold();
 		this.centerCells.length = 0;
-		for (const cell of this.rightCells) cell.unbindCold();
 		this.rightCells.length = 0;
 
 		this.element.className = '';

@@ -12,6 +12,7 @@ import { bindCellFull, type RowCellBinderDeps } from './rowCellBinder.js';
 import {
 	bindAllDataCells,
 	bindAllLoadingCells,
+	reconcileTopology,
 	type BindAllDataCellsRequest,
 	type BindAllLoadingCellsRequest,
 	type RowCellBindingLaneDeps,
@@ -362,11 +363,11 @@ export function bindFullWidthRow<TRowData>(args: RowRendererRuntimeArgs<TRowData
 		slot,
 		visualRow,
 		(s) => {
-			s.ensureLeftCells(0, null, args.initCell, args.releaseCellFn);
-			s.ensureCenterCells(0, args.initCell, args.releaseCellFn);
-			s.ensureRightCells(0, null, args.initCell, args.releaseCellFn);
-			args.ensurePinnedContainer(s, 'left', 0);
-			args.ensurePinnedContainer(s, 'right', 0);
+			// Clear all data cells via reconcileTopology with an empty topology.
+			// This properly removes cells from cellsByColumnId and calls releaseFn on each.
+			const pinLeftContainer = args.ensurePinnedContainer(s, 'left', 0);
+			const pinRightContainer = args.ensurePinnedContainer(s, 'right', 0);
+			reconcileTopology(s, 0, pinLeftContainer, 0, 0, 0, 0, pinRightContainer, [], args.initCell, args.releaseCellFn);
 		},
 		(s) => args.releaseRowPortal(s)
 	);
