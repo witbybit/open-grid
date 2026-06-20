@@ -6,6 +6,7 @@ import type { GridCellPointer } from '../api/GridApi.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import type { CellSlot, CellContentMode } from './cellSlot.js';
+import { TextRendererHandle, FallbackRendererHandle, PortalRendererHandle, LoadingRendererHandle, CustomRendererHandle, type CellPlacement } from './cellRendererHandle.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
@@ -124,6 +125,63 @@ function getScrollMountValue<TRowData>(
 		return '';
 	}
 	return node.data ? (node.data as Record<string, unknown>)[col.field] : (cellSlot?.lastFormattedValue ?? '');
+}
+
+/**
+ * WS2: Assign the appropriate CellRendererHandle based on the resolved content mode.
+ * Destroys the previous handle when the renderer kind changes or the portal key rotates.
+ * Text/fallback handles are updated in-place to avoid allocation when kind is stable.
+ */
+function assignRendererHandle<TRowData>(
+	cellSlot: CellSlot<TRowData>,
+	contentMode: CellContentMode,
+	formattedValue: string,
+	portalKey: string
+): void {
+	const existing = cellSlot.renderer;
+
+	if (contentMode === 'text') {
+		if (existing instanceof TextRendererHandle) {
+			existing.formattedValue = formattedValue;
+		} else {
+			if (existing !== null) existing.destroy();
+			cellSlot.renderer = new TextRendererHandle<TRowData>(formattedValue);
+		}
+	} else if (contentMode === 'fallback') {
+		if (existing instanceof FallbackRendererHandle) {
+			existing.formattedValue = formattedValue;
+		} else {
+			if (existing !== null) existing.destroy();
+			cellSlot.renderer = new FallbackRendererHandle<TRowData>(formattedValue);
+		}
+	} else if (contentMode === 'portal') {
+		if (existing instanceof PortalRendererHandle && existing.portalKey === portalKey) {
+			// Same portal key — renderer is still active; no structural change.
+		} else {
+			if (existing !== null) existing.destroy();
+			cellSlot.renderer = new PortalRendererHandle<TRowData>(portalKey);
+		}
+	} else if (contentMode === 'loading') {
+		if (existing instanceof LoadingRendererHandle) {
+			// Already loading — no change.
+		} else {
+			if (existing !== null) existing.destroy();
+			cellSlot.renderer = new LoadingRendererHandle<TRowData>();
+		}
+	} else if (contentMode === 'custom') {
+		if (existing instanceof CustomRendererHandle) {
+			// Custom content owner manages its own lifecycle.
+		} else {
+			if (existing !== null) existing.destroy();
+			cellSlot.renderer = new CustomRendererHandle<TRowData>();
+		}
+	} else {
+		// 'empty' | 'pending' — no active renderer
+		if (existing !== null) {
+			existing.destroy();
+			cellSlot.renderer = null;
+		}
+	}
 }
 
 export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellFullRequest<TRowData>): void {
@@ -371,6 +429,10 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		dragShift,
 		access.isSelected
 	);
+
+	// WS2: assign the renderer handle based on the resolved content mode.
+	// Destroy the previous handle when the renderer kind or portal key changes.
+	assignRendererHandle(cellSlot, contentMode, formattedValue, stableKey);
 
 	// Drag handle — injected when col.rowDrag is truthy. Stored on the element to avoid re-querying.
 	const el = cellSlot.element as HTMLDivElement & { _dragHandle?: HTMLDivElement };

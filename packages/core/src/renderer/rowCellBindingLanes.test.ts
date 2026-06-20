@@ -36,6 +36,48 @@ const initCell = (el: HTMLDivElement): void => {
 
 // ── cellInstanceId invariants ──────────────────────────────────────────────────
 
+// ── WS2: columnId set at construction time ────────────────────────────────────
+
+describe('reconcileTopology — WS2 columnId ownership', () => {
+	it('sets columnId on each cell at construction time', () => {
+		const slot = makeRowSlot();
+		reconcileTopology(slot, 0, null, 0, 3, 0, 3, null, [makeCol('a'), makeCol('b'), makeCol('c')], initCell, vi.fn());
+
+		expect(slot.cellsByColumnId.get('a')!.columnId).toBe('a');
+		expect(slot.cellsByColumnId.get('b')!.columnId).toBe('b');
+		expect(slot.cellsByColumnId.get('c')!.columnId).toBe('c');
+	});
+
+	it('columnId survives lane relocation — same cell, same id', () => {
+		const slot = makeRowSlot();
+		const cols = [makeCol('name'), makeCol('price'), makeCol('qty')];
+		reconcileTopology(slot, 0, null, 0, 3, 0, 3, null, cols, initCell, vi.fn());
+
+		const cell = slot.cellsByColumnId.get('name')!;
+		expect(cell.columnId).toBe('name');
+
+		// Pin name to left
+		const left = makeContainer();
+		slot.element.appendChild(left);
+		reconcileTopology(slot, 1, left, 1, 2, 0, 3, null, cols, initCell, vi.fn());
+
+		// Same cell — columnId unchanged
+		expect(cell.columnId).toBe('name');
+		expect(slot.cellsByColumnId.get('name')).toBe(cell);
+	});
+
+	it('columnId is not set for pre-existing cells (idempotent)', () => {
+		const slot = makeRowSlot();
+		reconcileTopology(slot, 0, null, 0, 2, 0, 2, null, [makeCol('x'), makeCol('y')], initCell, vi.fn());
+
+		// Second reconcile — cells already exist, columnId should still be correct
+		reconcileTopology(slot, 0, null, 0, 2, 0, 2, null, [makeCol('x'), makeCol('y')], initCell, vi.fn());
+
+		expect(slot.cellsByColumnId.get('x')!.columnId).toBe('x');
+		expect(slot.cellsByColumnId.get('y')!.columnId).toBe('y');
+	});
+});
+
 describe('CellSlot.cellInstanceId', () => {
 	it('is unique across distinct CellSlot constructions', () => {
 		const a = new CellSlot(document.createElement('div'));

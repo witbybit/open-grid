@@ -1,5 +1,7 @@
 export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending' | 'custom';
 
+import type { CellRendererHandle, CellPlacement } from './cellRendererHandle.js';
+
 // Monotonic counter — advances once per CellSlot construction.
 // A cell that is destroyed and recreated at the same position gets a strictly
 // larger id, so stale portal keys from the destroyed instance never match the
@@ -58,6 +60,23 @@ export class CellSlot<TRowData = unknown> {
 	 * Unlike slot.generation (which is per-slot), this is per-cell.
 	 */
 	public rowBindingGeneration = 0;
+	/**
+	 * Stable column association. Set once by reconcileTopology when the cell is first
+	 * created for a column. Never changes across row rebinds or lane relocations —
+	 * this cell is permanently associated with this column field for its lifetime.
+	 */
+	public columnId = '';
+	/**
+	 * Active renderer handle. Null when the cell is unbound or showing no content.
+	 * Set by the bind loop when content mode changes; destroy() is called on the
+	 * old handle before replacing it with a new one.
+	 */
+	public renderer: CellRendererHandle<TRowData> | null = null;
+	/**
+	 * Current lane placement. Set by the bind loop each frame and used by relocate-aware
+	 * code paths (e.g. DOM renderers that need to know their position context).
+	 */
+	public placement: CellPlacement | null = null;
 
 	/**
 	 * Authoritative identity for this bound slot.
@@ -366,6 +385,11 @@ export class CellSlot<TRowData = unknown> {
 	}
 
 	public unbindCold(): void {
+		if (this.renderer !== null) {
+			this.renderer.destroy();
+			this.renderer = null;
+		}
+		this.placement = null;
 		this.binding = null;
 		this.lastRawValue = undefined;
 		this.lastFormattedValue = undefined;

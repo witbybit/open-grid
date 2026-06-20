@@ -165,14 +165,15 @@ function reconcileTopology<TRowData>(
 	}
 
 	// Helper: get-or-create a cell for a column field.
-	// Note: colField is intentionally NOT set here — update() in the bind loop sets both
-	// cell.colField and element.dataset.colField in one guarded write.
+	// columnId is set here at construction time — it is the cell's permanent column identity.
+	// colField mirrors this and is also guarded-written by update() in the bind loop.
 	function ensureCell(field: string): CellSlot<TRowData> {
 		let cell = slot.cellsByColumnId.get(field);
 		if (!cell) {
 			const el = document.createElement('div');
 			initFn(el);
 			cell = CellSlot.fromElement<TRowData>(el);
+			cell.columnId = field;
 			slot.cellsByColumnId.set(field, cell);
 		}
 		return cell;
