@@ -1,7 +1,14 @@
 import { GridEventName } from '../api/GridEvents.js';
 import type { BatchCellValueUpdate, GridCellPointer, RowDataTransaction, RowNodeTransaction } from '../api/GridApi.js';
-import type { RowModel } from '../rowModel.js';
-import type { RowOrderCapableModel } from '../rowModel.js';
+import {
+	asCellValueWritableRowModel,
+	asRowOrderCapableModel,
+	asTransactionalRowModel,
+	type RowModel,
+	type RowOrderCapableModel,
+	type RowModelTransactionSnapshot,
+	type TransactionalRowModel,
+} from '../rowModel.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { InternalGridState, GridStateUpdater } from '../state/GridState.js';
@@ -30,21 +37,10 @@ export interface BatchCellMutation {
 	source?: CellValueChangeOptions['source'];
 }
 
-export interface RowModelTransactionSnapshot<TRowData = unknown> {
-	readonly modelType: string;
-	readonly snapshot: unknown;
-}
-
 export interface RowTransactionRejection {
 	rowId?: string;
 	reason: string;
 	index?: number;
-}
-
-export interface TransactionalRowModel<TRowData = unknown> {
-	captureTransactionSnapshot(mutation: RowTransactionMutation<TRowData>): RowModelTransactionSnapshot<TRowData>;
-	applyTransaction(mutation: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
-	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
 }
 
 export interface RowTransactionMutation<TRowData = unknown> {
@@ -117,27 +113,11 @@ export interface GridDomainMutationExecutorRegistry<TRowData = unknown> {
 }
 
 function getRowOrderCapableModel<TRowData>(context: GridCommitContext<TRowData>): RowOrderCapableModel | null {
-	const rowModel = context.getRowModel();
-	if (!rowModel) return null;
-	const candidate = rowModel as Partial<RowOrderCapableModel>;
-	if (typeof candidate.getRowOrder !== 'function' || typeof candidate.setRowOrder !== 'function') {
-		return null;
-	}
-	return rowModel as unknown as RowOrderCapableModel;
+	return asRowOrderCapableModel(context.getRowModel());
 }
 
 function getTransactionalRowModel<TRowData>(context: GridCommitContext<TRowData>): TransactionalRowModel<TRowData> | null {
-	const rowModel = context.getRowModel();
-	if (!rowModel) return null;
-	const candidate = rowModel as Partial<TransactionalRowModel<TRowData>>;
-	if (
-		typeof candidate.captureTransactionSnapshot !== 'function' ||
-		typeof candidate.applyTransaction !== 'function' ||
-		typeof candidate.restoreTransactionSnapshot !== 'function'
-	) {
-		return null;
-	}
-	return rowModel as unknown as TransactionalRowModel<TRowData>;
+	return asTransactionalRowModel(context.getRowModel());
 }
 
 interface CellValueMutationPreview {
@@ -359,15 +339,8 @@ function previewCellValueMutation<TRowData>(context: GridCommitContext<TRowData>
 	const getStoredCellValue = context.getStoredCellValue;
 	const getColumnDef = context.getColumnDef;
 
-	const writableRowModel = rowModel as Partial<import('../rowModel.js').CellValueWritableRowModel<TRowData>> | null;
-	if (
-		!writableRowModel ||
-		typeof writableRowModel.setCellValue !== 'function' ||
-		!getCellValue ||
-		!getRawCellValue ||
-		!getStoredCellValue ||
-		!getColumnDef
-	) {
+	const writableRowModel = asCellValueWritableRowModel(rowModel);
+	if (!writableRowModel || !getCellValue || !getRawCellValue || !getStoredCellValue || !getColumnDef) {
 		return {
 			rowId: mutation.rowId,
 			colField: mutation.colField,

@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientRowModelController } from '../rowModel.js';
-import { GridStore, type RowModel, type VisualRow, type RowModelRefreshResult } from '../store.js';
+import { GridStore, type VisualRow } from '../store.js';
+import { createMinimalRowModel } from '../testUtils/createMinimalRowModel.js';
 import { RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { RenderEngine } from './renderEngine.js';
 import { ServerRowModelController } from '../serverRowModel.js';
@@ -685,15 +686,9 @@ describe('RenderEngine', () => {
 			rowIndex: 0,
 			editable: false,
 		};
-		const rowModel: RowModel<{ id: string; name: string }> = {
-			getVisualRow: (index) => (index === 0 ? loadingRow : null),
-			getVisualRowCount: () => 1,
-			getVisualIndexById: (id) => (id === loadingRow.id ? 0 : -1),
-			getVisualIndexByRowId: () => -1,
-			getRowNodeById: () => null,
-			getRawRowById: () => null,
-			refresh: (): RowModelRefreshResult => ({ changed: false }),
-		};
+		const rowModel = createMinimalRowModel({
+			visualRows: [loadingRow],
+		});
 
 		const container = document.createElement('div');
 		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({

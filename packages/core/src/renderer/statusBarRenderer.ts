@@ -1,6 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
-import type { DataRowCountModel, RowModel } from '../rowModel.js';
+import { asDataRowCountModel, type RowModel } from '../rowModel.js';
 
 /**
  * Status bar — read-only chrome docked at the bottom of the grid.
@@ -48,8 +48,7 @@ export class StatusBarRenderer<TRowData = unknown> {
 
 	private getDataRowCount(rowModel: RowModel<TRowData> | null): number {
 		if (!rowModel) return 0;
-		const candidate = rowModel as unknown as Partial<DataRowCountModel>;
-		return typeof candidate.getDataRowCount === 'function' ? candidate.getDataRowCount() : rowModel.getVisualRowCount();
+		return asDataRowCountModel(rowModel)?.getDataRowCount() ?? rowModel.getVisualRowCount();
 	}
 
 	public render(): void {

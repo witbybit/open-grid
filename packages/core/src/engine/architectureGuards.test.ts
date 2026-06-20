@@ -364,19 +364,22 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('row-transaction executor narrows to TransactionalRowModel instead of optional row-model hooks', () => {
-		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts'), 'utf-8');
-		expect(content).toContain('function getTransactionalRowModel<TRowData>(');
-		expect(content).toContain('return rowModel as unknown as TransactionalRowModel<TRowData>;');
-		expect(content).not.toContain('rowModel!.captureTransactionSnapshot!(mutation)');
-		expect(content).not.toContain('rowModel!.applyTransaction!(mutation.transaction)');
-		expect(content).not.toContain('context.getRowModel()!.restoreTransactionSnapshot!(preparedRestoreSnapshot)');
+		const mutationContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts'), 'utf-8');
+		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(rowModelContent).toContain('export interface TransactionalRowModel<TRowData = unknown>');
+		expect(rowModelContent).toContain('export function asTransactionalRowModel<TRowData = unknown>(');
+		expect(mutationContent).toContain('return asTransactionalRowModel(context.getRowModel());');
+		expect(mutationContent).not.toContain('rowModel!.captureTransactionSnapshot!(mutation)');
+		expect(mutationContent).not.toContain('rowModel!.applyTransaction!(mutation.transaction)');
+		expect(mutationContent).not.toContain('context.getRowModel()!.restoreTransactionSnapshot!(preparedRestoreSnapshot)');
 	});
 
 	it('row-order executor narrows to an explicit row-order capability instead of optional row-model hooks', () => {
 		const mutationContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(rowModelContent).toContain('export interface RowOrderCapableModel');
-		expect(mutationContent).toContain('function getRowOrderCapableModel<TRowData>(');
+		expect(rowModelContent).toContain('export function asRowOrderCapableModel(');
+		expect(mutationContent).toContain('return asRowOrderCapableModel(context.getRowModel());');
 		expect(mutationContent).toContain('getRowOrderCapableModel(commitContext)!.setRowOrder(nextOrder);');
 		expect(mutationContent).toContain('getRowOrderCapableModel(commitContext)!.setRowOrder(currentOrder);');
 		expect(mutationContent).not.toContain('commitContext.getRowModel()?.setRowOrder?.(nextOrder)');
@@ -405,8 +408,14 @@ describe('Architecture guardrails', () => {
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(rowModelContent).toContain('export interface ClientMutableRowModel<TRowData = unknown> extends RowOrderCapableModel');
 		expect(rowModelContent).toContain('export interface ServerControllableRowModel<TRowData = unknown>');
+		expect(rowModelContent).toContain('export function asClientMutableRowModel<TRowData = unknown>(');
+		expect(rowModelContent).toContain('export function asServerControllableRowModel<TRowData = unknown>(');
+		expect(rowModelContent).toContain('export function asRowExpansionStateReadableModel(');
 		expect(storeContent).toContain('private getClientMutableRowModel(): ClientMutableRowModel<TRowData> | null');
 		expect(storeContent).toContain('private getServerControllableRowModel(): ServerControllableRowModel<TRowData> | null');
+		expect(storeContent).toContain('return asClientMutableRowModel(this.getRowModel());');
+		expect(storeContent).toContain('return asServerControllableRowModel(this.getRowModel());');
+		expect(storeContent).toContain('return asRowExpansionStateReadableModel(this.getRowModel());');
 		expect(storeContent).not.toContain('this.getRowModel()?.setRows?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.updateRows?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.purgeCache?.(');
@@ -415,17 +424,22 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('GridEngine distinct-value lookup narrows to a data-node source instead of optional row-model hooks', () => {
-		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
-		expect(content).toContain('private getDistinctValueSourceNodes(): RowNode<TRowData>[]');
-		expect(content).toContain('return computeDistinctValues(this.getDistinctValueSourceNodes(), colField);');
-		expect(content).not.toContain('this.rowModel?.getAllDataNodes?.()');
+		const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(rowModelContent).toContain('export interface AllDataNodesCapableRowModel<TRowData = unknown>');
+		expect(rowModelContent).toContain('export function asAllDataNodesCapableRowModel<TRowData = unknown>(');
+		expect(engineContent).toContain('private getDistinctValueSourceNodes(): RowNode<TRowData>[]');
+		expect(engineContent).toContain('return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];');
+		expect(engineContent).not.toContain('this.rowModel?.getAllDataNodes?.()');
 	});
 
 	it('GroupingFeatureController narrows expansion hooks instead of calling optional row-model methods directly', () => {
 		const featureContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GroupingFeatureController.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(rowModelContent).toContain('export interface RowExpansionCapableModel<TRowData = unknown>');
+		expect(rowModelContent).toContain('export function asRowExpansionCapableModel<TRowData = unknown>(');
 		expect(featureContent).toContain('private getExpansionCapableRowModel(): RowExpansionCapableModel<TRowData> | null');
+		expect(featureContent).toContain('return asRowExpansionCapableModel(this.getRowModel());');
 		expect(featureContent).not.toContain('this.getRowModel()?.expandAllGroups?.()');
 		expect(featureContent).not.toContain('this.getRowModel()?.collapseAllGroups?.()');
 		expect(featureContent).not.toContain('this.getRowModel()?.toggleGroupExpanded?.(groupId)');
@@ -434,8 +448,12 @@ describe('Architecture guardrails', () => {
 
 	it('PaginationBarRenderer narrows paging hooks instead of optional row-model methods directly', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'paginationBarRenderer.ts'), 'utf-8');
-		expect(content).toContain('private getPageWindowCapableRowModel()');
-		expect(content).toContain('private getPageNavigationCapableRowModel()');
+		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(rowModelContent).toContain('export function asPageWindowCapableRowModel(');
+		expect(rowModelContent).toContain('export function asServerControllableRowModel<TRowData = unknown>(');
+		expect(rowModelContent).toContain('export function asDataRowCountModel(');
+		expect(content).toContain('return asPageWindowCapableRowModel(this.engine.getRowModel());');
+		expect(content).toContain('return asServerControllableRowModel(this.engine.getRowModel());');
 		expect(content).not.toContain('rowModel?.getPageWindow?.()');
 		expect(content).not.toContain('rowModel?.goToPage');
 	});
@@ -444,15 +462,18 @@ describe('Architecture guardrails', () => {
 		const featureContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'DataMutationController.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(rowModelContent).toContain('export interface CellValueWritableRowModel<TRowData = unknown>');
+		expect(rowModelContent).toContain('export function asCellValueWritableRowModel<TRowData = unknown>(');
 		expect(featureContent).toContain('private getCellValueWritableRowModel(): CellValueWritableRowModel<TRowData> | null');
+		expect(featureContent).toContain('return asCellValueWritableRowModel(this.deps.getRowModel());');
 		expect(featureContent).not.toContain('if (!rowModel?.setCellValue)');
 	});
 
 	it('RowRenderer narrows visible-block loading instead of optional row-model hooks', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderer.ts'), 'utf-8');
-		expect(content).toContain(
-			'private getVisibleBlockLoadCapableRowModel(): { loadVisibleBlocks(startRow: number, endRow: number): void } | null'
-		);
+		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		expect(rowModelContent).toContain('export interface VisibleBlockLoadCapableRowModel');
+		expect(rowModelContent).toContain('export function asVisibleBlockLoadCapableRowModel(');
+		expect(content).toContain('return asVisibleBlockLoadCapableRowModel(this.engine.getRowModel());');
 		expect(content).not.toContain("typeof fullRowModel.loadVisibleBlocks === 'function'");
 	});
 
@@ -1411,8 +1432,11 @@ describe('Architecture guardrails', () => {
 	it('renderer core paths use getVisualRowModel(), not getRowModel() (Plan 099)', () => {
 		// These are the pure visual rendering paths that must not touch mutation APIs.
 		const renderWindowContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderWindow.ts'), 'utf-8');
+		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(renderWindowContent).toContain('getVisualRowModel()');
 		expect(renderWindowContent).not.toContain('engine.getRowModel()');
+		expect(rowModelContent).toContain('export interface StickyGroupMetaCapableVisualRowModel');
+		expect(rowModelContent).toContain('export function asStickyGroupMetaCapableVisualRowModel(');
 		expect(renderWindowContent).toContain('function getStickyGroupMeta(');
 		expect(renderWindowContent).not.toContain('rowModel?.getStickyGroupMeta?.()');
 

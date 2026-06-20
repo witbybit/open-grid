@@ -17,6 +17,7 @@ import { RowSlotPool } from './rowSlotPool.js';
 import { StableSlotAssigner } from './stableSlotAssigner.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
+import { asVisibleBlockLoadCapableRowModel } from '../rowModel.js';
 import { compileStyleRules, evaluateDetailRowStyleRules, evaluateGroupRowStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
 import { PinnedContainerManager } from './pinnedContainerManager.js';
 
@@ -129,16 +130,8 @@ export class RowRenderer<TRowData = unknown> {
 	private readonly _rowIndicesScratch: number[] = [];
 	// Reusable scratch for diffRenderWindow() — avoids six array allocations per frame.
 	private readonly _deltaScratch = createEmptyViewportDelta();
-	private getVisibleBlockLoadCapableRowModel(): { loadVisibleBlocks(startRow: number, endRow: number): void } | null {
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) {
-			return null;
-		}
-		const candidate = rowModel as unknown as { loadVisibleBlocks?: (startRow: number, endRow: number) => void };
-		if (typeof candidate.loadVisibleBlocks !== 'function') {
-			return null;
-		}
-		return rowModel as unknown as { loadVisibleBlocks(startRow: number, endRow: number): void };
+	private getVisibleBlockLoadCapableRowModel() {
+		return asVisibleBlockLoadCapableRowModel(this.engine.getRowModel());
 	}
 
 	// Pre-allocated scratch object for cell styleSlot callbacks — mutated in place before each call

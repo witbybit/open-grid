@@ -2,7 +2,7 @@ import type { DataModel } from '../models/DataModel.js';
 import type { ColumnModel } from '../models/ColumnModel.js';
 import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import type { BatchCellValueUpdate, GridCellPointer } from '../api/GridApi.js';
-import type { RowModel, CellValueWritableRowModel } from '../rowModel.js';
+import { asCellValueWritableRowModel, type RowModel, type CellValueWritableRowModel } from '../rowModel.js';
 
 export type { BatchCellValueUpdate };
 
@@ -34,15 +34,7 @@ export class DataMutationController<TRowData = unknown> {
 	constructor(private readonly deps: DataMutationDeps<TRowData>) {}
 
 	private getCellValueWritableRowModel(): CellValueWritableRowModel<TRowData> | null {
-		const rowModel = this.deps.getRowModel();
-		if (!rowModel) {
-			return null;
-		}
-		const candidate = rowModel as unknown as Partial<CellValueWritableRowModel<TRowData>>;
-		if (typeof candidate.setCellValue !== 'function') {
-			return null;
-		}
-		return rowModel as unknown as CellValueWritableRowModel<TRowData>;
+		return asCellValueWritableRowModel(this.deps.getRowModel());
 	}
 
 	applyCellValueChange(rowId: string, colField: string, value: unknown, options: CellValueChangeOptions = {}): CellValueChangeResult {

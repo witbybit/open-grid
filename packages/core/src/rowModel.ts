@@ -49,7 +49,7 @@ export interface ClientRowModelOptions<TData = unknown> {
 	columns: Array<ColumnDef<TData>>;
 }
 
-type ClientRowModelTransactionSnapshot<TData> = import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TData> & {
+type ClientRowModelTransactionSnapshot<TData> = RowModelTransactionSnapshot<TData> & {
 	readonly modelType: 'client';
 	readonly snapshot: {
 		readonly dataStore: RowDataStoreTransactionSnapshot<TData>;
@@ -96,6 +96,10 @@ export interface VisualRowModel<TRowData = unknown> {
 	getStickyGroupMeta?(): Map<number, number>;
 	/** Returns the group metadata for a row at the given visual index, or null. */
 	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
+}
+
+export interface StickyGroupMetaCapableVisualRowModel {
+	getStickyGroupMeta(): Map<number, number>;
 }
 
 export interface RowModelRefreshResult {
@@ -164,9 +168,90 @@ export interface VisibleBlockLoadCapableRowModel {
 	loadVisibleBlocks(startRow: number, endRow: number): void;
 }
 
+export interface RowModelTransactionSnapshot<TRowData = unknown> {
+	readonly modelType: string;
+	readonly snapshot: unknown;
+}
+
+export interface TransactionalRowModel<TRowData = unknown> {
+	captureTransactionSnapshot(
+		mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>
+	): RowModelTransactionSnapshot<TRowData>;
+	applyTransaction(mutation: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
+	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
+}
+
 /** Shared row-model contract used across engine and rendering code. */
 export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
+}
+
+function hasFunctions(value: unknown, names: readonly string[]): boolean {
+	if (!value || (typeof value !== 'object' && typeof value !== 'function')) return false;
+	const record = value as Record<string, unknown>;
+	return names.every((name) => typeof record[name] === 'function');
+}
+
+export function asRowExpansionCapableModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): RowExpansionCapableModel<TRowData> | null {
+	return hasFunctions(rowModel, ['expandAllGroups', 'collapseAllGroups', 'toggleGroupExpanded', 'toggleDetailExpanded'])
+		? (rowModel as unknown as RowExpansionCapableModel<TRowData>)
+		: null;
+}
+
+export function asRowExpansionStateReadableModel(rowModel: RowModel<unknown> | null): RowExpansionStateReadableModel | null {
+	return hasFunctions(rowModel, ['isGroupExpanded', 'isDetailExpanded']) ? (rowModel as unknown as RowExpansionStateReadableModel) : null;
+}
+
+export function asDataRowCountModel(rowModel: RowModel<unknown> | null): DataRowCountModel | null {
+	return hasFunctions(rowModel, ['getDataRowCount']) ? (rowModel as unknown as DataRowCountModel) : null;
+}
+
+export function asSelectableDataRowModel(rowModel: RowModel<unknown> | null): SelectableDataRowModel | null {
+	return hasFunctions(rowModel, ['getSelectableDataRowIds']) ? (rowModel as unknown as SelectableDataRowModel) : null;
+}
+
+export function asPageWindowCapableRowModel(rowModel: RowModel<unknown> | null): PageWindowCapableRowModel | null {
+	return hasFunctions(rowModel, ['getPageWindow']) ? (rowModel as unknown as PageWindowCapableRowModel) : null;
+}
+
+export function asAllDataNodesCapableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): AllDataNodesCapableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['getAllDataNodes']) ? (rowModel as unknown as AllDataNodesCapableRowModel<TRowData>) : null;
+}
+
+export function asGroupMetaCapableRowModel(rowModel: RowModel<unknown> | null): GroupMetaCapableRowModel | null {
+	return hasFunctions(rowModel, ['getGroupMeta']) ? (rowModel as unknown as GroupMetaCapableRowModel) : null;
+}
+
+export function asRowOrderCapableModel(rowModel: RowModel<unknown> | null): RowOrderCapableModel | null {
+	return hasFunctions(rowModel, ['getRowOrder', 'setRowOrder']) ? (rowModel as unknown as RowOrderCapableModel) : null;
+}
+
+export function asCellValueWritableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): CellValueWritableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['setCellValue']) ? (rowModel as unknown as CellValueWritableRowModel<TRowData>) : null;
+}
+
+export function asClientMutableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): ClientMutableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['setRows', 'updateRows', 'getRowOrder', 'setRowOrder'])
+		? (rowModel as unknown as ClientMutableRowModel<TRowData>)
+		: null;
+}
+
+export function asServerControllableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): ServerControllableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['purgeCache', 'setDatasource', 'goToPage']) ? (rowModel as unknown as ServerControllableRowModel<TRowData>) : null;
+}
+
+export function asVisibleBlockLoadCapableRowModel(rowModel: RowModel<unknown> | null): VisibleBlockLoadCapableRowModel | null {
+	return hasFunctions(rowModel, ['loadVisibleBlocks']) ? (rowModel as unknown as VisibleBlockLoadCapableRowModel) : null;
+}
+
+export function asTransactionalRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): TransactionalRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['captureTransactionSnapshot', 'applyTransaction', 'restoreTransactionSnapshot'])
+		? (rowModel as unknown as TransactionalRowModel<TRowData>)
+		: null;
+}
+
+export function asStickyGroupMetaCapableVisualRowModel(rowModel: VisualRowModel<unknown> | null): StickyGroupMetaCapableVisualRowModel | null {
+	return hasFunctions(rowModel, ['getStickyGroupMeta']) ? (rowModel as unknown as StickyGroupMetaCapableVisualRowModel) : null;
 }
 
 export interface GroupRowMeta {
@@ -1121,7 +1206,7 @@ export class ClientRowModelController<TData = unknown>
 
 	public captureTransactionSnapshot = (
 		_mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TData>
-	): import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TData> => {
+	): RowModelTransactionSnapshot<TData> => {
 		return {
 			modelType: 'client',
 			snapshot: {
@@ -1130,7 +1215,7 @@ export class ClientRowModelController<TData = unknown>
 		};
 	};
 
-	public restoreTransactionSnapshot = (snapshot: import('./engine/GridDomainMutation.js').RowModelTransactionSnapshot<TData>): void => {
+	public restoreTransactionSnapshot = (snapshot: RowModelTransactionSnapshot<TData>): void => {
 		if (snapshot.modelType !== 'client') {
 			throw new Error(`Open Grid: cannot restore ${snapshot.modelType} snapshot into client row model.`);
 		}

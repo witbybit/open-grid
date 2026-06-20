@@ -10,7 +10,7 @@ import type {
 } from './renderer/IGridRenderer.js';
 import type { GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
 import type { ColumnDef, InternalColumnDef } from './columnDef.js';
-import type { GroupMetaCapableRowModel } from './rowModel.js';
+import { asGroupMetaCapableRowModel } from './rowModel.js';
 import { resolveGridHostComposition } from './internal/apiInternalBridge.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
@@ -165,10 +165,7 @@ export function mountGridHost<TRowData>(
 			return internalApi.getCellAccess(rowId, colField);
 		},
 		getGroupVisibleDescendantRowIds(groupId: string) {
-			const rowModel = internalApi.getRowModel();
-			if (!rowModel) return [];
-			const candidate = rowModel as unknown as Partial<GroupMetaCapableRowModel>;
-			return typeof candidate.getGroupMeta === 'function' ? (candidate.getGroupMeta(groupId)?.visibleDescendantRowIds ?? []) : [];
+			return asGroupMetaCapableRowModel(internalApi.getRowModel())?.getGroupMeta(groupId)?.visibleDescendantRowIds ?? [];
 		},
 		isImperativeRendererColumn(column) {
 			return hasImperativeRendererCapability(column);

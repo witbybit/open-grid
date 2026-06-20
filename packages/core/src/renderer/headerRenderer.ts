@@ -1,6 +1,6 @@
 import type { InvalidationFrame } from './invalidationManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { SelectableDataRowModel } from '../rowModel.js';
+import { asSelectableDataRowModel } from '../rowModel.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
 import { computeGridLayoutPlan, getRightPinnedLaneScreenLeft, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
 import { reportRendererFault } from './rendererFaults.js';
@@ -20,10 +20,8 @@ export class HeaderRenderer<TRowData = unknown> {
 	private getSelectableDataRowIds(scope: import('../api/GridApi.js').RowSelectionScope): string[] {
 		const rowModel = this.engine.getRowModel();
 		if (!rowModel) return [];
-		const candidate = rowModel as unknown as Partial<SelectableDataRowModel>;
-		if (typeof candidate.getSelectableDataRowIds === 'function') {
-			return candidate.getSelectableDataRowIds(scope);
-		}
+		const selectableRowModel = asSelectableDataRowModel(rowModel);
+		if (selectableRowModel) return selectableRowModel.getSelectableDataRowIds(scope);
 		const ids: string[] = [];
 		const vCount = rowModel.getVisualRowCount();
 		for (let i = 0; i < vCount; i++) {

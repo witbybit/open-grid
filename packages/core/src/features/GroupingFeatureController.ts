@@ -2,7 +2,7 @@ import { GridEventName } from '../api/GridEvents.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { InvalidationManager } from '../renderer/invalidationManager.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
-import type { RowModel, RowExpansionCapableModel, RowModelRefreshResult } from '../rowModel.js';
+import { asRowExpansionCapableModel, type RowModel, type RowExpansionCapableModel, type RowModelRefreshResult } from '../rowModel.js';
 
 export interface GroupingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
@@ -25,18 +25,7 @@ export class GroupingFeatureController<TRowData = unknown> {
 	}
 
 	private getExpansionCapableRowModel(): RowExpansionCapableModel<TRowData> | null {
-		const rowModel = this.getRowModel();
-		if (!rowModel) return null;
-		const candidate = rowModel as unknown as Partial<RowExpansionCapableModel<TRowData>>;
-		if (
-			typeof candidate.expandAllGroups !== 'function' ||
-			typeof candidate.collapseAllGroups !== 'function' ||
-			typeof candidate.toggleGroupExpanded !== 'function' ||
-			typeof candidate.toggleDetailExpanded !== 'function'
-		) {
-			return null;
-		}
-		return rowModel as unknown as RowExpansionCapableModel<TRowData>;
+		return asRowExpansionCapableModel(this.getRowModel());
 	}
 
 	public applyRowModelRefreshInvalidation(result: RowModelRefreshResult | void, reason: 'group expansion' | 'detail', groupId?: string): void {

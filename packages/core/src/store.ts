@@ -6,6 +6,7 @@ import type {
 	ServerControllableRowModel,
 	RowExpansionStateReadableModel,
 } from './rowModel.js';
+import { asClientMutableRowModel, asRowExpansionStateReadableModel, asServerControllableRowModel } from './rowModel.js';
 import type { GridDomainVersions } from './state/GridDomainVersions.js';
 import type { RowValidator } from './features/ValidationManager.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
@@ -627,33 +628,15 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	private getClientMutableRowModel(): ClientMutableRowModel<TRowData> | null {
-		const rowModel = this.getRowModel();
-		if (!rowModel) return null;
-		const candidate = rowModel as unknown as Partial<ClientMutableRowModel<TRowData>>;
-		if (typeof candidate.setRows !== 'function' || typeof candidate.updateRows !== 'function' || typeof candidate.getRowOrder !== 'function') {
-			return null;
-		}
-		return rowModel as unknown as ClientMutableRowModel<TRowData>;
+		return asClientMutableRowModel(this.getRowModel());
 	}
 
 	private getServerControllableRowModel(): ServerControllableRowModel<TRowData> | null {
-		const rowModel = this.getRowModel();
-		if (!rowModel) return null;
-		const candidate = rowModel as unknown as Partial<ServerControllableRowModel<TRowData>>;
-		if (typeof candidate.purgeCache !== 'function' || typeof candidate.setDatasource !== 'function' || typeof candidate.goToPage !== 'function') {
-			return null;
-		}
-		return rowModel as unknown as ServerControllableRowModel<TRowData>;
+		return asServerControllableRowModel(this.getRowModel());
 	}
 
 	private getExpansionStateReadableRowModel(): RowExpansionStateReadableModel | null {
-		const rowModel = this.getRowModel();
-		if (!rowModel) return null;
-		const candidate = rowModel as unknown as Partial<RowExpansionStateReadableModel>;
-		if (typeof candidate.isGroupExpanded !== 'function' || typeof candidate.isDetailExpanded !== 'function') {
-			return null;
-		}
-		return rowModel as unknown as RowExpansionStateReadableModel;
+		return asRowExpansionStateReadableModel(this.getRowModel());
 	}
 
 	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);

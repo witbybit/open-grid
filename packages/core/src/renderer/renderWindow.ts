@@ -1,5 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 
+import { asStickyGroupMetaCapableVisualRowModel } from '../rowModel.js';
+
 export interface StickyGroupStackItem {
 	groupId: string;
 	visualIndex: number;
@@ -54,13 +56,8 @@ export interface ViewportDelta {
 	hasChanges: boolean;
 }
 
-function getStickyGroupMeta(
-	rowModel: Pick<import('../rowModel.js').VisualRowModel<unknown>, 'getStickyGroupMeta'> | null
-): Map<number, number> | null {
-	if (!rowModel || typeof rowModel.getStickyGroupMeta !== 'function') {
-		return null;
-	}
-	return rowModel.getStickyGroupMeta() ?? null;
+function getStickyGroupMeta(rowModel: import('../rowModel.js').VisualRowModel<unknown> | null): Map<number, number> | null {
+	return asStickyGroupMetaCapableVisualRowModel(rowModel)?.getStickyGroupMeta() ?? null;
 }
 
 /** Element-wise equality for sticky stack membership/state; pixel movement is handled by the sticky layer. */

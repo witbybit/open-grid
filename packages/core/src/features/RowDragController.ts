@@ -1,6 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
-import type { RowOrderCapableModel } from '../rowModel.js';
+import { asRowOrderCapableModel, type RowOrderCapableModel } from '../rowModel.js';
 
 interface DragState {
 	pointerId: number;
@@ -32,13 +32,7 @@ export class RowDragController<TRowData = unknown> {
 	constructor(private readonly engine: GridEngine<TRowData>) {}
 
 	private getRowOrderCapableRowModel(): RowOrderCapableModel | null {
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) return null;
-		const candidate = rowModel as unknown as Partial<RowOrderCapableModel>;
-		if (typeof candidate.setRowOrder !== 'function' || typeof candidate.getRowOrder !== 'function') {
-			return null;
-		}
-		return rowModel as unknown as RowOrderCapableModel;
+		return asRowOrderCapableModel(this.engine.getRowModel());
 	}
 
 	public mount(container: HTMLElement, scrollViewport: HTMLElement): void {

@@ -1,6 +1,12 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
-import type { DataRowCountModel, PageWindowCapableRowModel, ServerControllableRowModel } from '../rowModel.js';
+import {
+	asDataRowCountModel,
+	asPageWindowCapableRowModel,
+	asServerControllableRowModel,
+	type PageWindowCapableRowModel,
+	type ServerControllableRowModel,
+} from '../rowModel.js';
 
 /**
  * Pagination bar — chrome docked at the bottom of the grid.
@@ -42,33 +48,16 @@ export class PaginationBarRenderer<TRowData = unknown> {
 	}
 
 	private getPageWindowCapableRowModel(): PageWindowCapableRowModel | null {
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) {
-			return null;
-		}
-		const candidate = rowModel as unknown as Partial<PageWindowCapableRowModel>;
-		if (typeof candidate.getPageWindow !== 'function') {
-			return null;
-		}
-		return rowModel as unknown as PageWindowCapableRowModel;
+		return asPageWindowCapableRowModel(this.engine.getRowModel());
 	}
 
 	private getPageNavigationCapableRowModel(): ServerControllableRowModel<TRowData> | null {
-		const rowModel = this.engine.getRowModel();
-		if (!rowModel) {
-			return null;
-		}
-		const candidate = rowModel as unknown as Partial<ServerControllableRowModel<TRowData>>;
-		if (typeof candidate.goToPage !== 'function') {
-			return null;
-		}
-		return rowModel as unknown as ServerControllableRowModel<TRowData>;
+		return asServerControllableRowModel(this.engine.getRowModel());
 	}
 
 	private getDataRowCount(rowModel: ReturnType<GridEngine<TRowData>['getRowModel']>): number {
 		if (!rowModel) return 0;
-		const candidate = rowModel as unknown as Partial<DataRowCountModel>;
-		return typeof candidate.getDataRowCount === 'function' ? candidate.getDataRowCount() : rowModel.getVisualRowCount();
+		return asDataRowCountModel(rowModel)?.getDataRowCount() ?? rowModel.getVisualRowCount();
 	}
 
 	private getModel(): { page: number; pageSize: number; totalRows: number; pageCount: number } {
