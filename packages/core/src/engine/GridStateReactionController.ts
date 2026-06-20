@@ -1,4 +1,3 @@
-import { GridEventName } from '../api/GridEvents.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowModel } from '../rowModel.js';
 import type { StateManager } from '../state/StateManager.js';
@@ -7,7 +6,6 @@ import type { ColumnModel } from '../models/ColumnModel.js';
 import type { GeometryModel } from '../models/GeometryModel.js';
 import type { ViewportModel } from '../models/ViewportModel.js';
 import type { SelectionModel } from '../models/SelectionModel.js';
-import type { EventBus } from '../events/EventBus.js';
 import type { CellNotificationController } from './CellNotificationController.js';
 
 interface RangeBounds {
@@ -24,7 +22,6 @@ export interface GridStateReactionControllerDeps<TRowData = unknown> {
 	geometry: GeometryModel;
 	viewport: ViewportModel<TRowData>;
 	selection: SelectionModel;
-	eventBus: EventBus<TRowData>;
 	cellNotifications: CellNotificationController<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	getRowHeightsList: (rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number) => number[];
@@ -215,19 +212,6 @@ export class GridStateReactionController<TRowData = unknown> {
 
 		if (updatedSet.has('globalVersion')) {
 			this.deps.cellNotifications.notifyAllCellSubscribers();
-		}
-
-		// Derived selection events: these are computed from prev/curr state diff and are
-		// retained here as narrowly scoped derived-read notifications (not semantic mutation
-		// ownership). Domain version increments for selection are declared on the mutation.
-		if (updatedSet.has('selection') && prevState.selection.focus !== currState.selection.focus) {
-			this.deps.eventBus.dispatchEvent(GridEventName.focusChanged, { focus: currState.selection.focus, selection: currState.selection });
-		}
-		if (updatedSet.has('selection')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.selectionChanged, {
-				selection: currState.selection,
-				result: this.deps.selection.describeChange(prevState.selection, currState.selection, this.deps.getRowModel(), currState.columns),
-			});
 		}
 	};
 

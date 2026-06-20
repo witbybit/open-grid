@@ -363,6 +363,15 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("domainMutations: [{ kind: 'row-transaction', transaction }]");
 	});
 
+	it('row-transaction executor narrows to TransactionalRowModel instead of optional row-model hooks', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts'), 'utf-8');
+		expect(content).toContain('function getTransactionalRowModel<TRowData>(');
+		expect(content).toContain('return rowModel as TransactionalRowModel<TRowData>;');
+		expect(content).not.toContain('rowModel!.captureTransactionSnapshot!(mutation)');
+		expect(content).not.toContain('rowModel!.applyTransaction!(mutation.transaction)');
+		expect(content).not.toContain('context.getRowModel()!.restoreTransactionSnapshot!(preparedRestoreSnapshot)');
+	});
+
 	it('GridEngine cell mutations route through typed domain mutations', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 		expect(content).toContain("domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }]");
@@ -1737,14 +1746,23 @@ describe('Architecture guardrails', () => {
 
 	it('GridStateReactionController no longer owns selection invalidation or render requests (Plan 105)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridStateReactionController.ts'), 'utf-8');
-		expect(content).toContain('GridEventName.selectionChanged');
 		expect(content).not.toContain('invalidation: InvalidationManager');
 		expect(content).not.toContain('requestRender: (reason: string) => void;');
+		expect(content).not.toContain('GridEventName.selectionChanged');
+		expect(content).not.toContain('GridEventName.focusChanged');
 		expect(content).not.toContain("invalidateOverlay('selection')");
 		expect(content).not.toContain("invalidateCell(prevState.selection.focus.rowId, prevState.selection.focus.colField, 'focus')");
 		expect(content).not.toContain("invalidateCell(currState.selection.focus.rowId, currState.selection.focus.colField, 'focus')");
 		expect(content).not.toContain("invalidateCell(visualRow.rowId, col.field, 'selection')");
 		expect(content).not.toContain("requestRender('selection')");
+	});
+
+	it('GridEngine applySelectionRange owns selection and focus event publication (Plan 112)', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+		expect(content).toContain('const events: GridCommitEvent<TRowData>[] = [];');
+		expect(content).toContain('GridEventName.selectionChanged');
+		expect(content).toContain('GridEventName.focusChanged');
+		expect(content).toContain("reason: 'selection:set-range'");
 	});
 
 	it('RenderInvalidationCoordinator no longer infers edit/validation paints from state keys (Plan 105)', () => {

@@ -32,6 +32,7 @@ import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import { InvalidationManager } from '../renderer/invalidationManager.js';
 import { GridCommitKernel } from './GridChangeApplier.js';
+import type { GridCommitEvent } from './GridChangeApplier.js';
 import { ColumnFeatureController } from '../features/ColumnFeatureController.js';
 import { GroupingFeatureController } from '../features/GroupingFeatureController.js';
 import { EditingFeatureController } from '../features/EditingFeatureController.js';
@@ -291,7 +292,6 @@ export class GridEngine<TRowData = unknown> {
 			geometry: this.geometry,
 			viewport: this.viewport,
 			selection: this.selection,
-			eventBus: this.eventBus,
 			cellNotifications: this.cellNotifications,
 			getRowModel: () => this.rowModel,
 			getRowHeightsList: (rowModel, rowHeightsRecord, defaultRowHeight) => this.getRowHeightsList(rowModel, rowHeightsRecord, defaultRowHeight),
@@ -932,6 +932,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
+		const prevSelection = this.stateManager.getState().selection;
 		const validStart = this.isDataCellSelectable(start) ? start : null;
 		const validEnd = this.isDataCellSelectable(end) ? end : null;
 		if ((start || end) && (!validStart || !validEnd)) {
@@ -943,12 +944,32 @@ export class GridEngine<TRowData = unknown> {
 			focus: end,
 			anchor: start,
 			range,
+			bounds: this.selection.calculateRangeBounds(
+				range,
+				(id) => this.rowModel?.getVisualIndexByRowId(id) ?? -1,
+				(field) => this.columns.getColumnIndex(field)
+			),
 			source,
+		});
+		const events: GridCommitEvent<TRowData>[] = [];
+		if (prevSelection.focus !== selection.focus) {
+			events.push({
+				type: GridEventName.focusChanged,
+				payload: { focus: selection.focus, selection },
+			});
+		}
+		events.push({
+			type: GridEventName.selectionChanged,
+			payload: {
+				selection,
+				result: this.selection.describeChange(prevSelection, selection, this.rowModel, this.stateManager.getState().columns),
+			},
 		});
 		this.changeApplier.apply({
 			reason: 'selection:set-range',
 			state: { selection },
 			domains: ['selection'],
+			events,
 			requestRender: false,
 		});
 	};

@@ -34,13 +34,6 @@ export interface RowModelTransactionSnapshot<TRowData = unknown> {
 	readonly snapshot: unknown;
 }
 
-export interface RowTransactionResult<TRowData = unknown> {
-	added: readonly TRowData[];
-	updated: readonly TRowData[];
-	removed: readonly TRowData[];
-	rejected: readonly RowTransactionRejection[];
-}
-
 export interface RowTransactionRejection {
 	rowId?: string;
 	reason: string;
@@ -49,7 +42,7 @@ export interface RowTransactionRejection {
 
 export interface TransactionalRowModel<TRowData = unknown> {
 	captureTransactionSnapshot(mutation: RowTransactionMutation<TRowData>): RowModelTransactionSnapshot<TRowData>;
-	applyTransaction(mutation: RowDataTransaction<TRowData>): RowTransactionResult<TRowData>;
+	applyTransaction(mutation: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
 	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
 }
 
@@ -120,6 +113,19 @@ export interface GridDomainMutationExecutor<TRowData = unknown, TMutation extend
 
 export interface GridDomainMutationExecutorRegistry<TRowData = unknown> {
 	resolve<TMutation extends GridDomainMutation<TRowData>>(mutation: TMutation): GridDomainMutationExecutor<TRowData, TMutation> | null;
+}
+
+function getTransactionalRowModel<TRowData>(context: GridCommitContext<TRowData>): TransactionalRowModel<TRowData> | null {
+	const rowModel = context.getRowModel();
+	if (!rowModel) return null;
+	if (
+		typeof rowModel.captureTransactionSnapshot !== 'function' ||
+		typeof rowModel.applyTransaction !== 'function' ||
+		typeof rowModel.restoreTransactionSnapshot !== 'function'
+	) {
+		return null;
+	}
+	return rowModel as TransactionalRowModel<TRowData>;
 }
 
 interface CellValueMutationPreview {
@@ -644,8 +650,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 	const rowOrderExecutor = createRowOrderMutationExecutor<TRowData>();
 	const rowTransactionExecutor: GridDomainMutationExecutor<TRowData, RowTransactionMutation<TRowData>> = {
 		validate(_mutation, context) {
-			const rowModel = context.getRowModel();
-			if (!rowModel?.captureTransactionSnapshot || !rowModel?.applyTransaction || !rowModel?.restoreTransactionSnapshot) {
+			if (!getTransactionalRowModel(context)) {
 				return {
 					ok: false,
 					reason: 'row model does not implement TransactionalRowModel',
@@ -670,17 +675,17 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					apply: () => ({ noop: true, result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData> }),
 				};
 			}
-			const rowModel = context.getRowModel();
-			const preparedRestoreSnapshot = mutation.restoreSnapshot ?? rowModel!.captureTransactionSnapshot!(mutation);
+			const rowModel = getTransactionalRowModel(context)!;
+			const preparedRestoreSnapshot = mutation.restoreSnapshot ?? rowModel.captureTransactionSnapshot(mutation);
 			return {
 				mutation,
 				domains: ['rows', 'geometry'],
 				events: [],
 				requestRender: true,
 				apply(context) {
-					const rowModel = context.getRowModel();
+					const rowModel = getTransactionalRowModel(context)!;
 					if (mutation.restoreSnapshot) {
-						rowModel!.restoreTransactionSnapshot!(preparedRestoreSnapshot);
+						rowModel.restoreTransactionSnapshot(preparedRestoreSnapshot);
 						return {
 							domains: ['rows', 'geometry'],
 							invalidations: [{ kind: 'full', reason: 'data' }],
@@ -688,7 +693,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 							result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData>,
 						};
 					}
-					const result = rowModel!.applyTransaction!(mutation.transaction);
+					const result = rowModel.applyTransaction(mutation.transaction);
 					return {
 						domains: ['rows', 'geometry'],
 						invalidations: [{ kind: 'full', reason: 'data' }],
@@ -715,7 +720,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					};
 				},
 				rollback(_applied, context) {
-					context.getRowModel()!.restoreTransactionSnapshot!(preparedRestoreSnapshot);
+					getTransactionalRowModel(context)!.restoreTransactionSnapshot(preparedRestoreSnapshot);
 				},
 			};
 		},
