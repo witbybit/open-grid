@@ -3047,9 +3047,9 @@ describe('RenderEngine', () => {
 		const updates = lifecycleLog.filter((e) => e.op === 'update');
 		expect(updates.length).toBe(5);
 
-		// Renderer keys are slot-based (S prefix from createSlotRendererKey).
+		// cellKeys are cell-instance-based (C prefix from createCellInstanceRendererKey).
 		for (const entry of updates) {
-			expect(entry.cellKey).toMatch(/^S\d+:rsp-/);
+			expect(entry.cellKey).toMatch(/^C\d+:ci\d+/);
 		}
 
 		renderer.unmount();

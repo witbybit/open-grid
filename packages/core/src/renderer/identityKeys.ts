@@ -31,6 +31,16 @@ export function createSlotRendererKey(slotId: string, colField: string): Rendere
 }
 
 /**
+ * Cell-instance renderer key. Anchors the portal cellKey to the specific physical CellSlot
+ * object (via its `cellInstanceId`). Unlike the slot key, this key becomes invalid if the
+ * cell is ever destroyed — preventing stale deferred releases from targeting a new cell
+ * created at the same row/column position. Use this as the `cellKey` in portal mount calls.
+ */
+export function createCellInstanceRendererKey(cellInstanceId: string, colField: string): RendererKey {
+	return `C${encodePart(cellInstanceId)}${encodePart(colField)}`;
+}
+
+/**
  * Index-based renderer key. Fallback when no stable slot ID is available.
  */
 export function createIndexRendererKey(rowIndex: number, colIndex: number, colField: string): RendererKey {
@@ -55,10 +65,11 @@ export function createDomIndexRendererKey(rowIndex: number, colIndex: number, co
  * General-purpose key builder when the strategy is determined at call-site.
  */
 export function createRendererKey(params: {
-	strategy: 'edit' | 'slot' | 'index' | 'dom-slot' | 'dom-index';
+	strategy: 'edit' | 'slot' | 'index' | 'dom-slot' | 'dom-index' | 'cell-instance';
 	rowId?: string;
 	colField: string;
 	slotId?: string;
+	cellInstanceId?: string;
 	rowIndex?: number;
 	colIndex?: number;
 }): RendererKey {
@@ -67,6 +78,8 @@ export function createRendererKey(params: {
 			return createEditRendererKey(params.rowId ?? '', params.colField);
 		case 'slot':
 			return createSlotRendererKey(params.slotId ?? '', params.colField);
+		case 'cell-instance':
+			return createCellInstanceRendererKey(params.cellInstanceId ?? '', params.colField);
 		case 'index':
 			return createIndexRendererKey(params.rowIndex ?? 0, params.colIndex ?? 0, params.colField);
 		case 'dom-slot':

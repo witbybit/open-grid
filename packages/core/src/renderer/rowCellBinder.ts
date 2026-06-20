@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import { createEditRendererKey, createSlotRendererKey } from './identityKeys.js';
+import { createEditRendererKey, createCellInstanceRendererKey } from './identityKeys.js';
 import { reportRendererFault } from './rendererFaults.js';
 import type { CellRendererPhase, ColumnDef, GridCellClassParams, InternalColumnDef } from '../columnDef.js';
 import type { GridCellPointer } from '../api/GridApi.js';
@@ -289,7 +289,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		return;
 	}
 
-	const stableKey = access.isEditing ? createEditRendererKey(node.id, col.field) : createSlotRendererKey(slotId, col.field);
+	const stableKey = access.isEditing ? createEditRendererKey(node.id, col.field) : createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
 	let contentMode: CellContentMode = 'empty';
 	let formattedValue = '';
 
@@ -479,7 +479,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		contentMode = 'portal';
 	}
 
-	const cellKey = isEditing ? createEditRendererKey(node.id, col.field) : createSlotRendererKey(pooledRowId, col.field);
+	const cellKey = isEditing ? createEditRendererKey(node.id, col.field) : createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
 	const scrollMode = plan?.mode;
 	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
 	const isMounted = deps.portalMountManager.isCellMounted(cellKey);

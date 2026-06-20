@@ -1,5 +1,11 @@
 export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending' | 'custom';
 
+// Monotonic counter — advances once per CellSlot construction.
+// A cell that is destroyed and recreated at the same position gets a strictly
+// larger id, so stale portal keys from the destroyed instance never match the
+// new instance's keys.
+let _cellInstanceCounter = 0;
+
 /**
  * Authoritative identity record for a bound cell slot.
  * Logic must read identity from CellSlot.binding, not from element.dataset.
@@ -33,6 +39,13 @@ export const cellSlotWriteStats = {
 export class CellSlot<TRowData = unknown> {
 	public readonly element: HTMLDivElement;
 	public readonly contentElement: HTMLDivElement;
+	/**
+	 * Unique identity for this physical CellSlot object. Assigned once at construction
+	 * and never changes — not even across row rebinds or lane relocations.
+	 * Used as the basis for portal cellKeys so that a stale deferred release keyed to a
+	 * destroyed cell can never affect a newly created cell at the same row/column position.
+	 */
+	public readonly cellInstanceId: string;
 	/**
 	 * Lazily created on first portal use (getOrCreatePortalHost). Plain-text columns —
 	 * the common case — never pay the extra DOM node (+50% viewport node count).
@@ -72,6 +85,7 @@ export class CellSlot<TRowData = unknown> {
 	public lastMountedGlobalVersion = -1;
 
 	constructor(element: HTMLDivElement) {
+		this.cellInstanceId = `ci${++_cellInstanceCounter}`;
 		this.element = element;
 		(element as any).__cellSlot = this;
 		// ARIA grid semantics — role is static per element; positional/state attrs are
