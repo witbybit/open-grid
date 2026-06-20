@@ -11,6 +11,13 @@ export interface GroupingFeatureControllerDeps<TRowData = unknown> {
 	requestRender?: (reason: string) => void;
 }
 
+interface ExpansionCapableRowModel<TRowData = unknown> {
+	expandAllGroups(): RowModelRefreshResult | void;
+	collapseAllGroups(): RowModelRefreshResult | void;
+	toggleGroupExpanded(groupId: string): RowModelRefreshResult | void;
+	toggleDetailExpanded(rowId: string): RowModelRefreshResult | void;
+}
+
 export class GroupingFeatureController<TRowData = unknown> {
 	private readonly ctx: GridFeatureContext<TRowData>;
 	private readonly getRowModel: () => RowModel<TRowData> | null;
@@ -22,6 +29,20 @@ export class GroupingFeatureController<TRowData = unknown> {
 		this.getRowModel = deps.getRowModel;
 		this.invalidation = deps.invalidation;
 		this.requestRender = deps.requestRender ?? (() => {});
+	}
+
+	private getExpansionCapableRowModel(): ExpansionCapableRowModel<TRowData> | null {
+		const rowModel = this.getRowModel();
+		if (!rowModel) return null;
+		if (
+			typeof rowModel.expandAllGroups !== 'function' ||
+			typeof rowModel.collapseAllGroups !== 'function' ||
+			typeof rowModel.toggleGroupExpanded !== 'function' ||
+			typeof rowModel.toggleDetailExpanded !== 'function'
+		) {
+			return null;
+		}
+		return rowModel as ExpansionCapableRowModel<TRowData>;
 	}
 
 	public applyRowModelRefreshInvalidation(result: RowModelRefreshResult | void, reason: 'group expansion' | 'detail', groupId?: string): void {
@@ -185,18 +206,18 @@ export class GroupingFeatureController<TRowData = unknown> {
 	}
 
 	public expandAllGroups(): void {
-		this.applyRowModelRefreshInvalidation(this.getRowModel()?.expandAllGroups?.(), 'group expansion');
+		this.applyRowModelRefreshInvalidation(this.getExpansionCapableRowModel()?.expandAllGroups(), 'group expansion');
 	}
 
 	public collapseAllGroups(): void {
-		this.applyRowModelRefreshInvalidation(this.getRowModel()?.collapseAllGroups?.(), 'group expansion');
+		this.applyRowModelRefreshInvalidation(this.getExpansionCapableRowModel()?.collapseAllGroups(), 'group expansion');
 	}
 
 	public toggleGroupExpanded(groupId: string): void {
-		this.applyRowModelRefreshInvalidation(this.getRowModel()?.toggleGroupExpanded?.(groupId), 'group expansion', groupId);
+		this.applyRowModelRefreshInvalidation(this.getExpansionCapableRowModel()?.toggleGroupExpanded(groupId), 'group expansion', groupId);
 	}
 
 	public toggleDetailExpanded(rowId: string): void {
-		this.applyRowModelRefreshInvalidation(this.getRowModel()?.toggleDetailExpanded?.(rowId), 'detail');
+		this.applyRowModelRefreshInvalidation(this.getExpansionCapableRowModel()?.toggleDetailExpanded(rowId), 'detail');
 	}
 }

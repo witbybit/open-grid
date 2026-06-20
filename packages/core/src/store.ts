@@ -108,6 +108,18 @@ import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './feature
 
 export { validateRowIds } from './ids.js';
 
+type ClientMutableRowModel<TRowData = unknown> = Pick<RowModel<TRowData>, 'setRows' | 'updateRows' | 'getRowOrder' | 'refresh'> & {
+	setRows(rows: TRowData[]): void;
+	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
+	getRowOrder(): string[];
+};
+
+type ServerControllableRowModel<TRowData = unknown> = Pick<RowModel<TRowData>, 'purgeCache' | 'setDatasource' | 'goToPage'> & {
+	purgeCache(): void;
+	setDatasource(datasource: IGridDatasource<TRowData>, blockSize?: number): void;
+	goToPage(page: number): void;
+};
+
 /**
  * Internal runtime composition root.
  *
@@ -619,6 +631,24 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.getRowModel();
 	};
 
+	private getClientMutableRowModel(): ClientMutableRowModel<TRowData> | null {
+		const rowModel = this.getRowModel();
+		if (!rowModel) return null;
+		if (typeof rowModel.setRows !== 'function' || typeof rowModel.updateRows !== 'function' || typeof rowModel.getRowOrder !== 'function') {
+			return null;
+		}
+		return rowModel as ClientMutableRowModel<TRowData>;
+	}
+
+	private getServerControllableRowModel(): ServerControllableRowModel<TRowData> | null {
+		const rowModel = this.getRowModel();
+		if (!rowModel) return null;
+		if (typeof rowModel.purgeCache !== 'function' || typeof rowModel.setDatasource !== 'function' || typeof rowModel.goToPage !== 'function') {
+			return null;
+		}
+		return rowModel as ServerControllableRowModel<TRowData>;
+	}
+
 	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);
 	public getServerRowModelRuntime = (): ServerRowModelRuntime<TRowData> => createServerRowModelRuntime(this);
 
@@ -637,16 +667,16 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setRows = (rows: TRowData[]): void => {
-		this.getRowModel()?.setRows?.(rows);
+		this.getClientMutableRowModel()?.setRows(rows);
 	};
 
-	public getRowOrder = (): string[] => this.getRowModel()?.getRowOrder?.() ?? [];
+	public getRowOrder = (): string[] => this.getClientMutableRowModel()?.getRowOrder() ?? [];
 	public setRowOrder = (rowIds: string[]): void => {
 		this.engine.setRowOrder(rowIds);
 	};
 
 	public updateRows = (updater: (rows: TRowData[]) => TRowData[]): void => {
-		this.getRowModel()?.updateRows?.(updater);
+		this.getClientMutableRowModel()?.updateRows(updater);
 	};
 
 	public applyTransaction = (transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null => {
@@ -696,15 +726,15 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public purgeCache = (): void => {
-		this.getRowModel()?.purgeCache?.();
+		this.getServerControllableRowModel()?.purgeCache();
 	};
 
 	public setServerDatasource = (datasource: IGridDatasource<TRowData>, blockSize?: number): void => {
-		this.getRowModel()?.setDatasource?.(datasource, blockSize);
+		this.getServerControllableRowModel()?.setDatasource(datasource, blockSize);
 	};
 
 	public goToPage = (page: number): void => {
-		this.getRowModel()?.goToPage?.(page);
+		this.getServerControllableRowModel()?.goToPage(page);
 	};
 
 	public setViewportPins = (pins: { left?: number; right?: number; top?: number; bottom?: number }): void => {

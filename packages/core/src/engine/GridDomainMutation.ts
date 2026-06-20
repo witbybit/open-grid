@@ -115,6 +115,20 @@ export interface GridDomainMutationExecutorRegistry<TRowData = unknown> {
 	resolve<TMutation extends GridDomainMutation<TRowData>>(mutation: TMutation): GridDomainMutationExecutor<TRowData, TMutation> | null;
 }
 
+interface RowOrderCapableModel<TRowData = unknown> {
+	getRowOrder(): string[];
+	setRowOrder(rowIds: string[]): void;
+}
+
+function getRowOrderCapableModel<TRowData>(context: GridCommitContext<TRowData>): RowOrderCapableModel<TRowData> | null {
+	const rowModel = context.getRowModel();
+	if (!rowModel) return null;
+	if (typeof rowModel.getRowOrder !== 'function' || typeof rowModel.setRowOrder !== 'function') {
+		return null;
+	}
+	return rowModel as unknown as RowOrderCapableModel<TRowData>;
+}
+
 function getTransactionalRowModel<TRowData>(context: GridCommitContext<TRowData>): TransactionalRowModel<TRowData> | null {
 	const rowModel = context.getRowModel();
 	if (!rowModel) return null;
@@ -294,8 +308,7 @@ export function createRowOrderMutationExecutor<TRowData = unknown>(
 ): GridDomainMutationExecutor<TRowData, RowOrderMutation> {
 	return {
 		validate(_mutation, context) {
-			const rowModel = context.getRowModel();
-			if (!rowModel?.setRowOrder || !rowModel.getRowOrder) {
+			if (!getRowOrderCapableModel(context)) {
 				return {
 					ok: false,
 					reason: 'row model unavailable',
@@ -305,16 +318,7 @@ export function createRowOrderMutationExecutor<TRowData = unknown>(
 			return { ok: true };
 		},
 		prepare(mutation, context) {
-			const rowModel = context.getRowModel();
-			if (!rowModel?.getRowOrder) {
-				return {
-					mutation,
-					noop: true,
-					domains: [],
-					events: [],
-					apply: () => ({ noop: true }),
-				};
-			}
+			const rowModel = getRowOrderCapableModel(context)!;
 			const currentOrder = rowModel.getRowOrder();
 			const nextOrder = mutation.rowIds.slice();
 			if (areRowOrdersEqual(currentOrder, nextOrder)) {
@@ -333,7 +337,7 @@ export function createRowOrderMutationExecutor<TRowData = unknown>(
 				history: createRowOrderHistory(reason, currentOrder, nextOrder),
 				requestRender: true,
 				apply(commitContext) {
-					commitContext.getRowModel()?.setRowOrder?.(nextOrder);
+					getRowOrderCapableModel(commitContext)!.setRowOrder(nextOrder);
 					return {
 						domains: ['rows'],
 						invalidations: [{ kind: 'full', reason: 'row order changed' }],
@@ -343,7 +347,7 @@ export function createRowOrderMutationExecutor<TRowData = unknown>(
 					};
 				},
 				rollback(_applied, commitContext) {
-					commitContext.getRowModel()?.setRowOrder?.(currentOrder);
+					getRowOrderCapableModel(commitContext)!.setRowOrder(currentOrder);
 				},
 			};
 		},
