@@ -128,6 +128,7 @@ export const CORE_STYLES = `
 
   /* Center lane — grows to fill space between pin lanes. */
   .og-layer-floating-filter {
+    order: 1;
     flex: 1 1 auto;
     min-width: 0;
     position: relative;
@@ -148,12 +149,14 @@ export const CORE_STYLES = `
   }
 
   .og-layer-floating-filter-left {
+    order: 0;
     left: 0;
     border-right: 1px solid var(--og-pin-left-border-color, var(--og-border-color));
     box-shadow: var(--og-pin-left-shadow, none);
   }
 
   .og-layer-floating-filter-right {
+    order: 2;
     right: 0;
     border-left: 1px solid var(--og-pin-right-border-color, var(--og-border-color));
     box-shadow: var(--og-pin-right-shadow, none);
@@ -672,6 +675,7 @@ export const CORE_STYLES = `
 
   /* Center lane — grows to fill the space between the two pin lanes. */
   .og-layer-header {
+    order: 1;
     flex: 1 1 auto;
     min-width: 0;
     position: relative;
@@ -683,6 +687,7 @@ export const CORE_STYLES = `
 
   /* Left / right pin lanes — compositor-sticky so they never lag behind body rows. */
   .og-layer-header-left {
+    order: 0;
     position: sticky;
     left: 0;
     flex-shrink: 0;
@@ -698,6 +703,7 @@ export const CORE_STYLES = `
   }
 
   .og-layer-header-right {
+    order: 2;
     position: sticky;
     right: 0;
     flex-shrink: 0;
