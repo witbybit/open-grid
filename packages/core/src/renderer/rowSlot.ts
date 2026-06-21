@@ -31,9 +31,6 @@ export class RowSlot<TRowData = unknown> {
 	public pinRightContainer: HTMLDivElement | null = null;
 	public pinLeftContainerWidth = -1;
 	public pinRightContainerWidth = -1;
-	public pinLeftContainerTransform = '';
-	public pinRightContainerLeft = -1;
-	public pinRightContainerTransform = '';
 
 	// ── Stable cell ownership — keyed by column field ───────────────────────────────
 	// This map is the lifecycle owner for all cell slots in this row slot.
@@ -214,8 +211,5 @@ export class RowSlot<TRowData = unknown> {
 		this.pinRightContainer = null;
 		this.pinLeftContainerWidth = -1;
 		this.pinRightContainerWidth = -1;
-		this.pinLeftContainerTransform = '';
-		this.pinRightContainerLeft = -1;
-		this.pinRightContainerTransform = '';
 	}
 }

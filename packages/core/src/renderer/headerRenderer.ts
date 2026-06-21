@@ -51,10 +51,6 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.headerLayer = headerLayer;
 		this.headerLeftLayer = headerLeftLayer;
 		this.headerRightLayer = headerRightLayer;
-		// Clear any counter-transform inline styles from a previous render (defensive).
-		headerLeftLayer.style.transform = '';
-		headerRightLayer.style.transform = '';
-		headerRightLayer.style.left = '';
 		this.clearHeaderCells();
 	}
 
@@ -81,10 +77,6 @@ export class HeaderRenderer<TRowData = unknown> {
 	public repaintHeaders(layoutPlan?: GridLayoutPlan): void {
 		this.syncVisibleHeaders(true, layoutPlan ?? computeGridLayoutPlan(this.engine));
 	}
-
-	// Pin lanes now use CSS position:sticky — no JS counter-transform needed.
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	public syncScrollLeft(_layoutPlan: GridLayoutPlan): void {}
 
 	public syncVisibleColumnRange(layoutPlan: GridLayoutPlan, range?: { startIdx: number; endIdx: number }): boolean {
 		const band = layoutPlan.headerBands[0];

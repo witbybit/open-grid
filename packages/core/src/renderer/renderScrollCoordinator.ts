@@ -156,7 +156,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.deps.recycleViewport(true, scrollCtx, nextWindow);
 			this.deps.stickyGroupRenderer.sync(layoutPlan);
 
-			this.deps.headerRenderer.syncScrollLeft(layoutPlan);
 			this.deps.floatingFilterRenderer.syncScrollLeft(layoutPlan);
 			const didSyncRange = this.deps.headerRenderer.syncVisibleColumnRange(layoutPlan, visibleColRange);
 			if (didSyncRange) {
@@ -290,7 +289,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const scrollTop = layoutPlan.viewport.scrollTop;
 		const scrollLeft = layoutPlan.viewport.scrollLeft;
 
-		this.deps.headerRenderer.syncScrollLeft(layoutPlan);
 		this.deps.floatingFilterRenderer.syncScrollLeft(layoutPlan);
 		this.deps.renderStats.overlayCheapSyncsDuringScroll++;
 		this.deps.overlayRenderer.syncScrollPosition(this.state.cachedHasSelectionOverlay);

@@ -70,11 +70,6 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		this.filterLayer = filterLayer;
 		this.filterLeftLayer = filterLeftLayer;
 		this.filterRightLayer = filterRightLayer;
-		// Clear any counter-transform inline styles from a previous render (defensive).
-		filterLayer.style.transform = '';
-		filterLeftLayer.style.transform = '';
-		filterRightLayer.style.transform = '';
-		filterRightLayer.style.left = '';
 		this.clearCells();
 
 		// Re-render on filter model change (values may change from outside)
