@@ -165,7 +165,7 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 		const pinLeft = opts.pinLeft ?? 0;
 		const pinRight = opts.pinRight ?? 0;
 		const colCount = cols.length;
-		const pinRightStart = opts.pinRightStart ?? (colCount - pinRight);
+		const pinRightStart = opts.pinRightStart ?? colCount - pinRight;
 		const topology = makeTopology(cols, pinLeft, pinRight, pinRightStart);
 
 		reconcileTopology(

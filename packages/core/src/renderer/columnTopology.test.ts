@@ -8,12 +8,7 @@ function makeCol(field: string, width = 100, opts: Partial<InternalColumnDef<unk
 	return { field, width, ...opts } as unknown as InternalColumnDef<unknown>;
 }
 
-function makePlan(
-	cols: InternalColumnDef<unknown>[],
-	pinLeftCount: number,
-	pinRightCount: number,
-	version = 1
-): CompiledGridPlan<unknown> {
+function makePlan(cols: InternalColumnDef<unknown>[], pinLeftCount: number, pinRightCount: number, version = 1): CompiledGridPlan<unknown> {
 	const colWidth = 100;
 	const colCount = cols.length;
 	const pinRightStart = colCount - pinRightCount;
@@ -90,7 +85,7 @@ describe('compileColumnTopology — laneOffset computation', () => {
 		const plan = makePlan([makeCol('a'), makeCol('b'), makeCol('c')], 2, 0);
 		const t = compileColumnTopology(plan);
 
-		expect(t.left[0].laneOffset).toBe(0);   // absoluteLeft 0 - 0 = 0
+		expect(t.left[0].laneOffset).toBe(0); // absoluteLeft 0 - 0 = 0
 		expect(t.left[0].absoluteLeft).toBe(0);
 		expect(t.left[1].laneOffset).toBe(100); // absoluteLeft 100 - 0 = 100
 		expect(t.left[1].absoluteLeft).toBe(100);
@@ -101,7 +96,7 @@ describe('compileColumnTopology — laneOffset computation', () => {
 		const t = compileColumnTopology(plan);
 		// pinLeftWidth = 100 (1 left column of width 100)
 		expect(t.center[0].absoluteLeft).toBe(100);
-		expect(t.center[0].laneOffset).toBe(0);   // 100 - 100 = 0
+		expect(t.center[0].laneOffset).toBe(0); // 100 - 100 = 0
 		expect(t.center[1].absoluteLeft).toBe(200);
 		expect(t.center[1].laneOffset).toBe(100); // 200 - 100 = 100
 	});
@@ -111,7 +106,7 @@ describe('compileColumnTopology — laneOffset computation', () => {
 		const t = compileColumnTopology(plan);
 		// pinRightBaseLeft = 300 - 200 = 100 (totalWidth=300, pinRightWidth=200)
 		expect(t.right[0].absoluteLeft).toBe(100);
-		expect(t.right[0].laneOffset).toBe(0);   // 100 - 100 = 0
+		expect(t.right[0].laneOffset).toBe(0); // 100 - 100 = 0
 		expect(t.right[1].absoluteLeft).toBe(200);
 		expect(t.right[1].laneOffset).toBe(100); // 200 - 100 = 100
 	});
@@ -162,10 +157,7 @@ describe('compileColumnTopology — group segmentation', () => {
 	});
 
 	it('single group level: all same group → one segment', () => {
-		const plan = makePlan(
-			[makeCol('a', 100, { headerGroup: 'Revenue' }), makeCol('b', 100, { headerGroup: 'Revenue' })],
-			0, 0
-		);
+		const plan = makePlan([makeCol('a', 100, { headerGroup: 'Revenue' }), makeCol('b', 100, { headerGroup: 'Revenue' })], 0, 0);
 		const t = compileColumnTopology(plan);
 
 		expect(t.groupSegments).toHaveLength(1);
@@ -183,12 +175,9 @@ describe('compileColumnTopology — group segmentation', () => {
 
 	it('two different groups in same depth → two segments', () => {
 		const plan = makePlan(
-			[
-				makeCol('a', 100, { headerGroup: 'G1' }),
-				makeCol('b', 100, { headerGroup: 'G1' }),
-				makeCol('c', 100, { headerGroup: 'G2' }),
-			],
-			0, 0
+			[makeCol('a', 100, { headerGroup: 'G1' }), makeCol('b', 100, { headerGroup: 'G1' }), makeCol('c', 100, { headerGroup: 'G2' })],
+			0,
+			0
 		);
 		const t = compileColumnTopology(plan);
 
@@ -202,10 +191,7 @@ describe('compileColumnTopology — group segmentation', () => {
 
 	it('group spanning a pin boundary splits into two segments', () => {
 		// a is pinned left, b is center, both have the same headerGroup.
-		const plan = makePlan(
-			[makeCol('a', 100, { headerGroup: 'G' }), makeCol('b', 100, { headerGroup: 'G' })],
-			1, 0
-		);
+		const plan = makePlan([makeCol('a', 100, { headerGroup: 'G' }), makeCol('b', 100, { headerGroup: 'G' })], 1, 0);
 		const t = compileColumnTopology(plan);
 
 		const segs = t.groupSegments[0];
@@ -221,13 +207,7 @@ describe('compileColumnTopology — group segmentation', () => {
 	});
 
 	it('two group depths: groupSegments has two entries', () => {
-		const plan = makePlan(
-			[
-				makeCol('a', 100, { headerGroup: ['Outer', 'Inner'] }),
-				makeCol('b', 100, { headerGroup: ['Outer', 'Inner'] }),
-			],
-			0, 0
-		);
+		const plan = makePlan([makeCol('a', 100, { headerGroup: ['Outer', 'Inner'] }), makeCol('b', 100, { headerGroup: ['Outer', 'Inner'] })], 0, 0);
 		const t = compileColumnTopology(plan);
 
 		expect(t.groupSegments).toHaveLength(2);
@@ -236,24 +216,14 @@ describe('compileColumnTopology — group segmentation', () => {
 	});
 
 	it('segment id is stable: grp:{depth}:{firstColId}:{lastColId}', () => {
-		const plan = makePlan(
-			[makeCol('a', 100, { headerGroup: 'G' }), makeCol('b', 100, { headerGroup: 'G' })],
-			0, 0
-		);
+		const plan = makePlan([makeCol('a', 100, { headerGroup: 'G' }), makeCol('b', 100, { headerGroup: 'G' })], 0, 0);
 		const t = compileColumnTopology(plan);
 
 		expect(t.groupSegments[0][0].id).toBe('grp:0:a:b');
 	});
 
 	it('group laneOffset is relative to the lane (center case)', () => {
-		const plan = makePlan(
-			[
-				makeCol('pin', 100),
-				makeCol('a', 100, { headerGroup: 'G' }),
-				makeCol('b', 100, { headerGroup: 'G' }),
-			],
-			1, 0
-		);
+		const plan = makePlan([makeCol('pin', 100), makeCol('a', 100, { headerGroup: 'G' }), makeCol('b', 100, { headerGroup: 'G' })], 1, 0);
 		const t = compileColumnTopology(plan);
 		// pinLeftWidth = 100; a.absoluteLeft = 100; b.absoluteLeft = 200
 		// center laneOffset: a.laneOffset = 100-100=0, b.laneOffset = 200-100=100

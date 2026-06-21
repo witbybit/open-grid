@@ -369,7 +369,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === c) continue;
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		// Use topology laneOffset for right cells (= absoluteLeft - pinRightBaseLeft).
-		const leftArg = columnTopology.byColumnId.get(col.field)?.laneOffset ?? (plan.colLefts[c] - pinRightBaseLeft);
+		const leftArg = columnTopology.byColumnId.get(col.field)?.laneOffset ?? plan.colLefts[c] - pinRightBaseLeft;
 		const cellWidth = plan.colWidths[c];
 		if (isScrollFrameActive) {
 			deps.onScrollCellPatched();
@@ -412,8 +412,19 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 }
 
 export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData>, request: BindAllLoadingCellsRequest<TRowData>): void {
-	const { slot, rowIndex, pinLeftColumns, pinRightColumns, pinRightStart, centerColStart, centerColCount, columns, plan, columnTopology, isScrollFrameActive } =
-		request;
+	const {
+		slot,
+		rowIndex,
+		pinLeftColumns,
+		pinRightColumns,
+		pinRightStart,
+		centerColStart,
+		centerColCount,
+		columns,
+		plan,
+		columnTopology,
+		isScrollFrameActive,
+	} = request;
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 	const pinRightWidth = plan.pinRightWidth;
@@ -479,7 +490,9 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 		const c = pinRightStart + i;
 		if (c < colCount) {
 			const col = columns[c];
-			const leftArg = col ? (columnTopology.byColumnId.get(col.field)?.laneOffset ?? (plan.colLefts[c] - pinRightBaseLeft)) : plan.colLefts[c] - pinRightBaseLeft;
+			const leftArg = col
+				? (columnTopology.byColumnId.get(col.field)?.laneOffset ?? plan.colLefts[c] - pinRightBaseLeft)
+				: plan.colLefts[c] - pinRightBaseLeft;
 			bindLoadingCell(slot.rightCells[i], c, leftArg);
 		}
 	}
