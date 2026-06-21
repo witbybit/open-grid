@@ -1,6 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import { computeGridLayoutPlan } from './layoutPlan.js';
+import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type {
 	ColumnFilter,
 	FilterModel,
@@ -128,6 +129,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 			return;
 		}
 		this.lastFilterModel = filterModel;
+		if (topologyChanged) this.engine.instrumentation.increment(GridMetric.TOPOLOGY_VERSION_CHANGED);
 		this.lastTopologyVersion = topology.version;
 		this.lastVisibleRange = { startIdx: colStart, endIdx: colEnd, pinLeft: plan.columns.pinLeftCount, pinRight: plan.columns.pinRightCount };
 
@@ -161,7 +163,10 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 				cell.style.width = `${width}px`;
 				// Reparent if lane changed (pin/unpin relocation — move, do not destroy/recreate).
 				const targetParent = isPinLeft ? this.filterLeftLayer : isPinRight ? this.filterRightLayer : this.filterLayer;
-				if (targetParent && cell.parentNode !== targetParent) targetParent.appendChild(cell);
+				if (targetParent && cell.parentNode !== targetParent) {
+					targetParent.appendChild(cell);
+					this.engine.instrumentation.increment(GridMetric.FLOATING_FILTER_VIEW_RELOCATED);
+				}
 				// Sync filter value if it changed
 				this.updateCellFilterValue(cell, currentFilter, col);
 			}

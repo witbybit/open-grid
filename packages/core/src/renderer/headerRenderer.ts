@@ -5,6 +5,7 @@ import type { ColumnInteractionController } from './columnInteractionController.
 import { computeGridLayoutPlan, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { compileStyleRules, evaluateHeaderCellStyleRules } from '../styling/styleRules.js';
+import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 
 export class HeaderRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -322,6 +323,7 @@ export class HeaderRenderer<TRowData = unknown> {
 
 			if (headerCell.parentNode !== targetLayer) {
 				targetLayer!.appendChild(headerCell);
+				this.engine.instrumentation.increment(GridMetric.HEADER_VIEW_RELOCATED);
 			}
 		};
 
@@ -359,6 +361,9 @@ export class HeaderRenderer<TRowData = unknown> {
 			}
 		}
 
+		if (layoutPlan.columnTopology.version !== this.lastTopologyVersion) {
+			this.engine.instrumentation.increment(GridMetric.TOPOLOGY_VERSION_CHANGED);
+		}
 		this.lastTopologyVersion = layoutPlan.columnTopology.version;
 		this.lastHeaderVisibleRange = {
 			startIdx: colStart,

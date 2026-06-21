@@ -7,6 +7,7 @@ import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './ro
 import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { CompiledColumnTopology } from './columnTopology.js';
+import { GridMetric, type GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 
 export interface RowCellLaneFullBindRequest<TRowData = unknown> {
 	cellSlot: CellSlot<TRowData>;
@@ -104,7 +105,8 @@ function reconcileTopology<TRowData>(
 	pinRightContainer: HTMLDivElement | null,
 	columns: readonly ColumnDef<TRowData>[],
 	initFn: (el: HTMLDivElement) => void,
-	releaseFn: (cell: CellSlot<TRowData>) => void
+	releaseFn: (cell: CellSlot<TRowData>) => void,
+	instrumentation?: GridInstrumentation
 ): void {
 	// Build the set of column fields in the new rendered topology.
 	const newFields = new Set<string>();
@@ -122,6 +124,7 @@ function reconcileTopology<TRowData>(
 			releaseFn(cell);
 			if (cell.element.parentNode) cell.element.remove();
 			slot.cellsByColumnId.delete(field);
+			instrumentation?.increment(GridMetric.CELL_VIEW_DESTROYED);
 		}
 	}
 
@@ -135,6 +138,7 @@ function reconcileTopology<TRowData>(
 			cell = CellSlot.fromElement<TRowData>(el);
 			cell.columnId = field;
 			slot.cellsByColumnId.set(field, cell);
+			instrumentation?.increment(GridMetric.CELL_VIEW_CREATED);
 		}
 		return cell;
 	}
@@ -146,7 +150,10 @@ function reconcileTopology<TRowData>(
 			const col = columns[p.absoluteIndex];
 			if (!col?.field) continue;
 			const cell = ensureCell(col.field);
-			if (cell.element.parentNode !== pinLeftContainer) pinLeftContainer.appendChild(cell.element);
+			if (cell.element.parentNode !== pinLeftContainer) {
+				pinLeftContainer.appendChild(cell.element);
+				instrumentation?.increment(GridMetric.CELL_VIEW_RELOCATED);
+			}
 			slot.leftCells.push(cell);
 		}
 	}
@@ -158,7 +165,10 @@ function reconcileTopology<TRowData>(
 		const col = columns[c];
 		if (!col?.field) continue;
 		const cell = ensureCell(col.field);
-		if (cell.element.parentNode !== slot.element) slot.element.appendChild(cell.element);
+		if (cell.element.parentNode !== slot.element) {
+			slot.element.appendChild(cell.element);
+			instrumentation?.increment(GridMetric.CELL_VIEW_RELOCATED);
+		}
 		slot.centerCells.push(cell);
 	}
 
@@ -168,7 +178,10 @@ function reconcileTopology<TRowData>(
 			const col = columns[p.absoluteIndex];
 			if (!col?.field) continue;
 			const cell = ensureCell(col.field);
-			if (cell.element.parentNode !== pinRightContainer) pinRightContainer.appendChild(cell.element);
+			if (cell.element.parentNode !== pinRightContainer) {
+				pinRightContainer.appendChild(cell.element);
+				instrumentation?.increment(GridMetric.CELL_VIEW_RELOCATED);
+			}
 			slot.rightCells.push(cell);
 		}
 	}
@@ -314,7 +327,8 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			pinRightContainer,
 			columns,
 			deps.initCell,
-			deps.releaseCellFn
+			deps.releaseCellFn,
+			deps.engine.instrumentation
 		);
 	} else {
 		// Scroll frame: topology-owned reconciliation — never calls releaseFn.

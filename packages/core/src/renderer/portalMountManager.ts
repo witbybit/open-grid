@@ -21,6 +21,7 @@ import {
 	createDomSlotRendererKey,
 	createDomIndexRendererKey,
 } from './identityKeys.js';
+import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 
 function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
 	if (a === b) return true;
@@ -152,6 +153,8 @@ export class PortalMountManager<TRowData = unknown> {
 		});
 		const col = mount.col as InternalColumnDef<TRowData>;
 		const isCustom = !!(col.cellRenderer || mount.isEditing);
+
+		this.engine?.instrumentation.increment(GridMetric.CELL_RENDERER_MOUNTED);
 
 		if (!isCustom) {
 			this.onMountCellContent?.(mount);
@@ -431,6 +434,7 @@ export class PortalMountManager<TRowData = unknown> {
 					(unmount.cellRowBindingGeneration !== undefined && activeIdentity.cellRowBindingGeneration !== unmount.cellRowBindingGeneration))
 			) {
 				this.deferredCellReleases.delete(cellKey);
+				this.engine?.instrumentation.increment(GridMetric.STALE_CELL_OPERATION_REJECTED);
 				continue;
 			}
 			this.releaseCellReal(unmount.cellKey, 'scrolled-out', unmount);
@@ -466,6 +470,7 @@ export class PortalMountManager<TRowData = unknown> {
 				) {
 					this.deferredCellMounts.delete(mount.cellKey);
 					this.deferredNewCellMounts.delete(mount.cellKey);
+					this.engine?.instrumentation.increment(GridMetric.STALE_CELL_OPERATION_REJECTED);
 					continue;
 				}
 				this.mountCellReal(mount);

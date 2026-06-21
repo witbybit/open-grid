@@ -15,6 +15,22 @@ export const enum GridMetric {
 
 	// Slot reuse path (rowCellBinder)
 	SLOT_REBINDS = 'slotRebinds',
+
+	// Cell view lifecycle (reconcileTopology in rowCellBindingLanes)
+	CELL_VIEW_CREATED = 'cellViewCreated',
+	CELL_VIEW_DESTROYED = 'cellViewDestroyed',
+	CELL_VIEW_RELOCATED = 'cellViewRelocated',
+
+	// Cell renderer lifecycle (PortalMountManager)
+	CELL_RENDERER_MOUNTED = 'cellRendererMounted',
+	STALE_CELL_OPERATION_REJECTED = 'staleCellOperationRejected',
+
+	// Header / floating-filter view relocation (headerRenderer, floatingFilterRenderer)
+	HEADER_VIEW_RELOCATED = 'headerViewRelocated',
+	FLOATING_FILTER_VIEW_RELOCATED = 'floatingFilterViewRelocated',
+
+	// Topology version change — emitted once per plan change from any renderer that detects it
+	TOPOLOGY_VERSION_CHANGED = 'topologyVersionChanged',
 }
 
 /** Per-frame timing summary emitted by the frame coordinator. */
