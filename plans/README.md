@@ -120,7 +120,8 @@
 | 117 | [Private Runtime Composition Root](./117-private-runtime-composition-root.md)                                                 | DONE     | working tree |
 | 118 | [Stable Cell View Ownership](./118-stable-cell-view-ownership-and-renderer-lifecycle.md)                                      | DONE     | faf18afa     |
 | 119 | [Unified Column Topology](./119-unified-column-topology-and-pinned-lane-rendering.md)                                         | DONE     | faf18afa     |
-| 120 | [Portal Identity Completion](./120-portal-identity-completion.md)                                                             | TODO     | faf18afa     |
+| 120 | [Portal Identity Completion](./120-portal-identity-completion.md)                                                             | DONE     | 5cb7d65c     |
+| 121 | [React Portal Identity Completion](./121-react-portal-identity-completion.md)                                                 | DONE     | efba7b58     |
 
 ## Execution order
 
