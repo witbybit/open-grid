@@ -349,10 +349,6 @@ export class RowRenderer<TRowData = unknown> {
 		}
 
 		// ── Column layout constants ───────────────────────────────────────────────────
-		const pinLeftColumns = nextWindow.pinLeftCols;
-		const pinRightColumns = nextWindow.pinRightCols;
-		const colCount = columns.length;
-		const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 		const centerColStart = nextWindow.colStart;
 		const centerColEnd = nextWindow.colEnd;
 		const centerColCount = Math.max(0, centerColEnd - centerColStart + 1);
@@ -532,9 +528,6 @@ export class RowRenderer<TRowData = unknown> {
 				this.runtime.bindAllLoadingCells({
 					slot,
 					rowIndex: r,
-					pinLeftColumns,
-					pinRightColumns,
-					pinRightStart,
 					centerColStart,
 					centerColCount,
 					columns,
@@ -548,9 +541,6 @@ export class RowRenderer<TRowData = unknown> {
 					slot,
 					node: visualRow.node,
 					rowIndex: r,
-					pinLeftColumns,
-					pinRightColumns,
-					pinRightStart,
 					centerColStart,
 					centerColCount,
 					columns,

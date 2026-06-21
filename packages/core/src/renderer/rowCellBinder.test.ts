@@ -52,8 +52,7 @@ describe('bindCellDuringScroll', () => {
 			rowIndex: 0,
 			colIndex: 0,
 			col: { field: 'total', cellRenderer: () => null } as any,
-			pinLeftColumns: 0,
-			pinRightStart: 1,
+			lane: 'center',
 			ctx: {
 				activeEdit: null,
 				focusedCell: null,

@@ -8,6 +8,7 @@ import type { RenderWindow } from './renderWindow.js';
 import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
+import { compileColumnTopology } from './columnTopology.js';
 
 export interface RowCellBindRequest<TRowData = unknown> {
 	cellSlot: {
@@ -20,9 +21,7 @@ export interface RowCellBindRequest<TRowData = unknown> {
 	rowIndex: number;
 	colIndex: number;
 	col: ColumnDef<TRowData>;
-	pinLeftColumns: number;
-	pinRightColumns: number;
-	pinRightStart: number;
+	lane: 'left' | 'center' | 'right';
 	pinRightBaseLeft: number;
 	plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>;
 	state: InternalGridState<TRowData>;
@@ -44,17 +43,6 @@ export interface RowRenderMaintenanceDeps<TRowData = unknown> {
 	bindCellFull: (request: RowCellBindRequest<TRowData>) => void;
 }
 
-function getMaintenanceWindowPins<TRowData>(
-	engine: GridEngine<TRowData>,
-	getCurrentWindow: () => RenderWindow | null
-): { pinLeftColumns: number; pinRightColumns: number } {
-	const window = getCurrentWindow();
-	return {
-		pinLeftColumns: window?.pinLeftCols ?? engine.viewport.pinLeftColumns,
-		pinRightColumns: window?.pinRightCols ?? engine.viewport.pinRightColumns,
-	};
-}
-
 export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
 	const rowModel = deps.engine.getVisualRowModel();
 	if (!rowModel) return;
@@ -62,9 +50,8 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 	const state = deps.engine.stateManager.getState();
 	const columns = deps.engine.columns.getDisplayedColumns();
 	const plan = deps.engine.columns.getCompiledPlan();
-	const { pinLeftColumns, pinRightColumns } = getMaintenanceWindowPins(deps.engine, deps.getCurrentWindow);
+	const columnTopology = compileColumnTopology(plan);
 	const colCount = columns.length;
-	const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 
 	deps.selectionPaint.rebuildSelection(state.selectedRowIds);
@@ -80,6 +67,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			if (!columns[c].checkboxSelection) continue;
 			const cellSlot = slot.getCellForCol(c);
 			if (!cellSlot) continue;
+			const lane = columnTopology.byColumnId.get(columns[c].field)?.lane ?? 'center';
 			deps.bindCellFull({
 				cellSlot,
 				slotId: slot.id,
@@ -88,9 +76,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 				rowIndex,
 				colIndex: c,
 				col: columns[c],
-				pinLeftColumns,
-				pinRightColumns,
-				pinRightStart,
+				lane,
 				pinRightBaseLeft,
 				plan,
 				state,
@@ -112,6 +98,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			if (colIndex < 0) continue;
 			const cellSlot = slot.getCellForCol(colIndex);
 			if (!cellSlot) continue;
+			const lane = columnTopology.byColumnId.get(colField)?.lane ?? 'center';
 			deps.bindCellFull({
 				cellSlot,
 				slotId: slot.id,
@@ -120,9 +107,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 				rowIndex,
 				colIndex,
 				col: columns[colIndex],
-				pinLeftColumns,
-				pinRightColumns,
-				pinRightStart,
+				lane,
 				pinRightBaseLeft,
 				plan,
 				state,
@@ -135,6 +120,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 	for (const colField of frame.columns) {
 		const colIndex = deps.engine.columns.getColumnIndex(colField);
 		if (colIndex < 0) continue;
+		const lane = columnTopology.byColumnId.get(colField)?.lane ?? 'center';
 		for (const [rowIndex, slot] of deps.activeRows) {
 			const row = rowModel.getVisualRow(rowIndex);
 			if (row?.kind !== 'data') continue;
@@ -149,9 +135,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 				rowIndex,
 				colIndex,
 				col: columns[colIndex],
-				pinLeftColumns,
-				pinRightColumns,
-				pinRightStart,
+				lane,
 				pinRightBaseLeft,
 				plan,
 				state,
@@ -181,9 +165,8 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 	const state = deps.engine.stateManager.getState();
 	const columns = deps.engine.columns.getDisplayedColumns();
 	const plan = deps.engine.columns.getCompiledPlan();
-	const { pinLeftColumns, pinRightColumns } = getMaintenanceWindowPins(deps.engine, deps.getCurrentWindow);
+	const columnTopology = compileColumnTopology(plan);
 	const colCount = columns.length;
-	const pinRightStart = Math.max(pinLeftColumns, colCount - pinRightColumns);
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 
 	const rowCount = rowModel.getVisualRowCount();
@@ -250,6 +233,7 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 				const cellSlot = slot.getCellForCol(colIndex);
 				if (!cellSlot || cellSlot.element !== cell) continue;
 
+				const lane = columnTopology.byColumnId.get(columns[colIndex]?.field ?? '')?.lane ?? 'center';
 				deps.bindCellFull({
 					cellSlot,
 					slotId: slot.id,
@@ -258,9 +242,7 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 					rowIndex,
 					colIndex,
 					col: columns[colIndex],
-					pinLeftColumns,
-					pinRightColumns,
-					pinRightStart,
+					lane,
 					pinRightBaseLeft,
 					plan,
 					state,

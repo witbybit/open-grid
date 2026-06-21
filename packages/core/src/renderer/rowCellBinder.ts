@@ -21,9 +21,9 @@ import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
 import { validationKey } from '../features/ValidationManager.js';
 
-function buildCellPinClass(colIndex: number, pinLeftColumns: number, pinRightStart: number): string {
-	if (colIndex < pinLeftColumns) return 'og-cell og-cell-pinned-left';
-	if (colIndex >= pinRightStart) return 'og-cell og-cell-pinned-right';
+function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
+	if (lane === 'left') return 'og-cell og-cell-pinned-left';
+	if (lane === 'right') return 'og-cell og-cell-pinned-right';
 	return 'og-cell';
 }
 
@@ -62,9 +62,7 @@ export interface BindCellFullRequest<TRowData = unknown> {
 	rowIndex: number;
 	colIndex: number;
 	col: ColumnDef<TRowData>;
-	pinLeftColumns: number;
-	pinRightColumns: number;
-	pinRightStart: number;
+	lane: 'left' | 'center' | 'right';
 	pinRightBaseLeft: number;
 	plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>;
 	state: InternalGridState<TRowData>;
@@ -78,8 +76,7 @@ export interface BindCellDuringScrollRequest<TRowData = unknown> {
 	rowIndex: number;
 	colIndex: number;
 	col: ColumnDef<TRowData>;
-	pinLeftColumns: number;
-	pinRightStart: number;
+	lane: 'left' | 'center' | 'right';
 	ctx: ScrollRenderContext<TRowData>;
 	pooledRowId: string;
 	/** Physical slot generation — required for stale-mount detection in deferred flush. */
@@ -194,8 +191,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		rowIndex,
 		colIndex,
 		col,
-		pinLeftColumns,
-		pinRightStart,
+		lane,
 		pinRightBaseLeft,
 		plan,
 		state,
@@ -204,7 +200,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	} = request;
 	const access = deps.engine.cellAccess.get(node.id, rowIndex, node, node.data, colIndex, col, undefined, state);
 
-	let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, pinRightStart);
+	let cellClassName = buildCellPinClass(lane);
 	if (access.isFocused) {
 		cellClassName += ' og-cell-focused';
 		cellSlot.element.tabIndex = -1;
@@ -285,9 +281,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		}
 	}
 
-	const isPinRight = colIndex >= pinRightStart;
 	const cellLeft = plan.colLefts[colIndex];
-	const leftArg = isPinRight ? cellLeft - pinRightBaseLeft : cellLeft;
+	const leftArg = lane === 'right' ? cellLeft - pinRightBaseLeft : cellLeft;
 	const cellWidth = plan.colWidths[colIndex];
 	const dragShift = deps.getColumnShift ? deps.getColumnShift(colIndex) : 0;
 
@@ -469,8 +464,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		rowIndex,
 		colIndex,
 		col,
-		pinLeftColumns,
-		pinRightStart,
+		lane,
 		ctx,
 		pooledRowId,
 		left,
@@ -482,7 +476,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	if (col.checkboxSelection) {
 		deps.markCellDirtyAfterScroll(cellSlot.element);
-		const cellClassName = buildCellPinClass(colIndex, pinLeftColumns, pinRightStart) + ' og-cell-row-selector';
+		const cellClassName = buildCellPinClass(lane) + ' og-cell-row-selector';
 		cellSlot.update(colIndex, col.field, rowIndex, node.id, left, right, width, cellClassName, 'custom', undefined, '', undefined);
 		return;
 	}
@@ -491,7 +485,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
 	const rendererKind: 'primitive' | 'portal' | 'loading' = isRowLoading ? 'loading' : isEditing || plan?.isCustom ? 'portal' : 'primitive';
 
-	let cellClassName = buildCellPinClass(colIndex, pinLeftColumns, pinRightStart);
+	let cellClassName = buildCellPinClass(lane);
 	if (rendererKind === 'loading') cellClassName += ' og-cell-loading';
 
 	if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {

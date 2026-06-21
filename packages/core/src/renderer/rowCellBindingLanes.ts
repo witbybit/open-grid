@@ -16,9 +16,7 @@ export interface RowCellLaneFullBindRequest<TRowData = unknown> {
 	rowIndex: number;
 	colIndex: number;
 	col: ColumnDef<TRowData>;
-	pinLeftColumns: number;
-	pinRightColumns: number;
-	pinRightStart: number;
+	lane: 'left' | 'center' | 'right';
 	pinRightBaseLeft: number;
 	plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>;
 	state: InternalGridState<TRowData>;
@@ -33,8 +31,7 @@ export interface RowCellLaneScrollBindRequest<TRowData = unknown> {
 	rowIndex: number;
 	colIndex: number;
 	col: ColumnDef<TRowData>;
-	pinLeftColumns: number;
-	pinRightStart: number;
+	lane: 'left' | 'center' | 'right';
 	ctx: ScrollRenderContext<TRowData>;
 	pooledRowId: string;
 	pooledRowGeneration: number;
@@ -63,9 +60,6 @@ export interface BindAllDataCellsRequest<TRowData = unknown> {
 	slot: RowSlot<TRowData>;
 	node: RowNode<TRowData>;
 	rowIndex: number;
-	pinLeftColumns: number;
-	pinRightColumns: number;
-	pinRightStart: number;
 	centerColStart: number;
 	centerColCount: number;
 	columns: ColumnDef<TRowData>[];
@@ -81,9 +75,6 @@ export interface BindAllDataCellsRequest<TRowData = unknown> {
 export interface BindAllLoadingCellsRequest<TRowData = unknown> {
 	slot: RowSlot<TRowData>;
 	rowIndex: number;
-	pinLeftColumns: number;
-	pinRightColumns: number;
-	pinRightStart: number;
 	centerColStart: number;
 	centerColCount: number;
 	columns: ColumnDef<TRowData>[];
@@ -293,9 +284,6 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		slot,
 		node,
 		rowIndex,
-		pinLeftColumns,
-		pinRightColumns,
-		pinRightStart,
 		centerColStart,
 		centerColCount,
 		columns,
@@ -309,7 +297,6 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 	const pinRightWidth = plan.pinRightWidth;
-	const colCount = columns.length;
 	const isRowLoading = ctx ? ctx.loadingVersion > 0 && deps.engine.data.isRowLoading(node.id) : false;
 
 	const pinLeftContainer = deps.ensurePinnedContainer(slot, 'left', pinLeftWidth);
@@ -345,24 +332,24 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		);
 	}
 
-	for (let i = 0; i < pinLeftColumns; i++) {
-		const col = columns[i];
+	for (let i = 0; i < columnTopology.left.length; i++) {
+		const placement = columnTopology.left[i];
+		const col = columns[placement.absoluteIndex];
 		const cellSlot = slot.leftCells[i];
 		if (!col || !cellSlot) continue;
-		if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === i) continue;
+		if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === placement.absoluteIndex) continue;
 		if (isScrollFrameActive) deps.onScrollCellVisited();
-		const leftArg = plan.colLefts[i];
-		const cellWidth = plan.colWidths[i];
+		const leftArg = placement.laneOffset;
+		const cellWidth = plan.colWidths[placement.absoluteIndex];
 		if (isScrollFrameActive) {
 			deps.onScrollCellPatched();
 			bindCellDuringScroll(deps.cellBinderDeps, {
 				cellSlot,
 				node,
 				rowIndex,
-				colIndex: i,
+				colIndex: placement.absoluteIndex,
 				col,
-				pinLeftColumns,
-				pinRightStart,
+				lane: 'left',
 				ctx: ctx!,
 				pooledRowId: slot.id,
 				pooledRowGeneration: slot.generation,
@@ -379,11 +366,9 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				slotGeneration: slot.generation,
 				node,
 				rowIndex,
-				colIndex: i,
+				colIndex: placement.absoluteIndex,
 				col,
-				pinLeftColumns,
-				pinRightColumns,
-				pinRightStart,
+				lane: 'left',
 				pinRightBaseLeft,
 				plan,
 				state,
@@ -409,8 +394,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				rowIndex,
 				colIndex: c,
 				col,
-				pinLeftColumns,
-				pinRightStart,
+				lane: 'center',
 				ctx: ctx!,
 				pooledRowId: slot.id,
 				pooledRowGeneration: slot.generation,
@@ -429,9 +413,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				rowIndex,
 				colIndex: c,
 				col,
-				pinLeftColumns,
-				pinRightColumns,
-				pinRightStart,
+				lane: 'center',
 				pinRightBaseLeft,
 				plan,
 				state,
@@ -440,16 +422,16 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		}
 	}
 
-	for (let i = 0; i < pinRightColumns; i++) {
-		const c = pinRightStart + i;
-		if (c >= colCount) continue;
+	for (let i = 0; i < columnTopology.right.length; i++) {
+		const placement = columnTopology.right[i];
+		const c = placement.absoluteIndex;
 		const col = columns[c];
 		const cellSlot = slot.rightCells[i];
 		if (!col || !cellSlot) continue;
 		if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === c) continue;
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		// Use topology laneOffset for right cells (= absoluteLeft - pinRightBaseLeft).
-		const leftArg = columnTopology.byColumnId.get(col.field)?.laneOffset ?? plan.colLefts[c] - pinRightBaseLeft;
+		const leftArg = placement.laneOffset;
 		const cellWidth = plan.colWidths[c];
 		if (isScrollFrameActive) {
 			deps.onScrollCellPatched();
@@ -459,8 +441,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				rowIndex,
 				colIndex: c,
 				col,
-				pinLeftColumns,
-				pinRightStart,
+				lane: 'right',
 				ctx: ctx!,
 				pooledRowId: slot.id,
 				pooledRowGeneration: slot.generation,
@@ -479,9 +460,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				rowIndex,
 				colIndex: c,
 				col,
-				pinLeftColumns,
-				pinRightColumns,
-				pinRightStart,
+				lane: 'right',
 				pinRightBaseLeft,
 				plan,
 				state,
@@ -495,9 +474,6 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 	const {
 		slot,
 		rowIndex,
-		pinLeftColumns,
-		pinRightColumns,
-		pinRightStart,
 		centerColStart,
 		centerColCount,
 		columns,
@@ -508,7 +484,6 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 	const pinRightWidth = plan.pinRightWidth;
-	const colCount = columns.length;
 
 	const pinLeftContainer = deps.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 	const pinRightContainer = deps.ensurePinnedContainer(slot, 'right', pinRightWidth);
@@ -567,16 +542,11 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 		if (isScrollFrameActive && didWrite) deps.onScrollCellWritten();
 	};
 
-	for (let i = 0; i < pinLeftColumns; i++) bindLoadingCell(slot.leftCells[i], i, plan.colLefts[i]);
+	for (let i = 0; i < columnTopology.left.length; i++) {
+		bindLoadingCell(slot.leftCells[i], columnTopology.left[i].absoluteIndex, columnTopology.left[i].laneOffset);
+	}
 	for (let i = 0; i < centerColCount; i++) bindLoadingCell(slot.centerCells[i], centerColStart + i, plan.colLefts[centerColStart + i]);
-	for (let i = 0; i < pinRightColumns; i++) {
-		const c = pinRightStart + i;
-		if (c < colCount) {
-			const col = columns[c];
-			const leftArg = col
-				? (columnTopology.byColumnId.get(col.field)?.laneOffset ?? plan.colLefts[c] - pinRightBaseLeft)
-				: plan.colLefts[c] - pinRightBaseLeft;
-			bindLoadingCell(slot.rightCells[i], c, leftArg);
-		}
+	for (let i = 0; i < columnTopology.right.length; i++) {
+		bindLoadingCell(slot.rightCells[i], columnTopology.right[i].absoluteIndex, columnTopology.right[i].laneOffset);
 	}
 }
