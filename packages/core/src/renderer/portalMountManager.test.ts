@@ -508,7 +508,13 @@ describe('PortalMountManager', () => {
 			});
 
 			manager.setRuntimeState(makeScrollingRuntimeState());
-			manager.releaseCellForScroll({ cellKey: 'ci1-name', rowSlotId: 'slot-0', slotGeneration: 0, cellRowBindingGeneration: 0, cellInstanceId: 'ci1' });
+			manager.releaseCellForScroll({
+				cellKey: 'ci1-name',
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci1',
+			});
 
 			// Rebind to new row generation before flush
 			manager.setRuntimeState(makeIdleRuntimeState());
@@ -554,7 +560,13 @@ describe('PortalMountManager', () => {
 			});
 
 			manager.setRuntimeState(makeScrollingRuntimeState());
-			manager.releaseCellForScroll({ cellKey: 'ci2-name', rowSlotId: 'slot-0', slotGeneration: 0, cellRowBindingGeneration: 0, cellInstanceId: 'ci2' });
+			manager.releaseCellForScroll({
+				cellKey: 'ci2-name',
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci2',
+			});
 
 			// Rebind to same slot generation but incremented cell binding generation
 			manager.setRuntimeState(makeIdleRuntimeState());
@@ -600,7 +612,13 @@ describe('PortalMountManager', () => {
 			});
 
 			manager.setRuntimeState(makeScrollingRuntimeState());
-			manager.releaseCellForScroll({ cellKey: 'ci3-name', rowSlotId: 'slot-0', slotGeneration: 0, cellRowBindingGeneration: 0, cellInstanceId: 'ci3' });
+			manager.releaseCellForScroll({
+				cellKey: 'ci3-name',
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci3',
+			});
 
 			// New CellSlot at same slot/generation but different cellInstanceId
 			manager.setRuntimeState(makeIdleRuntimeState());
@@ -694,7 +712,13 @@ describe('PortalMountManager', () => {
 			});
 
 			manager.setRuntimeState(makeScrollingRuntimeState());
-			manager.releaseCellForScroll({ cellKey: 'ci6-name', rowSlotId: 'slot-0', slotGeneration: 0, cellRowBindingGeneration: 0, cellInstanceId: 'ci6' });
+			manager.releaseCellForScroll({
+				cellKey: 'ci6-name',
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci6',
+			});
 
 			manager.setRuntimeState(makeIdleRuntimeState());
 			manager.flushDeferred();
