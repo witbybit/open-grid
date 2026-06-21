@@ -1,6 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { computeRenderWindow, type RenderWindow, type StickyGroupStackItem } from './renderWindow.js';
 import type { InternalColumnDef } from '../columnDef.js';
+import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
 
 export const LEAF_HEADER_HEIGHT = 40;
 export const GROUP_PANEL_HEIGHT = 42;
@@ -121,60 +122,50 @@ export interface GridLayoutPlan {
 	headerBands: HeaderBandLayout[];
 	stickyGroups: StickyGroupStackItem[];
 	renderWindow: RenderWindow;
+	/** Authoritative column topology: lane membership, lane-relative offsets, group segments. */
+	columnTopology: CompiledColumnTopology;
 }
 
 export function getRightPinnedLaneScreenLeft(layoutPlan: GridLayoutPlan): number {
 	return layoutPlan.viewport.clientWidth - layoutPlan.columns.lanes.right.width;
 }
 
-function normalizeHeaderGroups(headerGroup: string | string[] | undefined): string[] {
-	if (!headerGroup) return [];
-	return Array.isArray(headerGroup) ? headerGroup : [headerGroup];
-}
-
+/**
+ * Builds HeaderBandLayout[] from the compiled column topology (WS10).
+ * All `left` values are lane-relative offsets — the renderer uses them directly
+ * without any per-lane subtraction.
+ */
 function buildHeaderBands<TRowData>(
-	columns: InternalColumnDef<TRowData>[],
-	colLefts: ArrayLike<number>,
-	colWidths: ArrayLike<number>,
-	totalColumnsWidth: number,
-	pinLeftCount: number,
-	firstRightPinColIdx: number,
+	topology: CompiledColumnTopology,
+	columns: readonly InternalColumnDef<TRowData>[],
 	leafHeaderHeight: number,
 	enableColumnReorder: boolean,
 	defaultColWidth: number
 ): HeaderBandLayout[] {
-	const colCount = columns.length;
-
-	// Compute max group depth across all columns
-	let maxGroupDepth = 0;
-	for (let c = 0; c < colCount; c++) {
-		const groups = normalizeHeaderGroups(columns[c].headerGroup);
-		if (groups.length > maxGroupDepth) maxGroupDepth = groups.length;
-	}
-
+	const maxGroupDepth = topology.groupSegments.length;
 	const groupBandsHeight = maxGroupDepth * GROUP_BAND_HEIGHT;
 	const leafBandTop = groupBandsHeight;
 
-	// Build leaf band
-	const leafCells: HeaderCellLayout[] = columns.map((column, colIndex) => {
-		const pinned: 'left' | 'center' | 'right' = colIndex < pinLeftCount ? 'left' : colIndex >= firstRightPinColIdx ? 'right' : 'center';
+	// Leaf band — laneOffset is already lane-relative for all three lanes.
+	const leafCells: HeaderCellLayout[] = topology.placements.map((placement) => {
+		const col = columns[placement.absoluteIndex];
 		return {
-			id: column.field,
-			field: column.field,
-			label: column.header ?? column.field,
+			id: placement.columnId,
+			field: placement.columnId,
+			label: col.header ?? col.field,
 			depth: maxGroupDepth,
-			colStart: colIndex,
-			colEnd: colIndex,
-			left: colLefts[colIndex] ?? 0,
-			width: colWidths[colIndex] ?? defaultColWidth,
+			colStart: placement.absoluteIndex,
+			colEnd: placement.absoluteIndex,
+			left: placement.laneOffset,
+			width: placement.width || defaultColWidth,
 			top: leafBandTop,
 			height: leafHeaderHeight,
-			pinned,
+			pinned: placement.lane,
 			isLeaf: true,
-			movable: enableColumnReorder && column.movable !== false && !column.checkboxSelection,
+			movable: enableColumnReorder && col.movable !== false && !col.checkboxSelection,
 			resizable: true,
-			sortable: column.sortable !== false && !column.checkboxSelection,
-			checkboxSelection: !!column.checkboxSelection,
+			sortable: col.sortable !== false && !col.checkboxSelection,
+			checkboxSelection: !!col.checkboxSelection,
 		};
 	});
 
@@ -184,67 +175,34 @@ function buildHeaderBands<TRowData>(
 
 	const bands: HeaderBandLayout[] = [];
 
-	// Build one band per group depth level
+	// Group bands from pre-computed topology segments (also lane-relative).
 	for (let d = 0; d < maxGroupDepth; d++) {
 		const bandTop = d * GROUP_BAND_HEIGHT;
-		const cells: HeaderCellLayout[] = [];
-		let i = 0;
+		const segments = topology.groupSegments[d];
+		if (!segments || segments.length === 0) continue;
 
-		while (i < colCount) {
-			const groups = normalizeHeaderGroups(columns[i].headerGroup);
-			const groupName = groups[d];
+		const cells: HeaderCellLayout[] = segments.map((seg) => ({
+			id: seg.id,
+			field: '',
+			label: seg.label,
+			depth: d,
+			colStart: seg.colStart,
+			colEnd: seg.colEnd,
+			left: seg.laneOffset,
+			width: seg.width,
+			top: bandTop,
+			height: GROUP_BAND_HEIGHT,
+			pinned: seg.lane,
+			isLeaf: false,
+			movable: false,
+			resizable: false,
+			sortable: false,
+			checkboxSelection: false,
+		}));
 
-			if (!groupName) {
-				// Column has no group at this depth — skip it in this band
-				i++;
-				continue;
-			}
-
-			const pinned: 'left' | 'center' | 'right' = i < pinLeftCount ? 'left' : i >= firstRightPinColIdx ? 'right' : 'center';
-
-			// Extend the span as long as: same group name, same pin zone, and column has a group at this depth
-			let j = i + 1;
-			while (j < colCount) {
-				const nextGroups = normalizeHeaderGroups(columns[j].headerGroup);
-				const nextGroupName = nextGroups[d];
-				const nextPinned: 'left' | 'center' | 'right' = j < pinLeftCount ? 'left' : j >= firstRightPinColIdx ? 'right' : 'center';
-				if (nextGroupName !== groupName || nextPinned !== pinned) break;
-				j++;
-			}
-
-			// j is one past the last column in this span
-			const left = colLefts[i] ?? 0;
-			const rightEdge = j < colCount ? (colLefts[j] ?? totalColumnsWidth) : totalColumnsWidth;
-			const width = rightEdge - left;
-
-			cells.push({
-				id: `grp:${d}:${columns[i].field}:${columns[j - 1].field}`,
-				field: '',
-				label: groupName,
-				depth: d,
-				colStart: i,
-				colEnd: j - 1,
-				left,
-				width,
-				top: bandTop,
-				height: GROUP_BAND_HEIGHT,
-				pinned,
-				isLeaf: false,
-				movable: false,
-				resizable: false,
-				sortable: false,
-				checkboxSelection: false,
-			});
-
-			i = j;
-		}
-
-		if (cells.length > 0) {
-			bands.push({ depth: d, top: bandTop, height: GROUP_BAND_HEIGHT, cells });
-		}
+		bands.push({ depth: d, top: bandTop, height: GROUP_BAND_HEIGHT, cells });
 	}
 
-	// Leaf band goes last
 	bands.push({ depth: maxGroupDepth, top: leafBandTop, height: leafHeaderHeight, cells: leafCells });
 
 	return bands;
@@ -272,13 +230,11 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			? totalColumnsWidth - (engine.geometry.colLefts[firstRightPinColIdx] || totalColumnsWidth)
 			: 0;
 
+	const columnTopology = compileColumnTopology(columnPlan);
+
 	const headerBands = buildHeaderBands(
+		columnTopology,
 		columnPlan.displayedColumns,
-		columnPlan.colLefts,
-		columnPlan.colWidths,
-		totalColumnsWidth,
-		pinLeftCount,
-		firstRightPinColIdx,
 		leafHeaderHeight,
 		state.enableColumnReorder ?? true,
 		state.defaultColWidth
@@ -391,5 +347,6 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 		headerBands,
 		stickyGroups: renderWindow.stickyGroupStack ?? [],
 		renderWindow,
+		columnTopology,
 	};
 }

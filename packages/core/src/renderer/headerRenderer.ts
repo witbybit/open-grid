@@ -94,7 +94,7 @@ export class HeaderRenderer<TRowData = unknown> {
 		const { pinLeftCount: pinLeft, pinRightCount: pinRight } = layoutPlan.columns;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
 		const colEnd = range?.endIdx ?? layoutPlan.columns.colEnd;
-		const topologyVersion = this.engine.columns.getCompiledPlan().version;
+		const topologyVersion = layoutPlan.columnTopology.version;
 
 		if (
 			colStart === this.lastHeaderVisibleRange.startIdx &&
@@ -135,11 +135,10 @@ export class HeaderRenderer<TRowData = unknown> {
 		const focusColIdx = focus !== null ? this.engine.columns.getColumnIndex(focus.colField) : -1;
 		const highlightMinCol = bounds !== null ? bounds.minCol : focusColIdx >= 0 ? focusColIdx : null;
 		const highlightMaxCol = bounds !== null ? bounds.maxCol : focusColIdx >= 0 ? focusColIdx : null;
-		const { pinLeftCount, pinRightCount, pinLeftWidth } = layoutPlan.columns;
+		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
 		const colCount = leafBand.cells.length;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
 		const colEnd = range?.endIdx ?? layoutPlan.columns.colEnd;
-		const pinRightBaseLeft = layoutPlan.columns.lanes.right.baseLeft;
 
 		if (
 			!forceRepaint &&
@@ -167,21 +166,17 @@ export class HeaderRenderer<TRowData = unknown> {
 			}
 			rendered.add(cellKey);
 
+			// cell.left is lane-relative for all three lanes (WS10). No per-lane subtraction needed.
 			let className = cell.isLeaf ? 'og-header-cell' : 'og-header-cell og-header-group-cell';
-			let cellLeft = cell.left;
+			const cellLeft = cell.left;
 			let targetLayer = this.headerLayer;
 
 			if (cell.pinned === 'left') {
 				className += ' og-header-cell-pinned-left';
 				targetLayer = this.headerLeftLayer;
-				// cellLeft = cell.left — already lane-relative (left zone starts at 0)
 			} else if (cell.pinned === 'right') {
 				className += ' og-header-cell-pinned-right';
-				cellLeft = cell.left - pinRightBaseLeft;
 				targetLayer = this.headerRightLayer;
-			} else {
-				// Center lane: cell.left is content-space; the center flex section starts at pinLeftWidth.
-				cellLeft = cell.left - pinLeftWidth;
 			}
 
 			if (cell.isLeaf) {
@@ -367,7 +362,7 @@ export class HeaderRenderer<TRowData = unknown> {
 			}
 		}
 
-		this.lastTopologyVersion = this.engine.columns.getCompiledPlan().version;
+		this.lastTopologyVersion = layoutPlan.columnTopology.version;
 		this.lastHeaderVisibleRange = {
 			startIdx: colStart,
 			endIdx: colEnd,

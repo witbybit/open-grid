@@ -17,6 +17,7 @@ import {
 	type BindAllLoadingCellsRequest,
 	type RowCellBindingLaneDeps,
 } from './rowCellBindingLanes.js';
+import type { CompiledColumnTopology } from './columnTopology.js';
 import {
 	decorateDirtyCellsAfterScroll as decorateDirtyCellsAfterScrollMaintenance,
 	repaintInvalidatedRowsAndCells as repaintInvalidatedRowsAndCellsMaintenance,
@@ -351,6 +352,19 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 }
 
 export function bindFullWidthRow<TRowData>(args: RowRendererRuntimeArgs<TRowData>, slot: RowSlot<TRowData>, visualRow: VisualRow<TRowData>): void {
+	const EMPTY_TOPOLOGY: CompiledColumnTopology = {
+		version: 0,
+		placements: [],
+		byColumnId: new Map(),
+		left: [],
+		center: [],
+		right: [],
+		groupSegments: [],
+		pinLeftWidth: 0,
+		pinRightWidth: 0,
+		pinRightBaseLeft: 0,
+		totalContentWidth: 0,
+	};
 	args.fullWidthRenderer.bind(
 		slot,
 		visualRow,
@@ -359,7 +373,7 @@ export function bindFullWidthRow<TRowData>(args: RowRendererRuntimeArgs<TRowData
 			// This properly removes cells from cellsByColumnId and calls releaseFn on each.
 			const pinLeftContainer = args.ensurePinnedContainer(s, 'left', 0);
 			const pinRightContainer = args.ensurePinnedContainer(s, 'right', 0);
-			reconcileTopology(s, 0, pinLeftContainer, 0, 0, 0, 0, pinRightContainer, [], args.initCell, args.releaseCellFn);
+			reconcileTopology(s, EMPTY_TOPOLOGY, pinLeftContainer, 0, 0, pinRightContainer, [], args.initCell, args.releaseCellFn);
 		},
 		(s) => args.releaseRowPortal(s)
 	);

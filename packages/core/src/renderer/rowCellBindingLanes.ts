@@ -6,6 +6,7 @@ import { CellSlot } from './cellSlot.js';
 import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './rowCellBinder.js';
 import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
+import type { CompiledColumnTopology } from './columnTopology.js';
 
 export interface RowCellLaneFullBindRequest<TRowData = unknown> {
 	cellSlot: CellSlot<TRowData>;
@@ -69,6 +70,8 @@ export interface BindAllDataCellsRequest<TRowData = unknown> {
 	centerColCount: number;
 	columns: ColumnDef<TRowData>[];
 	plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>;
+	/** Authoritative column topology for lane membership and lane-relative offsets. */
+	columnTopology: CompiledColumnTopology;
 	isScrollFrameActive: boolean;
 	ctx?: ScrollRenderContext<TRowData>;
 	state: InternalGridState<TRowData>;
@@ -85,6 +88,8 @@ export interface BindAllLoadingCellsRequest<TRowData = unknown> {
 	centerColCount: number;
 	columns: ColumnDef<TRowData>[];
 	plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>;
+	/** Authoritative column topology for lane membership and lane-relative offsets. */
+	columnTopology: CompiledColumnTopology;
 	isScrollFrameActive: boolean;
 }
 
@@ -123,37 +128,24 @@ export function syncCellsByColumnId<TRowData>(slot: RowSlot<TRowData>): void {
  */
 function reconcileTopology<TRowData>(
 	slot: RowSlot<TRowData>,
-	pinLeftColumns: number,
+	topology: CompiledColumnTopology,
 	pinLeftContainer: HTMLDivElement | null,
 	centerColStart: number,
 	centerColCount: number,
-	pinRightColumns: number,
-	pinRightStart: number,
 	pinRightContainer: HTMLDivElement | null,
 	columns: readonly ColumnDef<TRowData>[],
 	initFn: (el: HTMLDivElement) => void,
 	releaseFn: (cell: CellSlot<TRowData>) => void
 ): void {
-	const colCount = columns.length;
-
-	// Build the set of column fields in the new topology.
+	// Build the set of column fields in the new rendered topology.
 	const newFields = new Set<string>();
-	for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
-		const col = columns[i];
-		if (col?.field) newFields.add(col.field);
-	}
-	for (let i = 0; i < centerColCount; i++) {
-		const c = centerColStart + i;
-		const col = columns[c];
-		if (col?.field) newFields.add(col.field);
-	}
-	for (let i = 0; i < pinRightColumns; i++) {
-		const c = pinRightStart + i;
-		if (c < colCount) {
-			const col = columns[c];
-			if (col?.field) newFields.add(col.field);
+	for (const p of topology.left) if (p.columnId) newFields.add(p.columnId);
+	for (const p of topology.center) {
+		if (p.absoluteIndex >= centerColStart && p.absoluteIndex < centerColStart + centerColCount) {
+			if (p.columnId) newFields.add(p.columnId);
 		}
 	}
+	for (const p of topology.right) if (p.columnId) newFields.add(p.columnId);
 
 	// Step 1 — destroy cells for columns that exited the rendered set.
 	for (const [field, cell] of slot.cellsByColumnId) {
@@ -164,9 +156,8 @@ function reconcileTopology<TRowData>(
 		}
 	}
 
-	// Helper: get-or-create a cell for a column field.
-	// columnId is set here at construction time — it is the cell's permanent column identity.
-	// colField mirrors this and is also guarded-written by update() in the bind loop.
+	// columnId is set at construction time — the cell's permanent column identity.
+	// colField mirrors this and is guarded-written by update() in the bind loop.
 	function ensureCell(field: string): CellSlot<TRowData> {
 		let cell = slot.cellsByColumnId.get(field);
 		if (!cell) {
@@ -179,51 +170,43 @@ function reconcileTopology<TRowData>(
 		return cell;
 	}
 
-	// Step 2 & 3 — rebuild lane arrays, creating or relocating cells as needed.
+	// Step 2 & 3 — rebuild lane arrays from topology, creating or relocating cells as needed.
 	slot.leftCells.length = 0;
 	if (pinLeftContainer) {
-		for (let i = 0; i < pinLeftColumns && i < colCount; i++) {
-			const col = columns[i];
+		for (const p of topology.left) {
+			const col = columns[p.absoluteIndex];
 			if (!col?.field) continue;
 			const cell = ensureCell(col.field);
-			if (cell.element.parentNode !== pinLeftContainer) {
-				pinLeftContainer.appendChild(cell.element);
-			}
+			if (cell.element.parentNode !== pinLeftContainer) pinLeftContainer.appendChild(cell.element);
 			slot.leftCells.push(cell);
 		}
 	}
 
 	slot.centerCells.length = 0;
-	for (let i = 0; i < centerColCount; i++) {
-		const c = centerColStart + i;
-		if (c >= colCount) continue;
+	for (const p of topology.center) {
+		const c = p.absoluteIndex;
+		if (c < centerColStart || c >= centerColStart + centerColCount) continue;
 		const col = columns[c];
 		if (!col?.field) continue;
 		const cell = ensureCell(col.field);
-		if (cell.element.parentNode !== slot.element) {
-			slot.element.appendChild(cell.element);
-		}
+		if (cell.element.parentNode !== slot.element) slot.element.appendChild(cell.element);
 		slot.centerCells.push(cell);
 	}
 
 	slot.rightCells.length = 0;
 	if (pinRightContainer) {
-		for (let i = 0; i < pinRightColumns; i++) {
-			const c = pinRightStart + i;
-			if (c >= colCount) continue;
-			const col = columns[c];
+		for (const p of topology.right) {
+			const col = columns[p.absoluteIndex];
 			if (!col?.field) continue;
 			const cell = ensureCell(col.field);
-			if (cell.element.parentNode !== pinRightContainer) {
-				pinRightContainer.appendChild(cell.element);
-			}
+			if (cell.element.parentNode !== pinRightContainer) pinRightContainer.appendChild(cell.element);
 			slot.rightCells.push(cell);
 		}
 	}
 
 	slot.centerColStart = centerColStart;
-	slot.pinLeftCount = pinLeftColumns;
-	slot.pinRightStart = pinRightStart;
+	slot.pinLeftCount = topology.left.length;
+	slot.pinRightStart = topology.left.length + topology.center.length;
 }
 
 export { reconcileTopology };
@@ -240,6 +223,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		centerColCount,
 		columns,
 		plan,
+		columnTopology,
 		isScrollFrameActive,
 		ctx,
 		state,
@@ -260,12 +244,10 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		syncCellsByColumnId(slot);
 		reconcileTopology(
 			slot,
-			pinLeftColumns,
+			columnTopology,
 			pinLeftContainer,
 			centerColStart,
 			centerColCount,
-			pinRightColumns,
-			pinRightStart,
 			pinRightContainer,
 			columns,
 			deps.initCell,
@@ -386,7 +368,8 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		if (!col || !cellSlot) continue;
 		if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === c) continue;
 		if (isScrollFrameActive) deps.onScrollCellVisited();
-		const leftArg = plan.colLefts[c] - pinRightBaseLeft;
+		// Use topology laneOffset for right cells (= absoluteLeft - pinRightBaseLeft).
+		const leftArg = columnTopology.byColumnId.get(col.field)?.laneOffset ?? (plan.colLefts[c] - pinRightBaseLeft);
 		const cellWidth = plan.colWidths[c];
 		if (isScrollFrameActive) {
 			deps.onScrollCellPatched();
@@ -429,7 +412,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 }
 
 export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData>, request: BindAllLoadingCellsRequest<TRowData>): void {
-	const { slot, rowIndex, pinLeftColumns, pinRightColumns, pinRightStart, centerColStart, centerColCount, columns, plan, isScrollFrameActive } =
+	const { slot, rowIndex, pinLeftColumns, pinRightColumns, pinRightStart, centerColStart, centerColCount, columns, plan, columnTopology, isScrollFrameActive } =
 		request;
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
@@ -443,12 +426,10 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 		syncCellsByColumnId(slot);
 		reconcileTopology(
 			slot,
-			pinLeftColumns,
+			columnTopology,
 			pinLeftContainer,
 			centerColStart,
 			centerColCount,
-			pinRightColumns,
-			pinRightStart,
 			pinRightContainer,
 			columns,
 			deps.initCell,
@@ -496,6 +477,10 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 	for (let i = 0; i < centerColCount; i++) bindLoadingCell(slot.centerCells[i], centerColStart + i, plan.colLefts[centerColStart + i]);
 	for (let i = 0; i < pinRightColumns; i++) {
 		const c = pinRightStart + i;
-		if (c < colCount) bindLoadingCell(slot.rightCells[i], c, plan.colLefts[c] - pinRightBaseLeft);
+		if (c < colCount) {
+			const col = columns[c];
+			const leftArg = col ? (columnTopology.byColumnId.get(col.field)?.laneOffset ?? (plan.colLefts[c] - pinRightBaseLeft)) : plan.colLefts[c] - pinRightBaseLeft;
+			bindLoadingCell(slot.rightCells[i], c, leftArg);
+		}
 	}
 }

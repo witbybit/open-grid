@@ -110,10 +110,14 @@ describe('GridLayoutPlan', () => {
 
 		expect(plan.headerBands).toHaveLength(1);
 		expect(plan.headerBands[0]).toMatchObject({ depth: 0, top: 0, height: LEAF_HEADER_HEIGHT });
+		// After WS10: cell.left is lane-relative for all lanes.
+		// a (left lane): laneOffset = absoluteLeft - 0 = 0
+		// b (center lane): laneOffset = absoluteLeft(80) - pinLeftWidth(80) = 0
+		// c (right lane): laneOffset = absoluteLeft(200) - pinRightBaseLeft(200) = 0
 		expect(plan.headerBands[0].cells.map((cell) => [cell.field, cell.label, cell.left, cell.width, cell.pinned, cell.movable])).toEqual([
 			['a', 'A', 0, 80, 'left', true],
-			['b', 'B', 80, 120, 'center', false],
-			['c', 'C', 200, 160, 'right', true],
+			['b', 'B', 0, 120, 'center', false],
+			['c', 'C', 0, 160, 'right', true],
 		]);
 
 		controller.dispose();

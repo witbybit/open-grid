@@ -20,6 +20,7 @@ import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
 import { asVisibleBlockLoadCapableRowModel } from '../rowModel.js';
 import { compileStyleRules, evaluateDetailRowStyleRules, evaluateGroupRowStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
 import { PinnedContainerManager } from './pinnedContainerManager.js';
+import { compileColumnTopology } from './columnTopology.js';
 
 // Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
 const ROW_KIND_BASE: Record<string, string> = {
@@ -298,6 +299,7 @@ export class RowRenderer<TRowData = unknown> {
 		const rowModel = this.engine.getVisualRowModel();
 
 		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
+		const columnTopology = compileColumnTopology(plan);
 		const columns = plan.displayedColumns;
 		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
 
@@ -537,6 +539,7 @@ export class RowRenderer<TRowData = unknown> {
 					centerColCount,
 					columns,
 					plan,
+					columnTopology,
 					isScrollFrameActive,
 				});
 			} else if (visualRow.kind === 'data') {
@@ -552,6 +555,7 @@ export class RowRenderer<TRowData = unknown> {
 					centerColCount,
 					columns,
 					plan,
+					columnTopology,
 					isScrollFrameActive,
 					ctx,
 					state,

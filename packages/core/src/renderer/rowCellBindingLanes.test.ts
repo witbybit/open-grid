@@ -13,7 +13,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { RowSlot } from './rowSlot.js';
 import { CellSlot } from './cellSlot.js';
 import { reconcileTopology, syncCellsByColumnId } from './rowCellBindingLanes.js';
-import type { ColumnDef } from '../columnDef.js';
+import type { ColumnDef, CompiledGridPlan } from '../columnDef.js';
+import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,31 @@ const initCell = (el: HTMLDivElement): void => {
 	el.className = 'og-cell';
 };
 
+/** Builds a CompiledColumnTopology from simple lane-membership parameters for testing. */
+function makeTopology(cols: ColumnDef<unknown>[], pinLeftCount: number, pinRightCount: number, pinRightStart: number): CompiledColumnTopology {
+	const colWidth = 100;
+	const colCount = cols.length;
+	const colLefts = cols.map((_, i) => i * colWidth);
+	const colWidths = cols.map(() => colWidth);
+	const pinLeftWidth = pinLeftCount * colWidth;
+	const pinRightBaseLeft = pinRightStart * colWidth;
+	const pinRightWidth = pinRightCount * colWidth;
+	const totalWidth = colCount * colWidth;
+	return compileColumnTopology({
+		displayedColumns: cols,
+		colLefts,
+		colWidths,
+		pinLeftCount,
+		pinRightStart,
+		pinRightCount,
+		pinLeftWidth,
+		pinRightWidth,
+		pinRightBaseLeft,
+		totalWidth,
+		version: 1,
+	} as unknown as CompiledGridPlan<unknown>);
+}
+
 // ── cellInstanceId invariants ──────────────────────────────────────────────────
 
 // ── WS2: columnId set at construction time ────────────────────────────────────
@@ -41,7 +67,8 @@ const initCell = (el: HTMLDivElement): void => {
 describe('reconcileTopology — WS2 columnId ownership', () => {
 	it('sets columnId on each cell at construction time', () => {
 		const slot = makeRowSlot();
-		reconcileTopology(slot, 0, null, 0, 3, 0, 3, null, [makeCol('a'), makeCol('b'), makeCol('c')], initCell, vi.fn());
+		const aCols = [makeCol('a'), makeCol('b'), makeCol('c')];
+		reconcileTopology(slot, makeTopology(aCols, 0, 0, 3), null, 0, 3, null, aCols, initCell, vi.fn());
 
 		expect(slot.cellsByColumnId.get('a')!.columnId).toBe('a');
 		expect(slot.cellsByColumnId.get('b')!.columnId).toBe('b');
@@ -51,7 +78,7 @@ describe('reconcileTopology — WS2 columnId ownership', () => {
 	it('columnId survives lane relocation — same cell, same id', () => {
 		const slot = makeRowSlot();
 		const cols = [makeCol('name'), makeCol('price'), makeCol('qty')];
-		reconcileTopology(slot, 0, null, 0, 3, 0, 3, null, cols, initCell, vi.fn());
+		reconcileTopology(slot, makeTopology(cols, 0, 0, 3), null, 0, 3, null, cols, initCell, vi.fn());
 
 		const cell = slot.cellsByColumnId.get('name')!;
 		expect(cell.columnId).toBe('name');
@@ -59,7 +86,7 @@ describe('reconcileTopology — WS2 columnId ownership', () => {
 		// Pin name to left
 		const left = makeContainer();
 		slot.element.appendChild(left);
-		reconcileTopology(slot, 1, left, 1, 2, 0, 3, null, cols, initCell, vi.fn());
+		reconcileTopology(slot, makeTopology(cols, 1, 0, 3), left, 1, 2, null, cols, initCell, vi.fn());
 
 		// Same cell — columnId unchanged
 		expect(cell.columnId).toBe('name');
@@ -68,10 +95,11 @@ describe('reconcileTopology — WS2 columnId ownership', () => {
 
 	it('columnId is not set for pre-existing cells (idempotent)', () => {
 		const slot = makeRowSlot();
-		reconcileTopology(slot, 0, null, 0, 2, 0, 2, null, [makeCol('x'), makeCol('y')], initCell, vi.fn());
+		const xyCols = [makeCol('x'), makeCol('y')];
+		reconcileTopology(slot, makeTopology(xyCols, 0, 0, 2), null, 0, 2, null, xyCols, initCell, vi.fn());
 
 		// Second reconcile — cells already exist, columnId should still be correct
-		reconcileTopology(slot, 0, null, 0, 2, 0, 2, null, [makeCol('x'), makeCol('y')], initCell, vi.fn());
+		reconcileTopology(slot, makeTopology(xyCols, 0, 0, 2), null, 0, 2, null, xyCols, initCell, vi.fn());
 
 		expect(slot.cellsByColumnId.get('x')!.columnId).toBe('x');
 		expect(slot.cellsByColumnId.get('y')!.columnId).toBe('y');
@@ -133,16 +161,21 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 			releaseFn?: (cell: CellSlot<unknown>) => void;
 		} = {}
 	): void {
+		const cols = opts.cols ?? columns;
+		const pinLeft = opts.pinLeft ?? 0;
+		const pinRight = opts.pinRight ?? 0;
+		const colCount = cols.length;
+		const pinRightStart = opts.pinRightStart ?? (colCount - pinRight);
+		const topology = makeTopology(cols, pinLeft, pinRight, pinRightStart);
+
 		reconcileTopology(
 			slot,
-			opts.pinLeft ?? 0,
+			topology,
 			opts.pinLeftContainer ?? null,
 			opts.centerColStart ?? 0,
-			opts.centerColCount ?? (opts.cols ?? columns).length,
-			opts.pinRight ?? 0,
-			opts.pinRightStart ?? (opts.cols ?? columns).length,
+			opts.centerColCount ?? colCount,
 			opts.pinRightContainer ?? null,
-			opts.cols ?? columns,
+			cols,
 			initCell,
 			opts.releaseFn ?? vi.fn()
 		);
@@ -224,24 +257,24 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 		const cols = [makeCol('a'), makeCol('b'), makeCol('c')];
 
 		// All center
-		reconcileTopology(slot, 0, null, 0, 3, 0, 3, null, cols, initCell, vi.fn());
+		reconcileTopology(slot, makeTopology(cols, 0, 0, 3), null, 0, 3, null, cols, initCell, vi.fn());
 		const idA = slot.cellsByColumnId.get('a')!.cellInstanceId;
 
 		// Pin 'a' left
 		const left = makeContainer();
 		slot.element.appendChild(left);
-		reconcileTopology(slot, 1, left, 1, 2, 0, 3, null, cols, initCell, vi.fn());
+		reconcileTopology(slot, makeTopology(cols, 1, 0, 3), left, 1, 2, null, cols, initCell, vi.fn());
 		expect(slot.cellsByColumnId.get('a')!.cellInstanceId).toBe(idA);
 
 		// Now 'a' to right (simulate by making it the last column with pin-right)
 		const right = makeContainer();
 		slot.element.appendChild(right);
 		const colsReordered = [makeCol('b'), makeCol('c'), makeCol('a')];
-		reconcileTopology(slot, 0, null, 0, 2, 1, 2, right, colsReordered, initCell, vi.fn());
+		reconcileTopology(slot, makeTopology(colsReordered, 0, 1, 2), null, 0, 2, right, colsReordered, initCell, vi.fn());
 		expect(slot.cellsByColumnId.get('a')!.cellInstanceId).toBe(idA);
 
 		// Back to center
-		reconcileTopology(slot, 0, null, 0, 3, 0, 3, null, cols, initCell, vi.fn());
+		reconcileTopology(slot, makeTopology(cols, 0, 0, 3), null, 0, 3, null, cols, initCell, vi.fn());
 		expect(slot.cellsByColumnId.get('a')!.cellInstanceId).toBe(idA);
 	});
 
@@ -465,14 +498,14 @@ describe('reconcileTopology — unrelated column stability', () => {
 		const cols = [makeCol('a'), makeCol('b'), makeCol('c')];
 		const slot = makeRowSlot();
 
-		reconcileTopology(slot, 0, null, 0, 3, 0, 3, null, cols, initCell, vi.fn());
+		reconcileTopology(slot, makeTopology(cols, 0, 0, 3), null, 0, 3, null, cols, initCell, vi.fn());
 		const idB = slot.cellsByColumnId.get('b')!.cellInstanceId;
 		const idC = slot.cellsByColumnId.get('c')!.cellInstanceId;
 
 		// Pin 'a' — 'b' and 'c' should be unaffected
 		const left = makeContainer();
 		slot.element.appendChild(left);
-		reconcileTopology(slot, 1, left, 1, 2, 0, 3, null, cols, initCell, vi.fn());
+		reconcileTopology(slot, makeTopology(cols, 1, 0, 3), left, 1, 2, null, cols, initCell, vi.fn());
 
 		expect(slot.cellsByColumnId.get('b')!.cellInstanceId).toBe(idB);
 		expect(slot.cellsByColumnId.get('c')!.cellInstanceId).toBe(idC);

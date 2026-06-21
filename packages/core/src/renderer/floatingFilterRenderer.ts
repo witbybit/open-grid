@@ -111,17 +111,13 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 
 		const columnPlan = this.engine.columns.getCompiledPlan();
 		const columns = columnPlan.displayedColumns as InternalColumnDef<TRowData>[];
-		const colLefts = columnPlan.colLefts;
 		const colWidths = columnPlan.colWidths;
+		const topology = plan.columnTopology;
 		const colStart = plan.columns.colStart;
 		const colEnd = plan.columns.colEnd;
-		const pinLeftCount = plan.columns.pinLeftCount;
-		const firstRightPinColIdx = columns.length - plan.columns.pinRightCount;
-		const pinLeftWidth = plan.columns.pinLeftWidth;
-		const pinRightBaseLeft = plan.columns.lanes.right.baseLeft;
 		const filterModel = this.engine.stateManager.getState().filterModel;
 
-		const rangeKey = `${colStart}:${colEnd}:${pinLeftCount}:${plan.columns.pinRightCount}`;
+		const rangeKey = `${colStart}:${colEnd}:${plan.columns.pinLeftCount}:${plan.columns.pinRightCount}`;
 		const filterChanged = filterModel !== this.lastFilterModel;
 		if (
 			!force &&
@@ -132,24 +128,26 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 			return;
 		}
 		this.lastFilterModel = filterModel;
-		this.lastVisibleRange = { startIdx: colStart, endIdx: colEnd, pinLeft: pinLeftCount, pinRight: plan.columns.pinRightCount };
+		this.lastVisibleRange = { startIdx: colStart, endIdx: colEnd, pinLeft: plan.columns.pinLeftCount, pinRight: plan.columns.pinRightCount };
 
 		const colCount = columns.length;
 		const seen = new Set<string>();
 
 		for (let c = 0; c < colCount; c++) {
 			const col = columns[c];
-			const isPinLeft = c < pinLeftCount;
-			const isPinRight = c >= firstRightPinColIdx;
-			const isCenter = !isPinLeft && !isPinRight;
+			const placement = topology.byColumnId.get(col.field);
+			if (!placement) continue;
+
+			const isPinLeft = placement.lane === 'left';
+			const isPinRight = placement.lane === 'right';
+			const isCenter = placement.lane === 'center';
 
 			if (isCenter && (c < colStart || c > colEnd)) continue;
 
 			seen.add(col.field);
 
-			const absLeft = colLefts[c] ?? 0;
-			// Lane-relative left: center section starts at pinLeftWidth; right section starts at pinRightBaseLeft.
-			const left = isPinLeft ? absLeft : isPinRight ? absLeft - pinRightBaseLeft : absLeft - pinLeftWidth;
+			// laneOffset is already lane-relative for all three lanes.
+			const left = placement.laneOffset;
 			const width = colWidths[c] ?? this.engine.stateManager.getState().defaultColWidth;
 			const currentFilter = (filterModel?.[col.field] ?? null) as ColumnFilter | null;
 
