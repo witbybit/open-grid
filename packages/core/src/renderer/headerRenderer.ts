@@ -2,7 +2,7 @@ import type { InvalidationFrame } from './invalidationManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { asSelectableDataRowModel } from '../rowModel.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
-import { computeGridLayoutPlan, getRightPinnedLaneScreenLeft, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
+import { computeGridLayoutPlan, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { compileStyleRules, evaluateHeaderCellStyleRules } from '../styling/styleRules.js';
 
@@ -34,11 +34,6 @@ export class HeaderRenderer<TRowData = unknown> {
 
 	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
 	private lastTopologyVersion = -1;
-	private lastHeaderScrollLeft = 0;
-	private lastSyncedViewportWidth = -1;
-	private lastHeaderLeftTransform = '';
-	private lastHeaderRightLeft = -1;
-	private lastHeaderRightTransform = '';
 	private readonly renderedHeaderScratch = new Set<string>();
 
 	constructor(
@@ -58,6 +53,10 @@ export class HeaderRenderer<TRowData = unknown> {
 		// Clip cells that overflow the pinned lane width during pin/unpin transitions.
 		headerLeftLayer.style.overflow = 'hidden';
 		headerRightLayer.style.overflow = 'hidden';
+		// Clear any counter-transform inline styles from a previous render (defensive).
+		headerLeftLayer.style.transform = '';
+		headerRightLayer.style.transform = '';
+		headerRightLayer.style.left = '';
 		this.clearHeaderCells();
 	}
 
@@ -75,11 +74,6 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.headerCells.clear();
 		this.lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
 		this.lastTopologyVersion = -1;
-		this.lastSyncedViewportWidth = -1;
-		this.lastHeaderScrollLeft = 0;
-		this.lastHeaderLeftTransform = '';
-		this.lastHeaderRightLeft = -1;
-		this.lastHeaderRightTransform = '';
 	}
 
 	public sync(_frame: InvalidationFrame): void {
@@ -90,44 +84,9 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.syncVisibleHeaders(true, layoutPlan ?? computeGridLayoutPlan(this.engine));
 	}
 
-	public syncScrollLeft(layoutPlan: GridLayoutPlan): void {
-		const scrollLeft = layoutPlan.viewport.scrollLeft;
-		const viewportClientWidth = layoutPlan.viewport.clientWidth;
-		if (scrollLeft === this.lastHeaderScrollLeft && viewportClientWidth === this.lastSyncedViewportWidth) {
-			return;
-		}
-		this.lastHeaderScrollLeft = scrollLeft;
-		this.lastSyncedViewportWidth = viewportClientWidth;
-		this.syncPinnedLayerPositions(layoutPlan);
-	}
-
-	private syncPinnedLayerPositions(layoutPlan: GridLayoutPlan): void {
-		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
-		const scrollLeft = layoutPlan.viewport.scrollLeft;
-		// Single source of truth for the right-lane origin.
-		const pinRightBaseLeft = layoutPlan.columns.lanes.right.baseLeft;
-
-		if (this.headerLeftLayer) {
-			const transform = pinLeftCount > 0 ? `translate3d(${scrollLeft}px, 0, 0)` : '';
-			if (this.lastHeaderLeftTransform !== transform) {
-				this.lastHeaderLeftTransform = transform;
-				this.headerLeftLayer.style.transform = transform;
-			}
-		}
-
-		if (this.headerRightLayer && pinRightCount > 0) {
-			if (this.lastHeaderRightLeft !== pinRightBaseLeft) {
-				this.lastHeaderRightLeft = pinRightBaseLeft;
-				this.headerRightLayer.style.left = `${pinRightBaseLeft}px`;
-			}
-			const rightScreenLeft = getRightPinnedLaneScreenLeft(layoutPlan);
-			const transform = `translate3d(${scrollLeft + rightScreenLeft - pinRightBaseLeft}px, 0, 0)`;
-			if (this.lastHeaderRightTransform !== transform) {
-				this.lastHeaderRightTransform = transform;
-				this.headerRightLayer.style.transform = transform;
-			}
-		}
-	}
+	// Pin lanes now use CSS position:sticky — no JS counter-transform needed.
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	public syncScrollLeft(_layoutPlan: GridLayoutPlan): void {}
 
 	public syncVisibleColumnRange(layoutPlan: GridLayoutPlan, range?: { startIdx: number; endIdx: number }): boolean {
 		const band = layoutPlan.headerBands[0];
@@ -176,13 +135,11 @@ export class HeaderRenderer<TRowData = unknown> {
 		const focusColIdx = focus !== null ? this.engine.columns.getColumnIndex(focus.colField) : -1;
 		const highlightMinCol = bounds !== null ? bounds.minCol : focusColIdx >= 0 ? focusColIdx : null;
 		const highlightMaxCol = bounds !== null ? bounds.maxCol : focusColIdx >= 0 ? focusColIdx : null;
-		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
+		const { pinLeftCount, pinRightCount, pinLeftWidth } = layoutPlan.columns;
 		const colCount = leafBand.cells.length;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
 		const colEnd = range?.endIdx ?? layoutPlan.columns.colEnd;
 		const pinRightBaseLeft = layoutPlan.columns.lanes.right.baseLeft;
-
-		this.syncPinnedLayerPositions(layoutPlan);
 
 		if (
 			!forceRepaint &&
@@ -217,10 +174,14 @@ export class HeaderRenderer<TRowData = unknown> {
 			if (cell.pinned === 'left') {
 				className += ' og-header-cell-pinned-left';
 				targetLayer = this.headerLeftLayer;
+				// cellLeft = cell.left — already lane-relative (left zone starts at 0)
 			} else if (cell.pinned === 'right') {
 				className += ' og-header-cell-pinned-right';
 				cellLeft = cell.left - pinRightBaseLeft;
 				targetLayer = this.headerRightLayer;
+			} else {
+				// Center lane: cell.left is content-space; the center flex section starts at pinLeftWidth.
+				cellLeft = cell.left - pinLeftWidth;
 			}
 
 			if (cell.isLeaf) {
@@ -406,8 +367,6 @@ export class HeaderRenderer<TRowData = unknown> {
 			}
 		}
 
-		this.lastHeaderScrollLeft = layoutPlan.viewport.scrollLeft;
-		this.lastSyncedViewportWidth = layoutPlan.viewport.clientWidth;
 		this.lastTopologyVersion = this.engine.columns.getCompiledPlan().version;
 		this.lastHeaderVisibleRange = {
 			startIdx: colStart,

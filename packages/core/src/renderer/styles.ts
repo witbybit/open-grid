@@ -111,31 +111,35 @@ export const CORE_STYLES = `
   /* ── Floating filter row ────────────────────────────────────────────────── */
 
   /* Wrapper: sticky horizontal stripe, same z-index as the header. */
+  /*
+   * Floating filter wrapper — same flex+sticky model as the header wrapper.
+   * overflow:clip preserves sticky propagation for pin lanes; no left:0 so the
+   * wrapper scrolls horizontally (pin lanes handle their own sticky anchoring).
+   */
   .og-layer-floating-filter-wrapper {
     position: sticky;
     top: 0;
-    left: 0;
     z-index: 11;
     box-sizing: border-box;
     background-color: var(--og-floating-filter-bg, var(--og-header-bg));
     border-bottom: 1px solid var(--og-border-color);
-    overflow: visible;
+    overflow: clip;
   }
 
-  /* Center lane — horizontally scrolls with the scroll viewport transform. */
+  /* Center lane — grows to fill space between pin lanes. */
   .og-layer-floating-filter {
-    position: absolute;
-    top: 0;
-    left: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
     height: 100%;
     overflow: hidden;
   }
 
-  /* Left / right pinned lanes — absolutely positioned, always visible. */
+  /* Left / right pin lanes — compositor-sticky. */
   .og-layer-floating-filter-left,
   .og-layer-floating-filter-right {
-    position: absolute;
-    top: 0;
+    position: sticky;
+    flex-shrink: 0;
     height: 100%;
     z-index: 2;
     background-color: var(--og-floating-filter-bg, var(--og-header-bg));
@@ -649,32 +653,37 @@ export const CORE_STYLES = `
 
   /*
    * Header wrapper — sticky at the top of the scroll viewport.
-   * Three absolutely-positioned child layers overlap inside it (center, left-pin, right-pin).
+   * Uses a flex row so the three child lanes (left-pin | center | right-pin) sit
+   * side-by-side. overflow:clip (not hidden) preserves sticky propagation to
+   * og-scroll-viewport for the left/right pin lanes.
    */
   .og-layer-header-wrapper {
     position: sticky;
     top: 0;
     height: var(--og-total-header-height, 40px);
     z-index: 30;
-    overflow: hidden;
+    overflow: clip;
     flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
   }
 
+  /* Center lane — grows to fill the space between the two pin lanes. */
   .og-layer-header {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
     background-color: var(--og-header-bg);
   }
 
+  /* Left / right pin lanes — compositor-sticky so they never lag behind body rows. */
   .og-layer-header-left {
-    position: absolute;
-    top: 0;
+    position: sticky;
     left: 0;
+    flex-shrink: 0;
     height: 100%;
     z-index: 5;
     pointer-events: auto;
@@ -685,9 +694,9 @@ export const CORE_STYLES = `
   }
 
   .og-layer-header-right {
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: sticky;
+    right: 0;
+    flex-shrink: 0;
     height: 100%;
     z-index: 5;
     pointer-events: auto;

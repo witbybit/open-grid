@@ -76,22 +76,23 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 		},
 	},
 	{
-		id: 'header',
-		className: 'og-layer-header',
-		parent: 'header-wrapper',
-		order: 0,
-		apply(el, plan) {
-			el.style.width = `${plan.dimensions.contentWidth}px`;
-		},
-	},
-	{
+		// Left pin lane is first in DOM so the flex row is: left | center | right.
 		id: 'header-left',
 		className: 'og-layer-header-left',
 		parent: 'header-wrapper',
-		order: 1,
+		order: 0,
 		apply(el, plan) {
-			el.style.width = `${plan.columns.pinLeftWidth}px`;
+			const w = plan.columns.pinLeftWidth;
+			el.style.width = `${w}px`;
+			el.style.display = w > 0 ? '' : 'none';
 		},
+	},
+	{
+		// Center lane — flex:1 in CSS; no JS width needed.
+		id: 'header',
+		className: 'og-layer-header',
+		parent: 'header-wrapper',
+		order: 1,
 	},
 	{
 		id: 'header-right',
@@ -99,7 +100,9 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 		parent: 'header-wrapper',
 		order: 2,
 		apply(el, plan) {
-			el.style.width = `${plan.columns.pinRightWidth}px`;
+			const w = plan.columns.pinRightWidth;
+			el.style.width = `${w}px`;
+			el.style.display = w > 0 ? '' : 'none';
 		},
 	},
 	// Floating filter row — always-visible inline filter inputs below the header.
@@ -122,22 +125,23 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 		},
 	},
 	{
-		id: 'floating-filter',
-		className: 'og-layer-floating-filter',
-		parent: 'floating-filter-wrapper',
-		order: 0,
-		apply(el, plan) {
-			el.style.width = `${plan.dimensions.contentWidth}px`;
-		},
-	},
-	{
+		// Left pin lane is first in DOM so the flex row is: left | center | right.
 		id: 'floating-filter-left',
 		className: 'og-layer-floating-filter-left',
 		parent: 'floating-filter-wrapper',
-		order: 1,
+		order: 0,
 		apply(el, plan) {
-			el.style.width = `${plan.columns.pinLeftWidth}px`;
+			const w = plan.columns.pinLeftWidth;
+			el.style.width = `${w}px`;
+			el.style.display = w > 0 ? '' : 'none';
 		},
+	},
+	{
+		// Center lane — flex:1 in CSS; no JS width needed.
+		id: 'floating-filter',
+		className: 'og-layer-floating-filter',
+		parent: 'floating-filter-wrapper',
+		order: 1,
 	},
 	{
 		id: 'floating-filter-right',
@@ -145,7 +149,9 @@ export const LAYER_REGISTRY: LayerDescriptor[] = [
 		parent: 'floating-filter-wrapper',
 		order: 2,
 		apply(el, plan) {
-			el.style.width = `${plan.columns.pinRightWidth}px`;
+			const w = plan.columns.pinRightWidth;
+			el.style.width = `${w}px`;
+			el.style.display = w > 0 ? '' : 'none';
 		},
 	},
 	{

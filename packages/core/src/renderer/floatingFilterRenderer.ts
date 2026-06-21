@@ -56,11 +56,6 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 
 	// Cell elements keyed by column field (survives reorder)
 	private cells = new Map<string, HTMLDivElement>();
-	private lastScrollLeft = 0;
-	private lastSyncedViewportWidth = -1;
-	private lastLeftTransform = '';
-	private lastRightLeft = -1;
-	private lastRightTransform = '';
 	private lastFilterModel: FilterModel | null = null;
 	private lastVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1 };
 	private unsubscribers: (() => void)[] = [];
@@ -76,6 +71,11 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		// Clip filter cells that overflow the pinned lane width during pin/unpin transitions.
 		filterLeftLayer.style.overflow = 'hidden';
 		filterRightLayer.style.overflow = 'hidden';
+		// Clear any counter-transform inline styles from a previous render (defensive).
+		filterLayer.style.transform = '';
+		filterLeftLayer.style.transform = '';
+		filterRightLayer.style.transform = '';
+		filterRightLayer.style.left = '';
 		this.clearCells();
 
 		// Re-render on filter model change (values may change from outside)
@@ -99,53 +99,10 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		this.syncVisibleFilters(true, layoutPlan ?? computeGridLayoutPlan(this.engine));
 	}
 
-	public syncScrollLeft(layoutPlan: GridLayoutPlan): void {
-		const scrollLeft = layoutPlan.viewport.scrollLeft;
-		const clientWidth = layoutPlan.viewport.clientWidth;
-		if (scrollLeft === this.lastScrollLeft && clientWidth === this.lastSyncedViewportWidth) return;
-		this.lastScrollLeft = scrollLeft;
-		this.lastSyncedViewportWidth = clientWidth;
-		// Close the set-filter dropdown on horizontal scroll (it's fixed-position and won't track)
+	public syncScrollLeft(_layoutPlan: GridLayoutPlan): void {
+		// Pin lanes now use CSS position:sticky — no JS counter-transform needed.
+		// Close the set-filter dropdown on horizontal scroll (it's fixed-position and won't track).
 		closeOpenMenus();
-		this.syncPinnedPositions(layoutPlan);
-	}
-
-	private syncPinnedPositions(plan: GridLayoutPlan): void {
-		if (!this.filterLayer || !this.filterLeftLayer || !this.filterRightLayer) return;
-
-		const scrollLeft = plan.viewport.scrollLeft;
-		const clientWidth = plan.viewport.clientWidth;
-		const pinLeftWidth = plan.columns.pinLeftWidth;
-		const pinRightWidth = plan.columns.pinRightWidth;
-
-		// Center lane scrolls with the viewport
-		const centerTransform = `translate3d(${-scrollLeft}px, 0, 0)`;
-		if (this.filterLayer.style.transform !== centerTransform) {
-			this.filterLayer.style.transform = centerTransform;
-		}
-
-		// Left pin: counter-scroll so it stays fixed at left edge
-		const leftTransform = `translate3d(${scrollLeft}px, 0, 0)`;
-		if (this.lastLeftTransform !== leftTransform) {
-			this.lastLeftTransform = leftTransform;
-			this.filterLeftLayer.style.transform = leftTransform;
-		}
-
-		// Right pin: position at right edge of client, counter-scroll
-		const rightLeft = scrollLeft + clientWidth - pinRightWidth;
-		if (this.lastRightLeft !== rightLeft) {
-			this.lastRightLeft = rightLeft;
-			this.filterRightLayer.style.left = `${rightLeft}px`;
-		}
-		const rightTransform = `translate3d(${scrollLeft}px, 0, 0)`;
-		if (this.lastRightTransform !== rightTransform) {
-			this.lastRightTransform = rightTransform;
-			this.filterRightLayer.style.transform = rightTransform;
-		}
-
-		// Hide left/right layers when empty
-		this.filterLeftLayer.style.display = pinLeftWidth > 0 ? '' : 'none';
-		this.filterRightLayer.style.display = pinRightWidth > 0 ? '' : 'none';
 	}
 
 	private syncVisibleFilters(force: boolean, plan: GridLayoutPlan): void {
@@ -160,6 +117,8 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		const colEnd = plan.columns.colEnd;
 		const pinLeftCount = plan.columns.pinLeftCount;
 		const firstRightPinColIdx = columns.length - plan.columns.pinRightCount;
+		const pinLeftWidth = plan.columns.pinLeftWidth;
+		const pinRightBaseLeft = plan.columns.lanes.right.baseLeft;
 		const filterModel = this.engine.stateManager.getState().filterModel;
 
 		const rangeKey = `${colStart}:${colEnd}:${pinLeftCount}:${plan.columns.pinRightCount}`;
@@ -188,7 +147,9 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 
 			seen.add(col.field);
 
-			const left = colLefts[c] ?? 0;
+			const absLeft = colLefts[c] ?? 0;
+			// Lane-relative left: center section starts at pinLeftWidth; right section starts at pinRightBaseLeft.
+			const left = isPinLeft ? absLeft : isPinRight ? absLeft - pinRightBaseLeft : absLeft - pinLeftWidth;
 			const width = colWidths[c] ?? this.engine.stateManager.getState().defaultColWidth;
 			const currentFilter = (filterModel?.[col.field] ?? null) as ColumnFilter | null;
 
@@ -211,8 +172,6 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 				this.cells.delete(field);
 			}
 		}
-
-		this.syncPinnedPositions(plan);
 	}
 
 	private createCell(
@@ -828,11 +787,6 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		for (const cell of this.cells.values()) cell.remove();
 		this.cells.clear();
 		this.lastVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1 };
-		this.lastScrollLeft = 0;
-		this.lastSyncedViewportWidth = -1;
-		this.lastLeftTransform = '';
-		this.lastRightLeft = -1;
-		this.lastRightTransform = '';
 		this.lastFilterModel = null;
 	}
 }
