@@ -37,16 +37,16 @@ hiding, weaker tests, perf budget changes. This is identity-propagation only.
 
 ## Files in scope
 
-| File | Change |
-|---|---|
-| `packages/react/src/gridPortalTypes.ts` | Expand `CellPortalPhysicalIdentity` to 5 fields |
-| `packages/react/src/GridView.tsx` | Pass all 5 fields at every identity construction site |
-| `packages/react/src/gridPortalStore.ts` | Update `isSamePhysicalIdentity` to compare all 5 fields |
-| `packages/core/src/renderer/portalMountManager.ts` | Add `portalHostId` to core `CellPortalPhysicalIdentity`; update store + stale checks |
-| `packages/core/src/renderer/IGridRenderer.ts` | Add `portalHostId?` to `GridCellContentUnmount` |
-| `packages/core/src/renderer/rowRendererRuntime.ts` | Pass `cellInstanceId` + `portalHostId` in release objects |
-| `packages/react/src/gridPortalStore.adversarial.test.ts` | Update to 5-field identity; add 3 new stale-rejection tests |
-| `packages/core/src/engine/architectureGuards.test.ts` | Update Plan 110 guard to require all 5 fields |
+| File                                                     | Change                                                                               |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `packages/react/src/gridPortalTypes.ts`                  | Expand `CellPortalPhysicalIdentity` to 5 fields                                      |
+| `packages/react/src/GridView.tsx`                        | Pass all 5 fields at every identity construction site                                |
+| `packages/react/src/gridPortalStore.ts`                  | Update `isSamePhysicalIdentity` to compare all 5 fields                              |
+| `packages/core/src/renderer/portalMountManager.ts`       | Add `portalHostId` to core `CellPortalPhysicalIdentity`; update store + stale checks |
+| `packages/core/src/renderer/IGridRenderer.ts`            | Add `portalHostId?` to `GridCellContentUnmount`                                      |
+| `packages/core/src/renderer/rowRendererRuntime.ts`       | Pass `cellInstanceId` + `portalHostId` in release objects                            |
+| `packages/react/src/gridPortalStore.adversarial.test.ts` | Update to 5-field identity; add 3 new stale-rejection tests                          |
+| `packages/core/src/engine/architectureGuards.test.ts`    | Update Plan 110 guard to require all 5 fields                                        |
 
 **Out of scope:** `gridPortalHosts.tsx`, DOM cell renderer, floating-filter renderer,
 sticky group renderer, row portal path, menu portal path.
@@ -58,6 +58,7 @@ sticky group renderer, row portal path, menu portal path.
 **File:** `packages/react/src/gridPortalTypes.ts` lines 3–6
 
 Current:
+
 ```typescript
 export interface CellPortalPhysicalIdentity {
 	rowSlotId: string;
@@ -66,6 +67,7 @@ export interface CellPortalPhysicalIdentity {
 ```
 
 Replace with:
+
 ```typescript
 export interface CellPortalPhysicalIdentity {
 	readonly cellInstanceId: string;
@@ -95,11 +97,13 @@ There are **three** identity construction sites (lines ~111, ~128, ~132–135).
 ### Site 1 — `tryImperativeUpdate` call (~line 111)
 
 Current:
+
 ```typescript
 { rowSlotId: mount.rowSlotId, slotGeneration: mount.slotGeneration }
 ```
 
 Replace with:
+
 ```typescript
 {
     cellInstanceId: mount.cellInstanceId ?? '',
@@ -113,11 +117,13 @@ Replace with:
 ### Site 2 — `mountCell` call (~line 128)
 
 Current:
+
 ```typescript
 { rowSlotId: mount.rowSlotId, slotGeneration: mount.slotGeneration }
 ```
 
 Replace with:
+
 ```typescript
 {
     cellInstanceId: mount.cellInstanceId ?? '',
@@ -131,21 +137,23 @@ Replace with:
 ### Site 3 — `unmountCell` call (~lines 132–135)
 
 Current:
+
 ```typescript
 portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync ?? false, {
-    rowSlotId: unmount.rowSlotId,
-    slotGeneration: unmount.slotGeneration,
+	rowSlotId: unmount.rowSlotId,
+	slotGeneration: unmount.slotGeneration,
 });
 ```
 
 Replace with:
+
 ```typescript
 portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync ?? false, {
-    cellInstanceId: unmount.cellInstanceId ?? '',
-    rowSlotId: unmount.rowSlotId,
-    slotGeneration: unmount.slotGeneration,
-    rowBindingGeneration: unmount.cellRowBindingGeneration ?? 0,
-    portalHostId: unmount.portalHostId ?? '',
+	cellInstanceId: unmount.cellInstanceId ?? '',
+	rowSlotId: unmount.rowSlotId,
+	slotGeneration: unmount.slotGeneration,
+	rowBindingGeneration: unmount.cellRowBindingGeneration ?? 0,
+	portalHostId: unmount.portalHostId ?? '',
 });
 ```
 
@@ -181,35 +189,37 @@ Currently reads `rowSlotId`, `slotGeneration`, `cellRowBindingGeneration` — ne
 also read `cellInstanceId` and `portalHostId`.
 
 Locate this block (~lines 243–256):
+
 ```typescript
 const rowSlotId = activeIdentity.rowSlotId;
 const slotGeneration = activeIdentity.slotGeneration;
 const cellRowBindingGeneration = activeIdentity.cellRowBindingGeneration;
 
 if (isDeferred) {
-    this.deps.stateHost.currentScrollPortalOps++;
-    this.deps.portalMountManager.releaseCellForScroll({
-        cellKey,
-        container,
-        flushSync: false,
-        rowSlotId,
-        slotGeneration,
-        cellRowBindingGeneration,
-    });
+	this.deps.stateHost.currentScrollPortalOps++;
+	this.deps.portalMountManager.releaseCellForScroll({
+		cellKey,
+		container,
+		flushSync: false,
+		rowSlotId,
+		slotGeneration,
+		cellRowBindingGeneration,
+	});
 } else {
-    this.deps.portalMountManager.releaseCell({
-        cellKey,
-        container,
-        flushSync: false,
-        reason,
-        rowSlotId,
-        slotGeneration,
-        cellRowBindingGeneration,
-    });
+	this.deps.portalMountManager.releaseCell({
+		cellKey,
+		container,
+		flushSync: false,
+		reason,
+		rowSlotId,
+		slotGeneration,
+		cellRowBindingGeneration,
+	});
 }
 ```
 
 Replace with:
+
 ```typescript
 const rowSlotId = activeIdentity.rowSlotId;
 const slotGeneration = activeIdentity.slotGeneration;
@@ -218,29 +228,29 @@ const cellInstanceId = activeIdentity.cellInstanceId;
 const portalHostId = activeIdentity.portalHostId;
 
 if (isDeferred) {
-    this.deps.stateHost.currentScrollPortalOps++;
-    this.deps.portalMountManager.releaseCellForScroll({
-        cellKey,
-        container,
-        flushSync: false,
-        rowSlotId,
-        slotGeneration,
-        cellRowBindingGeneration,
-        cellInstanceId,
-        portalHostId,
-    });
+	this.deps.stateHost.currentScrollPortalOps++;
+	this.deps.portalMountManager.releaseCellForScroll({
+		cellKey,
+		container,
+		flushSync: false,
+		rowSlotId,
+		slotGeneration,
+		cellRowBindingGeneration,
+		cellInstanceId,
+		portalHostId,
+	});
 } else {
-    this.deps.portalMountManager.releaseCell({
-        cellKey,
-        container,
-        flushSync: false,
-        reason,
-        rowSlotId,
-        slotGeneration,
-        cellRowBindingGeneration,
-        cellInstanceId,
-        portalHostId,
-    });
+	this.deps.portalMountManager.releaseCell({
+		cellKey,
+		container,
+		flushSync: false,
+		reason,
+		rowSlotId,
+		slotGeneration,
+		cellRowBindingGeneration,
+		cellInstanceId,
+		portalHostId,
+	});
 }
 ```
 
@@ -255,52 +265,57 @@ if (isDeferred) {
 ### 5a — Add `portalHostId` to the interface (~line 70)
 
 Current:
+
 ```typescript
 interface CellPortalPhysicalIdentity {
-    cellInstanceId: string;
-    rowSlotId: string;
-    slotGeneration: number;
-    cellRowBindingGeneration: number;
+	cellInstanceId: string;
+	rowSlotId: string;
+	slotGeneration: number;
+	cellRowBindingGeneration: number;
 }
 ```
 
 Add `portalHostId`:
+
 ```typescript
 interface CellPortalPhysicalIdentity {
-    cellInstanceId: string;
-    portalHostId: string;
-    rowSlotId: string;
-    slotGeneration: number;
-    cellRowBindingGeneration: number;
+	cellInstanceId: string;
+	portalHostId: string;
+	rowSlotId: string;
+	slotGeneration: number;
+	cellRowBindingGeneration: number;
 }
 ```
 
 ### 5b — Store `portalHostId` in `mountCellReal` (~line 168)
 
 Current:
+
 ```typescript
 this.activeIdentityByKey.set(mount.cellKey, {
-    cellInstanceId: mount.cellInstanceId ?? '',
-    rowSlotId: mount.rowSlotId,
-    slotGeneration: mount.slotGeneration,
-    cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
+	cellInstanceId: mount.cellInstanceId ?? '',
+	rowSlotId: mount.rowSlotId,
+	slotGeneration: mount.slotGeneration,
+	cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
 });
 ```
 
 Add `portalHostId`:
+
 ```typescript
 this.activeIdentityByKey.set(mount.cellKey, {
-    cellInstanceId: mount.cellInstanceId ?? '',
-    portalHostId: mount.portalHostId ?? '',
-    rowSlotId: mount.rowSlotId,
-    slotGeneration: mount.slotGeneration,
-    cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
+	cellInstanceId: mount.cellInstanceId ?? '',
+	portalHostId: mount.portalHostId ?? '',
+	rowSlotId: mount.rowSlotId,
+	slotGeneration: mount.slotGeneration,
+	cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
 });
 ```
 
 ### 5c — Update `isSamePhysicalIdentity` to also check `portalHostId` (~line 157)
 
 Current:
+
 ```typescript
 private isSamePhysicalIdentity(
     active: CellPortalPhysicalIdentity,
@@ -315,6 +330,7 @@ private isSamePhysicalIdentity(
 ```
 
 Replace with (add `portalHostId` check):
+
 ```typescript
 private isSamePhysicalIdentity(
     active: CellPortalPhysicalIdentity,
@@ -342,6 +358,7 @@ when not provided (legacy call sites without access to the CellSlot). An empty s
 **File:** `packages/react/src/gridPortalStore.ts` line 15–17
 
 Current:
+
 ```typescript
 function isSamePhysicalIdentity(left: CellPortalPhysicalIdentity | undefined, right: CellPortalPhysicalIdentity | undefined): boolean {
 	return left?.rowSlotId === right?.rowSlotId && left?.slotGeneration === right?.slotGeneration;
@@ -349,20 +366,18 @@ function isSamePhysicalIdentity(left: CellPortalPhysicalIdentity | undefined, ri
 ```
 
 Replace with strict 5-field comparison:
+
 ```typescript
-function isSamePhysicalIdentity(
-    left: CellPortalPhysicalIdentity | undefined,
-    right: CellPortalPhysicalIdentity | undefined
-): boolean {
-    return (
-        !!left &&
-        !!right &&
-        left.cellInstanceId === right.cellInstanceId &&
-        left.rowSlotId === right.rowSlotId &&
-        left.slotGeneration === right.slotGeneration &&
-        left.rowBindingGeneration === right.rowBindingGeneration &&
-        left.portalHostId === right.portalHostId
-    );
+function isSamePhysicalIdentity(left: CellPortalPhysicalIdentity | undefined, right: CellPortalPhysicalIdentity | undefined): boolean {
+	return (
+		!!left &&
+		!!right &&
+		left.cellInstanceId === right.cellInstanceId &&
+		left.rowSlotId === right.rowSlotId &&
+		left.slotGeneration === right.slotGeneration &&
+		left.rowBindingGeneration === right.rowBindingGeneration &&
+		left.portalHostId === right.portalHostId
+	);
 }
 ```
 
@@ -385,13 +400,13 @@ Add a helper at the top of the describe block (after the `COLUMN` constant):
 
 ```typescript
 function makeIdentity(
-    cellInstanceId: string,
-    rowSlotId: string,
-    slotGeneration: number,
-    rowBindingGeneration = 0,
-    portalHostId = `${cellInstanceId}-ph`
+	cellInstanceId: string,
+	rowSlotId: string,
+	slotGeneration: number,
+	rowBindingGeneration = 0,
+	portalHostId = `${cellInstanceId}-ph`
 ): import('./gridPortalTypes.js').CellPortalPhysicalIdentity {
-    return { cellInstanceId, rowSlotId, slotGeneration, rowBindingGeneration, portalHostId };
+	return { cellInstanceId, rowSlotId, slotGeneration, rowBindingGeneration, portalHostId };
 }
 ```
 
@@ -400,10 +415,13 @@ function makeIdentity(
 Replace every `{ rowSlotId: 'slot-0', slotGeneration: N }` with `makeIdentity('ci1', 'slot-0', N)`.
 
 The `.toEqual` assertion at line 79:
+
 ```typescript
 expect(store.getCellData?.('slot-0:name')?.physicalIdentity).toEqual({ rowSlotId: 'slot-0', slotGeneration: 2 });
 ```
+
 Replace with:
+
 ```typescript
 expect(store.getCellData?.('slot-0:name')?.physicalIdentity).toEqual(makeIdentity('ci1', 'slot-0', 2));
 ```
@@ -416,6 +434,7 @@ Replace `{ rowSlotId: 'slot-1', slotGeneration: 7 }` with `makeIdentity('ci2', '
 ### 7d — Update Test 3: "ignores stale unmounts when physical identity mismatches"
 
 Replace identity objects:
+
 - mount: `makeIdentity('ci3', 'slot-0', 2)`
 - stale unmount 1: `makeIdentity('ci3', 'slot-0', 1)` (older generation)
 - stale unmount 2: `makeIdentity('ci3', 'slot-1', 2)` (wrong slot)
@@ -424,8 +443,9 @@ Replace identity objects:
 
 The churn test uses inline identity objects in `store.mountCell(...)` calls at line ~188.
 Replace `{ rowSlotId: \`slot-${...}\`, slotGeneration: generation }` with:
+
 ```typescript
-makeIdentity(`ci-${generation}`, `slot-${container === cellContainers[0] ? 0 : 1}`, generation)
+makeIdentity(`ci-${generation}`, `slot-${container === cellContainers[0] ? 0 : 1}`, generation);
 ```
 
 ### 7f — Add 3 new stale-rejection tests
@@ -433,57 +453,84 @@ makeIdentity(`ci-${generation}`, `slot-${container === cellContainers[0] ? 0 : 1
 Add after the existing tests, before the closing `});` of the describe block:
 
 **Test: "rejects operations when cellInstanceId differs"**
+
 ```typescript
 it('rejects stale operations when cellInstanceId differs (same slot + generation)', () => {
-    const store = createPortalStore<TestRow>();
-    const container = document.createElement('div');
+	const store = createPortalStore<TestRow>();
+	const container = document.createElement('div');
 
-    store.mountCell(
-        'ci-a:name', container, 'A', makeNode('row-a'), COLUMN,
-        false, false, undefined, undefined, undefined, undefined,
-        makeIdentity('ci-a', 'slot-0', 0)
-    );
+	store.mountCell(
+		'ci-a:name',
+		container,
+		'A',
+		makeNode('row-a'),
+		COLUMN,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		makeIdentity('ci-a', 'slot-0', 0)
+	);
 
-    // Different cellInstanceId — same slot and generation but physically different cell
-    store.unmountCell('ci-a:name', container, false, makeIdentity('ci-b', 'slot-0', 0));
-    expect(store.getCellData?.('ci-a:name')?.value).toBe('A');
+	// Different cellInstanceId — same slot and generation but physically different cell
+	store.unmountCell('ci-a:name', container, false, makeIdentity('ci-b', 'slot-0', 0));
+	expect(store.getCellData?.('ci-a:name')?.value).toBe('A');
 });
 ```
 
 **Test: "rejects operations when rowBindingGeneration differs"**
+
 ```typescript
 it('rejects stale operations when rowBindingGeneration differs', () => {
-    const store = createPortalStore<TestRow>();
-    const container = document.createElement('div');
+	const store = createPortalStore<TestRow>();
+	const container = document.createElement('div');
 
-    store.mountCell(
-        'ci-c:name', container, 'C', makeNode('row-c'), COLUMN,
-        false, false, undefined, undefined, undefined, undefined,
-        makeIdentity('ci-c', 'slot-0', 0, 1)
-    );
+	store.mountCell(
+		'ci-c:name',
+		container,
+		'C',
+		makeNode('row-c'),
+		COLUMN,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		makeIdentity('ci-c', 'slot-0', 0, 1)
+	);
 
-    // rowBindingGeneration 0 vs 1 — cell was hot-unbound and rebound
-    store.unmountCell('ci-c:name', container, false, makeIdentity('ci-c', 'slot-0', 0, 0));
-    expect(store.getCellData?.('ci-c:name')?.value).toBe('C');
+	// rowBindingGeneration 0 vs 1 — cell was hot-unbound and rebound
+	store.unmountCell('ci-c:name', container, false, makeIdentity('ci-c', 'slot-0', 0, 0));
+	expect(store.getCellData?.('ci-c:name')?.value).toBe('C');
 });
 ```
 
 **Test: "rejects operations when portalHostId differs"**
+
 ```typescript
 it('rejects stale operations when portalHostId differs', () => {
-    const store = createPortalStore<TestRow>();
-    const container = document.createElement('div');
+	const store = createPortalStore<TestRow>();
+	const container = document.createElement('div');
 
-    store.mountCell(
-        'ci-d:name', container, 'D', makeNode('row-d'), COLUMN,
-        false, false, undefined, undefined, undefined, undefined,
-        { cellInstanceId: 'ci-d', rowSlotId: 'slot-0', slotGeneration: 0, rowBindingGeneration: 0, portalHostId: 'ci-d-ph' }
-    );
+	store.mountCell('ci-d:name', container, 'D', makeNode('row-d'), COLUMN, false, false, undefined, undefined, undefined, undefined, {
+		cellInstanceId: 'ci-d',
+		rowSlotId: 'slot-0',
+		slotGeneration: 0,
+		rowBindingGeneration: 0,
+		portalHostId: 'ci-d-ph',
+	});
 
-    store.unmountCell('ci-d:name', container, false,
-        { cellInstanceId: 'ci-d', rowSlotId: 'slot-0', slotGeneration: 0, rowBindingGeneration: 0, portalHostId: 'ci-x-ph' }
-    );
-    expect(store.getCellData?.('ci-d:name')?.value).toBe('D');
+	store.unmountCell('ci-d:name', container, false, {
+		cellInstanceId: 'ci-d',
+		rowSlotId: 'slot-0',
+		slotGeneration: 0,
+		rowBindingGeneration: 0,
+		portalHostId: 'ci-x-ph',
+	});
+	expect(store.getCellData?.('ci-d:name')?.value).toBe('D');
 });
 ```
 
@@ -496,52 +543,56 @@ it('rejects stale operations when portalHostId differs', () => {
 ### 8a — Update the Plan 110 guard (~lines 1468–1474)
 
 Current:
+
 ```typescript
 it('React portal store requires physical identity for pooled cell mounts (Plan 110)', () => {
-    const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalTypes.ts'), 'utf-8');
-    expect(content).toContain('export interface CellPortalPhysicalIdentity');
-    expect(content).toContain('rowSlotId: string;');
-    expect(content).toContain('slotGeneration: number;');
-    expect(content).toContain('physicalIdentity: CellPortalPhysicalIdentity;');
+	const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalTypes.ts'), 'utf-8');
+	expect(content).toContain('export interface CellPortalPhysicalIdentity');
+	expect(content).toContain('rowSlotId: string;');
+	expect(content).toContain('slotGeneration: number;');
+	expect(content).toContain('physicalIdentity: CellPortalPhysicalIdentity;');
 });
 ```
 
 Replace with:
+
 ```typescript
 it('React portal store requires physical identity for pooled cell mounts (Plan 110)', () => {
-    const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalTypes.ts'), 'utf-8');
-    expect(content).toContain('export interface CellPortalPhysicalIdentity');
-    // All 5 required fields (Plan 121)
-    expect(content).toContain('cellInstanceId: string;');
-    expect(content).toContain('rowSlotId: string;');
-    expect(content).toContain('slotGeneration: number;');
-    expect(content).toContain('rowBindingGeneration: number;');
-    expect(content).toContain('portalHostId: string;');
-    expect(content).toContain('physicalIdentity: CellPortalPhysicalIdentity;');
+	const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalTypes.ts'), 'utf-8');
+	expect(content).toContain('export interface CellPortalPhysicalIdentity');
+	// All 5 required fields (Plan 121)
+	expect(content).toContain('cellInstanceId: string;');
+	expect(content).toContain('rowSlotId: string;');
+	expect(content).toContain('slotGeneration: number;');
+	expect(content).toContain('rowBindingGeneration: number;');
+	expect(content).toContain('portalHostId: string;');
+	expect(content).toContain('physicalIdentity: CellPortalPhysicalIdentity;');
 });
 ```
 
 ### 8b — Update the `isSamePhysicalIdentity` guard (~lines 693–697)
 
 Current:
+
 ```typescript
 it('portal mount equality check compares full physical identity in React store (Plan 110)', () => {
-    const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalStore.ts'), 'utf-8');
-    expect(content).toContain('isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)');
-    expect(content).toContain('existing?.physicalIdentity');
+	const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalStore.ts'), 'utf-8');
+	expect(content).toContain('isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)');
+	expect(content).toContain('existing?.physicalIdentity');
 });
 ```
 
 Replace with:
+
 ```typescript
 it('portal mount equality check compares full physical identity in React store (Plan 110/121)', () => {
-    const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalStore.ts'), 'utf-8');
-    expect(content).toContain('isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)');
-    expect(content).toContain('existing?.physicalIdentity');
-    // All 5 fields must be compared — no 2-field weak check (Plan 121)
-    expect(content).toContain('left.cellInstanceId === right.cellInstanceId');
-    expect(content).toContain('left.rowBindingGeneration === right.rowBindingGeneration');
-    expect(content).toContain('left.portalHostId === right.portalHostId');
+	const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalStore.ts'), 'utf-8');
+	expect(content).toContain('isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)');
+	expect(content).toContain('existing?.physicalIdentity');
+	// All 5 fields must be compared — no 2-field weak check (Plan 121)
+	expect(content).toContain('left.cellInstanceId === right.cellInstanceId');
+	expect(content).toContain('left.rowBindingGeneration === right.rowBindingGeneration');
+	expect(content).toContain('left.portalHostId === right.portalHostId');
 });
 ```
 
@@ -618,6 +669,7 @@ When this plan is done, write:
 `CellPortalPhysicalIdentity` in `gridPortalTypes.ts` is the React boundary's contract with
 the core physical cell model. If new per-cell lifecycle fields are added to `CellSlot` in
 the future, they must flow through:
+
 1. `GridCellContentMount` (core boundary type)
 2. `GridView.tsx` (boundary adapter)
 3. `CellPortalPhysicalIdentity` + `isSamePhysicalIdentity` (React store)

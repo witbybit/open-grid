@@ -12,10 +12,7 @@ import type {
 
 export type ConcretePortalStore<TRowData> = ReturnType<typeof createPortalStore<TRowData>>;
 
-function isSamePhysicalIdentity(
-	left: CellPortalPhysicalIdentity | undefined,
-	right: CellPortalPhysicalIdentity | undefined
-): boolean {
+function isSamePhysicalIdentity(left: CellPortalPhysicalIdentity | undefined, right: CellPortalPhysicalIdentity | undefined): boolean {
 	return (
 		!!left &&
 		!!right &&

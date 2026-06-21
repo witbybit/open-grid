@@ -109,12 +109,12 @@ export function GridView<TRowData = unknown>({
 								mount.isFocused,
 								mount.isSelected,
 								{
-								cellInstanceId: mount.cellInstanceId ?? '',
-								rowSlotId: mount.rowSlotId,
-								slotGeneration: mount.slotGeneration,
-								rowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
-								portalHostId: mount.portalHostId ?? '',
-							}
+									cellInstanceId: mount.cellInstanceId ?? '',
+									rowSlotId: mount.rowSlotId,
+									slotGeneration: mount.slotGeneration,
+									rowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
+									portalHostId: mount.portalHostId ?? '',
+								}
 							)
 						)
 							return;
