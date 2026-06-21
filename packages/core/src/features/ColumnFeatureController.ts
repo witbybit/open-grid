@@ -39,7 +39,7 @@ export class ColumnFeatureController<TRowData = unknown> {
 		this.ctx.applyChange({
 			reason: 'columns:resize',
 			state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: width } }),
-			invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+			invalidations: [{ kind: 'geometry' }, { kind: 'viewport' }, { kind: 'headers' }],
 			domains: ['columns', 'geometry'],
 			events: [{ type: GridEventName.columnResized, payload: { colField, width } }],
 			...(undoable
@@ -48,14 +48,14 @@ export class ColumnFeatureController<TRowData = unknown> {
 							undo: {
 								reason: 'columns:resize',
 								state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: oldWidth } }),
-								invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+								invalidations: [{ kind: 'geometry' }, { kind: 'viewport' }, { kind: 'headers' }],
 								domains: ['columns', 'geometry'],
 								events: [{ type: GridEventName.columnResized, payload: { colField, width: oldWidth } }],
 							},
 							redo: {
 								reason: 'columns:resize',
 								state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: width } }),
-								invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
+								invalidations: [{ kind: 'geometry' }, { kind: 'viewport' }, { kind: 'headers' }],
 								domains: ['columns', 'geometry'],
 								events: [{ type: GridEventName.columnResized, payload: { colField, width } }],
 							},

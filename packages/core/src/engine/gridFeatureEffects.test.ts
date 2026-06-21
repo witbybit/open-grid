@@ -67,7 +67,7 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			store.destroy();
 		});
 
-		it('invalidates geometry, headers, and column', () => {
+		it('invalidates geometry, headers, and viewport', () => {
 			const store = makeStore();
 			const ctrl = makeController(store);
 			const engine = (store as any).engine;
@@ -80,7 +80,7 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const plan = spyApply.mock.calls[0][0];
 			expect(plan.geometry).toBe(true);
 			expect(plan.headers).toBe(true);
-			expect(plan.columns.has('name')).toBe(true);
+			expect(plan.viewport).toBe(true);
 
 			ctrl.dispose();
 			store.destroy();
