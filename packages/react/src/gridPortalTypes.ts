@@ -1,8 +1,11 @@
 import type { ColumnDef, GridApi, RowNode, VisualRow, CellRendererPhase } from '@open-grid/core';
 
 export interface CellPortalPhysicalIdentity {
-	rowSlotId: string;
-	slotGeneration: number;
+	readonly cellInstanceId: string;
+	readonly rowSlotId: string;
+	readonly slotGeneration: number;
+	readonly rowBindingGeneration: number;
+	readonly portalHostId: string;
 }
 
 export interface PortalCellProps<TRowData = unknown> {

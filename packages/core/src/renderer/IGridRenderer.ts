@@ -94,6 +94,8 @@ export interface GridCellContentUnmount {
 	cellRowBindingGeneration?: number;
 	/** Physical CellSlot identity at the time this release was requested. */
 	cellInstanceId?: string;
+	/** Stable portal host ID at the time this release was requested. */
+	portalHostId?: string;
 }
 
 export interface GridCellContentFlush {

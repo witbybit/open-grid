@@ -26,6 +26,16 @@ function flushMicrotasks(): Promise<void> {
 
 const COLUMN: ColumnDef<TestRow> = { field: 'name', header: 'Name' };
 
+function makeIdentity(
+	cellInstanceId: string,
+	rowSlotId: string,
+	slotGeneration: number,
+	rowBindingGeneration = 0,
+	portalHostId = `${cellInstanceId}-ph`
+): import('./gridPortalTypes.js').CellPortalPhysicalIdentity {
+	return { cellInstanceId, rowSlotId, slotGeneration, rowBindingGeneration, portalHostId };
+}
+
 function makeNode(id: string, name = id): RowNode<TestRow> {
 	return new RowNode<TestRow>(id, { id, name });
 }
@@ -49,34 +59,30 @@ describe('createPortalStore — adversarial lifecycle invariants', () => {
 		const nodeB = makeNode('row-b', 'New');
 		const updater = vi.fn(() => true);
 
-		store.mountCell('slot-0:name', container, 'Old', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-0',
-			slotGeneration: 1,
-		});
+		store.mountCell('slot-0:name', container, 'Old', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined,
+			makeIdentity('ci1', 'slot-0', 1)
+		);
 		store.registerImperativeUpdater?.('slot-0:name', updater);
 
 		expect(
-			store.tryImperativeUpdate?.('slot-0:name', 'Old+', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined, {
-				rowSlotId: 'slot-0',
-				slotGeneration: 1,
-			})
+			store.tryImperativeUpdate?.('slot-0:name', 'Old+', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined,
+				makeIdentity('ci1', 'slot-0', 1)
+			)
 		).toBe(true);
 		expect(updater).toHaveBeenCalledTimes(1);
 
-		store.mountCell('slot-0:name', container, 'New', nodeB, COLUMN, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-0',
-			slotGeneration: 2,
-		});
+		store.mountCell('slot-0:name', container, 'New', nodeB, COLUMN, false, false, undefined, undefined, undefined, undefined,
+			makeIdentity('ci1', 'slot-0', 2)
+		);
 
 		expect(
-			store.tryImperativeUpdate?.('slot-0:name', 'STALE', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined, {
-				rowSlotId: 'slot-0',
-				slotGeneration: 1,
-			})
+			store.tryImperativeUpdate?.('slot-0:name', 'STALE', nodeA, COLUMN, false, false, undefined, undefined, undefined, undefined,
+				makeIdentity('ci1', 'slot-0', 1)
+			)
 		).toBe(false);
 		expect(updater).toHaveBeenCalledTimes(1);
 		expect(store.getCellData?.('slot-0:name')?.value).toBe('New');
-		expect(store.getCellData?.('slot-0:name')?.physicalIdentity).toEqual({ rowSlotId: 'slot-0', slotGeneration: 2 });
+		expect(store.getCellData?.('slot-0:name')?.physicalIdentity).toEqual(makeIdentity('ci1', 'slot-0', 2));
 	});
 
 	it('rejects stale imperative updates when slot id mismatches even if generation matches', () => {
@@ -96,10 +102,7 @@ describe('createPortalStore — adversarial lifecycle invariants', () => {
 			undefined,
 			undefined,
 			undefined,
-			{
-				rowSlotId: 'slot-0',
-				slotGeneration: 7,
-			}
+			makeIdentity('ci2', 'slot-0', 7)
 		);
 		store.registerImperativeUpdater?.('slot-0:name', updater);
 
@@ -115,7 +118,7 @@ describe('createPortalStore — adversarial lifecycle invariants', () => {
 				undefined,
 				undefined,
 				undefined,
-				{ rowSlotId: 'slot-1', slotGeneration: 7 }
+				makeIdentity('ci2', 'slot-1', 7)
 			)
 		).toBe(false);
 		expect(updater).not.toHaveBeenCalled();
@@ -137,22 +140,13 @@ describe('createPortalStore — adversarial lifecycle invariants', () => {
 			undefined,
 			undefined,
 			undefined,
-			{
-				rowSlotId: 'slot-0',
-				slotGeneration: 2,
-			}
+			makeIdentity('ci3', 'slot-0', 2)
 		);
 
-		store.unmountCell('slot-0:name', container, false, {
-			rowSlotId: 'slot-0',
-			slotGeneration: 1,
-		});
+		store.unmountCell('slot-0:name', container, false, makeIdentity('ci3', 'slot-0', 1));
 		expect(store.getCellData?.('slot-0:name')?.value).toBe('Current');
 
-		store.unmountCell('slot-0:name', container, false, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 2,
-		});
+		store.unmountCell('slot-0:name', container, false, makeIdentity('ci3', 'slot-1', 2));
 		expect(store.getCellData?.('slot-0:name')?.value).toBe('Current');
 	});
 
@@ -185,7 +179,7 @@ describe('createPortalStore — adversarial lifecycle invariants', () => {
 					undefined,
 					undefined,
 					undefined,
-					{ rowSlotId: `slot-${container === cellContainers[0] ? 0 : 1}`, slotGeneration: generation }
+					makeIdentity(`ci-${generation}`, `slot-${container === cellContainers[0] ? 0 : 1}`, generation)
 				);
 				activeCellByContainer.set(container, cellKey);
 			} else if (op === 1) {
@@ -229,5 +223,50 @@ describe('createPortalStore — adversarial lifecycle invariants', () => {
 		for (const [container, expectedRowKey] of activeRowByContainer) {
 			expect(store.getRowMenuSnapshot().rowPortalList.find((portal) => portal.container === container)?.rowKey).toBe(expectedRowKey);
 		}
+	});
+
+	it('rejects stale operations when cellInstanceId differs (same slot + generation)', () => {
+		const store = createPortalStore<TestRow>();
+		const container = document.createElement('div');
+
+		store.mountCell(
+			'ci-a:name', container, 'A', makeNode('row-a'), COLUMN,
+			false, false, undefined, undefined, undefined, undefined,
+			makeIdentity('ci-a', 'slot-0', 0)
+		);
+
+		store.unmountCell('ci-a:name', container, false, makeIdentity('ci-b', 'slot-0', 0));
+		expect(store.getCellData?.('ci-a:name')?.value).toBe('A');
+	});
+
+	it('rejects stale operations when rowBindingGeneration differs', () => {
+		const store = createPortalStore<TestRow>();
+		const container = document.createElement('div');
+
+		store.mountCell(
+			'ci-c:name', container, 'C', makeNode('row-c'), COLUMN,
+			false, false, undefined, undefined, undefined, undefined,
+			makeIdentity('ci-c', 'slot-0', 0, 1)
+		);
+
+		// rowBindingGeneration 0 vs 1 — cell was hot-unbound and rebound
+		store.unmountCell('ci-c:name', container, false, makeIdentity('ci-c', 'slot-0', 0, 0));
+		expect(store.getCellData?.('ci-c:name')?.value).toBe('C');
+	});
+
+	it('rejects stale operations when portalHostId differs', () => {
+		const store = createPortalStore<TestRow>();
+		const container = document.createElement('div');
+
+		store.mountCell(
+			'ci-d:name', container, 'D', makeNode('row-d'), COLUMN,
+			false, false, undefined, undefined, undefined, undefined,
+			{ cellInstanceId: 'ci-d', rowSlotId: 'slot-0', slotGeneration: 0, rowBindingGeneration: 0, portalHostId: 'ci-d-ph' }
+		);
+
+		store.unmountCell('ci-d:name', container, false,
+			{ cellInstanceId: 'ci-d', rowSlotId: 'slot-0', slotGeneration: 0, rowBindingGeneration: 0, portalHostId: 'ci-x-ph' }
+		);
+		expect(store.getCellData?.('ci-d:name')?.value).toBe('D');
 	});
 });

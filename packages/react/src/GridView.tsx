@@ -108,7 +108,13 @@ export function GridView<TRowData = unknown>({
 								mount.isScrolling,
 								mount.isFocused,
 								mount.isSelected,
-								{ rowSlotId: mount.rowSlotId, slotGeneration: mount.slotGeneration }
+								{
+								cellInstanceId: mount.cellInstanceId ?? '',
+								rowSlotId: mount.rowSlotId,
+								slotGeneration: mount.slotGeneration,
+								rowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
+								portalHostId: mount.portalHostId ?? '',
+							}
 							)
 						)
 							return;
@@ -125,13 +131,22 @@ export function GridView<TRowData = unknown>({
 						mount.isScrolling,
 						mount.isFocused,
 						mount.isSelected,
-						{ rowSlotId: mount.rowSlotId, slotGeneration: mount.slotGeneration }
+						{
+							cellInstanceId: mount.cellInstanceId ?? '',
+							rowSlotId: mount.rowSlotId,
+							slotGeneration: mount.slotGeneration,
+							rowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
+							portalHostId: mount.portalHostId ?? '',
+						}
 					);
 				},
 				unmountCellContent: (unmount) => {
 					portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync ?? false, {
+						cellInstanceId: unmount.cellInstanceId ?? '',
 						rowSlotId: unmount.rowSlotId,
 						slotGeneration: unmount.slotGeneration,
+						rowBindingGeneration: unmount.cellRowBindingGeneration ?? 0,
+						portalHostId: unmount.portalHostId ?? '',
 					});
 				},
 				flushCellContent: () => {},

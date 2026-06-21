@@ -69,6 +69,7 @@ export interface DeferredPortalFlushResult {
 /** Full physical identity record for a mounted cell portal. Stored in activeIdentityByKey. */
 interface CellPortalPhysicalIdentity {
 	cellInstanceId: string;
+	portalHostId: string;
 	rowSlotId: string;
 	slotGeneration: number;
 	cellRowBindingGeneration: number;
@@ -156,18 +157,20 @@ export class PortalMountManager<TRowData = unknown> {
 
 	private isSamePhysicalIdentity(
 		active: CellPortalPhysicalIdentity,
-		op: { cellInstanceId?: string; rowSlotId: string; slotGeneration: number; cellRowBindingGeneration?: number }
+		op: { cellInstanceId?: string; portalHostId?: string; rowSlotId: string; slotGeneration: number; cellRowBindingGeneration?: number }
 	): boolean {
 		if (active.rowSlotId !== op.rowSlotId) return false;
 		if (active.slotGeneration !== op.slotGeneration) return false;
 		if (op.cellRowBindingGeneration !== undefined && active.cellRowBindingGeneration !== op.cellRowBindingGeneration) return false;
 		if (op.cellInstanceId !== undefined && active.cellInstanceId !== op.cellInstanceId) return false;
+		if (op.portalHostId !== undefined && op.portalHostId !== '' && active.portalHostId !== op.portalHostId) return false;
 		return true;
 	}
 
 	private mountCellReal(mount: GridCellContentMount<TRowData>): void {
 		this.activeIdentityByKey.set(mount.cellKey, {
 			cellInstanceId: mount.cellInstanceId ?? '',
+			portalHostId: mount.portalHostId ?? '',
 			rowSlotId: mount.rowSlotId,
 			slotGeneration: mount.slotGeneration,
 			cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,

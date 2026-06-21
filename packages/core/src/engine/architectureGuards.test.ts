@@ -690,10 +690,14 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('rowId: string');
 	});
 
-	it('portal mount equality check compares full physical identity in React store (Plan 110)', () => {
+	it('portal mount equality check compares full physical identity in React store (Plan 110/121)', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalStore.ts'), 'utf-8');
 		expect(content).toContain('isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)');
 		expect(content).toContain('existing?.physicalIdentity');
+		// All 5 fields must be compared — no 2-field weak check (Plan 121)
+		expect(content).toContain('left.cellInstanceId === right.cellInstanceId');
+		expect(content).toContain('left.rowBindingGeneration === right.rowBindingGeneration');
+		expect(content).toContain('left.portalHostId === right.portalHostId');
 	});
 
 	it('deferred cell mounts validate generation before executing (Plan 081)', () => {
@@ -1468,8 +1472,12 @@ describe('Architecture guardrails', () => {
 	it('React portal store requires physical identity for pooled cell mounts (Plan 110)', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalTypes.ts'), 'utf-8');
 		expect(content).toContain('export interface CellPortalPhysicalIdentity');
+		// All 5 required fields (Plan 121)
+		expect(content).toContain('cellInstanceId: string;');
 		expect(content).toContain('rowSlotId: string;');
 		expect(content).toContain('slotGeneration: number;');
+		expect(content).toContain('rowBindingGeneration: number;');
+		expect(content).toContain('portalHostId: string;');
 		expect(content).toContain('physicalIdentity: CellPortalPhysicalIdentity;');
 	});
 

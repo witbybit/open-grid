@@ -12,8 +12,19 @@ import type {
 
 export type ConcretePortalStore<TRowData> = ReturnType<typeof createPortalStore<TRowData>>;
 
-function isSamePhysicalIdentity(left: CellPortalPhysicalIdentity | undefined, right: CellPortalPhysicalIdentity | undefined): boolean {
-	return left?.rowSlotId === right?.rowSlotId && left?.slotGeneration === right?.slotGeneration;
+function isSamePhysicalIdentity(
+	left: CellPortalPhysicalIdentity | undefined,
+	right: CellPortalPhysicalIdentity | undefined
+): boolean {
+	return (
+		!!left &&
+		!!right &&
+		left.cellInstanceId === right.cellInstanceId &&
+		left.rowSlotId === right.rowSlotId &&
+		left.slotGeneration === right.slotGeneration &&
+		left.rowBindingGeneration === right.rowBindingGeneration &&
+		left.portalHostId === right.portalHostId
+	);
 }
 
 export function createPortalStore<TRowData = unknown>() {
