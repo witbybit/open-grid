@@ -260,8 +260,8 @@ export class RowSlot<TRowData = unknown> {
 		this.pinLeftCount = 0;
 		this.pinRightStart = Number.MAX_SAFE_INTEGER;
 
-		// Unbind all cell slots. After a scroll frame the lane arrays may contain cells
-		// that aren't in cellsByColumnId (scroll drift), so union both sources.
+		// Unbind all cell slots. cellsByColumnId is authoritative, but lane arrays are
+		// unioned defensively in case external callers have pushed to them directly.
 		const allCells = new Set<CellSlot<TRowData>>();
 		for (const cell of this.cellsByColumnId.values()) allCells.add(cell);
 		for (const cell of this.leftCells) allCells.add(cell);

@@ -25,7 +25,7 @@ export interface ColumnPlacement {
  * lane boundaries are split into one segment per lane by the compiler.
  */
 export interface GroupHeaderSegment {
-	/** Stable identity: "grp:{depth}:{firstColumnId}:{lastColumnId}" */
+	/** Stable identity: "grp:{depth}:{lane}:{firstColumnId}:{lastColumnId}" — lane-aware so split segments get distinct keys. */
 	readonly id: string;
 	readonly label: string;
 	readonly depth: number;
@@ -128,7 +128,7 @@ function buildGroupSegments<TRowData>(
 			const width = rightEdge - absoluteLeft;
 
 			segments.push({
-				id: `grp:${d}:${columns[i].field}:${columns[j - 1].field}`,
+				id: `grp:${d}:${lane}:${columns[i].field}:${columns[j - 1].field}`,
 				label: groupName,
 				depth: d,
 				lane,

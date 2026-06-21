@@ -58,6 +58,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 	private cells = new Map<string, HTMLDivElement>();
 	private lastFilterModel: FilterModel | null = null;
 	private lastVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1 };
+	private lastTopologyVersion = -1;
 	private unsubscribers: (() => void)[] = [];
 
 	constructor(engine: GridEngine<TRowData>) {
@@ -119,15 +120,18 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 
 		const rangeKey = `${colStart}:${colEnd}:${plan.columns.pinLeftCount}:${plan.columns.pinRightCount}`;
 		const filterChanged = filterModel !== this.lastFilterModel;
+		const topologyChanged = topology.version !== this.lastTopologyVersion;
 		if (
 			!force &&
 			rangeKey ===
 				`${this.lastVisibleRange.startIdx}:${this.lastVisibleRange.endIdx}:${this.lastVisibleRange.pinLeft}:${this.lastVisibleRange.pinRight}` &&
-			!filterChanged
+			!filterChanged &&
+			!topologyChanged
 		) {
 			return;
 		}
 		this.lastFilterModel = filterModel;
+		this.lastTopologyVersion = topology.version;
 		this.lastVisibleRange = { startIdx: colStart, endIdx: colEnd, pinLeft: plan.columns.pinLeftCount, pinRight: plan.columns.pinRightCount };
 
 		const colCount = columns.length;
@@ -158,6 +162,9 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 				// Update position if column widths changed
 				cell.style.left = `${left}px`;
 				cell.style.width = `${width}px`;
+				// Reparent if lane changed (pin/unpin relocation — move, do not destroy/recreate).
+				const targetParent = isPinLeft ? this.filterLeftLayer : isPinRight ? this.filterRightLayer : this.filterLayer;
+				if (targetParent && cell.parentNode !== targetParent) targetParent.appendChild(cell);
 				// Sync filter value if it changed
 				this.updateCellFilterValue(cell, currentFilter, col);
 			}
@@ -786,5 +793,6 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		this.cells.clear();
 		this.lastVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1 };
 		this.lastFilterModel = null;
+		this.lastTopologyVersion = -1;
 	}
 }

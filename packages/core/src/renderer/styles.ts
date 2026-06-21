@@ -1231,16 +1231,14 @@ export const CORE_STYLES = `
 
   .og-header-cell-movable {
     cursor: grab;
-    /* Transitions apply to pickup (class added) and drop (class removed).
-       transform is on the inline style so it animates here too. */
-    transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, opacity 0.15s ease;
+    transition: box-shadow 0.15s ease, opacity 0.15s ease;
   }
 
-  /* Suppress transform transitions while scrolling. New header cells entering the
-     visible range during horizontal scroll would otherwise slide in from left: 0
-     instead of appearing immediately at their content-space position. */
-  .og-is-scrolling .og-header-cell-movable {
-    transition: none;
+  /* Transform transition only active during live column reorder — prevents animation
+     during topology changes (pin/unpin, scroll) where the cell jumps to a new position
+     and should appear immediately rather than sliding from the old one. */
+  .og-col-reordering .og-header-cell-movable {
+    transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, opacity 0.15s ease;
   }
 
   .og-header-cell-dragging {

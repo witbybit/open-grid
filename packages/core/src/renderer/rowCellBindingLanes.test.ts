@@ -7,12 +7,12 @@
  *  2. Lane changes relocate a CellSlot; they do not destroy or recreate it.
  *  3. React/portal identity (cellInstanceId) survives pinning, unpinning, and lane moves.
  *  4. Structural acquire/release only occurs when columns genuinely enter/exit.
- *  5. syncCellsByColumnId correctly repairs map drift after scroll-time ensure* usage.
+ *  5. reconcileCellTopologyForScroll never calls releaseFn and keeps cellsByColumnId authoritative.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { RowSlot } from './rowSlot.js';
 import { CellSlot } from './cellSlot.js';
-import { reconcileTopology, syncCellsByColumnId } from './rowCellBindingLanes.js';
+import { reconcileTopology, reconcileCellTopologyForScroll } from './rowCellBindingLanes.js';
 import type { ColumnDef, CompiledGridPlan } from '../columnDef.js';
 import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
 
@@ -400,78 +400,95 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 		expect(slot.leftCells[0]).toBe(nameCellFromMap);
 	});
 
-	// ── syncCellsByColumnId ────────────────────────────────────────────────────
+	// ── reconcileCellTopologyForScroll ────────────────────────────────────────
 
-	describe('syncCellsByColumnId', () => {
-		// Helper: simulate what the bind loop does — sets colField on each cell.
-		// reconcileTopology keys the map by column field but does NOT set cell.colField;
-		// that is the bind loop's job (via cellSlot.update()). syncCellsByColumnId reads
-		// cell.colField, so tests must populate it first to match production conditions.
-		function simulateBindLoop(slot: RowSlot<unknown>): void {
-			for (const [field, cell] of slot.cellsByColumnId) {
-				cell.colField = field;
-			}
-		}
+	describe('reconcileCellTopologyForScroll', () => {
+		const cols5 = [makeCol('a'), makeCol('b'), makeCol('c'), makeCol('d'), makeCol('e')];
 
-		it('rebuilds cellsByColumnId from lane arrays, repairing scroll-time drift', () => {
+		it('never calls releaseFn — cells leaving the window stay in map but detach from DOM', () => {
 			const slot = makeRowSlot();
-			run(slot, { centerColCount: 3 });
-			simulateBindLoop(slot);
+			const topo = makeTopology(cols5, 0, 0, 5);
+			// Full paint: establish 3 center cells [0,1,2]
+			reconcileTopology(slot, topo, null, 0, 3, null, cols5, initCell, vi.fn());
 
-			// Simulate scroll drift: the map has stale entries but lane arrays are current
-			const nameCellFromLane = slot.centerCells[0]; // cells[0] = 'name' column
-			expect(nameCellFromLane.colField).toBe('name');
-			slot.cellsByColumnId.clear(); // drift: map emptied, lane arrays unchanged
+			const cellA = slot.cellsByColumnId.get('a')!;
+			const cellB = slot.cellsByColumnId.get('b')!;
 
-			syncCellsByColumnId(slot);
+			// Scroll to [2,3,4] — cols [0,1] exit the window, col [4] enters
+			reconcileCellTopologyForScroll(slot, topo, null, 2, 3, null, cols5, initCell);
 
-			expect(slot.cellsByColumnId.get('name')).toBe(nameCellFromLane);
-			expect(slot.cellsByColumnId.size).toBe(3);
+			// Exited columns stay in cellsByColumnId (lifecycle ownership preserved)
+			expect(slot.cellsByColumnId.has('a')).toBe(true);
+			expect(slot.cellsByColumnId.has('b')).toBe(true);
+			// Their DOM elements are detached (no DOM bloat during scroll)
+			expect(cellA.element.parentNode).toBeNull();
+			expect(cellB.element.parentNode).toBeNull();
+			// New column entered the window and was created
+			expect(slot.cellsByColumnId.has('e')).toBe(true);
 		});
 
-		it('uses the cell colField property, not lane position, for the key', () => {
+		it('reuses existing cell instances for columns scrolling back into view', () => {
 			const slot = makeRowSlot();
-			run(slot, { centerColCount: 3 });
+			const topo = makeTopology(cols5, 0, 0, 5);
+			reconcileTopology(slot, topo, null, 0, 3, null, cols5, initCell, vi.fn());
 
-			// Set colField on only one cell to verify key-by-field, not key-by-index
-			const nameCell = slot.centerCells[0];
-			nameCell.colField = 'name';
-			// centerCells[1] and [2] have colField = '' — should be skipped
+			const instanceA = slot.cellsByColumnId.get('a')!;
+			const instanceB = slot.cellsByColumnId.get('b')!;
 
-			slot.cellsByColumnId.clear();
-			syncCellsByColumnId(slot);
+			// Scroll forward past a and b
+			reconcileCellTopologyForScroll(slot, topo, null, 2, 3, null, cols5, initCell);
+			// Scroll back to include a and b
+			reconcileCellTopologyForScroll(slot, topo, null, 0, 3, null, cols5, initCell);
 
-			expect(slot.cellsByColumnId.get('name')).toBe(nameCell);
-			expect(slot.cellsByColumnId.size).toBe(1);
+			// Same instances reused — no new allocations
+			expect(slot.cellsByColumnId.get('a')).toBe(instanceA);
+			expect(slot.cellsByColumnId.get('b')).toBe(instanceB);
 		});
 
-		it('skips cells with empty colField (unbound cells)', () => {
+		it('cellsByColumnId stays authoritative — lane array is a derived view', () => {
 			const slot = makeRowSlot();
-			run(slot, { centerColCount: 3 });
-			simulateBindLoop(slot); // all get colField set
+			const topo = makeTopology(cols5, 0, 0, 5);
+			reconcileTopology(slot, topo, null, 0, 3, null, cols5, initCell, vi.fn());
 
-			// Unset one cell's colField to simulate an unbound cell in the lane
-			slot.centerCells[0].colField = '';
+			reconcileCellTopologyForScroll(slot, topo, null, 1, 3, null, cols5, initCell);
 
-			slot.cellsByColumnId.clear();
-			syncCellsByColumnId(slot);
+			// centerCells is the current window [b,c,d]
+			expect(slot.centerCells).toHaveLength(3);
+			expect(slot.centerCells[0]).toBe(slot.cellsByColumnId.get('b'));
+			expect(slot.centerCells[1]).toBe(slot.cellsByColumnId.get('c'));
+			expect(slot.centerCells[2]).toBe(slot.cellsByColumnId.get('d'));
+		});
 
-			// Only the two cells with non-empty colField are indexed
-			expect(slot.cellsByColumnId.size).toBe(2);
+		it('pinned cells are always included regardless of center window', () => {
+			const cols4 = [makeCol('pin'), makeCol('a'), makeCol('b'), makeCol('c')];
+			const slot = makeRowSlot();
+			const left = makeContainer();
+			slot.element.appendChild(left);
+			const topo = makeTopology(cols4, 1, 0, 4);
+			reconcileTopology(slot, topo, left, 1, 2, null, cols4, initCell, vi.fn());
+
+			const pinCell = slot.cellsByColumnId.get('pin')!;
+
+			// Scroll center window
+			reconcileCellTopologyForScroll(slot, topo, left, 2, 1, null, cols4, initCell);
+
+			// Pinned cell survives in both map and leftCells
+			expect(slot.cellsByColumnId.get('pin')).toBe(pinCell);
+			expect(slot.leftCells[0]).toBe(pinCell);
 		});
 	});
 
 	// ── destroyCold with cellsByColumnId ──────────────────────────────────────
 
 	describe('RowSlot.destroyCold() with stable ownership', () => {
-		it('unbinds cells from both map and lane arrays via union (handles scroll drift)', () => {
+		it('unbinds cells from both map and lane arrays via defensive union', () => {
 			const slot = makeRowSlot();
 			const leftContainer = makeContainer();
 			slot.element.appendChild(leftContainer);
 
 			run(slot, { centerColCount: 3 });
 
-			// Simulate scroll drift: add a cell to a lane that isn't in the map
+			// Add a cell to the lane that isn't in the map (external caller edge case)
 			const driftCell = new CellSlot(document.createElement('div'));
 			driftCell.colField = 'drift';
 			slot.centerCells.push(driftCell);

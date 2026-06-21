@@ -215,11 +215,11 @@ describe('compileColumnTopology — group segmentation', () => {
 		expect(t.groupSegments[1][0].label).toBe('Inner');
 	});
 
-	it('segment id is stable: grp:{depth}:{firstColId}:{lastColId}', () => {
+	it('segment id is lane-aware: grp:{depth}:{lane}:{firstColId}:{lastColId}', () => {
 		const plan = makePlan([makeCol('a', 100, { headerGroup: 'G' }), makeCol('b', 100, { headerGroup: 'G' })], 0, 0);
 		const t = compileColumnTopology(plan);
 
-		expect(t.groupSegments[0][0].id).toBe('grp:0:a:b');
+		expect(t.groupSegments[0][0].id).toBe('grp:0:center:a:b');
 	});
 
 	it('group laneOffset is relative to the lane (center case)', () => {

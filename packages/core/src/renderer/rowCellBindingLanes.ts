@@ -94,30 +94,8 @@ export interface BindAllLoadingCellsRequest<TRowData = unknown> {
 }
 
 /**
- * Syncs `cellsByColumnId` from the current lane arrays using each cell's `colField`.
- *
- * After a scroll frame the lane arrays are authoritative (cells may have been recycled
- * to new columns by `ensure*`). Rebuilding the map from lane arrays before the next full
- * paint keeps reconcileTopology's field lookups correct.
- */
-export function syncCellsByColumnId<TRowData>(slot: RowSlot<TRowData>): void {
-	slot.cellsByColumnId.clear();
-	for (const cell of slot.leftCells) {
-		if (cell.colField) slot.cellsByColumnId.set(cell.colField, cell);
-	}
-	for (const cell of slot.centerCells) {
-		if (cell.colField) slot.cellsByColumnId.set(cell.colField, cell);
-	}
-	for (const cell of slot.rightCells) {
-		if (cell.colField) slot.cellsByColumnId.set(cell.colField, cell);
-	}
-}
-
-/**
  * Reconciles the three lane arrays on a RowSlot to match a new column topology without
  * destroying cells for columns that merely changed lanes (pin/unpin relocation).
- *
- * Call syncCellsByColumnId() first to ensure the map reflects any scroll-time drift.
  *
  * Algorithm:
  *  1. Destroy cells for columns that have left the rendered set entirely.
@@ -209,7 +187,106 @@ function reconcileTopology<TRowData>(
 	slot.pinRightStart = topology.left.length + topology.center.length;
 }
 
-export { reconcileTopology };
+/**
+ * Topology-owned scroll reconciliation: updates lane arrays to match the new center
+ * window WITHOUT calling releaseFn for any cell. Columns that leave the center window
+ * remain in `cellsByColumnId` and are reused when they scroll back into view.
+ *
+ * Invariant: `cellsByColumnId` is authoritative at all times — no drift is possible
+ * because this path never allocates by count or recycles cells to different columns.
+ */
+function reconcileCellTopologyForScroll<TRowData>(
+	slot: RowSlot<TRowData>,
+	topology: CompiledColumnTopology,
+	pinLeftContainer: HTMLDivElement | null,
+	centerColStart: number,
+	centerColCount: number,
+	pinRightContainer: HTMLDivElement | null,
+	columns: readonly ColumnDef<TRowData>[],
+	initFn: (el: HTMLDivElement) => void
+): void {
+	// Compute the set of column fields visible in this frame.
+	const visibleFields = new Set<string>();
+	if (pinLeftContainer) {
+		for (const p of topology.left) {
+			const col = columns[p.absoluteIndex];
+			if (col?.field) visibleFields.add(col.field);
+		}
+	}
+	for (const p of topology.center) {
+		const c = p.absoluteIndex;
+		if (c >= centerColStart && c < centerColStart + centerColCount) {
+			const col = columns[c];
+			if (col?.field) visibleFields.add(col.field);
+		}
+	}
+	if (pinRightContainer) {
+		for (const p of topology.right) {
+			const col = columns[p.absoluteIndex];
+			if (col?.field) visibleFields.add(col.field);
+		}
+	}
+
+	// Detach DOM elements for cells that left the visible window. The CellSlot itself
+	// stays in cellsByColumnId so it can be reused when the column scrolls back in —
+	// no releaseFn call, no portal teardown.
+	for (const [field, cell] of slot.cellsByColumnId) {
+		if (!visibleFields.has(field) && cell.element.parentNode) {
+			cell.element.remove();
+		}
+	}
+
+	function ensureCell(field: string): CellSlot<TRowData> {
+		let cell = slot.cellsByColumnId.get(field);
+		if (!cell) {
+			const el = document.createElement('div');
+			initFn(el);
+			cell = CellSlot.fromElement<TRowData>(el);
+			cell.columnId = field;
+			slot.cellsByColumnId.set(field, cell);
+		}
+		return cell;
+	}
+
+	slot.leftCells.length = 0;
+	if (pinLeftContainer) {
+		for (const p of topology.left) {
+			const col = columns[p.absoluteIndex];
+			if (!col?.field) continue;
+			const cell = ensureCell(col.field);
+			if (cell.element.parentNode !== pinLeftContainer) pinLeftContainer.appendChild(cell.element);
+			slot.leftCells.push(cell);
+		}
+	}
+
+	slot.centerCells.length = 0;
+	for (const p of topology.center) {
+		const c = p.absoluteIndex;
+		if (c < centerColStart || c >= centerColStart + centerColCount) continue;
+		const col = columns[c];
+		if (!col?.field) continue;
+		const cell = ensureCell(col.field);
+		if (cell.element.parentNode !== slot.element) slot.element.appendChild(cell.element);
+		slot.centerCells.push(cell);
+	}
+
+	slot.rightCells.length = 0;
+	if (pinRightContainer) {
+		for (const p of topology.right) {
+			const col = columns[p.absoluteIndex];
+			if (!col?.field) continue;
+			const cell = ensureCell(col.field);
+			if (cell.element.parentNode !== pinRightContainer) pinRightContainer.appendChild(cell.element);
+			slot.rightCells.push(cell);
+		}
+	}
+
+	slot.centerColStart = centerColStart;
+	slot.pinLeftCount = topology.left.length;
+	slot.pinRightStart = topology.left.length + topology.center.length;
+}
+
+export { reconcileTopology, reconcileCellTopologyForScroll };
 
 export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData>, request: BindAllDataCellsRequest<TRowData>): void {
 	const {
@@ -240,8 +317,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 
 	if (!isScrollFrameActive) {
 		// Full paint: topology-aware reconciliation — retains cells across lane changes.
-		// syncCellsByColumnId first to repair any drift from the scroll-time ensure* path.
-		syncCellsByColumnId(slot);
+		// cellsByColumnId is authoritative; no drift repair needed.
 		reconcileTopology(
 			slot,
 			columnTopology,
@@ -254,15 +330,19 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			deps.releaseCellFn
 		);
 	} else {
-		// Scroll frame: position-based resize preserves the scroll cheapness contract.
-		// reconcileTopology would call releaseFn for horizontally-exiting columns,
-		// triggering deferred portal releases that corrupt portalReleasesDuringScroll.
-		slot.ensureLeftCells(pinLeftColumns, pinLeftContainer, deps.initCell, deps.releaseCellFn);
-		slot.ensureCenterCells(centerColCount, deps.initCell, deps.releaseCellFn);
-		slot.ensureRightCells(pinRightColumns, pinRightContainer, deps.initCell, deps.releaseCellFn);
-		slot.centerColStart = centerColStart;
-		slot.pinLeftCount = pinLeftColumns;
-		slot.pinRightStart = pinRightStart;
+		// Scroll frame: topology-owned reconciliation — never calls releaseFn.
+		// cellsByColumnId stays authoritative; cells leaving the center window are
+		// retained in the map and reused when they scroll back into view.
+		reconcileCellTopologyForScroll(
+			slot,
+			columnTopology,
+			pinLeftContainer,
+			centerColStart,
+			centerColCount,
+			pinRightContainer,
+			columns,
+			deps.initCell
+		);
 	}
 
 	for (let i = 0; i < pinLeftColumns; i++) {
@@ -434,7 +514,6 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 	const pinRightContainer = deps.ensurePinnedContainer(slot, 'right', pinRightWidth);
 
 	if (!isScrollFrameActive) {
-		syncCellsByColumnId(slot);
 		reconcileTopology(
 			slot,
 			columnTopology,
@@ -447,12 +526,16 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 			deps.releaseCellFn
 		);
 	} else {
-		slot.ensureLeftCells(pinLeftColumns, pinLeftContainer, deps.initCell, deps.releaseCellFn);
-		slot.ensureCenterCells(centerColCount, deps.initCell, deps.releaseCellFn);
-		slot.ensureRightCells(pinRightColumns, pinRightContainer, deps.initCell, deps.releaseCellFn);
-		slot.centerColStart = centerColStart;
-		slot.pinLeftCount = pinLeftColumns;
-		slot.pinRightStart = pinRightStart;
+		reconcileCellTopologyForScroll(
+			slot,
+			columnTopology,
+			pinLeftContainer,
+			centerColStart,
+			centerColCount,
+			pinRightContainer,
+			columns,
+			deps.initCell
+		);
 	}
 
 	const bindLoadingCell = (cellSlot: CellSlot<TRowData>, c: number, leftArg: number) => {

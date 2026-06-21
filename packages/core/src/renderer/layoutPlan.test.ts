@@ -475,8 +475,8 @@ describe('GridLayoutPlan', () => {
 
 			const plan = computeGridLayoutPlan(store.engine);
 			const groupCell = plan.headerBands[0].cells[0];
-			// Stable key: grp:depth:firstField:lastField
-			expect(groupCell.id).toBe('grp:0:a:b');
+			// Stable key: grp:depth:lane:firstField:lastField
+			expect(groupCell.id).toBe('grp:0:center:a:b');
 
 			ctrl.dispose();
 			store.destroy();
@@ -495,14 +495,14 @@ describe('GridLayoutPlan', () => {
 
 			const unpinned = computeGridLayoutPlan(store.engine);
 			expect(unpinned.headerBands[0].cells).toHaveLength(1);
-			expect(unpinned.headerBands[0].cells[0].id).toBe('grp:0:a:b');
+			expect(unpinned.headerBands[0].cells[0].id).toBe('grp:0:center:a:b');
 
 			store.setViewportPins({ left: 1, right: 0 });
 			const pinned = computeGridLayoutPlan(store.engine);
-			// Span splits into two cells — each has its own stable id reflecting its extent
+			// Span splits into two cells — each has its own stable lane-aware id
 			expect(pinned.headerBands[0].cells).toHaveLength(2);
-			expect(pinned.headerBands[0].cells[0].id).toBe('grp:0:a:a');
-			expect(pinned.headerBands[0].cells[1].id).toBe('grp:0:b:b');
+			expect(pinned.headerBands[0].cells[0].id).toBe('grp:0:left:a:a');
+			expect(pinned.headerBands[0].cells[1].id).toBe('grp:0:center:b:b');
 
 			ctrl.dispose();
 			store.destroy();
