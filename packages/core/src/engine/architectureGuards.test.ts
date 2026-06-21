@@ -698,8 +698,10 @@ describe('Architecture guardrails', () => {
 
 	it('deferred cell mounts validate generation before executing (Plan 081)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
-		expect(content).toContain('activeIdentity.rowSlotId !== mount.rowSlotId');
-		expect(content).toContain('activeIdentity.slotGeneration !== mount.slotGeneration');
+		// Stale-check logic is now centralised in isSamePhysicalIdentity() (Plan 120).
+		expect(content).toContain('isSamePhysicalIdentity');
+		expect(content).toContain('active.rowSlotId !== op.rowSlotId');
+		expect(content).toContain('active.slotGeneration !== op.slotGeneration');
 	});
 
 	it('RowDependencyRegistry expands sort/filter/group source fields and tracks opaque getters (Plan 082)', () => {

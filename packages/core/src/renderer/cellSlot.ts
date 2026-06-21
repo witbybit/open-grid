@@ -49,6 +49,12 @@ export class CellSlot<TRowData = unknown> {
 	 */
 	public readonly cellInstanceId: string;
 	/**
+	 * Stable string identifier for the portal host of this cell. Derived from cellInstanceId —
+	 * never changes for the CellSlot's lifetime. Passed with every portal mount so the React
+	 * adapter can verify it is rendering into the correct physical host.
+	 */
+	public readonly portalHostId: string;
+	/**
 	 * Lazily created on first portal use (getOrCreatePortalHost). Plain-text columns —
 	 * the common case — never pay the extra DOM node (+50% viewport node count).
 	 */
@@ -112,6 +118,7 @@ export class CellSlot<TRowData = unknown> {
 
 	constructor(element: HTMLDivElement) {
 		this.cellInstanceId = `ci${++_cellInstanceCounter}`;
+		this.portalHostId = `${this.cellInstanceId}-ph`;
 		this.element = element;
 		(element as any).__cellSlot = this;
 		// ARIA grid semantics — role is static per element; positional/state attrs are

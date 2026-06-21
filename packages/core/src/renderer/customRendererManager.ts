@@ -29,6 +29,7 @@ export interface AcquireRendererParams<TRowData = unknown> {
 	rowSlotId: string;
 	slotGeneration: number;
 	cellRowBindingGeneration: number;
+	cellInstanceId?: string;
 	parentContainer: HTMLElement;
 	value: unknown;
 	node: RowNode<TRowData>;
@@ -214,6 +215,8 @@ export class CustomRendererManager<TRowData = unknown> {
 			cellKey: params.cellKey,
 			rowSlotId: params.rowSlotId,
 			slotGeneration: params.slotGeneration,
+			cellRowBindingGeneration: params.cellRowBindingGeneration,
+			cellInstanceId: params.cellInstanceId,
 			container,
 			value: params.value,
 			node: params.node,

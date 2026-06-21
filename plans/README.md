@@ -118,6 +118,9 @@
 | 115 | [Public Snapshot and Runtime State Closure](./115-public-snapshot-and-runtime-state-closure.md)                               | DONE     | working tree |
 | 116 | [Persistence Commit Restore and Schema Hardening](./116-persistence-commit-restore-and-schema-hardening.md)                   | DONE     | working tree |
 | 117 | [Private Runtime Composition Root](./117-private-runtime-composition-root.md)                                                 | DONE     | working tree |
+| 118 | [Stable Cell View Ownership](./118-stable-cell-view-ownership-and-renderer-lifecycle.md)                                      | DONE     | faf18afa     |
+| 119 | [Unified Column Topology](./119-unified-column-topology-and-pinned-lane-rendering.md)                                         | DONE     | faf18afa     |
+| 120 | [Portal Identity Completion](./120-portal-identity-completion.md)                                                             | TODO     | faf18afa     |
 
 ## Execution order
 

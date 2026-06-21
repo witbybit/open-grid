@@ -33,7 +33,7 @@ export class HeaderRenderer<TRowData = unknown> {
 		return ids;
 	}
 
-	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
+	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1, topologyVersion: -1 };
 	private lastTopologyVersion = -1;
 	private readonly renderedHeaderScratch = new Set<string>();
 
@@ -66,7 +66,7 @@ export class HeaderRenderer<TRowData = unknown> {
 			cell.remove();
 		}
 		this.headerCells.clear();
-		this.lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
+		this.lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1, topologyVersion: -1 };
 		this.lastTopologyVersion = -1;
 	}
 
@@ -136,7 +136,8 @@ export class HeaderRenderer<TRowData = unknown> {
 			colEnd === this.lastHeaderVisibleRange.endIdx &&
 			pinLeftCount === this.lastHeaderVisibleRange.pinLeft &&
 			pinRightCount === this.lastHeaderVisibleRange.pinRight &&
-			colCount === this.lastHeaderVisibleRange.colCount
+			colCount === this.lastHeaderVisibleRange.colCount &&
+			layoutPlan.columnTopology.version === this.lastHeaderVisibleRange.topologyVersion
 		) {
 			return;
 		}
@@ -363,6 +364,7 @@ export class HeaderRenderer<TRowData = unknown> {
 			pinLeft: pinLeftCount,
 			pinRight: pinRightCount,
 			colCount,
+			topologyVersion: layoutPlan.columnTopology.version,
 		};
 	}
 

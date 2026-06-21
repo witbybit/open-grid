@@ -60,6 +60,14 @@ export interface GridCellContentMount<TRowData = unknown> {
 	 * that do not have access to the CellSlot directly.
 	 */
 	cellRowBindingGeneration?: number;
+	/**
+	 * Stable identity of the physical CellSlot that owns this portal host (CellSlot.cellInstanceId).
+	 * When present, PortalMountManager uses this to reject mounts/releases from a different
+	 * CellSlot instance that happens to share the same rowSlotId and generation.
+	 */
+	cellInstanceId?: string;
+	/** Stable host-element identifier matching CellSlot.portalHostId. */
+	portalHostId?: string;
 	isEditing: boolean;
 	isLoading: boolean;
 	phase?: CellRendererPhase;
@@ -84,6 +92,8 @@ export interface GridCellContentUnmount {
 	 * a newer generation (the cell was rebound before the deferred release flushed).
 	 */
 	cellRowBindingGeneration?: number;
+	/** Physical CellSlot identity at the time this release was requested. */
+	cellInstanceId?: string;
 }
 
 export interface GridCellContentFlush {

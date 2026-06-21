@@ -485,4 +485,221 @@ describe('PortalMountManager', () => {
 		expect(mount).toHaveBeenCalledTimes(1);
 		expect(mount.mock.calls[0][0].value).toBe('A');
 	});
+
+	describe('flushDeferred — stale identity rejection', () => {
+		it('rejects deferred release when slotGeneration advanced before flush', () => {
+			const manager = new PortalMountManager();
+			const release = vi.fn();
+			const container = document.createElement('div');
+			manager.onUnmountCellContent = release;
+
+			manager.mountCell({
+				cellKey: 'ci1-name',
+				container,
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci1',
+				value: 'A',
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+
+			manager.setRuntimeState(makeScrollingRuntimeState());
+			manager.releaseCellForScroll({ cellKey: 'ci1-name', rowSlotId: 'slot-0', slotGeneration: 0, cellRowBindingGeneration: 0, cellInstanceId: 'ci1' });
+
+			// Rebind to new row generation before flush
+			manager.setRuntimeState(makeIdleRuntimeState());
+			manager.mountCell({
+				cellKey: 'ci1-name',
+				container,
+				rowSlotId: 'slot-0',
+				slotGeneration: 1,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci1',
+				value: 'B',
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+
+			manager.setRuntimeState(makeScrollingRuntimeState());
+			manager.setRuntimeState(makeIdleRuntimeState());
+			manager.flushDeferred();
+
+			expect(release).not.toHaveBeenCalled();
+		});
+
+		it('rejects deferred release when cellRowBindingGeneration advanced before flush', () => {
+			const manager = new PortalMountManager();
+			const release = vi.fn();
+			const container = document.createElement('div');
+			manager.onUnmountCellContent = release;
+
+			manager.mountCell({
+				cellKey: 'ci2-name',
+				container,
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci2',
+				value: 'A',
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+
+			manager.setRuntimeState(makeScrollingRuntimeState());
+			manager.releaseCellForScroll({ cellKey: 'ci2-name', rowSlotId: 'slot-0', slotGeneration: 0, cellRowBindingGeneration: 0, cellInstanceId: 'ci2' });
+
+			// Rebind to same slot generation but incremented cell binding generation
+			manager.setRuntimeState(makeIdleRuntimeState());
+			manager.mountCell({
+				cellKey: 'ci2-name',
+				container,
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 1,
+				cellInstanceId: 'ci2',
+				value: 'B',
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+
+			manager.setRuntimeState(makeScrollingRuntimeState());
+			manager.setRuntimeState(makeIdleRuntimeState());
+			manager.flushDeferred();
+
+			expect(release).not.toHaveBeenCalled();
+		});
+
+		it('rejects deferred release when cellInstanceId differs (CellSlot destroyed and recreated)', () => {
+			const manager = new PortalMountManager();
+			const release = vi.fn();
+			const container = document.createElement('div');
+			manager.onUnmountCellContent = release;
+
+			manager.mountCell({
+				cellKey: 'ci3-name',
+				container,
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci3',
+				value: 'A',
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+
+			manager.setRuntimeState(makeScrollingRuntimeState());
+			manager.releaseCellForScroll({ cellKey: 'ci3-name', rowSlotId: 'slot-0', slotGeneration: 0, cellRowBindingGeneration: 0, cellInstanceId: 'ci3' });
+
+			// New CellSlot at same slot/generation but different cellInstanceId
+			manager.setRuntimeState(makeIdleRuntimeState());
+			manager.mountCell({
+				cellKey: 'ci3-name',
+				container,
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci4',
+				value: 'B',
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+
+			manager.setRuntimeState(makeScrollingRuntimeState());
+			manager.setRuntimeState(makeIdleRuntimeState());
+			manager.flushDeferred();
+
+			expect(release).not.toHaveBeenCalled();
+		});
+
+		it('rejects deferred mount when active identity has a newer slotGeneration', () => {
+			const manager = new PortalMountManager();
+			const mount = vi.fn();
+			const container = document.createElement('div');
+			manager.onMountCellContent = mount;
+
+			// Enqueue a deferred mount for generation 0
+			manager.setRuntimeState(makeScrollingRuntimeState());
+			manager.mountCell({
+				cellKey: 'ci5-name',
+				container,
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci5',
+				value: 'A',
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+
+			// Mount immediately with generation 1 (row rebound) — this updates activeIdentityByKey
+			manager.setRuntimeState(makeIdleRuntimeState());
+			manager.mountCell({
+				cellKey: 'ci5-name',
+				container,
+				rowSlotId: 'slot-0',
+				slotGeneration: 1,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci5',
+				value: 'B',
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+
+			// mount called once (non-scrolling immediate above)
+			expect(mount).toHaveBeenCalledTimes(1);
+			mount.mockClear();
+
+			// flush should reject the deferred mount from generation 0
+			manager.flushDeferred();
+
+			expect(mount).not.toHaveBeenCalled();
+		});
+
+		it('executes legitimate release when identity matches exactly', () => {
+			const manager = new PortalMountManager();
+			const release = vi.fn();
+			const container = document.createElement('div');
+			manager.onUnmountCellContent = release;
+
+			manager.mountCell({
+				cellKey: 'ci6-name',
+				container,
+				rowSlotId: 'slot-0',
+				slotGeneration: 0,
+				cellRowBindingGeneration: 0,
+				cellInstanceId: 'ci6',
+				value: 'A',
+				node: {} as never,
+				col: { field: 'name', header: 'Name' },
+				isEditing: false,
+				isLoading: false,
+			});
+
+			manager.setRuntimeState(makeScrollingRuntimeState());
+			manager.releaseCellForScroll({ cellKey: 'ci6-name', rowSlotId: 'slot-0', slotGeneration: 0, cellRowBindingGeneration: 0, cellInstanceId: 'ci6' });
+
+			manager.setRuntimeState(makeIdleRuntimeState());
+			manager.flushDeferred();
+
+			expect(release).toHaveBeenCalledTimes(1);
+		});
+	});
 });
