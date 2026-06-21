@@ -597,9 +597,17 @@ describe('Architecture guardrails', () => {
 		const indexContent = readFileSync(resolve(REACT_ROOT, 'src', 'index.ts'), 'utf-8');
 		expect(indexContent).toContain("export { Grid } from './Grid.js';");
 
-		const forbiddenExports = ['GridView', 'GridProvider', 'useOwnedClientGrid', 'useOwnedServerGrid', 'ClientGridOptions', 'ServerGridOptions'];
+		// 'GridView' must appear only as a type suffix (e.g. GridViewDefinition), not as a standalone component export.
+		const forbiddenExports = [
+			/\bGridView\b(?!Definition)/,
+			/\bGridProvider\b/,
+			/\buseOwnedClientGrid\b/,
+			/\buseOwnedServerGrid\b/,
+			/\bClientGridOptions\b/,
+			/\bServerGridOptions\b/,
+		];
 		for (const token of forbiddenExports) {
-			expect(indexContent, `React public index must not export ${token}`).not.toContain(token);
+			expect(indexContent, `React public index must not export ${token}`).not.toMatch(token);
 		}
 
 		expect(existsSync(resolve(REACT_ROOT, 'src', 'ownedGrid.ts')), 'ownedGrid.ts must not exist').toBe(false);

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { GridApi, ColumnDef, PersistenceStatus } from '../../types.js';
+import type { GridApi, ColumnDef } from '../../types.js';
 import { useGridKeySelector } from '../../hooks.js';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -62,14 +62,6 @@ const StickyIcon = () => (
 	</svg>
 );
 
-const SaveIcon = () => (
-	<svg width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round'>
-		<path d='M2 1h7l2 2v8a1 1 0 01-1 1H2a1 1 0 01-1-1V2a1 1 0 011-1z' />
-		<path d='M4 1v3h5V1' />
-		<rect x='3' y='7' width='6' height='4' rx='0.5' />
-	</svg>
-);
-
 const PinIcon = () => (
 	<svg width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round'>
 		<path d='M8 1L11 4L7.5 7.5L7 10L5.5 8.5L3 11L2 10L4.5 7.5L3 6L6.5 5L8 1Z' />
@@ -84,8 +76,6 @@ const SearchIcon = () => (
 );
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const SUCCESS = '#22c55e';
-const WARN = '#f59e0b';
 type ColumnViewMode = 'all' | 'groupable' | 'hidden';
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -107,31 +97,12 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	useGridKeySelector('themeName', (s) => s.themeName);
 	const theme = api.getTheme();
 
-	// hasPersistence is fixed at grid-creation time — not reactive state, plain call is correct.
-	const hasPersistence = api.hasPersistence();
-
 	const allCols = api.getColumns();
 	const groupBy: string[] = stateGroupBy ?? EMPTY_GROUP_BY;
 	const visibleCount = allCols.filter((c) => !c.hide).length;
 
-	const [clearConfirm, setClearConfirm] = useState(false);
 	const [columnQuery, setColumnQuery] = useState('');
 	const [columnView, setColumnView] = useState<ColumnViewMode>('all');
-	const clearConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-	// Real persistence status — subscribes to actual save events from the adapter.
-	const [persistStatus, setPersistStatus] = useState<PersistenceStatus>(() => api.getPersistenceStatus());
-	useEffect(() => {
-		return api.subscribeToPersistenceStatus(setPersistStatus);
-	}, [api]);
-
-	// Clear the confirmation timer on unmount to prevent setState on unmounted component.
-	useEffect(() => {
-		return () => {
-			if (clearConfirmTimerRef.current) clearTimeout(clearConfirmTimerRef.current);
-		};
-	}, []);
-
 	// Drag-to-reorder for column list
 	const dragFromIdx = useRef<number | null>(null);
 	const [dropTargetIdx, setDropTargetIdx] = useState<number | null>(null);
@@ -292,23 +263,6 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 			api.moveColumn(colField, firstRight);
 			api.setPinnedColumns({ left, right: right + 1 });
 		}
-	};
-
-	// ── Persistence handlers ───────────────────────────────────────────────────
-
-	const handleClearPersistence = () => {
-		if (!clearConfirm) {
-			setClearConfirm(true);
-			clearConfirmTimerRef.current = setTimeout(() => setClearConfirm(false), 3000);
-			return;
-		}
-		if (clearConfirmTimerRef.current) {
-			clearTimeout(clearConfirmTimerRef.current);
-			clearConfirmTimerRef.current = null;
-		}
-		const result = api.clearPersistedState();
-		if (result instanceof Promise) result.catch(console.error);
-		setClearConfirm(false);
 	};
 
 	void stateColumns;
@@ -740,140 +694,8 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 						);
 					})}
 				</div>
-
-				{/* ── Persistence Section ────────────────────────────────── */}
-				{hasPersistence && (
-					<div
-						style={{
-							flexShrink: 0,
-							marginTop: 'auto',
-							borderTop: `1px solid ${theme.borderColor}`,
-							padding: '8px 12px 10px',
-						}}
-					>
-						{/* Header row */}
-						<div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-							<SaveIcon />
-							<span
-								style={{
-									fontSize: 9,
-									fontWeight: 700,
-									letterSpacing: '0.08em',
-									textTransform: 'uppercase',
-									color: theme.headerText,
-								}}
-							>
-								Saved Settings
-							</span>
-							<PersistenceStatusBadge status={persistStatus} />
-						</div>
-
-						{/* Auto-save toggle */}
-						<ToggleRow
-							icon={<SaveIcon />}
-							label='Auto-save'
-							description='Automatically save settings after each change'
-							checked={persistStatus.autoSave}
-							onChange={(v) => api.setAutoSave(v)}
-							theme={theme}
-						/>
-
-						<div style={{ fontSize: 10, color: theme.headerText, margin: '6px 0 7px', lineHeight: 1.4 }}>
-							Column order, visibility, widths, sort, filters, grouping, and pinning are persisted across sessions.
-						</div>
-						<div style={{ display: 'flex', gap: 5 }}>
-							<button
-								onClick={() => api.saveNow()}
-								style={{
-									flex: 1,
-									height: 26,
-									fontSize: 10,
-									fontWeight: 600,
-									letterSpacing: '0.04em',
-									borderRadius: 5,
-									border: `1px solid ${theme.selectionBorder}`,
-									background: theme.selectionBg,
-									color: theme.focusRing,
-									cursor: 'pointer',
-									transition: 'all 0.15s',
-								}}
-							>
-								Save now
-							</button>
-							<button
-								onClick={handleClearPersistence}
-								style={{
-									flex: 1,
-									height: 26,
-									fontSize: 10,
-									fontWeight: 600,
-									letterSpacing: '0.04em',
-									borderRadius: 5,
-									border: clearConfirm ? `1px solid rgba(239,68,68,0.5)` : `1px solid rgba(30,41,59,0.8)`,
-									background: clearConfirm ? 'rgba(239,68,68,0.12)' : 'rgba(180, 190, 213, 0.5)',
-									color: clearConfirm ? '#f87171' : theme.focusRing,
-									cursor: 'pointer',
-									transition: 'all 0.15s',
-								}}
-							>
-								{clearConfirm ? 'Confirm reset' : 'Reset settings'}
-							</button>
-						</div>
-					</div>
-				)}
 			</div>
 		</div>
-	);
-}
-
-// ── Persistence status badge ──────────────────────────────────────────────────
-
-function PersistenceStatusBadge({ status }: { status: PersistenceStatus }) {
-	let color: string;
-	let label: string;
-
-	if (!status.autoSave) {
-		color = '#64748b';
-		label = 'Off';
-	} else if (status.status === 'saving') {
-		color = WARN;
-		label = 'Saving…';
-	} else if (status.status === 'saved') {
-		color = SUCCESS;
-		label = 'Saved';
-	} else if (status.status === 'error') {
-		color = '#f87171';
-		label = 'Error';
-	} else {
-		color = SUCCESS;
-		label = 'Auto-save on';
-	}
-
-	return (
-		<span
-			style={{
-				marginLeft: 'auto',
-				display: 'flex',
-				alignItems: 'center',
-				gap: 3,
-				fontSize: 9,
-				color,
-				fontWeight: 600,
-			}}
-			title={status.status === 'error' ? String(status.error) : undefined}
-		>
-			<span
-				style={{
-					width: 5,
-					height: 5,
-					borderRadius: '50%',
-					background: color,
-					flexShrink: 0,
-					transition: 'background 0.2s',
-				}}
-			/>
-			{label}
-		</span>
 	);
 }
 

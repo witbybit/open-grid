@@ -5,10 +5,11 @@ import { ColumnsPanel } from './panels/ColumnsPanel.js';
 import { FiltersPanel } from './panels/FiltersPanel.js';
 import { SortPanel } from './panels/SortPanel.js';
 import { ThemesPanel } from './panels/ThemesPanel.js';
+import { ViewsPanel } from './panels/ViewsPanel.js';
 
 // ── Sidebar types ─────────────────────────────────────────────────────────────
 
-export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes';
+export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views';
 
 export interface SidebarPanelDef<TRowData = unknown> {
 	id: string;
@@ -53,6 +54,13 @@ const _ThemesIcon = () => (
 		<path d='M7.5 1.5a6 6 0 1 0 6 6c0-.6-.1-1.1-.2-1.6a.9.9 0 0 0-1.3-.6 2.8 2.8 0 0 1-1.4.4 2.9 2.9 0 0 1-2.9-2.9c0-.5.1-1 .4-1.4A.9.9 0 0 0 7.5 1.5Z' />
 	</svg>
 );
+const _ViewsIcon = () => (
+	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
+		<rect x='1.5' y='1.5' width='12' height='12' rx='2' />
+		<path d='M1.5 5.5h12' />
+		<path d='M5.5 5.5v8' />
+	</svg>
+);
 
 interface _ResolvedPanel<TRowData> {
 	id: string;
@@ -66,8 +74,15 @@ const _BUILTIN_ICONS: Record<BuiltinSidebarPanelId, React.ReactNode> = {
 	filters: <_FiltersIcon />,
 	sort: <_SortIcon />,
 	themes: <_ThemesIcon />,
+	views: <_ViewsIcon />,
 };
-const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = { columns: 'Columns', filters: 'Filters', sort: 'Sort', themes: 'Themes' };
+const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
+	columns: 'Columns',
+	filters: 'Filters',
+	sort: 'Sort',
+	themes: 'Themes',
+	views: 'Views',
+};
 
 function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TRowData>): _ResolvedPanel<TRowData> {
 	if (typeof def !== 'string') {
@@ -82,6 +97,7 @@ function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TR
 			if (def === 'filters') return <FiltersPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'sort') return <SortPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'themes') return <ThemesPanel api={api as GridApi<any>} onClose={onClose} />;
+			if (def === 'views') return <ViewsPanel api={api as GridApi<any>} onClose={onClose} />;
 			return null;
 		},
 	};
@@ -89,7 +105,7 @@ function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TR
 
 const _SIDEBAR_TAB_W = 44;
 export function GridSidebar<TRowData>({ api, config }: { api: GridApi<TRowData>; config: GridSidebarConfig<TRowData> }) {
-	const { panels = ['columns', 'filters', 'sort', 'themes'], position = 'right', width = 264 } = config;
+	const { panels = ['columns', 'filters', 'sort', 'themes', 'views'], position = 'right', width = 264 } = config;
 	const activeId = useGridKeySelector<string | null>('sidebarOpenPanel', (s) => s.sidebarOpenPanel ?? null);
 	const themeName = useGridKeySelector('themeName', (s) => s.themeName);
 	const filterCount = useGridKeySelector<number>('filterModel', (s) => (s.filterModel ? Object.keys(s.filterModel).length : 0));

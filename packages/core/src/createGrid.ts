@@ -14,9 +14,13 @@ import {
 	createPersistenceSubscription,
 } from './persistence/statePersistence.js';
 import { createGridRuntimeComposition } from './internal/createGridRuntimeComposition.js';
+import type { GridWorkspaceAdapter } from './workspace/workspaceTypes.js';
+import { type GridWorkspaceController, createWorkspaceController } from './workspace/GridWorkspaceController.js';
 
 export type { GridPersistenceAdapter, PersistedGridState };
 export { createLocalStorageAdapter };
+export type { GridWorkspaceAdapter };
+export { createWorkspaceController };
 
 export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowData> {
 	getRowId?: (row: TRowData) => string;
@@ -45,6 +49,7 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 	 * }
 	 */
 	persistence?: string | GridPersistenceAdapter;
+	workspace?: GridWorkspaceAdapter;
 	/** Grid-level cross-field validator — see RowValidator for details. */
 	rowValidator?: RowValidator<TRowData>;
 }
@@ -54,6 +59,7 @@ export interface InfiniteGridOptions<TRowData> extends InfiniteRowModelOptions<T
 	initialState?: Partial<GridInitialState<TRowData>>;
 	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	persistence?: string | GridPersistenceAdapter;
+	workspace?: GridWorkspaceAdapter;
 	rowValidator?: RowValidator<TRowData>;
 }
 
@@ -62,6 +68,7 @@ export interface ServerPageGridOptions<TRowData> extends ServerPageRowModelOptio
 	initialState?: Partial<GridInitialState<TRowData>>;
 	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	persistence?: string | GridPersistenceAdapter;
+	workspace?: GridWorkspaceAdapter;
 	rowValidator?: RowValidator<TRowData>;
 }
 
@@ -110,6 +117,30 @@ function withRowSelectionColumn<TRowData>(
 		nextInitial = { ...nextInitial, columns: nextColumns };
 	}
 	return { columns: nextColumns, initialState: nextInitial };
+}
+
+function wireGridWorkspace<TRowData>(
+	options: { workspace?: GridWorkspaceAdapter },
+	runtime: GridRuntime<TRowData>,
+	persistenceController?: PersistenceController
+): GridWorkspaceController | undefined {
+	if (!options.workspace) return undefined;
+	const controller = createWorkspaceController(options.workspace);
+
+	// When persistence auto-saves, also update the active writable view
+	if (persistenceController) {
+		persistenceController.onStatusChange((status) => {
+			if (status.status === 'saved') {
+				const activeId = controller.getActiveWritableViewId();
+				if (activeId) {
+					controller.updateView(activeId, runtime.getGridState()).catch(() => {});
+				}
+			}
+		});
+	}
+
+	controller.init().catch(() => {});
+	return controller;
 }
 
 function wireGridPersistence<TRowData>(
@@ -173,15 +204,18 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 
 	const controller = new ClientRowModelController<TRowData>(runtime.getClientRowModelRuntime(), { ...options, columns: resolvedColumns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
+	const workspaceController = wireGridWorkspace(options, runtime, persistenceController);
 	const api = createGridRuntimeComposition({
 		runtime,
 		destroy: () => {
 			persistenceController?.destroy();
+			workspaceController?.destroy();
 			controller.dispose();
 			runtime.destroy();
 		},
 		persistenceAdapter: adapter,
 		persistenceController,
+		workspaceController,
 	});
 
 	if (loadedPersistedState) {
@@ -242,15 +276,18 @@ export function createInfiniteGrid<TRowData>(options: InfiniteGridOptions<TRowDa
 
 	const controller = new InfiniteRowModelController<TRowData>(runtime.getInfiniteRowModelRuntime(), { ...options, columns: selected.columns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
+	const workspaceController = wireGridWorkspace(options, runtime, persistenceController);
 	const api = createGridRuntimeComposition({
 		runtime,
 		destroy: () => {
 			persistenceController?.destroy();
+			workspaceController?.destroy();
 			controller.dispose();
 			runtime.destroy();
 		},
 		persistenceAdapter: adapter,
 		persistenceController,
+		workspaceController,
 	});
 
 	if (loadedPersistedState) {
@@ -309,15 +346,18 @@ export function createServerPageGrid<TRowData>(options: ServerPageGridOptions<TR
 
 	const controller = new ServerPageRowModelController<TRowData>(runtime.getServerPageRowModelRuntime(), { ...options, columns: selected.columns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
+	const workspaceController = wireGridWorkspace(options, runtime, persistenceController);
 	const api = createGridRuntimeComposition({
 		runtime,
 		destroy: () => {
 			persistenceController?.destroy();
+			workspaceController?.destroy();
 			controller.dispose();
 			runtime.destroy();
 		},
 		persistenceAdapter: adapter,
 		persistenceController,
+		workspaceController,
 	});
 
 	if (loadedPersistedState) {

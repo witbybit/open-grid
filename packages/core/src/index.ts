@@ -1,5 +1,16 @@
 export { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from './createGrid.js';
-export type { ClientGridOptions, InfiniteGridOptions, ServerPageGridOptions, GridPersistenceAdapter, PersistedGridState } from './createGrid.js';
+export type {
+	ClientGridOptions,
+	InfiniteGridOptions,
+	ServerPageGridOptions,
+	GridPersistenceAdapter,
+	PersistedGridState,
+	GridWorkspaceAdapter,
+} from './createGrid.js';
+export type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from './workspace/workspaceTypes.js';
+export { createLocalStorageWorkspaceAdapter } from './workspace/localStorageWorkspaceAdapter.js';
+export { createWorkspaceController } from './workspace/GridWorkspaceController.js';
+export type { GridWorkspaceController } from './workspace/GridWorkspaceController.js';
 export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteRowModelOptions } from './infiniteRowModel.js';
 export type {
 	ServerDatasource,

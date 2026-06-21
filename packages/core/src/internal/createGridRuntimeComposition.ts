@@ -2,6 +2,9 @@ import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js'
 import { registerGridRuntimeComposition } from './apiInternalBridge.js';
 import { exportToCsv, type CsvExportOptions } from '../export/csvExport.js';
 import type { GridStore as GridRuntime } from '../store.js';
+import type { GridWorkspaceController } from '../workspace/GridWorkspaceController.js';
+import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from '../workspace/workspaceTypes.js';
+import { GridEventName } from '../api/GridEvents.js';
 import type { InfiniteDatasource } from '../infiniteRowModel.js';
 import type { ServerDatasource } from '../serverPageRowModel.js';
 import type { ThemeTokens } from '../renderer/themes.js';
@@ -28,13 +31,26 @@ interface GridRuntimeCompositionOptions<TRowData> {
 	destroy: () => void;
 	persistenceAdapter?: GridPersistenceAdapter;
 	persistenceController?: PersistenceController;
+	workspaceController?: GridWorkspaceController;
 }
+
+const _EMPTY_WORKSPACE_STATE: GridWorkspaceState = {
+	views: [],
+	activeViewId: null,
+	defaultViewId: null,
+	autoSaveEnabled: true,
+	dirty: false,
+	lastSavedAt: null,
+	lastError: null,
+	loading: false,
+};
 
 export function createGridRuntimeComposition<TRowData>({
 	runtime,
 	destroy,
 	persistenceAdapter,
 	persistenceController,
+	workspaceController,
 }: GridRuntimeCompositionOptions<TRowData>): GridApi<TRowData> {
 	const api = {
 		getStateSnapshot: () => runtime.getStateSnapshot(),
@@ -170,6 +186,62 @@ export function createGridRuntimeComposition<TRowData>({
 		subscribeToPersistenceStatus: (listener: (status: PersistenceStatus) => void): (() => void) =>
 			persistenceController?.onStatusChange(listener) ?? (() => {}),
 		saveNow: (): void => persistenceController?.saveNow(),
+
+		// ── Workspace / named views ───────────────────────────────────────────────
+		hasWorkspace: (): boolean => workspaceController !== undefined,
+		getWorkspaceState: (): GridWorkspaceState => workspaceController?.getState() ?? _EMPTY_WORKSPACE_STATE,
+		subscribeToWorkspaceState: (listener: (state: GridWorkspaceState) => void): (() => void) =>
+			workspaceController?.onStateChange(listener) ?? (() => {}),
+		listViews: (): Promise<readonly GridViewDefinition[]> => Promise.resolve(workspaceController?.getState().views ?? []),
+		saveView: async (name: string, options?: SaveViewOptions): Promise<GridViewDefinition> => {
+			if (!workspaceController) throw new Error('[open-grid] No workspace adapter configured');
+			const view = await workspaceController.saveView(name, runtime.getGridState(), options);
+			runtime.dispatchEvent(GridEventName.viewSaved, { view });
+			runtime.dispatchEvent(GridEventName.workspaceStateChanged, { state: workspaceController.getState() });
+			return view;
+		},
+		updateView: async (id: string, state?: PersistedGridState): Promise<void> => {
+			if (!workspaceController) return;
+			await workspaceController.updateView(id, state ?? runtime.getGridState());
+			runtime.dispatchEvent(GridEventName.workspaceStateChanged, { state: workspaceController.getState() });
+		},
+		applyView: async (id: string): Promise<void> => {
+			if (!workspaceController) return;
+			const view = await workspaceController.getView(id);
+			if (!view) throw new Error(`[open-grid] workspace: view "${id}" not found`);
+			if (persistenceController) {
+				persistenceController.suspendAutoSave(() => runtime.applyGridState(view.state));
+			} else {
+				runtime.applyGridState(view.state);
+			}
+			workspaceController.setActiveViewId(id);
+			runtime.dispatchEvent(GridEventName.viewApplied, { view });
+			runtime.dispatchEvent(GridEventName.workspaceStateChanged, { state: workspaceController.getState() });
+		},
+		deleteView: async (id: string): Promise<void> => {
+			if (!workspaceController) return;
+			await workspaceController.deleteView(id);
+			runtime.dispatchEvent(GridEventName.viewDeleted, { id });
+			runtime.dispatchEvent(GridEventName.workspaceStateChanged, { state: workspaceController.getState() });
+		},
+		duplicateView: async (id: string, name: string): Promise<GridViewDefinition> => {
+			if (!workspaceController) throw new Error('[open-grid] No workspace adapter configured');
+			const view = await workspaceController.duplicateView(id, name);
+			runtime.dispatchEvent(GridEventName.workspaceStateChanged, { state: workspaceController.getState() });
+			return view;
+		},
+		renameView: async (id: string, name: string): Promise<void> => {
+			if (!workspaceController) return;
+			await workspaceController.renameView(id, name);
+			runtime.dispatchEvent(GridEventName.viewRenamed, { id, name });
+			runtime.dispatchEvent(GridEventName.workspaceStateChanged, { state: workspaceController.getState() });
+		},
+		setDefaultView: async (id: string | null): Promise<void> => {
+			if (!workspaceController) return;
+			await workspaceController.setDefaultView(id);
+			runtime.dispatchEvent(GridEventName.workspaceStateChanged, { state: workspaceController.getState() });
+		},
+
 		getRuntimeFaults: () => runtime.getRuntimeFaults(),
 		clearRuntimeFaults: () => runtime.clearRuntimeFaults(),
 		getInstrumentation: () => runtime.getInstrumentation(),

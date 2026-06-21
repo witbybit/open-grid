@@ -7,6 +7,7 @@ import type {
 	ColumnDef,
 	GridInitialState,
 	GridPersistenceAdapter,
+	GridWorkspaceAdapter,
 	RowSelectionMode,
 	RowSelectionOptions,
 	InfiniteDatasource,
@@ -34,6 +35,7 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	getRowId?: (row: TRowData) => string;
 	initialState?: Partial<GridInitialState<TRowData>>;
 	persistence?: string | GridPersistenceAdapter;
+	workspace?: GridWorkspaceAdapter;
 	rowOverscanPx?: number;
 	colBuffer?: number;
 	overscanAdaptive?: boolean;
@@ -126,6 +128,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		getRowId,
 		initialState,
 		persistence,
+		workspace,
 		rowOverscanPx,
 		colBuffer,
 		overscanAdaptive,
@@ -183,6 +186,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				blockSize,
 				getRowId,
 				persistence: resolvedPersistence,
+				workspace,
 				rowSelection,
 				rowValidator,
 				initialState: initial,
@@ -196,6 +200,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				columns: resolveColumnTypes(columns, columnTypes),
 				getRowId,
 				persistence: resolvedPersistence,
+				workspace,
 				rowSelection,
 				rowValidator,
 				initialState: initial,
@@ -209,6 +214,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			columns: resolveColumnTypes(columns, columnTypes),
 			getRowId,
 			persistence: resolvedPersistence,
+			workspace,
 			rowSelection,
 			rowValidator,
 			initialState: initial,

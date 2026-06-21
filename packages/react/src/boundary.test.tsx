@@ -26,6 +26,7 @@ describe('React public boundary', () => {
 			'createDropdownCellEditor',
 			'createDropdownCellRenderer',
 			'createLocalStorageAdapter',
+			'createLocalStorageWorkspaceAdapter',
 			'createMultiSelectCellEditor',
 			'createMultiSelectCellRenderer',
 			'createNumberCellEditor',

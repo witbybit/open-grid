@@ -32,6 +32,7 @@ import { createRowsAccessor } from './rowsAccessor.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 import type { PersistenceStatus, PersistedGridState } from './persistence/statePersistence.js';
+import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from './workspace/workspaceTypes.js';
 import { extractPersistedState, preparePersistedGridStateRestore, areRowHeightsEqual } from './persistence/statePersistence.js';
 import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltInThemeName, type ThemeTokens } from './renderer/themes.js';
 
@@ -124,6 +125,17 @@ import { createGridPluginRuntime } from './plugins/createGridPluginRuntime.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './features/ColumnAutoSizeController.js';
 
 export { validateRowIds } from './ids.js';
+
+const _EMPTY_WS_STATE: GridWorkspaceState = {
+	views: [],
+	activeViewId: null,
+	defaultViewId: null,
+	autoSaveEnabled: true,
+	dirty: false,
+	lastSavedAt: null,
+	lastError: null,
+	loading: false,
+};
 
 /**
  * Internal runtime composition root.
@@ -459,6 +471,23 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		(_listener: (status: PersistenceStatus) => void): (() => void) =>
 		() => {};
 	public saveNow = (): void => {};
+
+	// All workspace methods are overridden by the composition root when a workspace adapter is configured.
+	public hasWorkspace = (): boolean => false;
+	public getWorkspaceState = (): GridWorkspaceState => _EMPTY_WS_STATE;
+	public subscribeToWorkspaceState =
+		(_listener: (state: GridWorkspaceState) => void): (() => void) =>
+		() => {};
+	public listViews = (): Promise<readonly GridViewDefinition[]> => Promise.resolve([]);
+	public saveView = (_name: string, _options?: SaveViewOptions): Promise<GridViewDefinition> =>
+		Promise.reject(new Error('[open-grid] No workspace adapter configured'));
+	public updateView = (_id: string, _state?: PersistedGridState): Promise<void> => Promise.resolve();
+	public applyView = (_id: string): Promise<void> => Promise.resolve();
+	public deleteView = (_id: string): Promise<void> => Promise.resolve();
+	public duplicateView = (_id: string, _name: string): Promise<GridViewDefinition> =>
+		Promise.reject(new Error('[open-grid] No workspace adapter configured'));
+	public renameView = (_id: string, _name: string): Promise<void> => Promise.resolve();
+	public setDefaultView = (_id: string | null): Promise<void> => Promise.resolve();
 
 	public openPanel = (panelId: string): void => {
 		this.engine.setSidebarOpenPanel(panelId);

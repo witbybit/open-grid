@@ -414,7 +414,7 @@ export default function AdvancedFiltersDemo() {
 					onGridReady={onGridReady}
 					showFilterChipBar={true}
 					persistence='advancedfilters'
-					sidebar={{ panels: ['columns', 'filters', 'sort', 'themes'], defaultOpen: 'filters' }}
+					sidebar={{ panels: ['columns', 'filters', 'sort', 'themes', 'views'], defaultOpen: 'filters' }}
 				/>
 			</div>
 		</div>

@@ -64,7 +64,12 @@ export type {
 	PersistedGridState,
 	PersistenceStatus,
 	PersistenceSaveStatus,
+	GridWorkspaceAdapter,
+	GridViewDefinition,
+	GridWorkspaceState,
+	SaveViewOptions,
 } from '@open-grid/core';
+export { createLocalStorageWorkspaceAdapter } from '@open-grid/core';
 
 export type {
 	ColumnDef,

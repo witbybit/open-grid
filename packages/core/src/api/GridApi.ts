@@ -11,6 +11,7 @@ import type { ViewportRange } from '../viewportController.js';
 import type { RenderStats } from '../renderer/renderOrchestrator.js';
 import type { AggregationDef } from '../rowModel.js';
 import type { PersistenceStatus, PersistedGridState } from '../persistence/statePersistence.js';
+import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from '../workspace/workspaceTypes.js';
 import type { CsvExportOptions } from '../export/csvExport.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
@@ -593,6 +594,31 @@ export interface GridApi<TRowData = unknown> {
 	subscribeToPersistenceStatus(listener: (status: PersistenceStatus) => void): () => void;
 	/** Immediately save current state, bypassing the debounce timer. No-op when no adapter is set. */
 	saveNow(): void;
+
+	// ── Workspace / named views API ───────────────────────────────────────────────
+	/** Returns true when a workspace adapter is configured for this grid instance. */
+	hasWorkspace(): boolean;
+	/** Returns the current workspace state (views list, active view, dirty state). */
+	getWorkspaceState(): GridWorkspaceState;
+	/** Subscribe to workspace state changes. Returns unsubscribe function. */
+	subscribeToWorkspaceState(listener: (state: GridWorkspaceState) => void): () => void;
+	/** List all saved views from the workspace adapter. */
+	listViews(): Promise<readonly GridViewDefinition[]>;
+	/** Save the current grid state as a named view. */
+	saveView(name: string, options?: SaveViewOptions): Promise<GridViewDefinition>;
+	/** Update the state of an existing view with the current grid state (or a provided state). */
+	updateView(id: string, state?: PersistedGridState): Promise<void>;
+	/** Apply a saved view by ID, restoring all its persisted state fields. */
+	applyView(id: string): Promise<void>;
+	/** Delete a saved view by ID. Clears activeViewId if the deleted view was active. */
+	deleteView(id: string): Promise<void>;
+	/** Duplicate a view with a new name. */
+	duplicateView(id: string, name: string): Promise<GridViewDefinition>;
+	/** Rename a view without changing its state. */
+	renameView(id: string, name: string): Promise<void>;
+	/** Set the default view. Pass null to clear. */
+	setDefaultView(id: string | null): Promise<void>;
+
 	/** Returns a bounded snapshot of recent runtime faults captured by the grid core. */
 	getRuntimeFaults(): RuntimeFault[];
 	/** Clears the captured runtime fault history. */
