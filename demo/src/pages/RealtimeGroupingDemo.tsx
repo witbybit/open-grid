@@ -365,7 +365,7 @@ function RealtimeGroupingDemoInner({ api, onGridReady }: { api: GridApi<SalesRow
 			{/* Grid */}
 			<div className='flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-800 shadow-2xl'>
 				<Grid<SalesRow>
-					mode='client'
+					rowModelType='client'
 					columns={COLUMNS}
 					rows={ROWS}
 					persistence='open-grid-sales-demo'

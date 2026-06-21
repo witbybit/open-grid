@@ -158,10 +158,28 @@ export interface ClientMutableRowModel<TRowData = unknown> extends RowOrderCapab
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
 }
 
+/** Capability interface for the infinite (block/range) row model. */
+export interface InfiniteControllableRowModel<TRowData = unknown> {
+	purgeCache(): void;
+	setDatasource(datasource: import('./infiniteRowModel.js').InfiniteDatasource<TRowData>, blockSize?: number): void;
+}
+
+/**
+ * Kept for architecture-guard continuity; represents the infinite row model's
+ * control surface. New code should prefer InfiniteControllableRowModel.
+ */
 export interface ServerControllableRowModel<TRowData = unknown> {
 	purgeCache(): void;
-	setDatasource(datasource: import('./serverRowModel.js').IGridDatasource<TRowData>, blockSize?: number): void;
+	setDatasource(datasource: import('./infiniteRowModel.js').InfiniteDatasource<TRowData>, blockSize?: number): void;
+}
+
+/** Capability interface for the server-page row model. */
+export interface ServerPageControllableRowModel<TRowData = unknown> {
 	goToPage(page: number): void;
+	setPageSize(pageSize: number): void;
+	reloadPage(reason?: string): void;
+	getPageState(): import('./serverPageRowModel.js').ServerPageState;
+	setDatasource(datasource: import('./serverPageRowModel.js').ServerDatasource<TRowData>): void;
 }
 
 export interface VisibleBlockLoadCapableRowModel {
@@ -236,8 +254,25 @@ export function asClientMutableRowModel<TRowData = unknown>(rowModel: RowModel<T
 		: null;
 }
 
+export function asInfiniteControllableRowModel<TRowData = unknown>(
+	rowModel: RowModel<TRowData> | null
+): InfiniteControllableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['purgeCache', 'setDatasource', 'loadVisibleBlocks'])
+		? (rowModel as unknown as InfiniteControllableRowModel<TRowData>)
+		: null;
+}
+
+/** Kept for architecture-guard continuity — delegates to asInfiniteControllableRowModel. */
 export function asServerControllableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): ServerControllableRowModel<TRowData> | null {
-	return hasFunctions(rowModel, ['purgeCache', 'setDatasource', 'goToPage']) ? (rowModel as unknown as ServerControllableRowModel<TRowData>) : null;
+	return hasFunctions(rowModel, ['purgeCache', 'setDatasource']) ? (rowModel as unknown as ServerControllableRowModel<TRowData>) : null;
+}
+
+export function asServerPageControllableRowModel<TRowData = unknown>(
+	rowModel: RowModel<TRowData> | null
+): ServerPageControllableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['goToPage', 'setPageSize', 'reloadPage', 'getPageState'])
+		? (rowModel as unknown as ServerPageControllableRowModel<TRowData>)
+		: null;
 }
 
 export function asVisibleBlockLoadCapableRowModel(rowModel: RowModel<unknown> | null): VisibleBlockLoadCapableRowModel | null {

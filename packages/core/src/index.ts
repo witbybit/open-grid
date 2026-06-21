@@ -1,5 +1,14 @@
-export { createClientGrid, createServerGrid, createLocalStorageAdapter } from './createGrid.js';
-export type { ClientGridOptions, ServerGridOptions, GridPersistenceAdapter, PersistedGridState } from './createGrid.js';
+export { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from './createGrid.js';
+export type { ClientGridOptions, InfiniteGridOptions, ServerPageGridOptions, GridPersistenceAdapter, PersistedGridState } from './createGrid.js';
+export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteRowModelOptions } from './infiniteRowModel.js';
+export type {
+	ServerDatasource,
+	ServerGetPageParams,
+	ServerPaginationOptions,
+	ServerPageState,
+	ServerPageRowModelOptions,
+} from './serverPageRowModel.js';
+export type { RowModelType } from './state/GridState.js';
 export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 export { GRID_STATE_SCHEMA_VERSION, validateSchemaVersion } from './persistence/statePersistence.js';
 
@@ -106,7 +115,6 @@ export {
 	getFilterChipText,
 } from './filterOperations.js';
 export type { CsvExportOptions } from './export/csvExport.js';
-export type { IGridDatasource } from './serverRowModel.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
 export type { BatchCellValueUpdate } from './api/GridApi.js';
 export type { CellValidationError, RowValidatorParams, RowValidator } from './api/GridApi.js';

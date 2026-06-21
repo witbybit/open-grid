@@ -3,9 +3,9 @@ import { GridEventName } from '../api/GridEvents.js';
 import {
 	asDataRowCountModel,
 	asPageWindowCapableRowModel,
-	asServerControllableRowModel,
+	asServerPageControllableRowModel,
 	type PageWindowCapableRowModel,
-	type ServerControllableRowModel,
+	type ServerPageControllableRowModel,
 } from '../rowModel.js';
 
 /**
@@ -35,10 +35,10 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		for (const evt of [GridEventName.rowsUpdated, GridEventName.filterChanged, GridEventName.groupByChanged, GridEventName.paginationChanged]) {
 			this.unsubscribers.push(this.engine.eventBus.addEventListener(evt, rerender));
 		}
-		// Server pagination totals land on the serverPagination state key (which may update
-		// before this bar mounts and catches the event) — subscribe to it directly so the
-		// bar reflects server page counts regardless of load timing.
+		// Server pagination totals land on the serverPagination/serverPage state keys (which may update
+		// before this bar mounts and catches the event) — subscribe to both directly.
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('serverPagination', rerender));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('serverPage', rerender));
 	}
 
 	public unmount(): void {
@@ -51,8 +51,8 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		return asPageWindowCapableRowModel(this.engine.getRowModel());
 	}
 
-	private getPageNavigationCapableRowModel(): ServerControllableRowModel<TRowData> | null {
-		return asServerControllableRowModel(this.engine.getRowModel());
+	private getPageNavigationCapableRowModel(): ServerPageControllableRowModel<TRowData> | null {
+		return asServerPageControllableRowModel(this.engine.getRowModel());
 	}
 
 	private getDataRowCount(rowModel: ReturnType<GridEngine<TRowData>['getRowModel']>): number {
@@ -64,8 +64,12 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		const state = this.engine.stateManager.getState();
 		const pageSize = Math.max(1, state.pagination?.pageSize ?? 100);
 		const rowModel = this.engine.getRowModel();
-		// Server pagination: the server row model is the authority (block loading reports
-		// the total + page count via serverPagination state).
+		// Server-page model: explicit page loading; serverPage is authoritative.
+		const serverPage = state.serverPage;
+		if (serverPage) {
+			return { page: serverPage.page, pageSize: serverPage.pageSize, totalRows: serverPage.totalRowCount, pageCount: serverPage.pageCount };
+		}
+		// Infinite row model: block loading reports totals via serverPagination state.
 		const serverPg = state.serverPagination;
 		if (serverPg) {
 			return { page: serverPg.page, pageSize: serverPg.pageSize, totalRows: serverPg.totalRows, pageCount: serverPg.pageCount };

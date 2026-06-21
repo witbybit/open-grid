@@ -139,8 +139,8 @@ export default function InfiniteServerScroll({
 		refreshSeverityStats();
 		refreshSelectionStats();
 		syncLoading();
-		const unsubBlockLoaded = api.addEventListener(GridEventName.serverBlockLoaded, handleBlockLoaded);
-		const unsubBlockLoadFailed = api.addEventListener(GridEventName.serverBlockLoadFailed, handleBlockLoadFailed);
+		const unsubBlockLoaded = api.addEventListener(GridEventName.infiniteBlockLoaded, handleBlockLoaded);
+		const unsubBlockLoadFailed = api.addEventListener(GridEventName.infiniteBlockLoadFailed, handleBlockLoadFailed);
 		const unsubCellValueChanged = api.addEventListener(GridEventName.cellValueChanged, refreshSeverityStats);
 		const unsubSelectionChanged = api.addEventListener(GridEventName.rowSelectionChanged, refreshSelectionStats);
 		const unsubSortChanged = api.addEventListener(GridEventName.sortChanged, clearSeverityStats);
@@ -202,11 +202,10 @@ export default function InfiniteServerScroll({
 
 				<div ref={gridHostRef} className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						mode='server'
+						rowModelType='infinite'
 						columns={columns}
 						datasource={datasource}
 						blockSize={100}
-						pagination={{ pageSize: 1000 }}
 						getRowId={(row) => row.id}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}

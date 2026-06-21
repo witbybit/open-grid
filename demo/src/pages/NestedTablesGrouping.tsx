@@ -281,7 +281,7 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 			</div>
 			<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-950/70 shadow-inner'>
 				<Grid
-					mode='client'
+					rowModelType='client'
 					rows={items}
 					columns={detailColumns}
 					enableNavigation={true}
@@ -546,7 +546,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 					{activeTab === 'group' && (
 						<Grid
 							key={`group-${gridVersion}`}
-							mode='client'
+							rowModelType='client'
 							rows={groupRows}
 							columns={groupingColumns}
 							initialState={groupInitialState as any}
@@ -562,7 +562,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 					{activeTab === 'tree' && (
 						<Grid
 							key={`tree-${gridVersion}`}
-							mode='client'
+							rowModelType='client'
 							rows={treeRows}
 							columns={treeColumns}
 							initialState={treeInitialState as any}
@@ -577,7 +577,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 					{activeTab === 'detail' && (
 						<Grid
 							key={`detail-${gridVersion}`}
-							mode='client'
+							rowModelType='client'
 							rows={masterRows}
 							columns={masterColumns}
 							initialState={masterInitialState}

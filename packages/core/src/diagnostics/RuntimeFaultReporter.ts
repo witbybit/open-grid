@@ -10,6 +10,7 @@ export type RuntimeFaultSource =
 	| 'row-pipeline'
 	| 'cell-notifications'
 	| 'server-row-model'
+	| 'infinite-row-model'
 	| 'renderer'
 	| 'persistence'
 	| 'store';

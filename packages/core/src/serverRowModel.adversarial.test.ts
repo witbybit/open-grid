@@ -1,16 +1,16 @@
 /**
- * Adversarial tests for ServerRowModelController generation handling.
+ * Adversarial tests for InfiniteRowModelController generation handling.
  *
  * Invariant: out-of-order or stale async server responses must never overwrite
- * a newer generation after purge-triggering actions such as sort/filter/page
- * changes or datasource replacement.
+ * a newer generation after purge-triggering actions such as sort/filter/datasource
+ * changes.
  *
  * All sequences are generated with a seeded deterministic LCG. Each seed
  * produces a reproducible request/resolve/reject trace.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { GridStore } from './store.js';
-import { type GetRowsParams, type IGridDatasource, ServerRowModelController } from './serverRowModel.js';
+import { type InfiniteGetRowsParams, type InfiniteDatasource, InfiniteRowModelController } from './infiniteRowModel.js';
 
 interface TestRow {
 	id: string;
@@ -20,7 +20,7 @@ interface TestRow {
 interface PendingRequest {
 	source: string;
 	token: string;
-	params: GetRowsParams;
+	params: InfiniteGetRowsParams;
 	resolve: (value: { rows: TestRow[]; totalCount: number }) => void;
 	reject: (error: Error) => void;
 }
@@ -44,9 +44,9 @@ function flushAsync(): Promise<void> {
 		.then(() => undefined);
 }
 
-function createDeferredDatasource(source: string, getToken: () => string, pending: PendingRequest[]): IGridDatasource<TestRow> {
+function createDeferredDatasource(source: string, getToken: () => string, pending: PendingRequest[]): InfiniteDatasource<TestRow> {
 	return {
-		getRows: vi.fn().mockImplementation((params: GetRowsParams) => {
+		getRows: vi.fn().mockImplementation((params: InfiniteGetRowsParams) => {
 			return new Promise<{ rows: TestRow[]; totalCount: number }>((resolve, reject) => {
 				pending.push({
 					source,
@@ -60,7 +60,7 @@ function createDeferredDatasource(source: string, getToken: () => string, pendin
 	};
 }
 
-function loadedNames(controller: ServerRowModelController<TestRow>): string[] {
+function loadedNames(controller: InfiniteRowModelController<TestRow>): string[] {
 	const names: string[] = [];
 	for (let i = 0; i < controller.getVisualRowCount(); i++) {
 		const row = controller.getVisualRow(i);
@@ -71,8 +71,8 @@ function loadedNames(controller: ServerRowModelController<TestRow>): string[] {
 	return names;
 }
 
-describe('ServerRowModelController — adversarial generation invariants', () => {
-	it('stale responses and stale failures are ignored after sort/filter/datasource/page churn', async () => {
+describe('InfiniteRowModelController — adversarial generation invariants', () => {
+	it('stale responses and stale failures are ignored after sort/filter/datasource churn', async () => {
 		const rng = makeLcg(0x5eed1234);
 		const pending: PendingRequest[] = [];
 		const store = new GridStore<TestRow>({
@@ -81,24 +81,22 @@ describe('ServerRowModelController — adversarial generation invariants', () =>
 		});
 
 		let source = 'A';
-		let page = 0;
 		let sequence = 0;
-		let currentToken = `${source}|page=${page}|seq=${sequence}|init`;
+		let currentToken = `${source}|seq=${sequence}|init`;
 		const getToken = () => currentToken;
 		const datasourceA = createDeferredDatasource('A', getToken, pending);
 		const datasourceB = createDeferredDatasource('B', getToken, pending);
 		let activeDatasource = datasourceA;
 
-		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
 			datasource: activeDatasource,
 			blockSize: 4,
 			columns: store.getState().columns,
-			pagination: { pageSize: 8, initialPage: 0 },
 		});
 
 		function bump(reason: string): void {
 			sequence++;
-			currentToken = `${source}|page=${page}|seq=${sequence}|${reason}`;
+			currentToken = `${source}|seq=${sequence}|${reason}`;
 		}
 
 		async function resolveRequest(request: PendingRequest): Promise<void> {
@@ -121,10 +119,9 @@ describe('ServerRowModelController — adversarial generation invariants', () =>
 		const initialRequest = pending.shift();
 		expect(initialRequest?.token).toBe(currentToken);
 		await resolveRequest(initialRequest!);
-		expect(store.getState().serverPagination?.pageCount).toBeGreaterThan(1);
 
 		for (let step = 0; step < 40; step++) {
-			const op = lcgInt(rng, 6);
+			const op = lcgInt(rng, 5);
 			const label = `seed=0x5eed1234,step=${step},op=${op}`;
 
 			if (op === 0) {
@@ -161,13 +158,6 @@ describe('ServerRowModelController — adversarial generation invariants', () =>
 				continue;
 			}
 
-			if (op === 3) {
-				page = (page + 1) % 3;
-				bump('page');
-				controller.goToPage(page);
-				continue;
-			}
-
 			if (pending.length === 0) {
 				continue;
 			}
@@ -176,7 +166,7 @@ describe('ServerRowModelController — adversarial generation invariants', () =>
 			const faultsBefore = store.getRuntimeFaults().length;
 			const isCurrent = request.token === currentToken;
 
-			if (op === 4) {
+			if (op === 3) {
 				await resolveRequest(request);
 				const names = loadedNames(controller);
 
@@ -215,70 +205,6 @@ describe('ServerRowModelController — adversarial generation invariants', () =>
 		const finalNames = loadedNames(controller);
 		expect(finalNames.length).toBeGreaterThan(0);
 		expect(new Set(finalNames)).toEqual(new Set([currentToken]));
-
-		controller.dispose();
-		store.destroy();
-	});
-
-	it('out-of-order page responses cannot overwrite a newer page generation', async () => {
-		const pending: PendingRequest[] = [];
-		const store = new GridStore<TestRow>({
-			getRowId: (row) => row.id,
-			columns: [{ field: 'name', header: 'Name' }],
-		});
-
-		let currentToken = 'page=0|seq=0|init';
-		const datasource = createDeferredDatasource('A', () => currentToken, pending);
-		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
-			datasource,
-			blockSize: 3,
-			columns: store.getState().columns,
-			pagination: { pageSize: 6, initialPage: 0 },
-		});
-
-		const initialRequest = pending.shift();
-		expect(initialRequest?.token).toBe('page=0|seq=0|init');
-		initialRequest!.resolve({
-			rows: [
-				{ id: 'init-0', name: initialRequest!.token },
-				{ id: 'init-1', name: initialRequest!.token },
-				{ id: 'init-2', name: initialRequest!.token },
-			],
-			totalCount: 12,
-		});
-		await flushAsync();
-
-		currentToken = 'page=1|seq=1|goToPage';
-		controller.goToPage(1);
-
-		const stalePage0 = initialRequest;
-		const currentPage1 = pending.find((request) => request.token === 'page=1|seq=1|goToPage');
-		expect(stalePage0).toBeDefined();
-		expect(currentPage1).toBeDefined();
-
-		stalePage0!.resolve({
-			rows: [
-				{ id: 'stale-0', name: stalePage0!.token },
-				{ id: 'stale-1', name: stalePage0!.token },
-				{ id: 'stale-2', name: stalePage0!.token },
-			],
-			totalCount: 12,
-		});
-		await flushAsync();
-		expect(loadedNames(controller)).not.toContain(stalePage0!.token);
-
-		currentPage1!.resolve({
-			rows: [
-				{ id: 'current-0', name: currentPage1!.token },
-				{ id: 'current-1', name: currentPage1!.token },
-				{ id: 'current-2', name: currentPage1!.token },
-			],
-			totalCount: 12,
-		});
-		await flushAsync();
-
-		expect(new Set(loadedNames(controller))).toEqual(new Set([currentPage1!.token]));
-		expect(store.getState().serverPagination?.page).toBe(1);
 
 		controller.dispose();
 		store.destroy();

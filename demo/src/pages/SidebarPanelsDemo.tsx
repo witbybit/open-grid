@@ -204,7 +204,7 @@ export default function SidebarPanelsDemo({ onGridReady }: SidebarPanelsDemoProp
 			{/* Grid with integrated sidebar — api.openPanel() / closePanel() / getOpenPanel() */}
 			<div className='flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-800 shadow-2xl'>
 				<Grid<HoldingRow>
-					mode='client'
+					rowModelType='client'
 					columns={COLUMNS}
 					rows={ROWS}
 					pinLeftColumns={1}

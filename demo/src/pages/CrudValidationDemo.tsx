@@ -585,7 +585,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 			{/* Grid */}
 			<div className='min-h-0 flex-1'>
 				<Grid<Employee>
-					mode='client'
+					rowModelType='client'
 					columns={COLUMNS}
 					rows={rows}
 					getRowId={(r) => r.id}

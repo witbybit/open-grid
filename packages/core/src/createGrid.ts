@@ -1,6 +1,7 @@
 import { ClientRowModelController, type ClientRowModelOptions } from './rowModel.js';
 import type { RowValidator } from './features/ValidationManager.js';
-import { ServerRowModelController, type ServerRowModelOptions } from './serverRowModel.js';
+import { InfiniteRowModelController, type InfiniteRowModelOptions } from './infiniteRowModel.js';
+import { ServerPageRowModelController, type ServerPageRowModelOptions } from './serverPageRowModel.js';
 import { GridStore as GridRuntime } from './store.js';
 import type { GridApi, RowSelectionMode, RowSelectionOptions } from './api/GridApi.js';
 import type { ColumnDef } from './columnDef.js';
@@ -48,17 +49,19 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 	rowValidator?: RowValidator<TRowData>;
 }
 
-export interface ServerGridOptions<TRowData> extends ServerRowModelOptions<TRowData> {
+/** Options for creating an infinite (block/range loading) grid. */
+export interface InfiniteGridOptions<TRowData> extends InfiniteRowModelOptions<TRowData> {
 	initialState?: Partial<GridInitialState<TRowData>>;
 	rowSelection?: RowSelectionMode | RowSelectionOptions;
-	/**
-	 * Persistence adapter — same interface as client grid.
-	 * Column order, visibility, widths, sort model, filter model,
-	 * showGroupFooter, and enableStickyGroupRows are persisted.
-	 * Row data is not persisted (fetched from the server datasource on load).
-	 */
 	persistence?: string | GridPersistenceAdapter;
-	/** Grid-level cross-field validator — see RowValidator for details. */
+	rowValidator?: RowValidator<TRowData>;
+}
+
+/** Options for creating a server-page (explicit page loading) grid. */
+export interface ServerPageGridOptions<TRowData> extends ServerPageRowModelOptions<TRowData> {
+	initialState?: Partial<GridInitialState<TRowData>>;
+	rowSelection?: RowSelectionMode | RowSelectionOptions;
+	persistence?: string | GridPersistenceAdapter;
 	rowValidator?: RowValidator<TRowData>;
 }
 
@@ -198,7 +201,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 	return api;
 }
 
-export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>): GridApi<TRowData> {
+export function createInfiniteGrid<TRowData>(options: InfiniteGridOptions<TRowData>): GridApi<TRowData> {
 	const { persistence: rawPersistence } = options;
 	const adapter = typeof rawPersistence === 'string' ? createLocalStorageAdapter(rawPersistence) : rawPersistence;
 
@@ -217,28 +220,27 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 	const selected = withRowSelectionColumn(options.columns, mergedInitial, options.rowSelection);
 	mergedInitial = selected.initialState;
 
-	let serverResolvedColumns = mergedInitial.columns ?? selected.columns;
-	// Derive pinnedColumns from column.pinned when not explicitly provided.
+	let resolvedColumns = mergedInitial.columns ?? selected.columns;
 	if (!mergedInitial.pinnedColumns) {
-		const leftCols = serverResolvedColumns.filter((c) => c.pinned === 'left');
-		const rightCols = serverResolvedColumns.filter((c) => c.pinned === 'right');
+		const leftCols = resolvedColumns.filter((c) => c.pinned === 'left');
+		const rightCols = resolvedColumns.filter((c) => c.pinned === 'right');
 		if (leftCols.length > 0 || rightCols.length > 0) {
-			const centerCols = serverResolvedColumns.filter((c) => !c.pinned);
-			serverResolvedColumns = [...leftCols, ...centerCols, ...rightCols];
+			const centerCols = resolvedColumns.filter((c) => !c.pinned);
+			resolvedColumns = [...leftCols, ...centerCols, ...rightCols];
 			mergedInitial = { ...mergedInitial, pinnedColumns: { left: leftCols.length, right: rightCols.length } };
 		}
 	}
 	const runtime = new GridRuntime<TRowData>(
 		{
-			columns: serverResolvedColumns,
+			columns: resolvedColumns,
 			getRowId: options.getRowId,
-			columnWidths: buildColumnWidths(serverResolvedColumns),
+			columnWidths: buildColumnWidths(resolvedColumns),
 			...mergedInitial,
 		},
 		{ rowValidator: options.rowValidator }
 	);
 
-	const controller = new ServerRowModelController<TRowData>(runtime.getServerRowModelRuntime(), { ...options, columns: selected.columns });
+	const controller = new InfiniteRowModelController<TRowData>(runtime.getInfiniteRowModelRuntime(), { ...options, columns: selected.columns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
 	const api = createGridRuntimeComposition({
 		runtime,
@@ -254,7 +256,6 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 	if (loadedPersistedState) {
 		api.applyGridState(loadedPersistedState);
 	}
-
 	if (asyncLoad) {
 		asyncLoad
 			.then((saved) => {
@@ -264,6 +265,72 @@ export function createServerGrid<TRowData>(options: ServerGridOptions<TRowData>)
 				/* load failure — grid stays in default state */
 			});
 	}
+	return api;
+}
 
+export function createServerPageGrid<TRowData>(options: ServerPageGridOptions<TRowData>): GridApi<TRowData> {
+	const { persistence: rawPersistence } = options;
+	const adapter = typeof rawPersistence === 'string' ? createLocalStorageAdapter(rawPersistence) : rawPersistence;
+
+	let mergedInitial: Partial<GridInitialState<TRowData>> = options.initialState ?? {};
+	let loadedPersistedState: PersistedGridState | null = null;
+	let asyncLoad: Promise<PersistedGridState | null> | undefined;
+
+	if (adapter) {
+		const loaded = adapter.load();
+		if (loaded instanceof Promise) {
+			asyncLoad = loaded;
+		} else if (loaded) {
+			loadedPersistedState = loaded;
+		}
+	}
+	const selected = withRowSelectionColumn(options.columns, mergedInitial, options.rowSelection);
+	mergedInitial = selected.initialState;
+
+	let resolvedColumns = mergedInitial.columns ?? selected.columns;
+	if (!mergedInitial.pinnedColumns) {
+		const leftCols = resolvedColumns.filter((c) => c.pinned === 'left');
+		const rightCols = resolvedColumns.filter((c) => c.pinned === 'right');
+		if (leftCols.length > 0 || rightCols.length > 0) {
+			const centerCols = resolvedColumns.filter((c) => !c.pinned);
+			resolvedColumns = [...leftCols, ...centerCols, ...rightCols];
+			mergedInitial = { ...mergedInitial, pinnedColumns: { left: leftCols.length, right: rightCols.length } };
+		}
+	}
+	const runtime = new GridRuntime<TRowData>(
+		{
+			columns: resolvedColumns,
+			getRowId: options.getRowId,
+			columnWidths: buildColumnWidths(resolvedColumns),
+			...mergedInitial,
+		},
+		{ rowValidator: options.rowValidator }
+	);
+
+	const controller = new ServerPageRowModelController<TRowData>(runtime.getServerPageRowModelRuntime(), { ...options, columns: selected.columns });
+	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
+	const api = createGridRuntimeComposition({
+		runtime,
+		destroy: () => {
+			persistenceController?.destroy();
+			controller.dispose();
+			runtime.destroy();
+		},
+		persistenceAdapter: adapter,
+		persistenceController,
+	});
+
+	if (loadedPersistedState) {
+		api.applyGridState(loadedPersistedState);
+	}
+	if (asyncLoad) {
+		asyncLoad
+			.then((saved) => {
+				if (saved) api.applyGridState(saved);
+			})
+			.catch(() => {
+				/* load failure — grid stays in default state */
+			});
+	}
 	return api;
 }

@@ -95,6 +95,9 @@ export interface GridRuntimeState {
 	selection: GridSelectionState;
 }
 
+/** Which row model is active for this grid instance. */
+export type RowModelType = 'client' | 'infinite' | 'server';
+
 /**
  * Transient UI state — session-only, not persisted by default.
  * Controls loading indicators, open panels, active editor, etc.
@@ -111,11 +114,21 @@ export interface GridUIState {
 	validationErrors?: Record<string, string>;
 	sidebarOpenPanel?: string | null;
 	chartOpen?: boolean;
+	/** Populated by the infinite row model when server pagination metadata is known. */
 	serverPagination?: {
 		page: number;
 		pageCount: number;
 		totalRows: number;
 		pageSize: number;
+	};
+	/** Populated by the server-page row model. Replaces serverPagination for explicit page loading. */
+	serverPage?: {
+		page: number;
+		pageSize: number;
+		pageCount: number;
+		totalRowCount: number;
+		loading: boolean;
+		error: string | null;
 	};
 }
 

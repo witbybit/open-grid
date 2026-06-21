@@ -66,7 +66,7 @@ export default function DynamicLayout({
 				</div>
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						mode='client'
+						rowModelType='client'
 						rows={rows}
 						columns={columns}
 						initialState={{ rowHeight: rowHeightsMap[compactLayout] } as any}

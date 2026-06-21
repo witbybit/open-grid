@@ -536,6 +536,14 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
+	public setServerPageState(state: NonNullable<InternalGridState<TRowData>['serverPage']>): void {
+		this.changeApplier.apply({
+			reason: 'rows:set-server-page',
+			state: { serverPage: state },
+			requestRender: false,
+		});
+	}
+
 	public setVisibleRanges(
 		visibleRowRange: InternalGridState<TRowData>['visibleRowRange'],
 		visibleColRange: InternalGridState<TRowData>['visibleColRange']

@@ -39,8 +39,14 @@ export enum GridEventName {
 	runtimeFault = 'runtimeFault',
 	selectionChanged = 'selectionChanged',
 	paginationChanged = 'paginationChanged',
-	serverBlockLoaded = 'serverBlockLoaded',
-	serverBlockLoadFailed = 'serverBlockLoadFailed',
+	// ── Infinite (block/range) row model events ───────────────────────────────
+	infiniteBlockLoaded = 'infiniteBlockLoaded',
+	infiniteBlockLoadFailed = 'infiniteBlockLoadFailed',
+	// ── Server-page row model events ──────────────────────────────────────────
+	serverPageLoadingStarted = 'serverPageLoadingStarted',
+	serverPageLoaded = 'serverPageLoaded',
+	serverPageLoadFailed = 'serverPageLoadFailed',
+	serverPageChanged = 'serverPageChanged',
 	showGroupFooterChanged = 'showGroupFooterChanged',
 	sortChanged = 'sortChanged',
 	cellValidationChanged = 'cellValidationChanged',
@@ -89,19 +95,23 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	};
 	[GridEventName.runtimeFault]: RuntimeFault;
 	[GridEventName.selectionChanged]: { selection: GridSelectionState; result: SelectionChangeResult };
-	[GridEventName.serverBlockLoaded]: {
+	[GridEventName.infiniteBlockLoaded]: {
 		blockIndex: number;
 		loadedBlockStart: number;
 		loadedBlockEnd: number;
 		totalRecords: number;
 		durationMs: number;
 	};
-	[GridEventName.serverBlockLoadFailed]: {
+	[GridEventName.infiniteBlockLoadFailed]: {
 		blockIndex: number;
 		startRow: number;
 		endRow: number;
 		message: string;
 	};
+	[GridEventName.serverPageLoadingStarted]: { page: number; pageSize: number };
+	[GridEventName.serverPageLoaded]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
+	[GridEventName.serverPageLoadFailed]: { page: number; pageSize: number; message: string };
+	[GridEventName.serverPageChanged]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
 	[GridEventName.showGroupFooterChanged]: { showGroupFooter: boolean | undefined };
 	[GridEventName.sortChanged]: { sortModel: SortModel | null };
 	[GridEventName.cellValidationChanged]: { rowId: string; colField: string; error: string | null };

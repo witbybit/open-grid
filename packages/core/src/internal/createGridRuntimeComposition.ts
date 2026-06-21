@@ -2,7 +2,8 @@ import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js'
 import { registerGridRuntimeComposition } from './apiInternalBridge.js';
 import { exportToCsv, type CsvExportOptions } from '../export/csvExport.js';
 import type { GridStore as GridRuntime } from '../store.js';
-import type { IGridDatasource } from '../serverRowModel.js';
+import type { InfiniteDatasource } from '../infiniteRowModel.js';
+import type { ServerDatasource } from '../serverPageRowModel.js';
 import type { ThemeTokens } from '../renderer/themes.js';
 import type {
 	GridApi,
@@ -49,9 +50,16 @@ export function createGridRuntimeComposition<TRowData>({
 		refreshRows: () => runtime.refreshRows(),
 		setRowHeights: (rowHeights: Record<string, number> | undefined) => runtime.setRowHeights(rowHeights),
 		setDefaultRowHeight: (defaultRowHeight?: number | undefined) => runtime.setDefaultRowHeight(defaultRowHeight),
+		getRowModelType: () => runtime.getRowModelType(),
 		purgeCache: () => runtime.purgeCache(),
-		setServerDatasource: (datasource: IGridDatasource<TRowData>, blockSize?: number) => runtime.setServerDatasource(datasource, blockSize),
-		goToPage: (page: number) => runtime.goToPage(page),
+		setInfiniteDatasource: (datasource: InfiniteDatasource<TRowData>, blockSize?: number) => runtime.setInfiniteDatasource(datasource, blockSize),
+		setServerPageDatasource: (datasource: ServerDatasource<TRowData>) => runtime.setServerPageDatasource(datasource),
+		goToServerPage: (page: number) => runtime.goToServerPage(page),
+		nextServerPage: () => runtime.nextServerPage(),
+		previousServerPage: () => runtime.previousServerPage(),
+		setServerPageSize: (pageSize: number) => runtime.setServerPageSize(pageSize),
+		refreshServerPage: (reason?: string) => runtime.refreshServerPage(reason),
+		getServerPageState: () => runtime.getServerPageState(),
 		getCellValue: (rowId: string, colField: string) => runtime.getCellValue(rowId, colField),
 		getFormula: (rowId: string, colField: string) => runtime.getFormula(rowId, colField),
 		hasFormula: (rowId: string, colField: string) => runtime.hasFormula(rowId, colField),

@@ -268,7 +268,7 @@ export default function RowDragDemo() {
 				<div className='flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-900/60'>
 					<Grid<TaskRow>
 						key={mode}
-						mode='client'
+						rowModelType='client'
 						columns={cols}
 						rows={displayRows}
 						getRowId={(row) => row.id}

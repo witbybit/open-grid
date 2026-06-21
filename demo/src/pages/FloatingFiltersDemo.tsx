@@ -321,7 +321,7 @@ export default function FloatingFiltersDemo({ editTrigger, arrowKeyNavigationEdi
 			{/* Grid */}
 			<div className='flex-1 min-h-0 relative overflow-hidden'>
 				<Grid<DealRow>
-					mode='client'
+					rowModelType='client'
 					rows={rows}
 					columns={columns}
 					getRowId={(row) => row.id}

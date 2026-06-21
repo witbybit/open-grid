@@ -1,7 +1,9 @@
 import type { FilterModel, SortModel } from '../rowModel.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from '../engine/rendererPorts.js';
-import type { IGridDatasource } from '../serverRowModel.js';
+import type { InfiniteDatasource } from '../infiniteRowModel.js';
+import type { ServerDatasource, ServerPageState } from '../serverPageRowModel.js';
+import type { RowModelType } from '../state/GridState.js';
 import type { ColumnDef, GridStyleRule, CellRendererPhase } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
 import type { RowNode } from '../rowNode.js';
@@ -381,9 +383,16 @@ export interface GridApi<TRowData = unknown> {
 	refreshRows(): void;
 	setRowHeights: (rowHeights: Record<string, number> | undefined) => void;
 	setDefaultRowHeight: (defaultRowHeight?: number | undefined) => void;
+	getRowModelType(): RowModelType;
 	purgeCache(): void;
-	setServerDatasource(datasource: IGridDatasource<TRowData>, blockSize?: number): void;
-	goToPage(page: number): void;
+	setInfiniteDatasource(datasource: InfiniteDatasource<TRowData>, blockSize?: number): void;
+	setServerPageDatasource(datasource: ServerDatasource<TRowData>): void;
+	goToServerPage(page: number): void;
+	nextServerPage(): void;
+	previousServerPage(): void;
+	setServerPageSize(pageSize: number): void;
+	refreshServerPage(reason?: string): void;
+	getServerPageState(): ServerPageState | null;
 	getCellValue(rowId: string, colField: string): unknown;
 	/** @experimental Formula/DAG engine (incubating) — DagEngine is directly coupled into GridEngine; must be extracted before Plan 097. Returns the formula string for a cell, or undefined if none. */
 	getFormula(rowId: string, colField: string): string | undefined;

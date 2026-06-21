@@ -151,7 +151,7 @@ export default function GanttSchedulingWorkspace({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						mode='client'
+						rowModelType='client'
 						rows={rows}
 						columns={columns}
 						getRowId={(row) => row.id}

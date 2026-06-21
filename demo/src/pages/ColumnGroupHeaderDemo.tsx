@@ -174,7 +174,7 @@ export default function ColumnGroupHeaderDemo({ onGridReady, pinLeftColumns = 0,
 			</div>
 			<div className='flex min-h-0 flex-1'>
 				<Grid
-					mode='client'
+					rowModelType='client'
 					columns={columns as ColumnDef<any>[]}
 					rows={ROWS as any[]}
 					getRowId={(row: any) => row.id}

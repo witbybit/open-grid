@@ -1,7 +1,12 @@
 /**
  * Row Multi-Select Demo
  *
- * Showcases the new row multi-select API:
+ * Showcases row multi-select across all three rowModelType modes:
+ *   - client     — all data local; grid owns sorting/filtering/pagination
+ *   - infinite   — block/range loading; datasource receives startRow/endRow
+ *   - server     — explicit page loading; datasource receives page/pageSize
+ *
+ * Features demonstrated:
  *   - checkboxSelection column  →  checkbox cell + select-all header checkbox
  *   - Ctrl/Cmd+Click            →  toggle a row without losing cell focus
  *   - api.selectRows / deselectRows / toggleRowSelection / selectAllRows / clearRowSelection
@@ -10,7 +15,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Grid, GridEventName } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent, RowSelectionScope } from '@open-grid/react';
+import type { ColumnDef, GridApi, GridReadyEvent, InfiniteDatasource, RowSelectionScope, ServerDatasource } from '@open-grid/react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
@@ -172,6 +177,8 @@ function BulkActions({
 
 // ─── Main demo ────────────────────────────────────────────────────────────────
 
+type GridMode = 'client' | 'infinite' | 'server';
+
 interface RowMultiSelectDemoProps {
 	onGridReady?: (event: GridReadyEvent<OrderRow>) => void;
 }
@@ -183,12 +190,23 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 	const [api, setApi] = useState<GridApi<OrderRow> | null>(null);
 	const [selectedCount, setSelectedCount] = useState(0);
 	const [selectAllScope, setSelectAllScope] = useState<RowSelectionScope>('page');
-	const [gridMode, setGridMode] = useState<'client' | 'server'>('client');
-	const datasource = useMemo(
+	const [gridMode, setGridMode] = useState<GridMode>('client');
+
+	const infiniteDatasource = useMemo<InfiniteDatasource<OrderRow>>(
 		() => ({
-			getRows: async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
+			getRows: async ({ startRow, endRow }) => ({
 				rows: rows.slice(startRow, endRow),
 				totalCount: rows.length,
+			}),
+		}),
+		[rows]
+	);
+
+	const serverDatasource = useMemo<ServerDatasource<OrderRow>>(
+		() => ({
+			getPage: async ({ page, pageSize }) => ({
+				rows: rows.slice(page * pageSize, (page + 1) * pageSize),
+				totalRowCount: rows.length,
 			}),
 		}),
 		[rows]
@@ -245,6 +263,8 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 		setBulkTag('');
 	}, [api, bulkTag]);
 
+	const MODE_LABELS: Record<GridMode, string> = { client: 'Client', infinite: 'Infinite', server: 'Server Page' };
+
 	return (
 		<div className='flex flex-col gap-4 h-full min-h-0'>
 			{/* ── Feature callout cards ──────────────────────────────────── */}
@@ -255,8 +275,10 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 					</div>
 					<p className='text-[11px] text-slate-400 leading-snug'>
 						Pass <code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>rowSelection: 'multiple'</code> to{' '}
-						<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>Grid</code>. A checkbox column is
-						auto-injected and pinned — no manual column def needed.
+						<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>Grid</code>. Works across{' '}
+						<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>client</code>,{' '}
+						<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>infinite</code>, and{' '}
+						<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>server</code> row models.
 					</p>
 				</div>
 				<div className='flex-1 bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5'>
@@ -275,22 +297,22 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 			<div className='flex items-center gap-3 shrink-0 bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-2.5'>
 				<div className='flex items-center gap-2 text-[11px] text-slate-500 font-medium'>
 					<Info className='w-3.5 h-3.5 shrink-0' />
-					Select rows above, then use the footer status bar for live totals and edit state.
+					Switch row model type to see selection work identically across all three modes.
 				</div>
 				<div className='flex-1' />
 				<div className='flex rounded-lg overflow-hidden border border-slate-700'>
-					{(['client', 'server'] as const).map((mode) => (
+					{(['client', 'infinite', 'server'] as GridMode[]).map((mode) => (
 						<button
 							key={mode}
 							onClick={() => {
 								setGridMode(mode);
 								api?.clearRowSelection();
 							}}
-							className={`px-3 py-1.5 text-[10px] font-semibold capitalize transition ${
+							className={`px-3 py-1.5 text-[10px] font-semibold transition ${
 								gridMode === mode ? 'bg-slate-200 text-slate-950' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'
 							}`}
 						>
-							{mode}
+							{MODE_LABELS[mode]}
 						</button>
 					))}
 				</div>
@@ -313,7 +335,7 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 					{gridMode === 'client' ? (
 						<Grid
 							key='client'
-							mode='client'
+							rowModelType='client'
 							rows={rows}
 							columns={COLUMNS}
 							getRowId={(row) => row.id}
@@ -328,11 +350,27 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 								onGridReady?.(event);
 							}}
 						/>
+					) : gridMode === 'infinite' ? (
+						<Grid
+							key='infinite'
+							rowModelType='infinite'
+							datasource={infiniteDatasource}
+							columns={COLUMNS}
+							getRowId={(row) => row.id}
+							rowSelection={{ mode: 'multiple', selectAllScope }}
+							showStatusBar
+							enableNavigation={true}
+							navigationOptions={{ editTrigger: 'doubleClick' }}
+							onGridReady={(event) => {
+								setApi(event.api);
+								onGridReady?.(event);
+							}}
+						/>
 					) : (
 						<Grid
 							key='server'
-							mode='server'
-							datasource={datasource}
+							rowModelType='server'
+							datasource={serverDatasource}
 							columns={COLUMNS}
 							getRowId={(row) => row.id}
 							rowSelection={{ mode: 'multiple', selectAllScope }}

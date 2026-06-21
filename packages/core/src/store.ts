@@ -4,17 +4,26 @@ import type {
 	RowModel,
 	ClientMutableRowModel,
 	ServerControllableRowModel,
+	InfiniteControllableRowModel,
+	ServerPageControllableRowModel,
 	RowExpansionStateReadableModel,
 } from './rowModel.js';
-import { asClientMutableRowModel, asRowExpansionStateReadableModel, asServerControllableRowModel } from './rowModel.js';
+import {
+	asClientMutableRowModel,
+	asRowExpansionStateReadableModel,
+	asServerControllableRowModel,
+	asInfiniteControllableRowModel,
+	asServerPageControllableRowModel,
+} from './rowModel.js';
 import type { GridDomainVersions } from './state/GridDomainVersions.js';
 import type { RowValidator } from './features/ValidationManager.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
-import type { IGridDatasource } from './serverRowModel.js';
+import type { InfiniteDatasource } from './infiniteRowModel.js';
+import type { ServerDatasource, ServerPageState } from './serverPageRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
-import type { ClientRowModelRuntime, ServerRowModelRuntime } from './engine/runtimePorts.js';
-import { createClientRowModelRuntime, createServerRowModelRuntime } from './engine/createRowModelRuntimes.js';
+import type { ClientRowModelRuntime, InfiniteRowModelRuntime, ServerPageRowModelRuntime } from './engine/runtimePorts.js';
+import { createClientRowModelRuntime, createInfiniteRowModelRuntime, createServerPageRowModelRuntime } from './engine/createRowModelRuntimes.js';
 import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from './engine/rendererPorts.js';
 import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
@@ -107,7 +116,7 @@ import type {
 	GridStateSnapshot,
 } from './api/GridApi.js';
 import { createGridStateSnapshot } from './api/createGridStateSnapshot.js';
-import type { InternalGridState, GridInitialState, ColumnState } from './state/GridState.js';
+import type { InternalGridState, GridInitialState, ColumnState, RowModelType } from './state/GridState.js';
 import type { GridEventPayloadMap, GridEventListener } from './api/GridEvents.js';
 import { GridEventName } from './api/GridEvents.js';
 import { GridPluginRegistry } from './plugins/GridPluginRegistry.js';
@@ -635,12 +644,21 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return asServerControllableRowModel(this.getRowModel());
 	}
 
+	private getInfiniteControllableRowModel(): InfiniteControllableRowModel<TRowData> | null {
+		return asInfiniteControllableRowModel(this.getRowModel());
+	}
+
+	private getServerPageControllableRowModel(): ServerPageControllableRowModel<TRowData> | null {
+		return asServerPageControllableRowModel(this.getRowModel());
+	}
+
 	private getExpansionStateReadableRowModel(): RowExpansionStateReadableModel | null {
 		return asRowExpansionStateReadableModel(this.getRowModel());
 	}
 
 	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);
-	public getServerRowModelRuntime = (): ServerRowModelRuntime<TRowData> => createServerRowModelRuntime(this);
+	public getInfiniteRowModelRuntime = (): InfiniteRowModelRuntime<TRowData> => createInfiniteRowModelRuntime(this);
+	public getServerPageRowModelRuntime = (): ServerPageRowModelRuntime<TRowData> => createServerPageRowModelRuntime(this);
 
 	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
 		const vr = this.getVisualRow(index);
@@ -715,16 +733,49 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.setDefaultRowHeight(defaultRowHeight);
 	};
 
+	public getRowModelType = (): RowModelType => {
+		const rowModel = this.getRowModel();
+		if (asServerPageControllableRowModel(rowModel)) return 'server';
+		if (asInfiniteControllableRowModel(rowModel)) return 'infinite';
+		return 'client';
+	};
+
 	public purgeCache = (): void => {
-		this.getServerControllableRowModel()?.purgeCache();
+		this.getInfiniteControllableRowModel()?.purgeCache();
 	};
 
-	public setServerDatasource = (datasource: IGridDatasource<TRowData>, blockSize?: number): void => {
-		this.getServerControllableRowModel()?.setDatasource(datasource, blockSize);
+	public setInfiniteDatasource = (datasource: InfiniteDatasource<TRowData>, blockSize?: number): void => {
+		this.getInfiniteControllableRowModel()?.setDatasource(datasource, blockSize);
 	};
 
-	public goToPage = (page: number): void => {
-		this.getServerControllableRowModel()?.goToPage(page);
+	public setServerPageDatasource = (datasource: ServerDatasource<TRowData>): void => {
+		this.getServerPageControllableRowModel()?.setDatasource(datasource);
+	};
+
+	public goToServerPage = (page: number): void => {
+		this.getServerPageControllableRowModel()?.goToPage(page);
+	};
+
+	public setServerPageSize = (pageSize: number): void => {
+		this.getServerPageControllableRowModel()?.setPageSize(pageSize);
+	};
+
+	public refreshServerPage = (reason?: string): void => {
+		this.getServerPageControllableRowModel()?.reloadPage(reason);
+	};
+
+	public getServerPageState = (): ServerPageState | null => {
+		return this.getServerPageControllableRowModel()?.getPageState() ?? null;
+	};
+
+	public nextServerPage = (): void => {
+		const state = this.getServerPageState();
+		if (state && state.page < state.pageCount - 1) this.goToServerPage(state.page + 1);
+	};
+
+	public previousServerPage = (): void => {
+		const state = this.getServerPageState();
+		if (state && state.page > 0) this.goToServerPage(state.page - 1);
 	};
 
 	public setViewportPins = (pins: { left?: number; right?: number; top?: number; bottom?: number }): void => {

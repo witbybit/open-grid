@@ -453,7 +453,8 @@ describe('Architecture guardrails', () => {
 		expect(rowModelContent).toContain('export function asServerControllableRowModel<TRowData = unknown>(');
 		expect(rowModelContent).toContain('export function asDataRowCountModel(');
 		expect(content).toContain('return asPageWindowCapableRowModel(this.engine.getRowModel());');
-		expect(content).toContain('return asServerControllableRowModel(this.engine.getRowModel());');
+		// Updated: pagination bar now routes server-page navigation through ServerPageControllableRowModel
+		expect(content).toContain('return asServerPageControllableRowModel(this.engine.getRowModel());');
 		expect(content).not.toContain('rowModel?.getPageWindow?.()');
 		expect(content).not.toContain('rowModel?.goToPage');
 	});
@@ -519,7 +520,7 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('row models do not reach through store.engine', () => {
-		const files = ['rowModel.ts', 'serverRowModel.ts'];
+		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverPageRowModel.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not use store.engine reach-through`).not.toContain('store.engine.');
@@ -527,7 +528,7 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('row models do not depend on the concrete GridStore type', () => {
-		const files = ['rowModel.ts', 'serverRowModel.ts'];
+		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverPageRowModel.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not reference GridStore`).not.toContain('GridStore<');
@@ -545,7 +546,8 @@ describe('Architecture guardrails', () => {
 			'plugins/GridPluginRegistry.ts',
 			'engine/CellNotificationController.ts',
 			'engine/createRowModelRuntimes.ts',
-			'serverRowModel.ts',
+			'infiniteRowModel.ts',
+			'serverPageRowModel.ts',
 			'rows/stages/aggregateStage.ts',
 			'renderer/fillDragController.ts',
 			'renderer/headerMenuController.ts',
@@ -560,11 +562,18 @@ describe('Architecture guardrails', () => {
 	it('row-model runtimes are defined in runtimePorts and used from factory wiring', () => {
 		const runtimePorts = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'runtimePorts.ts'), 'utf-8');
 		expect(runtimePorts).toContain('export interface ClientRowModelRuntime');
-		expect(runtimePorts).toContain('export interface ServerRowModelRuntime');
+		expect(runtimePorts).toContain('export interface InfiniteRowModelRuntime');
+		expect(runtimePorts).toContain('export interface ServerPageRowModelRuntime');
+		// Legacy ServerRowModelRuntime alias must be removed
+		expect(runtimePorts).not.toContain('ServerRowModelRuntime');
 
 		const createGrid = readFileSync(resolve(CORE_ROOT, 'src', 'createGrid.ts'), 'utf-8');
 		expect(createGrid).toContain('runtime.getClientRowModelRuntime()');
-		expect(createGrid).toContain('runtime.getServerRowModelRuntime()');
+		expect(createGrid).toContain('runtime.getInfiniteRowModelRuntime()');
+		expect(createGrid).toContain('runtime.getServerPageRowModelRuntime()');
+		// Legacy createServerGrid must be removed
+		expect(createGrid).not.toContain('runtime.getServerRowModelRuntime()');
+		expect(createGrid).not.toContain('createServerGrid');
 		expect(createGrid).not.toContain('new ClientRowModelController<TRowData>(store,');
 		expect(createGrid).not.toContain('new ServerRowModelController<TRowData>(store,');
 	});

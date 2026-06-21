@@ -407,7 +407,7 @@ export default function AdvancedFiltersDemo() {
 			{/* Grid */}
 			<div style={{ flex: 1, minHeight: 0 }}>
 				<Grid<EmployeeRow>
-					mode='client'
+					rowModelType='client'
 					columns={columns}
 					rows={rows}
 					getRowId={(row) => row.id}

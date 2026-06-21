@@ -5,7 +5,7 @@ import {
 	type ColumnDef,
 	type FilterModel,
 	type GridApi,
-	type GridDatasource,
+	type InfiniteDatasource,
 	type SortModel,
 } from '@open-grid/react';
 import {
@@ -230,7 +230,7 @@ export function createServerRows(): ServerAuditRow[] {
 	});
 }
 
-export function createServerDatasource(serverRows: ServerAuditRow[]): GridDatasource<ServerAuditRow> {
+export function createServerDatasource(serverRows: ServerAuditRow[]): InfiniteDatasource<ServerAuditRow> {
 	let cachedSortKey = '';
 	let cachedFilterKey = '';
 	let cachedRows = serverRows;

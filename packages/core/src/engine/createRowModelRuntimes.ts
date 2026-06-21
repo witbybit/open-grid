@@ -1,5 +1,5 @@
 import { GridEventName } from '../api/GridEvents.js';
-import type { ClientRowModelRuntime, RowModelRuntimeStoreBridge, ServerRowModelRuntime } from './runtimePorts.js';
+import type { ClientRowModelRuntime, InfiniteRowModelRuntime, RowModelRuntimeStoreBridge, ServerPageRowModelRuntime } from './runtimePorts.js';
 
 export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ClientRowModelRuntime<TRowData> {
 	return {
@@ -30,7 +30,7 @@ export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStor
 	};
 }
 
-export function createServerRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ServerRowModelRuntime<TRowData> {
+export function createInfiniteRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): InfiniteRowModelRuntime<TRowData> {
 	return {
 		getState: store.getState,
 		initializeModel: (model) => store.engine.initializeRowModelState(model),
@@ -51,19 +51,53 @@ export function createServerRowModelRuntime<TRowData>(store: RowModelRuntimeStor
 		isScrollingFast: () => store.engine.isScrollingFast(),
 		getScrollVelocity: () => store.engine.getScrollVelocity(),
 		setLoadingState: (loading) => store.engine.setRowModelLoadingState(loading),
-		dispatchServerBlockLoaded: (payload) => store.dispatchEvent(GridEventName.serverBlockLoaded, payload),
-		dispatchServerBlockLoadFailed: (payload) => store.dispatchEvent(GridEventName.serverBlockLoadFailed, payload),
+		dispatchInfiniteBlockLoaded: (payload) => {
+			store.dispatchEvent(GridEventName.infiniteBlockLoaded, payload);
+		},
+		dispatchInfiniteBlockLoadFailed: (payload) => {
+			store.dispatchEvent(GridEventName.infiniteBlockLoadFailed, payload);
+		},
 		dispatchPaginationChanged: (payload) => {
 			store.engine.setServerPaginationState(payload);
 			store.dispatchEvent(GridEventName.paginationChanged, payload);
 		},
 		reportBlockLoadFailure: (blockIndex, error) =>
 			store.reportRuntimeFault({
-				source: 'server-row-model',
+				source: 'infinite-row-model',
 				operation: 'fetch-block',
 				error,
 				context: { blockIndex },
 			}),
+		getInstrumentation: () => store.getInstrumentation(),
+	};
+}
+
+export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ServerPageRowModelRuntime<TRowData> {
+	return {
+		getState: store.getState,
+		initializeModel: (model) => store.engine.initializeRowModelState(model),
+		registerRowModel: store.registerRowModel,
+		addEventListener: store.addEventListener,
+		getRowId: store.getRowId,
+		getColumnDef: store.getColumnDef,
+		getCellValue: store.getCellValue,
+		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
+		reportRowPipelineFault: (operation, error, context) =>
+			store.reportRuntimeFault({
+				source: 'row-pipeline',
+				operation,
+				error,
+				context,
+			}),
+		clearFormulas: () => store.engine.clearFormulas(),
+		setLoadingState: (loading) => store.engine.setRowModelLoadingState(loading),
+		dispatchServerPageLoadingStarted: (payload) => store.dispatchEvent(GridEventName.serverPageLoadingStarted, payload),
+		dispatchServerPageLoaded: (payload) => {
+			store.dispatchEvent(GridEventName.serverPageLoaded, payload);
+			store.dispatchEvent(GridEventName.serverPageChanged, payload);
+		},
+		dispatchServerPageLoadFailed: (payload) => store.dispatchEvent(GridEventName.serverPageLoadFailed, payload),
+		setServerPageState: (state) => store.engine.setServerPageState(state),
 		getInstrumentation: () => store.getInstrumentation(),
 	};
 }

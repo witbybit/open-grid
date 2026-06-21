@@ -157,7 +157,7 @@ export default function WideGridDemo({ onGridReady, editTrigger, arrowKeyNavigat
 			{/* Grid */}
 			<div className='min-h-0 flex-1'>
 				<Grid<WideRow>
-					mode='client'
+					rowModelType='client'
 					columns={columns}
 					rows={ROWS}
 					getRowId={(r) => r.id}

@@ -142,7 +142,7 @@ export default function ClipboardDemo() {
 			</div>
 
 			<div style={{ flex: 1, minHeight: 0 }}>
-				<Grid<Product> mode='client' columns={COLUMNS} rows={ROWS} getRowId={(row) => row.id} onGridReady={handleGridReady} />
+				<Grid<Product> rowModelType='client' columns={COLUMNS} rows={ROWS} getRowId={(row) => row.id} onGridReady={handleGridReady} />
 			</div>
 
 			{log.length > 0 && (

@@ -1,9 +1,18 @@
-import { createClientGrid, createServerGrid, createLocalStorageAdapter } from '@open-grid/core';
+import { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from '@open-grid/core';
 import { useEffect, useMemo, useRef, useInsertionEffect, type PropsWithChildren } from 'react';
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
 import { resolveColumnTypes } from './resolveColumnTypes.js';
-import type { ColumnDef, GridInitialState, GridPersistenceAdapter, GridDatasource, RowSelectionMode, RowSelectionOptions } from './types.js';
+import type {
+	ColumnDef,
+	GridInitialState,
+	GridPersistenceAdapter,
+	RowSelectionMode,
+	RowSelectionOptions,
+	InfiniteDatasource,
+	ServerDatasource,
+	ServerPaginationOptions,
+} from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
 import type { RowValidator } from '@open-grid/core';
 
@@ -49,17 +58,25 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 }
 
 export interface GridClientProps<TRowData = unknown> extends GridCommonProps<TRowData> {
-	mode: 'client';
+	rowModelType?: 'client';
 	rows: TRowData[];
 }
 
-export interface GridServerProps<TRowData = unknown> extends GridCommonProps<TRowData> {
-	mode: 'server';
-	datasource: GridDatasource<TRowData>;
+/** Block/range (infinite scroll) row model — datasource receives startRow/endRow. */
+export interface GridInfiniteProps<TRowData = unknown> extends GridCommonProps<TRowData> {
+	rowModelType: 'infinite';
+	datasource: InfiniteDatasource<TRowData>;
 	blockSize?: number;
 }
 
-export type GridProps<TRowData = unknown> = GridClientProps<TRowData> | GridServerProps<TRowData>;
+/** Explicit page-based server row model — datasource receives page/pageSize. */
+export interface GridServerPageProps<TRowData = unknown> extends GridCommonProps<TRowData> {
+	rowModelType: 'server';
+	datasource: ServerDatasource<TRowData>;
+	pagination?: ServerPaginationOptions;
+}
+
+export type GridProps<TRowData = unknown> = GridClientProps<TRowData> | GridInfiniteProps<TRowData> | GridServerPageProps<TRowData>;
 export type GridRootProps<TRowData = unknown> = PropsWithChildren<GridProps<TRowData>>;
 
 function normalizePagination(pagination: boolean | GridPaginationConfig | undefined): { pageSize: number; initialPage: number } | null {
@@ -99,7 +116,7 @@ function createInitialState<TRowData>(
 
 export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	const {
-		mode,
+		rowModelType,
 		onGridReady,
 		detailRowHeight,
 		columns,
@@ -126,11 +143,13 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		...viewProps
 	} = props as GridRootProps<TRowData> &
 		GridShellProps<TRowData> & {
+			rowModelType?: 'client' | 'infinite' | 'server';
 			rows?: TRowData[];
-			datasource?: GridDatasource<TRowData>;
+			datasource?: InfiniteDatasource<TRowData> | ServerDatasource<TRowData>;
 			blockSize?: number;
 			rowSelection?: RowSelectionMode | RowSelectionOptions;
 			rowDragMode?: 'managed' | 'unmanaged';
+			serverPagination?: ServerPaginationOptions;
 		};
 	const readyFiredRef = useRef(false);
 	const lastColumnsRef = useRef(columns);
@@ -156,10 +175,12 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			},
 			{ detailRowHeight, pagination: paginationConfig, showStatusBar, showFilterChipBar, showFloatingFilters, rowDragMode }
 		);
-		if (mode === 'client') {
-			return createClientGrid({
-				rows: rows as TRowData[],
+
+		if (rowModelType === 'infinite') {
+			return createInfiniteGrid({
+				datasource: datasource as InfiniteDatasource<TRowData>,
 				columns: resolveColumnTypes(columns, columnTypes),
+				blockSize,
 				getRowId,
 				persistence: resolvedPersistence,
 				rowSelection,
@@ -168,16 +189,29 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			});
 		}
 
-		return createServerGrid({
-			datasource: datasource as GridDatasource<TRowData>,
+		if (rowModelType === 'server') {
+			const serverPagePagination = (props as GridServerPageProps<TRowData>).pagination;
+			return createServerPageGrid({
+				datasource: datasource as ServerDatasource<TRowData>,
+				columns: resolveColumnTypes(columns, columnTypes),
+				getRowId,
+				persistence: resolvedPersistence,
+				rowSelection,
+				rowValidator,
+				initialState: initial,
+				pagination: serverPagePagination ?? { pageSize: paginationConfig?.pageSize ?? 100 },
+			});
+		}
+
+		// Default: client row model
+		return createClientGrid({
+			rows: rows as TRowData[],
 			columns: resolveColumnTypes(columns, columnTypes),
-			blockSize,
 			getRowId,
 			persistence: resolvedPersistence,
 			rowSelection,
 			rowValidator,
 			initialState: initial,
-			pagination: paginationConfig ? { pageSize: paginationConfig.pageSize, initialPage: paginationConfig.initialPage } : undefined,
 		});
 		// The grid instance is intentionally created once; live changes are handled by the dedicated hooks below.
 	}, []);
@@ -187,18 +221,27 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	}, [api, styleRules]);
 
 	useEffect(() => {
-		if (mode !== 'client') return;
+		if (rowModelType !== 'client' && rowModelType !== undefined) return;
 		api.setRows(rows as TRowData[]);
-	}, [api, mode, rows]);
+	}, [api, rowModelType, rows]);
 
 	useEffect(() => {
-		if (mode !== 'server') return;
+		if (rowModelType !== 'infinite') return;
 		if (!didMountServerRef.current) {
 			didMountServerRef.current = true;
 			return;
 		}
-		api.setServerDatasource(datasource as GridDatasource<TRowData>, blockSize);
-	}, [api, mode, datasource, blockSize]);
+		api.setInfiniteDatasource(datasource as InfiniteDatasource<TRowData>, blockSize);
+	}, [api, rowModelType, datasource, blockSize]);
+
+	useEffect(() => {
+		if (rowModelType !== 'server') return;
+		if (!didMountServerRef.current) {
+			didMountServerRef.current = true;
+			return;
+		}
+		api.setServerPageDatasource(datasource as ServerDatasource<TRowData>);
+	}, [api, rowModelType, datasource]);
 
 	useEffect(() => {
 		if (columns === lastColumnsRef.current && columnTypes === lastColumnTypesRef.current) return;
@@ -210,8 +253,9 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	useEffect(() => {
 		if (readyFiredRef.current) return;
 		readyFiredRef.current = true;
-		onGridReady?.({ api, mode });
-	}, [api, mode, onGridReady]);
+		const resolvedRowModelType = rowModelType ?? 'client';
+		onGridReady?.({ api, rowModelType: resolvedRowModelType });
+	}, [api, rowModelType, onGridReady]);
 
 	useInsertionEffect(() => {
 		return () => {

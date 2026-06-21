@@ -4,7 +4,6 @@ import type {
 	CellRendererProps,
 	FilterModel,
 	SortModel,
-	IGridDatasource,
 	GridApi,
 	GridCellClickParams,
 	GridInitialState,
@@ -46,6 +45,11 @@ import type {
 	RowSelectionScope,
 	SelectRowsOptions,
 	SelectAllRowsOptions,
+	RowModelType,
+	InfiniteDatasource,
+	ServerDatasource,
+	ServerPaginationOptions,
+	ServerPageState,
 } from '@open-grid/core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@open-grid/core';
@@ -78,7 +82,6 @@ export type {
 	NumberFilterOperator,
 	DateFilterOperator,
 	SortModel,
-	IGridDatasource as GridDatasource,
 	GridApi,
 	GridCellClickParams,
 	GridInitialState,
@@ -107,6 +110,8 @@ export type {
 
 export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;
 
+export type { RowModelType, InfiniteDatasource, ServerDatasource, ServerPaginationOptions, ServerPageState };
+
 /**
  * Fields from GridInitialState that can be configured as top-level props on the public
  * Grid component. Sourced from the canonical GridInitialState type so these never drift
@@ -114,9 +119,7 @@ export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;
  */
 type GridRenderOptions<TRowData> = Pick<GridInitialState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;
 
-export type GridMode = 'client' | 'server';
-
 export interface GridReadyEvent<TRowData = unknown> {
 	api: GridApi<TRowData>;
-	mode: GridMode;
+	rowModelType: RowModelType;
 }

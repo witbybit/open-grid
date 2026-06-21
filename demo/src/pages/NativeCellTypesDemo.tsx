@@ -386,7 +386,7 @@ function NativeCellTypesDemoInner({ rows, onGridReady }: { rows: SkaterRow[]; on
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						mode='client'
+						rowModelType='client'
 						rows={rows}
 						columns={SKATER_COLUMNS}
 						columnTypes={SKATER_COLUMN_TYPES}
