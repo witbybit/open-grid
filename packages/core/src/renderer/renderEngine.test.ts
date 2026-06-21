@@ -6,7 +6,7 @@ import { GridStore, type VisualRow } from '../store.js';
 import { createMinimalRowModel } from '../testUtils/createMinimalRowModel.js';
 import { RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { RenderEngine } from './renderEngine.js';
-import { ServerRowModelController } from '../serverRowModel.js';
+import { InfiniteRowModelController } from '../infiniteRowModel.js';
 
 /**
  * Count the row-slot DOM children of the rows container, excluding the `.og-layer-exiting`
@@ -1013,7 +1013,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
 			columns: store.getState().columns,
 			blockSize: 50,
 			datasource: {

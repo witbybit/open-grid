@@ -1279,7 +1279,7 @@ describe('Grid pagination prop', () => {
 		render(
 			<div style={{ width: 400, height: 300 }}>
 				<Grid
-					mode='client'
+					rowModelType='client'
 					rows={rows}
 					columns={[{ field: 'name', header: 'Name', width: 120 }]}
 					getRowId={(row: TestRow) => row.id}
@@ -1310,19 +1310,18 @@ describe('Grid pagination prop', () => {
 			{ id: '4', name: 'Dane' },
 			{ id: '5', name: 'Elle' },
 		];
-		const getRows = vi.fn(async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
-			rows: rows.slice(startRow, endRow),
-			totalCount: rows.length,
+		const getPage = vi.fn(async ({ page, pageSize }: { page: number; pageSize: number }) => ({
+			rows: rows.slice(page * pageSize, (page + 1) * pageSize),
+			totalRowCount: rows.length,
 		}));
 
 		render(
 			<div style={{ width: 400, height: 300 }}>
 				<Grid
-					mode='server'
+					rowModelType='server'
 					columns={[{ field: 'name', header: 'Name', width: 120 }]}
-					datasource={{ getRows }}
+					datasource={{ getPage }}
 					getRowId={(row: TestRow) => row.id}
-					blockSize={2}
 					enableNavigation={false}
 					pagination={{ pageSize: 2 }}
 				/>
@@ -1330,13 +1329,13 @@ describe('Grid pagination prop', () => {
 		);
 
 		await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
-		expect(getRows.mock.calls.some(([params]) => params.startRow === 0 && params.endRow === 2)).toBe(true);
+		expect(getPage.mock.calls.some(([params]) => params.page === 0 && params.pageSize === 2)).toBe(true);
 
 		// Wait until the core bar reflects the server totals (next page available), then page.
 		await waitFor(() => expect((screen.getByLabelText('Next page') as HTMLButtonElement).disabled).toBe(false));
 		fireEvent.click(screen.getByLabelText('Next page'));
 
-		await waitFor(() => expect(getRows.mock.calls.some(([params]) => params.startRow === 2 && params.endRow === 4)).toBe(true));
+		await waitFor(() => expect(getPage.mock.calls.some(([params]) => params.page === 1 && params.pageSize === 2)).toBe(true));
 		await waitFor(() => expect(screen.getByText('Cara')).toBeTruthy());
 		expect(screen.queryByText('Alice')).toBeNull();
 	});
@@ -1361,7 +1360,7 @@ describe('explicit React entrypoints', () => {
 		render(
 			<div style={{ width: 400, height: 300 }}>
 				<Grid
-					mode='client'
+					rowModelType='client'
 					rows={[{ id: '1', name: 'Alice' }]}
 					columns={[
 						{
@@ -1378,7 +1377,7 @@ describe('explicit React entrypoints', () => {
 		);
 
 		await waitFor(() => expect(onGridReady).toHaveBeenCalledTimes(1));
-		expect(onGridReady.mock.calls[0][0]).toEqual(expect.objectContaining({ mode: 'client' }));
+		expect(onGridReady.mock.calls[0][0]).toEqual(expect.objectContaining({ rowModelType: 'client' }));
 		expect(screen.getByTestId('api-hook').textContent).toBe('yes');
 	});
 
@@ -1404,7 +1403,7 @@ describe('explicit React entrypoints', () => {
 		render(
 			<div style={{ width: 400, height: 300 }}>
 				<Grid
-					mode='client'
+					rowModelType='client'
 					rows={[{ id: '1', name: 'Alice' }]}
 					columns={[{ field: 'name', header: 'Name', width: 100 }]}
 					enableNavigation={false}

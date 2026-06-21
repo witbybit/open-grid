@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GridStore, GridEventName, validateColumns, validateRowIds } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
-import { ServerRowModelController, IGridDatasource } from './serverRowModel.js';
+import { InfiniteRowModelController, type InfiniteDatasource } from './infiniteRowModel.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 import type { ActiveEditState, ColumnDef } from './api/GridApi.js';
 
@@ -961,22 +961,20 @@ describe('ClientRowModelController sorting and filtering', () => {
 	}, 10_000);
 });
 
-describe('ServerRowModelController paginated lazily populated row-patching', () => {
+describe('InfiniteRowModelController lazily populated row-patching', () => {
 	it('should fetch rows block on demand', async () => {
 		const store = new GridStore<TestRow>();
-		const mockDatasource: IGridDatasource = {
-			getRows: async (params) => {
-				return {
-					rows: [
-						{ id: '10', name: 'Server A', price: 100 },
-						{ id: '11', name: 'Server B', price: 200 },
-					],
-					totalCount: 100,
-				};
-			},
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: async () => ({
+				rows: [
+					{ id: '10', name: 'Server A', price: 100 },
+					{ id: '11', name: 'Server B', price: 200 },
+				],
+				totalCount: 100,
+			}),
 		};
 
-		const controller = new ServerRowModelController<TestRow>(store.getServerRowModelRuntime(), {
+		const controller = new InfiniteRowModelController<TestRow>(store.getInfiniteRowModelRuntime(), {
 			datasource: mockDatasource,
 			blockSize: 2,
 			columns: [

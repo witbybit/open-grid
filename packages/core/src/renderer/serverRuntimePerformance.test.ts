@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ServerRowModelController, type IGridDatasource } from '../serverRowModel.js';
+import { InfiniteRowModelController, type InfiniteDatasource } from '../infiniteRowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
 import { diffRenderWindow, getColIndices, getRowIndices, type RenderWindow } from './renderWindow.js';
@@ -178,7 +178,7 @@ async function createServerAuditGrid(options: { rows?: number; cols?: number; bl
 	const totalRows = options.rows ?? 1_000_000;
 	const columns = createAuditColumns(options.cols ?? 1200);
 	const requests: Array<{ startRow: number; endRow: number }> = [];
-	const datasource: IGridDatasource = {
+	const datasource: InfiniteDatasource<AuditPerfRow> = {
 		getRows: async ({ startRow, endRow }) => {
 			requests.push({ startRow, endRow });
 			return {
@@ -196,7 +196,7 @@ async function createServerAuditGrid(options: { rows?: number; cols?: number; bl
 		getRowId: (row) => row.id,
 		runtimeLimits: { maxRenderedRows: 28, maxRenderedCells: 360 },
 	});
-	const controller = new ServerRowModelController<AuditPerfRow>(store.getServerRowModelRuntime(), {
+	const controller = new InfiniteRowModelController<AuditPerfRow>(store.getInfiniteRowModelRuntime(), {
 		datasource,
 		blockSize: options.blockSize ?? 100,
 		columns,
@@ -711,7 +711,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 			colBuffer: 1,
 			getRowId: (row) => row.id,
 		});
-		const datasource: IGridDatasource = {
+		const datasource: InfiniteDatasource<AuditPerfRow> = {
 			getRows: async ({ startRow, endRow }) => {
 				return {
 					rows: Array.from({ length: endRow - startRow }, (_, offset) => createAuditRow(startRow + offset)),
@@ -719,7 +719,11 @@ describe('Server demo ruthless runtime performance contracts', () => {
 				};
 			},
 		};
-		const controller = new ServerRowModelController<AuditPerfRow>(store.getServerRowModelRuntime(), { datasource, blockSize: 50, columns: cols });
+		const controller = new InfiniteRowModelController<AuditPerfRow>(store.getInfiniteRowModelRuntime(), {
+			datasource,
+			blockSize: 50,
+			columns: cols,
+		});
 		const container = createContainer();
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
