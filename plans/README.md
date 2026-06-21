@@ -122,6 +122,10 @@
 | 119 | [Unified Column Topology](./119-unified-column-topology-and-pinned-lane-rendering.md)                                         | DONE     | faf18afa     |
 | 120 | [Portal Identity Completion](./120-portal-identity-completion.md)                                                             | DONE     | 5cb7d65c     |
 | 121 | [React Portal Identity Completion](./121-react-portal-identity-completion.md)                                                 | DONE     | efba7b58     |
+| 122 | [Grid DevTools / Runtime Inspector](./122-grid-devtools-runtime-inspector.md)                                                 | TODO     | —            |
+| 123 | [Workspace Views and Persistence Controls](./123-workspace-views-and-persistence-controls.md)                                 | TODO     | —            |
+| 124 | [Advanced Query Builder](./124-advanced-query-builder.md)                                                                     | TODO     | —            |
+| 125 | [Validation and Cell Capability Framework](./125-validation-and-cell-capability-framework.md)                                 | TODO     | —            |
 
 ## Execution order
 
