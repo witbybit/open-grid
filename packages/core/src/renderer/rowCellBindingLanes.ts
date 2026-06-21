@@ -293,20 +293,8 @@ function reconcileCellTopologyForScroll<TRowData>(
 export { reconcileTopology, reconcileCellTopologyForScroll };
 
 export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData>, request: BindAllDataCellsRequest<TRowData>): void {
-	const {
-		slot,
-		node,
-		rowIndex,
-		centerColStart,
-		centerColCount,
-		columns,
-		plan,
-		columnTopology,
-		isScrollFrameActive,
-		ctx,
-		state,
-		isRowRebind,
-	} = request;
+	const { slot, node, rowIndex, centerColStart, centerColCount, columns, plan, columnTopology, isScrollFrameActive, ctx, state, isRowRebind } =
+		request;
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 	const pinRightWidth = plan.pinRightWidth;
@@ -485,16 +473,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 }
 
 export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData>, request: BindAllLoadingCellsRequest<TRowData>): void {
-	const {
-		slot,
-		rowIndex,
-		centerColStart,
-		centerColCount,
-		columns,
-		plan,
-		columnTopology,
-		isScrollFrameActive,
-	} = request;
+	const { slot, rowIndex, centerColStart, centerColCount, columns, plan, columnTopology, isScrollFrameActive } = request;
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 	const pinRightWidth = plan.pinRightWidth;

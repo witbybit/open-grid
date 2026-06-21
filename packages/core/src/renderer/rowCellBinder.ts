@@ -184,20 +184,7 @@ function assignRendererHandle<TRowData>(cellSlot: CellSlot<TRowData>, contentMod
 }
 
 export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellFullRequest<TRowData>): void {
-	const {
-		cellSlot,
-		slotId,
-		node,
-		rowIndex,
-		colIndex,
-		col,
-		lane,
-		pinRightBaseLeft,
-		plan,
-		state,
-		ctx,
-		phase = 'initial',
-	} = request;
+	const { cellSlot, slotId, node, rowIndex, colIndex, col, lane, pinRightBaseLeft, plan, state, ctx, phase = 'initial' } = request;
 	const access = deps.engine.cellAccess.get(node.id, rowIndex, node, node.data, colIndex, col, undefined, state);
 
 	let cellClassName = buildCellPinClass(lane);
@@ -458,21 +445,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 }
 
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
-	const {
-		cellSlot,
-		node,
-		rowIndex,
-		colIndex,
-		col,
-		lane,
-		ctx,
-		pooledRowId,
-		left,
-		right,
-		width,
-		isRowRebind,
-		isRowLoading,
-	} = request;
+	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, pooledRowId, left, right, width, isRowRebind, isRowLoading } = request;
 
 	if (col.checkboxSelection) {
 		deps.markCellDirtyAfterScroll(cellSlot.element);
