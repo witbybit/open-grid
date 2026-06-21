@@ -244,6 +244,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 		}
 		const rowSlotId = activeIdentity.rowSlotId;
 		const slotGeneration = activeIdentity.slotGeneration;
+		const cellRowBindingGeneration = activeIdentity.cellRowBindingGeneration;
 
 		if (isDeferred) {
 			this.deps.stateHost.currentScrollPortalOps++;
@@ -253,6 +254,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 				flushSync: false,
 				rowSlotId,
 				slotGeneration,
+				cellRowBindingGeneration,
 			});
 		} else {
 			this.deps.portalMountManager.releaseCell({
@@ -262,6 +264,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 				reason,
 				rowSlotId,
 				slotGeneration,
+				cellRowBindingGeneration,
 			});
 		}
 	}

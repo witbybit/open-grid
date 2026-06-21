@@ -78,6 +78,12 @@ export interface GridCellContentUnmount {
 	rowSlotId: string;
 	/** Generation at the time this release was requested — used to reject stale releases. */
 	slotGeneration: number;
+	/**
+	 * Per-cell row-binding generation at the time the release was requested.
+	 * When provided, flushDeferred rejects the release if the active identity has
+	 * a newer generation (the cell was rebound before the deferred release flushed).
+	 */
+	cellRowBindingGeneration?: number;
 }
 
 export interface GridCellContentFlush {

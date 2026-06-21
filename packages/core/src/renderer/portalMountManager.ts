@@ -108,7 +108,7 @@ export class PortalMountManager<TRowData = unknown> {
 	private deferredCellMounts = new Map<string, GridCellContentMount<TRowData>>();
 	private deferredCellReleases = new Map<string, GridCellContentUnmount>();
 	/** Tracks the current physical identity for each mounted cellKey. */
-	private activeIdentityByKey = new Map<string, { rowSlotId: string; slotGeneration: number }>();
+	private activeIdentityByKey = new Map<string, { rowSlotId: string; slotGeneration: number; cellRowBindingGeneration: number }>();
 	private deferredNewCellMounts = new Set<string>();
 	private deferredRowMounts = new Map<string, GridRowContentMount<TRowData>>();
 	private deferredRowReleases = new Map<string, GridRowContentUnmount>();
@@ -135,7 +135,7 @@ export class PortalMountManager<TRowData = unknown> {
 		return this.activeIdentityByKey.get(cellKey)?.slotGeneration;
 	}
 
-	public getActiveIdentity(cellKey: string): { rowSlotId: string; slotGeneration: number } | undefined {
+	public getActiveIdentity(cellKey: string): { rowSlotId: string; slotGeneration: number; cellRowBindingGeneration: number } | undefined {
 		return this.activeIdentityByKey.get(cellKey);
 	}
 
@@ -148,6 +148,7 @@ export class PortalMountManager<TRowData = unknown> {
 		this.activeIdentityByKey.set(mount.cellKey, {
 			rowSlotId: mount.rowSlotId,
 			slotGeneration: mount.slotGeneration,
+			cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
 		});
 		const col = mount.col as InternalColumnDef<TRowData>;
 		const isCustom = !!(col.cellRenderer || mount.isEditing);
@@ -231,6 +232,7 @@ export class PortalMountManager<TRowData = unknown> {
 					flushSync: false,
 					rowSlotId: activeIdentity.rowSlotId,
 					slotGeneration: activeIdentity.slotGeneration,
+					cellRowBindingGeneration: activeIdentity.cellRowBindingGeneration,
 				});
 			}
 		}
@@ -424,7 +426,9 @@ export class PortalMountManager<TRowData = unknown> {
 			const activeIdentity = this.activeIdentityByKey.get(cellKey);
 			if (
 				activeIdentity !== undefined &&
-				(activeIdentity.rowSlotId !== unmount.rowSlotId || activeIdentity.slotGeneration !== unmount.slotGeneration)
+				(activeIdentity.rowSlotId !== unmount.rowSlotId ||
+					activeIdentity.slotGeneration !== unmount.slotGeneration ||
+					(unmount.cellRowBindingGeneration !== undefined && activeIdentity.cellRowBindingGeneration !== unmount.cellRowBindingGeneration))
 			) {
 				this.deferredCellReleases.delete(cellKey);
 				continue;
@@ -456,7 +460,9 @@ export class PortalMountManager<TRowData = unknown> {
 				const activeIdentity = this.activeIdentityByKey.get(mount.cellKey);
 				if (
 					activeIdentity !== undefined &&
-					(activeIdentity.rowSlotId !== mount.rowSlotId || activeIdentity.slotGeneration !== mount.slotGeneration)
+					(activeIdentity.rowSlotId !== mount.rowSlotId ||
+						activeIdentity.slotGeneration !== mount.slotGeneration ||
+						(mount.cellRowBindingGeneration !== undefined && activeIdentity.cellRowBindingGeneration !== mount.cellRowBindingGeneration))
 				) {
 					this.deferredCellMounts.delete(mount.cellKey);
 					this.deferredNewCellMounts.delete(mount.cellKey);
