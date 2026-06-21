@@ -143,7 +143,10 @@ export class GridStateFeatureController<TRowData = unknown> {
 		this.deps.applyChange({
 			reason: 'rows:set-sort-model',
 			state: { sortModel },
-			invalidations: [{ kind: 'headers' }, { kind: 'full' }],
+			invalidations: [
+				{ kind: 'headers', reason: 'sort' },
+				{ kind: 'full', reason: 'sort' },
+			],
 			domains: ['rows', 'sorting'],
 			events: [{ type: GridEventName.sortChanged, payload: { sortModel } }],
 			history: undoable
@@ -151,7 +154,10 @@ export class GridStateFeatureController<TRowData = unknown> {
 						undo: {
 							reason: 'rows:set-sort-model',
 							state: { sortModel: oldSort },
-							invalidations: [{ kind: 'headers' }, { kind: 'full' }],
+							invalidations: [
+								{ kind: 'headers', reason: 'sort' },
+								{ kind: 'full', reason: 'sort' },
+							],
 							domains: ['rows', 'sorting'],
 							events: [{ type: GridEventName.sortChanged, payload: { sortModel: oldSort } }],
 							requestRender: true,
@@ -159,7 +165,10 @@ export class GridStateFeatureController<TRowData = unknown> {
 						redo: {
 							reason: 'rows:set-sort-model',
 							state: { sortModel },
-							invalidations: [{ kind: 'headers' }, { kind: 'full' }],
+							invalidations: [
+								{ kind: 'headers', reason: 'sort' },
+								{ kind: 'full', reason: 'sort' },
+							],
 							domains: ['rows', 'sorting'],
 							events: [{ type: GridEventName.sortChanged, payload: { sortModel } }],
 							requestRender: true,
