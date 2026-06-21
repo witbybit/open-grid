@@ -234,6 +234,74 @@ describe('compileColumnTopology — group segmentation', () => {
 	});
 });
 
+// ── Shared topology version (Plan 119) ────────────────────────────────────────
+
+describe('compileColumnTopology — shared topology version', () => {
+	it('topology.version equals plan.version exactly', () => {
+		const t = compileColumnTopology(makePlan([makeCol('a'), makeCol('b')], 0, 0, 42));
+		expect(t.version).toBe(42);
+	});
+
+	it('same plan compiled twice produces same version — shared across call sites', () => {
+		const plan = makePlan([makeCol('a'), makeCol('b')], 1, 0, 5);
+		const headerTopology = compileColumnTopology(plan);
+		const bodyTopology = compileColumnTopology(plan);
+		const filterTopology = compileColumnTopology(plan);
+		expect(headerTopology.version).toBe(5);
+		expect(bodyTopology.version).toBe(5);
+		expect(filterTopology.version).toBe(5);
+	});
+
+	it('increments by exactly 1 when plan version increments by 1', () => {
+		const cols = [makeCol('a'), makeCol('b')];
+		const t1 = compileColumnTopology(makePlan(cols, 0, 0, 1));
+		const t2 = compileColumnTopology(makePlan(cols, 0, 0, 2));
+		expect(t2.version - t1.version).toBe(1);
+	});
+
+	it('a single pin change increments version exactly once — not once per consumer', () => {
+		const cols = [makeCol('a'), makeCol('b'), makeCol('c')];
+		const prevPlan = makePlan(cols, 0, 0, 10);
+		const nextPlan = makePlan(cols, 1, 0, 11); // one topology change
+		const prev = compileColumnTopology(prevPlan);
+		const headerNext = compileColumnTopology(nextPlan);
+		const bodyNext = compileColumnTopology(nextPlan);
+		const filterNext = compileColumnTopology(nextPlan);
+		expect(headerNext.version).toBe(11);
+		expect(bodyNext.version).toBe(11);
+		expect(filterNext.version).toBe(11);
+		expect(headerNext.version - prev.version).toBe(1);
+	});
+
+	it('adding a column produces a higher topology version', () => {
+		const t1 = compileColumnTopology(makePlan([makeCol('a'), makeCol('b')], 0, 0, 1));
+		const t2 = compileColumnTopology(makePlan([makeCol('a'), makeCol('b'), makeCol('c')], 0, 0, 2));
+		expect(t2.version).toBeGreaterThan(t1.version);
+	});
+
+	it('removing a column produces a higher topology version', () => {
+		const t1 = compileColumnTopology(makePlan([makeCol('a'), makeCol('b'), makeCol('c')], 0, 0, 1));
+		const t2 = compileColumnTopology(makePlan([makeCol('a'), makeCol('b')], 0, 0, 2));
+		expect(t2.version).toBeGreaterThan(t1.version);
+	});
+
+	it('plan unchanged → topology version unchanged across multiple compilations', () => {
+		const plan = makePlan([makeCol('a'), makeCol('b'), makeCol('c')], 1, 1, 7);
+		const versions = [1, 2, 3].map(() => compileColumnTopology(plan).version);
+		expect(versions).toEqual([7, 7, 7]);
+	});
+
+	it('lane assignments are stable across compilations when version is unchanged', () => {
+		const plan = makePlan([makeCol('a'), makeCol('b'), makeCol('c')], 1, 1, 7);
+		const t1 = compileColumnTopology(plan);
+		const t2 = compileColumnTopology(plan);
+		for (const id of ['a', 'b', 'c']) {
+			expect(t2.byColumnId.get(id)!.lane).toBe(t1.byColumnId.get(id)!.lane);
+			expect(t2.byColumnId.get(id)!.laneOffset).toBe(t1.byColumnId.get(id)!.laneOffset);
+		}
+	});
+});
+
 // ── diffColumnTopologies (WS8) ─────────────────────────────────────────────────
 
 describe('diffColumnTopologies', () => {

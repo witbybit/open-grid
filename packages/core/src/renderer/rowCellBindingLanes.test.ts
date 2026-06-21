@@ -508,6 +508,76 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 	});
 });
 
+// ── Horizontal scroll topology stability (Plan 119) ──────────────────────────
+
+describe('reconcileCellTopologyForScroll — horizontal scroll topology stability', () => {
+	it('left and right pinned cells are unchanged when center window shifts', () => {
+		const cols = [makeCol('pin-l'), makeCol('a'), makeCol('b'), makeCol('c'), makeCol('pin-r')];
+		const slot = makeRowSlot();
+		const left = makeContainer();
+		const right = makeContainer();
+		slot.element.appendChild(left);
+		slot.element.appendChild(right);
+
+		// pinRightStart = 4 (last column)
+		const topo = makeTopology(cols, 1, 1, 4);
+		reconcileTopology(slot, topo, left, 1, 3, right, cols, initCell, vi.fn());
+
+		const leftCell = slot.leftCells[0];
+		const rightCell = slot.rightCells[0];
+
+		// Scroll center window forward
+		reconcileCellTopologyForScroll(slot, topo, left, 2, 2, right, cols, initCell);
+
+		expect(slot.leftCells[0]).toBe(leftCell);
+		expect(slot.rightCells[0]).toBe(rightCell);
+		expect(slot.leftCells[0].columnId).toBe('pin-l');
+		expect(slot.rightCells[0].columnId).toBe('pin-r');
+	});
+
+	it('center cells update to reflect the new window; out-of-window cells are detached but retained in map', () => {
+		const cols5 = [makeCol('a'), makeCol('b'), makeCol('c'), makeCol('d'), makeCol('e')];
+		const slot = makeRowSlot();
+		const topo = makeTopology(cols5, 0, 0, 5);
+		reconcileTopology(slot, topo, null, 0, 3, null, cols5, initCell, vi.fn());
+
+		// Cells a,b,c are in the window
+		const cellA = slot.cellsByColumnId.get('a')!;
+		const cellC = slot.cellsByColumnId.get('c')!;
+
+		// Scroll forward: window becomes [c, d, e]
+		reconcileCellTopologyForScroll(slot, topo, null, 2, 3, null, cols5, initCell);
+
+		// centerCells reflects new window exactly
+		expect(slot.centerCells).toHaveLength(3);
+		expect(slot.centerCells[0]).toBe(cellC);
+		expect(slot.centerCells[1]).toBe(slot.cellsByColumnId.get('d'));
+		expect(slot.centerCells[2]).toBe(slot.cellsByColumnId.get('e'));
+
+		// Out-of-window cell 'a' is still owned
+		expect(slot.cellsByColumnId.get('a')).toBe(cellA);
+		// But detached from DOM (no parent)
+		expect(cellA.element.parentNode).toBeNull();
+	});
+
+	it('forward then backward scroll returns to original center window with same cell instances', () => {
+		const cols5 = [makeCol('a'), makeCol('b'), makeCol('c'), makeCol('d'), makeCol('e')];
+		const slot = makeRowSlot();
+		const topo = makeTopology(cols5, 0, 0, 5);
+		reconcileTopology(slot, topo, null, 0, 3, null, cols5, initCell, vi.fn());
+
+		const snapBefore = slot.centerCells.map((c) => c.cellInstanceId);
+
+		// Scroll forward past a and b
+		reconcileCellTopologyForScroll(slot, topo, null, 2, 3, null, cols5, initCell);
+		// Scroll back to original window
+		reconcileCellTopologyForScroll(slot, topo, null, 0, 3, null, cols5, initCell);
+
+		const snapAfter = slot.centerCells.map((c) => c.cellInstanceId);
+		expect(snapAfter).toEqual(snapBefore);
+	});
+});
+
 // ── Pinning one column never blanks unrelated cells ──────────────────────────
 
 describe('reconcileTopology — unrelated column stability', () => {
