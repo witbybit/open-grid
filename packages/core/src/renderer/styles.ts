@@ -135,13 +135,15 @@ export const CORE_STYLES = `
     overflow: hidden;
   }
 
-  /* Left / right pin lanes — compositor-sticky. */
+  /* Left / right pin lanes — compositor-sticky, structurally clipped. */
   .og-layer-floating-filter-left,
   .og-layer-floating-filter-right {
     position: sticky;
     flex-shrink: 0;
     height: 100%;
     z-index: 2;
+    overflow: hidden;
+    contain: layout paint;
     background-color: var(--og-floating-filter-bg, var(--og-header-bg));
   }
 
@@ -686,6 +688,8 @@ export const CORE_STYLES = `
     flex-shrink: 0;
     height: 100%;
     z-index: 5;
+    overflow: hidden;
+    contain: layout paint;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
     border-right: 1px solid var(--og-pin-left-border-color);
@@ -699,6 +703,8 @@ export const CORE_STYLES = `
     flex-shrink: 0;
     height: 100%;
     z-index: 5;
+    overflow: hidden;
+    contain: layout paint;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
     border-left: 1px solid var(--og-pin-right-border-color);
@@ -966,6 +972,7 @@ export const CORE_STYLES = `
     z-index: 40;
     background-color: inherit;
     overflow: hidden;
+    contain: layout paint;
   }
 
   .og-row-pin-left {

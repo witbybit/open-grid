@@ -50,9 +50,6 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.headerLayer = headerLayer;
 		this.headerLeftLayer = headerLeftLayer;
 		this.headerRightLayer = headerRightLayer;
-		// Clip cells that overflow the pinned lane width during pin/unpin transitions.
-		headerLeftLayer.style.overflow = 'hidden';
-		headerRightLayer.style.overflow = 'hidden';
 		// Clear any counter-transform inline styles from a previous render (defensive).
 		headerLeftLayer.style.transform = '';
 		headerRightLayer.style.transform = '';
