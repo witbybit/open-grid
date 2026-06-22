@@ -1,3 +1,4 @@
+import type { GridCellDecoration } from '../../../insights/insightTypes.js';
 import type { ColumnDef } from '../../../columnDef.js';
 import type { GridApi } from '../../../api/GridApi.js';
 import type {
@@ -29,6 +30,7 @@ export class QualityIntegrityModule<TRowData> implements GridIntegrityModule<TRo
 	private lastScope: GridIntegrityScope | null = null;
 	private lastComplete = false;
 	private customRules = new Map<string, GridDataQualityRule<TRowData>>();
+	private readonly cellDecMap = new Map<string, GridCellDecoration[]>();
 
 	constructor(
 		options: GridQualityIntegrityOptions<TRowData>,
@@ -46,6 +48,10 @@ export class QualityIntegrityModule<TRowData> implements GridIntegrityModule<TRo
 
 	getIssues(): readonly GridIntegrityIssue[] {
 		return this.issues;
+	}
+
+	getCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[] {
+		return this.cellDecMap.get(`${rowId}\0${colField}`) ?? _EMPTY_DECS;
 	}
 
 	getDiagnostics(): unknown {
@@ -106,6 +112,7 @@ export class QualityIntegrityModule<TRowData> implements GridIntegrityModule<TRo
 
 		this.issues = allIssues;
 		this.lastRunAt = _now();
+		this._rebuildCellDecMap();
 		return allIssues;
 	}
 
@@ -120,6 +127,28 @@ export class QualityIntegrityModule<TRowData> implements GridIntegrityModule<TRo
 	destroy(): void {
 		this.issues = [];
 		this.customRules.clear();
+		this.cellDecMap.clear();
+	}
+
+	private _rebuildCellDecMap(): void {
+		this.cellDecMap.clear();
+		for (const issue of this.issues) {
+			if (!issue.rowId || !issue.colField) continue;
+			const key = `${issue.rowId}\0${issue.colField}`;
+			let list = this.cellDecMap.get(key);
+			if (!list) {
+				list = [];
+				this.cellDecMap.set(key, list);
+			}
+			list.push({
+				layerId: 'dataIntegrity',
+				kind: issue.type,
+				severity: issue.severity,
+				className: _qualityClass(issue.severity),
+				title: issue.message,
+				data: issue,
+			});
+		}
 	}
 }
 
@@ -199,8 +228,15 @@ export function missingRequiredRule<TRowData>(): GridDataQualityRule<TRowData> {
 	};
 }
 
+function _qualityClass(severity: import('../integrityTypes.js').GridIntegritySeverity): string {
+	if (severity === 'error') return 'og-cell-quality-error';
+	if (severity === 'warning') return 'og-cell-quality-warning';
+	return 'og-cell-quality-info';
+}
+
 function _now(): number {
 	return typeof performance !== 'undefined' ? Math.floor(performance.timeOrigin + performance.now()) : 0;
 }
 
 const _EMPTY: readonly GridIntegrityIssue[] = [];
+const _EMPTY_DECS: readonly GridCellDecoration[] = [];

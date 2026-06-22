@@ -10,6 +10,7 @@ import type {
 	GridIntegrityIssue,
 	GridIntegrityIssueFilter,
 	GridIntegrityIssueSource,
+	GridIntegritySeverity,
 	GridIntegritySummary,
 	GridIntegrityRunOptions,
 	GridIntegrityRunResult,
@@ -163,6 +164,8 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		_pushAll(decs, this._getValidationCellDecorations(rowId, colField));
 		_pushAll(decs, this.diffModule?.getCellDecorations(rowId, colField));
 		_pushAll(decs, this.liveStreamModule?.getCellDecorations(rowId, colField));
+		_pushAll(decs, this.qualityModule?.getCellDecorations(rowId, colField));
+		_pushAll(decs, this._getPublishedIssueCellDecorations(rowId, colField));
 		return decs;
 	}
 
@@ -467,6 +470,25 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		return false;
 	}
 
+	private _getPublishedIssueCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[] {
+		const decs: GridCellDecoration[] = [];
+		for (const issues of this.publishedIssues.values()) {
+			for (const issue of issues) {
+				if (issue.rowId === rowId && issue.colField === colField) {
+					decs.push({
+						layerId: 'dataIntegrity',
+						kind: issue.type,
+						severity: issue.severity,
+						className: _publishedIssueClass(issue.source, issue.severity),
+						title: issue.message,
+						data: issue,
+					});
+				}
+			}
+		}
+		return decs;
+	}
+
 	private _getValidationCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[] {
 		const issue = this.validationModule?.getCellError(rowId, colField);
 		if (!issue) return _EMPTY_DECS;
@@ -505,6 +527,13 @@ function _matchesFilter(issue: GridIntegrityIssue, filter: GridIntegrityIssueFil
 		if (!types.includes(issue.type)) return false;
 	}
 	return true;
+}
+
+function _publishedIssueClass(source: GridIntegrityIssueSource, severity: GridIntegritySeverity): string {
+	if (source === 'conflict') return 'og-cell-conflict';
+	if (severity === 'error') return 'og-cell-insight-error';
+	if (severity === 'warning') return 'og-cell-insight-warning';
+	return 'og-cell-insight-info';
 }
 
 function _buildSummary(issues: readonly GridIntegrityIssue[], baseStatus: GridIntegritySummary['status']): GridIntegritySummary {
