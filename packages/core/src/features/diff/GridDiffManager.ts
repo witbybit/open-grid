@@ -1,11 +1,6 @@
 import type { GridInsightLayer, GridCellDecoration, GridRowDecoration } from '../../insights/insightTypes.js';
 import type { ColumnDef } from '../../columnDef.js';
-import type {
-	GridCellDiff,
-	GridDiffDiagnostics,
-	GridDiffModel,
-	GridDiffResult,
-} from './diffTypes.js';
+import type { GridCellDiff, GridDiffDiagnostics, GridDiffModel, GridDiffResult } from './diffTypes.js';
 
 export type { GridCellDiff, GridDiffDiagnostics, GridDiffModel, GridDiffResult };
 export type { GridDiffDataset, GridDiffOptions } from './diffTypes.js';
@@ -95,9 +90,7 @@ export class GridDiffManager<TRowData> implements GridInsightLayer {
 		this.cellDiffMap.delete(cellKey);
 		// Remove from result's changedCells
 		if (this.result) {
-			const changedCells = this.result.changedCells.filter(
-				(c) => !(c.rowId === rowId && c.colField === colField)
-			);
+			const changedCells = this.result.changedCells.filter((c) => !(c.rowId === rowId && c.colField === colField));
 			const changedRows = changedCells.some((c) => c.rowId === rowId)
 				? this.result.changedRows
 				: this.result.changedRows.filter((id) => id !== rowId);
@@ -197,7 +190,10 @@ export class GridDiffManager<TRowData> implements GridInsightLayer {
 		for (const cellDiff of changedCells) {
 			const key = `${cellDiff.rowId}\0${cellDiff.colField}`;
 			let list = this.cellDecMap.get(key);
-			if (!list) { list = []; this.cellDecMap.set(key, list); }
+			if (!list) {
+				list = [];
+				this.cellDecMap.set(key, list);
+			}
 			list.push({
 				layerId: 'diff',
 				kind: 'changed',
@@ -209,13 +205,15 @@ export class GridDiffManager<TRowData> implements GridInsightLayer {
 		}
 
 		for (const rowId of addedRows) {
-			this.rowDecMap.set(rowId, [{
-				layerId: 'diff',
-				kind: 'added',
-				severity: 'info',
-				className: 'og-row-diff-added',
-				data: { rowId },
-			}]);
+			this.rowDecMap.set(rowId, [
+				{
+					layerId: 'diff',
+					kind: 'added',
+					severity: 'info',
+					className: 'og-row-diff-added',
+					data: { rowId },
+				},
+			]);
 			// Decorate all visible cells of added row
 			for (const field of fields) {
 				const key = `${rowId}\0${field}`;
@@ -224,7 +222,10 @@ export class GridDiffManager<TRowData> implements GridInsightLayer {
 				const addedDiff: GridCellDiff = { rowId, colField: field, oldValue: undefined, newValue, status: 'added' };
 				this.cellDiffMap.set(key, addedDiff);
 				let list = this.cellDecMap.get(key);
-				if (!list) { list = []; this.cellDecMap.set(key, list); }
+				if (!list) {
+					list = [];
+					this.cellDecMap.set(key, list);
+				}
 				list.push({
 					layerId: 'diff',
 					kind: 'added',
@@ -238,7 +239,10 @@ export class GridDiffManager<TRowData> implements GridInsightLayer {
 		// Row decorations for changed rows
 		for (const rowId of changedRows) {
 			let list = this.rowDecMap.get(rowId);
-			if (!list) { list = []; this.rowDecMap.set(rowId, list); }
+			if (!list) {
+				list = [];
+				this.rowDecMap.set(rowId, list);
+			}
 			list.push({
 				layerId: 'diff',
 				kind: 'changed',

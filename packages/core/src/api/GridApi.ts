@@ -679,7 +679,9 @@ export interface GridApi<TRowData = unknown> {
 	 * Returns a report containing all detected issues.
 	 * Scope defaults to `allClientRows` for client row models, `loadedRows` for others.
 	 */
-	runDataQualityCheck(options?: { scope?: import('../features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'] }): Promise<import('../features/dataQuality/dataQualityTypes.js').DataQualityReport>;
+	runDataQualityCheck(options?: {
+		scope?: import('../features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'];
+	}): Promise<import('../features/dataQuality/dataQualityTypes.js').DataQualityReport>;
 
 	/** Returns the most recent data-quality report, or null if no check has been run. */
 	getDataQualityReport(): import('../features/dataQuality/dataQualityTypes.js').DataQualityReport | null;
@@ -727,7 +729,9 @@ export interface GridApi<TRowData = unknown> {
 	getCellConflict(rowId: string, colField: string): import('../features/conflict/conflictTypes.js').GridCellConflict | null;
 
 	/** Adds a conflict for a cell. Replaces any existing conflict for the same cell. Returns the stored conflict with id/createdAt. */
-	addConflict(partial: Omit<import('../features/conflict/conflictTypes.js').GridCellConflict, 'id' | 'createdAt'>): import('../features/conflict/conflictTypes.js').GridCellConflict;
+	addConflict(
+		partial: Omit<import('../features/conflict/conflictTypes.js').GridCellConflict, 'id' | 'createdAt'>
+	): import('../features/conflict/conflictTypes.js').GridCellConflict;
 
 	/** Resolves a conflict by id. 'local' keeps local value; 'remote' commits remoteValue; 'custom' commits options.value. */
 	resolveConflict(conflictId: string, options: import('../features/conflict/conflictTypes.js').ResolveConflictOptions): void;
@@ -744,7 +748,9 @@ export interface GridApi<TRowData = unknown> {
 	 * Creates a live data stream that batches and coalesces incoming updates,
 	 * commits through existing mutation APIs, and exposes flash decorations via the insight layer.
 	 */
-	createTransactionStream(options?: import('../features/liveStream/liveStreamTypes.js').TransactionStreamOptions): import('../features/liveStream/liveStreamTypes.js').GridTransactionStream<TRowData>;
+	createTransactionStream(
+		options?: import('../features/liveStream/liveStreamTypes.js').TransactionStreamOptions
+	): import('../features/liveStream/liveStreamTypes.js').GridTransactionStream<TRowData>;
 
 	destroy(): void;
 }

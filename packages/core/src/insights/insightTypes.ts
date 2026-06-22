@@ -1,13 +1,6 @@
-export type GridInsightLayerId =
-	| 'dataQuality'
-	| 'diff'
-	| 'liveStream'
-	| 'conflict';
+export type GridInsightLayerId = 'dataQuality' | 'diff' | 'liveStream' | 'conflict';
 
-export type GridInsightSeverity =
-	| 'info'
-	| 'warning'
-	| 'error';
+export type GridInsightSeverity = 'info' | 'warning' | 'error';
 
 export interface GridCellDecoration {
 	readonly layerId: GridInsightLayerId;

@@ -24,7 +24,7 @@ const CLEAN_ROWS: TestRow[] = [
 ];
 
 const DIRTY_ROWS: TestRow[] = [
-	{ id: 'r1', name: '', email: 'alice@example.com', amount: 100 },  // missing name
+	{ id: 'r1', name: '', email: 'alice@example.com', amount: 100 }, // missing name
 	{ id: 'r2', name: 'Bob', email: 'bob@example.com', amount: 200 },
 ];
 

@@ -58,23 +58,23 @@ incoming update
 
 ```ts
 export interface CellStreamUpdate {
-  readonly rowId: string;
-  readonly colField: string;
-  readonly value: unknown;
-  readonly version?: string | number;
-  readonly source?: string;
+	readonly rowId: string;
+	readonly colField: string;
+	readonly value: unknown;
+	readonly version?: string | number;
+	readonly source?: string;
 }
 
 export interface RowStreamUpdate<TRowData> {
-  readonly rowId: string;
-  readonly patch: Partial<TRowData>;
-  readonly version?: string | number;
-  readonly source?: string;
+	readonly rowId: string;
+	readonly patch: Partial<TRowData>;
+	readonly version?: string | number;
+	readonly source?: string;
 }
 
 export interface TransactionStreamUpdate<TRowData> {
-  readonly cells?: readonly CellStreamUpdate[];
-  readonly rows?: readonly RowStreamUpdate<TRowData>[];
+	readonly cells?: readonly CellStreamUpdate[];
+	readonly rows?: readonly RowStreamUpdate<TRowData>[];
 }
 ```
 
@@ -82,14 +82,14 @@ Options:
 
 ```ts
 export interface TransactionStreamOptions {
-  readonly batchMs?: number;
-  readonly maxBatchSize?: number;
-  readonly coalesceBy?: 'cell' | 'row';
-  readonly history?: 'suppress' | 'grouped';
-  readonly flashChanges?: boolean;
-  readonly dirtyCellPolicy?: 'skip' | 'queue' | 'markConflictLater';
-  readonly sortPolicy?: 'live' | 'defer';
-  readonly filterPolicy?: 'live' | 'defer';
+	readonly batchMs?: number;
+	readonly maxBatchSize?: number;
+	readonly coalesceBy?: 'cell' | 'row';
+	readonly history?: 'suppress' | 'grouped';
+	readonly flashChanges?: boolean;
+	readonly dirtyCellPolicy?: 'skip' | 'queue' | 'markConflictLater';
+	readonly sortPolicy?: 'live' | 'defer';
+	readonly filterPolicy?: 'live' | 'defer';
 }
 ```
 
@@ -112,14 +112,14 @@ State:
 
 ```ts
 export interface TransactionStreamState {
-  readonly paused: boolean;
-  readonly pendingUpdates: number;
-  readonly committedBatches: number;
-  readonly skippedDirtyUpdates: number;
-  readonly droppedUpdates: number;
-  readonly lastFlushDurationMs: number | null;
-  readonly lastError: string | null;
-  readonly backpressureActive: boolean;
+	readonly paused: boolean;
+	readonly pendingUpdates: number;
+	readonly committedBatches: number;
+	readonly skippedDirtyUpdates: number;
+	readonly droppedUpdates: number;
+	readonly lastFlushDurationMs: number | null;
+	readonly lastError: string | null;
+	readonly backpressureActive: boolean;
 }
 ```
 
@@ -129,21 +129,21 @@ export interface TransactionStreamState {
 
 ```ts
 export interface GridTransactionStream<TRowData> {
-  push(update: TransactionStreamUpdate<TRowData>): void;
+	push(update: TransactionStreamUpdate<TRowData>): void;
 
-  pushCells(updates: readonly CellStreamUpdate[]): void;
+	pushCells(updates: readonly CellStreamUpdate[]): void;
 
-  pushRows(updates: readonly RowStreamUpdate<TRowData>[]): void;
+	pushRows(updates: readonly RowStreamUpdate<TRowData>[]): void;
 
-  pause(): void;
+	pause(): void;
 
-  resume(): void;
+	resume(): void;
 
-  flush(): Promise<void> | void;
+	flush(): Promise<void> | void;
 
-  destroy(): void;
+	destroy(): void;
 
-  getState(): TransactionStreamState;
+	getState(): TransactionStreamState;
 }
 ```
 
@@ -221,7 +221,7 @@ Live updates should expose flash decorations through Insight Layer.
 Add stream as insight layer:
 
 ```ts
-id = 'liveStream'
+id = 'liveStream';
 ```
 
 Decoration:
@@ -238,17 +238,17 @@ CSS:
 
 ```css
 .og-cell-live-flash {
-  animation: og-cell-live-flash 600ms ease-out;
+	animation: og-cell-live-flash 600ms ease-out;
 }
 
 @keyframes og-cell-live-flash {
-  from {
-    background-color: rgba(255, 230, 120, 0.75);
-  }
+	from {
+		background-color: rgba(255, 230, 120, 0.75);
+	}
 
-  to {
-    background-color: transparent;
-  }
+	to {
+		background-color: transparent;
+	}
 }
 ```
 

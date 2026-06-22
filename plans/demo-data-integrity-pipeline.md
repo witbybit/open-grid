@@ -49,15 +49,15 @@ Example row shape:
 
 ```ts
 interface IntegrityRow {
-  id: string;
-  invoiceNo: string;
-  customerName: string;
-  customerEmail: string;
-  status: 'Draft' | 'Pending' | 'Approved' | 'Paid' | 'Disputed';
-  amount: number;
-  dueDate: string;
-  updatedAt: string;
-  owner: string;
+	id: string;
+	invoiceNo: string;
+	customerName: string;
+	customerEmail: string;
+	status: 'Draft' | 'Pending' | 'Approved' | 'Paid' | 'Disputed';
+	amount: number;
+	dueDate: string;
+	updatedAt: string;
+	owner: string;
 }
 ```
 
@@ -80,46 +80,40 @@ Columns should include validation metadata:
 
 ```ts
 const columns = [
-  {
-    field: 'invoiceNo',
-    headerName: 'Invoice No',
-    required: true,
-  },
-  {
-    field: 'customerName',
-    headerName: 'Customer',
-    required: true,
-  },
-  {
-    field: 'customerEmail',
-    headerName: 'Email',
-    required: true,
-    valueValidator: ({ value }) =>
-      isValidEmail(value)
-        ? null
-        : 'Invalid email',
-  },
-  {
-    field: 'status',
-    headerName: 'Status',
-  },
-  {
-    field: 'amount',
-    headerName: 'Amount',
-    valueValidator: ({ value }) =>
-      Number(value) >= 0
-        ? null
-        : 'Amount cannot be negative',
-  },
-  {
-    field: 'dueDate',
-    headerName: 'Due Date',
-    required: true,
-  },
-  {
-    field: 'owner',
-    headerName: 'Owner',
-  },
+	{
+		field: 'invoiceNo',
+		headerName: 'Invoice No',
+		required: true,
+	},
+	{
+		field: 'customerName',
+		headerName: 'Customer',
+		required: true,
+	},
+	{
+		field: 'customerEmail',
+		headerName: 'Email',
+		required: true,
+		valueValidator: ({ value }) => (isValidEmail(value) ? null : 'Invalid email'),
+	},
+	{
+		field: 'status',
+		headerName: 'Status',
+	},
+	{
+		field: 'amount',
+		headerName: 'Amount',
+		valueValidator: ({ value }) => (Number(value) >= 0 ? null : 'Amount cannot be negative'),
+	},
+	{
+		field: 'dueDate',
+		headerName: 'Due Date',
+		required: true,
+	},
+	{
+		field: 'owner',
+		headerName: 'Owner',
+	},
 ];
 ```
 
@@ -161,10 +155,10 @@ DevTools
 2. Open Data Quality panel.
 3. Click “Run checks.”
 4. Panel shows:
-   - invalid emails;
-   - missing required fields;
-   - duplicate invoice numbers;
-   - negative amount validation errors.
+    - invalid emails;
+    - missing required fields;
+    - duplicate invoice numbers;
+    - negative amount validation errors.
 5. Cells are decorated.
 6. Clicking an issue focuses the cell.
 7. Clear report removes decorations.
@@ -210,10 +204,10 @@ one row removed
 1. Click “Compare with updated dataset.”
 2. `api.setDiffModel()` is called.
 3. Diff panel shows:
-   - added rows;
-   - removed rows;
-   - changed rows;
-   - changed cells.
+    - added rows;
+    - removed rows;
+    - changed rows;
+    - changed cells.
 4. Changed cells are highlighted.
 5. Clicking changed cell focuses it.
 6. Tooltip shows old/new values.
@@ -251,9 +245,9 @@ commit if accept was used
 
 1. Click “Start Live Stream.”
 2. Random updates arrive:
-   - amount changes;
-   - status changes;
-   - updatedAt changes.
+    - amount changes;
+    - status changes;
+    - updatedAt changes.
 3. Updates batch/coalesce.
 4. Cells flash on update.
 5. Pause stream.
@@ -294,10 +288,10 @@ skipped dirty updates
 4. Grid does not overwrite local value.
 5. Conflict cell decoration appears.
 6. Conflicts panel shows:
-   - local value;
-   - remote value;
-   - source;
-   - created time.
+    - local value;
+    - remote value;
+    - source;
+    - created time.
 7. User clicks “Use remote.”
 8. Value commits through normal mutation path.
 9. Conflict clears.

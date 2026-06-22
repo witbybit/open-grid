@@ -12,7 +12,9 @@ export interface GridConflictManagerDeps {
 const _EMPTY: readonly GridCellDecoration[] = [];
 
 let _seq = 0;
-function nextConflictId(): string { return `conflict-${++_seq}`; }
+function nextConflictId(): string {
+	return `conflict-${++_seq}`;
+}
 
 export class GridConflictManager<TRowData = unknown> implements GridInsightLayer {
 	public readonly id = 'conflict' as const;
@@ -31,14 +33,16 @@ export class GridConflictManager<TRowData = unknown> implements GridInsightLayer
 		if (!id) return _EMPTY;
 		const conflict = this.conflicts.get(id);
 		if (!conflict) return _EMPTY;
-		return [{
-			layerId: 'conflict',
-			kind: 'conflict',
-			severity: 'error',
-			className: 'og-cell-conflict',
-			title: `Conflict: local ${_fmt(conflict.localValue)} vs remote ${_fmt(conflict.remoteValue)}`,
-			data: conflict,
-		}];
+		return [
+			{
+				layerId: 'conflict',
+				kind: 'conflict',
+				severity: 'error',
+				className: 'og-cell-conflict',
+				title: `Conflict: local ${_fmt(conflict.localValue)} vs remote ${_fmt(conflict.remoteValue)}`,
+				data: conflict,
+			},
+		];
 	}
 
 	getDiagnostics(): ConflictDiagnostics {

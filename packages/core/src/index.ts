@@ -183,7 +183,15 @@ export type { GridInsightLayer, GridInsightLayerId, GridInsightSeverity, GridCel
 export { GridInsightRegistry } from './insights/GridInsightRegistry.js';
 
 // ── Data Quality ──────────────────────────────────────────────────────────────
-export type { DataQualityIssue, DataQualityIssueType, DataQualityFix, DataQualityReport, DataQualityRule, DataQualityRuleContext, DataQualityDiagnostics } from './insights/dataQuality.js';
+export type {
+	DataQualityIssue,
+	DataQualityIssueType,
+	DataQualityFix,
+	DataQualityReport,
+	DataQualityRule,
+	DataQualityRuleContext,
+	DataQualityDiagnostics,
+} from './insights/dataQuality.js';
 export { GridDataQualityManager, createDuplicateValueRule } from './insights/dataQuality.js';
 
 // ── Data Diff ─────────────────────────────────────────────────────────────────
@@ -191,7 +199,14 @@ export type { GridDiffModel, GridDiffDataset, GridDiffOptions, GridCellDiff, Gri
 export { GridDiffManager } from './insights/diff.js';
 
 // ── Live Data Stream ──────────────────────────────────────────────────────────
-export type { CellStreamUpdate, RowStreamUpdate, TransactionStreamUpdate, TransactionStreamOptions, TransactionStreamState, GridTransactionStream } from './insights/liveStream.js';
+export type {
+	CellStreamUpdate,
+	RowStreamUpdate,
+	TransactionStreamUpdate,
+	TransactionStreamOptions,
+	TransactionStreamState,
+	GridTransactionStream,
+} from './insights/liveStream.js';
 export { GridTransactionStreamImpl } from './insights/liveStream.js';
 
 // ── Conflict Resolution ───────────────────────────────────────────────────────

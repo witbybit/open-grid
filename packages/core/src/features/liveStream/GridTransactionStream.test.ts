@@ -10,7 +10,10 @@ const testScheduler: GridScheduler = {
 	microtask: (cb) => queueMicrotask(cb),
 	raf: (cb) => requestAnimationFrame(cb),
 	cancelRaf: (id) => cancelAnimationFrame(id),
-	idle: (cb) => { cb(); return 0; },
+	idle: (cb) => {
+		cb();
+		return 0;
+	},
 	cancelIdle: () => {},
 };
 
@@ -41,8 +44,12 @@ function makeDeps(overrides?: Partial<GridTransactionStreamDeps<Row>>) {
 }
 
 describe('GridTransactionStreamImpl', () => {
-	beforeEach(() => { vi.useFakeTimers(); });
-	afterEach(() => { vi.useRealTimers(); });
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+	});
 
 	it('registers as insight layer with id "liveStream"', () => {
 		const { deps } = makeDeps();

@@ -50,38 +50,38 @@ base dataset + compare dataset
 
 ```ts
 export interface GridDiffDataset<TRowData> {
-  readonly id: string;
-  readonly label: string;
-  readonly rows: readonly TRowData[];
-  readonly getRowId?: (row: TRowData) => string;
+	readonly id: string;
+	readonly label: string;
+	readonly rows: readonly TRowData[];
+	readonly getRowId?: (row: TRowData) => string;
 }
 
 export interface GridDiffModel<TRowData> {
-  readonly id: string;
-  readonly mode: 'inline';
-  readonly base: GridDiffDataset<TRowData>;
-  readonly compare: GridDiffDataset<TRowData>;
-  readonly options?: GridDiffOptions;
+	readonly id: string;
+	readonly mode: 'inline';
+	readonly base: GridDiffDataset<TRowData>;
+	readonly compare: GridDiffDataset<TRowData>;
+	readonly options?: GridDiffOptions;
 }
 
 export interface GridDiffOptions {
-  readonly compareFields?: readonly string[];
-  readonly ignoreFields?: readonly string[];
+	readonly compareFields?: readonly string[];
+	readonly ignoreFields?: readonly string[];
 }
 
 export interface GridCellDiff {
-  readonly rowId: string;
-  readonly colField: string;
-  readonly oldValue: unknown;
-  readonly newValue: unknown;
-  readonly status: 'added' | 'removed' | 'changed';
+	readonly rowId: string;
+	readonly colField: string;
+	readonly oldValue: unknown;
+	readonly newValue: unknown;
+	readonly status: 'added' | 'removed' | 'changed';
 }
 
 export interface GridDiffResult {
-  readonly addedRows: readonly string[];
-  readonly removedRows: readonly string[];
-  readonly changedRows: readonly string[];
-  readonly changedCells: readonly GridCellDiff[];
+	readonly addedRows: readonly string[];
+	readonly removedRows: readonly string[];
+	readonly changedRows: readonly string[];
+	readonly changedCells: readonly GridCellDiff[];
 }
 ```
 
@@ -92,26 +92,20 @@ export interface GridDiffResult {
 Add:
 
 ```ts
-export class GridDiffManager<TRowData>
-  implements GridInsightLayer {
-  readonly id = 'diff';
+export class GridDiffManager<TRowData> implements GridInsightLayer {
+	readonly id = 'diff';
 
-  setDiffModel(model: GridDiffModel<TRowData> | null): void;
-  getDiffModel(): GridDiffModel<TRowData> | null;
-  getDiffResult(): GridDiffResult | null;
-  getCellDiff(rowId: string, colField: string): GridCellDiff | null;
-  clear(): void;
+	setDiffModel(model: GridDiffModel<TRowData> | null): void;
+	getDiffModel(): GridDiffModel<TRowData> | null;
+	getDiffResult(): GridDiffResult | null;
+	getCellDiff(rowId: string, colField: string): GridCellDiff | null;
+	clear(): void;
 
-  getCellDecorations(
-    rowId: string,
-    colField: string
-  ): readonly GridCellDecoration[];
+	getCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[];
 
-  getRowDecorations(
-    rowId: string
-  ): readonly GridRowDecoration[];
+	getRowDecorations(rowId: string): readonly GridRowDecoration[];
 
-  getDiagnostics(): GridDiffDiagnostics;
+	getDiagnostics(): GridDiffDiagnostics;
 }
 ```
 
@@ -119,12 +113,12 @@ Diagnostics:
 
 ```ts
 export interface GridDiffDiagnostics {
-  readonly active: boolean;
-  readonly addedRows: number;
-  readonly removedRows: number;
-  readonly changedRows: number;
-  readonly changedCells: number;
-  readonly lastComputedAt: number | null;
+	readonly active: boolean;
+	readonly addedRows: number;
+	readonly removedRows: number;
+	readonly changedRows: number;
+	readonly changedCells: number;
+	readonly lastComputedAt: number | null;
 }
 ```
 
@@ -178,22 +172,25 @@ Cell classes:
 
 ```css
 .og-cell-diff-changed {
-  outline: 1px solid var(--og-warning-border);
+	outline: 1px solid var(--og-warning-border);
 }
 
 .og-cell-diff-added {
-  outline: 1px solid var(--og-success-border);
+	outline: 1px solid var(--og-success-border);
 }
 
 .og-cell-diff-removed {
-  outline: 1px solid var(--og-danger-border);
+	outline: 1px solid var(--og-danger-border);
 }
 
-.og-row-diff-added {}
+.og-row-diff-added {
+}
 
-.og-row-diff-removed {}
+.og-row-diff-removed {
+}
 
-.og-row-diff-changed {}
+.og-row-diff-changed {
+}
 ```
 
 Tooltips:
@@ -303,11 +300,11 @@ Extend the Data Integrity demo:
 
 1. Load base invoice/order dataset.
 2. Create a modified compare dataset:
-   - one amount changed;
-   - one status changed;
-   - one customer name changed;
-   - one added row;
-   - one removed row.
+    - one amount changed;
+    - one status changed;
+    - one customer name changed;
+    - one added row;
+    - one removed row.
 3. Apply `api.setDiffModel()`.
 4. Diff panel shows summary.
 5. Changed cells are highlighted.

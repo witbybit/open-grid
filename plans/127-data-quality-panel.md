@@ -41,55 +41,46 @@ Quick fixes, if added, must use normal grid mutation APIs.
 
 ```ts
 export type DataQualityIssueType =
-  | 'validation'
-  | 'missing'
-  | 'duplicate'
-  | 'outlier'
-  | 'typeMismatch'
-  | 'formulaError'
-  | 'inconsistentFormat'
-  | 'custom';
+	| 'validation'
+	| 'missing'
+	| 'duplicate'
+	| 'outlier'
+	| 'typeMismatch'
+	| 'formulaError'
+	| 'inconsistentFormat'
+	| 'custom';
 
 export interface DataQualityIssue {
-  readonly id: string;
-  readonly type: DataQualityIssueType;
-  readonly severity: 'info' | 'warning' | 'error';
-  readonly rowId?: string;
-  readonly colField?: string;
-  readonly message: string;
-  readonly value?: unknown;
-  readonly groupKey?: string;
-  readonly suggestedFix?: DataQualityFix;
+	readonly id: string;
+	readonly type: DataQualityIssueType;
+	readonly severity: 'info' | 'warning' | 'error';
+	readonly rowId?: string;
+	readonly colField?: string;
+	readonly message: string;
+	readonly value?: unknown;
+	readonly groupKey?: string;
+	readonly suggestedFix?: DataQualityFix;
 }
 
 export interface DataQualityFix {
-  readonly id: string;
-  readonly label: string;
-  readonly kind:
-    | 'setCellValue'
-    | 'batchCellValues'
-    | 'applyTransaction'
-    | 'custom';
+	readonly id: string;
+	readonly label: string;
+	readonly kind: 'setCellValue' | 'batchCellValues' | 'applyTransaction' | 'custom';
 }
 
 export interface DataQualityReport {
-  readonly id: string;
-  readonly generatedAt: number;
-  readonly scope:
-    | 'loadedRows'
-    | 'filteredRows'
-    | 'selectedRows'
-    | 'allClientRows'
-    | 'serverProvided';
+	readonly id: string;
+	readonly generatedAt: number;
+	readonly scope: 'loadedRows' | 'filteredRows' | 'selectedRows' | 'allClientRows' | 'serverProvided';
 
-  readonly issues: readonly DataQualityIssue[];
+	readonly issues: readonly DataQualityIssue[];
 
-  readonly summary: {
-    readonly totalIssues: number;
-    readonly errors: number;
-    readonly warnings: number;
-    readonly infos: number;
-  };
+	readonly summary: {
+		readonly totalIssues: number;
+		readonly errors: number;
+		readonly warnings: number;
+		readonly infos: number;
+	};
 }
 ```
 
@@ -101,18 +92,16 @@ Add extensible rules.
 
 ```ts
 export interface DataQualityRuleContext<TRowData> {
-  readonly rows: readonly TRowData[];
-  readonly columns: readonly ColumnDef<TRowData>[];
-  readonly getRowId: (row: TRowData) => string;
+	readonly rows: readonly TRowData[];
+	readonly columns: readonly ColumnDef<TRowData>[];
+	readonly getRowId: (row: TRowData) => string;
 }
 
 export interface DataQualityRule<TRowData> {
-  readonly id: string;
-  readonly label: string;
+	readonly id: string;
+	readonly label: string;
 
-  run(
-    context: DataQualityRuleContext<TRowData>
-  ): readonly DataQualityIssue[] | Promise<readonly DataQualityIssue[]>;
+	run(context: DataQualityRuleContext<TRowData>): readonly DataQualityIssue[] | Promise<readonly DataQualityIssue[]>;
 }
 ```
 
@@ -127,20 +116,16 @@ Rules cannot mutate rows.
 Add:
 
 ```ts
-export class GridDataQualityManager<TRowData>
-  implements GridInsightLayer {
-  readonly id = 'dataQuality';
+export class GridDataQualityManager<TRowData> implements GridInsightLayer {
+	readonly id = 'dataQuality';
 
-  run(scope?: DataQualityReport['scope']): Promise<DataQualityReport> | DataQualityReport;
-  clear(): void;
-  getReport(): DataQualityReport | null;
+	run(scope?: DataQualityReport['scope']): Promise<DataQualityReport> | DataQualityReport;
+	clear(): void;
+	getReport(): DataQualityReport | null;
 
-  getCellDecorations(
-    rowId: string,
-    colField: string
-  ): readonly GridCellDecoration[];
+	getCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[];
 
-  getDiagnostics(): DataQualityDiagnostics;
+	getDiagnostics(): DataQualityDiagnostics;
 }
 ```
 
@@ -148,14 +133,14 @@ Diagnostics:
 
 ```ts
 export interface DataQualityDiagnostics {
-  readonly active: boolean;
-  readonly scope: string | null;
-  readonly totalIssues: number;
-  readonly errors: number;
-  readonly warnings: number;
-  readonly infos: number;
-  readonly lastRunAt: number | null;
-  readonly lastError: string | null;
+	readonly active: boolean;
+	readonly scope: string | null;
+	readonly totalIssues: number;
+	readonly errors: number;
+	readonly warnings: number;
+	readonly infos: number;
+	readonly lastRunAt: number | null;
+	readonly lastError: string | null;
 }
 ```
 
@@ -178,7 +163,7 @@ Validation remains source of truth.
 Use existing column metadata if present:
 
 ```ts
-column.required
+column.required;
 ```
 
 If the project has no existing required metadata, add it as optional metadata only:
@@ -334,15 +319,15 @@ CSS:
 
 ```css
 .og-cell-quality-error {
-  box-shadow: inset 0 -2px 0 var(--og-danger-border);
+	box-shadow: inset 0 -2px 0 var(--og-danger-border);
 }
 
 .og-cell-quality-warning {
-  box-shadow: inset 0 -2px 0 var(--og-warning-border);
+	box-shadow: inset 0 -2px 0 var(--og-warning-border);
 }
 
 .og-cell-quality-info {
-  box-shadow: inset 0 -2px 0 var(--og-info-border);
+	box-shadow: inset 0 -2px 0 var(--og-info-border);
 }
 ```
 

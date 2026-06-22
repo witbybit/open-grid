@@ -1088,45 +1088,76 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return isBuiltInThemeName(themeName) ? themeName : null;
 	};
 
-	public getAvailableThemes = (): BuiltInThemeName[] => { const t = this.rendererPorts.theme.getAvailableThemes(); return t.length > 0 ? t : BUILT_IN_THEME_ORDER.slice(); };
-	public switchTheme = (themeName: string): void => { if (!isBuiltInThemeName(themeName) || this.state.themeName === themeName) return; this.engine.setThemeName(themeName); this.rendererPorts.theme.switchTheme(themeName); };
+	public getAvailableThemes = (): BuiltInThemeName[] => {
+		const t = this.rendererPorts.theme.getAvailableThemes();
+		return t.length > 0 ? t : BUILT_IN_THEME_ORDER.slice();
+	};
+	public switchTheme = (themeName: string): void => {
+		if (!isBuiltInThemeName(themeName) || this.state.themeName === themeName) return;
+		this.engine.setThemeName(themeName);
+		this.rendererPorts.theme.switchTheme(themeName);
+	};
 	public mergeTheme = (partial: Partial<ThemeTokens>): void => this.rendererPorts.theme.mergeTheme(partial);
 	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.rendererPorts.theme.onThemeChange(listener);
-	public setContainerElement = (c: HTMLElement): void => { this.containerElement = c; };
+	public setContainerElement = (c: HTMLElement): void => {
+		this.containerElement = c;
+	};
 	public getContainerElement = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
 	public getContainer = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
 
 	public getInsightDiagnostics = (): Record<string, unknown> => this.engine.insights.getDiagnostics();
-	public runDataQualityCheck = (opts?: { scope?: import('./features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'] }): Promise<import('./features/dataQuality/dataQualityTypes.js').DataQualityReport> =>
-		this.engine.dataQuality.run(opts?.scope);
-	public getDataQualityReport = (): import('./features/dataQuality/dataQualityTypes.js').DataQualityReport | null => this.engine.dataQuality.getReport();
+	public runDataQualityCheck = (opts?: {
+		scope?: import('./features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'];
+	}): Promise<import('./features/dataQuality/dataQualityTypes.js').DataQualityReport> => this.engine.dataQuality.run(opts?.scope);
+	public getDataQualityReport = (): import('./features/dataQuality/dataQualityTypes.js').DataQualityReport | null =>
+		this.engine.dataQuality.getReport();
 	public clearDataQualityReport = (): void => this.engine.dataQuality.clear();
-	public registerDataQualityRule = (rule: import('./features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>): void => this.engine.dataQuality.registerRule(rule);
+	public registerDataQualityRule = (rule: import('./features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>): void =>
+		this.engine.dataQuality.registerRule(rule);
 	public unregisterDataQualityRule = (ruleId: string): void => this.engine.dataQuality.unregisterRule(ruleId);
-	public setDiffModel = (model: import('./features/diff/diffTypes.js').GridDiffModel<TRowData> | null): void => this.engine.diff.setDiffModel(model);
+	public setDiffModel = (model: import('./features/diff/diffTypes.js').GridDiffModel<TRowData> | null): void =>
+		this.engine.diff.setDiffModel(model);
 	public clearDiffModel = (): void => this.engine.diff.clear();
 	public getDiffResult = (): import('./features/diff/diffTypes.js').GridDiffResult | null => this.engine.diff.getDiffResult();
 	public getCellDiff = (r: string, c: string): import('./features/diff/diffTypes.js').GridCellDiff | null => this.engine.diff.getCellDiff(r, c);
 	public acceptCellDiff = (r: string, c: string): void => {
 		const d = this.engine.diff.getCellDiff(r, c);
-		if (d) { this.setCellValue(r, c, d.newValue); this.engine.diff.rejectCellDiff(r, c); }
+		if (d) {
+			this.setCellValue(r, c, d.newValue);
+			this.engine.diff.rejectCellDiff(r, c);
+		}
 	};
 	public rejectCellDiff = (r: string, c: string): void => this.engine.diff.rejectCellDiff(r, c);
 	public getConflicts = (): readonly import('./features/conflict/conflictTypes.js').GridCellConflict[] => this.engine.conflict.getConflicts();
-	public getCellConflict = (r: string, c: string): import('./features/conflict/conflictTypes.js').GridCellConflict | null => this.engine.conflict.getConflict(r, c);
-	public addConflict = (p: Omit<import('./features/conflict/conflictTypes.js').GridCellConflict, 'id' | 'createdAt'>): import('./features/conflict/conflictTypes.js').GridCellConflict => this.engine.conflict.addConflict(p);
-	public resolveConflict = (id: string, opts: import('./features/conflict/conflictTypes.js').ResolveConflictOptions): void => this.engine.conflict.resolveConflict(id, opts);
+	public getCellConflict = (r: string, c: string): import('./features/conflict/conflictTypes.js').GridCellConflict | null =>
+		this.engine.conflict.getConflict(r, c);
+	public addConflict = (
+		p: Omit<import('./features/conflict/conflictTypes.js').GridCellConflict, 'id' | 'createdAt'>
+	): import('./features/conflict/conflictTypes.js').GridCellConflict => this.engine.conflict.addConflict(p);
+	public resolveConflict = (id: string, opts: import('./features/conflict/conflictTypes.js').ResolveConflictOptions): void =>
+		this.engine.conflict.resolveConflict(id, opts);
 	public clearConflict = (id: string): void => this.engine.conflict.clearConflict(id);
 	public clearAllConflicts = (): void => this.engine.conflict.clearAllConflicts();
-	public createTransactionStream = (opts?: import('./features/liveStream/liveStreamTypes.js').TransactionStreamOptions): import('./features/liveStream/liveStreamTypes.js').GridTransactionStream<TRowData> => {
-		const s = new GridTransactionStreamImpl<TRowData>({
-			commitCells: (u) => this.engine.batchStreamCells(u),
-			applyRowPatch: (rid, p) => { const n = this.getRowNodeById(rid); if (n?.data) this.applyTransaction({ update: [{ ...n.data, ...p }] }); },
-			isCellBeingEdited: (r, c) => { const st = this.engine.stateManager.getState(); return st.activeEdit?.rowId === r && st.activeEdit?.colField === c; },
-			requestInsightRepaint: () => this.engine.requestInsightRepaint(),
-			onDestroy: () => this.engine.insights.unregister('liveStream'),
-			scheduler: defaultGridScheduler,
-		}, opts);
+	public createTransactionStream = (
+		opts?: import('./features/liveStream/liveStreamTypes.js').TransactionStreamOptions
+	): import('./features/liveStream/liveStreamTypes.js').GridTransactionStream<TRowData> => {
+		const s = new GridTransactionStreamImpl<TRowData>(
+			{
+				commitCells: (u) => this.engine.batchStreamCells(u),
+				applyRowPatch: (rid, p) => {
+					const n = this.getRowNodeById(rid);
+					if (n?.data) this.applyTransaction({ update: [{ ...n.data, ...p }] });
+				},
+				isCellBeingEdited: (r, c) => {
+					const st = this.engine.stateManager.getState();
+					return st.activeEdit?.rowId === r && st.activeEdit?.colField === c;
+				},
+				requestInsightRepaint: () => this.engine.requestInsightRepaint(),
+				onDestroy: () => this.engine.insights.unregister('liveStream'),
+				scheduler: defaultGridScheduler,
+			},
+			opts
+		);
 		this.engine.insights.register(s);
 		return s;
 	};

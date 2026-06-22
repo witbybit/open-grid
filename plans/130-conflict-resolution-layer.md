@@ -47,32 +47,28 @@ Conflicts are metadata until resolved.
 ## Core conflict types
 
 ```ts
-export type GridConflictSource =
-  | 'liveStream'
-  | 'serverRefresh'
-  | 'collaboration'
-  | 'import';
+export type GridConflictSource = 'liveStream' | 'serverRefresh' | 'collaboration' | 'import';
 
 export interface GridCellConflict {
-  readonly id: string;
-  readonly rowId: string;
-  readonly colField: string;
+	readonly id: string;
+	readonly rowId: string;
+	readonly colField: string;
 
-  readonly baseValue: unknown;
-  readonly localValue: unknown;
-  readonly remoteValue: unknown;
+	readonly baseValue: unknown;
+	readonly localValue: unknown;
+	readonly remoteValue: unknown;
 
-  readonly localVersion?: string | number;
-  readonly remoteVersion?: string | number;
+	readonly localVersion?: string | number;
+	readonly remoteVersion?: string | number;
 
-  readonly source: GridConflictSource;
-  readonly createdAt: number;
-  readonly message?: string;
+	readonly source: GridConflictSource;
+	readonly createdAt: number;
+	readonly message?: string;
 }
 
 export interface ResolveConflictOptions {
-  readonly strategy: 'local' | 'remote' | 'custom';
-  readonly value?: unknown;
+	readonly strategy: 'local' | 'remote' | 'custom';
+	readonly value?: unknown;
 }
 ```
 
@@ -80,9 +76,9 @@ Diagnostics:
 
 ```ts
 export interface ConflictDiagnostics {
-  readonly activeConflicts: number;
-  readonly resolvedConflicts: number;
-  readonly lastConflictAt: number | null;
+	readonly activeConflicts: number;
+	readonly resolvedConflicts: number;
+	readonly lastConflictAt: number | null;
 }
 ```
 
@@ -93,34 +89,24 @@ export interface ConflictDiagnostics {
 Add:
 
 ```ts
-export class GridConflictManager<TRowData>
-  implements GridInsightLayer {
-  readonly id = 'conflict';
+export class GridConflictManager<TRowData> implements GridInsightLayer {
+	readonly id = 'conflict';
 
-  addConflict(conflict: GridCellConflict): void;
+	addConflict(conflict: GridCellConflict): void;
 
-  getConflicts(): readonly GridCellConflict[];
+	getConflicts(): readonly GridCellConflict[];
 
-  getConflict(
-    rowId: string,
-    colField: string
-  ): GridCellConflict | null;
+	getConflict(rowId: string, colField: string): GridCellConflict | null;
 
-  resolveConflict(
-    conflictId: string,
-    options: ResolveConflictOptions
-  ): Promise<void> | void;
+	resolveConflict(conflictId: string, options: ResolveConflictOptions): Promise<void> | void;
 
-  clearConflict(conflictId: string): void;
+	clearConflict(conflictId: string): void;
 
-  clearAllConflicts(): void;
+	clearAllConflicts(): void;
 
-  getCellDecorations(
-    rowId: string,
-    colField: string
-  ): readonly GridCellDecoration[];
+	getCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[];
 
-  getDiagnostics(): ConflictDiagnostics;
+	getDiagnostics(): ConflictDiagnostics;
 }
 ```
 
@@ -135,7 +121,7 @@ Update Plan 129 dirty cell behavior.
 Instead of only skipping dirty updates, allow:
 
 ```ts
-dirtyCellPolicy: 'markConflict'
+dirtyCellPolicy: 'markConflict';
 ```
 
 When remote update targets dirty local cell:
@@ -277,13 +263,7 @@ CSS:
 
 ```css
 .og-cell-conflict {
-  background-image: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 4px,
-    rgba(255, 0, 0, 0.16) 4px,
-    rgba(255, 0, 0, 0.16) 8px
-  );
+	background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 0, 0, 0.16) 4px, rgba(255, 0, 0, 0.16) 8px);
 }
 ```
 
@@ -320,7 +300,7 @@ api.clearAllConflicts(): void;
 Optional alias for live stream conflicts:
 
 ```ts
-api.getLiveConflicts()
+api.getLiveConflicts();
 ```
 
 But prefer generic conflict API.

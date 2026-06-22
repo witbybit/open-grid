@@ -2,12 +2,7 @@ import type { GridInsightLayer, GridCellDecoration } from '../../insights/insigh
 import type { InternalGridState } from '../../state/GridState.js';
 import type { RowModel } from '../../rowModel.js';
 import { missingRequiredRule } from './builtInRules.js';
-import type {
-	DataQualityDiagnostics,
-	DataQualityIssue,
-	DataQualityReport,
-	DataQualityRule,
-} from './dataQualityTypes.js';
+import type { DataQualityDiagnostics, DataQualityIssue, DataQualityReport, DataQualityRule } from './dataQualityTypes.js';
 
 export type { DataQualityDiagnostics, DataQualityIssue, DataQualityReport, DataQualityRule };
 export type { DataQualityIssueType, DataQualityFix, DataQualityRuleContext } from './dataQualityTypes.js';
@@ -83,9 +78,7 @@ export class GridDataQualityManager<TRowData> implements GridInsightLayer {
 		const resolvedScope = scope ?? this._defaultScope(rowModel);
 		const rows = this._collectRows(rowModel, resolvedScope, state);
 
-		const getRowId = state.getRowId
-			? (row: TRowData) => state.getRowId!(row)
-			: (_row: TRowData) => String(Math.random());
+		const getRowId = state.getRowId ? (row: TRowData) => state.getRowId!(row) : (_row: TRowData) => String(Math.random());
 
 		const context: import('./dataQualityTypes.js').DataQualityRuleContext<TRowData> = {
 			rows,
@@ -200,11 +193,7 @@ export class GridDataQualityManager<TRowData> implements GridInsightLayer {
 		return type === 'client' ? 'allClientRows' : 'loadedRows';
 	}
 
-	private _collectRows(
-		rowModel: RowModel<TRowData> | null,
-		_scope: DataQualityReport['scope'],
-		_state: InternalGridState<TRowData>
-	): TRowData[] {
+	private _collectRows(rowModel: RowModel<TRowData> | null, _scope: DataQualityReport['scope'], _state: InternalGridState<TRowData>): TRowData[] {
 		if (!rowModel) return [];
 		const rows: TRowData[] = [];
 		const count = rowModel.getVisualRowCount();

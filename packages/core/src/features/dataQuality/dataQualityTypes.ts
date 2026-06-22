@@ -25,22 +25,13 @@ export interface DataQualityIssue {
 export interface DataQualityFix {
 	readonly id: string;
 	readonly label: string;
-	readonly kind:
-		| 'setCellValue'
-		| 'batchCellValues'
-		| 'applyTransaction'
-		| 'custom';
+	readonly kind: 'setCellValue' | 'batchCellValues' | 'applyTransaction' | 'custom';
 }
 
 export interface DataQualityReport {
 	readonly id: string;
 	readonly generatedAt: number;
-	readonly scope:
-		| 'loadedRows'
-		| 'filteredRows'
-		| 'selectedRows'
-		| 'allClientRows'
-		| 'serverProvided';
+	readonly scope: 'loadedRows' | 'filteredRows' | 'selectedRows' | 'allClientRows' | 'serverProvided';
 
 	readonly issues: readonly DataQualityIssue[];
 
@@ -62,9 +53,7 @@ export interface DataQualityRule<TRowData> {
 	readonly id: string;
 	readonly label: string;
 
-	run(
-		context: DataQualityRuleContext<TRowData>
-	): readonly DataQualityIssue[] | Promise<readonly DataQualityIssue[]>;
+	run(context: DataQualityRuleContext<TRowData>): readonly DataQualityIssue[] | Promise<readonly DataQualityIssue[]>;
 }
 
 export interface DataQualityDiagnostics {

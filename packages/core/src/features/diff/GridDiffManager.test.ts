@@ -15,11 +15,7 @@ function makeManager(columns: string[] = ['name', 'amount', 'status']) {
 	return { manager, repaint };
 }
 
-function makeModel(
-	base: Row[],
-	compare: Row[],
-	options?: GridDiffModel<Row>['options']
-): GridDiffModel<Row> {
+function makeModel(base: Row[], compare: Row[], options?: GridDiffModel<Row>['options']): GridDiffModel<Row> {
 	return {
 		id: 'test-diff',
 		mode: 'inline',
@@ -59,9 +55,7 @@ describe('GridDiffManager', () => {
 
 	it('detects changed cells', () => {
 		const { manager } = makeManager();
-		const compare = BASE_ROWS.map((r) =>
-			r.id === 'r1' ? { ...r, amount: 999 } : r
-		);
+		const compare = BASE_ROWS.map((r) => (r.id === 'r1' ? { ...r, amount: 999 } : r));
 		manager.setDiffModel(makeModel(BASE_ROWS, compare));
 		const result = manager.getDiffResult()!;
 		expect(result.changedRows).toContain('r1');
@@ -71,9 +65,7 @@ describe('GridDiffManager', () => {
 
 	it('respects compareFields option — only specified fields compared', () => {
 		const { manager } = makeManager();
-		const compare = BASE_ROWS.map((r) =>
-			r.id === 'r1' ? { ...r, amount: 999, name: 'CHANGED' } : r
-		);
+		const compare = BASE_ROWS.map((r) => (r.id === 'r1' ? { ...r, amount: 999, name: 'CHANGED' } : r));
 		manager.setDiffModel(makeModel(BASE_ROWS, compare, { compareFields: ['amount'] }));
 		const result = manager.getDiffResult()!;
 		const fields = result.changedCells.map((c) => c.colField);
@@ -83,9 +75,7 @@ describe('GridDiffManager', () => {
 
 	it('respects ignoreFields option — ignored fields skipped', () => {
 		const { manager } = makeManager();
-		const compare = BASE_ROWS.map((r) =>
-			r.id === 'r1' ? { ...r, amount: 999, name: 'CHANGED' } : r
-		);
+		const compare = BASE_ROWS.map((r) => (r.id === 'r1' ? { ...r, amount: 999, name: 'CHANGED' } : r));
 		manager.setDiffModel(makeModel(BASE_ROWS, compare, { ignoreFields: ['name'] }));
 		const result = manager.getDiffResult()!;
 		const fields = result.changedCells.map((c) => c.colField);
@@ -169,11 +159,7 @@ describe('GridDiffManager', () => {
 
 	it('getDiagnostics reports diff stats', () => {
 		const { manager } = makeManager();
-		const compare = [
-			...BASE_ROWS.filter((r) => r.id !== 'r3'),
-			{ id: 'r4', name: 'Dave', amount: 400, status: 'new' },
-			BASE_ROWS[0],
-		];
+		const compare = [...BASE_ROWS.filter((r) => r.id !== 'r3'), { id: 'r4', name: 'Dave', amount: 400, status: 'new' }, BASE_ROWS[0]];
 		const compareWithChange = compare.map((r) => (r.id === 'r2' ? { ...r, amount: 999 } : r));
 		manager.setDiffModel(makeModel(BASE_ROWS, compareWithChange));
 		const diag = manager.getDiagnostics();

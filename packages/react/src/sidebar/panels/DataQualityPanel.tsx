@@ -217,7 +217,15 @@ export function DataQualityPanel({ api, onClose }: { api: GridApi<any>; onClose:
 				<span style={{ fontWeight: 600, fontSize: 12 }}>Data Quality</span>
 				<button
 					onClick={onClose}
-					style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedText, padding: 2, display: 'flex', alignItems: 'center' }}
+					style={{
+						background: 'none',
+						border: 'none',
+						cursor: 'pointer',
+						color: mutedText,
+						padding: 2,
+						display: 'flex',
+						alignItems: 'center',
+					}}
 				>
 					<CloseIcon />
 				</button>
@@ -271,7 +279,15 @@ export function DataQualityPanel({ api, onClose }: { api: GridApi<any>; onClose:
 
 			{/* Error */}
 			{error && (
-				<div style={{ padding: '6px 10px', background: 'rgba(248,113,113,0.1)', color: '#f87171', fontSize: 11, borderBottom: `1px solid ${borderColor}` }}>
+				<div
+					style={{
+						padding: '6px 10px',
+						background: 'rgba(248,113,113,0.1)',
+						color: '#f87171',
+						fontSize: 11,
+						borderBottom: `1px solid ${borderColor}`,
+					}}
+				>
 					{error}
 				</div>
 			)}

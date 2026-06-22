@@ -81,50 +81,38 @@ GridApi / domain mutation
 Add shared types in core.
 
 ```ts
-export type GridInsightLayerId =
-  | 'dataQuality'
-  | 'diff'
-  | 'liveStream'
-  | 'conflict';
+export type GridInsightLayerId = 'dataQuality' | 'diff' | 'liveStream' | 'conflict';
 
-export type GridInsightSeverity =
-  | 'info'
-  | 'warning'
-  | 'error';
+export type GridInsightSeverity = 'info' | 'warning' | 'error';
 
 export interface GridCellDecoration {
-  readonly layerId: GridInsightLayerId;
-  readonly kind: string;
-  readonly severity?: GridInsightSeverity;
-  readonly className?: string;
-  readonly title?: string;
-  readonly data?: unknown;
+	readonly layerId: GridInsightLayerId;
+	readonly kind: string;
+	readonly severity?: GridInsightSeverity;
+	readonly className?: string;
+	readonly title?: string;
+	readonly data?: unknown;
 }
 
 export interface GridRowDecoration {
-  readonly layerId: GridInsightLayerId;
-  readonly kind: string;
-  readonly severity?: GridInsightSeverity;
-  readonly className?: string;
-  readonly title?: string;
-  readonly data?: unknown;
+	readonly layerId: GridInsightLayerId;
+	readonly kind: string;
+	readonly severity?: GridInsightSeverity;
+	readonly className?: string;
+	readonly title?: string;
+	readonly data?: unknown;
 }
 
 export interface GridInsightLayer {
-  readonly id: GridInsightLayerId;
+	readonly id: GridInsightLayerId;
 
-  getCellDecorations?(
-    rowId: string,
-    colField: string
-  ): readonly GridCellDecoration[];
+	getCellDecorations?(rowId: string, colField: string): readonly GridCellDecoration[];
 
-  getRowDecorations?(
-    rowId: string
-  ): readonly GridRowDecoration[];
+	getRowDecorations?(rowId: string): readonly GridRowDecoration[];
 
-  getDiagnostics?(): unknown;
+	getDiagnostics?(): unknown;
 
-  destroy?(): void;
+	destroy?(): void;
 }
 ```
 
@@ -142,21 +130,16 @@ Add:
 
 ```ts
 export class GridInsightRegistry {
-  register(layer: GridInsightLayer): void;
-  unregister(id: GridInsightLayerId): void;
+	register(layer: GridInsightLayer): void;
+	unregister(id: GridInsightLayerId): void;
 
-  getCellDecorations(
-    rowId: string,
-    colField: string
-  ): readonly GridCellDecoration[];
+	getCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[];
 
-  getRowDecorations(
-    rowId: string
-  ): readonly GridRowDecoration[];
+	getRowDecorations(rowId: string): readonly GridRowDecoration[];
 
-  getDiagnostics(): Record<string, unknown>;
+	getDiagnostics(): Record<string, unknown>;
 
-  clear(): void;
+	clear(): void;
 }
 ```
 
@@ -201,7 +184,7 @@ Expose only safe API methods later.
 Potential internal access:
 
 ```ts
-getInsightRegistryFromApi(api)
+getInsightRegistryFromApi(api);
 ```
 
 only if your architecture already supports internal API lookups.
@@ -229,13 +212,13 @@ Initial implementation can be simple:
 const decorations = runtime.insights.getCellDecorations(rowId, colField);
 
 for (const decoration of decorations) {
-  if (decoration.className) {
-    cellElement.classList.add(decoration.className);
-  }
+	if (decoration.className) {
+		cellElement.classList.add(decoration.className);
+	}
 
-  if (decoration.title) {
-    cellElement.title = mergeCellTitle(cellElement.title, decoration.title);
-  }
+	if (decoration.title) {
+		cellElement.title = mergeCellTitle(cellElement.title, decoration.title);
+	}
 }
 ```
 
@@ -264,7 +247,7 @@ or use the existing cell decoration invalidation path if one already exists.
 Insight layers must request invalidation through existing systems:
 
 ```ts
-requestInvalidation('insight-decoration-changed')
+requestInvalidation('insight-decoration-changed');
 ```
 
 Do not schedule RAF directly.
@@ -280,17 +263,23 @@ Do not publish broad full refresh unless the existing invalidation system normal
 Add base classes.
 
 ```css
-.og-cell-insight-info {}
+.og-cell-insight-info {
+}
 
-.og-cell-insight-warning {}
+.og-cell-insight-warning {
+}
 
-.og-cell-insight-error {}
+.og-cell-insight-error {
+}
 
-.og-row-insight-info {}
+.og-row-insight-info {
+}
 
-.og-row-insight-warning {}
+.og-row-insight-warning {
+}
 
-.og-row-insight-error {}
+.og-row-insight-error {
+}
 ```
 
 Feature-specific classes come in later plans.
@@ -303,7 +292,7 @@ Extend diagnostics snapshot from Plan 126 DevTools if already present:
 
 ```ts
 interface GridDiagnosticsSnapshot {
-  readonly insights?: Record<string, unknown>;
+	readonly insights?: Record<string, unknown>;
 }
 ```
 
@@ -387,20 +376,22 @@ Add a tiny demo-only insight layer:
 
 ```ts
 const demoLayer: GridInsightLayer = {
-  id: 'dataQuality',
-  getCellDecorations(rowId, colField) {
-    if (rowId === 'row-1' && colField === 'amount') {
-      return [{
-        layerId: 'dataQuality',
-        kind: 'demo-warning',
-        severity: 'warning',
-        className: 'og-cell-insight-warning',
-        title: 'Demo insight warning',
-      }];
-    }
+	id: 'dataQuality',
+	getCellDecorations(rowId, colField) {
+		if (rowId === 'row-1' && colField === 'amount') {
+			return [
+				{
+					layerId: 'dataQuality',
+					kind: 'demo-warning',
+					severity: 'warning',
+					className: 'og-cell-insight-warning',
+					title: 'Demo insight warning',
+				},
+			];
+		}
 
-    return [];
-  },
+		return [];
+	},
 };
 ```
 
