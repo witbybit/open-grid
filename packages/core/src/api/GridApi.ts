@@ -665,6 +665,13 @@ export interface GridApi<TRowData = unknown> {
 	/** Convenience: check whether a column can be exported. */
 	canExport(colField?: string): boolean;
 
+	/**
+	 * Returns a diagnostics snapshot from all registered insight layers.
+	 * Keyed by layer id; value is whatever each layer's getDiagnostics() returns.
+	 * Safe to call at any time; returns an empty object when no layers are registered.
+	 */
+	getInsightDiagnostics(): Record<string, unknown>;
+
 	destroy(): void;
 }
 

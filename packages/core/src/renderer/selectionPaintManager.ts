@@ -164,6 +164,12 @@ export class SelectionPaintManager<TRowData> {
 			}
 		}
 
+		// Insight layer row decorations — read-only overlay; must not mutate row data.
+		const rowDecorations = this.engine.insights.getRowDecorations(node.id);
+		for (const d of rowDecorations) {
+			if (d.className) rowClassName += ' ' + d.className;
+		}
+
 		slot.update(rowIndex, slot.visualRowId, 'data', slot.rowTop, slot.rowHeight, rowClassName);
 	}
 

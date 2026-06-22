@@ -254,6 +254,7 @@ export function createGridRuntimeComposition<TRowData>({
 		mergeTheme: (partial: Partial<ThemeTokens>) => runtime.mergeTheme(partial),
 		onThemeChange: (listener: (theme: ThemeTokens) => void) => runtime.onThemeChange(listener),
 		getContainer: () => runtime.getContainerElement(),
+		getInsightDiagnostics: () => runtime.getInsightDiagnostics(),
 		destroy,
 	};
 

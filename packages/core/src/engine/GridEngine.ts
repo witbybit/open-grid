@@ -54,6 +54,7 @@ import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
 import { GridCapabilityManager } from '../capabilities/GridCapabilityManager.js';
 import type { GridCapabilityAction, GridCapabilitiesConfig, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
+import { GridInsightRegistry } from '../insights/GridInsightRegistry.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -83,6 +84,7 @@ export class GridEngine<TRowData = unknown> {
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 	private readonly stateReactions: GridStateReactionController<TRowData>;
 	public readonly capabilityManager: GridCapabilityManager<TRowData>;
+	public readonly insights: GridInsightRegistry;
 
 	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
 		return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];
@@ -238,6 +240,7 @@ export class GridEngine<TRowData = unknown> {
 		this.eventBus.setRuntimeFaultReporter(this.runtimeFaults);
 		this.commandHistory = new CommandHistory(this.runtimeFaults);
 		this.invalidation = new InvalidationManager();
+		this.insights = new GridInsightRegistry();
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
@@ -1059,6 +1062,7 @@ export class GridEngine<TRowData = unknown> {
 		this.spreadsheetFill.fillRange(source, target);
 	}
 	public destroy(): void {
+		this.insights.clear();
 		this.cellNotifications.clear();
 		this.eventBus.clear();
 		this.stateManager.destroy();

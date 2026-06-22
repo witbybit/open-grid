@@ -228,6 +228,14 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	const validationError = state.validationErrors?.[validationKey(node.id, col.field)];
 	if (validationError) cellClassName += ' og-cell-invalid';
 
+	// Insight layer decorations — read-only overlay; must not mutate row data or DOM directly.
+	const cellDecorations = deps.engine.insights.getCellDecorations(node.id, col.field);
+	let insightTitle = '';
+	for (const d of cellDecorations) {
+		if (d.className) cellClassName += ' ' + d.className;
+		if (d.title) insightTitle = insightTitle ? insightTitle + '\n' + d.title : d.title;
+	}
+
 	// Sync badge dot and tooltip data attribute — badge is only in the DOM when an error exists.
 	const prevError = cellSlot.element.dataset.validationError;
 	if (validationError) {
@@ -401,6 +409,11 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		}
 	} else if (col.tooltip === undefined && cellSlot.element.title) {
 		cellSlot.element.removeAttribute('title');
+	}
+	// Merge insight decoration titles after col.tooltip so they always appear.
+	if (insightTitle) {
+		const prev = cellSlot.element.title;
+		cellSlot.element.title = prev ? prev + '\n' + insightTitle : insightTitle;
 	}
 
 	cellSlot.update(

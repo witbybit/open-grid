@@ -40,6 +40,8 @@ import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltIn
 
 // ── Focused sub-modules — re-export so callers of store.ts continue to work ──
 export { RowNode } from './rowNode.js';
+export type { GridInsightLayer, GridInsightLayerId, GridInsightSeverity, GridCellDecoration, GridRowDecoration } from './insights/insightTypes.js';
+export { GridInsightRegistry } from './insights/GridInsightRegistry.js';
 
 export { isDomCellRenderer, getValueByPath, setValueByPath, compilePathGetter, validateColumns } from './columnDef.js';
 export { compileStyleRules } from './styling/styleRules.js';
@@ -1106,6 +1108,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 	public getContainerElement = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
 	public getContainer = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
+
+	public getInsightDiagnostics = (): Record<string, unknown> => {
+		return this.engine.insights.getDiagnostics();
+	};
 
 	public destroy = (): void => {
 		this.storeDestroyed = true;

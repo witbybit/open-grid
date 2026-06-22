@@ -29,6 +29,7 @@ export type GridInvalidationReason =
 	| 'state'
 	| 'style slots'
 	| 'viewport'
+	| 'insight-decorations'
 	| (string & {});
 
 export interface GridInvalidationBase {
