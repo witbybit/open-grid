@@ -495,12 +495,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.layoutTransition.destroy();
 		this.frameCoordinator.destroy();
 		this.clearPostScrollDecorationTimer();
-		this.portalMountManager.releaseAll();
 
-		// Release all active rows and cells
+		// Unmount renderers first so they can properly release portal identities
+		// before releaseAll() clears activeIdentityByKey.
 		this.rowRenderer.unmount();
 		this.headerRenderer.unmount();
 		this.overlayRenderer.unmount();
+
+		this.portalMountManager.releaseAll();
 
 		this.viewportRenderer.unmount();
 	}
