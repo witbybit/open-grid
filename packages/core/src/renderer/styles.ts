@@ -1136,38 +1136,41 @@ export const CORE_STYLES = `
     opacity: var(--og-readonly-cell-opacity, 0.65);
   }
 
-  /* ── Cell validation error ────────────────────────────────────────────────── */
-  .og-cell-invalid {
+  /* ── Cell validation / integrity error ───────────────────────────────────── */
+  /* og-cell-integrity-error is emitted via the decoration layer (getCellDecorations).  */
+  /* og-cell-validation-error is a more specific alias applied for in-editor validators. */
+  .og-cell-integrity-error,
+  .og-cell-validation-error {
     outline: 2px solid var(--og-error);
     outline-offset: -2px;
     background-color: color-mix(in srgb, var(--og-error) 6%, transparent);
     z-index: 15;
   }
 
-  /* Error wins over selection bg — blend error tint into selection colour */
-  .og-cell-invalid.og-cell-selected {
+  /* Error wins over selection bg */
+  .og-cell-integrity-error.og-cell-selected,
+  .og-cell-validation-error.og-cell-selected {
     background-color: color-mix(in srgb, var(--og-error) 8%, var(--og-selection-bg));
   }
 
   /* Error wins over focus outline colour and bg */
-  .og-cell-invalid.og-cell-focused {
+  .og-cell-integrity-error.og-cell-focused,
+  .og-cell-validation-error.og-cell-focused {
     outline-color: var(--og-error);
     background-color: color-mix(in srgb, var(--og-error) 8%, var(--og-selection-bg));
     z-index: 20;
   }
 
-  /* Error border on the inline editor input when the cell is invalid */
-  .og-cell-invalid .og-cell-editor {
+  /* Error border on the inline editor input */
+  .og-cell-integrity-error .og-cell-editor,
+  .og-cell-validation-error .og-cell-editor {
     border-color: var(--og-error);
   }
 
-  /* Hide badge while the editor is open — the red editor border already signals the error */
-  .og-cell:has(.og-cell-editor) .og-cell-error-badge {
-    display: none;
-  }
-
-  /* Validation error badge — shown inside the cell via og-cell-error-badge */
-  .og-cell-error-badge {
+  /* Badge dot via CSS pseudo-element — no DOM manipulation required */
+  .og-cell-integrity-error::after,
+  .og-cell-validation-error::after {
+    content: '';
     position: absolute;
     top: 3px;
     right: 3px;
@@ -1176,7 +1179,12 @@ export const CORE_STYLES = `
     border-radius: 50%;
     background: var(--og-error);
     pointer-events: none;
-    flex-shrink: 0;
+  }
+
+  /* Hide badge while the editor is open — the red editor border signals the error */
+  .og-cell-integrity-error:has(.og-cell-editor)::after,
+  .og-cell-validation-error:has(.og-cell-editor)::after {
+    display: none;
   }
 
   /* Validation error tooltip — shown on hover/focus of invalid cells */

@@ -227,9 +227,19 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	// Insight layer decorations — read-only overlay; must not mutate row data or DOM directly.
 	const cellDecorations = deps.engine.insights.getCellDecorations(node.id, col.field);
 	let insightTitle = '';
+	let validationDecTitle: string | undefined;
 	for (const d of cellDecorations) {
 		if (d.className) cellClassName += ' ' + d.className;
 		if (d.title) insightTitle = insightTitle ? insightTitle + '\n' + d.title : d.title;
+		if (d.kind === 'validationError' && d.title) validationDecTitle = d.title;
+	}
+
+	// Sync data-validation-error for ValidationTooltipController (hover tooltip).
+	const prevValidationAttr = cellSlot.element.dataset.validationError;
+	if (validationDecTitle) {
+		if (prevValidationAttr !== validationDecTitle) cellSlot.element.dataset.validationError = validationDecTitle;
+	} else if (prevValidationAttr !== undefined) {
+		delete cellSlot.element.dataset.validationError;
 	}
 
 	const compiledStyleRules = compileStyleRules(state.styleRules);
