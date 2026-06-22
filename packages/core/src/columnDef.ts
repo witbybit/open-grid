@@ -14,13 +14,6 @@ export interface ValueGetterParams<TRowData = unknown> {
 	colField: string;
 }
 
-export interface ValueValidatorParams<TRowData = unknown> {
-	value: unknown;
-	oldValue: unknown;
-	row: TRowData;
-	colField: string;
-}
-
 export interface TooltipParams<TRowData = unknown> {
 	row: TRowData;
 	rowId: string;
@@ -212,12 +205,6 @@ export interface ColumnDef<TRowData = unknown> {
 	 */
 	valueFormatter?: (params: ValueFormatterParams<TRowData>) => string;
 	/**
-	 * Called before committing an edit to validate the new value.
-	 * Return a non-empty string to block the commit and surface an error message.
-	 * Supports async (return a Promise) for server-side checks.
-	 */
-	valueValidator?: (params: ValueValidatorParams<TRowData>) => string | null | Promise<string | null>;
-	/**
 	 * Called during commit to apply the value to the row's data object.
 	 * Sync: return false to reject. Async: return Promise<false> to reject after optimistic update.
 	 * Call params.abort() to trigger an immediate rollback.
@@ -294,7 +281,7 @@ export interface ColumnDef<TRowData = unknown> {
 	disableCellRangeSelection?: boolean;
 	/**
 	 * Marks this column as required for data-quality purposes.
-	 * Does not block editing — use `valueValidator` to enforce a hard edit constraint.
+	 * Does not block editing — use `dataIntegrity.validation` cell rules to enforce hard constraints.
 	 * When true, `DataQualityManager.run()` will flag rows with null/empty values as issues.
 	 */
 	required?: boolean;

@@ -117,7 +117,6 @@ export type {
 	GridContextMenuItem,
 	GridCellPointer,
 	HeaderMenuRendererProps,
-	ValueValidatorParams,
 	TooltipParams,
 	AutoSizeColumnOptions,
 	AutoSizeAllColumnsOptions,

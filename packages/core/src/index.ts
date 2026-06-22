@@ -191,7 +191,7 @@ export type {
 } from './integrity.js';
 export { required, email, min, max, number, date, oneOf, regex, customCellRule } from './integrity.js';
 export { duplicateValueRule, missingRequiredRule } from './integrity.js';
-export type { ValueValidatorParams, TooltipParams, ValueFormatterParams } from './columnDef.js';
+export type { TooltipParams, ValueFormatterParams } from './columnDef.js';
 export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
 export type { GridNavigationOptions } from './navigation.js';

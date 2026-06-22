@@ -516,9 +516,9 @@ export interface GridApi<TRowData = unknown> {
 	stopEditing(cancel?: boolean): void;
 	/**
 	 * Async commit of an in-progress edit.
-	 * Runs `valueValidator` first (if defined). If validation passes, optimistically applies the
-	 * value, then runs `valueSetter` (if defined). If the setter rejects, rolls back and surfaces
-	 * a validation error on `activeEdit.validationError`.
+	 * Optionally runs `dataIntegrity.validateCellProposal` (if enabled). If validation passes,
+	 * applies the value, then runs `valueSetter` (if defined). If the setter rejects, rolls back.
+	 * Returns true when the commit succeeded and `stopEditing` was called.
 	 * Returns true when the commit succeeded and `stopEditing` was called.
 	 */
 	commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean>;

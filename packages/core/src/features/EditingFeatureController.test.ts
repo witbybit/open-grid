@@ -85,56 +85,6 @@ describe('EditingFeatureController', () => {
 		store.destroy();
 	});
 
-	it('commitEdit with sync validator failure returns false', async () => {
-		const store = makeStore([
-			{ field: 'id', header: 'ID', width: 50 },
-			{
-				field: 'name',
-				header: 'Name',
-				width: 150,
-				valueValidator: async () => 'Too short',
-			},
-			{ field: 'price', header: 'Price', width: 100 },
-		]);
-		const ctrl = makeController(store);
-		const feature = makeEditingFeature(store);
-
-		feature.startEdit('1', 'name');
-		const result = await feature.commitEdit('1', 'name', 'A');
-
-		expect(result).toBe(false);
-		expect(store.getState().activeEdit).not.toBeNull();
-
-		ctrl.dispose();
-		store.destroy();
-	});
-
-	it('commitEdit with async validator failure returns false', async () => {
-		const store = makeStore([
-			{ field: 'id', header: 'ID', width: 50 },
-			{
-				field: 'name',
-				header: 'Name',
-				width: 150,
-				valueValidator: async () => {
-					await new Promise((resolve) => setTimeout(resolve, 0));
-					return 'Async validation failed';
-				},
-			},
-			{ field: 'price', header: 'Price', width: 100 },
-		]);
-		const ctrl = makeController(store);
-		const feature = makeEditingFeature(store);
-
-		feature.startEdit('1', 'name');
-		const result = await feature.commitEdit('1', 'name', 'B');
-
-		expect(result).toBe(false);
-
-		ctrl.dispose();
-		store.destroy();
-	});
-
 	it('commitEdit with valueSetter returning false returns false (rollback)', async () => {
 		const store = makeStore([
 			{ field: 'id', header: 'ID', width: 50 },

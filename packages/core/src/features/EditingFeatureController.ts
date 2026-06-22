@@ -86,30 +86,6 @@ export class EditingFeatureController<TRowData = unknown> {
 		const node = this.getRowModel()?.getRowNodeById(rowId);
 		const row = node?.data ?? ({} as TRowData);
 
-		if (col?.valueValidator) {
-			let error: string | null = null;
-			try {
-				error = await col.valueValidator({ value, oldValue, row, colField });
-			} catch {
-				error = 'Validation failed';
-			}
-			if (error) {
-				const activeEdit = this.ctx.getState().activeEdit;
-				if (activeEdit?.rowId === rowId && activeEdit?.colField === colField) {
-					this.ctx.applyChange({
-						reason: 'editing:validation',
-						state: { activeEdit: { ...activeEdit, validationError: error } },
-						invalidations: [
-							{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
-							{ kind: 'overlay', reason: 'edit stopped' },
-						],
-					});
-					this.notifyCellChange(rowId, colField);
-				}
-				return false;
-			}
-		}
-
 		let committedValue = value;
 		let bypassValueSetter = false;
 

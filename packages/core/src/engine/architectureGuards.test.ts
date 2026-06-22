@@ -2081,4 +2081,172 @@ describe('Architecture guardrails', () => {
 			expect(violators, `files still importing from deleted features/dataQuality/: ${violators.join(', ')}`).toHaveLength(0);
 		});
 	});
+
+	// ── Hardening: remove valueValidator from ColumnDef and editing path ──────
+
+	describe('Hardening — No ColumnDef.valueValidator', () => {
+		it('ColumnDef.valueValidator field is removed from columnDef.ts', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'columnDef.ts'), 'utf-8');
+			expect(content).not.toContain('valueValidator?');
+			expect(content).not.toContain('ValueValidatorParams');
+		});
+
+		it('EditingFeatureController does not read col.valueValidator', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'EditingFeatureController.ts'), 'utf-8');
+			expect(content).not.toContain('valueValidator');
+		});
+
+		it('core index.ts does not export ValueValidatorParams', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
+			expect(content).not.toContain('ValueValidatorParams');
+		});
+	});
+
+	// ── Hardening: discriminated GridCommitResult ─────────────────────────────
+
+	describe('Hardening — GridCommitResult is a discriminated union', () => {
+		it('GridCommitResult uses status discriminant, not success boolean', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'integrityTypes.ts'), 'utf-8');
+			expect(content).toContain("status: 'applied'");
+			expect(content).toContain("status: 'notFound'");
+			expect(content).toContain("status: 'failed'");
+			expect(content).not.toContain('readonly success: boolean');
+		});
+
+		it('DiffIntegrityModule checks commitResult.status, not commitResult.success', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'), 'utf-8');
+			expect(content).toContain("commitResult.status !== 'applied'");
+			expect(content).not.toContain('commitResult.success');
+		});
+
+		it('ConflictIntegrityModule checks commitResult.status, not commitResult.success', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'), 'utf-8');
+			expect(content).toContain("commitResult.status !== 'applied'");
+			expect(content).not.toContain('commitResult.success');
+		});
+
+		it('GridDataIntegrityManager.commitCellValue uses ctx.applyChange, not setCellValue', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridDataIntegrityManager.ts'), 'utf-8');
+			expect(content).toContain('deps.ctx.applyChange(');
+			expect(content).not.toContain('deps.setCellValue(');
+		});
+	});
+
+	// ── Hardening: validateCellProposal (validates proposed, not current) ─────
+
+	describe('Hardening — validateCellProposal validates proposed value', () => {
+		it('GridIntegrityApi includes validateCellProposal', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'integrityTypes.ts'), 'utf-8');
+			expect(content).toContain('validateCellProposal(params: GridValidateCellProposalParams)');
+			expect(content).toContain('GridValidateCellProposalParams');
+		});
+
+		it('ValidationIntegrityModule implements validateCellProposal', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'), 'utf-8');
+			expect(content).toContain('validateCellProposal(params: GridValidateCellProposalParams)');
+		});
+
+		it('DiffIntegrityModule uses validateCellProposal (not validateCell) for the proposed value', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'), 'utf-8');
+			expect(content).toContain('validateCellProposal');
+			expect(content).not.toContain('validateCell:');
+			expect(content).not.toContain('validateCell?:');
+		});
+
+		it('ConflictIntegrityModule uses validateCellProposal (not validateCell) for the proposed value', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'), 'utf-8');
+			expect(content).toContain('validateCellProposal');
+			expect(content).not.toContain('validateCell:');
+			expect(content).not.toContain('validateCell?:');
+		});
+	});
+
+	// ── Hardening: stable issue IDs ───────────────────────────────────────────
+
+	describe('Hardening — stable issue IDs', () => {
+		it('DiffIntegrityModule uses stable prefix-based IDs, not counter IDs', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'), 'utf-8');
+			expect(content).toContain('diff:changed:');
+			expect(content).toContain('diff:added:');
+			expect(content).toContain('diff:removed:');
+			expect(content).not.toContain('nextIssueId()');
+		});
+
+		it('ConflictIntegrityModule uses stable conflict-derived IDs in getIssues()', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'), 'utf-8');
+			expect(content).toContain('conflict:${conflict.id}');
+			expect(content).not.toContain('nextIssueId()');
+		});
+
+		it('ValidationIntegrityModule uses stable rule-derived IDs', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'), 'utf-8');
+			expect(content).toContain('_stableCellIssueId(');
+			expect(content).toContain('_stableRowIssueId(');
+			expect(content).not.toContain("id: nextIssueId()");
+		});
+	});
+
+	// ── Hardening: clearIssues routes to all modules ──────────────────────────
+
+	describe('Hardening — clearIssues routes to all modules', () => {
+		it('GridDataIntegrityManager.clearIssues clears validationModule, diffModule, conflictModule', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridDataIntegrityManager.ts'), 'utf-8');
+			expect(content).toContain('this.validationModule?.clearIssues()');
+			expect(content).toContain('this.diffModule?.clearIssues()');
+			expect(content).toContain('this.conflictModule?.clearIssues()');
+			expect(content).toContain('this.qualityModule?.clearIssues()');
+		});
+	});
+
+	// ── Hardening: unified requestIntegrityRepaint API ────────────────────────
+
+	describe('Hardening — unified requestIntegrityRepaint', () => {
+		it('GridDataIntegrityManagerDeps uses requestIntegrityRepaint, not dual repaint API', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridDataIntegrityManager.ts'), 'utf-8');
+			expect(content).toContain('requestIntegrityRepaint');
+			expect(content).not.toContain('requestInsightRepaint:');
+			expect(content).not.toContain('requestTargetedRepaint:');
+		});
+
+		it('GridEngine wires requestIntegrityRepaint to the unified handler', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			expect(content).toContain('requestIntegrityRepaint:');
+			expect(content).not.toContain('requestTargetedRepaint:');
+		});
+	});
+
+	// ── Hardening: core styles include all integrity decoration classes ────────
+
+	describe('Hardening — core styles.ts includes all data integrity decoration CSS', () => {
+		it('styles.ts has CSS for og-cell-diff-changed, og-cell-diff-added, og-cell-diff-removed', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'styles.ts'), 'utf-8');
+			expect(content).toContain('.og-cell-diff-changed');
+			expect(content).toContain('.og-cell-diff-added');
+			expect(content).toContain('.og-cell-diff-removed');
+		});
+
+		it('styles.ts has CSS for og-cell-conflict', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'styles.ts'), 'utf-8');
+			expect(content).toContain('.og-cell-conflict');
+		});
+
+		it('styles.ts has CSS for og-cell-insight-error, og-cell-insight-warning, og-cell-insight-info', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'styles.ts'), 'utf-8');
+			expect(content).toContain('.og-cell-insight-error');
+			expect(content).toContain('.og-cell-insight-warning');
+			expect(content).toContain('.og-cell-insight-info');
+		});
+
+		it('styles.ts has CSS for og-row-diff-added, og-row-diff-changed', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'styles.ts'), 'utf-8');
+			expect(content).toContain('.og-row-diff-added');
+			expect(content).toContain('.og-row-diff-changed');
+		});
+
+		it('styles.ts has CSS for og-cell-quality-error, og-cell-quality-warning', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'styles.ts'), 'utf-8');
+			expect(content).toContain('.og-cell-quality-error');
+			expect(content).toContain('.og-cell-quality-warning');
+		});
+	});
 });

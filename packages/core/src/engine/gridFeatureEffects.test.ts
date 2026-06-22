@@ -206,32 +206,6 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			store.destroy();
 		});
 
-		it('commitEdit with validator failure returns false and does not close editor', async () => {
-			const store = makeStore({
-				columns: [
-					{ field: 'id', header: 'ID', width: 50 },
-					{
-						field: 'name',
-						header: 'Name',
-						width: 150,
-						valueValidator: async () => 'Value is too short',
-					},
-					{ field: 'price', header: 'Price', width: 100 },
-				],
-			});
-			const ctrl = makeController(store);
-
-			store.startEditing('1', 'name');
-			const result = await store.commitEdit('1', 'name', 'A');
-
-			expect(result).toBe(false);
-			// Editor should still be open (activeEdit not cleared)
-			expect(store.getState().activeEdit).not.toBeNull();
-
-			ctrl.dispose();
-			store.destroy();
-		});
-
 		it('commitEdit with async valueSetter returning false returns false and rolls back', async () => {
 			const store = makeStore({
 				columns: [

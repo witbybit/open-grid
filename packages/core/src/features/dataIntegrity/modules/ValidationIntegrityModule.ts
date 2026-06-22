@@ -9,12 +9,16 @@ import type {
 	GridValidationIntegrityOptions,
 	GridCellIntegrityRule,
 	GridRowIntegrityRule,
+	GridValidateCellProposalParams,
 } from '../integrityTypes.js';
 import { GridEventName } from '../../../api/GridEvents.js';
 
-let _seq = 0;
-function nextIssueId(): string {
-	return `vi-${++_seq}`;
+function _stableCellIssueId(ruleId: string, rowId: string, field: string): string {
+	return `validation:${ruleId}:${rowId}:${field}`;
+}
+
+function _stableRowIssueId(ruleId: string, rowId: string): string {
+	return `validation:row:${ruleId}:${rowId}`;
 }
 
 export interface ValidationModuleDeps<TRowData> {
@@ -259,11 +263,67 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		return newIssues;
 	}
 
+	// ── Validate proposed value (not current) ────────────────────────────────
+
+	async validateCellProposal(params: GridValidateCellProposalParams): Promise<readonly GridIntegrityIssue[]> {
+		if (!this.isEnabled()) return _EMPTY;
+		const { rowId, colField, proposedValue } = params;
+
+		const cellRules = (this.options.cellRules ?? []).filter((r) => r.field === colField);
+		const api = this.deps.getApi();
+		const rowModel = this.deps.getRowModel();
+		const node = rowModel?.getRowNodeById?.(rowId) ?? null;
+		const row = (node?.data ?? {}) as TRowData;
+		const issues: GridIntegrityIssue[] = [];
+
+		for (const rule of cellRules) {
+			let result: import('../integrityTypes.js').GridIntegrityRuleResult | null = null;
+			try {
+				result = await rule.validate({ rowId, row, field: colField, value: proposedValue, api });
+			} catch {
+				result = { message: `Rule "${rule.id}" threw an error` };
+			}
+			if (result) {
+				issues.push(_makeCellIssue(rule, rowId, colField, proposedValue, result));
+			}
+		}
+
+		// Row rules: substitute the proposed value into a cloned row
+		const rowRules = this.options.rowRules ?? [];
+		if (rowRules.length > 0) {
+			const draftRow = { ...(row as Record<string, unknown>) };
+			draftRow[colField] = proposedValue;
+			for (const rule of rowRules) {
+				let result: import('../integrityTypes.js').GridIntegrityRuleResult | null = null;
+				try {
+					result = await rule.validate({ rowId, row: draftRow as TRowData, api });
+				} catch {
+					result = null;
+				}
+				if (result) {
+					const fields = result.fields ?? [];
+					if (fields.includes(colField) || fields.length === 0) {
+						issues.push(_makeRowIssue(rule, rowId, fields, result));
+					}
+				}
+			}
+		}
+
+		return issues;
+	}
+
+	// ── Clear all issues ──────────────────────────────────────────────────────
+
+	clearIssues(): void {
+		this._applyIssues([]);
+		this.deps.requestRepaint();
+	}
+
 	// ── External (server) validation ──────────────────────────────────────────
 
 	publishServerValidationError(rowId: string, colField: string, message: string): void {
 		const issue: GridIntegrityIssue = {
-			id: nextIssueId(),
+			id: `validation:server:${rowId}:${colField}`,
 			source: 'serverValidation',
 			type: 'serverRejected',
 			severity: 'error',
@@ -325,7 +385,7 @@ function _makeCellIssue(
 ): GridIntegrityIssue {
 	const sev = rule.severity ?? 'error';
 	return {
-		id: nextIssueId(),
+		id: _stableCellIssueId(rule.id, rowId, colField),
 		source: 'validation',
 		type: 'invalidValue',
 		severity: sev,
@@ -347,7 +407,7 @@ function _makeRowIssue(
 ): GridIntegrityIssue {
 	const sev = rule.severity ?? 'error';
 	return {
-		id: nextIssueId(),
+		id: _stableRowIssueId(rule.id, rowId),
 		source: 'validation',
 		type: 'rowValidation',
 		severity: sev,

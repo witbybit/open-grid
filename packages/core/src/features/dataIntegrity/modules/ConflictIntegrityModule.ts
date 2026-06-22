@@ -9,19 +9,17 @@ import type {
 	ConflictResolutionResult,
 	GridConflictSource,
 	GridCommitResult,
+	GridValidateCellProposalParams,
 } from '../integrityTypes.js';
 
-let _seq = 0;
+let _conflictSeq = 0;
 function nextConflictId(): string {
-	return `cfl-${++_seq}`;
-}
-function nextIssueId(): string {
-	return `ci-${++_seq}`;
+	return `cfl-${++_conflictSeq}`;
 }
 
 export interface ConflictModuleDeps<TRowData> {
 	commitCellValue: (rowId: string, colField: string, value: unknown) => Promise<GridCommitResult>;
-	validateCell?: (rowId: string, colField: string) => Promise<readonly GridIntegrityIssue[]>;
+	validateCellProposal?: (params: GridValidateCellProposalParams) => Promise<readonly GridIntegrityIssue[]>;
 	canEdit?: (rowId: string, colField: string) => boolean;
 	requestRepaint: (cells?: Array<{ rowId: string; colField: string }>) => void;
 }
@@ -50,7 +48,7 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 		const issues: GridIntegrityIssue[] = [];
 		for (const conflict of this.conflicts.values()) {
 			issues.push({
-				id: nextIssueId(),
+				id: `conflict:${conflict.id}`,
 				source: 'conflict',
 				type: 'conflict',
 				severity: 'error',
@@ -63,6 +61,10 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 			});
 		}
 		return issues;
+	}
+
+	clearIssues(): void {
+		this.clearAllConflicts();
 	}
 
 	getDiagnostics(): unknown {
@@ -144,9 +146,14 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 
 		const valueToApply = options.strategy === 'custom' ? options.value : conflict.remoteValue;
 
-		// Validate before commit if enabled
-		if (this.options.validateBeforeResolve !== false && this.deps.validateCell) {
-			const validationIssues = await this.deps.validateCell(conflict.rowId, conflict.colField);
+		// Validate the proposed value (not the current value) before commit
+		if (this.options.validateBeforeResolve !== false && this.deps.validateCellProposal) {
+			const validationIssues = await this.deps.validateCellProposal({
+				rowId: conflict.rowId,
+				colField: conflict.colField,
+				proposedValue: valueToApply,
+				source: 'conflictResolve',
+			});
 			const blocking = validationIssues.filter((i) => i.blocking);
 			if (blocking.length > 0) {
 				// Conflict remains — validation failed
@@ -156,8 +163,8 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 
 		// Commit — only clear conflict marker on success
 		const commitResult = await this.deps.commitCellValue(conflict.rowId, conflict.colField, valueToApply);
-		if (!commitResult.success) {
-			return { status: 'failed', error: commitResult.error };
+		if (commitResult.status !== 'applied') {
+			return { status: 'failed', error: commitResult.status === 'failed' ? commitResult.error : commitResult.status };
 		}
 
 		this._clearConflict(conflictId, conflict);

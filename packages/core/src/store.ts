@@ -48,7 +48,6 @@ export type {
 	CellCopyParams,
 	CellPasteParams,
 	ValueGetterParams,
-	ValueValidatorParams,
 	ValueSetterParams,
 	CellRendererPhase,
 	CellRendererCapabilities,

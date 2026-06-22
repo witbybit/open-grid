@@ -490,7 +490,6 @@ export class GridEngine<TRowData = unknown> {
 				scheduler: defaultGridScheduler,
 				rowProvider,
 				capabilityManager: this.capabilityManager,
-				setCellValue: (r, c, v) => this.setCellValue(r, c, v),
 				commitCells: (updates) => this.batchCellValues(updates as import('../api/GridApi.js').BatchCellValueUpdate[], 'api'),
 				applyRowPatch: (rowId, patch) => {
 					const row = this.rowModel?.getRawRowById(rowId);
@@ -499,10 +498,13 @@ export class GridEngine<TRowData = unknown> {
 						this.applyTransaction({ update: [updated] });
 					}
 				},
-				requestInsightRepaint: () => this.requestInsightRepaint(),
-				requestTargetedRepaint: (cells) => {
-					for (const { rowId, colField } of cells) {
-						this.notifyCellChange(rowId, colField);
+				requestIntegrityRepaint: (request) => {
+					if (request.cells && request.cells.length > 0) {
+						for (const { rowId, colField } of request.cells) {
+							this.notifyCellChange(rowId, colField);
+						}
+					} else {
+						this.requestInsightRepaint();
 					}
 				},
 			});

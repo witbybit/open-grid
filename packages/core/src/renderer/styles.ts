@@ -1187,6 +1187,97 @@ export const CORE_STYLES = `
     display: none;
   }
 
+  /* ── Cell diff decorations ───────────────────────────────────────────────── */
+
+  .og-cell-diff-changed {
+    outline: 2px solid var(--og-diff-changed, #f6ad55);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-diff-changed, #f6ad55) 8%, transparent);
+  }
+
+  .og-cell-diff-added {
+    outline: 2px solid var(--og-diff-added, #68d391);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-diff-added, #68d391) 8%, transparent);
+  }
+
+  .og-cell-diff-removed {
+    outline: 2px solid var(--og-diff-removed, #fc8181);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-diff-removed, #fc8181) 8%, transparent);
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  /* ── Row diff decorations ─────────────────────────────────────────────────── */
+
+  .og-row-diff-added {
+    background-color: color-mix(in srgb, var(--og-diff-added, #68d391) 6%, transparent) !important;
+  }
+
+  .og-row-diff-changed {
+    background-color: color-mix(in srgb, var(--og-diff-changed, #f6ad55) 5%, transparent) !important;
+  }
+
+  .og-row-diff-removed {
+    background-color: color-mix(in srgb, var(--og-diff-removed, #fc8181) 6%, transparent) !important;
+    opacity: 0.7;
+  }
+
+  /* ── Cell conflict decoration ─────────────────────────────────────────────── */
+
+  .og-cell-conflict {
+    outline: 2px solid var(--og-conflict, #b794f4);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-conflict, #b794f4) 8%, transparent);
+  }
+
+  .og-cell-conflict::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--og-conflict, #b794f4);
+    pointer-events: none;
+  }
+
+  /* ── Cell insight decorations (generic) ───────────────────────────────────── */
+
+  .og-cell-insight-error {
+    outline: 2px solid var(--og-error);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-error) 6%, transparent);
+  }
+
+  .og-cell-insight-warning {
+    outline: 2px solid var(--og-warning, #ed8936);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-warning, #ed8936) 6%, transparent);
+  }
+
+  .og-cell-insight-info {
+    outline: 2px solid var(--og-info, #63b3ed);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-info, #63b3ed) 6%, transparent);
+  }
+
+  /* ── Cell quality decorations ─────────────────────────────────────────────── */
+
+  .og-cell-quality-error {
+    outline: 2px solid var(--og-error);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-error) 6%, transparent);
+  }
+
+  .og-cell-quality-warning {
+    outline: 2px solid var(--og-warning, #ed8936);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-warning, #ed8936) 6%, transparent);
+  }
+
   /* Validation error tooltip — shown on hover/focus of invalid cells */
   .og-validation-tooltip {
     position: fixed;

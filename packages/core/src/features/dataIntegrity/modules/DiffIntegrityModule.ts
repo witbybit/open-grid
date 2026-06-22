@@ -10,17 +10,13 @@ import type {
 	GridDiffAcceptResult,
 	GridDiffIntegrityOptions,
 	GridCommitResult,
+	GridValidateCellProposalParams,
 } from '../integrityTypes.js';
-
-let _seq = 0;
-function nextIssueId(): string {
-	return `di-${++_seq}`;
-}
 
 export interface DiffModuleDeps<TRowData> {
 	getColumns: () => readonly ColumnDef<TRowData>[];
 	commitCellValue: (rowId: string, colField: string, value: unknown) => Promise<GridCommitResult>;
-	validateCell?: (rowId: string, colField: string) => Promise<readonly GridIntegrityIssue[]>;
+	validateCellProposal?: (params: GridValidateCellProposalParams) => Promise<readonly GridIntegrityIssue[]>;
 	canEdit?: (rowId: string, colField: string) => boolean;
 	requestRepaint: (cells?: Array<{ rowId: string; colField: string }>) => void;
 }
@@ -124,9 +120,9 @@ export class DiffIntegrityModule<TRowData> implements GridIntegrityModule<TRowDa
 			return { status: 'capabilityDenied', reason: 'Cell is not editable' };
 		}
 
-		// Validate proposed value if validation is enabled
-		if (this.options.validateChangedValues && this.deps.validateCell) {
-			const validationIssues = await this.deps.validateCell(rowId, colField);
+		// Validate proposed value (not current) if validation is enabled
+		if (this.options.validateChangedValues && this.deps.validateCellProposal) {
+			const validationIssues = await this.deps.validateCellProposal({ rowId, colField, proposedValue: diff.newValue, source: 'diffAccept' });
 			const blocking = validationIssues.filter((i) => i.blocking);
 			if (blocking.length > 0) {
 				return { status: 'validationFailed', issues: blocking };
@@ -135,8 +131,8 @@ export class DiffIntegrityModule<TRowData> implements GridIntegrityModule<TRowDa
 
 		// Commit the new value — only clear diff state on success
 		const commitResult = await this.deps.commitCellValue(rowId, colField, diff.newValue);
-		if (!commitResult.success) {
-			return { status: 'failed', error: commitResult.error };
+		if (commitResult.status !== 'applied') {
+			return { status: 'failed', error: commitResult.status === 'failed' ? commitResult.error : commitResult.status };
 		}
 
 		this._rejectCellDiff(rowId, colField);
@@ -267,6 +263,10 @@ export class DiffIntegrityModule<TRowData> implements GridIntegrityModule<TRowDa
 		}
 	}
 
+	clearIssues(): void {
+		this.clearDiff();
+	}
+
 	private _buildIssues(): void {
 		if (!this.result) {
 			this.issues = [];
@@ -277,7 +277,7 @@ export class DiffIntegrityModule<TRowData> implements GridIntegrityModule<TRowDa
 
 		for (const cell of this.result.changedCells) {
 			issues.push({
-				id: nextIssueId(),
+				id: `diff:changed:${cell.rowId}:${cell.colField}`,
 				source: 'diff',
 				type: 'diffChanged',
 				severity: 'info',
@@ -293,7 +293,7 @@ export class DiffIntegrityModule<TRowData> implements GridIntegrityModule<TRowDa
 
 		for (const rowId of this.result.addedRows) {
 			issues.push({
-				id: nextIssueId(),
+				id: `diff:added:${rowId}`,
 				source: 'diff',
 				type: 'diffAdded',
 				severity: 'info',
@@ -306,7 +306,7 @@ export class DiffIntegrityModule<TRowData> implements GridIntegrityModule<TRowDa
 
 		for (const rowId of this.result.removedRows) {
 			issues.push({
-				id: nextIssueId(),
+				id: `diff:removed:${rowId}`,
 				source: 'diff',
 				type: 'diffRemoved',
 				severity: 'info',

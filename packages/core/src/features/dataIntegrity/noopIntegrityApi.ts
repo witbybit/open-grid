@@ -56,6 +56,10 @@ export function makeNoopIntegrityApi<TRowData>(): GridIntegrityApi<TRowData> {
 			_warn('validateCell');
 			return [];
 		},
+		validateCellProposal: async () => {
+			_warn('validateCellProposal');
+			return [];
+		},
 		validateRow: async () => {
 			_warn('validateRow');
 			return [];
