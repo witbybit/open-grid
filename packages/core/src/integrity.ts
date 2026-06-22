@@ -1,5 +1,7 @@
 export type {
 	GridIntegrityApi,
+	GridCommitResult,
+	GridDataQualityRuleContext,
 	GridIntegrityIssue,
 	GridIntegrityIssueSource,
 	GridIntegrityIssueType,

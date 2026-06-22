@@ -140,6 +140,14 @@ export interface AllDataNodesCapableRowModel<TRowData = unknown> {
 	getAllDataNodes(): RowNode<TRowData>[];
 }
 
+export interface FilteredDataNodesCapableRowModel<TRowData = unknown> {
+	getFilteredDataNodes(): RowNode<TRowData>[];
+}
+
+export interface CurrentPageDataNodesCapableRowModel<TRowData = unknown> {
+	getCurrentPageDataNodes(): RowNode<TRowData>[];
+}
+
 export interface GroupMetaCapableRowModel {
 	getGroupMeta(groupId: string): GroupRowMeta | null;
 }
@@ -1372,7 +1380,7 @@ export class ClientRowModelController<TData = unknown>
 
 	public getAllDataNodes = (): RowNode<TData>[] => this.dataStore.getAllNodes();
 
-	/** Returns all nodes that currently pass the active filter (post-sort, pre-viewport). */
+	/** Returns all nodes that currently pass the active filter (post-sort). With client pagination, returns only the current page. */
 	public getFilteredDataNodes = (): RowNode<TData>[] => {
 		const result: RowNode<TData>[] = [];
 		for (const vr of this.visualRows) {
@@ -1380,6 +1388,9 @@ export class ClientRowModelController<TData = unknown>
 		}
 		return result;
 	};
+
+	/** Returns nodes on the current page. Without pagination, identical to getFilteredDataNodes(). */
+	public getCurrentPageDataNodes = (): RowNode<TData>[] => this.getFilteredDataNodes();
 
 	public getRowOrder = (): string[] => this.dataStore.getSourceOrder();
 

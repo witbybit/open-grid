@@ -9,6 +9,7 @@ import type {
 	GridCellDiff,
 	GridDiffAcceptResult,
 	GridDiffIntegrityOptions,
+	GridCommitResult,
 } from '../integrityTypes.js';
 
 let _seq = 0;
@@ -18,7 +19,7 @@ function nextIssueId(): string {
 
 export interface DiffModuleDeps<TRowData> {
 	getColumns: () => readonly ColumnDef<TRowData>[];
-	setCellValue: (rowId: string, colField: string, value: unknown) => void;
+	commitCellValue: (rowId: string, colField: string, value: unknown) => Promise<GridCommitResult>;
 	validateCell?: (rowId: string, colField: string) => Promise<readonly GridIntegrityIssue[]>;
 	canEdit?: (rowId: string, colField: string) => boolean;
 	requestRepaint: (cells?: Array<{ rowId: string; colField: string }>) => void;
@@ -132,14 +133,12 @@ export class DiffIntegrityModule<TRowData> implements GridIntegrityModule<TRowDa
 			}
 		}
 
-		// Commit the new value
-		try {
-			this.deps.setCellValue(rowId, colField, diff.newValue);
-		} catch (e) {
-			return { status: 'failed', error: e };
+		// Commit the new value — only clear diff state on success
+		const commitResult = await this.deps.commitCellValue(rowId, colField, diff.newValue);
+		if (!commitResult.success) {
+			return { status: 'failed', error: commitResult.error };
 		}
 
-		// Only clear after successful commit
 		this._rejectCellDiff(rowId, colField);
 		this.deps.requestRepaint([{ rowId, colField }]);
 		return { status: 'accepted' };

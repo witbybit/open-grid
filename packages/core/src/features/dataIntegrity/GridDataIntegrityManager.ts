@@ -28,6 +28,7 @@ import type {
 	ConflictResolutionResult,
 	ServerIntegrityReport,
 	GridIntegrityApi,
+	GridCommitResult,
 } from './integrityTypes.js';
 import type { GridIntegrityRowProvider } from './integrityTypes.js';
 import { ValidationIntegrityModule } from './modules/ValidationIntegrityModule.js';
@@ -87,6 +88,15 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 			}
 		};
 
+		const commitCellValue = async (rowId: string, colField: string, value: unknown): Promise<GridCommitResult> => {
+			try {
+				deps.setCellValue(rowId, colField, value);
+				return { success: true, rowId, colField, committedValue: value };
+			} catch (e) {
+				return { success: false, rowId, colField, error: String(e) };
+			}
+		};
+
 		// Validation module
 		const validationConfig = _normalizeModuleConfig(config.validation);
 		if (validationConfig) {
@@ -106,7 +116,7 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		const conflictConfig = _normalizeModuleConfig(config.conflicts);
 		if (conflictConfig) {
 			this.conflictModule = new ConflictIntegrityModule<TRowData>(conflictConfig, {
-				setCellValue: deps.setCellValue,
+				commitCellValue,
 				validateCell: this.validationModule ? (rowId, colField) => this.validationModule!.validateCell(rowId, colField) : undefined,
 				canEdit: (rowId, colField) => deps.capabilityManager.can('edit', { rowId, colField }).allowed,
 				requestRepaint,
@@ -146,7 +156,7 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		if (diffConfig) {
 			this.diffModule = new DiffIntegrityModule<TRowData>(diffConfig, {
 				getColumns: () => deps.ctx.getState().columns,
-				setCellValue: deps.setCellValue,
+				commitCellValue,
 				validateCell: this.validationModule ? (rowId, colField) => this.validationModule!.validateCell(rowId, colField) : undefined,
 				canEdit: (rowId, colField) => deps.capabilityManager.can('edit', { rowId, colField }).allowed,
 				requestRepaint,

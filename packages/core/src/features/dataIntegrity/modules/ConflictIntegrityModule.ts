@@ -8,6 +8,7 @@ import type {
 	ResolveConflictOptions,
 	ConflictResolutionResult,
 	GridConflictSource,
+	GridCommitResult,
 } from '../integrityTypes.js';
 
 let _seq = 0;
@@ -19,7 +20,7 @@ function nextIssueId(): string {
 }
 
 export interface ConflictModuleDeps<TRowData> {
-	setCellValue: (rowId: string, colField: string, value: unknown) => void;
+	commitCellValue: (rowId: string, colField: string, value: unknown) => Promise<GridCommitResult>;
 	validateCell?: (rowId: string, colField: string) => Promise<readonly GridIntegrityIssue[]>;
 	canEdit?: (rowId: string, colField: string) => boolean;
 	requestRepaint: (cells?: Array<{ rowId: string; colField: string }>) => void;
@@ -153,15 +154,12 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 			}
 		}
 
-		// Commit
-		try {
-			this.deps.setCellValue(conflict.rowId, conflict.colField, valueToApply);
-		} catch (e) {
-			// Conflict remains — commit failed
-			return { status: 'failed', error: e };
+		// Commit — only clear conflict marker on success
+		const commitResult = await this.deps.commitCellValue(conflict.rowId, conflict.colField, valueToApply);
+		if (!commitResult.success) {
+			return { status: 'failed', error: commitResult.error };
 		}
 
-		// Only clear AFTER successful commit
 		this._clearConflict(conflictId, conflict);
 		this._resolvedConflicts++;
 		return { status: 'resolved' };

@@ -39,7 +39,7 @@ export class ClientGridIntegrityRowProvider<TRowData> implements GridIntegrityRo
 				return this._scanVisibleRows(rowModel);
 
 			case 'currentPage':
-				return this._scanAllDataNodes('currentPage', rowModel, state);
+				return this._scanCurrentPageNodes(rowModel, state);
 
 			case 'serverProvided':
 				return {
@@ -136,6 +136,29 @@ export class ClientGridIntegrityRowProvider<TRowData> implements GridIntegrityRo
 			status: 'unsupported',
 			scope: 'filteredRows',
 			reason: 'Row model does not implement getFilteredDataNodes() or getAllDataNodes()',
+		};
+
+		void state; // used only to avoid lint warning
+	}
+
+	private _scanCurrentPageNodes(
+		rowModel: RowModel<TRowData>,
+		state: InternalGridState<TRowData>
+	): GridIntegrityRowsResult<TRowData> {
+		const pageCapable = _asCurrentPageCapable(rowModel);
+		if (pageCapable) {
+			const nodes = pageCapable.getCurrentPageDataNodes();
+			const refs: GridIntegrityRowRef<TRowData>[] = [];
+			for (const node of nodes) {
+				if (node.data == null) continue;
+				refs.push({ rowId: node.id, row: node.data as TRowData, source: 'client' });
+			}
+			return { status: 'ok', scope: 'currentPage', rows: refs, complete: true };
+		}
+		return {
+			status: 'unsupported',
+			scope: 'currentPage',
+			reason: 'Row model does not implement getCurrentPageDataNodes()',
 		};
 
 		void state; // used only to avoid lint warning
@@ -350,4 +373,13 @@ interface FilteredDataNodeCapable<TRowData> {
 function _asFilteredDataNodeCapable<TRowData>(rowModel: RowModel<TRowData>): FilteredDataNodeCapable<TRowData> | null {
 	const m = rowModel as unknown as Partial<FilteredDataNodeCapable<TRowData>>;
 	return typeof m.getFilteredDataNodes === 'function' ? (m as FilteredDataNodeCapable<TRowData>) : null;
+}
+
+interface CurrentPageCapable<TRowData> {
+	getCurrentPageDataNodes(): Array<{ id: string; data: TRowData | null }>;
+}
+
+function _asCurrentPageCapable<TRowData>(rowModel: RowModel<TRowData>): CurrentPageCapable<TRowData> | null {
+	const m = rowModel as unknown as Partial<CurrentPageCapable<TRowData>>;
+	return typeof m.getCurrentPageDataNodes === 'function' ? (m as CurrentPageCapable<TRowData>) : null;
 }

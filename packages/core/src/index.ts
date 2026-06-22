@@ -99,7 +99,7 @@ export type {
 	ValueGetterParams,
 } from './columnDef.js';
 export type { GridInitialState } from './state/GridState.js';
-export type { VisualRowModel } from './rowModel.js';
+export type { VisualRowModel, AllDataNodesCapableRowModel, FilteredDataNodesCapableRowModel, CurrentPageDataNodesCapableRowModel } from './rowModel.js';
 export type { VisualRow, DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow } from './visualRow.js';
 export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';
 
@@ -152,6 +152,7 @@ export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.
 export type { BatchCellValueUpdate } from './api/GridApi.js';
 export type {
 	GridIntegrityApi,
+	GridCommitResult,
 	GridIntegrityIssue,
 	GridIntegrityIssueSource,
 	GridIntegrityIssueType,
@@ -171,6 +172,7 @@ export type {
 	GridRowIntegrityRule,
 	GridIntegrityRuleResult,
 	GridDataQualityRule,
+	GridDataQualityRuleContext,
 	GridDiffModel,
 	GridDiffResult,
 	GridCellDiff,

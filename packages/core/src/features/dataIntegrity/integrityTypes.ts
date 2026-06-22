@@ -46,6 +46,17 @@ export interface GridIntegrityIssue {
 	readonly data?: unknown;
 }
 
+// ── Commit result ─────────────────────────────────────────────────────────────
+
+/** Result returned by integrity-initiated cell writes (diff accept, conflict resolve). */
+export interface GridCommitResult {
+	readonly success: boolean;
+	readonly rowId: string;
+	readonly colField: string;
+	readonly committedValue?: unknown;
+	readonly error?: string;
+}
+
 // ── Issue filter ──────────────────────────────────────────────────────────────
 
 export interface GridIntegrityIssueFilter {
