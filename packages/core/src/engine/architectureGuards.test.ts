@@ -2062,4 +2062,42 @@ describe('Architecture guardrails', () => {
 			expect(violators, `integrity modules calling invalidateFull directly: ${violators.join(', ')}`).toHaveLength(0);
 		});
 	});
+
+	// ── Plan 136: guards for Plans 132 and 133 ───────────────────────────────
+
+	describe('Plan 136 — guardrails for Plans 132 (result-aware commits) and 133 (dead code removal)', () => {
+		it('DiffIntegrityModule must not call setCellValue directly (Plan 132)', () => {
+			const content = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'),
+				'utf-8'
+			);
+			expect(content, 'DiffIntegrityModule must use commitCellValue, not setCellValue').not.toContain('setCellValue');
+		});
+
+		it('ConflictIntegrityModule must not call setCellValue directly (Plan 132)', () => {
+			const content = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'),
+				'utf-8'
+			);
+			expect(content, 'ConflictIntegrityModule must use commitCellValue, not setCellValue').not.toContain('setCellValue');
+		});
+
+		it('features/dataQuality/ folder must not exist (Plan 133)', () => {
+			const dataQualityDir = resolve(CORE_ROOT, 'src', 'features', 'dataQuality');
+			expect(existsSync(dataQualityDir), 'features/dataQuality/ was deleted in Plan 133 and must not be re-added').toBe(false);
+		});
+
+		it('no source file imports from features/dataQuality/ (Plan 133)', () => {
+			const srcDir = resolve(CORE_ROOT, 'src');
+			const allFiles = collectSourceFiles(srcDir).filter((f) => !f.endsWith('.test.ts'));
+			const violators: string[] = [];
+			for (const file of allFiles) {
+				const content = readFileSync(file, 'utf-8');
+				if (/from ['"].*features\/dataQuality/.test(content)) {
+					violators.push(path.relative(srcDir, file));
+				}
+			}
+			expect(violators, `files still importing from deleted features/dataQuality/: ${violators.join(', ')}`).toHaveLength(0);
+		});
+	});
 });
