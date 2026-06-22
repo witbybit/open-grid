@@ -42,6 +42,8 @@ import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltIn
 export { RowNode } from './rowNode.js';
 export type { GridInsightLayer, GridInsightLayerId, GridInsightSeverity, GridCellDecoration, GridRowDecoration } from './insights/insightTypes.js';
 export { GridInsightRegistry } from './insights/GridInsightRegistry.js';
+export type { DataQualityIssue, DataQualityIssueType, DataQualityFix, DataQualityReport, DataQualityRule, DataQualityRuleContext, DataQualityDiagnostics } from './features/dataQuality/DataQualityManager.js';
+export { GridDataQualityManager, createDuplicateValueRule } from './features/dataQuality/DataQualityManager.js';
 
 export { isDomCellRenderer, getValueByPath, setValueByPath, compilePathGetter, validateColumns } from './columnDef.js';
 export { compileStyleRules } from './styling/styleRules.js';
@@ -1111,6 +1113,26 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getInsightDiagnostics = (): Record<string, unknown> => {
 		return this.engine.insights.getDiagnostics();
+	};
+
+	public runDataQualityCheck = (options?: { scope?: import('./features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'] }): Promise<import('./features/dataQuality/dataQualityTypes.js').DataQualityReport> => {
+		return this.engine.dataQuality.run(options?.scope);
+	};
+
+	public getDataQualityReport = (): import('./features/dataQuality/dataQualityTypes.js').DataQualityReport | null => {
+		return this.engine.dataQuality.getReport();
+	};
+
+	public clearDataQualityReport = (): void => {
+		this.engine.dataQuality.clear();
+	};
+
+	public registerDataQualityRule = (rule: import('./features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>): void => {
+		this.engine.dataQuality.registerRule(rule);
+	};
+
+	public unregisterDataQualityRule = (ruleId: string): void => {
+		this.engine.dataQuality.unregisterRule(ruleId);
 	};
 
 	public destroy = (): void => {

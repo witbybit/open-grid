@@ -172,5 +172,10 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		canPaste: source.canPaste,
 		canExport: source.canExport,
 		getInsightDiagnostics: source.getInsightDiagnostics,
+		runDataQualityCheck: source.runDataQualityCheck,
+		getDataQualityReport: source.getDataQualityReport,
+		clearDataQualityReport: source.clearDataQualityReport,
+		registerDataQualityRule: source.registerDataQualityRule,
+		unregisterDataQualityRule: source.unregisterDataQualityRule,
 	};
 }

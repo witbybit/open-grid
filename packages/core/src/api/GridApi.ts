@@ -672,6 +672,27 @@ export interface GridApi<TRowData = unknown> {
 	 */
 	getInsightDiagnostics(): Record<string, unknown>;
 
+	// ── Data Quality ─────────────────────────────────────────────────────────────
+
+	/**
+	 * Runs all registered data-quality checks against the current dataset.
+	 * Returns a report containing all detected issues.
+	 * Scope defaults to `allClientRows` for client row models, `loadedRows` for others.
+	 */
+	runDataQualityCheck(options?: { scope?: import('../features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'] }): Promise<import('../features/dataQuality/dataQualityTypes.js').DataQualityReport>;
+
+	/** Returns the most recent data-quality report, or null if no check has been run. */
+	getDataQualityReport(): import('../features/dataQuality/dataQualityTypes.js').DataQualityReport | null;
+
+	/** Clears the active data-quality report and removes all cell decorations. */
+	clearDataQualityReport(): void;
+
+	/** Registers a custom data-quality rule. Replaces any existing rule with the same id. */
+	registerDataQualityRule(rule: import('../features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>): void;
+
+	/** Removes a previously registered data-quality rule. */
+	unregisterDataQualityRule(ruleId: string): void;
+
 	destroy(): void;
 }
 

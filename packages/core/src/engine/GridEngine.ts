@@ -55,6 +55,7 @@ import { type GridInstrumentation, NOOP_INSTRUMENTATION } from '../diagnostics/G
 import { GridCapabilityManager } from '../capabilities/GridCapabilityManager.js';
 import type { GridCapabilityAction, GridCapabilitiesConfig, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { GridInsightRegistry } from '../insights/GridInsightRegistry.js';
+import { GridDataQualityManager } from '../features/dataQuality/DataQualityManager.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -85,6 +86,7 @@ export class GridEngine<TRowData = unknown> {
 	private readonly stateReactions: GridStateReactionController<TRowData>;
 	public readonly capabilityManager: GridCapabilityManager<TRowData>;
 	public readonly insights: GridInsightRegistry;
+	public readonly dataQuality: GridDataQualityManager<TRowData>;
 
 	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
 		return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];
@@ -241,6 +243,12 @@ export class GridEngine<TRowData = unknown> {
 		this.commandHistory = new CommandHistory(this.runtimeFaults);
 		this.invalidation = new InvalidationManager();
 		this.insights = new GridInsightRegistry();
+		this.dataQuality = new GridDataQualityManager<TRowData>({
+			getState: () => this.stateManager.getState(),
+			getRowModel: () => this.getRowModel(),
+			requestInsightRepaint: () => this.requestInsightRepaint(),
+		});
+		this.insights.register(this.dataQuality);
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
@@ -1061,6 +1069,12 @@ export class GridEngine<TRowData = unknown> {
 	public fillRange(source: GridCellRange, target: GridCellRange): void {
 		this.spreadsheetFill.fillRange(source, target);
 	}
+	/** Request a full repaint triggered by an insight layer decoration change. */
+	public requestInsightRepaint(): void {
+		this.invalidation.invalidateFull('insight-decorations');
+		this.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason: 'insight-decorations' });
+	}
+
 	public destroy(): void {
 		this.insights.clear();
 		this.cellNotifications.clear();

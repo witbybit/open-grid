@@ -292,6 +292,12 @@ export interface ColumnDef<TRowData = unknown> {
 	 * Useful for action / checkbox / drag-handle columns.
 	 */
 	disableCellRangeSelection?: boolean;
+	/**
+	 * Marks this column as required for data-quality purposes.
+	 * Does not block editing — use `valueValidator` to enforce a hard edit constraint.
+	 * When true, `DataQualityManager.run()` will flag rows with null/empty values as issues.
+	 */
+	required?: boolean;
 
 	// ── Column-level capability callbacks ────────────────────────────────────────
 	/** Return false / { allowed: false } to make this column read-only. */

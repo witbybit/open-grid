@@ -128,6 +128,22 @@
 	animation: spin-slow 20s linear infinite;
 }
 
+/* ── Data Quality decorations (Plan 127) ────────────────────────────────────── */
+
+.og-cell-quality-error {
+	box-shadow: inset 0 -2px 0 rgba(248, 113, 113, 0.9);
+	background-color: rgba(248, 113, 113, 0.07);
+}
+
+.og-cell-quality-warning {
+	box-shadow: inset 0 -2px 0 rgba(251, 191, 36, 0.85);
+	background-color: rgba(251, 191, 36, 0.05);
+}
+
+.og-cell-quality-info {
+	box-shadow: inset 0 -2px 0 rgba(56, 189, 248, 0.7);
+}
+
 /* ── Insight Layer Foundation (Plan 126) ────────────────────────────────────── */
 
 /* Cell-level severity classes — set via GridInsightLayer.getCellDecorations() */

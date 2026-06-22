@@ -177,3 +177,11 @@ export type { ThemeTokens, BuiltInThemeName } from './renderer/themes.js';
 export type { GridDomainVersions } from './state/GridDomainVersions.js';
 export type { GridInstrumentation, GridInstrumentationSnapshot, FrameMetrics, FallbackMetric } from './diagnostics/GridInstrumentation.js';
 export { GridMetric } from './diagnostics/GridInstrumentation.js';
+
+// ── Insight Layer (Plan 126) ──────────────────────────────────────────────────
+export type { GridInsightLayer, GridInsightLayerId, GridInsightSeverity, GridCellDecoration, GridRowDecoration } from './insights/insightTypes.js';
+export { GridInsightRegistry } from './insights/GridInsightRegistry.js';
+
+// ── Data Quality (Plan 127) ───────────────────────────────────────────────────
+export type { DataQualityIssue, DataQualityIssueType, DataQualityFix, DataQualityReport, DataQualityRule, DataQualityRuleContext, DataQualityDiagnostics } from './features/dataQuality/DataQualityManager.js';
+export { GridDataQualityManager, createDuplicateValueRule } from './features/dataQuality/DataQualityManager.js';

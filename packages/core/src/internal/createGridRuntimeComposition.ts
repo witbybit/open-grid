@@ -255,6 +255,11 @@ export function createGridRuntimeComposition<TRowData>({
 		onThemeChange: (listener: (theme: ThemeTokens) => void) => runtime.onThemeChange(listener),
 		getContainer: () => runtime.getContainerElement(),
 		getInsightDiagnostics: () => runtime.getInsightDiagnostics(),
+		runDataQualityCheck: (options?: { scope?: import('../features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'] }) => runtime.runDataQualityCheck(options),
+		getDataQualityReport: () => runtime.getDataQualityReport(),
+		clearDataQualityReport: () => runtime.clearDataQualityReport(),
+		registerDataQualityRule: (rule: import('../features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>) => runtime.registerDataQualityRule(rule),
+		unregisterDataQualityRule: (ruleId: string) => runtime.unregisterDataQualityRule(ruleId),
 		destroy,
 	};
 

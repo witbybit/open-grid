@@ -7,10 +7,11 @@ import { SortPanel } from './panels/SortPanel.js';
 import { ThemesPanel } from './panels/ThemesPanel.js';
 import { ViewsPanel } from './panels/ViewsPanel.js';
 import { QueryPanel } from './panels/QueryPanel.js';
+import { DataQualityPanel } from './panels/DataQualityPanel.js';
 
 // ── Sidebar types ─────────────────────────────────────────────────────────────
 
-export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views' | 'query';
+export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views' | 'query' | 'dataQuality';
 
 export interface SidebarPanelDef<TRowData = unknown> {
 	id: string;
@@ -69,6 +70,11 @@ const _QueryIcon = () => (
 		<circle cx='7.5' cy='11.5' r='0.5' fill='currentColor' />
 	</svg>
 );
+const _DataQualityIcon = () => (
+	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
+		<path d='M7.5 1.5l1.5 3 3.5.5-2.5 2.5.6 3.5-3.1-1.6-3.1 1.6.6-3.5L2.5 5l3.5-.5z' />
+	</svg>
+);
 
 interface _ResolvedPanel<TRowData> {
 	id: string;
@@ -84,6 +90,7 @@ const _BUILTIN_ICONS: Record<BuiltinSidebarPanelId, React.ReactNode> = {
 	themes: <_ThemesIcon />,
 	views: <_ViewsIcon />,
 	query: <_QueryIcon />,
+	dataQuality: <_DataQualityIcon />,
 };
 const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
 	columns: 'Columns',
@@ -92,6 +99,7 @@ const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
 	themes: 'Themes',
 	views: 'Views',
 	query: 'Query',
+	dataQuality: 'Data Quality',
 };
 
 function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TRowData>): _ResolvedPanel<TRowData> {
@@ -109,6 +117,7 @@ function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TR
 			if (def === 'themes') return <ThemesPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'views') return <ViewsPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'query') return <QueryPanel api={api as GridApi<any>} onClose={onClose} />;
+			if (def === 'dataQuality') return <DataQualityPanel api={api as GridApi<any>} onClose={onClose} />;
 			return null;
 		},
 	};
