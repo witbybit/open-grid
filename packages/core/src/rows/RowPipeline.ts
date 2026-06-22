@@ -1,6 +1,8 @@
 import type { ColumnDef } from '../columnDef.js';
 import type { SortModel, FilterModel, GroupRowMeta } from '../rowModel.js';
 import { applyClientFilterOnly, applyClientSortAndFilter } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
+import { applyQueryModelFilter } from '../query/evaluateQueryModel.js';
 import { RowNode } from '../rowNode.js';
 import type { VisualRow } from '../visualRow.js';
 import { createRowPipelineContext } from './pipelineContext.js';
@@ -49,6 +51,7 @@ export interface RowPipelineInput<TData = unknown> {
 	columns: ColumnDef<TData>[];
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
+	queryModel?: GridQueryModel | null;
 
 	// Tree / Group / Detail configs
 	groupBy?: string[];
@@ -110,6 +113,7 @@ export class RowPipeline<TData = unknown> {
 			columns,
 			sortModel,
 			filterModel,
+			queryModel,
 			groupBy,
 			rowModelConfig,
 			getParentId,
@@ -146,13 +150,18 @@ export class RowPipeline<TData = unknown> {
 		let visualRows: VisualRow<TData>[] | null = null;
 
 		if (groupDefs.length > 0) {
-			const filteredNodes = applyClientFilterOnly(nodes, columns, filterModel);
+			const filteredNodes = applyQueryModelFilter(applyClientFilterOnly(nodes, columns, filterModel), columns, queryModel);
 			roots = groupStage(filteredNodes, groupDefs, context);
 		} else if (effectiveGetParentId) {
 			const treeRoots = treeStage(nodes, effectiveGetParentId);
-			roots = this.filterTree(treeRoots, columns, filterModel, treeConfig?.filterMode ?? 'includeAncestors');
+			const treeFiltered = this.filterTree(treeRoots, columns, filterModel, treeConfig?.filterMode ?? 'includeAncestors');
+			roots = queryModel ? this.filterTreeByQuery(treeFiltered, columns, queryModel) : treeFiltered;
 		} else {
-			const filteredNodes = applyClientSortAndFilter(nodes, columns, sortModel, filterModel).map((w) => w.node);
+			const filteredNodes = applyQueryModelFilter(
+				applyClientSortAndFilter(nodes, columns, sortModel, filterModel).map((w) => w.node),
+				columns,
+				queryModel
+			);
 			if (!detailConfig?.enabled && !masterDetailEnabled && aggDefs.length === 0) {
 				visualRows = filteredNodes.map((node) => {
 					const explicitHeight = rowHeightsRecord[node.id];
@@ -278,12 +287,14 @@ export class RowPipeline<TData = unknown> {
 		};
 	}
 
-	public collectAllGroupIds(input: Pick<RowPipelineInput<TData>, 'nodes' | 'columns' | 'groupBy' | 'rowModelConfig' | 'filterModel'>): string[] {
-		const { nodes, columns, groupBy, rowModelConfig, filterModel } = input;
+	public collectAllGroupIds(
+		input: Pick<RowPipelineInput<TData>, 'nodes' | 'columns' | 'groupBy' | 'rowModelConfig' | 'filterModel' | 'queryModel'>
+	): string[] {
+		const { nodes, columns, groupBy, rowModelConfig, filterModel, queryModel } = input;
 		const groupingConfig = rowModelConfig?.grouping;
 		const groupDefs: GroupDef<TData>[] = groupingConfig?.model ?? (groupBy ?? []).map((colId) => ({ colId }));
 		if (groupDefs.length === 0) return [];
-		const filteredNodes = applyClientFilterOnly(nodes, columns, filterModel);
+		const filteredNodes = applyQueryModelFilter(applyClientFilterOnly(nodes, columns, filterModel), columns, queryModel);
 		const context = createRowPipelineContext(columns, { groups: new Set(), treeRows: new Set(), details: new Set() });
 		const roots = groupStage(filteredNodes, groupDefs, context);
 		const ids: string[] = [];
@@ -297,6 +308,24 @@ export class RowPipeline<TData = unknown> {
 		};
 		collect(roots);
 		return ids;
+	}
+
+	private filterTreeByQuery<TData>(roots: RowTreeNode<TData>[], columns: ColumnDef<TData>[], queryModel: GridQueryModel): RowTreeNode<TData>[] {
+		if (queryModel.root.children.length === 0) return roots;
+		const matchingIds = new Set(
+			applyQueryModelFilter(
+				roots.flatMap((root) => collectDataNodes(root)),
+				columns,
+				queryModel
+			).map((n) => n.id)
+		);
+		const includeNode = (node: RowTreeNode<TData>): RowTreeNode<TData> | null => {
+			if (node.kind !== 'data') return node;
+			const children = (node.children ?? []).map(includeNode).filter((c): c is RowTreeNode<TData> => !!c);
+			if (!matchingIds.has(node.rowId) && children.length === 0) return null;
+			return { ...node, children: children.length > 0 ? children : undefined };
+		};
+		return roots.map(includeNode).filter((n): n is RowTreeNode<TData> => !!n);
 	}
 
 	private filterTree<TData>(

@@ -6,10 +6,11 @@ import { FiltersPanel } from './panels/FiltersPanel.js';
 import { SortPanel } from './panels/SortPanel.js';
 import { ThemesPanel } from './panels/ThemesPanel.js';
 import { ViewsPanel } from './panels/ViewsPanel.js';
+import { QueryPanel } from './panels/QueryPanel.js';
 
 // ── Sidebar types ─────────────────────────────────────────────────────────────
 
-export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views';
+export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views' | 'query';
 
 export interface SidebarPanelDef<TRowData = unknown> {
 	id: string;
@@ -61,6 +62,13 @@ const _ViewsIcon = () => (
 		<path d='M5.5 5.5v8' />
 	</svg>
 );
+const _QueryIcon = () => (
+	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
+		<circle cx='7.5' cy='7.5' r='6' />
+		<path d='M5.5 6a2 2 0 1 1 2 2v1' />
+		<circle cx='7.5' cy='11.5' r='0.5' fill='currentColor' />
+	</svg>
+);
 
 interface _ResolvedPanel<TRowData> {
 	id: string;
@@ -75,6 +83,7 @@ const _BUILTIN_ICONS: Record<BuiltinSidebarPanelId, React.ReactNode> = {
 	sort: <_SortIcon />,
 	themes: <_ThemesIcon />,
 	views: <_ViewsIcon />,
+	query: <_QueryIcon />,
 };
 const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
 	columns: 'Columns',
@@ -82,6 +91,7 @@ const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
 	sort: 'Sort',
 	themes: 'Themes',
 	views: 'Views',
+	query: 'Query',
 };
 
 function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TRowData>): _ResolvedPanel<TRowData> {
@@ -98,6 +108,7 @@ function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TR
 			if (def === 'sort') return <SortPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'themes') return <ThemesPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'views') return <ViewsPanel api={api as GridApi<any>} onClose={onClose} />;
+			if (def === 'query') return <QueryPanel api={api as GridApi<any>} onClose={onClose} />;
 			return null;
 		},
 	};

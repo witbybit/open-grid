@@ -31,6 +31,7 @@ import { DagEngine, type FormulaCellCoordinate } from '../calculations/dagEngine
 import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
 import { InvalidationManager } from '../renderer/invalidationManager.js';
 import { GridCommitKernel } from './GridChangeApplier.js';
 import type { GridCommitEvent } from './GridChangeApplier.js';
@@ -319,6 +320,7 @@ export class GridEngine<TRowData = unknown> {
 			activeEdit: config.activeEdit || null,
 			sortModel: config.sortModel || null,
 			filterModel: config.filterModel || null,
+			queryModel: config.queryModel || null,
 			themeName: config.themeName ?? 'dark',
 			globalVersion: 0,
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
@@ -704,6 +706,9 @@ export class GridEngine<TRowData = unknown> {
 	}
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
 		this.stateFeature.setFilterModel(filterModel, undoable);
+	}
+	public setQueryModel(queryModel: GridQueryModel | null): void {
+		this.stateFeature.setQueryModel(queryModel);
 	}
 	public setPaginationPage(page: number, metrics?: { pageCount: number; totalRows: number }): void {
 		this.stateFeature.setPaginationPage(page, metrics);

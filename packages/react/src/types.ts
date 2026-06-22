@@ -117,6 +117,18 @@ export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;
 
 export type { RowModelType, InfiniteDatasource, ServerDatasource, ServerPaginationOptions, ServerPageState };
 
+export type {
+	GridQueryModel,
+	GridQueryGroup,
+	GridQueryCondition,
+	GridQueryNode,
+	QueryDiagnostics,
+	QueryConditionDiagnostic,
+	QueryEvaluationContext,
+	QueryOperatorDefinition,
+} from '@open-grid/core';
+export { createEmptyQueryModel, isQueryModelActive, countQueryNodes, getQueryOperator, getQueryOperatorsForType } from '@open-grid/core';
+
 /**
  * Fields from GridInitialState that can be configured as top-level props on the public
  * Grid component. Sourced from the canonical GridInitialState type so these never drift

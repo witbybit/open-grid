@@ -1,4 +1,5 @@
 import type { FilterModel, SortModel } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from '../engine/rendererPorts.js';
 import type { InfiniteDatasource } from '../infiniteRowModel.js';
@@ -151,6 +152,7 @@ export interface GridStateSnapshot<TRowData = unknown> {
 	readonly columns: readonly ColumnDef<TRowData>[];
 	readonly sortModel: SortModel | null;
 	readonly filterModel: FilterModel | null;
+	readonly queryModel?: GridQueryModel | null;
 	readonly selection: GridSelectionState;
 	readonly selectedRowIds: readonly string[];
 	readonly activeEdit: ActiveEditState | null;
@@ -462,6 +464,11 @@ export interface GridApi<TRowData = unknown> {
 	setRowHeight(rowId: string, height: number): void;
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
+	getQueryModel(): GridQueryModel | null;
+	setQueryModel(model: GridQueryModel | null): void;
+	clearQueryModel(): void;
+	/** Evaluate the active query model against a single row. Returns true when the row passes (or when no query model is active). */
+	evaluateQueryForRow(rowId: string): boolean;
 	/** Returns all distinct values for a column, scanning unfiltered row data. Used to populate set filter options. */
 	getColumnDistinctValues(colField: string): (string | number | null)[];
 	setStyleRules(styleRules: GridStyleRule<TRowData>[] | undefined): void;

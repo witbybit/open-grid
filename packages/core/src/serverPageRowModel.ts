@@ -26,6 +26,7 @@ export interface ServerGetPageParams {
 	readonly pageSize: number;
 	readonly sortModel: unknown;
 	readonly filterModel: unknown;
+	readonly queryModel: unknown;
 }
 
 export interface ServerGetPageResult<TRowData> {
@@ -231,6 +232,7 @@ export class ServerPageRowModelController<TData = unknown>
 				pageSize,
 				sortModel: state.sortModel,
 				filterModel: state.filterModel,
+				queryModel: state.queryModel,
 			});
 
 			if (this.disposed || generation !== this.requestGeneration) return;

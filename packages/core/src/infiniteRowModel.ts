@@ -27,6 +27,7 @@ export interface InfiniteGetRowsParams {
 	readonly endRow: number;
 	readonly sortModel: unknown;
 	readonly filterModel: unknown;
+	readonly queryModel: unknown;
 }
 
 export interface InfiniteDatasource<TRowData = unknown> {
@@ -237,6 +238,7 @@ export class InfiniteRowModelController<TData = unknown>
 				endRow,
 				sortModel: state.sortModel,
 				filterModel: state.filterModel,
+				queryModel: state.queryModel,
 			});
 
 			if (this.disposed || generation !== this.requestGeneration) return;

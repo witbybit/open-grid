@@ -1,6 +1,7 @@
 import type { ColumnDef } from '../columnDef.js';
 import type { GridInitialState, InternalGridState } from '../state/GridState.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
 import { isBuiltInThemeName, type BuiltInThemeName } from '../renderer/themes.js';
 
 /**
@@ -21,6 +22,7 @@ export interface SerializedGridState {
 	columnVisibility?: Record<string, boolean>;
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
+	queryModel?: GridQueryModel | null;
 	themeName?: BuiltInThemeName;
 	groupBy?: string[];
 	showGroupFooter?: boolean;
@@ -99,6 +101,7 @@ function parseSerializedGridState(raw: unknown): SerializedGridStateParseResult 
 		'columnVisibility',
 		'sortModel',
 		'filterModel',
+		'queryModel',
 		'themeName',
 		'groupBy',
 		'showGroupFooter',
@@ -298,6 +301,7 @@ function extractSerializedGridState<TRowData>(state: InternalGridState<TRowData>
 		columnVisibility: Object.keys(columnVisibility).length > 0 ? columnVisibility : undefined,
 		sortModel: state.sortModel,
 		filterModel: state.filterModel,
+		queryModel: state.queryModel,
 		themeName: state.themeName,
 		groupBy: state.groupBy,
 		showGroupFooter: state.showGroupFooter,
@@ -433,6 +437,7 @@ const PERSISTENCE_KEYS = [
 	'columnWidths',
 	'sortModel',
 	'filterModel',
+	'queryModel',
 	'themeName',
 	'groupBy',
 	'showGroupFooter',
@@ -594,6 +599,9 @@ export function preparePersistedGridStateRestore<TRowData>(
 	}
 	if (s.filterModel !== undefined) {
 		stateMutation.filterModel = s.filterModel as FilterModel | null;
+	}
+	if (s.queryModel !== undefined) {
+		stateMutation.queryModel = s.queryModel ?? null;
 	}
 	if (s.themeName !== undefined && isBuiltInThemeName(s.themeName)) {
 		stateMutation.themeName = s.themeName;

@@ -1,4 +1,5 @@
 import type { FilterModel, SortDirection, SortModel } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
@@ -23,6 +24,7 @@ export interface GridModelState<TRowData = unknown> {
 
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
+	queryModel: GridQueryModel | null;
 	themeName: BuiltInThemeName;
 
 	groupBy?: string[];

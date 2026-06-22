@@ -305,7 +305,7 @@ function makeColumns(): ColumnDef<EmployeeRow>[] {
 }
 
 // ── Pre-seeded workspace views ────────────────────────────────────────────────
-// v:2 is GRID_STATE_SCHEMA_VERSION from @open-grid/core.
+// v:2 matches the current GRID_STATE_SCHEMA_VERSION.
 // Each view embeds a PersistedGridState with a real filter / sort model.
 
 const _T = Date.now();
@@ -710,6 +710,8 @@ export default function AdvancedFiltersDemo() {
 						flexDirection: 'column',
 						gap: 6,
 						minHeight: 0,
+						overflow: 'auto',
+						maxHeight: 150,
 					}}
 				>
 					<div
@@ -800,7 +802,7 @@ export default function AdvancedFiltersDemo() {
 					showFilterChipBar={true}
 					persistence='advancedfilters-ws'
 					workspace={adapter}
-					sidebar={{ panels: ['columns', 'filters', 'sort', 'themes', 'views'], defaultOpen: 'views' }}
+					sidebar={{ panels: ['columns', 'query', 'filters', 'sort', 'themes', 'views'], defaultOpen: 'views' }}
 				/>
 			</div>
 		</div>

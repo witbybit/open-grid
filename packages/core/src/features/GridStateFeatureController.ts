@@ -1,6 +1,7 @@
 import { GridEventName } from '../api/GridEvents.js';
 import type { StateManager } from '../state/StateManager.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { GridCommit, GridCommitResult } from '../engine/GridChangeApplier.js';
 import type { InternalGridState } from '../state/GridState.js';
 
@@ -207,6 +208,36 @@ export class GridStateFeatureController<TRowData = unknown> {
 						},
 					}
 				: undefined,
+			requestRender: true,
+		});
+	}
+
+	public setQueryModel(queryModel: GridQueryModel | null): void {
+		const oldQueryModel = this.deps.stateManager.getState().queryModel;
+		this.deps.applyChange({
+			reason: 'rows:set-query-model',
+			state: { queryModel },
+			invalidations: [{ kind: 'full' }],
+			domains: ['rows', 'filtering'],
+			events: [{ type: GridEventName.queryModelChanged, payload: { queryModel } }],
+			history: {
+				undo: {
+					reason: 'rows:set-query-model',
+					state: { queryModel: oldQueryModel },
+					invalidations: [{ kind: 'full' }],
+					domains: ['rows', 'filtering'],
+					events: [{ type: GridEventName.queryModelChanged, payload: { queryModel: oldQueryModel } }],
+					requestRender: true,
+				},
+				redo: {
+					reason: 'rows:set-query-model',
+					state: { queryModel },
+					invalidations: [{ kind: 'full' }],
+					domains: ['rows', 'filtering'],
+					events: [{ type: GridEventName.queryModelChanged, payload: { queryModel } }],
+					requestRender: true,
+				},
+			},
 			requestRender: true,
 		});
 	}

@@ -627,7 +627,6 @@ describe('Architecture guardrails', () => {
 			'useOwnedGrid',
 			'useShowroomStores',
 			'GridProvider',
-			'GridView',
 			'ownedGrid',
 		];
 

@@ -8,6 +8,8 @@ import type {
 	ServerPageControllableRowModel,
 	RowExpansionStateReadableModel,
 } from './rowModel.js';
+import type { GridQueryModel } from './query/GridQueryModel.js';
+import { evaluateQueryModel, createQueryEvaluationContext } from './query/evaluateQueryModel.js';
 import {
 	asClientMutableRowModel,
 	asRowExpansionStateReadableModel,
@@ -175,6 +177,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			activeEdit: initialState.activeEdit || null,
 			sortModel: initialState.sortModel || null,
 			filterModel: initialState.filterModel || null,
+			queryModel: initialState.queryModel || null,
 			getRowId: initialState.getRowId,
 			loading: initialState.loading,
 			loadingSkeletonCount: initialState.loadingSkeletonCount,
@@ -399,6 +402,27 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setFilterModel = (filterModel: FilterModel | null): void => {
 		this.engine.setFilterModel(filterModel);
+	};
+
+	public getQueryModel = (): GridQueryModel | null => {
+		return this.state.queryModel ?? null;
+	};
+
+	public setQueryModel = (model: GridQueryModel | null): void => {
+		this.engine.setQueryModel(model);
+	};
+
+	public clearQueryModel = (): void => {
+		this.engine.setQueryModel(null);
+	};
+
+	public evaluateQueryForRow = (rowId: string): boolean => {
+		const queryModel = this.state.queryModel;
+		if (!queryModel) return true;
+		const node = this.getRowNodeById(rowId);
+		if (!node) return false;
+		const ctx = createQueryEvaluationContext(this.state.columns);
+		return evaluateQueryModel(queryModel, node, ctx);
 	};
 
 	public setGroupBy = (colIds: string[]): void => {

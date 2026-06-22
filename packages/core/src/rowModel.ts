@@ -829,6 +829,9 @@ export class ClientRowModelController<TData = unknown>
 				this.rebuildDependencyRegistry();
 				this.refresh();
 			}),
+			this.runtime.addEventListener(GridEventName.queryModelChanged, () => {
+				this.refresh();
+			}),
 			this.runtime.addEventListener(GridEventName.groupByChanged, () => {
 				this.rebuildDependencyRegistry();
 				this.refresh();
@@ -1406,6 +1409,7 @@ export class ClientRowModelController<TData = unknown>
 				columns: state.columns,
 				sortModel: state.sortModel,
 				filterModel: state.filterModel,
+				queryModel: state.queryModel,
 				groupBy: state.groupBy,
 				rowModelConfig,
 				getParentId: state.getParentId,
@@ -1510,6 +1514,7 @@ export class ClientRowModelController<TData = unknown>
 			columns: state.columns,
 			sortModel: state.sortModel,
 			filterModel: state.filterModel,
+			queryModel: state.queryModel,
 			groupBy: state.groupBy,
 			rowModelConfig,
 			getParentId: state.getParentId,

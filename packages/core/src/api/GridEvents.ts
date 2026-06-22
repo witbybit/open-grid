@@ -57,6 +57,8 @@ export enum GridEventName {
 	rowDragEnd = 'rowDragEnd',
 	rowDragCancelled = 'rowDragCancelled',
 	rowOrderChanged = 'rowOrderChanged',
+	// ── Query model events ────────────────────────────────────────────────────────
+	queryModelChanged = 'queryModelChanged',
 	// ── Workspace events ──────────────────────────────────────────────────────────
 	viewSaved = 'viewSaved',
 	viewApplied = 'viewApplied',
@@ -128,6 +130,7 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.rowDragEnd]: { rowId: string; overRowId: string | null; overVisualIndex: number | null };
 	[GridEventName.rowDragCancelled]: { rowId: string };
 	[GridEventName.rowOrderChanged]: { rowIds: string[] };
+	[GridEventName.queryModelChanged]: { queryModel: import('../query/GridQueryModel.js').GridQueryModel | null };
 	[GridEventName.viewSaved]: { view: GridViewDefinition };
 	[GridEventName.viewApplied]: { view: GridViewDefinition };
 	[GridEventName.viewDeleted]: { id: string };

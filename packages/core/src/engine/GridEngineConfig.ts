@@ -3,6 +3,7 @@ import type { GridCellPointer, GridSelectionState, RowSelectionOptions } from '.
 import type { RowValidator } from '../features/ValidationManager.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
 	columns: ColumnDef<TRowData>[];
@@ -18,6 +19,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	selectedRowIds?: string[];
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
+	queryModel?: GridQueryModel | null;
 	themeName?: BuiltInThemeName;
 	activeEdit?: GridCellPointer | null;
 	loadingSkeletonCount?: number;

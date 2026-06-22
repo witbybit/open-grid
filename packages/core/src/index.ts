@@ -11,6 +11,19 @@ export type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from './
 export { createLocalStorageWorkspaceAdapter } from './workspace/localStorageWorkspaceAdapter.js';
 export { createWorkspaceController } from './workspace/GridWorkspaceController.js';
 export type { GridWorkspaceController } from './workspace/GridWorkspaceController.js';
+export type {
+	GridQueryModel,
+	GridQueryGroup,
+	GridQueryCondition,
+	GridQueryNode,
+	QueryDiagnostics,
+	QueryConditionDiagnostic,
+} from './query/GridQueryModel.js';
+export { createEmptyQueryModel, isQueryModelActive, countQueryNodes } from './query/GridQueryModel.js';
+export { getQueryOperator, getQueryOperatorsForType } from './query/queryOperatorRegistry.js';
+export type { QueryOperatorDefinition, QueryEvaluateParams } from './query/queryOperatorRegistry.js';
+export { evaluateQueryModel, applyQueryModelFilter, createQueryEvaluationContext } from './query/evaluateQueryModel.js';
+export type { QueryEvaluationContext } from './query/evaluateQueryModel.js';
 export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteRowModelOptions } from './infiniteRowModel.js';
 export type {
 	ServerDatasource,
