@@ -75,6 +75,7 @@ describe('Public/internal boundary', () => {
 				'GridEventName',
 				'GridInsightRegistry',
 				'GridMetric',
+				'GridTransactionStreamImpl',
 				'HIGH_CONTRAST_DARK_THEME',
 				'HIGH_CONTRAST_LIGHT_THEME',
 				'LIGHT_THEME',

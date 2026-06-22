@@ -798,6 +798,15 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
+	public batchStreamCells(updates: readonly { rowId: string; colField: string; value: unknown }[]): void {
+		if (!updates.length) return;
+		this.changeApplier.commit({
+			reason: 'data:stream-cells',
+			domainMutations: [{ kind: 'batch-cell', updates: updates as { rowId: string; colField: string; value: unknown }[], undoable: false, source: 'api' }],
+			historyPolicy: 'suppress',
+		});
+	}
+
 	public startEdit(rowId: string, colField: string): void {
 		this.editingFeature.startEdit(rowId, colField);
 	}

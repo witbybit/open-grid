@@ -266,6 +266,7 @@ export function createGridRuntimeComposition<TRowData>({
 		getCellDiff: (rowId: string, colField: string) => runtime.getCellDiff(rowId, colField),
 		acceptCellDiff: (rowId: string, colField: string) => runtime.acceptCellDiff(rowId, colField),
 		rejectCellDiff: (rowId: string, colField: string) => runtime.rejectCellDiff(rowId, colField),
+		createTransactionStream: (opts?: import('../features/liveStream/liveStreamTypes.js').TransactionStreamOptions) => runtime.createTransactionStream(opts),
 		destroy,
 	};
 

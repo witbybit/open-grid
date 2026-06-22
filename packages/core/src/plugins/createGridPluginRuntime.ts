@@ -183,5 +183,6 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		getCellDiff: source.getCellDiff,
 		acceptCellDiff: source.acceptCellDiff,
 		rejectCellDiff: source.rejectCellDiff,
+		createTransactionStream: source.createTransactionStream,
 	};
 }

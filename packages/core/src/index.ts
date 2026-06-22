@@ -189,3 +189,7 @@ export { GridDataQualityManager, createDuplicateValueRule } from './insights/dat
 // ── Data Diff ─────────────────────────────────────────────────────────────────
 export type { GridDiffModel, GridDiffDataset, GridDiffOptions, GridCellDiff, GridDiffResult, GridDiffDiagnostics } from './insights/diff.js';
 export { GridDiffManager } from './insights/diff.js';
+
+// ── Live Data Stream ──────────────────────────────────────────────────────────
+export type { CellStreamUpdate, RowStreamUpdate, TransactionStreamUpdate, TransactionStreamOptions, TransactionStreamState, GridTransactionStream } from './insights/liveStream.js';
+export { GridTransactionStreamImpl } from './insights/liveStream.js';

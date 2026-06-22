@@ -718,6 +718,14 @@ export interface GridApi<TRowData = unknown> {
 	 */
 	rejectCellDiff(rowId: string, colField: string): void;
 
+	// ── Live Data Stream ──────────────────────────────────────────────────────────
+
+	/**
+	 * Creates a live data stream that batches and coalesces incoming updates,
+	 * commits through existing mutation APIs, and exposes flash decorations via the insight layer.
+	 */
+	createTransactionStream(options?: import('../features/liveStream/liveStreamTypes.js').TransactionStreamOptions): import('../features/liveStream/liveStreamTypes.js').GridTransactionStream<TRowData>;
+
 	destroy(): void;
 }
 

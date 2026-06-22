@@ -37,15 +37,13 @@ import type { PersistenceStatus, PersistedGridState } from './persistence/stateP
 import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from './workspace/workspaceTypes.js';
 import { extractPersistedState, preparePersistedGridStateRestore, areRowHeightsEqual } from './persistence/statePersistence.js';
 import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltInThemeName, type ThemeTokens } from './renderer/themes.js';
+import { GridTransactionStreamImpl } from './features/liveStream/GridTransactionStream.js';
+import { defaultGridScheduler } from './renderer/gridScheduler.js';
 
 // ── Focused sub-modules — re-export so callers of store.ts continue to work ──
 export { RowNode } from './rowNode.js';
 export type { GridInsightLayer, GridInsightLayerId, GridInsightSeverity, GridCellDecoration, GridRowDecoration } from './insights/insightTypes.js';
 export { GridInsightRegistry } from './insights/GridInsightRegistry.js';
-export type { DataQualityIssue, DataQualityIssueType, DataQualityFix, DataQualityReport, DataQualityRule, DataQualityRuleContext, DataQualityDiagnostics } from './features/dataQuality/DataQualityManager.js';
-export { GridDataQualityManager, createDuplicateValueRule } from './features/dataQuality/DataQualityManager.js';
-export type { GridDiffModel, GridDiffDataset, GridDiffOptions, GridCellDiff, GridDiffResult, GridDiffDiagnostics } from './features/diff/GridDiffManager.js';
-export { GridDiffManager } from './features/diff/GridDiffManager.js';
 
 export { isDomCellRenderer, getValueByPath, setValueByPath, compilePathGetter, validateColumns } from './columnDef.js';
 export { compileStyleRules } from './styling/styleRules.js';
@@ -1129,6 +1127,18 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		if (d) { this.setCellValue(r, c, d.newValue); this.engine.diff.rejectCellDiff(r, c); }
 	};
 	public rejectCellDiff = (r: string, c: string): void => this.engine.diff.rejectCellDiff(r, c);
+	public createTransactionStream = (opts?: import('./features/liveStream/liveStreamTypes.js').TransactionStreamOptions): import('./features/liveStream/liveStreamTypes.js').GridTransactionStream<TRowData> => {
+		const s = new GridTransactionStreamImpl<TRowData>({
+			commitCells: (u) => this.engine.batchStreamCells(u),
+			applyRowPatch: (rid, p) => { const n = this.getRowNodeById(rid); if (n?.data) this.applyTransaction({ update: [{ ...n.data, ...p }] }); },
+			isCellBeingEdited: (r, c) => { const st = this.engine.stateManager.getState(); return st.activeEdit?.rowId === r && st.activeEdit?.colField === c; },
+			requestInsightRepaint: () => this.engine.requestInsightRepaint(),
+			onDestroy: () => this.engine.insights.unregister('liveStream'),
+			scheduler: defaultGridScheduler,
+		}, opts);
+		this.engine.insights.register(s);
+		return s;
+	};
 
 	public destroy = (): void => {
 		this.storeDestroyed = true;
