@@ -56,6 +56,7 @@ import { GridCapabilityManager } from '../capabilities/GridCapabilityManager.js'
 import type { GridCapabilityAction, GridCapabilitiesConfig, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { GridInsightRegistry } from '../insights/GridInsightRegistry.js';
 import { GridDataQualityManager } from '../features/dataQuality/DataQualityManager.js';
+import { GridDiffManager } from '../features/diff/GridDiffManager.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -87,6 +88,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly capabilityManager: GridCapabilityManager<TRowData>;
 	public readonly insights: GridInsightRegistry;
 	public readonly dataQuality: GridDataQualityManager<TRowData>;
+	public readonly diff: GridDiffManager<TRowData>;
 
 	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
 		return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];
@@ -249,6 +251,11 @@ export class GridEngine<TRowData = unknown> {
 			requestInsightRepaint: () => this.requestInsightRepaint(),
 		});
 		this.insights.register(this.dataQuality);
+		this.diff = new GridDiffManager<TRowData>({
+			getState: () => this.stateManager.getState() as { columns: readonly import('../columnDef.js').ColumnDef<unknown>[] },
+			requestInsightRepaint: () => this.requestInsightRepaint(),
+		});
+		this.insights.register(this.diff);
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 

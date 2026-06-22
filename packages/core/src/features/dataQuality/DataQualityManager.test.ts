@@ -29,7 +29,7 @@ const DIRTY_ROWS: TestRow[] = [
 ];
 
 function makeVisualRow(row: TestRow, index: number) {
-	return { kind: 'data' as const, rowId: row.id, data: row, visualRowIndex: index };
+	return { kind: 'data' as const, rowId: row.id, node: { id: row.id, data: row }, visualRowIndex: index };
 }
 
 function makeRowModel(rows: TestRow[]) {

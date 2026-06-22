@@ -44,6 +44,8 @@ export type { GridInsightLayer, GridInsightLayerId, GridInsightSeverity, GridCel
 export { GridInsightRegistry } from './insights/GridInsightRegistry.js';
 export type { DataQualityIssue, DataQualityIssueType, DataQualityFix, DataQualityReport, DataQualityRule, DataQualityRuleContext, DataQualityDiagnostics } from './features/dataQuality/DataQualityManager.js';
 export { GridDataQualityManager, createDuplicateValueRule } from './features/dataQuality/DataQualityManager.js';
+export type { GridDiffModel, GridDiffDataset, GridDiffOptions, GridCellDiff, GridDiffResult, GridDiffDiagnostics } from './features/diff/GridDiffManager.js';
+export { GridDiffManager } from './features/diff/GridDiffManager.js';
 
 export { isDomCellRenderer, getValueByPath, setValueByPath, compilePathGetter, validateColumns } from './columnDef.js';
 export { compileStyleRules } from './styling/styleRules.js';
@@ -1111,29 +1113,22 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getContainerElement = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
 	public getContainer = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
 
-	public getInsightDiagnostics = (): Record<string, unknown> => {
-		return this.engine.insights.getDiagnostics();
+	public getInsightDiagnostics = (): Record<string, unknown> => this.engine.insights.getDiagnostics();
+	public runDataQualityCheck = (opts?: { scope?: import('./features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'] }): Promise<import('./features/dataQuality/dataQualityTypes.js').DataQualityReport> =>
+		this.engine.dataQuality.run(opts?.scope);
+	public getDataQualityReport = (): import('./features/dataQuality/dataQualityTypes.js').DataQualityReport | null => this.engine.dataQuality.getReport();
+	public clearDataQualityReport = (): void => this.engine.dataQuality.clear();
+	public registerDataQualityRule = (rule: import('./features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>): void => this.engine.dataQuality.registerRule(rule);
+	public unregisterDataQualityRule = (ruleId: string): void => this.engine.dataQuality.unregisterRule(ruleId);
+	public setDiffModel = (model: import('./features/diff/diffTypes.js').GridDiffModel<TRowData> | null): void => this.engine.diff.setDiffModel(model);
+	public clearDiffModel = (): void => this.engine.diff.clear();
+	public getDiffResult = (): import('./features/diff/diffTypes.js').GridDiffResult | null => this.engine.diff.getDiffResult();
+	public getCellDiff = (r: string, c: string): import('./features/diff/diffTypes.js').GridCellDiff | null => this.engine.diff.getCellDiff(r, c);
+	public acceptCellDiff = (r: string, c: string): void => {
+		const d = this.engine.diff.getCellDiff(r, c);
+		if (d) { this.setCellValue(r, c, d.newValue); this.engine.diff.rejectCellDiff(r, c); }
 	};
-
-	public runDataQualityCheck = (options?: { scope?: import('./features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'] }): Promise<import('./features/dataQuality/dataQualityTypes.js').DataQualityReport> => {
-		return this.engine.dataQuality.run(options?.scope);
-	};
-
-	public getDataQualityReport = (): import('./features/dataQuality/dataQualityTypes.js').DataQualityReport | null => {
-		return this.engine.dataQuality.getReport();
-	};
-
-	public clearDataQualityReport = (): void => {
-		this.engine.dataQuality.clear();
-	};
-
-	public registerDataQualityRule = (rule: import('./features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>): void => {
-		this.engine.dataQuality.registerRule(rule);
-	};
-
-	public unregisterDataQualityRule = (ruleId: string): void => {
-		this.engine.dataQuality.unregisterRule(ruleId);
-	};
+	public rejectCellDiff = (r: string, c: string): void => this.engine.diff.rejectCellDiff(r, c);
 
 	public destroy = (): void => {
 		this.storeDestroyed = true;

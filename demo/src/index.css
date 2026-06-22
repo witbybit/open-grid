@@ -128,7 +128,36 @@
 	animation: spin-slow 20s linear infinite;
 }
 
-/* ── Data Quality decorations (Plan 127) ────────────────────────────────────── */
+/* ── Data Diff decorations ───────────────────────────────────────────────────── */
+
+.og-cell-diff-changed {
+	outline: 1px solid rgba(245, 158, 11, 0.7);
+	background-color: rgba(245, 158, 11, 0.06);
+}
+
+.og-cell-diff-added {
+	outline: 1px solid rgba(34, 197, 94, 0.6);
+	background-color: rgba(34, 197, 94, 0.06);
+}
+
+.og-cell-diff-removed {
+	outline: 1px solid rgba(239, 68, 68, 0.6);
+	background-color: rgba(239, 68, 68, 0.06);
+}
+
+.og-row-diff-added {
+	border-left: 2px solid rgba(34, 197, 94, 0.8);
+}
+
+.og-row-diff-removed {
+	border-left: 2px solid rgba(239, 68, 68, 0.8);
+}
+
+.og-row-diff-changed {
+	border-left: 2px solid rgba(245, 158, 11, 0.7);
+}
+
+/* ── Data Quality decorations ────────────────────────────────────────────────── */
 
 .og-cell-quality-error {
 	box-shadow: inset 0 -2px 0 rgba(248, 113, 113, 0.9);

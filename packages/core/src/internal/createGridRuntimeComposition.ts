@@ -260,6 +260,12 @@ export function createGridRuntimeComposition<TRowData>({
 		clearDataQualityReport: () => runtime.clearDataQualityReport(),
 		registerDataQualityRule: (rule: import('../features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>) => runtime.registerDataQualityRule(rule),
 		unregisterDataQualityRule: (ruleId: string) => runtime.unregisterDataQualityRule(ruleId),
+		setDiffModel: (model: import('../features/diff/diffTypes.js').GridDiffModel<TRowData> | null) => runtime.setDiffModel(model),
+		clearDiffModel: () => runtime.clearDiffModel(),
+		getDiffResult: () => runtime.getDiffResult(),
+		getCellDiff: (rowId: string, colField: string) => runtime.getCellDiff(rowId, colField),
+		acceptCellDiff: (rowId: string, colField: string) => runtime.acceptCellDiff(rowId, colField),
+		rejectCellDiff: (rowId: string, colField: string) => runtime.rejectCellDiff(rowId, colField),
 		destroy,
 	};
 

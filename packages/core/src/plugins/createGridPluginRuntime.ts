@@ -177,5 +177,11 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		clearDataQualityReport: source.clearDataQualityReport,
 		registerDataQualityRule: source.registerDataQualityRule,
 		unregisterDataQualityRule: source.unregisterDataQualityRule,
+		setDiffModel: source.setDiffModel,
+		clearDiffModel: source.clearDiffModel,
+		getDiffResult: source.getDiffResult,
+		getCellDiff: source.getCellDiff,
+		acceptCellDiff: source.acceptCellDiff,
+		rejectCellDiff: source.rejectCellDiff,
 	};
 }

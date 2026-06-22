@@ -693,6 +693,31 @@ export interface GridApi<TRowData = unknown> {
 	/** Removes a previously registered data-quality rule. */
 	unregisterDataQualityRule(ruleId: string): void;
 
+	// ── Data Diff ────────────────────────────────────────────────────────────────
+
+	/** Sets the active diff model. Pass null to clear. Triggers insight repaint. */
+	setDiffModel(model: import('../features/diff/diffTypes.js').GridDiffModel<TRowData> | null): void;
+
+	/** Clears the active diff model and decorations. */
+	clearDiffModel(): void;
+
+	/** Returns the computed diff result, or null if no diff is active. */
+	getDiffResult(): import('../features/diff/diffTypes.js').GridDiffResult | null;
+
+	/** Returns the diff for a specific cell, or null if not changed. */
+	getCellDiff(rowId: string, colField: string): import('../features/diff/diffTypes.js').GridCellDiff | null;
+
+	/**
+	 * Accepts a changed cell value by committing the new value through the normal mutation API.
+	 * Removes the cell decoration after commit.
+	 */
+	acceptCellDiff(rowId: string, colField: string): void;
+
+	/**
+	 * Rejects a changed cell diff. Removes the diff decoration for that cell without mutating data.
+	 */
+	rejectCellDiff(rowId: string, colField: string): void;
+
 	destroy(): void;
 }
 
