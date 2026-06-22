@@ -2018,4 +2018,48 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('getFilteredDataNodes');
 		});
 	});
+
+	// ── Plan 135: Pillar 5 — Targeted cell invalidation ──────────────────────
+
+	describe('Plan 135 Pillar 5 — targeted integrity invalidation', () => {
+		it('DiffIntegrityModule.acceptChange uses targeted requestRepaint for the accepted cell', () => {
+			const content = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'),
+				'utf-8'
+			);
+			// Single-cell accept must call requestRepaint with cell coords (batch ops like clearDiff may still call it without args)
+			expect(content).toContain('requestRepaint([{ rowId, colField }])');
+		});
+
+		it('ConflictIntegrityModule._clearConflict uses targeted requestRepaint, not full repaint', () => {
+			const content = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'),
+				'utf-8'
+			);
+			// _clearConflict must call requestRepaint with a cell array
+			expect(content).toContain('requestRepaint([{ rowId: conflict.rowId, colField: conflict.colField }])');
+		});
+
+		it('ValidationIntegrityModule.validateCell uses targeted requestRepaint after applying issues', () => {
+			const content = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'),
+				'utf-8'
+			);
+			// Single-cell validate must pass cell coords to requestRepaint
+			expect(content).toContain('requestRepaint([{ rowId, colField }])');
+		});
+
+		it('integrity modules do not call invalidateFull directly', () => {
+			const modulesDir = resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules');
+			const files = collectSourceFiles(modulesDir).filter((f) => !f.endsWith('.test.ts'));
+			const violators: string[] = [];
+			for (const file of files) {
+				const content = readFileSync(file, 'utf-8');
+				if (content.includes('invalidateFull(')) {
+					violators.push(path.relative(modulesDir, file));
+				}
+			}
+			expect(violators, `integrity modules calling invalidateFull directly: ${violators.join(', ')}`).toHaveLength(0);
+		});
+	});
 });
