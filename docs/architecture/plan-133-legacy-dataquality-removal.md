@@ -6,6 +6,7 @@
 ## Problem
 
 `packages/core/src/features/dataQuality/` is a dead parallel quality system:
+
 - `DataQualityManager.ts` — reads `state.validationErrors` and applies its own quality rules
 - `builtInRules.ts` — duplicate built-in rules that now live in `QualityIntegrityModule`
 - `DataQualityManager.test.ts` — tests for dead code
@@ -16,18 +17,19 @@ Similarly `insights/dataQuality.ts` is a re-export shim pointing to this dead fo
 
 ## Tasks
 
-| Task | File | Notes |
-|------|------|-------|
-| Delete `features/dataQuality/DataQualityManager.ts` | Dead code | Not wired to engine |
-| Delete `features/dataQuality/DataQualityManager.test.ts` | Dead test | |
-| Delete `features/dataQuality/builtInRules.ts` | Superseded | Rules now in QualityIntegrityModule |
-| Delete `insights/dataQuality.ts` | Re-export shim | No longer needed |
-| Remove `GridDataQualityManager` export from `core/index.ts` | `src/index.ts` | |
-| Keep `GridDataQualityRule` type in `core/index.ts` | `src/index.ts` | It's a public type used by quality rules |
+| Task                                                        | File           | Notes                                    |
+| ----------------------------------------------------------- | -------------- | ---------------------------------------- |
+| Delete `features/dataQuality/DataQualityManager.ts`         | Dead code      | Not wired to engine                      |
+| Delete `features/dataQuality/DataQualityManager.test.ts`    | Dead test      |                                          |
+| Delete `features/dataQuality/builtInRules.ts`               | Superseded     | Rules now in QualityIntegrityModule      |
+| Delete `insights/dataQuality.ts`                            | Re-export shim | No longer needed                         |
+| Remove `GridDataQualityManager` export from `core/index.ts` | `src/index.ts` |                                          |
+| Keep `GridDataQualityRule` type in `core/index.ts`          | `src/index.ts` | It's a public type used by quality rules |
 
 ## Verification
 
 After deletion, run:
+
 ```
 npx tsc --noEmit   # must pass
 npx vitest run     # must pass

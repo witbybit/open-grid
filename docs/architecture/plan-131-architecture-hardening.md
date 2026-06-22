@@ -19,23 +19,23 @@
 
 ### Remaining work
 
-| Task | File | Status |
-|------|------|--------|
-| Remove `state.validationErrors` field from `InternalGridState` | `state/GridState.ts:116` | Pending |
+| Task                                                                                                                                     | File                            | Status  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------- |
+| Remove `state.validationErrors` field from `InternalGridState`                                                                           | `state/GridState.ts:116`        | Pending |
 | Remove legacy `ValidationManager.ts` (`api.validateCell`, `api.validateGrid`, `api.clearValidationErrors`, `api.getAllValidationErrors`) | `features/ValidationManager.ts` | Pending |
-| Remove `validationKey` export from `ValidationManager.ts` (now unused) | `features/ValidationManager.ts` | Pending |
-| Remove `columnDef.valueValidator` prop | `columnDef.ts` | Pending |
-| Remove `rowValidator` grid prop | `engine/GridEngine.ts` | Pending |
+| Remove `validationKey` export from `ValidationManager.ts` (now unused)                                                                   | `features/ValidationManager.ts` | Pending |
+| Remove `columnDef.valueValidator` prop                                                                                                   | `columnDef.ts`                  | Pending |
+| Remove `rowValidator` grid prop                                                                                                          | `engine/GridEngine.ts`          | Pending |
 
 ### Guard to add
 
 ```ts
 // architectureGuards.test.ts
 it('rowCellBinder must not read state.validationErrors', () => {
-  const content = readFileSync(rowCellBinderPath, 'utf-8');
-  expect(content).not.toContain('validationErrors');
-  expect(content).not.toContain('og-cell-invalid');
-  expect(content).not.toContain('og-cell-error-badge');
+	const content = readFileSync(rowCellBinderPath, 'utf-8');
+	expect(content).not.toContain('validationErrors');
+	expect(content).not.toContain('og-cell-invalid');
+	expect(content).not.toContain('og-cell-error-badge');
 });
 ```
 
@@ -65,13 +65,13 @@ interface GridCommitResult {
 
 ### Remaining work
 
-| Task | File | Status |
-|------|------|--------|
-| Add `GridCommitResult` type to `integrityTypes.ts` | `features/dataIntegrity/integrityTypes.ts` | Pending |
-| Add `commitCellValue` to `GridApi` | `api/GridApi.ts` | Pending |
-| Update `DiffIntegrityModule.acceptChange()` to use `commitCellValue` and only clear diff state on success | `modules/DiffIntegrityModule.ts` | Pending |
-| Update `ConflictIntegrityModule.resolveConflict()` same pattern | `modules/ConflictIntegrityModule.ts` | Pending |
-| Deprecate `setCellValue` in integrity module deps | Internal only | Pending |
+| Task                                                                                                      | File                                       | Status  |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ------- |
+| Add `GridCommitResult` type to `integrityTypes.ts`                                                        | `features/dataIntegrity/integrityTypes.ts` | Pending |
+| Add `commitCellValue` to `GridApi`                                                                        | `api/GridApi.ts`                           | Pending |
+| Update `DiffIntegrityModule.acceptChange()` to use `commitCellValue` and only clear diff state on success | `modules/DiffIntegrityModule.ts`           | Pending |
+| Update `ConflictIntegrityModule.resolveConflict()` same pattern                                           | `modules/ConflictIntegrityModule.ts`       | Pending |
+| Deprecate `setCellValue` in integrity module deps                                                         | Internal only                              | Pending |
 
 ---
 
@@ -81,14 +81,14 @@ interface GridCommitResult {
 
 ### Remaining work
 
-| Task | File | Status |
-|------|------|--------|
-| Delete `features/dataQuality/DataQualityManager.ts` | Legacy | Pending |
-| Delete `features/dataQuality/DataQualityManager.test.ts` | Legacy | Pending |
-| Delete `features/dataQuality/builtInRules.ts` | Legacy | Pending |
-| Delete `insights/dataQuality.ts` re-export shim | Legacy | Pending |
-| Remove `GridDataQualityRule` from `core/index.ts` (or keep as re-export of `GridDataQualityRule` from integrity types) | `src/index.ts` | Pending |
-| Confirm `DataQualityManager` is not wired into engine (already confirmed — not referenced in engine/) | — | ✅ Confirmed |
+| Task                                                                                                                   | File           | Status       |
+| ---------------------------------------------------------------------------------------------------------------------- | -------------- | ------------ |
+| Delete `features/dataQuality/DataQualityManager.ts`                                                                    | Legacy         | Pending      |
+| Delete `features/dataQuality/DataQualityManager.test.ts`                                                               | Legacy         | Pending      |
+| Delete `features/dataQuality/builtInRules.ts`                                                                          | Legacy         | Pending      |
+| Delete `insights/dataQuality.ts` re-export shim                                                                        | Legacy         | Pending      |
+| Remove `GridDataQualityRule` from `core/index.ts` (or keep as re-export of `GridDataQualityRule` from integrity types) | `src/index.ts` | Pending      |
+| Confirm `DataQualityManager` is not wired into engine (already confirmed — not referenced in engine/)                  | —              | ✅ Confirmed |
 
 ---
 
@@ -98,13 +98,13 @@ interface GridCommitResult {
 
 ### Remaining work
 
-| Task | File | Status |
-|------|------|--------|
-| ✅ Remove visual-row fallback from `ClientGridIntegrityRowProvider._scanAllDataNodes` | `GridIntegrityRowProvider.ts` | ✅ Done |
-| Add `getFilteredDataNodes(): RowNode<TRowData>[]` to `ClientRowModelController` | `rowModel.ts` | Pending |
-| Wire `filteredRows` scope in `ClientGridIntegrityRowProvider` to use `getFilteredDataNodes()` | `GridIntegrityRowProvider.ts` | Pending |
-| Add `FilteredDataNodesCapableRowModel` interface (duck-typed) | `rowModel.ts` or `integrityTypes.ts` | Pending |
-| Add `currentPage` scope support via `getCurrentPageDataNodes()` when pagination present | `rowModel.ts` | Pending |
+| Task                                                                                          | File                                 | Status  |
+| --------------------------------------------------------------------------------------------- | ------------------------------------ | ------- |
+| ✅ Remove visual-row fallback from `ClientGridIntegrityRowProvider._scanAllDataNodes`         | `GridIntegrityRowProvider.ts`        | ✅ Done |
+| Add `getFilteredDataNodes(): RowNode<TRowData>[]` to `ClientRowModelController`               | `rowModel.ts`                        | Pending |
+| Wire `filteredRows` scope in `ClientGridIntegrityRowProvider` to use `getFilteredDataNodes()` | `GridIntegrityRowProvider.ts`        | Pending |
+| Add `FilteredDataNodesCapableRowModel` interface (duck-typed)                                 | `rowModel.ts` or `integrityTypes.ts` | Pending |
+| Add `currentPage` scope support via `getCurrentPageDataNodes()` when pagination present       | `rowModel.ts`                        | Pending |
 
 ### Implementation sketch: `getFilteredDataNodes`
 
@@ -135,12 +135,12 @@ case 'filteredRows':
 
 ### Remaining work
 
-| Task | File | Status |
-|------|------|--------|
-| Audit `GridDataIntegrityManager.requestInsightRepaint()` — ensure it triggers targeted repaint (cell-level) not full paint | `GridDataIntegrityManager.ts` | Pending |
-| Add `repaintCell(rowId, colField)` to repaint coordinator if not present | `renderPaintCoordinator.ts` | Pending |
-| Update `ValidationIntegrityModule.validateCell()` to use cell-targeted repaint | `modules/ValidationIntegrityModule.ts` | Pending |
-| Architecture guard: `RenderInvalidationCoordinator` must not subscribe to `validationErrors` key | `architectureGuards.test.ts:1911` | ✅ Already tested |
+| Task                                                                                                                       | File                                   | Status            |
+| -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ----------------- |
+| Audit `GridDataIntegrityManager.requestInsightRepaint()` — ensure it triggers targeted repaint (cell-level) not full paint | `GridDataIntegrityManager.ts`          | Pending           |
+| Add `repaintCell(rowId, colField)` to repaint coordinator if not present                                                   | `renderPaintCoordinator.ts`            | Pending           |
+| Update `ValidationIntegrityModule.validateCell()` to use cell-targeted repaint                                             | `modules/ValidationIntegrityModule.ts` | Pending           |
+| Architecture guard: `RenderInvalidationCoordinator` must not subscribe to `validationErrors` key                           | `architectureGuards.test.ts:1911`      | ✅ Already tested |
 
 ---
 
@@ -163,11 +163,11 @@ describe('Data Integrity Architecture Guards', () => {
 
 ### Fix pre-existing guard failures
 
-| Failure | Current | Budget | Fix |
-|---------|---------|--------|-----|
-| `store.ts` line count | 1206 | 1150 | Extract `TransactionCoordinator` (~60 lines) to separate file |
-| `GridEngine.ts` line count | 1162 | 1150 | Extract `_buildSidebarConfig` helper (~15 lines) to separate file |
-| `core/index.ts` imports from `features/` | Flagged | Must import from public API boundary | Fix import paths |
+| Failure                                  | Current | Budget                               | Fix                                                               |
+| ---------------------------------------- | ------- | ------------------------------------ | ----------------------------------------------------------------- |
+| `store.ts` line count                    | 1206    | 1150                                 | Extract `TransactionCoordinator` (~60 lines) to separate file     |
+| `GridEngine.ts` line count               | 1162    | 1150                                 | Extract `_buildSidebarConfig` helper (~15 lines) to separate file |
+| `core/index.ts` imports from `features/` | Flagged | Must import from public API boundary | Fix import paths                                                  |
 
 ---
 
@@ -177,17 +177,17 @@ describe('Data Integrity Architecture Guards', () => {
 
 ### Remaining work
 
-| Task | File | Status |
-|------|------|--------|
-| Create `packages/react/src/sidebar/panels/DataIntegrityPanel.tsx` with tab navigation | New file | Pending |
-| Tabs: Overview, Validation, Quality, Diff, Live Stream, Conflicts — only show enabled ones | `DataIntegrityPanel.tsx` | Pending |
-| Register as `'dataIntegrity'` built-in panel | `sidebar/SidebarPanel.ts` | Pending |
-| Deprecate `'dataQuality'` panel (keep for one release) | `sidebar/panels/DataQualityPanel.tsx` | Pending |
-| Deprecate `'diff'`, `'conflicts'` panels same | — | Pending |
-| Remove root-level `api.validateGrid()`, `api.getAllValidationErrors()` | `api/GridApi.ts` | Pending |
-| Remove root-level `api.setDiffModel()`, `api.clearDiffModel()` | `api/GridApi.ts` | Pending |
-| Remove root-level `api.createTransactionStream()`, `api.getConflicts()`, etc. | `api/GridApi.ts` | Pending |
-| All of the above now live exclusively under `api.integrity.*` | — | Pending |
+| Task                                                                                       | File                                  | Status  |
+| ------------------------------------------------------------------------------------------ | ------------------------------------- | ------- |
+| Create `packages/react/src/sidebar/panels/DataIntegrityPanel.tsx` with tab navigation      | New file                              | Pending |
+| Tabs: Overview, Validation, Quality, Diff, Live Stream, Conflicts — only show enabled ones | `DataIntegrityPanel.tsx`              | Pending |
+| Register as `'dataIntegrity'` built-in panel                                               | `sidebar/SidebarPanel.ts`             | Pending |
+| Deprecate `'dataQuality'` panel (keep for one release)                                     | `sidebar/panels/DataQualityPanel.tsx` | Pending |
+| Deprecate `'diff'`, `'conflicts'` panels same                                              | —                                     | Pending |
+| Remove root-level `api.validateGrid()`, `api.getAllValidationErrors()`                     | `api/GridApi.ts`                      | Pending |
+| Remove root-level `api.setDiffModel()`, `api.clearDiffModel()`                             | `api/GridApi.ts`                      | Pending |
+| Remove root-level `api.createTransactionStream()`, `api.getConflicts()`, etc.              | `api/GridApi.ts`                      | Pending |
+| All of the above now live exclusively under `api.integrity.*`                              | —                                     | Pending |
 
 ---
 
@@ -196,7 +196,7 @@ describe('Data Integrity Architecture Guards', () => {
 ```
 131 (Pillar 1 remaining) → 133 (legacy removal, unblocks 131 fully) → 136 (guards, catch regressions)
 132 (commits) — parallel with 131-133
-134 (filteredRows) — parallel with 131-133  
+134 (filteredRows) — parallel with 131-133
 135 (targeted invalidation) — after 134
 137 (sidebar panel) — after 133
 ```

@@ -2003,13 +2003,10 @@ describe('Architecture guardrails', () => {
 
 	describe('Plan 134 Pillar 4 — GridIntegrityRowProvider honest scopes', () => {
 		it('ClientGridIntegrityRowProvider must not fall back to getVisualRowCount for allRows/loadedRows/filteredRows', () => {
-			const content = readFileSync(
-				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridIntegrityRowProvider.ts'),
-				'utf-8'
-			);
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridIntegrityRowProvider.ts'), 'utf-8');
 			// The only place getVisualRowCount should appear is in _scanVisibleRows (for scope 'visibleRows')
 			// Specifically must NOT appear in _scanAllDataNodes fallback
-			expect(content).not.toContain("allRows fell back to visual rows");
+			expect(content).not.toContain('allRows fell back to visual rows');
 		});
 
 		it('ClientRowModelController must implement getFilteredDataNodes', () => {
@@ -2022,28 +2019,19 @@ describe('Architecture guardrails', () => {
 
 	describe('Plan 135 Pillar 5 — targeted integrity invalidation', () => {
 		it('DiffIntegrityModule.acceptChange uses targeted requestRepaint for the accepted cell', () => {
-			const content = readFileSync(
-				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'),
-				'utf-8'
-			);
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'), 'utf-8');
 			// Single-cell accept must call requestRepaint with cell coords (batch ops like clearDiff may still call it without args)
 			expect(content).toContain('requestRepaint([{ rowId, colField }])');
 		});
 
 		it('ConflictIntegrityModule._clearConflict uses targeted requestRepaint, not full repaint', () => {
-			const content = readFileSync(
-				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'),
-				'utf-8'
-			);
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'), 'utf-8');
 			// _clearConflict must call requestRepaint with a cell array
 			expect(content).toContain('requestRepaint([{ rowId: conflict.rowId, colField: conflict.colField }])');
 		});
 
 		it('ValidationIntegrityModule.validateCell uses targeted requestRepaint after applying issues', () => {
-			const content = readFileSync(
-				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'),
-				'utf-8'
-			);
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'), 'utf-8');
 			// Single-cell validate must pass cell coords to requestRepaint
 			expect(content).toContain('requestRepaint([{ rowId, colField }])');
 		});
@@ -2066,18 +2054,12 @@ describe('Architecture guardrails', () => {
 
 	describe('Plan 136 — guardrails for Plans 132 (result-aware commits) and 133 (dead code removal)', () => {
 		it('DiffIntegrityModule must not call setCellValue directly (Plan 132)', () => {
-			const content = readFileSync(
-				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'),
-				'utf-8'
-			);
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'), 'utf-8');
 			expect(content, 'DiffIntegrityModule must use commitCellValue, not setCellValue').not.toContain('setCellValue');
 		});
 
 		it('ConflictIntegrityModule must not call setCellValue directly (Plan 132)', () => {
-			const content = readFileSync(
-				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'),
-				'utf-8'
-			);
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'), 'utf-8');
 			expect(content, 'ConflictIntegrityModule must use commitCellValue, not setCellValue').not.toContain('setCellValue');
 		});
 

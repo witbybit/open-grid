@@ -16,24 +16,25 @@ Add targeted cell-level repaint for integrity decoration changes. When only a sp
 `GridEngine.notifyCellChange(rowId, colField)` → `CellNotificationController` → per-cell invalidation → only that cell gets rebound.
 
 `GridDataIntegrityManager` already has `requestTargetedRepaint` in its deps (used by `LiveStreamIntegrityModule`):
+
 ```ts
 requestTargetedRepaint: (cells) => {
-  for (const { rowId, colField } of cells) {
-    this.notifyCellChange(rowId, colField);
-  }
-}
+	for (const { rowId, colField } of cells) {
+		this.notifyCellChange(rowId, colField);
+	}
+};
 ```
 
 ## Tasks
 
-| Task | File | Notes |
-|------|------|-------|
-| Add `repaintCell(rowId, colField)` to `GridDataIntegrityManager` | `GridDataIntegrityManager.ts` | Calls `deps.requestTargetedRepaint([{ rowId, colField }])` |
-| Update `ValidationIntegrityModule.validateCell()` | `modules/ValidationIntegrityModule.ts` | After `_applyIssues`, call `deps.requestRepaint([{ rowId, colField }])` not full repaint |
-| Update `ConflictIntegrityModule.resolveConflict()` | `modules/ConflictIntegrityModule.ts` | Targeted repaint for resolved cell |
-| Update `DiffIntegrityModule.acceptChange()` | `modules/DiffIntegrityModule.ts` | Targeted repaint for accepted cell |
-| Keep `requestInsightRepaint()` (full repaint) for batch operations | `GridDataIntegrityManager.ts` | `run()`, `clearIssues()`, `publishServerReport()` still need full repaint |
-| Architecture guard: single-cell integrity ops must not call `invalidateFull` | `architectureGuards.test.ts` | Verify via content check |
+| Task                                                                         | File                                   | Notes                                                                                    |
+| ---------------------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Add `repaintCell(rowId, colField)` to `GridDataIntegrityManager`             | `GridDataIntegrityManager.ts`          | Calls `deps.requestTargetedRepaint([{ rowId, colField }])`                               |
+| Update `ValidationIntegrityModule.validateCell()`                            | `modules/ValidationIntegrityModule.ts` | After `_applyIssues`, call `deps.requestRepaint([{ rowId, colField }])` not full repaint |
+| Update `ConflictIntegrityModule.resolveConflict()`                           | `modules/ConflictIntegrityModule.ts`   | Targeted repaint for resolved cell                                                       |
+| Update `DiffIntegrityModule.acceptChange()`                                  | `modules/DiffIntegrityModule.ts`       | Targeted repaint for accepted cell                                                       |
+| Keep `requestInsightRepaint()` (full repaint) for batch operations           | `GridDataIntegrityManager.ts`          | `run()`, `clearIssues()`, `publishServerReport()` still need full repaint                |
+| Architecture guard: single-cell integrity ops must not call `invalidateFull` | `architectureGuards.test.ts`           | Verify via content check                                                                 |
 
 ## Non-negotiable
 

@@ -141,7 +141,6 @@ const _EMPTY_WS_STATE: GridWorkspaceState = {
 	loading: false,
 };
 
-
 /**
  * Internal runtime composition root.
  *

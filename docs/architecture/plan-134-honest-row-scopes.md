@@ -5,6 +5,7 @@
 ## Problem
 
 `ClientGridIntegrityRowProvider._scanAllDataNodes` previously fell back to `getVisualRowCount()`/`getVisualRow(i)` when `getAllDataNodes()` was unavailable. This meant:
+
 - `allRows` scope silently returned only visible rows for row models that don't implement `getAllDataNodes`
 - `filteredRows` returned viewport-visible rows instead of all post-filter rows
 - No indication of degradation to callers
@@ -20,11 +21,11 @@
 
 ## Remaining
 
-| Task | File | Notes |
-|------|------|-------|
-| Add `getCurrentPageDataNodes()` to `ClientRowModelController` | `rowModel.ts` | For pagination: rows on current page only |
-| Wire `currentPage` scope in `ClientGridIntegrityRowProvider` | `GridIntegrityRowProvider.ts` | Currently still falls through to `_scanAllDataNodes` |
-| Add `FilteredDataNodesCapableRowModel` interface to `rowModel.ts` | `rowModel.ts` | Type-safe duck-typing, expose publicly like `AllDataNodesCapableRowModel` |
+| Task                                                              | File                          | Notes                                                                     |
+| ----------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------- |
+| Add `getCurrentPageDataNodes()` to `ClientRowModelController`     | `rowModel.ts`                 | For pagination: rows on current page only                                 |
+| Wire `currentPage` scope in `ClientGridIntegrityRowProvider`      | `GridIntegrityRowProvider.ts` | Currently still falls through to `_scanAllDataNodes`                      |
+| Add `FilteredDataNodesCapableRowModel` interface to `rowModel.ts` | `rowModel.ts`                 | Type-safe duck-typing, expose publicly like `AllDataNodesCapableRowModel` |
 
 ## Invariants
 

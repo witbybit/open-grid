@@ -99,10 +99,7 @@ export class ClientGridIntegrityRowProvider<TRowData> implements GridIntegrityRo
 		return { status: 'ok', scope: 'selectedRows', rows: refs, complete: true };
 	}
 
-	private _scanFilteredNodes(
-		rowModel: RowModel<TRowData>,
-		state: InternalGridState<TRowData>
-	): GridIntegrityRowsResult<TRowData> {
+	private _scanFilteredNodes(rowModel: RowModel<TRowData>, state: InternalGridState<TRowData>): GridIntegrityRowsResult<TRowData> {
 		const filteredCapable = _asFilteredDataNodeCapable(rowModel);
 		if (filteredCapable) {
 			const nodes = filteredCapable.getFilteredDataNodes();
@@ -141,10 +138,7 @@ export class ClientGridIntegrityRowProvider<TRowData> implements GridIntegrityRo
 		void state; // used only to avoid lint warning
 	}
 
-	private _scanCurrentPageNodes(
-		rowModel: RowModel<TRowData>,
-		state: InternalGridState<TRowData>
-	): GridIntegrityRowsResult<TRowData> {
+	private _scanCurrentPageNodes(rowModel: RowModel<TRowData>, state: InternalGridState<TRowData>): GridIntegrityRowsResult<TRowData> {
 		const pageCapable = _asCurrentPageCapable(rowModel);
 		if (pageCapable) {
 			const nodes = pageCapable.getCurrentPageDataNodes();
