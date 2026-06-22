@@ -472,7 +472,7 @@ export default function DataIntegrityLab() {
 							conflicts: true,
 						}}
 						sidebar={{
-							panels: ['columns', 'dataQuality', 'diff', 'conflicts'],
+							panels: ['columns', 'dataIntegrity'],
 							position: 'right',
 						}}
 						onGridReady={onGridReady}

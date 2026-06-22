@@ -7,13 +7,11 @@ import { SortPanel } from './panels/SortPanel.js';
 import { ThemesPanel } from './panels/ThemesPanel.js';
 import { ViewsPanel } from './panels/ViewsPanel.js';
 import { QueryPanel } from './panels/QueryPanel.js';
-import { DataQualityPanel } from './panels/DataQualityPanel.js';
-import { DiffPanel } from './panels/DiffPanel.js';
-import { ConflictsPanel } from './panels/ConflictsPanel.js';
+import { DataIntegrityPanel } from './panels/DataIntegrityPanel.js';
 
 // ── Sidebar types ─────────────────────────────────────────────────────────────
 
-export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views' | 'query' | 'dataQuality' | 'diff' | 'conflicts';
+export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views' | 'query' | 'dataIntegrity';
 
 export interface SidebarPanelDef<TRowData = unknown> {
 	id: string;
@@ -72,22 +70,10 @@ const _QueryIcon = () => (
 		<circle cx='7.5' cy='11.5' r='0.5' fill='currentColor' />
 	</svg>
 );
-const _DataQualityIcon = () => (
+const _DataIntegrityIcon = () => (
 	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
-		<path d='M7.5 1.5l1.5 3 3.5.5-2.5 2.5.6 3.5-3.1-1.6-3.1 1.6.6-3.5L2.5 5l3.5-.5z' />
-	</svg>
-);
-const _DiffIcon = () => (
-	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
-		<path d='M2 4h11M2 7.5h6M2 11h4' />
-		<path d='M10.5 7.5h3M12 6l1.5 1.5L12 9' />
-	</svg>
-);
-const _ConflictsIcon = () => (
-	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
-		<path d='M7.5 1.5L13 12.5H2L7.5 1.5Z' />
-		<path d='M7.5 5.5v3.5' strokeWidth='1.8' />
-		<circle cx='7.5' cy='11' r='0.6' fill='currentColor' stroke='none' />
+		<path d='M7.5 1.5L13 4v4c0 3-2.5 5-5.5 5.5C4.5 13 2 11 2 8V4z' />
+		<path d='M5 7.5l1.5 1.5 3-3' />
 	</svg>
 );
 
@@ -105,9 +91,7 @@ const _BUILTIN_ICONS: Record<BuiltinSidebarPanelId, React.ReactNode> = {
 	themes: <_ThemesIcon />,
 	views: <_ViewsIcon />,
 	query: <_QueryIcon />,
-	dataQuality: <_DataQualityIcon />,
-	diff: <_DiffIcon />,
-	conflicts: <_ConflictsIcon />,
+	dataIntegrity: <_DataIntegrityIcon />,
 };
 const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
 	columns: 'Columns',
@@ -116,9 +100,7 @@ const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
 	themes: 'Themes',
 	views: 'Views',
 	query: 'Query',
-	dataQuality: 'Data Quality',
-	diff: 'Diff',
-	conflicts: 'Conflicts',
+	dataIntegrity: 'Data Integrity',
 };
 
 function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TRowData>): _ResolvedPanel<TRowData> {
@@ -136,9 +118,7 @@ function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TR
 			if (def === 'themes') return <ThemesPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'views') return <ViewsPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'query') return <QueryPanel api={api as GridApi<any>} onClose={onClose} />;
-			if (def === 'dataQuality') return <DataQualityPanel api={api as GridApi<any>} onClose={onClose} />;
-			if (def === 'diff') return <DiffPanel api={api as GridApi<any>} onClose={onClose} />;
-			if (def === 'conflicts') return <ConflictsPanel api={api as GridApi<any>} onClose={onClose} />;
+			if (def === 'dataIntegrity') return <DataIntegrityPanel api={api as GridApi<any>} onClose={onClose} />;
 			return null;
 		},
 	};

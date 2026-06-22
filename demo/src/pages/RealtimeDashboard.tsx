@@ -447,7 +447,7 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 							conflicts: true,
 						}}
 						sidebar={{
-							panels: ['dataQuality', 'diff', 'conflicts'],
+							panels: ['dataIntegrity'],
 							position: 'right',
 						}}
 						onGridReady={(event) => {
