@@ -343,9 +343,12 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 
 	clearIssues(filter?: GridIntegrityIssueFilter): void {
 		if (!filter) {
+			this.qualityModule?.clearIssues();
 			this.publishedIssues.clear();
 			this.serverReport = null;
 		} else {
+			const sources = filter.source ? (Array.isArray(filter.source) ? filter.source : [filter.source]) : null;
+			if (!sources || sources.includes('dataQuality')) this.qualityModule?.clearIssues();
 			for (const [source, issues] of this.publishedIssues) {
 				const kept = issues.filter((i) => !_matchesFilter(i, filter));
 				if (kept.length === 0) this.publishedIssues.delete(source);

@@ -124,10 +124,14 @@ export class QualityIntegrityModule<TRowData> implements GridIntegrityModule<TRo
 		this.customRules.delete(ruleId);
 	}
 
-	destroy(): void {
+	clearIssues(): void {
 		this.issues = [];
-		this.customRules.clear();
 		this.cellDecMap.clear();
+	}
+
+	destroy(): void {
+		this.clearIssues();
+		this.customRules.clear();
 	}
 
 	private _rebuildCellDecMap(): void {
