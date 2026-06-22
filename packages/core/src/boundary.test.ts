@@ -70,6 +70,7 @@ describe('Public/internal boundary', () => {
 				'DARK_THEME',
 				'DATE_OPS',
 				'GRID_STATE_SCHEMA_VERSION',
+				'GridConflictManager',
 				'GridDataQualityManager',
 				'GridDiffManager',
 				'GridEventName',

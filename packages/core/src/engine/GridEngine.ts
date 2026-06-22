@@ -57,6 +57,7 @@ import type { GridCapabilityAction, GridCapabilitiesConfig, GridCapabilityResult
 import { GridInsightRegistry } from '../insights/GridInsightRegistry.js';
 import { GridDataQualityManager } from '../features/dataQuality/DataQualityManager.js';
 import { GridDiffManager } from '../features/diff/GridDiffManager.js';
+import { GridConflictManager } from '../features/conflict/GridConflictManager.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -89,6 +90,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly insights: GridInsightRegistry;
 	public readonly dataQuality: GridDataQualityManager<TRowData>;
 	public readonly diff: GridDiffManager<TRowData>;
+	public readonly conflict: GridConflictManager<TRowData>;
 
 	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
 		return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];
@@ -256,6 +258,11 @@ export class GridEngine<TRowData = unknown> {
 			requestInsightRepaint: () => this.requestInsightRepaint(),
 		});
 		this.insights.register(this.diff);
+		this.conflict = new GridConflictManager<TRowData>({
+			setCellValue: (r, c, v) => this.setCellValue(r, c, v),
+			requestInsightRepaint: () => this.requestInsightRepaint(),
+		});
+		this.insights.register(this.conflict);
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 

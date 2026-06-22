@@ -9,10 +9,11 @@ import { ViewsPanel } from './panels/ViewsPanel.js';
 import { QueryPanel } from './panels/QueryPanel.js';
 import { DataQualityPanel } from './panels/DataQualityPanel.js';
 import { DiffPanel } from './panels/DiffPanel.js';
+import { ConflictsPanel } from './panels/ConflictsPanel.js';
 
 // ── Sidebar types ─────────────────────────────────────────────────────────────
 
-export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views' | 'query' | 'dataQuality' | 'diff';
+export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views' | 'query' | 'dataQuality' | 'diff' | 'conflicts';
 
 export interface SidebarPanelDef<TRowData = unknown> {
 	id: string;
@@ -82,6 +83,13 @@ const _DiffIcon = () => (
 		<path d='M10.5 7.5h3M12 6l1.5 1.5L12 9' />
 	</svg>
 );
+const _ConflictsIcon = () => (
+	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
+		<path d='M7.5 1.5L13 12.5H2L7.5 1.5Z' />
+		<path d='M7.5 5.5v3.5' strokeWidth='1.8' />
+		<circle cx='7.5' cy='11' r='0.6' fill='currentColor' stroke='none' />
+	</svg>
+);
 
 interface _ResolvedPanel<TRowData> {
 	id: string;
@@ -99,6 +107,7 @@ const _BUILTIN_ICONS: Record<BuiltinSidebarPanelId, React.ReactNode> = {
 	query: <_QueryIcon />,
 	dataQuality: <_DataQualityIcon />,
 	diff: <_DiffIcon />,
+	conflicts: <_ConflictsIcon />,
 };
 const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
 	columns: 'Columns',
@@ -109,6 +118,7 @@ const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
 	query: 'Query',
 	dataQuality: 'Data Quality',
 	diff: 'Diff',
+	conflicts: 'Conflicts',
 };
 
 function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TRowData>): _ResolvedPanel<TRowData> {
@@ -128,6 +138,7 @@ function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TR
 			if (def === 'query') return <QueryPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'dataQuality') return <DataQualityPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'diff') return <DiffPanel api={api as GridApi<any>} onClose={onClose} />;
+			if (def === 'conflicts') return <ConflictsPanel api={api as GridApi<any>} onClose={onClose} />;
 			return null;
 		},
 	};

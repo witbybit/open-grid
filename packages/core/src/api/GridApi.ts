@@ -718,6 +718,26 @@ export interface GridApi<TRowData = unknown> {
 	 */
 	rejectCellDiff(rowId: string, colField: string): void;
 
+	// ── Conflict Resolution ──────────────────────────────────────────────────────
+
+	/** Returns all active conflicts. */
+	getConflicts(): readonly import('../features/conflict/conflictTypes.js').GridCellConflict[];
+
+	/** Returns the conflict for a specific cell, or null if none. */
+	getCellConflict(rowId: string, colField: string): import('../features/conflict/conflictTypes.js').GridCellConflict | null;
+
+	/** Adds a conflict for a cell. Replaces any existing conflict for the same cell. Returns the stored conflict with id/createdAt. */
+	addConflict(partial: Omit<import('../features/conflict/conflictTypes.js').GridCellConflict, 'id' | 'createdAt'>): import('../features/conflict/conflictTypes.js').GridCellConflict;
+
+	/** Resolves a conflict by id. 'local' keeps local value; 'remote' commits remoteValue; 'custom' commits options.value. */
+	resolveConflict(conflictId: string, options: import('../features/conflict/conflictTypes.js').ResolveConflictOptions): void;
+
+	/** Removes a conflict by id without applying any value. */
+	clearConflict(conflictId: string): void;
+
+	/** Removes all active conflicts. */
+	clearAllConflicts(): void;
+
 	// ── Live Data Stream ──────────────────────────────────────────────────────────
 
 	/**

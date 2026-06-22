@@ -168,6 +168,19 @@
 	border-left: 2px solid rgba(245, 158, 11, 0.7);
 }
 
+/* ── Conflict decorations ────────────────────────────────────────────────────── */
+
+.og-cell-conflict {
+	background: repeating-linear-gradient(
+		45deg,
+		rgba(239, 68, 68, 0.06),
+		rgba(239, 68, 68, 0.06) 4px,
+		transparent 4px,
+		transparent 8px
+	);
+	outline: 1px solid rgba(239, 68, 68, 0.55);
+}
+
 /* ── Data Quality decorations ────────────────────────────────────────────────── */
 
 .og-cell-quality-error {

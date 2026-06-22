@@ -24,7 +24,7 @@ export interface TransactionStreamOptions {
 	readonly coalesceBy?: 'cell' | 'row';
 	readonly history?: 'suppress' | 'grouped';
 	readonly flashChanges?: boolean;
-	readonly dirtyCellPolicy?: 'skip' | 'queue' | 'markConflictLater';
+	readonly dirtyCellPolicy?: 'skip' | 'queue' | 'markConflict' | 'markConflictLater';
 	readonly sortPolicy?: 'live' | 'defer';
 	readonly filterPolicy?: 'live' | 'defer';
 }
