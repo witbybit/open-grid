@@ -11,8 +11,6 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
 	notifyCellChange: (rowId: string, colField: string) => void;
-	clearValidationError?: (rowId: string, colField: string) => void;
-	setValidationError?: (rowId: string, colField: string, error: string) => void;
 	validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
@@ -22,8 +20,6 @@ export class EditingFeatureController<TRowData = unknown> {
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
 	private readonly notifyCellChange: (rowId: string, colField: string) => void;
-	private readonly clearValidationError?: (rowId: string, colField: string) => void;
-	private readonly setValidationError?: (rowId: string, colField: string, error: string) => void;
 	private readonly validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
 	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 
@@ -32,8 +28,6 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.getRowModel = deps.getRowModel;
 		this.data = deps.data;
 		this.notifyCellChange = deps.notifyCellChange;
-		this.clearValidationError = deps.clearValidationError;
-		this.setValidationError = deps.setValidationError;
 		this.validateCellPostCommit = deps.validateCellPostCommit;
 		this.checkCapability = deps.checkCapability;
 	}
@@ -112,7 +106,6 @@ export class EditingFeatureController<TRowData = unknown> {
 					});
 					this.notifyCellChange(rowId, colField);
 				}
-				this.setValidationError?.(rowId, colField, error);
 				return false;
 			}
 		}
@@ -165,11 +158,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		}
 
 		this.notifyCellChange(rowId, colField);
-		if (this.validateCellPostCommit) {
-			await this.validateCellPostCommit(rowId, colField);
-		} else {
-			this.clearValidationError?.(rowId, colField);
-		}
+		await this.validateCellPostCommit?.(rowId, colField);
 		return true;
 	}
 }

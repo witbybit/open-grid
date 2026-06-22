@@ -38,7 +38,6 @@ import type { GridCommitEvent } from './GridChangeApplier.js';
 import { ColumnFeatureController } from '../features/ColumnFeatureController.js';
 import { GroupingFeatureController } from '../features/GroupingFeatureController.js';
 import { EditingFeatureController } from '../features/EditingFeatureController.js';
-import { ValidationManager } from '../features/ValidationManager.js';
 import { RowSelectionFeatureController } from '../features/RowSelectionFeatureController.js';
 import { DataMutationController } from '../features/DataMutationController.js';
 import { GridStateFeatureController } from '../features/GridStateFeatureController.js';
@@ -83,7 +82,6 @@ export class GridEngine<TRowData = unknown> {
 	public readonly clipboard: ClipboardController<TRowData>;
 	public readonly groupingFeature: GroupingFeatureController<TRowData>;
 	public readonly editingFeature: EditingFeatureController<TRowData>;
-	public readonly validationFeature: ValidationManager<TRowData>;
 	public readonly rowSelectionFeature: RowSelectionFeatureController<TRowData>;
 	public readonly dataMutation: DataMutationController<TRowData>;
 	public readonly stateFeature: GridStateFeatureController<TRowData>;
@@ -436,25 +434,15 @@ export class GridEngine<TRowData = unknown> {
 			requestRender: (reason) => this.requestRender(reason),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
-		this.validationFeature = new ValidationManager<TRowData>({
-			ctx: featureContext,
-			getRowModel: () => this.rowModel,
-			data: this.data,
-		});
 		this.editingFeature = new EditingFeatureController<TRowData>({
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			data: this.data,
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
-			clearValidationError: (rowId, colField) => this.validationFeature._setCellError(rowId, colField, null),
-			setValidationError: (rowId, colField, error) => this.validationFeature._setCellError(rowId, colField, error),
-			validateCellPostCommit: (rowId, colField) => {
-				// Prefer integrity pipeline validation if configured; fall back to column valueValidator
-				if (this.dataIntegrity?.validationModule?.isEnabled()) {
-					return this.dataIntegrity.validateCell(rowId, colField).then(() => undefined);
-				}
-				return this.validationFeature.validateCell(rowId, colField).then(() => undefined);
-			},
+			validateCellPostCommit: (rowId, colField) =>
+				this.dataIntegrity?.validationModule?.isEnabled()
+					? this.dataIntegrity.validateCell(rowId, colField).then(() => undefined)
+					: Promise.resolve(),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);

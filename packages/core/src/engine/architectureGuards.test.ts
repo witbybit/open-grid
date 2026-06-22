@@ -1969,7 +1969,6 @@ describe('Architecture guardrails', () => {
 			resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'),
 			resolve(CORE_ROOT, 'src', 'features', 'GroupingFeatureController.ts'),
 			resolve(CORE_ROOT, 'src', 'features', 'RowSelectionFeatureController.ts'),
-			resolve(CORE_ROOT, 'src', 'features', 'ValidationManager.ts'),
 		];
 		for (const file of files) {
 			expect(readFileSync(file, 'utf-8'), `${path.basename(file)} should rely on typed GridChange events`).not.toContain('as never');

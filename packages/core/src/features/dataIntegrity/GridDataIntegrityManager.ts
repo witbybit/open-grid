@@ -439,8 +439,6 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		this.conflictModule?.clearConflict(conflictId);
 	}
 
-	// ── Used by ValidationManager for inline error display ────────────────────
-
 	getCellErrorMessage(rowId: string, colField: string): string | null {
 		return this.validationModule?.getCellErrorMessage(rowId, colField) ?? null;
 	}
