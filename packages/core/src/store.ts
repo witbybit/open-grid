@@ -126,6 +126,7 @@ import { GridEventName } from './api/GridEvents.js';
 import { GridPluginRegistry } from './plugins/GridPluginRegistry.js';
 import { createGridPluginRuntime } from './plugins/createGridPluginRuntime.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './features/ColumnAutoSizeController.js';
+import { makeNoopIntegrityApi } from './features/dataIntegrity/noopIntegrityApi.js';
 
 export { validateRowIds } from './ids.js';
 
@@ -140,105 +141,6 @@ const _EMPTY_WS_STATE: GridWorkspaceState = {
 	loading: false,
 };
 
-function _makeNoopIntegrityApi<TRowData>(): import('./features/dataIntegrity/integrityTypes.js').GridIntegrityApi<TRowData> {
-	const _warn = (method: string) => console.warn(`[OpenGrid] api.integrity.${method}() called but dataIntegrity is not configured on this grid.`);
-	const _noopSummary = (): import('./features/dataIntegrity/integrityTypes.js').GridIntegritySummary => ({
-		status: 'clean',
-		totalIssues: 0,
-		blockingIssues: 0,
-		warnings: 0,
-		errors: 0,
-		bySource: {},
-	});
-	const _noopResult = (): import('./features/dataIntegrity/integrityTypes.js').GridIntegrityRunResult => ({
-		summary: _noopSummary(),
-		issues: [],
-	});
-	return {
-		run: async (opts?) => {
-			_warn('run');
-			return _noopResult();
-		},
-		getSummary: () => {
-			_warn('getSummary');
-			return _noopSummary();
-		},
-		getIssues: () => {
-			_warn('getIssues');
-			return [];
-		},
-		getCellIssues: () => {
-			_warn('getCellIssues');
-			return [];
-		},
-		getRowIssues: () => {
-			_warn('getRowIssues');
-			return [];
-		},
-		getBlockingIssues: () => {
-			_warn('getBlockingIssues');
-			return [];
-		},
-		canSubmit: () => {
-			_warn('canSubmit');
-			return true;
-		},
-		publishIssues: () => {
-			_warn('publishIssues');
-		},
-		publishServerReport: () => {
-			_warn('publishServerReport');
-		},
-		clearIssues: () => {
-			_warn('clearIssues');
-		},
-		validateCell: async () => {
-			_warn('validateCell');
-			return [];
-		},
-		validateRow: async () => {
-			_warn('validateRow');
-			return [];
-		},
-		validateGrid: async () => {
-			_warn('validateGrid');
-			return _noopResult();
-		},
-		setDiffModel: () => {
-			_warn('setDiffModel');
-		},
-		clearDiff: () => {
-			_warn('clearDiff');
-		},
-		getDiffResult: () => {
-			_warn('getDiffResult');
-			return null;
-		},
-		acceptCellDiff: async () => {
-			_warn('acceptCellDiff');
-			return { status: 'notFound', reason: 'dataIntegrity not configured' } as const;
-		},
-		createStream: () => {
-			_warn('createStream');
-			throw new Error('[OpenGrid] dataIntegrity is not configured on this grid.');
-		},
-		getStreamState: () => {
-			_warn('getStreamState');
-			return null;
-		},
-		getConflicts: () => {
-			_warn('getConflicts');
-			return [];
-		},
-		resolveConflict: async () => {
-			_warn('resolveConflict');
-			return { status: 'notFound' } as const;
-		},
-		clearConflict: () => {
-			_warn('clearConflict');
-		},
-	};
-}
 
 /**
  * Internal runtime composition root.
@@ -324,7 +226,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 		// Wire up the lazy api ref so integrity modules can call GridApi methods in rules
 		this.engine.setApiRef(this as unknown as import('./api/GridApi.js').GridApi<TRowData>);
-		this.integrity = this.engine.dataIntegrity?.buildApi() ?? _makeNoopIntegrityApi<TRowData>();
+		this.integrity = this.engine.dataIntegrity?.buildApi() ?? makeNoopIntegrityApi<TRowData>();
 
 		// Apply persisted pin counts at construction time before any renders occur
 		if (initialState.pinnedColumns) {

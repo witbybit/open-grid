@@ -181,9 +181,9 @@ export type {
 	ServerIntegrityReport,
 	GridTransactionStreamHandle,
 	GridTransactionStreamState,
-} from './features/dataIntegrity/integrityTypes.js';
-export { required, email, min, max, number, date, oneOf, regex, customCellRule } from './features/dataIntegrity/validationRules.js';
-export { duplicateValueRule, missingRequiredRule } from './features/dataIntegrity/modules/QualityIntegrityModule.js';
+} from './integrity.js';
+export { required, email, min, max, number, date, oneOf, regex, customCellRule } from './integrity.js';
+export { duplicateValueRule, missingRequiredRule } from './integrity.js';
 export type { ValueValidatorParams, TooltipParams, ValueFormatterParams } from './columnDef.js';
 export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';

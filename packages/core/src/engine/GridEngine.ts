@@ -139,15 +139,13 @@ export class GridEngine<TRowData = unknown> {
 		};
 	}
 
-	/** Subscribes to domain version changes. The listener is called once per committed
-	 *  logical mutation in any domain. Returns an unsubscribe function. */
+	/** Subscribes to domain version changes. Returns an unsubscribe function. */
 	public subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void {
 		this.domainVersionListeners.add(listener);
 		return () => this.domainVersionListeners.delete(listener);
 	}
 
-	/** Subscribes to version increments for a single domain. The listener receives the new
-	 *  version counter each time that domain is mutated. Returns an unsubscribe function. */
+	/** Subscribes to version increments for a single domain. Returns an unsubscribe function. */
 	public subscribeDomain(domain: keyof GridDomainVersions, listener: (version: number) => void): () => void {
 		let set = this.domainListeners.get(domain);
 		if (!set) {
@@ -212,8 +210,7 @@ export class GridEngine<TRowData = unknown> {
 		this.notifyDomainVersionListeners(uniqueDomains);
 	}
 
-	// Per-row version map: rowId → version, bumped on each row data mutation.
-	// Keyed directly on the engine (not in GridState) so updates are zero-allocation.
+	// Per-row version map for zero-allocation mutation tracking.
 	public readonly rowVersions = new Map<string, number>();
 
 	private _scrollStateProvider: { isScrolling(): boolean; phase: string } | null = null;
@@ -255,12 +252,9 @@ export class GridEngine<TRowData = unknown> {
 		this.commandHistory = new CommandHistory(this.runtimeFaults);
 		this.invalidation = new InvalidationManager();
 		this.insights = new GridInsightRegistry();
-		// dataIntegrity manager is created after stateManager is set up, so we defer below
-		this.dataIntegrity = null; // will be assigned in _initDataIntegrity after stateManager init
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
-		// Construct sub-models
 		this.geometry = new GeometryModel();
 		this.data = new DataModel<TRowData>({
 			getState: () => this.stateManager.getState(),
@@ -374,7 +368,6 @@ export class GridEngine<TRowData = unknown> {
 			overscanAdaptive: config.overscanAdaptive,
 		};
 
-		// Construct StateManager with coordinate state update bridging
 		this.stateManager = new StateManager<TRowData>(
 			initialState,
 			this.stateReactions.handleStateChanges,
@@ -382,7 +375,6 @@ export class GridEngine<TRowData = unknown> {
 			this.instrumentation
 		);
 
-		// Capability manager — must be after stateManager, before feature controllers
 		const capCfg = config.capabilities ?? (config.canPerformAction ? { canPerformAction: config.canPerformAction } : {});
 		this.capabilityManager = new GridCapabilityManager<TRowData>(
 			capCfg,
@@ -390,7 +382,6 @@ export class GridEngine<TRowData = unknown> {
 			(rowId) => this.rowModel?.getRawRowById(rowId) ?? null
 		);
 
-		// Initialize changeApplier after stateManager is available
 		this.changeApplier = new GridCommitKernel<TRowData>({
 			stateManager: this.stateManager,
 			invalidation: this.invalidation,
@@ -412,7 +403,6 @@ export class GridEngine<TRowData = unknown> {
 			faultReporter: this.runtimeFaults,
 		});
 
-		// Initialize feature controllers (columns model will be linked after sub-models init)
 		const featureContext = {
 			columns: this.columns,
 			getState: () => this.stateManager.getState(),
@@ -481,7 +471,6 @@ export class GridEngine<TRowData = unknown> {
 			invalidateFormulaCell: (rowId, colField) => this.invalidateFormulaCell(rowId, colField),
 		});
 
-		// Initialize unified Data Integrity manager if configured
 		if (config.dataIntegrity) {
 			const diFeatureCtx = {
 				columns: this.columns,
@@ -532,13 +521,11 @@ export class GridEngine<TRowData = unknown> {
 			this.insights.register(this.dataIntegrity);
 		}
 
-		// Link sub-models back to this engine context
 		this.viewport.init(this);
 		this.geometry.init();
 		this.selection.init();
 		this.edit.init();
 
-		// Setup columns if they are passed in config
 		if (config.columns) {
 			this.columns.updateColumns(config.columns, config.columnWidths || {}, config.defaultColWidth);
 		}

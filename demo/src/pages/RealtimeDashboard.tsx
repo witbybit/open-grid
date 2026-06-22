@@ -7,8 +7,9 @@ import {
 	type GridContextMenuOptions,
 	type GridReadyEvent,
 	type StyleRule,
+	type GridIntegrityIssue,
+	type GridTransactionStreamHandle,
 } from '@open-grid/react';
-import type { GridIntegrityIssue, GridTransactionStreamHandle } from '@open-grid/core';
 import { Activity, BarChart3, Code2, RefreshCw, TrendingUp, Zap, ShieldCheck } from 'lucide-react';
 import { createDashboardColumns, createDashboardRows } from './demoGridConfigs';
 import type { DashboardStockRow } from '../components/FastRenderers';

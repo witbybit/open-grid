@@ -1372,6 +1372,15 @@ export class ClientRowModelController<TData = unknown>
 
 	public getAllDataNodes = (): RowNode<TData>[] => this.dataStore.getAllNodes();
 
+	/** Returns all nodes that currently pass the active filter (post-sort, pre-viewport). */
+	public getFilteredDataNodes = (): RowNode<TData>[] => {
+		const result: RowNode<TData>[] = [];
+		for (const vr of this.visualRows) {
+			if (vr.kind === 'data' && vr.node.data != null) result.push(vr.node);
+		}
+		return result;
+	};
+
 	public getRowOrder = (): string[] => this.dataStore.getSourceOrder();
 
 	public setRowOrder = (rowIds: string[]): void => {

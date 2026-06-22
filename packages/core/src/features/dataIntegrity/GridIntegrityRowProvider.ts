@@ -27,8 +27,10 @@ export class ClientGridIntegrityRowProvider<TRowData> implements GridIntegrityRo
 		switch (scope) {
 			case 'allRows':
 			case 'loadedRows':
-			case 'filteredRows':
 				return this._scanAllDataNodes(scope, rowModel, state);
+
+			case 'filteredRows':
+				return this._scanFilteredNodes(rowModel, state);
 
 			case 'selectedRows':
 				return this._scanSelectedRows(rowModel, state);
@@ -77,28 +79,10 @@ export class ClientGridIntegrityRowProvider<TRowData> implements GridIntegrityRo
 			return { status: 'ok', scope, rows: refs, complete: true };
 		}
 
-		// Fallback: visual scan (only for filteredRows or when truly no other option)
-		if (scope === 'filteredRows' || scope === 'loadedRows' || scope === 'allRows' || scope === 'currentPage') {
-			const refs: GridIntegrityRowRef<TRowData>[] = [];
-			const count = rowModel.getVisualRowCount();
-			for (let i = 0; i < count; i++) {
-				const vr = rowModel.getVisualRow(i);
-				if (!vr || vr.kind !== 'data' || vr.node.data == null) continue;
-				refs.push({
-					rowId: vr.node.id,
-					row: vr.node.data as TRowData,
-					rowIndex: i,
-					source: 'visible',
-				});
-			}
-			const message = scope === 'allRows' ? 'allRows fell back to visual rows — getAllDataNodes() not available on this row model' : undefined;
-			return { status: 'ok', scope, rows: refs, complete: false, message };
-		}
-
 		return {
 			status: 'unsupported',
 			scope,
-			reason: 'Row model does not support this scope',
+			reason: `Row model does not implement getAllDataNodes() — cannot scan scope '${scope}' without visual-row fallback. Implement AllDataNodesCapableRowModel to support this scope.`,
 		};
 
 		void state; // used only to avoid lint warning
@@ -113,6 +97,48 @@ export class ClientGridIntegrityRowProvider<TRowData> implements GridIntegrityRo
 			refs.push({ rowId, row: node.data as TRowData, source: 'selected' });
 		}
 		return { status: 'ok', scope: 'selectedRows', rows: refs, complete: true };
+	}
+
+	private _scanFilteredNodes(
+		rowModel: RowModel<TRowData>,
+		state: InternalGridState<TRowData>
+	): GridIntegrityRowsResult<TRowData> {
+		const filteredCapable = _asFilteredDataNodeCapable(rowModel);
+		if (filteredCapable) {
+			const nodes = filteredCapable.getFilteredDataNodes();
+			const refs: GridIntegrityRowRef<TRowData>[] = [];
+			for (const node of nodes) {
+				if (node.data == null) continue;
+				refs.push({ rowId: node.id, row: node.data as TRowData, source: 'client' });
+			}
+			return { status: 'ok', scope: 'filteredRows', rows: refs, complete: true };
+		}
+
+		// If no filter-aware API, fall back to all data nodes (conservative: better too many than too few)
+		const allDataCapable = _asAllDataNodeCapable(rowModel);
+		if (allDataCapable) {
+			const nodes = allDataCapable.getAllDataNodes();
+			const refs: GridIntegrityRowRef<TRowData>[] = [];
+			for (const node of nodes) {
+				if (node.data == null) continue;
+				refs.push({ rowId: node.id, row: node.data as TRowData, source: 'client' });
+			}
+			return {
+				status: 'ok',
+				scope: 'filteredRows',
+				rows: refs,
+				complete: false,
+				message: 'filteredRows fell back to allRows — row model does not implement getFilteredDataNodes()',
+			};
+		}
+
+		return {
+			status: 'unsupported',
+			scope: 'filteredRows',
+			reason: 'Row model does not implement getFilteredDataNodes() or getAllDataNodes()',
+		};
+
+		void state; // used only to avoid lint warning
 	}
 
 	private _scanVisibleRows(rowModel: RowModel<TRowData>): GridIntegrityRowsResult<TRowData> {
@@ -315,4 +341,13 @@ interface AllDataNodeCapable<TRowData> {
 function _asAllDataNodeCapable<TRowData>(rowModel: RowModel<TRowData>): AllDataNodeCapable<TRowData> | null {
 	const m = rowModel as unknown as Partial<AllDataNodeCapable<TRowData>>;
 	return typeof m.getAllDataNodes === 'function' ? (m as AllDataNodeCapable<TRowData>) : null;
+}
+
+interface FilteredDataNodeCapable<TRowData> {
+	getFilteredDataNodes(): Array<{ id: string; data: TRowData | null }>;
+}
+
+function _asFilteredDataNodeCapable<TRowData>(rowModel: RowModel<TRowData>): FilteredDataNodeCapable<TRowData> | null {
+	const m = rowModel as unknown as Partial<FilteredDataNodeCapable<TRowData>>;
+	return typeof m.getFilteredDataNodes === 'function' ? (m as FilteredDataNodeCapable<TRowData>) : null;
 }

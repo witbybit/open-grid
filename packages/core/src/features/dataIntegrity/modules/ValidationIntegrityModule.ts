@@ -190,7 +190,7 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		// Fire event
 		this.deps.ctx.applyChange({
 			reason: 'integrity:validation:cell',
-			state: { validationErrors: this._buildValidationErrors() },
+			state: {},
 			invalidations: [{ kind: 'cell', rowId, colId: colField, reason: 'integrity-validation' }],
 			events:
 				newIssues.length > 0
@@ -277,7 +277,7 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		this._applyIssues([...retained, issue], false);
 		this.deps.ctx.applyChange({
 			reason: 'integrity:serverValidation',
-			state: { validationErrors: this._buildValidationErrors() },
+			state: {},
 			invalidations: [{ kind: 'cell', rowId, colId: colField, reason: 'server-validation' }],
 		});
 		this.deps.requestRepaint([{ rowId, colField }]);
@@ -302,20 +302,10 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		if (rebuildState) {
 			this.deps.ctx.applyChange({
 				reason: 'integrity:validation:batch',
-				state: { validationErrors: this._buildValidationErrors() },
+				state: {},
 				invalidations: [],
 			});
 		}
-	}
-
-	private _buildValidationErrors(): Record<string, string> {
-		const errors: Record<string, string> = {};
-		for (const issue of this.issues) {
-			if (issue.rowId && issue.colField) {
-				errors[`${issue.rowId}:${issue.colField}`] = issue.message;
-			}
-		}
-		return errors;
 	}
 
 	destroy(): void {

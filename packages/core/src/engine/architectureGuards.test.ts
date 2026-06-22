@@ -1975,4 +1975,47 @@ describe('Architecture guardrails', () => {
 			expect(readFileSync(file, 'utf-8'), `${path.basename(file)} should rely on typed GridChange events`).not.toContain('as never');
 		}
 	});
+
+	// ── Plan 131: Pillar 1 — Slot-based rendering lockdown ────────────────────
+
+	describe('Plan 131 Pillar 1 — rowCellBinder decoration pipeline lockdown', () => {
+		it('rowCellBinder must not read state.validationErrors', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
+			expect(content).not.toContain('validationErrors');
+		});
+
+		it('rowCellBinder must not import from ValidationManager', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
+			expect(content).not.toContain('ValidationManager');
+		});
+
+		it('rowCellBinder must not produce og-cell-invalid class', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
+			expect(content).not.toContain('og-cell-invalid');
+		});
+
+		it('rowCellBinder must not create og-cell-error-badge DOM elements', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
+			expect(content).not.toContain('og-cell-error-badge');
+		});
+	});
+
+	// ── Plan 134: Pillar 4 — Honest row model scopes ─────────────────────────
+
+	describe('Plan 134 Pillar 4 — GridIntegrityRowProvider honest scopes', () => {
+		it('ClientGridIntegrityRowProvider must not fall back to getVisualRowCount for allRows/loadedRows/filteredRows', () => {
+			const content = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridIntegrityRowProvider.ts'),
+				'utf-8'
+			);
+			// The only place getVisualRowCount should appear is in _scanVisibleRows (for scope 'visibleRows')
+			// Specifically must NOT appear in _scanAllDataNodes fallback
+			expect(content).not.toContain("allRows fell back to visual rows");
+		});
+
+		it('ClientRowModelController must implement getFilteredDataNodes', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+			expect(content).toContain('getFilteredDataNodes');
+		});
+	});
 });
