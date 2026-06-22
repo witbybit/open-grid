@@ -1,6 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Grid, createDuplicateValueRule } from '@open-grid/react';
-import type { ColumnDef, GridReadyEvent, GridApi, GridTransactionStream, DataQualityReport, GridDiffModel } from '@open-grid/react';
+import type {
+	ColumnDef,
+	GridReadyEvent,
+	GridApi,
+	GridTransactionStream,
+	DataQualityReport,
+	GridDiffModel,
+	DataQualityIssue,
+	GridCellConflict,
+} from '@open-grid/react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -45,7 +54,8 @@ const BASE_ROWS: TradeRow[] = Array.from({ length: 30 }, (_, i) => makeRow(i));
 
 function makeCompareRows(): TradeRow[] {
 	return BASE_ROWS.map((r, i) => {
-		if (i % 5 === 0) return { ...r, price: parseFloat((r.price * 1.05).toFixed(2)), notional: r.quantity * parseFloat((r.price * 1.05).toFixed(2)) };
+		if (i % 5 === 0)
+			return { ...r, price: parseFloat((r.price * 1.05).toFixed(2)), notional: r.quantity * parseFloat((r.price * 1.05).toFixed(2)) };
 		if (i % 7 === 0) return { ...r, status: 'CANCELLED' as const };
 		return r;
 	}).filter((_, i) => i !== 3); // simulate one removed row
@@ -55,11 +65,23 @@ function makeCompareRows(): TradeRow[] {
 
 function StatusRenderer({ value }: { value: unknown }) {
 	const color: Record<string, string> = {
-		OPEN: '#22c55e', FILLED: '#6366f1', CANCELLED: '#f59e0b', REJECTED: '#ef4444',
+		OPEN: '#22c55e',
+		FILLED: '#6366f1',
+		CANCELLED: '#f59e0b',
+		REJECTED: '#ef4444',
 	};
 	const v = String(value ?? '');
 	return (
-		<span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: `${color[v] ?? '#6b7280'}22`, color: color[v] ?? '#6b7280' }}>
+		<span
+			style={{
+				fontSize: 10,
+				fontWeight: 700,
+				padding: '2px 7px',
+				borderRadius: 4,
+				background: `${color[v] ?? '#6b7280'}22`,
+				color: color[v] ?? '#6b7280',
+			}}
+		>
 			{v}
 		</span>
 	);
@@ -73,15 +95,23 @@ const COLUMNS: ColumnDef<TradeRow>[] = [
 	{ field: 'venue', header: 'Venue', width: 80 },
 	{ field: 'quantity', header: 'Qty', width: 80, type: 'number' },
 	{
-		field: 'price', header: 'Price', width: 90, type: 'number',
-		valueFormatter: (p) => p.value != null ? `$${Number(p.value).toFixed(2)}` : '',
+		field: 'price',
+		header: 'Price',
+		width: 90,
+		type: 'number',
+		valueFormatter: (p) => (p.value != null ? `$${Number(p.value).toFixed(2)}` : ''),
 	},
 	{
-		field: 'notional', header: 'Notional', width: 110, type: 'number',
-		valueFormatter: (p) => p.value != null ? `$${Number(p.value).toLocaleString()}` : '',
+		field: 'notional',
+		header: 'Notional',
+		width: 110,
+		type: 'number',
+		valueFormatter: (p) => (p.value != null ? `$${Number(p.value).toLocaleString()}` : ''),
 	},
 	{
-		field: 'status', header: 'Status', width: 95,
+		field: 'status',
+		header: 'Status',
+		width: 95,
 		renderer: { kind: 'react', component: StatusRenderer },
 	},
 ];
@@ -90,7 +120,17 @@ const COLUMNS: ColumnDef<TradeRow>[] = [
 
 type BtnVariant = 'primary' | 'amber' | 'green' | 'red' | 'indigo' | 'ghost';
 
-function Btn({ children, onClick, variant = 'ghost', disabled }: { children: React.ReactNode; onClick?: () => void; variant?: BtnVariant; disabled?: boolean }) {
+function Btn({
+	children,
+	onClick,
+	variant = 'ghost',
+	disabled,
+}: {
+	children: React.ReactNode;
+	onClick?: () => void;
+	variant?: BtnVariant;
+	disabled?: boolean;
+}) {
 	const colors: Record<BtnVariant, string> = {
 		primary: 'bg-purple-600/20 border-purple-500/40 text-purple-300 hover:bg-purple-600/30',
 		amber: 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30',
@@ -114,11 +154,15 @@ function Btn({ children, onClick, variant = 'ghost', disabled }: { children: Rea
 
 function StageBadge({ label, active, done }: { label: string; active: boolean; done: boolean }) {
 	return (
-		<div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition-all ${
-			done ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-				: active ? 'border-purple-500/50 bg-purple-500/15 text-purple-300'
-					: 'border-slate-800 bg-slate-900/20 text-slate-600'
-		}`}>
+		<div
+			className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition-all ${
+				done
+					? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+					: active
+						? 'border-purple-500/50 bg-purple-500/15 text-purple-300'
+						: 'border-slate-800 bg-slate-900/20 text-slate-600'
+			}`}
+		>
 			{done ? '✓' : active ? '◉' : '○'} {label}
 		</div>
 	);
@@ -147,17 +191,19 @@ export default function DataIntegrityLab() {
 		apiRef.current = api;
 
 		// Register duplicate-symbol quality rule
-		(api as any).registerDataQualityRule?.(createDuplicateValueRule('symbol', {
-			severity: 'warning',
-			label: 'Duplicate Symbol',
-		}));
+		api.registerDataQualityRule?.(
+			createDuplicateValueRule('symbol', {
+				severity: 'warning',
+				label: 'Duplicate Symbol',
+			})
+		);
 
 		// Register a notional-range rule (custom)
-		(api as any).registerDataQualityRule?.({
+		api.registerDataQualityRule?.({
 			id: 'notional-range',
 			label: 'Notional Range',
-			run(context: any) {
-				const issues: any[] = [];
+			run(context) {
+				const issues: DataQualityIssue[] = [];
 				for (const row of context.rows) {
 					const n = (row as TradeRow).notional;
 					if (n < 5_000 || n > 500_000) {
@@ -184,15 +230,17 @@ export default function DataIntegrityLab() {
 		const api = apiRef.current;
 		if (!api) return;
 		addLog('Running data quality check…');
-		const report = await (api as any).runDataQualityCheck?.();
+		const report = await api.runDataQualityCheck?.();
 		if (report) {
 			setQualityReport(report);
-			addLog(`Quality: ${report.issues.length} issues found (${report.issues.filter((i: any) => i.severity === 'error').length} errors, ${report.issues.filter((i: any) => i.severity === 'warning').length} warnings)`);
+			addLog(
+				`Quality: ${report.issues.length} issues found (${report.issues.filter((i) => i.severity === 'error').length} errors, ${report.issues.filter((i) => i.severity === 'warning').length} warnings)`
+			);
 		}
 	}
 
 	function handleClearQuality() {
-		(apiRef.current as any)?.clearDataQualityReport?.();
+		apiRef.current?.clearDataQualityReport?.();
 		setQualityReport(null);
 		addLog('Quality report cleared');
 	}
@@ -209,13 +257,13 @@ export default function DataIntegrityLab() {
 			base: { id: 'base', label: 'Current (T+0)', rows: BASE_ROWS, getRowId: (r) => r.id },
 			compare: { id: 'compare', label: 'EOD Snapshot (T+1)', rows: compareRows, getRowId: (r) => r.id },
 		};
-		(api as any).setDiffModel?.(model);
+		api.setDiffModel?.(model);
 		setDiffActive(true);
 		addLog('Diff activated — comparing current vs EOD snapshot');
 	}
 
 	function handleClearDiff() {
-		(apiRef.current as any)?.clearDiffModel?.();
+		apiRef.current?.clearDiffModel?.();
 		setDiffActive(false);
 		addLog('Diff cleared');
 	}
@@ -225,7 +273,7 @@ export default function DataIntegrityLab() {
 	function handleStartStream() {
 		const api = apiRef.current;
 		if (!api || streamRef.current) return;
-		const stream = (api as any).createTransactionStream?.({
+		const stream = api.createTransactionStream?.({
 			batchMs: 400,
 			flashChanges: true,
 			coalesceBy: 'cell',
@@ -247,7 +295,7 @@ export default function DataIntegrityLab() {
 				tick++;
 				return { rowId: row.id, colField: 'price', value: newPrice };
 			});
-			(streamRef.current as any).pushCells?.(updates);
+			streamRef.current.pushCells?.(updates);
 			setTimeout(pushTick, 600 + Math.floor(Math.random() * 400));
 		}
 		pushTick();
@@ -265,13 +313,13 @@ export default function DataIntegrityLab() {
 	function handleInjectConflicts() {
 		const api = apiRef.current;
 		if (!api) return;
-		const seeds = [
-			{ rowId: 'T0001', colField: 'price', base: 63.0, local: 65.5, remote: 61.0 },
-			{ rowId: 'T0003', colField: 'status', base: 'OPEN', local: 'FILLED', remote: 'CANCELLED' },
-			{ rowId: 'T0007', colField: 'quantity', base: 800, local: 850, remote: 750 },
+		const seeds: Omit<GridCellConflict, 'id' | 'createdAt'>[] = [
+			{ rowId: 'T0001', colField: 'price', baseValue: 63.0, localValue: 65.5, remoteValue: 61.0, source: 'liveStream' },
+			{ rowId: 'T0003', colField: 'status', baseValue: 'OPEN', localValue: 'FILLED', remoteValue: 'CANCELLED', source: 'serverRefresh' },
+			{ rowId: 'T0007', colField: 'quantity', baseValue: 800, localValue: 850, remoteValue: 750, source: 'collaboration' },
 		];
 		for (const s of seeds) {
-			(api as any).addConflict?.({ ...s, source: 'liveStream' });
+			api.addConflict?.(s);
 		}
 		setConflictCount(3);
 		addLog(`Injected 3 conflicts — open Conflicts panel to resolve`);
@@ -280,7 +328,7 @@ export default function DataIntegrityLab() {
 	function handleResolveAll() {
 		const api = apiRef.current;
 		if (!api) return;
-		(api as any).clearAllConflicts?.();
+		api.clearAllConflicts?.();
 		setConflictCount(0);
 		addLog('All conflicts cleared');
 	}
@@ -326,12 +374,19 @@ export default function DataIntegrityLab() {
 				<div className='flex items-center gap-2 flex-wrap min-h-[28px]'>
 					{activeStage === 'quality' && (
 						<>
-							<Btn variant='primary' onClick={handleRunQuality}>Run Quality Check</Btn>
+							<Btn variant='primary' onClick={handleRunQuality}>
+								Run Quality Check
+							</Btn>
 							{qualityReport && (
 								<>
 									<span className='text-[10px] text-slate-400'>
-										{qualityReport.issues.length} issues — <span className='text-red-400'>{qualityReport.issues.filter((i) => i.severity === 'error').length} errors</span>{' '}
-										<span className='text-amber-400'>{qualityReport.issues.filter((i) => i.severity === 'warning').length} warnings</span>
+										{qualityReport.issues.length} issues —{' '}
+										<span className='text-red-400'>
+											{qualityReport.issues.filter((i) => i.severity === 'error').length} errors
+										</span>{' '}
+										<span className='text-amber-400'>
+											{qualityReport.issues.filter((i) => i.severity === 'warning').length} warnings
+										</span>
 									</span>
 									<Btn onClick={handleClearQuality}>Clear</Btn>
 								</>
@@ -340,30 +395,54 @@ export default function DataIntegrityLab() {
 					)}
 					{activeStage === 'diff' && (
 						<>
-							{!diffActive
-								? <Btn variant='amber' onClick={handleActivateDiff}>Activate EOD Diff</Btn>
-								: <Btn onClick={handleClearDiff}>Clear Diff</Btn>}
-							<span className='text-[10px] text-slate-500'>Compares live data vs EOD snapshot — changed cells highlighted amber, removed rows red</span>
+							{!diffActive ? (
+								<Btn variant='amber' onClick={handleActivateDiff}>
+									Activate EOD Diff
+								</Btn>
+							) : (
+								<Btn onClick={handleClearDiff}>Clear Diff</Btn>
+							)}
+							<span className='text-[10px] text-slate-500'>
+								Compares live data vs EOD snapshot — changed cells highlighted amber, removed rows red
+							</span>
 						</>
 					)}
 					{activeStage === 'stream' && (
 						<>
-							{!streamRunning
-								? <Btn variant='green' onClick={handleStartStream}>Start Live Feed</Btn>
-								: <Btn variant='red' onClick={handleStopStream}>Stop Feed</Btn>}
-							<span className='text-[10px] text-slate-500'>{streamRunning ? 'Streaming price updates — cells flash yellow on update' : 'Click to stream live price ticks with coalescing & flash'}</span>
+							{!streamRunning ? (
+								<Btn variant='green' onClick={handleStartStream}>
+									Start Live Feed
+								</Btn>
+							) : (
+								<Btn variant='red' onClick={handleStopStream}>
+									Stop Feed
+								</Btn>
+							)}
+							<span className='text-[10px] text-slate-500'>
+								{streamRunning
+									? 'Streaming price updates — cells flash yellow on update'
+									: 'Click to stream live price ticks with coalescing & flash'}
+							</span>
 						</>
 					)}
 					{activeStage === 'conflict' && (
 						<>
-							<Btn variant='indigo' onClick={handleInjectConflicts} disabled={conflictCount > 0}>Inject 3 Conflicts</Btn>
+							<Btn variant='indigo' onClick={handleInjectConflicts} disabled={conflictCount > 0}>
+								Inject 3 Conflicts
+							</Btn>
 							{conflictCount > 0 && (
 								<>
 									<span className='text-[10px] text-red-400'>{conflictCount} unresolved conflicts (striped cells)</span>
-									<Btn variant='red' onClick={handleResolveAll}>Clear All</Btn>
+									<Btn variant='red' onClick={handleResolveAll}>
+										Clear All
+									</Btn>
 								</>
 							)}
-							{conflictCount === 0 && <span className='text-[10px] text-slate-500'>Injects server-vs-local conflicts; open Conflicts panel to resolve per-cell</span>}
+							{conflictCount === 0 && (
+								<span className='text-[10px] text-slate-500'>
+									Injects server-vs-local conflicts; open Conflicts panel to resolve per-cell
+								</span>
+							)}
 						</>
 					)}
 				</div>
@@ -390,16 +469,21 @@ export default function DataIntegrityLab() {
 					<div className='flex items-center justify-between px-3 py-2 border-b border-slate-800/60'>
 						<span className='text-[9px] font-extrabold uppercase tracking-widest text-slate-500'>Activity Log</span>
 						{log.length > 0 && (
-							<button onClick={() => setLog([])} className='text-[9px] text-slate-600 hover:text-slate-400'>Clear</button>
+							<button onClick={() => setLog([])} className='text-[9px] text-slate-600 hover:text-slate-400'>
+								Clear
+							</button>
 						)}
 					</div>
 					<div className='flex-1 overflow-y-auto flex flex-col-reverse p-2 gap-1'>
-						{log.length === 0
-							? <p className='text-[9px] text-slate-700 text-center mt-4'>No activity yet</p>
-							: log.map((msg, i) => (
-								<div key={i} className='text-[9px] text-slate-400 font-mono leading-tight'>{msg}</div>
+						{log.length === 0 ? (
+							<p className='text-[9px] text-slate-700 text-center mt-4'>No activity yet</p>
+						) : (
+							log.map((msg, i) => (
+								<div key={i} className='text-[9px] text-slate-400 font-mono leading-tight'>
+									{msg}
+								</div>
 							))
-						}
+						)}
 					</div>
 				</div>
 			</div>

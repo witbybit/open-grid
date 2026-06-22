@@ -266,6 +266,12 @@ export function createGridRuntimeComposition<TRowData>({
 		getCellDiff: (rowId: string, colField: string) => runtime.getCellDiff(rowId, colField),
 		acceptCellDiff: (rowId: string, colField: string) => runtime.acceptCellDiff(rowId, colField),
 		rejectCellDiff: (rowId: string, colField: string) => runtime.rejectCellDiff(rowId, colField),
+		getConflicts: () => runtime.getConflicts(),
+		getCellConflict: (rowId: string, colField: string) => runtime.getCellConflict(rowId, colField),
+		addConflict: (p: Omit<import('../features/conflict/conflictTypes.js').GridCellConflict, 'id' | 'createdAt'>) => runtime.addConflict(p),
+		resolveConflict: (id: string, opts: import('../features/conflict/conflictTypes.js').ResolveConflictOptions) => runtime.resolveConflict(id, opts),
+		clearConflict: (id: string) => runtime.clearConflict(id),
+		clearAllConflicts: () => runtime.clearAllConflicts(),
 		createTransactionStream: (opts?: import('../features/liveStream/liveStreamTypes.js').TransactionStreamOptions) => runtime.createTransactionStream(opts),
 		destroy,
 	};
