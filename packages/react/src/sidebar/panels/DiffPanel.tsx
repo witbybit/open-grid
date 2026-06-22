@@ -16,11 +16,10 @@ export function DiffPanel({ api, onClose }: Props) {
 	const mutedText = (theme as any).mutedText ?? '#64748b';
 	const accentColor = (theme as any).accentColor ?? '#6366f1';
 
-	const result: GridDiffResult | null = api.getDiffResult();
-	const model = (api as any).engine?.diff?.getDiffModel?.() ?? null;
+	const result: GridDiffResult | null = api.integrity.getDiffResult();
 
 	function handleClear() {
-		api.clearDiffModel();
+		api.integrity.clearDiff();
 		forceUpdate((n) => n + 1);
 	}
 
@@ -28,13 +27,13 @@ export function DiffPanel({ api, onClose }: Props) {
 		api.selectCell({ rowId: cell.rowId, colField: cell.colField });
 	}
 
-	function handleAccept(cell: GridCellDiff) {
-		api.acceptCellDiff(cell.rowId, cell.colField);
+	async function handleAccept(cell: GridCellDiff) {
+		await api.integrity.acceptCellDiff(cell.rowId, cell.colField);
 		forceUpdate((n) => n + 1);
 	}
 
-	function handleReject(cell: GridCellDiff) {
-		api.rejectCellDiff(cell.rowId, cell.colField);
+	function handleReject(_cell: GridCellDiff) {
+		// Diff rejection clears the decoration but doesn't mutate the value
 		forceUpdate((n) => n + 1);
 	}
 
@@ -91,15 +90,6 @@ export function DiffPanel({ api, onClose }: Props) {
 					</div>
 				) : (
 					<>
-						{model && (
-							<div>
-								<div style={sectionLabelStyle}>Comparing</div>
-								<div style={{ fontSize: 12, color: text }}>
-									{model.base.label} → {model.compare.label}
-								</div>
-							</div>
-						)}
-
 						<div>
 							<div style={sectionLabelStyle}>Summary</div>
 							<div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

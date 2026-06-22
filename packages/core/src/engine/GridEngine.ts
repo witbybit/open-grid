@@ -55,9 +55,13 @@ import { type GridInstrumentation, NOOP_INSTRUMENTATION } from '../diagnostics/G
 import { GridCapabilityManager } from '../capabilities/GridCapabilityManager.js';
 import type { GridCapabilityAction, GridCapabilitiesConfig, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { GridInsightRegistry } from '../insights/GridInsightRegistry.js';
-import { GridDataQualityManager } from '../features/dataQuality/DataQualityManager.js';
-import { GridDiffManager } from '../features/diff/GridDiffManager.js';
-import { GridConflictManager } from '../features/conflict/GridConflictManager.js';
+import { GridDataIntegrityManager } from '../features/dataIntegrity/GridDataIntegrityManager.js';
+import {
+	ClientGridIntegrityRowProvider,
+	InfiniteGridIntegrityRowProvider,
+	ServerPageGridIntegrityRowProvider,
+} from '../features/dataIntegrity/GridIntegrityRowProvider.js';
+import { defaultGridScheduler } from '../renderer/gridScheduler.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -88,9 +92,13 @@ export class GridEngine<TRowData = unknown> {
 	private readonly stateReactions: GridStateReactionController<TRowData>;
 	public readonly capabilityManager: GridCapabilityManager<TRowData>;
 	public readonly insights: GridInsightRegistry;
-	public readonly dataQuality: GridDataQualityManager<TRowData>;
-	public readonly diff: GridDiffManager<TRowData>;
-	public readonly conflict: GridConflictManager<TRowData>;
+	public dataIntegrity: GridDataIntegrityManager<TRowData> | null = null;
+
+	// Lazy api ref — set by store after api object is created
+	private _apiRef: import('../api/GridApi.js').GridApi<TRowData> | null = null;
+	public setApiRef(api: import('../api/GridApi.js').GridApi<TRowData>): void {
+		this._apiRef = api;
+	}
 
 	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
 		return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];
@@ -247,22 +255,8 @@ export class GridEngine<TRowData = unknown> {
 		this.commandHistory = new CommandHistory(this.runtimeFaults);
 		this.invalidation = new InvalidationManager();
 		this.insights = new GridInsightRegistry();
-		this.dataQuality = new GridDataQualityManager<TRowData>({
-			getState: () => this.stateManager.getState(),
-			getRowModel: () => this.getRowModel(),
-			requestInsightRepaint: () => this.requestInsightRepaint(),
-		});
-		this.insights.register(this.dataQuality);
-		this.diff = new GridDiffManager<TRowData>({
-			getState: () => this.stateManager.getState() as { columns: readonly import('../columnDef.js').ColumnDef<unknown>[] },
-			requestInsightRepaint: () => this.requestInsightRepaint(),
-		});
-		this.insights.register(this.diff);
-		this.conflict = new GridConflictManager<TRowData>({
-			setCellValue: (r, c, v) => this.setCellValue(r, c, v),
-			requestInsightRepaint: () => this.requestInsightRepaint(),
-		});
-		this.insights.register(this.conflict);
+		// dataIntegrity manager is created after stateManager is set up, so we defer below
+		this.dataIntegrity = null; // will be assigned in _initDataIntegrity after stateManager init
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
@@ -456,7 +450,6 @@ export class GridEngine<TRowData = unknown> {
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			data: this.data,
-			rowValidator: config.rowValidator,
 		});
 		this.editingFeature = new EditingFeatureController<TRowData>({
 			ctx: featureContext,
@@ -465,7 +458,13 @@ export class GridEngine<TRowData = unknown> {
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
 			clearValidationError: (rowId, colField) => this.validationFeature._setCellError(rowId, colField, null),
 			setValidationError: (rowId, colField, error) => this.validationFeature._setCellError(rowId, colField, error),
-			validateCellPostCommit: (rowId, colField) => this.validationFeature.validateCell(rowId, colField).then(() => undefined),
+			validateCellPostCommit: (rowId, colField) => {
+				// Prefer integrity pipeline validation if configured; fall back to column valueValidator
+				if (this.dataIntegrity?.validationModule?.isEnabled()) {
+					return this.dataIntegrity.validateCell(rowId, colField).then(() => undefined);
+				}
+				return this.validationFeature.validateCell(rowId, colField).then(() => undefined);
+			},
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
@@ -481,6 +480,57 @@ export class GridEngine<TRowData = unknown> {
 			syncFormulaForCell: (rowId, colField, value) => this.syncFormulaForCell(rowId, colField, value),
 			invalidateFormulaCell: (rowId, colField) => this.invalidateFormulaCell(rowId, colField),
 		});
+
+		// Initialize unified Data Integrity manager if configured
+		if (config.dataIntegrity) {
+			const diFeatureCtx = {
+				columns: this.columns,
+				getState: () => this.stateManager.getState(),
+				applyChange: (change: import('./GridChangeApplier.js').GridCommit<TRowData>) => this.changeApplier.commit(change),
+			};
+			const modelType = (config.rowModelConfig as { type?: string } | undefined)?.type ?? 'client';
+			const rowProvider =
+				modelType === 'infinite'
+					? new InfiniteGridIntegrityRowProvider<TRowData>(
+							() => this.rowModel,
+							() => this.stateManager.getState()
+						)
+					: modelType === 'server'
+						? new ServerPageGridIntegrityRowProvider<TRowData>(
+								() => this.rowModel,
+								() => this.stateManager.getState()
+							)
+						: new ClientGridIntegrityRowProvider<TRowData>(
+								() => this.rowModel,
+								() => this.stateManager.getState()
+							);
+
+			this.dataIntegrity = new GridDataIntegrityManager<TRowData>(config.dataIntegrity, {
+				ctx: diFeatureCtx,
+				data: this.data,
+				getRowModel: () => this.rowModel,
+				getApi: () => this._apiRef!,
+				scheduler: defaultGridScheduler,
+				rowProvider,
+				capabilityManager: this.capabilityManager,
+				setCellValue: (r, c, v) => this.setCellValue(r, c, v),
+				commitCells: (updates) => this.batchCellValues(updates as import('../api/GridApi.js').BatchCellValueUpdate[], 'api'),
+				applyRowPatch: (rowId, patch) => {
+					const row = this.rowModel?.getRawRowById(rowId);
+					if (row) {
+						const updated = { ...row, ...patch };
+						this.applyTransaction({ update: [updated] });
+					}
+				},
+				requestInsightRepaint: () => this.requestInsightRepaint(),
+				requestTargetedRepaint: (cells) => {
+					for (const { rowId, colField } of cells) {
+						this.notifyCellChange(rowId, colField);
+					}
+				},
+			});
+			this.insights.register(this.dataIntegrity);
+		}
 
 		// Link sub-models back to this engine context
 		this.viewport.init(this);

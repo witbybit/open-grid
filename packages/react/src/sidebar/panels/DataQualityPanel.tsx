@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import type { GridApi } from '../../types.js';
-import type { DataQualityReport, DataQualityIssue } from '@open-grid/core';
+import type { GridIntegrityIssue } from '@open-grid/core';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ function SeverityDot({ severity }: { severity: 'info' | 'warning' | 'error' }) {
 	return <InfoDotIcon />;
 }
 
-function IssueRow({ issue, onFocus, theme }: { issue: DataQualityIssue; onFocus: (issue: DataQualityIssue) => void; theme: any }) {
+function IssueRow({ issue, onFocus, theme }: { issue: GridIntegrityIssue; onFocus: (issue: GridIntegrityIssue) => void; theme: any }) {
 	const label = _ISSUE_TYPE_LABELS[issue.type] ?? issue.type;
 	return (
 		<div
@@ -128,7 +128,8 @@ function IssueRow({ issue, onFocus, theme }: { issue: DataQualityIssue; onFocus:
 
 export function DataQualityPanel({ api, onClose }: { api: GridApi<any>; onClose: () => void }) {
 	const [running, setRunning] = useState(false);
-	const [report, setReport] = useState<DataQualityReport | null>(() => api.getDataQualityReport());
+	const [hasRun, setHasRun] = useState(false);
+	const [issues, setIssues] = useState<readonly GridIntegrityIssue[]>([]);
 	const [error, setError] = useState<string | null>(null);
 
 	const theme = api.getTheme?.() ?? {};
@@ -137,8 +138,9 @@ export function DataQualityPanel({ api, onClose }: { api: GridApi<any>; onClose:
 		setRunning(true);
 		setError(null);
 		try {
-			const r = await api.runDataQualityCheck();
-			setReport(r);
+			await api.integrity.run({ modules: ['quality'] });
+			setIssues(api.integrity.getIssues({ source: 'dataQuality' }));
+			setHasRun(true);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
@@ -147,13 +149,14 @@ export function DataQualityPanel({ api, onClose }: { api: GridApi<any>; onClose:
 	}, [api]);
 
 	const handleClear = useCallback(() => {
-		api.clearDataQualityReport();
-		setReport(null);
+		api.integrity.clearIssues({ source: 'dataQuality' });
+		setIssues([]);
+		setHasRun(false);
 		setError(null);
 	}, [api]);
 
 	const handleFocus = useCallback(
-		(issue: DataQualityIssue) => {
+		(issue: GridIntegrityIssue) => {
 			if (issue.rowId && issue.colField) {
 				api.selectCell({ rowId: issue.rowId, colField: issue.colField });
 			}
@@ -167,16 +170,14 @@ export function DataQualityPanel({ api, onClose }: { api: GridApi<any>; onClose:
 	const mutedText = (theme as any).mutedText ?? '#64748b';
 	const accentColor = (theme as any).accentColor ?? '#6366f1';
 
-	const summary = report?.summary;
-	const issues: readonly DataQualityIssue[] = report?.issues ?? [];
+	const summary = hasRun ? api.integrity.getSummary() : null;
 
 	// Group issues by type for display
-	const validationIssues = issues.filter((i) => i.type === 'validation');
-	const missingIssues = issues.filter((i) => i.type === 'missing');
+	const missingIssues = issues.filter((i) => i.type === 'missingRequired');
 	const duplicateIssues = issues.filter((i) => i.type === 'duplicate');
-	const otherIssues = issues.filter((i) => !['validation', 'missing', 'duplicate'].includes(i.type));
+	const otherIssues = issues.filter((i) => !['missingRequired', 'duplicate'].includes(i.type as string));
 
-	function Section({ title, items }: { title: string; items: DataQualityIssue[] }) {
+	function Section({ title, items }: { title: string; items: GridIntegrityIssue[] }) {
 		if (items.length === 0) return null;
 		return (
 			<div style={{ marginBottom: 8 }}>
@@ -259,7 +260,7 @@ export function DataQualityPanel({ api, onClose }: { api: GridApi<any>; onClose:
 				>
 					{running ? 'Running…' : 'Run Checks'}
 				</button>
-				{report && (
+				{hasRun && (
 					<button
 						onClick={handleClear}
 						style={{
@@ -307,7 +308,6 @@ export function DataQualityPanel({ api, onClose }: { api: GridApi<any>; onClose:
 						{ label: 'Total', value: summary.totalIssues, color: text },
 						{ label: 'Errors', value: summary.errors, color: '#f87171' },
 						{ label: 'Warnings', value: summary.warnings, color: '#fbbf24' },
-						{ label: 'Info', value: summary.infos, color: '#38bdf8' },
 					].map(({ label, value, color }) => (
 						<div key={label} style={{ flex: 1, textAlign: 'center' }}>
 							<div style={{ fontSize: 15, fontWeight: 700, color }}>{value}</div>
@@ -317,29 +317,21 @@ export function DataQualityPanel({ api, onClose }: { api: GridApi<any>; onClose:
 				</div>
 			)}
 
-			{/* Scope notice */}
-			{report && (
-				<div style={{ padding: '4px 10px', fontSize: 10, color: mutedText, borderBottom: `1px solid ${borderColor}`, flexShrink: 0 }}>
-					Scope: {report.scope === 'allClientRows' ? 'all client rows' : report.scope === 'loadedRows' ? 'loaded rows only' : report.scope}
-				</div>
-			)}
-
 			{/* Issue list */}
 			<div style={{ flex: 1, overflowY: 'auto' }}>
-				{!report && !running && (
+				{!hasRun && !running && (
 					<div style={{ padding: 16, color: mutedText, fontSize: 11, textAlign: 'center' }}>
 						Click <strong>Run Checks</strong> to scan the dataset for quality issues.
 					</div>
 				)}
-				{report && issues.length === 0 && (
+				{hasRun && issues.length === 0 && (
 					<div style={{ padding: 16, color: mutedText, fontSize: 11, textAlign: 'center' }}>No issues found.</div>
 				)}
-				{report && issues.length > 0 && (
+				{hasRun && issues.length > 0 && (
 					<>
-						<Section title='Validation Errors' items={validationIssues} />
-						<Section title='Missing Values' items={missingIssues} />
-						<Section title='Duplicates' items={duplicateIssues} />
-						<Section title='Other Issues' items={otherIssues} />
+						<Section title='Missing Values' items={missingIssues as GridIntegrityIssue[]} />
+						<Section title='Duplicates' items={duplicateIssues as GridIntegrityIssue[]} />
+						<Section title='Other Issues' items={otherIssues as GridIntegrityIssue[]} />
 					</>
 				)}
 			</div>

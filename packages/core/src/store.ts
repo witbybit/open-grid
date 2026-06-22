@@ -18,7 +18,6 @@ import {
 	asServerPageControllableRowModel,
 } from './rowModel.js';
 import type { GridDomainVersions } from './state/GridDomainVersions.js';
-import type { RowValidator } from './features/ValidationManager.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
 import type { InfiniteDatasource } from './infiniteRowModel.js';
 import type { ServerDatasource, ServerPageState } from './serverPageRowModel.js';
@@ -37,8 +36,6 @@ import type { PersistenceStatus, PersistedGridState } from './persistence/stateP
 import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from './workspace/workspaceTypes.js';
 import { extractPersistedState, preparePersistedGridStateRestore, areRowHeightsEqual } from './persistence/statePersistence.js';
 import { BUILT_IN_THEME_ORDER, getBuiltInTheme, isBuiltInThemeName, type BuiltInThemeName, type ThemeTokens } from './renderer/themes.js';
-import { GridTransactionStreamImpl } from './features/liveStream/GridTransactionStream.js';
-import { defaultGridScheduler } from './renderer/gridScheduler.js';
 
 // ── Focused sub-modules — re-export so callers of store.ts continue to work ──
 export { RowNode } from './rowNode.js';
@@ -143,6 +140,106 @@ const _EMPTY_WS_STATE: GridWorkspaceState = {
 	loading: false,
 };
 
+function _makeNoopIntegrityApi<TRowData>(): import('./features/dataIntegrity/integrityTypes.js').GridIntegrityApi<TRowData> {
+	const _warn = (method: string) => console.warn(`[OpenGrid] api.integrity.${method}() called but dataIntegrity is not configured on this grid.`);
+	const _noopSummary = (): import('./features/dataIntegrity/integrityTypes.js').GridIntegritySummary => ({
+		status: 'clean',
+		totalIssues: 0,
+		blockingIssues: 0,
+		warnings: 0,
+		errors: 0,
+		bySource: {},
+	});
+	const _noopResult = (): import('./features/dataIntegrity/integrityTypes.js').GridIntegrityRunResult => ({
+		summary: _noopSummary(),
+		issues: [],
+	});
+	return {
+		run: async (opts?) => {
+			_warn('run');
+			return _noopResult();
+		},
+		getSummary: () => {
+			_warn('getSummary');
+			return _noopSummary();
+		},
+		getIssues: () => {
+			_warn('getIssues');
+			return [];
+		},
+		getCellIssues: () => {
+			_warn('getCellIssues');
+			return [];
+		},
+		getRowIssues: () => {
+			_warn('getRowIssues');
+			return [];
+		},
+		getBlockingIssues: () => {
+			_warn('getBlockingIssues');
+			return [];
+		},
+		canSubmit: () => {
+			_warn('canSubmit');
+			return true;
+		},
+		publishIssues: () => {
+			_warn('publishIssues');
+		},
+		publishServerReport: () => {
+			_warn('publishServerReport');
+		},
+		clearIssues: () => {
+			_warn('clearIssues');
+		},
+		validateCell: async () => {
+			_warn('validateCell');
+			return [];
+		},
+		validateRow: async () => {
+			_warn('validateRow');
+			return [];
+		},
+		validateGrid: async () => {
+			_warn('validateGrid');
+			return _noopResult();
+		},
+		setDiffModel: () => {
+			_warn('setDiffModel');
+		},
+		clearDiff: () => {
+			_warn('clearDiff');
+		},
+		getDiffResult: () => {
+			_warn('getDiffResult');
+			return null;
+		},
+		acceptCellDiff: async () => {
+			_warn('acceptCellDiff');
+			return { status: 'notFound', reason: 'dataIntegrity not configured' } as const;
+		},
+		createStream: () => {
+			_warn('createStream');
+			throw new Error('[OpenGrid] dataIntegrity is not configured on this grid.');
+		},
+		getStreamState: () => {
+			_warn('getStreamState');
+			return null;
+		},
+		getConflicts: () => {
+			_warn('getConflicts');
+			return [];
+		},
+		resolveConflict: async () => {
+			_warn('resolveConflict');
+			return { status: 'notFound' } as const;
+		},
+		clearConflict: () => {
+			_warn('clearConflict');
+		},
+	};
+}
+
 /**
  * Internal runtime composition root.
  *
@@ -168,14 +265,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	constructor(
 		initialState: Partial<GridInitialState<TRowData>> = {},
 		engineOptions?: {
-			rowValidator?: RowValidator<TRowData>;
 			capabilities?: import('./capabilities/capabilityTypes.js').GridCapabilitiesConfig<TRowData>;
+			dataIntegrity?: import('./features/dataIntegrity/integrityTypes.js').GridDataIntegrityConfig<TRowData>;
 		}
 	) {
 		validateColumns(initialState.columns || []);
 		this.engine = new GridEngine<TRowData>({
-			rowValidator: engineOptions?.rowValidator,
 			capabilities: engineOptions?.capabilities,
+			dataIntegrity: engineOptions?.dataIntegrity,
 			columns: initialState.columns || [],
 			selection: initialState.selection,
 			selectedRowIds: initialState.selectedRowIds ?? [],
@@ -224,6 +321,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
 		this.pluginRuntime = createGridPluginRuntime(this as unknown as GridPluginRuntime<TRowData>);
 		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime, this.engine.runtimeFaults);
+
+		// Wire up the lazy api ref so integrity modules can call GridApi methods in rules
+		this.engine.setApiRef(this as unknown as import('./api/GridApi.js').GridApi<TRowData>);
+		this.integrity = this.engine.dataIntegrity?.buildApi() ?? _makeNoopIntegrityApi<TRowData>();
 
 		// Apply persisted pin counts at construction time before any renders occur
 		if (initialState.pinnedColumns) {
@@ -626,19 +727,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.editingFeature.commitEdit(rowId, colField, value);
 	};
 
-	public validateCell = (rowId: string, colField: string): Promise<string | null> => this.engine.validationFeature.validateCell(rowId, colField);
-	public validateGrid = (): Promise<import('./features/ValidationManager.js').CellValidationError[]> =>
-		this.engine.validationFeature.validateGrid();
-	public setCellValidationError = (rowId: string, colField: string, error: string): void =>
-		this.engine.validationFeature.setCellValidationError(rowId, colField, error);
-	public clearCellValidationError = (rowId: string, colField: string): void =>
-		this.engine.validationFeature.clearCellValidationError(rowId, colField);
-	public clearValidationErrors = (): void => this.engine.validationFeature.clearValidationErrors();
-	public getCellValidationError = (rowId: string, colField: string): string | null =>
-		this.engine.validationFeature.getCellValidationError(rowId, colField);
-	public hasValidationErrors = (): boolean => this.engine.validationFeature.hasValidationErrors();
-	public getAllValidationErrors = (): import('./features/ValidationManager.js').CellValidationError[] =>
-		this.engine.validationFeature.getAllValidationErrors();
+	// ── Data Integrity API ─────────────────────────────────────────────────────
+	public integrity!: import('./features/dataIntegrity/integrityTypes.js').GridIntegrityApi<TRowData>;
 
 	public can = (
 		action: import('./capabilities/capabilityTypes.js').GridCapabilityAction,
@@ -1106,61 +1196,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getContainer = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
 
 	public getInsightDiagnostics = (): Record<string, unknown> => this.engine.insights.getDiagnostics();
-	public runDataQualityCheck = (opts?: {
-		scope?: import('./features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'];
-	}): Promise<import('./features/dataQuality/dataQualityTypes.js').DataQualityReport> => this.engine.dataQuality.run(opts?.scope);
-	public getDataQualityReport = (): import('./features/dataQuality/dataQualityTypes.js').DataQualityReport | null =>
-		this.engine.dataQuality.getReport();
-	public clearDataQualityReport = (): void => this.engine.dataQuality.clear();
-	public registerDataQualityRule = (rule: import('./features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>): void =>
-		this.engine.dataQuality.registerRule(rule);
-	public unregisterDataQualityRule = (ruleId: string): void => this.engine.dataQuality.unregisterRule(ruleId);
-	public setDiffModel = (model: import('./features/diff/diffTypes.js').GridDiffModel<TRowData> | null): void =>
-		this.engine.diff.setDiffModel(model);
-	public clearDiffModel = (): void => this.engine.diff.clear();
-	public getDiffResult = (): import('./features/diff/diffTypes.js').GridDiffResult | null => this.engine.diff.getDiffResult();
-	public getCellDiff = (r: string, c: string): import('./features/diff/diffTypes.js').GridCellDiff | null => this.engine.diff.getCellDiff(r, c);
-	public acceptCellDiff = (r: string, c: string): void => {
-		const d = this.engine.diff.getCellDiff(r, c);
-		if (d) {
-			this.setCellValue(r, c, d.newValue);
-			this.engine.diff.rejectCellDiff(r, c);
-		}
-	};
-	public rejectCellDiff = (r: string, c: string): void => this.engine.diff.rejectCellDiff(r, c);
-	public getConflicts = (): readonly import('./features/conflict/conflictTypes.js').GridCellConflict[] => this.engine.conflict.getConflicts();
-	public getCellConflict = (r: string, c: string): import('./features/conflict/conflictTypes.js').GridCellConflict | null =>
-		this.engine.conflict.getConflict(r, c);
-	public addConflict = (
-		p: Omit<import('./features/conflict/conflictTypes.js').GridCellConflict, 'id' | 'createdAt'>
-	): import('./features/conflict/conflictTypes.js').GridCellConflict => this.engine.conflict.addConflict(p);
-	public resolveConflict = (id: string, opts: import('./features/conflict/conflictTypes.js').ResolveConflictOptions): void =>
-		this.engine.conflict.resolveConflict(id, opts);
-	public clearConflict = (id: string): void => this.engine.conflict.clearConflict(id);
-	public clearAllConflicts = (): void => this.engine.conflict.clearAllConflicts();
-	public createTransactionStream = (
-		opts?: import('./features/liveStream/liveStreamTypes.js').TransactionStreamOptions
-	): import('./features/liveStream/liveStreamTypes.js').GridTransactionStream<TRowData> => {
-		const s = new GridTransactionStreamImpl<TRowData>(
-			{
-				commitCells: (u) => this.engine.batchStreamCells(u),
-				applyRowPatch: (rid, p) => {
-					const n = this.getRowNodeById(rid);
-					if (n?.data) this.applyTransaction({ update: [{ ...n.data, ...p }] });
-				},
-				isCellBeingEdited: (r, c) => {
-					const st = this.engine.stateManager.getState();
-					return st.activeEdit?.rowId === r && st.activeEdit?.colField === c;
-				},
-				requestInsightRepaint: () => this.engine.requestInsightRepaint(),
-				onDestroy: () => this.engine.insights.unregister('liveStream'),
-				scheduler: defaultGridScheduler,
-			},
-			opts
-		);
-		this.engine.insights.register(s);
-		return s;
-	};
 
 	public destroy = (): void => {
 		this.storeDestroyed = true;

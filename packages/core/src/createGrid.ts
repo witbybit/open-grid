@@ -1,5 +1,4 @@
 import { ClientRowModelController, type ClientRowModelOptions } from './rowModel.js';
-import type { RowValidator } from './features/ValidationManager.js';
 import { InfiniteRowModelController, type InfiniteRowModelOptions } from './infiniteRowModel.js';
 import { ServerPageRowModelController, type ServerPageRowModelOptions } from './serverPageRowModel.js';
 import { GridStore as GridRuntime } from './store.js';
@@ -17,6 +16,7 @@ import { createGridRuntimeComposition } from './internal/createGridRuntimeCompos
 import type { GridWorkspaceAdapter } from './workspace/workspaceTypes.js';
 import { type GridWorkspaceController, createWorkspaceController } from './workspace/GridWorkspaceController.js';
 import type { GridCapabilitiesConfig } from './capabilities/capabilityTypes.js';
+import type { GridDataIntegrityConfig } from './features/dataIntegrity/integrityTypes.js';
 
 export type { GridPersistenceAdapter, PersistedGridState };
 export { createLocalStorageAdapter };
@@ -51,10 +51,10 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 	 */
 	persistence?: string | GridPersistenceAdapter;
 	workspace?: GridWorkspaceAdapter;
-	/** Grid-level cross-field validator — see RowValidator for details. */
-	rowValidator?: RowValidator<TRowData>;
 	/** Grid-level capability rules. Control which actions are allowed per cell, column, or row. */
 	capabilities?: GridCapabilitiesConfig<TRowData>;
+	/** Unified Data Integrity pipeline — validation, quality, diff, live stream, conflict resolution. */
+	dataIntegrity?: GridDataIntegrityConfig<TRowData>;
 }
 
 /** Options for creating an infinite (block/range loading) grid. */
@@ -63,8 +63,9 @@ export interface InfiniteGridOptions<TRowData> extends InfiniteRowModelOptions<T
 	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	persistence?: string | GridPersistenceAdapter;
 	workspace?: GridWorkspaceAdapter;
-	rowValidator?: RowValidator<TRowData>;
 	capabilities?: GridCapabilitiesConfig<TRowData>;
+	/** Unified Data Integrity pipeline — validation, quality, diff, live stream, conflict resolution. */
+	dataIntegrity?: GridDataIntegrityConfig<TRowData>;
 }
 
 /** Options for creating a server-page (explicit page loading) grid. */
@@ -73,8 +74,9 @@ export interface ServerPageGridOptions<TRowData> extends ServerPageRowModelOptio
 	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	persistence?: string | GridPersistenceAdapter;
 	workspace?: GridWorkspaceAdapter;
-	rowValidator?: RowValidator<TRowData>;
 	capabilities?: GridCapabilitiesConfig<TRowData>;
+	/** Unified Data Integrity pipeline — validation, quality, diff, live stream, conflict resolution. */
+	dataIntegrity?: GridDataIntegrityConfig<TRowData>;
 }
 
 function buildColumnWidths<TRowData>(columns: Array<ColumnDef<TRowData>>): Record<string, number> {
@@ -204,7 +206,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 			columnWidths: buildColumnWidths(resolvedColumns),
 			...mergedInitial,
 		},
-		{ rowValidator: options.rowValidator, capabilities: options.capabilities }
+		{ capabilities: options.capabilities, dataIntegrity: options.dataIntegrity }
 	);
 
 	const controller = new ClientRowModelController<TRowData>(runtime.getClientRowModelRuntime(), { ...options, columns: resolvedColumns });
@@ -276,7 +278,7 @@ export function createInfiniteGrid<TRowData>(options: InfiniteGridOptions<TRowDa
 			columnWidths: buildColumnWidths(resolvedColumns),
 			...mergedInitial,
 		},
-		{ rowValidator: options.rowValidator, capabilities: options.capabilities }
+		{ capabilities: options.capabilities, dataIntegrity: options.dataIntegrity }
 	);
 
 	const controller = new InfiniteRowModelController<TRowData>(runtime.getInfiniteRowModelRuntime(), { ...options, columns: selected.columns });
@@ -346,7 +348,7 @@ export function createServerPageGrid<TRowData>(options: ServerPageGridOptions<TR
 			columnWidths: buildColumnWidths(resolvedColumns),
 			...mergedInitial,
 		},
-		{ rowValidator: options.rowValidator, capabilities: options.capabilities }
+		{ capabilities: options.capabilities, dataIntegrity: options.dataIntegrity }
 	);
 
 	const controller = new ServerPageRowModelController<TRowData>(runtime.getServerPageRowModelRuntime(), { ...options, columns: selected.columns });

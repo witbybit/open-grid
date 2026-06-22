@@ -14,7 +14,15 @@
  */
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { Grid } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent, CellValidationError, SidebarPanelDef, RowValidator } from '@open-grid/react';
+import type {
+	ColumnDef,
+	GridApi,
+	GridReadyEvent,
+	GridIntegrityIssue,
+	SidebarPanelDef,
+	GridCellIntegrityRule,
+	GridRowIntegrityRule,
+} from '@open-grid/react';
 import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson, Scan } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
@@ -115,32 +123,17 @@ const COLUMNS: ColumnDef<Employee>[] = [
 		minWidth: 100,
 		maxWidth: 300,
 		tooltip: ({ row }) => `ID: ${row.id}`,
-		valueValidator: async ({ value }) => {
-			const s = String(value ?? '').trim();
-			if (!s) return 'Name is required';
-			if (s.length < 2) return 'Name must be at least 2 characters';
-			return null;
-		},
 	},
 	{
 		field: 'email',
 		header: 'Email',
 		width: 200,
 		minWidth: 120,
-		valueValidator: async ({ value }) => {
-			const s = String(value ?? '').trim();
-			if (!s) return 'Email is required';
-			if (!isValidEmail(s)) return 'Invalid email format (user@domain.com)';
-			return null;
-		},
 	},
 	{
 		field: 'department',
 		header: 'Department',
 		width: 130,
-		valueValidator: ({ value }) => {
-			return DEPARTMENTS.includes(String(value ?? '')) ? null : `Must be one of: ${DEPARTMENTS.join(', ')}`;
-		},
 	},
 	{
 		field: 'status',
@@ -151,9 +144,6 @@ const COLUMNS: ColumnDef<Employee>[] = [
 			if (row.status === 'On Leave') return 'Bonus is locked while on leave';
 			return null;
 		},
-		valueValidator: ({ value }) => {
-			return STATUSES.includes(value as EmployeeStatus) ? null : `Must be one of: ${STATUSES.join(', ')}`;
-		},
 	},
 	{
 		field: 'salary',
@@ -161,49 +151,27 @@ const COLUMNS: ColumnDef<Employee>[] = [
 		width: 120,
 		minWidth: 80,
 		maxWidth: 200,
-		// Salary is locked for terminated employees
 		canEdit: ({ row }) => row?.status !== 'Terminated',
 		tooltip: ({ row }) => (row.status === 'Terminated' ? 'Salary locked — employee is terminated' : null),
-		valueValidator: ({ value }) => {
-			const n = Number(String(value ?? '').replace(/[$,]/g, ''));
-			if (isNaN(n)) return 'Must be a number';
-			if (n < 0) return 'Salary cannot be negative';
-			if (n > 10_000_000) return 'Salary exceeds maximum ($10M)';
-			return null;
-		},
 	},
 	{
 		field: 'bonus',
 		header: 'Bonus ($)',
 		width: 110,
-		// Bonus is only editable for Active employees
 		canEdit: ({ row }) => row?.status === 'Active',
 		tooltip: ({ row }) => {
 			if (row.status === 'Active') return null;
 			return `Bonus not applicable — status is "${row.status}"`;
-		},
-		valueValidator: ({ value }) => {
-			if (value === null || value === '' || value === undefined) return null;
-			const n = Number(String(value).replace(/[$,]/g, ''));
-			if (isNaN(n)) return 'Must be a number';
-			if (n < 0) return 'Bonus cannot be negative';
-			if (n > 1_000_000) return 'Bonus exceeds maximum ($1M)';
-			return null;
 		},
 	},
 	{
 		field: 'startDate',
 		header: 'Start Date',
 		width: 115,
-		valueValidator: ({ value }) => {
-			const d = new Date(String(value ?? ''));
-			if (isNaN(d.getTime())) return 'Invalid date (YYYY-MM-DD)';
-			return null;
-		},
 	},
 ];
 
-// ─── Cross-field row validator ────────────────────────────────────────────────
+// ─── Validation rules (integrity pipeline) ───────────────────────────────────
 
 const DEPT_MIN_SALARY: Record<string, number> = {
 	Engineering: 70000,
@@ -215,34 +183,104 @@ const DEPT_MIN_SALARY: Record<string, number> = {
 	HR: 45000,
 };
 
-const employeeRowValidator: RowValidator<Employee> = ({ row }) => {
-	const errors: Record<string, string | null> = {};
-	const salary = Number(row.salary);
-	const dept = row.department;
-	const minSalary = DEPT_MIN_SALARY[dept];
+const EMPLOYEE_CELL_RULES: GridCellIntegrityRule<Employee>[] = [
+	{
+		id: 'name-required',
+		field: 'name',
+		validate: async ({ value }) => {
+			const s = String(value ?? '').trim();
+			if (!s) return { message: 'Name is required' };
+			if (s.length < 2) return { message: 'Name must be at least 2 characters' };
+			return null;
+		},
+	},
+	{
+		id: 'email-required',
+		field: 'email',
+		validate: async ({ value }) => {
+			const s = String(value ?? '').trim();
+			if (!s) return { message: 'Email is required' };
+			if (!isValidEmail(s)) return { message: 'Invalid email format (user@domain.com)' };
+			return null;
+		},
+	},
+	{
+		id: 'department-valid',
+		field: 'department',
+		validate: ({ value }) => {
+			return DEPARTMENTS.includes(String(value ?? '')) ? null : { message: `Must be one of: ${DEPARTMENTS.join(', ')}` };
+		},
+	},
+	{
+		id: 'status-valid',
+		field: 'status',
+		validate: ({ value }) => {
+			return STATUSES.includes(value as EmployeeStatus) ? null : { message: `Must be one of: ${STATUSES.join(', ')}` };
+		},
+	},
+	{
+		id: 'salary-valid',
+		field: 'salary',
+		validate: ({ value }) => {
+			const n = Number(String(value ?? '').replace(/[$,]/g, ''));
+			if (isNaN(n)) return { message: 'Must be a number' };
+			if (n < 0) return { message: 'Salary cannot be negative' };
+			if (n > 10_000_000) return { message: 'Salary exceeds maximum ($10M)' };
+			return null;
+		},
+	},
+	{
+		id: 'bonus-valid',
+		field: 'bonus',
+		validate: ({ value }) => {
+			if (value === null || value === '' || value === undefined) return null;
+			const n = Number(String(value).replace(/[$,]/g, ''));
+			if (isNaN(n)) return { message: 'Must be a number' };
+			if (n < 0) return { message: 'Bonus cannot be negative' };
+			if (n > 1_000_000) return { message: 'Bonus exceeds maximum ($1M)' };
+			return null;
+		},
+	},
+	{
+		id: 'start-date-valid',
+		field: 'startDate',
+		validate: ({ value }) => {
+			const d = new Date(String(value ?? ''));
+			return isNaN(d.getTime()) ? { message: 'Invalid date (YYYY-MM-DD)' } : null;
+		},
+	},
+];
 
-	// Per-department salary minimum (skip for terminated — salary is locked)
-	if (row.status !== 'Terminated' && minSalary !== undefined && !isNaN(salary) && salary >= 0 && salary < minSalary) {
-		errors.salary = `${dept} minimum salary is $${minSalary.toLocaleString()}`;
-	} else {
-		errors.salary = null;
-	}
-
-	// Bonus only allowed for Active employees
-	if (row.status !== 'Active' && row.bonus !== null && row.bonus !== undefined) {
-		errors.bonus = `Bonus not applicable for status "${row.status}"`;
-	} else {
-		errors.bonus = null;
-	}
-
-	return errors;
-};
+const EMPLOYEE_ROW_RULES: GridRowIntegrityRule<Employee>[] = [
+	{
+		id: 'dept-min-salary',
+		validate: ({ row }) => {
+			const salary = Number((row as Employee).salary);
+			const dept = (row as Employee).department;
+			const minSalary = DEPT_MIN_SALARY[dept];
+			if ((row as Employee).status !== 'Terminated' && minSalary !== undefined && !isNaN(salary) && salary >= 0 && salary < minSalary) {
+				return { message: `${dept} minimum salary is $${minSalary.toLocaleString()}`, fields: ['salary'] };
+			}
+			return null;
+		},
+	},
+	{
+		id: 'bonus-inactive',
+		validate: ({ row }) => {
+			const r = row as Employee;
+			if (r.status !== 'Active' && r.bonus !== null && r.bonus !== undefined) {
+				return { message: `Bonus not applicable for status "${r.status}"`, fields: ['bonus'] };
+			}
+			return null;
+		},
+	},
+];
 
 // ─── Submit state type ────────────────────────────────────────────────────────
 
 type SubmitStatus = 'idle' | 'validating' | 'submitting' | 'success' | 'error';
 
-type SubmissionLog = { kind: 'error'; errors: CellValidationError[] } | { kind: 'success'; rows: Employee[] } | null;
+type SubmissionLog = { kind: 'error'; errors: GridIntegrityIssue[] } | { kind: 'success'; rows: Employee[] } | null;
 
 // ─── JSON syntax highlight helper ────────────────────────────────────────────
 
@@ -315,7 +353,7 @@ function SubmissionLogPanel({ log }: { log: SubmissionLog }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
-	onGridReady?: (event: GridReadyEvent<any>) => void;
+	onGridReady?: (event: GridReadyEvent<Employee>) => void;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	pinLeftColumns?: number;
@@ -326,15 +364,15 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 	const apiRef = useRef<GridApi<Employee> | null>(null);
 	const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
 	const [submitMessage, setSubmitMessage] = useState('');
-	const [validationSummary, setValidationSummary] = useState<CellValidationError[]>([]);
+	const [validationSummary, setValidationSummary] = useState<GridIntegrityIssue[]>([]);
 	const [submissionLog, setSubmissionLog] = useState<SubmissionLog>(null);
-	const [errorSnapshot, setErrorSnapshot] = useState<CellValidationError[] | null>(null);
+	const [errorSnapshot, setErrorSnapshot] = useState<GridIntegrityIssue[] | null>(null);
 	const [rows] = useState<Employee[]>(INITIAL_ROWS);
 
 	const handleGridReady = useCallback(
 		(event: GridReadyEvent<Employee>) => {
 			apiRef.current = event.api;
-			onGridReady?.(event as GridReadyEvent<any>);
+			onGridReady?.(event as GridReadyEvent<Employee>);
 		},
 		[onGridReady]
 	);
@@ -344,7 +382,8 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		if (!api) return;
 		setSubmitStatus('validating');
 		setSubmitMessage('');
-		const errors = await api.validateGrid();
+		const result = await api.integrity.validateGrid();
+		const errors = result.issues as GridIntegrityIssue[];
 		setValidationSummary(errors);
 		if (errors.length === 0) {
 			setSubmitStatus('idle');
@@ -366,7 +405,8 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		setSubmitStatus('validating');
 		setSubmitMessage('Validating…');
 		setValidationSummary([]);
-		const errors = await api.validateGrid();
+		const result = await api.integrity.validateGrid();
+		const errors = result.issues as GridIntegrityIssue[];
 		setValidationSummary(errors);
 
 		if (errors.length > 0) {
@@ -383,16 +423,22 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		await new Promise((r) => setTimeout(r, 900));
 
 		// Simulate a 50% chance the server rejects row 4 for a domain policy reason.
-		// api.setCellValidationError() pushes the error directly into the grid cell
-		// (same red-border treatment as client-side validation) without re-running validators.
+		// api.integrity.publishIssues() pushes server errors into the integrity pipeline
 		const serverRejected = Math.random() > 0.5;
 		if (serverRejected) {
-			const serverErrors: CellValidationError[] = [
-				{ rowId: '4', colField: 'email', error: 'Server: @company.com domain reserved for existing staff' },
-			];
-			for (const { rowId, colField, error } of serverErrors) {
-				api.setCellValidationError(rowId, colField, error);
-			}
+			const serverIssue: GridIntegrityIssue = {
+				id: 'server-email-4',
+				source: 'serverValidation',
+				type: 'serverRejected',
+				severity: 'error',
+				blocking: true,
+				rowId: '4',
+				colField: 'email',
+				message: 'Server: @company.com domain reserved for existing staff',
+				createdAt: Date.now(),
+			};
+			api.integrity.publishIssues('serverValidation', [serverIssue]);
+			const serverErrors: GridIntegrityIssue[] = [serverIssue];
 			setValidationSummary(serverErrors);
 			setSubmitStatus('error');
 			setSubmitMessage('Server rejected the request. Fix highlighted cells and retry.');
@@ -403,7 +449,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 
 		// Step 3: success — collect all rows from the grid and log them
 		const allRows = api.rows().getAll();
-		api.clearValidationErrors();
+		api.integrity.clearIssues();
 		setValidationSummary([]);
 		setSubmitStatus('success');
 		setSubmitMessage('All changes saved successfully!');
@@ -419,7 +465,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 	}, []);
 
 	const handleClearErrors = useCallback(() => {
-		apiRef.current?.clearValidationErrors();
+		apiRef.current?.integrity.clearIssues();
 		setValidationSummary([]);
 		setSubmitStatus('idle');
 		setSubmitMessage('');
@@ -431,7 +477,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 	const handleSnapshotErrors = useCallback(() => {
 		const api = apiRef.current;
 		if (!api) return;
-		setErrorSnapshot(api.getAllValidationErrors());
+		setErrorSnapshot(api.integrity.getIssues() as GridIntegrityIssue[]);
 	}, []);
 
 	// Sidebar panel — recreated when submissionLog changes so the render closure captures the latest value
@@ -535,7 +581,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 									<span className='font-semibold text-rose-300'>
 										Row {e.rowId} / {e.colField}:
 									</span>{' '}
-									{e.error}
+									{e.message}
 								</span>
 							</li>
 						))}
@@ -573,7 +619,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 										<span className='font-semibold text-sky-300'>
 											Row {e.rowId} / {e.colField}:
 										</span>{' '}
-										{e.error}
+										{e.message}
 									</span>
 								</li>
 							))}
@@ -589,7 +635,12 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					columns={COLUMNS}
 					rows={rows}
 					getRowId={(r) => r.id}
-					rowValidator={employeeRowValidator}
+					dataIntegrity={{
+						validation: {
+							cellRules: EMPLOYEE_CELL_RULES,
+							rowRules: EMPLOYEE_ROW_RULES,
+						},
+					}}
 					navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
 					pinLeftColumns={pinLeftColumns}
 					pinRightColumns={pinRightColumns}
@@ -618,11 +669,11 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				<span>·</span>
 				<span>Use the header filter menu to filter — active filters appear as chips above the headers</span>
 				<span>·</span>
-				<span>Row validator enforces per-department salary minimums</span>
+				<span>Cross-field rules enforce per-department salary minimums and bonus eligibility</span>
 				<span>·</span>
 				<span>
-					<strong className='text-slate-400'>Submit Changes</strong> may surface a server error — the cell is highlighted via{' '}
-					<code className='text-slate-400'>setCellValidationError()</code>
+					<strong className='text-slate-400'>Submit Changes</strong> may surface a server error pushed via{' '}
+					<code className='text-slate-400'>api.integrity.publishIssues()</code>
 				</span>
 			</div>
 		</div>

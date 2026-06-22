@@ -150,7 +150,40 @@ export {
 export type { CsvExportOptions } from './export/csvExport.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
 export type { BatchCellValueUpdate } from './api/GridApi.js';
-export type { CellValidationError, RowValidatorParams, RowValidator } from './api/GridApi.js';
+export type {
+	GridIntegrityApi,
+	GridIntegrityIssue,
+	GridIntegrityIssueSource,
+	GridIntegrityIssueType,
+	GridIntegritySeverity,
+	GridIntegrityIssueFilter,
+	GridIntegritySummary,
+	GridIntegrityScope,
+	GridIntegrityRunOptions,
+	GridIntegrityRunResult,
+	GridDataIntegrityConfig,
+	GridValidationIntegrityOptions,
+	GridQualityIntegrityOptions,
+	GridDiffIntegrityOptions,
+	GridLiveStreamIntegrityOptions,
+	GridConflictIntegrityOptions,
+	GridCellIntegrityRule,
+	GridRowIntegrityRule,
+	GridIntegrityRuleResult,
+	GridDataQualityRule,
+	GridDiffModel,
+	GridDiffResult,
+	GridCellDiff,
+	GridDiffAcceptResult,
+	GridCellConflict,
+	ResolveConflictOptions,
+	ConflictResolutionResult,
+	ServerIntegrityReport,
+	GridTransactionStreamHandle,
+	GridTransactionStreamState,
+} from './features/dataIntegrity/integrityTypes.js';
+export { required, email, min, max, number, date, oneOf, regex, customCellRule } from './features/dataIntegrity/validationRules.js';
+export { duplicateValueRule, missingRequiredRule } from './features/dataIntegrity/modules/QualityIntegrityModule.js';
 export type { ValueValidatorParams, TooltipParams, ValueFormatterParams } from './columnDef.js';
 export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
@@ -181,34 +214,3 @@ export { GridMetric } from './diagnostics/GridInstrumentation.js';
 // ── Insight Layer ─────────────────────────────────────────────────────────────
 export type { GridInsightLayer, GridInsightLayerId, GridInsightSeverity, GridCellDecoration, GridRowDecoration } from './insights/insightTypes.js';
 export { GridInsightRegistry } from './insights/GridInsightRegistry.js';
-
-// ── Data Quality ──────────────────────────────────────────────────────────────
-export type {
-	DataQualityIssue,
-	DataQualityIssueType,
-	DataQualityFix,
-	DataQualityReport,
-	DataQualityRule,
-	DataQualityRuleContext,
-	DataQualityDiagnostics,
-} from './insights/dataQuality.js';
-export { GridDataQualityManager, createDuplicateValueRule } from './insights/dataQuality.js';
-
-// ── Data Diff ─────────────────────────────────────────────────────────────────
-export type { GridDiffModel, GridDiffDataset, GridDiffOptions, GridCellDiff, GridDiffResult, GridDiffDiagnostics } from './insights/diff.js';
-export { GridDiffManager } from './insights/diff.js';
-
-// ── Live Data Stream ──────────────────────────────────────────────────────────
-export type {
-	CellStreamUpdate,
-	RowStreamUpdate,
-	TransactionStreamUpdate,
-	TransactionStreamOptions,
-	TransactionStreamState,
-	GridTransactionStream,
-} from './insights/liveStream.js';
-export { GridTransactionStreamImpl } from './insights/liveStream.js';
-
-// ── Conflict Resolution ───────────────────────────────────────────────────────
-export type { GridCellConflict, GridConflictSource, ConflictDiagnostics, ResolveConflictOptions } from './insights/conflict.js';
-export { GridConflictManager } from './insights/conflict.js';

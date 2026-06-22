@@ -1,15 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Grid, createDuplicateValueRule } from '@open-grid/react';
-import type {
-	ColumnDef,
-	GridReadyEvent,
-	GridApi,
-	GridTransactionStream,
-	DataQualityReport,
-	GridDiffModel,
-	DataQualityIssue,
-	GridCellConflict,
-} from '@open-grid/react';
+import { Grid, duplicateValueRule } from '@open-grid/react';
+import type { ColumnDef, GridReadyEvent, GridApi, GridTransactionStreamHandle, GridIntegrityIssue, GridDiffModel } from '@open-grid/react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -174,10 +165,10 @@ type Stage = 'quality' | 'diff' | 'stream' | 'conflict';
 
 export default function DataIntegrityLab() {
 	const apiRef = useRef<GridApi<TradeRow> | null>(null);
-	const streamRef = useRef<GridTransactionStream<TradeRow> | null>(null);
+	const streamRef = useRef<GridTransactionStreamHandle<TradeRow> | null>(null);
 	const [activeStage, setActiveStage] = useState<Stage>('quality');
 	const [log, setLog] = useState<string[]>([]);
-	const [qualityReport, setQualityReport] = useState<DataQualityReport | null>(null);
+	const [qualityIssues, setQualityIssues] = useState<GridIntegrityIssue[] | null>(null);
 	const [diffActive, setDiffActive] = useState(false);
 	const [streamRunning, setStreamRunning] = useState(false);
 	const [conflictCount, setConflictCount] = useState(0);
@@ -189,38 +180,6 @@ export default function DataIntegrityLab() {
 	function onGridReady(e: GridReadyEvent<TradeRow>) {
 		const api = e.api as GridApi<TradeRow>;
 		apiRef.current = api;
-
-		// Register duplicate-symbol quality rule
-		api.registerDataQualityRule?.(
-			createDuplicateValueRule('symbol', {
-				severity: 'warning',
-				label: 'Duplicate Symbol',
-			})
-		);
-
-		// Register a notional-range rule (custom)
-		api.registerDataQualityRule?.({
-			id: 'notional-range',
-			label: 'Notional Range',
-			run(context) {
-				const issues: DataQualityIssue[] = [];
-				for (const row of context.rows) {
-					const n = (row as TradeRow).notional;
-					if (n < 5_000 || n > 500_000) {
-						issues.push({
-							id: `notional-range-${(row as TradeRow).id}`,
-							type: 'validation',
-							severity: 'error',
-							rowId: (row as TradeRow).id,
-							colField: 'notional',
-							message: `Notional $${n.toLocaleString()} out of [$5k – $500k]`,
-						});
-					}
-				}
-				return issues;
-			},
-		});
-
 		addLog('Grid ready — 30 trade rows loaded');
 	}
 
@@ -230,18 +189,17 @@ export default function DataIntegrityLab() {
 		const api = apiRef.current;
 		if (!api) return;
 		addLog('Running data quality check…');
-		const report = await api.runDataQualityCheck?.();
-		if (report) {
-			setQualityReport(report);
-			addLog(
-				`Quality: ${report.issues.length} issues found (${report.issues.filter((i) => i.severity === 'error').length} errors, ${report.issues.filter((i) => i.severity === 'warning').length} warnings)`
-			);
-		}
+		const result = await api.integrity.run({ modules: ['quality'] });
+		const issues = result.issues.filter((i) => i.source === 'dataQuality') as GridIntegrityIssue[];
+		setQualityIssues(issues);
+		addLog(
+			`Quality: ${issues.length} issues found (${issues.filter((i) => i.severity === 'error').length} errors, ${issues.filter((i) => i.severity === 'warning').length} warnings)`
+		);
 	}
 
 	function handleClearQuality() {
-		apiRef.current?.clearDataQualityReport?.();
-		setQualityReport(null);
+		apiRef.current?.integrity.clearIssues({ source: 'dataQuality' });
+		setQualityIssues(null);
 		addLog('Quality report cleared');
 	}
 
@@ -252,18 +210,16 @@ export default function DataIntegrityLab() {
 		if (!api) return;
 		const compareRows = makeCompareRows();
 		const model: GridDiffModel<TradeRow> = {
-			id: 'eod-snapshot',
-			mode: 'inline',
-			base: { id: 'base', label: 'Current (T+0)', rows: BASE_ROWS, getRowId: (r) => r.id },
-			compare: { id: 'compare', label: 'EOD Snapshot (T+1)', rows: compareRows, getRowId: (r) => r.id },
+			base: { rows: BASE_ROWS, getRowId: (r) => r.id },
+			compare: { rows: compareRows, getRowId: (r) => r.id },
 		};
-		api.setDiffModel?.(model);
+		api.integrity.setDiffModel(model);
 		setDiffActive(true);
 		addLog('Diff activated — comparing current vs EOD snapshot');
 	}
 
 	function handleClearDiff() {
-		apiRef.current?.clearDiffModel?.();
+		apiRef.current?.integrity.clearDiff();
 		setDiffActive(false);
 		addLog('Diff cleared');
 	}
@@ -273,13 +229,12 @@ export default function DataIntegrityLab() {
 	function handleStartStream() {
 		const api = apiRef.current;
 		if (!api || streamRef.current) return;
-		const stream = api.createTransactionStream?.({
+		const stream = api.integrity.createStream({
 			batchMs: 400,
 			flashChanges: true,
 			coalesceBy: 'cell',
-			dirtyCellPolicy: 'queue',
+			dirtyCellPolicy: 'markConflict',
 		});
-		if (!stream) return;
 		streamRef.current = stream;
 		setStreamRunning(true);
 		addLog('Live stream started — price updates every 400ms');
@@ -295,7 +250,7 @@ export default function DataIntegrityLab() {
 				tick++;
 				return { rowId: row.id, colField: 'price', value: newPrice };
 			});
-			streamRef.current.pushCells?.(updates);
+			stream.push({ cells: updates });
 			setTimeout(pushTick, 600 + Math.floor(Math.random() * 400));
 		}
 		pushTick();
@@ -313,14 +268,43 @@ export default function DataIntegrityLab() {
 	function handleInjectConflicts() {
 		const api = apiRef.current;
 		if (!api) return;
-		const seeds: Omit<GridCellConflict, 'id' | 'createdAt'>[] = [
-			{ rowId: 'T0001', colField: 'price', baseValue: 63.0, localValue: 65.5, remoteValue: 61.0, source: 'liveStream' },
-			{ rowId: 'T0003', colField: 'status', baseValue: 'OPEN', localValue: 'FILLED', remoteValue: 'CANCELLED', source: 'serverRefresh' },
-			{ rowId: 'T0007', colField: 'quantity', baseValue: 800, localValue: 850, remoteValue: 750, source: 'collaboration' },
+		const now = Date.now();
+		const conflictIssues: GridIntegrityIssue[] = [
+			{
+				id: 'ci-T0001-price',
+				source: 'conflict',
+				type: 'conflict',
+				severity: 'error',
+				blocking: true,
+				rowId: 'T0001',
+				colField: 'price',
+				message: 'Conflict: local 65.5 vs remote 61.0',
+				createdAt: now,
+			},
+			{
+				id: 'ci-T0003-status',
+				source: 'conflict',
+				type: 'conflict',
+				severity: 'error',
+				blocking: true,
+				rowId: 'T0003',
+				colField: 'status',
+				message: 'Conflict: local FILLED vs remote CANCELLED',
+				createdAt: now,
+			},
+			{
+				id: 'ci-T0007-qty',
+				source: 'conflict',
+				type: 'conflict',
+				severity: 'error',
+				blocking: true,
+				rowId: 'T0007',
+				colField: 'quantity',
+				message: 'Conflict: local 850 vs remote 750',
+				createdAt: now,
+			},
 		];
-		for (const s of seeds) {
-			api.addConflict?.(s);
-		}
+		api.integrity.publishIssues('conflict', conflictIssues);
 		setConflictCount(3);
 		addLog(`Injected 3 conflicts — open Conflicts panel to resolve`);
 	}
@@ -328,7 +312,7 @@ export default function DataIntegrityLab() {
 	function handleResolveAll() {
 		const api = apiRef.current;
 		if (!api) return;
-		api.clearAllConflicts?.();
+		api.integrity.clearIssues({ source: 'conflict' });
 		setConflictCount(0);
 		addLog('All conflicts cleared');
 	}
@@ -350,7 +334,7 @@ export default function DataIntegrityLab() {
 	];
 
 	const stageDone: Record<Stage, boolean> = {
-		quality: qualityReport !== null,
+		quality: qualityIssues !== null,
 		diff: diffActive,
 		stream: streamRunning,
 		conflict: conflictCount === 0 && false, // never "done" automatically
@@ -377,15 +361,13 @@ export default function DataIntegrityLab() {
 							<Btn variant='primary' onClick={handleRunQuality}>
 								Run Quality Check
 							</Btn>
-							{qualityReport && (
+							{qualityIssues !== null && (
 								<>
 									<span className='text-[10px] text-slate-400'>
-										{qualityReport.issues.length} issues —{' '}
-										<span className='text-red-400'>
-											{qualityReport.issues.filter((i) => i.severity === 'error').length} errors
-										</span>{' '}
+										{qualityIssues.length} issues —{' '}
+										<span className='text-red-400'>{qualityIssues.filter((i) => i.severity === 'error').length} errors</span>{' '}
 										<span className='text-amber-400'>
-											{qualityReport.issues.filter((i) => i.severity === 'warning').length} warnings
+											{qualityIssues.filter((i) => i.severity === 'warning').length} warnings
 										</span>
 									</span>
 									<Btn onClick={handleClearQuality}>Clear</Btn>
@@ -456,6 +438,39 @@ export default function DataIntegrityLab() {
 						columns={COLUMNS}
 						rows={BASE_ROWS}
 						getRowId={(r) => r.id}
+						dataIntegrity={{
+							quality: {
+								enabled: true,
+								rules: [
+									duplicateValueRule('symbol'),
+									{
+										id: 'notional-range',
+										label: 'Notional Range',
+										run(context) {
+											return context.rows
+												.filter((ref) => {
+													const n = (ref.row as TradeRow).notional;
+													return n < 5_000 || n > 500_000;
+												})
+												.map((ref) => ({
+													id: `notional-range-${ref.rowId}`,
+													source: 'dataQuality' as const,
+													type: 'custom' as const,
+													severity: 'error' as const,
+													blocking: false,
+													rowId: ref.rowId,
+													colField: 'notional',
+													message: `Notional out of [$5k – $500k]`,
+													createdAt: Date.now(),
+												}));
+										},
+									},
+								],
+							},
+							diff: true,
+							liveStream: { enabled: true, dirtyCellPolicy: 'markConflict', flashChanges: true },
+							conflicts: true,
+						}}
 						sidebar={{
 							panels: ['columns', 'dataQuality', 'diff', 'conflicts'],
 							position: 'right',

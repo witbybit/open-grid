@@ -20,37 +20,49 @@ import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js'
 import type { ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
+import type { GridIntegrityApi } from '../features/dataIntegrity/integrityTypes.js';
 
 export type { CsvExportOptions };
 export type { RuntimeFault };
 
-// ── Validation types ──────────────────────────────────────────────────────────
-
-export interface CellValidationError {
-	rowId: string;
-	colField: string;
-	error: string;
-}
-
-/** Parameters passed to a grid-level row validator. */
-export interface RowValidatorParams<TRowData = unknown> {
-	/** Current row data snapshot. */
-	row: TRowData;
-	/**
-	 * Which column triggered this validation call (set during single-cell validation,
-	 * undefined during a full grid validateGrid() sweep).
-	 */
-	changedColField?: string;
-}
-
-/**
- * Grid-level cross-field validator. Return a map of colField → error string (or null/empty
- * to clear a row-level error for that field). Runs after per-column valueValidators so it can
- * override or supplement them.
- */
-export type RowValidator<TRowData = unknown> = (
-	params: RowValidatorParams<TRowData>
-) => Record<string, string | null> | Promise<Record<string, string | null>>;
+// ── Integrity types (re-exported for convenience) ─────────────────────────────
+export type {
+	GridIntegrityApi,
+	GridIntegrityIssue,
+	GridIntegrityIssueSource,
+	GridIntegrityIssueType,
+	GridIntegritySeverity,
+	GridIntegrityIssueFilter,
+	GridIntegritySummary,
+	GridIntegrityScope,
+	GridIntegrityRunOptions,
+	GridIntegrityRunResult,
+	GridDataIntegrityConfig,
+	GridValidationIntegrityOptions,
+	GridQualityIntegrityOptions,
+	GridDiffIntegrityOptions,
+	GridLiveStreamIntegrityOptions,
+	GridConflictIntegrityOptions,
+	GridCellIntegrityRule,
+	GridRowIntegrityRule,
+	GridIntegrityRuleResult,
+	GridDataQualityRule,
+	GridDataQualityRuleContext,
+	GridDiffModel,
+	GridDiffResult,
+	GridCellDiff,
+	GridDiffAcceptResult,
+	GridCellConflict,
+	ResolveConflictOptions,
+	ConflictResolutionResult,
+	ServerIntegrityReport,
+	GridTransactionStreamHandle,
+	GridTransactionStreamState,
+	GridLiveStreamOptions,
+	GridLiveStreamUpdate,
+	GridCellStreamUpdate,
+	GridRowStreamUpdate,
+} from '../features/dataIntegrity/integrityTypes.js';
 
 // ── Cell / selection types ────────────────────────────────────────────────────
 
@@ -511,31 +523,13 @@ export interface GridApi<TRowData = unknown> {
 	 */
 	commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean>;
 
-	// ── Validation API ────────────────────────────────────────────────────────
+	// ── Data Integrity API ────────────────────────────────────────────────────
 	/**
-	 * Validate a single cell by running its column's `valueValidator` against the current value.
-	 * Sets a persistent red-border indicator on failure; clears it on pass.
-	 * Returns the error message string, or null when the cell is valid.
+	 * Unified Data Integrity pipeline.
+	 * Null when no dataIntegrity config was provided.
+	 * Use dataIntegrity={{ validation: true, ... }} on the grid to enable.
 	 */
-	validateCell(rowId: string, colField: string): Promise<string | null>;
-	/**
-	 * Run all column validators across every data row.
-	 * Returns the list of failures. Visual error indicators are applied to all failing cells
-	 * and `gridValidated` is fired with the full result.
-	 */
-	validateGrid(): Promise<CellValidationError[]>;
-	/** Set a validation error on a cell from an external source (e.g. server response, external form library). */
-	setCellValidationError(rowId: string, colField: string, error: string): void;
-	/** Clear the validation error for a single cell. */
-	clearCellValidationError(rowId: string, colField: string): void;
-	/** Clear all validation errors on the grid. */
-	clearValidationErrors(): void;
-	/** Returns the current validation error message for a cell, or null if none. */
-	getCellValidationError(rowId: string, colField: string): string | null;
-	/** Returns true when at least one cell has an active validation error. */
-	hasValidationErrors(): boolean;
-	/** Returns all current validation errors without re-running validation. */
-	getAllValidationErrors(): CellValidationError[];
+	integrity: GridIntegrityApi<TRowData>;
 	/**
 	 * Returns the currently rendered column range for the center (scrollable) lane.
 	 * `colStart` and `colEnd` are column indices; `total` is the total column count.
@@ -671,86 +665,6 @@ export interface GridApi<TRowData = unknown> {
 	 * Safe to call at any time; returns an empty object when no layers are registered.
 	 */
 	getInsightDiagnostics(): Record<string, unknown>;
-
-	// ── Data Quality ─────────────────────────────────────────────────────────────
-
-	/**
-	 * Runs all registered data-quality checks against the current dataset.
-	 * Returns a report containing all detected issues.
-	 * Scope defaults to `allClientRows` for client row models, `loadedRows` for others.
-	 */
-	runDataQualityCheck(options?: {
-		scope?: import('../features/dataQuality/dataQualityTypes.js').DataQualityReport['scope'];
-	}): Promise<import('../features/dataQuality/dataQualityTypes.js').DataQualityReport>;
-
-	/** Returns the most recent data-quality report, or null if no check has been run. */
-	getDataQualityReport(): import('../features/dataQuality/dataQualityTypes.js').DataQualityReport | null;
-
-	/** Clears the active data-quality report and removes all cell decorations. */
-	clearDataQualityReport(): void;
-
-	/** Registers a custom data-quality rule. Replaces any existing rule with the same id. */
-	registerDataQualityRule(rule: import('../features/dataQuality/dataQualityTypes.js').DataQualityRule<TRowData>): void;
-
-	/** Removes a previously registered data-quality rule. */
-	unregisterDataQualityRule(ruleId: string): void;
-
-	// ── Data Diff ────────────────────────────────────────────────────────────────
-
-	/** Sets the active diff model. Pass null to clear. Triggers insight repaint. */
-	setDiffModel(model: import('../features/diff/diffTypes.js').GridDiffModel<TRowData> | null): void;
-
-	/** Clears the active diff model and decorations. */
-	clearDiffModel(): void;
-
-	/** Returns the computed diff result, or null if no diff is active. */
-	getDiffResult(): import('../features/diff/diffTypes.js').GridDiffResult | null;
-
-	/** Returns the diff for a specific cell, or null if not changed. */
-	getCellDiff(rowId: string, colField: string): import('../features/diff/diffTypes.js').GridCellDiff | null;
-
-	/**
-	 * Accepts a changed cell value by committing the new value through the normal mutation API.
-	 * Removes the cell decoration after commit.
-	 */
-	acceptCellDiff(rowId: string, colField: string): void;
-
-	/**
-	 * Rejects a changed cell diff. Removes the diff decoration for that cell without mutating data.
-	 */
-	rejectCellDiff(rowId: string, colField: string): void;
-
-	// ── Conflict Resolution ──────────────────────────────────────────────────────
-
-	/** Returns all active conflicts. */
-	getConflicts(): readonly import('../features/conflict/conflictTypes.js').GridCellConflict[];
-
-	/** Returns the conflict for a specific cell, or null if none. */
-	getCellConflict(rowId: string, colField: string): import('../features/conflict/conflictTypes.js').GridCellConflict | null;
-
-	/** Adds a conflict for a cell. Replaces any existing conflict for the same cell. Returns the stored conflict with id/createdAt. */
-	addConflict(
-		partial: Omit<import('../features/conflict/conflictTypes.js').GridCellConflict, 'id' | 'createdAt'>
-	): import('../features/conflict/conflictTypes.js').GridCellConflict;
-
-	/** Resolves a conflict by id. 'local' keeps local value; 'remote' commits remoteValue; 'custom' commits options.value. */
-	resolveConflict(conflictId: string, options: import('../features/conflict/conflictTypes.js').ResolveConflictOptions): void;
-
-	/** Removes a conflict by id without applying any value. */
-	clearConflict(conflictId: string): void;
-
-	/** Removes all active conflicts. */
-	clearAllConflicts(): void;
-
-	// ── Live Data Stream ──────────────────────────────────────────────────────────
-
-	/**
-	 * Creates a live data stream that batches and coalesces incoming updates,
-	 * commits through existing mutation APIs, and exposes flash decorations via the insight layer.
-	 */
-	createTransactionStream(
-		options?: import('../features/liveStream/liveStreamTypes.js').TransactionStreamOptions
-	): import('../features/liveStream/liveStreamTypes.js').GridTransactionStream<TRowData>;
 
 	destroy(): void;
 }

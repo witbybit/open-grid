@@ -15,7 +15,7 @@ import type {
 	ServerPaginationOptions,
 } from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
-import type { RowValidator, GridCapabilitiesConfig } from '@open-grid/core';
+import type { GridCapabilitiesConfig } from '@open-grid/core';
 
 type GridShellProps<TRowData> = Omit<GridViewProps<TRowData>, 'api'>;
 const DEFAULT_PAGE_SIZE = 100;
@@ -42,8 +42,8 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	runtimeLimits?: GridInitialState<TRowData>['runtimeLimits'];
 	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
 	styleRules?: StyleRule<TRowData>[];
-	/** Grid-level cross-field validator. Runs after per-column valueValidators. */
-	rowValidator?: RowValidator<TRowData>;
+	/** Unified Data Integrity pipeline — validation, quality, diff, live stream, conflict resolution. */
+	dataIntegrity?: import('@open-grid/core').GridDataIntegrityConfig<TRowData>;
 	/** Grid-level capability rules. Control which actions are allowed per cell, column, or row. */
 	capabilities?: GridCapabilitiesConfig<TRowData>;
 	detailRowHeight?: number;
@@ -126,7 +126,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		columns,
 		columnTypes,
 		styleRules,
-		rowValidator,
+		dataIntegrity,
 		capabilities,
 		getRowId,
 		initialState,
@@ -191,7 +191,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				persistence: resolvedPersistence,
 				workspace,
 				rowSelection,
-				rowValidator,
+				dataIntegrity,
 				capabilities,
 				initialState: initial,
 			});
@@ -206,7 +206,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				persistence: resolvedPersistence,
 				workspace,
 				rowSelection,
-				rowValidator,
+				dataIntegrity,
 				capabilities,
 				initialState: initial,
 				pagination: serverPagePagination ?? { pageSize: paginationConfig?.pageSize ?? 100 },
@@ -221,7 +221,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			persistence: resolvedPersistence,
 			workspace,
 			rowSelection,
-			rowValidator,
+			dataIntegrity,
 			capabilities,
 			initialState: initial,
 		});

@@ -1,4 +1,4 @@
-export type GridInsightLayerId = 'dataQuality' | 'diff' | 'liveStream' | 'conflict';
+export type GridInsightLayerId = 'dataQuality' | 'diff' | 'liveStream' | 'conflict' | 'dataIntegrity';
 
 export type GridInsightSeverity = 'info' | 'warning' | 'error';
 
