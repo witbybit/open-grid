@@ -16,6 +16,7 @@ import {
 	LayoutTemplate,
 	SlidersHorizontal,
 	GripVertical,
+	ShieldCheck,
 } from 'lucide-react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
@@ -57,9 +58,11 @@ export default function ShowroomTitleBanner({
 					{activePage === 'colgroups' && <LayoutTemplate className='w-4.5 h-4.5' />}
 					{activePage === 'floatingfilters' && <SlidersHorizontal className='w-4.5 h-4.5' />}
 					{activePage === 'rowdrag' && <GripVertical className='w-4.5 h-4.5' />}
+					{activePage === 'integrity' && <ShieldCheck className='w-4.5 h-4.5' />}
 				</span>
 				<div>
 					<h2 className='text-sm font-extrabold text-slate-200 leading-tight uppercase tracking-wider flex items-center gap-2'>
+						{activePage === 'integrity' && 'Data Integrity Lab — Quality · Diff · Live Stream · Conflict Resolution'}
 						{activePage === 'lab' && 'Performance Lab: compiled plans, DOM renderers, and glide telemetry'}
 						{activePage === 'perf' && 'Financial Risk & Option Greeks stress-test engine'}
 						{activePage === 'server' && 'Global Audit & Transaction Logging Ledger'}
@@ -106,6 +109,8 @@ export default function ShowroomTitleBanner({
 							'Always-visible filter row per column below the header. Text debounce, number eq, date, set-badge, and custom DOM renderer (probability slider). Horizontally virtualised, pinned-lane aware.'}
 						{activePage === 'rowdrag' &&
 							'Drag the gripper handle to reorder rows. Managed mode auto-applies the new order; unmanaged mode lets the host drive the update. Auto-scroll at viewport edges, Escape to cancel.'}
+						{activePage === 'integrity' &&
+							'Walk through all 5 insight layers: data quality rules, EOD diff comparison, live price streaming, and server-vs-local conflict resolution — all composable on the same grid.'}
 					</p>
 				</div>
 			</div>

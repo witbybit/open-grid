@@ -30,6 +30,7 @@ const ClipboardDemo = lazy(() => import('./pages/ClipboardDemo'));
 const FloatingFiltersDemo = lazy(() => import('./pages/FloatingFiltersDemo'));
 const RowDragDemo = lazy(() => import('./pages/RowDragDemo'));
 const AdvancedFiltersDemo = lazy(() => import('./pages/AdvancedFiltersDemo'));
+const DataIntegrityLab = lazy(() => import('./pages/DataIntegrityLab'));
 
 const PAGES: readonly GridPageType[] = [
 	'perf',
@@ -52,6 +53,7 @@ const PAGES: readonly GridPageType[] = [
 	'floatingfilters',
 	'rowdrag',
 	'advancedfilters',
+	'integrity',
 ];
 
 function GridPageFallback() {
@@ -243,6 +245,7 @@ export default function App() {
 		if (activePage === 'floatingfilters') return <FloatingFiltersDemo {...commonGridProps} />;
 		if (activePage === 'rowdrag') return <RowDragDemo />;
 		if (activePage === 'advancedfilters') return <AdvancedFiltersDemo />;
+		if (activePage === 'integrity') return <DataIntegrityLab />;
 		return <CrudValidationDemo {...commonGridProps} />;
 	})();
 

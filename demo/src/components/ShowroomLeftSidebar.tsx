@@ -23,6 +23,7 @@ import {
 	LayoutTemplate,
 	SlidersHorizontal,
 	GripVertical,
+	ShieldCheck,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -160,6 +161,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Advanced Filters',
 			subtitle: 'Multi-Select · Async · Infinite',
 			icon: SlidersHorizontal,
+		},
+		{
+			id: 'integrity',
+			label: 'Data Integrity Lab',
+			subtitle: 'Quality · Diff · Live · Conflicts',
+			icon: ShieldCheck,
 		},
 	] as const;
 

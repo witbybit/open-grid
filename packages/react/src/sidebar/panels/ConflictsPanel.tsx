@@ -1,6 +1,22 @@
 import React, { useState } from 'react';
 import type { GridApi } from '../../types.js';
-import type { GridCellConflict, ResolveConflictOptions } from '@open-grid/core';
+
+// Local conflict types (mirrors GridCellConflict from core — avoids dist dep)
+interface _GridCellConflict {
+	id: string;
+	rowId: string;
+	colField: string;
+	baseValue: unknown;
+	localValue: unknown;
+	remoteValue: unknown;
+	source: string;
+	createdAt: number;
+	message?: string;
+}
+interface _ResolveOptions {
+	strategy: 'local' | 'remote' | 'custom';
+	value?: unknown;
+}
 
 interface Props {
 	api: GridApi<any>;
@@ -15,19 +31,20 @@ export function ConflictsPanel({ api, onClose }: Props) {
 	const text = (theme as any).text ?? '#e2e8f0';
 	const mutedText = (theme as any).mutedText ?? '#64748b';
 
-	const conflicts: readonly GridCellConflict[] = api.getConflicts();
+	const api_ = api as any;
+	const conflicts: readonly _GridCellConflict[] = api_.getConflicts?.() ?? [];
 
-	function handleResolve(conflict: GridCellConflict, options: ResolveConflictOptions) {
-		api.resolveConflict(conflict.id, options);
+	function handleResolve(conflict: _GridCellConflict, options: _ResolveOptions) {
+		api_.resolveConflict?.(conflict.id, options);
 		forceUpdate((n) => n + 1);
 	}
 
 	function handleClearAll() {
-		api.clearAllConflicts();
+		api_.clearAllConflicts?.();
 		forceUpdate((n) => n + 1);
 	}
 
-	function handleFocus(conflict: GridCellConflict) {
+	function handleFocus(conflict: _GridCellConflict) {
 		api.selectCell({ rowId: conflict.rowId, colField: conflict.colField });
 	}
 
@@ -43,7 +60,7 @@ export function ConflictsPanel({ api, onClose }: Props) {
 	const mutedStyle: React.CSSProperties = { fontSize: 11, color: mutedText };
 	const sectionLabelStyle: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: mutedText, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 };
 
-	const sourceBadge = (source: GridCellConflict['source']): React.CSSProperties => ({
+	const sourceBadge = (source: string): React.CSSProperties => ({
 		display: 'inline-block', padding: '0 5px', borderRadius: 3,
 		fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
 		background: 'rgba(99,102,241,0.15)', color: '#818cf8',

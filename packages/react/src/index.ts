@@ -126,3 +126,28 @@ export type {
 	AutoSizeAllColumnsOptions,
 	FloatingFilterRendererParams,
 } from '@open-grid/core';
+
+// ── Insight layer public surface ──────────────────────────────────────────────
+export type {
+	DataQualityIssue,
+	DataQualityReport,
+	DataQualityRule,
+	DataQualityRuleContext,
+	DataQualityDiagnostics,
+	GridDiffModel,
+	GridDiffDataset,
+	GridDiffOptions,
+	GridCellDiff,
+	GridDiffResult,
+	GridDiffDiagnostics,
+	CellStreamUpdate,
+	RowStreamUpdate,
+	TransactionStreamOptions,
+	TransactionStreamState,
+	GridTransactionStream,
+	GridCellConflict,
+	GridConflictSource,
+	ConflictDiagnostics,
+	ResolveConflictOptions,
+} from '@open-grid/core';
+export { createDuplicateValueRule } from '@open-grid/core';

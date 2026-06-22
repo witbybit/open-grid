@@ -26,6 +26,7 @@ describe('React public boundary', () => {
 			'TagsCellRenderer',
 			'createDropdownCellEditor',
 			'createDropdownCellRenderer',
+			'createDuplicateValueRule',
 			'createLocalStorageAdapter',
 			'createLocalStorageWorkspaceAdapter',
 			'createMultiSelectCellEditor',
