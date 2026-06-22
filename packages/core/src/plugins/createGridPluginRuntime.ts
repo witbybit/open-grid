@@ -166,5 +166,10 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		getVisibleColumnRange: source.getVisibleColumnRange,
 		getRowOrder: source.getRowOrder,
 		setRowOrder: source.setRowOrder,
+		can: source.can,
+		canEdit: source.canEdit,
+		canCopy: source.canCopy,
+		canPaste: source.canPaste,
+		canExport: source.canExport,
 	};
 }

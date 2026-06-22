@@ -4,6 +4,7 @@
 import type { RowNode } from './rowNode.js';
 import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState } from './api/GridApi.js';
 import type { GroupVisualRow, DetailVisualRow } from './visualRow.js';
+import type { GridCapabilityCallback } from './capabilities/capabilityTypes.js';
 
 // ─── Value getter / setter / validator params ─────────────────────────────────
 
@@ -17,12 +18,6 @@ export interface ValueValidatorParams<TRowData = unknown> {
 	value: unknown;
 	oldValue: unknown;
 	row: TRowData;
-	colField: string;
-}
-
-export interface EditableParams<TRowData = unknown> {
-	row: TRowData;
-	rowId: string;
 	colField: string;
 }
 
@@ -204,7 +199,6 @@ export interface ColumnDef<TRowData = unknown> {
 	/** Named column type registered via `columnTypes` on the grid options. Resolved in the React layer. */
 	type?: string;
 	hide?: boolean;
-	movable?: boolean;
 	loading?: boolean;
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
 	valueGetterDependencies?: string[];
@@ -239,16 +233,6 @@ export interface ColumnDef<TRowData = unknown> {
 	enableRowGroup?: boolean;
 	/** Set to true to hide/disable the header menu for this column. Defaults to false. */
 	suppressHeaderMenu?: boolean;
-	/** Set to false to disable column pinning for this column. Defaults to true. */
-	pinnable?: boolean;
-	/** Set to false to disable filtering for this column. Defaults to true. */
-	filterable?: boolean;
-	/**
-	 * Whether this cell is editable. Defaults to true.
-	 * Pass false to make the entire column read-only.
-	 * Pass a function for conditional editability (e.g., locked rows, permission checks).
-	 */
-	editable?: boolean | ((params: EditableParams<TRowData>) => boolean);
 	/** Minimum column width in pixels. Enforced during resize. */
 	minWidth?: number;
 	/** Maximum column width in pixels. Enforced during resize. */
@@ -304,16 +288,33 @@ export interface ColumnDef<TRowData = unknown> {
 	 */
 	floatingFilterRenderer?: (params: import('./renderer/floatingFilterRenderer.js').FloatingFilterRendererParams<TRowData>) => void;
 	/**
-	 * Show a drag handle in this column's cells, allowing rows to be reordered by dragging.
-	 * Typically placed on the first column. Works in both managed and unmanaged drag modes.
-	 * Pass a function for conditional per-row drag handles (return false to hide for a row).
-	 */
-	rowDrag?: boolean | ((params: { rowData: TRowData; rowId: string }) => boolean);
-	/**
 	 * Prevent cell range selection from starting when the user clicks on cells in this column.
-	 * Automatically applied to columns with `rowDrag` set. Useful for action / checkbox columns.
+	 * Useful for action / checkbox / drag-handle columns.
 	 */
 	disableCellRangeSelection?: boolean;
+
+	// ── Column-level capability callbacks ────────────────────────────────────────
+	/** Return false / { allowed: false } to make this column read-only. */
+	canEdit?: GridCapabilityCallback<TRowData>;
+	canSelect?: GridCapabilityCallback<TRowData>;
+	canCopy?: GridCapabilityCallback<TRowData>;
+	canPaste?: GridCapabilityCallback<TRowData>;
+	canGroup?: GridCapabilityCallback<TRowData>;
+	canFill?: GridCapabilityCallback<TRowData>;
+	canSort?: GridCapabilityCallback<TRowData>;
+	canFilter?: GridCapabilityCallback<TRowData>;
+	canPin?: GridCapabilityCallback<TRowData>;
+	canResize?: GridCapabilityCallback<TRowData>;
+	canDelete?: GridCapabilityCallback<TRowData>;
+	canExpand?: GridCapabilityCallback<TRowData>;
+	/**
+	 * When defined, this column shows a row-drag handle. The callback is called per row to
+	 * conditionally show/hide the handle (return false to hide for a specific row).
+	 */
+	canDrag?: GridCapabilityCallback<TRowData>;
+	/** Return false / { allowed: false } to prevent header drag-reordering for this column. */
+	canMoveColumn?: GridCapabilityCallback<TRowData>;
+	canExport?: GridCapabilityCallback<TRowData>;
 }
 
 /**

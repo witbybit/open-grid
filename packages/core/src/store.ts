@@ -161,10 +161,17 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private cachedStateSnapshotState: InternalGridState<TRowData> | null = null;
 	private cachedStateSnapshot: GridStateSnapshot<TRowData> | null = null;
 
-	constructor(initialState: Partial<GridInitialState<TRowData>> = {}, engineOptions?: { rowValidator?: RowValidator<TRowData> }) {
+	constructor(
+		initialState: Partial<GridInitialState<TRowData>> = {},
+		engineOptions?: {
+			rowValidator?: RowValidator<TRowData>;
+			capabilities?: import('./capabilities/capabilityTypes.js').GridCapabilitiesConfig<TRowData>;
+		}
+	) {
 		validateColumns(initialState.columns || []);
 		this.engine = new GridEngine<TRowData>({
 			rowValidator: engineOptions?.rowValidator,
+			capabilities: engineOptions?.capabilities,
 			columns: initialState.columns || [],
 			selection: initialState.selection,
 			selectedRowIds: initialState.selectedRowIds ?? [],
@@ -628,6 +635,20 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public hasValidationErrors = (): boolean => this.engine.validationFeature.hasValidationErrors();
 	public getAllValidationErrors = (): import('./features/ValidationManager.js').CellValidationError[] =>
 		this.engine.validationFeature.getAllValidationErrors();
+
+	public can = (
+		action: import('./capabilities/capabilityTypes.js').GridCapabilityAction,
+		params: Partial<import('./capabilities/capabilityTypes.js').GridCapabilityParams<TRowData>> = {}
+	): import('./capabilities/capabilityTypes.js').GridCapabilityResult => this.engine.capabilityManager.can(action, params);
+
+	public canEdit = (rowId: string, colField: string): boolean => this.engine.capabilityManager.can('edit', { rowId, colField }).allowed;
+
+	public canCopy = (rowId?: string, colField?: string): boolean => this.engine.capabilityManager.can('copy', { rowId, colField }).allowed;
+
+	public canPaste = (rowId?: string, colField?: string): boolean => this.engine.capabilityManager.can('paste', { rowId, colField }).allowed;
+
+	public canExport = (colField?: string): boolean => this.engine.capabilityManager.can('export', { colField }).allowed;
+
 	public getColumnState = (): ColumnState[] => {
 		return this.engine.columnFeature.getColumnState();
 	};

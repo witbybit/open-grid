@@ -1,6 +1,7 @@
 import React from 'react';
 import { Zap, Filter, ArrowDownAZ, ArrowUpAZ, Keyboard, Layers, HelpCircle, RefreshCw, GripVertical, MoveLeft, MoveRight } from 'lucide-react';
 import type { GridApi } from '@open-grid/react';
+import { normalizeCapabilityResult } from '@open-grid/react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
 // ============================================================================
@@ -196,7 +197,10 @@ export function ColumnOrderPanel({ activeApi }: ColumnOrderPanelProps) {
 	const columns = state.columns || [];
 	const selectedIndex = columns.findIndex((column) => column.field === selectedField);
 	const selectedColumn = selectedIndex >= 0 ? columns[selectedIndex] : null;
-	const canMoveSelected = state.enableColumnReorder && selectedColumn?.movable !== false;
+	const canMoveSelected =
+		state.enableColumnReorder &&
+		(selectedColumn?.canMoveColumn === undefined ||
+			normalizeCapabilityResult(selectedColumn.canMoveColumn({ action: 'moveColumn', colField: selectedColumn.field ?? '' })).allowed);
 
 	const moveSelected = (delta: -1 | 1) => {
 		if (!canMoveSelected || !selectedColumn) return;

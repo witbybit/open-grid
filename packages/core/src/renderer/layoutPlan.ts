@@ -2,6 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import { computeRenderWindow, type RenderWindow, type StickyGroupStackItem } from './renderWindow.js';
 import type { InternalColumnDef } from '../columnDef.js';
 import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
+import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 
 export const LEAF_HEADER_HEIGHT = 40;
 export const GROUP_PANEL_HEIGHT = 42;
@@ -162,7 +163,11 @@ function buildHeaderBands<TRowData>(
 			height: leafHeaderHeight,
 			pinned: placement.lane,
 			isLeaf: true,
-			movable: enableColumnReorder && col.movable !== false && !col.checkboxSelection,
+			movable:
+				enableColumnReorder &&
+				!col.checkboxSelection &&
+				(col.canMoveColumn === undefined ||
+					normalizeCapabilityResult(col.canMoveColumn({ action: 'moveColumn', colField: col.field })).allowed),
 			resizable: true,
 			sortable: col.sortable !== false && !col.checkboxSelection,
 			checkboxSelection: !!col.checkboxSelection,

@@ -129,6 +129,16 @@ export type {
 } from '@open-grid/core';
 export { createEmptyQueryModel, isQueryModelActive, countQueryNodes, getQueryOperator, getQueryOperatorsForType } from '@open-grid/core';
 
+export type {
+	GridCapabilityAction,
+	GridCapabilityParams,
+	GridCapabilityResult,
+	GridCapabilityCallback,
+	GridCapabilitiesConfig,
+	CapabilityDiagnostics,
+} from '@open-grid/core';
+export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@open-grid/core';
+
 /**
  * Fields from GridInitialState that can be configured as top-level props on the public
  * Grid component. Sourced from the canonical GridInitialState type so these never drift

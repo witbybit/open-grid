@@ -169,7 +169,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	// ── Grouping handlers ──────────────────────────────────────────────────────
 
 	const isGrouped = (field: string) => groupBy.includes(field);
-	const canGroup = (col: ColumnDef<any>) => col.enableRowGroup !== false;
+	const canGroup = (col: ColumnDef<any>) => col.enableRowGroup !== false && (api.can?.('group', { colField: col.field })?.allowed ?? true);
 
 	const toggleGroup = (field: string) => {
 		const next = isGrouped(field) ? groupBy.filter((f) => f !== field) : [...groupBy, field];
@@ -229,6 +229,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	// ── Pin handlers ──────────────────────────────────────────────────────────
 
 	const handleTogglePinLeft = (colField: string) => {
+		if (api.can && !api.can('pin', { colField }).allowed) return;
 		const displayedCols = api.getDisplayedColumns();
 		const { left, right } = api.getPinnedColumns();
 		const colIdx = displayedCols.findIndex((c) => c.field === colField);
@@ -246,6 +247,7 @@ export function ColumnsPanel({ api, onClose }: ColumnsPanelProps) {
 	};
 
 	const handleTogglePinRight = (colField: string) => {
+		if (api.can && !api.can('pin', { colField }).allowed) return;
 		const displayedCols = api.getDisplayedColumns();
 		const { left, right } = api.getPinnedColumns();
 		const colIdx = displayedCols.findIndex((c) => c.field === colField);

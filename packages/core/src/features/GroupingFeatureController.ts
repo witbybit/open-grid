@@ -3,12 +3,14 @@ import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { InvalidationManager } from '../renderer/invalidationManager.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
 import { asRowExpansionCapableModel, type RowModel, type RowExpansionCapableModel, type RowModelRefreshResult } from '../rowModel.js';
+import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 
 export interface GroupingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	invalidation: InvalidationManager;
 	requestRender?: (reason: string) => void;
+	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
 export class GroupingFeatureController<TRowData = unknown> {
@@ -16,12 +18,14 @@ export class GroupingFeatureController<TRowData = unknown> {
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly invalidation: InvalidationManager;
 	private readonly requestRender: (reason: string) => void;
+	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 
 	constructor(deps: GroupingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
 		this.getRowModel = deps.getRowModel;
 		this.invalidation = deps.invalidation;
 		this.requestRender = deps.requestRender ?? (() => {});
+		this.checkCapability = deps.checkCapability;
 	}
 
 	private getExpansionCapableRowModel(): RowExpansionCapableModel<TRowData> | null {
@@ -46,6 +50,10 @@ export class GroupingFeatureController<TRowData = unknown> {
 	}
 
 	public setGroupBy(colIds: string[]): void {
+		if (this.checkCapability) {
+			const denied = colIds.some((colField) => !this.checkCapability!('group', { colField }).allowed);
+			if (denied) return;
+		}
 		const state = this.ctx.getState();
 		const newExpansion = { ...state.expansion, groups: {} as Record<string, true> };
 		this.ctx.applyChange({
@@ -63,6 +71,10 @@ export class GroupingFeatureController<TRowData = unknown> {
 	}
 
 	public addGroupBy(colId: string, atIndex?: number): void {
+		if (this.checkCapability) {
+			const result = this.checkCapability('group', { colField: colId });
+			if (!result.allowed) return;
+		}
 		const current = this.ctx.getState().groupBy ?? [];
 		if (current.includes(colId)) return;
 		const next = [...current];

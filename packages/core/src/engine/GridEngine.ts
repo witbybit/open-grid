@@ -52,6 +52,8 @@ import { ClipboardController } from '../features/ClipboardController.js';
 import { computeDistinctValues } from '../filterModel.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
+import { GridCapabilityManager } from '../capabilities/GridCapabilityManager.js';
+import type { GridCapabilityAction, GridCapabilitiesConfig, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -80,6 +82,7 @@ export class GridEngine<TRowData = unknown> {
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
 	private readonly stateReactions: GridStateReactionController<TRowData>;
+	public readonly capabilityManager: GridCapabilityManager<TRowData>;
 
 	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
 		return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];
@@ -360,6 +363,14 @@ export class GridEngine<TRowData = unknown> {
 			this.instrumentation
 		);
 
+		// Capability manager — must be after stateManager, before feature controllers
+		const capCfg = config.capabilities ?? (config.canPerformAction ? { canPerformAction: config.canPerformAction } : {});
+		this.capabilityManager = new GridCapabilityManager<TRowData>(
+			capCfg,
+			() => this.stateManager.getState().columns,
+			(rowId) => this.rowModel?.getRawRowById(rowId) ?? null
+		);
+
 		// Initialize changeApplier after stateManager is available
 		this.changeApplier = new GridCommitKernel<TRowData>({
 			stateManager: this.stateManager,
@@ -407,12 +418,14 @@ export class GridEngine<TRowData = unknown> {
 			getRawRowById: (rowId) => this.rowModel?.getRawRowById(rowId) ?? null,
 			batchCellValues: (updates, source) => this.batchCellValues(updates, source),
 			dispatchEvent: (type, payload) => this.eventBus.dispatchEvent(type, payload),
+			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.groupingFeature = new GroupingFeatureController<TRowData>({
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			invalidation: this.invalidation,
 			requestRender: (reason) => this.requestRender(reason),
+			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.validationFeature = new ValidationManager<TRowData>({
 			ctx: featureContext,
@@ -428,11 +441,13 @@ export class GridEngine<TRowData = unknown> {
 			clearValidationError: (rowId, colField) => this.validationFeature._setCellError(rowId, colField, null),
 			setValidationError: (rowId, colField, error) => this.validationFeature._setCellError(rowId, colField, error),
 			validateCellPostCommit: (rowId, colField) => this.validationFeature.validateCell(rowId, colField).then(() => undefined),
+			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
 		this.stateFeature = new GridStateFeatureController<TRowData>({
 			stateManager: this.stateManager,
 			applyChange: (change) => this.changeApplier.commit(change),
+			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.dataMutation = new DataMutationController<TRowData>({
 			data: this.data,

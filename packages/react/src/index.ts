@@ -103,6 +103,16 @@ export type {
 } from './types.js';
 
 export type {
+	GridCapabilityAction,
+	GridCapabilityParams,
+	GridCapabilityResult,
+	GridCapabilityCallback,
+	GridCapabilitiesConfig,
+	CapabilityDiagnostics,
+} from '@open-grid/core';
+export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@open-grid/core';
+
+export type {
 	GridContextMenuOptions,
 	GridContextMenuItem,
 	GridCellPointer,
@@ -111,7 +121,6 @@ export type {
 	RowValidatorParams,
 	RowValidator,
 	ValueValidatorParams,
-	EditableParams,
 	TooltipParams,
 	AutoSizeColumnOptions,
 	AutoSizeAllColumnsOptions,

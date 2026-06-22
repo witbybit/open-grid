@@ -16,6 +16,7 @@ import {
 import { createGridRuntimeComposition } from './internal/createGridRuntimeComposition.js';
 import type { GridWorkspaceAdapter } from './workspace/workspaceTypes.js';
 import { type GridWorkspaceController, createWorkspaceController } from './workspace/GridWorkspaceController.js';
+import type { GridCapabilitiesConfig } from './capabilities/capabilityTypes.js';
 
 export type { GridPersistenceAdapter, PersistedGridState };
 export { createLocalStorageAdapter };
@@ -52,6 +53,8 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 	workspace?: GridWorkspaceAdapter;
 	/** Grid-level cross-field validator — see RowValidator for details. */
 	rowValidator?: RowValidator<TRowData>;
+	/** Grid-level capability rules. Control which actions are allowed per cell, column, or row. */
+	capabilities?: GridCapabilitiesConfig<TRowData>;
 }
 
 /** Options for creating an infinite (block/range loading) grid. */
@@ -61,6 +64,7 @@ export interface InfiniteGridOptions<TRowData> extends InfiniteRowModelOptions<T
 	persistence?: string | GridPersistenceAdapter;
 	workspace?: GridWorkspaceAdapter;
 	rowValidator?: RowValidator<TRowData>;
+	capabilities?: GridCapabilitiesConfig<TRowData>;
 }
 
 /** Options for creating a server-page (explicit page loading) grid. */
@@ -70,6 +74,7 @@ export interface ServerPageGridOptions<TRowData> extends ServerPageRowModelOptio
 	persistence?: string | GridPersistenceAdapter;
 	workspace?: GridWorkspaceAdapter;
 	rowValidator?: RowValidator<TRowData>;
+	capabilities?: GridCapabilitiesConfig<TRowData>;
 }
 
 function buildColumnWidths<TRowData>(columns: Array<ColumnDef<TRowData>>): Record<string, number> {
@@ -102,7 +107,7 @@ function withRowSelectionColumn<TRowData>(
 			width: 40,
 			checkboxSelection: true,
 			sortable: false,
-			movable: false,
+			canMoveColumn: () => false,
 		} as unknown as ColumnDef<TRowData>;
 		nextColumns = [checkboxCol, ...columns];
 		nextInitial = {
@@ -199,7 +204,7 @@ export function createClientGrid<TRowData>(options: ClientGridOptions<TRowData>)
 			columnWidths: buildColumnWidths(resolvedColumns),
 			...mergedInitial,
 		},
-		{ rowValidator: options.rowValidator }
+		{ rowValidator: options.rowValidator, capabilities: options.capabilities }
 	);
 
 	const controller = new ClientRowModelController<TRowData>(runtime.getClientRowModelRuntime(), { ...options, columns: resolvedColumns });
@@ -271,7 +276,7 @@ export function createInfiniteGrid<TRowData>(options: InfiniteGridOptions<TRowDa
 			columnWidths: buildColumnWidths(resolvedColumns),
 			...mergedInitial,
 		},
-		{ rowValidator: options.rowValidator }
+		{ rowValidator: options.rowValidator, capabilities: options.capabilities }
 	);
 
 	const controller = new InfiniteRowModelController<TRowData>(runtime.getInfiniteRowModelRuntime(), { ...options, columns: selected.columns });
@@ -341,7 +346,7 @@ export function createServerPageGrid<TRowData>(options: ServerPageGridOptions<TR
 			columnWidths: buildColumnWidths(resolvedColumns),
 			...mergedInitial,
 		},
-		{ rowValidator: options.rowValidator }
+		{ rowValidator: options.rowValidator, capabilities: options.capabilities }
 	);
 
 	const controller = new ServerPageRowModelController<TRowData>(runtime.getServerPageRowModelRuntime(), { ...options, columns: selected.columns });

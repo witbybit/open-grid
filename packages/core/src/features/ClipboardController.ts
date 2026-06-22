@@ -3,6 +3,7 @@ import type { VisualRow } from '../visualRow.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
+import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 
 interface ClipboardContext<TRowData> {
 	getState(): InternalGridState<TRowData>;
@@ -14,6 +15,7 @@ interface ClipboardContext<TRowData> {
 	getRawRowById(rowId: string): TRowData | null;
 	batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill'): void;
 	dispatchEvent<K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void;
+	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
 interface CopyResult {
@@ -90,6 +92,10 @@ export class ClipboardController<TRowData = unknown> {
 						const row = this.c.getRawRowById(rowId);
 						if (row !== null) value = col.onPaste({ row, rowId, colField: col.field, pastedText: cells[c] });
 					}
+					if (this.c.checkCapability) {
+						const r = this.c.checkCapability('paste', { rowId, colField: col.field });
+						if (!r.allowed) continue;
+					}
 					updates.push({ rowId, colField: col.field, value });
 					colsPasted++;
 				}
@@ -130,6 +136,10 @@ export class ClipboardController<TRowData = unknown> {
 			for (let c = minCol; c <= maxCol; c++) {
 				const col = state.columns[c] as ColumnDef<TRowData> | undefined;
 				if (!col) continue;
+				if (this.c.checkCapability) {
+					const res = this.c.checkCapability('copy', { rowId: vr.rowId, colField: col.field });
+					if (!res.allowed) continue;
+				}
 				rowCells.push(this._getCellText(vr.rowId, col.field, state));
 				cells.push({ rowId: vr.rowId, colField: col.field });
 			}

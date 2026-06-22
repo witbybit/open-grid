@@ -136,14 +136,13 @@ const PriceRenderer = ({ value }: CellRendererProps<HoldingRow>) => (
 // ── Column definitions ────────────────────────────────────────────────────────
 
 const COLUMNS: ColumnDef<HoldingRow>[] = [
-	{ field: 'symbol', header: 'Symbol', width: 90, sortable: true, movable: true },
-	{ field: 'name', header: 'Name', width: 180, sortable: true, movable: true },
+	{ field: 'symbol', header: 'Symbol', width: 90, sortable: true },
+	{ field: 'name', header: 'Name', width: 180, sortable: true },
 	{
 		field: 'price',
 		header: 'Price',
 		width: 100,
 		sortable: true,
-		movable: true,
 		renderer: { kind: 'react', component: PriceRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
 	{
@@ -151,7 +150,6 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		header: 'Change $',
 		width: 100,
 		sortable: true,
-		movable: true,
 		renderer: { kind: 'react', component: ChangeRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
 	{
@@ -159,20 +157,18 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		header: 'Change %',
 		width: 105,
 		sortable: true,
-		movable: true,
 		renderer: { kind: 'react', component: ChangePctRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
-	{ field: 'marketCap', header: 'Mkt Cap', width: 100, sortable: true, movable: true },
-	{ field: 'volume', header: 'Volume', width: 110, sortable: true, movable: true },
-	{ field: 'sector', header: 'Sector', width: 130, sortable: true, movable: true },
-	{ field: 'region', header: 'Region', width: 90, sortable: true, movable: true },
-	{ field: 'pe', header: 'P/E', width: 70, sortable: true, movable: true },
+	{ field: 'marketCap', header: 'Mkt Cap', width: 100, sortable: true },
+	{ field: 'volume', header: 'Volume', width: 110, sortable: true },
+	{ field: 'sector', header: 'Sector', width: 130, sortable: true },
+	{ field: 'region', header: 'Region', width: 90, sortable: true },
+	{ field: 'pe', header: 'P/E', width: 70, sortable: true },
 	{
 		field: 'status',
 		header: 'Status',
 		width: 90,
 		sortable: true,
-		movable: true,
 		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
 ];

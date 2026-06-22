@@ -4,14 +4,20 @@ import type { SortModel, FilterModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { GridCommit, GridCommitResult } from '../engine/GridChangeApplier.js';
 import type { InternalGridState } from '../state/GridState.js';
+import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 
 export interface GridStateFeatureControllerDeps<TRowData = unknown> {
 	stateManager: StateManager<TRowData>;
 	applyChange: (change: GridCommit<TRowData>) => GridCommitResult;
+	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
 export class GridStateFeatureController<TRowData = unknown> {
-	constructor(private readonly deps: GridStateFeatureControllerDeps<TRowData>) {}
+	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
+
+	constructor(private readonly deps: GridStateFeatureControllerDeps<TRowData>) {
+		this.checkCapability = deps.checkCapability;
+	}
 
 	public getRowOverscanPx(): number {
 		return this.deps.stateManager.getState().rowOverscanPx ?? 400;
@@ -140,6 +146,10 @@ export class GridStateFeatureController<TRowData = unknown> {
 	}
 
 	public setSortModel(sortModel: SortModel | null, undoable = true): void {
+		if (this.checkCapability) {
+			const result = this.checkCapability('sort', {});
+			if (!result.allowed) return;
+		}
 		const oldSort = this.deps.stateManager.getState().sortModel;
 		this.deps.applyChange({
 			reason: 'rows:set-sort-model',
@@ -181,6 +191,10 @@ export class GridStateFeatureController<TRowData = unknown> {
 	}
 
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
+		if (this.checkCapability) {
+			const result = this.checkCapability('filter', {});
+			if (!result.allowed) return;
+		}
 		const oldFilter = this.deps.stateManager.getState().filterModel;
 		this.deps.applyChange({
 			reason: 'rows:set-filter-model',

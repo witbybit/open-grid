@@ -194,6 +194,10 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 			nextValue = Number.isInteger(finalVal) ? finalVal : parseFloat(finalVal.toFixed(4));
 		}
 
+		if (this.engine.capabilityManager) {
+			const result = this.engine.capabilityManager.can('fill', { rowId, colField });
+			if (!result.allowed) return;
+		}
 		updates.push({
 			rowId,
 			colField,

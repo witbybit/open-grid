@@ -249,7 +249,7 @@ describe('HeaderPopoverMenu', () => {
 
 	it('should respect ColumnDef options to conditionally hide menu sections and render dividers correctly', () => {
 		store.setColumns([
-			{ field: 'id', header: 'ID', pinnable: false, filterable: false, enableRowGroup: false },
+			{ field: 'id', header: 'ID', canPin: () => false, canFilter: () => false, enableRowGroup: false },
 			{ field: 'name', header: 'Name', sortable: false, enableRowGroup: false },
 			{ field: 'price', header: 'Price' },
 		]);

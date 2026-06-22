@@ -19,6 +19,7 @@ import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaul
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import type { ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
+import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 
 export type { CsvExportOptions };
 export type { RuntimeFault };
@@ -652,6 +653,17 @@ export interface GridApi<TRowData = unknown> {
 	onThemeChange(listener: (theme: ThemeTokens) => void): () => void;
 	/** Returns the grid container HTML element, or null if not mounted yet. */
 	getContainer(): HTMLElement | null;
+
+	/** Check whether a grid action is currently allowed by the configured capability rules. */
+	can(action: GridCapabilityAction, params?: Partial<GridCapabilityParams<TRowData>>): GridCapabilityResult;
+	/** Convenience: check whether a specific cell can be edited. */
+	canEdit(rowId: string, colField: string): boolean;
+	/** Convenience: check whether a specific cell can be copied. */
+	canCopy(rowId?: string, colField?: string): boolean;
+	/** Convenience: check whether a specific cell can be pasted into. */
+	canPaste(rowId?: string, colField?: string): boolean;
+	/** Convenience: check whether a column can be exported. */
+	canExport(colField?: string): boolean;
 
 	destroy(): void;
 }

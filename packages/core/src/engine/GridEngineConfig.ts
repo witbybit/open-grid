@@ -4,6 +4,7 @@ import type { RowValidator } from '../features/ValidationManager.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
+import type { GridCapabilitiesConfig } from '../capabilities/capabilityTypes.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
 	columns: ColumnDef<TRowData>[];
@@ -20,6 +21,8 @@ export interface GridEngineConfig<TRowData = unknown> {
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
 	queryModel?: GridQueryModel | null;
+	capabilities?: GridCapabilitiesConfig<TRowData>;
+	canPerformAction?: GridCapabilitiesConfig<TRowData>['canPerformAction'];
 	themeName?: BuiltInThemeName;
 	activeEdit?: GridCellPointer | null;
 	loadingSkeletonCount?: number;

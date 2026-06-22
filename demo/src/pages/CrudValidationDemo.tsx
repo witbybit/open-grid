@@ -162,7 +162,7 @@ const COLUMNS: ColumnDef<Employee>[] = [
 		minWidth: 80,
 		maxWidth: 200,
 		// Salary is locked for terminated employees
-		editable: ({ row }) => row.status !== 'Terminated',
+		canEdit: ({ row }) => row?.status !== 'Terminated',
 		tooltip: ({ row }) => (row.status === 'Terminated' ? 'Salary locked — employee is terminated' : null),
 		valueValidator: ({ value }) => {
 			const n = Number(String(value ?? '').replace(/[$,]/g, ''));
@@ -177,7 +177,7 @@ const COLUMNS: ColumnDef<Employee>[] = [
 		header: 'Bonus ($)',
 		width: 110,
 		// Bonus is only editable for Active employees
-		editable: ({ row }) => row.status === 'Active',
+		canEdit: ({ row }) => row?.status === 'Active',
 		tooltip: ({ row }) => {
 			if (row.status === 'Active') return null;
 			return `Bonus not applicable — status is "${row.status}"`;

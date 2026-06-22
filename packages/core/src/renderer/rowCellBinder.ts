@@ -3,6 +3,7 @@ import { createEditRendererKey, createCellInstanceRendererKey } from './identity
 import { reportRendererFault } from './rendererFaults.js';
 import type { CellRendererPhase, ColumnDef, GridCellClassParams, InternalColumnDef } from '../columnDef.js';
 import type { GridCellPointer } from '../api/GridApi.js';
+import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import type { CellSlot, CellContentMode } from './cellSlot.js';
@@ -217,9 +218,10 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	if (access.isLoading) cellClassName += ' og-cell-loading';
 
 	// Readonly visual indicator
-	if (col.editable !== undefined && node.data !== null) {
-		const isEditable =
-			typeof col.editable === 'boolean' ? col.editable : col.editable({ row: node.data as TRowData, rowId: node.id, colField: col.field });
+	if (col.canEdit !== undefined && node.data !== null) {
+		const isEditable = normalizeCapabilityResult(
+			col.canEdit({ action: 'edit', row: node.data as TRowData, rowId: node.id, colField: col.field })
+		).allowed;
 		if (!isEditable) cellClassName += ' og-cell-readonly';
 	}
 
@@ -422,9 +424,11 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	// Destroy the previous handle when the renderer kind or portal key changes.
 	assignRendererHandle(cellSlot, contentMode, formattedValue, stableKey);
 
-	// Drag handle — injected when col.rowDrag is truthy. Stored on the element to avoid re-querying.
+	// Drag handle — injected when col.canDrag is defined (opt-in). Stored on the element to avoid re-querying.
 	const el = cellSlot.element as HTMLDivElement & { _dragHandle?: HTMLDivElement };
-	const shouldDrag = col.rowDrag === true || (typeof col.rowDrag === 'function' && col.rowDrag({ rowData: node.data as TRowData, rowId: node.id }));
+	const shouldDrag =
+		col.canDrag !== undefined &&
+		normalizeCapabilityResult(col.canDrag({ action: 'drag', row: node.data as TRowData, rowId: node.id, colField: col.field })).allowed;
 	if (shouldDrag) {
 		let handle = el._dragHandle;
 		if (!handle) {

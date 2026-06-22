@@ -4,6 +4,7 @@ import type { GridFeatureContext } from './GridFeatureContext.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { RowModel } from '../rowModel.js';
 import { canEditCell } from '../visualRow.js';
+import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
@@ -13,6 +14,7 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	clearValidationError?: (rowId: string, colField: string) => void;
 	setValidationError?: (rowId: string, colField: string, error: string) => void;
 	validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
+	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
 export class EditingFeatureController<TRowData = unknown> {
@@ -23,6 +25,7 @@ export class EditingFeatureController<TRowData = unknown> {
 	private readonly clearValidationError?: (rowId: string, colField: string) => void;
 	private readonly setValidationError?: (rowId: string, colField: string, error: string) => void;
 	private readonly validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
+	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 
 	constructor(deps: EditingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
@@ -32,6 +35,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.clearValidationError = deps.clearValidationError;
 		this.setValidationError = deps.setValidationError;
 		this.validateCellPostCommit = deps.validateCellPostCommit;
+		this.checkCapability = deps.checkCapability;
 	}
 
 	private canEditCell(rowId: string, colField: string): boolean {
@@ -43,6 +47,10 @@ export class EditingFeatureController<TRowData = unknown> {
 
 	public startEdit(rowId: string, colField: string): void {
 		if (!this.canEditCell(rowId, colField)) return;
+		if (this.checkCapability) {
+			const result = this.checkCapability('edit', { rowId, colField, source: 'api' });
+			if (!result.allowed) return;
+		}
 		this.ctx.applyChange({
 			reason: 'editing:start',
 			state: { activeEdit: { rowId, colField } },
@@ -75,6 +83,10 @@ export class EditingFeatureController<TRowData = unknown> {
 	}
 
 	public async commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean> {
+		if (this.checkCapability) {
+			const result = this.checkCapability('edit', { rowId, colField });
+			if (!result.allowed) return false;
+		}
 		const col = this.ctx.columns.getColumnDef(colField);
 		const oldValue = this.data.getRawCellValue(rowId, colField);
 		const node = this.getRowModel()?.getRowNodeById(rowId);

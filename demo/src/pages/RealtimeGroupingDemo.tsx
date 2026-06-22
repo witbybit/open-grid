@@ -104,28 +104,28 @@ const StatusRenderer = ({ value }: CellRendererProps<SalesRow>) => {
 // ── Column definitions ────────────────────────────────────────────────────────
 
 const COLUMNS: ColumnDef<SalesRow>[] = [
-	{ field: 'region', header: 'Region', width: 110, sortable: true, movable: true, enableRowGroup: true },
-	{ field: 'country', header: 'Country', width: 120, sortable: true, movable: true, enableRowGroup: true },
-	{ field: 'category', header: 'Category', width: 110, sortable: true, movable: true, enableRowGroup: true },
-	{ field: 'product', header: 'Product', width: 160, sortable: true, movable: true, enableRowGroup: true },
-	{ field: 'rep', header: 'Sales Rep', width: 145, sortable: true, movable: true, enableRowGroup: true },
-	{ field: 'quarter', header: 'Quarter', width: 100, sortable: true, movable: true, enableRowGroup: true },
+	{ field: 'region', header: 'Region', width: 110, sortable: true, enableRowGroup: true },
+	{ field: 'country', header: 'Country', width: 120, sortable: true, enableRowGroup: true },
+	{ field: 'category', header: 'Category', width: 110, sortable: true, enableRowGroup: true },
+	{ field: 'product', header: 'Product', width: 160, sortable: true, enableRowGroup: true },
+	{ field: 'rep', header: 'Sales Rep', width: 145, sortable: true, enableRowGroup: true },
+	{ field: 'quarter', header: 'Quarter', width: 100, sortable: true, enableRowGroup: true },
 	{
 		field: 'revenue',
 		header: 'Revenue',
 		width: 130,
 		sortable: true,
-		movable: true,
+
 		enableRowGroup: false,
 		renderer: { kind: 'react', component: CurrencyRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
-	{ field: 'units', header: 'Units', width: 75, sortable: true, movable: true, enableRowGroup: false },
+	{ field: 'units', header: 'Units', width: 75, sortable: true, enableRowGroup: false },
 	{
 		field: 'margin',
 		header: 'Margin %',
 		width: 95,
 		sortable: true,
-		movable: true,
+
 		enableRowGroup: false,
 		renderer: { kind: 'react', component: MarginRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
@@ -134,7 +134,7 @@ const COLUMNS: ColumnDef<SalesRow>[] = [
 		header: 'Status',
 		width: 95,
 		sortable: true,
-		movable: true,
+
 		enableRowGroup: true,
 		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live' } },
 	},

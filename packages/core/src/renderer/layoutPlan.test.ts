@@ -94,7 +94,7 @@ describe('GridLayoutPlan', () => {
 			getRowId: (row) => row.id,
 			columns: [
 				{ field: 'a', header: 'A', width: 80 },
-				{ field: 'b', header: 'B', width: 120, movable: false },
+				{ field: 'b', header: 'B', width: 120, canMoveColumn: () => false },
 				{ field: 'c', header: 'C', width: 160 },
 			],
 			defaultRowHeight: 30,

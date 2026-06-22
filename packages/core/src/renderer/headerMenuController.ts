@@ -3,6 +3,7 @@ import type { PortalMountManager } from './portalMountManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi } from '../api/GridApi.js';
 import { reportRendererFault } from './rendererFaults.js';
+import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { getOpsForType, applyFilterToModel } from '../filterOperations.js';
 import type { TextFilterOperator, NumberFilterOperator, DateFilterOperator } from '../filterModel.js';
 
@@ -206,7 +207,7 @@ export class HeaderMenuController<TRowData = unknown> {
 			sections.push(sortContainer);
 		}
 
-		const isPinnable = column.pinnable !== false;
+		const isPinnable = column.canPin === undefined || normalizeCapabilityResult(column.canPin({ action: 'pin', colField: column.field })).allowed;
 		const isGroupable = column.enableRowGroup !== false;
 
 		if (isPinnable || isGroupable) {
@@ -284,7 +285,8 @@ export class HeaderMenuController<TRowData = unknown> {
 			sections.push(pinGroupContainer);
 		}
 
-		const isFilterable = column.filterable !== false;
+		const isFilterable =
+			column.canFilter === undefined || normalizeCapabilityResult(column.canFilter({ action: 'filter', colField: column.field })).allowed;
 		if (isFilterable) {
 			const filterContainer = document.createElement('div');
 			filterContainer.className = 'og-popover-filter-section';

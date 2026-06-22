@@ -24,6 +24,15 @@ export { getQueryOperator, getQueryOperatorsForType } from './query/queryOperato
 export type { QueryOperatorDefinition, QueryEvaluateParams } from './query/queryOperatorRegistry.js';
 export { evaluateQueryModel, applyQueryModelFilter, createQueryEvaluationContext } from './query/evaluateQueryModel.js';
 export type { QueryEvaluationContext } from './query/evaluateQueryModel.js';
+export type {
+	GridCapabilityAction,
+	GridCapabilityParams,
+	GridCapabilityResult,
+	GridCapabilityCallback,
+	GridCapabilitiesConfig,
+	CapabilityDiagnostics,
+} from './capabilities/capabilityTypes.js';
+export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from './capabilities/capabilityTypes.js';
 export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteRowModelOptions } from './infiniteRowModel.js';
 export type {
 	ServerDatasource,
@@ -142,7 +151,7 @@ export type { CsvExportOptions } from './export/csvExport.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
 export type { BatchCellValueUpdate } from './api/GridApi.js';
 export type { CellValidationError, RowValidatorParams, RowValidator } from './api/GridApi.js';
-export type { ValueValidatorParams, EditableParams, TooltipParams, ValueFormatterParams } from './columnDef.js';
+export type { ValueValidatorParams, TooltipParams, ValueFormatterParams } from './columnDef.js';
 export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
 export type { GridNavigationOptions } from './navigation.js';

@@ -29,7 +29,6 @@ function generateColumns(colBuffer: number): ColumnDef<WideRow>[] {
 		field: `col_${i}`,
 		header: `Col ${i}`,
 		width: COL_WIDTH,
-		editable: true,
 		valueValidator: ({ value }: { value: unknown }) => {
 			const n = Number(value);
 			if (isNaN(n)) return 'Must be a number';

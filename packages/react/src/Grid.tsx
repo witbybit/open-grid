@@ -15,7 +15,7 @@ import type {
 	ServerPaginationOptions,
 } from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
-import type { RowValidator } from '@open-grid/core';
+import type { RowValidator, GridCapabilitiesConfig } from '@open-grid/core';
 
 type GridShellProps<TRowData> = Omit<GridViewProps<TRowData>, 'api'>;
 const DEFAULT_PAGE_SIZE = 100;
@@ -44,6 +44,8 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	styleRules?: StyleRule<TRowData>[];
 	/** Grid-level cross-field validator. Runs after per-column valueValidators. */
 	rowValidator?: RowValidator<TRowData>;
+	/** Grid-level capability rules. Control which actions are allowed per cell, column, or row. */
+	capabilities?: GridCapabilitiesConfig<TRowData>;
 	detailRowHeight?: number;
 	/** Enable the core pagination bar (and, in client mode, page-window row slicing). */
 	pagination?: boolean | GridPaginationConfig;
@@ -125,6 +127,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		columnTypes,
 		styleRules,
 		rowValidator,
+		capabilities,
 		getRowId,
 		initialState,
 		persistence,
@@ -189,6 +192,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				workspace,
 				rowSelection,
 				rowValidator,
+				capabilities,
 				initialState: initial,
 			});
 		}
@@ -203,6 +207,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				workspace,
 				rowSelection,
 				rowValidator,
+				capabilities,
 				initialState: initial,
 				pagination: serverPagePagination ?? { pageSize: paginationConfig?.pageSize ?? 100 },
 			});
@@ -217,6 +222,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			workspace,
 			rowSelection,
 			rowValidator,
+			capabilities,
 			initialState: initial,
 		});
 		// The grid instance is intentionally created once; live changes are handled by the dedicated hooks below.
