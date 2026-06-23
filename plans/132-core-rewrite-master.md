@@ -38,7 +38,7 @@ kernels alive past Phase 11. No feature flags, no `legacyMode`, no deprecated al
 | 3 | `132b-rows-domain.md` | Branded IDs, RowNode, RowModelCapabilities, RowModelPlugin, client/infinite/server shells | **done** |
 | 4 | `132c-cells-domain.md` | CellAddress, CellValueEngine, sync-only valueSetter, CellChangeSet | **done** |
 | 5 | `132d-pipeline.md` | FilterStage, SortStage, flatten, shared RowWriteImpact classifier | **done** |
-| 6 | `132e-columns-domain.md` | ColumnModel, ColumnState, ColumnCommand, ColumnLayout | not started |
+| 6 | `132e-columns-domain.md` | ColumnModel, ColumnState, ColumnCommand, ColumnLayout | **done** |
 | 7 | `132f-selection-editing.md` | SelectionModel, EditSession, edit commands | not started |
 | 8 | `132g-layout-viewport-render.md` | LayoutSnapshot, ViewportSnapshot, RenderPlan, SlotModel | not started |
 | 9 | `132h-public-api.md` | GridApi command-backed facade | not started |
