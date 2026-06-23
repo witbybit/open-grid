@@ -59,6 +59,60 @@ type ClientRowModelTransactionSnapshot<TData> = RowModelTransactionSnapshot<TDat
 export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
 export type { AggregationDef } from './rows/stages/aggregateStage.js';
 
+// ── Row model capability types ────────────────────────────────────────────────
+
+export type RowModelCapability =
+	| 'fullDataset'
+	| 'loadedDataset'
+	| 'pagedDataset'
+	| 'clientMutation'
+	| 'loadedRowMutation'
+	| 'pageRowMutation'
+	| 'transactions'
+	| 'rowOrder'
+	| 'blockLoading'
+	| 'serverPagination'
+	| 'clientSort'
+	| 'clientFilter'
+	| 'serverSort'
+	| 'serverFilter'
+	| 'clientGrouping'
+	| 'clientTree'
+	| 'aggregation'
+	| 'masterDetail'
+	| 'allRowSelection'
+	| 'loadedRowSelection'
+	| 'pageRowSelection';
+
+export type RowModelCapabilities = Readonly<Record<RowModelCapability, boolean>>;
+
+export interface CapableRowModel {
+	getCapabilities(): RowModelCapabilities;
+}
+
+export function asCapableRowModel(rowModel: unknown): CapableRowModel | null {
+	return rowModel && typeof (rowModel as CapableRowModel).getCapabilities === 'function' ? (rowModel as CapableRowModel) : null;
+}
+
+// ── Unsupported operation error ───────────────────────────────────────────────
+
+export class UnsupportedRowModelOperationError extends Error {
+	readonly operation: string;
+	readonly rowModelType: string;
+	readonly supportedRowModels: readonly string[];
+
+	constructor(opts: { operation: string; rowModelType: string; supportedRowModels: string[] }) {
+		super(
+			`[open-grid] Operation '${opts.operation}' is not supported by the '${opts.rowModelType}' row model. ` +
+				`Supported row model(s): ${opts.supportedRowModels.join(', ')}.`
+		);
+		this.name = 'UnsupportedRowModelOperationError';
+		this.operation = opts.operation;
+		this.rowModelType = opts.rowModelType;
+		this.supportedRowModels = opts.supportedRowModels;
+	}
+}
+
 // ── Row model contract types ──────────────────────────────────────────────────
 // Defined here to avoid a circular import with store.ts. store.ts re-exports these.
 
@@ -172,15 +226,6 @@ export interface InfiniteControllableRowModel<TRowData = unknown> {
 	setDatasource(datasource: import('./infiniteRowModel.js').InfiniteDatasource<TRowData>, blockSize?: number): void;
 }
 
-/**
- * Kept for architecture-guard continuity; represents the infinite row model's
- * control surface. New code should prefer InfiniteControllableRowModel.
- */
-export interface ServerControllableRowModel<TRowData = unknown> {
-	purgeCache(): void;
-	setDatasource(datasource: import('./infiniteRowModel.js').InfiniteDatasource<TRowData>, blockSize?: number): void;
-}
-
 /** Capability interface for the server-page row model. */
 export interface ServerPageControllableRowModel<TRowData = unknown> {
 	goToPage(page: number): void;
@@ -268,11 +313,6 @@ export function asInfiniteControllableRowModel<TRowData = unknown>(
 	return hasFunctions(rowModel, ['purgeCache', 'setDatasource', 'loadVisibleBlocks'])
 		? (rowModel as unknown as InfiniteControllableRowModel<TRowData>)
 		: null;
-}
-
-/** Kept for architecture-guard continuity — delegates to asInfiniteControllableRowModel. */
-export function asServerControllableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): ServerControllableRowModel<TRowData> | null {
-	return hasFunctions(rowModel, ['purgeCache', 'setDatasource']) ? (rowModel as unknown as ServerControllableRowModel<TRowData>) : null;
 }
 
 export function asServerPageControllableRowModel<TRowData = unknown>(
@@ -718,6 +758,30 @@ export function applyClientSortAndFilter<TData>(
 	return result;
 }
 
+const CLIENT_CAPABILITIES: RowModelCapabilities = {
+	fullDataset: true,
+	loadedDataset: false,
+	pagedDataset: false,
+	clientMutation: true,
+	loadedRowMutation: false,
+	pageRowMutation: false,
+	transactions: true,
+	rowOrder: true,
+	blockLoading: false,
+	serverPagination: false,
+	clientSort: true,
+	clientFilter: true,
+	serverSort: false,
+	serverFilter: false,
+	clientGrouping: true,
+	clientTree: true,
+	aggregation: true,
+	masterDetail: true,
+	allRowSelection: true,
+	loadedRowSelection: false,
+	pageRowSelection: false,
+};
+
 export class ClientRowModelController<TData = unknown>
 	implements
 		RowModel<TData>,
@@ -729,7 +793,8 @@ export class ClientRowModelController<TData = unknown>
 		AllDataNodesCapableRowModel<TData>,
 		GroupMetaCapableRowModel,
 		ClientMutableRowModel<TData>,
-		CellValueWritableRowModel<TData>
+		CellValueWritableRowModel<TData>,
+		CapableRowModel
 {
 	private readonly runtime: ClientRowModelRuntime<TData>;
 	private dataStore: RowDataStore<TData>;
@@ -754,6 +819,10 @@ export class ClientRowModelController<TData = unknown>
 	public getGroupMetaByVisualIndex = (visualIndex: number): GroupRowMeta | null => this._groupMetaByVisualIndex.get(visualIndex) ?? null;
 
 	public getDataRowCount = (): number => this.dataRowCount;
+
+	public getCapabilities(): RowModelCapabilities {
+		return CLIENT_CAPABILITIES;
+	}
 
 	public toggleGroupExpanded = (groupId: string): RowModelRefreshResult => {
 		const expansion = this.runtime.getState().expansion;

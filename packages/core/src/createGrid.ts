@@ -281,7 +281,7 @@ export function createInfiniteGrid<TRowData>(options: InfiniteGridOptions<TRowDa
 		{ capabilities: options.capabilities, dataIntegrity: options.dataIntegrity }
 	);
 
-	const controller = new InfiniteRowModelController<TRowData>(runtime.getInfiniteRowModelRuntime(), { ...options, columns: selected.columns });
+	const controller = new InfiniteRowModelController<TRowData>(runtime.getInfiniteRowModelRuntime(), { ...options, columns: resolvedColumns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
 	const workspaceController = wireGridWorkspace(options, runtime, persistenceController);
 	const api = createGridRuntimeComposition({
@@ -351,7 +351,7 @@ export function createServerPageGrid<TRowData>(options: ServerPageGridOptions<TR
 		{ capabilities: options.capabilities, dataIntegrity: options.dataIntegrity }
 	);
 
-	const controller = new ServerPageRowModelController<TRowData>(runtime.getServerPageRowModelRuntime(), { ...options, columns: selected.columns });
+	const controller = new ServerPageRowModelController<TRowData>(runtime.getServerPageRowModelRuntime(), { ...options, columns: resolvedColumns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
 	const workspaceController = wireGridWorkspace(options, runtime, persistenceController);
 	const api = createGridRuntimeComposition({

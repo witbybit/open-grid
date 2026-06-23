@@ -10,6 +10,8 @@ import type {
 	SelectableDataRowModel,
 	InfiniteControllableRowModel,
 	VisibleBlockLoadCapableRowModel,
+	CapableRowModel,
+	RowModelCapabilities,
 } from './rowModel.js';
 import type { RowSelectionScope } from './api/GridApi.js';
 import { RowNode } from './rowNode.js';
@@ -41,6 +43,30 @@ export interface InfiniteRowModelOptions<TData = unknown> {
 	getRowId?: (row: TData) => string;
 }
 
+const INFINITE_CAPABILITIES: RowModelCapabilities = {
+	fullDataset: false,
+	loadedDataset: true,
+	pagedDataset: false,
+	clientMutation: false,
+	loadedRowMutation: true,
+	pageRowMutation: false,
+	transactions: false,
+	rowOrder: false,
+	blockLoading: true,
+	serverPagination: false,
+	clientSort: false,
+	clientFilter: false,
+	serverSort: true,
+	serverFilter: true,
+	clientGrouping: false,
+	clientTree: false,
+	aggregation: false,
+	masterDetail: false,
+	allRowSelection: false,
+	loadedRowSelection: true,
+	pageRowSelection: false,
+};
+
 export class InfiniteRowModelController<TData = unknown>
 	implements
 		RowModel<TData>,
@@ -48,7 +74,8 @@ export class InfiniteRowModelController<TData = unknown>
 		SelectableDataRowModel,
 		InfiniteControllableRowModel<TData>,
 		CellValueWritableRowModel<TData>,
-		VisibleBlockLoadCapableRowModel
+		VisibleBlockLoadCapableRowModel,
+		CapableRowModel
 {
 	private readonly runtime: InfiniteRowModelRuntime<TData>;
 	private datasource: InfiniteDatasource<TData>;
@@ -63,6 +90,7 @@ export class InfiniteRowModelController<TData = unknown>
 	private unsubscribers: Array<() => void> = [];
 	private disposed = false;
 	private requestGeneration = 0;
+	private pendingVisibleLoad: { startRow: number; endRow: number } | null = null;
 
 	constructor(runtime: InfiniteRowModelRuntime<TData>, options: InfiniteRowModelOptions<TData>) {
 		this.runtime = runtime;
@@ -95,8 +123,13 @@ export class InfiniteRowModelController<TData = unknown>
 		this.requestGeneration++;
 		this.loadingBlocks = {};
 		this.loadingBlockCount = 0;
+		this.pendingVisibleLoad = null;
 		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
 		this.unsubscribers = [];
+	}
+
+	public getCapabilities(): RowModelCapabilities {
+		return INFINITE_CAPABILITIES;
 	}
 
 	public getVisualRow = (rowIndex: number): VisualRow<TData> | null => {
@@ -116,10 +149,18 @@ export class InfiniteRowModelController<TData = unknown>
 	public loadVisibleBlocks = (startRow: number, endRow: number): void => {
 		if (startRow > endRow) return;
 
-		if (this.runtime.isScrollingFast()) return;
+		if (this.runtime.isScrollingFast()) {
+			this.pendingVisibleLoad = { startRow, endRow };
+			return;
+		}
 
-		const minRow = Math.max(0, startRow);
-		const maxRow = Math.min(Math.max(0, endRow), Math.max(0, this.getVisualRowCount() - 1));
+		// Flush any pending range accumulated during fast scroll.
+		const effectiveStart = this.pendingVisibleLoad ? Math.min(startRow, this.pendingVisibleLoad.startRow) : startRow;
+		const effectiveEnd = this.pendingVisibleLoad ? Math.max(endRow, this.pendingVisibleLoad.endRow) : endRow;
+		this.pendingVisibleLoad = null;
+
+		const minRow = Math.max(0, effectiveStart);
+		const maxRow = Math.min(Math.max(0, effectiveEnd), Math.max(0, this.getVisualRowCount() - 1));
 		if (minRow > maxRow) return;
 
 		const visibleBlocks = new Set<number>();
@@ -248,6 +289,9 @@ export class InfiniteRowModelController<TData = unknown>
 			if (this.activeNodes.length < startRow) this.activeNodes.length = startRow;
 			if (this.visualRows.length < startRow) this.visualRows.length = startRow;
 
+			// Clear stale row IDs for this block range before inserting new rows.
+			this.clearBlockRange(startRow, startRow + this.blockSize);
+
 			response.rows.forEach((row, idx) => {
 				const localIdx = startRow + idx;
 				const typedRow = row as TData;
@@ -308,6 +352,29 @@ export class InfiniteRowModelController<TData = unknown>
 		}
 	};
 
+	private clearBlockRange(startRow: number, endRow: number): void {
+		for (let i = startRow; i < endRow; i++) {
+			const existingVisual = this.visualRows[i];
+			if (existingVisual?.kind === 'data') {
+				const existingNode = this.activeNodes[i];
+				if (existingNode) {
+					// Only remove from maps if no other slot references this row ID.
+					const mappedIndex = this.rowIdToVisualIndex.get(existingNode.id);
+					if (mappedIndex === i) {
+						this.nodeMap.delete(existingNode.id);
+						this.rowIdToVisualIndex.delete(existingNode.id);
+					}
+					const mappedVisualIndex = this.visualRowIdToIndex.get(existingVisual.id);
+					if (mappedVisualIndex === i) {
+						this.visualRowIdToIndex.delete(existingVisual.id);
+					}
+				}
+			}
+			this.visualRows[i] = null;
+			this.activeNodes[i] = null;
+		}
+	}
+
 	public purgeCache = (): void => {
 		if (this.disposed) return;
 		this.requestGeneration++;
@@ -318,6 +385,7 @@ export class InfiniteRowModelController<TData = unknown>
 		this.nodeMap.clear();
 		this.visualRowIdToIndex.clear();
 		this.rowIdToVisualIndex.clear();
+		this.pendingVisibleLoad = null;
 		this.runtime.clearFormulas();
 		this.runtime.setLoadingState(true);
 		this.fetchBlock(0);

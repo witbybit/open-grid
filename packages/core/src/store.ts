@@ -3,19 +3,21 @@ import type {
 	SortModel,
 	RowModel,
 	ClientMutableRowModel,
-	ServerControllableRowModel,
 	InfiniteControllableRowModel,
 	ServerPageControllableRowModel,
 	RowExpansionStateReadableModel,
+	RowModelCapability,
+	RowModelCapabilities,
 } from './rowModel.js';
 import type { GridQueryModel } from './query/GridQueryModel.js';
 import { evaluateQueryModel, createQueryEvaluationContext } from './query/evaluateQueryModel.js';
 import {
 	asClientMutableRowModel,
 	asRowExpansionStateReadableModel,
-	asServerControllableRowModel,
 	asInfiniteControllableRowModel,
 	asServerPageControllableRowModel,
+	asCapableRowModel,
+	UnsupportedRowModelOperationError,
 } from './rowModel.js';
 import type { GridDomainVersions } from './state/GridDomainVersions.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
@@ -128,6 +130,13 @@ import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './feature
 import { makeNoopIntegrityApi } from './features/dataIntegrity/noopIntegrityApi.js';
 
 export { validateRowIds } from './ids.js';
+
+// prettier-ignore
+const _FALLBACK_CAPS: Record<RowModelType, RowModelCapabilities> = {
+	infinite: { fullDataset: false, loadedDataset: true, pagedDataset: false, clientMutation: false, loadedRowMutation: true, pageRowMutation: false, transactions: false, rowOrder: false, blockLoading: true, serverPagination: false, clientSort: false, clientFilter: false, serverSort: true, serverFilter: true, clientGrouping: false, clientTree: false, aggregation: false, masterDetail: false, allRowSelection: false, loadedRowSelection: true, pageRowSelection: false },
+	server:   { fullDataset: false, loadedDataset: false, pagedDataset: true, clientMutation: false, loadedRowMutation: false, pageRowMutation: true, transactions: false, rowOrder: false, blockLoading: false, serverPagination: true, clientSort: false, clientFilter: false, serverSort: true, serverFilter: true, clientGrouping: false, clientTree: false, aggregation: false, masterDetail: false, allRowSelection: false, loadedRowSelection: false, pageRowSelection: true },
+	client:   { fullDataset: true, loadedDataset: false, pagedDataset: false, clientMutation: true, loadedRowMutation: false, pageRowMutation: false, transactions: true, rowOrder: true, blockLoading: false, serverPagination: false, clientSort: true, clientFilter: true, serverSort: false, serverFilter: false, clientGrouping: true, clientTree: true, aggregation: true, masterDetail: true, allRowSelection: true, loadedRowSelection: false, pageRowSelection: false },
+};
 
 const _EMPTY_WS_STATE: GridWorkspaceState = {
 	views: [],
@@ -708,10 +717,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return asClientMutableRowModel(this.getRowModel());
 	}
 
-	private getServerControllableRowModel(): ServerControllableRowModel<TRowData> | null {
-		return asServerControllableRowModel(this.getRowModel());
-	}
-
 	private getInfiniteControllableRowModel(): InfiniteControllableRowModel<TRowData> | null {
 		return asInfiniteControllableRowModel(this.getRowModel());
 	}
@@ -722,6 +727,25 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	private getExpansionStateReadableRowModel(): RowExpansionStateReadableModel | null {
 		return asRowExpansionStateReadableModel(this.getRowModel());
+	}
+
+	private assertInfiniteRowModel(op: string): InfiniteControllableRowModel<TRowData> {
+		const m = this.getInfiniteControllableRowModel();
+		if (!m)
+			throw new UnsupportedRowModelOperationError({ operation: op, rowModelType: this.getRowModelType(), supportedRowModels: ['infinite'] });
+		return m;
+	}
+
+	private assertServerPageRowModel(op: string): ServerPageControllableRowModel<TRowData> {
+		const m = this.getServerPageControllableRowModel();
+		if (!m) throw new UnsupportedRowModelOperationError({ operation: op, rowModelType: this.getRowModelType(), supportedRowModels: ['server'] });
+		return m;
+	}
+
+	private assertClientMutableRowModel(op: string): ClientMutableRowModel<TRowData> {
+		const m = this.getClientMutableRowModel();
+		if (!m) throw new UnsupportedRowModelOperationError({ operation: op, rowModelType: this.getRowModelType(), supportedRowModels: ['client'] });
+		return m;
 	}
 
 	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);
@@ -743,7 +767,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setRows = (rows: TRowData[]): void => {
-		this.getClientMutableRowModel()?.setRows(rows);
+		this.assertClientMutableRowModel('setRows').setRows(rows);
 	};
 
 	public getRowOrder = (): string[] => this.getClientMutableRowModel()?.getRowOrder() ?? [];
@@ -752,7 +776,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public updateRows = (updater: (rows: TRowData[]) => TRowData[]): void => {
-		this.getClientMutableRowModel()?.updateRows(updater);
+		this.assertClientMutableRowModel('updateRows').updateRows(updater);
 	};
 
 	public applyTransaction = (transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null => {
@@ -808,28 +832,37 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return 'client';
 	};
 
+	public getRowModelCapabilities = (): RowModelCapabilities => {
+		const capable = asCapableRowModel(this.getRowModel());
+		return capable ? capable.getCapabilities() : _FALLBACK_CAPS[this.getRowModelType()];
+	};
+
+	public supportsRowModelCapability = (capability: RowModelCapability): boolean => {
+		return this.getRowModelCapabilities()[capability] === true;
+	};
+
 	public purgeCache = (): void => {
-		this.getInfiniteControllableRowModel()?.purgeCache();
+		this.assertInfiniteRowModel('purgeCache').purgeCache();
 	};
 
 	public setInfiniteDatasource = (datasource: InfiniteDatasource<TRowData>, blockSize?: number): void => {
-		this.getInfiniteControllableRowModel()?.setDatasource(datasource, blockSize);
+		this.assertInfiniteRowModel('setInfiniteDatasource').setDatasource(datasource, blockSize);
 	};
 
 	public setServerPageDatasource = (datasource: ServerDatasource<TRowData>): void => {
-		this.getServerPageControllableRowModel()?.setDatasource(datasource);
+		this.assertServerPageRowModel('setServerPageDatasource').setDatasource(datasource);
 	};
 
 	public goToServerPage = (page: number): void => {
-		this.getServerPageControllableRowModel()?.goToPage(page);
+		this.assertServerPageRowModel('goToServerPage').goToPage(page);
 	};
 
 	public setServerPageSize = (pageSize: number): void => {
-		this.getServerPageControllableRowModel()?.setPageSize(pageSize);
+		this.assertServerPageRowModel('setServerPageSize').setPageSize(pageSize);
 	};
 
 	public refreshServerPage = (reason?: string): void => {
-		this.getServerPageControllableRowModel()?.reloadPage(reason);
+		this.assertServerPageRowModel('refreshServerPage').reloadPage(reason);
 	};
 
 	public getServerPageState = (): ServerPageState | null => {
@@ -837,13 +870,15 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public nextServerPage = (): void => {
-		const state = this.getServerPageState();
-		if (state && state.page < state.pageCount - 1) this.goToServerPage(state.page + 1);
+		const model = this.assertServerPageRowModel('nextServerPage');
+		const state = model.getPageState();
+		if (state.page < state.pageCount - 1) model.goToPage(state.page + 1);
 	};
 
 	public previousServerPage = (): void => {
-		const state = this.getServerPageState();
-		if (state && state.page > 0) this.goToServerPage(state.page - 1);
+		const model = this.assertServerPageRowModel('previousServerPage');
+		const state = model.getPageState();
+		if (state.page > 0) model.goToPage(state.page - 1);
 	};
 
 	public setViewportPins = (pins: { left?: number; right?: number; top?: number; bottom?: number }): void => {

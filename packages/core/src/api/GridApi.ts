@@ -5,6 +5,7 @@ import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from
 import type { InfiniteDatasource } from '../infiniteRowModel.js';
 import type { ServerDatasource, ServerPageState } from '../serverPageRowModel.js';
 import type { RowModelType } from '../state/GridState.js';
+import type { RowModelCapability, RowModelCapabilities } from '../rowModel.js';
 import type { ColumnDef, GridStyleRule, CellRendererPhase } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
 import type { RowNode } from '../rowNode.js';
@@ -24,6 +25,8 @@ import type { GridIntegrityApi } from '../features/dataIntegrity/integrityTypes.
 
 export type { CsvExportOptions };
 export type { RuntimeFault };
+export type { RowModelCapability, RowModelCapabilities };
+export { UnsupportedRowModelOperationError } from '../rowModel.js';
 
 // ── Integrity types (re-exported for convenience) ─────────────────────────────
 export type {
@@ -400,6 +403,8 @@ export interface GridApi<TRowData = unknown> {
 	setRowHeights: (rowHeights: Record<string, number> | undefined) => void;
 	setDefaultRowHeight: (defaultRowHeight?: number | undefined) => void;
 	getRowModelType(): RowModelType;
+	getRowModelCapabilities(): RowModelCapabilities;
+	supportsRowModelCapability(capability: RowModelCapability): boolean;
 	purgeCache(): void;
 	setInfiniteDatasource(datasource: InfiniteDatasource<TRowData>, blockSize?: number): void;
 	setServerPageDatasource(datasource: ServerDatasource<TRowData>): void;

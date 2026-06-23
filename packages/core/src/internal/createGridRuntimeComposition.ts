@@ -22,7 +22,7 @@ import type {
 	SelectRowsOptions,
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
-import type { FilterModel, SortModel } from '../rowModel.js';
+import type { FilterModel, SortModel, RowModelCapability } from '../rowModel.js';
 import type { ColumnState, GridInitialState } from '../state/GridState.js';
 import type { GridPersistenceAdapter, PersistenceController, PersistenceStatus, PersistedGridState } from '../persistence/statePersistence.js';
 
@@ -67,6 +67,8 @@ export function createGridRuntimeComposition<TRowData>({
 		setRowHeights: (rowHeights: Record<string, number> | undefined) => runtime.setRowHeights(rowHeights),
 		setDefaultRowHeight: (defaultRowHeight?: number | undefined) => runtime.setDefaultRowHeight(defaultRowHeight),
 		getRowModelType: () => runtime.getRowModelType(),
+		getRowModelCapabilities: () => runtime.getRowModelCapabilities(),
+		supportsRowModelCapability: (capability: RowModelCapability) => runtime.supportsRowModelCapability(capability),
 		purgeCache: () => runtime.purgeCache(),
 		setInfiniteDatasource: (datasource: InfiniteDatasource<TRowData>, blockSize?: number) => runtime.setInfiniteDatasource(datasource, blockSize),
 		setServerPageDatasource: (datasource: ServerDatasource<TRowData>) => runtime.setServerPageDatasource(datasource),

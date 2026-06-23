@@ -407,15 +407,20 @@ describe('Architecture guardrails', () => {
 		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(rowModelContent).toContain('export interface ClientMutableRowModel<TRowData = unknown> extends RowOrderCapableModel');
-		expect(rowModelContent).toContain('export interface ServerControllableRowModel<TRowData = unknown>');
 		expect(rowModelContent).toContain('export function asClientMutableRowModel<TRowData = unknown>(');
-		expect(rowModelContent).toContain('export function asServerControllableRowModel<TRowData = unknown>(');
 		expect(rowModelContent).toContain('export function asRowExpansionStateReadableModel(');
+		// ServerControllableRowModel is removed — InfiniteControllableRowModel is the canonical interface.
+		expect(rowModelContent).not.toContain('export interface ServerControllableRowModel<TRowData = unknown>');
+		expect(rowModelContent).not.toContain('export function asServerControllableRowModel<TRowData = unknown>(');
 		expect(storeContent).toContain('private getClientMutableRowModel(): ClientMutableRowModel<TRowData> | null');
-		expect(storeContent).toContain('private getServerControllableRowModel(): ServerControllableRowModel<TRowData> | null');
+		// getServerControllableRowModel is removed — assertInfiniteRowModel / assertServerPageRowModel used instead.
+		expect(storeContent).not.toContain('private getServerControllableRowModel():');
 		expect(storeContent).toContain('return asClientMutableRowModel(this.getRowModel());');
-		expect(storeContent).toContain('return asServerControllableRowModel(this.getRowModel());');
 		expect(storeContent).toContain('return asRowExpansionStateReadableModel(this.getRowModel());');
+		// Capability-checked — no silent optional chaining.
+		expect(storeContent).not.toContain('.getInfiniteControllableRowModel()?.purgeCache()');
+		expect(storeContent).not.toContain('.getInfiniteControllableRowModel()?.setDatasource(');
+		expect(storeContent).not.toContain('.getServerPageControllableRowModel()?.goToPage(');
 		expect(storeContent).not.toContain('this.getRowModel()?.setRows?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.updateRows?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.purgeCache?.(');
@@ -450,10 +455,10 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'paginationBarRenderer.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(rowModelContent).toContain('export function asPageWindowCapableRowModel(');
-		expect(rowModelContent).toContain('export function asServerControllableRowModel<TRowData = unknown>(');
+		// asServerControllableRowModel is removed — asServerPageControllableRowModel is the canonical interface.
+		expect(rowModelContent).not.toContain('export function asServerControllableRowModel<TRowData = unknown>(');
 		expect(rowModelContent).toContain('export function asDataRowCountModel(');
 		expect(content).toContain('return asPageWindowCapableRowModel(this.engine.getRowModel());');
-		// Updated: pagination bar now routes server-page navigation through ServerPageControllableRowModel
 		expect(content).toContain('return asServerPageControllableRowModel(this.engine.getRowModel());');
 		expect(content).not.toContain('rowModel?.getPageWindow?.()');
 		expect(content).not.toContain('rowModel?.goToPage');

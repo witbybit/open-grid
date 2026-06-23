@@ -58,10 +58,18 @@ export class ViewportModel<TRowData = unknown> {
 		return current;
 	}
 
+	// After this many ms with no scroll event, velocity is considered decayed to zero.
+	private static readonly SCROLL_SETTLE_MS = 200;
+
 	/**
 	 * Evaluates if the grid is currently scrolling faster than the fluid performance threshold.
+	 * Returns false if no scroll event has arrived in the last SCROLL_SETTLE_MS milliseconds,
+	 * so the infinite row model correctly detects scroll-settle without relying on timers.
 	 */
 	public get isScrollingFast(): boolean {
+		if (this.lastTimestamp === 0) return false;
+		const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+		if (now - this.lastTimestamp > ViewportModel.SCROLL_SETTLE_MS) return false;
 		return Math.abs(this.velocityY) > this.FAST_SCROLL_THRESHOLD || Math.abs(this.velocityX) > this.FAST_SCROLL_THRESHOLD;
 	}
 

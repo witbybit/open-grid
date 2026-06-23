@@ -9,6 +9,8 @@ import type {
 	RowModelRefreshResult,
 	SelectableDataRowModel,
 	ServerPageControllableRowModel,
+	CapableRowModel,
+	RowModelCapabilities,
 } from './rowModel.js';
 import type { RowSelectionScope } from './api/GridApi.js';
 import { RowNode } from './rowNode.js';
@@ -59,8 +61,38 @@ export interface ServerPageRowModelOptions<TData = unknown> {
 	pagination: ServerPaginationOptions;
 }
 
+const SERVER_PAGE_CAPABILITIES: RowModelCapabilities = {
+	fullDataset: false,
+	loadedDataset: false,
+	pagedDataset: true,
+	clientMutation: false,
+	loadedRowMutation: false,
+	pageRowMutation: true,
+	transactions: false,
+	rowOrder: false,
+	blockLoading: false,
+	serverPagination: true,
+	clientSort: false,
+	clientFilter: false,
+	serverSort: true,
+	serverFilter: true,
+	clientGrouping: false,
+	clientTree: false,
+	aggregation: false,
+	masterDetail: false,
+	allRowSelection: false,
+	loadedRowSelection: false,
+	pageRowSelection: true,
+};
+
 export class ServerPageRowModelController<TData = unknown>
-	implements RowModel<TData>, DataRowCountModel, SelectableDataRowModel, ServerPageControllableRowModel<TData>, CellValueWritableRowModel<TData>
+	implements
+		RowModel<TData>,
+		DataRowCountModel,
+		SelectableDataRowModel,
+		ServerPageControllableRowModel<TData>,
+		CellValueWritableRowModel<TData>,
+		CapableRowModel
 {
 	private readonly runtime: ServerPageRowModelRuntime<TData>;
 	private datasource: ServerDatasource<TData>;
@@ -105,6 +137,10 @@ export class ServerPageRowModelController<TData = unknown>
 		);
 
 		this.fetchPage();
+	}
+
+	public getCapabilities(): RowModelCapabilities {
+		return SERVER_PAGE_CAPABILITIES;
 	}
 
 	public setDatasource(datasource: ServerDatasource<TData>): void {
@@ -222,6 +258,14 @@ export class ServerPageRowModelController<TData = unknown>
 		this.loading = true;
 		this.error = null;
 		this.runtime.setLoadingState(true);
+		this.runtime.setServerPageState({
+			page,
+			pageSize,
+			pageCount: this.pageCount,
+			totalRowCount: this.totalRowCount,
+			loading: true,
+			error: null,
+		});
 		this.runtime.dispatchServerPageLoadingStarted({ page, pageSize });
 
 		const state = this.runtime.getState();
