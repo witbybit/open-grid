@@ -579,6 +579,14 @@ export class GridEngine<TRowData = unknown> {
 		return result ?? null;
 	}
 
+	public replaceRows(rows: readonly TRowData[]): void {
+		this.changeApplier.commit({ reason: 'rows:replace', domainMutations: [{ kind: 'replace-rows', rows }] });
+	}
+
+	public updateRows(updater: (rows: TRowData[]) => TRowData[]): void {
+		this.changeApplier.commit({ reason: 'rows:update', domainMutations: [{ kind: 'batch-row-update', updater }] });
+	}
+
 	public updateExpansionState(updater: (expansion: InternalGridState<TRowData>['expansion']) => InternalGridState<TRowData>['expansion']): void {
 		this.changeApplier.apply({
 			reason: 'rows:update-expansion',

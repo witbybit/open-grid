@@ -4,6 +4,7 @@ import {
 	asCellValueWritableRowModel,
 	asRowOrderCapableModel,
 	asTransactionalRowModel,
+	asClientMutableRowModel,
 	type RowModel,
 	type RowOrderCapableModel,
 	type RowModelTransactionSnapshot,
@@ -55,7 +56,25 @@ export interface RowOrderMutation {
 	emitEvent?: boolean;
 }
 
-export type GridDomainMutation<TRowData = unknown> = CellValueMutation | BatchCellMutation | RowTransactionMutation<TRowData> | RowOrderMutation;
+export interface ReplaceRowsMutation<TRowData = unknown> {
+	kind: 'replace-rows';
+	rows: readonly TRowData[];
+	undoable?: boolean;
+}
+
+export interface BatchRowUpdateMutation<TRowData = unknown> {
+	kind: 'batch-row-update';
+	updater: (rows: TRowData[]) => TRowData[];
+	undoable?: boolean;
+}
+
+export type GridDomainMutation<TRowData = unknown> =
+	| CellValueMutation
+	| BatchCellMutation
+	| RowTransactionMutation<TRowData>
+	| RowOrderMutation
+	| ReplaceRowsMutation<TRowData>
+	| BatchRowUpdateMutation<TRowData>;
 
 export interface GridMutationRejection {
 	mutationKind: GridDomainMutation['kind'];
@@ -710,6 +729,56 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 		},
 	};
 
+	const replaceRowsExecutor: GridDomainMutationExecutor<TRowData, ReplaceRowsMutation<TRowData>> = {
+		validate(_mutation, context) {
+			if (!asClientMutableRowModel(context.getRowModel())) {
+				return { ok: false, reason: 'replace-rows requires client row model', rejection: { mutationKind: 'replace-rows', reason: 'replace-rows requires client row model' } };
+			}
+			return { ok: true };
+		},
+		prepare(mutation, context) {
+			return {
+				mutation,
+				domains: ['rows', 'geometry'],
+				events: [],
+				requestRender: true,
+				apply(commitContext) {
+					asClientMutableRowModel(commitContext.getRowModel())!.setRows(mutation.rows as TRowData[]);
+					return {
+						domains: ['rows', 'geometry'],
+						invalidations: [{ kind: 'full', reason: 'data' }],
+						requestRender: true,
+					};
+				},
+			};
+		},
+	};
+
+	const batchRowUpdateExecutor: GridDomainMutationExecutor<TRowData, BatchRowUpdateMutation<TRowData>> = {
+		validate(_mutation, context) {
+			if (!asClientMutableRowModel(context.getRowModel())) {
+				return { ok: false, reason: 'batch-row-update requires client row model', rejection: { mutationKind: 'batch-row-update', reason: 'batch-row-update requires client row model' } };
+			}
+			return { ok: true };
+		},
+		prepare(mutation, context) {
+			return {
+				mutation,
+				domains: ['rows', 'geometry'],
+				events: [],
+				requestRender: true,
+				apply(commitContext) {
+					asClientMutableRowModel(commitContext.getRowModel())!.updateRows(mutation.updater);
+					return {
+						domains: ['rows', 'geometry'],
+						invalidations: [{ kind: 'full', reason: 'data' }],
+						requestRender: true,
+					};
+				},
+			};
+		},
+	};
+
 	return {
 		resolve(mutation) {
 			if (mutation.kind === 'cell-value') {
@@ -723,6 +792,12 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 			}
 			if (mutation.kind === 'row-transaction') {
 				return rowTransactionExecutor as GridDomainMutationExecutor<TRowData, typeof mutation>;
+			}
+			if (mutation.kind === 'replace-rows') {
+				return replaceRowsExecutor as GridDomainMutationExecutor<TRowData, typeof mutation>;
+			}
+			if (mutation.kind === 'batch-row-update') {
+				return batchRowUpdateExecutor as GridDomainMutationExecutor<TRowData, typeof mutation>;
 			}
 			return null;
 		},
