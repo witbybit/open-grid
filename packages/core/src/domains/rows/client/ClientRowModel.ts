@@ -59,6 +59,16 @@ export class ClientRowModel<TRow> implements RowModelPlugin<TRow> {
 	getRows(): readonly RowNode<TRow>[] {
 		return this.store.getRows();
 	}
+
+	/**
+	 * Replace one row's data wholesale, returning the structural change set. This is the persistence
+	 * primitive the cell value engine composes with after it computes a row's next data (running a
+	 * column value setter). The row model owns the structural write; the cell engine owns the
+	 * value-application semantics (R3, R8).
+	 */
+	writeRowDataStructural(rowId: RowId, nextData: TRow): RowChangeSet<TRow> {
+		return this.store.writeRowData(rowId, nextData);
+	}
 }
 
 function refreshFor(changes: RowChangeSet): PipelineRefreshKind {

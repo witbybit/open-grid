@@ -104,6 +104,26 @@ export class ClientRowStore<TRow> {
 		return rowChangeSet({ updated: [nextNode], changedFieldsByRow });
 	}
 
+	/**
+	 * Replace one row's data wholesale and diff its fields. Used by the cell value engine when a
+	 * column's value setter mutates the row in ways a single-field write cannot express.
+	 */
+	writeRowData(rowId: RowId, nextData: TRow): RowChangeSet<TRow> {
+		const node = this.byId.get(rowId);
+		if (!node) {
+			throw new Error(`ClientRowStore.writeRowData: no row with id "${rowId}".`);
+		}
+		const changed = changedFields(node.data, nextData);
+		if (changed.size === 0) {
+			return rowChangeSet({});
+		}
+		const nextNode = createRowNode(rowId, node.sourceIndex, nextData);
+		this.nodes = this.nodes.map((n) => (n.id === rowId ? nextNode : n));
+		this.byId.set(rowId, nextNode);
+		const changedFieldsByRow = new Map<RowId, ReadonlySet<ColumnId>>([[rowId, changed]]);
+		return rowChangeSet({ updated: [nextNode], changedFieldsByRow });
+	}
+
 	// ── Internals ───────────────────────────────────────────────────────────────────
 
 	/** Diff `nextData` against current storage by id, commit, and produce the change set. */
