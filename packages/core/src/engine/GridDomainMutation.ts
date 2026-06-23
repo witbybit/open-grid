@@ -4,7 +4,6 @@ import {
 	asCellValueWritableRowModel,
 	asRowOrderCapableModel,
 	asTransactionalRowModel,
-	asClientMutableRowModel,
 	asClientStructuralRowModel,
 	type RowModel,
 	type RowOrderCapableModel,
@@ -360,8 +359,8 @@ function previewCellValueMutation<TRowData>(context: GridCommitContext<TRowData>
 	const getStoredCellValue = context.getStoredCellValue;
 	const getColumnDef = context.getColumnDef;
 
-	const writableRowModel = asCellValueWritableRowModel(rowModel);
-	if (!writableRowModel || !getCellValue || !getRawCellValue || !getStoredCellValue || !getColumnDef) {
+	const hasCellWriteCapability = asCellValueWritableRowModel(rowModel) !== null || asClientStructuralRowModel(rowModel) !== null;
+	if (!hasCellWriteCapability || !getCellValue || !getRawCellValue || !getStoredCellValue || !getColumnDef) {
 		return {
 			rowId: mutation.rowId,
 			colField: mutation.colField,

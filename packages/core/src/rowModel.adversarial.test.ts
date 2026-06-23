@@ -128,7 +128,8 @@ function runAdversarialSequence(seed: number, steps: number): void {
 			if (allNodes.length > 0) {
 				const target = allNodes[lcgInt(rng, allNodes.length)];
 				const newAmount = lcgInt(rng, 200);
-				controller.setCellValue!(target.id, 'amount', newAmount);
+				const cellWr = controller.writeCellValueStructurally(target.id, 'amount', newAmount);
+				controller.reconcileAfterDataWrite(cellWr, controller.classifyFieldMutation(new Set(['amount'])));
 			}
 		} else if (op === OP_SORT_ASC) {
 			const colId = lcgInt(rng, 2) === 0 ? 'name' : 'amount';
@@ -304,11 +305,12 @@ describe('ClientRowModelController — adversarial differential invariants', () 
 
 		checkInvariants(controller, store, 'before-setRows');
 
-		controller.setRows!([
+		const setRowsResult = controller.replaceRowsStructurally([
 			{ id: '3', name: 'Zoe', amount: 5 },
 			{ id: '4', name: 'Anna', amount: 99 },
 			{ id: '5', name: 'Mark', amount: 42 },
 		]);
+		controller.reconcileAfterDataWrite(setRowsResult, 'value-only');
 
 		checkInvariants(controller, store, 'after-setRows');
 

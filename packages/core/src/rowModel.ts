@@ -215,12 +215,7 @@ export interface CellValueWritableRowModel<TRowData = unknown> {
 	setCellValue(rowId: string, colField: string, value: unknown, options?: { bypassValueSetter?: boolean }): boolean;
 }
 
-export interface ClientMutableRowModel<TRowData = unknown> extends RowOrderCapableModel {
-	setRows(rows: TRowData[]): void;
-	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
-}
-
-// ── Structural write contract (Phase 3+ target) ───────────────────────────────
+// ── Structural write contract ─────────────────────────────────────────────────
 
 /**
  * How a data write affects the visual row model — drives refresh strategy.
@@ -369,12 +364,6 @@ export function asRowOrderCapableModel(rowModel: RowModel<unknown> | null): RowO
 
 export function asCellValueWritableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): CellValueWritableRowModel<TRowData> | null {
 	return hasFunctions(rowModel, ['setCellValue']) ? (rowModel as unknown as CellValueWritableRowModel<TRowData>) : null;
-}
-
-export function asClientMutableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): ClientMutableRowModel<TRowData> | null {
-	return hasFunctions(rowModel, ['setRows', 'updateRows', 'getRowOrder', 'setRowOrder'])
-		? (rowModel as unknown as ClientMutableRowModel<TRowData>)
-		: null;
 }
 
 export function asInfiniteControllableRowModel<TRowData = unknown>(
@@ -862,8 +851,6 @@ export class ClientRowModelController<TData = unknown>
 		PageWindowCapableRowModel,
 		AllDataNodesCapableRowModel<TData>,
 		GroupMetaCapableRowModel,
-		ClientMutableRowModel<TData>,
-		CellValueWritableRowModel<TData>,
 		ClientStructuralRowModel<TData>,
 		CapableRowModel
 {
@@ -994,7 +981,8 @@ export class ClientRowModelController<TData = unknown>
 			this.runtime.addEventListener(GridEventName.paginationChanged, () => this.refresh('flatten'))
 		);
 		this.rebuildDependencyRegistry();
-		this.setRows(options.rows);
+		this.dataStore.setRows(options.rows);
+		this.refresh();
 	}
 
 	public dispose(): void {
@@ -1120,13 +1108,6 @@ export class ClientRowModelController<TData = unknown>
 		this.visualRows = mutable;
 		this.reindexFrom(Math.min(earliestRemovedIndex, earliestInsertedIndex));
 		return true;
-	}
-
-	public setRows(rows: TData[]): void {
-		this.dataStore.setRows(rows);
-		this.runtime.clearFormulas();
-		this.refresh();
-		this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
 	}
 
 	public replaceRowsStructurally(rows: readonly TData[]): RowModelWriteResult<TData> {
@@ -1392,115 +1373,6 @@ export class ClientRowModelController<TData = unknown>
 		return true;
 	}
 
-	public updateRows(updater: (rows: TData[]) => TData[]): void {
-		const result = this.dataStore.updateRows(updater);
-
-		if (result.mismatch) {
-			const currentRows = this.dataStore.getAllNodes().map((n) => n.data);
-			this.setRows(updater(currentRows));
-			return;
-		}
-
-		if (result.changedNodes.length === 0) return;
-
-		// Invalidate changed cells and gather affected formula dependents.
-		const allInvalidatedCells = new Map<string, Set<string>>();
-		const addInvalidatedCell = (rowId: string, field: string) => {
-			let fields = allInvalidatedCells.get(rowId);
-			if (!fields) {
-				fields = new Set<string>();
-				allInvalidatedCells.set(rowId, fields);
-			}
-			fields.add(field);
-		};
-		for (const [rowId, fields] of result.changedFieldsByRow) {
-			for (const field of fields) {
-				addInvalidatedCell(rowId, field);
-
-				const node = this.dataStore.getNode(rowId);
-				if (node) {
-					const nextVal = (node.data as Record<string, unknown>)[field];
-					this.runtime.syncFormulaForCell(rowId, field, nextVal);
-				}
-
-				const invalidated = this.runtime.invalidateFormulaCell(rowId, field);
-				for (const cell of invalidated) {
-					addInvalidatedCell(cell.rowId, cell.colField);
-				}
-			}
-		}
-
-		// Classify the mutation impact using the dependency registry — covers sort, filter,
-		// group, tree-parent, and formula dependencies in one pass over all changed fields.
-		const allChangedFields = new Set<string>();
-		for (const [, fields] of result.changedFieldsByRow) {
-			for (const field of fields) allChangedFields.add(field);
-		}
-		const impact = this.classifyFieldMutation(allChangedFields);
-
-		// sort-key: attempt incremental relocation within the sorted array. Falls back to full
-		// rebuild for grouped/tree/paginated grids or when relocateSortedRows returns false.
-		// filter-key: test membership for each changed node on flat grids. If no row enters
-		// or exits the filter, the visual array is unchanged — skip the pipeline rebuild.
-		let needsFullRefresh = impact === 'group-key' || impact === 'tree-parent' || impact === 'aggregation-input';
-		let didSortRelocation = false;
-		if (!needsFullRefresh && impact === 'sort-key') {
-			didSortRelocation = this.relocateSortedRows(result.changedNodes);
-			needsFullRefresh = !didSortRelocation;
-		}
-		if (!needsFullRefresh && impact === 'filter-key') {
-			needsFullRefresh = this.filterMembershipChanged(result.changedNodes);
-		}
-
-		if (needsFullRefresh) {
-			this.refresh();
-		} else {
-			// No sorting or filtering is affected. Notify only changed cells, formula dependents,
-			// and explicitly declared valueGetter dependents.
-			const notifyCells = new Map<string, Set<string>>();
-			const addNotifyCell = (rowId: string, field: string) => {
-				let fields = notifyCells.get(rowId);
-				if (!fields) {
-					fields = new Set<string>();
-					notifyCells.set(rowId, fields);
-				}
-				fields.add(field);
-			};
-			for (const [rowId, fields] of allInvalidatedCells) {
-				for (const field of fields) addNotifyCell(rowId, field);
-			}
-			for (const node of result.changedNodes) {
-				const changedFields = result.changedFieldsByRow.get(node.id);
-				if (changedFields) {
-					for (const field of changedFields) {
-						addNotifyCell(node.id, field);
-						for (const dependentField of this.runtime.getValueGetterDependents(field)) {
-							if (dependentField !== field) {
-								addNotifyCell(node.id, dependentField);
-							}
-						}
-					}
-				}
-			}
-
-			this.runtime.notifyBulkCellChange(notifyCells);
-
-			// Sort relocation changed the visual order — bump version so geometry and renderer
-			// refresh with the new row positions. Value-only updates don't need this since
-			// the visual array is unchanged and each cell's notifyBulkCellChange is sufficient.
-			if (didSortRelocation) {
-				this.runtime.bumpGlobalVersion();
-			}
-
-			if (result.changedValuesByRow.size > 0) {
-				this.runtime.dispatchRowsUpdated({
-					changedValuesByRow: result.changedValuesByRow,
-					changedNodes: result.changedNodes,
-				});
-			}
-		}
-	}
-
 	public captureTransactionSnapshot = (
 		_mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TData>
 	): RowModelTransactionSnapshot<TData> => {
@@ -1703,57 +1575,6 @@ export class ClientRowModelController<TData = unknown>
 			if (row?.kind === 'data') ids.push(row.rowId);
 		}
 		return ids;
-	};
-
-	public setCellValue = (rowId: string, colField: string, value: unknown, options?: { bypassValueSetter?: boolean }): boolean => {
-		const node = this.getRowNodeById(rowId);
-		if (!node) return false;
-
-		const col = this.runtime.getColumnDef(colField);
-		const oldValue = this.runtime.getCellValue(rowId, colField);
-		const updatedRow = { ...node.data };
-		if (options?.bypassValueSetter === true) {
-			setValueByPath(updatedRow, colField, value);
-		} else if (col?.valueSetter) {
-			// Sync path: call valueSetter with params. Async setters are handled by commitEdit.
-			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
-			if (result === false || (result instanceof Promise && false)) return false;
-			// For sync-returning false, bail out. Async setters proceed optimistically here.
-			if (!(result instanceof Promise) && !result) return false;
-		} else {
-			setValueByPath(updatedRow, colField, value);
-		}
-
-		node.setData(updatedRow);
-
-		// If the edited cell field affects active sorting, filtering, grouping, or aggregates,
-		// we must re-run the pipeline to update the row positions, visibility, or computed aggregates.
-		const state = this.runtime.getState();
-		let needsRefresh = false;
-
-		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
-			needsRefresh = true;
-		} else if (state.filterModel && state.filterModel[colField] !== undefined) {
-			needsRefresh = true;
-		} else if (state.groupBy && state.groupBy.includes(colField)) {
-			needsRefresh = true;
-		} else if (this.runtime.hasValueGetter(colField)) {
-			needsRefresh = true;
-		} else {
-			// If grouping or custom row models (e.g. parentId tree) are active, any cell edit
-			// might affect group calculations, so we refresh to keep aggregations/hierarchies correct.
-			const hasGrouping = state.groupBy && state.groupBy.length > 0;
-			const hasTree = !!state.getParentId;
-			if (hasGrouping || hasTree) {
-				needsRefresh = true;
-			}
-		}
-
-		if (needsRefresh) {
-			this.refresh();
-		}
-
-		return true;
 	};
 
 	public refresh(reason?: RowRefreshReason, groupId?: string): RowModelRefreshResult {

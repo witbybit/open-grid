@@ -1285,6 +1285,74 @@ describe('GridStore auto-batching and dirty cell fanout', () => {
 	});
 });
 
+describe('Fix 6 regression — setCellValue on sort-key field triggers visual reorder', () => {
+	it('api.setCellValue on a sort-key field moves the row to its correct sorted position', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'A', price: 10 },
+				{ id: '2', name: 'B', price: 20 },
+				{ id: '3', name: 'C', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Initial order: 1 (10), 2 (20), 3 (30)
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(0);
+
+		// Raise row 1's price via public API — executor must trigger sort reconciliation
+		store.setCellValue('1', 'price', 25);
+		ctrl.refresh();
+
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(0); // 20
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(1); // 25 (moved)
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(2); // 30
+
+		ctrl.dispose();
+	});
+});
+
+describe('Fix 7 regression — applyTransaction update path uses sort/filter reconciliation', () => {
+	it('api.applyTransaction({ update }) on a sort-key field relocates the row', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'A', price: 10 },
+				{ id: '2', name: 'B', price: 20 },
+				{ id: '3', name: 'C', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// Initial order: 1 (10), 2 (20), 3 (30)
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(0);
+
+		// Update via applyTransaction — must go through same sort reconciliation as updateRows
+		store.applyTransaction({ update: [{ id: '1', name: 'A', price: 25 }] });
+		ctrl.refresh();
+
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(0); // 20
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(1); // 25 (moved)
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(2); // 30
+
+		ctrl.dispose();
+	});
+});
+
 describe('GridStore undo and redo functionality', () => {
 	it('should support undo and redo for cell value modifications', () => {
 		const store = new GridStore<TestRow>({

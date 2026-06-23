@@ -1,8 +1,7 @@
-import { type ColumnDef, setValueByPath } from './columnDef.js';
+import { type ColumnDef } from './columnDef.js';
 import { GridEventName } from './api/GridEvents.js';
 import type { ServerPageRowModelRuntime } from './engine/runtimePorts.js';
 import type {
-	CellValueWritableRowModel,
 	DataRowCountModel,
 	RowModel,
 	RowRefreshReason,
@@ -86,13 +85,7 @@ const SERVER_PAGE_CAPABILITIES: RowModelCapabilities = {
 };
 
 export class ServerPageRowModelController<TData = unknown>
-	implements
-		RowModel<TData>,
-		DataRowCountModel,
-		SelectableDataRowModel,
-		ServerPageControllableRowModel<TData>,
-		CellValueWritableRowModel<TData>,
-		CapableRowModel
+	implements RowModel<TData>, DataRowCountModel, SelectableDataRowModel, ServerPageControllableRowModel<TData>, CapableRowModel
 {
 	private readonly runtime: ServerPageRowModelRuntime<TData>;
 	private datasource: ServerDatasource<TData>;
@@ -227,24 +220,6 @@ export class ServerPageRowModelController<TData = unknown>
 
 	public getSelectableDataRowIds = (_scope: RowSelectionScope = 'loaded'): string[] => {
 		return this.activeNodes.map((n) => n.id);
-	};
-
-	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
-		const node = this.getRowNodeById(rowId);
-		if (!node) return false;
-
-		const col = this.runtime.getColumnDef(colField);
-		const oldValue = this.runtime.getCellValue(rowId, colField);
-		const updatedRow = { ...node.data };
-		if (col?.valueSetter) {
-			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
-			if (!(result instanceof Promise) && !result) return false;
-		} else {
-			setValueByPath(updatedRow, colField, value);
-		}
-
-		node.setData(updatedRow);
-		return true;
 	};
 
 	private fetchPage = async (): Promise<void> => {

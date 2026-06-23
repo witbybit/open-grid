@@ -22,6 +22,22 @@ function getRowNode<TData>(controller: ClientRowModelController<TData>, index: n
 	return vr?.kind === 'data' ? vr.node : null;
 }
 
+function doUpdateRows<T>(ctrl: ClientRowModelController<T>, updater: (rows: T[]) => T[]): void {
+	const wr = ctrl.updateRowsStructurally(updater);
+	const allFields = new Set<string>();
+	if (wr.changedFieldsByRow) {
+		for (const fields of wr.changedFieldsByRow.values()) {
+			for (const f of fields) allFields.add(f);
+		}
+	}
+	ctrl.reconcileAfterDataWrite(wr, allFields.size > 0 ? ctrl.classifyFieldMutation(allFields) : 'value-only');
+}
+
+function doSetCellValue<T>(ctrl: ClientRowModelController<T>, rowId: string, field: string, value: unknown): void {
+	const wr = ctrl.writeCellValueStructurally(rowId, field, value);
+	ctrl.reconcileAfterDataWrite(wr, ctrl.classifyFieldMutation(new Set([field])));
+}
+
 describe('ClientRowModelController', () => {
 	it('should initialize and populate visualRows correctly', () => {
 		const store = new GridStore<TestRow>({
@@ -64,7 +80,7 @@ describe('ClientRowModelController', () => {
 			columns: store.getState().columns,
 		});
 
-		controller.setCellValue('1', 'name', 'Alicia');
+		doSetCellValue(controller, '1', 'name', 'Alicia');
 		const node = controller.getRowNodeById('1');
 		expect(node?.data.name).toBe('Alicia');
 	});
@@ -84,7 +100,7 @@ describe('ClientRowModelController', () => {
 			columns: store.getState().columns,
 		});
 
-		controller.updateRows((rows) => rows.map((row) => (row.id === '2' ? { ...row, user: { name: 'Aaron' } } : row)));
+		doUpdateRows(controller, (rows) => rows.map((row) => (row.id === '2' ? { ...row, user: { name: 'Aaron' } } : row)));
 
 		expect(getRowNode(controller, 0)?.id).toBe('2');
 	});
@@ -111,7 +127,7 @@ describe('ClientRowModelController', () => {
 		expect(getRowNode(controller, 2)?.id).toBe('2'); // Charlie
 
 		// Edit Charlie to Aaron. The sort order should automatically update to Aaron (2), Alice (3), Bob (1)
-		controller.setCellValue('2', 'name', 'Aaron');
+		doSetCellValue(controller, '2', 'name', 'Aaron');
 
 		expect(getRowNode(controller, 0)?.id).toBe('2'); // Aaron (formerly Charlie)
 		expect(getRowNode(controller, 1)?.id).toBe('3'); // Alice
@@ -645,7 +661,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 
 		// Update `status` on row 1 to a different value that still matches the filter
 		// (same value 'active' → still passes; membership unchanged)
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 99 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 99 } : r)));
 
 		// Row count unchanged, row still visible, value updated
 		expect(ctrl.getVisualRowCount()).toBe(1);
@@ -665,7 +681,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 		expect(ctrl.getVisualRowCount()).toBe(1);
 
 		// Row 2 was hidden; now update its status so it passes the filter
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '2' ? { ...r, status: 'active' } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '2' ? { ...r, status: 'active' } : r)));
 
 		expect(ctrl.getVisualRowCount()).toBe(2);
 	});
@@ -683,7 +699,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 		expect(ctrl.getVisualRowCount()).toBe(1);
 
 		// Row 1 is visible; now make it fail the filter
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
 
 		expect(ctrl.getVisualRowCount()).toBe(0);
 	});
@@ -713,7 +729,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 		expect(ctrl.getVisualRowCount()).toBe(2);
 
 		// Update a status field on the visible row; full rebuild runs (group may need updating)
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
 
 		// Active group should disappear; inactive group was previously filtered
 		expect(ctrl.getVisualRowCount()).toBe(0);
@@ -735,7 +751,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 		expect(getRowNode(ctrl, 1)?.id).toBe('2');
 
 		// Change price (not a filter key) and status (still 'active') — neither changes membership
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 999 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 999 } : r)));
 
 		expect(ctrl.getVisualRowCount()).toBe(2);
 		expect(getRowNode(ctrl, 0)?.id).toBe('1');
@@ -779,7 +795,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		expect(getRowNode(ctrl, 2)?.id).toBe('3');
 
 		// Raise row 1's price to 25 — should move between 2 and 3
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 25 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 25 } : r)));
 
 		expect(ctrl.getVisualRowCount()).toBe(3);
 		expect(getRowNode(ctrl, 0)?.id).toBe('2'); // 20
@@ -802,7 +818,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		expect(getRowNode(ctrl, 0)?.id).toBe('1');
 
 		// Drop row 1's price below everyone else
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 5 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 5 } : r)));
 
 		expect(getRowNode(ctrl, 0)?.id).toBe('2');
 		expect(getRowNode(ctrl, 1)?.id).toBe('3');
@@ -821,7 +837,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		});
 
 		// 'Bob' → 'Aaron' should move to first
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '2' ? { ...r, name: 'Aaron' } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '2' ? { ...r, name: 'Aaron' } : r)));
 
 		expect(ctrl.getVisualIndexByRowId('2')).toBe(0);
 		expect(ctrl.getVisualIndexByRowId('1')).toBe(1);
@@ -850,7 +866,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		});
 
 		// Full rebuild should correctly update group structure even with sort change
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 30 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 30 } : r)));
 
 		// Verify rows are still present and correctly structured
 		expect(ctrl.getVisualRowCount()).toBeGreaterThan(0);
@@ -870,7 +886,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 
 		// Update price but keep relative order (15 stays between 10 and 20 → no, 15 > 10 and < 20, so '1' stays at 0)
 		// Actually 15 > 10 (original) so row 1 stays first if it was at 10. 15 < 20, so still at index 0.
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 15 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 15 } : r)));
 
 		expect(getRowNode(ctrl, 0)?.id).toBe('1'); // still first (15 < 20 < 30)
 		expect(ctrl.getRowNodeById('1')?.data.price).toBe(15);
@@ -888,7 +904,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		});
 
 		// Swap prices of row 1 and row 3
-		ctrl.updateRows((rows) =>
+		doUpdateRows(ctrl, (rows) =>
 			rows.map((r) => {
 				if (r.id === '1') return { ...r, price: 30 };
 				if (r.id === '3') return { ...r, price: 10 };
@@ -1231,8 +1247,10 @@ describe('Plan 083 — incremental index maintenance', () => {
 			columns: store.getState().columns,
 		});
 
-		// updateRows() triggers the sort-key mutation path (classifyFieldMutation → sort-key → relocateSortedRows)
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '3' ? { ...r, value: 5 } : r)));
+		// updateRowsStructurally + reconcileAfterDataWrite triggers the sort-key mutation path
+		const writeResult = ctrl.updateRowsStructurally((rows) => rows.map((r) => (r.id === '3' ? { ...r, value: 5 } : r)));
+		const impact = ctrl.classifyFieldMutation(new Set(['value']));
+		ctrl.reconcileAfterDataWrite(writeResult, impact);
 
 		expect(ctrl.getVisualIndexByRowId('3')).toBe(0);
 		expect(ctrl.getVisualIndexByRowId('1')).toBe(1);
@@ -1500,7 +1518,8 @@ describe('ClientRowModelController – differential correctness (Plan 099)', () 
 			rows: initial,
 			columns: store.getState().columns,
 		});
-		incr.setRows!(replacement);
+		const replaceResult = incr.replaceRowsStructurally(replacement);
+		incr.reconcileAfterDataWrite(replaceResult, 'value-only');
 
 		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: replacement,

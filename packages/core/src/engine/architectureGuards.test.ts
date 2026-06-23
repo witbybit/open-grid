@@ -406,16 +406,19 @@ describe('Architecture guardrails', () => {
 	it('GridStore narrows row-model capabilities instead of calling optional row-model hooks directly', () => {
 		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		expect(rowModelContent).toContain('export interface ClientMutableRowModel<TRowData = unknown> extends RowOrderCapableModel');
-		expect(rowModelContent).toContain('export function asClientMutableRowModel<TRowData = unknown>(');
+		// ClientMutableRowModel replaced by ClientStructuralRowModel (Plan 131).
+		expect(rowModelContent).not.toContain('export interface ClientMutableRowModel<TRowData = unknown>');
+		expect(rowModelContent).not.toContain('export function asClientMutableRowModel<TRowData = unknown>(');
+		expect(rowModelContent).toContain('export interface ClientStructuralRowModel<TRowData = unknown>');
+		expect(rowModelContent).toContain('export function asClientStructuralRowModel<TRowData = unknown>(');
 		expect(rowModelContent).toContain('export function asRowExpansionStateReadableModel(');
 		// ServerControllableRowModel is removed — InfiniteControllableRowModel is the canonical interface.
 		expect(rowModelContent).not.toContain('export interface ServerControllableRowModel<TRowData = unknown>');
 		expect(rowModelContent).not.toContain('export function asServerControllableRowModel<TRowData = unknown>(');
-		expect(storeContent).toContain('private getClientMutableRowModel(): ClientMutableRowModel<TRowData> | null');
+		expect(storeContent).toContain('private getClientStructuralRowModel(): ClientStructuralRowModel<TRowData> | null');
 		// getServerControllableRowModel is removed — assertInfiniteRowModel / assertServerPageRowModel used instead.
 		expect(storeContent).not.toContain('private getServerControllableRowModel():');
-		expect(storeContent).toContain('return asClientMutableRowModel(this.getRowModel());');
+		expect(storeContent).toContain('return asClientStructuralRowModel(this.getRowModel());');
 		expect(storeContent).toContain('return asRowExpansionStateReadableModel(this.getRowModel());');
 		// Capability-checked — no silent optional chaining.
 		expect(storeContent).not.toContain('.getInfiniteControllableRowModel()?.purgeCache()');
@@ -426,6 +429,28 @@ describe('Architecture guardrails', () => {
 		expect(storeContent).not.toContain('this.getRowModel()?.purgeCache?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.setDatasource?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.goToPage?.(');
+	});
+
+	it('Plan 131 — ClientRowModelController exposes only structural write methods, not old high-level lifecycle methods', () => {
+		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		// Old lifecycle-owning methods are gone — replaced by structural equivalents.
+		expect(rowModelContent).not.toContain('public setRows(');
+		expect(rowModelContent).not.toContain('public setRows =');
+		expect(rowModelContent).not.toContain('public updateRows(');
+		expect(rowModelContent).not.toContain('public updateRows =');
+		expect(rowModelContent).not.toContain('public setCellValue =');
+		// Structural replacements are present.
+		expect(rowModelContent).toContain('public replaceRowsStructurally(');
+		expect(rowModelContent).toContain('public updateRowsStructurally(');
+		expect(rowModelContent).toContain('public writeCellValueStructurally(');
+		expect(rowModelContent).toContain('public reconcileAfterDataWrite(');
+		// Infinite and server row models no longer implement CellValueWritableRowModel.
+		const infiniteContent = readFileSync(resolve(CORE_ROOT, 'src', 'infiniteRowModel.ts'), 'utf-8');
+		const serverContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverPageRowModel.ts'), 'utf-8');
+		expect(infiniteContent).not.toContain('CellValueWritableRowModel');
+		expect(serverContent).not.toContain('CellValueWritableRowModel');
+		expect(infiniteContent).not.toContain('public setCellValue');
+		expect(serverContent).not.toContain('public setCellValue');
 	});
 
 	it('GridEngine distinct-value lookup narrows to a data-node source instead of optional row-model hooks', () => {

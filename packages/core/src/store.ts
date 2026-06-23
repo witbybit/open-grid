@@ -2,7 +2,7 @@ import type {
 	FilterModel,
 	SortModel,
 	RowModel,
-	ClientMutableRowModel,
+	ClientStructuralRowModel,
 	InfiniteControllableRowModel,
 	ServerPageControllableRowModel,
 	RowExpansionStateReadableModel,
@@ -12,7 +12,7 @@ import type {
 import type { GridQueryModel } from './query/GridQueryModel.js';
 import { evaluateQueryModel, createQueryEvaluationContext } from './query/evaluateQueryModel.js';
 import {
-	asClientMutableRowModel,
+	asClientStructuralRowModel,
 	asRowExpansionStateReadableModel,
 	asInfiniteControllableRowModel,
 	asServerPageControllableRowModel,
@@ -300,6 +300,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	 * invalidations instead of one coalesced batch.
 	 */
 	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
+		this.assertClientStructuralRowModel('setCellValue');
 		this.engine.setCellValue(rowId, colField, value);
 	};
 
@@ -713,8 +714,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.getRowModel();
 	};
 
-	private getClientMutableRowModel(): ClientMutableRowModel<TRowData> | null {
-		return asClientMutableRowModel(this.getRowModel());
+	private getClientStructuralRowModel(): ClientStructuralRowModel<TRowData> | null {
+		return asClientStructuralRowModel(this.getRowModel());
 	}
 
 	private getInfiniteControllableRowModel(): InfiniteControllableRowModel<TRowData> | null {
@@ -742,8 +743,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return m;
 	}
 
-	private assertClientMutableRowModel(op: string): ClientMutableRowModel<TRowData> {
-		const m = this.getClientMutableRowModel();
+	private assertClientStructuralRowModel(op: string): ClientStructuralRowModel<TRowData> {
+		const m = this.getClientStructuralRowModel();
 		if (!m) throw new UnsupportedRowModelOperationError({ operation: op, rowModelType: this.getRowModelType(), supportedRowModels: ['client'] });
 		return m;
 	}
@@ -767,17 +768,17 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public setRows = (rows: TRowData[]): void => {
-		this.assertClientMutableRowModel('setRows');
+		this.assertClientStructuralRowModel('setRows');
 		this.engine.replaceRows(rows);
 	};
 
-	public getRowOrder = (): string[] => this.getClientMutableRowModel()?.getRowOrder() ?? [];
+	public getRowOrder = (): string[] => this.getClientStructuralRowModel()?.getRowOrder() ?? [];
 	public setRowOrder = (rowIds: string[]): void => {
 		this.engine.setRowOrder(rowIds);
 	};
 
 	public updateRows = (updater: (rows: TRowData[]) => TRowData[]): void => {
-		this.assertClientMutableRowModel('updateRows');
+		this.assertClientStructuralRowModel('updateRows');
 		this.engine.updateRows(updater);
 	};
 

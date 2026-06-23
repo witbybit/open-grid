@@ -1,8 +1,7 @@
-import { type ColumnDef, setValueByPath } from './columnDef.js';
+import { type ColumnDef } from './columnDef.js';
 import { GridEventName } from './api/GridEvents.js';
 import type { InfiniteRowModelRuntime } from './engine/runtimePorts.js';
 import type {
-	CellValueWritableRowModel,
 	DataRowCountModel,
 	RowModel,
 	RowRefreshReason,
@@ -73,7 +72,6 @@ export class InfiniteRowModelController<TData = unknown>
 		DataRowCountModel,
 		SelectableDataRowModel,
 		InfiniteControllableRowModel<TData>,
-		CellValueWritableRowModel<TData>,
 		VisibleBlockLoadCapableRowModel,
 		CapableRowModel
 {
@@ -227,34 +225,6 @@ export class InfiniteRowModelController<TData = unknown>
 			if (node) ids.push(node.id);
 		}
 		return ids;
-	};
-
-	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
-		const node = this.getRowNodeById(rowId);
-		if (!node) return false;
-
-		const col = this.runtime.getColumnDef(colField);
-		const oldValue = this.runtime.getCellValue(rowId, colField);
-		const updatedRow = { ...node.data };
-		if (col?.valueSetter) {
-			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
-			if (!(result instanceof Promise) && !result) return false;
-		} else {
-			setValueByPath(updatedRow, colField, value);
-		}
-
-		node.setData(updatedRow);
-
-		const state = this.runtime.getState();
-		let needsPurge = false;
-		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
-			needsPurge = true;
-		} else if (state.filterModel && state.filterModel[colField] !== undefined) {
-			needsPurge = true;
-		}
-
-		if (needsPurge) this.purgeCache();
-		return true;
 	};
 
 	private fetchBlock = async (blockIndex: number): Promise<void> => {
