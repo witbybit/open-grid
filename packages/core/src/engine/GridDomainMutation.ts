@@ -5,10 +5,12 @@ import {
 	asRowOrderCapableModel,
 	asTransactionalRowModel,
 	asClientMutableRowModel,
+	asClientStructuralRowModel,
 	type RowModel,
 	type RowOrderCapableModel,
 	type RowModelTransactionSnapshot,
 	type TransactionalRowModel,
+	type RowWriteImpact,
 } from '../rowModel.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
@@ -471,9 +473,27 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 							result,
 						};
 					}
+					let invalidations = createInvalidationsFromCells(result.invalidatedCells);
+					const structuralRowModel = asClientStructuralRowModel<TRowData>(commitContext.getRowModel());
+					if (structuralRowModel) {
+						const changedFieldsByRow = new Map([[preview.rowId, new Set([preview.colField])]]);
+						const impact = structuralRowModel.classifyFieldMutation(new Set([preview.colField]));
+						if (impact !== 'value-only') {
+							const node = commitContext.getRowModel()!.getRowNodeById(preview.rowId);
+							const reconcileResult = structuralRowModel.reconcileAfterDataWrite(
+								{
+									updatedNodes: node ? [node] : [],
+									changedFieldsByRow,
+									visualChange: 'none',
+								},
+								impact
+							);
+							if (reconcileResult.changed) invalidations = [{ kind: 'full', reason: 'data' }];
+						}
+					}
 					return {
 						domains: ['rows'],
-						invalidations: createInvalidationsFromCells(result.invalidatedCells),
+						invalidations,
 						events: createEventsFromResults<TRowData>([result]),
 						history:
 							mutation.undoable === false
@@ -613,10 +633,42 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					}
 
 					const invalidatedCells = committed.flatMap((result) => result.invalidatedCells);
+					let batchInvalidations = createInvalidationsFromCells(invalidatedCells);
+					if (committed.length > 0) {
+						const structuralRowModel = asClientStructuralRowModel<TRowData>(commitContext.getRowModel());
+						if (structuralRowModel) {
+							const changedFieldsByRow = new Map<string, Set<string>>();
+							for (const r of committed) {
+								let fields = changedFieldsByRow.get(r.rowId);
+								if (!fields) {
+									fields = new Set();
+									changedFieldsByRow.set(r.rowId, fields);
+								}
+								fields.add(r.colField);
+							}
+							const allFields = new Set<string>();
+							for (const fields of changedFieldsByRow.values()) for (const f of fields) allFields.add(f);
+							const impact = allFields.size > 0 ? structuralRowModel.classifyFieldMutation(allFields) : 'value-only';
+							if (impact !== 'value-only') {
+								const nodes = [...new Set(committed.map((r) => r.rowId))]
+									.map((id) => commitContext.getRowModel()!.getRowNodeById(id))
+									.filter((n): n is NonNullable<typeof n> => n != null);
+								const reconcileResult = structuralRowModel.reconcileAfterDataWrite(
+									{
+										updatedNodes: nodes,
+										changedFieldsByRow,
+										visualChange: 'none',
+									},
+									impact
+								);
+								if (reconcileResult.changed) batchInvalidations = [{ kind: 'full', reason: 'data' }];
+							}
+						}
+					}
 					return {
 						noop: committed.length === 0,
 						domains: committed.length > 0 ? ['rows'] : [],
-						invalidations: createInvalidationsFromCells(invalidatedCells),
+						invalidations: batchInvalidations,
 						events: createEventsFromResults<TRowData>(committed),
 						history:
 							committed.length > 0 && mutation.undoable !== false
@@ -686,9 +738,13 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 				events: [],
 				requestRender: true,
 				apply(context) {
-					const rowModel = getTransactionalRowModel(context)!;
+					const transactionalRowModel = getTransactionalRowModel(context)!;
+					const structuralRowModel = asClientStructuralRowModel<TRowData>(context.getRowModel());
 					if (mutation.restoreSnapshot) {
-						rowModel.restoreTransactionSnapshot(preparedRestoreSnapshot);
+						transactionalRowModel.restoreTransactionSnapshot(preparedRestoreSnapshot);
+						if (structuralRowModel) {
+							structuralRowModel.reconcileAfterDataWrite({ visualChange: 'full' }, 'value-only');
+						}
 						return {
 							domains: ['rows', 'geometry'],
 							invalidations: [{ kind: 'full', reason: 'data' }],
@@ -696,7 +752,48 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 							result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData>,
 						};
 					}
-					const result = rowModel.applyTransaction(mutation.transaction);
+					if (structuralRowModel) {
+						const txResult = structuralRowModel.applyTransactionStructurally(mutation.transaction);
+						const hasStructural = (txResult.addedNodes?.length ?? 0) > 0 || (txResult.removedNodes?.length ?? 0) > 0;
+						let impact: RowWriteImpact;
+						if (hasStructural) {
+							impact = 'insert';
+						} else {
+							const allFields = new Set<string>();
+							if (txResult.changedFieldsByRow) {
+								for (const fields of txResult.changedFieldsByRow.values()) {
+									for (const f of fields) allFields.add(f);
+								}
+							}
+							impact = allFields.size > 0 ? structuralRowModel.classifyFieldMutation(allFields) : 'value-only';
+						}
+						structuralRowModel.reconcileAfterDataWrite(txResult, impact);
+						return {
+							domains: ['rows', 'geometry'],
+							invalidations: [{ kind: 'full', reason: 'data' }],
+							history: {
+								undo: {
+									reason: 'rows:apply-transaction',
+									domainMutations: [
+										{
+											kind: 'row-transaction',
+											transaction: { update: [] },
+											restoreSnapshot: preparedRestoreSnapshot,
+										},
+									],
+									requestRender: false,
+								},
+								redo: {
+									reason: 'rows:apply-transaction',
+									domainMutations: [mutation],
+									requestRender: false,
+								},
+							},
+							requestRender: true,
+							result: { add: txResult.add, remove: txResult.remove, update: txResult.update },
+						};
+					}
+					const result = transactionalRowModel.applyTransaction(mutation.transaction);
 					return {
 						domains: ['rows', 'geometry'],
 						invalidations: [{ kind: 'full', reason: 'data' }],
@@ -731,7 +828,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 
 	const replaceRowsExecutor: GridDomainMutationExecutor<TRowData, ReplaceRowsMutation<TRowData>> = {
 		validate(_mutation, context) {
-			if (!asClientMutableRowModel(context.getRowModel())) {
+			if (!asClientStructuralRowModel(context.getRowModel())) {
 				return {
 					ok: false,
 					reason: 'replace-rows requires client row model',
@@ -740,14 +837,16 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 			}
 			return { ok: true };
 		},
-		prepare(mutation, context) {
+		prepare(mutation, _context) {
 			return {
 				mutation,
 				domains: ['rows', 'geometry'],
 				events: [],
 				requestRender: true,
 				apply(commitContext) {
-					asClientMutableRowModel(commitContext.getRowModel())!.setRows(mutation.rows as TRowData[]);
+					const rowModel = asClientStructuralRowModel<TRowData>(commitContext.getRowModel())!;
+					const writeResult = rowModel.replaceRowsStructurally(mutation.rows as TRowData[]);
+					rowModel.reconcileAfterDataWrite(writeResult, 'value-only');
 					return {
 						domains: ['rows', 'geometry'],
 						invalidations: [{ kind: 'full', reason: 'data' }],
@@ -760,7 +859,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 
 	const batchRowUpdateExecutor: GridDomainMutationExecutor<TRowData, BatchRowUpdateMutation<TRowData>> = {
 		validate(_mutation, context) {
-			if (!asClientMutableRowModel(context.getRowModel())) {
+			if (!asClientStructuralRowModel(context.getRowModel())) {
 				return {
 					ok: false,
 					reason: 'batch-row-update requires client row model',
@@ -769,18 +868,28 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 			}
 			return { ok: true };
 		},
-		prepare(mutation, context) {
+		prepare(mutation, _context) {
 			return {
 				mutation,
 				domains: ['rows', 'geometry'],
 				events: [],
 				requestRender: true,
 				apply(commitContext) {
-					asClientMutableRowModel(commitContext.getRowModel())!.updateRows(mutation.updater);
+					const rowModel = asClientStructuralRowModel<TRowData>(commitContext.getRowModel())!;
+					const writeResult = rowModel.updateRowsStructurally(mutation.updater);
+					const allFields = new Set<string>();
+					if (writeResult.changedFieldsByRow) {
+						for (const fields of writeResult.changedFieldsByRow.values()) {
+							for (const f of fields) allFields.add(f);
+						}
+					}
+					const impact: RowWriteImpact = allFields.size > 0 ? rowModel.classifyFieldMutation(allFields) : 'value-only';
+					const reconcileResult = rowModel.reconcileAfterDataWrite(writeResult, impact);
+					const changed = writeResult.visualChange !== 'none' || reconcileResult.changed;
 					return {
-						domains: ['rows', 'geometry'],
-						invalidations: [{ kind: 'full', reason: 'data' }],
-						requestRender: true,
+						domains: changed ? (['rows', 'geometry'] as const) : ([] as const),
+						invalidations: changed ? [{ kind: 'full' as const, reason: 'data' }] : [],
+						requestRender: changed,
 					};
 				},
 			};

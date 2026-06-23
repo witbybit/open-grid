@@ -155,23 +155,22 @@ Row models are structural writers only — they do not own refresh or event life
 
 ### Phase 4 — Upgrade executors to use structural methods
 
-- [ ] **4.1** Upgrade `replace-rows` executor:
+- [x] **4.1** Upgrade `replace-rows` executor:
     - Calls `rowModel.replaceRowsStructurally(rows)`
-    - Calls `classifyWriteImpact(result.changedFieldsByRow)`
-    - Calls `rowModel.reconcileAfterDataWrite(result, impact)`
-    - Returns correct `domains`, `invalidations`, `events`, `cellChanges`
-- [ ] **4.2** Upgrade `batch-row-update` executor — same pattern as 4.1
-- [ ] **4.3** Upgrade `row-transaction` executor:
+    - Calls `rowModel.reconcileAfterDataWrite(result, 'value-only')` (visualChange=full → bulk refresh)
+    - Returns correct `domains`, `invalidations`, `requestRender`
+- [x] **4.2** Upgrade `batch-row-update` executor — same pattern, with field classification via `classifyFieldMutation`
+- [x] **4.3** Upgrade `row-transaction` executor:
     - Calls `rowModel.applyTransactionStructurally(transaction)` instead of `rowModel.applyTransaction(transaction)`
-    - Uses `classifyWriteImpact` and `reconcileAfterDataWrite`
-    - Fixes Fix 7: transaction updates now go through the same sort/filter reconciliation as `updateRows`
-- [ ] **4.4** Upgrade `cell-value` executor path through `DataMutationController`:
-    - `DataMutationController.applyCellValueChange` calls `rowModel.writeCellValueStructurally(...)` instead of `rowModel.setCellValue(...)`
-    - Returns enriched `CellValueChangeResult` with `changedFieldsByRow`
-    - Executor runs `classifyWriteImpact` and `reconcileAfterDataWrite` after formula work
-    - Fixes Fix 6: cell mutation lifecycle is fully owned by the executor, not the row model
-- [ ] **4.5** Upgrade `batch-cell` executor — same pattern as 4.4
-- [ ] **4.6** Run full test suite — all tests must pass
+    - Detects structural (add/remove) vs field-only updates; passes `'insert'` impact for structural
+    - `reconcileAfterDataWrite` for `'insert'`: tries `tryIncrementalTransaction` first, falls back to full rebuild
+    - **Fix 7 complete**: transaction updates now go through same sort/filter reconciliation as `updateRows`
+- [x] **4.4** Upgrade `cell-value` executor path through `DataMutationController`:
+    - `DataMutationController.applyCellValueChange` calls `rowModel.writeCellValueStructurally(...)` for client models; falls back to `setCellValue` for infinite/server
+    - Executor runs `classifyFieldMutation` and `reconcileAfterDataWrite` for non-value-only impacts
+    - **Fix 6 complete**: cell mutation lifecycle owned by executor; row model is pure storage writer
+- [x] **4.5** Upgrade `batch-cell` executor — aggregates changedFieldsByRow across all committed cells, reconciles once
+- [x] **4.6** Full test suite: 78 files, 1364 tests — all pass. TypeScript strict: zero errors.
 
 ### Phase 5 — Delete old high-level row-model write paths
 

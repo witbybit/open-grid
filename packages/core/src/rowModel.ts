@@ -1199,22 +1199,44 @@ export class ClientRowModelController<TData = unknown>
 	}
 
 	public reconcileAfterDataWrite(writeResult: RowModelWriteResult<TData>, impact: RowWriteImpact): RowModelRefreshResult {
-		if (writeResult.visualChange === 'full' || impact === 'full-rebuild' || impact === 'insert' || impact === 'remove') {
+		const inst = this.runtime.getInstrumentation();
+		if (impact === 'insert' || impact === 'remove') {
+			const added = writeResult.addedNodes ?? [];
+			const removed = writeResult.removedNodes ?? [];
+			const wasIncremental = this.tryIncrementalTransaction(added, removed);
+			if (wasIncremental) {
+				this.runtime.bumpGlobalVersion();
+				inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
+				return { changed: true, reason: 'row-order' as RowRefreshReason };
+			}
+			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
+			return this.refresh('bulk');
+		}
+		if (writeResult.visualChange === 'full' || impact === 'full-rebuild') {
+			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
 			return this.refresh('bulk');
 		}
 		if (impact === 'group-key' || impact === 'tree-parent' || impact === 'aggregation-input') {
+			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
 			return this.refresh('bulk');
 		}
 		if (impact === 'sort-key') {
 			const nodes = writeResult.updatedNodes ?? [];
 			const relocated = nodes.length > 0 && this.relocateSortedRows(nodes);
-			return relocated ? { changed: true, reason: 'sort' } : this.refresh('sort' as RowRefreshReason);
+			if (relocated) {
+				inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
+				return { changed: true, reason: 'sort' };
+			}
+			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
+			return this.refresh('sort' as RowRefreshReason);
 		}
 		if (impact === 'filter-key') {
+			inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
 			const nodes = writeResult.updatedNodes ?? [];
 			const changed = nodes.length > 0 && this.filterMembershipChanged(nodes);
 			return changed ? this.refresh('filter' as RowRefreshReason) : { changed: false };
 		}
+		inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
 		return { changed: false };
 	}
 
