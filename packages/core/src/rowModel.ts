@@ -6,7 +6,7 @@ import { GridMetric } from './diagnostics/GridInstrumentation.js';
 import { getFieldRoot } from './ids.js';
 import { RowNode } from './rowNode.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
-import { RowDependencyRegistry, classifyMutation } from './rows/rowMutationClassifier.js';
+import { RowDependencyRegistry, classifyMutation, type RowMutationImpact } from './rows/rowMutationClassifier.js';
 import type { PageWindow } from './rows/pageModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
 import type { RowDataStoreTransactionSnapshot } from './rows/RowDataStore.js';
@@ -218,6 +218,76 @@ export interface CellValueWritableRowModel<TRowData = unknown> {
 export interface ClientMutableRowModel<TRowData = unknown> extends RowOrderCapableModel {
 	setRows(rows: TRowData[]): void;
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
+}
+
+// ── Structural write contract (Phase 3+ target) ───────────────────────────────
+
+/**
+ * How a data write affects the visual row model — drives refresh strategy.
+ * Aliased from RowMutationImpact so the commit layer and row-model classifier
+ * share one canonical type.
+ */
+export type RowWriteImpact = RowMutationImpact;
+
+/** Returned by every structural write method — carries exactly what changed, nothing else. */
+export interface RowModelWriteResult<TRowData = unknown> {
+	addedNodes?: RowNode<TRowData>[];
+	removedNodes?: RowNode<TRowData>[];
+	updatedNodes?: RowNode<TRowData>[];
+	changedFieldsByRow?: Map<string, Set<string>>;
+	changedValuesByRow?: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
+	visualChange: 'none' | 'partial' | 'full';
+}
+
+/**
+ * Structural row-model write interface — commit layer calls these methods.
+ * Implementations mutate storage and return what changed; they do NOT refresh,
+ * dispatch events, invalidate formulas, or bump versions.
+ */
+export interface ClientStructuralRowModel<TRowData = unknown> extends RowOrderCapableModel {
+	replaceRowsStructurally(rows: readonly TRowData[]): RowModelWriteResult<TRowData>;
+	updateRowsStructurally(updater: (rows: TRowData[]) => TRowData[]): RowModelWriteResult<TRowData>;
+	applyTransactionStructurally(
+		transaction: import('./api/GridApi.js').RowDataTransaction<TRowData>
+	): RowModelWriteResult<TRowData> & import('./api/GridApi.js').RowNodeTransaction<TRowData>;
+	writeCellValueStructurally(
+		rowId: string,
+		colField: string,
+		value: unknown,
+		options?: { bypassValueSetter?: boolean }
+	): RowModelWriteResult<TRowData>;
+	reconcileAfterDataWrite(writeResult: RowModelWriteResult<TRowData>, impact: RowWriteImpact): RowModelRefreshResult;
+	classifyFieldMutation(changedFields: ReadonlySet<string>): RowWriteImpact;
+}
+
+/**
+ * Classify which visual-model systems are affected by a set of changed data fields.
+ * Delegates to the row model's own registry when possible; returns 'none' when the
+ * row model is not a ClientStructuralRowModel (infinite/server never need client-side
+ * sort/filter/group classification).
+ */
+export function classifyWriteImpact(rowModel: RowModel<unknown> | null, changedFieldsByRow: Map<string, Set<string>>): RowWriteImpact {
+	const client = asClientStructuralRowModel(rowModel);
+	if (!client) return 'value-only';
+	const allFields = new Set<string>();
+	for (const fields of changedFieldsByRow.values()) {
+		for (const f of fields) allFields.add(f);
+	}
+	if (allFields.size === 0) return 'value-only';
+	return client.classifyFieldMutation(allFields);
+}
+
+export function asClientStructuralRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): ClientStructuralRowModel<TRowData> | null {
+	return hasFunctions(rowModel, [
+		'replaceRowsStructurally',
+		'updateRowsStructurally',
+		'applyTransactionStructurally',
+		'writeCellValueStructurally',
+		'reconcileAfterDataWrite',
+		'classifyFieldMutation',
+	])
+		? (rowModel as unknown as ClientStructuralRowModel<TRowData>)
+		: null;
 }
 
 /** Capability interface for the infinite (block/range) row model. */
@@ -794,6 +864,7 @@ export class ClientRowModelController<TData = unknown>
 		GroupMetaCapableRowModel,
 		ClientMutableRowModel<TData>,
 		CellValueWritableRowModel<TData>,
+		ClientStructuralRowModel<TData>,
 		CapableRowModel
 {
 	private readonly runtime: ClientRowModelRuntime<TData>;
@@ -1056,6 +1127,95 @@ export class ClientRowModelController<TData = unknown>
 		this.runtime.clearFormulas();
 		this.refresh();
 		this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
+	}
+
+	public replaceRowsStructurally(rows: readonly TData[]): RowModelWriteResult<TData> {
+		this.dataStore.setRows(rows as TData[]);
+		return { visualChange: 'full' };
+	}
+
+	public updateRowsStructurally(updater: (rows: TData[]) => TData[]): RowModelWriteResult<TData> {
+		const result = this.dataStore.updateRows(updater);
+		if (result.mismatch) {
+			const current = this.dataStore.getAllNodes().map((n) => n.data);
+			this.dataStore.setRows(updater(current));
+			return { visualChange: 'full' };
+		}
+		return {
+			updatedNodes: result.changedNodes,
+			changedFieldsByRow: result.changedFieldsByRow,
+			changedValuesByRow: result.changedValuesByRow,
+			visualChange: result.changedNodes.length > 0 ? 'partial' : 'none',
+		};
+	}
+
+	public applyTransactionStructurally(
+		transaction: import('./api/GridApi.js').RowDataTransaction<TData>
+	): RowModelWriteResult<TData> & import('./api/GridApi.js').RowNodeTransaction<TData> {
+		const result = this.dataStore.applyTransaction(transaction);
+		const hasStructural = result.added.length > 0 || result.removed.length > 0;
+		return {
+			add: result.added,
+			remove: result.removed,
+			update: result.updated,
+			addedNodes: result.added,
+			removedNodes: result.removed,
+			updatedNodes: result.updated,
+			changedFieldsByRow: result.changedFieldsByRow,
+			changedValuesByRow: result.changedValuesByRow,
+			visualChange: hasStructural ? 'partial' : result.updated.length > 0 ? 'partial' : 'none',
+		};
+	}
+
+	public writeCellValueStructurally(
+		rowId: string,
+		colField: string,
+		value: unknown,
+		options?: { bypassValueSetter?: boolean }
+	): RowModelWriteResult<TData> {
+		const node = this.getRowNodeById(rowId);
+		if (!node) return { visualChange: 'none' };
+
+		const col = this.runtime.getColumnDef(colField);
+		const oldValue = this.runtime.getCellValue(rowId, colField);
+		const updatedRow = { ...node.data };
+		if (options?.bypassValueSetter === true) {
+			setValueByPath(updatedRow, colField, value);
+		} else if (col?.valueSetter) {
+			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
+			if (result === false || (!(result instanceof Promise) && !result)) return { visualChange: 'none' };
+		} else {
+			setValueByPath(updatedRow, colField, value);
+		}
+
+		node.setData(updatedRow);
+
+		return {
+			updatedNodes: [node],
+			changedFieldsByRow: new Map([[rowId, new Set([colField])]]),
+			changedValuesByRow: new Map([[rowId, new Map([[colField, { oldValue, newValue: value }]])]]),
+			visualChange: 'none',
+		};
+	}
+
+	public reconcileAfterDataWrite(writeResult: RowModelWriteResult<TData>, impact: RowWriteImpact): RowModelRefreshResult {
+		if (writeResult.visualChange === 'full' || impact === 'full-rebuild' || impact === 'insert' || impact === 'remove') {
+			return this.refresh('bulk');
+		}
+		if (impact === 'group-key' || impact === 'tree-parent' || impact === 'aggregation-input') {
+			return this.refresh('bulk');
+		}
+		if (impact === 'sort-key') {
+			const nodes = writeResult.updatedNodes ?? [];
+			const relocated = nodes.length > 0 && this.relocateSortedRows(nodes);
+			return relocated ? { changed: true, reason: 'sort' } : this.refresh('sort' as RowRefreshReason);
+		}
+		if (impact === 'filter-key') {
+			const nodes = writeResult.updatedNodes ?? [];
+			const changed = nodes.length > 0 && this.filterMembershipChanged(nodes);
+			return changed ? this.refresh('filter' as RowRefreshReason) : { changed: false };
+		}
+		return { changed: false };
 	}
 
 	/**

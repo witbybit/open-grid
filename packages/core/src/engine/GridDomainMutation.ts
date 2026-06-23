@@ -732,7 +732,11 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 	const replaceRowsExecutor: GridDomainMutationExecutor<TRowData, ReplaceRowsMutation<TRowData>> = {
 		validate(_mutation, context) {
 			if (!asClientMutableRowModel(context.getRowModel())) {
-				return { ok: false, reason: 'replace-rows requires client row model', rejection: { mutationKind: 'replace-rows', reason: 'replace-rows requires client row model' } };
+				return {
+					ok: false,
+					reason: 'replace-rows requires client row model',
+					rejection: { mutationKind: 'replace-rows', reason: 'replace-rows requires client row model' },
+				};
 			}
 			return { ok: true };
 		},
@@ -757,7 +761,11 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 	const batchRowUpdateExecutor: GridDomainMutationExecutor<TRowData, BatchRowUpdateMutation<TRowData>> = {
 		validate(_mutation, context) {
 			if (!asClientMutableRowModel(context.getRowModel())) {
-				return { ok: false, reason: 'batch-row-update requires client row model', rejection: { mutationKind: 'batch-row-update', reason: 'batch-row-update requires client row model' } };
+				return {
+					ok: false,
+					reason: 'batch-row-update requires client row model',
+					rejection: { mutationKind: 'batch-row-update', reason: 'batch-row-update requires client row model' },
+				};
 			}
 			return { ok: true };
 		},
