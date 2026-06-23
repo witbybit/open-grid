@@ -73,11 +73,11 @@ describe('GridKernel — events and publication (ARCHITECTURE.md §3 R1)', () =>
 		const kernel = new GridKernel();
 		const events: GridEvent[] = [];
 		kernel.subscribe((e) => events.push(e));
-		kernel.register('rows.replace', () =>
+		kernel.register('test.replace', () =>
 			handlerApplied({ dirtyDomains: ['rows'], events: [{ type: 'rows.replaced', payload: { count: 3 } }] }),
 		);
 
-		const result = kernel.dispatch({ type: 'rows.replace', payload: {} });
+		const result = kernel.dispatch({ type: 'test.replace', payload: {} });
 		expect(result.status).toBe('applied');
 		const commitId = result.status === 'applied' ? result.commitId : '';
 

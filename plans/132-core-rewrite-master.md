@@ -35,7 +35,7 @@ kernels alive past Phase 11. No feature flags, no `legacyMode`, no deprecated al
 | ----- | ---- | ----- | ------ |
 | 1 | (this file) + `ARCHITECTURE.md` | Freeze target, ownership, forbidden deps, terminology | **done** |
 | 2 | `132a-kernel.md` | GridKernel, GridCommand, GridCommandResult, GridCommit, GridEffect, GridEvent, GridVersion, dispatch | **done** |
-| 3 | `132b-rows-domain.md` | Branded IDs, RowNode, RowModelCapabilities, RowModelPlugin, client/infinite/server shells | not started |
+| 3 | `132b-rows-domain.md` | Branded IDs, RowNode, RowModelCapabilities, RowModelPlugin, client/infinite/server shells | **done** |
 | 4 | `132c-cells-domain.md` | CellAddress, CellValueEngine, sync-only valueSetter, CellChangeSet | not started |
 | 5 | `132d-pipeline.md` | FilterStage, SortStage, flatten, shared RowWriteImpact classifier | not started |
 | 6 | `132e-columns-domain.md` | ColumnModel, ColumnState, ColumnCommand, ColumnLayout | not started |
