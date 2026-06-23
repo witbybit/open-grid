@@ -49,6 +49,35 @@ export function registerCellCommands<TRow>(
 	});
 }
 
+type AppliedCellWrite = Extract<CellWriteOutcome, { status: 'applied' }>;
+
+/**
+ * Build the commit draft for an applied cell write — the single mapping from a cell-write outcome
+ * to a commit (changes, dirty domains, `cells.changed` event, render invalidation, undo patch).
+ * Shared by `cell.setValue` and `editing.commit` so cell-write semantics are never duplicated (R8).
+ */
+export function appliedCellWriteDraft(outcome: AppliedCellWrite, address: CellAddress): GridCommitDraft {
+	return {
+		changes: [outcome.changeSet],
+		// rows bumps because the row data changed; cells bumps for value subscribers. Whether a
+		// value edit also dirties the pipeline (sort/filter key) is the shared classifier's call;
+		// the wiring (cells vs editing) decides whether to feed it the classifier.
+		dirtyDomains: ['rows', 'cells'],
+		events: [
+			{
+				type: 'cells.changed',
+				payload: { rowId: address.rowId, columnId: address.columnId, field: address.field },
+			},
+		],
+		renderInvalidation: { scope: 'cells', domains: ['rows', 'cells'] },
+		undoPatch: {
+			label: 'edit cell',
+			undo: { type: 'cell.setValue', payload: { address, value: outcome.oldValue } },
+			redo: { type: 'cell.setValue', payload: { address, value: outcome.newValue } },
+		},
+	};
+}
+
 function toDraft(outcome: CellWriteOutcome, address: CellAddress) {
 	switch (outcome.status) {
 		case 'rejected':
@@ -57,27 +86,7 @@ function toDraft(outcome: CellWriteOutcome, address: CellAddress) {
 		case 'aborted':
 		case 'noop':
 			return handlerNoop(outcome.reason);
-		case 'applied': {
-			const draft: GridCommitDraft = {
-				changes: [outcome.changeSet],
-				// rows bumps because the row data changed; cells bumps for value subscribers. Whether a
-				// value edit also dirties the pipeline (sort/filter key) is the shared classifier's call
-				// once it lands; until then a value edit leaves the pipeline untouched.
-				dirtyDomains: ['rows', 'cells'],
-				events: [
-					{
-						type: 'cells.changed',
-						payload: { rowId: address.rowId, columnId: address.columnId, field: address.field },
-					},
-				],
-				renderInvalidation: { scope: 'cells', domains: ['rows', 'cells'] },
-				undoPatch: {
-					label: 'edit cell',
-					undo: { type: 'cell.setValue', payload: { address, value: outcome.oldValue } },
-					redo: { type: 'cell.setValue', payload: { address, value: outcome.newValue } },
-				},
-			};
-			return handlerApplied(draft);
-		}
+		case 'applied':
+			return handlerApplied(appliedCellWriteDraft(outcome, address));
 	}
 }

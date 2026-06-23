@@ -39,7 +39,7 @@ kernels alive past Phase 11. No feature flags, no `legacyMode`, no deprecated al
 | 4 | `132c-cells-domain.md` | CellAddress, CellValueEngine, sync-only valueSetter, CellChangeSet | **done** |
 | 5 | `132d-pipeline.md` | FilterStage, SortStage, flatten, shared RowWriteImpact classifier | **done** |
 | 6 | `132e-columns-domain.md` | ColumnModel, ColumnState, ColumnCommand, ColumnLayout | **done** |
-| 7 | `132f-selection-editing.md` | SelectionModel, EditSession, edit commands | not started |
+| 7 | `132f-selection-editing.md` | SelectionModel, EditSession, edit commands | **done** |
 | 8 | `132g-layout-viewport-render.md` | LayoutSnapshot, ViewportSnapshot, RenderPlan, SlotModel | not started |
 | 9 | `132h-public-api.md` | GridApi command-backed facade | not started |
 | 10 | `132i-react-adapter.md` | Grid.tsx, GridProvider, render-plan consumption, immutable rowModelType | not started |

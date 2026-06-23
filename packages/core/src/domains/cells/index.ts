@@ -7,5 +7,5 @@ export type { ValueSetter, ValueSetterParams } from './ValueSetter.js';
 export type { ValueParser, ValueParserParams } from './ValueParser.js';
 export { CellValueEngine } from './CellValueEngine.js';
 export type { CellDataPort, CellWriteContext, CellWriteOutcome } from './CellValueEngine.js';
-export { registerCellCommands } from './CellCommands.js';
+export { appliedCellWriteDraft, registerCellCommands } from './CellCommands.js';
 export type { CellCommandHost, CellCommandOptions } from './CellCommands.js';
