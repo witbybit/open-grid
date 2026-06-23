@@ -281,8 +281,7 @@ export interface ColumnDef<TRowData = unknown> {
 	disableCellRangeSelection?: boolean;
 	/**
 	 * Marks this column as required for data-quality purposes.
-	 * Does not block editing — use `dataIntegrity.validation` cell rules to enforce hard constraints.
-	 * When true, `DataQualityManager.run()` will flag rows with null/empty values as issues.
+	 * Does not block editing — use `GridDataIntegrityManager.validation` cell rules to enforce hard constraints.
 	 */
 	required?: boolean;
 

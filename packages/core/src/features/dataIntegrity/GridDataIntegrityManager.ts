@@ -120,9 +120,7 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		if (conflictConfig) {
 			this.conflictModule = new ConflictIntegrityModule<TRowData>(conflictConfig, {
 				commitCellValue,
-				validateCellProposal: this.validationModule
-					? (params) => this.validationModule!.validateCellProposal(params)
-					: undefined,
+				validateCellProposal: this.validationModule ? (params) => this.validationModule!.validateCellProposal(params) : undefined,
 				canEdit: (rowId, colField) => deps.capabilityManager.can('edit', { rowId, colField }).allowed,
 				requestRepaint,
 			});
@@ -162,9 +160,7 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 			this.diffModule = new DiffIntegrityModule<TRowData>(diffConfig, {
 				getColumns: () => deps.ctx.getState().columns,
 				commitCellValue,
-				validateCellProposal: this.validationModule
-					? (params) => this.validationModule!.validateCellProposal(params)
-					: undefined,
+				validateCellProposal: this.validationModule ? (params) => this.validationModule!.validateCellProposal(params) : undefined,
 				canEdit: (rowId, colField) => deps.capabilityManager.can('edit', { rowId, colField }).allowed,
 				requestRepaint,
 			});

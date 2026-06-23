@@ -2182,7 +2182,7 @@ describe('Architecture guardrails', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'), 'utf-8');
 			expect(content).toContain('_stableCellIssueId(');
 			expect(content).toContain('_stableRowIssueId(');
-			expect(content).not.toContain("id: nextIssueId()");
+			expect(content).not.toContain('id: nextIssueId()');
 		});
 	});
 

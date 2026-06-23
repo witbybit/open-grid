@@ -2,14 +2,6 @@
  * CRUD + Validation Demo
  *
  * Demonstrates the full validation lifecycle:
- *   - Per-column valueValidator (sync and async)
- *   - api.validateCell()  →  single-cell inline check
- *   - api.validateGrid()  →  full-form sweep before submit
- *   - Red border (og-cell-invalid) persists after the editor closes
- *   - Mock server response with simulated server-side rejection
- *   - api.setCellValidationError() → push external/server errors into the grid
- *   - api.clearValidationErrors() on a clean submit
- *   - api.getAllValidationErrors()  →  sync snapshot of current error state (no re-run)
  *   - Sidebar "Submission Log" panel showing errors or success payload as JSON
  */
 import React, { useState, useRef, useCallback, useMemo } from 'react';
@@ -648,7 +640,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					showFilterChipBar
 					initialState={{ defaultColWidth: 130 }}
 					sidebar={{
-						panels: [...sidebarPanels, 'themes'],
+						panels: [...sidebarPanels, 'themes', 'dataIntegrity'],
 						position: 'right',
 						width: 320,
 					}}

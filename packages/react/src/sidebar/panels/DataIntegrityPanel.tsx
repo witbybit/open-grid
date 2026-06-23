@@ -53,13 +53,33 @@ function SeverityDot({ severity }: { severity: 'info' | 'warning' | 'error' }) {
 
 function IssueRow({ issue, theme, onFocus }: { issue: GridIntegrityIssue; theme: Theme; onFocus?: (issue: GridIntegrityIssue) => void }) {
 	return (
-		<div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 10px', borderBottom: `1px solid ${theme.borderColor}`, fontSize: 11 }}>
+		<div
+			style={{
+				display: 'flex',
+				alignItems: 'flex-start',
+				gap: 6,
+				padding: '5px 10px',
+				borderBottom: `1px solid ${theme.borderColor}`,
+				fontSize: 11,
+			}}
+		>
 			<SeverityDot severity={issue.severity} />
 			<div style={{ flex: 1, minWidth: 0 }}>
 				<div style={{ display: 'flex', gap: 4, marginBottom: 1 }}>
-					<span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: theme.mutedText }}>{issue.source}</span>
+					<span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: theme.mutedText }}>
+						{issue.source}
+					</span>
 					{issue.colField && (
-						<span style={{ fontSize: 9, fontFamily: 'monospace', color: theme.mutedText, background: theme.hoverBg, borderRadius: 3, padding: '0 3px' }}>
+						<span
+							style={{
+								fontSize: 9,
+								fontFamily: 'monospace',
+								color: theme.mutedText,
+								background: theme.hoverBg,
+								borderRadius: 3,
+								padding: '0 3px',
+							}}
+						>
 							{issue.colField}
 						</span>
 					)}
@@ -70,7 +90,17 @@ function IssueRow({ issue, theme, onFocus }: { issue: GridIntegrityIssue; theme:
 				<button
 					onClick={() => onFocus(issue)}
 					title='Focus cell'
-					style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: theme.mutedText, padding: 2, borderRadius: 3, display: 'flex', alignItems: 'center' }}
+					style={{
+						flexShrink: 0,
+						background: 'none',
+						border: 'none',
+						cursor: 'pointer',
+						color: theme.mutedText,
+						padding: 2,
+						borderRadius: 3,
+						display: 'flex',
+						alignItems: 'center',
+					}}
 				>
 					<FocusIcon />
 				</button>
@@ -127,7 +157,14 @@ function OverviewTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 		{ label: 'Blocking', value: summary.blockingIssues, color: '#f87171' },
 	];
 
-	const statusColor = summary.status === 'blocked' ? '#f87171' : summary.status === 'warning' ? '#fbbf24' : summary.status === 'clean' ? '#4ade80' : theme.mutedText;
+	const statusColor =
+		summary.status === 'blocked'
+			? '#f87171'
+			: summary.status === 'warning'
+				? '#fbbf24'
+				: summary.status === 'clean'
+					? '#4ade80'
+					: theme.mutedText;
 
 	return (
 		<div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
@@ -197,29 +234,62 @@ function QualityTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 				<button
 					onClick={handleRun}
 					disabled={running}
-					style={{ flex: 1, padding: '5px 10px', background: theme.accentColor, color: '#fff', border: 'none', borderRadius: 4, cursor: running ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, opacity: running ? 0.7 : 1 }}
+					style={{
+						flex: 1,
+						padding: '5px 10px',
+						background: theme.accentColor,
+						color: '#fff',
+						border: 'none',
+						borderRadius: 4,
+						cursor: running ? 'not-allowed' : 'pointer',
+						fontSize: 11,
+						fontWeight: 600,
+						opacity: running ? 0.7 : 1,
+					}}
 				>
 					{running ? 'Running…' : 'Run Checks'}
 				</button>
 				{hasRun && (
 					<button
 						onClick={handleClear}
-						style={{ padding: '5px 10px', background: 'transparent', color: theme.mutedText, border: `1px solid ${theme.borderColor}`, borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+						style={{
+							padding: '5px 10px',
+							background: 'transparent',
+							color: theme.mutedText,
+							border: `1px solid ${theme.borderColor}`,
+							borderRadius: 4,
+							cursor: 'pointer',
+							fontSize: 11,
+						}}
 					>
 						Clear
 					</button>
 				)}
 			</div>
 			{error && (
-				<div style={{ padding: '6px 10px', background: 'rgba(248,113,113,0.1)', color: '#f87171', fontSize: 11, borderBottom: `1px solid ${theme.borderColor}` }}>{error}</div>
+				<div
+					style={{
+						padding: '6px 10px',
+						background: 'rgba(248,113,113,0.1)',
+						color: '#f87171',
+						fontSize: 11,
+						borderBottom: `1px solid ${theme.borderColor}`,
+					}}
+				>
+					{error}
+				</div>
 			)}
 			{!hasRun && !running && (
-				<div style={{ padding: 16, color: theme.mutedText, fontSize: 11, textAlign: 'center' }}>Click <strong>Run Checks</strong> to scan for quality issues.</div>
+				<div style={{ padding: 16, color: theme.mutedText, fontSize: 11, textAlign: 'center' }}>
+					Click <strong>Run Checks</strong> to scan for quality issues.
+				</div>
 			)}
 			{hasRun && issues.length === 0 && (
 				<div style={{ padding: 16, color: theme.mutedText, fontSize: 11, textAlign: 'center' }}>No quality issues found.</div>
 			)}
-			{issues.map((issue) => <IssueRow key={issue.id} issue={issue} theme={theme} onFocus={handleFocus} />)}
+			{issues.map((issue) => (
+				<IssueRow key={issue.id} issue={issue} theme={theme} onFocus={handleFocus} />
+			))}
 		</div>
 	);
 }
@@ -247,16 +317,34 @@ function DiffTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 	}
 
 	const chipStyle = (color: string): React.CSSProperties => ({
-		display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 6px', borderRadius: 4,
-		background: `${color}22`, color, fontSize: 11, fontWeight: 600,
+		display: 'inline-flex',
+		alignItems: 'center',
+		gap: 4,
+		padding: '1px 6px',
+		borderRadius: 4,
+		background: `${color}22`,
+		color,
+		fontSize: 11,
+		fontWeight: 600,
 	});
 
 	const sectionLabel: React.CSSProperties = {
-		fontSize: 10, fontWeight: 700, color: theme.mutedText, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4,
+		fontSize: 10,
+		fontWeight: 700,
+		color: theme.mutedText,
+		textTransform: 'uppercase',
+		letterSpacing: '0.06em',
+		marginBottom: 4,
 	};
 
 	const btn = (color: string, bg: string): React.CSSProperties => ({
-		fontSize: 10, padding: '1px 6px', borderRadius: 3, border: `1px solid ${color}`, background: bg, color, cursor: 'pointer',
+		fontSize: 10,
+		padding: '1px 6px',
+		borderRadius: 3,
+		border: `1px solid ${color}`,
+		background: bg,
+		color,
+		cursor: 'pointer',
 	});
 
 	return (
@@ -284,7 +372,18 @@ function DiffTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 							<div style={sectionLabel}>Removed Rows ({result.removedRows.length})</div>
 							<div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 								{result.removedRows.map((id) => (
-									<div key={id} style={{ fontSize: 11, color: '#ef4444', padding: '2px 6px', background: 'rgba(239,68,68,0.08)', borderRadius: 4 }}>{id}</div>
+									<div
+										key={id}
+										style={{
+											fontSize: 11,
+											color: '#ef4444',
+											padding: '2px 6px',
+											background: 'rgba(239,68,68,0.08)',
+											borderRadius: 4,
+										}}
+									>
+										{id}
+									</div>
 								))}
 							</div>
 						</div>
@@ -295,19 +394,42 @@ function DiffTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 							<div style={sectionLabel}>Changed Cells ({result.changedCells.length})</div>
 							<div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
 								{result.changedCells.map((cell, i) => (
-									<div key={i} style={{ fontSize: 11, color: theme.text, padding: '5px 7px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 5 }}>
+									<div
+										key={i}
+										style={{
+											fontSize: 11,
+											color: theme.text,
+											padding: '5px 7px',
+											background: 'rgba(245,158,11,0.06)',
+											border: '1px solid rgba(245,158,11,0.2)',
+											borderRadius: 5,
+										}}
+									>
 										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
 											<span style={{ fontWeight: 600 }}>{cell.colField}</span>
 											<span style={{ fontSize: 10, color: theme.mutedText }}>{cell.rowId}</span>
 										</div>
-										<div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, color: theme.mutedText, marginBottom: 5 }}>
+										<div
+											style={{
+												display: 'flex',
+												gap: 6,
+												alignItems: 'center',
+												fontSize: 10,
+												color: theme.mutedText,
+												marginBottom: 5,
+											}}
+										>
 											<span style={{ color: '#ef4444', textDecoration: 'line-through' }}>{String(cell.oldValue ?? '—')}</span>
 											<span>→</span>
 											<span style={{ color: '#22c55e' }}>{String(cell.newValue ?? '—')}</span>
 										</div>
 										<div style={{ display: 'flex', gap: 4 }}>
-											<button onClick={() => handleFocus(cell)} style={btn(theme.mutedText, 'none')}>Focus</button>
-											<button onClick={() => handleAccept(cell)} style={btn('#22c55e', 'rgba(34,197,94,0.08)')}>Accept</button>
+											<button onClick={() => handleFocus(cell)} style={btn(theme.mutedText, 'none')}>
+												Focus
+											</button>
+											<button onClick={() => handleAccept(cell)} style={btn('#22c55e', 'rgba(34,197,94,0.08)')}>
+												Accept
+											</button>
 										</div>
 									</div>
 								))}
@@ -320,13 +442,36 @@ function DiffTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 							<div style={sectionLabel}>Added Rows ({result.addedRows.length})</div>
 							<div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 								{result.addedRows.map((id) => (
-									<div key={id} style={{ fontSize: 11, color: '#22c55e', padding: '2px 6px', background: 'rgba(34,197,94,0.08)', borderRadius: 4 }}>{id}</div>
+									<div
+										key={id}
+										style={{
+											fontSize: 11,
+											color: '#22c55e',
+											padding: '2px 6px',
+											background: 'rgba(34,197,94,0.08)',
+											borderRadius: 4,
+										}}
+									>
+										{id}
+									</div>
 								))}
 							</div>
 						</div>
 					)}
 
-					<button onClick={handleClear} style={{ marginTop: 4, padding: '5px 10px', borderRadius: 5, border: `1px solid ${theme.borderColor}`, background: 'none', color: theme.mutedText, cursor: 'pointer', fontSize: 11 }}>
+					<button
+						onClick={handleClear}
+						style={{
+							marginTop: 4,
+							padding: '5px 10px',
+							borderRadius: 5,
+							border: `1px solid ${theme.borderColor}`,
+							background: 'none',
+							color: theme.mutedText,
+							cursor: 'pointer',
+							fontSize: 11,
+						}}
+					>
 						Clear Diff
 					</button>
 				</>
@@ -375,16 +520,34 @@ function ConflictsTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 	}
 
 	const sectionLabel: React.CSSProperties = {
-		fontSize: 10, fontWeight: 700, color: theme.mutedText, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4,
+		fontSize: 10,
+		fontWeight: 700,
+		color: theme.mutedText,
+		textTransform: 'uppercase',
+		letterSpacing: '0.06em',
+		marginBottom: 4,
 	};
 
 	const sourceBadge: React.CSSProperties = {
-		display: 'inline-block', padding: '0 5px', borderRadius: 3, fontSize: 9, fontWeight: 700,
-		textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(99,102,241,0.15)', color: '#818cf8',
+		display: 'inline-block',
+		padding: '0 5px',
+		borderRadius: 3,
+		fontSize: 9,
+		fontWeight: 700,
+		textTransform: 'uppercase',
+		letterSpacing: '0.05em',
+		background: 'rgba(99,102,241,0.15)',
+		color: '#818cf8',
 	};
 
 	const btn = (color: string, bg: string, border: string): React.CSSProperties => ({
-		fontSize: 10, padding: '1px 6px', borderRadius: 3, border: `1px solid ${border}`, background: bg, color, cursor: 'pointer',
+		fontSize: 10,
+		padding: '1px 6px',
+		borderRadius: 3,
+		border: `1px solid ${border}`,
+		background: bg,
+		color,
+		cursor: 'pointer',
 	});
 
 	return (
@@ -401,23 +564,57 @@ function ConflictsTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 						<>
 							<div style={sectionLabel}>Live Conflicts ({realConflicts.length})</div>
 							{realConflicts.map((c) => (
-								<div key={c.id} style={{ fontSize: 11, color: theme.text, padding: '7px 9px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 5 }}>
+								<div
+									key={c.id}
+									style={{
+										fontSize: 11,
+										color: theme.text,
+										padding: '7px 9px',
+										background: 'rgba(239,68,68,0.06)',
+										border: '1px solid rgba(239,68,68,0.2)',
+										borderRadius: 5,
+									}}
+								>
 									<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
 										<span style={{ fontWeight: 600 }}>{c.colField}</span>
 										<span style={sourceBadge}>{c.source}</span>
 									</div>
 									<div style={{ fontSize: 11, color: theme.mutedText, marginBottom: 4 }}>{c.rowId}</div>
 									<div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10, marginBottom: 6 }}>
-										<div><span style={{ color: theme.mutedText }}>Base: </span>{String(c.baseValue ?? '—')}</div>
-										<div><span style={{ color: theme.mutedText }}>Local: </span><span style={{ color: '#22c55e' }}>{String(c.localValue ?? '—')}</span></div>
-										<div><span style={{ color: theme.mutedText }}>Remote: </span><span style={{ color: '#f59e0b' }}>{String(c.remoteValue ?? '—')}</span></div>
+										<div>
+											<span style={{ color: theme.mutedText }}>Base: </span>
+											{String(c.baseValue ?? '—')}
+										</div>
+										<div>
+											<span style={{ color: theme.mutedText }}>Local: </span>
+											<span style={{ color: '#22c55e' }}>{String(c.localValue ?? '—')}</span>
+										</div>
+										<div>
+											<span style={{ color: theme.mutedText }}>Remote: </span>
+											<span style={{ color: '#f59e0b' }}>{String(c.remoteValue ?? '—')}</span>
+										</div>
 									</div>
 									<div style={{ display: 'flex', gap: 4 }}>
 										{c.rowId && c.colField && (
-											<button onClick={() => handleFocus(c.rowId, c.colField)} style={btn(theme.mutedText, 'none', theme.borderColor)}>Focus</button>
+											<button
+												onClick={() => handleFocus(c.rowId, c.colField)}
+												style={btn(theme.mutedText, 'none', theme.borderColor)}
+											>
+												Focus
+											</button>
 										)}
-										<button onClick={() => handleResolve(c, { strategy: 'local' })} style={btn('#22c55e', 'rgba(34,197,94,0.08)', 'rgba(34,197,94,0.4)')}>Keep Local</button>
-										<button onClick={() => handleResolve(c, { strategy: 'remote' })} style={btn('#f59e0b', 'rgba(245,158,11,0.08)', 'rgba(245,158,11,0.4)')}>Use Remote</button>
+										<button
+											onClick={() => handleResolve(c, { strategy: 'local' })}
+											style={btn('#22c55e', 'rgba(34,197,94,0.08)', 'rgba(34,197,94,0.4)')}
+										>
+											Keep Local
+										</button>
+										<button
+											onClick={() => handleResolve(c, { strategy: 'remote' })}
+											style={btn('#f59e0b', 'rgba(245,158,11,0.08)', 'rgba(245,158,11,0.4)')}
+										>
+											Use Remote
+										</button>
 									</div>
 								</div>
 							))}
@@ -428,7 +625,17 @@ function ConflictsTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 						<>
 							<div style={sectionLabel}>Conflict Issues ({publishedIssues.length})</div>
 							{publishedIssues.map((issue) => (
-								<div key={issue.id} style={{ fontSize: 11, color: theme.text, padding: '7px 9px', background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 5 }}>
+								<div
+									key={issue.id}
+									style={{
+										fontSize: 11,
+										color: theme.text,
+										padding: '7px 9px',
+										background: 'rgba(239,68,68,0.04)',
+										border: '1px solid rgba(239,68,68,0.15)',
+										borderRadius: 5,
+									}}
+								>
 									<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
 										<span style={{ fontWeight: 600 }}>{issue.colField ?? '—'}</span>
 										<span style={sourceBadge}>conflict</span>
@@ -437,9 +644,19 @@ function ConflictsTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 									<div style={{ fontSize: 10, color: theme.text, marginBottom: 6, lineHeight: 1.4 }}>{issue.message}</div>
 									<div style={{ display: 'flex', gap: 4 }}>
 										{issue.rowId && issue.colField && (
-											<button onClick={() => handleFocus(issue.rowId!, issue.colField!)} style={btn(theme.mutedText, 'none', theme.borderColor)}>Focus</button>
+											<button
+												onClick={() => handleFocus(issue.rowId!, issue.colField!)}
+												style={btn(theme.mutedText, 'none', theme.borderColor)}
+											>
+												Focus
+											</button>
 										)}
-										<button onClick={() => handleDismissIssue(issue)} style={btn('#f87171', 'rgba(239,68,68,0.08)', 'rgba(239,68,68,0.4)')}>Dismiss</button>
+										<button
+											onClick={() => handleDismissIssue(issue)}
+											style={btn('#f87171', 'rgba(239,68,68,0.08)', 'rgba(239,68,68,0.4)')}
+										>
+											Dismiss
+										</button>
 									</div>
 								</div>
 							))}
@@ -447,7 +664,19 @@ function ConflictsTab({ api, theme }: { api: GridApi<any>; theme: Theme }) {
 					)}
 
 					{totalCount > 1 && (
-						<button onClick={handleClearAll} style={{ marginTop: 4, padding: '5px 10px', borderRadius: 5, border: `1px solid ${theme.borderColor}`, background: 'none', color: theme.mutedText, cursor: 'pointer', fontSize: 11 }}>
+						<button
+							onClick={handleClearAll}
+							style={{
+								marginTop: 4,
+								padding: '5px 10px',
+								borderRadius: 5,
+								border: `1px solid ${theme.borderColor}`,
+								background: 'none',
+								color: theme.mutedText,
+								cursor: 'pointer',
+								fontSize: 11,
+							}}
+						>
 							Clear All
 						</button>
 					)}
@@ -466,9 +695,29 @@ export function DataIntegrityPanel({ api, onClose }: { api: GridApi<any>; onClos
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: theme.panelBg, color: theme.text, fontSize: 12 }}>
 			{/* Header */}
-			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: `1px solid ${theme.borderColor}`, flexShrink: 0 }}>
+			<div
+				style={{
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'space-between',
+					padding: '10px 12px',
+					borderBottom: `1px solid ${theme.borderColor}`,
+					flexShrink: 0,
+				}}
+			>
 				<span style={{ fontWeight: 600, fontSize: 12 }}>Data Integrity</span>
-				<button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: theme.mutedText, padding: 2, display: 'flex', alignItems: 'center' }}>
+				<button
+					onClick={onClose}
+					style={{
+						background: 'none',
+						border: 'none',
+						cursor: 'pointer',
+						color: theme.mutedText,
+						padding: 2,
+						display: 'flex',
+						alignItems: 'center',
+					}}
+				>
 					<CloseIcon />
 				</button>
 			</div>
