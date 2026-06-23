@@ -431,9 +431,9 @@ describe('Architecture guardrails', () => {
 		expect(storeContent).not.toContain('this.getRowModel()?.goToPage?.(');
 	});
 
-	it('Plan 131 — ClientRowModelController exposes only structural write methods, not old high-level lifecycle methods', () => {
+	it('Plan 131 — all row models expose writeCellValueStructurally; old high-level lifecycle methods removed from ClientRowModelController', () => {
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		// Old lifecycle-owning methods are gone — replaced by structural equivalents.
+		// Old lifecycle-owning methods are gone from ClientRowModelController — replaced by structural equivalents.
 		expect(rowModelContent).not.toContain('public setRows(');
 		expect(rowModelContent).not.toContain('public setRows =');
 		expect(rowModelContent).not.toContain('public updateRows(');
@@ -444,11 +444,12 @@ describe('Architecture guardrails', () => {
 		expect(rowModelContent).toContain('public updateRowsStructurally(');
 		expect(rowModelContent).toContain('public writeCellValueStructurally(');
 		expect(rowModelContent).toContain('public reconcileAfterDataWrite(');
-		// Infinite and server row models no longer implement CellValueWritableRowModel.
+		// Unified cell write interface: all three row model types expose writeCellValueStructurally.
 		const infiniteContent = readFileSync(resolve(CORE_ROOT, 'src', 'infiniteRowModel.ts'), 'utf-8');
 		const serverContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverPageRowModel.ts'), 'utf-8');
-		expect(infiniteContent).not.toContain('CellValueWritableRowModel');
-		expect(serverContent).not.toContain('CellValueWritableRowModel');
+		expect(infiniteContent).toContain('public writeCellValueStructurally =');
+		expect(serverContent).toContain('public writeCellValueStructurally =');
+		// Neither falls back to the old direct-mutate setCellValue path.
 		expect(infiniteContent).not.toContain('public setCellValue');
 		expect(serverContent).not.toContain('public setCellValue');
 	});
@@ -492,11 +493,12 @@ describe('Architecture guardrails', () => {
 	it('DataMutationController narrows cell-write ownership instead of optional row-model hooks', () => {
 		const featureContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'DataMutationController.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		expect(rowModelContent).toContain('export interface CellValueWritableRowModel<TRowData = unknown>');
-		expect(rowModelContent).toContain('export function asCellValueWritableRowModel<TRowData = unknown>(');
-		expect(featureContent).toContain('private getCellValueWritableRowModel(): CellValueWritableRowModel<TRowData> | null');
-		expect(featureContent).toContain('return asCellValueWritableRowModel(this.deps.getRowModel());');
+		// Plan 131: unified structural cell write interface covers client, infinite, and server models.
+		expect(rowModelContent).toContain('export interface AnyModelCellWritable<TRowData = unknown>');
+		expect(rowModelContent).toContain('export function asAnyModelCellWritable<TRowData = unknown>(');
+		expect(featureContent).toContain('asAnyModelCellWritable(this.deps.getRowModel())');
 		expect(featureContent).not.toContain('if (!rowModel?.setCellValue)');
+		expect(featureContent).not.toContain('private getCellValueWritableRowModel()');
 	});
 
 	it('RowRenderer narrows visible-block loading instead of optional row-model hooks', () => {

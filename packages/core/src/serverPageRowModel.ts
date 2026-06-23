@@ -1,4 +1,4 @@
-import { type ColumnDef } from './columnDef.js';
+import { type ColumnDef, setValueByPath } from './columnDef.js';
 import { GridEventName } from './api/GridEvents.js';
 import type { ServerPageRowModelRuntime } from './engine/runtimePorts.js';
 import type {
@@ -6,8 +6,10 @@ import type {
 	RowModel,
 	RowRefreshReason,
 	RowModelRefreshResult,
+	RowModelWriteResult,
 	SelectableDataRowModel,
 	ServerPageControllableRowModel,
+	AnyModelCellWritable,
 	CapableRowModel,
 	RowModelCapabilities,
 } from './rowModel.js';
@@ -85,7 +87,13 @@ const SERVER_PAGE_CAPABILITIES: RowModelCapabilities = {
 };
 
 export class ServerPageRowModelController<TData = unknown>
-	implements RowModel<TData>, DataRowCountModel, SelectableDataRowModel, ServerPageControllableRowModel<TData>, CapableRowModel
+	implements
+		RowModel<TData>,
+		DataRowCountModel,
+		SelectableDataRowModel,
+		ServerPageControllableRowModel<TData>,
+		AnyModelCellWritable<TData>,
+		CapableRowModel
 {
 	private readonly runtime: ServerPageRowModelRuntime<TData>;
 	private datasource: ServerDatasource<TData>;
@@ -220,6 +228,33 @@ export class ServerPageRowModelController<TData = unknown>
 
 	public getSelectableDataRowIds = (_scope: RowSelectionScope = 'loaded'): string[] => {
 		return this.activeNodes.map((n) => n.id);
+	};
+
+	public writeCellValueStructurally = (
+		rowId: string,
+		colField: string,
+		value: unknown,
+		options?: { bypassValueSetter?: boolean }
+	): RowModelWriteResult<TData> => {
+		const node = this.nodeMap.get(rowId);
+		if (!node) return { visualChange: 'none' };
+
+		const col = this.runtime.getColumnDef(colField);
+		const oldValue = this.runtime.getCellValue(rowId, colField);
+		const updatedRow = { ...node.data };
+
+		if (!options?.bypassValueSetter && col?.valueSetter) {
+			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
+			if (!(result instanceof Promise) && !result) return { visualChange: 'none' };
+		} else {
+			setValueByPath(updatedRow, colField, value);
+		}
+
+		node.setData(updatedRow);
+
+		const changedFieldsByRow = new Map<string, Set<string>>();
+		changedFieldsByRow.set(rowId, new Set([colField]));
+		return { updatedNodes: [node], changedFieldsByRow, visualChange: 'none' };
 	};
 
 	private fetchPage = async (): Promise<void> => {

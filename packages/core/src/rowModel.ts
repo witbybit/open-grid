@@ -285,6 +285,25 @@ export function asClientStructuralRowModel<TRowData = unknown>(rowModel: RowMode
 		: null;
 }
 
+/**
+ * Any row model that can structurally write a single cell value.
+ * Narrower than `ClientStructuralRowModel` — infinite and server models implement this
+ * without providing the full dataset-replace / update / reconcile contract.
+ * Duck-typed: any model with `writeCellValueStructurally` satisfies this interface.
+ */
+export interface AnyModelCellWritable<TRowData = unknown> {
+	writeCellValueStructurally(
+		rowId: string,
+		colField: string,
+		value: unknown,
+		options?: { bypassValueSetter?: boolean }
+	): RowModelWriteResult<TRowData>;
+}
+
+export function asAnyModelCellWritable<TRowData = unknown>(rowModel: RowModel<TRowData> | null): AnyModelCellWritable<TRowData> | null {
+	return hasFunctions(rowModel, ['writeCellValueStructurally']) ? (rowModel as unknown as AnyModelCellWritable<TRowData>) : null;
+}
+
 /** Capability interface for the infinite (block/range) row model. */
 export interface InfiniteControllableRowModel<TRowData = unknown> {
 	purgeCache(): void;

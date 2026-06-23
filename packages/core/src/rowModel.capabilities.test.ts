@@ -238,16 +238,6 @@ describe('Unsupported row model operations — infinite grid', () => {
 		expect(() => api.updateRows((r) => r)).toThrowError(UnsupportedRowModelOperationError);
 		api.destroy();
 	});
-
-	it('setCellValue throws', () => {
-		const api = createInfiniteGrid({
-			columns: COLUMNS,
-			getRowId: (r) => r.id,
-			datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) },
-		});
-		expect(() => api.setCellValue('r1', 'name', 'x')).toThrowError(UnsupportedRowModelOperationError);
-		api.destroy();
-	});
 });
 
 describe('Unsupported row model operations — server grid', () => {
@@ -293,17 +283,6 @@ describe('Unsupported row model operations — server grid', () => {
 			pagination: { pageSize: 10 },
 		});
 		expect(() => api.updateRows((r) => r)).toThrowError(UnsupportedRowModelOperationError);
-		api.destroy();
-	});
-
-	it('setCellValue throws', () => {
-		const api = createServerPageGrid({
-			columns: COLUMNS,
-			getRowId: (r) => r.id,
-			datasource: { getPage: vi.fn().mockResolvedValue({ rows: [], totalRowCount: 0 }) },
-			pagination: { pageSize: 10 },
-		});
-		expect(() => api.setCellValue('r1', 'name', 'x')).toThrowError(UnsupportedRowModelOperationError);
 		api.destroy();
 	});
 });

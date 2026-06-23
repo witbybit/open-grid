@@ -300,7 +300,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	 * invalidations instead of one coalesced batch.
 	 */
 	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
-		this.assertClientStructuralRowModel('setCellValue');
 		this.engine.setCellValue(rowId, colField, value);
 	};
 

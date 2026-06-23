@@ -463,7 +463,11 @@ describe('GridChangeApplier', () => {
 				getRowModel: () =>
 					({
 						getRawRowById: (rowId: string) => (rowId === '1' ? ({ id: '1', name: rowValues.get('1:name') } as TestRow) : null),
-						setCellValue: () => true,
+						writeCellValueStructurally: (rowId: string) => ({
+							updatedNodes: [{ id: rowId } as any],
+							changedFieldsByRow: new Map([[rowId, new Set(['name'])]]),
+							visualChange: 'none' as const,
+						}),
 					}) as any,
 				getCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
 				getRawCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
@@ -553,7 +557,11 @@ describe('GridChangeApplier', () => {
 					({
 						getRawRowById: (rowId: string) =>
 							rowId === '1' || rowId === '2' ? ({ id: rowId, name: rowValues.get(`${rowId}:name`) } as TestRow) : null,
-						setCellValue: () => true,
+						writeCellValueStructurally: (rowId: string) => ({
+							updatedNodes: [{ id: rowId } as any],
+							changedFieldsByRow: new Map([[rowId, new Set(['name'])]]),
+							visualChange: 'none' as const,
+						}),
 					}) as any,
 				getCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
 				getRawCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
@@ -620,7 +628,11 @@ describe('GridChangeApplier', () => {
 				getRowModel: () =>
 					({
 						getRawRowById: (rowId: string) => (rowId === '1' ? ({ id: rowId, name: rowValues.get(`${rowId}:name`) } as TestRow) : null),
-						setCellValue: () => true,
+						writeCellValueStructurally: (rowId: string) => ({
+							updatedNodes: [{ id: rowId } as any],
+							changedFieldsByRow: new Map([[rowId, new Set(['name'])]]),
+							visualChange: 'none' as const,
+						}),
 					}) as any,
 				getCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),
 				getRawCellValue: (rowId, colField) => rowValues.get(`${rowId}:${colField}`),

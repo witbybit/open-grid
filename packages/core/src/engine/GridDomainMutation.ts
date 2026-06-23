@@ -1,7 +1,7 @@
 import { GridEventName } from '../api/GridEvents.js';
 import type { BatchCellValueUpdate, GridCellPointer, RowDataTransaction, RowNodeTransaction } from '../api/GridApi.js';
 import {
-	asCellValueWritableRowModel,
+	asAnyModelCellWritable,
 	asRowOrderCapableModel,
 	asTransactionalRowModel,
 	asClientStructuralRowModel,
@@ -359,7 +359,7 @@ function previewCellValueMutation<TRowData>(context: GridCommitContext<TRowData>
 	const getStoredCellValue = context.getStoredCellValue;
 	const getColumnDef = context.getColumnDef;
 
-	const hasCellWriteCapability = asCellValueWritableRowModel(rowModel) !== null || asClientStructuralRowModel(rowModel) !== null;
+	const hasCellWriteCapability = asAnyModelCellWritable(rowModel) !== null;
 	if (!hasCellWriteCapability || !getCellValue || !getRawCellValue || !getStoredCellValue || !getColumnDef) {
 		return {
 			rowId: mutation.rowId,
