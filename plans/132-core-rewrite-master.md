@@ -43,8 +43,14 @@ kernels alive past Phase 11. No feature flags, no `legacyMode`, no deprecated al
 | 8 | `132g-layout-viewport-render.md` | LayoutSnapshot, ViewportSnapshot, RenderPlan, SlotModel | **done** |
 | 9 | `132h-public-api.md` | GridApi command-backed facade | **done** |
 | 10 | `132i-react-adapter.md` | Grid.tsx, GridProvider, render-plan consumption, immutable rowModelType | **done** |
-| 11 | `132j-delete-old.md` | Delete GridStore/GridEngine and all legacy write paths, demos, tests | not started |
-| 12 | `132k-tests.md` | Architecture guards, command, capability, pipeline, render-plan, adapter tests | not started |
+| 11 | → `133-feature-parity-and-demolition.md` | Reframed: incrementally rebuild old features on the new core, migrate the demo, then delete old | program started |
+| 12 | → `133` (Demolition step) | Architecture-guard tests land with the demolition step of the 133 program | pending |
+
+> Phases 11–12 are executed via the **[133 program](./133-feature-parity-and-demolition.md)**: the
+> user's directive is to rebuild the old grid's features on the new stack incrementally, migrate the
+> demo onto the new API, and erase the old implementation as each slice is replaced (not a single
+> big-bang delete). The core rewrite (Phases 1–10) is complete; 133 carries it to feature parity +
+> demolition.
 
 ## Global invariants (mirror of ARCHITECTURE.md §3)
 
