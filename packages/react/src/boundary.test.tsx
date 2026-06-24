@@ -22,6 +22,7 @@ describe('React public boundary', () => {
 			'DateCellRenderer',
 			'Grid',
 			'GridEventName',
+			'GridNext',
 			'MultiSelectCellRenderer',
 			'TagsCellRenderer',
 			'createDropdownCellEditor',

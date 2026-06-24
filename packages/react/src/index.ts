@@ -1,5 +1,7 @@
 export { Grid } from './Grid.js';
 export type { GridProps, GridClientProps, GridInfiniteProps, GridServerPageProps, GridPaginationConfig } from './Grid.js';
+export { GridNext } from './GridNext.js';
+export type { GridNextProps, GridNextColumnDef } from './GridNext.js';
 export type { RowModelType, InfiniteDatasource, ServerDatasource, ServerPaginationOptions, ServerPageState } from './types.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';

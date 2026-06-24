@@ -168,6 +168,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			subtitle: 'Quality · Diff · Live · Conflicts',
 			icon: ShieldCheck,
 		},
+		{
+			id: 'new-engine',
+			label: 'New Engine',
+			subtitle: 'Plan 133 · GridKernel · DomRenderer',
+			icon: Cpu,
+		},
 	] as const;
 
 	return (
