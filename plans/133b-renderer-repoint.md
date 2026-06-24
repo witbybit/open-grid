@@ -31,8 +31,26 @@ A single read interface the renderer consumes (assembled from pieces the new eng
 6. **Mount** — adapt `gridHost`/`RenderEngine` to construct against `RendererEngineView` + bind the new ports.
 7. **Portals** — keep the React portal pool; feed it cell/row identity from the view.
 
+## Reality corrections (after reading the renderer)
+- **Not green-per-step.** The demo runs on the OLD engine via `gridHost → RenderEngine →
+  coordinators(GridEngine)`; the new engine has no mount path yet. You cannot run the demo split
+  across two engines, so the coordinator refactor is an **atomic vertical** — coordinators → mount
+  path → React → demo → delete old — and the build is RED mid-vertical. The user accepts alpha
+  breakage mid-flight; the gate is the FINAL demo on the new engine, not green intermediate steps.
+- **The geometry port is gated on engine gaps.** `computeGridLayoutPlan` reads chrome/display config
+  from `stateManager.getState()` (showGroupPanel/showFilterChipBar/showFloatingFilters/showStatusBar/
+  pagination/defaults/loading/styleRules) AND header-band topology from column groups. The new engine
+  must expose these on the view BEFORE the geometry coordinator can be ported. Column groups are a
+  feature still to build (Tranche F).
+
+## Revised order
+0. **Grow the view's read surface** the renderer needs (green, incremental): display/chrome config
+   (THIS slice), then styleRules, then column-group topology (needs the column-groups feature).
+1. Then the atomic vertical: geometry → rows/cells → invalidation → paint → mount → portals →
+   migrate demo → delete old.
+
 ## Gates
-- New engine exposes a coherent `RendererEngineView` (tested) before any coordinator is touched.
-- Each coordinator refactor keeps the demo rendering identically (the no-regression proof).
-- No old-engine internal (`engine.geometry.rowTops`, `getCompiledPlan`, `invalidation.consume`) remains
-  referenced by the renderer once its coordinator is migrated.
+- The view exposes everything the renderer reads (config, geometry, columns incl. groups, values,
+  selection, invalidation) BEFORE the coordinator vertical starts.
+- The FINAL gate is the demo rendering identically on the new engine. No old-engine internal remains
+  referenced by the renderer at the end.

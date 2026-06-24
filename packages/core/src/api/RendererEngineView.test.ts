@@ -66,6 +66,27 @@ describe('GridCore.getRendererView — clean renderer contract (ARCHITECTURE.md 
 		expect(view.isRowSelected(asRowId('b'))).toBe(true);
 	});
 
+	it('exposes display/chrome config the renderer layout needs', () => {
+		const c = new GridCore<Person>({
+			columns,
+			getRowId: (r) => r.id,
+			rowHeight: 36,
+			showStatusBar: true,
+			showFloatingFilters: true,
+			enableColumnReorder: true,
+		});
+		const cfg = c.getRendererView().getDisplayConfig();
+		expect(cfg).toMatchObject({
+			defaultRowHeight: 36,
+			defaultColWidth: 150,
+			showStatusBar: true,
+			showFloatingFilters: true,
+			enableColumnReorder: true,
+			showGroupPanel: false,
+			loading: false,
+		});
+	});
+
 	it('exposes a change signal: subscribe fires on commits, versions advance', () => {
 		const c = core();
 		const view = c.getRendererView();

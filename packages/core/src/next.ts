@@ -8,7 +8,7 @@
 export { createGrid } from './api/GridApiFacade.js';
 export type { GridApi } from './api/GridApiFacade.js';
 export type { GridCoreOptions } from './api/GridCore.js';
-export type { RenderColumn, RendererEngineView } from './domains/render/RendererEngineView.js';
+export type { RenderColumn, RenderDisplayConfig, RendererEngineView } from './domains/render/RendererEngineView.js';
 
 export { GridKernel } from './kernel/index.js';
 export type { GridCommand, GridCommandResult, GridEvent, GridEventListener } from './kernel/index.js';

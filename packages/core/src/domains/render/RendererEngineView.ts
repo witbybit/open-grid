@@ -9,6 +9,21 @@ import type { RowId } from '../rows/RowId.js';
 import type { VisibleWindow } from '../viewport/VisibleWindow.js';
 import type { ViewportSnapshot } from '../viewport/ViewportModel.js';
 
+/**
+ * Display/chrome configuration the renderer's layout reads (replaces the old renderer's reads of
+ * `stateManager.getState()` for these flags). Explicit accessors, not a state blob.
+ */
+export interface RenderDisplayConfig {
+	readonly defaultRowHeight: number;
+	readonly defaultColWidth: number;
+	readonly showGroupPanel: boolean;
+	readonly showFilterChipBar: boolean;
+	readonly showFloatingFilters: boolean;
+	readonly showStatusBar: boolean;
+	readonly enableColumnReorder: boolean;
+	readonly loading: boolean;
+}
+
 /** A visible column as the renderer paints it — header text, lane, geometry, live sort direction. */
 export interface RenderColumn {
 	readonly columnId: ColumnId;
@@ -33,6 +48,9 @@ export interface RendererEngineView<TRow> {
 	getVisualRowCount(): number;
 	getVisualRow(index: number): VisualRow<TRow> | null;
 	getVisualModel(): VisualModelView<TRow>;
+
+	// display/chrome config (header lanes, status bar, floating filters, defaults, loading)
+	getDisplayConfig(): RenderDisplayConfig;
 
 	// geometry (row tops/heights, column lefts/widths, pinned lanes, totals)
 	getGeometry(): LayoutSnapshot;

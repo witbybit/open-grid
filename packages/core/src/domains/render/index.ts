@@ -4,4 +4,4 @@ export { buildRenderPlan, EMPTY_RENDER_PLAN } from './RenderPlan.js';
 export type { RowSlot, SlotSyncResult } from './SlotModel.js';
 export { RowSlotPool } from './SlotModel.js';
 export type { RendererContract } from './RendererContract.js';
-export type { RenderColumn, RendererEngineView } from './RendererEngineView.js';
+export type { RenderColumn, RenderDisplayConfig, RendererEngineView } from './RendererEngineView.js';

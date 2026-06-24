@@ -18,7 +18,7 @@ import type { VisualModelView } from '../domains/pipeline/VisualModel.js';
 import type { VisualRow } from '../domains/pipeline/VisualRow.js';
 import { buildRenderPlan } from '../domains/render/RenderPlan.js';
 import type { RenderPlan } from '../domains/render/RenderPlan.js';
-import type { RenderColumn, RendererEngineView } from '../domains/render/RendererEngineView.js';
+import type { RenderColumn, RenderDisplayConfig, RendererEngineView } from '../domains/render/RendererEngineView.js';
 import { ClientRowModel } from '../domains/rows/client/ClientRowModel.js';
 import { InfiniteRowModel } from '../domains/rows/infinite/InfiniteRowModel.js';
 import { ServerRowModel } from '../domains/rows/server/ServerRowModel.js';
@@ -40,6 +40,13 @@ export interface GridCoreOptions<TRow> {
 	readonly getRowId?: GetRowId<TRow>;
 	readonly rowHeight?: number;
 	readonly overscanPx?: number;
+	readonly defaultColWidth?: number;
+	readonly showGroupPanel?: boolean;
+	readonly showFilterChipBar?: boolean;
+	readonly showFloatingFilters?: boolean;
+	readonly showStatusBar?: boolean;
+	readonly enableColumnReorder?: boolean;
+	readonly loading?: boolean;
 }
 
 /**
@@ -62,6 +69,7 @@ export class GridCore<TRow> {
 	private readonly disposers: Array<() => void> = [];
 	private columnLayoutDirty = true;
 	private cachedLayout: LayoutSnapshot | null = null;
+	private readonly displayConfig: RenderDisplayConfig;
 
 	constructor(options: GridCoreOptions<TRow>) {
 		const type = options.rowModelType ?? 'client';
@@ -80,6 +88,16 @@ export class GridCore<TRow> {
 					});
 		this.rowHeights = new RowHeightModel(0, options.rowHeight ?? 40);
 		this.viewport = new ViewportModel(options.overscanPx ?? 0);
+		this.displayConfig = {
+			defaultRowHeight: options.rowHeight ?? 40,
+			defaultColWidth: options.defaultColWidth ?? 150,
+			showGroupPanel: options.showGroupPanel ?? false,
+			showFilterChipBar: options.showFilterChipBar ?? false,
+			showFloatingFilters: options.showFloatingFilters ?? false,
+			showStatusBar: options.showStatusBar ?? false,
+			enableColumnReorder: options.enableColumnReorder ?? false,
+			loading: options.loading ?? false,
+		};
 
 		const port: CellDataPort<TRow> = {
 			getRow: (id) => this.rowModel.query.getRowById(id),
@@ -198,6 +216,7 @@ export class GridCore<TRow> {
 			getVisualRowCount: () => this.getVisualRowCount(),
 			getVisualRow: (index) => this.getVisualRow(index),
 			getVisualModel: () => this.getVisualModel(),
+			getDisplayConfig: () => this.displayConfig,
 			getGeometry: () => this.getLayoutSnapshot(),
 			getColumns: () => this.getColumnHeaders(),
 			getViewport: () => this.getViewportSnapshot(),
