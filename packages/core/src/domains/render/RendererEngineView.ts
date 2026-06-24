@@ -71,4 +71,10 @@ export interface RendererEngineView<TRow> {
 	// change signal + invalidation
 	subscribe(listener: GridEventListener): () => void;
 	getVersion(domain: GridDomainId): number;
+
+	// Viewport write-back — the renderer is the sole producer of scroll/size state.
+	// These bypass the kernel (scroll is not undoable business state) and update the
+	// viewport model directly so computeVisibleWindow returns a fresh window next paint.
+	setScroll(scrollTop: number, scrollLeft: number): void;
+	setSize(width: number, height: number): void;
 }

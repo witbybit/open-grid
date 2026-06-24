@@ -1004,6 +1004,8 @@ describe('Architecture guardrails', () => {
 			// Canonical scheduling sites (Plan 089 target)
 			resolve(srcDir, 'renderer', 'frameCoordinator.ts'),
 			resolve(srcDir, 'renderer', 'gridScheduler.ts'),
+			// New renderer (Plan 133): owns its own RAF schedule loop, replacing gridScheduler
+			resolve(srcDir, 'domains', 'render', 'DomGridRenderer.ts'),
 			// Known exceptions — to be eliminated in Stage B plans
 			resolve(srcDir, 'contextMenu.ts'), // focus + close delay
 			resolve(srcDir, 'export', 'csvExport.ts'), // URL.revokeObjectURL cleanup
@@ -1048,7 +1050,7 @@ describe('Architecture guardrails', () => {
 			.filter((file) => readFileSync(file, 'utf-8').includes('requestAnimationFrame'))
 			.map((file) => path.relative(srcDir, file).replaceAll('\\', '/'))
 			.sort();
-		expect(rafUsers).toEqual(['contextMenu.ts', 'features/RowDragController.ts', 'renderer/gridScheduler.ts']);
+		expect(rafUsers).toEqual(['contextMenu.ts', 'domains/render/DomGridRenderer.ts', 'features/RowDragController.ts', 'renderer/gridScheduler.ts']);
 	});
 
 	it('public index.ts does not re-export internal renderer or engine types (Plan 089)', () => {

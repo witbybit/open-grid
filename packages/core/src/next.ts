@@ -35,4 +35,6 @@ export type { CellRenderPlan, RenderPlan, RowRenderPlan } from './domains/render
 export { StableSlotAssigner } from './domains/render/StableSlotAssigner.js';
 export type { RowBinding } from './domains/render/RowBinder.js';
 export { RowBinder } from './domains/render/RowBinder.js';
+export type { CellContentMount, CellContentUnmount, DomGridRendererCallbacks } from './domains/render/DomGridRenderer.js';
+export { DomGridRenderer } from './domains/render/DomGridRenderer.js';
 export type { SelectionState } from './domains/selection/SelectionState.js';

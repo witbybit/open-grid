@@ -15,3 +15,5 @@ export {
 export { StableSlotAssigner } from './StableSlotAssigner.js';
 export type { RowBinding } from './RowBinder.js';
 export { RowBinder } from './RowBinder.js';
+export type { CellContentMount, CellContentUnmount, DomGridRendererCallbacks } from './DomGridRenderer.js';
+export { DomGridRenderer } from './DomGridRenderer.js';

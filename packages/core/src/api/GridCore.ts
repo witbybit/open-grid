@@ -225,6 +225,8 @@ export class GridCore<TRow> {
 			isRowSelected: (rowId) => this.isRowSelected(rowId),
 			subscribe: (listener) => this.kernel.subscribe(listener),
 			getVersion: (domain) => this.kernel.getVersion(domain),
+			setScroll: (scrollTop, scrollLeft) => this.viewport.setScroll(scrollTop, scrollLeft),
+			setSize: (width, height) => this.viewport.setSize(width, height),
 		};
 	}
 
