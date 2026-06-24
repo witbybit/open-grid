@@ -5,6 +5,9 @@ import { FilterStage } from './FilterStage.js';
 import { buildGroupedVisualRows } from './GroupStage.js';
 import { EMPTY_GROUP_BY, GroupExpansionState, groupColumnIds } from './GroupModel.js';
 import type { GroupByModel } from './GroupModel.js';
+import { buildTreeVisualRows } from './TreeStage.js';
+import type { TreeDataOptions } from './TreeStage.js';
+import { DetailExpansionState, insertDetailRows } from './DetailStage.js';
 import type { FilterModel, SortModel } from './PipelineModels.js';
 import { EMPTY_FILTER_MODEL, EMPTY_SORT_MODEL, filterColumnIds, sortColumnIds } from './PipelineModels.js';
 import type { PipelineContext } from './PipelineStage.js';
@@ -30,6 +33,9 @@ export class RowPipeline<TRow> {
 	private filterModel: FilterModel = EMPTY_FILTER_MODEL;
 	private groupBy: GroupByModel = EMPTY_GROUP_BY;
 	private readonly expansion = new GroupExpansionState();
+	private treeOptions: TreeDataOptions<TRow> | null = null;
+	private readonly treeExpansion = new GroupExpansionState();
+	private readonly detailExpansion = new DetailExpansionState();
 	private visualModel: VisualModel<TRow> = new VisualModel<TRow>([]);
 
 	constructor(source: RowSource<TRow>) {
@@ -78,13 +84,42 @@ export class RowPipeline<TRow> {
 		return this.recompute();
 	}
 
-	/** Rebuild the visual model: filter → sort → (group ? grouped flatten : data flatten). */
+	// ── Tree data ──
+	setTreeData(options: TreeDataOptions<TRow> | null): VisualModel<TRow> {
+		this.treeOptions = options;
+		return this.recompute();
+	}
+
+	toggleTreeNode(rowId: string): VisualModel<TRow> {
+		this.treeExpansion.toggle(rowId);
+		return this.recompute();
+	}
+
+	// ── Master/detail ──
+	toggleDetail(rowId: string): VisualModel<TRow> {
+		this.detailExpansion.toggle(rowId);
+		return this.recompute();
+	}
+
+	setDetailOpen(rowId: string, open: boolean): VisualModel<TRow> {
+		this.detailExpansion.setOpen(rowId, open);
+		return this.recompute();
+	}
+
+	/**
+	 * Rebuild the visual model: filter → sort → shape → detail.
+	 * Shape is tree (if tree data is configured), else grouped (if group-by is active), else flat
+	 * data rows. Master/detail rows are inserted as a post-pass on top of any shape.
+	 */
 	recompute(): VisualModel<TRow> {
 		const ctx = this.context();
 		const filtered = this.filterStage.build(this.source(), ctx);
 		const sorted = this.sortStage.build(filtered, ctx);
-		const visual = buildGroupedVisualRows(sorted, this.groupBy, this.expansion);
-		this.visualModel = new VisualModel<TRow>(visual);
+		const shaped = this.treeOptions
+			? buildTreeVisualRows(sorted, this.treeOptions, this.treeExpansion)
+			: buildGroupedVisualRows(sorted, this.groupBy, this.expansion);
+		const withDetail = insertDetailRows(shaped, this.detailExpansion);
+		this.visualModel = new VisualModel<TRow>(withDetail);
 		return this.visualModel;
 	}
 

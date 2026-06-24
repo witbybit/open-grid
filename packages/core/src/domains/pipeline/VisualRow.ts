@@ -62,6 +62,14 @@ export function dataVisualRow<TRow>(node: RowNode<TRow>): VisualRow<TRow> {
 	};
 }
 
+export function treeVisualRow<TRow>(node: RowNode<TRow>, depth: number): VisualRow<TRow> {
+	return { kind: 'tree', visualRowId: asVisualRowId(`v:tree:${node.id}`), rowId: node.id, depth, node };
+}
+
+export function detailVisualRow<TRow>(parentRowId: RowId): VisualRow<TRow> {
+	return { kind: 'detail', visualRowId: asVisualRowId(`v:detail:${parentRowId}`), parentRowId };
+}
+
 /** Narrowing helper: the `RowId` of a visual row that maps to a data row, else null. */
 export function rowIdOfVisualRow<TRow>(row: VisualRow<TRow>): RowId | null {
 	return row.kind === 'data' || row.kind === 'tree' ? row.rowId : null;

@@ -3,11 +3,14 @@ export type { RowWriteImpact, RowWriteImpactContext } from './RowWriteImpact.js'
 export { classifyChangedFields, classifyWriteImpact, impactRequiresPipelineRebuild } from './RowWriteImpact.js';
 
 export type { VisualRow, GroupVisualRowInit } from './VisualRow.js';
-export { dataVisualRow, groupVisualRow, isDataVisualRow, rowIdOfVisualRow } from './VisualRow.js';
+export { dataVisualRow, detailVisualRow, groupVisualRow, isDataVisualRow, rowIdOfVisualRow, treeVisualRow } from './VisualRow.js';
 
 export type { GroupByColumn, GroupByModel } from './GroupModel.js';
 export { EMPTY_GROUP_BY, GroupExpansionState, groupColumnIds } from './GroupModel.js';
 export { buildGroupedVisualRows } from './GroupStage.js';
+export { buildTreeVisualRows } from './TreeStage.js';
+export type { TreeDataOptions } from './TreeStage.js';
+export { DetailExpansionState, insertDetailRows } from './DetailStage.js';
 export { EMPTY_VISUAL_MODEL, VisualModel } from './VisualModel.js';
 
 export type { ColumnFilter, FilterModel, SortDirection, SortKey, SortModel } from './PipelineModels.js';
