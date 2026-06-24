@@ -7,7 +7,6 @@ import type { ColumnDef } from '../domains/columns/ColumnDef.js';
 import type { ColumnId } from '../domains/columns/ColumnId.js';
 import { ColumnModel } from '../domains/columns/ColumnModel.js';
 import { computeColumnLayout } from '../domains/columns/ColumnLayout.js';
-import type { ColumnLane } from '../domains/columns/ColumnLayout.js';
 import { registerColumnCommands } from '../domains/columns/ColumnCommands.js';
 import { EditModel } from '../domains/editing/EditModel.js';
 import { registerEditingCommands } from '../domains/editing/EditingCommands.js';
@@ -16,8 +15,10 @@ import { RowHeightModel } from '../domains/layout/RowHeightModel.js';
 import { RowPipeline } from '../domains/pipeline/RowPipeline.js';
 import { registerPipelineCommands } from '../domains/pipeline/PipelineCommands.js';
 import type { VisualModelView } from '../domains/pipeline/VisualModel.js';
+import type { VisualRow } from '../domains/pipeline/VisualRow.js';
 import { buildRenderPlan } from '../domains/render/RenderPlan.js';
 import type { RenderPlan } from '../domains/render/RenderPlan.js';
+import type { RenderColumn, RendererEngineView } from '../domains/render/RendererEngineView.js';
 import { ClientRowModel } from '../domains/rows/client/ClientRowModel.js';
 import { InfiniteRowModel } from '../domains/rows/infinite/InfiniteRowModel.js';
 import { ServerRowModel } from '../domains/rows/server/ServerRowModel.js';
@@ -30,17 +31,8 @@ import { SelectionModel } from '../domains/selection/SelectionModel.js';
 import { registerSelectionCommands } from '../domains/selection/SelectionCommands.js';
 import { createCellAddress } from '../domains/cells/CellAddress.js';
 import { ViewportModel } from '../domains/viewport/ViewportModel.js';
-
-export interface GridColumnHeader {
-	readonly columnId: ColumnId;
-	readonly field: string;
-	readonly header: string;
-	readonly lane: ColumnLane;
-	readonly left: number;
-	readonly width: number;
-	readonly sortable: boolean;
-	readonly sortDirection: 'asc' | 'desc' | null;
-}
+import type { ViewportSnapshot } from '../domains/viewport/ViewportModel.js';
+import type { VisibleWindow } from '../domains/viewport/VisibleWindow.js';
 
 export interface GridCoreOptions<TRow> {
 	readonly rowModelType?: RowModelType;
@@ -163,7 +155,7 @@ export class GridCore<TRow> {
 	}
 
 	/** Header descriptors for the visible columns, enriched with layout + current sort direction. */
-	getColumnHeaders(): GridColumnHeader[] {
+	getColumnHeaders(): RenderColumn[] {
 		const layout = this.getLayoutSnapshot();
 		const sort = this.pipeline.getSortModel();
 		return layout.columns.entries.map((entry) => {
@@ -179,6 +171,42 @@ export class GridCore<TRow> {
 				sortDirection: direction,
 			};
 		});
+	}
+
+	getVisualRow(index: number): VisualRow<TRow> | null {
+		return this.pipeline.getVisualModel().getByVisualIndex(index);
+	}
+
+	getViewportSnapshot(): ViewportSnapshot {
+		return this.viewport.getSnapshot();
+	}
+
+	getVisibleWindow(): VisibleWindow {
+		return this.viewport.getVisibleWindow(this.rowHeights);
+	}
+
+	isRowSelected(rowId: RowId): boolean {
+		return this.selectionModel.getState().selectedRowIds.has(rowId);
+	}
+
+	/**
+	 * The clean read surface the DOM renderer consumes (ARCHITECTURE.md §3 R12). Assembles the
+	 * engine's snapshots into one view so the renderer reads nothing of the engine's internals.
+	 */
+	getRendererView(): RendererEngineView<TRow> {
+		return {
+			getVisualRowCount: () => this.getVisualRowCount(),
+			getVisualRow: (index) => this.getVisualRow(index),
+			getVisualModel: () => this.getVisualModel(),
+			getGeometry: () => this.getLayoutSnapshot(),
+			getColumns: () => this.getColumnHeaders(),
+			getViewport: () => this.getViewportSnapshot(),
+			getVisibleWindow: () => this.getVisibleWindow(),
+			getCellDisplayValue: (rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
+			isRowSelected: (rowId) => this.isRowSelected(rowId),
+			subscribe: (listener) => this.kernel.subscribe(listener),
+			getVersion: (domain) => this.kernel.getVersion(domain),
+		};
 	}
 
 	destroy(): void {
