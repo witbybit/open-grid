@@ -34,5 +34,12 @@ Deferred to later slices: cell editors UI, keyboard nav/focus, context menu, the
 `cellRenderers` prop (`Record<columnId, CellRenderer>`). 3 new jsdom tests. Sort still routes
 through `api.pipeline.setSortModel` — the adapter stays a plan-painter (R12).
 
+**Follow-up landed (slot virtualization + kind dispatch):** the initial KernelGrid keyed rows by
+`visualRowId` (React remount churn on scroll) and rendered every row as data. Fixed: KernelGrid now
+drives a `RowSlotPool` (keys = slotId → rows rebind, not remount; constant element count, R13) and
+`renderRowContent` switches on `VisualRow.kind` (data/tree render cells; group/detail/loading are
+full-width seams for later tranches, R5–R6). `RowSlotPool` exported via `@open-grid/core/next`.
+Tests prove same-DOM-node reuse across scroll + kind tagging. core 1457, react 93.
+
 Next slices of Tranche A: cell editor UI wired to the editing transaction; keyboard nav + focus;
 cell/row class & theming hooks; context menu.
