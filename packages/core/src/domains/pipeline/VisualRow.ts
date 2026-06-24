@@ -11,11 +11,46 @@ import type { RowNode } from '../rows/RowNode.js';
  */
 export type VisualRow<TRow = unknown> =
 	| { readonly kind: 'data'; readonly visualRowId: VisualRowId; readonly rowId: RowId; readonly sourceIndex: number; readonly node: RowNode<TRow> }
-	| { readonly kind: 'group'; readonly visualRowId: VisualRowId; readonly groupKey: string; readonly depth: number }
+	| {
+			readonly kind: 'group';
+			readonly visualRowId: VisualRowId;
+			/** Full group path, e.g. `Europe/France`. Identity for expansion + the visual row id. */
+			readonly groupKey: string;
+			readonly depth: number;
+			/** The column field this level groups by. */
+			readonly field: string;
+			/** The grouped value at this level. */
+			readonly value: unknown;
+			/** Number of leaf data rows under this group (all descendants). */
+			readonly count: number;
+			readonly expanded: boolean;
+	  }
 	| { readonly kind: 'tree'; readonly visualRowId: VisualRowId; readonly rowId: RowId; readonly depth: number; readonly node: RowNode<TRow> }
 	| { readonly kind: 'detail'; readonly visualRowId: VisualRowId; readonly parentRowId: RowId }
 	| { readonly kind: 'loading'; readonly visualRowId: VisualRowId; readonly index: number }
 	| { readonly kind: 'placeholder'; readonly visualRowId: VisualRowId; readonly index: number };
+
+export interface GroupVisualRowInit {
+	readonly groupKey: string;
+	readonly depth: number;
+	readonly field: string;
+	readonly value: unknown;
+	readonly count: number;
+	readonly expanded: boolean;
+}
+
+export function groupVisualRow<TRow>(init: GroupVisualRowInit): VisualRow<TRow> {
+	return {
+		kind: 'group',
+		visualRowId: asVisualRowId(`v:group:${init.groupKey}`),
+		groupKey: init.groupKey,
+		depth: init.depth,
+		field: init.field,
+		value: init.value,
+		count: init.count,
+		expanded: init.expanded,
+	};
+}
 
 export function dataVisualRow<TRow>(node: RowNode<TRow>): VisualRow<TRow> {
 	return {

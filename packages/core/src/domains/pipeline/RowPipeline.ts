@@ -2,7 +2,9 @@ import type { RowChangeSet } from '../rows/RowChangeSet.js';
 import { isFieldOnlyChange } from '../rows/RowChangeSet.js';
 import type { RowNode } from '../rows/RowNode.js';
 import { FilterStage } from './FilterStage.js';
-import { FlattenStage } from './FlattenStage.js';
+import { buildGroupedVisualRows } from './GroupStage.js';
+import { EMPTY_GROUP_BY, GroupExpansionState, groupColumnIds } from './GroupModel.js';
+import type { GroupByModel } from './GroupModel.js';
 import type { FilterModel, SortModel } from './PipelineModels.js';
 import { EMPTY_FILTER_MODEL, EMPTY_SORT_MODEL, filterColumnIds, sortColumnIds } from './PipelineModels.js';
 import type { PipelineContext } from './PipelineStage.js';
@@ -23,10 +25,11 @@ export class RowPipeline<TRow> {
 	private readonly source: RowSource<TRow>;
 	private readonly filterStage = new FilterStage<TRow>();
 	private readonly sortStage = new SortStage<TRow>();
-	private readonly flattenStage = new FlattenStage<TRow>();
 
 	private sortModel: SortModel = EMPTY_SORT_MODEL;
 	private filterModel: FilterModel = EMPTY_FILTER_MODEL;
+	private groupBy: GroupByModel = EMPTY_GROUP_BY;
+	private readonly expansion = new GroupExpansionState();
 	private visualModel: VisualModel<TRow> = new VisualModel<TRow>([]);
 
 	constructor(source: RowSource<TRow>) {
@@ -55,12 +58,32 @@ export class RowPipeline<TRow> {
 		return this.recompute();
 	}
 
-	/** Rebuild the visual model from the current row source and sort/filter models. */
+	getGroupBy(): GroupByModel {
+		return this.groupBy;
+	}
+
+	setGroupBy(model: GroupByModel): VisualModel<TRow> {
+		this.groupBy = model;
+		return this.recompute();
+	}
+
+	/** Toggle a group's expansion and rebuild. Returns the new visual model. */
+	toggleGroup(groupKey: string): VisualModel<TRow> {
+		this.expansion.toggle(groupKey);
+		return this.recompute();
+	}
+
+	setGroupExpanded(groupKey: string, expanded: boolean): VisualModel<TRow> {
+		this.expansion.setExpanded(groupKey, expanded);
+		return this.recompute();
+	}
+
+	/** Rebuild the visual model: filter → sort → (group ? grouped flatten : data flatten). */
 	recompute(): VisualModel<TRow> {
 		const ctx = this.context();
 		const filtered = this.filterStage.build(this.source(), ctx);
 		const sorted = this.sortStage.build(filtered, ctx);
-		const visual = this.flattenStage.build(sorted, ctx);
+		const visual = buildGroupedVisualRows(sorted, this.groupBy, this.expansion);
 		this.visualModel = new VisualModel<TRow>(visual);
 		return this.visualModel;
 	}
@@ -79,6 +102,7 @@ export class RowPipeline<TRow> {
 		return {
 			filterColumns: filterColumnIds(this.filterModel),
 			sortColumns: sortColumnIds(this.sortModel),
+			groupColumns: groupColumnIds(this.groupBy),
 		};
 	}
 }
