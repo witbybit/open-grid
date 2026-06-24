@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { GridApi } from './types.js';
+
+// FormulaBar uses old-style GridApi — kept as internal helper, not exported from index.ts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type GridApi<TRowData = unknown> = any;
 
 export interface FormulaBarProps<TRowData = unknown> {
 	api: GridApi<TRowData>;
