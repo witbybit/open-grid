@@ -42,7 +42,7 @@ kernels alive past Phase 11. No feature flags, no `legacyMode`, no deprecated al
 | 7 | `132f-selection-editing.md` | SelectionModel, EditSession, edit commands | **done** |
 | 8 | `132g-layout-viewport-render.md` | LayoutSnapshot, ViewportSnapshot, RenderPlan, SlotModel | **done** |
 | 9 | `132h-public-api.md` | GridApi command-backed facade | **done** |
-| 10 | `132i-react-adapter.md` | Grid.tsx, GridProvider, render-plan consumption, immutable rowModelType | not started |
+| 10 | `132i-react-adapter.md` | Grid.tsx, GridProvider, render-plan consumption, immutable rowModelType | **done** |
 | 11 | `132j-delete-old.md` | Delete GridStore/GridEngine and all legacy write paths, demos, tests | not started |
 | 12 | `132k-tests.md` | Architecture guards, command, capability, pipeline, render-plan, adapter tests | not started |
 
