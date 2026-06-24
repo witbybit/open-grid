@@ -1,6 +1,7 @@
-import { useEffect, useRef, createPortal, useMemo, type CSSProperties } from 'react';
+import { useEffect, useRef, useMemo, type CSSProperties } from 'react';
 import { createGrid, DomGridRenderer } from '@open-grid/core/next';
 import type { ColumnDef } from '@open-grid/core/next';
+import type { GridApi } from '@open-grid/core/next';
 
 export interface GridNextColumnDef<TRow> extends Omit<ColumnDef<TRow>, 'id'> {
 	id?: string;
@@ -24,6 +25,9 @@ export interface GridNextProps<TRow = unknown> {
  * React adapter for the new command-driven engine (ARCHITECTURE.md §1). Mounts
  * {@link DomGridRenderer} into a container div; the renderer owns the DOM, React is adapter-only.
  * Column definitions are fixed at mount time — React props drive row data + display state only.
+ *
+ * API + renderer are co-created in a single useEffect so React Strict Mode's cleanup/remount
+ * cycle destroys and recreates them as a unit, preventing "dispatch on destroyed kernel" errors.
  */
 export function GridNext<TRow = unknown>({
 	columns,
@@ -39,52 +43,63 @@ export function GridNext<TRow = unknown>({
 	className,
 }: GridNextProps<TRow>) {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const apiRef = useRef<GridApi<TRow> | null>(null);
 
-	// Normalize column defs: supply id from field if omitted.
+	// Normalize column defs once — columns are fixed at mount time.
+	// We memoize against an empty dep array so the same array instance is used on remount.
 	const normalizedCols = useMemo<ColumnDef<TRow>[]>(
 		() =>
 			columns.map((col) => ({
 				...col,
 				id: col.id ?? col.field ?? 'col',
 			})),
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: columns fixed at mount
+		// intentional: columns are fixed at mount
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[],
 	);
 
-	// Create the API once — the kernel + all domains live here.
-	const api = useMemo(
-		() =>
-			createGrid<TRow>({
-				columns: normalizedCols,
-				getRowId: getRowId as ((row: TRow) => string) | undefined,
-				rowHeight: rowHeight ?? 40,
-				defaultColWidth,
-				showStatusBar,
-				showFloatingFilters,
-				showGroupPanel: showGroupPanel ?? false,
-				loading,
-			}),
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: stable once
-		[],
-	);
+	// Keep rows current in a ref so the mount effect can prime the grid
+	// and the rows-sync effect can dispatch without caring about API lifecycle.
+	const rowsRef = useRef(rows);
+	rowsRef.current = rows;
 
-	// Destroy the grid when the component unmounts.
-	useEffect(() => () => api.destroy(), [api]);
-
-	// Mount the DOM renderer once the container ref is ready.
+	// Co-create the API + renderer so both are destroyed together on cleanup.
+	// This pairs creation/destruction in one effect, which is React Strict Mode safe.
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
-		const view = api.getRendererView();
-		const renderer = new DomGridRenderer<TRow>(view);
+
+		const api = createGrid<TRow>({
+			columns: normalizedCols,
+			getRowId: getRowId as ((row: TRow) => string) | undefined,
+			rowHeight: rowHeight ?? 40,
+			defaultColWidth,
+			showStatusBar,
+			showFloatingFilters,
+			showGroupPanel: showGroupPanel ?? false,
+			loading,
+		});
+		apiRef.current = api;
+
+		const renderer = new DomGridRenderer<TRow>(api.getRendererView());
 		renderer.mount(container);
-		return () => renderer.unmount();
-	}, [api]);
+
+		// Prime with current rows immediately so the first paint has data.
+		api.rows.replace(rowsRef.current as readonly TRow[]);
+
+		return () => {
+			renderer.unmount();
+			api.destroy();
+			if (apiRef.current === api) apiRef.current = null;
+		};
+		// intentional: mount once; columns/options are fixed at construction time
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	// Sync row data: replace rows whenever the prop array changes identity.
 	useEffect(() => {
-		api.rows.replace(rows as readonly TRow[]);
-	}, [api, rows]);
+		apiRef.current?.rows.replace(rows as readonly TRow[]);
+	}, [rows]);
 
 	return (
 		<div
