@@ -45,7 +45,7 @@ describe('GroupStage / RowPipeline grouping (ARCHITECTURE.md §3 R5–R6)', () =
 	it('emits group rows interleaved with their data rows (single level)', () => {
 		const p = makePipeline();
 		p.setGroupBy(byTeam);
-		expect(shape(p.getVisualModel().rows)).toEqual([
+		expect(shape(p.getVisualModel().toArray())).toEqual([
 			'G0:Eng(3)',
 			'D:a',
 			'D:b',
@@ -58,7 +58,7 @@ describe('GroupStage / RowPipeline grouping (ARCHITECTURE.md §3 R5–R6)', () =
 	it('nests multi-level groups with descendant leaf counts', () => {
 		const p = makePipeline();
 		p.setGroupBy(byTeamCity);
-		expect(shape(p.getVisualModel().rows)).toEqual([
+		expect(shape(p.getVisualModel().toArray())).toEqual([
 			'G0:Eng(3)',
 			'G1:Oslo(2)',
 			'D:a',
@@ -75,7 +75,7 @@ describe('GroupStage / RowPipeline grouping (ARCHITECTURE.md §3 R5–R6)', () =
 		const p = makePipeline();
 		p.setGroupBy(byTeam);
 		p.toggleGroup('Eng'); // collapse
-		const rows = p.getVisualModel().rows;
+		const rows = p.getVisualModel().toArray();
 		expect(shape(rows)).toEqual(['G0:Eng(3)', 'G0:Sales(1)', 'D:d']);
 		expect(rows[0]!.kind === 'group' && rows[0]!.expanded).toBe(false);
 	});
@@ -83,7 +83,7 @@ describe('GroupStage / RowPipeline grouping (ARCHITECTURE.md §3 R5–R6)', () =
 	it('a group visual row id is distinct from any data row id (R5)', () => {
 		const p = makePipeline();
 		p.setGroupBy(byTeam);
-		const group = p.getVisualModel().rows.find((r) => r.kind === 'group')!;
+		const group = p.getVisualModel().toArray().find((r) => r.kind === 'group')!;
 		expect(String(group.visualRowId)).toBe('v:group:Eng');
 	});
 
@@ -91,6 +91,6 @@ describe('GroupStage / RowPipeline grouping (ARCHITECTURE.md §3 R5–R6)', () =
 		const p = makePipeline();
 		p.setGroupBy(byTeam);
 		p.setGroupBy([]);
-		expect(shape(p.getVisualModel().rows)).toEqual(['D:a', 'D:b', 'D:c', 'D:d']);
+		expect(shape(p.getVisualModel().toArray())).toEqual(['D:a', 'D:b', 'D:c', 'D:d']);
 	});
 });

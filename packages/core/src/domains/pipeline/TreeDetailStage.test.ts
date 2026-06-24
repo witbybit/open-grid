@@ -39,22 +39,22 @@ describe('TreeStage / RowPipeline tree data (ARCHITECTURE.md §3 R5–R6)', () =
 	it('flattens a hierarchy into ordered tree rows with depth', () => {
 		const p = treePipeline();
 		p.setTreeData({ getParentId: (r) => r.parentId });
-		expect(shape(p.getVisualModel().rows)).toEqual(['T0:a', 'T1:a1', 'T2:a1a', 'T1:a2', 'T0:b']);
+		expect(shape(p.getVisualModel().toArray())).toEqual(['T0:a', 'T1:a1', 'T2:a1a', 'T1:a2', 'T0:b']);
 	});
 
 	it('collapsing a node hides its descendants but keeps the node', () => {
 		const p = treePipeline();
 		p.setTreeData({ getParentId: (r) => r.parentId });
 		p.toggleTreeNode('a1'); // collapse a1 → hides a1a
-		expect(shape(p.getVisualModel().rows)).toEqual(['T0:a', 'T1:a1', 'T1:a2', 'T0:b']);
+		expect(shape(p.getVisualModel().toArray())).toEqual(['T0:a', 'T1:a1', 'T1:a2', 'T0:b']);
 		p.toggleTreeNode('a'); // collapse a → hides a1, a2 (and their subtree)
-		expect(shape(p.getVisualModel().rows)).toEqual(['T0:a', 'T0:b']);
+		expect(shape(p.getVisualModel().toArray())).toEqual(['T0:a', 'T0:b']);
 	});
 
 	it('tree rows are real data rows (carry rowId + node)', () => {
 		const p = treePipeline();
 		p.setTreeData({ getParentId: (r) => r.parentId });
-		const first = p.getVisualModel().rows[0]!;
+		const first = p.getVisualModel().toArray()[0]!;
 		expect(first.kind).toBe('tree');
 		expect(first.kind === 'tree' && first.node.data.name).toBe('A');
 		expect(String(first.visualRowId)).toBe('v:tree:a');
@@ -83,7 +83,7 @@ describe('DetailStage / RowPipeline master-detail (ARCHITECTURE.md §3 R5–R6)'
 	it('inserts a detail row directly after an opened master row', () => {
 		const p = flatPipeline();
 		p.toggleDetail('r2');
-		const rows = p.getVisualModel().rows;
+		const rows = p.getVisualModel().toArray();
 		expect(rows.map((r) => (r.kind === 'data' ? `D:${String(r.rowId)}` : `X:${String((r as { parentRowId: string }).parentRowId)}`))).toEqual([
 			'D:r1',
 			'D:r2',
@@ -95,7 +95,7 @@ describe('DetailStage / RowPipeline master-detail (ARCHITECTURE.md §3 R5–R6)'
 	it('a detail visual row carries the master id and a distinct visual id (R5)', () => {
 		const p = flatPipeline();
 		p.toggleDetail('r1');
-		const detail = p.getVisualModel().rows.find((r) => r.kind === 'detail')!;
+		const detail = p.getVisualModel().toArray().find((r) => r.kind === 'detail')!;
 		expect(detail.kind === 'detail' && String(detail.parentRowId)).toBe('r1');
 		expect(String(detail.visualRowId)).toBe('v:detail:r1');
 	});
@@ -104,6 +104,6 @@ describe('DetailStage / RowPipeline master-detail (ARCHITECTURE.md §3 R5–R6)'
 		const p = flatPipeline();
 		p.toggleDetail('r1');
 		p.toggleDetail('r1');
-		expect(p.getVisualModel().rows.every((r) => r.kind !== 'detail')).toBe(true);
+		expect(p.getVisualModel().toArray().every((r) => r.kind !== 'detail')).toBe(true);
 	});
 });

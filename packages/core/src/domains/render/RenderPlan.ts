@@ -2,7 +2,7 @@ import type { ColumnId } from '../columns/ColumnId.js';
 import type { ColumnLane } from '../columns/ColumnLayout.js';
 import type { LayoutSnapshot } from '../layout/LayoutSnapshot.js';
 import type { RowId, VisualRowId } from '../rows/RowId.js';
-import type { VisualModel } from '../pipeline/VisualModel.js';
+import type { VisualModelView } from '../pipeline/VisualModel.js';
 import { isDataVisualRow } from '../pipeline/VisualRow.js';
 import type { VisualRow } from '../pipeline/VisualRow.js';
 import type { VisibleWindow } from '../viewport/VisibleWindow.js';
@@ -53,7 +53,7 @@ export const EMPTY_RENDER_PLAN: RenderPlan = { rows: [], firstIndex: 0, lastInde
  * column's lane/left/width and resolved value.
  */
 export function buildRenderPlan<TRow>(
-	visual: VisualModel<TRow>,
+	visual: VisualModelView<TRow>,
 	layout: LayoutSnapshot,
 	window: VisibleWindow,
 	options: BuildRenderPlanOptions = {},

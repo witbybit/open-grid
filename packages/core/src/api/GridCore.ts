@@ -15,7 +15,7 @@ import { LayoutSnapshot } from '../domains/layout/LayoutSnapshot.js';
 import { RowHeightModel } from '../domains/layout/RowHeightModel.js';
 import { RowPipeline } from '../domains/pipeline/RowPipeline.js';
 import { registerPipelineCommands } from '../domains/pipeline/PipelineCommands.js';
-import type { VisualModel } from '../domains/pipeline/VisualModel.js';
+import type { VisualModelView } from '../domains/pipeline/VisualModel.js';
 import { buildRenderPlan } from '../domains/render/RenderPlan.js';
 import type { RenderPlan } from '../domains/render/RenderPlan.js';
 import { ClientRowModel } from '../domains/rows/client/ClientRowModel.js';
@@ -77,7 +77,15 @@ export class GridCore<TRow> {
 		const clientModel = this.rowModel instanceof ClientRowModel ? this.rowModel : null;
 
 		this.columnModel = new ColumnModel<TRow>(options.columns);
-		this.pipeline = new RowPipeline<TRow>(() => this.rowModel.query.getLoadedRows());
+		// Client owns the full dataset → full-mode pipeline (filter/sort/group/tree). Infinite/server
+		// are windowed: the pipeline projects the full logical height with loading rows in the gaps.
+		this.pipeline =
+			type === 'client'
+				? new RowPipeline<TRow>(() => this.rowModel.query.getLoadedRows())
+				: new RowPipeline<TRow>(() => this.rowModel.query.getLoadedRows(), {
+						getTotalRowCount: () => this.rowModel.query.getRowCount(),
+						getNodeByIndex: (index) => this.rowModel.query.getRowByIndex(index),
+					});
 		this.rowHeights = new RowHeightModel(0, options.rowHeight ?? 40);
 		this.viewport = new ViewportModel(options.overscanPx ?? 0);
 
@@ -125,7 +133,7 @@ export class GridCore<TRow> {
 		this.recomputePipeline();
 	}
 
-	getVisualModel(): VisualModel<TRow> {
+	getVisualModel(): VisualModelView<TRow> {
 		return this.pipeline.getVisualModel();
 	}
 

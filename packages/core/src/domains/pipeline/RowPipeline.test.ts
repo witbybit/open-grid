@@ -37,12 +37,12 @@ const onlyActive: FilterModel = [
 describe('RowPipeline — rows → visual model (ARCHITECTURE.md §3 R6)', () => {
 	it('with no sort/filter, the visual model mirrors source order', () => {
 		const { pipeline } = makePipeline();
-		expect(pipeline.getVisualModel().rows.map((r) => (r.kind === 'data' ? r.rowId : null))).toEqual(['a', 'b', 'c']);
+		expect(pipeline.getVisualModel().toArray().map((r) => (r.kind === 'data' ? r.rowId : null))).toEqual(['a', 'b', 'c']);
 	});
 
 	it('data visual rows carry distinct VisualRowId and RowId (R5)', () => {
 		const { pipeline } = makePipeline();
-		const first = pipeline.getVisualModel().rows[0]!;
+		const first = pipeline.getVisualModel().toArray()[0]!;
 		expect(first.kind).toBe('data');
 		if (first.kind !== 'data') return;
 		expect(String(first.rowId)).toBe('a');
@@ -53,7 +53,7 @@ describe('RowPipeline — rows → visual model (ARCHITECTURE.md §3 R6)', () =>
 	it('sort reorders the visual model', () => {
 		const { pipeline } = makePipeline();
 		pipeline.setSortModel(ageAsc);
-		expect(pipeline.getVisualModel().rows.map((r) => (r.kind === 'data' ? r.rowId : null))).toEqual(['b', 'a', 'c']);
+		expect(pipeline.getVisualModel().toArray().map((r) => (r.kind === 'data' ? r.rowId : null))).toEqual(['b', 'a', 'c']);
 	});
 
 	it('filter changes membership and indexOfRowId reflects visibility', () => {

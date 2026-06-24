@@ -70,6 +70,16 @@ export function detailVisualRow<TRow>(parentRowId: RowId): VisualRow<TRow> {
 	return { kind: 'detail', visualRowId: asVisualRowId(`v:detail:${parentRowId}`), parentRowId };
 }
 
+/** A row whose data is being fetched (infinite/server). Carries no RowId — never editable. */
+export function loadingVisualRow<TRow>(index: number): VisualRow<TRow> {
+	return { kind: 'loading', visualRowId: asVisualRowId(`v:loading:${index}`), index };
+}
+
+/** A row in an unrequested window (infinite/server). Carries no RowId — never editable. */
+export function placeholderVisualRow<TRow>(index: number): VisualRow<TRow> {
+	return { kind: 'placeholder', visualRowId: asVisualRowId(`v:placeholder:${index}`), index };
+}
+
 /** Narrowing helper: the `RowId` of a visual row that maps to a data row, else null. */
 export function rowIdOfVisualRow<TRow>(row: VisualRow<TRow>): RowId | null {
 	return row.kind === 'data' || row.kind === 'tree' ? row.rowId : null;

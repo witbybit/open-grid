@@ -40,7 +40,7 @@ describe('registerPipelineCommands — kernel integration (ARCHITECTURE.md §3 R
 		expect(result.status).toBe('applied');
 		expect(kernel.getVersion('pipeline')).toBe(1);
 		expect(events.some((e) => e.type === 'pipeline.changed')).toBe(true);
-		expect(pipeline.getVisualModel().rows.map((r) => (r.kind === 'data' ? String(r.rowId) : null))).toEqual(['b', 'a']);
+		expect(pipeline.getVisualModel().toArray().map((r) => (r.kind === 'data' ? String(r.rowId) : null))).toEqual(['b', 'a']);
 	});
 
 	it('pipeline.setFilterModel changes membership', () => {

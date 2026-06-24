@@ -12,6 +12,10 @@ export { buildTreeVisualRows } from './TreeStage.js';
 export type { TreeDataOptions } from './TreeStage.js';
 export { DetailExpansionState, insertDetailRows } from './DetailStage.js';
 export { EMPTY_VISUAL_MODEL, VisualModel } from './VisualModel.js';
+export type { VisualModelView } from './VisualModel.js';
+export { WindowedVisualModel } from './WindowedVisualModel.js';
+export type { WindowedNodeAccessor } from './WindowedVisualModel.js';
+export type { RowSource, WindowedSource } from './RowPipeline.js';
 
 export type { ColumnFilter, FilterModel, SortDirection, SortKey, SortModel } from './PipelineModels.js';
 export { EMPTY_FILTER_MODEL, EMPTY_SORT_MODEL, filterColumnIds, sortColumnIds } from './PipelineModels.js';
@@ -23,5 +27,4 @@ export { FlattenStage } from './FlattenStage.js';
 export { getFieldValue, defaultCompare } from './fieldValue.js';
 
 export { RowPipeline } from './RowPipeline.js';
-export type { RowSource } from './RowPipeline.js';
 export { registerPipelineCommands } from './PipelineCommands.js';

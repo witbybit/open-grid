@@ -15,8 +15,20 @@ import type { RowWriteImpact, RowWriteImpactContext } from './RowWriteImpact.js'
 import { classifyWriteImpact } from './RowWriteImpact.js';
 import { SortStage } from './SortStage.js';
 import { VisualModel } from './VisualModel.js';
+import type { VisualModelView } from './VisualModel.js';
+import { WindowedVisualModel } from './WindowedVisualModel.js';
 
 export type RowSource<TRow> = () => readonly RowNode<TRow>[];
+
+/**
+ * Windowed-dataset source for infinite/server row models: total logical count + a per-index loaded
+ * node accessor. When provided, the pipeline produces a lazy windowed visual model (data rows where
+ * loaded, loading rows in gaps) and skips client filter/sort/group/tree (the server owns those).
+ */
+export interface WindowedSource<TRow> {
+	getTotalRowCount(): number;
+	getNodeByIndex(index: number): RowNode<TRow> | null;
+}
 
 /**
  * Runs the row nodes through filter → sort → flatten to produce the {@link VisualModel}
@@ -36,10 +48,12 @@ export class RowPipeline<TRow> {
 	private treeOptions: TreeDataOptions<TRow> | null = null;
 	private readonly treeExpansion = new GroupExpansionState();
 	private readonly detailExpansion = new DetailExpansionState();
-	private visualModel: VisualModel<TRow> = new VisualModel<TRow>([]);
+	private readonly windowed: WindowedSource<TRow> | null;
+	private visualModel: VisualModelView<TRow> = new VisualModel<TRow>([]);
 
-	constructor(source: RowSource<TRow>) {
+	constructor(source: RowSource<TRow>, windowed?: WindowedSource<TRow>) {
 		this.source = source;
+		this.windowed = windowed ?? null;
 	}
 
 	getSortModel(): SortModel {
@@ -50,16 +64,16 @@ export class RowPipeline<TRow> {
 		return this.filterModel;
 	}
 
-	getVisualModel(): VisualModel<TRow> {
+	getVisualModel(): VisualModelView<TRow> {
 		return this.visualModel;
 	}
 
-	setSortModel(model: SortModel): VisualModel<TRow> {
+	setSortModel(model: SortModel): VisualModelView<TRow> {
 		this.sortModel = model;
 		return this.recompute();
 	}
 
-	setFilterModel(model: FilterModel): VisualModel<TRow> {
+	setFilterModel(model: FilterModel): VisualModelView<TRow> {
 		this.filterModel = model;
 		return this.recompute();
 	}
@@ -68,40 +82,40 @@ export class RowPipeline<TRow> {
 		return this.groupBy;
 	}
 
-	setGroupBy(model: GroupByModel): VisualModel<TRow> {
+	setGroupBy(model: GroupByModel): VisualModelView<TRow> {
 		this.groupBy = model;
 		return this.recompute();
 	}
 
 	/** Toggle a group's expansion and rebuild. Returns the new visual model. */
-	toggleGroup(groupKey: string): VisualModel<TRow> {
+	toggleGroup(groupKey: string): VisualModelView<TRow> {
 		this.expansion.toggle(groupKey);
 		return this.recompute();
 	}
 
-	setGroupExpanded(groupKey: string, expanded: boolean): VisualModel<TRow> {
+	setGroupExpanded(groupKey: string, expanded: boolean): VisualModelView<TRow> {
 		this.expansion.setExpanded(groupKey, expanded);
 		return this.recompute();
 	}
 
 	// ── Tree data ──
-	setTreeData(options: TreeDataOptions<TRow> | null): VisualModel<TRow> {
+	setTreeData(options: TreeDataOptions<TRow> | null): VisualModelView<TRow> {
 		this.treeOptions = options;
 		return this.recompute();
 	}
 
-	toggleTreeNode(rowId: string): VisualModel<TRow> {
+	toggleTreeNode(rowId: string): VisualModelView<TRow> {
 		this.treeExpansion.toggle(rowId);
 		return this.recompute();
 	}
 
 	// ── Master/detail ──
-	toggleDetail(rowId: string): VisualModel<TRow> {
+	toggleDetail(rowId: string): VisualModelView<TRow> {
 		this.detailExpansion.toggle(rowId);
 		return this.recompute();
 	}
 
-	setDetailOpen(rowId: string, open: boolean): VisualModel<TRow> {
+	setDetailOpen(rowId: string, open: boolean): VisualModelView<TRow> {
 		this.detailExpansion.setOpen(rowId, open);
 		return this.recompute();
 	}
@@ -111,7 +125,18 @@ export class RowPipeline<TRow> {
 	 * Shape is tree (if tree data is configured), else grouped (if group-by is active), else flat
 	 * data rows. Master/detail rows are inserted as a post-pass on top of any shape.
 	 */
-	recompute(): VisualModel<TRow> {
+	recompute(): VisualModelView<TRow> {
+		// Windowed (infinite/server): the server owns filter/sort/group; we project the full logical
+		// height with data rows where loaded and loading rows in the gaps, lazily.
+		if (this.windowed) {
+			this.visualModel = new WindowedVisualModel<TRow>(
+				this.windowed.getTotalRowCount(),
+				(index) => this.windowed!.getNodeByIndex(index),
+				this.source(),
+			);
+			return this.visualModel;
+		}
+
 		const ctx = this.context();
 		const filtered = this.filterStage.build(this.source(), ctx);
 		const sorted = this.sortStage.build(filtered, ctx);
