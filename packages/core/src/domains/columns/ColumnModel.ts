@@ -50,6 +50,17 @@ export class ColumnModel<TRow = unknown> {
 		return this.columns.get(columnId)?.field ?? null;
 	}
 
+	/** Display header text for a column (falls back to its field). */
+	getHeader(columnId: ColumnId): string {
+		const col = this.columns.get(columnId);
+		if (!col) return String(columnId);
+		return col.def.header ?? col.field;
+	}
+
+	isSortable(columnId: ColumnId): boolean {
+		return this.columns.get(columnId)?.def.sortable ?? true;
+	}
+
 	getWidth(columnId: ColumnId): number | null {
 		return this.columns.get(columnId)?.width ?? null;
 	}

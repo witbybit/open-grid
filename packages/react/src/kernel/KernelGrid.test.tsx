@@ -58,6 +58,41 @@ describe('KernelGrid — paints the render plan (ARCHITECTURE.md §3 R12–R13)'
 	});
 });
 
+describe('KernelGrid — headers & custom renderers (133a)', () => {
+	it('renders a header cell per visible column with its header text', () => {
+		render(<KernelGrid api={makeApi(5)} height={200} width={400} />);
+		const headers = screen.getAllByTestId('grid-header-cell');
+		expect(headers.map((h) => h.getAttribute('data-col-id'))).toEqual(['name', 'age']);
+		expect(headers[0]!.textContent).toContain('name');
+	});
+
+	it('clicking a sortable header cycles sort asc → desc, reordering painted rows', () => {
+		render(<KernelGrid api={makeApi(5)} height={400} width={400} />);
+		const header = () => screen.getAllByTestId('grid-header-cell').find((h) => h.getAttribute('data-col-id') === 'age')!;
+		const rowIds = () => screen.getAllByTestId('grid-row').map((r) => r.getAttribute('data-row-id'));
+
+		// rows have age = index, so ascending == r0..r4 (already), descending reverses
+		act(() => fireEvent.click(header())); // asc
+		expect(header().getAttribute('data-sort')).toBe('asc');
+		act(() => fireEvent.click(header())); // desc
+		expect(header().getAttribute('data-sort')).toBe('desc');
+		expect(rowIds()[0]).toBe('r4');
+	});
+
+	it('uses a custom cell renderer for its column', () => {
+		render(
+			<KernelGrid
+				api={makeApi(3)}
+				height={400}
+				width={400}
+				cellRenderers={{ name: ({ value }) => <strong data-testid="custom">{`<<${String(value)}>>`}</strong> }}
+			/>,
+		);
+		const custom = screen.getAllByTestId('custom');
+		expect(custom[0]!.textContent).toBe('<<N0>>');
+	});
+});
+
 describe('GridContext (ARCHITECTURE.md "React adapter exposes GridApi")', () => {
 	function TypeProbe() {
 		return <span data-testid="type">{useGridApi<Person>().rowModel.getType()}</span>;

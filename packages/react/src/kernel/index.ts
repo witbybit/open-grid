@@ -2,4 +2,4 @@
 export { GridApiProvider, useGridApi, useGridSelector } from './GridContext.js';
 export type { GridApiProviderProps } from './GridContext.js';
 export { KernelGrid } from './KernelGrid.js';
-export type { KernelGridProps } from './KernelGrid.js';
+export type { CellRenderer, CellRenderParams, KernelGridProps } from './KernelGrid.js';

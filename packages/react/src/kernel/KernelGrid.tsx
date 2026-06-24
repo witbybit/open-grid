@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { ReactNode, UIEvent } from 'react';
 import { createGrid } from '@open-grid/core/next';
-import type { GridApi, GridCoreOptions } from '@open-grid/core/next';
+import type { GridApi, GridColumnHeader, GridCoreOptions, RowId, SortModel } from '@open-grid/core/next';
 import { GridApiProvider } from './GridContext.js';
+
+export interface CellRenderParams<TRow> {
+	readonly value: unknown;
+	readonly rowId: RowId;
+	readonly columnId: string;
+	readonly field: string;
+	readonly api: GridApi<TRow>;
+}
+
+export type CellRenderer<TRow> = (params: CellRenderParams<TRow>) => ReactNode;
+
+const HEADER_HEIGHT = 32;
 
 export interface KernelGridProps<TRow> {
 	/** Create the grid from options (the adapter owns its lifecycle), … */
@@ -11,8 +23,20 @@ export interface KernelGridProps<TRow> {
 	readonly api?: GridApi<TRow>;
 	readonly height: number;
 	readonly width: number;
+	/** Custom cell renderers keyed by column id; falls back to `String(value)`. */
+	readonly cellRenderers?: Record<string, CellRenderer<TRow>>;
 	/** Optional content rendered inside the provider (toolbars, overlays) — shares the same API. */
 	readonly children?: ReactNode;
+}
+
+/** Cycle a column's sort: none → asc → desc → none, single-column. */
+function nextSortModel(columns: readonly GridColumnHeader[], columnId: string): SortModel {
+	const col = columns.find((c) => String(c.columnId) === columnId);
+	if (!col) return [];
+	const dir = col.sortDirection;
+	if (dir === null) return [{ columnId: col.columnId, field: col.field, direction: 'asc' }];
+	if (dir === 'asc') return [{ columnId: col.columnId, field: col.field, direction: 'desc' }];
+	return [];
 }
 
 /**
@@ -71,35 +95,76 @@ export function KernelGrid<TRow>(props: KernelGridProps<TRow>) {
 		[api, width, height],
 	);
 
+	const columns = api.view.getColumns();
 	const plan = api.view.getRenderPlan();
+	const renderers = props.cellRenderers;
+
+	const onHeaderClick = (column: GridColumnHeader) => {
+		if (!column.sortable) return;
+		api.pipeline.setSortModel(nextSortModel(columns, String(column.columnId)));
+		force();
+	};
 
 	return (
 		<GridApiProvider api={api}>
-			<div
-				data-testid="kernel-grid"
-				onScroll={onScroll}
-				style={{ height, width, overflow: 'auto', position: 'relative' }}
-			>
-				<div style={{ height: plan.totalHeight, width: plan.totalWidth, position: 'relative' }}>
-					{plan.rows.map((row) => (
+			<div data-testid="kernel-grid-root" style={{ width, position: 'relative' }}>
+				<div
+					data-testid="grid-header"
+					style={{ height: HEADER_HEIGHT, width, position: 'relative', overflow: 'hidden' }}
+				>
+					{columns.map((column) => (
 						<div
-							key={String(row.visualRowId)}
-							data-testid="grid-row"
-							data-row-id={row.rowId ? String(row.rowId) : ''}
-							style={{ position: 'absolute', top: row.top, height: row.height, width: plan.totalWidth }}
+							key={String(column.columnId)}
+							data-testid="grid-header-cell"
+							data-col-id={String(column.columnId)}
+							data-sort={column.sortDirection ?? ''}
+							onClick={() => onHeaderClick(column)}
+							style={{
+								position: 'absolute',
+								left: column.left,
+								width: column.width,
+								height: HEADER_HEIGHT,
+								cursor: column.sortable ? 'pointer' : 'default',
+							}}
 						>
-							{row.cells.map((cell) => (
-								<div
-									key={String(cell.columnId)}
-									data-testid="grid-cell"
-									data-col-id={String(cell.columnId)}
-									style={{ position: 'absolute', left: cell.left, width: cell.width, height: row.height }}
-								>
-									{formatValue(cell.value)}
-								</div>
-							))}
+							{column.header}
+							{column.sortDirection === 'asc' ? ' ▲' : column.sortDirection === 'desc' ? ' ▼' : ''}
 						</div>
 					))}
+				</div>
+				<div
+					data-testid="kernel-grid"
+					onScroll={onScroll}
+					style={{ height, width, overflow: 'auto', position: 'relative' }}
+				>
+					<div style={{ height: plan.totalHeight, width: plan.totalWidth, position: 'relative' }}>
+						{plan.rows.map((row) => (
+							<div
+								key={String(row.visualRowId)}
+								data-testid="grid-row"
+								data-row-id={row.rowId ? String(row.rowId) : ''}
+								style={{ position: 'absolute', top: row.top, height: row.height, width: plan.totalWidth }}
+							>
+								{row.cells.map((cell) => {
+									const renderer = renderers?.[String(cell.columnId)];
+									const content =
+										renderer && row.rowId
+											? renderer({ value: cell.value, rowId: row.rowId, columnId: String(cell.columnId), field: cell.field, api })
+											: formatValue(cell.value);
+									return (
+										<div
+											key={String(cell.columnId)}
+											data-testid="grid-cell"
+											data-col-id={String(cell.columnId)}
+											style={{ position: 'absolute', left: cell.left, width: cell.width, height: row.height }}
+										>
+											{content}
+										</div>
+									);
+								})}
+							</div>
+						))}
+					</div>
 				</div>
 			</div>
 			{props.children}

@@ -14,7 +14,7 @@ import type { RowModelType } from '../domains/rows/RowModelType.js';
 import type { RowNode } from '../domains/rows/RowNode.js';
 import type { SelectionState } from '../domains/selection/SelectionState.js';
 import { GridCore } from './GridCore.js';
-import type { GridCoreOptions } from './GridCore.js';
+import type { GridColumnHeader, GridCoreOptions } from './GridCore.js';
 
 /**
  * The public, command-backed grid API (ARCHITECTURE.md "Public API Direction"). Every mutating
@@ -73,6 +73,7 @@ export interface GridApi<TRow> {
 	/** Read access for the renderer (R12). Scroll/size are runtime state, not commits. */
 	readonly view: {
 		getVisualRowCount(): number;
+		getColumns(): GridColumnHeader[];
 		setViewport(scrollTop: number, scrollLeft: number, width: number, height: number): void;
 		getRenderPlan(): RenderPlan;
 	};
@@ -144,6 +145,7 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 
 		view: {
 			getVisualRowCount: () => core.getVisualRowCount(),
+			getColumns: () => core.getColumnHeaders(),
 			setViewport: (scrollTop, scrollLeft, width, height) => {
 				core.viewport.setScroll(scrollTop, scrollLeft);
 				core.viewport.setSize(width, height);

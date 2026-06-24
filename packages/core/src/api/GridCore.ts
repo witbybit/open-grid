@@ -7,6 +7,7 @@ import type { ColumnDef } from '../domains/columns/ColumnDef.js';
 import type { ColumnId } from '../domains/columns/ColumnId.js';
 import { ColumnModel } from '../domains/columns/ColumnModel.js';
 import { computeColumnLayout } from '../domains/columns/ColumnLayout.js';
+import type { ColumnLane } from '../domains/columns/ColumnLayout.js';
 import { registerColumnCommands } from '../domains/columns/ColumnCommands.js';
 import { EditModel } from '../domains/editing/EditModel.js';
 import { registerEditingCommands } from '../domains/editing/EditingCommands.js';
@@ -29,6 +30,17 @@ import { SelectionModel } from '../domains/selection/SelectionModel.js';
 import { registerSelectionCommands } from '../domains/selection/SelectionCommands.js';
 import { createCellAddress } from '../domains/cells/CellAddress.js';
 import { ViewportModel } from '../domains/viewport/ViewportModel.js';
+
+export interface GridColumnHeader {
+	readonly columnId: ColumnId;
+	readonly field: string;
+	readonly header: string;
+	readonly lane: ColumnLane;
+	readonly left: number;
+	readonly width: number;
+	readonly sortable: boolean;
+	readonly sortDirection: 'asc' | 'desc' | null;
+}
 
 export interface GridCoreOptions<TRow> {
 	readonly rowModelType?: RowModelType;
@@ -137,6 +149,25 @@ export class GridCore<TRow> {
 
 	getCellValue(address: CellAddress): unknown {
 		return this.cellEngine.getRawValue(address);
+	}
+
+	/** Header descriptors for the visible columns, enriched with layout + current sort direction. */
+	getColumnHeaders(): GridColumnHeader[] {
+		const layout = this.getLayoutSnapshot();
+		const sort = this.pipeline.getSortModel();
+		return layout.columns.entries.map((entry) => {
+			const direction = sort.find((key) => key.columnId === entry.columnId)?.direction ?? null;
+			return {
+				columnId: entry.columnId,
+				field: this.columnModel.getField(entry.columnId) ?? String(entry.columnId),
+				header: this.columnModel.getHeader(entry.columnId),
+				lane: entry.lane,
+				left: entry.left,
+				width: entry.width,
+				sortable: this.columnModel.isSortable(entry.columnId),
+				sortDirection: direction,
+			};
+		});
 	}
 
 	destroy(): void {
