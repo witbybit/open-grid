@@ -15,7 +15,7 @@ import type { RowNode } from '../domains/rows/RowNode.js';
 import type { SelectionState } from '../domains/selection/SelectionState.js';
 import { GridCore } from './GridCore.js';
 import type { GridCoreOptions } from './GridCore.js';
-import type { RenderColumn } from '../domains/render/RendererEngineView.js';
+import type { RenderColumn, RendererEngineView } from '../domains/render/RendererEngineView.js';
 
 /**
  * The public, command-backed grid API (ARCHITECTURE.md "Public API Direction"). Every mutating
@@ -83,6 +83,9 @@ export interface GridApi<TRow> {
 	redo(): GridCommandResult;
 	canUndo(): boolean;
 	canRedo(): boolean;
+
+	/** The clean renderer contract — pass this to DomGridRenderer.mount(). */
+	getRendererView(): RendererEngineView<TRow>;
 
 	subscribe(listener: GridEventListener): () => void;
 	destroy(): void;
@@ -158,6 +161,8 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 		redo: () => kernel.redo(),
 		canUndo: () => kernel.canUndo(),
 		canRedo: () => kernel.canRedo(),
+
+		getRendererView: () => core.getRendererView(),
 
 		subscribe: (listener) => kernel.subscribe(listener),
 		destroy: () => core.destroy(),
