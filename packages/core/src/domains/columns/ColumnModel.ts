@@ -1,4 +1,5 @@
 import type { ValueSetter } from '../cells/ValueSetter.js';
+import type { ValueFormatter, ValueGetter } from '../cells/ValueGetter.js';
 import { columnChangeSet } from './ColumnChangeSet.js';
 import type { ColumnChangeSet } from './ColumnChangeSet.js';
 import { DEFAULT_COLUMN_MIN_WIDTH, DEFAULT_COLUMN_WIDTH } from './ColumnDef.js';
@@ -80,6 +81,14 @@ export class ColumnModel<TRow = unknown> {
 
 	getValueSetter(columnId: ColumnId): ValueSetter<TRow> | undefined {
 		return this.columns.get(columnId)?.def.valueSetter;
+	}
+
+	getValueGetter(columnId: ColumnId): ValueGetter<TRow> | undefined {
+		return this.columns.get(columnId)?.def.valueGetter;
+	}
+
+	getValueFormatter(columnId: ColumnId): ValueFormatter<TRow> | undefined {
+		return this.columns.get(columnId)?.def.valueFormatter;
 	}
 
 	getState(): ColumnState[] {

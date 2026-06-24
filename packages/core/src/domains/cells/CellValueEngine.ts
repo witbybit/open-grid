@@ -6,6 +6,7 @@ import type { CellAddress, CellId } from './CellAddress.js';
 import { cellId } from './CellAddress.js';
 import type { CellChangeSet, CellValueChange } from './CellChangeSet.js';
 import type { ValueSetter } from './ValueSetter.js';
+import type { ValueFormatter, ValueGetter } from './ValueGetter.js';
 
 /**
  * The minimal structural surface the cell value engine needs from a row model (ARCHITECTURE.md §3
@@ -21,6 +22,15 @@ export interface CellDataPort<TRow> {
 export interface CellWriteContext<TRow> {
 	/** When present, the column's value setter decides how the value is applied. */
 	readonly valueSetter?: ValueSetter<TRow>;
+}
+
+/**
+ * Optional per-column read semantics the engine resolves for value reads (ARCHITECTURE.md §3 R8).
+ * The columns domain supplies these; the engine stays decoupled from column storage.
+ */
+export interface CellColumnAccess<TRow> {
+	getValueGetter(columnId: ColumnId): ValueGetter<TRow> | undefined;
+	getValueFormatter(columnId: ColumnId): ValueFormatter<TRow> | undefined;
 }
 
 export type CellWriteOutcome =
@@ -41,16 +51,27 @@ export type CellWriteOutcome =
  * notifications, or rendering — it returns a {@link CellChangeSet} and lets the kernel publish.
  */
 export class CellValueEngine<TRow> {
-	constructor(private readonly port: CellDataPort<TRow>) {}
+	constructor(
+		private readonly port: CellDataPort<TRow>,
+		private readonly columns?: CellColumnAccess<TRow>,
+	) {}
 
+	/** Raw value: the column's value getter if it has one, else the field read. */
 	getRawValue(address: CellAddress): unknown {
 		const node = this.port.getRow(address.rowId);
-		return node ? getByPath(node.data, address.field) : undefined;
+		if (!node) return undefined;
+		const getter = this.columns?.getValueGetter(address.columnId);
+		if (getter) return getter({ row: node.data, field: address.field, columnId: address.columnId });
+		return getByPath(node.data, address.field);
 	}
 
-	/** Display value. Equals raw until formatters / value-getters land in the cell domain. */
+	/** Display value: the column's value formatter applied to the raw value, else the raw value. */
 	getDisplayValue(address: CellAddress): unknown {
-		return this.getRawValue(address);
+		const node = this.port.getRow(address.rowId);
+		if (!node) return undefined;
+		const raw = this.getRawValue(address);
+		const formatter = this.columns?.getValueFormatter(address.columnId);
+		return formatter ? formatter({ value: raw, row: node.data, field: address.field, columnId: address.columnId }) : raw;
 	}
 
 	applyCellValue(address: CellAddress, value: unknown, ctx: CellWriteContext<TRow> = {}): CellWriteOutcome {

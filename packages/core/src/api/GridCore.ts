@@ -88,7 +88,10 @@ export class GridCore<TRow> {
 				return clientModel.writeRowDataStructural(id, data);
 			},
 		};
-		this.cellEngine = new CellValueEngine<TRow>(port);
+		this.cellEngine = new CellValueEngine<TRow>(port, {
+			getValueGetter: (columnId) => this.columnModel.getValueGetter(columnId),
+			getValueFormatter: (columnId) => this.columnModel.getValueFormatter(columnId),
+		});
 
 		const resolveValueSetter = (columnId: ColumnId) => this.columnModel.getValueSetter(columnId);
 

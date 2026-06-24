@@ -1,5 +1,6 @@
 import type { ValueParser } from '../cells/ValueParser.js';
 import type { ValueSetter } from '../cells/ValueSetter.js';
+import type { ValueFormatter, ValueGetter } from '../cells/ValueGetter.js';
 
 export type ColumnPin = 'left' | 'right' | null;
 
@@ -23,6 +24,10 @@ export interface ColumnDef<TRow = unknown> {
 	readonly filterable?: boolean;
 	readonly valueSetter?: ValueSetter<TRow>;
 	readonly valueParser?: ValueParser<TRow>;
+	/** Computes the raw value (overrides the field read). Makes the column computed/read-only. */
+	readonly valueGetter?: ValueGetter<TRow>;
+	/** Formats the value for display. */
+	readonly valueFormatter?: ValueFormatter<TRow>;
 }
 
 export const DEFAULT_COLUMN_WIDTH = 150;
