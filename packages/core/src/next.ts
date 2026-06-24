@@ -32,6 +32,7 @@ export type { ColumnFilter, FilterModel, SortKey, SortModel } from './domains/pi
 export type { VisualRow } from './domains/pipeline/VisualRow.js';
 
 export type { CellRenderPlan, RenderPlan, RowRenderPlan } from './domains/render/RenderPlan.js';
-export { RowSlotPool } from './domains/render/SlotModel.js';
-export type { RowSlot, SlotSyncResult } from './domains/render/SlotModel.js';
+export { StableSlotAssigner } from './domains/render/StableSlotAssigner.js';
+export type { RowBinding } from './domains/render/RowBinder.js';
+export { RowBinder } from './domains/render/RowBinder.js';
 export type { SelectionState } from './domains/selection/SelectionState.js';

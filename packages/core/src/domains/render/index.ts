@@ -1,8 +1,6 @@
-// Render domain — render plans + slot virtualization (ARCHITECTURE.md §3 R12–R13).
+// Render domain — layout brain + slot virtualization (ARCHITECTURE.md §3 R12–R13).
 export type { BuildRenderPlanOptions, CellRenderPlan, RenderPlan, RowRenderPlan } from './RenderPlan.js';
 export { buildRenderPlan, EMPTY_RENDER_PLAN } from './RenderPlan.js';
-export type { RowSlot, SlotSyncResult } from './SlotModel.js';
-export { RowSlotPool } from './SlotModel.js';
 export type { RendererContract } from './RendererContract.js';
 export type { RenderColumn, RenderDisplayConfig, RendererEngineView } from './RendererEngineView.js';
 export type { RenderLayout } from './RenderLayout.js';
@@ -14,3 +12,6 @@ export {
 	LEAF_HEADER_HEIGHT,
 	STATUS_BAR_HEIGHT,
 } from './RenderLayout.js';
+export { StableSlotAssigner } from './StableSlotAssigner.js';
+export type { RowBinding } from './RowBinder.js';
+export { RowBinder } from './RowBinder.js';
