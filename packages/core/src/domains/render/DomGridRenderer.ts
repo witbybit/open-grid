@@ -5,6 +5,19 @@ import { computeRenderLayout } from './RenderLayout.js';
 import type { RenderLayout } from './RenderLayout.js';
 import type { VisualRow } from '../pipeline/VisualRow.js';
 import type { RowId } from '../rows/RowId.js';
+import { CORE_STYLES } from '../../renderer/styles.js';
+
+const STYLE_TAG_ATTR = 'data-og-core-styles';
+
+/** Inject CORE_STYLES once per document; subsequent calls are no-ops. */
+function injectCoreStyles(): void {
+	if (typeof document === 'undefined') return;
+	if (document.querySelector(`[${STYLE_TAG_ATTR}]`)) return;
+	const tag = document.createElement('style');
+	tag.setAttribute(STYLE_TAG_ATTR, '1');
+	tag.textContent = CORE_STYLES;
+	document.head.appendChild(tag);
+}
 
 /**
  * Callbacks wired by the React adapter for portal-based custom cell renderers.
@@ -72,6 +85,7 @@ export class DomGridRenderer<TRow> {
 	) {}
 
 	mount(container: HTMLElement): void {
+		injectCoreStyles();
 		this.container = container;
 		this.buildDom(container);
 
