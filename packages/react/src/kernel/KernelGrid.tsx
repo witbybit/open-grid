@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { ReactNode, UIEvent } from 'react';
-import { createGrid } from '@open-grid/core/next';
-import type { GridApi, GridColumnHeader, GridCoreOptions, RowId, SortModel } from '@open-grid/core/next';
+import { createGrid, RowSlotPool } from '@open-grid/core/next';
+import type { GridApi, GridColumnHeader, GridCoreOptions, RowId, RowRenderPlan, SortModel } from '@open-grid/core/next';
 import { GridApiProvider } from './GridContext.js';
 
 export interface CellRenderParams<TRow> {
@@ -63,6 +63,10 @@ export function KernelGrid<TRow>(props: KernelGridProps<TRow>) {
 	const api = apiRef.current;
 	const owned = !props.api;
 
+	// Reusable row-slot pool — drives stable-key slot virtualization (R13), see render below.
+	const slotPoolRef = useRef<RowSlotPool | null>(null);
+	if (!slotPoolRef.current) slotPoolRef.current = new RowSlotPool();
+
 	// Initialise the viewport once, during the first render, so the first paint is already windowed
 	// (idempotent on the freshly created API).
 	const initedRef = useRef(false);
@@ -98,6 +102,11 @@ export function KernelGrid<TRow>(props: KernelGridProps<TRow>) {
 	const columns = api.view.getColumns();
 	const plan = api.view.getRenderPlan();
 	const renderers = props.cellRenderers;
+
+	// Slot virtualization (R13): assign each visible row a reusable slot id. React keys are slot
+	// ids, not row identities — so scrolling REBINDS a slot's DOM node to a different row instead
+	// of unmounting/mounting one. Element count stays at the pool's high-water mark.
+	const slots = slotPoolRef.current.sync(plan.rows.map((row) => row.visualRowId));
 
 	const onHeaderClick = (column: GridColumnHeader) => {
 		if (!column.sortable) return;
@@ -138,32 +147,21 @@ export function KernelGrid<TRow>(props: KernelGridProps<TRow>) {
 					style={{ height, width, overflow: 'auto', position: 'relative' }}
 				>
 					<div style={{ height: plan.totalHeight, width: plan.totalWidth, position: 'relative' }}>
-						{plan.rows.map((row) => (
-							<div
-								key={String(row.visualRowId)}
-								data-testid="grid-row"
-								data-row-id={row.rowId ? String(row.rowId) : ''}
-								style={{ position: 'absolute', top: row.top, height: row.height, width: plan.totalWidth }}
-							>
-								{row.cells.map((cell) => {
-									const renderer = renderers?.[String(cell.columnId)];
-									const content =
-										renderer && row.rowId
-											? renderer({ value: cell.value, rowId: row.rowId, columnId: String(cell.columnId), field: cell.field, api })
-											: formatValue(cell.value);
-									return (
-										<div
-											key={String(cell.columnId)}
-											data-testid="grid-cell"
-											data-col-id={String(cell.columnId)}
-											style={{ position: 'absolute', left: cell.left, width: cell.width, height: row.height }}
-										>
-											{content}
-										</div>
-									);
-								})}
-							</div>
-						))}
+						{plan.rows.map((row) => {
+							const slotId = slots.assignments.get(row.visualRowId) ?? -1;
+							return (
+								<div
+									key={slotId}
+									data-testid="grid-row"
+									data-slot-id={slotId}
+									data-row-id={row.rowId ? String(row.rowId) : ''}
+									data-kind={row.kind}
+									style={{ position: 'absolute', top: row.top, height: row.height, width: plan.totalWidth }}
+								>
+									{renderRowContent(row, plan.totalWidth, renderers, api)}
+								</div>
+							);
+						})}
 					</div>
 				</div>
 			</div>
@@ -174,4 +172,61 @@ export function KernelGrid<TRow>(props: KernelGridProps<TRow>) {
 
 function formatValue(value: unknown): string {
 	return value == null ? '' : String(value);
+}
+
+/**
+ * Render a slot's content by the visual row's kind (R5–R6). `data`/`tree` rows render cells;
+ * `group`/`detail`/`loading`/`placeholder` are full-width constructs. The pipeline EMITS these
+ * kinds (group/tree/detail/loading land with the grouping, tree, master-detail, and infinite/server
+ * tranches); this switch is the seam so those slot in without re-touching the render loop. A
+ * non-data row is never editable/selectable — it carries no `RowId`.
+ */
+function renderRowContent<TRow>(
+	row: RowRenderPlan,
+	totalWidth: number,
+	renderers: Record<string, CellRenderer<TRow>> | undefined,
+	api: GridApi<TRow>,
+): ReactNode {
+	switch (row.kind) {
+		case 'data':
+		case 'tree':
+			return row.cells.map((cell) => {
+				const renderer = renderers?.[String(cell.columnId)];
+				const content =
+					renderer && row.rowId
+						? renderer({ value: cell.value, rowId: row.rowId, columnId: String(cell.columnId), field: cell.field, api })
+						: formatValue(cell.value);
+				return (
+					<div
+						key={String(cell.columnId)}
+						data-testid="grid-cell"
+						data-col-id={String(cell.columnId)}
+						style={{ position: 'absolute', left: cell.left, width: cell.width, height: row.height }}
+					>
+						{content}
+					</div>
+				);
+			});
+		case 'group':
+			return (
+				<div data-testid="grid-group-row" style={{ width: totalWidth, height: row.height }}>
+					{/* group header (label + expand toggle) filled in by the grouping tranche */}
+				</div>
+			);
+		case 'detail':
+			return (
+				<div data-testid="grid-detail-row" style={{ width: totalWidth, height: row.height }}>
+					{/* master/detail panel rendered via a detailRenderer prop in the master-detail tranche */}
+				</div>
+			);
+		case 'loading':
+		case 'placeholder':
+			return (
+				<div data-testid="grid-loading-row" style={{ width: totalWidth, height: row.height }}>
+					{/* skeleton for an unloaded infinite/server window */}
+				</div>
+			);
+		default:
+			return null;
+	}
 }

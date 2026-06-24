@@ -44,6 +44,33 @@ describe('KernelGrid — paints the render plan (ARCHITECTURE.md §3 R12–R13)'
 		expect(screen.getByText('CHANGED')).toBeTruthy();
 	});
 
+	it('reuses slot DOM nodes across scroll instead of remounting (R13)', () => {
+		render(<KernelGrid api={makeApi(100)} height={200} width={400} />);
+		const grid = screen.getByTestId('kernel-grid');
+
+		const countBefore = screen.getAllByTestId('grid-row').length;
+		const slot0Before = document.querySelector('[data-slot-id="0"]') as HTMLElement;
+		const rowBefore = slot0Before.getAttribute('data-row-id');
+
+		act(() => {
+			grid.scrollTop = 400; // scroll well past the original window
+			fireEvent.scroll(grid);
+		});
+
+		const slot0After = document.querySelector('[data-slot-id="0"]') as HTMLElement;
+		const countAfter = screen.getAllByTestId('grid-row').length;
+
+		expect(slot0After).toBe(slot0Before); // SAME DOM node — rebound, not remounted
+		expect(slot0After.getAttribute('data-row-id')).not.toBe(rowBefore); // now shows a different row
+		expect(countAfter).toBe(countBefore); // element count is stable (no reconciliation churn)
+	});
+
+	it('tags every painted row with its visual-row kind for kind-based rendering (R5–R6)', () => {
+		render(<KernelGrid api={makeApi(5)} height={400} width={400} />);
+		const kinds = screen.getAllByTestId('grid-row').map((r) => r.getAttribute('data-kind'));
+		expect(kinds.every((k) => k === 'data')).toBe(true); // only data rows until the grouping/tree tranches emit others
+	});
+
 	it('updates the visible window on scroll', () => {
 		render(<KernelGrid api={makeApi(100)} height={200} width={400} />);
 		const grid = screen.getByTestId('kernel-grid');
