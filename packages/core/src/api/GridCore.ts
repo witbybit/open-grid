@@ -5,6 +5,10 @@ import { GridCapabilityManager } from '../plugins/GridCapabilityManager.js';
 import type { GridCapability } from '../plugins/GridCapabilityManager.js';
 import { DagEngine } from '../domains/dag/DagEngine.js';
 import { SpreadsheetFillEngine } from '../domains/dag/SpreadsheetFillEngine.js';
+import { StatusBarModel } from '../domains/statusbar/StatusBarModel.js';
+import { PaginationModel } from '../domains/pagination/PaginationModel.js';
+import { ChartOverlayController } from '../domains/chart/ChartOverlayController.js';
+import type { PaginationConfig } from '../domains/pagination/PaginationModel.js';
 import { DataIntegrityManager } from '../domains/integrity/DataIntegrityManager.js';
 import { PersistenceController } from '../domains/persistence/PersistenceController.js';
 import { GridWorkspaceController } from '../domains/persistence/GridWorkspaceController.js';
@@ -65,6 +69,8 @@ export interface GridCoreOptions<TRow> {
 	readonly workspaceAdapter?: GridWorkspaceAdapter;
 	/** Override the initial set of enabled capabilities. Defaults to the standard set. */
 	readonly capabilities?: Iterable<GridCapability>;
+	/** When provided, enables client-side pagination. */
+	readonly pagination?: PaginationConfig;
 }
 
 /**
@@ -91,6 +97,9 @@ export class GridCore<TRow> {
 	readonly clipboard: ClipboardController<TRow>;
 	readonly dag: DagEngine<TRow>;
 	readonly fill: SpreadsheetFillEngine;
+	readonly statusBar: StatusBarModel<TRow>;
+	readonly pagination: PaginationModel | null;
+	readonly chart: ChartOverlayController<TRow>;
 
 	private readonly rowHeights: RowHeightModel;
 	private readonly disposers: Array<() => void> = [];
@@ -165,6 +174,39 @@ export class GridCore<TRow> {
 			},
 			fieldForColumn: (columnId) => this.columnModel.getField(columnId) ?? null,
 		});
+
+		// Status bar — auto-subscribes to kernel events
+		this.statusBar = new StatusBarModel<TRow>({
+			getVisualRowCount: () => this.getVisualRowCount(),
+			getTotalRowCount: () => this.rowModel.query.getRowCount(),
+			getSelectedRowIds: () => this.selectionModel.getState().selectedRowIds,
+			getLoadedRows: () => this.rowModel.query.getLoadedRows().map((n) => ({ id: n.id, data: n.data })),
+			getCellValue: (rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
+			subscribeToKernel: (fn) => this.kernel.subscribe(fn),
+		});
+		this.disposers.push(this.statusBar.subscribeToKernel());
+
+		// Pagination (optional)
+		if (options.pagination) {
+			const pg = new PaginationModel(options.pagination);
+			(this as unknown as { pagination: PaginationModel }).pagination = pg;
+		} else {
+			(this as unknown as { pagination: null }).pagination = null;
+		}
+
+		// Chart overlay controller
+		this.chart = new ChartOverlayController<TRow>(
+			(rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
+			() => {
+				const vm = this.pipeline.getVisualModel();
+				const ids: RowId[] = [];
+				for (let i = 0; i < vm.count; i++) {
+					const row = vm.getByVisualIndex(i);
+					if (row && (row.kind === 'data' || row.kind === 'tree')) ids.push(row.rowId as RowId);
+				}
+				return ids;
+			},
+		);
 
 		// Data integrity manager — starts empty; consumers register validators after createGrid().
 		this.integrity = new DataIntegrityManager<TRow>({
@@ -338,6 +380,9 @@ export class GridCore<TRow> {
 		this.persistence?.destroy();
 		this.workspace?.destroy();
 		this.integrity.destroy();
+		this.statusBar.destroy();
+		this.pagination?.destroy();
+		this.chart.destroy();
 		this.sidebar.destroy();
 		this.capabilities.destroy();
 		this.kernel.destroy();

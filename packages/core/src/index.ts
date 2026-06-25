@@ -55,6 +55,13 @@ export type { GridViewDefinition, GridWorkspaceAdapter } from './domains/persist
 export { createGridStateSnapshot, applyGridState, isValidGridState, GRID_STATE_SCHEMA_VERSION } from './domains/persistence/GridStateSchema.js';
 export type { SerializedGridState, GridStateReadPort, GridStateWritePort } from './domains/persistence/GridStateSchema.js';
 
+export { StatusBarModel } from './domains/statusbar/StatusBarModel.js';
+export type { StatusBarPanelDef, StatusBarPanelId, StatusBarData, ComputedPanel, StatusBarPort } from './domains/statusbar/StatusBarModel.js';
+export { PaginationModel } from './domains/pagination/PaginationModel.js';
+export type { PaginationConfig } from './domains/pagination/PaginationModel.js';
+export { ChartOverlayController } from './domains/chart/ChartOverlayController.js';
+export type { ChartConfig, ChartSeries, ChartDataPoint, ChartSnapshot, ChartType } from './domains/chart/ChartOverlayController.js';
+
 export { DagEngine } from './domains/dag/DagEngine.js';
 export type { ComputedColumnDef, DagEnginePort } from './domains/dag/DagEngine.js';
 export { SpreadsheetFillEngine } from './domains/dag/SpreadsheetFillEngine.js';

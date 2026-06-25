@@ -30,6 +30,8 @@ import type { ExportOptions } from '../domains/export/GridExportEngine.js';
 import type { GridCapability } from '../plugins/GridCapabilityManager.js';
 import type { ComputedColumnDef } from '../domains/dag/DagEngine.js';
 import type { FillPattern } from '../domains/dag/SpreadsheetFillEngine.js';
+import type { StatusBarData, StatusBarPanelDef } from '../domains/statusbar/StatusBarModel.js';
+import type { ChartConfig, ChartSnapshot } from '../domains/chart/ChartOverlayController.js';
 
 /**
  * The public, command-backed grid API (ARCHITECTURE.md "Public API Direction"). Every mutating
@@ -154,6 +156,43 @@ export interface GridApi<TRow> {
 		getIssuesByField(field: string): GridIntegrityIssue[];
 		getIssuesBySeverity(severity: IntegritySeverity): GridIntegrityIssue[];
 		hasIssues(): boolean;
+		subscribe(fn: () => void): () => void;
+	};
+
+	/** Status bar: row/selected/filtered counts + field aggregates. */
+	readonly statusBar: {
+		getData(): StatusBarData;
+		refresh(): void;
+		subscribe(fn: () => void): () => void;
+	};
+
+	/** Client-side pagination. Null if no pagination config was provided. */
+	readonly pagination: {
+		hasPagination(): boolean;
+		getPageSize(): number;
+		getCurrentPage(): number;
+		getPageCount(): number;
+		getTotalRows(): number;
+		getStartRowIndex(): number;
+		getEndRowIndex(): number;
+		hasNextPage(): boolean;
+		hasPrevPage(): boolean;
+		setPageSize(size: number): void;
+		goToPage(page: number): void;
+		nextPage(): void;
+		prevPage(): void;
+		firstPage(): void;
+		lastPage(): void;
+		subscribe(fn: () => void): () => void;
+	};
+
+	/** Chart overlay: build chart data from grid cells. */
+	readonly chart: {
+		isActive(): boolean;
+		getConfig(): ChartConfig | null;
+		open(config: ChartConfig): void;
+		close(): void;
+		buildSnapshot(): ChartSnapshot | null;
 		subscribe(fn: () => void): () => void;
 	};
 
@@ -342,6 +381,40 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 			getIssuesBySeverity: (severity) => core.integrity.getIssuesBySeverity(severity),
 			hasIssues: () => core.integrity.hasIssues(),
 			subscribe: (fn) => core.integrity.subscribe(fn),
+		},
+
+		statusBar: {
+			getData: () => core.statusBar.getData(),
+			refresh: () => core.statusBar.refresh(),
+			subscribe: (fn) => core.statusBar.subscribe(fn),
+		},
+
+		pagination: {
+			hasPagination: () => core.pagination !== null,
+			getPageSize: () => core.pagination?.pageSize ?? 0,
+			getCurrentPage: () => core.pagination?.currentPage ?? 1,
+			getPageCount: () => core.pagination?.pageCount ?? 1,
+			getTotalRows: () => core.pagination?.totalRows ?? 0,
+			getStartRowIndex: () => core.pagination?.startRowIndex ?? 0,
+			getEndRowIndex: () => core.pagination?.endRowIndex ?? 0,
+			hasNextPage: () => core.pagination?.hasNextPage ?? false,
+			hasPrevPage: () => core.pagination?.hasPrevPage ?? false,
+			setPageSize: (size) => core.pagination?.setPageSize(size),
+			goToPage: (page) => core.pagination?.goToPage(page),
+			nextPage: () => core.pagination?.nextPage(),
+			prevPage: () => core.pagination?.prevPage(),
+			firstPage: () => core.pagination?.firstPage(),
+			lastPage: () => core.pagination?.lastPage(),
+			subscribe: (fn) => core.pagination?.subscribe(fn) ?? (() => {}),
+		},
+
+		chart: {
+			isActive: () => core.chart.isActive(),
+			getConfig: () => core.chart.getConfig(),
+			open: (config) => core.chart.open(config),
+			close: () => core.chart.close(),
+			buildSnapshot: () => core.chart.buildSnapshot(),
+			subscribe: (fn) => core.chart.subscribe(fn),
 		},
 
 		dag: {
