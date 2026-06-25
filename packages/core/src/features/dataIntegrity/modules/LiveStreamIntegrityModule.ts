@@ -134,7 +134,9 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 			createdAt: _now(),
 		};
 		const nextIssues = [
-			...this.getIssues().filter((existing) => !(existing.rowId === rowId && existing.colField === colField && existing.type === 'streamSkipped')),
+			...this.getIssues().filter(
+				(existing) => !(existing.rowId === rowId && existing.colField === colField && existing.type === 'streamSkipped')
+			),
 			issue,
 		];
 		this._setStreamIssues(nextIssues);

@@ -2307,10 +2307,19 @@ describe('Architecture guardrails', () => {
 		});
 
 		it('integrity modules no longer keep durable field-owned registries', () => {
-			const validationContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'), 'utf-8');
+			const validationContent = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'),
+				'utf-8'
+			);
 			const diffContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'), 'utf-8');
-			const conflictContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'), 'utf-8');
-			const liveStreamContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'LiveStreamIntegrityModule.ts'), 'utf-8');
+			const conflictContent = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'),
+				'utf-8'
+			);
+			const liveStreamContent = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'LiveStreamIntegrityModule.ts'),
+				'utf-8'
+			);
 			expect(validationContent).not.toContain('private readonly cellErrorIndex');
 			expect(diffContent).not.toContain('private readonly cellDiffMap');
 			expect(diffContent).not.toContain('private issues:');
@@ -2320,10 +2329,19 @@ describe('Architecture guardrails', () => {
 		});
 
 		it('integrity modules route authoritative writes through integrity domain mutations', () => {
-			const validationContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'), 'utf-8');
+			const validationContent = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ValidationIntegrityModule.ts'),
+				'utf-8'
+			);
 			const diffContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'DiffIntegrityModule.ts'), 'utf-8');
-			const conflictContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'), 'utf-8');
-			const liveStreamContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'LiveStreamIntegrityModule.ts'), 'utf-8');
+			const conflictContent = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'ConflictIntegrityModule.ts'),
+				'utf-8'
+			);
+			const liveStreamContent = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'LiveStreamIntegrityModule.ts'),
+				'utf-8'
+			);
 			expect(validationContent).toContain("kind: 'integrity-set-validation-issues'");
 			expect(diffContent).toContain("kind: 'integrity-set-diff-state'");
 			expect(conflictContent).toContain("kind: 'integrity-upsert-conflict'");

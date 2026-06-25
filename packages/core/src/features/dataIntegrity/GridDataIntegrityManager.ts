@@ -355,10 +355,7 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 			this.conflictModule?.clearIssues();
 			this.deps.ctx.applyChange({
 				reason: 'integrity:clear-all',
-				domainMutations: [
-					{ kind: 'integrity-clear-published-issues' },
-					{ kind: 'integrity-set-server-report', report: null },
-				],
+				domainMutations: [{ kind: 'integrity-clear-published-issues' }, { kind: 'integrity-set-server-report', report: null }],
 			});
 		} else {
 			const sources = filter.source ? (Array.isArray(filter.source) ? filter.source : [filter.source]) : null;
@@ -477,7 +474,16 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 			});
 		}
 		for (const rowId of integrity.diff.result?.addedRows ?? []) {
-			all.push({ id: `diff:added:${rowId}`, source: 'diff', type: 'diffAdded', severity: 'info', blocking: false, rowId, message: 'Row added', createdAt: 0 });
+			all.push({
+				id: `diff:added:${rowId}`,
+				source: 'diff',
+				type: 'diffAdded',
+				severity: 'info',
+				blocking: false,
+				rowId,
+				message: 'Row added',
+				createdAt: 0,
+			});
 		}
 		for (const rowId of integrity.diff.result?.removedRows ?? []) {
 			all.push({

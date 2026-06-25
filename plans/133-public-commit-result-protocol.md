@@ -27,12 +27,12 @@ Advanced grid features cannot rely on void mutation APIs once validation, capabi
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-| --- | --- | --- |
-| Architecture gate | `corepack pnpm run test:architecture` | exit 0 |
-| Core tests | `corepack pnpm --filter @open-grid/core test` | exit 0 |
-| Workspace tests | `corepack pnpm run test` | exit 0 |
-| Build/typecheck | `corepack pnpm run build` | exit 0 |
+| Purpose           | Command                                       | Expected on success |
+| ----------------- | --------------------------------------------- | ------------------- |
+| Architecture gate | `corepack pnpm run test:architecture`         | exit 0              |
+| Core tests        | `corepack pnpm --filter @open-grid/core test` | exit 0              |
+| Workspace tests   | `corepack pnpm run test`                      | exit 0              |
+| Build/typecheck   | `corepack pnpm run build`                     | exit 0              |
 
 ## Scope
 
@@ -105,12 +105,12 @@ Add architecture guards proving that:
 ## Test plan
 
 - Add regression tests for:
-  - successful single-cell commit
-  - noop commit
-  - rejected commit
-  - validation failure
-  - capability denial
-  - failed-before-commit path surfaced honestly
+    - successful single-cell commit
+    - noop commit
+    - rejected commit
+    - validation failure
+    - capability denial
+    - failed-before-commit path surfaced honestly
 - Add tests proving feature paths such as diff accept, conflict resolve, and edit commit consume the same result protocol.
 
 ## Done criteria

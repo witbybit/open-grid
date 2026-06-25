@@ -22,26 +22,26 @@ Open Grid cannot claim a single source of truth while integrity-critical state s
 
 - `packages/core/src/state/GridState.ts` defines the authoritative internal state slices and does not include any data-integrity domain state.
 - `packages/core/src/features/dataIntegrity/GridDataIntegrityManager.ts` owns mutable authoritative state in local fields:
-  - `publishedIssues` map at `packages/core/src/features/dataIntegrity/GridDataIntegrityManager.ts:67`
-  - `serverReport` field at `packages/core/src/features/dataIntegrity/GridDataIntegrityManager.ts:70`
-  - `_summary` field at `packages/core/src/features/dataIntegrity/GridDataIntegrityManager.ts:72`
+    - `publishedIssues` map at `packages/core/src/features/dataIntegrity/GridDataIntegrityManager.ts:67`
+    - `serverReport` field at `packages/core/src/features/dataIntegrity/GridDataIntegrityManager.ts:70`
+    - `_summary` field at `packages/core/src/features/dataIntegrity/GridDataIntegrityManager.ts:72`
 - Integrity submodules also own durable state locally instead of in the kernel:
-  - `ConflictIntegrityModule.conflicts` / `cellIndex` at `packages/core/src/features/dataIntegrity/modules/ConflictIntegrityModule.ts:31-32`
-  - `DiffIntegrityModule.model` / `result` / `cellDiffMap` at `packages/core/src/features/dataIntegrity/modules/DiffIntegrityModule.ts:28-36`
-  - `ValidationIntegrityModule.issues` / `cellErrorIndex` at `packages/core/src/features/dataIntegrity/modules/ValidationIntegrityModule.ts:36-40`
-  - `LiveStreamIntegrityModule.streamIssues`, `flashCells`, and `activeStream` at `packages/core/src/features/dataIntegrity/modules/LiveStreamIntegrityModule.ts:39-43`
+    - `ConflictIntegrityModule.conflicts` / `cellIndex` at `packages/core/src/features/dataIntegrity/modules/ConflictIntegrityModule.ts:31-32`
+    - `DiffIntegrityModule.model` / `result` / `cellDiffMap` at `packages/core/src/features/dataIntegrity/modules/DiffIntegrityModule.ts:28-36`
+    - `ValidationIntegrityModule.issues` / `cellErrorIndex` at `packages/core/src/features/dataIntegrity/modules/ValidationIntegrityModule.ts:36-40`
+    - `LiveStreamIntegrityModule.streamIssues`, `flashCells`, and `activeStream` at `packages/core/src/features/dataIntegrity/modules/LiveStreamIntegrityModule.ts:39-43`
 - `GridDataIntegrityManager` is currently an owner plus orchestrator plus API builder, which is too much authority for one feature shell.
 - The repo constitution says mutable concerns must have one owner in core state and all other layers read projections from that owner: `docs/architecture/core-target.md`.
 - Existing architectural enforcement style lives in `packages/core/src/engine/architectureGuards.test.ts`; match that style for any new guardrails.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-| --- | --- | --- |
-| Architecture gate | `corepack pnpm run test:architecture` | exit 0 |
-| Core tests | `corepack pnpm --filter @open-grid/core test` | exit 0 |
-| Workspace tests | `corepack pnpm run test` | exit 0 |
-| Build/typecheck | `corepack pnpm run build` | exit 0 |
+| Purpose           | Command                                       | Expected on success |
+| ----------------- | --------------------------------------------- | ------------------- |
+| Architecture gate | `corepack pnpm run test:architecture`         | exit 0              |
+| Core tests        | `corepack pnpm --filter @open-grid/core test` | exit 0              |
+| Workspace tests   | `corepack pnpm run test`                      | exit 0              |
+| Build/typecheck   | `corepack pnpm run build`                     | exit 0              |
 
 ## Scope
 
@@ -137,11 +137,11 @@ Match the repository’s existing content-inspection guard style.
 ## Test plan
 
 - Add focused tests proving integrity state can be observed from one canonical state snapshot after:
-  - validation run
-  - diff model set/clear
-  - conflict add/resolve
-  - live-stream state updates
-  - server report publish/clear
+    - validation run
+    - diff model set/clear
+    - conflict add/resolve
+    - live-stream state updates
+    - server report publish/clear
 - Add regression tests proving decorations and diagnostics are reconstructed from authoritative state after manager recreation.
 - Add at least one architecture guard that fails if durable integrity state ownership returns to feature-local fields.
 

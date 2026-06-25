@@ -26,12 +26,12 @@ The commit kernel is only truly authoritative if derived state, domain version b
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-| --- | --- | --- |
-| Architecture gate | `corepack pnpm run test:architecture` | exit 0 |
-| Core tests | `corepack pnpm --filter @open-grid/core test` | exit 0 |
-| Workspace tests | `corepack pnpm run test` | exit 0 |
-| Build/typecheck | `corepack pnpm run build` | exit 0 |
+| Purpose           | Command                                       | Expected on success |
+| ----------------- | --------------------------------------------- | ------------------- |
+| Architecture gate | `corepack pnpm run test:architecture`         | exit 0              |
+| Core tests        | `corepack pnpm --filter @open-grid/core test` | exit 0              |
+| Workspace tests   | `corepack pnpm run test`                      | exit 0              |
+| Build/typecheck   | `corepack pnpm run build`                     | exit 0              |
 
 ## Scope
 
@@ -102,10 +102,10 @@ The test should fail if a second reactive side-path reintroduces extra invalidat
 ## Test plan
 
 - Add regression tests around selection, sort, filter, expansion, and row-height changes to prove the new pipeline still computes:
-  - bounds
-  - visible ranges
-  - geometry updates
-  - targeted invalidations
+    - bounds
+    - visible ranges
+    - geometry updates
+    - targeted invalidations
 - Add at least one adversarial test proving duplicate render invalidations are not emitted for a single logical mutation.
 
 ## Done criteria

@@ -1053,7 +1053,9 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					};
 				}
 
-				const changedCells = currentResult.changedCells.filter((cell) => !(cell.rowId === mutation.rowId && cell.colField === mutation.colField));
+				const changedCells = currentResult.changedCells.filter(
+					(cell) => !(cell.rowId === mutation.rowId && cell.colField === mutation.colField)
+				);
 				const changedRows = changedCells.some((cell) => cell.rowId === mutation.rowId)
 					? currentResult.changedRows
 					: currentResult.changedRows.filter((rowId) => rowId !== mutation.rowId);
@@ -1199,7 +1201,10 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					};
 				}
 				const publishedIssues: Partial<Record<GridIntegrityIssueSource, readonly GridIntegrityIssue[]>> = {};
-				for (const [source, issues] of Object.entries(integrity.publishedIssues) as [GridIntegrityIssueSource, readonly GridIntegrityIssue[]][]) {
+				for (const [source, issues] of Object.entries(integrity.publishedIssues) as [
+					GridIntegrityIssueSource,
+					readonly GridIntegrityIssue[],
+				][]) {
 					const kept = issues.filter((issue) => !matchesIntegrityFilter(issue, mutation.filter!));
 					if (kept.length > 0) {
 						publishedIssues[source] = kept;
@@ -1394,7 +1399,9 @@ function collectIntegrityIssues<TRowData>(integrity: GridIntegrityState<TRowData
 			blocking: true,
 			rowId: conflict.rowId,
 			colField: conflict.colField,
-			message: conflict.message ?? `Conflict: local ${formatIntegrityValue(conflict.localValue)} vs remote ${formatIntegrityValue(conflict.remoteValue)}`,
+			message:
+				conflict.message ??
+				`Conflict: local ${formatIntegrityValue(conflict.localValue)} vs remote ${formatIntegrityValue(conflict.remoteValue)}`,
 			createdAt: conflict.createdAt,
 			data: conflict,
 		});

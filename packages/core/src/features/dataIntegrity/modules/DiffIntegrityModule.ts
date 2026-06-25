@@ -62,7 +62,16 @@ export class DiffIntegrityModule<TRowData> implements GridIntegrityModule<TRowDa
 			});
 		}
 		for (const rowId of result.addedRows) {
-			issues.push({ id: `diff:added:${rowId}`, source: 'diff', type: 'diffAdded', severity: 'info', blocking: false, rowId, message: 'Row added', createdAt: this.lastComputedAt ?? 0 });
+			issues.push({
+				id: `diff:added:${rowId}`,
+				source: 'diff',
+				type: 'diffAdded',
+				severity: 'info',
+				blocking: false,
+				rowId,
+				message: 'Row added',
+				createdAt: this.lastComputedAt ?? 0,
+			});
 		}
 		for (const rowId of result.removedRows) {
 			issues.push({

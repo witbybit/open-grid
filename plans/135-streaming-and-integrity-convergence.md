@@ -26,12 +26,12 @@ Two live-stream engines with nearly identical batching, flashing, and patch-appl
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-| --- | --- | --- |
-| Architecture gate | `corepack pnpm run test:architecture` | exit 0 |
-| Core tests | `corepack pnpm --filter @open-grid/core test` | exit 0 |
-| Workspace tests | `corepack pnpm run test` | exit 0 |
-| Build/typecheck | `corepack pnpm run build` | exit 0 |
+| Purpose           | Command                                       | Expected on success |
+| ----------------- | --------------------------------------------- | ------------------- |
+| Architecture gate | `corepack pnpm run test:architecture`         | exit 0              |
+| Core tests        | `corepack pnpm --filter @open-grid/core test` | exit 0              |
+| Workspace tests   | `corepack pnpm run test`                      | exit 0              |
+| Build/typecheck   | `corepack pnpm run build`                     | exit 0              |
 
 ## Scope
 
@@ -91,11 +91,11 @@ Add architecture guards preventing:
 
 - Keep or rewrite the strongest batching/backpressure/flash tests around the canonical implementation.
 - Add regression tests covering:
-  - dirty cell skip
-  - conflict creation
-  - remote-wins commit
-  - row patch apply
-  - flash decoration lifecycle
+    - dirty cell skip
+    - conflict creation
+    - remote-wins commit
+    - row patch apply
+    - flash decoration lifecycle
 - Confirm no behavior loss relative to the kept implementation.
 
 ## Done criteria

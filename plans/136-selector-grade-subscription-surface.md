@@ -20,20 +20,20 @@ Serious grids survive feature load by waking only the smallest necessary slice o
 ## Current state
 
 - `store.ts` still exposes broad subscriptions:
-  - `subscribeToRow` listens to `globalVersion` and `rowHeights` at `packages/core/src/store.ts:963-975`
-  - `subscribeToColumn` listens to `columns` and `columnWidths` at `packages/core/src/store.ts:977-989`
-  - `subscribeToHeaders` listens to `columns`, `columnWidths`, and `sortModel` at `packages/core/src/store.ts:991-1000`
+    - `subscribeToRow` listens to `globalVersion` and `rowHeights` at `packages/core/src/store.ts:963-975`
+    - `subscribeToColumn` listens to `columns` and `columnWidths` at `packages/core/src/store.ts:977-989`
+    - `subscribeToHeaders` listens to `columns`, `columnWidths`, and `sortModel` at `packages/core/src/store.ts:991-1000`
 - `GridApi` exposes domain-version subscription hooks but not a strong selector-grade read model for all important domains.
 - Domain versions already exist in `GridEngine`, so the architecture has the beginnings of a better wakeup model.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-| --- | --- | --- |
-| Architecture gate | `corepack pnpm run test:architecture` | exit 0 |
-| Core tests | `corepack pnpm --filter @open-grid/core test` | exit 0 |
-| Workspace tests | `corepack pnpm run test` | exit 0 |
-| Build/typecheck | `corepack pnpm run build` | exit 0 |
+| Purpose           | Command                                       | Expected on success |
+| ----------------- | --------------------------------------------- | ------------------- |
+| Architecture gate | `corepack pnpm run test:architecture`         | exit 0              |
+| Core tests        | `corepack pnpm --filter @open-grid/core test` | exit 0              |
+| Workspace tests   | `corepack pnpm run test`                      | exit 0              |
+| Build/typecheck   | `corepack pnpm run build`                     | exit 0              |
 
 ## Scope
 

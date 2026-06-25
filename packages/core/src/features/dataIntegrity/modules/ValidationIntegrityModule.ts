@@ -157,7 +157,15 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 				if (fields.includes(colField) || fields.length === 0) {
 					newIssues.push(_makeRowIssue(rule, rowId, fields, result));
 					for (const field of fields) {
-						if (!newIssues.some((issue) => issue.colField === field && issue.rowId === rowId && issue.source === 'validation' && issue.type === 'rowValidation')) {
+						if (
+							!newIssues.some(
+								(issue) =>
+									issue.colField === field &&
+									issue.rowId === rowId &&
+									issue.source === 'validation' &&
+									issue.type === 'rowValidation'
+							)
+						) {
 							newIssues.push(
 								_makeCellIssue(
 									{ id: `${rule.id}:${field}`, field, severity: rule.severity ?? 'error', blocking: rule.blocking ?? true },
@@ -178,7 +186,10 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 			reason: 'integrity:validation:set-issues',
 			domainMutations: [{ kind: 'integrity-set-validation-issues', issues: [...retained, ...newIssues] }],
 			invalidations: [{ kind: 'cell', rowId, colId: colField, reason: 'integrity-validation' }],
-			events: newIssues.length > 0 ? [{ type: GridEventName.cellValidationChanged, payload: { rowId, colField, error: newIssues[0]?.message ?? null } }] : [],
+			events:
+				newIssues.length > 0
+					? [{ type: GridEventName.cellValidationChanged, payload: { rowId, colField, error: newIssues[0]?.message ?? null } }]
+					: [],
 		});
 
 		this.deps.requestRepaint([{ rowId, colField }]);
@@ -302,7 +313,9 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 			message,
 			createdAt: _now(),
 		};
-		const retained = this.getIssues().filter((existing) => !(existing.source === 'serverValidation' && existing.rowId === rowId && existing.colField === colField));
+		const retained = this.getIssues().filter(
+			(existing) => !(existing.source === 'serverValidation' && existing.rowId === rowId && existing.colField === colField)
+		);
 		this.deps.ctx.applyChange({
 			reason: 'integrity:validation:set-issues',
 			domainMutations: [{ kind: 'integrity-set-validation-issues', issues: [...retained, issue] }],
