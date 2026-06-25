@@ -109,6 +109,24 @@ export class RowPipeline<TRow> {
 		return this.recompute();
 	}
 
+	expandAllGroups(): VisualModelView<TRow> {
+		this.expansion.expandAll();
+		return this.recompute();
+	}
+
+	collapseAllGroups(): VisualModelView<TRow> {
+		// Expand everything first so all group rows surface, then collect and collapse them.
+		this.expansion.expandAll();
+		const full = this.recompute();
+		const groupKeys: string[] = [];
+		for (let i = 0; i < full.count; i++) {
+			const row = full.getByVisualIndex(i);
+			if (row?.kind === 'group') groupKeys.push(row.groupKey);
+		}
+		this.expansion.collapseAll(groupKeys);
+		return this.recompute();
+	}
+
 	// ── Master/detail ──
 	toggleDetail(rowId: string): VisualModelView<TRow> {
 		this.detailExpansion.toggle(rowId);

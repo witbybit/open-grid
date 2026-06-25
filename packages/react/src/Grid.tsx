@@ -166,6 +166,32 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 
 		// ── 3. Create + mount the renderer ────────────────────────────────────
 		const renderer = new DomGridRenderer<TRow>(api.getRendererView());
+
+		// Wire column interaction callbacks
+		renderer.setSortCallback((field, _currentDir) => {
+			const currentSort = api.pipeline.getSortModel();
+			const existing = currentSort.find((s) => s.field === field);
+			const nextDir: 'asc' | 'desc' | null =
+				!existing ? 'asc' : existing.direction === 'asc' ? 'desc' : null;
+			const nextModel = nextDir === null
+				? currentSort.filter((s) => s.field !== field)
+				: [...currentSort.filter((s) => s.field !== field), { field, columnId: field as import('@open-grid/core').ColumnId, direction: nextDir }];
+			api.pipeline.setSortModel(nextModel);
+		});
+		renderer.setResizeCallback((field, newWidth) => {
+			const col = api.columns.getState().find((c) => c.field === field || c.id === field);
+			if (col) api.columns.resize(col.id, newWidth);
+		});
+		renderer.setGroupToggleCallback((groupKey) => {
+			api.pipeline.toggleGroupExpanded(groupKey);
+		});
+		renderer.setTreeToggleCallback((rowId) => {
+			api.pipeline.toggleTreeNode(rowId);
+		});
+		renderer.setDetailToggleCallback((rowId) => {
+			api.pipeline.toggleDetail(rowId);
+		});
+
 		renderer.mount(container);
 
 		// ── 4. Prime with current rows immediately ─────────────────────────────

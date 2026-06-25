@@ -5,7 +5,9 @@ import type { CellAddress } from '../domains/cells/CellAddress.js';
 import type { ColumnId } from '../domains/columns/ColumnId.js';
 import type { ColumnPin } from '../domains/columns/ColumnDef.js';
 import type { ColumnState } from '../domains/columns/ColumnState.js';
+import type { GroupByModel } from '../domains/pipeline/GroupModel.js';
 import type { FilterModel, SortModel } from '../domains/pipeline/PipelineModels.js';
+import type { TreeDataOptions } from '../domains/pipeline/TreeStage.js';
 import type { RenderPlan } from '../domains/render/RenderPlan.js';
 import type { RowTransaction } from '../domains/rows/RowCommand.js';
 import type { RowId } from '../domains/rows/RowId.js';
@@ -49,8 +51,26 @@ export interface GridApi<TRow> {
 	};
 
 	readonly pipeline: {
+		getSortModel(): SortModel;
+		getFilterModel(): FilterModel;
 		setSortModel(model: SortModel): GridCommandResult;
 		setFilterModel(model: FilterModel): GridCommandResult;
+
+		// Grouping
+		getGroupBy(): GroupByModel;
+		setGroupBy(model: GroupByModel): GridCommandResult;
+		toggleGroupExpanded(groupKey: string): GridCommandResult;
+		setGroupExpanded(groupKey: string, expanded: boolean): GridCommandResult;
+		expandAllGroups(): GridCommandResult;
+		collapseAllGroups(): GridCommandResult;
+
+		// Tree data
+		setTreeData(options: TreeDataOptions | null): GridCommandResult;
+		toggleTreeNode(rowId: string): GridCommandResult;
+
+		// Master / detail
+		toggleDetail(rowId: string): GridCommandResult;
+		setDetailOpen(rowId: string, open: boolean): GridCommandResult;
 	};
 
 	readonly selection: {
@@ -124,8 +144,23 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 		},
 
 		pipeline: {
+			getSortModel: () => core.pipeline.getSortModel(),
+			getFilterModel: () => core.pipeline.getFilterModel(),
 			setSortModel: (model) => kernel.dispatch({ type: 'pipeline.setSortModel', payload: { model } }),
 			setFilterModel: (model) => kernel.dispatch({ type: 'pipeline.setFilterModel', payload: { model } }),
+
+			getGroupBy: () => core.pipeline.getGroupBy(),
+			setGroupBy: (model) => kernel.dispatch({ type: 'pipeline.setGroupBy', payload: { model } }),
+			toggleGroupExpanded: (groupKey) => kernel.dispatch({ type: 'pipeline.toggleGroup', payload: { groupKey } }),
+			setGroupExpanded: (groupKey, expanded) => kernel.dispatch({ type: 'pipeline.setGroupExpanded', payload: { groupKey, expanded } }),
+			expandAllGroups: () => kernel.dispatch({ type: 'pipeline.expandAllGroups', payload: {} }),
+			collapseAllGroups: () => kernel.dispatch({ type: 'pipeline.collapseAllGroups', payload: {} }),
+
+			setTreeData: (options) => kernel.dispatch({ type: 'pipeline.setTreeData', payload: { options } }),
+			toggleTreeNode: (rowId) => kernel.dispatch({ type: 'pipeline.toggleTreeNode', payload: { rowId } }),
+
+			toggleDetail: (rowId) => kernel.dispatch({ type: 'pipeline.toggleDetail', payload: { rowId } }),
+			setDetailOpen: (rowId, open) => kernel.dispatch({ type: 'pipeline.setDetailOpen', payload: { rowId, open } }),
 		},
 
 		selection: {

@@ -23,6 +23,8 @@ export { createCellAddress, cellId } from './domains/cells/CellAddress.js';
 export type { CellAddress, CellId } from './domains/cells/CellAddress.js';
 
 export type { ColumnFilter, FilterModel, SortKey, SortModel } from './domains/pipeline/PipelineModels.js';
+export type { GroupByColumn, GroupByModel } from './domains/pipeline/GroupModel.js';
+export type { TreeDataOptions } from './domains/pipeline/TreeStage.js';
 export type { VisualRow } from './domains/pipeline/VisualRow.js';
 
 export type { CellRenderPlan, RenderPlan, RowRenderPlan } from './domains/render/RenderPlan.js';

@@ -71,6 +71,8 @@ interface RowSlotState {
 	mountedCellKeys: Set<string>;
 	pinLeft: HTMLDivElement | null;
 	pinRight: HTMLDivElement | null;
+	/** Last row kind rendered in this slot — used to detect kind transitions and clear stale content. */
+	lastKind: VisualRow['kind'] | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +143,9 @@ export class DomGridRenderer<TRow> {
 	// Callbacks
 	private sortCallback: ((field: string, currentDir: 'asc' | 'desc' | null) => void) | null = null;
 	private resizeCallback: ((field: string, newWidth: number) => void) | null = null;
+	private groupToggleCallback: ((groupKey: string) => void) | null = null;
+	private treeToggleCallback: ((rowId: string) => void) | null = null;
+	private detailToggleCallback: ((rowId: string) => void) | null = null;
 	private resizeDragState: ResizeDragState | null = null;
 
 	// Selection overlay
@@ -247,6 +252,21 @@ export class DomGridRenderer<TRow> {
 	/** Wire a resize handler called when the user finishes resizing a column header. */
 	setResizeCallback(fn: (field: string, newWidth: number) => void): void {
 		this.resizeCallback = fn;
+	}
+
+	/** Wire a handler called when the user clicks to expand/collapse a group row. */
+	setGroupToggleCallback(fn: (groupKey: string) => void): void {
+		this.groupToggleCallback = fn;
+	}
+
+	/** Wire a handler called when the user clicks to expand/collapse a tree node. */
+	setTreeToggleCallback(fn: (rowId: string) => void): void {
+		this.treeToggleCallback = fn;
+	}
+
+	/** Wire a handler called when the user clicks to expand/collapse a detail panel. */
+	setDetailToggleCallback(fn: (rowId: string) => void): void {
+		this.detailToggleCallback = fn;
 	}
 
 	/** Force an immediate synchronous paint (for tests / imperative refresh). */
@@ -687,6 +707,152 @@ export class DomGridRenderer<TRow> {
 		colStart: number,
 		colEnd: number,
 	): void {
+		// When the row kind changes, clear all previous slot content first.
+		if (slot.lastKind !== null && slot.lastKind !== row.kind) {
+			this.clearSlotContent(slot);
+		}
+		slot.lastKind = row.kind;
+
+		if (row.kind === 'group') {
+			this.paintGroupRow(slot, row);
+			return;
+		}
+		if (row.kind === 'detail') {
+			this.paintDetailRow(slot, row);
+			return;
+		}
+		if (row.kind === 'placeholder') {
+			// Placeholder rows are outside the loaded block — render empty.
+			slot.el.style.display = 'none';
+			return;
+		}
+
+		// data | tree | loading — paint column cells
+		this.paintColumnCells(slot, row, topology, colStart, colEnd);
+	}
+
+	/** Remove all cell/content elements from a slot (called on row-kind transition). */
+	private clearSlotContent(slot: RowSlotState): void {
+		this.fireUnmountForSlot(slot);
+		slot.cellsByField.clear();
+		slot.pinLeft?.remove();
+		slot.pinLeft = null;
+		slot.pinRight?.remove();
+		slot.pinRight = null;
+		slot.el.innerHTML = '';
+	}
+
+	// ---------------------------------------------------------------------------
+	// Group row
+	// ---------------------------------------------------------------------------
+
+	private paintGroupRow(slot: RowSlotState, row: Extract<VisualRow<TRow>, { kind: 'group' }>): void {
+		const el = slot.el;
+		// Reuse existing group content if present; create on first paint.
+		let groupEl = el.querySelector<HTMLDivElement>('.og-group-row-content');
+		if (!groupEl) {
+			groupEl = document.createElement('div');
+			groupEl.className = 'og-group-row-content';
+			groupEl.style.display = 'flex';
+			groupEl.style.alignItems = 'center';
+			groupEl.style.height = '100%';
+			groupEl.style.paddingLeft = '8px';
+			groupEl.style.gap = '6px';
+			groupEl.style.cursor = 'pointer';
+			groupEl.style.userSelect = 'none';
+
+			const chevron = document.createElement('span');
+			chevron.className = 'og-group-chevron';
+			chevron.style.display = 'inline-block';
+			chevron.style.width = '16px';
+			chevron.style.textAlign = 'center';
+			chevron.style.transition = 'transform 0.15s';
+			chevron.style.flexShrink = '0';
+			groupEl.appendChild(chevron);
+
+			const label = document.createElement('span');
+			label.className = 'og-group-label';
+			label.style.overflow = 'hidden';
+			label.style.textOverflow = 'ellipsis';
+			label.style.whiteSpace = 'nowrap';
+			label.style.fontWeight = '600';
+			groupEl.appendChild(label);
+
+			const count = document.createElement('span');
+			count.className = 'og-group-count';
+			count.style.opacity = '0.6';
+			count.style.fontSize = '0.85em';
+			count.style.flexShrink = '0';
+			groupEl.appendChild(count);
+
+			groupEl.addEventListener('click', () => {
+				this.groupToggleCallback?.(row.groupKey);
+			});
+
+			el.appendChild(groupEl);
+		}
+
+		// Update depth indentation
+		const indentPx = row.depth * 16;
+		groupEl.style.paddingLeft = `${8 + indentPx}px`;
+
+		// Update chevron
+		const chevron = groupEl.querySelector<HTMLSpanElement>('.og-group-chevron');
+		if (chevron) {
+			chevron.textContent = row.expanded ? '▾' : '▸';
+			chevron.style.transform = '';
+		}
+
+		// Update label
+		const label = groupEl.querySelector<HTMLSpanElement>('.og-group-label');
+		if (label) {
+			const valText = row.value != null ? String(row.value) : '(blank)';
+			label.textContent = valText;
+		}
+
+		// Update count
+		const countEl = groupEl.querySelector<HTMLSpanElement>('.og-group-count');
+		if (countEl) {
+			countEl.textContent = `(${row.count})`;
+		}
+
+		// Re-wire click to latest groupKey (handles slot recycle)
+		const oldHandler = (groupEl as HTMLDivElement & { _ogGroupHandler?: () => void })._ogGroupHandler;
+		if (oldHandler) groupEl.removeEventListener('click', oldHandler);
+		const handler = () => { this.groupToggleCallback?.(row.groupKey); };
+		(groupEl as HTMLDivElement & { _ogGroupHandler?: () => void })._ogGroupHandler = handler;
+		groupEl.addEventListener('click', handler);
+	}
+
+	// ---------------------------------------------------------------------------
+	// Detail row
+	// ---------------------------------------------------------------------------
+
+	private paintDetailRow(slot: RowSlotState, row: Extract<VisualRow<TRow>, { kind: 'detail' }>): void {
+		const el = slot.el;
+		let detailEl = el.querySelector<HTMLDivElement>('.og-detail-row-content');
+		if (!detailEl) {
+			detailEl = document.createElement('div');
+			detailEl.className = 'og-detail-row-content';
+			detailEl.style.width = '100%';
+			detailEl.style.height = '100%';
+			detailEl.dataset.parentRowId = String(row.parentRowId);
+			el.appendChild(detailEl);
+		}
+		// Portal consumers can mount into detailEl via callbacks if wired up.
+	}
+
+	// ---------------------------------------------------------------------------
+	// Column-based cell painting (data | tree | loading)
+	// ---------------------------------------------------------------------------
+
+	private paintColumnCells(
+		slot: RowSlotState,
+		row: VisualRow<TRow>,
+		topology: CompiledColumnTopology,
+		colStart: number,
+		colEnd: number,
+	): void {
 		const el = slot.el;
 		const hasLeft = topology.pinLeftWidth > 0;
 		const hasRight = topology.pinRightWidth > 0;
@@ -721,7 +887,6 @@ export class DomGridRenderer<TRow> {
 		// Remove cells that left the window
 		for (const [field, cellEl] of slot.cellsByField) {
 			if (!renderFields.has(field)) {
-				// Fire unmount if portal was mounted
 				if (row.kind === 'data') {
 					const cellKey = `${row.rowId}:${field}`;
 					if (slot.mountedCellKeys.has(cellKey)) {
@@ -736,17 +901,20 @@ export class DomGridRenderer<TRow> {
 
 		// Paint left pins
 		for (const p of topology.leftPlacements) {
-			this.paintCell(slot, row, p.field, p.laneLeft, p.width, 'left');
+			this.paintCell(slot, row, p.field, p.laneLeft, p.width, 'left', 0);
 		}
 
-		// Paint visible center columns
+		// Paint visible center columns — first visible col gets tree indent
+		let firstCenter = true;
 		for (const p of visibleCenterPlacements) {
-			this.paintCell(slot, row, p.field, topology.pinLeftWidth + p.laneLeft, p.width, 'center');
+			const treeIndent = firstCenter && row.kind === 'tree' ? row.depth * 16 : 0;
+			firstCenter = false;
+			this.paintCell(slot, row, p.field, topology.pinLeftWidth + p.laneLeft, p.width, 'center', treeIndent);
 		}
 
 		// Paint right pins
 		for (const p of topology.rightPlacements) {
-			this.paintCell(slot, row, p.field, p.laneLeft, p.width, 'right');
+			this.paintCell(slot, row, p.field, p.laneLeft, p.width, 'right', 0);
 		}
 	}
 
@@ -757,6 +925,7 @@ export class DomGridRenderer<TRow> {
 		cssLeft: number,
 		width: number,
 		lane: 'left' | 'center' | 'right',
+		treeIndent: number,
 	): void {
 		const el = slot.el;
 		let cellEl = slot.cellsByField.get(field);
@@ -796,47 +965,62 @@ export class DomGridRenderer<TRow> {
 		if (cellEl.style.left !== nextLeft) cellEl.style.left = nextLeft;
 		if (cellEl.style.width !== nextWidth) cellEl.style.width = nextWidth;
 
+		// Tree indentation on first center column
+		if (treeIndent > 0) {
+			cellEl.style.paddingLeft = `${treeIndent}px`;
+		} else if (cellEl.style.paddingLeft) {
+			cellEl.style.paddingLeft = '';
+		}
+
 		// Update content
 		const contentEl = cellEl.firstElementChild as HTMLDivElement | null;
-		if (contentEl) {
-			if (row.kind === 'data') {
-				const val = this.view.getCellDisplayValue(row.rowId, field);
-				const text = val != null ? String(val) : '';
-				if (contentEl.dataset.contentMode !== 'text') contentEl.dataset.contentMode = 'text';
+		if (!contentEl) return;
 
-				// Fire portal callback on new bind
-				if (isNew && this.callbacks.onMountCellContent) {
-					const topology = this.compiledTopology;
-					const colPlacement = topology?.byColumnId;
-					// Find matching column
-					const columns = this.view.getColumns();
-					const col = columns.find((c) => c.field === field);
-					if (col) {
-						const cellKey = `${row.rowId}:${field}`;
-						slot.mountedCellKeys.add(cellKey);
-						this.callbacks.onMountCellContent({
-							cellKey,
-							container: cellEl,
-							rowId: row.rowId,
-							field,
-							row,
-							column: col,
-						});
-					}
-				} else if (!isNew || !this.callbacks.onMountCellContent) {
-					if (contentEl.textContent !== text) contentEl.textContent = text;
+		if (row.kind === 'data') {
+			const val = this.view.getCellDisplayValue(row.rowId, field);
+			const text = val != null ? String(val) : '';
+			if (contentEl.dataset.contentMode !== 'text') contentEl.dataset.contentMode = 'text';
+
+			// Fire portal callback on new bind
+			if (isNew && this.callbacks.onMountCellContent) {
+				const columns = this.view.getColumns();
+				const col = columns.find((c) => c.field === field);
+				if (col) {
+					const cellKey = `${row.rowId}:${field}`;
+					slot.mountedCellKeys.add(cellKey);
+					this.callbacks.onMountCellContent({
+						cellKey,
+						container: cellEl,
+						rowId: row.rowId,
+						field,
+						row,
+						column: col,
+					});
 				}
-			} else if (row.kind === 'group') {
-				const text = field === 'group' ? String((row as { groupKey?: unknown }).groupKey ?? '') : '';
+			} else if (!isNew || !this.callbacks.onMountCellContent) {
 				if (contentEl.textContent !== text) contentEl.textContent = text;
-			} else if (row.kind === 'loading') {
-				if (contentEl.dataset.contentMode !== 'loading') {
-					contentEl.dataset.contentMode = 'loading';
-					contentEl.innerHTML = '';
-					const skel = document.createElement('div');
-					skel.className = 'og-cell-loading-skeleton';
-					contentEl.appendChild(skel);
-				}
+			}
+		} else if (row.kind === 'tree') {
+			// Tree rows are real data rows — display cell value same as data
+			const val = this.view.getCellDisplayValue(row.rowId, field);
+			const text = val != null ? String(val) : '';
+			if (contentEl.dataset.contentMode !== 'text') contentEl.dataset.contentMode = 'text';
+			// Add expand/collapse chevron to first column if this is a tree row with children
+			// (simplified: always show chevron; wires to treeToggleCallback on click)
+			if (isNew) {
+				cellEl.addEventListener('click', (e) => {
+					if (!(e.target as HTMLElement).closest('.og-tree-chevron')) return;
+					this.treeToggleCallback?.(String(row.rowId));
+				});
+			}
+			if (contentEl.textContent !== text) contentEl.textContent = text;
+		} else if (row.kind === 'loading') {
+			if (contentEl.dataset.contentMode !== 'loading') {
+				contentEl.dataset.contentMode = 'loading';
+				contentEl.innerHTML = '';
+				const skel = document.createElement('div');
+				skel.className = 'og-cell-loading-skeleton';
+				contentEl.appendChild(skel);
 			}
 		}
 	}
@@ -891,6 +1075,7 @@ export class DomGridRenderer<TRow> {
 				mountedCellKeys: new Set(),
 				pinLeft: null,
 				pinRight: null,
+				lastKind: null,
 			});
 		}
 	}
