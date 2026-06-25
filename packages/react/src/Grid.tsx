@@ -1,12 +1,14 @@
-import { useEffect, useRef, useMemo, type CSSProperties } from 'react';
+import { useEffect, useRef, useMemo, useState, type CSSProperties } from 'react';
 import {
 	createGrid,
 	DomGridRenderer,
 	ThemeManager,
 	isBuiltInThemeName,
 } from '@open-grid/core';
-import type { GridApi, RowId, SortModel, FilterModel } from '@open-grid/core';
+import type { GridApi, RowId, SortModel, FilterModel, ColumnId } from '@open-grid/core';
 import type { GridNextColumnDef, GridNextProps } from './GridNext.js';
+import { GridSidebar } from './sidebar/GridSidebar.js';
+import type { GridSidebarConfig } from './sidebar/GridSidebar.js';
 
 // Re-export for consumers who import from this module.
 export type GridColumnDef<TRow> = GridNextColumnDef<TRow>;
@@ -44,8 +46,8 @@ export interface GridProps<TRow extends object = Record<string, unknown>> extend
 	showFilterChipBar?: boolean;
 	enableContextMenu?: boolean;
 
-	// Sidebar (pass-through for future use)
-	sidebar?: unknown;
+	// Sidebar
+	sidebar?: GridSidebarConfig<TRow>;
 }
 
 /**
@@ -85,6 +87,7 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 }: GridProps<TRow>) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const apiRef = useRef<GridApi<TRow> | null>(null);
+	const [mountedApi, setMountedApi] = useState<GridApi<TRow> | null>(null);
 
 	// Normalize column defs once — columns are fixed at mount time.
 	const normalizedCols = useMemo(
@@ -175,7 +178,7 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 				!existing ? 'asc' : existing.direction === 'asc' ? 'desc' : null;
 			const nextModel = nextDir === null
 				? currentSort.filter((s) => s.field !== field)
-				: [...currentSort.filter((s) => s.field !== field), { field, columnId: field as import('@open-grid/core').ColumnId, direction: nextDir }];
+				: [...currentSort.filter((s) => s.field !== field), { field, columnId: field as ColumnId, direction: nextDir }];
 			api.pipeline.setSortModel(nextModel);
 		});
 		renderer.setResizeCallback((field, newWidth) => {
@@ -198,7 +201,13 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 		api.rows.replace(rowsRef.current as readonly TRow[]);
 
 		// ── 5. Notify host ─────────────────────────────────────────────────────
+		setMountedApi(api);
 		onGridReadyRef.current?.(api);
+
+		// Open default sidebar panel if configured
+		if (sidebar?.defaultOpen) {
+			api.sidebar.openPanel(sidebar.defaultOpen);
+		}
 
 		// ── 6. Subscribe to events for callbacks ──────────────────────────────
 		const unsub = api.subscribe((event) => {
@@ -225,6 +234,7 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 
 		// ── 7. Cleanup ─────────────────────────────────────────────────────────
 		return () => {
+			setMountedApi(null);
 			unsub();
 			renderer.unmount();
 			api.destroy();
@@ -268,9 +278,21 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 
 	return (
 		<div
-			ref={containerRef}
-			className={`og-grid-container${className ? ` ${className}` : ''}`}
-			style={{ width: '100%', height: '100%', ...style } as CSSProperties}
-		/>
+			className={className}
+			style={{ width: '100%', height: '100%', display: 'flex', overflow: 'hidden', ...style } as CSSProperties}
+		>
+			<div
+				ref={containerRef}
+				className="og-grid-container"
+				style={{ flex: 1, minWidth: 0, height: '100%' }}
+			/>
+			{sidebar && mountedApi && (
+				<GridSidebar
+					api={mountedApi}
+					config={sidebar}
+					container={containerRef.current}
+				/>
+			)}
+		</div>
 	);
 }

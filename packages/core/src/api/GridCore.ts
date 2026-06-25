@@ -1,4 +1,5 @@
 import { GridKernel } from '../kernel/GridKernel.js';
+import { SidebarStore } from '../sidebar/SidebarStore.js';
 import type { CellAddress } from '../domains/cells/CellAddress.js';
 import { CellValueEngine } from '../domains/cells/CellValueEngine.js';
 import type { CellDataPort } from '../domains/cells/CellValueEngine.js';
@@ -57,6 +58,7 @@ export interface GridCoreOptions<TRow> {
  */
 export class GridCore<TRow> {
 	readonly kernel = new GridKernel();
+	readonly sidebar = new SidebarStore();
 	readonly rowModel: RowModelPlugin<TRow>;
 	readonly columnModel: ColumnModel<TRow>;
 	readonly selectionModel = new SelectionModel();
@@ -233,6 +235,7 @@ export class GridCore<TRow> {
 	destroy(): void {
 		for (const dispose of this.disposers) dispose();
 		this.disposers.length = 0;
+		this.sidebar.destroy();
 		this.kernel.destroy();
 	}
 

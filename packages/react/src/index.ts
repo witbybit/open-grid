@@ -10,6 +10,10 @@ export { GridApiContext, GridApiProvider } from './gridContext.js';
 export type { GridApiProviderProps } from './gridContext.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 
+// ── Sidebar ───────────────────────────────────────────────────────────────
+export { GridSidebar } from './sidebar/GridSidebar.js';
+export type { GridSidebarConfig, SidebarPanelDef, BuiltInPanelId } from './sidebar/GridSidebar.js';
+
 // ── Portal system ─────────────────────────────────────────────────────────
 export { GridPortalStore } from './gridPortalStore.js';
 export type { PortalEntry } from './gridPortalStore.js';

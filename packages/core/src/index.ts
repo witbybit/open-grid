@@ -35,6 +35,8 @@ export type { CellContentMount, CellContentUnmount, DomGridRendererCallbacks } f
 export { DomGridRenderer } from './domains/render/DomGridRenderer.js';
 export type { SelectionState } from './domains/selection/SelectionState.js';
 
+export { SidebarStore } from './sidebar/SidebarStore.js';
+
 // Themes — standalone CSS variable system, no engine dependency
 export {
   BUILT_IN_THEMES,

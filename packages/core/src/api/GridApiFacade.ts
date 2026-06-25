@@ -18,6 +18,7 @@ import type { SelectionState } from '../domains/selection/SelectionState.js';
 import { GridCore } from './GridCore.js';
 import type { GridCoreOptions } from './GridCore.js';
 import type { RenderColumn, RendererEngineView } from '../domains/render/RendererEngineView.js';
+import type { SidebarStore } from '../sidebar/SidebarStore.js';
 
 /**
  * The public, command-backed grid API (ARCHITECTURE.md "Public API Direction"). Every mutating
@@ -97,6 +98,15 @@ export interface GridApi<TRow> {
 		getColumns(): RenderColumn[];
 		setViewport(scrollTop: number, scrollLeft: number, width: number, height: number): void;
 		getRenderPlan(): RenderPlan;
+	};
+
+	/** Sidebar UI state — not a kernel command; no undo. */
+	readonly sidebar: {
+		getOpenPanel(): string | null;
+		openPanel(id: string): void;
+		closePanel(): void;
+		togglePanel(id: string): void;
+		subscribe(fn: () => void): () => void;
 	};
 
 	undo(): GridCommandResult;
@@ -190,6 +200,14 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 				core.viewport.setSize(width, height);
 			},
 			getRenderPlan: () => core.getRenderPlan(),
+		},
+
+		sidebar: {
+			getOpenPanel: () => core.sidebar.getOpenPanel(),
+			openPanel: (id) => core.sidebar.openPanel(id),
+			closePanel: () => core.sidebar.closePanel(),
+			togglePanel: (id) => core.sidebar.togglePanel(id),
+			subscribe: (fn) => core.sidebar.subscribe(fn),
 		},
 
 		undo: () => kernel.undo(),
