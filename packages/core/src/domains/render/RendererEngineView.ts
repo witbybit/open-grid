@@ -5,6 +5,7 @@ import type { ColumnLane } from '../columns/ColumnLayout.js';
 import type { LayoutSnapshot } from '../layout/LayoutSnapshot.js';
 import type { GroupByModel } from '../pipeline/GroupModel.js';
 import type { FilterModel } from '../pipeline/PipelineModels.js';
+import type { GridIntegrityIssue } from '../integrity/ValidationRules.js';
 import type { VisualModelView } from '../pipeline/VisualModel.js';
 import type { VisualRow } from '../pipeline/VisualRow.js';
 import type { RowId } from '../rows/RowId.js';
@@ -70,6 +71,9 @@ export interface RendererEngineView<TRow> {
 
 	// cell display value
 	getCellDisplayValue(rowId: RowId, field: string): unknown;
+
+	// cell validation issue (null = valid or no rule registered)
+	getCellIssue(rowId: RowId, field: string): GridIntegrityIssue | null;
 
 	// selection / editing read
 	isRowSelected(rowId: RowId): boolean;

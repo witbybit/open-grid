@@ -37,6 +37,11 @@ export type { SelectionState } from './domains/selection/SelectionState.js';
 
 export { SidebarStore } from './sidebar/SidebarStore.js';
 
+export { DataIntegrityManager } from './domains/integrity/DataIntegrityManager.js';
+export type { ColumnValidationConfig, IntegrityDataPort } from './domains/integrity/DataIntegrityManager.js';
+export { ValidationRules } from './domains/integrity/ValidationRules.js';
+export type { GridIntegrityIssue, IntegritySeverity, CellValidator, RowIntegrityRule, CellValidatorContext } from './domains/integrity/ValidationRules.js';
+
 // Themes — standalone CSS variable system, no engine dependency
 export {
   BUILT_IN_THEMES,

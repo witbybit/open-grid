@@ -1012,6 +1012,16 @@ export class DomGridRenderer<TRow> {
 			const text = val != null ? String(val) : '';
 			if (contentEl.dataset.contentMode !== 'text') contentEl.dataset.contentMode = 'text';
 
+			// Validation decoration
+			const issue = this.view.getCellIssue(row.rowId, field);
+			if (issue) {
+				cellEl.dataset.validationError = issue.severity;
+				cellEl.title = issue.message;
+			} else {
+				delete cellEl.dataset.validationError;
+				if (cellEl.title) cellEl.title = '';
+			}
+
 			// Fire portal callback on new bind
 			if (isNew && this.callbacks.onMountCellContent) {
 				const columns = this.view.getColumns();

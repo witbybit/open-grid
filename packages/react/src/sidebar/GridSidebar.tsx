@@ -5,6 +5,7 @@ import { FiltersPanel } from './panels/FiltersPanel.js';
 import { SortPanel } from './panels/SortPanel.js';
 import { ThemesPanel } from './panels/ThemesPanel.js';
 import { StubPanel } from './panels/StubPanel.js';
+import { DataIntegrityPanel } from './panels/DataIntegrityPanel.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -214,6 +215,6 @@ function renderBuiltIn(id: BuiltInPanelId, api: GridApi<unknown>, container: HTM
 		case 'query':
 			return <StubPanel title="Query Builder" />;
 		case 'dataIntegrity':
-			return <StubPanel title="Data Integrity" />;
+			return <DataIntegrityPanel api={api} />;
 	}
 }

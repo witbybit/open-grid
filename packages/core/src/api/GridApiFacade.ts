@@ -19,6 +19,8 @@ import { GridCore } from './GridCore.js';
 import type { GridCoreOptions } from './GridCore.js';
 import type { RenderColumn, RendererEngineView } from '../domains/render/RendererEngineView.js';
 import type { SidebarStore } from '../sidebar/SidebarStore.js';
+import type { ColumnValidationConfig, DataIntegrityManager } from '../domains/integrity/DataIntegrityManager.js';
+import type { GridIntegrityIssue, IntegritySeverity, RowIntegrityRule } from '../domains/integrity/ValidationRules.js';
 
 /**
  * The public, command-backed grid API (ARCHITECTURE.md "Public API Direction"). Every mutating
@@ -98,6 +100,22 @@ export interface GridApi<TRow> {
 		getColumns(): RenderColumn[];
 		setViewport(scrollTop: number, scrollLeft: number, width: number, height: number): void;
 		getRenderPlan(): RenderPlan;
+	};
+
+	/** Data integrity: validators, issues, row rules. */
+	readonly integrity: {
+		addColumnValidation(config: ColumnValidationConfig): void;
+		removeColumnValidation(field: string): void;
+		addRowRule(rule: RowIntegrityRule): void;
+		removeRowRule(ruleId: string): void;
+		revalidate(): void;
+		getCellIssue(rowId: RowId, field: string): GridIntegrityIssue | null;
+		getRowIssues(rowId: RowId): GridIntegrityIssue[];
+		getAllIssues(): GridIntegrityIssue[];
+		getIssuesByField(field: string): GridIntegrityIssue[];
+		getIssuesBySeverity(severity: IntegritySeverity): GridIntegrityIssue[];
+		hasIssues(): boolean;
+		subscribe(fn: () => void): () => void;
 	};
 
 	/** Sidebar UI state — not a kernel command; no undo. */
@@ -200,6 +218,21 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 				core.viewport.setSize(width, height);
 			},
 			getRenderPlan: () => core.getRenderPlan(),
+		},
+
+		integrity: {
+			addColumnValidation: (config) => core.integrity.addColumnValidation(config),
+			removeColumnValidation: (field) => core.integrity.removeColumnValidation(field),
+			addRowRule: (rule) => core.integrity.addRowRule(rule as RowIntegrityRule<TRow>),
+			removeRowRule: (ruleId) => core.integrity.removeRowRule(ruleId),
+			revalidate: () => core.integrity.revalidate(),
+			getCellIssue: (rowId, field) => core.integrity.getCellIssue(rowId, field),
+			getRowIssues: (rowId) => core.integrity.getRowIssues(rowId),
+			getAllIssues: () => core.integrity.getAllIssues(),
+			getIssuesByField: (field) => core.integrity.getIssuesByField(field),
+			getIssuesBySeverity: (severity) => core.integrity.getIssuesBySeverity(severity),
+			hasIssues: () => core.integrity.hasIssues(),
+			subscribe: (fn) => core.integrity.subscribe(fn),
 		},
 
 		sidebar: {

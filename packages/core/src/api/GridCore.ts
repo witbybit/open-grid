@@ -1,5 +1,6 @@
 import { GridKernel } from '../kernel/GridKernel.js';
 import { SidebarStore } from '../sidebar/SidebarStore.js';
+import { DataIntegrityManager } from '../domains/integrity/DataIntegrityManager.js';
 import type { CellAddress } from '../domains/cells/CellAddress.js';
 import { CellValueEngine } from '../domains/cells/CellValueEngine.js';
 import type { CellDataPort } from '../domains/cells/CellValueEngine.js';
@@ -59,6 +60,7 @@ export interface GridCoreOptions<TRow> {
 export class GridCore<TRow> {
 	readonly kernel = new GridKernel();
 	readonly sidebar = new SidebarStore();
+	readonly integrity: DataIntegrityManager<TRow>;
 	readonly rowModel: RowModelPlugin<TRow>;
 	readonly columnModel: ColumnModel<TRow>;
 	readonly selectionModel = new SelectionModel();
@@ -114,6 +116,14 @@ export class GridCore<TRow> {
 		});
 
 		const resolveValueSetter = (columnId: ColumnId) => this.columnModel.getValueSetter(columnId);
+
+		// Data integrity manager — starts empty; consumers register validators after createGrid().
+		this.integrity = new DataIntegrityManager<TRow>({
+			getRowIds: () => this.rowModel.query.getLoadedRows().map((n) => n.id),
+			getRow: (rowId) => this.rowModel.query.getRowById(rowId)?.data ?? null,
+			getCellValue: (rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
+		});
+		this.disposers.push(this.integrity.subscribeToKernel((listener) => this.kernel.subscribe(listener)));
 
 		// Register every command on the single kernel gateway (R1).
 		this.disposers.push(registerRowCommands(this.kernel, this.rowModel));
@@ -225,6 +235,7 @@ export class GridCore<TRow> {
 			getVisibleWindow: () => this.getVisibleWindow(),
 			getFilterModel: () => this.pipeline.getFilterModel(),
 			getGroupBy: () => this.pipeline.getGroupBy(),
+			getCellIssue: (rowId, field) => this.integrity.getCellIssue(rowId, field),
 			getCellDisplayValue: (rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
 			isRowSelected: (rowId) => this.isRowSelected(rowId),
 			subscribe: (listener) => this.kernel.subscribe(listener),
@@ -237,6 +248,7 @@ export class GridCore<TRow> {
 	destroy(): void {
 		for (const dispose of this.disposers) dispose();
 		this.disposers.length = 0;
+		this.integrity.destroy();
 		this.sidebar.destroy();
 		this.kernel.destroy();
 	}
