@@ -1,4 +1,5 @@
 import type { GridInsightLayer, GridCellDecoration } from '../../insights/insightTypes.js';
+import type { GridWriteResult } from '../../api/GridApi.js';
 import type { GridScheduler } from '../../renderer/gridScheduler.js';
 import type {
 	CellStreamUpdate,
@@ -26,7 +27,7 @@ const FLASH_DURATION_MS = 600;
 const _EMPTY: readonly GridCellDecoration[] = [];
 
 export interface GridTransactionStreamDeps<TRowData> {
-	commitCells(updates: readonly { rowId: string; colField: string; value: unknown }[]): void;
+	commitCells(updates: readonly { rowId: string; colField: string; value: unknown }[]): GridWriteResult;
 	applyRowPatch(rowId: string, patch: Partial<TRowData>): void;
 	isCellBeingEdited(rowId: string, colField: string): boolean;
 	requestInsightRepaint(): void;
@@ -208,9 +209,12 @@ export class GridTransactionStreamImpl<TRowData> implements GridInsightLayer, Gr
 
 		if (toCommit.length === 0) return;
 
-		this.deps.commitCells(toCommit);
+		const result = this.deps.commitCells(toCommit);
+		if (result.status !== 'applied' && result.status !== 'noop') {
+			throw new Error(result.status === 'failed' ? result.error.message : result.reason);
+		}
 
-		if (this.opts.flashChanges) {
+		if (result.status === 'applied' && this.opts.flashChanges) {
 			this._flashCells(toCommit);
 		}
 	}

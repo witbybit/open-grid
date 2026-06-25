@@ -20,7 +20,7 @@ const testScheduler: GridScheduler = {
 type Row = { id: string; name: string; amount: number };
 
 function makeDeps(overrides?: Partial<GridTransactionStreamDeps<Row>>) {
-	const commitCells = vi.fn();
+	const commitCells = vi.fn(() => ({ status: 'applied', changeId: 1, faults: [] }));
 	const applyRowPatch = vi.fn();
 	const isCellBeingEdited = vi.fn().mockReturnValue(false);
 	const requestInsightRepaint = vi.fn();

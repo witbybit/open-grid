@@ -107,6 +107,7 @@ import type {
 	GridPluginController,
 	GridPluginRuntime,
 	GridRowsAccessor,
+	GridWriteResult,
 	RowDataTransaction,
 	RowNodeTransaction,
 	GridTransaction,
@@ -274,7 +275,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getFormula = (rowId: string, colField: string): string | undefined => this.engine.getFormula(rowId, colField);
 	public hasFormula = (rowId: string, colField: string): boolean => this.engine.hasFormula(rowId, colField);
-	public setFormula = (rowId: string, colField: string, formula: string): void => this.engine.setCellValue(rowId, colField, formula);
+	public setFormula = (rowId: string, colField: string, formula: string): void => {
+		this.engine.setCellValue(rowId, colField, formula);
+	};
 	public clearFormula = (rowId: string, colField: string): void =>
 		this.engine.syncFormulaForCell(rowId, colField, this.engine.getRawCellValue(rowId, colField));
 
@@ -299,9 +302,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	 * (structured add/remove/update). Calling this in a loop fires O(N) individual
 	 * invalidations instead of one coalesced batch.
 	 */
-	public setCellValue = (rowId: string, colField: string, value: unknown): void => {
-		this.engine.setCellValue(rowId, colField, value);
-	};
+	public setCellValue = (rowId: string, colField: string, value: unknown): GridWriteResult => this.engine.setCellValue(rowId, colField, value);
 
 	/**
 	 * Applies multiple cell value writes as a single atomic operation.
@@ -309,9 +310,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	 * are coalesced — one RAF flush and one undo entry for the entire batch.
 	 * Use this instead of looping setCellValue for paste, clear, and programmatic bulk edits.
 	 */
-	public batchCellValues = (updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill' = 'api'): void => {
-		this.engine.batchCellValues(updates, source);
-	};
+	public batchCellValues = (
+		updates: { rowId: string; colField: string; value: unknown }[],
+		source: 'paste' | 'api' | 'fill' = 'api'
+	): GridWriteResult => this.engine.batchCellValues(updates, source);
 
 	public getCellState = (rowId: string, colField: string): CellState => {
 		const computedValue = this.getCellValue(rowId, colField);

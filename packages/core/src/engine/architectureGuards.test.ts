@@ -2138,11 +2138,17 @@ describe('Architecture guardrails', () => {
 
 	describe('Hardening — GridCommitResult is a discriminated union', () => {
 		it('GridCommitResult uses status discriminant, not success boolean', () => {
-			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'integrityTypes.ts'), 'utf-8');
-			expect(content).toContain("status: 'applied'");
-			expect(content).toContain("status: 'notFound'");
-			expect(content).toContain("status: 'failed'");
-			expect(content).not.toContain('readonly success: boolean');
+			const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+			const integrityContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'integrityTypes.ts'), 'utf-8');
+			expect(apiContent).toContain("status: 'applied'");
+			expect(apiContent).toContain("status: 'noop'");
+			expect(apiContent).toContain("status: 'rejected'");
+			expect(apiContent).toContain("status: 'capabilityDenied'");
+			expect(apiContent).toContain("status: 'validationFailed'");
+			expect(apiContent).toContain("status: 'failed'");
+			expect(apiContent).not.toContain('readonly success: boolean');
+			expect(integrityContent).toContain('export type GridCommitResult = GridWriteResult;');
+			expect(integrityContent).toContain("from '../../api/GridApi.js'");
 		});
 
 		it('DiffIntegrityModule checks commitResult.status, not commitResult.success', () => {
@@ -2157,10 +2163,10 @@ describe('Architecture guardrails', () => {
 			expect(content).not.toContain('commitResult.success');
 		});
 
-		it('GridDataIntegrityManager.commitCellValue uses ctx.applyChange, not setCellValue', () => {
+		it('GridDataIntegrityManager routes commitCellValue through the public api.setCellValue result protocol', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridDataIntegrityManager.ts'), 'utf-8');
-			expect(content).toContain('deps.ctx.applyChange(');
-			expect(content).not.toContain('deps.setCellValue(');
+			expect(content).toContain('deps.getApi().setCellValue(rowId, colField, value)');
+			expect(content).not.toContain("reason: 'data:set-cell-value'");
 		});
 	});
 
@@ -2346,6 +2352,36 @@ describe('Architecture guardrails', () => {
 			expect(diffContent).toContain("kind: 'integrity-set-diff-state'");
 			expect(conflictContent).toContain("kind: 'integrity-upsert-conflict'");
 			expect(liveStreamContent).toContain("kind: 'integrity-set-live-stream-session'");
+		});
+	});
+
+	describe('Plan 133 - public write api result protocol', () => {
+		it('GridApi advanced write methods return GridWriteResult instead of void', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+			expect(content).toContain('setCellValue(rowId: string, colField: string, value: unknown): GridWriteResult;');
+			expect(content).toContain("batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): GridWriteResult;");
+			expect(content).not.toContain('setCellValue(rowId: string, colField: string, value: unknown): void;');
+			expect(content).not.toContain("batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): void;");
+		});
+
+		it('GridEngine advanced write methods map kernel commits to GridWriteResult', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			expect(content).toContain('public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): GridWriteResult');
+			expect(content).toContain('public batchCellValues(');
+			expect(content).toContain('return this.toGridWriteResult(');
+			expect(content).toContain("status: 'applied'");
+		});
+
+		it('feature callers handle write result statuses explicitly instead of assuming success', () => {
+			const clipboardContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'ClipboardController.ts'), 'utf-8');
+			const liveStreamContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'liveStream', 'GridTransactionStream.ts'), 'utf-8');
+			const legacyLiveStreamContent = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'LiveStreamIntegrityModule.ts'),
+				'utf-8'
+			);
+			expect(clipboardContent).toContain("if (result.status === 'applied' || result.status === 'noop')");
+			expect(liveStreamContent).toContain("if (result.status !== 'applied' && result.status !== 'noop')");
+			expect(legacyLiveStreamContent).toContain("if (result.status !== 'applied' && result.status !== 'noop')");
 		});
 	});
 });

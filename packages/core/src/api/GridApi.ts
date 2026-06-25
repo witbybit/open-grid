@@ -21,7 +21,7 @@ import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js'
 import type { ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
-import type { GridIntegrityApi } from '../features/dataIntegrity/integrityTypes.js';
+import type { GridIntegrityApi, GridIntegrityIssue } from '../features/dataIntegrity/integrityTypes.js';
 
 export type { CsvExportOptions };
 export type { RuntimeFault };
@@ -97,6 +97,39 @@ export interface BatchCellValueUpdate {
 	colField: string;
 	value: unknown;
 }
+
+export interface GridWriteRejection {
+	readonly mutationKind: string;
+	readonly reason: string;
+	readonly index?: number;
+}
+
+export type GridWriteResult =
+	| {
+			readonly status: 'applied';
+			readonly changeId: number;
+			readonly faults: readonly RuntimeFault[];
+			readonly rejections?: readonly GridWriteRejection[];
+	  }
+	| { readonly status: 'noop' }
+	| {
+			readonly status: 'rejected';
+			readonly reason: string;
+			readonly rejections?: readonly GridWriteRejection[];
+	  }
+	| {
+			readonly status: 'capabilityDenied';
+			readonly reason: string;
+	  }
+	| {
+			readonly status: 'validationFailed';
+			readonly reason: string;
+			readonly issues: readonly GridIntegrityIssue[];
+	  }
+	| {
+			readonly status: 'failed';
+			readonly error: RuntimeFault;
+	  };
 
 export interface VisualRowPointer {
 	visualRowId: string;
@@ -434,14 +467,14 @@ export interface GridApi<TRowData = unknown> {
 	 * (structured add/remove/update). Calling this in a loop fires O(N) individual
 	 * invalidations instead of one coalesced batch.
 	 */
-	setCellValue(rowId: string, colField: string, value: unknown): void;
+	setCellValue(rowId: string, colField: string, value: unknown): GridWriteResult;
 	/**
 	 * Applies multiple cell value writes as a single atomic operation.
 	 * valueSetter runs per-cell, but notifications, cellValueChanged events, and undo
 	 * are coalesced — one RAF flush and one undo entry for the entire batch.
 	 * Use this instead of looping setCellValue for paste, clear, and programmatic bulk edits.
 	 */
-	batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): void;
+	batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): GridWriteResult;
 	selectCell(pointer: GridCellPointer | null, source?: GridSelectionSource): void;
 	selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source?: GridSelectionSource): void;
 	extendSelection(end: GridCellPointer, source?: GridSelectionSource): void;

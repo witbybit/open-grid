@@ -6,6 +6,8 @@ import type {
 	GridCellPointer,
 	GridCellRange,
 	GridSelectionSource,
+	GridWriteRejection,
+	GridWriteResult,
 	RowDataTransaction,
 	RowNodeTransaction,
 	RowSelectionChangeResult,
@@ -61,6 +63,8 @@ import {
 	ServerPageGridIntegrityRowProvider,
 } from '../features/dataIntegrity/GridIntegrityRowProvider.js';
 import { defaultGridScheduler } from '../renderer/gridScheduler.js';
+import type { GridMutationRejection } from './GridDomainMutation.js';
+import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -827,18 +831,25 @@ export class GridEngine<TRowData = unknown> {
 	public setStickyGroupRows(enabled: boolean): void {
 		this.groupingFeature.setStickyGroupRows(enabled);
 	}
-	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
-		this.changeApplier.commit({
+	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): GridWriteResult {
+		return this.toGridWriteResult(
+			this.changeApplier.commit({
 			reason: 'data:set-cell-value',
 			domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
-		});
+			})
+		);
 	}
 
-	public batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill' = 'api'): void {
-		this.changeApplier.commit({
+	public batchCellValues(
+		updates: { rowId: string; colField: string; value: unknown }[],
+		source: 'paste' | 'api' | 'fill' = 'api'
+	): GridWriteResult {
+		return this.toGridWriteResult(
+			this.changeApplier.commit({
 			reason: 'data:batch-cell-values',
 			domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
-		});
+			})
+		);
 	}
 
 	public batchStreamCells(updates: readonly { rowId: string; colField: string; value: unknown }[]): void {
@@ -1143,6 +1154,37 @@ export class GridEngine<TRowData = unknown> {
 		this.stateManager.destroy();
 		this.domainVersionListeners.clear();
 		this.domainListeners.clear();
+	}
+
+	private toGridWriteResult(result: InternalGridCommitResult): GridWriteResult {
+		switch (result.status) {
+			case 'committed':
+				return {
+					status: 'applied',
+					changeId: result.changeId,
+					faults: result.faults,
+					rejections: this.toGridWriteRejections(result.rejectedMutations),
+				};
+			case 'noop':
+				return { status: 'noop' };
+			case 'rejected':
+				return {
+					status: 'rejected',
+					reason: result.reason,
+					rejections: this.toGridWriteRejections(result.rejections),
+				};
+			case 'failed-before-commit':
+				return { status: 'failed', error: result.fault };
+		}
+	}
+
+	private toGridWriteRejections(rejections: readonly GridMutationRejection[] | undefined): readonly GridWriteRejection[] | undefined {
+		if (!rejections || rejections.length === 0) return undefined;
+		return rejections.map((rejection) => ({
+			mutationKind: rejection.mutationKind,
+			reason: rejection.reason,
+			index: rejection.index,
+		}));
 	}
 }
 

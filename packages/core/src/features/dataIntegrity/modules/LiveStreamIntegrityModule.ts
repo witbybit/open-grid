@@ -1,4 +1,5 @@
 import type { GridCellDecoration } from '../../../insights/insightTypes.js';
+import type { GridWriteResult } from '../../../api/GridApi.js';
 import type { GridScheduler } from '../../../renderer/gridScheduler.js';
 import type { GridCommit } from '../../../engine/GridChangeApplier.js';
 import type { GridIntegrityState } from '../../../state/GridState.js';
@@ -27,7 +28,7 @@ const FLASH_DURATION_MS = 600;
 export interface LiveStreamModuleDeps<TRowData> {
 	applyIntegrityChange: (change: GridCommit<TRowData>) => void;
 	getIntegrityState: () => GridIntegrityState<TRowData>;
-	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => void;
+	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => GridWriteResult;
 	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => void;
 	getRawCellValue: (rowId: string, colField: string) => unknown;
 	isCellDirty: (rowId: string, colField: string) => boolean;
@@ -198,7 +199,7 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 }
 
 interface LiveStreamHandleDeps<TRowData> {
-	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => void;
+	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => GridWriteResult;
 	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => void;
 	getRawCellValue: (rowId: string, colField: string) => unknown;
 	isCellDirty: (rowId: string, colField: string) => boolean;
@@ -386,9 +387,12 @@ class LiveStreamHandle<TRowData> implements GridTransactionStreamHandle<TRowData
 
 		if (toCommit.length === 0) return;
 
-		this.deps.commitCells(toCommit);
+		const result = this.deps.commitCells(toCommit);
+		if (result.status !== 'applied' && result.status !== 'noop') {
+			throw new Error(result.status === 'failed' ? result.error.message : result.reason);
+		}
 
-		if (this.opts.flashChanges) {
+		if (result.status === 'applied' && this.opts.flashChanges) {
 			this.deps.onFlash(toCommit.map((cell) => ({ rowId: cell.rowId, colField: cell.colField })));
 		}
 	}

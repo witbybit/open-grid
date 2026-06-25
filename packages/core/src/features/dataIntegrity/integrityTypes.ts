@@ -1,5 +1,5 @@
 import type { ColumnDef } from '../../columnDef.js';
-import type { GridApi } from '../../api/GridApi.js';
+import type { GridApi, GridWriteResult } from '../../api/GridApi.js';
 import type {
 	GridCellConflict,
 	GridCellDiff,
@@ -45,13 +45,7 @@ export type GridIntegrityIssueType =
 	| 'conflict'
 	| 'custom';
 
-export type GridCommitResult =
-	| { readonly status: 'applied'; readonly rowId: string; readonly colField: string; readonly value: unknown }
-	| { readonly status: 'notFound'; readonly reason: string }
-	| { readonly status: 'validationFailed'; readonly issues: readonly GridIntegrityIssue[] }
-	| { readonly status: 'capabilityDenied'; readonly reason: string }
-	| { readonly status: 'blocked'; readonly reason: string; readonly issues?: readonly GridIntegrityIssue[] }
-	| { readonly status: 'failed'; readonly error: unknown };
+export type GridCommitResult = GridWriteResult;
 
 export interface GridValidateCellProposalParams {
 	readonly rowId: string;

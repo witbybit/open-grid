@@ -109,9 +109,10 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 
-		store.setCellValue('1', 'name', 'Product Updated');
+		const result = store.setCellValue('1', 'name', 'Product Updated');
 		store.flushCellUpdatesSync();
 
+		expect(result.status).toBe('applied');
 		expect(valueSetter).toHaveBeenCalledTimes(1);
 		expect((store as any).engine.getRawCellValue('1', 'name')).toBe('Product Updated accepted');
 
@@ -133,13 +134,61 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 
-		store.setCellValue('1', 'name', 'Rejected');
+		const result = store.setCellValue('1', 'name', 'Rejected');
 		store.flushCellUpdatesSync();
 
+		expect(result).toEqual({
+			status: 'rejected',
+			reason: 'value setter rejected change',
+			rejections: [{ mutationKind: 'cell-value', reason: 'value setter rejected change', index: undefined }],
+		});
 		expect(valueSetter).toHaveBeenCalledTimes(1);
 		expect((store as any).engine.getRawCellValue('1', 'name')).toBe('Product A');
 		expect(store.canUndo()).toBe(false);
 
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('returns noop for unchanged direct writes', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const result = store.setCellValue('1', 'name', 'Product A');
+
+		expect(result).toEqual({ status: 'noop' });
+		expect(store.canUndo()).toBe(false);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('surfaces failed-before-commit writes as failed results', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+		const applySpy = vi.spyOn(store.engine.dataMutation, 'applyCellValueChange').mockImplementation(() => {
+			throw new Error('boom');
+		});
+
+		const result = store.setCellValue('1', 'name', 'Broken');
+
+		expect(result.status).toBe('failed');
+		expect(result.error.message).toBe('boom');
+		expect(store.getCellValue('1', 'name')).toBe('Product A');
+
+		applySpy.mockRestore();
 		controller.dispose();
 		store.destroy();
 	});

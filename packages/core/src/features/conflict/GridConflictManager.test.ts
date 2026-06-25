@@ -4,7 +4,7 @@ import { GridInsightRegistry } from '../../insights/GridInsightRegistry.js';
 import type { GridCellConflict } from './conflictTypes.js';
 
 function makeManager(overrides?: { setCellValue?: ReturnType<typeof vi.fn> }) {
-	const setCellValue = overrides?.setCellValue ?? vi.fn();
+	const setCellValue = overrides?.setCellValue ?? vi.fn(() => ({ status: 'applied', changeId: 1, faults: [] }));
 	const requestInsightRepaint = vi.fn();
 	const manager = new GridConflictManager({ setCellValue, requestInsightRepaint });
 	return { manager, setCellValue, requestInsightRepaint };
@@ -73,6 +73,19 @@ describe('GridConflictManager', () => {
 		manager.resolveConflict(conflict.id, { strategy: 'custom', value: 555 });
 		expect(setCellValue).toHaveBeenCalledWith('r1', 'amount', 555);
 		expect(manager.getConflicts()).toHaveLength(0);
+	});
+
+	it('keeps the conflict when the write result is rejected', () => {
+		const { manager, setCellValue } = makeManager({
+			setCellValue: vi.fn(() => ({ status: 'rejected', reason: 'blocked' })),
+		});
+		const conflict = manager.addConflict(makeConflict({ remoteValue: 999 }));
+
+		manager.resolveConflict(conflict.id, { strategy: 'remote' });
+
+		expect(setCellValue).toHaveBeenCalledWith('r1', 'amount', 999);
+		expect(manager.getConflicts()).toHaveLength(1);
+		expect(manager.getDiagnostics().resolvedConflicts).toBe(0);
 	});
 
 	it('clearing conflict removes decoration', () => {

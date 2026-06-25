@@ -1,11 +1,12 @@
 import type { GridInsightLayer, GridCellDecoration } from '../../insights/insightTypes.js';
+import type { GridWriteResult } from '../../api/GridApi.js';
 import type { GridCellConflict, ConflictDiagnostics, ResolveConflictOptions } from './conflictTypes.js';
 
 export type { GridCellConflict, ConflictDiagnostics, ResolveConflictOptions };
 export type { GridConflictSource } from './conflictTypes.js';
 
 export interface GridConflictManagerDeps {
-	setCellValue(rowId: string, colField: string, value: unknown): void;
+	setCellValue(rowId: string, colField: string, value: unknown): GridWriteResult;
 	requestInsightRepaint(): void;
 }
 
@@ -86,12 +87,17 @@ export class GridConflictManager<TRowData = unknown> implements GridInsightLayer
 		const conflict = this.conflicts.get(conflictId);
 		if (!conflict) return;
 
+		let writeResult: GridWriteResult | null = null;
 		if (options.strategy === 'remote') {
-			this.deps.setCellValue(conflict.rowId, conflict.colField, conflict.remoteValue);
+			writeResult = this.deps.setCellValue(conflict.rowId, conflict.colField, conflict.remoteValue);
 		} else if (options.strategy === 'custom') {
-			this.deps.setCellValue(conflict.rowId, conflict.colField, options.value);
+			writeResult = this.deps.setCellValue(conflict.rowId, conflict.colField, options.value);
 		}
 		// 'local' strategy: no mutation, just clear
+
+		if (writeResult && writeResult.status !== 'applied' && writeResult.status !== 'noop') {
+			return;
+		}
 
 		this._clearConflict(conflictId, conflict);
 		this._resolvedConflicts++;

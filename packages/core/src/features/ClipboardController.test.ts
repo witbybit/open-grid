@@ -205,6 +205,23 @@ describe('ClipboardController', () => {
 		store.destroy();
 	});
 
+	it('pasteFromClipboard does not fire cellsPasted when the batch write is rejected', async () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.cellsPasted, handler);
+		vi.spyOn(store.engine, 'batchCellValues').mockReturnValue({ status: 'rejected', reason: 'blocked' });
+
+		clip.setStored('Gamma');
+		store.selectCell({ rowId: '1', colField: 'name' });
+		await store.pasteFromClipboard();
+
+		expect(handler).not.toHaveBeenCalled();
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('copyRange copies explicit visual row/col bounds', async () => {
 		const store = makeStore();
 		const ctrl = makeController(store);

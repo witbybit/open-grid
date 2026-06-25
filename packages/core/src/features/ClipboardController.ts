@@ -1,4 +1,5 @@
 import type { ColumnDef } from '../columnDef.js';
+import type { GridWriteResult } from '../api/GridApi.js';
 import type { VisualRow } from '../visualRow.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
@@ -13,7 +14,7 @@ interface ClipboardContext<TRowData> {
 	getCellValue(rowId: string, colField: string): unknown;
 	getCheapDisplayValue(rowId: string, colField: string): string;
 	getRawRowById(rowId: string): TRowData | null;
-	batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill'): void;
+	batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill'): GridWriteResult;
 	dispatchEvent<K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
@@ -104,8 +105,10 @@ export class ClipboardController<TRowData = unknown> {
 			}
 
 			if (updates.length > 0) {
-				this.c.batchCellValues(updates, 'paste');
-				this.c.dispatchEvent(GridEventName.cellsPasted, { rowCount: pastedRows, colCount: pastedCols });
+				const result = this.c.batchCellValues(updates, 'paste');
+				if (result.status === 'applied' || result.status === 'noop') {
+					this.c.dispatchEvent(GridEventName.cellsPasted, { rowCount: pastedRows, colCount: pastedCols });
+				}
 			}
 		} catch {
 			// Clipboard access denied — silently ignore

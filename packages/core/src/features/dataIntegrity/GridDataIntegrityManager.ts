@@ -32,6 +32,7 @@ import type {
 	GridValidateCellProposalParams,
 	IntegrityRepaintRequest,
 } from './integrityTypes.js';
+import type { GridWriteResult } from '../../api/GridApi.js';
 import type { GridIntegrityRowProvider } from './integrityTypes.js';
 import { ValidationIntegrityModule } from './modules/ValidationIntegrityModule.js';
 import type { ValidationModuleDeps } from './modules/ValidationIntegrityModule.js';
@@ -53,7 +54,7 @@ export interface GridDataIntegrityManagerDeps<TRowData> {
 	scheduler: GridScheduler;
 	rowProvider: GridIntegrityRowProvider<TRowData>;
 	capabilityManager: GridCapabilityManager<TRowData>;
-	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => void;
+	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => GridWriteResult;
 	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => void;
 	requestIntegrityRepaint: (request: IntegrityRepaintRequest) => void;
 }
@@ -76,21 +77,8 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 			deps.requestIntegrityRepaint({ reason: 'module-repaint', cells });
 		};
 
-		const commitCellValue = async (rowId: string, colField: string, value: unknown): Promise<GridCommitResult> => {
-			try {
-				const result = deps.ctx.applyChange({
-					reason: 'data:set-cell-value',
-					domainMutations: [{ kind: 'cell-value', rowId, colField, value, source: 'api' }],
-					invalidations: [{ kind: 'cell', rowId, colId: colField, reason: 'integrity-commit' }],
-				});
-				if (result.status === 'committed' || result.status === 'noop') {
-					return { status: 'applied', rowId, colField, value };
-				}
-				return { status: 'failed', error: `Commit returned status: ${result.status}` };
-			} catch (e) {
-				return { status: 'failed', error: e };
-			}
-		};
+		const commitCellValue = async (rowId: string, colField: string, value: unknown): Promise<GridCommitResult> =>
+			deps.getApi().setCellValue(rowId, colField, value);
 
 		// Validation module
 		const validationConfig = _normalizeModuleConfig(config.validation);

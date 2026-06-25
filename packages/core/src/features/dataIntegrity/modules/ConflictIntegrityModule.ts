@@ -148,8 +148,17 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 		}
 
 		const commitResult = await this.deps.commitCellValue(conflict.rowId, conflict.colField, valueToApply);
-		if (commitResult.status !== 'applied') {
-			return { status: 'failed', error: commitResult.status === 'failed' ? commitResult.error : commitResult.status };
+		if (commitResult.status === 'capabilityDenied') {
+			return { status: 'capabilityDenied', reason: commitResult.reason };
+		}
+		if (commitResult.status === 'validationFailed') {
+			return { status: 'validationFailed', issues: commitResult.issues };
+		}
+		if (commitResult.status !== 'applied' && commitResult.status !== 'noop') {
+			return {
+				status: 'failed',
+				error: commitResult.status === 'failed' ? commitResult.error : new Error(commitResult.reason),
+			};
 		}
 
 		this._clearConflict(conflictId, conflict);
