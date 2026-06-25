@@ -36,6 +36,12 @@ export type { RowBinding } from './domains/render/RowBinder.js';
 export { RowBinder } from './domains/render/RowBinder.js';
 export type { CellContentMount, CellContentUnmount, DomGridRendererCallbacks } from './domains/render/DomGridRenderer.js';
 export { DomGridRenderer } from './domains/render/DomGridRenderer.js';
+export { LayoutTransitionController } from './domains/render/LayoutTransitionController.js';
+export type { TransitionOptions } from './domains/render/LayoutTransitionController.js';
+export { FullWidthPainter } from './domains/render/FullWidthPainter.js';
+export type { FullWidthRowConfig, FullWidthSlot } from './domains/render/FullWidthPainter.js';
+export { StickyGroupHeader } from './domains/render/StickyGroupHeader.js';
+export type { StickyGroupHeaderConfig, GroupHeaderInfo } from './domains/render/StickyGroupHeader.js';
 export type { SelectionState } from './domains/selection/SelectionState.js';
 
 export { SidebarStore } from './sidebar/SidebarStore.js';
