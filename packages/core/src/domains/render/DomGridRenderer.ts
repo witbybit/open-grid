@@ -146,7 +146,13 @@ export class DomGridRenderer<TRow> {
 	private groupToggleCallback: ((groupKey: string) => void) | null = null;
 	private treeToggleCallback: ((rowId: string) => void) | null = null;
 	private detailToggleCallback: ((rowId: string) => void) | null = null;
+	private floatingFilterChangeCallback: ((field: string, value: string, operator: string) => void) | null = null;
+	private filterChipRemoveCallback: ((columnId: string) => void) | null = null;
+	private groupPanelRemoveCallback: ((columnId: string) => void) | null = null;
 	private resizeDragState: ResizeDragState | null = null;
+
+	// Floating filter input map: field → input element
+	private floatingFilterInputs = new Map<string, HTMLInputElement>();
 
 	// Selection overlay
 	private selectionOverlay: HTMLDivElement | null = null;
@@ -236,6 +242,7 @@ export class DomGridRenderer<TRow> {
 
 		this.slots = [];
 		this.headerCells.clear();
+		this.floatingFilterInputs.clear();
 		this.rowBinder.reset();
 		this.compiledTopology = null;
 		this.lastCompiledColVersion = -1;
@@ -267,6 +274,21 @@ export class DomGridRenderer<TRow> {
 	/** Wire a handler called when the user clicks to expand/collapse a detail panel. */
 	setDetailToggleCallback(fn: (rowId: string) => void): void {
 		this.detailToggleCallback = fn;
+	}
+
+	/** Wire a handler called when a floating filter input value changes. */
+	setFloatingFilterChangeCallback(fn: (field: string, value: string, operator: string) => void): void {
+		this.floatingFilterChangeCallback = fn;
+	}
+
+	/** Wire a handler called when the user removes a filter chip from the filter chip bar. */
+	setFilterChipRemoveCallback(fn: (columnId: string) => void): void {
+		this.filterChipRemoveCallback = fn;
+	}
+
+	/** Wire a handler called when the user removes a column from the group panel. */
+	setGroupPanelRemoveCallback(fn: (columnId: string) => void): void {
+		this.groupPanelRemoveCallback = fn;
 	}
 
 	/** Force an immediate synchronous paint (for tests / imperative refresh). */
@@ -365,8 +387,15 @@ export class DomGridRenderer<TRow> {
 		// Apply DOM layout
 		this.applyLayerLayout(layout, topology);
 
+		// Paint top chrome
+		this.paintGroupPanel(layout.chrome.groupPanelHeight);
+		this.paintFilterChipBar(layout.chrome.filterChipBarHeight);
+
 		// Paint header (skip if column version unchanged)
 		this.paintHeader(topology, layout.chrome.headerHeight);
+
+		// Paint floating filters
+		this.paintFloatingFilters(topology, layout.chrome.floatingFilterHeight);
 
 		// Paint rows
 		this.paintRows(topology, defaultRowHeight);
@@ -385,6 +414,8 @@ export class DomGridRenderer<TRow> {
 		this.layerRegistry!.applyLayout({
 			totalRowsHeight: layout.dimensions.totalRowsHeight,
 			contentWidth: layout.dimensions.contentWidth,
+			groupPanelHeight: layout.chrome.groupPanelHeight,
+			filterChipBarHeight: layout.chrome.filterChipBarHeight,
 			headerHeight: layout.chrome.headerHeight,
 			floatingFilterHeight: layout.chrome.floatingFilterHeight,
 			pinLeftWidth: topology.pinLeftWidth,
@@ -1021,6 +1052,217 @@ export class DomGridRenderer<TRow> {
 				const skel = document.createElement('div');
 				skel.className = 'og-cell-loading-skeleton';
 				contentEl.appendChild(skel);
+			}
+		}
+	}
+
+	// ---------------------------------------------------------------------------
+	// Group panel chrome
+	// ---------------------------------------------------------------------------
+
+	private paintGroupPanel(groupPanelHeight: number): void {
+		if (!this.layerRegistry) return;
+		const el = this.layerRegistry.layers.groupPanelLayer;
+		if (groupPanelHeight === 0) return;
+
+		const groupBy = this.view.getGroupBy();
+		const columns = this.view.getColumns();
+
+		// Rebuild content on every paint (group-by changes are rare and the element is simple)
+		el.innerHTML = '';
+		el.style.display = 'flex';
+		el.style.alignItems = 'center';
+		el.style.gap = '6px';
+		el.style.padding = '0 10px';
+		el.style.fontSize = '12px';
+
+		if (groupBy.length === 0) {
+			const hint = document.createElement('span');
+			hint.style.color = 'var(--og-cell-text-muted, #888)';
+			hint.style.pointerEvents = 'none';
+			hint.textContent = 'Drag a column here to group…';
+			el.appendChild(hint);
+		} else {
+			const label = document.createElement('span');
+			label.textContent = 'Group by:';
+			label.style.color = 'var(--og-cell-text-muted, #888)';
+			label.style.marginRight = '4px';
+			el.appendChild(label);
+
+			for (const g of groupBy) {
+				const col = columns.find((c) => String(c.columnId) === String(g.columnId));
+				const name = col?.header ?? g.field;
+				const chip = document.createElement('div');
+				chip.style.display = 'inline-flex';
+				chip.style.alignItems = 'center';
+				chip.style.gap = '4px';
+				chip.style.padding = '2px 8px';
+				chip.style.border = '1px solid var(--og-border, #ddd)';
+				chip.style.borderRadius = '12px';
+				chip.style.background = 'var(--og-primary, #4f46e5)';
+				chip.style.color = '#fff';
+				chip.style.fontSize = '12px';
+
+				const chipLabel = document.createElement('span');
+				chipLabel.textContent = name;
+				chip.appendChild(chipLabel);
+
+				const remove = document.createElement('button');
+				remove.textContent = '✕';
+				remove.style.border = 'none';
+				remove.style.background = 'transparent';
+				remove.style.color = '#fff';
+				remove.style.cursor = 'pointer';
+				remove.style.padding = '0';
+				remove.style.fontSize = '10px';
+				remove.addEventListener('click', (e) => {
+					e.stopPropagation();
+					this.groupPanelRemoveCallback?.(String(g.columnId));
+				});
+				chip.appendChild(remove);
+				el.appendChild(chip);
+			}
+		}
+	}
+
+	// ---------------------------------------------------------------------------
+	// Filter chip bar chrome
+	// ---------------------------------------------------------------------------
+
+	private paintFilterChipBar(filterChipBarHeight: number): void {
+		if (!this.layerRegistry) return;
+		const el = this.layerRegistry.layers.filterChipBarLayer;
+		if (filterChipBarHeight === 0) return;
+
+		const filterModel = this.view.getFilterModel();
+		const columns = this.view.getColumns();
+
+		el.innerHTML = '';
+		el.style.display = 'flex';
+		el.style.alignItems = 'center';
+		el.style.gap = '6px';
+		el.style.padding = '0 10px';
+		el.style.fontSize = '12px';
+		el.style.overflowX = 'auto';
+
+		if (filterModel.length > 0) {
+			for (const f of filterModel) {
+				const col = columns.find((c) => String(c.columnId) === String(f.columnId));
+				const name = col?.header ?? f.field;
+				const chip = document.createElement('div');
+				chip.style.display = 'inline-flex';
+				chip.style.alignItems = 'center';
+				chip.style.gap = '4px';
+				chip.style.padding = '2px 8px';
+				chip.style.border = '1px solid var(--og-border, #ddd)';
+				chip.style.borderRadius = '12px';
+				chip.style.background = 'var(--og-cell-bg, #fff)';
+				chip.style.fontSize = '12px';
+				chip.style.whiteSpace = 'nowrap';
+
+				const chipLabel = document.createElement('span');
+				chipLabel.textContent = `${name}: ${f.operator ?? ''} ${String(f.value ?? '')}`.trim();
+				chip.appendChild(chipLabel);
+
+				const remove = document.createElement('button');
+				remove.textContent = '✕';
+				remove.style.border = 'none';
+				remove.style.background = 'transparent';
+				remove.style.cursor = 'pointer';
+				remove.style.padding = '0 2px';
+				remove.style.fontSize = '10px';
+				remove.style.color = 'var(--og-cell-text-muted, #888)';
+				remove.addEventListener('click', (e) => {
+					e.stopPropagation();
+					this.filterChipRemoveCallback?.(String(f.columnId));
+				});
+				chip.appendChild(remove);
+				el.appendChild(chip);
+			}
+		} else {
+			const hint = document.createElement('span');
+			hint.style.color = 'var(--og-cell-text-muted, #888)';
+			hint.textContent = 'No active filters';
+			el.appendChild(hint);
+		}
+	}
+
+	// ---------------------------------------------------------------------------
+	// Floating filter chrome
+	// ---------------------------------------------------------------------------
+
+	private paintFloatingFilters(topology: CompiledColumnTopology, floatingFilterHeight: number): void {
+		if (!this.layerRegistry || floatingFilterHeight === 0) return;
+
+		const filterModel = this.view.getFilterModel();
+		const { floatingFilterLeft, floatingFilterCenter, floatingFilterRight } = this.layerRegistry.layers;
+
+		const filterByField = new Map(filterModel.map((f) => [f.field, f]));
+		const renderedFields = new Set<string>();
+
+		const paintFilterInput = (
+			field: string,
+			cssLeft: number,
+			width: number,
+			lane: 'left' | 'center' | 'right',
+		): void => {
+			renderedFields.add(field);
+			let input = this.floatingFilterInputs.get(field);
+			const isNew = !input;
+
+			if (!input) {
+				input = document.createElement('input');
+				input.type = 'text';
+				input.placeholder = 'Filter…';
+				input.style.position = 'absolute';
+				input.style.top = '4px';
+				input.style.bottom = '4px';
+				input.style.boxSizing = 'border-box';
+				input.style.border = '1px solid var(--og-border, #ddd)';
+				input.style.borderRadius = '3px';
+				input.style.padding = '0 6px';
+				input.style.fontSize = '12px';
+				input.style.background = 'var(--og-cell-bg, #fff)';
+				input.style.color = 'inherit';
+				input.dataset.field = field;
+				input.addEventListener('input', () => {
+					this.floatingFilterChangeCallback?.(field, input!.value, 'contains');
+				});
+				const targetLane = lane === 'left' ? floatingFilterLeft : lane === 'right' ? floatingFilterRight : floatingFilterCenter;
+				targetLane.appendChild(input);
+				this.floatingFilterInputs.set(field, input);
+			}
+
+			input.style.left = `${cssLeft}px`;
+			input.style.width = `${width - 4}px`;
+
+			// Sync value with current filter model (without clobbering user typing)
+			const active = filterByField.get(field);
+			const modelVal = active ? String(active.value ?? '') : '';
+			if (isNew || document.activeElement !== input) {
+				input.value = modelVal;
+			}
+		};
+
+		const win = this.scrollCoordinator.getCurrent();
+
+		for (const p of topology.leftPlacements) {
+			paintFilterInput(p.field, p.laneLeft, p.width, 'left');
+		}
+		for (let i = win.colStart; i <= win.colEnd && i < topology.centerPlacements.length; i++) {
+			const p = topology.centerPlacements[i];
+			if (!p) continue;
+			paintFilterInput(p.field, topology.pinLeftWidth + p.laneLeft, p.width, 'center');
+		}
+		for (const p of topology.rightPlacements) {
+			paintFilterInput(p.field, p.laneLeft, p.width, 'right');
+		}
+
+		// Remove inputs that left the window
+		for (const [field, input] of this.floatingFilterInputs) {
+			if (!renderedFields.has(field)) {
+				input.remove();
+				this.floatingFilterInputs.delete(field);
 			}
 		}
 	}

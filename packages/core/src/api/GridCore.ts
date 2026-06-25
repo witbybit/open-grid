@@ -223,6 +223,8 @@ export class GridCore<TRow> {
 			getColumns: () => this.getColumnHeaders(),
 			getViewport: () => this.getViewportSnapshot(),
 			getVisibleWindow: () => this.getVisibleWindow(),
+			getFilterModel: () => this.pipeline.getFilterModel(),
+			getGroupBy: () => this.pipeline.getGroupBy(),
 			getCellDisplayValue: (rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
 			isRowSelected: (rowId) => this.isRowSelected(rowId),
 			subscribe: (listener) => this.kernel.subscribe(listener),

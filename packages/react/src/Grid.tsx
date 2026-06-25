@@ -194,6 +194,28 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 		renderer.setDetailToggleCallback((rowId) => {
 			api.pipeline.toggleDetail(rowId);
 		});
+		renderer.setFloatingFilterChangeCallback((field, value, operator) => {
+			const currentFilter = api.pipeline.getFilterModel();
+			const col = api.columns.getState().find((c) => c.field === field);
+			if (!col) return;
+			if (!value) {
+				api.pipeline.setFilterModel(currentFilter.filter((f) => f.field !== field));
+			} else {
+				const next = [
+					...currentFilter.filter((f) => f.field !== field),
+					{ columnId: col.id, field, operator, value },
+				];
+				api.pipeline.setFilterModel(next);
+			}
+		});
+		renderer.setFilterChipRemoveCallback((columnId) => {
+			const current = api.pipeline.getFilterModel();
+			api.pipeline.setFilterModel(current.filter((f) => String(f.columnId) !== columnId));
+		});
+		renderer.setGroupPanelRemoveCallback((columnId) => {
+			const current = api.pipeline.getGroupBy();
+			api.pipeline.setGroupBy(current.filter((g) => String(g.columnId) !== columnId));
+		});
 
 		renderer.mount(container);
 

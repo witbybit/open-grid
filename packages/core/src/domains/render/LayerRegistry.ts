@@ -9,6 +9,10 @@
 export interface GridLayers {
 	scrollViewport: HTMLDivElement;
 	rowsContainer: HTMLDivElement;
+	/** Sticky top chrome: group panel drop-zone (shown when showGroupPanel). */
+	groupPanelLayer: HTMLDivElement;
+	/** Sticky top chrome: active filter chips bar (shown when showFilterChipBar). */
+	filterChipBarLayer: HTMLDivElement;
 	headerWrapper: HTMLDivElement;
 	headerLeft: HTMLDivElement;
 	headerCenter: HTMLDivElement;
@@ -26,6 +30,8 @@ export interface GridLayers {
 export interface ApplyLayoutParams {
 	totalRowsHeight: number;
 	contentWidth: number;
+	groupPanelHeight: number;
+	filterChipBarHeight: number;
 	headerHeight: number;
 	floatingFilterHeight: number;
 	pinLeftWidth: number;
@@ -65,6 +71,26 @@ export class LayerRegistry {
 		const rowsContainer = div('og-rows-container');
 		Object.assign(rowsContainer.style, {
 			position: 'relative',
+		});
+
+		// ── group-panel (sticky top, shown when groupBy is active) ───────────
+		const groupPanelLayer = div('og-layer-group-panel');
+		Object.assign(groupPanelLayer.style, {
+			position: 'sticky',
+			top: '0',
+			zIndex: '3',
+			display: 'none',
+			overflow: 'hidden',
+		});
+
+		// ── filter-chip-bar (sticky below group panel) ─────────────────────
+		const filterChipBarLayer = div('og-layer-filter-chip-bar');
+		Object.assign(filterChipBarLayer.style, {
+			position: 'sticky',
+			top: '0',
+			zIndex: '3',
+			display: 'none',
+			overflow: 'hidden',
 		});
 
 		// ── header-wrapper (sticky top) ───────────────────────────────────
@@ -145,7 +171,9 @@ export class LayerRegistry {
 			zIndex: '1',
 		});
 
-		// Assemble scroll-viewport children (order: header, filter, rows, sticky-groups)
+		// Assemble scroll-viewport children (order: group panel, chip bar, header, filter, rows, sticky-groups)
+		scrollViewport.appendChild(groupPanelLayer);
+		scrollViewport.appendChild(filterChipBarLayer);
 		scrollViewport.appendChild(headerWrapper);
 		scrollViewport.appendChild(floatingFilterWrapper);
 		scrollViewport.appendChild(rowsContainer);
@@ -171,6 +199,8 @@ export class LayerRegistry {
 		this.layers = {
 			scrollViewport,
 			rowsContainer,
+			groupPanelLayer,
+			filterChipBarLayer,
 			headerWrapper,
 			headerLeft,
 			headerCenter,
@@ -201,6 +231,8 @@ export class LayerRegistry {
 		const {
 			totalRowsHeight,
 			contentWidth,
+			groupPanelHeight,
+			filterChipBarHeight,
 			headerHeight,
 			floatingFilterHeight,
 			pinLeftWidth,
@@ -217,9 +249,30 @@ export class LayerRegistry {
 		l.rowsContainer.style.height = `${totalRowsHeight}px`;
 		l.rowsContainer.style.width = `${contentWidth}px`;
 
-		// header-wrapper
+		// group-panel (sticky at top: 0)
+		if (groupPanelHeight > 0) {
+			l.groupPanelLayer.style.display = '';
+			l.groupPanelLayer.style.height = `${groupPanelHeight}px`;
+			l.groupPanelLayer.style.top = '0';
+			l.groupPanelLayer.style.width = `${contentWidth}px`;
+		} else {
+			l.groupPanelLayer.style.display = 'none';
+		}
+
+		// filter-chip-bar (sticky at top: groupPanelHeight)
+		if (filterChipBarHeight > 0) {
+			l.filterChipBarLayer.style.display = '';
+			l.filterChipBarLayer.style.height = `${filterChipBarHeight}px`;
+			l.filterChipBarLayer.style.top = `${groupPanelHeight}px`;
+			l.filterChipBarLayer.style.width = `${contentWidth}px`;
+		} else {
+			l.filterChipBarLayer.style.display = 'none';
+		}
+
+		// header-wrapper (sticky at top: groupPanelHeight + filterChipBarHeight)
 		l.headerWrapper.style.height = `${headerHeight}px`;
 		l.headerWrapper.style.width = `${contentWidth}px`;
+		l.headerWrapper.style.top = `${groupPanelHeight + filterChipBarHeight}px`;
 
 		// header pins
 		if (pinLeftWidth > 0) {
@@ -240,7 +293,7 @@ export class LayerRegistry {
 		const filterVisible = floatingFilterHeight > 0;
 		l.floatingFilterWrapper.style.display = filterVisible ? 'flex' : 'none';
 		if (filterVisible) {
-			l.floatingFilterWrapper.style.top = `${headerHeight}px`;
+			l.floatingFilterWrapper.style.top = `${groupPanelHeight + filterChipBarHeight + headerHeight}px`;
 			l.floatingFilterWrapper.style.height = `${floatingFilterHeight}px`;
 			l.floatingFilterWrapper.style.width = `${contentWidth}px`;
 		}

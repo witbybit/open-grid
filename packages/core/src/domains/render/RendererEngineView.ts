@@ -3,6 +3,8 @@ import type { GridEventListener } from '../../kernel/GridEvent.js';
 import type { ColumnId } from '../columns/ColumnId.js';
 import type { ColumnLane } from '../columns/ColumnLayout.js';
 import type { LayoutSnapshot } from '../layout/LayoutSnapshot.js';
+import type { GroupByModel } from '../pipeline/GroupModel.js';
+import type { FilterModel } from '../pipeline/PipelineModels.js';
 import type { VisualModelView } from '../pipeline/VisualModel.js';
 import type { VisualRow } from '../pipeline/VisualRow.js';
 import type { RowId } from '../rows/RowId.js';
@@ -61,6 +63,10 @@ export interface RendererEngineView<TRow> {
 	// viewport / visible window (runtime)
 	getViewport(): ViewportSnapshot;
 	getVisibleWindow(): VisibleWindow;
+
+	// active pipeline models (for chrome: floating filters, filter chips, group panel)
+	getFilterModel(): FilterModel;
+	getGroupBy(): GroupByModel;
 
 	// cell display value
 	getCellDisplayValue(rowId: RowId, field: string): unknown;
