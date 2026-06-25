@@ -1,8 +1,11 @@
 import { GridKernel } from '../kernel/GridKernel.js';
+import type { GridCommand } from '../kernel/GridCommand.js';
 import { SidebarStore } from '../sidebar/SidebarStore.js';
 import { DataIntegrityManager } from '../domains/integrity/DataIntegrityManager.js';
 import { PersistenceController } from '../domains/persistence/PersistenceController.js';
 import { GridWorkspaceController } from '../domains/persistence/GridWorkspaceController.js';
+import { GridExportEngine } from '../domains/export/GridExportEngine.js';
+import { ClipboardController } from '../domains/export/ClipboardController.js';
 import type { GridWorkspaceAdapter } from '../domains/persistence/GridWorkspaceController.js';
 import type { PersistenceAdapter } from '../domains/persistence/PersistenceAdapter.js';
 import { createGridStateSnapshot, applyGridState } from '../domains/persistence/GridStateSchema.js';
@@ -77,6 +80,8 @@ export class GridCore<TRow> {
 	readonly cellEngine: CellValueEngine<TRow>;
 	readonly pipeline: RowPipeline<TRow>;
 	readonly viewport: ViewportModel;
+	readonly exportEngine: GridExportEngine<TRow>;
+	readonly clipboard: ClipboardController<TRow>;
 
 	private readonly rowHeights: RowHeightModel;
 	private readonly disposers: Array<() => void> = [];
@@ -125,6 +130,21 @@ export class GridCore<TRow> {
 		});
 
 		const resolveValueSetter = (columnId: ColumnId) => this.columnModel.getValueSetter(columnId);
+
+		// Export + clipboard
+		this.exportEngine = new GridExportEngine<TRow>(
+			() => this.getColumnHeaders(),
+			(rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
+			() => this.pipeline.getVisualModel().toArray(),
+		);
+		this.clipboard = new ClipboardController<TRow>({
+			getColumns: () => this.getColumnHeaders(),
+			getCellValue: (rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
+			getVisualRows: () => this.pipeline.getVisualModel().toArray(),
+			getSelection: () => this.selectionModel.getState(),
+			getRow: (rowId) => this.rowModel.query.getRowById(rowId)?.data ?? null,
+			dispatch: (cmd) => this.kernel.dispatch(cmd as GridCommand),
+		});
 
 		// Data integrity manager — starts empty; consumers register validators after createGrid().
 		this.integrity = new DataIntegrityManager<TRow>({

@@ -24,6 +24,7 @@ import type { GridIntegrityIssue, IntegritySeverity, RowIntegrityRule } from '..
 import type { SerializedGridState } from '../domains/persistence/GridStateSchema.js';
 import type { PersistenceStatus } from '../domains/persistence/PersistenceController.js';
 import type { GridViewDefinition } from '../domains/persistence/GridWorkspaceController.js';
+import type { ExportOptions } from '../domains/export/GridExportEngine.js';
 
 /**
  * The public, command-backed grid API (ARCHITECTURE.md "Public API Direction"). Every mutating
@@ -147,6 +148,21 @@ export interface GridApi<TRow> {
 		getIssuesBySeverity(severity: IntegritySeverity): GridIntegrityIssue[];
 		hasIssues(): boolean;
 		subscribe(fn: () => void): () => void;
+	};
+
+	/** CSV / TSV export. */
+	readonly export: {
+		toCsvString(opts?: ExportOptions): string;
+		downloadCsv(opts?: ExportOptions): void;
+	};
+
+	/** Clipboard: copy/paste/cut selected rows/cells. */
+	readonly clipboard: {
+		copySelection(): Promise<void>;
+		cutSelection(): Promise<void>;
+		paste(): Promise<void>;
+		hasPendingCut(): boolean;
+		clearCut(): void;
 	};
 
 	/** Sidebar UI state — not a kernel command; no undo. */
@@ -290,6 +306,19 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 			getIssuesBySeverity: (severity) => core.integrity.getIssuesBySeverity(severity),
 			hasIssues: () => core.integrity.hasIssues(),
 			subscribe: (fn) => core.integrity.subscribe(fn),
+		},
+
+		export: {
+			toCsvString: (opts) => core.exportEngine.toCsvString(opts),
+			downloadCsv: (opts) => core.exportEngine.downloadCsv(opts),
+		},
+
+		clipboard: {
+			copySelection: () => core.clipboard.copySelection(),
+			cutSelection: () => core.clipboard.cutSelection(),
+			paste: () => core.clipboard.paste(),
+			hasPendingCut: () => core.clipboard.hasPendingCut,
+			clearCut: () => core.clipboard.clearCut(),
 		},
 
 		sidebar: {

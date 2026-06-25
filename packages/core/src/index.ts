@@ -46,6 +46,11 @@ export type { GridViewDefinition, GridWorkspaceAdapter } from './domains/persist
 export { createGridStateSnapshot, applyGridState, isValidGridState, GRID_STATE_SCHEMA_VERSION } from './domains/persistence/GridStateSchema.js';
 export type { SerializedGridState, GridStateReadPort, GridStateWritePort } from './domains/persistence/GridStateSchema.js';
 
+export { GridExportEngine } from './domains/export/GridExportEngine.js';
+export type { ExportOptions } from './domains/export/GridExportEngine.js';
+export { ClipboardController } from './domains/export/ClipboardController.js';
+export type { ClipboardPort, ClipboardOptions } from './domains/export/ClipboardController.js';
+
 export { DataIntegrityManager } from './domains/integrity/DataIntegrityManager.js';
 export type { ColumnValidationConfig, IntegrityDataPort } from './domains/integrity/DataIntegrityManager.js';
 export { ValidationRules } from './domains/integrity/ValidationRules.js';
