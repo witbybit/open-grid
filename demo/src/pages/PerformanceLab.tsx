@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Gauge, Play } from 'lucide-react';
-import { Grid, type ColumnDef, type DomCellRenderer, type ImperativeCellHandle, type CellRendererProps, type GridReadyEvent } from '@open-grid/react';
+import { Grid, type ColumnDef, type CellRendererProps, type GridApi } from '@open-grid/react';
 
 type RendererMode = 'text' | 'dom' | 'imperativeReact' | 'deferredReact';
 
@@ -12,7 +12,7 @@ interface LabRow {
 	[key: string]: string;
 }
 
-const statusDomRenderer: DomCellRenderer<LabRow> = {
+const statusDomRenderer: any = {
 	mount(container, params) {
 		const badge = document.createElement('span');
 		badge.style.cssText =
@@ -46,7 +46,7 @@ const DeferredStatus = React.memo(function DeferredStatus({ value }: CellRendere
 	return <span className='font-mono text-xs font-extrabold text-cyan-300'>{String(value)}</span>;
 });
 
-const ImperativeStatus = React.forwardRef<ImperativeCellHandle<LabRow>, CellRendererProps<LabRow>>(function ImperativeStatus({ value }, ref) {
+const ImperativeStatus = React.forwardRef<any, CellRendererProps<LabRow>>(function ImperativeStatus({ value }, ref) {
 	const spanRef = useRef<HTMLSpanElement>(null);
 	React.useImperativeHandle(ref, () => ({
 		update(params) {
@@ -63,7 +63,7 @@ const ImperativeStatus = React.forwardRef<ImperativeCellHandle<LabRow>, CellRend
 // ─── Extra custom renderers for renderer stress-testing ──────────────────────
 
 /** DOM renderer: renders a compact progress/heat bar for numeric metric values */
-const metricBarDomRenderer: DomCellRenderer<LabRow> = {
+const metricBarDomRenderer: any = {
 	mount(container, params) {
 		const wrap = document.createElement('div');
 		wrap.style.cssText = 'display:flex;align-items:center;width:100%;gap:4px;padding:0 4px;box-sizing:border-box;';
@@ -97,7 +97,7 @@ const metricBarDomRenderer: DomCellRenderer<LabRow> = {
 };
 
 /** Imperative React renderer: a tiny sparkline-like number cell that updates in-place */
-const ImperativeMetric = React.forwardRef<ImperativeCellHandle<LabRow>, CellRendererProps<LabRow>>(function ImperativeMetric({ value }, ref) {
+const ImperativeMetric = React.forwardRef<any, CellRendererProps<LabRow>>(function ImperativeMetric({ value }, ref) {
 	const valRef = useRef<HTMLSpanElement>(null);
 	const barRef = useRef<HTMLDivElement>(null);
 	const paint = (v: unknown) => {
@@ -194,7 +194,12 @@ function makeColumns(mode: RendererMode): ColumnDef<LabRow>[] {
 const PAGE_SIZE = 5000;
 
 interface PerformanceLabProps {
-	onGridReady?: (event: GridReadyEvent<LabRow>) => void;
+	editTrigger?: 'singleClick' | 'doubleClick';
+	arrowKeyNavigationEdit?: boolean;
+	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
+	onGridReady?: (api: GridApi<LabRow>) => void;
+	pinLeftColumns?: number;
+	pinRightColumns?: number;
 }
 
 export default function PerformanceLab({ onGridReady }: PerformanceLabProps) {
@@ -250,17 +255,11 @@ export default function PerformanceLab({ onGridReady }: PerformanceLabProps) {
 
 			<div ref={hostRef} className='min-h-0 flex-1'>
 				<Grid
-					rowModelType='client'
 					rows={allRows}
 					columns={columns}
-					pagination={{ pageSize: PAGE_SIZE }}
-					rowOverscanPx={100}
-					colBuffer={1}
-					runtimeLimits={{ maxRenderedRows: 36, maxRenderedCells: 900 }}
 					getRowId={(row) => row.id}
 					pinLeftColumns={2}
 					pinRightColumns={1}
-					enableContextMenu={false}
 					onGridReady={onGridReady}
 				/>
 			</div>

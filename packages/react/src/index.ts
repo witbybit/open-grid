@@ -2,9 +2,6 @@
 export { Grid } from './Grid.js';
 export type { GridProps, GridColumnDef } from './Grid.js';
 
-export { GridNext } from './GridNext.js';
-export type { GridNextProps, GridNextColumnDef } from './GridNext.js';
-
 // ── React context + hooks ──────────────────────────────────────────────────
 export { GridApiContext, GridApiProvider } from './gridContext.js';
 export type { GridApiProviderProps } from './gridContext.js';
@@ -68,6 +65,7 @@ export type {
 export type {
 	ColumnDef,
 	ColumnPin,
+	ColumnState,
 	RowNode,
 	RowId,
 	RowModelType,

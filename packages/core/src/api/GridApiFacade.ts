@@ -45,6 +45,8 @@ export interface GridApi<TRow> {
 	readonly rows: {
 		getRowCount(): number;
 		getRow(rowId: RowId): RowNode<TRow> | null;
+		/** Returns all currently loaded rows as an array. */
+		getAll(): TRow[];
 		replace(rows: readonly TRow[]): GridCommandResult;
 		update(updater: (rows: TRow[]) => TRow[]): GridCommandResult;
 		applyTransaction(tx: RowTransaction<TRow>): GridCommandResult;
@@ -53,6 +55,10 @@ export interface GridApi<TRow> {
 	readonly cells: {
 		getValue(address: CellAddress): unknown;
 		setValue(address: CellAddress, value: unknown): GridCommandResult;
+		/** Convenience: get a cell value by row ID and field name. */
+		getField(rowId: RowId, field: string): unknown;
+		/** Convenience: set a cell value by row ID and field name. */
+		setField(rowId: RowId, field: string, value: unknown): GridCommandResult;
 	};
 
 	readonly columns: {
@@ -272,6 +278,7 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 		rows: {
 			getRowCount: () => core.rowModel.query.getRowCount(),
 			getRow: (rowId) => core.rowModel.query.getRowById(rowId),
+			getAll: () => core.rowModel.query.getLoadedRows().map((n) => n.data as TRow),
 			replace: (rows) => kernel.dispatch({ type: 'rows.replace', payload: { rows } }),
 			update: (updater) => kernel.dispatch({ type: 'rows.update', payload: { updater: updater as (rows: unknown[]) => unknown[] } }),
 			applyTransaction: (tx) => kernel.dispatch({ type: 'rows.applyTransaction', payload: { transaction: tx } }),
@@ -280,6 +287,8 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 		cells: {
 			getValue: (address) => core.getCellValue(address),
 			setValue: (address, value) => kernel.dispatch({ type: 'cell.setValue', payload: { address, value } }),
+			getField: (rowId, field) => core.getCellValue(addrOf(rowId, field)),
+			setField: (rowId, field, value) => kernel.dispatch({ type: 'cell.setValue', payload: { address: addrOf(rowId, field), value } }),
 		},
 
 		columns: {

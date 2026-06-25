@@ -3,9 +3,10 @@ import * as publicApi from './index.js';
 import * as experimentalApi from './experimental.js';
 
 describe('React public boundary', () => {
-	it('exports Grid and GridNext as grid entrypoints', () => {
+	it('exports Grid as the canonical grid entrypoint', () => {
 		expect(typeof (publicApi as Record<string, unknown>)['Grid']).toBe('function');
-		expect(typeof (publicApi as Record<string, unknown>)['GridNext']).toBe('function');
+		// GridNext was merged into Grid — it no longer exists as a separate export
+		expect((publicApi as Record<string, unknown>)['GridNext']).toBeUndefined();
 	});
 
 	it('exports React context and hooks', () => {

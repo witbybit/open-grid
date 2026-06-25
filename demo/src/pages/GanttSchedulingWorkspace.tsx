@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Grid, GridEventName, type GridApi, type GridReadyEvent, type StyleRule } from '@open-grid/react';
+import { Grid, type GridApi } from '@open-grid/react';
 import { CheckSquare, Clock, Layers, RefreshCw, Sparkles, TrendingUp, Users, Zap } from 'lucide-react';
 import { createGanttColumns, createGanttRows, type GanttRow } from './demoGridConfigs';
 
@@ -7,89 +7,35 @@ interface GanttSchedulingWorkspaceProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
-	onGridReady?: (event: GridReadyEvent<GanttRow>) => void;
+	onGridReady?: (api: GridApi<GanttRow>) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 }
 
 export default function GanttSchedulingWorkspace({
-	editTrigger,
-	arrowKeyNavigationEdit,
+	editTrigger: _editTrigger,
+	arrowKeyNavigationEdit: _arrowKeyNavigationEdit,
 	onCellValueChanged,
 	onGridReady,
 	pinLeftColumns = 0,
 	pinRightColumns = 0,
 }: GanttSchedulingWorkspaceProps) {
 	const [api, setApi] = useState<GridApi<GanttRow> | null>(null);
-	const [selectedRange, setSelectedRange] = useState<unknown>(null);
 	const [revision, setRevision] = useState(0);
 	const rows = useMemo(() => createGanttRows(), []);
 	const columns = useMemo(() => createGanttColumns(), []);
 
-	const styleRules = useMemo<StyleRule<GanttRow>[]>(
-		() => [
-			{
-				kind: 'row',
-				when: (row) => row.status === 'Blocked',
-				rowClass: 'transition-all duration-200 border-l-2 border-rose-500/80 bg-rose-950/5 hover:bg-rose-900/10 text-rose-200/90',
-			},
-			{
-				kind: 'row',
-				when: (row) => row.status === 'Done',
-				rowClass: 'transition-all duration-200 border-l-2 border-emerald-500/80 bg-emerald-950/5 hover:bg-emerald-900/10 text-emerald-200/90',
-			},
-			{
-				kind: 'row',
-				when: (row) => row.status === 'In Progress',
-				rowClass: 'transition-all duration-200 border-l-2 border-indigo-500/50 bg-indigo-950/5 hover:bg-indigo-900/10',
-			},
-			{
-				kind: 'row',
-				when: (row) => row.status === 'Pending',
-				rowClass: 'transition-all duration-200 border-l-2 border-slate-800 bg-slate-900/5 hover:bg-slate-800/10',
-			},
-			{
-				kind: 'cell',
-				field: 'progress',
-				when: (row) => Number(row.progress) >= 90,
-				cellClass: 'text-emerald-400 font-extrabold font-mono shadow-sm',
-			},
-			{
-				kind: 'cell',
-				field: 'status',
-				when: (row) => row.status === 'Blocked',
-				cellClass: 'animate-pulse text-rose-400 font-semibold',
-			},
-			{
-				kind: 'headerCell',
-				field: 'timeline',
-				when: () => true,
-				headerCellClass:
-					'bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 text-indigo-300 font-bold border-b border-indigo-900/30',
-			},
-			{
-				kind: 'headerCell',
-				when: (col) => col.field !== 'timeline',
-				headerCellClass: 'font-semibold text-slate-400',
-			},
-		],
-		[]
-	);
-
 	useEffect(() => {
 		if (!api) return;
-		const readSelection = () => setSelectedRange(api.getStateSnapshot().selection.range ?? null);
-		readSelection();
-		const unsubSelection = api.subscribeToKey('selection', readSelection);
-		const unsubCell = api.addEventListener(GridEventName.cellValueChanged, () => setRevision((value) => value + 1));
-		return () => {
-			unsubSelection();
-			unsubCell();
-		};
+		return api.subscribe((event) => {
+			if (event.type === 'cells.changed' || event.type === 'selection.changed') {
+				setRevision((v) => v + 1);
+			}
+		});
 	}, [api]);
 
 	const stats = useMemo(() => {
-		const currentRows = api?.rows().getAll() ?? rows;
+		const currentRows = api?.rows.getAll() ?? rows;
 		let done = 0;
 		let blocked = 0;
 		let progressSum = 0;
@@ -107,32 +53,33 @@ export default function GanttSchedulingWorkspace({
 			progressAvg: currentRows.length > 0 ? progressSum / currentRows.length : 0,
 			totalDuration,
 		};
-	}, [api, rows, revision, selectedRange]);
+	}, [api, rows, revision]);
 
 	const handleAutoSolveConflicts = useCallback(() => {
 		if (!api) return;
 		const start = performance.now();
 		let currentDay = 1;
 		const updates: GanttRow[] = [];
-		api.rows().forEach((row) => {
+		api.rows.getAll().forEach((row) => {
 			updates.push({ ...row, sprintDay: currentDay });
 			currentDay += Number(row.durationDays) || 2;
 		});
-		api.applyTransaction({ update: updates });
-		setRevision((value) => value + 1);
+		api.rows.applyTransaction({ update: updates });
+		setRevision((v) => v + 1);
 		alert(`Sprint Scheduling Overlaps Auto-Resolved! (Shifted coordinate dates sequentially in ${(performance.now() - start).toFixed(2)}ms)`);
 	}, [api]);
 
 	const handleBatchExpedite = useCallback(() => {
 		if (!api) return;
-		const range = api.getStateSnapshot().selection.range;
-		if (!range) {
-			alert('Please select a range of cells using drag selection first.');
+		const selectedIds = api.selection.getState().selectedRowIds;
+		if (selectedIds.size === 0) {
+			alert('Please select rows first using click or Shift+Click.');
 			return;
 		}
-		const rowIdSet = new Set(api.rows().inRange(range).getIds());
-		api.updateRows((rows) => rows.map((row) => (rowIdSet.has(row.id) ? { ...row, progress: 100, status: 'Done' } : row)));
-		setRevision((value) => value + 1);
+		api.rows.update((currentRows) =>
+			currentRows.map((row) => (selectedIds.has(row.id) ? { ...row, progress: 100, status: 'Done' } : row))
+		);
+		setRevision((v) => v + 1);
 	}, [api]);
 
 	return (
@@ -145,23 +92,21 @@ export default function GanttSchedulingWorkspace({
 						<span className='text-[10px] text-slate-400 font-extrabold uppercase tracking-wider'>Gantt Scheduling Arena</span>
 					</div>
 					<div className='text-slate-400 font-medium text-[10px] bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 font-mono flex items-center gap-1 shrink-0'>
-						<span>Drag glowing anchor handle at selection bottom-right to autocomplete/extrapolate sprint days & sequences!</span>
+						<span>Select rows then use Batch Complete to mark as Done</span>
 					</div>
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						rowModelType='client'
 						rows={rows}
 						columns={columns}
 						getRowId={(row) => row.id}
-						styleRules={styleRules}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
-						onGridReady={(event) => {
-							setApi(event.api);
-							onGridReady?.(event);
+						onCellValueChanged={onCellValueChanged}
+						onGridReady={(api) => {
+							setApi(api);
+							onGridReady?.(api);
 						}}
 					/>
 				</div>

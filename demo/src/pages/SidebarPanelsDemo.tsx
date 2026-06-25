@@ -1,6 +1,6 @@
 import React from 'react';
 import { Grid } from '@open-grid/react';
-import type { ColumnDef, CellRendererProps, GridReadyEvent } from '@open-grid/react';
+import type { ColumnDef, CellRendererProps, GridApi } from '@open-grid/react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -176,10 +176,15 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 const ROWS = generateHoldings(200);
 
 interface SidebarPanelsDemoProps {
-	onGridReady?: (event: GridReadyEvent<HoldingRow>) => void;
+	editTrigger?: 'singleClick' | 'doubleClick';
+	arrowKeyNavigationEdit?: boolean;
+	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
+	onGridReady?: (api: GridApi<HoldingRow>) => void;
+	pinLeftColumns?: number;
+	pinRightColumns?: number;
 }
 
-export default function SidebarPanelsDemo({ onGridReady }: SidebarPanelsDemoProps) {
+export default function SidebarPanelsDemo({ onGridReady, pinLeftColumns, pinRightColumns }: SidebarPanelsDemoProps) {
 	return (
 		<div style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 12 }}>
 			{/* Intro strip */}
@@ -200,17 +205,14 @@ export default function SidebarPanelsDemo({ onGridReady }: SidebarPanelsDemoProp
 			{/* Grid with integrated sidebar — api.openPanel() / closePanel() / getOpenPanel() */}
 			<div className='flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-800 shadow-2xl'>
 				<Grid<HoldingRow>
-					rowModelType='client'
 					columns={COLUMNS}
 					rows={ROWS}
-					pinLeftColumns={1}
-					enableContextMenu={true}
-					enableChart
+					pinLeftColumns={pinLeftColumns ?? 1}
+					pinRightColumns={pinRightColumns}
 					sidebar={{
 						panels: ['columns', 'filters', 'sort', 'themes'],
 						defaultOpen: 'columns',
 						position: 'right',
-						width: 300,
 					}}
 					onGridReady={onGridReady}
 				/>

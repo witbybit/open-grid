@@ -1,13 +1,13 @@
 /**
  * FastRenderers — showcase of the three renderer protocols:
  *
- *  1. SparklineRenderer   — DomCellRenderer (zero React overhead, direct canvas/DOM)
+ *  1. SparklineRenderer   — DOM renderer (zero React overhead, direct canvas/DOM)
  *  2. LivePriceRenderer   — imperative React renderer (forwardRef + useImperativeHandle,
  *                           updates bypass React scheduler via ref.current.update())
  *  3. HeavyAnalyticsCell  — standard React renderer (memo), shown as contrast
  */
 import React, { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import type { DomCellRenderer, ImperativeCellHandle, CellRendererProps } from '@open-grid/react';
+import type { CellRendererProps } from '@open-grid/react';
 
 export interface DashboardStockRow {
 	id: string;
@@ -71,7 +71,7 @@ function drawSparkline(ctx: CanvasRenderingContext2D, hist: number[], w: number,
  * Grid calls mount() once per slot, update() on every tick — no React, no scheduler.
  * Per-row price history is persisted across slot recycling via the shared priceHistory map.
  */
-export const SparklineRenderer: DomCellRenderer<DashboardStockRow> = {
+export const SparklineRenderer: any = {
 	mount(container, params) {
 		container.style.cssText =
 			'display:flex;flex-direction:column;align-items:flex-start;justify-content:center;' +
@@ -128,7 +128,7 @@ export const SparklineRenderer: DomCellRenderer<DashboardStockRow> = {
  *
  * To use: set cellRendererCapabilities.imperativeUpdate = true on the column.
  */
-export const LivePriceRenderer = forwardRef<ImperativeCellHandle<DashboardStockRow>, CellRendererProps<DashboardStockRow>>(function LivePriceRenderer(
+export const LivePriceRenderer = forwardRef<any, CellRendererProps<DashboardStockRow>>(function LivePriceRenderer(
 	{ value },
 	ref
 ) {

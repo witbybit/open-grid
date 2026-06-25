@@ -1,11 +1,11 @@
 /**
- * New Engine Demo — proves the Plan 133 GridNext component renders a working grid
+ * New Engine Demo — proves the Plan 133 Grid component renders a working grid
  * using the new command-driven GridKernel + DomGridRenderer, with zero old engine
  * machinery (no GridStore, no GridEngine).
  */
 import React, { useMemo, useState } from 'react';
-import { GridNext } from '@open-grid/react';
-import type { GridNextColumnDef } from '@open-grid/react';
+import { Grid } from '@open-grid/react';
+import type { GridColumnDef } from '@open-grid/react';
 
 interface DemoRow {
 	id: string;
@@ -31,7 +31,7 @@ function generateRows(count: number): DemoRow[] {
 	}));
 }
 
-const COLUMNS: GridNextColumnDef<DemoRow>[] = [
+const COLUMNS: GridColumnDef<DemoRow>[] = [
 	{ id: 'id', field: 'id', header: '#', width: 60 },
 	{ id: 'name', field: 'name', header: 'Name', width: 160 },
 	{ id: 'role', field: 'role', header: 'Role', width: 140 },
@@ -40,7 +40,7 @@ const COLUMNS: GridNextColumnDef<DemoRow>[] = [
 	{ id: 'status', field: 'status', header: 'Status', width: 100 },
 ];
 
-const PINNED_COLUMNS: GridNextColumnDef<DemoRow>[] = [
+const PINNED_COLUMNS: GridColumnDef<DemoRow>[] = [
 	{ id: 'id', field: 'id', header: '#', width: 60, pinned: 'left' },
 	{ id: 'name', field: 'name', header: 'Name', width: 160 },
 	{ id: 'role', field: 'role', header: 'Role', width: 140 },
@@ -105,7 +105,7 @@ export default function NewEngineDemo() {
 				</div>
 			</div>
 			<div style={{ flex: 1, minHeight: 0 }}>
-				<GridNext<DemoRow> columns={usePinned ? PINNED_COLUMNS : COLUMNS} rows={rows} getRowId={(r) => r.id} rowHeight={38} />
+				<Grid<DemoRow> columns={usePinned ? PINNED_COLUMNS : COLUMNS} rows={rows} getRowId={(r) => r.id} rowHeight={38} />
 			</div>
 		</div>
 	);

@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Grid, GridEventName, type GridApi, type GridReadyEvent } from '@open-grid/react';
+import { Grid, type GridApi } from '@open-grid/react';
 
 interface Product {
 	id: string;
@@ -42,7 +42,7 @@ const COLUMNS = [
 	},
 ];
 
-type LogEntry = { kind: 'copy' | 'paste'; text: string; time: string };
+type LogEntry = { kind: 'copy' | 'paste' | 'cut'; text: string; time: string };
 
 export default function ClipboardDemo() {
 	const apiRef = useRef<GridApi<Product> | null>(null);
@@ -54,46 +54,47 @@ export default function ClipboardDemo() {
 	}, []);
 
 	const handleGridReady = useCallback(
-		(e: GridReadyEvent<Product>) => {
-			apiRef.current = e.api;
-
-			e.api.addEventListener(GridEventName.cellsCopied, (event) => {
-				const { rowCount, colCount, text } = event.payload;
-				addLog({
-					kind: 'copy',
-					text: `${rowCount}×${colCount} cells — "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`,
-					time: new Date().toLocaleTimeString(),
-				});
-				setStatus(`Copied ${rowCount}×${colCount} cells to clipboard`);
-			});
-
-			e.api.addEventListener(GridEventName.cellsPasted, (event) => {
-				const { rowCount, colCount } = event.payload;
-				addLog({
-					kind: 'paste',
-					text: `Pasted ${rowCount}×${colCount} cells`,
-					time: new Date().toLocaleTimeString(),
-				});
-				setStatus(`Pasted ${rowCount}×${colCount} cells`);
-			});
+		(api: GridApi<Product>) => {
+			apiRef.current = api;
 		},
-		[addLog]
+		[]
 	);
 
-	const handleCopyAll = useCallback(() => {
+	const handleCopySelected = useCallback(async () => {
 		if (!apiRef.current) return;
-		const rowCount = ROWS.length;
-		const colCount = COLUMNS.length - 1; // skip ID
-		void apiRef.current.copyRange(0, rowCount - 1, 1, colCount);
-	}, []);
+		try {
+			await apiRef.current.clipboard.copySelection();
+			const time = new Date().toLocaleTimeString();
+			addLog({ kind: 'copy', text: 'Copied selection to clipboard', time });
+			setStatus('Copied selection to clipboard');
+		} catch {
+			setStatus('Copy failed — select cells first');
+		}
+	}, [addLog]);
 
-	const handleCopySelected = useCallback(() => {
-		void apiRef.current?.copySelectedRange();
-	}, []);
+	const handleCopyAll = useCallback(async () => {
+		if (!apiRef.current) return;
+		try {
+			await apiRef.current.clipboard.copySelection();
+			const time = new Date().toLocaleTimeString();
+			addLog({ kind: 'copy', text: 'Copied to clipboard', time });
+			setStatus('Copied to clipboard');
+		} catch {
+			setStatus('Copy failed');
+		}
+	}, [addLog]);
 
-	const handlePaste = useCallback(() => {
-		void apiRef.current?.pasteFromClipboard();
-	}, []);
+	const handlePaste = useCallback(async () => {
+		if (!apiRef.current) return;
+		try {
+			await apiRef.current.clipboard.paste();
+			const time = new Date().toLocaleTimeString();
+			addLog({ kind: 'paste', text: 'Pasted from clipboard', time });
+			setStatus('Pasted from clipboard');
+		} catch {
+			setStatus('Paste failed — check clipboard permissions');
+		}
+	}, [addLog]);
 
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 12, padding: 16 }}>
@@ -102,12 +103,9 @@ export default function ClipboardDemo() {
 				<button
 					onClick={handleCopySelected}
 					style={{
-						padding: '5px 12px',
-						borderRadius: 6,
+						padding: '5px 12px', borderRadius: 6,
 						border: '1px solid var(--og-border-color, #d1d5db)',
-						background: 'var(--og-header-bg, #f9fafb)',
-						cursor: 'pointer',
-						fontSize: 12,
+						background: 'var(--og-header-bg, #f9fafb)', cursor: 'pointer', fontSize: 12,
 					}}
 				>
 					Copy Selected (Ctrl+C)
@@ -115,25 +113,19 @@ export default function ClipboardDemo() {
 				<button
 					onClick={handleCopyAll}
 					style={{
-						padding: '5px 12px',
-						borderRadius: 6,
+						padding: '5px 12px', borderRadius: 6,
 						border: '1px solid var(--og-border-color, #d1d5db)',
-						background: 'var(--og-header-bg, #f9fafb)',
-						cursor: 'pointer',
-						fontSize: 12,
+						background: 'var(--og-header-bg, #f9fafb)', cursor: 'pointer', fontSize: 12,
 					}}
 				>
-					Copy All (name→revenue)
+					Copy Selection
 				</button>
 				<button
 					onClick={handlePaste}
 					style={{
-						padding: '5px 12px',
-						borderRadius: 6,
+						padding: '5px 12px', borderRadius: 6,
 						border: '1px solid var(--og-border-color, #d1d5db)',
-						background: 'var(--og-header-bg, #f9fafb)',
-						cursor: 'pointer',
-						fontSize: 12,
+						background: 'var(--og-header-bg, #f9fafb)', cursor: 'pointer', fontSize: 12,
 					}}
 				>
 					Paste (Ctrl+V)
@@ -142,34 +134,26 @@ export default function ClipboardDemo() {
 			</div>
 
 			<div style={{ flex: 1, minHeight: 0 }}>
-				<Grid<Product> rowModelType='client' columns={COLUMNS} rows={ROWS} getRowId={(row) => row.id} onGridReady={handleGridReady} />
+				<Grid<Product> columns={COLUMNS} rows={ROWS} getRowId={(row) => row.id} onGridReady={handleGridReady} />
 			</div>
 
 			{log.length > 0 && (
 				<div
 					style={{
-						height: 120,
-						overflowY: 'auto',
-						borderRadius: 6,
+						height: 120, overflowY: 'auto', borderRadius: 6,
 						border: '1px solid var(--og-border-color, #e5e7eb)',
-						background: 'var(--og-odd-row-bg, #fafafa)',
-						fontSize: 11,
-						fontFamily: 'monospace',
-						padding: '6px 10px',
-						flexShrink: 0,
+						background: 'var(--og-odd-row-bg, #fafafa)', fontSize: 11,
+						fontFamily: 'monospace', padding: '6px 10px', flexShrink: 0,
 					}}
 				>
 					{log.map((entry, i) => (
 						<div key={i} style={{ display: 'flex', gap: 8, marginBottom: 2 }}>
 							<span style={{ color: '#9ca3af', minWidth: 60 }}>{entry.time}</span>
-							<span
-								style={{
-									color: entry.kind === 'copy' ? '#2563eb' : '#16a34a',
-									minWidth: 40,
-									fontWeight: 600,
-								}}
-							>
-								{entry.kind === 'copy' ? '↑ COPY' : '↓ PASTE'}
+							<span style={{
+								color: entry.kind === 'copy' ? '#2563eb' : entry.kind === 'cut' ? '#d97706' : '#16a34a',
+								minWidth: 40, fontWeight: 600,
+							}}>
+								{entry.kind === 'copy' ? '↑ COPY' : entry.kind === 'cut' ? '✂ CUT' : '↓ PASTE'}
 							</span>
 							<span style={{ color: 'var(--og-cell-fg, #374151)' }}>{entry.text}</span>
 						</div>

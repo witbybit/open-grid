@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Grid, type GridApi, type GridCellPointer, type GridReadyEvent } from '@open-grid/react';
+import React, { useMemo, useState } from 'react';
+import { Grid, type GridApi } from '@open-grid/react';
 import { CheckCircle2, Compass, Cpu, Layout, Maximize2 } from 'lucide-react';
 import { generatePerformanceRows, layoutColumnsFull } from './demoGridConfigs';
 import type { PerformanceRow } from '../components/GridShared';
@@ -9,7 +9,7 @@ interface DynamicLayoutProps {
 	arrowKeyNavigationEdit: boolean;
 	rowHeightsMap: Record<string, number>;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
-	onGridReady?: (event: GridReadyEvent<PerformanceRow>) => void;
+	onGridReady?: (api: GridApi<PerformanceRow>) => void;
 	compactLayout: 'compact' | 'normal' | 'spacious';
 	visibleColumns?: Record<string, boolean>;
 	pinLeftColumns?: number;
@@ -17,8 +17,8 @@ interface DynamicLayoutProps {
 }
 
 export default function DynamicLayout({
-	editTrigger,
-	arrowKeyNavigationEdit,
+	editTrigger: _editTrigger,
+	arrowKeyNavigationEdit: _arrowKeyNavigationEdit,
 	rowHeightsMap,
 	onCellValueChanged,
 	onGridReady,
@@ -32,15 +32,7 @@ export default function DynamicLayout({
 		() => (visibleColumns ? layoutColumnsFull.filter((column) => visibleColumns[column.field]) : layoutColumnsFull),
 		[visibleColumns]
 	);
-	const [api, setApi] = useState<GridApi<PerformanceRow> | null>(null);
-	const [focusedCell, setFocusedCell] = useState<GridCellPointer | null>(null);
-
-	useEffect(() => {
-		if (!api) return;
-		const update = () => setFocusedCell(api.getStateSnapshot().selection.focus);
-		update();
-		return api.subscribeToKey('selection', update);
-	}, [api]);
+	const [_api, setApi] = useState<GridApi<PerformanceRow> | null>(null);
 
 	const layoutStats = {
 		colsCount: columns.length,
@@ -66,17 +58,15 @@ export default function DynamicLayout({
 				</div>
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						rowModelType='client'
 						rows={rows}
 						columns={columns}
-						initialState={{ rowHeight: rowHeightsMap[compactLayout] } as any}
+						rowHeight={rowHeightsMap[compactLayout]}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
-						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
-						onGridReady={(event) => {
-							setApi(event.api);
-							onGridReady?.(event);
+						onCellValueChanged={onCellValueChanged}
+						onGridReady={(api) => {
+							setApi(api);
+							onGridReady?.(api);
 						}}
 					/>
 				</div>
@@ -107,10 +97,8 @@ export default function DynamicLayout({
 						Viewport Blueprint
 					</h3>
 					<div className='bg-slate-950/60 border border-slate-900 p-2.5 rounded-lg font-mono text-[10px]'>
-						<span className='text-[8px] text-slate-500 uppercase tracking-wider font-extrabold'>Focus Address</span>
-						<div className='text-purple-400 font-extrabold'>
-							{focusedCell ? `${focusedCell.rowId} : ${focusedCell.colField}` : 'No Focus Coordinate'}
-						</div>
+						<span className='text-[8px] text-slate-500 uppercase tracking-wider font-extrabold'>Est. Memory</span>
+						<div className='text-purple-400 font-extrabold'>{layoutStats.estimatedMemoryKb} KB</div>
 					</div>
 				</div>
 				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3'>

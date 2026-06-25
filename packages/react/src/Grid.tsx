@@ -4,59 +4,60 @@ import {
 	DomGridRenderer,
 	ThemeManager,
 	isBuiltInThemeName,
+	asColumnId,
 } from '@open-grid/core';
-import type { GridApi, RowId, SortModel, FilterModel, ColumnId } from '@open-grid/core';
-import type { GridNextColumnDef, GridNextProps } from './GridNext.js';
+import type { GridApi, RowId, SortModel, FilterModel, ColumnId, ColumnDef } from '@open-grid/core';
 import { GridSidebar } from './sidebar/GridSidebar.js';
 import type { GridSidebarConfig } from './sidebar/GridSidebar.js';
 
-// Re-export for consumers who import from this module.
-export type GridColumnDef<TRow> = GridNextColumnDef<TRow>;
+export interface GridColumnDef<TRow> extends Omit<ColumnDef<TRow>, 'id'> {
+	id?: string;
+}
 
-export interface GridProps<TRow extends object = Record<string, unknown>> extends Omit<GridNextProps<TRow>, 'columns' | 'rows'> {
+export interface GridProps<TRow extends object = Record<string, unknown>> {
 	columns: GridColumnDef<TRow>[];
 	rows: TRow[];
+	getRowId?: (row: TRow) => string | number;
+	rowHeight?: number;
+	defaultColWidth?: number;
+	showStatusBar?: boolean;
+	showFloatingFilters?: boolean;
+	showGroupPanel?: boolean;
+	showFilterChipBar?: boolean;
+	enableColumnReorder?: boolean;
+	loading?: boolean;
+	style?: CSSProperties;
+	className?: string;
 
 	// Theme
 	theme?: string;
 
 	// Lifecycle callbacks
 	onGridReady?: (api: GridApi<TRow>) => void;
+	/** Called once after the grid is mounted. Alias for onGridReady. */
+	onMount?: (api: GridApi<TRow>) => void;
 
 	// Change callbacks
 	onSortChanged?: (sortModel: SortModel) => void;
 	onFilterChanged?: (filterModel: FilterModel) => void;
 	onRowSelectionChanged?: (selectedIds: RowId[]) => void;
 	onCellClicked?: (params: { rowId: RowId; field: string }) => void;
+	onCellValueChanged?: (rowId: RowId, field: string, value: unknown) => void;
 
-	// Editing
-	editTrigger?: 'singleClick' | 'dblClick';
-
-	// Column pinning
-	pinLeftColumns?: string[];
-	pinRightColumns?: string[];
-
-	// Column reorder
-	enableColumnReorder?: boolean;
-
-	// Style rules (pass-through, stored in ref for future use)
-	styleRules?: unknown;
-
-	// Chrome / UI toggles
-	showFilterChipBar?: boolean;
-	enableContextMenu?: boolean;
+	// Column pinning — number: pin first N; string[]: pin by field name
+	pinLeftColumns?: number | string[];
+	pinRightColumns?: number | string[];
 
 	// Sidebar
 	sidebar?: GridSidebarConfig<TRow>;
 }
 
 /**
- * Grid — the primary React entry-point for Open Grid on the new GridKernel architecture.
+ * Grid — primary React entry-point for Open Grid on the new GridKernel architecture.
  *
  * API + renderer are co-created inside a single effect so React Strict Mode's
- * cleanup/remount cycle destroys and recreates them as a unit (same pattern as GridNext).
- * Column definitions are fixed at mount time; live prop changes drive row data and event
- * subscriptions only.
+ * cleanup/remount cycle destroys and recreates them as a unit.
+ * Column definitions are fixed at mount time; live prop changes drive row data only.
  */
 export function Grid<TRow extends object = Record<string, unknown>>({
 	columns,
@@ -74,23 +75,22 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 	className,
 	theme,
 	onGridReady,
+	onMount,
 	onSortChanged,
 	onFilterChanged,
 	onRowSelectionChanged,
 	onCellClicked,
-	editTrigger: _editTrigger,   // reserved for renderer wiring
+	onCellValueChanged,
 	pinLeftColumns,
 	pinRightColumns,
-	styleRules: _styleRules,     // stored below for future pipeline use
-	enableContextMenu: _enableContextMenu,
-	sidebar: _sidebar,
+	sidebar,
 }: GridProps<TRow>) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const apiRef = useRef<GridApi<TRow> | null>(null);
 	const [mountedApi, setMountedApi] = useState<GridApi<TRow> | null>(null);
 
 	// Normalize column defs once — columns are fixed at mount time.
-	const normalizedCols = useMemo(
+	const normalizedCols = useMemo<ColumnDef<TRow>[]>(
 		() =>
 			columns.map((col) => ({
 				...col,
@@ -101,35 +101,25 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 		[],
 	);
 
-	// Keep rows and callbacks in refs so the mount effect can prime the grid
-	// and downstream effects can always read the latest value without being
-	// listed as effect dependencies.
 	const rowsRef = useRef(rows);
 	rowsRef.current = rows;
 
-	// Track pipeline state locally — the public GridApi exposes setters only;
-	// we mirror the last-dispatched models here so callbacks receive a value.
-	const sortModelRef = useRef<SortModel>([]);
-	const filterModelRef = useRef<FilterModel>([]);
-
-	// Callback refs — always current, never stale inside the mount effect.
+	// Callback refs — always current, never stale.
 	const onGridReadyRef = useRef(onGridReady);
 	onGridReadyRef.current = onGridReady;
-
+	const onMountRef = useRef(onMount);
+	onMountRef.current = onMount;
 	const onSortChangedRef = useRef(onSortChanged);
 	onSortChangedRef.current = onSortChanged;
-
 	const onFilterChangedRef = useRef(onFilterChanged);
 	onFilterChangedRef.current = onFilterChanged;
-
 	const onRowSelectionChangedRef = useRef(onRowSelectionChanged);
 	onRowSelectionChangedRef.current = onRowSelectionChanged;
-
 	const onCellClickedRef = useRef(onCellClicked);
 	onCellClickedRef.current = onCellClicked;
+	const onCellValueChangedRef = useRef(onCellValueChanged);
+	onCellValueChangedRef.current = onCellValueChanged;
 
-	// Co-create the API + renderer so both are destroyed together on cleanup.
-	// This pairs creation/destruction in one effect, which is React Strict Mode safe.
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
@@ -150,40 +140,36 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 		apiRef.current = api;
 
 		// ── 2. Apply column pinning ────────────────────────────────────────────
-		if (pinLeftColumns && pinLeftColumns.length > 0) {
-			for (const field of pinLeftColumns) {
-				const colState = api.columns.getState().find((c) => c.field === field || c.id === field);
-				if (colState) {
-					api.columns.setPinned(colState.id, 'left');
-				}
+		const applyPins = (spec: number | string[] | undefined, side: 'left' | 'right') => {
+			if (!spec) return;
+			const cols = typeof spec === 'number'
+				? (side === 'left'
+					? normalizedCols.slice(0, spec)
+					: normalizedCols.slice(normalizedCols.length - spec))
+				: normalizedCols.filter((c) => (spec as string[]).includes(c.field ?? c.id ?? ''));
+			for (const col of cols) {
+				api.columns.setPinned(asColumnId(col.id ?? col.field ?? ''), side);
 			}
-		}
-		if (pinRightColumns && pinRightColumns.length > 0) {
-			for (const field of pinRightColumns) {
-				const colState = api.columns.getState().find((c) => c.field === field || c.id === field);
-				if (colState) {
-					api.columns.setPinned(colState.id, 'right');
-				}
-			}
-		}
+		};
+		applyPins(pinLeftColumns, 'left');
+		applyPins(pinRightColumns, 'right');
 
 		// ── 3. Create + mount the renderer ────────────────────────────────────
 		const renderer = new DomGridRenderer<TRow>(api.getRendererView());
 
-		// Wire column interaction callbacks
-		renderer.setSortCallback((field, _currentDir) => {
-			const currentSort = api.pipeline.getSortModel();
-			const existing = currentSort.find((s) => s.field === field);
+		renderer.setSortCallback((field) => {
+			const current = api.pipeline.getSortModel();
+			const existing = current.find((s) => s.field === field);
 			const nextDir: 'asc' | 'desc' | null =
 				!existing ? 'asc' : existing.direction === 'asc' ? 'desc' : null;
 			const nextModel = nextDir === null
-				? currentSort.filter((s) => s.field !== field)
-				: [...currentSort.filter((s) => s.field !== field), { field, columnId: field as ColumnId, direction: nextDir }];
+				? current.filter((s) => s.field !== field)
+				: [...current.filter((s) => s.field !== field), { field, columnId: field as ColumnId, direction: nextDir }];
 			api.pipeline.setSortModel(nextModel);
 		});
 		renderer.setResizeCallback((field, newWidth) => {
-			const col = api.columns.getState().find((c) => c.field === field || c.id === field);
-			if (col) api.columns.resize(col.id, newWidth);
+			const col = api.columns.getState().find((c) => c.field === field);
+			if (col) api.columns.resize(col.columnId, newWidth);
 		});
 		renderer.setGroupToggleCallback((groupKey) => {
 			api.pipeline.toggleGroupExpanded(groupKey);
@@ -195,58 +181,62 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 			api.pipeline.toggleDetail(rowId);
 		});
 		renderer.setFloatingFilterChangeCallback((field, value, operator) => {
-			const currentFilter = api.pipeline.getFilterModel();
+			const current = api.pipeline.getFilterModel();
 			const col = api.columns.getState().find((c) => c.field === field);
 			if (!col) return;
 			if (!value) {
-				api.pipeline.setFilterModel(currentFilter.filter((f) => f.field !== field));
+				api.pipeline.setFilterModel(current.filter((f) => f.field !== field));
 			} else {
-				const next = [
-					...currentFilter.filter((f) => f.field !== field),
-					{ columnId: col.id, field, operator, value },
-				];
-				api.pipeline.setFilterModel(next);
+				api.pipeline.setFilterModel([
+					...current.filter((f) => f.field !== field),
+					{ columnId: col.columnId, field, operator, value },
+				]);
 			}
 		});
 		renderer.setFilterChipRemoveCallback((columnId) => {
-			const current = api.pipeline.getFilterModel();
-			api.pipeline.setFilterModel(current.filter((f) => String(f.columnId) !== columnId));
+			api.pipeline.setFilterModel(
+				api.pipeline.getFilterModel().filter((f) => String(f.columnId) !== columnId),
+			);
 		});
 		renderer.setGroupPanelRemoveCallback((columnId) => {
-			const current = api.pipeline.getGroupBy();
-			api.pipeline.setGroupBy(current.filter((g) => String(g.columnId) !== columnId));
+			api.pipeline.setGroupBy(
+				api.pipeline.getGroupBy().filter((g) => String(g.columnId) !== columnId),
+			);
 		});
 
 		renderer.mount(container);
 
-		// ── 4. Prime with current rows immediately ─────────────────────────────
+		// ── 4. Prime with current rows ─────────────────────────────────────────
 		api.rows.replace(rowsRef.current as readonly TRow[]);
 
 		// ── 5. Notify host ─────────────────────────────────────────────────────
 		setMountedApi(api);
 		onGridReadyRef.current?.(api);
+		onMountRef.current?.(api);
 
-		// Open default sidebar panel if configured
 		if (sidebar?.defaultOpen) {
 			api.sidebar.openPanel(sidebar.defaultOpen);
 		}
 
-		// ── 6. Subscribe to events for callbacks ──────────────────────────────
+		// ── 6. Subscribe to kernel events ────────────────────────────────────
 		const unsub = api.subscribe((event) => {
 			switch (event.type) {
 				case 'pipeline.changed': {
 					const reason = (event.payload as { reason?: string } | undefined)?.reason;
-					if (reason === 'sort') {
-						onSortChangedRef.current?.(sortModelRef.current);
-					} else if (reason === 'filter') {
-						onFilterChangedRef.current?.(filterModelRef.current);
-					}
+					if (reason === 'sort') onSortChangedRef.current?.(api.pipeline.getSortModel());
+					else if (reason === 'filter') onFilterChangedRef.current?.(api.pipeline.getFilterModel());
 					break;
 				}
 				case 'selection.changed': {
-					const state = api.selection.getState();
-					const ids = Array.from(state.selectedRowIds) as RowId[];
+					const ids = Array.from(api.selection.getState().selectedRowIds) as RowId[];
 					onRowSelectionChangedRef.current?.(ids);
+					break;
+				}
+				case 'cells.changed': {
+					if (onCellValueChangedRef.current) {
+						const changes = (event.payload as { changes?: Array<{ rowId: RowId; field: string; value: unknown }> })?.changes ?? [];
+						for (const c of changes) onCellValueChangedRef.current(c.rowId, c.field, c.value);
+					}
 					break;
 				}
 				default:
@@ -262,36 +252,27 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 			api.destroy();
 			if (apiRef.current === api) apiRef.current = null;
 		};
-		// intentional: mount once; columns/options are fixed at construction time
+		// intentional: mount once
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	// Sync row data: replace rows whenever the prop array changes identity.
+	// Sync rows whenever prop changes identity.
 	useEffect(() => {
 		apiRef.current?.rows.replace(rows as readonly TRow[]);
 	}, [rows]);
 
-	// Theme changes: apply via ThemeManager when the theme prop changes.
-	// ThemeManager is scoped to the container element to avoid global style leaks.
+	// Apply theme when it changes.
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container || !theme) return;
-
 		const manager = new ThemeManager();
-		// Derive a unique selector for this instance using a data attribute.
 		const instanceId = `og-${Math.random().toString(36).slice(2, 8)}`;
 		container.setAttribute('data-og-theme', instanceId);
 		const selector = `.og-grid-container[data-og-theme="${instanceId}"]`;
 		manager.mount(selector);
-
 		if (isBuiltInThemeName(theme)) {
 			manager.switchTheme(theme, selector);
-		} else {
-			// Unknown theme name — log a warning; built-in default remains active.
-			// TODO: support custom ThemeTokens objects passed as the theme prop.
-			console.warn(`[Grid] Unknown theme name: "${theme}". Use one of the built-in theme names or pass a ThemeTokens object.`);
 		}
-
 		return () => {
 			manager.unmount();
 			container.removeAttribute('data-og-theme');

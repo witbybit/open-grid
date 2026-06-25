@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Layout } from 'lucide-react';
-import type { FilterModel, GridApi, GridReadyEvent } from '@open-grid/react';
+import type { GridApi, ColumnFilter } from '@open-grid/react';
+import { asColumnId } from '@open-grid/react';
 import { DemoGridApiScope } from './DemoGridContext';
 import ShowroomHeader from './components/ShowroomHeader';
 import ShowroomLeftSidebar from './components/ShowroomLeftSidebar';
@@ -114,39 +115,43 @@ export default function App() {
 	}, []);
 
 	const rowHeightsMap = useMemo(() => ({ compact: 30, normal: 38, spacious: 48 }), []);
-	const filterModel = useMemo<FilterModel | null>(
-		() => (statusFilter === 'All' ? null : { status: { type: 'text', operator: 'equals', value: statusFilter } }),
+
+	const filterModel = useMemo<readonly ColumnFilter[]>(
+		() =>
+			statusFilter === 'All'
+				? []
+				: [{ columnId: asColumnId('status'), field: 'status', operator: 'equals', value: statusFilter }],
 		[statusFilter]
 	);
 
 	useEffect(() => {
-		activeApi?.setFilterModel(filterModel);
+		activeApi?.pipeline.setFilterModel(filterModel);
 	}, [activeApi, filterModel]);
 
 	useEffect(() => {
 		if (!activeApi) return;
-		const columns = activeApi.getStateSnapshot().columns;
+		const columns = activeApi.columns.getState();
 		if (columns.length > 0 && !columns.some((column) => column.field === sortField)) {
 			setSortField(columns[0].field);
 		}
 	}, [activeApi, sortField]);
 
 	const registerGridApi = useCallback(
-		(page: GridPageType, event: GridReadyEvent<any>) => {
-			if (page === activePage) setActiveApi(event.api);
+		(page: GridPageType, api: GridApi<any>) => {
+			if (page === activePage) setActiveApi(api);
 		},
 		[activePage]
 	);
 
-	const handleGridReady = useCallback((event: GridReadyEvent<any>) => registerGridApi(activePage, event), [activePage, registerGridApi]);
+	const handleGridReady = useCallback((api: GridApi<any>) => registerGridApi(activePage, api), [activePage, registerGridApi]);
 
 	const handleCellValueChanged = useCallback(
 		(rowId: string, colField: string, value: unknown) => {
 			if (!activeApi) return;
 			setInactiveRiskSideEffects(activeApi, rowId, colField, value);
 			if (activePage === 'gantt' && colField === 'status') {
-				if (value === 'Done') activeApi.setCellValue(rowId, 'progress', 100);
-				else if (value === 'Pending') activeApi.setCellValue(rowId, 'progress', 0);
+				if (value === 'Done') activeApi.cells.setField(rowId, 'progress', 100);
+				else if (value === 'Pending') activeApi.cells.setField(rowId, 'progress', 0);
 			}
 			performance.mark('open-grid-demo-cell-change');
 		},
@@ -157,7 +162,7 @@ export default function App() {
 		if (!activeApi) return;
 		const start = performance.now();
 		const updates: any[] = [];
-		activeApi.rows().forEach((row, index) => {
+		activeApi.rows.getAll().forEach((row: any, index: number) => {
 			if (index % 10 !== 0) return;
 			updates.push({
 				...row,
@@ -165,7 +170,7 @@ export default function App() {
 				quantity: (Math.floor(Math.random() * 60) + 15).toString(),
 			});
 		});
-		activeApi.applyTransaction({ update: updates });
+		activeApi.rows.applyTransaction({ update: updates });
 		performance.measure('open-grid-demo-bulk-calculation', { start, end: performance.now() });
 		performance.mark('open-grid-demo-grid-action');
 	}, [activeApi]);
@@ -173,35 +178,33 @@ export default function App() {
 	const applySpreadsheetRangeAction = useCallback(
 		(action: 'fill' | 'clear' | 'addPercent' | 'sum') => {
 			if (!activeApi) return;
-			const state = activeApi.getStateSnapshot();
-			const range = state.selection.range;
-			if (!range) {
-				window.alert('Please select a range of cells first using click-and-drag or Shift+Arrows.');
+			const selectedRowIds = Array.from(activeApi.selection.getState().selectedRowIds);
+			if (selectedRowIds.length === 0) {
+				window.alert('Please select rows first using click or Shift+Click.');
 				return;
 			}
-			const startColIndex = state.columns.findIndex((column) => column.field === range.start.colField);
-			const endColIndex = state.columns.findIndex((column) => column.field === range.end.colField);
-			if (startColIndex === -1 || endColIndex === -1) return;
-			const rowIds = activeApi.rows().inRange(range).getIds();
-			const columns = state.columns
-				.slice(Math.min(startColIndex, endColIndex), Math.max(startColIndex, endColIndex) + 1)
-				.map((column) => column.field)
-				.filter((field) => field !== 'id');
+			const numericFields = ['A', 'B', 'C', 'D', 'E', 'F', 'price', 'quantity'];
+			const rowIdSet = new Set(selectedRowIds.map(String));
+
 			if (action === 'sum') {
 				let total = 0;
-				for (const rowId of rowIds) for (const colField of columns) total += parseFloat(String(activeApi.getCellValue(rowId, colField))) || 0;
-				window.alert(`Calculated Selection Range Sum: ${total.toFixed(2)}`);
+				for (const rowId of selectedRowIds) {
+					for (const field of numericFields) {
+						total += parseFloat(String(activeApi.cells.getField(rowId, field))) || 0;
+					}
+				}
+				window.alert(`Calculated Selection Sum: ${total.toFixed(2)}`);
 				return;
 			}
-			const rowIdSet = new Set(rowIds);
-			activeApi.updateRows((currentRows) =>
-				currentRows.map((row) => {
-					if (!rowIdSet.has(row.id)) return row;
-					const next = { ...row } as any;
-					for (const field of columns) {
+			activeApi.rows.update((currentRows: any[]) =>
+				currentRows.map((row: any) => {
+					if (!rowIdSet.has(String(row.id))) return row;
+					const next = { ...row };
+					for (const field of numericFields) {
+						if (row[field] === undefined) continue;
 						if (action === 'fill') next[field] = '100';
 						else if (action === 'clear') next[field] = 0;
-						else next[field] = ((parseFloat(String((row as any)[field])) || 0) * 1.1).toFixed(0);
+						else next[field] = ((parseFloat(String(row[field])) || 0) * 1.1).toFixed(0);
 					}
 					return next;
 				})
@@ -288,8 +291,8 @@ export default function App() {
 									>
 										<input
 											type='checkbox'
-											checked={visibleColumns[col.field]}
-											onChange={() => toggleColumnVisibility(col.field)}
+											checked={visibleColumns[col.field ?? '']}
+											onChange={() => toggleColumnVisibility(col.field ?? '')}
 											className='h-3 w-3 cursor-pointer rounded border-slate-800 bg-slate-950 text-purple-600 focus:ring-purple-500/20'
 										/>
 										<span className='text-[10px] font-bold text-slate-300'>{col.header}</span>

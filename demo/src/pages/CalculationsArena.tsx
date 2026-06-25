@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Grid, GridEventName, type GridApi, type GridReadyEvent, type StyleRule } from '@open-grid/react';
+import { Grid, type GridApi } from '@open-grid/react';
 import { Activity, BadgePercent, ShieldAlert } from 'lucide-react';
 import { createPerformanceColumns, generatePerformanceRows } from './demoGridConfigs';
 import type { PerformanceRow } from '../components/GridShared';
@@ -9,15 +9,15 @@ interface CalculationsArenaProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
-	onGridReady?: (event: GridReadyEvent<PerformanceRow>) => void;
+	onGridReady?: (api: GridApi<PerformanceRow>) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 }
 
 export default function CalculationsArena({
 	massiveColumns = false,
-	editTrigger,
-	arrowKeyNavigationEdit,
+	editTrigger: _editTrigger,
+	arrowKeyNavigationEdit: _arrowKeyNavigationEdit,
 	onCellValueChanged,
 	onGridReady,
 	pinLeftColumns = 0,
@@ -28,30 +28,6 @@ export default function CalculationsArena({
 	const rows = useMemo(() => generatePerformanceRows(10000, 'R'), []);
 	const [telemetry, setTelemetry] = useState({ totalContracts: 0, avgVol: 0, sumDelta: 0, avgVega: 0, highRiskCount: 0 });
 
-	const styleRules = useMemo<StyleRule<PerformanceRow>[]>(
-		() => [
-			{
-				kind: 'row',
-				when: (row) => row.status === 'Inactive',
-				rowClass: 'transition-all duration-200 border-l-2 border-rose-500/80 bg-rose-950/5 hover:bg-rose-900/10 text-rose-200/90',
-			},
-			{
-				kind: 'row',
-				when: (row) => row.status === 'Pending',
-				rowClass: 'transition-all duration-200 border-l-2 border-amber-500/60 bg-amber-950/5 hover:bg-amber-900/10 text-amber-200/90',
-			},
-			{
-				kind: 'row',
-				when: (row) => row.status === 'Active',
-				rowClass: 'transition-all duration-200 border-l-2 border-emerald-500/40 bg-emerald-950/5 hover:bg-emerald-900/10 text-emerald-200/90',
-			},
-			{ kind: 'cell', field: 'status', when: (row) => row.status === 'Inactive', cellClass: 'text-rose-400 font-bold animate-pulse' },
-			{ kind: 'cell', field: 'status', when: (row) => row.status === 'Pending', cellClass: 'text-amber-400 font-bold' },
-			{ kind: 'cell', field: 'status', when: (row) => row.status === 'Active', cellClass: 'text-emerald-400 font-bold' },
-		],
-		[]
-	);
-
 	useEffect(() => {
 		if (!api) return;
 		const calculateTelemetry = () => {
@@ -60,7 +36,7 @@ export default function CalculationsArena({
 			let vegaSum = 0;
 			let highRisk = 0;
 			let count = 0;
-			api.rows().forEach((row) => {
+			api.rows.getAll().forEach((row) => {
 				count++;
 				const vol = parseFloat(row.quantity) || 0;
 				volSum += vol;
@@ -79,7 +55,9 @@ export default function CalculationsArena({
 			});
 		};
 		calculateTelemetry();
-		return api.addEventListener(GridEventName.cellValueChanged, calculateTelemetry);
+		return api.subscribe((event) => {
+			if (event.type === 'cells.changed') calculateTelemetry();
+		});
 	}, [api]);
 
 	const stressScore = telemetry.totalContracts ? Math.min(100, Math.round((telemetry.highRiskCount / telemetry.totalContracts) * 300)) : 0;
@@ -98,17 +76,14 @@ export default function CalculationsArena({
 				</div>
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						rowModelType='client'
 						rows={rows}
 						columns={columns}
-						styleRules={styleRules}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
-						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
-						onGridReady={(event) => {
-							setApi(event.api);
-							onGridReady?.(event);
+						onCellValueChanged={onCellValueChanged}
+						onGridReady={(api) => {
+							setApi(api);
+							onGridReady?.(api);
 						}}
 					/>
 				</div>

@@ -8,7 +8,7 @@
  */
 import React, { useState, useCallback, useEffect } from 'react';
 import { Grid } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent } from '@open-grid/react';
+import type { ColumnDef, GridApi } from '@open-grid/react';
 import { Eye, Columns, SlidersHorizontal } from 'lucide-react';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -47,41 +47,42 @@ const ROWS = generateRows();
 // ─── Component ───────────────────────────────────────────────────────────────
 
 interface Props {
-	onGridReady?: (event: GridReadyEvent<any>) => void;
-	editTrigger: 'singleClick' | 'doubleClick';
-	arrowKeyNavigationEdit: boolean;
+	onGridReady?: (api: GridApi<any>) => void;
+	editTrigger?: 'singleClick' | 'doubleClick';
+	arrowKeyNavigationEdit?: boolean;
+	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 }
 
-export default function WideGridDemo({ onGridReady, editTrigger, arrowKeyNavigationEdit, pinLeftColumns, pinRightColumns }: Props) {
+export default function WideGridDemo({ onGridReady, pinLeftColumns, pinRightColumns }: Props) {
 	const [api, setApi] = useState<GridApi<WideRow> | null>(null);
-	const [colBuffer, setColBuffer] = useState(2); // matches the new default
+	const [colBuffer, setColBuffer] = useState(2);
 	const [visibleRange, setVisibleRange] = useState<{ colStart: number; colEnd: number; total: number }>({
 		colStart: 0,
-		colEnd: 0,
-		total: 0,
+		colEnd: TOTAL_COLS - 1,
+		total: TOTAL_COLS,
 	});
 
 	const columns = React.useMemo(() => generateColumns(colBuffer), [colBuffer]);
 
 	const handleGridReady = useCallback(
-		(event: GridReadyEvent<WideRow>) => {
-			setApi(event.api);
-			onGridReady?.(event as GridReadyEvent<any>);
+		(api: GridApi<WideRow>) => {
+			setApi(api);
+			onGridReady?.(api);
 		},
 		[onGridReady]
 	);
 
-	// Subscribe to viewport changes to update the badge.
+	// Subscribe to any grid change to update visible column count display.
 	useEffect(() => {
 		if (!api) return;
-		let rafId = requestAnimationFrame(() => setVisibleRange(api.getVisibleColumnRange()));
-		const unsub = api.subscribe(() => setVisibleRange(api.getVisibleColumnRange()));
-		return () => {
-			cancelAnimationFrame(rafId);
-			unsub();
-		};
+		const cols = api.columns.getState();
+		setVisibleRange({ colStart: 0, colEnd: Math.max(0, cols.length - 1), total: cols.length });
+		return api.subscribe(() => {
+			const cols = api.columns.getState();
+			setVisibleRange({ colStart: 0, colEnd: Math.max(0, cols.length - 1), total: cols.length });
+		});
 	}, [api]);
 
 	const visibleCount = visibleRange.colEnd - visibleRange.colStart + 1;
@@ -151,15 +152,12 @@ export default function WideGridDemo({ onGridReady, editTrigger, arrowKeyNavigat
 			{/* Grid */}
 			<div className='min-h-0 flex-1'>
 				<Grid<WideRow>
-					rowModelType='client'
 					columns={columns}
 					rows={ROWS}
 					getRowId={(r) => r.id}
-					navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
 					pinLeftColumns={pinLeftColumns}
 					pinRightColumns={pinRightColumns}
 					onGridReady={handleGridReady}
-					initialState={{ colBuffer }}
 					showFilterChipBar
 				/>
 			</div>

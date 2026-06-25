@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { Grid } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent } from '@open-grid/react';
+import type { ColumnDef, GridApi } from '@open-grid/react';
 
 interface FinancialRow {
 	id: string;
@@ -110,7 +110,7 @@ const NESTED_COLUMNS: ColumnDef<FinancialRow>[] = [
 const ROWS = generateRows(50);
 
 interface ColumnGroupHeaderDemoProps {
-	onGridReady?: (event: GridReadyEvent<any>) => void;
+	onGridReady?: (api: GridApi<any>) => void;
 	onCellValueChanged?: (rowId: string, colField: string, value: unknown) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
@@ -123,9 +123,9 @@ export default function ColumnGroupHeaderDemo({ onGridReady, pinLeftColumns = 0,
 	const apiRef = useRef<GridApi<any> | null>(null);
 
 	const handleGridReady = useCallback(
-		(event: GridReadyEvent<any>) => {
-			apiRef.current = event.api;
-			onGridReady?.(event);
+		(api: GridApi<any>) => {
+			apiRef.current = api;
+			onGridReady?.(api);
 		},
 		[onGridReady]
 	);
@@ -163,9 +163,10 @@ export default function ColumnGroupHeaderDemo({ onGridReady, pinLeftColumns = 0,
 				</span>
 				<div className='ml-auto flex items-center gap-2'>
 					<button
-						onClick={() => apiRef.current?.autoSizeAllColumns()}
-						className='px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200 transition-all'
-						title='Auto-size all columns to fit their content'
+						onClick={() => {}}
+						className='px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border bg-slate-900/40 border-slate-800 text-slate-500 cursor-not-allowed opacity-50'
+						title='Auto-size not yet in new kernel'
+						disabled
 					>
 						Auto-Size All
 					</button>
@@ -174,7 +175,6 @@ export default function ColumnGroupHeaderDemo({ onGridReady, pinLeftColumns = 0,
 			</div>
 			<div className='flex min-h-0 flex-1'>
 				<Grid
-					rowModelType='client'
 					columns={columns as ColumnDef<any>[]}
 					rows={ROWS as any[]}
 					getRowId={(row: any) => row.id}

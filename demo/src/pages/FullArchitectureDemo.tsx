@@ -13,8 +13,8 @@
  * Uses ONLY the new GridApi — zero old engine machinery.
  */
 import React, { useRef, useState } from 'react';
-import { GridNext } from '@open-grid/react';
-import type { GridNextColumnDef, GridApi } from '@open-grid/react';
+import { Grid } from '@open-grid/react';
+import type { GridColumnDef, GridApi } from '@open-grid/react';
 import { ValidationRules, asColumnId } from '@open-grid/core';
 
 // ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ function makeRows(n: number): SalesRow[] {
 // Columns
 // ---------------------------------------------------------------------------
 
-const COLUMNS: GridNextColumnDef<SalesRow>[] = [
+const COLUMNS: GridColumnDef<SalesRow>[] = [
 	{ id: 'id',      field: 'id',      header: '#',       width: 60,  pinned: 'left' },
 	{ id: 'rep',     field: 'rep',     header: 'Rep',     width: 110, sortable: true },
 	{ id: 'region',  field: 'region',  header: 'Region',  width: 90,  sortable: true },
@@ -198,7 +198,7 @@ export default function FullArchitectureDemo() {
 
 			{/* Grid */}
 			<div style={{ flex: 1, minHeight: 0 }}>
-				<GridNext<SalesRow>
+				<Grid<SalesRow>
 					columns={COLUMNS}
 					rows={ROWS}
 					getRowId={(r) => r.id}

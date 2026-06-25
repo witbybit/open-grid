@@ -1,7 +1,7 @@
 import React from 'react';
-import { Zap, Filter, ArrowDownAZ, ArrowUpAZ, Keyboard, Layers, HelpCircle, RefreshCw, GripVertical, MoveLeft, MoveRight } from 'lucide-react';
-import type { GridApi } from '@open-grid/react';
-import { normalizeCapabilityResult } from '@open-grid/react';
+import { Zap, Filter, ArrowDownAZ, ArrowUpAZ, Keyboard, HelpCircle, GripVertical, MoveLeft, MoveRight } from 'lucide-react';
+import type { GridApi, ColumnState } from '@open-grid/react';
+import { asColumnId } from '@open-grid/react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
 // ============================================================================
@@ -103,7 +103,7 @@ export function SortFilterPanel({
 	sortDirection,
 	setSortDirection,
 }: SortFilterPanelProps) {
-	const cols = activeApi.getStateSnapshot().columns || [];
+	const cols = activeApi.columns.getState();
 
 	return (
 		<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col gap-3 shrink-0'>
@@ -179,32 +179,27 @@ interface ColumnOrderPanelProps {
 }
 
 export function ColumnOrderPanel({ activeApi }: ColumnOrderPanelProps) {
-	const [state, setState] = React.useState(() => activeApi.getStateSnapshot());
-	const [selectedField, setSelectedField] = React.useState(() => activeApi.getStateSnapshot().columns[0]?.field ?? '');
+	const [columns, setColumns] = React.useState<ColumnState[]>(() => activeApi.columns.getState());
+	const [selectedField, setSelectedField] = React.useState(() => activeApi.columns.getState()[0]?.field ?? '');
 
 	React.useEffect(() => {
-		setState(activeApi.getStateSnapshot());
-		setSelectedField(activeApi.getStateSnapshot().columns[0]?.field ?? '');
-		return activeApi.subscribe(() => {
-			const nextState = activeApi.getStateSnapshot();
-			setState(nextState);
+		const sync = () => {
+			const cols = activeApi.columns.getState();
+			setColumns(cols);
 			setSelectedField((currentField) =>
-				nextState.columns.some((column) => column.field === currentField) ? currentField : (nextState.columns[0]?.field ?? '')
+				cols.some((col) => col.field === currentField) ? currentField : (cols[0]?.field ?? '')
 			);
-		});
+		};
+		sync();
+		return activeApi.subscribe(sync);
 	}, [activeApi]);
 
-	const columns = state.columns || [];
-	const selectedIndex = columns.findIndex((column) => column.field === selectedField);
+	const selectedIndex = columns.findIndex((col) => col.field === selectedField);
 	const selectedColumn = selectedIndex >= 0 ? columns[selectedIndex] : null;
-	const canMoveSelected =
-		state.enableColumnReorder &&
-		(selectedColumn?.canMoveColumn === undefined ||
-			normalizeCapabilityResult(selectedColumn.canMoveColumn({ action: 'moveColumn', colField: selectedColumn.field ?? '' })).allowed);
 
 	const moveSelected = (delta: -1 | 1) => {
-		if (!canMoveSelected || !selectedColumn) return;
-		activeApi.moveColumn(selectedColumn.field, selectedIndex + delta);
+		if (!selectedColumn) return;
+		activeApi.columns.move(asColumnId(selectedColumn.field), selectedIndex + delta);
 	};
 
 	return (
@@ -213,19 +208,6 @@ export function ColumnOrderPanel({ activeApi }: ColumnOrderPanelProps) {
 				<GripVertical className='w-4 h-4 text-sky-400' />
 				Column Order
 			</h3>
-
-			<label className='flex items-center gap-2 p-2 rounded-lg bg-slate-950/60 border border-slate-900 hover:border-slate-850 cursor-pointer select-none transition-all'>
-				<input
-					type='checkbox'
-					checked={state.enableColumnReorder}
-					onChange={(e) => activeApi.setColumnReorderEnabled(e.target.checked)}
-					className='rounded border-slate-800 text-purple-600 focus:ring-purple-500/20 w-3 h-3 bg-slate-950 cursor-pointer'
-				/>
-				<div className='flex flex-col'>
-					<span className='text-[11px] font-bold text-slate-200 leading-tight'>Header Drag Reorder</span>
-					<span className='text-[9px] text-slate-500 mt-0.5 leading-none'>Global API toggle for draggable headers</span>
-				</div>
-			</label>
 
 			<div className='grid grid-cols-[1fr_auto_auto] gap-2 items-end'>
 				<label className='flex flex-col gap-1 min-w-0'>
@@ -244,7 +226,7 @@ export function ColumnOrderPanel({ activeApi }: ColumnOrderPanelProps) {
 				</label>
 				<button
 					onClick={() => moveSelected(-1)}
-					disabled={!canMoveSelected || selectedIndex <= 0}
+					disabled={!selectedColumn || selectedIndex <= 0}
 					className='h-8 w-8 inline-flex items-center justify-center rounded-lg bg-slate-950 border border-slate-850 text-slate-300 hover:text-white hover:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all'
 					title='Move selected column left'
 				>
@@ -252,7 +234,7 @@ export function ColumnOrderPanel({ activeApi }: ColumnOrderPanelProps) {
 				</button>
 				<button
 					onClick={() => moveSelected(1)}
-					disabled={!canMoveSelected || selectedIndex < 0 || selectedIndex >= columns.length - 1}
+					disabled={!selectedColumn || selectedIndex < 0 || selectedIndex >= columns.length - 1}
 					className='h-8 w-8 inline-flex items-center justify-center rounded-lg bg-slate-950 border border-slate-850 text-slate-300 hover:text-white hover:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all'
 					title='Move selected column right'
 				>
@@ -312,15 +294,7 @@ export function AccessibilityPanel({ editTrigger, setEditTrigger, arrowKeyNaviga
 }
 
 // ============================================================================
-// 5. Developer Reset Panel
-// ============================================================================
-interface DeveloperPanelProps {
-	activePage: GridPageType;
-	activeApi: GridApi<any>;
-}
-
-// ============================================================================
-// 6. Keyboard Shortcuts Guide
+// 5. Keyboard Shortcuts Guide
 // ============================================================================
 export function KeyboardShortcutsPanel() {
 	return (
@@ -335,8 +309,8 @@ export function KeyboardShortcutsPanel() {
 					<span className='font-mono bg-slate-950 px-1 py-0.5 rounded text-purple-400 text-[9px]'>Arrow Keys</span>
 				</li>
 				<li className='flex justify-between border-b border-slate-900/60 pb-1'>
-					<span>Expand Range</span>
-					<span className='font-mono bg-slate-950 px-1 py-0.5 rounded text-purple-400 text-[9px]'>Shift + Arrows</span>
+					<span>Select Rows</span>
+					<span className='font-mono bg-slate-950 px-1 py-0.5 rounded text-purple-400 text-[9px]'>Shift + Click</span>
 				</li>
 				<li className='flex justify-between border-b border-slate-900/60 pb-1'>
 					<span>Edit Mode</span>

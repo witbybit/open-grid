@@ -6,7 +6,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { Grid, multiSelectColumnType, dropdownColumnType, numberColumnType } from '@open-grid/react';
-import type { ColumnDef, ColumnTypeDefinition, DropdownOption, GridReadyEvent } from '@open-grid/react';
+import type { ColumnDef, ColumnTypeDefinition, DropdownOption, GridApi } from '@open-grid/react';
 import { CheckSquare, Tag, Calendar, List, Hash, Film, Sparkles, Code2, ChevronRight, Box } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
@@ -360,7 +360,7 @@ const columns: ColumnDef<Row>[] = [
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
-function NativeCellTypesDemoInner({ rows, onGridReady }: { rows: SkaterRow[]; onGridReady?: (event: GridReadyEvent<SkaterRow>) => void }) {
+function NativeCellTypesDemoInner({ rows, onGridReady }: { rows: SkaterRow[]; onGridReady?: (api: GridApi<SkaterRow>) => void }) {
 	const [activeType, setActiveType] = useState<number | null>(null);
 	const [showSnippet, setShowSnippet] = useState(false);
 
@@ -386,11 +386,8 @@ function NativeCellTypesDemoInner({ rows, onGridReady }: { rows: SkaterRow[]; on
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						rowModelType='client'
 						rows={rows}
 						columns={SKATER_COLUMNS}
-						columnTypes={SKATER_COLUMN_TYPES}
-						navigationOptions={{ editTrigger: 'doubleClick', onCellValueChanged: () => {} }}
 						pinLeftColumns={1}
 						onGridReady={onGridReady}
 					/>
@@ -517,7 +514,12 @@ function NativeCellTypesDemoInner({ rows, onGridReady }: { rows: SkaterRow[]; on
 }
 
 interface NativeCellTypesDemoProps {
-	onGridReady?: (event: GridReadyEvent<SkaterRow>) => void;
+	editTrigger?: 'singleClick' | 'doubleClick';
+	arrowKeyNavigationEdit?: boolean;
+	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
+	onGridReady?: (api: GridApi<SkaterRow>) => void;
+	pinLeftColumns?: number;
+	pinRightColumns?: number;
 }
 
 export default function NativeCellTypesDemo({ onGridReady }: NativeCellTypesDemoProps) {

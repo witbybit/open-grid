@@ -94,7 +94,15 @@ export class ColumnModel<TRow = unknown> {
 	getState(): ColumnState[] {
 		return this.order.map((id, orderIndex) => {
 			const col = this.columns.get(id)!;
-			return { columnId: id, width: col.width, hidden: col.hidden, pinned: col.pinned, orderIndex };
+			return {
+				columnId: id,
+				field: col.field,
+				header: col.def.header ?? col.field,
+				width: col.width,
+				hidden: col.hidden,
+				pinned: col.pinned,
+				orderIndex,
+			};
 		});
 	}
 

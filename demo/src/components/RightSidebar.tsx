@@ -1,21 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { GridEventName, type GridApi } from '@open-grid/react';
+import type { GridApi } from '@open-grid/react';
 import { TableProperties, Terminal } from 'lucide-react';
 
 export const StateInspector = React.memo(({ api }: { api: GridApi<any> }) => {
-	const [selection, setSelection] = useState(() => api.getStateSnapshot().selection);
+	const [selectedCount, setSelectedCount] = useState(() => api.selection.getState().selectedRowIds.size);
+	const [anchorId, setAnchorId] = useState<string | null>(() => {
+		const s = api.selection.getState();
+		return s.anchorRowId != null ? String(s.anchorRowId) : null;
+	});
 
 	useEffect(() => {
-		setSelection(api.getStateSnapshot().selection);
-		return api.subscribeToKey('selection', () => {
-			setSelection(api.getStateSnapshot().selection);
+		const sync = () => {
+			const s = api.selection.getState();
+			setSelectedCount(s.selectedRowIds.size);
+			setAnchorId(s.anchorRowId != null ? String(s.anchorRowId) : null);
+		};
+		sync();
+		return api.subscribe((event) => {
+			if (event.type === 'selection.changed') sync();
 		});
 	}, [api]);
-
-	const focusText = selection.focus ? `Row ID: ${selection.focus.rowId}, Col Field: ${selection.focus.colField}` : 'None';
-	const rangeText = selection.range
-		? `(${selection.range.start.rowId},${selection.range.start.colField}) to (${selection.range.end.rowId},${selection.range.end.colField})`
-		: 'None';
 
 	return (
 		<div className='flex shrink-0 flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900/40 p-4 glass-card'>
@@ -24,8 +28,8 @@ export const StateInspector = React.memo(({ api }: { api: GridApi<any> }) => {
 				State Inspector
 			</h3>
 			<div className='break-all rounded-lg border border-slate-850 bg-slate-950 p-2.5 font-mono text-xs leading-relaxed text-purple-400'>
-				Focused: {focusText} <br />
-				Range: {rangeText}
+				Selected rows: {selectedCount} <br />
+				Anchor ID: {anchorId ?? 'None'}
 			</div>
 			<p className='text-[9px] leading-normal text-slate-500'>
 				* This panel reads the active API supplied by the page. It does not create another grid owner.
@@ -41,37 +45,26 @@ export const LiveEventLogPanel = React.memo(({ api }: { api: GridApi<any> }) => 
 
 	useEffect(() => {
 		setEventLogs([]);
-
-		const formatLog = (name: string, payload: unknown) => `${name} => ${JSON.stringify(payload)}`;
 		const addLog = (msg: string) => setEventLogs((prev) => [msg, ...prev].slice(0, 4));
 
-		const unsubValue = api.addEventListener(GridEventName.cellValueChanged, (e) => {
-			addLog(formatLog(GridEventName.cellValueChanged, e.payload));
+		return api.subscribe((event) => {
+			switch (event.type) {
+				case 'cells.changed':
+					addLog(`cellValueChanged => ${JSON.stringify(event.payload)}`);
+					break;
+				case 'columns.changed':
+					addLog(`columnChanged => ${JSON.stringify(event.payload)}`);
+					break;
+				case 'selection.changed':
+					addLog(`selectionChanged => ${JSON.stringify(event.payload)}`);
+					break;
+				case 'pipeline.changed':
+					addLog(`pipelineChanged => ${JSON.stringify(event.payload)}`);
+					break;
+				default:
+					break;
+			}
 		});
-		const unsubResize = api.addEventListener(GridEventName.columnResized, (e) => {
-			addLog(formatLog(GridEventName.columnResized, e.payload));
-		});
-		const unsubFocus = api.addEventListener(GridEventName.focusChanged, (e) => {
-			addLog(formatLog(GridEventName.focusChanged, e.payload));
-		});
-		const unsubSelect = api.addEventListener(GridEventName.selectionChanged, (e) => {
-			addLog(formatLog(GridEventName.selectionChanged, e.payload));
-		});
-		const unsubSort = api.addEventListener(GridEventName.sortChanged, (e) => {
-			addLog(formatLog(GridEventName.sortChanged, e.payload));
-		});
-		const unsubFilter = api.addEventListener(GridEventName.filterChanged, (e) => {
-			addLog(formatLog(GridEventName.filterChanged, e.payload));
-		});
-
-		return () => {
-			unsubValue();
-			unsubResize();
-			unsubFocus();
-			unsubSelect();
-			unsubSort();
-			unsubFilter();
-		};
 	}, [api]);
 
 	return (

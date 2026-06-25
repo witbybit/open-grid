@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Grid, GridEventName, type GridApi, type GridReadyEvent, type GridStateSnapshot } from '@open-grid/react';
+import { Grid, type GridApi } from '@open-grid/react';
 import { AlertTriangle, BarChart3, Gauge, Play, ShieldCheck, Star } from 'lucide-react';
 import { createCustomColumns, generateCustomShowcaseRows } from './demoGridConfigs';
 import type { CustomShowcaseRow } from '../components/GridShared';
@@ -8,14 +8,14 @@ interface CustomEditorRendererProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
-	onGridReady?: (event: GridReadyEvent<CustomShowcaseRow>) => void;
+	onGridReady?: (api: GridApi<CustomShowcaseRow>) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 }
 
 export default function CustomEditorRenderer({
-	editTrigger,
-	arrowKeyNavigationEdit,
+	editTrigger: _editTrigger,
+	arrowKeyNavigationEdit: _arrowKeyNavigationEdit,
 	onCellValueChanged,
 	onGridReady,
 	pinLeftColumns = 0,
@@ -24,7 +24,6 @@ export default function CustomEditorRenderer({
 	const columns = useMemo(() => createCustomColumns(), []);
 	const rows = useMemo(() => generateCustomShowcaseRows(50), []);
 	const [api, setApi] = useState<GridApi<CustomShowcaseRow> | null>(null);
-	const [selectedRange, setSelectedRange] = useState<GridStateSnapshot<CustomShowcaseRow>['selection']['range']>(null);
 	const [telemetry, setTelemetry] = useState({
 		totalAssets: 0,
 		totalValuation: 0,
@@ -46,7 +45,7 @@ export default function CustomEditorRenderer({
 				active = 0,
 				pending = 0,
 				inactive = 0;
-			api.rows().forEach((row) => {
+			api.rows.getAll().forEach((row) => {
 				total++;
 				valSum += parseFloat(String(row.price).replace(/[^0-9.-]+/g, '')) || 0;
 				const rating = parseFloat(String(row.rating)) || 0;
@@ -69,29 +68,26 @@ export default function CustomEditorRenderer({
 				inactiveCount: inactive,
 			});
 		};
-		const updateSelection = () => setSelectedRange(api.getStateSnapshot().selection.range);
 		calculateTelemetry();
-		updateSelection();
-		const unsubValue = api.addEventListener(GridEventName.cellValueChanged, calculateTelemetry);
-		const unsubSelection = api.subscribeToKey('selection', updateSelection);
-		return () => {
-			unsubValue();
-			unsubSelection();
-		};
+		return api.subscribe((event) => {
+			if (event.type === 'cells.changed') calculateTelemetry();
+		});
 	}, [api]);
 
 	const handleBatchActivate = () => {
-		if (!api || !selectedRange) return alert('Please select a range of cells or rows first.');
-		const rowIdSet = new Set(api.rows().inRange(selectedRange).getIds());
-		api.updateRows((rows) => rows.map((row) => (rowIdSet.has(row.id) ? { ...row, status: 'Active' } : row)));
+		if (!api) return;
+		const selectedIds = api.selection.getState().selectedRowIds;
+		if (selectedIds.size === 0) return alert('Please select rows first using click or Shift+Click.');
+		api.rows.update((currentRows) => currentRows.map((row) => (selectedIds.has(row.id) ? { ...row, status: 'Active' } : row)));
 	};
 
 	const handleBatchBoostProgress = () => {
-		if (!api || !selectedRange) return alert('Please select a range of cells or rows first.');
-		const rowIdSet = new Set(api.rows().inRange(selectedRange).getIds());
-		api.updateRows((rows) =>
-			rows.map((row) => {
-				if (!rowIdSet.has(row.id)) return row;
+		if (!api) return;
+		const selectedIds = api.selection.getState().selectedRowIds;
+		if (selectedIds.size === 0) return alert('Please select rows first using click or Shift+Click.');
+		api.rows.update((currentRows) =>
+			currentRows.map((row) => {
+				if (!selectedIds.has(row.id)) return row;
 				return { ...row, progress: Math.min(100, (parseFloat(String(row.progress)) || 0) + 10).toString() };
 			})
 		);
@@ -114,16 +110,14 @@ export default function CustomEditorRenderer({
 				</div>
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						rowModelType='client'
 						rows={rows}
 						columns={columns}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
-						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
-						onGridReady={(event) => {
-							setApi(event.api);
-							onGridReady?.(event);
+						onCellValueChanged={onCellValueChanged}
+						onGridReady={(api) => {
+							setApi(api);
+							onGridReady?.(api);
 						}}
 					/>
 				</div>
@@ -193,7 +187,7 @@ export default function CustomEditorRenderer({
 						onClick={handleBatchActivate}
 						className='py-2 text-[9px] font-extrabold uppercase tracking-wider text-emerald-400 border border-emerald-950 bg-emerald-950/20 hover:bg-emerald-950/40 rounded'
 					>
-						Activate Selection Range
+						Activate Selection
 					</button>
 					<button
 						onClick={handleBatchBoostProgress}

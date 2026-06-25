@@ -1,20 +1,20 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Grid, type GridReadyEvent } from '@open-grid/react';
+import { Grid } from '@open-grid/react';
+import type { GridApi } from '@open-grid/react';
 import { Palette } from 'lucide-react';
 import { createSkinsColumns, generatePerformanceRows } from './demoGridConfigs';
 import { ThemeTweaker } from '../components/ThemeTweaker';
 
 interface HeadlessSkinsPlaygroundProps {
-	editTrigger: 'singleClick' | 'doubleClick';
-	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
-	onGridReady?: (event: GridReadyEvent<any>) => void;
+	editTrigger?: 'singleClick' | 'doubleClick';
+	arrowKeyNavigationEdit?: boolean;
+	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
+	onGridReady?: (api: GridApi<any>) => void;
+	pinLeftColumns?: number;
+	pinRightColumns?: number;
 }
 
 export default function HeadlessSkinsPlayground({
-	editTrigger,
-	arrowKeyNavigationEdit,
-	onCellValueChanged,
 	onGridReady,
 }: HeadlessSkinsPlaygroundProps) {
 	const apiRef = useRef<any>(null);
@@ -22,10 +22,10 @@ export default function HeadlessSkinsPlayground({
 	const rows = useMemo(() => generatePerformanceRows(1000, 'R'), []);
 	const columns = useMemo(() => createSkinsColumns(), []);
 
-	const handleGridReady = (event: GridReadyEvent<any>) => {
-		apiRef.current = event.api;
-		setApiReady(event.api);
-		onGridReady?.(event);
+	const handleGridReady = (api: GridApi<any>) => {
+		apiRef.current = api;
+		setApiReady(api);
+		onGridReady?.(api);
 	};
 
 	return (
@@ -48,17 +48,11 @@ export default function HeadlessSkinsPlayground({
 				{/* Grid viewport */}
 				<div className='flex-1 min-h-0 relative overflow-hidden'>
 					<Grid
-						rowModelType='client'
 						rows={rows}
 						columns={columns}
 						getRowId={(row) => row.id}
 						pinLeftColumns={1}
 						pinRightColumns={1}
-						navigationOptions={{
-							editTrigger,
-							arrowKeyNavigationEdit,
-							onCellValueChanged,
-						}}
 						onGridReady={handleGridReady}
 					/>
 				</div>

@@ -3,10 +3,7 @@ import {
 	multiSelectColumnType,
 	numberColumnType,
 	type ColumnDef,
-	type FilterModel,
 	type GridApi,
-	type InfiniteDatasource,
-	type SortModel,
 } from '@open-grid/react';
 import {
 	GanttStatusBadgeRenderer,
@@ -82,8 +79,8 @@ export const layoutColumnsFull: ColumnDef<PerformanceRow>[] = [
 
 export function setInactiveRiskSideEffects(api: GridApi<any>, rowId: string, colField: string, value: unknown) {
 	if (colField === 'status' && value === 'Inactive') {
-		api.setCellValue(rowId, 'price', '0');
-		api.setCellValue(rowId, 'quantity', '0');
+		api.cells.setField(rowId, 'price', '0');
+		api.cells.setField(rowId, 'quantity', '0');
 	}
 }
 
@@ -228,57 +225,6 @@ export function createServerRows(): ServerAuditRow[] {
 			ipAddress: `192.168.1.${(index * 7) % 255}`,
 		};
 	});
-}
-
-export function createServerDatasource(serverRows: ServerAuditRow[]): InfiniteDatasource<ServerAuditRow> {
-	let cachedSortKey = '';
-	let cachedFilterKey = '';
-	let cachedRows = serverRows;
-
-	const buildRows = (sortModel: SortModel | undefined, filterModel: FilterModel | undefined) => {
-		const sortKey = JSON.stringify(sortModel ?? []);
-		const filterKey = JSON.stringify(filterModel ?? {});
-		if (sortKey === cachedSortKey && filterKey === cachedFilterKey) return cachedRows;
-
-		cachedSortKey = sortKey;
-		cachedFilterKey = filterKey;
-		let rows = serverRows;
-		const statusFilter = filterModel?.status as any;
-		if (statusFilter?.value) {
-			if (statusFilter.value === 'Active') rows = rows.filter((row) => row.severity === 'CRITICAL' || row.severity === 'ERROR');
-			else if (statusFilter.value === 'Pending') rows = rows.filter((row) => row.severity === 'WARNING');
-			else if (statusFilter.value === 'Inactive') rows = rows.filter((row) => row.severity === 'INFO' || row.severity === 'DEBUG');
-		}
-		if (sortModel?.length) {
-			rows = [...rows].sort((leftRow, rightRow) => {
-				for (const item of sortModel) {
-					const field = item.colId as keyof ServerAuditRow;
-					const left = leftRow[field];
-					const right = rightRow[field];
-					const leftNum = Number(left);
-					const rightNum = Number(right);
-					const cmp =
-						!Number.isNaN(leftNum) && !Number.isNaN(rightNum)
-							? leftNum - rightNum
-							: String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
-					if (cmp !== 0) return item.sort === 'desc' ? -cmp : cmp;
-				}
-				return 0;
-			});
-		}
-		cachedRows = rows;
-		return rows;
-	};
-
-	return {
-		getRows: async (params) => {
-			const start = performance.now();
-			const rows = buildRows(params.sortModel as SortModel | undefined, params.filterModel as FilterModel | undefined);
-			await new Promise((resolve) => setTimeout(resolve, 250));
-			LatencyProfiler.record(performance.now() - start);
-			return { rows: rows.slice(params.startRow, params.endRow), totalCount: rows.length };
-		},
-	};
 }
 
 export function createSpreadsheetColumns(): ColumnDef<SpreadsheetRow>[] {
