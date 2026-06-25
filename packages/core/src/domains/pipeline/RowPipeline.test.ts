@@ -31,7 +31,7 @@ function makePipeline() {
 
 const ageAsc: SortModel = [{ columnId: asColumnId('age'), field: 'age', direction: 'asc' }];
 const onlyActive: FilterModel = [
-	{ columnId: asColumnId('status'), field: 'status', predicate: (v) => v === 'active' },
+	{ columnId: asColumnId('status'), field: 'status', operator: 'equals', value: 'active' },
 ];
 
 describe('RowPipeline — rows → visual model (ARCHITECTURE.md §3 R6)', () => {

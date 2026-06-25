@@ -7,6 +7,7 @@ import type { ColumnPin } from '../domains/columns/ColumnDef.js';
 import type { ColumnState } from '../domains/columns/ColumnState.js';
 import type { GroupByModel } from '../domains/pipeline/GroupModel.js';
 import type { FilterModel, SortModel } from '../domains/pipeline/PipelineModels.js';
+import type { QueryNode } from '../domains/pipeline/GridQueryModel.js';
 import type { TreeDataOptions } from '../domains/pipeline/TreeStage.js';
 import type { RenderPlan } from '../domains/render/RenderPlan.js';
 import type { RowTransaction } from '../domains/rows/RowCommand.js';
@@ -60,8 +61,10 @@ export interface GridApi<TRow> {
 	readonly pipeline: {
 		getSortModel(): SortModel;
 		getFilterModel(): FilterModel;
+		getQuery(): QueryNode | null;
 		setSortModel(model: SortModel): GridCommandResult;
 		setFilterModel(model: FilterModel): GridCommandResult;
+		setQuery(node: QueryNode | null): GridCommandResult;
 
 		// Grouping
 		getGroupBy(): GroupByModel;
@@ -221,8 +224,10 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 		pipeline: {
 			getSortModel: () => core.pipeline.getSortModel(),
 			getFilterModel: () => core.pipeline.getFilterModel(),
+			getQuery: () => core.pipeline.getQueryNode(),
 			setSortModel: (model) => kernel.dispatch({ type: 'pipeline.setSortModel', payload: { model } }),
 			setFilterModel: (model) => kernel.dispatch({ type: 'pipeline.setFilterModel', payload: { model } }),
+			setQuery: (node) => kernel.dispatch({ type: 'pipeline.setQuery', payload: { node } }),
 
 			getGroupBy: () => core.pipeline.getGroupBy(),
 			setGroupBy: (model) => kernel.dispatch({ type: 'pipeline.setGroupBy', payload: { model } }),

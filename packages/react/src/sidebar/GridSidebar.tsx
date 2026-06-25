@@ -7,6 +7,7 @@ import { ThemesPanel } from './panels/ThemesPanel.js';
 import { StubPanel } from './panels/StubPanel.js';
 import { DataIntegrityPanel } from './panels/DataIntegrityPanel.js';
 import { ViewsPanel } from './panels/ViewsPanel.js';
+import { QueryBuilderPanel } from './panels/QueryBuilderPanel.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -214,7 +215,7 @@ function renderBuiltIn(id: BuiltInPanelId, api: GridApi<unknown>, container: HTM
 		case 'views':
 			return <ViewsPanel api={api} />;
 		case 'query':
-			return <StubPanel title="Query Builder" />;
+			return <QueryBuilderPanel api={api} />;
 		case 'dataIntegrity':
 			return <DataIntegrityPanel api={api} />;
 	}

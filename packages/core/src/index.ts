@@ -22,7 +22,10 @@ export type { ColumnState } from './domains/columns/ColumnState.js';
 export { createCellAddress, cellId } from './domains/cells/CellAddress.js';
 export type { CellAddress, CellId } from './domains/cells/CellAddress.js';
 
-export type { ColumnFilter, FilterModel, SortKey, SortModel } from './domains/pipeline/PipelineModels.js';
+export type { ColumnFilter, FilterModel, FilterOperator, SortKey, SortModel } from './domains/pipeline/PipelineModels.js';
+export { evaluateOperator } from './domains/pipeline/PipelineModels.js';
+export type { QueryNode, QueryGroup, QueryCondition } from './domains/pipeline/GridQueryModel.js';
+export { queryGroup, queryCondition, filterModelToQuery, evaluateQueryNode } from './domains/pipeline/GridQueryModel.js';
 export type { GroupByColumn, GroupByModel } from './domains/pipeline/GroupModel.js';
 export type { TreeDataOptions } from './domains/pipeline/TreeStage.js';
 export type { VisualRow } from './domains/pipeline/VisualRow.js';

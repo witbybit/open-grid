@@ -93,7 +93,7 @@ describe('GridCore.getRendererView — clean renderer contract (ARCHITECTURE.md 
 		let events = 0;
 		const off = view.subscribe(() => events++);
 		const before = view.getVersion('pipeline');
-		c.kernel.dispatch({ type: 'pipeline.setFilterModel', payload: { model: [{ columnId: asColumnId('age'), field: 'age', predicate: (v) => Number(v) >= 30 }] } });
+		c.kernel.dispatch({ type: 'pipeline.setFilterModel', payload: { model: [{ columnId: asColumnId('age'), field: 'age', operator: 'gte', value: 30 }] } });
 		expect(events).toBeGreaterThan(0);
 		expect(view.getVersion('pipeline')).toBeGreaterThan(before);
 		expect(view.getVisualRowCount()).toBe(2); // Bob (25) filtered out

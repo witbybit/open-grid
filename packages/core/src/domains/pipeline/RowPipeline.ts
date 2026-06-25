@@ -10,6 +10,7 @@ import type { TreeDataOptions } from './TreeStage.js';
 import { DetailExpansionState, insertDetailRows } from './DetailStage.js';
 import type { FilterModel, SortModel } from './PipelineModels.js';
 import { EMPTY_FILTER_MODEL, EMPTY_SORT_MODEL, filterColumnIds, sortColumnIds } from './PipelineModels.js';
+import type { QueryNode } from './GridQueryModel.js';
 import type { PipelineContext } from './PipelineStage.js';
 import type { RowWriteImpact, RowWriteImpactContext } from './RowWriteImpact.js';
 import { classifyWriteImpact } from './RowWriteImpact.js';
@@ -43,6 +44,7 @@ export class RowPipeline<TRow> {
 
 	private sortModel: SortModel = EMPTY_SORT_MODEL;
 	private filterModel: FilterModel = EMPTY_FILTER_MODEL;
+	private queryNode: QueryNode | null = null;
 	private groupBy: GroupByModel = EMPTY_GROUP_BY;
 	private readonly expansion = new GroupExpansionState();
 	private treeOptions: TreeDataOptions<TRow> | null = null;
@@ -75,6 +77,16 @@ export class RowPipeline<TRow> {
 
 	setFilterModel(model: FilterModel): VisualModelView<TRow> {
 		this.filterModel = model;
+		this.queryNode = null; // flat filter model takes over; clear query
+		return this.recompute();
+	}
+
+	getQueryNode(): QueryNode | null {
+		return this.queryNode;
+	}
+
+	setQueryNode(node: QueryNode | null): VisualModelView<TRow> {
+		this.queryNode = node;
 		return this.recompute();
 	}
 
@@ -173,7 +185,7 @@ export class RowPipeline<TRow> {
 	}
 
 	private context(): PipelineContext {
-		return { sortModel: this.sortModel, filterModel: this.filterModel };
+		return { sortModel: this.sortModel, filterModel: this.filterModel, queryNode: this.queryNode };
 	}
 
 	private impactContext(): RowWriteImpactContext {

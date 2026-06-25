@@ -1,5 +1,6 @@
 import type { GridChangeSet } from '../../kernel/GridChangeSet.js';
 import type { FilterModel, SortModel } from './PipelineModels.js';
+import type { QueryNode } from './GridQueryModel.js';
 
 /**
  * Shared context handed to every pipeline stage (ARCHITECTURE.md §3 R7).
@@ -7,6 +8,8 @@ import type { FilterModel, SortModel } from './PipelineModels.js';
 export interface PipelineContext {
 	readonly sortModel: SortModel;
 	readonly filterModel: FilterModel;
+	/** Rich query AST — when set, takes precedence over filterModel in FilterStage. */
+	readonly queryNode: QueryNode | null;
 }
 
 export interface PipelineUpdateResult<Out> {

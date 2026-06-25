@@ -47,7 +47,7 @@ describe('registerPipelineCommands — kernel integration (ARCHITECTURE.md §3 R
 		const { kernel, pipeline } = setup();
 		const result = kernel.dispatch({
 			type: 'pipeline.setFilterModel',
-			payload: { model: [{ columnId: asColumnId('age'), field: 'age', predicate: (v) => Number(v) >= 30 }] },
+			payload: { model: [{ columnId: asColumnId('age'), field: 'age', operator: 'gte', value: 30 }] },
 		});
 		expect(result.status).toBe('applied');
 		expect(pipeline.getVisualModel().count).toBe(1);
