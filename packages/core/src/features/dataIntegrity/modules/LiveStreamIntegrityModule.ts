@@ -77,6 +77,8 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 	}
 
 	createStream(options?: GridLiveStreamOptions<TRowData>): GridTransactionStreamHandle<TRowData> {
+		// Canonical production stream owner: session state, skipped updates, conflicts,
+		// flash decorations, and diagnostics all flow through integrity state now.
 		this.activeStream?.destroy();
 
 		const policy = options?.dirtyCellPolicy ?? this.moduleOptions.dirtyCellPolicy ?? 'markConflict';

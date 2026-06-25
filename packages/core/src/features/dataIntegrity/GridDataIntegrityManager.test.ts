@@ -179,4 +179,41 @@ describe('GridDataIntegrityManager authoritative state', () => {
 			publishedIssues: { system: 1 },
 		});
 	});
+
+	it('remote-wins stream commits, row patches, and flash decorations all flow through integrity ownership', () => {
+		const store = createStore();
+		const stream = store.integrity.createStream({ dirtyCellPolicy: 'remoteWins', flashChanges: true });
+
+		stream.pushCells([{ rowId: '2', colField: 'score', value: 22 }]);
+		stream.pushRows([{ rowId: '2', patch: { name: 'Remote Beta' } }]);
+		stream.flush();
+
+		expect(store.getCellValue('2', 'score')).toBe(22);
+		expect(store.getRowNodeById('2')?.data.name).toBe('Remote Beta');
+		expect(store.engine.getState().integrity.liveStream.session?.committedBatches).toBe(1);
+		expect(store.engine.getState().integrity.liveStream.issues).toHaveLength(0);
+		expect(store.engine.dataIntegrity?.getCellDecorations('2', 'score')).toEqual(
+			expect.arrayContaining([expect.objectContaining({ className: 'og-cell-live-flash' })])
+		);
+	});
+
+	it('stream skip and conflict paths publish authoritative integrity state', () => {
+		const store = createStore();
+
+		store.startEditing('1', 'name');
+		const skipStream = store.integrity.createStream({ dirtyCellPolicy: 'skip', flashChanges: false });
+		skipStream.pushCells([{ rowId: '1', colField: 'name', value: 'Skipped Remote' }]);
+		skipStream.flush();
+		expect(store.engine.getState().integrity.liveStream.issues).toEqual(
+			expect.arrayContaining([expect.objectContaining({ type: 'streamSkipped', rowId: '1', colField: 'name' })])
+		);
+
+		const conflictStream = store.integrity.createStream({ dirtyCellPolicy: 'markConflict', flashChanges: false });
+		conflictStream.pushCells([{ rowId: '1', colField: 'name', value: 'Conflicted Remote' }]);
+		conflictStream.flush();
+		expect(store.engine.getState().integrity.conflicts.conflicts).toHaveLength(1);
+		expect(store.engine.getState().integrity.liveStream.session?.skippedDirtyUpdates).toBe(1);
+
+		store.stopEditing(true);
+	});
 });

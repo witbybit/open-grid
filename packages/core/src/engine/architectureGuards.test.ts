@@ -2367,14 +2367,12 @@ describe('Architecture guardrails', () => {
 
 		it('feature callers handle write result statuses explicitly instead of assuming success', () => {
 			const clipboardContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'ClipboardController.ts'), 'utf-8');
-			const liveStreamContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'liveStream', 'GridTransactionStream.ts'), 'utf-8');
-			const legacyLiveStreamContent = readFileSync(
+			const liveStreamContent = readFileSync(
 				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'LiveStreamIntegrityModule.ts'),
 				'utf-8'
 			);
 			expect(clipboardContent).toContain("if (result.status === 'applied' || result.status === 'noop')");
 			expect(liveStreamContent).toContain("if (result.status !== 'applied' && result.status !== 'noop')");
-			expect(legacyLiveStreamContent).toContain("if (result.status !== 'applied' && result.status !== 'noop')");
 		});
 	});
 
@@ -2410,6 +2408,29 @@ describe('Architecture guardrails', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'gridDirectWriteAllowlist.ts'), 'utf-8');
 			expect(content).not.toContain('GridStateReactionController.ts');
 			expect(content).toContain("kind: 'renderer-local-consumer'");
+		});
+	});
+
+	describe('Plan 135 - canonical live stream ownership', () => {
+		it('standalone features/liveStream owner and insights/liveStream barrel are deleted', () => {
+			expect(existsSync(resolve(CORE_ROOT, 'src', 'features', 'liveStream'))).toBe(false);
+			expect(existsSync(resolve(CORE_ROOT, 'src', 'insights', 'liveStream.ts'))).toBe(false);
+		});
+
+		it('LiveStreamIntegrityModule is the only production stream owner', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'LiveStreamIntegrityModule.ts'), 'utf-8');
+			expect(content).toContain('Canonical production stream owner');
+			expect(content).toContain("kind: 'integrity-set-live-stream-session'");
+			expect(content).toContain("kind: 'integrity-set-live-stream-issues'");
+		});
+
+		it('package barrels only expose integrity-backed stream types', () => {
+			const indexContent = readFileSync(resolve(CORE_ROOT, 'src', 'index.ts'), 'utf-8');
+			const integrityContent = readFileSync(resolve(CORE_ROOT, 'src', 'integrity.ts'), 'utf-8');
+			expect(indexContent).not.toContain('insights/liveStream');
+			expect(indexContent).not.toContain('features/liveStream');
+			expect(integrityContent).toContain('GridTransactionStreamHandle');
+			expect(integrityContent).toContain('GridTransactionStreamState');
 		});
 	});
 });
