@@ -37,6 +37,15 @@ export type { SelectionState } from './domains/selection/SelectionState.js';
 
 export { SidebarStore } from './sidebar/SidebarStore.js';
 
+export { createLocalStorageAdapter } from './domains/persistence/PersistenceAdapter.js';
+export type { PersistenceAdapter } from './domains/persistence/PersistenceAdapter.js';
+export { PersistenceController } from './domains/persistence/PersistenceController.js';
+export type { PersistenceStatus } from './domains/persistence/PersistenceController.js';
+export { GridWorkspaceController, createLocalStorageWorkspaceAdapter } from './domains/persistence/GridWorkspaceController.js';
+export type { GridViewDefinition, GridWorkspaceAdapter } from './domains/persistence/GridWorkspaceController.js';
+export { createGridStateSnapshot, applyGridState, isValidGridState, GRID_STATE_SCHEMA_VERSION } from './domains/persistence/GridStateSchema.js';
+export type { SerializedGridState, GridStateReadPort, GridStateWritePort } from './domains/persistence/GridStateSchema.js';
+
 export { DataIntegrityManager } from './domains/integrity/DataIntegrityManager.js';
 export type { ColumnValidationConfig, IntegrityDataPort } from './domains/integrity/DataIntegrityManager.js';
 export { ValidationRules } from './domains/integrity/ValidationRules.js';

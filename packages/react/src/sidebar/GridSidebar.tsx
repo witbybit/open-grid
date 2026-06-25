@@ -6,6 +6,7 @@ import { SortPanel } from './panels/SortPanel.js';
 import { ThemesPanel } from './panels/ThemesPanel.js';
 import { StubPanel } from './panels/StubPanel.js';
 import { DataIntegrityPanel } from './panels/DataIntegrityPanel.js';
+import { ViewsPanel } from './panels/ViewsPanel.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -211,7 +212,7 @@ function renderBuiltIn(id: BuiltInPanelId, api: GridApi<unknown>, container: HTM
 		case 'themes':
 			return <ThemesPanel api={api} container={container} />;
 		case 'views':
-			return <StubPanel title="Views" />;
+			return <ViewsPanel api={api} />;
 		case 'query':
 			return <StubPanel title="Query Builder" />;
 		case 'dataIntegrity':

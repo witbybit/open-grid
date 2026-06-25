@@ -21,6 +21,9 @@ import type { RenderColumn, RendererEngineView } from '../domains/render/Rendere
 import type { SidebarStore } from '../sidebar/SidebarStore.js';
 import type { ColumnValidationConfig, DataIntegrityManager } from '../domains/integrity/DataIntegrityManager.js';
 import type { GridIntegrityIssue, IntegritySeverity, RowIntegrityRule } from '../domains/integrity/ValidationRules.js';
+import type { SerializedGridState } from '../domains/persistence/GridStateSchema.js';
+import type { PersistenceStatus } from '../domains/persistence/PersistenceController.js';
+import type { GridViewDefinition } from '../domains/persistence/GridWorkspaceController.js';
 
 /**
  * The public, command-backed grid API (ARCHITECTURE.md "Public API Direction"). Every mutating
@@ -100,6 +103,34 @@ export interface GridApi<TRow> {
 		getColumns(): RenderColumn[];
 		setViewport(scrollTop: number, scrollLeft: number, width: number, height: number): void;
 		getRenderPlan(): RenderPlan;
+	};
+
+	/** Persistence: auto-save, manual save, state snapshot. */
+	readonly persistence: {
+		hasPersistence(): boolean;
+		enable(): void;
+		disable(): void;
+		isEnabled(): boolean;
+		saveNow(): void;
+		clearPersistedState(): void;
+		getGridState(): SerializedGridState;
+		applyGridState(state: SerializedGridState): void;
+		getStatus(): PersistenceStatus;
+		subscribeToStatus(fn: () => void): () => void;
+	};
+
+	/** Workspace: named views, CRUD. */
+	readonly workspace: {
+		hasWorkspace(): boolean;
+		listViews(): GridViewDefinition[];
+		saveView(name: string, description?: string): GridViewDefinition | null;
+		updateView(id: string, patch: Partial<Pick<GridViewDefinition, 'name' | 'description' | 'state'>>): void;
+		renameView(id: string, name: string): void;
+		deleteView(id: string): void;
+		duplicateView(id: string): GridViewDefinition | null;
+		applyView(id: string): boolean;
+		setDefaultView(id: string): void;
+		subscribe(fn: () => void): () => void;
 	};
 
 	/** Data integrity: validators, issues, row rules. */
@@ -218,6 +249,32 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 				core.viewport.setSize(width, height);
 			},
 			getRenderPlan: () => core.getRenderPlan(),
+		},
+
+		persistence: {
+			hasPersistence: () => core.persistence !== null,
+			enable: () => core.persistence?.enable(),
+			disable: () => core.persistence?.disable(),
+			isEnabled: () => core.persistence?.isEnabled() ?? false,
+			saveNow: () => core.persistence?.saveNow(),
+			clearPersistedState: () => core.persistence?.clearPersistedState(),
+			getGridState: () => core.persistence?.getGridState() ?? ({} as SerializedGridState),
+			applyGridState: (state) => core.persistence?.applyState(state),
+			getStatus: () => core.persistence?.getStatus() ?? 'idle',
+			subscribeToStatus: (fn) => core.persistence?.subscribeToStatus(fn) ?? (() => {}),
+		},
+
+		workspace: {
+			hasWorkspace: () => core.workspace !== null,
+			listViews: () => core.workspace?.listViews() ?? [],
+			saveView: (name, desc) => core.workspace?.saveView(name, desc) ?? null,
+			updateView: (id, patch) => core.workspace?.updateView(id, patch),
+			renameView: (id, name) => core.workspace?.renameView(id, name),
+			deleteView: (id) => core.workspace?.deleteView(id),
+			duplicateView: (id) => core.workspace?.duplicateView(id) ?? null,
+			applyView: (id) => core.workspace?.applyView(id) ?? false,
+			setDefaultView: (id) => core.workspace?.setDefaultView(id),
+			subscribe: (fn) => core.workspace?.subscribe(fn) ?? (() => {}),
 		},
 
 		integrity: {

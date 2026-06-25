@@ -1,6 +1,11 @@
 import { GridKernel } from '../kernel/GridKernel.js';
 import { SidebarStore } from '../sidebar/SidebarStore.js';
 import { DataIntegrityManager } from '../domains/integrity/DataIntegrityManager.js';
+import { PersistenceController } from '../domains/persistence/PersistenceController.js';
+import { GridWorkspaceController } from '../domains/persistence/GridWorkspaceController.js';
+import type { GridWorkspaceAdapter } from '../domains/persistence/GridWorkspaceController.js';
+import type { PersistenceAdapter } from '../domains/persistence/PersistenceAdapter.js';
+import { createGridStateSnapshot, applyGridState } from '../domains/persistence/GridStateSchema.js';
 import type { CellAddress } from '../domains/cells/CellAddress.js';
 import { CellValueEngine } from '../domains/cells/CellValueEngine.js';
 import type { CellDataPort } from '../domains/cells/CellValueEngine.js';
@@ -49,6 +54,8 @@ export interface GridCoreOptions<TRow> {
 	readonly showStatusBar?: boolean;
 	readonly enableColumnReorder?: boolean;
 	readonly loading?: boolean;
+	readonly persistenceAdapter?: PersistenceAdapter;
+	readonly workspaceAdapter?: GridWorkspaceAdapter;
 }
 
 /**
@@ -61,6 +68,8 @@ export class GridCore<TRow> {
 	readonly kernel = new GridKernel();
 	readonly sidebar = new SidebarStore();
 	readonly integrity: DataIntegrityManager<TRow>;
+	readonly persistence: PersistenceController | null = null;
+	readonly workspace: GridWorkspaceController | null = null;
 	readonly rowModel: RowModelPlugin<TRow>;
 	readonly columnModel: ColumnModel<TRow>;
 	readonly selectionModel = new SelectionModel();
@@ -124,6 +133,44 @@ export class GridCore<TRow> {
 			getCellValue: (rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
 		});
 		this.disposers.push(this.integrity.subscribeToKernel((listener) => this.kernel.subscribe(listener)));
+
+		// Persistence + workspace (optional)
+		const readPort = {
+			getColumnState: () => this.columnModel.getState(),
+			getSortModel: () => this.pipeline.getSortModel(),
+			getFilterModel: () => this.pipeline.getFilterModel(),
+			getGroupBy: () => this.pipeline.getGroupBy(),
+			getSidebarOpenPanel: () => this.sidebar.getOpenPanel(),
+		};
+		const writePort = {
+			setColumnState: (state: import('../domains/columns/ColumnState.js').ColumnState[]) =>
+				this.kernel.dispatch({ type: 'columns.setState', payload: { state } }),
+			setSortModel: (m: import('../domains/pipeline/PipelineModels.js').SortModel) =>
+				this.kernel.dispatch({ type: 'pipeline.setSortModel', payload: { model: m } }),
+			setFilterModel: (m: import('../domains/pipeline/PipelineModels.js').FilterModel) =>
+				this.kernel.dispatch({ type: 'pipeline.setFilterModel', payload: { model: m } }),
+			setGroupBy: (m: import('../domains/pipeline/GroupModel.js').GroupByModel) =>
+				this.kernel.dispatch({ type: 'pipeline.setGroupBy', payload: { model: m } }),
+			setSidebarOpenPanel: (id: string | null) =>
+				id ? this.sidebar.openPanel(id) : this.sidebar.closePanel(),
+		};
+
+		if (options.persistenceAdapter) {
+			const ctrl = new PersistenceController(options.persistenceAdapter, readPort, writePort);
+			(this as unknown as { persistence: PersistenceController }).persistence = ctrl;
+			this.disposers.push(ctrl.subscribeToKernel((listener) => this.kernel.subscribe(listener)));
+			// Restore saved state immediately
+			ctrl.loadAndApply();
+		}
+
+		if (options.workspaceAdapter) {
+			const ctrl = new GridWorkspaceController(
+				options.workspaceAdapter,
+				() => createGridStateSnapshot(readPort),
+				(state) => applyGridState(state, writePort),
+			);
+			(this as unknown as { workspace: GridWorkspaceController }).workspace = ctrl;
+		}
 
 		// Register every command on the single kernel gateway (R1).
 		this.disposers.push(registerRowCommands(this.kernel, this.rowModel));
@@ -248,6 +295,8 @@ export class GridCore<TRow> {
 	destroy(): void {
 		for (const dispose of this.disposers) dispose();
 		this.disposers.length = 0;
+		this.persistence?.destroy();
+		this.workspace?.destroy();
 		this.integrity.destroy();
 		this.sidebar.destroy();
 		this.kernel.destroy();
