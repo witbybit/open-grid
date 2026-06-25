@@ -80,7 +80,7 @@ describe('Architecture guardrails', () => {
     expect(violations, `kernel/domains importing React: ${violations.join(', ')}`).toHaveLength(0);
   });
 
-  it('DomGridRenderer is the only new-tree file using requestAnimationFrame', () => {
+  it('only GridScheduler (and optionally DomGridRenderer) use requestAnimationFrame in new-tree code', () => {
     const srcDir = resolve(CORE_ROOT, 'src');
     const newDirs = [resolve(srcDir, 'kernel'), resolve(srcDir, 'domains'), resolve(srcDir, 'api')];
     const rafPattern = /\brequestAnimationFrame\b/;
@@ -101,7 +101,13 @@ describe('Architecture guardrails', () => {
       scan(root);
     }
     const normalized = found.map(p => p.replace(/\\/g, '/'));
-    expect(normalized).toEqual(['domains/render/DomGridRenderer.ts']);
+    // GridScheduler is the RAF timing abstraction layer — it is the canonical and expected
+    // place for requestAnimationFrame calls. DomGridRenderer delegates to GridScheduler and
+    // must NOT call requestAnimationFrame directly. No other new-tree file should use RAF.
+    const allowed = new Set(['domains/render/GridScheduler.ts', 'domains/render/DomGridRenderer.ts']);
+    const unexpected = normalized.filter(p => !allowed.has(p));
+    expect(unexpected, `unexpected RAF users: ${unexpected.join(', ')}`).toHaveLength(0);
+    expect(normalized).toContain('domains/render/GridScheduler.ts');
   });
 
   it('index.ts does not re-export renderer-internal types', () => {

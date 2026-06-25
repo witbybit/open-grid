@@ -1,11 +1,17 @@
 import type { RenderColumn, RendererEngineView } from './RendererEngineView.js';
-import type { RowBinding } from './RowBinder.js';
 import { RowBinder } from './RowBinder.js';
 import { computeRenderLayout } from './RenderLayout.js';
-import type { RenderLayout } from './RenderLayout.js';
 import type { VisualRow } from '../pipeline/VisualRow.js';
 import type { RowId } from '../rows/RowId.js';
 import { CORE_STYLES } from '../../renderer/styles.js';
+import { LayerRegistry } from './LayerRegistry.js';
+import { compileColumnTopology } from './ColumnTopologyCompiler.js';
+import type { CompiledColumnTopology } from './ColumnTopologyCompiler.js';
+import { GeometryController } from './GeometryController.js';
+import { RenderScrollCoordinator } from './RenderScrollCoordinator.js';
+import { ScrollEngine } from './ScrollEngine.js';
+import { FrameCoordinator, defaultGridScheduler } from './GridScheduler.js';
+import type { GridScheduler } from './GridScheduler.js';
 
 const STYLE_TAG_ATTR = 'data-og-core-styles';
 
@@ -18,6 +24,10 @@ function injectCoreStyles(): void {
 	tag.textContent = CORE_STYLES;
 	document.head.appendChild(tag);
 }
+
+// ---------------------------------------------------------------------------
+// Public callback interfaces (kept stable for React adapter compatibility)
+// ---------------------------------------------------------------------------
 
 /**
  * Callbacks wired by the React adapter for portal-based custom cell renderers.
@@ -42,233 +52,602 @@ export interface DomGridRendererCallbacks<TRow> {
 	onUnmountCellContent?: (unmount: CellContentUnmount) => void;
 }
 
+// ---------------------------------------------------------------------------
+// Internal row slot state
+// ---------------------------------------------------------------------------
+
 /** One DOM row slot and its current binding metadata. */
 interface RowSlotState {
 	el: HTMLDivElement;
 	/** Last-painted visual row index (-1 if slot was just created/unused). */
 	visualRowIndex: number;
+	/** The rowId last bound to this slot — used to detect recycle events. */
+	lastRowId: RowId | null;
+	/** Monotonically increasing generation: incremented when rowId changes. */
+	generation: number;
 	/** Child cell elements indexed by column field, for incremental updates. */
 	cellsByField: Map<string, HTMLDivElement>;
+	/** Mounted cell keys (for unmount callbacks on recycle). */
+	mountedCellKeys: Set<string>;
 	pinLeft: HTMLDivElement | null;
 	pinRight: HTMLDivElement | null;
 }
 
+// ---------------------------------------------------------------------------
+// Header cell tracking
+// ---------------------------------------------------------------------------
+
+interface HeaderCellState {
+	el: HTMLDivElement;
+	field: string;
+	lastSortDirection: 'asc' | 'desc' | null | undefined;
+	lastWidth: number;
+	lastLeft: number;
+}
+
+// ---------------------------------------------------------------------------
+// Resize drag state
+// ---------------------------------------------------------------------------
+
+interface ResizeDragState {
+	field: string;
+	startX: number;
+	startWidth: number;
+}
+
+// ---------------------------------------------------------------------------
+// DomGridRenderer
+// ---------------------------------------------------------------------------
+
 /**
  * Pure-DOM renderer that reads from {@link RendererEngineView} and paints the `.og-*` layer
- * structure (ARCHITECTURE.md §3 R12–R13). Reuses the existing styles.ts CSS class contract so the
- * grid looks identical; only the data-access layer changes. No React, no business state — the React
- * adapter owns the container div and wires the portal callbacks.
+ * structure (ARCHITECTURE.md §3 R12–R13). Uses the new infrastructure components:
+ * - {@link LayerRegistry} for DOM structure
+ * - {@link ColumnTopologyCompiler} for column layout (compiled once per column version)
+ * - {@link GeometryController} for row positioning
+ * - {@link RenderScrollCoordinator} to track the visible window
+ * - {@link ScrollEngine} for scroll handling
+ * - {@link FrameCoordinator} / {@link GridScheduler} for RAF scheduling
  */
 export class DomGridRenderer<TRow> {
 	private readonly rowBinder = new RowBinder<TRow>();
 	private slots: RowSlotState[] = [];
 
-	// DOM refs
-	private scrollViewport: HTMLDivElement | null = null;
-	private rowsContainer: HTMLDivElement | null = null;
-	private headerWrapper: HTMLDivElement | null = null;
-	private headerLeft: HTMLDivElement | null = null;
-	private headerCenter: HTMLDivElement | null = null;
-	private headerRight: HTMLDivElement | null = null;
+	// Infrastructure
+	private layerRegistry: LayerRegistry | null = null;
+	private scrollEngine: ScrollEngine | null = null;
+	private frameCoordinator: FrameCoordinator;
+	private readonly scrollCoordinator = new RenderScrollCoordinator({ rowOverscanPx: 200, colBuffer: 2 });
+	private readonly geometryController = new GeometryController();
 
-	private rafId: number | null = null;
+	// Column topology (compiled once per column version, reused across frames)
+	private compiledTopology: CompiledColumnTopology | null = null;
+	private lastCompiledColVersion = -1;
+
+	// Header cell map: field → stable {el, state} (cells are relocated not recreated on pin/reorder)
+	private headerCells = new Map<string, HeaderCellState>();
+
+	// Lifecycle
 	private unsubscribe: (() => void) | null = null;
 	private resizeObserver: ResizeObserver | null = null;
 	private container: HTMLElement | null = null;
 
-	// Track last-painted column set to skip header repaint when unchanged.
-	private lastColumnVersion = -1;
+	// Viewport state (updated by scroll / resize; forwarded to engine view)
+	private vpWidth = 0;
+	private vpHeight = 0;
+	private scrollTop = 0;
+	private scrollLeft = 0;
+
+	// Callbacks
+	private sortCallback: ((field: string, currentDir: 'asc' | 'desc' | null) => void) | null = null;
+	private resizeCallback: ((field: string, newWidth: number) => void) | null = null;
+	private resizeDragState: ResizeDragState | null = null;
+
+	// Selection overlay
+	private selectionOverlay: HTMLDivElement | null = null;
 
 	constructor(
 		private readonly view: RendererEngineView<TRow>,
 		private readonly callbacks: DomGridRendererCallbacks<TRow> = {},
-	) {}
+		private readonly scheduler: GridScheduler = defaultGridScheduler,
+	) {
+		this.frameCoordinator = new FrameCoordinator({ scheduler: this.scheduler });
+
+		this.frameCoordinator
+			.onScrollFrame(() => this.handleScrollFrame())
+			.onPaintFrame(() => this.paint())
+			.onScrollEnd(() => this.frameCoordinator.schedulePaintFrame());
+	}
+
+	// ---------------------------------------------------------------------------
+	// Public API
+	// ---------------------------------------------------------------------------
 
 	mount(container: HTMLElement): void {
 		injectCoreStyles();
 		this.container = container;
-		this.buildDom(container);
 
-		this.unsubscribe = this.view.subscribe(() => this.schedulePaint());
+		// Build DOM layer structure via LayerRegistry
+		this.layerRegistry = new LayerRegistry(container);
 
+		// Wire ScrollEngine to the scroll viewport
+		const sv = this.layerRegistry.layers.scrollViewport;
+		this.scrollEngine = new ScrollEngine(sv, {
+			onScroll: (state) => {
+				this.scrollTop = state.scrollTop;
+				this.scrollLeft = state.scrollLeft;
+				this.view.setScroll(state.scrollTop, state.scrollLeft);
+				this.frameCoordinator.scheduleScrollFrame();
+			},
+			onScrollEnd: () => {
+				this.frameCoordinator.schedulePaintFrame();
+			},
+		});
+
+		// Subscribe to engine changes
+		this.unsubscribe = this.view.subscribe(() => {
+			this.frameCoordinator.schedulePaintFrame();
+		});
+
+		// ResizeObserver for container size changes
 		this.resizeObserver = new ResizeObserver((entries) => {
 			const entry = entries[0];
 			if (!entry) return;
 			const { width, height } = entry.contentRect;
+			this.vpWidth = width;
+			this.vpHeight = height;
 			this.view.setSize(width, height);
-			this.schedulePaint();
+			this.frameCoordinator.schedulePaintFrame();
 		});
 		this.resizeObserver.observe(container);
 
-		// Prime the viewport with current dimensions.
+		// Prime viewport with current dimensions
 		const rect = container.getBoundingClientRect();
-		this.view.setSize(rect.width || 800, rect.height || 500);
+		this.vpWidth = rect.width || 800;
+		this.vpHeight = rect.height || 500;
+		this.view.setSize(this.vpWidth, this.vpHeight);
 
+		// Initial paint
 		this.paint();
 	}
 
 	unmount(): void {
-		if (this.rafId !== null) {
-			cancelAnimationFrame(this.rafId);
-			this.rafId = null;
-		}
+		this.frameCoordinator.destroy();
+
 		this.unsubscribe?.();
 		this.unsubscribe = null;
+
 		this.resizeObserver?.disconnect();
 		this.resizeObserver = null;
-		this.scrollViewport?.removeEventListener('scroll', this.onScroll);
-		if (this.container) this.container.innerHTML = '';
+
+		this.scrollEngine?.destroy();
+		this.scrollEngine = null;
+
+		// Unmount portal callbacks for all mounted cells
+		this.fireUnmountForAllSlots();
+
+		this.layerRegistry?.destroy();
+		this.layerRegistry = null;
+
 		this.slots = [];
+		this.headerCells.clear();
 		this.rowBinder.reset();
+		this.compiledTopology = null;
+		this.lastCompiledColVersion = -1;
 		this.container = null;
-		this.scrollViewport = null;
-		this.rowsContainer = null;
-		this.headerWrapper = null;
-		this.headerLeft = null;
-		this.headerCenter = null;
-		this.headerRight = null;
+		this.selectionOverlay = null;
+		this.resizeDragState = null;
 	}
 
+	/** Wire a sort handler called when the user clicks a sortable column header. */
+	setSortCallback(fn: (field: string, currentDir: 'asc' | 'desc' | null) => void): void {
+		this.sortCallback = fn;
+	}
+
+	/** Wire a resize handler called when the user finishes resizing a column header. */
+	setResizeCallback(fn: (field: string, newWidth: number) => void): void {
+		this.resizeCallback = fn;
+	}
+
+	/** Force an immediate synchronous paint (for tests / imperative refresh). */
 	schedulePaint(): void {
-		if (this.rafId !== null) return;
-		this.rafId = requestAnimationFrame(() => {
-			this.rafId = null;
-			this.paint();
-		});
+		this.frameCoordinator.schedulePaintFrame();
 	}
 
-	// ─── Private ─────────────────────────────────────────────────────────────
+	// ---------------------------------------------------------------------------
+	// Frame handlers
+	// ---------------------------------------------------------------------------
 
-	private buildDom(container: HTMLElement): void {
-		const sv = document.createElement('div');
-		sv.className = 'og-scroll-viewport';
-		sv.addEventListener('scroll', this.onScroll, { passive: true });
-		this.scrollViewport = sv;
-
-		// Header wrapper (sticky top:0 from CSS)
-		const hw = document.createElement('div');
-		hw.className = 'og-layer-header-wrapper';
-		this.headerWrapper = hw;
-
-		const hl = document.createElement('div');
-		hl.className = 'og-layer-header-left';
-		this.headerLeft = hl;
-
-		const hc = document.createElement('div');
-		hc.className = 'og-layer-header';
-		this.headerCenter = hc;
-
-		const hr = document.createElement('div');
-		hr.className = 'og-layer-header-right';
-		this.headerRight = hr;
-
-		hw.append(hl, hc, hr);
-
-		// Rows container
-		const rc = document.createElement('div');
-		rc.className = 'og-rows-container';
-		this.rowsContainer = rc;
-
-		sv.append(hw, rc);
-		container.appendChild(sv);
-	}
-
-	private onScroll = (): void => {
-		if (!this.scrollViewport) return;
-		this.view.setScroll(this.scrollViewport.scrollTop, this.scrollViewport.scrollLeft);
-		this.schedulePaint();
-	};
-
-	private paint(): void {
-		if (!this.rowsContainer || !this.headerWrapper) return;
+	private handleScrollFrame(): void {
+		if (!this.layerRegistry) return;
 
 		const layout = computeRenderLayout(this.view);
 		const columns = this.view.getColumns();
 
-		this.applyLayout(layout, columns);
-		this.paintHeader(layout, columns);
-		this.paintRows(layout, columns);
+		// Ensure topology is compiled
+		this.ensureTopologyCompiled(columns);
+
+		const topology = this.compiledTopology!;
+		const rowCount = this.view.getVisualRowCount();
+		const cfg = this.view.getDisplayConfig();
+		const defaultRowHeight = cfg.defaultRowHeight || 40;
+
+		// Recompute geometry
+		this.geometryController.recomputeIfNeeded(rowCount, defaultRowHeight);
+
+		// Update scroll coordinator
+		const changed = this.scrollCoordinator.update({
+			scrollTop: this.scrollTop,
+			scrollLeft: this.scrollLeft,
+			viewportWidth: this.vpWidth,
+			viewportHeight: this.vpHeight,
+			rowCount,
+			defaultRowHeight,
+			rowOverscanPx: 200,
+			pinLeftCount: topology.leftPlacements.length,
+			pinRightCount: topology.rightPlacements.length,
+			centerColCount: topology.centerPlacements.length,
+			colPlacements: topology.centerPlacements.map((p) => ({
+				absoluteLeft: p.laneLeft,
+				width: p.width,
+			})),
+			rowVersion: this.view.getVersion('rows'),
+			colVersion: this.view.getVersion('columns'),
+		});
+
+		if (changed) {
+			// Apply layout metrics
+			this.applyLayerLayout(layout, topology);
+			// Repaint rows (cheap: only visible range)
+			this.paintRows(topology, defaultRowHeight);
+		}
 	}
 
-	private applyLayout(layout: RenderLayout, columns: readonly RenderColumn[]): void {
-		// Size the scrollable content area.
-		this.rowsContainer!.style.height = `${layout.dimensions.totalRowsHeight}px`;
-		this.rowsContainer!.style.minWidth = `${layout.dimensions.contentWidth}px`;
+	private paint(): void {
+		if (!this.layerRegistry) return;
 
-		// Header wrapper height (just the leaf header row for now).
-		this.headerWrapper!.style.height = `${layout.chrome.headerHeight}px`;
+		const layout = computeRenderLayout(this.view);
+		const columns = this.view.getColumns();
 
-		// Lane widths for the header (right lane expands from the right).
-		this.headerLeft!.style.width = `${layout.columns.leftWidth}px`;
-		this.headerCenter!.style.minWidth = `${layout.columns.centerWidth}px`;
-		this.headerRight!.style.width = `${layout.columns.rightWidth}px`;
+		// Recompile topology if column version changed
+		this.ensureTopologyCompiled(columns);
 
-		// Set CSS var so the status bar / bottom chrome offset works correctly.
+		const topology = this.compiledTopology!;
+		const rowCount = this.view.getVisualRowCount();
+		const cfg = this.view.getDisplayConfig();
+		const defaultRowHeight = cfg.defaultRowHeight || 40;
+
+		// Rebuild row geometry
+		this.geometryController.recomputeIfNeeded(rowCount, defaultRowHeight);
+
+		// Sync scroll coordinator
+		this.scrollCoordinator.update({
+			scrollTop: this.scrollTop,
+			scrollLeft: this.scrollLeft,
+			viewportWidth: this.vpWidth,
+			viewportHeight: this.vpHeight,
+			rowCount,
+			defaultRowHeight,
+			rowOverscanPx: 200,
+			pinLeftCount: topology.leftPlacements.length,
+			pinRightCount: topology.rightPlacements.length,
+			centerColCount: topology.centerPlacements.length,
+			colPlacements: topology.centerPlacements.map((p) => ({
+				absoluteLeft: p.laneLeft,
+				width: p.width,
+			})),
+			rowVersion: this.view.getVersion('rows'),
+			colVersion: this.view.getVersion('columns'),
+		});
+
+		const win = this.scrollCoordinator.getCurrent();
+
+		// Apply DOM layout
+		this.applyLayerLayout(layout, topology);
+
+		// Paint header (skip if column version unchanged)
+		this.paintHeader(topology, layout.chrome.headerHeight);
+
+		// Paint rows
+		this.paintRows(topology, defaultRowHeight);
+
+		// Paint selection overlay
+		this.paintSelectionOverlay(win, topology, defaultRowHeight);
+	}
+
+	// ---------------------------------------------------------------------------
+	// DOM layer layout
+	// ---------------------------------------------------------------------------
+
+	private applyLayerLayout(layout: ReturnType<typeof computeRenderLayout>, topology: CompiledColumnTopology): void {
+		const cfg = this.view.getDisplayConfig();
+
+		this.layerRegistry!.applyLayout({
+			totalRowsHeight: layout.dimensions.totalRowsHeight,
+			contentWidth: layout.dimensions.contentWidth,
+			headerHeight: layout.chrome.headerHeight,
+			floatingFilterHeight: layout.chrome.floatingFilterHeight,
+			pinLeftWidth: topology.pinLeftWidth,
+			pinRightWidth: topology.pinRightWidth,
+			showStatusBar: cfg.showStatusBar,
+			statusBarHeight: layout.chrome.statusBarHeight,
+			showPagination: false,
+			paginationHeight: 0,
+		});
+
+		// Expose bottom chrome height as CSS variable
 		if (this.container) {
 			this.container.style.setProperty('--og-bottom-chrome-height', `${layout.chrome.bottomChromeHeight}px`);
 		}
-
-		// Paint columns version for header change detection.
-		this.lastColumnVersion = this.view.getVersion('columns');
 	}
 
-	private paintHeader(layout: RenderLayout, columns: readonly RenderColumn[]): void {
-		const hl = this.headerLeft!;
-		const hc = this.headerCenter!;
-		const hr = this.headerRight!;
+	// ---------------------------------------------------------------------------
+	// Column topology
+	// ---------------------------------------------------------------------------
 
-		// Clear and repaint (headers change rarely; incremental update is an optimization for later).
-		hl.innerHTML = '';
-		hc.innerHTML = '';
-		hr.innerHTML = '';
+	private ensureTopologyCompiled(columns: readonly RenderColumn[]): void {
+		const colVersion = this.view.getVersion('columns');
+		if (this.compiledTopology !== null && colVersion === this.lastCompiledColVersion) return;
 
-		const height = layout.chrome.headerHeight;
+		this.compiledTopology = compileColumnTopology(columns, colVersion);
+		this.geometryController.updateTopology(this.compiledTopology);
+		this.lastCompiledColVersion = colVersion;
 
-		for (const col of columns) {
-			const cell = document.createElement('div');
-			cell.className = 'og-header-cell';
-			cell.style.left = `${col.left}px`;
-			cell.style.width = `${col.width}px`;
-			cell.style.height = `${height}px`;
-			cell.textContent = col.header;
-			if (col.sortDirection) {
-				cell.dataset.sort = col.sortDirection;
+		// Invalidate header cells when column topology changes
+		this.clearStaledHeaderCells(columns);
+	}
+
+	private clearStaledHeaderCells(columns: readonly RenderColumn[]): void {
+		const currentFields = new Set(columns.map((c) => c.field));
+		for (const [field, state] of this.headerCells) {
+			if (!currentFields.has(field)) {
+				state.el.remove();
+				this.headerCells.delete(field);
 			}
-
-			if (col.lane === 'left') hl.appendChild(cell);
-			else if (col.lane === 'right') hr.appendChild(cell);
-			else hc.appendChild(cell);
 		}
 	}
 
-	private paintRows(layout: RenderLayout, columns: readonly RenderColumn[]): void {
+	// ---------------------------------------------------------------------------
+	// Header rendering
+	// ---------------------------------------------------------------------------
+
+	private paintHeader(topology: CompiledColumnTopology, headerHeight: number): void {
+		const { headerLeft, headerCenter, headerRight } = this.layerRegistry!.layers;
+
+		const rendered = new Set<string>();
+
+		const paintPlacement = (field: string, header: string, left: number, width: number, sortable: boolean, sortDirection: 'asc' | 'desc' | null, lane: 'left' | 'center' | 'right', columnId: string) => {
+			rendered.add(field);
+
+			let state = this.headerCells.get(field);
+			if (!state) {
+				const el = this.createHeaderCellElement(field, columnId);
+				state = { el, field, lastSortDirection: undefined, lastWidth: -1, lastLeft: -1 };
+				this.headerCells.set(field, state);
+			}
+
+			const el = state.el;
+
+			// Update geometry only when changed
+			const nextWidth = `${width}px`;
+			const nextLeft = `${left}px`;
+			const nextHeight = `${headerHeight}px`;
+			if (el.style.width !== nextWidth) el.style.width = nextWidth;
+			if (el.style.left !== nextLeft) el.style.left = nextLeft;
+			if (el.style.height !== nextHeight) el.style.height = nextHeight;
+
+			// Update label text
+			const labelEl = el.querySelector<HTMLSpanElement>('.og-header-label');
+			if (labelEl && labelEl.textContent !== header) labelEl.textContent = header;
+
+			// Update data attributes
+			if (el.dataset.field !== field) el.dataset.field = field;
+			if (el.dataset.colId !== columnId) el.dataset.colId = columnId;
+
+			// Sort indicator
+			if (state.lastSortDirection !== sortDirection) {
+				state.lastSortDirection = sortDirection;
+				const sortEl = el.querySelector<HTMLElement>('.og-sort-indicator');
+				if (sortEl) {
+					if (sortDirection) {
+						sortEl.style.display = '';
+						sortEl.dataset.sort = sortDirection;
+						sortEl.textContent = sortDirection === 'asc' ? '▲' : '▼';
+					} else {
+						sortEl.style.display = 'none';
+					}
+				}
+			}
+
+			// Move to correct lane container if needed
+			const targetLayer = lane === 'left' ? headerLeft : lane === 'right' ? headerRight : headerCenter;
+			if (el.parentNode !== targetLayer) {
+				targetLayer.appendChild(el);
+			}
+		};
+
+		// Left pins
+		for (const p of topology.leftPlacements) {
+			paintPlacement(p.field, p.header, p.laneLeft, p.width, p.sortable, p.sortDirection, 'left', p.columnId);
+		}
+
+		// Center columns
+		const win = this.scrollCoordinator.getCurrent();
+		for (let i = win.colStart; i <= win.colEnd && i < topology.centerPlacements.length; i++) {
+			const p = topology.centerPlacements[i];
+			if (!p) continue;
+			paintPlacement(p.field, p.header, p.laneLeft, p.width, p.sortable, p.sortDirection, 'center', p.columnId);
+		}
+
+		// Right pins
+		for (const p of topology.rightPlacements) {
+			paintPlacement(p.field, p.header, p.laneLeft, p.width, p.sortable, p.sortDirection, 'right', p.columnId);
+		}
+
+		// Remove header cells no longer in the window
+		for (const [field, state] of this.headerCells) {
+			if (!rendered.has(field)) {
+				state.el.remove();
+				this.headerCells.delete(field);
+			}
+		}
+	}
+
+	private createHeaderCellElement(field: string, columnId: string): HTMLDivElement {
+		const cell = document.createElement('div');
+		cell.className = 'og-header-cell';
+		cell.dataset.field = field;
+		cell.dataset.colId = columnId;
+
+		// Position absolute within the header lane
+		cell.style.position = 'absolute';
+		cell.style.top = '0';
+		cell.style.display = 'flex';
+		cell.style.alignItems = 'center';
+		cell.style.overflow = 'hidden';
+		cell.style.boxSizing = 'border-box';
+
+		// Label span
+		const label = document.createElement('span');
+		label.className = 'og-header-label';
+		label.style.overflow = 'hidden';
+		label.style.textOverflow = 'ellipsis';
+		label.style.whiteSpace = 'nowrap';
+		label.style.flex = '1';
+		label.style.minWidth = '0';
+		label.textContent = field;
+		cell.appendChild(label);
+
+		// Sort indicator
+		const sortIndicator = document.createElement('span');
+		sortIndicator.className = 'og-sort-indicator';
+		sortIndicator.style.display = 'none';
+		sortIndicator.style.marginLeft = '4px';
+		sortIndicator.style.flexShrink = '0';
+		sortIndicator.style.fontSize = '10px';
+		cell.appendChild(sortIndicator);
+
+		// Sort click handler on the label (not the resize handle)
+		label.addEventListener('click', (e) => {
+			e.stopPropagation();
+			if (!this.sortCallback) return;
+			const colField = cell.dataset.field ?? field;
+			const curDir = (cell.dataset.sortDir as 'asc' | 'desc' | undefined) ?? null;
+			// Cycle: null → asc → desc → null
+			const nextDir: 'asc' | 'desc' | null = curDir === null ? 'asc' : curDir === 'asc' ? 'desc' : null;
+			this.sortCallback(colField, nextDir !== null ? curDir : null);
+		});
+		sortIndicator.addEventListener('click', (e) => {
+			e.stopPropagation();
+			if (!this.sortCallback) return;
+			const colField = cell.dataset.field ?? field;
+			const curDir = (cell.dataset.sortDir as 'asc' | 'desc' | undefined) ?? null;
+			const nextDir: 'asc' | 'desc' | null = curDir === null ? 'asc' : curDir === 'asc' ? 'desc' : null;
+			this.sortCallback(colField, nextDir !== null ? curDir : null);
+		});
+
+		// Resize handle
+		const resizeHandle = document.createElement('div');
+		resizeHandle.className = 'og-col-resize-handle';
+		resizeHandle.style.position = 'absolute';
+		resizeHandle.style.right = '0';
+		resizeHandle.style.top = '0';
+		resizeHandle.style.bottom = '0';
+		resizeHandle.style.width = '6px';
+		resizeHandle.style.cursor = 'col-resize';
+		resizeHandle.style.zIndex = '1';
+
+		resizeHandle.addEventListener('mousedown', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			const colField = cell.dataset.field ?? field;
+			const currentWidth = cell.offsetWidth;
+
+			this.resizeDragState = {
+				field: colField,
+				startX: e.clientX,
+				startWidth: currentWidth,
+			};
+
+			const onMouseMove = (me: MouseEvent) => {
+				if (!this.resizeDragState) return;
+				const delta = me.clientX - this.resizeDragState.startX;
+				const newWidth = Math.max(40, this.resizeDragState.startWidth + delta);
+				// Optimistically update header cell width for immediate visual feedback
+				cell.style.width = `${newWidth}px`;
+			};
+
+			const onMouseUp = (ue: MouseEvent) => {
+				document.removeEventListener('mousemove', onMouseMove);
+				document.removeEventListener('mouseup', onMouseUp);
+				if (!this.resizeDragState) return;
+				const delta = ue.clientX - this.resizeDragState.startX;
+				const newWidth = Math.max(40, this.resizeDragState.startWidth + delta);
+				this.resizeCallback?.(this.resizeDragState.field, newWidth);
+				this.resizeDragState = null;
+			};
+
+			document.addEventListener('mousemove', onMouseMove);
+			document.addEventListener('mouseup', onMouseUp);
+		});
+
+		cell.appendChild(resizeHandle);
+		return cell;
+	}
+
+	// ---------------------------------------------------------------------------
+	// Row rendering
+	// ---------------------------------------------------------------------------
+
+	private paintRows(topology: CompiledColumnTopology, defaultRowHeight: number): void {
+		if (!this.layerRegistry) return;
+
+		const win = this.scrollCoordinator.getCurrent();
+		const rowCount = this.view.getVisualRowCount();
+
+		// Build the visible window rows list and bind slots
 		const bindings = this.rowBinder.bind(this.view);
 		const needed = this.rowBinder.slotCount;
 
 		this.ensureSlots(needed);
 
-		// Hide slots beyond the current window (window shrunk).
+		// Hide slots beyond the current window
 		for (let i = needed; i < this.slots.length; i++) {
-			this.slots[i]!.el.style.display = 'none';
+			const slot = this.slots[i];
+			if (slot) slot.el.style.display = 'none';
 		}
-
-		const { leftWidth, rightWidth } = layout.columns;
 
 		for (const binding of bindings) {
 			const slot = this.slots[binding.slotIndex];
 			if (!slot) continue;
-			this.paintRowSlot(slot, binding, columns, leftWidth, rightWidth);
+
+			const { row, top, height, visualRowIndex } = binding;
+			const rowId = row.kind === 'data' ? row.rowId : null;
+
+			// Detect recycle: rowId changed → fire unmount for old portals, increment generation
+			if (rowId !== slot.lastRowId && slot.lastRowId !== null) {
+				this.fireUnmountForSlot(slot);
+				slot.generation++;
+			}
+
+			// Paint the slot
+			this.paintRowSlot(slot, row, visualRowIndex, top, height, topology, defaultRowHeight, win.colStart, win.colEnd);
+
+			slot.lastRowId = rowId;
 		}
 	}
 
 	private paintRowSlot(
 		slot: RowSlotState,
-		binding: RowBinding<TRow>,
-		columns: readonly RenderColumn[],
-		leftWidth: number,
-		rightWidth: number,
+		row: VisualRow<TRow>,
+		visualRowIndex: number,
+		top: number,
+		height: number,
+		topology: CompiledColumnTopology,
+		defaultRowHeight: number,
+		colStart: number,
+		colEnd: number,
 	): void {
-		const { row, top, height, visualRowIndex } = binding;
 		const el = slot.el;
 
 		el.style.display = '';
@@ -278,7 +657,7 @@ export class DomGridRenderer<TRow> {
 
 		el.className = this.rowClass(row);
 
-		this.paintCells(slot, row, columns, leftWidth, rightWidth);
+		this.paintCells(slot, row, topology, colStart, colEnd);
 		slot.visualRowIndex = visualRowIndex;
 	}
 
@@ -304,15 +683,15 @@ export class DomGridRenderer<TRow> {
 	private paintCells(
 		slot: RowSlotState,
 		row: VisualRow<TRow>,
-		columns: readonly RenderColumn[],
-		leftWidth: number,
-		rightWidth: number,
+		topology: CompiledColumnTopology,
+		colStart: number,
+		colEnd: number,
 	): void {
 		const el = slot.el;
-		const hasLeft = leftWidth > 0;
-		const hasRight = rightWidth > 0;
+		const hasLeft = topology.pinLeftWidth > 0;
+		const hasRight = topology.pinRightWidth > 0;
 
-		// Ensure pin containers exist when needed, create them lazily.
+		// Ensure pin containers exist lazily
 		if (hasLeft && !slot.pinLeft) {
 			const pl = document.createElement('div');
 			pl.className = 'og-row-pin-left';
@@ -326,77 +705,210 @@ export class DomGridRenderer<TRow> {
 			slot.pinRight = pr;
 		}
 
-		// Update pin container widths.
-		if (slot.pinLeft) slot.pinLeft.style.width = `${leftWidth}px`;
-		if (slot.pinRight) slot.pinRight.style.width = `${rightWidth}px`;
+		// Update pin container widths
+		if (slot.pinLeft) slot.pinLeft.style.width = `${topology.pinLeftWidth}px`;
+		if (slot.pinRight) slot.pinRight.style.width = `${topology.pinRightWidth}px`;
 
-		// Remove all old center cell children (those not inside pin containers).
-		// Faster than diffing: headers rarely change, rows don't add/remove columns mid-session.
-		const toRemove: ChildNode[] = [];
-		el.childNodes.forEach((n) => {
-			if (n !== slot.pinLeft && n !== slot.pinRight) toRemove.push(n);
-		});
-		toRemove.forEach((n) => el.removeChild(n));
-		if (slot.pinLeft) slot.pinLeft.innerHTML = '';
-		if (slot.pinRight) slot.pinRight.innerHTML = '';
+		// Determine which center columns to render
+		const visibleCenterPlacements = topology.centerPlacements.slice(colStart, colEnd + 1);
 
-		for (const col of columns) {
-			const cell = this.buildCell(col, row, leftWidth);
-			if (col.lane === 'left') {
-				slot.pinLeft!.appendChild(cell);
-			} else if (col.lane === 'right') {
-				slot.pinRight!.appendChild(cell);
+		// Build the full set of fields to render in this frame
+		const renderFields = new Set<string>();
+		for (const p of topology.leftPlacements) renderFields.add(p.field);
+		for (const p of visibleCenterPlacements) renderFields.add(p.field);
+		for (const p of topology.rightPlacements) renderFields.add(p.field);
+
+		// Remove cells that left the window
+		for (const [field, cellEl] of slot.cellsByField) {
+			if (!renderFields.has(field)) {
+				// Fire unmount if portal was mounted
+				if (row.kind === 'data') {
+					const cellKey = `${row.rowId}:${field}`;
+					if (slot.mountedCellKeys.has(cellKey)) {
+						this.callbacks.onUnmountCellContent?.({ cellKey });
+						slot.mountedCellKeys.delete(cellKey);
+					}
+				}
+				cellEl.remove();
+				slot.cellsByField.delete(field);
+			}
+		}
+
+		// Paint left pins
+		for (const p of topology.leftPlacements) {
+			this.paintCell(slot, row, p.field, p.laneLeft, p.width, 'left');
+		}
+
+		// Paint visible center columns
+		for (const p of visibleCenterPlacements) {
+			this.paintCell(slot, row, p.field, topology.pinLeftWidth + p.laneLeft, p.width, 'center');
+		}
+
+		// Paint right pins
+		for (const p of topology.rightPlacements) {
+			this.paintCell(slot, row, p.field, p.laneLeft, p.width, 'right');
+		}
+	}
+
+	private paintCell(
+		slot: RowSlotState,
+		row: VisualRow<TRow>,
+		field: string,
+		cssLeft: number,
+		width: number,
+		lane: 'left' | 'center' | 'right',
+	): void {
+		const el = slot.el;
+		let cellEl = slot.cellsByField.get(field);
+		const isNew = !cellEl;
+
+		if (!cellEl) {
+			cellEl = document.createElement('div');
+			cellEl.className = 'og-cell';
+			cellEl.style.position = 'absolute';
+			cellEl.style.top = '0';
+			cellEl.style.bottom = '0';
+			cellEl.style.overflow = 'hidden';
+			cellEl.style.boxSizing = 'border-box';
+			if (lane === 'left') cellEl.classList.add('og-cell-pinned-left');
+			if (lane === 'right') cellEl.classList.add('og-cell-pinned-right');
+
+			const content = document.createElement('div');
+			content.className = 'og-cell-content';
+			content.dataset.contentMode = 'text';
+			cellEl.appendChild(content);
+
+			// Append to appropriate container
+			if (lane === 'left' && slot.pinLeft) {
+				slot.pinLeft.appendChild(cellEl);
+			} else if (lane === 'right' && slot.pinRight) {
+				slot.pinRight.appendChild(cellEl);
 			} else {
-				el.appendChild(cell);
+				el.appendChild(cellEl);
+			}
+
+			slot.cellsByField.set(field, cellEl);
+		}
+
+		// Update geometry
+		const nextLeft = `${cssLeft}px`;
+		const nextWidth = `${width}px`;
+		if (cellEl.style.left !== nextLeft) cellEl.style.left = nextLeft;
+		if (cellEl.style.width !== nextWidth) cellEl.style.width = nextWidth;
+
+		// Update content
+		const contentEl = cellEl.firstElementChild as HTMLDivElement | null;
+		if (contentEl) {
+			if (row.kind === 'data') {
+				const val = this.view.getCellDisplayValue(row.rowId, field);
+				const text = val != null ? String(val) : '';
+				if (contentEl.dataset.contentMode !== 'text') contentEl.dataset.contentMode = 'text';
+
+				// Fire portal callback on new bind
+				if (isNew && this.callbacks.onMountCellContent) {
+					const topology = this.compiledTopology;
+					const colPlacement = topology?.byColumnId;
+					// Find matching column
+					const columns = this.view.getColumns();
+					const col = columns.find((c) => c.field === field);
+					if (col) {
+						const cellKey = `${row.rowId}:${field}`;
+						slot.mountedCellKeys.add(cellKey);
+						this.callbacks.onMountCellContent({
+							cellKey,
+							container: cellEl,
+							rowId: row.rowId,
+							field,
+							row,
+							column: col,
+						});
+					}
+				} else if (!isNew || !this.callbacks.onMountCellContent) {
+					if (contentEl.textContent !== text) contentEl.textContent = text;
+				}
+			} else if (row.kind === 'group') {
+				const text = field === 'group' ? String((row as { groupKey?: unknown }).groupKey ?? '') : '';
+				if (contentEl.textContent !== text) contentEl.textContent = text;
+			} else if (row.kind === 'loading') {
+				if (contentEl.dataset.contentMode !== 'loading') {
+					contentEl.dataset.contentMode = 'loading';
+					contentEl.innerHTML = '';
+					const skel = document.createElement('div');
+					skel.className = 'og-cell-loading-skeleton';
+					contentEl.appendChild(skel);
+				}
 			}
 		}
 	}
 
-	private buildCell(col: RenderColumn, row: VisualRow<TRow>, leftWidth: number): HTMLDivElement {
-		const cell = document.createElement('div');
-		cell.className = 'og-cell';
-		if (col.lane === 'left') cell.classList.add('og-cell-pinned-left');
-		if (col.lane === 'right') cell.classList.add('og-cell-pinned-right');
+	// ---------------------------------------------------------------------------
+	// Selection overlay
+	// ---------------------------------------------------------------------------
 
-		// Lane-relative offset: center cells are placed absolutely within the full row,
-		// so their CSS left = pinLeftWidth + laneOffset. Left/right cells are within their
-		// pin container so CSS left = laneOffset directly.
-		const cssLeft = col.lane === 'center' ? leftWidth + col.left : col.left;
-		cell.style.left = `${cssLeft}px`;
-		cell.style.width = `${col.width}px`;
+	private paintSelectionOverlay(
+		win: Readonly<import('./RenderWindow.js').RenderWindow>,
+		topology: CompiledColumnTopology,
+		defaultRowHeight: number,
+	): void {
+		if (!this.layerRegistry) return;
 
-		const content = document.createElement('div');
-		content.className = 'og-cell-content';
-		content.dataset.contentMode = 'text';
-
-		if (row.kind === 'data') {
-			const val = this.view.getCellDisplayValue(row.rowId, col.field);
-			content.textContent = val != null ? String(val) : '';
-		} else if (row.kind === 'group') {
-			content.textContent = col.field === 'group' ? String(row.groupKey ?? '') : '';
-		} else if (row.kind === 'loading') {
-			const skel = document.createElement('div');
-			skel.className = 'og-cell-loading-skeleton';
-			content.appendChild(skel);
-			content.dataset.contentMode = 'loading';
+		// For now: a simple single .og-selection-overlay positioned over the selected range.
+		// More sophisticated multi-range overlays can be added later.
+		// We just ensure the overlay div exists in the overlay layer.
+		if (!this.selectionOverlay) {
+			const overlay = document.createElement('div');
+			overlay.className = 'og-selection-overlay';
+			overlay.style.position = 'absolute';
+			overlay.style.pointerEvents = 'none';
+			overlay.style.display = 'none';
+			this.layerRegistry.layers.overlayLayer.appendChild(overlay);
+			this.selectionOverlay = overlay;
 		}
 
-		cell.appendChild(content);
-		return cell;
+		// Hide by default — specific selection logic can be wired later
+		this.selectionOverlay.style.display = 'none';
 	}
 
+	// ---------------------------------------------------------------------------
+	// Slot management
+	// ---------------------------------------------------------------------------
+
 	private ensureSlots(count: number): void {
+		if (!this.layerRegistry) return;
 		while (this.slots.length < count) {
 			const el = document.createElement('div');
 			el.className = 'og-row';
-			this.rowsContainer!.appendChild(el);
+			el.style.position = 'absolute';
+			el.style.left = '0';
+			el.style.right = '0';
+			this.layerRegistry.layers.rowsContainer.appendChild(el);
 			this.slots.push({
 				el,
 				visualRowIndex: -1,
+				lastRowId: null,
+				generation: 0,
 				cellsByField: new Map(),
+				mountedCellKeys: new Set(),
 				pinLeft: null,
 				pinRight: null,
 			});
+		}
+	}
+
+	// ---------------------------------------------------------------------------
+	// Portal cleanup
+	// ---------------------------------------------------------------------------
+
+	private fireUnmountForSlot(slot: RowSlotState): void {
+		for (const cellKey of slot.mountedCellKeys) {
+			this.callbacks.onUnmountCellContent?.({ cellKey });
+		}
+		slot.mountedCellKeys.clear();
+	}
+
+	private fireUnmountForAllSlots(): void {
+		for (const slot of this.slots) {
+			this.fireUnmountForSlot(slot);
 		}
 	}
 }
