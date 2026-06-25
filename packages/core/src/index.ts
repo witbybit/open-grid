@@ -49,6 +49,11 @@ export type { GridViewDefinition, GridWorkspaceAdapter } from './domains/persist
 export { createGridStateSnapshot, applyGridState, isValidGridState, GRID_STATE_SCHEMA_VERSION } from './domains/persistence/GridStateSchema.js';
 export type { SerializedGridState, GridStateReadPort, GridStateWritePort } from './domains/persistence/GridStateSchema.js';
 
+export { DagEngine } from './domains/dag/DagEngine.js';
+export type { ComputedColumnDef, DagEnginePort } from './domains/dag/DagEngine.js';
+export { SpreadsheetFillEngine } from './domains/dag/SpreadsheetFillEngine.js';
+export type { FillEnginePort, FillOperation, FillPattern } from './domains/dag/SpreadsheetFillEngine.js';
+
 export { GridCapabilityManager } from './plugins/GridCapabilityManager.js';
 export type { GridCapability } from './plugins/GridCapabilityManager.js';
 export { GridPluginRegistry } from './plugins/GridPluginRegistry.js';

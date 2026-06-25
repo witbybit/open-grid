@@ -2,7 +2,9 @@ import type { GridCommand, GridCommandType } from '../kernel/GridCommand.js';
 import type { GridCommandResult } from '../kernel/GridCommandResult.js';
 import type { GridEventListener } from '../kernel/GridEvent.js';
 import type { CellAddress } from '../domains/cells/CellAddress.js';
+import { createCellAddress } from '../domains/cells/CellAddress.js';
 import type { ColumnId } from '../domains/columns/ColumnId.js';
+import type { RowId } from '../domains/rows/RowId.js';
 import type { ColumnPin } from '../domains/columns/ColumnDef.js';
 import type { ColumnState } from '../domains/columns/ColumnState.js';
 import type { GroupByModel } from '../domains/pipeline/GroupModel.js';
@@ -11,7 +13,6 @@ import type { QueryNode } from '../domains/pipeline/GridQueryModel.js';
 import type { TreeDataOptions } from '../domains/pipeline/TreeStage.js';
 import type { RenderPlan } from '../domains/render/RenderPlan.js';
 import type { RowTransaction } from '../domains/rows/RowCommand.js';
-import type { RowId } from '../domains/rows/RowId.js';
 import type { RowModelCapabilities } from '../domains/rows/RowModelCapabilities.js';
 import type { RowModelType } from '../domains/rows/RowModelType.js';
 import type { RowNode } from '../domains/rows/RowNode.js';
@@ -27,6 +28,8 @@ import type { PersistenceStatus } from '../domains/persistence/PersistenceContro
 import type { GridViewDefinition } from '../domains/persistence/GridWorkspaceController.js';
 import type { ExportOptions } from '../domains/export/GridExportEngine.js';
 import type { GridCapability } from '../plugins/GridCapabilityManager.js';
+import type { ComputedColumnDef } from '../domains/dag/DagEngine.js';
+import type { FillPattern } from '../domains/dag/SpreadsheetFillEngine.js';
 
 /**
  * The public, command-backed grid API (ARCHITECTURE.md "Public API Direction"). Every mutating
@@ -152,6 +155,23 @@ export interface GridApi<TRow> {
 		getIssuesBySeverity(severity: IntegritySeverity): GridIntegrityIssue[];
 		hasIssues(): boolean;
 		subscribe(fn: () => void): () => void;
+	};
+
+	/** DAG computed columns: register field-level derivations evaluated in topo order. */
+	readonly dag: {
+		addComputed(def: ComputedColumnDef<TRow>): void;
+		removeComputed(field: string): void;
+		hasComputed(field: string): boolean;
+		getComputedFields(): readonly string[];
+		hasCycle(): boolean;
+		recomputeAll(): void;
+	};
+
+	/** Spreadsheet fill: fill-down / fill-right / fill-selection. */
+	readonly fill: {
+		fillDown(columnIds: readonly ColumnId[], sourceRowIds: readonly RowId[], targetRowIds: readonly RowId[], pattern?: FillPattern): void;
+		fillRight(rowId: RowId, sourceColumnId: ColumnId, targetColumnIds: readonly ColumnId[]): void;
+		fillSelection(columnIds: readonly ColumnId[], allRowIds: readonly RowId[], pattern?: FillPattern): void;
 	};
 
 	/** Feature capabilities — check before activating UI or behaviour. */
@@ -324,6 +344,25 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 			subscribe: (fn) => core.integrity.subscribe(fn),
 		},
 
+		dag: {
+			addComputed: (def) => core.dag.addComputed(def),
+			removeComputed: (field) => core.dag.removeComputed(field),
+			hasComputed: (field) => core.dag.hasComputed(field),
+			getComputedFields: () => core.dag.getComputedFields(),
+			hasCycle: () => core.dag.hasCycle(),
+			recomputeAll: () => core.dag.recomputeAll({
+				getLoadedRows: () => core.rowModel.query.getLoadedRows().map((n) => ({ id: n.id, data: n.data })),
+				getCellValue: (rowId, field) => core.cellEngine.getDisplayValue(addrOf(rowId, field)),
+				setCellValue: (rowId, field, value) => kernel.dispatch({ type: 'cell.setValue', payload: { address: addrOf(rowId, field), value } }),
+			}),
+		},
+
+		fill: {
+			fillDown: (columnIds, sourceRowIds, targetRowIds, pattern) => core.fill.fillDown(columnIds, sourceRowIds, targetRowIds, pattern),
+			fillRight: (rowId, sourceColumnId, targetColumnIds) => core.fill.fillRight(rowId, sourceColumnId, targetColumnIds),
+			fillSelection: (columnIds, allRowIds, pattern) => core.fill.fillSelection(columnIds, allRowIds, pattern),
+		},
+
 		capabilities: {
 			has: (cap) => core.capabilities.has(cap),
 			enable: (cap) => core.capabilities.enable(cap),
@@ -364,4 +403,8 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 		subscribe: (listener) => kernel.subscribe(listener),
 		destroy: () => core.destroy(),
 	};
+}
+
+function addrOf(rowId: RowId, field: string) {
+	return createCellAddress(rowId, field as unknown as ColumnId, field);
 }

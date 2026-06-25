@@ -3,6 +3,8 @@ import type { GridCommand } from '../kernel/GridCommand.js';
 import { SidebarStore } from '../sidebar/SidebarStore.js';
 import { GridCapabilityManager } from '../plugins/GridCapabilityManager.js';
 import type { GridCapability } from '../plugins/GridCapabilityManager.js';
+import { DagEngine } from '../domains/dag/DagEngine.js';
+import { SpreadsheetFillEngine } from '../domains/dag/SpreadsheetFillEngine.js';
 import { DataIntegrityManager } from '../domains/integrity/DataIntegrityManager.js';
 import { PersistenceController } from '../domains/persistence/PersistenceController.js';
 import { GridWorkspaceController } from '../domains/persistence/GridWorkspaceController.js';
@@ -87,6 +89,8 @@ export class GridCore<TRow> {
 	readonly viewport: ViewportModel;
 	readonly exportEngine: GridExportEngine<TRow>;
 	readonly clipboard: ClipboardController<TRow>;
+	readonly dag: DagEngine<TRow>;
+	readonly fill: SpreadsheetFillEngine;
 
 	private readonly rowHeights: RowHeightModel;
 	private readonly disposers: Array<() => void> = [];
@@ -150,6 +154,16 @@ export class GridCore<TRow> {
 			getSelection: () => this.selectionModel.getState(),
 			getRow: (rowId) => this.rowModel.query.getRowById(rowId)?.data ?? null,
 			dispatch: (cmd) => this.kernel.dispatch(cmd as GridCommand),
+		});
+
+		// DAG computed columns + fill engine
+		this.dag = new DagEngine<TRow>();
+		this.fill = new SpreadsheetFillEngine({
+			getCellValue: (rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
+			setCellValue: (rowId, field, value) => {
+				this.kernel.dispatch({ type: 'cell.setValue', payload: { address: addressFor(rowId, field), value } });
+			},
+			fieldForColumn: (columnId) => this.columnModel.getField(columnId) ?? null,
 		});
 
 		// Data integrity manager — starts empty; consumers register validators after createGrid().
