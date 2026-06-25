@@ -68,14 +68,6 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 	private readonly liveStreamModule: LiveStreamIntegrityModule<TRowData> | null;
 	private readonly conflictModule: ConflictIntegrityModule<TRowData> | null;
 
-	// Unified issue registry: all externally published issues
-	private readonly publishedIssues = new Map<GridIntegrityIssueSource, GridIntegrityIssue[]>();
-
-	// Server-provided report
-	private serverReport: ServerIntegrityReport | null = null;
-
-	private _summary: GridIntegritySummary = _cleanSummary();
-
 	constructor(
 		config: GridDataIntegrityConfig<TRowData>,
 		private readonly deps: GridDataIntegrityManagerDeps<TRowData>
@@ -108,6 +100,7 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 				getRowModel: deps.getRowModel,
 				data: deps.data,
 				getApi: deps.getApi,
+				getIntegrityState: () => deps.ctx.getState().integrity,
 				requestRepaint,
 			};
 			this.validationModule = new ValidationIntegrityModule<TRowData>(validationConfig, validationDeps);
@@ -119,6 +112,8 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		const conflictConfig = _normalizeModuleConfig(config.conflicts);
 		if (conflictConfig) {
 			this.conflictModule = new ConflictIntegrityModule<TRowData>(conflictConfig, {
+				applyIntegrityChange: (change) => deps.ctx.applyChange(change),
+				getIntegrityState: () => deps.ctx.getState().integrity,
 				commitCellValue,
 				validateCellProposal: this.validationModule ? (params) => this.validationModule!.validateCellProposal(params) : undefined,
 				canEdit: (rowId, colField) => deps.capabilityManager.can('edit', { rowId, colField }).allowed,
@@ -132,6 +127,8 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		const liveStreamConfig = _normalizeModuleConfig(config.liveStream);
 		if (liveStreamConfig) {
 			this.liveStreamModule = new LiveStreamIntegrityModule<TRowData>(liveStreamConfig, {
+				applyIntegrityChange: (change) => deps.ctx.applyChange(change),
+				getIntegrityState: () => deps.ctx.getState().integrity,
 				commitCells: deps.commitCells,
 				applyRowPatch: deps.applyRowPatch,
 				getRawCellValue: (rowId, colField) => deps.data.getRawCellValue(rowId, colField),
@@ -149,6 +146,8 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		if (qualityConfig) {
 			this.qualityModule = new QualityIntegrityModule<TRowData>(qualityConfig, {
 				getApi: deps.getApi,
+				applyIntegrityChange: (change) => deps.ctx.applyChange(change),
+				getIntegrityState: () => deps.ctx.getState().integrity,
 			});
 		} else {
 			this.qualityModule = null;
@@ -159,6 +158,8 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		if (diffConfig) {
 			this.diffModule = new DiffIntegrityModule<TRowData>(diffConfig, {
 				getColumns: () => deps.ctx.getState().columns,
+				applyIntegrityChange: (change) => deps.ctx.applyChange(change),
+				getIntegrityState: () => deps.ctx.getState().integrity,
 				commitCellValue,
 				validateCellProposal: this.validationModule ? (params) => this.validationModule!.validateCellProposal(params) : undefined,
 				canEdit: (rowId, colField) => deps.capabilityManager.can('edit', { rowId, colField }).allowed,
@@ -189,8 +190,9 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 	}
 
 	getDiagnostics(): unknown {
+		const integrity = this.deps.ctx.getState().integrity;
 		return {
-			summary: this._summary,
+			summary: integrity.summary,
 			modules: {
 				validation: this.validationModule?.getDiagnostics() ?? null,
 				quality: this.qualityModule?.getDiagnostics() ?? null,
@@ -198,9 +200,9 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 				liveStream: this.liveStreamModule?.getDiagnostics() ?? null,
 				conflicts: this.conflictModule?.getDiagnostics() ?? null,
 			},
-			publishedIssues: Object.fromEntries(Array.from(this.publishedIssues.entries()).map(([k, v]) => [k, v.length])),
-			serverReport: this.serverReport
-				? { scope: this.serverReport.scope, complete: this.serverReport.complete, issues: this.serverReport.issues.length }
+			publishedIssues: Object.fromEntries(Object.entries(integrity.publishedIssues).map(([k, v]) => [k, v?.length ?? 0])),
+			serverReport: integrity.serverReport
+				? { scope: integrity.serverReport.scope, complete: integrity.serverReport.complete, issues: integrity.serverReport.issues.length }
 				: null,
 		};
 	}
@@ -211,7 +213,6 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		this.diffModule?.destroy();
 		this.liveStreamModule?.destroy();
 		this.conflictModule?.destroy();
-		this.publishedIssues.clear();
 	}
 
 	// ── Public API (GridIntegrityApi) ──────────────────────────────────────────
@@ -296,27 +297,15 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 			for (const i of issues) collectedIssues.push(i);
 		}
 
-		// Include published issues
-		for (const [, issues] of this.publishedIssues) {
-			for (const i of issues) collectedIssues.push(i);
-		}
-
-		// Server report
-		if (this.serverReport) {
-			for (const i of this.serverReport.issues) collectedIssues.push(i);
-		}
-
-		const summary = _buildSummary(collectedIssues, 'clean');
-		this._summary = summary;
 		this.deps.requestIntegrityRepaint({ reason: 'run-complete', full: true });
 
-		return { summary, issues: collectedIssues };
+		return { summary: this.getSummary(), issues: this._collectAllIssues() };
 	}
 
 	// ── Issue registry ─────────────────────────────────────────────────────────
 
 	getSummary(): GridIntegritySummary {
-		return this._summary;
+		return this.deps.ctx.getState().integrity.summary;
 	}
 
 	getIssues(filter?: GridIntegrityIssueFilter): readonly GridIntegrityIssue[] {
@@ -342,16 +331,19 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 	}
 
 	publishIssues(source: GridIntegrityIssueSource, issues: readonly GridIntegrityIssue[]): void {
-		const existing = this.publishedIssues.get(source) ?? [];
 		const stamped = issues.map((i) => ({ ...i, id: i.id || nextPublishedIssueId(), source }));
-		this.publishedIssues.set(source, [...existing, ...stamped]);
-		this._rebuildSummary();
+		this.deps.ctx.applyChange({
+			reason: 'integrity:publish-issues',
+			domainMutations: [{ kind: 'integrity-publish-issues', source, issues: stamped }],
+		});
 		this.deps.requestIntegrityRepaint({ reason: 'publish-issues', full: true });
 	}
 
 	publishServerReport(report: ServerIntegrityReport): void {
-		this.serverReport = report;
-		this._rebuildSummary();
+		this.deps.ctx.applyChange({
+			reason: 'integrity:server-report:set',
+			domainMutations: [{ kind: 'integrity-set-server-report', report }],
+		});
 		this.deps.requestIntegrityRepaint({ reason: 'server-report', full: true });
 	}
 
@@ -361,8 +353,13 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 			this.qualityModule?.clearIssues();
 			this.diffModule?.clearIssues();
 			this.conflictModule?.clearIssues();
-			this.publishedIssues.clear();
-			this.serverReport = null;
+			this.deps.ctx.applyChange({
+				reason: 'integrity:clear-all',
+				domainMutations: [
+					{ kind: 'integrity-clear-published-issues' },
+					{ kind: 'integrity-set-server-report', report: null },
+				],
+			});
 		} else {
 			const sources = filter.source ? (Array.isArray(filter.source) ? filter.source : [filter.source]) : null;
 			if (!sources || sources.includes('validation') || sources.includes('serverValidation')) {
@@ -371,14 +368,14 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 			if (!sources || sources.includes('dataQuality')) this.qualityModule?.clearIssues();
 			if (!sources || sources.includes('diff')) this.diffModule?.clearIssues();
 			if (!sources || sources.includes('conflict')) this.conflictModule?.clearIssues();
-			for (const [source, issues] of this.publishedIssues) {
-				const kept = issues.filter((i) => !_matchesFilter(i, filter));
-				if (kept.length === 0) this.publishedIssues.delete(source);
-				else this.publishedIssues.set(source, kept);
-			}
-			if (!sources || sources.includes('system')) this.serverReport = null;
+			this.deps.ctx.applyChange({
+				reason: 'integrity:clear-published-issues',
+				domainMutations: [
+					{ kind: 'integrity-clear-published-issues', filter },
+					...(!sources || sources.includes('system') ? [{ kind: 'integrity-set-server-report', report: null } as const] : []),
+				],
+			});
 		}
-		this._rebuildSummary();
 		this.deps.requestIntegrityRepaint({ reason: 'clear-issues', full: true });
 	}
 
@@ -408,20 +405,18 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 	setDiffModel(model: GridDiffModel<TRowData> | null): void {
 		if (!this.diffModule) throw new Error('[DataIntegrity] Diff module is not enabled. Add diff: true to dataIntegrity config.');
 		this.diffModule.setDiffModel(model);
-		this._rebuildSummary();
 	}
 
 	clearDiff(): void {
 		this.diffModule?.clearDiff();
-		this._rebuildSummary();
 	}
 
 	getDiffResult(): GridDiffResult | null {
-		return this.diffModule?.getDiffResult() ?? null;
+		return this.deps.ctx.getState().integrity.diff.result;
 	}
 
 	getCellDiff(rowId: string, colField: string): GridCellDiff | null {
-		return this.diffModule?.getCellDiff(rowId, colField) ?? null;
+		return this.deps.ctx.getState().integrity.diff.cellDiffIndex[`${rowId}\0${colField}`] ?? null;
 	}
 
 	async acceptCellDiff(rowId: string, colField: string): Promise<GridDiffAcceptResult> {
@@ -439,13 +434,13 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 	}
 
 	getStreamState(): GridTransactionStreamState | null {
-		return this.liveStreamModule?.getStreamState() ?? null;
+		return this.deps.ctx.getState().integrity.liveStream.session;
 	}
 
 	// ── Conflict shortcuts ─────────────────────────────────────────────────────
 
 	getConflicts(): readonly GridCellConflict[] {
-		return this.conflictModule?.getConflicts() ?? [];
+		return this.deps.ctx.getState().integrity.conflicts.conflicts;
 	}
 
 	async resolveConflict(conflictId: string, options: ResolveConflictOptions): Promise<ConflictResolutionResult> {
@@ -458,30 +453,63 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 	}
 
 	getCellErrorMessage(rowId: string, colField: string): string | null {
-		return this.validationModule?.getCellErrorMessage(rowId, colField) ?? null;
+		return this.deps.ctx.getState().integrity.validation.cellErrorIndex[`${rowId}:${colField}`]?.message ?? null;
 	}
 
 	// ── Private ────────────────────────────────────────────────────────────────
 
 	private _collectAllIssues(): GridIntegrityIssue[] {
-		const all: GridIntegrityIssue[] = [];
-		const vm = this.validationModule?.getIssues();
-		if (vm) for (const i of vm) all.push(i);
-		const qm = this.qualityModule?.getIssues();
-		if (qm) for (const i of qm) all.push(i);
-		const dm = this.diffModule?.getIssues();
-		if (dm) for (const i of dm) all.push(i);
-		const lm = this.liveStreamModule?.getIssues();
-		if (lm) for (const i of lm) all.push(i);
-		const cm = this.conflictModule?.getIssues();
-		if (cm) for (const i of cm) all.push(i);
-		for (const [, issues] of this.publishedIssues) for (const i of issues) all.push(i);
-		if (this.serverReport) for (const i of this.serverReport.issues) all.push(i);
+		const integrity = this.deps.ctx.getState().integrity;
+		const all: GridIntegrityIssue[] = [...integrity.validation.issues, ...integrity.quality.issues, ...integrity.liveStream.issues];
+		for (const cell of integrity.diff.result?.changedCells ?? []) {
+			all.push({
+				id: `diff:changed:${cell.rowId}:${cell.colField}`,
+				source: 'diff',
+				type: 'diffChanged',
+				severity: 'info',
+				blocking: false,
+				rowId: cell.rowId,
+				colField: cell.colField,
+				message: `Changed: ${_fmt(cell.oldValue)} -> ${_fmt(cell.newValue)}`,
+				value: cell.newValue,
+				createdAt: 0,
+				data: cell,
+			});
+		}
+		for (const rowId of integrity.diff.result?.addedRows ?? []) {
+			all.push({ id: `diff:added:${rowId}`, source: 'diff', type: 'diffAdded', severity: 'info', blocking: false, rowId, message: 'Row added', createdAt: 0 });
+		}
+		for (const rowId of integrity.diff.result?.removedRows ?? []) {
+			all.push({
+				id: `diff:removed:${rowId}`,
+				source: 'diff',
+				type: 'diffRemoved',
+				severity: 'info',
+				blocking: false,
+				rowId,
+				message: 'Row removed',
+				createdAt: 0,
+			});
+		}
+		for (const conflict of integrity.conflicts.conflicts) {
+			all.push({
+				id: `conflict:${conflict.id}`,
+				source: 'conflict',
+				type: 'conflict',
+				severity: 'error',
+				blocking: true,
+				rowId: conflict.rowId,
+				colField: conflict.colField,
+				message: conflict.message ?? `Conflict: local ${_fmt(conflict.localValue)} vs remote ${_fmt(conflict.remoteValue)}`,
+				createdAt: conflict.createdAt,
+				data: conflict,
+			});
+		}
+		for (const issues of Object.values(integrity.publishedIssues)) {
+			if (issues) all.push(...issues);
+		}
+		if (integrity.serverReport) all.push(...integrity.serverReport.issues);
 		return all;
-	}
-
-	private _rebuildSummary(): void {
-		this._summary = _buildSummary(this._collectAllIssues(), 'clean');
 	}
 
 	private _defaultScope(): GridIntegrityScope {
@@ -495,13 +523,14 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		const editState = this.deps.ctx.getState().activeEdit;
 		if (editState?.rowId === rowId && editState?.colField === colField) return true;
 		// Check existing conflicts (a conflicted cell is locally dirty)
-		if (this.conflictModule?.getCellConflict(rowId, colField)) return true;
+		if (this.deps.ctx.getState().integrity.conflicts.cellConflictIndex[`${rowId}\0${colField}`]) return true;
 		return false;
 	}
 
 	private _getPublishedIssueCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[] {
 		const decs: GridCellDecoration[] = [];
-		for (const issues of this.publishedIssues.values()) {
+		for (const issues of Object.values(this.deps.ctx.getState().integrity.publishedIssues)) {
+			if (!issues) continue;
 			for (const issue of issues) {
 				if (issue.rowId === rowId && issue.colField === colField) {
 					decs.push({
@@ -519,7 +548,7 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 	}
 
 	private _getValidationCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[] {
-		const issue = this.validationModule?.getCellError(rowId, colField);
+		const issue = this.deps.ctx.getState().integrity.validation.cellErrorIndex[`${rowId}:${colField}`] ?? null;
 		if (!issue) return _EMPTY_DECS;
 		return [
 			{
@@ -565,34 +594,10 @@ function _publishedIssueClass(source: GridIntegrityIssueSource, severity: GridIn
 	return 'og-cell-insight-info';
 }
 
-function _buildSummary(issues: readonly GridIntegrityIssue[], baseStatus: GridIntegritySummary['status']): GridIntegritySummary {
-	const blocking = issues.filter((i) => i.blocking).length;
-	const errors = issues.filter((i) => i.severity === 'error').length;
-	const warnings = issues.filter((i) => i.severity === 'warning').length;
-
-	const bySource: Partial<Record<GridIntegrityIssueSource, number>> = {};
-	for (const issue of issues) {
-		bySource[issue.source] = (bySource[issue.source] ?? 0) + 1;
-	}
-
-	let status: GridIntegritySummary['status'] = baseStatus;
-	if (blocking > 0) status = 'blocked';
-	else if (errors > 0) status = 'blocked';
-	else if (warnings > 0) status = 'warning';
-	else if (issues.length === 0) status = 'clean';
-
-	return {
-		status,
-		totalIssues: issues.length,
-		blockingIssues: blocking,
-		warnings,
-		errors,
-		bySource,
-	};
-}
-
-function _cleanSummary(): GridIntegritySummary {
-	return { status: 'clean', totalIssues: 0, blockingIssues: 0, warnings: 0, errors: 0, bySource: {} };
+function _fmt(value: unknown): string {
+	if (value === null) return 'null';
+	if (value === undefined) return 'undefined';
+	return String(value);
 }
 
 function _pushAll<T>(target: T[], source: readonly T[] | undefined): void {

@@ -14,7 +14,7 @@ import type {
 	RowSelectionScope,
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
-import type { InternalGridState, Listener } from '../state/GridState.js';
+import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
 import { asAllDataNodesCapableRowModel, type RowModel, type VisualRowModel } from '../rowModel.js';
 import type { RowNode } from '../rowNode.js';
 import { StateManager } from '../state/StateManager.js';
@@ -364,6 +364,7 @@ export class GridEngine<TRowData = unknown> {
 			colBuffer: config.colBuffer ?? 2,
 			runtimeLimits: config.runtimeLimits,
 			overscanAdaptive: config.overscanAdaptive,
+			integrity: _createEmptyIntegrityState<TRowData>(),
 		};
 
 		this.stateManager = new StateManager<TRowData>(
@@ -1143,4 +1144,17 @@ export class GridEngine<TRowData = unknown> {
 		this.domainVersionListeners.clear();
 		this.domainListeners.clear();
 	}
+}
+
+function _createEmptyIntegrityState<TRowData>(): GridIntegrityState<TRowData> {
+	return {
+		validation: { issues: [], cellErrorIndex: {} },
+		quality: { issues: [] },
+		diff: { model: null, result: null, cellDiffIndex: {} },
+		conflicts: { conflicts: [], cellConflictIndex: {}, resolvedConflicts: 0, lastConflictAt: null },
+		liveStream: { issues: [], session: null },
+		publishedIssues: {},
+		serverReport: null,
+		summary: { status: 'clean', totalIssues: 0, blockingIssues: 0, warnings: 0, errors: 0, bySource: {} },
+	};
 }

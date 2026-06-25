@@ -2,13 +2,12 @@ import type { GridApi } from '../../../api/GridApi.js';
 import type { GridFeatureContext } from '../../GridFeatureContext.js';
 import type { DataModel } from '../../../models/DataModel.js';
 import type { RowModel } from '../../../rowModel.js';
+import type { GridIntegrityState } from '../../../state/GridState.js';
 import type {
 	GridIntegrityIssue,
 	GridIntegrityModule,
 	GridIntegrityRunContext,
 	GridValidationIntegrityOptions,
-	GridCellIntegrityRule,
-	GridRowIntegrityRule,
 	GridValidateCellProposalParams,
 } from '../integrityTypes.js';
 import { GridEventName } from '../../../api/GridEvents.js';
@@ -26,6 +25,7 @@ export interface ValidationModuleDeps<TRowData> {
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
 	getApi: () => GridApi<TRowData>;
+	getIntegrityState: () => GridIntegrityState<TRowData>;
 	requestRepaint: (cells?: Array<{ rowId: string; colField: string }>) => void;
 }
 
@@ -33,10 +33,6 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 	public readonly id = 'validation' as const;
 
 	private options: GridValidationIntegrityOptions<TRowData>;
-	private issues: GridIntegrityIssue[] = [];
-
-	// Cell-level error index for inline display: `rowId:colField` → issue
-	private readonly cellErrorIndex = new Map<string, GridIntegrityIssue>();
 
 	constructor(
 		options: GridValidationIntegrityOptions<TRowData>,
@@ -50,18 +46,19 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 	}
 
 	getIssues(): readonly GridIntegrityIssue[] {
-		return this.issues;
+		return this.deps.getIntegrityState().validation.issues;
 	}
 
 	getCellError(rowId: string, colField: string): GridIntegrityIssue | null {
-		return this.cellErrorIndex.get(`${rowId}:${colField}`) ?? null;
+		return this.deps.getIntegrityState().validation.cellErrorIndex[`${rowId}:${colField}`] ?? null;
 	}
 
 	getDiagnostics(): unknown {
+		const issues = this.getIssues();
 		return {
 			enabled: this.isEnabled(),
-			totalIssues: this.issues.length,
-			blockingIssues: this.issues.filter((i) => i.blocking).length,
+			totalIssues: issues.length,
+			blockingIssues: issues.filter((issue) => issue.blocking).length,
 			options: {
 				validateOnEdit: this.options.validateOnEdit ?? true,
 				validateOnSubmit: this.options.validateOnSubmit ?? true,
@@ -70,8 +67,6 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 			},
 		};
 	}
-
-	// ── Module run (batch) ────────────────────────────────────────────────────
 
 	async run(context: GridIntegrityRunContext<TRowData>): Promise<readonly GridIntegrityIssue[]> {
 		if (!this.isEnabled()) return _EMPTY;
@@ -84,7 +79,6 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		for (const ref of context.rows) {
 			const { rowId, row } = ref;
 
-			// Cell rules
 			for (const rule of cellRules) {
 				if (!_fieldInColumns(rule.field, context.columns)) continue;
 				const rawValue = this.deps.data.getRawCellValue(rowId, rule.field);
@@ -99,7 +93,6 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 				}
 			}
 
-			// Row rules
 			for (const rule of rowRules) {
 				let result: import('../integrityTypes.js').GridIntegrityRuleResult | null = null;
 				try {
@@ -110,31 +103,29 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 				if (result) {
 					const fields = result.fields ?? [];
 					newIssues.push(_makeRowIssue(rule, rowId, fields, result));
-					// Also index cell-level for multi-field rules
 					for (const field of fields) {
-						const cellIssue = _makeCellIssue(
-							{ id: `${rule.id}:${field}`, field, severity: rule.severity ?? 'error', blocking: rule.blocking ?? true },
-							rowId,
-							field,
-							undefined,
-							result
+						newIssues.push(
+							_makeCellIssue(
+								{ id: `${rule.id}:${field}`, field, severity: rule.severity ?? 'error', blocking: rule.blocking ?? true },
+								rowId,
+								field,
+								undefined,
+								result
+							)
 						);
-						newIssues.push(cellIssue);
 					}
 				}
 			}
 		}
 
-		this._applyIssues(newIssues);
+		this._commitIssues('integrity:validation:set-issues', newIssues);
 		return newIssues;
 	}
-
-	// ── Single-cell validation (triggered by edit) ───────────────────────────
 
 	async validateCell(rowId: string, colField: string): Promise<readonly GridIntegrityIssue[]> {
 		if (!this.isEnabled()) return _EMPTY;
 
-		const cellRules = (this.options.cellRules ?? []).filter((r) => r.field === colField);
+		const cellRules = (this.options.cellRules ?? []).filter((rule) => rule.field === colField);
 		const api = this.deps.getApi();
 		const rowModel = this.deps.getRowModel();
 		const node = rowModel?.getRowNodeById?.(rowId) ?? null;
@@ -154,9 +145,7 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 			}
 		}
 
-		// Row rules that touch this field
-		const rowRules = (this.options.rowRules ?? []).filter((r) => true); // run all; filter by affected fields after
-		for (const rule of rowRules) {
+		for (const rule of this.options.rowRules ?? []) {
 			let result: import('../integrityTypes.js').GridIntegrityRuleResult | null = null;
 			try {
 				result = await rule.validate({ rowId, row, api });
@@ -167,15 +156,13 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 				const fields = result.fields ?? [];
 				if (fields.includes(colField) || fields.length === 0) {
 					newIssues.push(_makeRowIssue(rule, rowId, fields, result));
-					for (const f of fields) {
-						if (
-							!newIssues.some((i) => i.colField === f && i.rowId === rowId && i.source === 'validation' && i.type === 'rowValidation')
-						) {
+					for (const field of fields) {
+						if (!newIssues.some((issue) => issue.colField === field && issue.rowId === rowId && issue.source === 'validation' && issue.type === 'rowValidation')) {
 							newIssues.push(
 								_makeCellIssue(
-									{ id: `${rule.id}:${f}`, field: f, severity: rule.severity ?? 'error', blocking: rule.blocking ?? true },
+									{ id: `${rule.id}:${field}`, field, severity: rule.severity ?? 'error', blocking: rule.blocking ?? true },
 									rowId,
-									f,
+									field,
 									undefined,
 									result
 								)
@@ -186,27 +173,17 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 			}
 		}
 
-		// Merge with existing issues (replace for this cell)
-		const keyToRemove = new Set([`${rowId}:${colField}`]);
-		const retained = this.issues.filter((i) => !_issueKeyMatches(i, rowId, colField, keyToRemove));
-		this._applyIssues([...retained, ...newIssues], false);
-
-		// Fire event
+		const retained = this.getIssues().filter((issue) => !_issueKeyMatches(issue, rowId, colField));
 		this.deps.ctx.applyChange({
-			reason: 'integrity:validation:cell',
-			state: {},
+			reason: 'integrity:validation:set-issues',
+			domainMutations: [{ kind: 'integrity-set-validation-issues', issues: [...retained, ...newIssues] }],
 			invalidations: [{ kind: 'cell', rowId, colId: colField, reason: 'integrity-validation' }],
-			events:
-				newIssues.length > 0
-					? [{ type: GridEventName.cellValidationChanged, payload: { rowId, colField, error: newIssues[0]?.message ?? null } }]
-					: [],
+			events: newIssues.length > 0 ? [{ type: GridEventName.cellValidationChanged, payload: { rowId, colField, error: newIssues[0]?.message ?? null } }] : [],
 		});
 
 		this.deps.requestRepaint([{ rowId, colField }]);
 		return newIssues;
 	}
-
-	// ── Single-row validation ─────────────────────────────────────────────────
 
 	async validateRow(rowId: string): Promise<readonly GridIntegrityIssue[]> {
 		if (!this.isEnabled()) return _EMPTY;
@@ -242,12 +219,12 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 			if (result) {
 				const fields = result.fields ?? [];
 				newIssues.push(_makeRowIssue(rule, rowId, fields, result));
-				for (const f of fields) {
+				for (const field of fields) {
 					newIssues.push(
 						_makeCellIssue(
-							{ id: `${rule.id}:${f}`, field: f, severity: rule.severity ?? 'error', blocking: rule.blocking ?? true },
+							{ id: `${rule.id}:${field}`, field, severity: rule.severity ?? 'error', blocking: rule.blocking ?? true },
 							rowId,
-							f,
+							field,
 							undefined,
 							result
 						)
@@ -256,20 +233,17 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 			}
 		}
 
-		// Merge: replace issues for this row
-		const retained = this.issues.filter((i) => i.rowId !== rowId);
-		this._applyIssues([...retained, ...newIssues], false);
+		const retained = this.getIssues().filter((issue) => issue.rowId !== rowId);
+		this._commitIssues('integrity:validation:set-issues', [...retained, ...newIssues]);
 		this.deps.requestRepaint();
 		return newIssues;
 	}
-
-	// ── Validate proposed value (not current) ────────────────────────────────
 
 	async validateCellProposal(params: GridValidateCellProposalParams): Promise<readonly GridIntegrityIssue[]> {
 		if (!this.isEnabled()) return _EMPTY;
 		const { rowId, colField, proposedValue } = params;
 
-		const cellRules = (this.options.cellRules ?? []).filter((r) => r.field === colField);
+		const cellRules = (this.options.cellRules ?? []).filter((rule) => rule.field === colField);
 		const api = this.deps.getApi();
 		const rowModel = this.deps.getRowModel();
 		const node = rowModel?.getRowNodeById?.(rowId) ?? null;
@@ -288,7 +262,6 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 			}
 		}
 
-		// Row rules: substitute the proposed value into a cloned row
 		const rowRules = this.options.rowRules ?? [];
 		if (rowRules.length > 0) {
 			const draftRow = { ...(row as Record<string, unknown>) };
@@ -312,14 +285,10 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		return issues;
 	}
 
-	// ── Clear all issues ──────────────────────────────────────────────────────
-
 	clearIssues(): void {
-		this._applyIssues([]);
+		this._commitIssues('integrity:validation:set-issues', []);
 		this.deps.requestRepaint();
 	}
-
-	// ── External (server) validation ──────────────────────────────────────────
 
 	publishServerValidationError(rowId: string, colField: string, message: string): void {
 		const issue: GridIntegrityIssue = {
@@ -333,48 +302,30 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 			message,
 			createdAt: _now(),
 		};
-		const retained = this.issues.filter((i) => !(i.source === 'serverValidation' && i.rowId === rowId && i.colField === colField));
-		this._applyIssues([...retained, issue], false);
+		const retained = this.getIssues().filter((existing) => !(existing.source === 'serverValidation' && existing.rowId === rowId && existing.colField === colField));
 		this.deps.ctx.applyChange({
-			reason: 'integrity:serverValidation',
-			state: {},
+			reason: 'integrity:validation:set-issues',
+			domainMutations: [{ kind: 'integrity-set-validation-issues', issues: [...retained, issue] }],
 			invalidations: [{ kind: 'cell', rowId, colId: colField, reason: 'server-validation' }],
 		});
 		this.deps.requestRepaint([{ rowId, colField }]);
 	}
 
-	// ── Inline error display helper ───────────────────────────────────────────
-
 	getCellErrorMessage(rowId: string, colField: string): string | null {
-		return this.cellErrorIndex.get(`${rowId}:${colField}`)?.message ?? null;
+		return this.deps.getIntegrityState().validation.cellErrorIndex[`${rowId}:${colField}`]?.message ?? null;
 	}
 
-	// ── Internal ──────────────────────────────────────────────────────────────
-
-	private _applyIssues(issues: GridIntegrityIssue[], rebuildState = true): void {
-		this.issues = issues;
-		this.cellErrorIndex.clear();
-		for (const issue of issues) {
-			if (issue.rowId && issue.colField) {
-				this.cellErrorIndex.set(`${issue.rowId}:${issue.colField}`, issue);
-			}
-		}
-		if (rebuildState) {
-			this.deps.ctx.applyChange({
-				reason: 'integrity:validation:batch',
-				state: {},
-				invalidations: [],
-			});
-		}
+	private _commitIssues(reason: 'integrity:validation:set-issues', issues: GridIntegrityIssue[]): void {
+		this.deps.ctx.applyChange({
+			reason,
+			domainMutations: [{ kind: 'integrity-set-validation-issues', issues }],
+		});
 	}
 
 	destroy(): void {
-		this.issues = [];
-		this.cellErrorIndex.clear();
+		this._commitIssues('integrity:validation:set-issues', []);
 	}
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _makeCellIssue(
 	rule: { id: string; field: string; severity?: import('../integrityTypes.js').GridIntegritySeverity; blocking?: boolean },
@@ -421,15 +372,14 @@ function _makeRowIssue(
 }
 
 function _fieldInColumns(field: string, columns: readonly { field?: string }[]): boolean {
-	return columns.some((c) => c.field === field);
+	return columns.some((column) => column.field === field);
 }
 
-function _issueKeyMatches(issue: GridIntegrityIssue, rowId: string, colField: string, _keys: Set<string>): boolean {
+function _issueKeyMatches(issue: GridIntegrityIssue, rowId: string, colField: string): boolean {
 	return issue.rowId === rowId && issue.colField === colField && (issue.source === 'validation' || issue.source === 'serverValidation');
 }
 
 function _now(): number {
-	// Use performance.now offset to avoid Date.now() flakiness in tests
 	return typeof performance !== 'undefined' ? Math.floor(performance.timeOrigin + performance.now()) : 0;
 }
 

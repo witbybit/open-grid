@@ -1,5 +1,7 @@
 import type { GridCellDecoration } from '../../../insights/insightTypes.js';
 import type { GridScheduler } from '../../../renderer/gridScheduler.js';
+import type { GridCommit } from '../../../engine/GridChangeApplier.js';
+import type { GridIntegrityState } from '../../../state/GridState.js';
 import type {
 	GridIntegrityIssue,
 	GridIntegrityModule,
@@ -23,6 +25,8 @@ function nextIssueId(): string {
 const FLASH_DURATION_MS = 600;
 
 export interface LiveStreamModuleDeps<TRowData> {
+	applyIntegrityChange: (change: GridCommit<TRowData>) => void;
+	getIntegrityState: () => GridIntegrityState<TRowData>;
 	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => void;
 	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => void;
 	getRawCellValue: (rowId: string, colField: string) => unknown;
@@ -37,9 +41,6 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 
 	private moduleOptions: GridLiveStreamIntegrityOptions;
 	private activeStream: LiveStreamHandle<TRowData> | null = null;
-	private streamIssues: GridIntegrityIssue[] = [];
-
-	// Flash decorations currently active: `rowId\0colField` → decoration
 	private readonly flashCells = new Map<string, GridCellDecoration[]>();
 
 	constructor(
@@ -54,7 +55,7 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 	}
 
 	getIssues(): readonly GridIntegrityIssue[] {
-		return this.streamIssues;
+		return this.deps.getIntegrityState().liveStream.issues;
 	}
 
 	getDiagnostics(): unknown {
@@ -62,19 +63,17 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 			enabled: this.isEnabled(),
 			activeStream: this.activeStream !== null,
 			dirtyCellPolicy: this.moduleOptions.dirtyCellPolicy ?? 'markConflict',
-			streamState: this.activeStream?.getState() ?? null,
+			streamState: this.getStreamState(),
 		};
 	}
 
 	run(_context: GridIntegrityRunContext<TRowData>): readonly GridIntegrityIssue[] {
-		return this.streamIssues;
+		return this.getIssues();
 	}
 
 	getCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[] {
 		return this.flashCells.get(`${rowId}\0${colField}`) ?? _EMPTY;
 	}
-
-	// ── Stream management ──────────────────────────────────────────────────────
 
 	createStream(options?: GridLiveStreamOptions<TRowData>): GridTransactionStreamHandle<TRowData> {
 		this.activeStream?.destroy();
@@ -103,21 +102,24 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 					this._flashCells(cells);
 				},
 				scheduler: this.deps.scheduler,
+				onStateChange: (session) => {
+					this._setSessionState(session);
+				},
 				onDestroy: () => {
 					if (this.activeStream === handle) this.activeStream = null;
+					this._setSessionState(null);
 				},
 			}
 		);
 
 		this.activeStream = handle;
+		this._setSessionState(handle.getState());
 		return handle;
 	}
 
 	getStreamState(): GridTransactionStreamState | null {
-		return this.activeStream?.getState() ?? null;
+		return this.deps.getIntegrityState().liveStream.session;
 	}
-
-	// ── Private callbacks ──────────────────────────────────────────────────────
 
 	private _onCellSkipped(rowId: string, colField: string, _remoteValue: unknown): void {
 		const issue: GridIntegrityIssue = {
@@ -128,15 +130,14 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 			blocking: false,
 			rowId,
 			colField,
-			message: `Live update skipped — cell is dirty`,
+			message: 'Live update skipped - cell is dirty',
 			createdAt: _now(),
 		};
-		// Replace any existing skip issue for this cell
-		this.streamIssues = [
-			...this.streamIssues.filter((i) => !(i.rowId === rowId && i.colField === colField && i.type === 'streamSkipped')),
+		const nextIssues = [
+			...this.getIssues().filter((existing) => !(existing.rowId === rowId && existing.colField === colField && existing.type === 'streamSkipped')),
 			issue,
 		];
-		// Targeted repaint — only the affected cell
+		this._setStreamIssues(nextIssues);
 		this.deps.requestRepaint([{ rowId, colField }]);
 	}
 
@@ -145,10 +146,8 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 		if (conflictModule) {
 			conflictModule.addConflict(makeConflictFromStream(rowId, colField, localValue, remoteValue, 'liveStream'));
 		} else {
-			// No conflict module — fall back to skip behavior
 			this._onCellSkipped(rowId, colField, remoteValue);
 		}
-		// Targeted repaint
 		this.deps.requestRepaint([{ rowId, colField }]);
 	}
 
@@ -159,30 +158,42 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 			className: 'og-cell-live-flash',
 		};
 
-		for (const c of cells) {
-			this.flashCells.set(`${c.rowId}\0${c.colField}`, [flashDec]);
+		for (const cell of cells) {
+			this.flashCells.set(`${cell.rowId}\0${cell.colField}`, [flashDec]);
 		}
-		// Targeted repaint — only affected cells
-		this.deps.requestRepaint(cells.map((c) => ({ rowId: c.rowId, colField: c.colField })));
+		this.deps.requestRepaint(cells.map((cell) => ({ rowId: cell.rowId, colField: cell.colField })));
 
 		this.deps.scheduler.timeout(() => {
 			let changed = false;
-			for (const c of cells) {
-				if (this.flashCells.delete(`${c.rowId}\0${c.colField}`)) changed = true;
+			for (const cell of cells) {
+				if (this.flashCells.delete(`${cell.rowId}\0${cell.colField}`)) changed = true;
 			}
-			if (changed) this.deps.requestRepaint(cells.map((c) => ({ rowId: c.rowId, colField: c.colField })));
+			if (changed) this.deps.requestRepaint(cells.map((cell) => ({ rowId: cell.rowId, colField: cell.colField })));
 		}, FLASH_DURATION_MS);
+	}
+
+	private _setSessionState(session: GridTransactionStreamState | null): void {
+		this.deps.applyIntegrityChange({
+			reason: 'integrity:live-stream:set-session',
+			domainMutations: [{ kind: 'integrity-set-live-stream-session', session }],
+		});
+	}
+
+	private _setStreamIssues(issues: readonly GridIntegrityIssue[]): void {
+		this.deps.applyIntegrityChange({
+			reason: 'integrity:live-stream:set-issues',
+			domainMutations: [{ kind: 'integrity-set-live-stream-issues', issues }],
+		});
 	}
 
 	destroy(): void {
 		this.activeStream?.destroy();
 		this.activeStream = null;
-		this.streamIssues = [];
+		this._setStreamIssues([]);
+		this._setSessionState(null);
 		this.flashCells.clear();
 	}
 }
-
-// ── Live stream handle ────────────────────────────────────────────────────────
 
 interface LiveStreamHandleDeps<TRowData> {
 	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => void;
@@ -193,6 +204,7 @@ interface LiveStreamHandleDeps<TRowData> {
 	onConflict: (rowId: string, colField: string, localValue: unknown, remoteValue: unknown) => void;
 	onFlash: (cells: Array<{ rowId: string; colField: string }>) => void;
 	scheduler: GridScheduler;
+	onStateChange: (state: GridTransactionStreamState) => void;
 	onDestroy: () => void;
 }
 
@@ -236,45 +248,51 @@ class LiveStreamHandle<TRowData> implements GridTransactionStreamHandle<TRowData
 
 	pushCells(updates: readonly GridCellStreamUpdate[]): void {
 		if (this._destroyed) return;
-		for (const u of updates) {
-			const key = `${u.rowId}\0${u.colField}`;
+		for (const update of updates) {
+			const key = `${update.rowId}\0${update.colField}`;
 			if (this.pendingCells.size >= this.opts.maxBatchSize && !this.pendingCells.has(key)) {
 				this._droppedUpdates++;
 				this._backpressureActive = true;
 				continue;
 			}
 			this._backpressureActive = false;
-			this.pendingCells.set(key, { rowId: u.rowId, colField: u.colField, value: u.value });
+			this.pendingCells.set(key, { rowId: update.rowId, colField: update.colField, value: update.value });
 		}
+		this._emitStateChange();
 		this._scheduleBatch();
 	}
 
 	pushRows(updates: readonly GridRowStreamUpdate<TRowData>[]): void {
 		if (this._destroyed) return;
-		for (const u of updates) {
-			const existing = this.pendingRows.get(u.rowId);
+		for (const update of updates) {
+			const existing = this.pendingRows.get(update.rowId);
 			if (existing) {
-				existing.patch = { ...existing.patch, ...u.patch };
+				existing.patch = { ...existing.patch, ...update.patch };
 			} else {
 				if (this.pendingRows.size >= this.opts.maxBatchSize) {
 					this._droppedUpdates++;
 					this._backpressureActive = true;
 					continue;
 				}
-				this.pendingRows.set(u.rowId, { rowId: u.rowId, patch: { ...u.patch } });
+				this.pendingRows.set(update.rowId, { rowId: update.rowId, patch: { ...update.patch } });
 			}
 		}
+		this._emitStateChange();
 		this._scheduleBatch();
 	}
 
 	pause(): void {
 		this._paused = true;
 		this._cancelTimer();
+		this._emitStateChange();
 	}
+
 	resume(): void {
 		this._paused = false;
+		this._emitStateChange();
 		if (this.pendingCells.size > 0 || this.pendingRows.size > 0) this._scheduleBatch();
 	}
+
 	flush(): void {
 		if (this._destroyed) return;
 		this._cancelTimer();
@@ -329,11 +347,12 @@ class LiveStreamHandle<TRowData> implements GridTransactionStreamHandle<TRowData
 			this._flushCells();
 			this._flushRows();
 			this._committedBatches++;
-		} catch (e) {
-			this._lastError = e instanceof Error ? e.message : String(e);
+		} catch (error) {
+			this._lastError = error instanceof Error ? error.message : String(error);
 		}
 
 		this._lastFlushDurationMs = _now() - t0;
+		this._emitStateChange();
 	}
 
 	private _flushCells(): void {
@@ -342,25 +361,23 @@ class LiveStreamHandle<TRowData> implements GridTransactionStreamHandle<TRowData
 		const toCommit: { rowId: string; colField: string; value: unknown }[] = [];
 		const policy = this.opts.dirtyCellPolicy;
 
-		for (const [, u] of this.pendingCells) {
-			const isDirty = this.deps.isCellDirty(u.rowId, u.colField);
+		for (const [, update] of this.pendingCells) {
+			const isDirty = this.deps.isCellDirty(update.rowId, update.colField);
 
 			if (isDirty && policy === 'skip') {
 				this._skippedDirtyUpdates++;
-				this.deps.onSkipped(u.rowId, u.colField, u.value);
+				this.deps.onSkipped(update.rowId, update.colField, update.value);
 				continue;
 			}
 
 			if (isDirty && policy === 'markConflict') {
 				this._skippedDirtyUpdates++;
-				const localValue = this.deps.getRawCellValue(u.rowId, u.colField);
-				this.deps.onConflict(u.rowId, u.colField, localValue, u.value);
-				// Do NOT commit remote value
+				const localValue = this.deps.getRawCellValue(update.rowId, update.colField);
+				this.deps.onConflict(update.rowId, update.colField, localValue, update.value);
 				continue;
 			}
 
-			// 'remoteWins' or cell is clean — proceed with commit
-			toCommit.push(u);
+			toCommit.push(update);
 		}
 
 		this.pendingCells.clear();
@@ -370,20 +387,24 @@ class LiveStreamHandle<TRowData> implements GridTransactionStreamHandle<TRowData
 		this.deps.commitCells(toCommit);
 
 		if (this.opts.flashChanges) {
-			this.deps.onFlash(toCommit.map((c) => ({ rowId: c.rowId, colField: c.colField })));
+			this.deps.onFlash(toCommit.map((cell) => ({ rowId: cell.rowId, colField: cell.colField })));
 		}
 	}
 
 	private _flushRows(): void {
 		if (this.pendingRows.size === 0) return;
-		for (const [, u] of this.pendingRows) {
+		for (const [, update] of this.pendingRows) {
 			try {
-				this.deps.applyRowPatch(u.rowId, u.patch);
-			} catch (e) {
-				this._lastError = e instanceof Error ? e.message : String(e);
+				this.deps.applyRowPatch(update.rowId, update.patch);
+			} catch (error) {
+				this._lastError = error instanceof Error ? error.message : String(error);
 			}
 		}
 		this.pendingRows.clear();
+	}
+
+	private _emitStateChange(): void {
+		this.deps.onStateChange(this.getState());
 	}
 }
 

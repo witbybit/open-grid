@@ -54,6 +54,20 @@ export type GridCommitReason =
 	| 'data:batch-cell-values'
 	| 'data:batch-cell-values:undo'
 	| 'data:batch-cell-values:redo'
+	| 'integrity:validation:set-issues'
+	| 'integrity:quality:set-issues'
+	| 'integrity:diff:set-model'
+	| 'integrity:diff:clear'
+	| 'integrity:diff:resolve-cell'
+	| 'integrity:conflict:add'
+	| 'integrity:conflict:clear'
+	| 'integrity:conflict:clear-all'
+	| 'integrity:live-stream:set-session'
+	| 'integrity:live-stream:set-issues'
+	| 'integrity:publish-issues'
+	| 'integrity:clear-published-issues'
+	| 'integrity:server-report:set'
+	| 'integrity:clear-all'
 	| 'geometry:resize-row'
 	| 'geometry:set-row-heights'
 	| 'geometry:set-default-row-height'
@@ -194,9 +208,16 @@ export class GridCommitKernel<TRowData = unknown> {
 				}
 				appliedMutations.push(appliedMutation);
 			}
-			if (change.state !== undefined) {
+			const mutationState = appliedMutations
+				.map((mutation) => mutation.state)
+				.filter((state): state is GridStateUpdater<TRowData> => state !== undefined);
+			const mergedState =
+				mutationState.length === 0
+					? change.state
+					: mutationState.reduce<GridStateUpdater<TRowData>>((acc, next) => this.composeStateUpdaters(acc, next), change.state ?? {});
+			if (mergedState !== undefined) {
 				failureOperation = 'commit-state';
-				this.deps.stateManager.setState(change.state);
+				this.deps.stateManager.setState(mergedState);
 			}
 		} catch (error) {
 			const primaryRejections = error instanceof GridCommitRejectedError ? error.rejections : undefined;

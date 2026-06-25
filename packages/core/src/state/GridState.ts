@@ -5,6 +5,17 @@ import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { GridSelectionState, ActiveEditState, RowSelectionOptions } from '../api/GridApi.js';
+import type {
+	GridCellConflict,
+	GridCellDiff,
+	GridDiffModel,
+	GridDiffResult,
+	GridIntegrityIssue,
+	GridIntegrityIssueSource,
+	GridIntegritySummary,
+	GridTransactionStreamState,
+	ServerIntegrityReport,
+} from '../features/dataIntegrity/integrityTypes.js';
 
 /**
  * User-configured and persisted fields.
@@ -128,12 +139,54 @@ export interface GridUIState {
 	};
 }
 
+export interface GridIntegrityValidationState {
+	issues: readonly GridIntegrityIssue[];
+	cellErrorIndex: Record<string, GridIntegrityIssue>;
+}
+
+export interface GridIntegrityQualityState {
+	issues: readonly GridIntegrityIssue[];
+}
+
+export interface GridIntegrityDiffState<TRowData = unknown> {
+	model: GridDiffModel<TRowData> | null;
+	result: GridDiffResult | null;
+	cellDiffIndex: Record<string, GridCellDiff>;
+}
+
+export interface GridIntegrityConflictState {
+	conflicts: readonly GridCellConflict[];
+	cellConflictIndex: Record<string, string>;
+	resolvedConflicts: number;
+	lastConflictAt: number | null;
+}
+
+export interface GridIntegrityLiveStreamState {
+	issues: readonly GridIntegrityIssue[];
+	session: GridTransactionStreamState | null;
+}
+
+export interface GridIntegrityState<TRowData = unknown> {
+	validation: GridIntegrityValidationState;
+	quality: GridIntegrityQualityState;
+	diff: GridIntegrityDiffState<TRowData>;
+	conflicts: GridIntegrityConflictState;
+	liveStream: GridIntegrityLiveStreamState;
+	publishedIssues: Partial<Record<GridIntegrityIssueSource, readonly GridIntegrityIssue[]>>;
+	serverReport: ServerIntegrityReport | null;
+	summary: GridIntegritySummary;
+}
+
 /**
  * Full internal grid state: intersection of model, runtime, and UI slices.
  * This is an implementation detail used inside the core runtime, not a stable
  * public snapshot contract.
  */
-export type InternalGridState<TRowData = unknown> = GridModelState<TRowData> & GridRuntimeState & GridUIState;
+export type InternalGridState<TRowData = unknown> = GridModelState<TRowData> &
+	GridRuntimeState &
+	GridUIState & {
+		integrity: GridIntegrityState<TRowData>;
+	};
 
 export type GridInitialState<TRowData = unknown> = GridModelState<TRowData> & Omit<GridUIState, never> & Partial<Pick<GridRuntimeState, 'selection'>>;
 

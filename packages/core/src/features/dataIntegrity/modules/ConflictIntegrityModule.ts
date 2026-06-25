@@ -1,4 +1,6 @@
 import type { GridCellDecoration } from '../../../insights/insightTypes.js';
+import type { GridCommit } from '../../../engine/GridChangeApplier.js';
+import type { GridIntegrityState } from '../../../state/GridState.js';
 import type {
 	GridIntegrityIssue,
 	GridIntegrityModule,
@@ -18,6 +20,8 @@ function nextConflictId(): string {
 }
 
 export interface ConflictModuleDeps<TRowData> {
+	applyIntegrityChange: (change: GridCommit<TRowData>) => void;
+	getIntegrityState: () => GridIntegrityState<TRowData>;
 	commitCellValue: (rowId: string, colField: string, value: unknown) => Promise<GridCommitResult>;
 	validateCellProposal?: (params: GridValidateCellProposalParams) => Promise<readonly GridIntegrityIssue[]>;
 	canEdit?: (rowId: string, colField: string) => boolean;
@@ -28,10 +32,6 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 	public readonly id = 'conflicts' as const;
 
 	private options: GridConflictIntegrityOptions;
-	private readonly conflicts = new Map<string, GridCellConflict>();
-	private readonly cellIndex = new Map<string, string>(); // `rowId\0colField` → conflictId
-	private _resolvedConflicts = 0;
-	private _lastConflictAt: number | null = null;
 
 	constructor(
 		options: GridConflictIntegrityOptions,
@@ -46,7 +46,7 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 
 	getIssues(): readonly GridIntegrityIssue[] {
 		const issues: GridIntegrityIssue[] = [];
-		for (const conflict of this.conflicts.values()) {
+		for (const conflict of this.deps.getIntegrityState().conflicts.conflicts) {
 			issues.push({
 				id: `conflict:${conflict.id}`,
 				source: 'conflict',
@@ -68,26 +68,22 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 	}
 
 	getDiagnostics(): unknown {
+		const conflicts = this.deps.getIntegrityState().conflicts;
 		return {
 			enabled: this.isEnabled(),
-			activeConflicts: this.conflicts.size,
-			resolvedConflicts: this._resolvedConflicts,
-			lastConflictAt: this._lastConflictAt,
+			activeConflicts: conflicts.conflicts.length,
+			resolvedConflicts: conflicts.resolvedConflicts,
+			lastConflictAt: conflicts.lastConflictAt,
 			validateBeforeResolve: this.options.validateBeforeResolve ?? true,
 		};
 	}
 
 	run(_context: GridIntegrityRunContext<TRowData>): readonly GridIntegrityIssue[] {
-		// Conflicts are live — return current issues
 		return this.getIssues();
 	}
 
-	// ── Cell decorations ───────────────────────────────────────────────────────
-
 	getCellDecorations(rowId: string, colField: string): readonly GridCellDecoration[] {
-		const id = this.cellIndex.get(`${rowId}\0${colField}`);
-		if (!id) return _EMPTY;
-		const conflict = this.conflicts.get(id);
+		const conflict = this.getCellConflict(rowId, colField);
 		if (!conflict) return _EMPTY;
 		return [
 			{
@@ -101,36 +97,30 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 		];
 	}
 
-	// ── Conflict management ────────────────────────────────────────────────────
-
 	addConflict(partial: Omit<GridCellConflict, 'id' | 'createdAt'>): GridCellConflict {
-		const cellKey = `${partial.rowId}\0${partial.colField}`;
-		// Remove existing conflict for same cell
-		const existingId = this.cellIndex.get(cellKey);
-		if (existingId) this.conflicts.delete(existingId);
-
 		const conflict: GridCellConflict = { ...partial, id: nextConflictId(), createdAt: _now() };
-		this.conflicts.set(conflict.id, conflict);
-		this.cellIndex.set(cellKey, conflict.id);
-		this._lastConflictAt = conflict.createdAt;
+		this.deps.applyIntegrityChange({
+			reason: 'integrity:conflict:add',
+			domainMutations: [{ kind: 'integrity-upsert-conflict', conflict }],
+		});
 		this.deps.requestRepaint([{ rowId: conflict.rowId, colField: conflict.colField }]);
 		return conflict;
 	}
 
 	getConflicts(): readonly GridCellConflict[] {
-		return Array.from(this.conflicts.values());
+		return this.deps.getIntegrityState().conflicts.conflicts;
 	}
 
 	getCellConflict(rowId: string, colField: string): GridCellConflict | null {
-		const id = this.cellIndex.get(`${rowId}\0${colField}`);
-		return id ? (this.conflicts.get(id) ?? null) : null;
+		const state = this.deps.getIntegrityState().conflicts;
+		const id = state.cellConflictIndex[`${rowId}\0${colField}`];
+		return id ? (state.conflicts.find((conflict) => conflict.id === id) ?? null) : null;
 	}
 
 	async resolveConflict(conflictId: string, options: ResolveConflictOptions): Promise<ConflictResolutionResult> {
-		const conflict = this.conflicts.get(conflictId);
+		const conflict = this.deps.getIntegrityState().conflicts.conflicts.find((entry) => entry.id === conflictId);
 		if (!conflict) return { status: 'notFound' };
 
-		// Check capability
 		if (this.options.checkCapabilitiesBeforeResolve !== false && this.deps.canEdit) {
 			if (options.strategy !== 'local' && !this.deps.canEdit(conflict.rowId, conflict.colField)) {
 				return { status: 'capabilityDenied', reason: 'Cell is not editable' };
@@ -138,15 +128,12 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 		}
 
 		if (options.strategy === 'local') {
-			// Keep local: only clear the conflict marker, no mutation
 			this._clearConflict(conflictId, conflict);
-			this._resolvedConflicts++;
 			return { status: 'resolved' };
 		}
 
 		const valueToApply = options.strategy === 'custom' ? options.value : conflict.remoteValue;
 
-		// Validate the proposed value (not the current value) before commit
 		if (this.options.validateBeforeResolve !== false && this.deps.validateCellProposal) {
 			const validationIssues = await this.deps.validateCellProposal({
 				rowId: conflict.rowId,
@@ -154,41 +141,40 @@ export class ConflictIntegrityModule<TRowData> implements GridIntegrityModule<TR
 				proposedValue: valueToApply,
 				source: 'conflictResolve',
 			});
-			const blocking = validationIssues.filter((i) => i.blocking);
+			const blocking = validationIssues.filter((issue) => issue.blocking);
 			if (blocking.length > 0) {
-				// Conflict remains — validation failed
 				return { status: 'validationFailed', issues: blocking };
 			}
 		}
 
-		// Commit — only clear conflict marker on success
 		const commitResult = await this.deps.commitCellValue(conflict.rowId, conflict.colField, valueToApply);
 		if (commitResult.status !== 'applied') {
 			return { status: 'failed', error: commitResult.status === 'failed' ? commitResult.error : commitResult.status };
 		}
 
 		this._clearConflict(conflictId, conflict);
-		this._resolvedConflicts++;
 		return { status: 'resolved' };
 	}
 
 	clearConflict(conflictId: string): void {
-		const conflict = this.conflicts.get(conflictId);
+		const conflict = this.deps.getIntegrityState().conflicts.conflicts.find((entry) => entry.id === conflictId);
 		if (!conflict) return;
 		this._clearConflict(conflictId, conflict);
 	}
 
 	clearAllConflicts(): void {
-		this.conflicts.clear();
-		this.cellIndex.clear();
+		this.deps.applyIntegrityChange({
+			reason: 'integrity:conflict:clear-all',
+			domainMutations: [{ kind: 'integrity-clear-conflicts' }],
+		});
 		this.deps.requestRepaint();
 	}
 
-	// ── Private ────────────────────────────────────────────────────────────────
-
 	private _clearConflict(id: string, conflict: GridCellConflict): void {
-		this.conflicts.delete(id);
-		this.cellIndex.delete(`${conflict.rowId}\0${conflict.colField}`);
+		this.deps.applyIntegrityChange({
+			reason: 'integrity:conflict:clear',
+			domainMutations: [{ kind: 'integrity-clear-conflict', conflictId: id }],
+		});
 		this.deps.requestRepaint([{ rowId: conflict.rowId, colField: conflict.colField }]);
 	}
 
