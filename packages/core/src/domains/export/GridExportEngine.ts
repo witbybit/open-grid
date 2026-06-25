@@ -22,7 +22,7 @@ export class GridExportEngine<TRow> {
 	constructor(
 		private readonly getColumns: () => RenderColumn[],
 		private readonly getCellValue: CellValueFn,
-		private readonly getVisualRows: () => ReadonlyArray<VisualRow<TRow>>,
+		private readonly getVisualRows: () => ReadonlyArray<VisualRow<TRow>>
 	) {}
 
 	toCsvString(opts: ExportOptions = {}): string {
@@ -30,9 +30,7 @@ export class GridExportEngine<TRow> {
 		const includeHeaders = opts.includeHeaders ?? true;
 
 		const allColumns = this.getColumns();
-		const columns = opts.columnIds
-			? allColumns.filter((c) => opts.columnIds!.includes(c.columnId))
-			: allColumns;
+		const columns = opts.columnIds ? allColumns.filter((c) => opts.columnIds!.includes(c.columnId)) : allColumns;
 
 		if (columns.length === 0) return '';
 
@@ -115,15 +113,29 @@ function parseCsvLine(line: string, delimiter: string): string[] {
 		const ch = line[i];
 		if (inQuotes) {
 			if (ch === '"') {
-				if (line[i + 1] === '"') { current += '"'; i += 2; }
-				else { inQuotes = false; i++; }
+				if (line[i + 1] === '"') {
+					current += '"';
+					i += 2;
+				} else {
+					inQuotes = false;
+					i++;
+				}
 			} else {
-				current += ch; i++;
+				current += ch;
+				i++;
 			}
 		} else {
-			if (ch === '"') { inQuotes = true; i++; }
-			else if (ch === delimiter) { result.push(current); current = ''; i++; }
-			else { current += ch; i++; }
+			if (ch === '"') {
+				inQuotes = true;
+				i++;
+			} else if (ch === delimiter) {
+				result.push(current);
+				current = '';
+				i++;
+			} else {
+				current += ch;
+				i++;
+			}
 		}
 	}
 	result.push(current);

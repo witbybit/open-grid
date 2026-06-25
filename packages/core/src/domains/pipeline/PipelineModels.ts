@@ -56,25 +56,37 @@ export function evaluateOperator(operator: FilterOperator, cellValue: unknown, f
 	const filterStr = filterValue == null ? '' : String(filterValue).toLowerCase();
 
 	switch (operator) {
-		case 'contains':    return cellStr.includes(filterStr);
-		case 'notContains': return !cellStr.includes(filterStr);
-		case 'equals':      return cellStr === filterStr;
-		case 'notEquals':   return cellStr !== filterStr;
-		case 'startsWith':  return cellStr.startsWith(filterStr);
-		case 'endsWith':    return cellStr.endsWith(filterStr);
-		case 'blank':       return cellValue == null || cellStr === '';
-		case 'notBlank':    return cellValue != null && cellStr !== '';
+		case 'contains':
+			return cellStr.includes(filterStr);
+		case 'notContains':
+			return !cellStr.includes(filterStr);
+		case 'equals':
+			return cellStr === filterStr;
+		case 'notEquals':
+			return cellStr !== filterStr;
+		case 'startsWith':
+			return cellStr.startsWith(filterStr);
+		case 'endsWith':
+			return cellStr.endsWith(filterStr);
+		case 'blank':
+			return cellValue == null || cellStr === '';
+		case 'notBlank':
+			return cellValue != null && cellStr !== '';
 		case 'gt': {
-			const n = Number(cellValue); return !isNaN(n) && n > Number(filterValue);
+			const n = Number(cellValue);
+			return !isNaN(n) && n > Number(filterValue);
 		}
 		case 'lt': {
-			const n = Number(cellValue); return !isNaN(n) && n < Number(filterValue);
+			const n = Number(cellValue);
+			return !isNaN(n) && n < Number(filterValue);
 		}
 		case 'gte': {
-			const n = Number(cellValue); return !isNaN(n) && n >= Number(filterValue);
+			const n = Number(cellValue);
+			return !isNaN(n) && n >= Number(filterValue);
 		}
 		case 'lte': {
-			const n = Number(cellValue); return !isNaN(n) && n <= Number(filterValue);
+			const n = Number(cellValue);
+			return !isNaN(n) && n <= Number(filterValue);
 		}
 		case 'in': {
 			const arr = Array.isArray(filterValue) ? filterValue : [filterValue];

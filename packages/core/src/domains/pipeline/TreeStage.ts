@@ -21,7 +21,7 @@ const ROOT = Symbol('tree-root');
 export function buildTreeVisualRows<TRow>(
 	rows: readonly RowNode<TRow>[],
 	options: TreeDataOptions<TRow>,
-	expansion: GroupExpansionState,
+	expansion: GroupExpansionState
 ): VisualRow<TRow>[] {
 	const ids = new Set(rows.map((n) => String(n.id)));
 	const childrenByParent = new Map<string | typeof ROOT, RowNode<TRow>[]>();

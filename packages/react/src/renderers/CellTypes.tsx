@@ -27,23 +27,23 @@ import { createPortal } from 'react-dom';
 
 // Minimal cell renderer/editor prop shapes — inlined after types.ts deletion (Plan 133 Stage 5)
 export interface CellRendererProps<TRowData = unknown> {
-  value: unknown;
-  rowId: string;
-  colField: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  api: any;
-  rowData?: TRowData;
+	value: unknown;
+	rowId: string;
+	colField: string;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	api: any;
+	rowData?: TRowData;
 }
 export interface CellEditorProps<TRowData = unknown> {
-  value: unknown;
-  rowId: string;
-  colField: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  api: any;
-  rowData?: TRowData;
-  onChange: (value: unknown) => void;
-  onCommit: () => void;
-  onCancel: () => void;
+	value: unknown;
+	rowId: string;
+	colField: string;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	api: any;
+	rowData?: TRowData;
+	onChange: (value: unknown) => void;
+	onCommit: () => void;
+	onCancel: () => void;
 }
 
 // ─── CSS token constants ──────────────────────────────────────────────────────

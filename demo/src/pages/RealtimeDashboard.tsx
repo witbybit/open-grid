@@ -11,7 +11,12 @@ interface RealtimeDashboardProps {
 	onGridReady?: (api: GridApi<DashboardStockRow>) => void;
 }
 
-export default function RealtimeDashboard({ editTrigger: _editTrigger, arrowKeyNavigationEdit: _arrowKeyNavigationEdit, onCellValueChanged, onGridReady }: RealtimeDashboardProps) {
+export default function RealtimeDashboard({
+	editTrigger: _editTrigger,
+	arrowKeyNavigationEdit: _arrowKeyNavigationEdit,
+	onCellValueChanged,
+	onGridReady,
+}: RealtimeDashboardProps) {
 	const columns = useMemo(() => createDashboardColumns(), []);
 	const rows = useMemo(() => createDashboardRows(), []);
 	const [api, setApi] = useState<GridApi<DashboardStockRow> | null>(null);
@@ -34,11 +39,22 @@ export default function RealtimeDashboard({ editTrigger: _editTrigger, arrowKeyN
 		}
 		if (numericValues.length) {
 			const sum = numericValues.reduce((a, b) => a + b, 0);
-			setStats({ sum, avg: sum / numericValues.length, min: Math.min(...numericValues), max: Math.max(...numericValues), count: numericValues.length });
+			setStats({
+				sum,
+				avg: sum / numericValues.length,
+				min: Math.min(...numericValues),
+				max: Math.max(...numericValues),
+				count: numericValues.length,
+			});
 		} else {
 			setStats({ sum: 0, avg: 0, min: 0, max: 0, count: 0 });
 		}
-		setPrices(api.rows.getAll().slice(0, 18).map((row) => parseFloat(String(row.price)) || 0));
+		setPrices(
+			api.rows
+				.getAll()
+				.slice(0, 18)
+				.map((row) => parseFloat(String(row.price)) || 0)
+		);
 	}, [api]);
 
 	useEffect(() => {
@@ -48,7 +64,10 @@ export default function RealtimeDashboard({ editTrigger: _editTrigger, arrowKeyN
 			setEventLogs((prev) => [{ id: ++eventLogIdRef.current, time: new Date().toLocaleTimeString(), msg }, ...prev].slice(0, 10));
 		return api.subscribe((event) => {
 			if (event.type === 'selection.changed') refreshStats();
-			if (event.type === 'cells.changed') { log('cells changed'); refreshStats(); }
+			if (event.type === 'cells.changed') {
+				log('cells changed');
+				refreshStats();
+			}
 		});
 	}, [api, refreshStats]);
 
@@ -64,7 +83,12 @@ export default function RealtimeDashboard({ editTrigger: _editTrigger, arrowKeyN
 				const nextChange = changeNum + (priceDiff / priceNum) * 100;
 				const volumeNum = parseFloat(String(row.volume)) || 0;
 				const nextVolume = Math.max(0.1, volumeNum * (1 + (Math.random() - 0.5) * 0.3));
-				return { ...row, price: nextPrice.toFixed(2), change: `${nextChange >= 0 ? '+' : ''}${nextChange.toFixed(1)}`, volume: nextVolume.toFixed(1) };
+				return {
+					...row,
+					price: nextPrice.toFixed(2),
+					change: `${nextChange >= 0 ? '+' : ''}${nextChange.toFixed(1)}`,
+					volume: nextVolume.toFixed(1),
+				};
 			})
 		);
 	}, [api]);
@@ -73,12 +97,20 @@ export default function RealtimeDashboard({ editTrigger: _editTrigger, arrowKeyN
 		if (!api) return;
 		const next = !autoFireRef.current;
 		setAutoFire(next);
-		if (autoIntervalRef.current) { clearInterval(autoIntervalRef.current); autoIntervalRef.current = null; }
+		if (autoIntervalRef.current) {
+			clearInterval(autoIntervalRef.current);
+			autoIntervalRef.current = null;
+		}
 		if (!next) return;
 		autoIntervalRef.current = setInterval(triggerVolatility, 100);
 	}, [api, triggerVolatility]);
 
-	useEffect(() => () => { if (autoIntervalRef.current) clearInterval(autoIntervalRef.current); }, []);
+	useEffect(
+		() => () => {
+			if (autoIntervalRef.current) clearInterval(autoIntervalRef.current);
+		},
+		[]
+	);
 
 	const svgPoints = useMemo(() => {
 		if (prices.length < 2) return '';
@@ -102,7 +134,9 @@ export default function RealtimeDashboard({ editTrigger: _editTrigger, arrowKeyN
 					<button
 						onClick={toggleAutoFire}
 						className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg font-bold text-[10px] border shadow-lg transition-all cursor-pointer ${
-							autoFire ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500/20' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
+							autoFire
+								? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500/20'
+								: 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
 						}`}
 					>
 						<Zap className={`w-3 h-3 ${autoFire ? 'animate-pulse' : ''}`} />

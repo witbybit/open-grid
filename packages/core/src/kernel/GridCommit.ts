@@ -70,7 +70,7 @@ export interface GridKernelContext {
 
 export type GridCommandHandler<K extends GridCommandType = GridCommandType> = (
 	command: GridCommand<K>,
-	ctx: GridKernelContext,
+	ctx: GridKernelContext
 ) => GridCommandHandlerResult;
 
 /** Convenience constructors for handler authors. */

@@ -1,7 +1,7 @@
 # Open Grid — Core Architecture (v2 Reset)
 
 > **Status: in-progress rewrite.** This document is the frozen target. It describes the
-> architecture the core *must* have, not the one it has today. Where the current code
+> architecture the core _must_ have, not the one it has today. Where the current code
 > contradicts this document, the current code is wrong and is scheduled for deletion.
 > This is alpha. We break what must be broken. No compatibility wrappers, no `legacyMode`,
 > no migration flags, no duplicate old/new systems left side by side.
@@ -21,7 +21,7 @@ aggregation, pivoting, master/detail, pinned rows & columns, range selection, fi
 clipboard, multi-cell paste, undo/redo, formulas, computed fields, validation, data
 integrity, AI-proposed edits, runtime devtools, column/view persistence, server-backed
 editing, and collaboration. **This reset does not build those features.** It builds the
-*spine* that lets them be added without rotting the core.
+_spine_ that lets them be added without rotting the core.
 
 ---
 
@@ -108,6 +108,7 @@ global version publication, or any cross-domain side effect. Command handlers re
 **R4 — Capabilities are authoritative.** No duck typing (`'applyTransaction' in rowModel`,
 `asTransactionalRowModel(...)`). Decisions are made from an explicit `RowModelCapabilities`
 map. If a feature is not truly implemented, its capability is `false`. We do not lie.
+
 > Note: this is **distinct** from the existing user-permission `GridCapabilitiesConfig`
 > (`canEdit`, `canSort`…). That is a per-action authorization gate. `RowModelCapabilities`
 > is the structural ability of a row model. Both exist; they are never conflated.
@@ -129,7 +130,7 @@ does not recompute business state.
 Future stages (group, tree, aggregation, pivot, master/detail) fit the same shape. A single
 shared `RowWriteImpact` classifier (`none | plain-cell-value | sort-key | filter-key |
 group-key | tree-parent | aggregation-input | value-getter-dependency | structural`) is used
-by *every* write path — setCellValue, batch cell update, updateRows, applyTransaction,
+by _every_ write path — setCellValue, batch cell update, updateRows, applyTransaction,
 replaceRows, row order, paste, fill. No per-path classifier.
 
 **R8 — Cell values are their own domain.** `CellValueEngine` owns value application semantics
@@ -177,18 +178,18 @@ React reconciliation is never responsible for thousands of cells during scroll.
 
 ## 5. Terminology
 
-| Term | Meaning |
-| --- | --- |
-| **Command** | An intent to change state. Immutable, serializable, dispatched to the kernel. |
-| **Commit** | The kernel's record of one applied command: its change sets, effects, events, dirty domains, render invalidation, undo patch. |
-| **Effect** | A typed, kernel-applied consequence (version bump, event, render invalidation). Domains describe effects; only the kernel applies them. |
-| **ChangeSet** | Typed description of what a domain changed (`RowChangeSet`, `ColumnChangeSet`, `CellChangeSet`, `SelectionChangeSet`). |
-| **Event** | A published notification derived from a commit. Emitted by the kernel only. |
-| **CommandResult** | `applied | noop | rejected`. Rejected is never collapsed into noop; noop is never collapsed into applied. |
-| **RowWriteImpact** | The single classification of how a write affects the pipeline. |
-| **VisualRow** | A row as the user sees it: data, group, tree, detail, loading, or placeholder. Distinct from a data row. |
-| **Capability** (row model) | Structural ability of a row model. Authoritative; never duck-typed. |
-| **Capability** (grid) | Per-action user-permission gate (`canEdit`…). A separate concept. |
+| Term                       | Meaning                                                                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------- |
+| **Command**                | An intent to change state. Immutable, serializable, dispatched to the kernel.                                                           |
+| **Commit**                 | The kernel's record of one applied command: its change sets, effects, events, dirty domains, render invalidation, undo patch.           |
+| **Effect**                 | A typed, kernel-applied consequence (version bump, event, render invalidation). Domains describe effects; only the kernel applies them. |
+| **ChangeSet**              | Typed description of what a domain changed (`RowChangeSet`, `ColumnChangeSet`, `CellChangeSet`, `SelectionChangeSet`).                  |
+| **Event**                  | A published notification derived from a commit. Emitted by the kernel only.                                                             |
+| **CommandResult**          | `applied                                                                                                                                | noop | rejected`. Rejected is never collapsed into noop; noop is never collapsed into applied. |
+| **RowWriteImpact**         | The single classification of how a write affects the pipeline.                                                                          |
+| **VisualRow**              | A row as the user sees it: data, group, tree, detail, loading, or placeholder. Distinct from a data row.                                |
+| **Capability** (row model) | Structural ability of a row model. Authoritative; never duck-typed.                                                                     |
+| **Capability** (grid)      | Per-action user-permission gate (`canEdit`…). A separate concept.                                                                       |
 
 ---
 
@@ -196,19 +197,19 @@ React reconciliation is never responsible for thousands of cells during scroll.
 
 ```ts
 type GridCommandResult =
-  | { status: 'applied'; commitId: string; effects: GridEffect[] }
-  | { status: 'noop'; reason: string }
-  | { status: 'rejected'; reason: string; error?: Error };
+	| { status: 'applied'; commitId: string; effects: GridEffect[] }
+	| { status: 'noop'; reason: string }
+	| { status: 'rejected'; reason: string; error?: Error };
 
 interface GridCommit {
-  id: string;
-  command: GridCommand;
-  changes: GridChangeSet[];
-  effects: GridEffect[];
-  events: GridEvent[];
-  dirtyDomains: GridDomainId[];
-  renderInvalidation: RenderInvalidation | null;
-  undoPatch?: GridUndoPatch;
+	id: string;
+	command: GridCommand;
+	changes: GridChangeSet[];
+	effects: GridEffect[];
+	events: GridEvent[];
+	dirtyDomains: GridDomainId[];
+	renderInvalidation: RenderInvalidation | null;
+	undoPatch?: GridUndoPatch;
 }
 ```
 

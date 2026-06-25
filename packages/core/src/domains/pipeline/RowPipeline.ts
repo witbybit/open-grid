@@ -162,7 +162,7 @@ export class RowPipeline<TRow> {
 			this.visualModel = new WindowedVisualModel<TRow>(
 				this.windowed.getTotalRowCount(),
 				(index) => this.windowed!.getNodeByIndex(index),
-				this.source(),
+				this.source()
 			);
 			return this.visualModel;
 		}

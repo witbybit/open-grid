@@ -10,6 +10,7 @@ powerful.
 ## What is kept vs replaced
 
 KEEP (the body, re-pointed onto the new engine):
+
 - The whole renderer: `renderer/*` — DOM renderer, scroll engine, **layer registry + layout plans**,
   stable slot assigner, row slot pool, layout transitions, overlays, sticky groups, status bar,
   filter chips, floating filters, header menu, column interaction.
@@ -18,6 +19,7 @@ KEEP (the body, re-pointed onto the new engine):
 - `styles.ts`, `themes.ts`, `ThemeManager`. Every feature. The demo (migrated, not deleted-as-feature).
 
 BECOME THE ENGINE (new):
+
 - `kernel/` (command/commit/effect/version/undo, applied|noop|rejected).
 - `domains/` (rows incl. client/infinite/server, cells, pipeline + shared `RowWriteImpact`
   classifier, columns, selection, editing, layout, viewport, render).
@@ -32,6 +34,7 @@ DELETE (when nothing consumes them): `store.ts` (`GridStore`), `engine/*` (`Grid
 
 The existing renderer reads these today (from `engine`); the new engine must provide equivalents
 (or a redesigned-but-not-weaker form the re-pointed renderer consumes):
+
 - Visual rows by index incl. kind: data | group | tree | detail | loading | placeholder
   (`getVisualRow(i)`, `getVisualRowCount()`, id↔index maps). **Pipeline currently emits only `data`.**
 - Geometry: row heights/tops, total height, column widths/lefts, pinned lanes (left/right).
@@ -58,12 +61,13 @@ The existing renderer reads these today (from `engine`); the new engine must pro
 
 filtering (+ advanced query builder, floating filters, filter chips) · sorting (multi) · grouping
 (+ group panel, sticky groups, footers, aggregation) · tree data · master/detail · pinned columns
-+ pinned rows · infinite block loading + server pagination (real datasources, loading/placeholder
-rows) · range selection · fill handle · clipboard copy/paste/multi-paste · multi/checkbox/select-all
-· custom cell renderers + editors · native cell types · value formatters/getters · formula/computed
-fields (DAG) · validation + tooltips · data-integrity pipeline + quality/diff/conflict/stream ·
-column groups/header groups · row drag · status bar · keyboard nav/focus · context menu · column &
-view/workspace persistence · theming/skins · column auto-size · CSV export · data integrity capabilities.
+
+- pinned rows · infinite block loading + server pagination (real datasources, loading/placeholder
+  rows) · range selection · fill handle · clipboard copy/paste/multi-paste · multi/checkbox/select-all
+  · custom cell renderers + editors · native cell types · value formatters/getters · formula/computed
+  fields (DAG) · validation + tooltips · data-integrity pipeline + quality/diff/conflict/stream ·
+  column groups/header groups · row drag · status bar · keyboard nav/focus · context menu · column &
+  view/workspace persistence · theming/skins · column auto-size · CSV export · data integrity capabilities.
 
 ## Gates
 

@@ -35,7 +35,9 @@ export class RowIdentityResolver<TRow> {
 		for (let index = 0; index < rows.length; index++) {
 			const id = this.idOf(rows[index]!, index);
 			if (!id) {
-				throw new RowModelError(`Open Grid [${context}]: getRowId returned an empty id at index ${index}. Every row must have a non-empty id.`);
+				throw new RowModelError(
+					`Open Grid [${context}]: getRowId returned an empty id at index ${index}. Every row must have a non-empty id.`
+				);
 			}
 			if (seen.has(id)) {
 				throw new RowModelError(`Open Grid [${context}]: duplicate row id "${id}". Each row must have a unique id.`);

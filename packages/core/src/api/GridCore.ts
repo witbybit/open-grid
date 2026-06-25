@@ -154,7 +154,7 @@ export class GridCore<TRow> {
 		this.exportEngine = new GridExportEngine<TRow>(
 			() => this.getColumnHeaders(),
 			(rowId, field) => this.cellEngine.getDisplayValue(addressFor(rowId, field)),
-			() => this.pipeline.getVisualModel().toArray(),
+			() => this.pipeline.getVisualModel().toArray()
 		);
 		this.clipboard = new ClipboardController<TRow>({
 			getColumns: () => this.getColumnHeaders(),
@@ -205,7 +205,7 @@ export class GridCore<TRow> {
 					if (row && (row.kind === 'data' || row.kind === 'tree')) ids.push(row.rowId as RowId);
 				}
 				return ids;
-			},
+			}
 		);
 
 		// Data integrity manager — starts empty; consumers register validators after createGrid().
@@ -233,8 +233,7 @@ export class GridCore<TRow> {
 				this.kernel.dispatch({ type: 'pipeline.setFilterModel', payload: { model: m } }),
 			setGroupBy: (m: import('../domains/pipeline/GroupModel.js').GroupByModel) =>
 				this.kernel.dispatch({ type: 'pipeline.setGroupBy', payload: { model: m } }),
-			setSidebarOpenPanel: (id: string | null) =>
-				id ? this.sidebar.openPanel(id) : this.sidebar.closePanel(),
+			setSidebarOpenPanel: (id: string | null) => (id ? this.sidebar.openPanel(id) : this.sidebar.closePanel()),
 		};
 
 		if (options.persistenceAdapter) {
@@ -249,7 +248,7 @@ export class GridCore<TRow> {
 			const ctrl = new GridWorkspaceController(
 				options.workspaceAdapter,
 				() => createGridStateSnapshot(readPort),
-				(state) => applyGridState(state, writePort),
+				(state) => applyGridState(state, writePort)
 			);
 			(this as unknown as { workspace: GridWorkspaceController }).workspace = ctrl;
 		}
@@ -278,7 +277,7 @@ export class GridCore<TRow> {
 						this.columnLayoutDirty = true;
 						break;
 				}
-			}),
+			})
 		);
 
 		this.recomputePipeline();

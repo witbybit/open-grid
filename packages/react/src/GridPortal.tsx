@@ -20,7 +20,7 @@ export interface GridPortalProps {
 function renderEntry(
 	entry: PortalEntry,
 	columnRenderers: Map<string, React.ComponentType<CellRendererProps>> | undefined,
-	columnEditors: Map<string, React.ComponentType<CellRendererProps>> | undefined,
+	columnEditors: Map<string, React.ComponentType<CellRendererProps>> | undefined
 ): ReactNode {
 	const props: CellRendererProps = {
 		cellKey: entry.cellKey,

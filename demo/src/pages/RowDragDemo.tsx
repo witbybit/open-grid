@@ -59,7 +59,9 @@ const PRIORITY_COLORS: Record<string, string> = {
 const PriorityBadge = ({ value }: { value: unknown }) => {
 	const v = String(value ?? '');
 	return (
-		<span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border leading-none inline-block ${PRIORITY_COLORS[v] ?? 'text-slate-400'}`}>
+		<span
+			className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border leading-none inline-block ${PRIORITY_COLORS[v] ?? 'text-slate-400'}`}
+		>
 			{v}
 		</span>
 	);
@@ -71,7 +73,10 @@ const COLUMNS: GridColumnDef<TaskRow>[] = [
 	{ id: 'rank', field: 'rank', header: '#', width: 48 },
 	{ id: 'title', field: 'title', header: 'Task', width: 240 },
 	{
-		id: 'priority', field: 'priority', header: 'Priority', width: 100,
+		id: 'priority',
+		field: 'priority',
+		header: 'Priority',
+		width: 100,
 		renderer: { kind: 'react', component: ({ value }: { value: unknown }) => <PriorityBadge value={value} /> } as any,
 	},
 	{ id: 'assignee', field: 'assignee', header: 'Assignee', width: 100 },
@@ -106,13 +111,7 @@ export default function RowDragDemo() {
 				</div>
 
 				<div className='flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-900/60'>
-					<Grid<TaskRow>
-						columns={COLUMNS}
-						rows={ROWS}
-						getRowId={(row) => row.id}
-						rowHeight={36}
-						onGridReady={(api) => setApi(api)}
-					/>
+					<Grid<TaskRow> columns={COLUMNS} rows={ROWS} getRowId={(row) => row.id} rowHeight={36} onGridReady={(api) => setApi(api)} />
 				</div>
 			</div>
 

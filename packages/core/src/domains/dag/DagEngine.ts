@@ -86,11 +86,7 @@ export class DagEngine<TRow = unknown> {
 		if (this.defs.size === 0) return;
 		const rows = port.getLoadedRows();
 		for (const row of rows) {
-			const computed = this.computeRow(
-				row.id,
-				row.data,
-				(field) => port.getCellValue(row.id, field),
-			);
+			const computed = this.computeRow(row.id, row.data, (field) => port.getCellValue(row.id, field));
 			for (const [field, value] of computed) {
 				port.setCellValue(row.id, field, value);
 			}
@@ -104,11 +100,7 @@ export class DagEngine<TRow = unknown> {
 		if (this.defs.size === 0) return;
 		const rows = port.getLoadedRows().filter((r) => rowIds.includes(r.id));
 		for (const row of rows) {
-			const computed = this.computeRow(
-				row.id,
-				row.data,
-				(field) => port.getCellValue(row.id, field),
-			);
+			const computed = this.computeRow(row.id, row.data, (field) => port.getCellValue(row.id, field));
 			for (const [field, value] of computed) {
 				port.setCellValue(row.id, field, value);
 			}

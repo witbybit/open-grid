@@ -128,10 +128,7 @@ export const SparklineRenderer: any = {
  *
  * To use: set cellRendererCapabilities.imperativeUpdate = true on the column.
  */
-export const LivePriceRenderer = forwardRef<any, CellRendererProps<DashboardStockRow>>(function LivePriceRenderer(
-	{ value },
-	ref
-) {
+export const LivePriceRenderer = forwardRef<any, CellRendererProps<DashboardStockRow>>(function LivePriceRenderer({ value }, ref) {
 	const spanRef = useRef<HTMLSpanElement>(null);
 	const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const prevValueRef = useRef(value);

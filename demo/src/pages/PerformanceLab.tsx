@@ -254,14 +254,7 @@ export default function PerformanceLab({ onGridReady }: PerformanceLabProps) {
 			</div>
 
 			<div ref={hostRef} className='min-h-0 flex-1'>
-				<Grid
-					rows={allRows}
-					columns={columns}
-					getRowId={(row) => row.id}
-					pinLeftColumns={2}
-					pinRightColumns={1}
-					onGridReady={onGridReady}
-				/>
+				<Grid rows={allRows} columns={columns} getRowId={(row) => row.id} pinLeftColumns={2} pinRightColumns={1} onGridReady={onGridReady} />
 			</div>
 		</div>
 	);

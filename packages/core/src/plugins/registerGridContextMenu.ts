@@ -71,11 +71,22 @@ export function registerGridContextMenu<TRow>(options: GridContextMenuOptions): 
 						'cursor:pointer',
 						'white-space:nowrap',
 						isDisabled ? 'opacity:0.5;pointer-events:none' : '',
-					].filter(Boolean).join(';');
+					]
+						.filter(Boolean)
+						.join(';');
 					if (!isDisabled) {
-						el.addEventListener('mouseenter', () => { el.style.background = 'var(--og-primary,#4f46e5)'; el.style.color = '#fff'; });
-						el.addEventListener('mouseleave', () => { el.style.background = ''; el.style.color = ''; });
-						el.addEventListener('click', () => { item.action(rowId, api as GridApi<unknown>); closeMenu(); });
+						el.addEventListener('mouseenter', () => {
+							el.style.background = 'var(--og-primary,#4f46e5)';
+							el.style.color = '#fff';
+						});
+						el.addEventListener('mouseleave', () => {
+							el.style.background = '';
+							el.style.color = '';
+						});
+						el.addEventListener('click', () => {
+							item.action(rowId, api as GridApi<unknown>);
+							closeMenu();
+						});
 					}
 					menu.appendChild(el);
 				}

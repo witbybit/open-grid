@@ -385,12 +385,7 @@ function NativeCellTypesDemoInner({ rows, onGridReady }: { rows: SkaterRow[]; on
 				</div>
 
 				<div className='flex-1 min-h-0 min-w-0'>
-					<Grid
-						rows={rows}
-						columns={SKATER_COLUMNS}
-						pinLeftColumns={1}
-						onGridReady={onGridReady}
-					/>
+					<Grid rows={rows} columns={SKATER_COLUMNS} pinLeftColumns={1} onGridReady={onGridReady} />
 				</div>
 			</div>
 

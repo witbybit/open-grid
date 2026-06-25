@@ -115,7 +115,13 @@ const orderItemsMap: Record<string, OrderItemRow[]> = {
 };
 
 const initialQuantities: Record<string, number> = {
-	'ITM-01': 1, 'ITM-02': 3, 'ITM-03': 2, 'ITM-04': 2, 'ITM-05': 5, 'ITM-06': 2, 'ITM-07': 2,
+	'ITM-01': 1,
+	'ITM-02': 3,
+	'ITM-03': 2,
+	'ITM-04': 2,
+	'ITM-05': 5,
+	'ITM-06': 2,
+	'ITM-07': 2,
 };
 
 // ============================================================================
@@ -132,7 +138,9 @@ const RatingStarsRenderer = ({ value }: CellRendererProps<EmployeeRow>) => {
 	return (
 		<div className='flex items-center text-amber-400 select-none h-full'>
 			{Array.from({ length: 5 }).map((_, i) => (
-				<span key={i} className='text-sm'>{i < stars ? '★' : '☆'}</span>
+				<span key={i} className='text-sm'>
+					{i < stars ? '★' : '☆'}
+				</span>
 			))}
 		</div>
 	);
@@ -189,26 +197,34 @@ const NestedOrderGrid = ({ orderId, parentApi }: NestedOrderGridProps) => {
 		[]
 	);
 
-	const handleChildCellValueChanged = useCallback((rowId: string, colField: string, val: unknown) => {
-		const start = performance.now();
-		if (colField === 'quantity' && detailApi) {
-			const q = parseInt(String(val)) || 0;
-			const row = detailApi.rows.getRow(rowId);
-			if (row) {
-				const newSubtotal = q * row.price;
-				detailApi.cells.setField(rowId, 'subtotal', newSubtotal);
-				const originalItem = items.find((itm) => itm.id === rowId);
-				if (originalItem) { originalItem.quantity = q; originalItem.subtotal = newSubtotal; }
-				setTimeout(() => {
-					if (!parentApi) return;
-					let parentSum = 0;
-					detailApi.rows.getAll().forEach((item) => { parentSum += item.subtotal; });
-					parentApi.cells.setField(orderId, 'totalAmount', parentSum);
-				}, 0);
+	const handleChildCellValueChanged = useCallback(
+		(rowId: string, colField: string, val: unknown) => {
+			const start = performance.now();
+			if (colField === 'quantity' && detailApi) {
+				const q = parseInt(String(val)) || 0;
+				const row = detailApi.rows.getRow(rowId);
+				if (row) {
+					const newSubtotal = q * row.price;
+					detailApi.cells.setField(rowId, 'subtotal', newSubtotal);
+					const originalItem = items.find((itm) => itm.id === rowId);
+					if (originalItem) {
+						originalItem.quantity = q;
+						originalItem.subtotal = newSubtotal;
+					}
+					setTimeout(() => {
+						if (!parentApi) return;
+						let parentSum = 0;
+						detailApi.rows.getAll().forEach((item) => {
+							parentSum += item.subtotal;
+						});
+						parentApi.cells.setField(orderId, 'totalAmount', parentSum);
+					}, 0);
+				}
 			}
-		}
-		LatencyProfiler.record(performance.now() - start);
-	}, [detailApi, items, orderId, parentApi]);
+			LatencyProfiler.record(performance.now() - start);
+		},
+		[detailApi, items, orderId, parentApi]
+	);
 
 	if (items.length === 0) return <div className='p-4 text-[10px] text-slate-500'>No line items for this order.</div>;
 
@@ -264,10 +280,20 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 			for (const item of items) {
 				totalQuantity += item.quantity;
 				grandTotal += item.subtotal;
-				if (item.price > highestPrice) { highestPrice = item.price; highestItem = item.itemName; }
+				if (item.price > highestPrice) {
+					highestPrice = item.price;
+					highestItem = item.itemName;
+				}
 			}
 		}
-		setTelemetryResult({ totalOrders: masterRows.length, totalQuantity, grandTotal, highestItem, highestPrice, timestamp: new Date().toLocaleTimeString() });
+		setTelemetryResult({
+			totalOrders: masterRows.length,
+			totalQuantity,
+			grandTotal,
+			highestItem,
+			highestPrice,
+			timestamp: new Date().toLocaleTimeString(),
+		});
 	};
 
 	const groupingColumns = useMemo<GridColumnDef<EmployeeRow>[]>(
@@ -286,16 +312,28 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 		() => [
 			{ id: 'name', field: 'name', header: 'Node Path / Name', width: 260, renderer: { kind: 'react', component: TreeNameRenderer } },
 			{
-				id: 'type', field: 'type', header: 'File Type', width: 110,
-				renderer: { kind: 'react', component: ({ value }: CellRendererProps<any>) => (
-					<span className='text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wide'>{String(value)}</span>
-				)},
+				id: 'type',
+				field: 'type',
+				header: 'File Type',
+				width: 110,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: CellRendererProps<any>) => (
+						<span className='text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wide'>{String(value)}</span>
+					),
+				},
 			},
 			{
-				id: 'size', field: 'size', header: 'Capacity Size', width: 120,
-				renderer: { kind: 'react', component: ({ value }: CellRendererProps<any>) => (
-					<span className='font-mono text-slate-400 text-xs'>{String(value ?? '—')}</span>
-				)},
+				id: 'size',
+				field: 'size',
+				header: 'Capacity Size',
+				width: 120,
+				renderer: {
+					kind: 'react',
+					component: ({ value }: CellRendererProps<any>) => (
+						<span className='font-mono text-slate-400 text-xs'>{String(value ?? '—')}</span>
+					),
+				},
 			},
 			{ id: 'modifiedAt', field: 'modifiedAt', header: 'Last Edited', width: 140 },
 		],
@@ -307,7 +345,13 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 			{ id: 'id', field: 'id', header: 'Order ID', width: 110 },
 			{ id: 'customerName', field: 'customerName', header: 'Client Corporation', width: 220 },
 			{ id: 'orderDate', field: 'orderDate', header: 'Purchase Date', width: 150 },
-			{ id: 'totalAmount', field: 'totalAmount', header: 'Transaction Value', width: 160, renderer: { kind: 'react', component: PriceBadgeRenderer } },
+			{
+				id: 'totalAmount',
+				field: 'totalAmount',
+				header: 'Transaction Value',
+				width: 160,
+				renderer: { kind: 'react', component: PriceBadgeRenderer },
+			},
 			{ id: 'status', field: 'status', header: 'Fulfillment Status', width: 140, renderer: { kind: 'react', component: StatusBadgeRenderer } },
 		],
 		[]
@@ -405,7 +449,9 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 						VisualRow Architecture
 					</h3>
 					<div className='text-xs text-slate-300 flex flex-col gap-2.5'>
-						<p>Each visible row is a pipeline-driven <span className='font-mono text-purple-400'>VisualRow</span> discriminated union.</p>
+						<p>
+							Each visible row is a pipeline-driven <span className='font-mono text-purple-400'>VisualRow</span> discriminated union.
+						</p>
 						<p>This enables complex render hierarchies without mutating the original dataset.</p>
 					</div>
 					<div className='border-t border-slate-900/60 pt-3 flex flex-col gap-2 text-[10px]'>
@@ -432,7 +478,9 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 					{activeTab === 'group' && (
 						<div className='text-xs text-slate-300 flex flex-col gap-2 leading-relaxed'>
 							<span className='text-[10px] font-extrabold text-purple-400 uppercase tracking-wide'>📦 Row Grouping Mode</span>
-							<p>Groups employee data on the fly by their <span className='font-semibold text-slate-200'>Department</span> column.</p>
+							<p>
+								Groups employee data on the fly by their <span className='font-semibold text-slate-200'>Department</span> column.
+							</p>
 							<p>Use the group panel to drag columns for ad-hoc grouping.</p>
 						</div>
 					)}
@@ -446,7 +494,10 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 					{activeTab === 'detail' && (
 						<div className='text-xs text-slate-300 flex flex-col gap-2 leading-relaxed'>
 							<span className='text-[10px] font-extrabold text-pink-400 uppercase tracking-wide'>🔍 Master-Detail Mode</span>
-							<p>Click any order row to view its line items below. Edit the <span className='font-mono text-pink-300 text-[10px]'>Qty</span> column to update subtotals.</p>
+							<p>
+								Click any order row to view its line items below. Edit the{' '}
+								<span className='font-mono text-pink-300 text-[10px]'>Qty</span> column to update subtotals.
+							</p>
 						</div>
 					)}
 				</div>
@@ -487,12 +538,11 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 								<div className='p-2.5 bg-slate-950/80 border border-slate-900 rounded-lg flex flex-col font-mono text-left'>
 									<span className='text-slate-500 text-[8px] uppercase font-sans font-extrabold'>Grand Total</span>
 									<span className='text-emerald-400 text-base font-extrabold mt-0.5'>
-										${telemetryResult.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+										$
+										{telemetryResult.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 									</span>
 								</div>
-								<div className='text-[8px] text-slate-500 text-center italic mt-0.5'>
-									Calculated at {telemetryResult.timestamp}
-								</div>
+								<div className='text-[8px] text-slate-500 text-center italic mt-0.5'>Calculated at {telemetryResult.timestamp}</div>
 							</div>
 						) : (
 							<div className='text-[10px] text-slate-500 italic p-3 bg-slate-950/40 border border-slate-900/60 rounded-lg text-center leading-normal'>
@@ -514,7 +564,8 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 						</div>
 					</div>
 					<p className='text-[10px] text-slate-500 leading-normal mt-1'>
-						Visual portal mounts are batch-flushed to avoid layout thrashing, ensuring smooth performance even with deep sub-grid recursion.
+						Visual portal mounts are batch-flushed to avoid layout thrashing, ensuring smooth performance even with deep sub-grid
+						recursion.
 					</p>
 				</div>
 			</div>

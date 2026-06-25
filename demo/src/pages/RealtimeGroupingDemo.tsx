@@ -102,10 +102,31 @@ const COLUMNS: GridColumnDef<SalesRow>[] = [
 	{ id: 'product', field: 'product', header: 'Product', width: 160, sortable: true },
 	{ id: 'rep', field: 'rep', header: 'Sales Rep', width: 145, sortable: true },
 	{ id: 'quarter', field: 'quarter', header: 'Quarter', width: 100, sortable: true },
-	{ id: 'revenue', field: 'revenue', header: 'Revenue', width: 130, sortable: true, renderer: { kind: 'react', component: CurrencyRenderer, capabilities: { scrollBehavior: 'live' } } },
+	{
+		id: 'revenue',
+		field: 'revenue',
+		header: 'Revenue',
+		width: 130,
+		sortable: true,
+		renderer: { kind: 'react', component: CurrencyRenderer, capabilities: { scrollBehavior: 'live' } },
+	},
 	{ id: 'units', field: 'units', header: 'Units', width: 75, sortable: true },
-	{ id: 'margin', field: 'margin', header: 'Margin %', width: 95, sortable: true, renderer: { kind: 'react', component: MarginRenderer, capabilities: { scrollBehavior: 'live' } } },
-	{ id: 'status', field: 'status', header: 'Status', width: 95, sortable: true, renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live' } } },
+	{
+		id: 'margin',
+		field: 'margin',
+		header: 'Margin %',
+		width: 95,
+		sortable: true,
+		renderer: { kind: 'react', component: MarginRenderer, capabilities: { scrollBehavior: 'live' } },
+	},
+	{
+		id: 'status',
+		field: 'status',
+		header: 'Status',
+		width: 95,
+		sortable: true,
+		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live' } },
+	},
 ];
 
 const ROWS = generateRows(500);

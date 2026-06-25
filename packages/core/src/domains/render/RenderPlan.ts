@@ -56,7 +56,7 @@ export function buildRenderPlan<TRow>(
 	visual: VisualModelView<TRow>,
 	layout: LayoutSnapshot,
 	window: VisibleWindow,
-	options: BuildRenderPlanOptions = {},
+	options: BuildRenderPlanOptions = {}
 ): RenderPlan {
 	const rows: RowRenderPlan[] = [];
 	const last = Math.min(window.lastIndex, visual.count - 1);

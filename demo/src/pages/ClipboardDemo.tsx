@@ -53,12 +53,9 @@ export default function ClipboardDemo() {
 		setLog((prev) => [entry, ...prev].slice(0, 20));
 	}, []);
 
-	const handleGridReady = useCallback(
-		(api: GridApi<Product>) => {
-			apiRef.current = api;
-		},
-		[]
-	);
+	const handleGridReady = useCallback((api: GridApi<Product>) => {
+		apiRef.current = api;
+	}, []);
 
 	const handleCopySelected = useCallback(async () => {
 		if (!apiRef.current) return;
@@ -103,9 +100,12 @@ export default function ClipboardDemo() {
 				<button
 					onClick={handleCopySelected}
 					style={{
-						padding: '5px 12px', borderRadius: 6,
+						padding: '5px 12px',
+						borderRadius: 6,
 						border: '1px solid var(--og-border-color, #d1d5db)',
-						background: 'var(--og-header-bg, #f9fafb)', cursor: 'pointer', fontSize: 12,
+						background: 'var(--og-header-bg, #f9fafb)',
+						cursor: 'pointer',
+						fontSize: 12,
 					}}
 				>
 					Copy Selected (Ctrl+C)
@@ -113,9 +113,12 @@ export default function ClipboardDemo() {
 				<button
 					onClick={handleCopyAll}
 					style={{
-						padding: '5px 12px', borderRadius: 6,
+						padding: '5px 12px',
+						borderRadius: 6,
 						border: '1px solid var(--og-border-color, #d1d5db)',
-						background: 'var(--og-header-bg, #f9fafb)', cursor: 'pointer', fontSize: 12,
+						background: 'var(--og-header-bg, #f9fafb)',
+						cursor: 'pointer',
+						fontSize: 12,
 					}}
 				>
 					Copy Selection
@@ -123,9 +126,12 @@ export default function ClipboardDemo() {
 				<button
 					onClick={handlePaste}
 					style={{
-						padding: '5px 12px', borderRadius: 6,
+						padding: '5px 12px',
+						borderRadius: 6,
 						border: '1px solid var(--og-border-color, #d1d5db)',
-						background: 'var(--og-header-bg, #f9fafb)', cursor: 'pointer', fontSize: 12,
+						background: 'var(--og-header-bg, #f9fafb)',
+						cursor: 'pointer',
+						fontSize: 12,
 					}}
 				>
 					Paste (Ctrl+V)
@@ -140,19 +146,27 @@ export default function ClipboardDemo() {
 			{log.length > 0 && (
 				<div
 					style={{
-						height: 120, overflowY: 'auto', borderRadius: 6,
+						height: 120,
+						overflowY: 'auto',
+						borderRadius: 6,
 						border: '1px solid var(--og-border-color, #e5e7eb)',
-						background: 'var(--og-odd-row-bg, #fafafa)', fontSize: 11,
-						fontFamily: 'monospace', padding: '6px 10px', flexShrink: 0,
+						background: 'var(--og-odd-row-bg, #fafafa)',
+						fontSize: 11,
+						fontFamily: 'monospace',
+						padding: '6px 10px',
+						flexShrink: 0,
 					}}
 				>
 					{log.map((entry, i) => (
 						<div key={i} style={{ display: 'flex', gap: 8, marginBottom: 2 }}>
 							<span style={{ color: '#9ca3af', minWidth: 60 }}>{entry.time}</span>
-							<span style={{
-								color: entry.kind === 'copy' ? '#2563eb' : entry.kind === 'cut' ? '#d97706' : '#16a34a',
-								minWidth: 40, fontWeight: 600,
-							}}>
+							<span
+								style={{
+									color: entry.kind === 'copy' ? '#2563eb' : entry.kind === 'cut' ? '#d97706' : '#16a34a',
+									minWidth: 40,
+									fontWeight: 600,
+								}}
+							>
 								{entry.kind === 'copy' ? '↑ COPY' : entry.kind === 'cut' ? '✂ CUT' : '↓ PASTE'}
 							</span>
 							<span style={{ color: 'var(--og-cell-fg, #374151)' }}>{entry.text}</span>

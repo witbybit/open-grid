@@ -123,7 +123,9 @@ describe('DomGridRenderer — DOM structure (ARCHITECTURE.md §3 R12–R13)', ()
 	it('data cells carry og-cell class and display the cell value', () => {
 		const { container } = mountGrid();
 		const cells = container.querySelectorAll('.og-row .og-cell');
-		const texts = Array.from(cells).map((c) => c.textContent?.trim()).filter(Boolean);
+		const texts = Array.from(cells)
+			.map((c) => c.textContent?.trim())
+			.filter(Boolean);
 		expect(texts).toContain('Alice');
 		expect(texts).toContain('42');
 	});

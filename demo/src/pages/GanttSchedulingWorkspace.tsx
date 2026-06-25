@@ -76,9 +76,7 @@ export default function GanttSchedulingWorkspace({
 			alert('Please select rows first using click or Shift+Click.');
 			return;
 		}
-		api.rows.update((currentRows) =>
-			currentRows.map((row) => (selectedIds.has(row.id) ? { ...row, progress: 100, status: 'Done' } : row))
-		);
+		api.rows.update((currentRows) => currentRows.map((row) => (selectedIds.has(row.id) ? { ...row, progress: 100, status: 'Done' } : row)));
 		setRevision((v) => v + 1);
 	}, [api]);
 

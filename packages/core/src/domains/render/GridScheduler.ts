@@ -65,10 +65,7 @@ export class DefaultGridScheduler implements GridScheduler {
 		if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
 			return (
 				window as unknown as {
-					requestIdleCallback: (
-						cb: (deadline: GridIdleDeadline) => void,
-						opts?: { timeout: number },
-					) => number;
+					requestIdleCallback: (cb: (deadline: GridIdleDeadline) => void, opts?: { timeout: number }) => number;
 				}
 			).requestIdleCallback(callback, { timeout });
 		}
@@ -329,11 +326,7 @@ export class FrameCoordinator {
 			}
 		} finally {
 			this.inFlush = false;
-			const keepAlive =
-				this.pendingScrollFrame ||
-				this.pendingPaintFrame ||
-				this.pendingPostScroll ||
-				this._isScrolling;
+			const keepAlive = this.pendingScrollFrame || this.pendingPaintFrame || this.pendingPostScroll || this._isScrolling;
 			if (keepAlive) this.scheduleRaf();
 		}
 	}

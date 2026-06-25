@@ -160,7 +160,7 @@ export class DomGridRenderer<TRow> {
 	constructor(
 		private readonly view: RendererEngineView<TRow>,
 		private readonly callbacks: DomGridRendererCallbacks<TRow> = {},
-		private readonly scheduler: GridScheduler = defaultGridScheduler,
+		private readonly scheduler: GridScheduler = defaultGridScheduler
 	) {
 		this.frameCoordinator = new FrameCoordinator({ scheduler: this.scheduler });
 
@@ -467,7 +467,16 @@ export class DomGridRenderer<TRow> {
 
 		const rendered = new Set<string>();
 
-		const paintPlacement = (field: string, header: string, left: number, width: number, sortable: boolean, sortDirection: 'asc' | 'desc' | null, lane: 'left' | 'center' | 'right', columnId: string) => {
+		const paintPlacement = (
+			field: string,
+			header: string,
+			left: number,
+			width: number,
+			sortable: boolean,
+			sortDirection: 'asc' | 'desc' | null,
+			lane: 'left' | 'center' | 'right',
+			columnId: string
+		) => {
 			rendered.add(field);
 
 			let state = this.headerCells.get(field);
@@ -697,7 +706,7 @@ export class DomGridRenderer<TRow> {
 		topology: CompiledColumnTopology,
 		defaultRowHeight: number,
 		colStart: number,
-		colEnd: number,
+		colEnd: number
 	): void {
 		const el = slot.el;
 
@@ -731,13 +740,7 @@ export class DomGridRenderer<TRow> {
 		return cls;
 	}
 
-	private paintCells(
-		slot: RowSlotState,
-		row: VisualRow<TRow>,
-		topology: CompiledColumnTopology,
-		colStart: number,
-		colEnd: number,
-	): void {
+	private paintCells(slot: RowSlotState, row: VisualRow<TRow>, topology: CompiledColumnTopology, colStart: number, colEnd: number): void {
 		// When the row kind changes, clear all previous slot content first.
 		if (slot.lastKind !== null && slot.lastKind !== row.kind) {
 			this.clearSlotContent(slot);
@@ -850,7 +853,9 @@ export class DomGridRenderer<TRow> {
 		// Re-wire click to latest groupKey (handles slot recycle)
 		const oldHandler = (groupEl as HTMLDivElement & { _ogGroupHandler?: () => void })._ogGroupHandler;
 		if (oldHandler) groupEl.removeEventListener('click', oldHandler);
-		const handler = () => { this.groupToggleCallback?.(row.groupKey); };
+		const handler = () => {
+			this.groupToggleCallback?.(row.groupKey);
+		};
 		(groupEl as HTMLDivElement & { _ogGroupHandler?: () => void })._ogGroupHandler = handler;
 		groupEl.addEventListener('click', handler);
 	}
@@ -877,13 +882,7 @@ export class DomGridRenderer<TRow> {
 	// Column-based cell painting (data | tree | loading)
 	// ---------------------------------------------------------------------------
 
-	private paintColumnCells(
-		slot: RowSlotState,
-		row: VisualRow<TRow>,
-		topology: CompiledColumnTopology,
-		colStart: number,
-		colEnd: number,
-	): void {
+	private paintColumnCells(slot: RowSlotState, row: VisualRow<TRow>, topology: CompiledColumnTopology, colStart: number, colEnd: number): void {
 		const el = slot.el;
 		const hasLeft = topology.pinLeftWidth > 0;
 		const hasRight = topology.pinRightWidth > 0;
@@ -956,7 +955,7 @@ export class DomGridRenderer<TRow> {
 		cssLeft: number,
 		width: number,
 		lane: 'left' | 'center' | 'right',
-		treeIndent: number,
+		treeIndent: number
 	): void {
 		const el = slot.el;
 		let cellEl = slot.cellsByField.get(field);
@@ -1210,12 +1209,7 @@ export class DomGridRenderer<TRow> {
 		const filterByField = new Map(filterModel.map((f) => [f.field, f]));
 		const renderedFields = new Set<string>();
 
-		const paintFilterInput = (
-			field: string,
-			cssLeft: number,
-			width: number,
-			lane: 'left' | 'center' | 'right',
-		): void => {
+		const paintFilterInput = (field: string, cssLeft: number, width: number, lane: 'left' | 'center' | 'right'): void => {
 			renderedFields.add(field);
 			let input = this.floatingFilterInputs.get(field);
 			const isNew = !input;
@@ -1284,7 +1278,7 @@ export class DomGridRenderer<TRow> {
 	private paintSelectionOverlay(
 		win: Readonly<import('./RenderWindow.js').RenderWindow>,
 		topology: CompiledColumnTopology,
-		defaultRowHeight: number,
+		defaultRowHeight: number
 	): void {
 		if (!this.layerRegistry) return;
 

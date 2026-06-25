@@ -1,11 +1,7 @@
 import type { GridCommand, GridCommandType } from './GridCommand.js';
 import type { GridCommandResult } from './GridCommandResult.js';
 import { appliedResult, noopResult, rejectedResult } from './GridCommandResult.js';
-import type {
-	GridCommandHandler,
-	GridCommit,
-	GridKernelContext,
-} from './GridCommit.js';
+import type { GridCommandHandler, GridCommit, GridKernelContext } from './GridCommit.js';
 import type { GridDomainId } from './GridDomain.js';
 import type { GridEffect } from './GridEffect.js';
 import type { GridEvent, GridEventDraft, GridEventListener } from './GridEvent.js';

@@ -37,9 +37,9 @@ export function registerRowCommands<TRow>(kernel: GridKernel, rowModel: RowModel
 	unregister.push(
 		kernel.register('rows.replace', (command) => {
 			if (!caps.replaceRows) return handlerRejected(`"replaceRows" unsupported by "${type}" row model`);
-			const result = rowModel.commands.replaceRows((command.payload.rows as readonly TRow[]));
+			const result = rowModel.commands.replaceRows(command.payload.rows as readonly TRow[]);
 			return toDraft(result, 'rows.replaced');
-		}),
+		})
 	);
 
 	unregister.push(
@@ -47,7 +47,7 @@ export function registerRowCommands<TRow>(kernel: GridKernel, rowModel: RowModel
 			if (!caps.updateRows) return handlerRejected(`"updateRows" unsupported by "${type}" row model`);
 			const result = rowModel.commands.updateRows(command.payload.updater as (rows: TRow[]) => TRow[]);
 			return toDraft(result, 'rows.changed');
-		}),
+		})
 	);
 
 	unregister.push(
@@ -55,7 +55,7 @@ export function registerRowCommands<TRow>(kernel: GridKernel, rowModel: RowModel
 			if (!caps.transactions) return handlerRejected(`"transactions" unsupported by "${type}" row model`);
 			const result = rowModel.commands.applyTransaction(command.payload.transaction as RowTransaction<TRow>);
 			return toDraft(result, 'rows.changed');
-		}),
+		})
 	);
 
 	return () => {
@@ -99,10 +99,5 @@ function toDraft(result: RowCommandResult, appliedEvent: 'rows.replaced' | 'rows
 }
 
 function isEmptyChange(changes: RowChangeSet): boolean {
-	return (
-		changes.added.length === 0 &&
-		changes.removed.length === 0 &&
-		changes.updated.length === 0 &&
-		changes.moved.length === 0
-	);
+	return changes.added.length === 0 && changes.removed.length === 0 && changes.updated.length === 0 && changes.moved.length === 0;
 }

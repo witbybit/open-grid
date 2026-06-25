@@ -10,16 +10,26 @@ type Operator = (typeof OPERATORS)[number];
 
 function operatorLabel(op: Operator): string {
 	switch (op) {
-		case 'contains': return 'Contains';
-		case 'notContains': return 'Not contains';
-		case 'equals': return 'Equals';
-		case 'notEquals': return 'Not equals';
-		case 'startsWith': return 'Starts with';
-		case 'endsWith': return 'Ends with';
-		case 'gt': return '>';
-		case 'lt': return '<';
-		case 'gte': return '>=';
-		case 'lte': return '<=';
+		case 'contains':
+			return 'Contains';
+		case 'notContains':
+			return 'Not contains';
+		case 'equals':
+			return 'Equals';
+		case 'notEquals':
+			return 'Not equals';
+		case 'startsWith':
+			return 'Starts with';
+		case 'endsWith':
+			return 'Ends with';
+		case 'gt':
+			return '>';
+		case 'lt':
+			return '<';
+		case 'gte':
+			return '>=';
+		case 'lte':
+			return '<=';
 	}
 }
 
@@ -27,20 +37,17 @@ export function FiltersPanel({ api }: FiltersPanelProps) {
 	const filterModel = useSyncExternalStore(
 		api.subscribe,
 		() => api.pipeline.getFilterModel(),
-		() => api.pipeline.getFilterModel(),
+		() => api.pipeline.getFilterModel()
 	);
 
 	const cols = useSyncExternalStore(
 		api.subscribe,
 		() => api.columns.getState(),
-		() => api.pipeline.getFilterModel(), // stable snapshot for SSR
+		() => api.pipeline.getFilterModel() // stable snapshot for SSR
 	).filter((c) => c.visible);
 
 	function setFilter(cf: ColumnFilter) {
-		const next: FilterModel = [
-			...filterModel.filter((f) => f.columnId !== cf.columnId),
-			cf,
-		];
+		const next: FilterModel = [...filterModel.filter((f) => f.columnId !== cf.columnId), cf];
 		api.pipeline.setFilterModel(next);
 	}
 
@@ -85,13 +92,18 @@ export function FiltersPanel({ api }: FiltersPanelProps) {
 						}}
 					>
 						<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-							<span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-								{label}
-							</span>
+							<span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
 							{active && (
 								<button
 									onClick={() => removeFilter(id)}
-									style={{ padding: '1px 5px', fontSize: '11px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--og-error, #d32f2f)' }}
+									style={{
+										padding: '1px 5px',
+										fontSize: '11px',
+										border: 'none',
+										background: 'transparent',
+										cursor: 'pointer',
+										color: 'var(--og-error, #d32f2f)',
+									}}
 								>
 									✕
 								</button>
@@ -99,22 +111,20 @@ export function FiltersPanel({ api }: FiltersPanelProps) {
 						</div>
 						<select
 							value={operator}
-							onChange={(e) =>
-								setFilter({ columnId: col.id, field: col.field ?? id, operator: e.target.value, value })
-							}
+							onChange={(e) => setFilter({ columnId: col.id, field: col.field ?? id, operator: e.target.value, value })}
 							style={{ ...inputStyle, marginBottom: '4px' }}
 						>
 							{OPERATORS.map((op) => (
-								<option key={op} value={op}>{operatorLabel(op)}</option>
+								<option key={op} value={op}>
+									{operatorLabel(op)}
+								</option>
 							))}
 						</select>
 						<input
-							type="text"
-							placeholder="Filter value…"
+							type='text'
+							placeholder='Filter value…'
 							value={value}
-							onChange={(e) =>
-								setFilter({ columnId: col.id, field: col.field ?? id, operator, value: e.target.value })
-							}
+							onChange={(e) => setFilter({ columnId: col.id, field: col.field ?? id, operator, value: e.target.value })}
 							style={inputStyle}
 						/>
 					</div>

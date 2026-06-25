@@ -107,7 +107,10 @@ export class DataIntegrityManager<TRow = unknown> {
 							message: msg,
 						};
 						let rowMap = this.cellIssues.get(rowId);
-						if (!rowMap) { rowMap = new Map(); this.cellIssues.set(rowId, rowMap); }
+						if (!rowMap) {
+							rowMap = new Map();
+							this.cellIssues.set(rowId, rowMap);
+						}
 						if (!rowMap.has(colRule.field)) rowMap.set(colRule.field, issue);
 						break; // first failing validator per cell
 					}
@@ -177,7 +180,9 @@ export class DataIntegrityManager<TRow = unknown> {
 
 	subscribe = (fn: () => void): (() => void) => {
 		this.listeners.add(fn);
-		return () => { this.listeners.delete(fn); };
+		return () => {
+			this.listeners.delete(fn);
+		};
 	};
 
 	private notify(): void {

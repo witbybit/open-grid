@@ -84,19 +84,25 @@ export type { ClipboardPort, ClipboardOptions } from './domains/export/Clipboard
 export { DataIntegrityManager } from './domains/integrity/DataIntegrityManager.js';
 export type { ColumnValidationConfig, IntegrityDataPort } from './domains/integrity/DataIntegrityManager.js';
 export { ValidationRules } from './domains/integrity/ValidationRules.js';
-export type { GridIntegrityIssue, IntegritySeverity, CellValidator, RowIntegrityRule, CellValidatorContext } from './domains/integrity/ValidationRules.js';
+export type {
+	GridIntegrityIssue,
+	IntegritySeverity,
+	CellValidator,
+	RowIntegrityRule,
+	CellValidatorContext,
+} from './domains/integrity/ValidationRules.js';
 
 // Themes — standalone CSS variable system, no engine dependency
 export {
-  BUILT_IN_THEMES,
-  BUILT_IN_THEME_ORDER,
-  BUILT_IN_THEME_METADATA,
-  getBuiltInTheme,
-  isBuiltInThemeName,
-  createTheme,
-  themeToCSSVariables,
-  ThemeManager,
-  LIGHT_THEME,
-  DARK_THEME,
+	BUILT_IN_THEMES,
+	BUILT_IN_THEME_ORDER,
+	BUILT_IN_THEME_METADATA,
+	getBuiltInTheme,
+	isBuiltInThemeName,
+	createTheme,
+	themeToCSSVariables,
+	ThemeManager,
+	LIGHT_THEME,
+	DARK_THEME,
 } from './renderer/themes.js';
 export type { ThemeTokens, BuiltInThemeName } from './renderer/themes.js';

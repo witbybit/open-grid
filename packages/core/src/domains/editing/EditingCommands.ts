@@ -29,7 +29,7 @@ export function registerEditingCommands<TRow>(
 	host: CellCommandHost,
 	model: EditModel,
 	engine: CellValueEngine<TRow>,
-	options: CellCommandOptions<TRow> = {},
+	options: CellCommandOptions<TRow> = {}
 ): () => void {
 	const off: Array<() => void> = [];
 
@@ -43,7 +43,7 @@ export function registerEditingCommands<TRow>(
 				events: [{ type: 'editing.started', payload: { editId: session.id, rowId: address.rowId, columnId: address.columnId } }],
 				renderInvalidation: { scope: 'cells', domains: ['editing'] },
 			});
-		}),
+		})
 	);
 
 	off.push(
@@ -54,7 +54,7 @@ export function registerEditingCommands<TRow>(
 				dirtyDomains: ['editing'],
 				renderInvalidation: { scope: 'cells', domains: ['editing'] },
 			});
-		}),
+		})
 	);
 
 	off.push(
@@ -66,7 +66,7 @@ export function registerEditingCommands<TRow>(
 				events: [{ type: 'editing.cancelled', payload: { editId: closed.id } }],
 				renderInvalidation: { scope: 'cells', domains: ['editing'] },
 			});
-		}),
+		})
 	);
 
 	off.push(
@@ -88,7 +88,10 @@ export function registerEditingCommands<TRow>(
 			}
 
 			const closed = model.close('committed')!;
-			const committedEvent = { type: 'editing.committed' as const, payload: { editId: closed.id, rowId: active.cell.rowId, columnId: active.cell.columnId } };
+			const committedEvent = {
+				type: 'editing.committed' as const,
+				payload: { editId: closed.id, rowId: active.cell.rowId, columnId: active.cell.columnId },
+			};
 
 			if (outcome.status === 'applied') {
 				const base = appliedCellWriteDraft(outcome, active.cell);
@@ -106,7 +109,7 @@ export function registerEditingCommands<TRow>(
 				events: [committedEvent],
 				renderInvalidation: { scope: 'cells', domains: ['editing'] },
 			});
-		}),
+		})
 	);
 
 	return () => {

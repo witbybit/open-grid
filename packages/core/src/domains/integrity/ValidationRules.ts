@@ -44,8 +44,7 @@ export interface RowIntegrityRule<TRow = unknown> {
 // ---------------------------------------------------------------------------
 
 export function required(message?: string): CellValidator {
-	return ({ value }) =>
-		value == null || value === '' ? (message ?? 'This field is required') : null;
+	return ({ value }) => (value == null || value === '' ? (message ?? 'This field is required') : null);
 }
 
 export function email(message?: string): CellValidator {
@@ -107,10 +106,7 @@ export function customCellRule(fn: (value: unknown, row: unknown) => string | nu
 	return ({ value, rowData }) => fn(value, rowData);
 }
 
-export function duplicateValueRule(
-	getColumnValues: () => unknown[],
-	message?: string,
-): CellValidator {
+export function duplicateValueRule(getColumnValues: () => unknown[], message?: string): CellValidator {
 	return ({ value }) => {
 		if (value == null || value === '') return null;
 		const all = getColumnValues();

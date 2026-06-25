@@ -25,7 +25,7 @@ export class ClipboardController<TRow> {
 
 	constructor(
 		private readonly port: ClipboardPort<TRow>,
-		private readonly opts: ClipboardOptions = {},
+		private readonly opts: ClipboardOptions = {}
 	) {}
 
 	/** True if there's a pending cut operation (rows highlighted for deletion). */
@@ -122,7 +122,7 @@ export class ClipboardController<TRow> {
 		const engine = new GridExportEngine<TRow>(
 			() => this.port.getColumns(),
 			(rowId, field) => this.port.getCellValue(rowId, field),
-			() => this.port.getVisualRows(),
+			() => this.port.getVisualRows()
 		);
 		return engine.toCsvString({
 			delimiter: '\t',

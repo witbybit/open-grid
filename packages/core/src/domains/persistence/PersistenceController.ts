@@ -19,7 +19,7 @@ export class PersistenceController {
 		private readonly adapter: PersistenceAdapter,
 		private readonly readPort: GridStateReadPort,
 		private readonly writePort: GridStateWritePort,
-		private readonly debounceMs = 500,
+		private readonly debounceMs = 500
 	) {}
 
 	/**
@@ -28,11 +28,7 @@ export class PersistenceController {
 	subscribeToKernel(subscribe: (listener: GridEventListener) => () => void): () => void {
 		return subscribe((event) => {
 			if (!this.autoSave) return;
-			if (
-				event.type === 'rows.replaced' ||
-				event.type === 'pipeline.changed' ||
-				event.type === 'columns.changed'
-			) {
+			if (event.type === 'rows.replaced' || event.type === 'pipeline.changed' || event.type === 'columns.changed') {
 				this.scheduleAutoSave();
 			}
 		});
@@ -74,7 +70,9 @@ export class PersistenceController {
 
 	subscribeToStatus = (fn: () => void): (() => void) => {
 		this.statusListeners.add(fn);
-		return () => { this.statusListeners.delete(fn); };
+		return () => {
+			this.statusListeners.delete(fn);
+		};
 	};
 
 	getGridState(): SerializedGridState {
@@ -93,7 +91,9 @@ export class PersistenceController {
 	private scheduleAutoSave(): void {
 		this.cancelDebounce();
 		this.setStatus('saving');
-		this.debounceTimer = setTimeout(() => { this.doSave(); }, this.debounceMs);
+		this.debounceTimer = setTimeout(() => {
+			this.doSave();
+		}, this.debounceMs);
 	}
 
 	private cancelDebounce(): void {

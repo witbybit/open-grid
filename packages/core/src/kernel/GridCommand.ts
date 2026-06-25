@@ -18,18 +18,7 @@ export interface GridCommandPayloads {}
 
 export type GridCommandType = (keyof GridCommandPayloads & string) | (string & {});
 
-export type GridCommandSource =
-	| 'api'
-	| 'keyboard'
-	| 'mouse'
-	| 'paste'
-	| 'fill'
-	| 'menu'
-	| 'panel'
-	| 'export'
-	| 'undo'
-	| 'redo'
-	| 'internal';
+export type GridCommandSource = 'api' | 'keyboard' | 'mouse' | 'paste' | 'fill' | 'menu' | 'panel' | 'export' | 'undo' | 'redo' | 'internal';
 
 export interface GridCommandMeta {
 	readonly source?: GridCommandSource;
@@ -48,10 +37,6 @@ export interface GridCommand<K extends GridCommandType = GridCommandType> {
 	readonly meta?: GridCommandMeta;
 }
 
-export function defineCommand<K extends GridCommandType>(
-	type: K,
-	payload: PayloadOf<K>,
-	meta?: GridCommandMeta,
-): GridCommand<K> {
+export function defineCommand<K extends GridCommandType>(type: K, payload: PayloadOf<K>, meta?: GridCommandMeta): GridCommand<K> {
 	return meta ? { type, payload, meta } : { type, payload };
 }

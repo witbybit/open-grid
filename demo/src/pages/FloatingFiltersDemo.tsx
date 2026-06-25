@@ -1,11 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import {
-	Grid,
-	type GridApi,
-	type ColumnDef,
-	type ColumnFilter,
-	type CellRendererProps,
-} from '@open-grid/react';
+import { Grid, type GridApi, type ColumnDef, type ColumnFilter, type CellRendererProps } from '@open-grid/react';
 import { Filter, X, ToggleLeft, ToggleRight, Code2 } from 'lucide-react';
 
 // ── Row type ──────────────────────────────────────────────────────────────────
@@ -27,8 +21,16 @@ const STAGES: DealRow['stage'][] = ['Lead', 'Qualified', 'Proposal', 'Negotiatio
 const REGIONS: DealRow['region'][] = ['North America', 'Europe', 'APAC', 'LATAM'];
 const OWNERS = ['Alice Chen', 'Bob Martinez', 'Carol Smith', 'David Kim', 'Emma Wilson', 'Frank Lee', 'Grace Park'];
 const DEAL_NAMES = [
-	'Project Nexus', 'Atlas Platform', 'Horizon Suite', 'Vertex CRM', 'Apex Analytics',
-	'Synergy Hub', 'Catalyst Cloud', 'Prism Data', 'Echo Framework', 'Nova Stack',
+	'Project Nexus',
+	'Atlas Platform',
+	'Horizon Suite',
+	'Vertex CRM',
+	'Apex Analytics',
+	'Synergy Hub',
+	'Catalyst Cloud',
+	'Prism Data',
+	'Echo Framework',
+	'Nova Stack',
 ];
 
 function generateDeals(count: number): DealRow[] {
@@ -51,18 +53,32 @@ function generateDeals(count: number): DealRow[] {
 // ── Stage badge colors ────────────────────────────────────────────────────────
 
 const STAGE_COLORS: Record<string, string> = {
-	Lead: '#64748b', Qualified: '#3b82f6', Proposal: '#8b5cf6',
-	Negotiation: '#f59e0b', 'Closed Won': '#10b981', 'Closed Lost': '#ef4444',
+	Lead: '#64748b',
+	Qualified: '#3b82f6',
+	Proposal: '#8b5cf6',
+	Negotiation: '#f59e0b',
+	'Closed Won': '#10b981',
+	'Closed Lost': '#ef4444',
 };
 
 function StageBadgeRenderer({ value }: CellRendererProps<DealRow>) {
 	const stage = String(value ?? '');
 	const color = STAGE_COLORS[stage] ?? '#64748b';
 	return (
-		<span style={{
-			display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 10,
-			fontSize: 10, fontWeight: 700, background: `${color}22`, border: `1px solid ${color}55`, color, whiteSpace: 'nowrap',
-		}}>
+		<span
+			style={{
+				display: 'inline-flex',
+				alignItems: 'center',
+				padding: '2px 8px',
+				borderRadius: 10,
+				fontSize: 10,
+				fontWeight: 700,
+				background: `${color}22`,
+				border: `1px solid ${color}55`,
+				color,
+				whiteSpace: 'nowrap',
+			}}
+		>
 			{stage}
 		</span>
 	);
@@ -75,13 +91,19 @@ function buildColumns(): ColumnDef<DealRow>[] {
 		{ field: 'id', header: 'Deal ID', width: 110, filterType: 'text' },
 		{ field: 'dealName', header: 'Deal Name', width: 180, filterType: 'text' },
 		{
-			field: 'stage', header: 'Stage', width: 140,
-			filterType: 'set', filterValues: STAGES as string[],
+			field: 'stage',
+			header: 'Stage',
+			width: 140,
+			filterType: 'set',
+			filterValues: STAGES as string[],
 			renderer: { kind: 'react', component: StageBadgeRenderer },
 		},
 		{ field: 'region', header: 'Region', width: 140, filterType: 'set', filterValues: REGIONS as string[] },
 		{
-			field: 'value', header: 'Deal Value ($)', width: 140, filterType: 'number',
+			field: 'value',
+			header: 'Deal Value ($)',
+			width: 140,
+			filterType: 'number',
 			valueFormatter: ({ value }) => `$${Number(value).toLocaleString()}`,
 		},
 		{ field: 'probability', header: 'Probability (%)', width: 155, filterType: 'number' },
@@ -183,7 +205,13 @@ export default function FloatingFiltersDemo({ onGridReady, pinLeftColumns }: Flo
 				<div className='shrink-0 flex flex-wrap gap-2 px-1'>
 					{filterModel.map((filter) => {
 						const opMap: Record<string, string> = {
-							contains: 'contains', equals: '=', gte: '≥', lte: '≤', gt: '>', lt: '<', notEquals: '≠',
+							contains: 'contains',
+							equals: '=',
+							gte: '≥',
+							lte: '≤',
+							gt: '>',
+							lt: '<',
+							notEquals: '≠',
 						};
 						const desc = `${opMap[filter.operator] ?? filter.operator} ${filter.value ?? ''}`;
 						return (
@@ -193,7 +221,10 @@ export default function FloatingFiltersDemo({ onGridReady, pinLeftColumns }: Flo
 							>
 								<span className='opacity-60'>{filter.field}:</span>
 								<span>{desc}</span>
-								<button onClick={() => removeFilter(filter.field)} className='ml-1 text-violet-400 hover:text-white transition-colors'>
+								<button
+									onClick={() => removeFilter(filter.field)}
+									className='ml-1 text-violet-400 hover:text-white transition-colors'
+								>
 									<X className='w-2.5 h-2.5' />
 								</button>
 							</div>

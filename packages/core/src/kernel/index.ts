@@ -9,14 +9,7 @@ export { defineCommand } from './GridCommand.js';
 export type { GridCommandResult } from './GridCommandResult.js';
 export { appliedResult, isApplied, noopResult, rejectedResult } from './GridCommandResult.js';
 
-export type {
-	GridCommandHandler,
-	GridCommandHandlerResult,
-	GridCommit,
-	GridCommitDraft,
-	GridKernelContext,
-	GridUndoPatch,
-} from './GridCommit.js';
+export type { GridCommandHandler, GridCommandHandlerResult, GridCommit, GridCommitDraft, GridKernelContext, GridUndoPatch } from './GridCommit.js';
 export { handlerApplied, handlerNoop, handlerRejected } from './GridCommit.js';
 
 export type { GridChangeSet } from './GridChangeSet.js';

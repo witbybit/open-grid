@@ -28,7 +28,9 @@ export function ThemesPanel({ api: _api, container }: ThemesPanelProps) {
 		container.setAttribute('data-og-theme', instanceId);
 		const selector = `.og-grid-container[data-og-theme="${instanceId}"]`;
 		manager.mount(selector);
-		return () => { manager.unmount(); };
+		return () => {
+			manager.unmount();
+		};
 	}, [container, manager]);
 
 	function applyTheme(name: BuiltInThemeName) {
@@ -42,9 +44,7 @@ export function ThemesPanel({ api: _api, container }: ThemesPanelProps) {
 
 	return (
 		<div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-			<div style={{ fontSize: '12px', color: 'var(--og-cell-text-muted, #888)', marginBottom: '4px' }}>
-				Built-in themes
-			</div>
+			<div style={{ fontSize: '12px', color: 'var(--og-cell-text-muted, #888)', marginBottom: '4px' }}>Built-in themes</div>
 			{BUILT_IN_THEME_ORDER.map((name) => {
 				if (!isBuiltInThemeName(name)) return null;
 				const tokens = BUILT_IN_THEMES[name];

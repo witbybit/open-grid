@@ -38,13 +38,13 @@ export interface GridSidebarConfig<TRowData = unknown> {
 // ---------------------------------------------------------------------------
 
 const BUILT_IN_META: Record<BuiltInPanelId, { label: string; icon: string }> = {
-	columns:       { label: 'Columns',        icon: '⊞' },
-	filters:       { label: 'Filters',         icon: '⌾' },
-	sort:          { label: 'Sort',            icon: '⇅' },
-	themes:        { label: 'Themes',          icon: '◑' },
-	views:         { label: 'Views',           icon: '⊕' },
-	query:         { label: 'Query',           icon: '⌖' },
-	dataIntegrity: { label: 'Data Integrity',  icon: '✓' },
+	columns: { label: 'Columns', icon: '⊞' },
+	filters: { label: 'Filters', icon: '⌾' },
+	sort: { label: 'Sort', icon: '⇅' },
+	themes: { label: 'Themes', icon: '◑' },
+	views: { label: 'Views', icon: '⊕' },
+	query: { label: 'Query', icon: '⌖' },
+	dataIntegrity: { label: 'Data Integrity', icon: '✓' },
 };
 
 const ALL_BUILT_IN: BuiltInPanelId[] = ['columns', 'filters', 'sort', 'themes', 'views', 'query', 'dataIntegrity'];
@@ -61,11 +61,7 @@ interface GridSidebarProps<TRowData> {
 }
 
 export function GridSidebar<TRowData = unknown>({ api, config, container }: GridSidebarProps<TRowData>) {
-	const openPanel = useSyncExternalStore(
-		api.sidebar.subscribe,
-		api.sidebar.getOpenPanel,
-		api.sidebar.getOpenPanel,
-	);
+	const openPanel = useSyncExternalStore(api.sidebar.subscribe, api.sidebar.getOpenPanel, api.sidebar.getOpenPanel);
 
 	const panelWidth = config.width ?? 264;
 	const position = config.position ?? 'right';
@@ -174,9 +170,7 @@ export function GridSidebar<TRowData = unknown>({ api, config, container }: Grid
 						</button>
 					</div>
 					{/* Panel body */}
-					<div style={{ flex: 1, overflowY: 'auto' }}>
-						{activePanel.render(api)}
-					</div>
+					<div style={{ flex: 1, overflowY: 'auto' }}>{activePanel.render(api)}</div>
 				</div>
 			)}
 		</div>

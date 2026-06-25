@@ -38,7 +38,7 @@ export class SpreadsheetFillEngine {
 		columnIds: readonly ColumnId[],
 		sourceRowIds: readonly RowId[], // [anchor, ...] — first used as value source; two for trend
 		targetRowIds: readonly RowId[],
-		pattern: FillPattern = 'auto',
+		pattern: FillPattern = 'auto'
 	): FillOperation[] {
 		if (sourceRowIds.length === 0 || targetRowIds.length === 0) return [];
 
@@ -53,10 +53,7 @@ export class SpreadsheetFillEngine {
 
 			for (let i = 0; i < targetRowIds.length; i++) {
 				const rowId = targetRowIds[i];
-				const value =
-					trend !== null
-						? projectLinear(trend, sourceValues.length + i)
-						: sourceValues[0];
+				const value = trend !== null ? projectLinear(trend, sourceValues.length + i) : sourceValues[0];
 				ops.push({ rowId, field, value });
 				this.port.setCellValue(rowId, field, value);
 			}
@@ -68,11 +65,7 @@ export class SpreadsheetFillEngine {
 	/**
 	 * Fill right: copy value from `sourceColumnId` into each of `targetColumnIds` for the given row.
 	 */
-	fillRight(
-		rowId: RowId,
-		sourceColumnId: ColumnId,
-		targetColumnIds: readonly ColumnId[],
-	): FillOperation[] {
+	fillRight(rowId: RowId, sourceColumnId: ColumnId, targetColumnIds: readonly ColumnId[]): FillOperation[] {
 		const sourceField = this.port.fieldForColumn(sourceColumnId);
 		if (!sourceField) return [];
 		const sourceValue = this.port.getCellValue(rowId, sourceField);
@@ -91,11 +84,7 @@ export class SpreadsheetFillEngine {
 	 * Fill selection: given a rectangular selection (rows × columns), fill all cells from
 	 * the topmost row's values using the given pattern.
 	 */
-	fillSelection(
-		columnIds: readonly ColumnId[],
-		allRowIds: readonly RowId[],
-		pattern: FillPattern = 'copy',
-	): FillOperation[] {
+	fillSelection(columnIds: readonly ColumnId[], allRowIds: readonly RowId[], pattern: FillPattern = 'copy'): FillOperation[] {
 		if (allRowIds.length <= 1) return [];
 		const [first, ...rest] = allRowIds as [RowId, ...RowId[]];
 		return this.fillDown(columnIds, [first], rest, pattern);

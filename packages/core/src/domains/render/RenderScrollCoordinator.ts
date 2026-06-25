@@ -7,12 +7,7 @@
  * swapped in-place each update.
  */
 
-import {
-	type RenderWindow,
-	createEmptyRenderWindow,
-	copyRenderWindow,
-	sameRenderedWindow,
-} from './RenderWindow.js';
+import { type RenderWindow, createEmptyRenderWindow, copyRenderWindow, sameRenderedWindow } from './RenderWindow.js';
 
 // ---------------------------------------------------------------------------
 // Public types

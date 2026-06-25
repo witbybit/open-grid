@@ -15,7 +15,7 @@ export function ViewsPanel({ api }: ViewsPanelProps) {
 	const views = useSyncExternalStore(
 		api.workspace.subscribe,
 		() => api.workspace.listViews(),
-		() => api.workspace.listViews(),
+		() => api.workspace.listViews()
 	);
 
 	if (!hasWorkspace) {
@@ -43,8 +43,8 @@ export function ViewsPanel({ api }: ViewsPanelProps) {
 			{/* Save current view */}
 			<div style={{ display: 'flex', gap: '6px' }}>
 				<input
-					type="text"
-					placeholder="New view name…"
+					type='text'
+					placeholder='New view name…'
 					value={newName}
 					onChange={(e) => setNewName(e.target.value)}
 					onKeyDown={(e) => {
@@ -65,7 +65,12 @@ export function ViewsPanel({ api }: ViewsPanelProps) {
 				/>
 				<button
 					disabled={!newName.trim()}
-					onClick={() => { if (newName.trim()) { api.workspace.saveView(newName.trim()); setNewName(''); } }}
+					onClick={() => {
+						if (newName.trim()) {
+							api.workspace.saveView(newName.trim());
+							setNewName('');
+						}
+					}}
 					style={{ ...btnStyle, padding: '5px 10px' }}
 				>
 					Save
@@ -74,9 +79,7 @@ export function ViewsPanel({ api }: ViewsPanelProps) {
 
 			{/* View list */}
 			{views.length === 0 ? (
-				<div style={{ textAlign: 'center', color: 'var(--og-cell-text-muted, #888)', paddingTop: '8px' }}>
-					No saved views
-				</div>
+				<div style={{ textAlign: 'center', color: 'var(--og-cell-text-muted, #888)', paddingTop: '8px' }}>No saved views</div>
 			) : (
 				views.map((view) => (
 					<div
@@ -97,23 +100,71 @@ export function ViewsPanel({ api }: ViewsPanelProps) {
 									value={editName}
 									onChange={(e) => setEditName(e.target.value)}
 									onKeyDown={(e) => {
-										if (e.key === 'Enter') { api.workspace.renameView(view.id, editName); setEditing(null); }
+										if (e.key === 'Enter') {
+											api.workspace.renameView(view.id, editName);
+											setEditing(null);
+										}
 										if (e.key === 'Escape') setEditing(null);
 									}}
-									style={{ flex: 1, padding: '3px 6px', fontSize: '12px', border: '1px solid var(--og-primary, #4f46e5)', borderRadius: '3px', background: 'var(--og-cell-bg, #fff)', color: 'inherit' }}
+									style={{
+										flex: 1,
+										padding: '3px 6px',
+										fontSize: '12px',
+										border: '1px solid var(--og-primary, #4f46e5)',
+										borderRadius: '3px',
+										background: 'var(--og-cell-bg, #fff)',
+										color: 'inherit',
+									}}
 								/>
-								<button onClick={() => { api.workspace.renameView(view.id, editName); setEditing(null); }} style={btnStyle}>✓</button>
-								<button onClick={() => setEditing(null)} style={btnStyle}>✕</button>
+								<button
+									onClick={() => {
+										api.workspace.renameView(view.id, editName);
+										setEditing(null);
+									}}
+									style={btnStyle}
+								>
+									✓
+								</button>
+								<button onClick={() => setEditing(null)} style={btnStyle}>
+									✕
+								</button>
 							</div>
 						) : (
 							<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-								<span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: view.isDefault ? 600 : 400 }}>
+								<span
+									style={{
+										flex: 1,
+										overflow: 'hidden',
+										textOverflow: 'ellipsis',
+										whiteSpace: 'nowrap',
+										fontWeight: view.isDefault ? 600 : 400,
+									}}
+								>
 									{view.name}
-									{view.isDefault && <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--og-primary, #4f46e5)' }}>★</span>}
+									{view.isDefault && (
+										<span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--og-primary, #4f46e5)' }}>★</span>
+									)}
 								</span>
-								<button title="Apply view" onClick={() => api.workspace.applyView(view.id)} style={btnStyle}>Apply</button>
-								<button title="Rename" onClick={() => { setEditing(view.id); setEditName(view.name); }} style={btnStyle}>✎</button>
-								<button title="Delete" onClick={() => api.workspace.deleteView(view.id)} style={{ ...btnStyle, color: 'var(--og-error, #d32f2f)' }}>✕</button>
+								<button title='Apply view' onClick={() => api.workspace.applyView(view.id)} style={btnStyle}>
+									Apply
+								</button>
+								<button
+									title='Rename'
+									onClick={() => {
+										setEditing(view.id);
+										setEditName(view.name);
+									}}
+									style={btnStyle}
+								>
+									✎
+								</button>
+								<button
+									title='Delete'
+									onClick={() => api.workspace.deleteView(view.id)}
+									style={{ ...btnStyle, color: 'var(--og-error, #d32f2f)' }}
+								>
+									✕
+								</button>
 							</div>
 						)}
 					</div>

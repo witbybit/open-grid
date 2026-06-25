@@ -54,11 +54,15 @@ export class ChartOverlayController<TRow = unknown> {
 
 	constructor(
 		private readonly getCellValue: (rowId: RowId, field: string) => unknown,
-		private readonly getVisibleRowIds: () => readonly RowId[],
+		private readonly getVisibleRowIds: () => readonly RowId[]
 	) {}
 
-	isActive(): boolean { return this._config !== null; }
-	getConfig(): ChartConfig | null { return this._config; }
+	isActive(): boolean {
+		return this._config !== null;
+	}
+	getConfig(): ChartConfig | null {
+		return this._config;
+	}
 
 	open(config: ChartConfig): void {
 		this._config = config;
@@ -78,14 +82,10 @@ export class ChartOverlayController<TRow = unknown> {
 		if (!this._config) return null;
 		const config = this._config;
 
-		const rowIds = config.rowIds
-			? [...config.rowIds]
-			: [...this.getVisibleRowIds()];
+		const rowIds = config.rowIds ? [...config.rowIds] : [...this.getVisibleRowIds()];
 
 		// Collect categories (X axis)
-		const categories = rowIds.map((id) =>
-			String(this.getCellValue(id, config.categoryField) ?? id),
-		);
+		const categories = rowIds.map((id) => String(this.getCellValue(id, config.categoryField) ?? id));
 
 		// Build one series per value field
 		const palette = DEFAULT_PALETTE;
@@ -105,24 +105,25 @@ export class ChartOverlayController<TRow = unknown> {
 
 	subscribe(fn: () => void): () => void {
 		this.listeners.add(fn);
-		return () => { this.listeners.delete(fn); };
+		return () => {
+			this.listeners.delete(fn);
+		};
 	}
 
 	destroy(): void {
 		this.listeners.clear();
 	}
 
-	private _notify(): void { this.listeners.forEach((fn) => fn()); }
+	private _notify(): void {
+		this.listeners.forEach((fn) => fn());
+	}
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const DEFAULT_PALETTE = [
-	'#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444',
-	'#8b5cf6', '#ec4899', '#84cc16', '#f97316', '#14b8a6',
-];
+const DEFAULT_PALETTE = ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#84cc16', '#f97316', '#14b8a6'];
 
 function numericValue(v: unknown): number {
 	const n = Number(v);

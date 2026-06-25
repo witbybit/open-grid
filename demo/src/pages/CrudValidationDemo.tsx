@@ -10,11 +10,7 @@
  */
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { Grid } from '@open-grid/react';
-import type {
-	ColumnDef,
-	GridApi,
-	SidebarPanelDef,
-} from '@open-grid/react';
+import type { ColumnDef, GridApi, SidebarPanelDef } from '@open-grid/react';
 import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson, Scan } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
@@ -56,11 +52,47 @@ function makeEmployee(overrides: Partial<Employee> = {}): Employee {
 }
 
 const INITIAL_ROWS: Employee[] = [
-	{ id: '1', name: 'Alice Chen', email: 'alice@company.com', department: 'Engineering', salary: 95000, bonus: 12000, status: 'Active', startDate: '2021-03-01' },
+	{
+		id: '1',
+		name: 'Alice Chen',
+		email: 'alice@company.com',
+		department: 'Engineering',
+		salary: 95000,
+		bonus: 12000,
+		status: 'Active',
+		startDate: '2021-03-01',
+	},
 	{ id: '2', name: 'Bob Smith', email: '', department: 'Design', salary: -5000, bonus: null, status: 'Terminated', startDate: '2023-07-15' },
-	{ id: '3', name: '', email: 'carol@company.com', department: 'Marketing', salary: 72000, bonus: null, status: 'On Leave', startDate: '2022-11-20' },
-	{ id: '4', name: 'David Park', email: 'david.park@company.com', department: 'Finance', salary: 88000, bonus: 9500, status: 'Active', startDate: '2020-05-10' },
-	{ id: '5', name: 'Eva Torres', email: 'not-an-email', department: 'HR', salary: 200000000, bonus: null, status: 'Active', startDate: '2024-02-28' },
+	{
+		id: '3',
+		name: '',
+		email: 'carol@company.com',
+		department: 'Marketing',
+		salary: 72000,
+		bonus: null,
+		status: 'On Leave',
+		startDate: '2022-11-20',
+	},
+	{
+		id: '4',
+		name: 'David Park',
+		email: 'david.park@company.com',
+		department: 'Finance',
+		salary: 88000,
+		bonus: 9500,
+		status: 'Active',
+		startDate: '2020-05-10',
+	},
+	{
+		id: '5',
+		name: 'Eva Torres',
+		email: 'not-an-email',
+		department: 'HR',
+		salary: 200000000,
+		bonus: null,
+		status: 'Active',
+		startDate: '2024-02-28',
+	},
 ];
 
 // ─── Validators ───────────────────────────────────────────────────────────────
@@ -70,8 +102,13 @@ function isValidEmail(s: string) {
 }
 
 const DEPT_MIN_SALARY: Record<string, number> = {
-	Engineering: 70000, Finance: 65000, Legal: 80000, Design: 55000,
-	Marketing: 50000, Sales: 45000, HR: 45000,
+	Engineering: 70000,
+	Finance: 65000,
+	Legal: 80000,
+	Design: 55000,
+	Marketing: 50000,
+	Sales: 45000,
+	HR: 45000,
 };
 
 // ─── Column definitions ───────────────────────────────────────────────────────
@@ -81,7 +118,9 @@ const COLUMNS: ColumnDef<Employee>[] = [
 	{ field: 'email', header: 'Email', width: 200, minWidth: 120 },
 	{ field: 'department', header: 'Department', width: 130 },
 	{
-		field: 'status', header: 'Status', width: 110,
+		field: 'status',
+		header: 'Status',
+		width: 110,
 		tooltip: ({ row }) => {
 			if (row.status === 'Terminated') return 'Salary and bonus are locked for terminated employees';
 			if (row.status === 'On Leave') return 'Bonus is locked while on leave';
@@ -89,12 +128,18 @@ const COLUMNS: ColumnDef<Employee>[] = [
 		},
 	},
 	{
-		field: 'salary', header: 'Salary ($)', width: 120, minWidth: 80, maxWidth: 200,
+		field: 'salary',
+		header: 'Salary ($)',
+		width: 120,
+		minWidth: 80,
+		maxWidth: 200,
 		canEdit: ({ row }) => row?.status !== 'Terminated',
 		tooltip: ({ row }) => (row.status === 'Terminated' ? 'Salary locked — employee is terminated' : null),
 	},
 	{
-		field: 'bonus', header: 'Bonus ($)', width: 110,
+		field: 'bonus',
+		header: 'Bonus ($)',
+		width: 110,
 		canEdit: ({ row }) => row?.status === 'Active',
 		tooltip: ({ row }) => {
 			if (row.status === 'Active') return null;
@@ -185,7 +230,8 @@ function validateRows(rows: Employee[]): ValidationIssue[] {
 		if (!email) issues.push({ rowId: row.id, colField: 'email', message: 'Email is required' });
 		else if (!isValidEmail(email)) issues.push({ rowId: row.id, colField: 'email', message: 'Invalid email format (user@domain.com)' });
 
-		if (!DEPARTMENTS.includes(row.department)) issues.push({ rowId: row.id, colField: 'department', message: `Must be one of: ${DEPARTMENTS.join(', ')}` });
+		if (!DEPARTMENTS.includes(row.department))
+			issues.push({ rowId: row.id, colField: 'department', message: `Must be one of: ${DEPARTMENTS.join(', ')}` });
 		if (!STATUSES.includes(row.status)) issues.push({ rowId: row.id, colField: 'status', message: `Must be one of: ${STATUSES.join(', ')}` });
 
 		const salary = Number(String(row.salary ?? '').replace(/[$,]/g, ''));
@@ -417,7 +463,9 @@ export default function CrudValidationDemo({ onGridReady, pinLeftColumns, pinRig
 							<li key={i} className='flex items-start gap-2 text-[11px] text-rose-300/80'>
 								<span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400' />
 								<span>
-									<span className='font-semibold text-rose-300'>Row {e.rowId} / {e.colField}:</span>{' '}
+									<span className='font-semibold text-rose-300'>
+										Row {e.rowId} / {e.colField}:
+									</span>{' '}
 									{e.message}
 								</span>
 							</li>
@@ -436,7 +484,9 @@ export default function CrudValidationDemo({ onGridReady, pinLeftColumns, pinRig
 								Validation snapshot — {errorSnapshot.length} error{errorSnapshot.length !== 1 ? 's' : ''}
 							</p>
 						</div>
-						<button onClick={() => setErrorSnapshot(null)} className='text-[10px] text-sky-600 hover:text-sky-400'>✕</button>
+						<button onClick={() => setErrorSnapshot(null)} className='text-[10px] text-sky-600 hover:text-sky-400'>
+							✕
+						</button>
 					</div>
 					{errorSnapshot.length === 0 ? (
 						<p className='text-[11px] text-sky-600 italic'>No errors — all rows are valid.</p>
@@ -446,7 +496,9 @@ export default function CrudValidationDemo({ onGridReady, pinLeftColumns, pinRig
 								<li key={i} className='flex items-start gap-2 text-[11px] text-sky-300/80'>
 									<span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400' />
 									<span>
-										<span className='font-semibold text-sky-300'>Row {e.rowId} / {e.colField}:</span>{' '}
+										<span className='font-semibold text-sky-300'>
+											Row {e.rowId} / {e.colField}:
+										</span>{' '}
 										{e.message}
 									</span>
 								</li>
@@ -484,7 +536,9 @@ export default function CrudValidationDemo({ onGridReady, pinLeftColumns, pinRig
 					<strong className='text-slate-400'>Bonus</strong> is locked unless <em>Active</em>
 				</span>
 				<span>·</span>
-				<span>Use <strong className='text-slate-400'>Validate All</strong> to run client-side rules</span>
+				<span>
+					Use <strong className='text-slate-400'>Validate All</strong> to run client-side rules
+				</span>
 			</div>
 		</div>
 	);

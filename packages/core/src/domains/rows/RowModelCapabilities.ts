@@ -88,25 +88,17 @@ export const clientRowModelCapabilities: RowModelCapabilities = withTrue(
 	'clientTree',
 	'aggregation',
 	'cellMutation',
-	'allRowSelection',
+	'allRowSelection'
 );
 
 /**
  * Infinite row model: owns loaded blocks only. No full dataset, no transactions, no row order, no
  * cell mutation by default (honest — not yet designed). Selection limited to loaded rows.
  */
-export const infiniteRowModelCapabilities: RowModelCapabilities = withTrue(
-	'loadedDataset',
-	'blockLoading',
-	'loadedRowSelection',
-);
+export const infiniteRowModelCapabilities: RowModelCapabilities = withTrue('loadedDataset', 'blockLoading', 'loadedRowSelection');
 
 /**
  * Server row model: owns the current page only. No full dataset, no transactions, no row order, no
  * cell mutation by default. Selection limited to page rows.
  */
-export const serverRowModelCapabilities: RowModelCapabilities = withTrue(
-	'pagedDataset',
-	'serverPagination',
-	'pageRowSelection',
-);
+export const serverRowModelCapabilities: RowModelCapabilities = withTrue('pagedDataset', 'serverPagination', 'pageRowSelection');

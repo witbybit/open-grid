@@ -26,7 +26,10 @@ export class GridPluginRegistry<TRow = unknown> {
 
 	uninstall(id: string): void {
 		const teardown = this.installed.get(id);
-		if (teardown) { teardown(); this.installed.delete(id); }
+		if (teardown) {
+			teardown();
+			this.installed.delete(id);
+		}
 	}
 
 	destroy(): void {

@@ -28,9 +28,15 @@ export class PaginationModel {
 	// State
 	// ---------------------------------------------------------------------------
 
-	get pageSize(): number { return this._pageSize; }
-	get currentPage(): number { return this._currentPage; }
-	get totalRows(): number { return this._totalRows; }
+	get pageSize(): number {
+		return this._pageSize;
+	}
+	get currentPage(): number {
+		return this._currentPage;
+	}
+	get totalRows(): number {
+		return this._totalRows;
+	}
 
 	get pageCount(): number {
 		return this._totalRows <= 0 ? 1 : Math.ceil(this._totalRows / this._pageSize);
@@ -44,8 +50,12 @@ export class PaginationModel {
 		return Math.min(this.startRowIndex + this._pageSize, this._totalRows);
 	}
 
-	get hasNextPage(): boolean { return this._currentPage < this.pageCount; }
-	get hasPrevPage(): boolean { return this._currentPage > 1; }
+	get hasNextPage(): boolean {
+		return this._currentPage < this.pageCount;
+	}
+	get hasPrevPage(): boolean {
+		return this._currentPage > 1;
+	}
 
 	// ---------------------------------------------------------------------------
 	// Commands
@@ -76,10 +86,18 @@ export class PaginationModel {
 		this._notify();
 	}
 
-	nextPage(): void { this.goToPage(this._currentPage + 1); }
-	prevPage(): void { this.goToPage(this._currentPage - 1); }
-	firstPage(): void { this.goToPage(1); }
-	lastPage(): void { this.goToPage(this.pageCount); }
+	nextPage(): void {
+		this.goToPage(this._currentPage + 1);
+	}
+	prevPage(): void {
+		this.goToPage(this._currentPage - 1);
+	}
+	firstPage(): void {
+		this.goToPage(1);
+	}
+	lastPage(): void {
+		this.goToPage(this.pageCount);
+	}
 
 	// ---------------------------------------------------------------------------
 	// Subscription
@@ -87,10 +105,16 @@ export class PaginationModel {
 
 	subscribe(fn: () => void): () => void {
 		this.listeners.add(fn);
-		return () => { this.listeners.delete(fn); };
+		return () => {
+			this.listeners.delete(fn);
+		};
 	}
 
-	destroy(): void { this.listeners.clear(); }
+	destroy(): void {
+		this.listeners.clear();
+	}
 
-	private _notify(): void { this.listeners.forEach((fn) => fn()); }
+	private _notify(): void {
+		this.listeners.forEach((fn) => fn());
+	}
 }

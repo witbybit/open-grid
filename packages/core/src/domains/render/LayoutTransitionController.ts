@@ -57,18 +57,15 @@ export class LayoutTransitionController {
 	animate(
 		slots: ReadonlyMap<string, HTMLElement>,
 		newIds: ReadonlySet<string> = new Set(),
-		removedEls: ReadonlyMap<string, HTMLElement> = new Map(),
+		removedEls: ReadonlyMap<string, HTMLElement> = new Map()
 	): void {
-		const {
-			duration = 220,
-			easing = 'cubic-bezier(0.4, 0, 0.2, 1)',
-			animateNewRows = true,
-			animateRemovedRows = true,
-		} = this.opts;
+		const { duration = 220, easing = 'cubic-bezier(0.4, 0, 0.2, 1)', animateNewRows = true, animateRemovedRows = true } = this.opts;
 
 		// Cancel any running animations before starting new ones
 		for (const anim of this.runningAnimations) {
-			try { anim.cancel(); } catch {}
+			try {
+				anim.cancel();
+			} catch {}
 		}
 		this.runningAnimations = [];
 
@@ -80,10 +77,11 @@ export class LayoutTransitionController {
 			if (before && !newIds.has(id)) {
 				const dy = before.top - after.top;
 				if (Math.abs(dy) > 0.5) {
-					const anim = el.animate(
-						[{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
-						{ duration, easing, fill: 'none' },
-					);
+					const anim = el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], {
+						duration,
+						easing,
+						fill: 'none',
+					});
 					this.runningAnimations.push(anim);
 				}
 			}
@@ -91,8 +89,11 @@ export class LayoutTransitionController {
 			// Fade in new rows
 			if (animateNewRows && newIds.has(id)) {
 				const anim = el.animate(
-					[{ opacity: '0', transform: 'translateY(4px)' }, { opacity: '1', transform: 'translateY(0)' }],
-					{ duration, easing, fill: 'none' },
+					[
+						{ opacity: '0', transform: 'translateY(4px)' },
+						{ opacity: '1', transform: 'translateY(0)' },
+					],
+					{ duration, easing, fill: 'none' }
 				);
 				this.runningAnimations.push(anim);
 			}
@@ -102,11 +103,16 @@ export class LayoutTransitionController {
 		if (animateRemovedRows) {
 			for (const [, el] of removedEls) {
 				const anim = el.animate(
-					[{ opacity: '1', transform: 'translateY(0)' }, { opacity: '0', transform: 'translateY(-4px)' }],
-					{ duration: duration * 0.7, easing, fill: 'forwards' },
+					[
+						{ opacity: '1', transform: 'translateY(0)' },
+						{ opacity: '0', transform: 'translateY(-4px)' },
+					],
+					{ duration: duration * 0.7, easing, fill: 'forwards' }
 				);
 				this.runningAnimations.push(anim);
-				anim.onfinish = () => { el.remove(); };
+				anim.onfinish = () => {
+					el.remove();
+				};
 			}
 		} else {
 			for (const [, el] of removedEls) el.remove();
@@ -118,7 +124,9 @@ export class LayoutTransitionController {
 	/** Cancel all running animations immediately. */
 	cancel(): void {
 		for (const anim of this.runningAnimations) {
-			try { anim.cancel(); } catch {}
+			try {
+				anim.cancel();
+			} catch {}
 		}
 		this.runningAnimations = [];
 	}

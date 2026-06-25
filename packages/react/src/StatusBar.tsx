@@ -6,11 +6,7 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ api }: StatusBarProps) {
-	const data = useSyncExternalStore(
-		api.statusBar.subscribe,
-		api.statusBar.getData,
-		api.statusBar.getData,
-	);
+	const data = useSyncExternalStore(api.statusBar.subscribe, api.statusBar.getData, api.statusBar.getData);
 
 	return (
 		<div

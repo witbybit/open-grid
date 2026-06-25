@@ -76,35 +76,21 @@ export class GeometryController {
 	 * @param rowHeightFn       Optional per-index height provider (takes precedence over stored
 	 *                          overrides when provided).
 	 */
-	recomputeIfNeeded(
-		rowCount: number,
-		defaultRowHeight: number,
-		rowHeightFn?: (index: number) => number,
-	): void {
-		if (
-			this._tops !== null &&
-			this._cachedRowCount === rowCount &&
-			this._cachedDefaultRowHeight === defaultRowHeight
-		) {
+	recomputeIfNeeded(rowCount: number, defaultRowHeight: number, rowHeightFn?: (index: number) => number): void {
+		if (this._tops !== null && this._cachedRowCount === rowCount && this._cachedDefaultRowHeight === defaultRowHeight) {
 			return;
 		}
 
 		this._rebuild(rowCount, defaultRowHeight, rowHeightFn);
 	}
 
-	private _rebuild(
-		rowCount: number,
-		defaultRowHeight: number,
-		rowHeightFn?: (index: number) => number,
-	): void {
+	private _rebuild(rowCount: number, defaultRowHeight: number, rowHeightFn?: (index: number) => number): void {
 		const tops = new Float64Array(rowCount);
 		let running = 0;
 
 		for (let i = 0; i < rowCount; i++) {
 			tops[i] = running;
-			const h = rowHeightFn
-				? rowHeightFn(i)
-				: (this._rowHeights.get(i) ?? defaultRowHeight);
+			const h = rowHeightFn ? rowHeightFn(i) : (this._rowHeights.get(i) ?? defaultRowHeight);
 			running += h;
 		}
 
@@ -123,9 +109,7 @@ export class GeometryController {
 	 */
 	getRowTop(visualRowIndex: number): number {
 		if (this._tops === null) {
-			throw new Error(
-				'GeometryController: cache is dirty — call recomputeIfNeeded() before getRowTop()',
-			);
+			throw new Error('GeometryController: cache is dirty — call recomputeIfNeeded() before getRowTop()');
 		}
 		if (visualRowIndex < 0 || visualRowIndex >= this._tops.length) return 0;
 		return this._tops[visualRowIndex];

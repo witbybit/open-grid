@@ -41,10 +41,7 @@ export interface RowWriteImpactContext {
  * Structural writes (add/remove/move) are NOT classified here — callers detect those from the
  * change set and pass `'structural'` directly. Use {@link classifyChangedFields} for a flat set.
  */
-export function classifyWriteImpact(
-	changedFieldsByRow: ReadonlyMap<RowId, ReadonlySet<ColumnId>>,
-	ctx: RowWriteImpactContext,
-): RowWriteImpact {
+export function classifyWriteImpact(changedFieldsByRow: ReadonlyMap<RowId, ReadonlySet<ColumnId>>, ctx: RowWriteImpactContext): RowWriteImpact {
 	const changed = new Set<ColumnId>();
 	for (const fields of changedFieldsByRow.values()) {
 		for (const c of fields) changed.add(c);

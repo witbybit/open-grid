@@ -64,6 +64,6 @@ export function queryCondition(field: string, operator: FilterOperator, value?: 
 export function filterModelToQuery(filterModel: readonly { field: string; operator: FilterOperator; value?: unknown }[]): QueryGroup {
 	return queryGroup(
 		'and',
-		filterModel.map((f) => queryCondition(f.field, f.operator, f.value)),
+		filterModel.map((f) => queryCondition(f.field, f.operator, f.value))
 	);
 }

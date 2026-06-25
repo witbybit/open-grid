@@ -59,13 +59,13 @@ function makeRows(n: number): SalesRow[] {
 // ---------------------------------------------------------------------------
 
 const COLUMNS: GridColumnDef<SalesRow>[] = [
-	{ id: 'id',      field: 'id',      header: '#',       width: 60,  pinned: 'left' },
-	{ id: 'rep',     field: 'rep',     header: 'Rep',     width: 110, sortable: true },
-	{ id: 'region',  field: 'region',  header: 'Region',  width: 90,  sortable: true },
+	{ id: 'id', field: 'id', header: '#', width: 60, pinned: 'left' },
+	{ id: 'rep', field: 'rep', header: 'Rep', width: 110, sortable: true },
+	{ id: 'region', field: 'region', header: 'Region', width: 90, sortable: true },
 	{ id: 'product', field: 'product', header: 'Product', width: 130, sortable: true },
-	{ id: 'q',       field: 'q',       header: 'Quarter', width: 80,  sortable: true },
-	{ id: 'units',   field: 'units',   header: 'Units',   width: 80,  sortable: true },
-	{ id: 'price',   field: 'price',   header: 'Price',   width: 80,  sortable: true },
+	{ id: 'q', field: 'q', header: 'Quarter', width: 80, sortable: true },
+	{ id: 'units', field: 'units', header: 'Units', width: 80, sortable: true },
+	{ id: 'price', field: 'price', header: 'Price', width: 80, sortable: true },
 	{ id: 'revenue', field: 'revenue', header: 'Revenue', width: 100, sortable: true },
 ];
 
@@ -108,92 +108,138 @@ export default function FullArchitectureDemo() {
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 			{/* Controls */}
-			<div style={{
-				display: 'flex', gap: 8, padding: '8px 12px', flexShrink: 0,
-				background: '#1e293b', borderBottom: '1px solid #334155',
-				flexWrap: 'wrap', alignItems: 'center',
-			}}>
+			<div
+				style={{
+					display: 'flex',
+					gap: 8,
+					padding: '8px 12px',
+					flexShrink: 0,
+					background: '#1e293b',
+					borderBottom: '1px solid #334155',
+					flexWrap: 'wrap',
+					alignItems: 'center',
+				}}
+			>
 				<Chip>Plan 133 · Phases 7-13</Chip>
 
-				<Btn onClick={() => {
-					apiRef.current?.export.downloadCsv({ filename: 'sales-export' });
-					addLog('CSV downloaded');
-				}}>Export CSV</Btn>
+				<Btn
+					onClick={() => {
+						apiRef.current?.export.downloadCsv({ filename: 'sales-export' });
+						addLog('CSV downloaded');
+					}}
+				>
+					Export CSV
+				</Btn>
 
-				<Btn onClick={async () => {
-					await apiRef.current?.clipboard.copySelection();
-					addLog('Selection copied to clipboard');
-				}}>Copy</Btn>
+				<Btn
+					onClick={async () => {
+						await apiRef.current?.clipboard.copySelection();
+						addLog('Selection copied to clipboard');
+					}}
+				>
+					Copy
+				</Btn>
 
-				<Btn onClick={async () => {
-					await apiRef.current?.clipboard.paste();
-					addLog('Pasted from clipboard');
-				}}>Paste</Btn>
+				<Btn
+					onClick={async () => {
+						await apiRef.current?.clipboard.paste();
+						addLog('Pasted from clipboard');
+					}}
+				>
+					Paste
+				</Btn>
 
-				<Btn onClick={() => {
-					apiRef.current?.dag.recomputeAll();
-					addLog('DAG: revenue recomputed for all rows');
-				}}>Recompute DAG</Btn>
+				<Btn
+					onClick={() => {
+						apiRef.current?.dag.recomputeAll();
+						addLog('DAG: revenue recomputed for all rows');
+					}}
+				>
+					Recompute DAG
+				</Btn>
 
-				<Btn onClick={() => {
-					const api = apiRef.current;
-					if (!api) return;
-					const vm = api.getRendererView().getVisualModel();
-					const q1Ids = new Set(
-						vm.toArray()
-							.filter((r) => r.kind === 'data' && (r.rowData as SalesRow).q === 'Q1')
-							.map((r) => r.rowId),
-					);
-					api.chart.open({
-						type: 'bar',
-						categoryField: 'rep',
-						valueFields: ['revenue'],
-						rowIds: q1Ids,
-						title: 'Q1 Revenue by Rep',
-					});
-					addLog(`Chart opened: Q1 revenue by rep (${q1Ids.size} rows)`);
-				}}>Chart Q1</Btn>
+				<Btn
+					onClick={() => {
+						const api = apiRef.current;
+						if (!api) return;
+						const vm = api.getRendererView().getVisualModel();
+						const q1Ids = new Set(
+							vm
+								.toArray()
+								.filter((r) => r.kind === 'data' && (r.rowData as SalesRow).q === 'Q1')
+								.map((r) => r.rowId)
+						);
+						api.chart.open({
+							type: 'bar',
+							categoryField: 'rep',
+							valueFields: ['revenue'],
+							rowIds: q1Ids,
+							title: 'Q1 Revenue by Rep',
+						});
+						addLog(`Chart opened: Q1 revenue by rep (${q1Ids.size} rows)`);
+					}}
+				>
+					Chart Q1
+				</Btn>
 
-				<Btn onClick={() => {
-					apiRef.current?.chart.close();
-					addLog('Chart closed');
-				}}>Close Chart</Btn>
+				<Btn
+					onClick={() => {
+						apiRef.current?.chart.close();
+						addLog('Chart closed');
+					}}
+				>
+					Close Chart
+				</Btn>
 
-				<Btn onClick={() => {
-					const api = apiRef.current;
-					if (!api) return;
-					api.pipeline.setGroupBy([{ columnId: asColumnId('region'), field: 'region' }]);
-					addLog('Grouped by Region');
-				}}>Group Region</Btn>
+				<Btn
+					onClick={() => {
+						const api = apiRef.current;
+						if (!api) return;
+						api.pipeline.setGroupBy([{ columnId: asColumnId('region'), field: 'region' }]);
+						addLog('Grouped by Region');
+					}}
+				>
+					Group Region
+				</Btn>
 
-				<Btn onClick={() => {
-					apiRef.current?.pipeline.setGroupBy([]);
-					addLog('Grouping cleared');
-				}}>Ungroup</Btn>
+				<Btn
+					onClick={() => {
+						apiRef.current?.pipeline.setGroupBy([]);
+						addLog('Grouping cleared');
+					}}
+				>
+					Ungroup
+				</Btn>
 
-				<Btn onClick={() => {
-					const api = apiRef.current;
-					if (!api) return;
-					// P9 — rich query filter
-					api.pipeline.setQuery({
-						type: 'group',
-						operator: 'and',
-						children: [
-							{ type: 'condition', field: 'q', operator: 'equals', value: 'Q1' },
-							{ type: 'condition', field: 'units', operator: 'gt', value: 50 },
-						],
-					});
-					addLog('Query: Q1 AND units > 50');
-				}}>Filter Q1 + Units&gt;50</Btn>
+				<Btn
+					onClick={() => {
+						const api = apiRef.current;
+						if (!api) return;
+						// P9 — rich query filter
+						api.pipeline.setQuery({
+							type: 'group',
+							operator: 'and',
+							children: [
+								{ type: 'condition', field: 'q', operator: 'equals', value: 'Q1' },
+								{ type: 'condition', field: 'units', operator: 'gt', value: 50 },
+							],
+						});
+						addLog('Query: Q1 AND units > 50');
+					}}
+				>
+					Filter Q1 + Units&gt;50
+				</Btn>
 
-				<Btn onClick={() => {
-					apiRef.current?.pipeline.setQuery(null);
-					addLog('Query cleared');
-				}}>Clear Filter</Btn>
+				<Btn
+					onClick={() => {
+						apiRef.current?.pipeline.setQuery(null);
+						addLog('Query cleared');
+					}}
+				>
+					Clear Filter
+				</Btn>
 
-				<span style={{ fontSize: 11, color: '#475569', marginLeft: 'auto' }}>
-					{ROWS.length} rows · new GridApi
-				</span>
+				<span style={{ fontSize: 11, color: '#475569', marginLeft: 'auto' }}>{ROWS.length} rows · new GridApi</span>
 			</div>
 
 			{/* Grid */}
@@ -212,19 +258,23 @@ export default function FullArchitectureDemo() {
 
 			{/* Action log */}
 			{log.length > 0 && (
-				<div style={{
-					padding: '4px 12px',
-					background: '#0f172a',
-					fontSize: 11,
-					color: '#475569',
-					borderTop: '1px solid #1e293b',
-					display: 'flex',
-					gap: 20,
-					flexShrink: 0,
-					overflowX: 'auto',
-				}}>
+				<div
+					style={{
+						padding: '4px 12px',
+						background: '#0f172a',
+						fontSize: 11,
+						color: '#475569',
+						borderTop: '1px solid #1e293b',
+						display: 'flex',
+						gap: 20,
+						flexShrink: 0,
+						overflowX: 'auto',
+					}}
+				>
 					{log.slice(0, 4).map((l, i) => (
-						<span key={i} style={{ opacity: 1 - i * 0.22, whiteSpace: 'nowrap' }}>{l}</span>
+						<span key={i} style={{ opacity: 1 - i * 0.22, whiteSpace: 'nowrap' }}>
+							{l}
+						</span>
 					))}
 				</div>
 			)}
@@ -253,17 +303,19 @@ function Btn({ onClick, children }: { onClick(): void; children: React.ReactNode
 
 function Chip({ children }: { children: React.ReactNode }) {
 	return (
-		<span style={{
-			fontSize: 10,
-			fontWeight: 700,
-			textTransform: 'uppercase',
-			letterSpacing: '0.06em',
-			color: 'rgba(167,139,250,0.9)',
-			background: 'rgba(139,92,246,0.12)',
-			border: '1px solid rgba(139,92,246,0.3)',
-			borderRadius: 4,
-			padding: '2px 8px',
-		}}>
+		<span
+			style={{
+				fontSize: 10,
+				fontWeight: 700,
+				textTransform: 'uppercase',
+				letterSpacing: '0.06em',
+				color: 'rgba(167,139,250,0.9)',
+				background: 'rgba(139,92,246,0.12)',
+				border: '1px solid rgba(139,92,246,0.3)',
+				borderRadius: 4,
+				padding: '2px 8px',
+			}}
+		>
 			{children}
 		</span>
 	);

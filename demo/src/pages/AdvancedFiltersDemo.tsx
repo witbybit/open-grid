@@ -32,15 +32,46 @@ const LOCATIONS = ['San Francisco', 'New York', 'London', 'Berlin', 'Singapore',
 const STATUSES: EmployeeRow['status'][] = ['Active', 'On Leave', 'Contractor', 'Alumni'];
 const LEVELS: EmployeeRow['level'][] = ['IC1', 'IC2', 'IC3', 'IC4', 'IC5', 'M1', 'M2', 'M3'];
 const NAMES = [
-	'Alice Chen', 'Bob Martinez', 'Carol Smith', 'David Kim', 'Emma Wilson',
-	'Frank Lee', 'Grace Park', 'Henry Brown', 'Iris Davis', 'Jake Thompson',
-	'Kate Anderson', 'Liam Johnson', 'Maya Patel', 'Noah Williams', 'Olivia Garcia',
-	'Peter Zhang', 'Quinn Rodriguez', 'Rachel Torres', 'Sam White', 'Tara Nguyen',
+	'Alice Chen',
+	'Bob Martinez',
+	'Carol Smith',
+	'David Kim',
+	'Emma Wilson',
+	'Frank Lee',
+	'Grace Park',
+	'Henry Brown',
+	'Iris Davis',
+	'Jake Thompson',
+	'Kate Anderson',
+	'Liam Johnson',
+	'Maya Patel',
+	'Noah Williams',
+	'Olivia Garcia',
+	'Peter Zhang',
+	'Quinn Rodriguez',
+	'Rachel Torres',
+	'Sam White',
+	'Tara Nguyen',
 ];
 const ALL_SKILLS = [
-	'React', 'TypeScript', 'Python', 'Go', 'Rust', 'SQL', 'Figma',
-	'Kubernetes', 'AWS', 'Machine Learning', 'Data Analysis', 'Product Strategy',
-	'UX Research', 'Copywriting', 'SEO', 'Finance', 'Compliance', 'Recruiting',
+	'React',
+	'TypeScript',
+	'Python',
+	'Go',
+	'Rust',
+	'SQL',
+	'Figma',
+	'Kubernetes',
+	'AWS',
+	'Machine Learning',
+	'Data Analysis',
+	'Product Strategy',
+	'UX Research',
+	'Copywriting',
+	'SEO',
+	'Finance',
+	'Compliance',
+	'Recruiting',
 ];
 
 function generateEmployees(count: number): EmployeeRow[] {
@@ -62,7 +93,10 @@ const ALL_ROWS = generateEmployees(200);
 // ── Status badge ──────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
-	Active: '#22c55e', 'On Leave': '#f59e0b', Contractor: '#60a5fa', Alumni: '#94a3b8',
+	Active: '#22c55e',
+	'On Leave': '#f59e0b',
+	Contractor: '#60a5fa',
+	Alumni: '#94a3b8',
 };
 
 function StatusRenderer({ value }: { value: unknown }) {
@@ -85,13 +119,19 @@ function makeColumns(): ColumnDef<EmployeeRow>[] {
 		{ field: 'department', header: 'Department', width: 160, filterType: 'set', filterValues: DEPARTMENTS },
 		{ field: 'location', header: 'Location', width: 150, filterType: 'set', filterValues: LOCATIONS },
 		{
-			field: 'status', header: 'Status', width: 130,
-			filterType: 'set', filterValues: STATUSES as string[],
+			field: 'status',
+			header: 'Status',
+			width: 130,
+			filterType: 'set',
+			filterValues: STATUSES as string[],
 			renderer: { kind: 'react', component: StatusRenderer },
 		},
 		{ field: 'level', header: 'Level', width: 100, filterType: 'set', filterValues: LEVELS as string[] },
 		{
-			field: 'salary', header: 'Salary', width: 130, filterType: 'number',
+			field: 'salary',
+			header: 'Salary',
+			width: 130,
+			filterType: 'number',
 			valueFormatter: ({ value }) => `$${Number(value).toLocaleString()}`,
 		},
 		{ field: 'startDate', header: 'Start Date', width: 130, filterType: 'date' },
@@ -161,8 +201,7 @@ function StatsBar({ filterModel, totalRows }: StatsBarProps) {
 					<div className='flex items-center gap-2 text-[11px] text-slate-400'>
 						<Filter className='h-3 w-3 text-violet-400' />
 						<span>
-							<span className='font-bold text-violet-300'>{filterModel.length}</span>{' '}
-							active filter{filterModel.length !== 1 ? 's' : ''}
+							<span className='font-bold text-violet-300'>{filterModel.length}</span> active filter{filterModel.length !== 1 ? 's' : ''}
 						</span>
 					</div>
 				</>
@@ -243,7 +282,8 @@ export default function AdvancedFiltersDemo({ onGridReady: onGridReadyProp, pinL
 						Filter types: <span className='font-semibold text-slate-300'>text</span> (name, skills),{' '}
 						<span className='font-semibold text-slate-300'>number</span> (salary),{' '}
 						<span className='font-semibold text-slate-300'>date</span> (startDate),{' '}
-						<span className='font-semibold text-slate-300'>set</span> (department, location, status, level). Use the header dropdowns or floating filters below.
+						<span className='font-semibold text-slate-300'>set</span> (department, location, status, level). Use the header dropdowns or
+						floating filters below.
 					</p>
 				</div>
 				<div className='flex shrink-0 items-center gap-2'>
@@ -275,7 +315,9 @@ export default function AdvancedFiltersDemo({ onGridReady: onGridReadyProp, pinL
 				{PRESETS.map((preset) => {
 					const isActive =
 						preset.filters.length === filterModel.length &&
-						preset.filters.every((pf) => filterModel.some((af) => af.field === pf.field && af.operator === pf.operator && String(af.value) === String(pf.value)));
+						preset.filters.every((pf) =>
+							filterModel.some((af) => af.field === pf.field && af.operator === pf.operator && String(af.value) === String(pf.value))
+						);
 					return (
 						<button
 							key={preset.label}
@@ -297,7 +339,14 @@ export default function AdvancedFiltersDemo({ onGridReady: onGridReadyProp, pinL
 				<div className='flex shrink-0 flex-wrap gap-2 px-1'>
 					{filterModel.map((filter) => {
 						const opMap: Record<string, string> = {
-							contains: 'contains', equals: '=', gte: '≥', lte: '≤', gt: '>', lt: '<', notEquals: '≠', in: 'in',
+							contains: 'contains',
+							equals: '=',
+							gte: '≥',
+							lte: '≤',
+							gt: '>',
+							lt: '<',
+							notEquals: '≠',
+							in: 'in',
 						};
 						const desc = `${opMap[filter.operator] ?? filter.operator} ${filter.value ?? ''}`;
 						return (
@@ -307,7 +356,10 @@ export default function AdvancedFiltersDemo({ onGridReady: onGridReadyProp, pinL
 							>
 								<span className='opacity-60'>{filter.field}:</span>
 								<span>{desc}</span>
-								<button onClick={() => removeFilter(filter.field)} className='ml-1 text-violet-400 transition-colors hover:text-white'>
+								<button
+									onClick={() => removeFilter(filter.field)}
+									className='ml-1 text-violet-400 transition-colors hover:text-white'
+								>
 									<X className='h-2.5 w-2.5' />
 								</button>
 							</div>

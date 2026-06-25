@@ -21,7 +21,7 @@ export function DataIntegrityPanel({ api }: DataIntegrityPanelProps) {
 	const issues = useSyncExternalStore(
 		api.integrity.subscribe,
 		() => api.integrity.getAllIssues(),
-		() => api.integrity.getAllIssues(),
+		() => api.integrity.getAllIssues()
 	);
 
 	const errors = issues.filter((i) => i.severity === 'error');
@@ -37,7 +37,19 @@ export function DataIntegrityPanel({ api }: DataIntegrityPanelProps) {
 					{ label: 'Warnings', count: warnings.length, color: severityColor.warning },
 					{ label: 'Info', count: infos.length, color: severityColor.info },
 				].map(({ label, count, color }) => (
-					<div key={label} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', border: `1px solid ${color}`, borderRadius: '12px', fontSize: '12px', color }}>
+					<div
+						key={label}
+						style={{
+							display: 'flex',
+							alignItems: 'center',
+							gap: '4px',
+							padding: '4px 8px',
+							border: `1px solid ${color}`,
+							borderRadius: '12px',
+							fontSize: '12px',
+							color,
+						}}
+					>
 						<span style={{ fontWeight: 600 }}>{count}</span>
 						<span>{label}</span>
 					</div>
@@ -64,9 +76,7 @@ export function DataIntegrityPanel({ api }: DataIntegrityPanelProps) {
 							fontSize: '12px',
 						}}
 					>
-						<span style={{ color: severityColor[issue.severity], flexShrink: 0 }}>
-							{severityIcon[issue.severity]}
-						</span>
+						<span style={{ color: severityColor[issue.severity], flexShrink: 0 }}>{severityIcon[issue.severity]}</span>
 						<div>
 							{issue.field && (
 								<div style={{ fontWeight: 600, marginBottom: '2px' }}>

@@ -95,7 +95,10 @@ describe('DetailStage / RowPipeline master-detail (ARCHITECTURE.md §3 R5–R6)'
 	it('a detail visual row carries the master id and a distinct visual id (R5)', () => {
 		const p = flatPipeline();
 		p.toggleDetail('r1');
-		const detail = p.getVisualModel().toArray().find((r) => r.kind === 'detail')!;
+		const detail = p
+			.getVisualModel()
+			.toArray()
+			.find((r) => r.kind === 'detail')!;
 		expect(detail.kind === 'detail' && String(detail.parentRowId)).toBe('r1');
 		expect(String(detail.visualRowId)).toBe('v:detail:r1');
 	});
@@ -104,6 +107,11 @@ describe('DetailStage / RowPipeline master-detail (ARCHITECTURE.md §3 R5–R6)'
 		const p = flatPipeline();
 		p.toggleDetail('r1');
 		p.toggleDetail('r1');
-		expect(p.getVisualModel().toArray().every((r) => r.kind !== 'detail')).toBe(true);
+		expect(
+			p
+				.getVisualModel()
+				.toArray()
+				.every((r) => r.kind !== 'detail')
+		).toBe(true);
 	});
 });

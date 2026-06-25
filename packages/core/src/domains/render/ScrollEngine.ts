@@ -60,9 +60,7 @@ export class ScrollEngine {
 		this.state.scrollLeft = element.scrollLeft;
 
 		// Feature-detect native scrollend once.
-		this.supportsScrollEnd =
-			typeof window !== 'undefined' &&
-			('onscrollend' in window || 'onscrollend' in HTMLElement.prototype);
+		this.supportsScrollEnd = typeof window !== 'undefined' && ('onscrollend' in window || 'onscrollend' in HTMLElement.prototype);
 
 		element.addEventListener('scroll', this.handleScroll, { passive: true });
 

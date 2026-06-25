@@ -34,8 +34,7 @@ const totalAddr = createCellAddress(asRowId('p1'), asColumnId('total'), 'total')
 describe('CellValueEngine value getters & formatters (ARCHITECTURE.md §3 R8)', () => {
 	it('a value getter computes the raw value, overriding the field read', () => {
 		const engine = makeEngine({
-			getValueGetter: (columnId) =>
-				String(columnId) === 'total' ? ({ row }) => row.price * row.qty : undefined,
+			getValueGetter: (columnId) => (String(columnId) === 'total' ? ({ row }) => row.price * row.qty : undefined),
 		});
 		expect(engine.getRawValue(totalAddr)).toBe(30); // 10 * 3, no `total` field exists
 		expect(engine.getRawValue(priceAddr)).toBe(10); // plain field read
@@ -43,8 +42,7 @@ describe('CellValueEngine value getters & formatters (ARCHITECTURE.md §3 R8)', 
 
 	it('a value formatter shapes the display value without changing the raw value', () => {
 		const engine = makeEngine({
-			getValueFormatter: (columnId) =>
-				String(columnId) === 'price' ? ({ value }) => `$${Number(value).toFixed(2)}` : undefined,
+			getValueFormatter: (columnId) => (String(columnId) === 'price' ? ({ value }) => `$${Number(value).toFixed(2)}` : undefined),
 		});
 		expect(engine.getRawValue(priceAddr)).toBe(10);
 		expect(engine.getDisplayValue(priceAddr)).toBe('$10.00');
@@ -52,8 +50,14 @@ describe('CellValueEngine value getters & formatters (ARCHITECTURE.md §3 R8)', 
 
 	it('formatter receives the getter-computed value', () => {
 		const engine = makeEngine({
-			getValueGetter: () => ({ row }) => row.price * row.qty,
-			getValueFormatter: () => ({ value }) => `${value} units$`,
+			getValueGetter:
+				() =>
+				({ row }) =>
+					row.price * row.qty,
+			getValueFormatter:
+				() =>
+				({ value }) =>
+					`${value} units$`,
 		});
 		expect(engine.getDisplayValue(totalAddr)).toBe('30 units$');
 	});

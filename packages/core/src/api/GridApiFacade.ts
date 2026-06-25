@@ -432,11 +432,13 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 			hasComputed: (field) => core.dag.hasComputed(field),
 			getComputedFields: () => core.dag.getComputedFields(),
 			hasCycle: () => core.dag.hasCycle(),
-			recomputeAll: () => core.dag.recomputeAll({
-				getLoadedRows: () => core.rowModel.query.getLoadedRows().map((n) => ({ id: n.id, data: n.data })),
-				getCellValue: (rowId, field) => core.cellEngine.getDisplayValue(addrOf(rowId, field)),
-				setCellValue: (rowId, field, value) => kernel.dispatch({ type: 'cell.setValue', payload: { address: addrOf(rowId, field), value } }),
-			}),
+			recomputeAll: () =>
+				core.dag.recomputeAll({
+					getLoadedRows: () => core.rowModel.query.getLoadedRows().map((n) => ({ id: n.id, data: n.data })),
+					getCellValue: (rowId, field) => core.cellEngine.getDisplayValue(addrOf(rowId, field)),
+					setCellValue: (rowId, field, value) =>
+						kernel.dispatch({ type: 'cell.setValue', payload: { address: addrOf(rowId, field), value } }),
+				}),
 		},
 
 		fill: {

@@ -53,7 +53,7 @@ export type CellWriteOutcome =
 export class CellValueEngine<TRow> {
 	constructor(
 		private readonly port: CellDataPort<TRow>,
-		private readonly columns?: CellColumnAccess<TRow>,
+		private readonly columns?: CellColumnAccess<TRow>
 	) {}
 
 	/** Raw value: the column's value getter if it has one, else the field read. */
@@ -125,11 +125,9 @@ function buildCellChangeSet(
 	address: CellAddress,
 	oldValue: unknown,
 	newValue: unknown,
-	changedFieldsByRow: ReadonlyMap<RowId, ReadonlySet<ColumnId>>,
+	changedFieldsByRow: ReadonlyMap<RowId, ReadonlySet<ColumnId>>
 ): CellChangeSet {
-	const changedValuesByCell = new Map<CellId, CellValueChange>([
-		[cellId(address.rowId, address.columnId), { oldValue, newValue }],
-	]);
+	const changedValuesByCell = new Map<CellId, CellValueChange>([[cellId(address.rowId, address.columnId), { oldValue, newValue }]]);
 	return { domain: 'cells', changedValuesByCell, changedFieldsByRow };
 }
 

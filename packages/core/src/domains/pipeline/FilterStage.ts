@@ -16,15 +16,11 @@ export class FilterStage<TRow> implements PipelineStage<Rows<TRow>, Rows<TRow>> 
 
 	build(input: Rows<TRow>, ctx: PipelineContext): Rows<TRow> {
 		if (ctx.queryNode) {
-			return input.filter((node) =>
-				evaluateQueryNode(ctx.queryNode!, (field) => getFieldValue(node.data, field)),
-			);
+			return input.filter((node) => evaluateQueryNode(ctx.queryNode!, (field) => getFieldValue(node.data, field)));
 		}
 		if (ctx.filterModel.length === 0) return input;
 		return input.filter((node) =>
-			ctx.filterModel.every((filter) =>
-				evaluateOperator(filter.operator, getFieldValue(node.data, filter.field), filter.value),
-			),
+			ctx.filterModel.every((filter) => evaluateOperator(filter.operator, getFieldValue(node.data, filter.field), filter.value))
 		);
 	}
 

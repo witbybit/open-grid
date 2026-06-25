@@ -72,9 +72,7 @@ export default function NewEngineDemo() {
 				>
 					New Engine
 				</span>
-				<span style={{ fontSize: 13, color: '#94a3b8' }}>
-					Plan 133 · GridKernel + DomGridRenderer · no GridStore / GridEngine
-				</span>
+				<span style={{ fontSize: 13, color: '#94a3b8' }}>Plan 133 · GridKernel + DomGridRenderer · no GridStore / GridEngine</span>
 				<div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
 					<label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94a3b8', cursor: 'pointer' }}>
 						<input

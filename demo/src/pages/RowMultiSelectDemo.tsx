@@ -53,7 +53,9 @@ const STATUS_COLORS: Record<string, string> = {
 const StatusBadge = ({ value }: { value: unknown }) => {
 	const v = String(value ?? '');
 	return (
-		<span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border leading-none inline-block ${STATUS_COLORS[v] ?? 'text-slate-400'}`}>
+		<span
+			className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border leading-none inline-block ${STATUS_COLORS[v] ?? 'text-slate-400'}`}
+		>
 			{v}
 		</span>
 	);
@@ -66,7 +68,10 @@ const COLUMNS: GridColumnDef<OrderRow>[] = [
 	{ id: 'qty', field: 'qty', header: 'Qty', width: 70 },
 	{ id: 'unitPrice', field: 'unitPrice', header: 'Unit Price', width: 100, valueGetter: ({ row }) => `$${Number(row.unitPrice).toFixed(2)}` },
 	{
-		id: 'status', field: 'status', header: 'Status', width: 110,
+		id: 'status',
+		field: 'status',
+		header: 'Status',
+		width: 110,
 		renderer: { kind: 'react', component: ({ value }: { value: unknown }) => <StatusBadge value={value} /> } as any,
 	},
 	{ id: 'region', field: 'region', header: 'Region', width: 90 },
@@ -216,7 +221,8 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 					</div>
 					<p className='text-[11px] text-slate-400 leading-snug'>
 						Use <code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>api.selection.selectRows</code> and{' '}
-						<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>api.selection.clear</code> for programmatic control.
+						<code className='bg-slate-800 px-1 rounded text-indigo-300 font-mono text-[10px]'>api.selection.clear</code> for programmatic
+						control.
 					</p>
 				</div>
 				<div className='flex-1 bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5'>

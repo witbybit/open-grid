@@ -8,7 +8,11 @@ interface PaginationBarProps {
 export function PaginationBar({ api }: PaginationBarProps) {
 	const p = api.pagination;
 
-	useSyncExternalStore(p.subscribe, () => p.getCurrentPage(), () => p.getCurrentPage());
+	useSyncExternalStore(
+		p.subscribe,
+		() => p.getCurrentPage(),
+		() => p.getCurrentPage()
+	);
 
 	if (!p.hasPagination()) return null;
 
@@ -50,20 +54,10 @@ export function PaginationBar({ api }: PaginationBarProps) {
 				{startRow}–{endRow} of {total.toLocaleString()}
 			</span>
 
-			<button
-				onClick={() => p.firstPage()}
-				disabled={!p.hasPrevPage()}
-				style={p.hasPrevPage() ? btnStyle : disabledStyle}
-				title="First page"
-			>
+			<button onClick={() => p.firstPage()} disabled={!p.hasPrevPage()} style={p.hasPrevPage() ? btnStyle : disabledStyle} title='First page'>
 				«
 			</button>
-			<button
-				onClick={() => p.prevPage()}
-				disabled={!p.hasPrevPage()}
-				style={p.hasPrevPage() ? btnStyle : disabledStyle}
-				title="Previous page"
-			>
+			<button onClick={() => p.prevPage()} disabled={!p.hasPrevPage()} style={p.hasPrevPage() ? btnStyle : disabledStyle} title='Previous page'>
 				‹
 			</button>
 
@@ -71,20 +65,10 @@ export function PaginationBar({ api }: PaginationBarProps) {
 				Page {currentPage} of {pageCount}
 			</span>
 
-			<button
-				onClick={() => p.nextPage()}
-				disabled={!p.hasNextPage()}
-				style={p.hasNextPage() ? btnStyle : disabledStyle}
-				title="Next page"
-			>
+			<button onClick={() => p.nextPage()} disabled={!p.hasNextPage()} style={p.hasNextPage() ? btnStyle : disabledStyle} title='Next page'>
 				›
 			</button>
-			<button
-				onClick={() => p.lastPage()}
-				disabled={!p.hasNextPage()}
-				style={p.hasNextPage() ? btnStyle : disabledStyle}
-				title="Last page"
-			>
+			<button onClick={() => p.lastPage()} disabled={!p.hasNextPage()} style={p.hasNextPage() ? btnStyle : disabledStyle} title='Last page'>
 				»
 			</button>
 
@@ -92,10 +76,12 @@ export function PaginationBar({ api }: PaginationBarProps) {
 				value={p.getPageSize()}
 				onChange={(e) => p.setPageSize(Number(e.target.value))}
 				style={{ ...btnStyle, padding: '2px 4px' }}
-				title="Rows per page"
+				title='Rows per page'
 			>
 				{[25, 50, 100, 200, 500].map((n) => (
-					<option key={n} value={n}>{n} / page</option>
+					<option key={n} value={n}>
+						{n} / page
+					</option>
 				))}
 			</select>
 		</div>

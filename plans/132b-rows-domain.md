@@ -37,7 +37,7 @@ infinite / server. Then wire the first real row commands through the kernel, cap
   executor gates on capabilities BEFORE calling.
 - `RowId` ≠ `VisualRowId` (R5).
 - Unsupported row commands → `rejected` at the kernel; never silent no-op.
-- The required pipeline refresh is *reported* by the row command result; actual pipeline rebuild
+- The required pipeline refresh is _reported_ by the row command result; actual pipeline rebuild
   is Phase 5 (the row command handler records it, does not perform it).
 
 ## Task list

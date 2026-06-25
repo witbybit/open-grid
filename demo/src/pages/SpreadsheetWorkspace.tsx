@@ -75,8 +75,7 @@ export default function SpreadsheetWorkspace({
 					if (!selectedRowIds.has(row.id)) return row;
 					const nextRow = { ...row };
 					for (const field of NUMERIC_FIELDS) {
-						(nextRow as any)[field] =
-							emptyValue !== undefined ? emptyValue : mapValue(parseFloat(String((row as any)[field])) || 0);
+						(nextRow as any)[field] = emptyValue !== undefined ? emptyValue : mapValue(parseFloat(String((row as any)[field])) || 0);
 					}
 					return nextRow;
 				})
@@ -121,9 +120,13 @@ export default function SpreadsheetWorkspace({
 					<div className='flex-1 flex items-center gap-2 text-[10px] font-mono text-slate-400'>
 						{selectionSize > 0 ? (
 							<>
-								<span>Sum: <span className='text-emerald-400 font-bold'>{selectionSum.toFixed(1)}</span></span>
+								<span>
+									Sum: <span className='text-emerald-400 font-bold'>{selectionSum.toFixed(1)}</span>
+								</span>
 								<span className='text-slate-700'>·</span>
-								<span>Avg: <span className='text-indigo-400 font-bold'>{selectionAvg.toFixed(1)}</span></span>
+								<span>
+									Avg: <span className='text-indigo-400 font-bold'>{selectionAvg.toFixed(1)}</span>
+								</span>
 							</>
 						) : (
 							<span className='text-slate-600'>Select rows to see aggregates</span>

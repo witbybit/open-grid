@@ -19,7 +19,7 @@ const GROUP_PATH_SEPARATOR = '/';
 export function buildGroupedVisualRows<TRow>(
 	rows: readonly RowNode<TRow>[],
 	groupBy: GroupByModel,
-	expansion: GroupExpansionState,
+	expansion: GroupExpansionState
 ): VisualRow<TRow>[] {
 	if (groupBy.length === 0) {
 		return rows.map((node) => dataVisualRow(node));
@@ -32,7 +32,7 @@ function groupLevel<TRow>(
 	groupBy: GroupByModel,
 	expansion: GroupExpansionState,
 	depth: number,
-	parentKey: string,
+	parentKey: string
 ): VisualRow<TRow>[] {
 	if (depth >= groupBy.length) {
 		return rows.map((node) => dataVisualRow(node));
@@ -53,7 +53,7 @@ function groupLevel<TRow>(
 				value,
 				count: members.length, // leaf count: members at the deepest level are data rows
 				expanded,
-			}),
+			})
 		);
 		if (expanded) {
 			out.push(...groupLevel(members, groupBy, expansion, depth + 1, groupKey));

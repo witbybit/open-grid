@@ -21,11 +21,7 @@ export interface GridTransactionResult {
  * honest "stop on first failure" boundary, not a fake "all-or-nothing". Callers that need
  * atomicity must check `status` and decide. We do not pretend rollback works.
  */
-export function dispatchTransaction(
-	kernel: GridKernel,
-	commands: readonly GridCommand[],
-	transactionId: string,
-): GridTransactionResult {
+export function dispatchTransaction(kernel: GridKernel, commands: readonly GridCommand[], transactionId: string): GridTransactionResult {
 	const results: GridCommandResult[] = [];
 
 	for (let index = 0; index < commands.length; index++) {

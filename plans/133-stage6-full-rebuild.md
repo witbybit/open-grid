@@ -76,6 +76,7 @@
 ## 3. GridApi — Public Methods
 
 ### Data / Rows
+
 - [ ] **`getStateSnapshot`** — deep-frozen public state snapshot
 - [ ] **`getRowId` / `isRowLoading`** — row identity helpers
 - [ ] **`setRows` / `updateRows` / `applyTransaction` / `refreshRows`** — full replace, partial update, add/remove/update transaction, force refresh
@@ -90,18 +91,22 @@
 - [ ] **`rows()` accessor** — `GridRowsAccessor`: `forEach`, `getAll`, `getSelected`, `getSelectedIds`, `getById`, `getNodeById`, `getCount`, `getVisualRowById`, `inRange`, `getChecked`, `getCheckedIds`
 
 ### Cell Values
+
 - [ ] **`getCellValue` / `setCellValue` / `batchCellValues`** — single and bulk batch
 - [ ] **`getFormula` / `hasFormula` / `setFormula` / `clearFormula`** — formula read/write/clear
 - [ ] **`commitEdit`** — commit in-progress cell edit
 
 ### Cell Selection
+
 - [ ] **`selectCell` / `selectRange` / `extendSelection`** — programmatic cell range manipulation
 
 ### Row Selection
+
 - [ ] **`applyRowSelectionGesture` / `selectRows` / `deselectRows` / `toggleRowSelection` / `selectAllRows` / `clearRowSelection`**
 - [ ] **`getSelectedRowIds` / `isRowNodeSelected` / `getSelectedRowCount`** — row selection read API
 
 ### Columns
+
 - [ ] **`setColumns` / `setColumnWidth` / `autoSizeColumn` / `autoSizeAllColumns`**
 - [ ] **`setColumnVisible` / `setColumnsVisible`**
 - [ ] **`getColumns` / `getDisplayedColumns`**
@@ -112,10 +117,12 @@
 - [ ] **`getColumnDistinctValues`** — distinct value set for set filters
 
 ### Sort / Filter / Query
+
 - [ ] **`setSortModel` / `setFilterModel`** (already partial — complete + expose on Grid props)
 - [ ] **`getQueryModel` / `setQueryModel` / `clearQueryModel` / `evaluateQueryForRow`**
 
 ### Grouping / Aggregation
+
 - [ ] **`setGroupBy` / `getGroupBy` / `addGroupBy` / `removeGroupBy` / `moveGroupBy`**
 - [ ] **`setAggDefs` / `getAggDefs`**
 - [ ] **`expandAllGroups` / `collapseAllGroups` / `toggleGroupExpanded` / `isGroupExpanded`**
@@ -123,39 +130,49 @@
 - [ ] **`setShowGroupFooter` / `setStickyGroupRows` / `setShowGroupPanel` / `setShowFloatingFilters` / `setShowFilterChipBar`**
 
 ### Editing
+
 - [ ] **`startEditing` / `stopEditing`** — programmatic editing lifecycle
 
 ### Clipboard / Export
+
 - [ ] **`copySelectedRange` / `pasteFromClipboard` / `copyRange`** — clipboard
 - [ ] **`exportCsv`** — CSV export trigger
 
 ### Undo/Redo
+
 - [ ] **`undo` / `redo` / `canUndo` / `canRedo`**
 
 ### Styling / Theme
+
 - [ ] **`setStyleRules`** — conditional row/cell style rules
 - [ ] **`getTheme` / `getThemeName` / `getAvailableThemes` / `switchTheme` / `mergeTheme` / `onThemeChange`**
 
 ### Sidebar / Chart
+
 - [ ] **`openPanel` / `closePanel` / `togglePanel` / `getOpenPanel`**
 - [ ] **`openChart` / `closeChart` / `toggleChart` / `isChartOpen`**
 
 ### Persistence
+
 - [ ] **`hasPersistence` / `clearPersistedState` / `setAutoSave` / `isAutoSaveEnabled` / `getPersistenceStatus` / `subscribeToPersistenceStatus` / `saveNow`**
 - [ ] **`getGridState` / `applyGridState`**
 
 ### Workspace / Views
+
 - [ ] **`hasWorkspace` / `getWorkspaceState` / `subscribeToWorkspaceState`**
 - [ ] **`listViews` / `saveView` / `updateView` / `applyView` / `deleteView` / `duplicateView` / `renameView` / `setDefaultView`**
 
 ### Subscriptions
+
 - [ ] **`subscribe` / `subscribeToKey` / `subscribeToDomainVersions` / `subscribeDomain`**
 - [ ] **`addEventListener` / `dispatchEvent`**
 
 ### Capabilities
+
 - [ ] **`can` / `canEdit` / `canCopy` / `canPaste` / `canExport`**
 
 ### Diagnostics
+
 - [ ] **`getRuntimeFaults` / `clearRuntimeFaults`** — ring-buffer fault log
 - [ ] **`flushCellUpdatesSync`**
 - [ ] **`getInstrumentation` / `setInstrumentation`**
@@ -164,6 +181,7 @@
 - [ ] **`integrity`** — `DataIntegrity` API surface
 
 ### Lifecycle
+
 - [ ] **`destroy`** — wire remaining subsystems (already partial)
 - [ ] **`getContainer`** — return grid root DOM element
 
@@ -412,5 +430,5 @@ Each page must work end-to-end before Stage 6 is declared complete.
 
 ---
 
-*Total: ~150 discrete implementation tasks across 20 feature areas + supplementary.*
-*Completion gate: all demo pages listed in §18 render correctly with their documented features.*
+_Total: ~150 discrete implementation tasks across 20 feature areas + supplementary._
+_Completion gate: all demo pages listed in §18 render correctly with their documented features._

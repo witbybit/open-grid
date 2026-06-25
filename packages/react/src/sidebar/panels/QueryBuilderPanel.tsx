@@ -7,18 +7,18 @@ interface QueryBuilderPanelProps {
 }
 
 const OPERATORS: { value: FilterOperator; label: string }[] = [
-	{ value: 'contains',    label: 'Contains' },
+	{ value: 'contains', label: 'Contains' },
 	{ value: 'notContains', label: 'Not contains' },
-	{ value: 'equals',      label: 'Equals' },
-	{ value: 'notEquals',   label: 'Not equals' },
-	{ value: 'startsWith',  label: 'Starts with' },
-	{ value: 'endsWith',    label: 'Ends with' },
-	{ value: 'gt',          label: '>' },
-	{ value: 'lt',          label: '<' },
-	{ value: 'gte',         label: '>=' },
-	{ value: 'lte',         label: '<=' },
-	{ value: 'blank',       label: 'Is blank' },
-	{ value: 'notBlank',    label: 'Is not blank' },
+	{ value: 'equals', label: 'Equals' },
+	{ value: 'notEquals', label: 'Not equals' },
+	{ value: 'startsWith', label: 'Starts with' },
+	{ value: 'endsWith', label: 'Ends with' },
+	{ value: 'gt', label: '>' },
+	{ value: 'lt', label: '<' },
+	{ value: 'gte', label: '>=' },
+	{ value: 'lte', label: '<=' },
+	{ value: 'blank', label: 'Is blank' },
+	{ value: 'notBlank', label: 'Is not blank' },
 ];
 
 const inputStyle = {
@@ -44,13 +44,13 @@ export function QueryBuilderPanel({ api }: QueryBuilderPanelProps) {
 	const cols = useSyncExternalStore(
 		api.subscribe,
 		() => api.columns.getState(),
-		() => api.columns.getState(),
+		() => api.columns.getState()
 	).filter((c) => c.visible);
 
 	const activeQuery = useSyncExternalStore(
 		api.subscribe,
 		() => api.pipeline.getQuery(),
-		() => api.pipeline.getQuery(),
+		() => api.pipeline.getQuery()
 	);
 
 	const [draft, setDraft] = useState<QueryGroup | null>(activeQuery?.type === 'group' ? (activeQuery as QueryGroup) : null);
@@ -117,24 +117,29 @@ export function QueryBuilderPanel({ api }: QueryBuilderPanelProps) {
 				{draft && (
 					<button
 						onClick={toggleOperator}
-						style={{ ...btnStyle, fontWeight: 600, background: 'var(--og-primary, #4f46e5)', color: '#fff', border: 'none', padding: '3px 10px' }}
+						style={{
+							...btnStyle,
+							fontWeight: 600,
+							background: 'var(--og-primary, #4f46e5)',
+							color: '#fff',
+							border: 'none',
+							padding: '3px 10px',
+						}}
 					>
 						{draft.operator.toUpperCase()}
 					</button>
 				)}
-				<button onClick={addCondition} style={btnStyle}>+ Condition</button>
-				<button onClick={addGroup} style={btnStyle}>+ Group</button>
+				<button onClick={addCondition} style={btnStyle}>
+					+ Condition
+				</button>
+				<button onClick={addGroup} style={btnStyle}>
+					+ Group
+				</button>
 			</div>
 
 			{/* Conditions */}
 			{draft?.children.map((child, i) => (
-				<ConditionRow
-					key={i}
-					node={child}
-					fields={fields}
-					onRemove={() => removeChild(i)}
-					onUpdate={(patch) => updateCondition(i, patch)}
-				/>
+				<ConditionRow key={i} node={child} fields={fields} onRemove={() => removeChild(i)} onUpdate={(patch) => updateCondition(i, patch)} />
 			))}
 
 			{(!draft || draft.children.length === 0) && (
@@ -158,11 +163,7 @@ export function QueryBuilderPanel({ api }: QueryBuilderPanelProps) {
 				)}
 			</div>
 
-			{isActive && (
-				<div style={{ fontSize: '11px', color: 'var(--og-primary, #4f46e5)', textAlign: 'center' }}>
-					Query active
-				</div>
-			)}
+			{isActive && <div style={{ fontSize: '11px', color: 'var(--og-primary, #4f46e5)', textAlign: 'center' }}>Query active</div>}
 		</div>
 	);
 }
@@ -177,11 +178,20 @@ interface ConditionRowProps {
 function ConditionRow({ node, fields, onRemove, onUpdate }: ConditionRowProps) {
 	if (node.type === 'group') {
 		return (
-			<div style={{ border: '1px solid var(--og-border, #ddd)', borderRadius: '4px', padding: '6px', background: 'var(--og-header-bg, #f9f9f9)' }}>
+			<div
+				style={{
+					border: '1px solid var(--og-border, #ddd)',
+					borderRadius: '4px',
+					padding: '6px',
+					background: 'var(--og-header-bg, #f9f9f9)',
+				}}
+			>
 				<div style={{ fontSize: '11px', color: 'var(--og-cell-text-muted, #888)', marginBottom: '4px' }}>
 					Nested group ({node.operator.toUpperCase()}) — {node.children.length} condition(s)
 				</div>
-				<button onClick={onRemove} style={{ ...btnStyle, color: 'var(--og-error, #d32f2f)', fontSize: '10px' }}>Remove group</button>
+				<button onClick={onRemove} style={{ ...btnStyle, color: 'var(--og-error, #d32f2f)', fontSize: '10px' }}>
+					Remove group
+				</button>
 			</div>
 		);
 	}
@@ -196,25 +206,35 @@ function ConditionRow({ node, fields, onRemove, onUpdate }: ConditionRowProps) {
 				onChange={(e) => onUpdate({ field: e.target.value })}
 				style={{ ...inputStyle, flex: '1 1 80px', minWidth: '60px' }}
 			>
-				{fields.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
+				{fields.map((f) => (
+					<option key={f.field} value={f.field}>
+						{f.label}
+					</option>
+				))}
 			</select>
 			<select
 				value={cond.operator}
 				onChange={(e) => onUpdate({ operator: e.target.value as FilterOperator })}
 				style={{ ...inputStyle, flex: '1 1 80px', minWidth: '60px' }}
 			>
-				{OPERATORS.map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
+				{OPERATORS.map((op) => (
+					<option key={op.value} value={op.value}>
+						{op.label}
+					</option>
+				))}
 			</select>
 			{needsValue && (
 				<input
-					type="text"
+					type='text'
 					value={cond.value != null ? String(cond.value) : ''}
 					onChange={(e) => onUpdate({ value: e.target.value })}
-					placeholder="Value"
+					placeholder='Value'
 					style={{ ...inputStyle, flex: '1 1 60px', minWidth: '40px' }}
 				/>
 			)}
-			<button onClick={onRemove} style={{ ...btnStyle, color: 'var(--og-error, #d32f2f)', flexShrink: 0 }}>✕</button>
+			<button onClick={onRemove} style={{ ...btnStyle, color: 'var(--og-error, #d32f2f)', flexShrink: 0 }}>
+				✕
+			</button>
 		</div>
 	);
 }

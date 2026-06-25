@@ -84,7 +84,7 @@ describe('ClientRowModel — structural writes (ARCHITECTURE.md §3 R3)', () => 
 			model.commands.replaceRows([
 				{ id: 'x', name: 'X', age: 1 },
 				{ id: 'x', name: 'Y', age: 2 },
-			]),
+			])
 		).toThrow(/duplicate row id/);
 	});
 });

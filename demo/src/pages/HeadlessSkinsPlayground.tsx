@@ -14,9 +14,7 @@ interface HeadlessSkinsPlaygroundProps {
 	pinRightColumns?: number;
 }
 
-export default function HeadlessSkinsPlayground({
-	onGridReady,
-}: HeadlessSkinsPlaygroundProps) {
+export default function HeadlessSkinsPlayground({ onGridReady }: HeadlessSkinsPlaygroundProps) {
 	const apiRef = useRef<any>(null);
 	const [apiReady, setApiReady] = useState<any>(null);
 	const rows = useMemo(() => generatePerformanceRows(1000, 'R'), []);

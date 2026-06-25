@@ -42,7 +42,7 @@ parsers for the cell engine.
 only the 7 pre-existing react failures remain. All 6 gates met. `ColumnModel.getValueSetter`
 provides the seam the cell engine's `resolveValueSetter` consumes.
 
-Note: the *root* tsconfig reports 169 pre-existing errors in `fixtures/` and old `*.test.ts` files
+Note: the _root_ tsconfig reports 169 pre-existing errors in `fixtures/` and old `*.test.ts` files
 (unrelated to this rewrite — confirmed identical count with this work stashed). The core build
 config (`packages/core/tsconfig.json`, excludes tests/fixtures) is the meaningful gate and is clean.
 

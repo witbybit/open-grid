@@ -6,11 +6,7 @@ export type { RowNode } from './RowNode.js';
 export { createRowNode } from './RowNode.js';
 
 export type { RowModelCapabilities } from './RowModelCapabilities.js';
-export {
-	clientRowModelCapabilities,
-	infiniteRowModelCapabilities,
-	serverRowModelCapabilities,
-} from './RowModelCapabilities.js';
+export { clientRowModelCapabilities, infiniteRowModelCapabilities, serverRowModelCapabilities } from './RowModelCapabilities.js';
 
 export { RowModelError, UnsupportedRowModelOperationError } from './RowModelError.js';
 

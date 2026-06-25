@@ -341,10 +341,8 @@ export class LayerRegistry {
 		}
 
 		// shrink scroll-viewport to leave room for bottom chrome
-		const bottomChromeHeight =
-			(showStatusBar ? statusBarHeight : 0) + (showPagination ? paginationHeight : 0);
-		this.layers.scrollViewport.style.paddingBottom =
-			bottomChromeHeight > 0 ? `${bottomChromeHeight}px` : '';
+		const bottomChromeHeight = (showStatusBar ? statusBarHeight : 0) + (showPagination ? paginationHeight : 0);
+		this.layers.scrollViewport.style.paddingBottom = bottomChromeHeight > 0 ? `${bottomChromeHeight}px` : '';
 	}
 
 	// ── scroll listener ────────────────────────────────────────────────────

@@ -31,20 +31,20 @@ kernels alive past Phase 11. No feature flags, no `legacyMode`, no deprecated al
 
 ## Child plans
 
-| Phase | Plan | Scope | Status |
-| ----- | ---- | ----- | ------ |
-| 1 | (this file) + `ARCHITECTURE.md` | Freeze target, ownership, forbidden deps, terminology | **done** |
-| 2 | `132a-kernel.md` | GridKernel, GridCommand, GridCommandResult, GridCommit, GridEffect, GridEvent, GridVersion, dispatch | **done** |
-| 3 | `132b-rows-domain.md` | Branded IDs, RowNode, RowModelCapabilities, RowModelPlugin, client/infinite/server shells | **done** |
-| 4 | `132c-cells-domain.md` | CellAddress, CellValueEngine, sync-only valueSetter, CellChangeSet | **done** |
-| 5 | `132d-pipeline.md` | FilterStage, SortStage, flatten, shared RowWriteImpact classifier | **done** |
-| 6 | `132e-columns-domain.md` | ColumnModel, ColumnState, ColumnCommand, ColumnLayout | **done** |
-| 7 | `132f-selection-editing.md` | SelectionModel, EditSession, edit commands | **done** |
-| 8 | `132g-layout-viewport-render.md` | LayoutSnapshot, ViewportSnapshot, RenderPlan, SlotModel | **done** |
-| 9 | `132h-public-api.md` | GridApi command-backed facade | **done** |
-| 10 | `132i-react-adapter.md` | Grid.tsx, GridProvider, render-plan consumption, immutable rowModelType | **done** |
-| 11 | → `133-feature-parity-and-demolition.md` | Reframed: incrementally rebuild old features on the new core, migrate the demo, then delete old | program started |
-| 12 | → `133` (Demolition step) | Architecture-guard tests land with the demolition step of the 133 program | pending |
+| Phase | Plan                                     | Scope                                                                                                | Status          |
+| ----- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------- |
+| 1     | (this file) + `ARCHITECTURE.md`          | Freeze target, ownership, forbidden deps, terminology                                                | **done**        |
+| 2     | `132a-kernel.md`                         | GridKernel, GridCommand, GridCommandResult, GridCommit, GridEffect, GridEvent, GridVersion, dispatch | **done**        |
+| 3     | `132b-rows-domain.md`                    | Branded IDs, RowNode, RowModelCapabilities, RowModelPlugin, client/infinite/server shells            | **done**        |
+| 4     | `132c-cells-domain.md`                   | CellAddress, CellValueEngine, sync-only valueSetter, CellChangeSet                                   | **done**        |
+| 5     | `132d-pipeline.md`                       | FilterStage, SortStage, flatten, shared RowWriteImpact classifier                                    | **done**        |
+| 6     | `132e-columns-domain.md`                 | ColumnModel, ColumnState, ColumnCommand, ColumnLayout                                                | **done**        |
+| 7     | `132f-selection-editing.md`              | SelectionModel, EditSession, edit commands                                                           | **done**        |
+| 8     | `132g-layout-viewport-render.md`         | LayoutSnapshot, ViewportSnapshot, RenderPlan, SlotModel                                              | **done**        |
+| 9     | `132h-public-api.md`                     | GridApi command-backed facade                                                                        | **done**        |
+| 10    | `132i-react-adapter.md`                  | Grid.tsx, GridProvider, render-plan consumption, immutable rowModelType                              | **done**        |
+| 11    | → `133-feature-parity-and-demolition.md` | Reframed: incrementally rebuild old features on the new core, migrate the demo, then delete old      | program started |
+| 12    | → `133` (Demolition step)                | Architecture-guard tests land with the demolition step of the 133 program                            | pending         |
 
 > Phases 11–12 are executed via the **[133 program](./133-feature-parity-and-demolition.md)**: the
 > user's directive is to rebuild the old grid's features on the new stack incrementally, migrate the

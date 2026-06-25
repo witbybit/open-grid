@@ -53,7 +53,7 @@ export class StatusBarModel<TRow = unknown> {
 
 	constructor(
 		private readonly port: StatusBarPort<TRow>,
-		panels: StatusBarPanelDef[] = defaultPanels(),
+		panels: StatusBarPanelDef[] = defaultPanels()
 	) {
 		this.panels = panels;
 		this.data = this._compute();
@@ -86,7 +86,9 @@ export class StatusBarModel<TRow = unknown> {
 
 	subscribe(fn: () => void): () => void {
 		this.listeners.add(fn);
-		return () => { this.listeners.delete(fn); };
+		return () => {
+			this.listeners.delete(fn);
+		};
 	}
 
 	destroy(): void {
@@ -171,14 +173,22 @@ function defaultPanels(): StatusBarPanelDef[] {
 
 function labelForType(type: StatusBarPanelId): string {
 	switch (type) {
-		case 'rowCount': return 'Rows';
-		case 'filteredCount': return 'Filtered';
-		case 'selectedCount': return 'Selected';
-		case 'sum': return 'Sum';
-		case 'avg': return 'Avg';
-		case 'min': return 'Min';
-		case 'max': return 'Max';
-		case 'customText': return '';
+		case 'rowCount':
+			return 'Rows';
+		case 'filteredCount':
+			return 'Filtered';
+		case 'selectedCount':
+			return 'Selected';
+		case 'sum':
+			return 'Sum';
+		case 'avg':
+			return 'Avg';
+		case 'min':
+			return 'Min';
+		case 'max':
+			return 'Max';
+		case 'customText':
+			return '';
 	}
 }
 

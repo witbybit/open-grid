@@ -9,7 +9,7 @@ import type { RowHeightModel } from './RowHeightModel.js';
 export class LayoutSnapshot {
 	constructor(
 		private readonly rows: RowHeightModel,
-		readonly columns: ColumnLayout,
+		readonly columns: ColumnLayout
 	) {}
 
 	get rowCount(): number {

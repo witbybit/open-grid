@@ -186,9 +186,7 @@ export function ColumnOrderPanel({ activeApi }: ColumnOrderPanelProps) {
 		const sync = () => {
 			const cols = activeApi.columns.getState();
 			setColumns(cols);
-			setSelectedField((currentField) =>
-				cols.some((col) => col.field === currentField) ? currentField : (cols[0]?.field ?? '')
-			);
+			setSelectedField((currentField) => (cols.some((col) => col.field === currentField) ? currentField : (cols[0]?.field ?? '')));
 		};
 		sync();
 		return activeApi.subscribe(sync);

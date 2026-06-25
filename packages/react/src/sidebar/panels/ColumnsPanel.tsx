@@ -11,18 +11,16 @@ export function ColumnsPanel({ api }: ColumnsPanelProps) {
 	const cols = useSyncExternalStore(
 		api.subscribe,
 		() => api.columns.getState(),
-		() => api.columns.getState(),
+		() => api.columns.getState()
 	);
 
 	const groupBy = useSyncExternalStore(
 		api.subscribe,
 		() => api.pipeline.getGroupBy(),
-		() => api.pipeline.getGroupBy(),
+		() => api.pipeline.getGroupBy()
 	);
 
-	const filtered = search
-		? cols.filter((c) => (c.header ?? c.field ?? String(c.id)).toLowerCase().includes(search.toLowerCase()))
-		: cols;
+	const filtered = search ? cols.filter((c) => (c.header ?? c.field ?? String(c.id)).toLowerCase().includes(search.toLowerCase())) : cols;
 
 	const groupedColumnIds = new Set(groupBy.map((g) => String(g.columnId)));
 
@@ -41,10 +39,7 @@ export function ColumnsPanel({ api }: ColumnsPanelProps) {
 			const next: GroupByModel = groupBy.filter((g) => String(g.columnId) !== String(col.id));
 			api.pipeline.setGroupBy(next);
 		} else {
-			const next: GroupByModel = [
-				...groupBy,
-				{ columnId: col.id, field: col.field ?? String(col.id) } as GroupByColumn,
-			];
+			const next: GroupByModel = [...groupBy, { columnId: col.id, field: col.field ?? String(col.id) } as GroupByColumn];
 			api.pipeline.setGroupBy(next);
 		}
 	}
@@ -53,8 +48,8 @@ export function ColumnsPanel({ api }: ColumnsPanelProps) {
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 			<div style={{ padding: '8px' }}>
 				<input
-					type="text"
-					placeholder="Search columns…"
+					type='text'
+					placeholder='Search columns…'
 					value={search}
 					onChange={(e) => setSearch(e.target.value)}
 					style={{
@@ -84,12 +79,7 @@ export function ColumnsPanel({ api }: ColumnsPanelProps) {
 								borderBottom: '1px solid var(--og-border, #f0f0f0)',
 							}}
 						>
-							<input
-								type="checkbox"
-								checked={col.visible}
-								onChange={() => toggleVisible(col)}
-								style={{ margin: 0, flexShrink: 0 }}
-							/>
+							<input type='checkbox' checked={col.visible} onChange={() => toggleVisible(col)} style={{ margin: 0, flexShrink: 0 }} />
 							<span style={{ flex: 1, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
 								{label}
 							</span>

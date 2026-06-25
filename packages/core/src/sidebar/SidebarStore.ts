@@ -31,7 +31,9 @@ export class SidebarStore {
 
 	subscribe = (fn: () => void): (() => void) => {
 		this.listeners.add(fn);
-		return () => { this.listeners.delete(fn); };
+		return () => {
+			this.listeners.delete(fn);
+		};
 	};
 
 	destroy(): void {

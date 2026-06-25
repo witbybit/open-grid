@@ -73,7 +73,9 @@ export class GridCapabilityManager {
 
 	subscribe(fn: (cap: GridCapability) => void): () => void {
 		this.listeners.add(fn);
-		return () => { this.listeners.delete(fn); };
+		return () => {
+			this.listeners.delete(fn);
+		};
 	}
 
 	destroy(): void {

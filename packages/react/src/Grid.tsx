@@ -1,11 +1,5 @@
 import { useEffect, useRef, useMemo, useState, type CSSProperties } from 'react';
-import {
-	createGrid,
-	DomGridRenderer,
-	ThemeManager,
-	isBuiltInThemeName,
-	asColumnId,
-} from '@open-grid/core';
+import { createGrid, DomGridRenderer, ThemeManager, isBuiltInThemeName, asColumnId } from '@open-grid/core';
 import type { GridApi, RowId, SortModel, FilterModel, ColumnId, ColumnDef } from '@open-grid/core';
 import { GridSidebar } from './sidebar/GridSidebar.js';
 import type { GridSidebarConfig } from './sidebar/GridSidebar.js';
@@ -98,7 +92,7 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 			})),
 		// intentional: columns are fixed at mount
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[],
+		[]
 	);
 
 	const rowsRef = useRef(rows);
@@ -142,11 +136,12 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 		// ── 2. Apply column pinning ────────────────────────────────────────────
 		const applyPins = (spec: number | string[] | undefined, side: 'left' | 'right') => {
 			if (!spec) return;
-			const cols = typeof spec === 'number'
-				? (side === 'left'
-					? normalizedCols.slice(0, spec)
-					: normalizedCols.slice(normalizedCols.length - spec))
-				: normalizedCols.filter((c) => (spec as string[]).includes(c.field ?? c.id ?? ''));
+			const cols =
+				typeof spec === 'number'
+					? side === 'left'
+						? normalizedCols.slice(0, spec)
+						: normalizedCols.slice(normalizedCols.length - spec)
+					: normalizedCols.filter((c) => (spec as string[]).includes(c.field ?? c.id ?? ''));
 			for (const col of cols) {
 				api.columns.setPinned(asColumnId(col.id ?? col.field ?? ''), side);
 			}
@@ -160,11 +155,11 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 		renderer.setSortCallback((field) => {
 			const current = api.pipeline.getSortModel();
 			const existing = current.find((s) => s.field === field);
-			const nextDir: 'asc' | 'desc' | null =
-				!existing ? 'asc' : existing.direction === 'asc' ? 'desc' : null;
-			const nextModel = nextDir === null
-				? current.filter((s) => s.field !== field)
-				: [...current.filter((s) => s.field !== field), { field, columnId: field as ColumnId, direction: nextDir }];
+			const nextDir: 'asc' | 'desc' | null = !existing ? 'asc' : existing.direction === 'asc' ? 'desc' : null;
+			const nextModel =
+				nextDir === null
+					? current.filter((s) => s.field !== field)
+					: [...current.filter((s) => s.field !== field), { field, columnId: field as ColumnId, direction: nextDir }];
 			api.pipeline.setSortModel(nextModel);
 		});
 		renderer.setResizeCallback((field, newWidth) => {
@@ -187,21 +182,14 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 			if (!value) {
 				api.pipeline.setFilterModel(current.filter((f) => f.field !== field));
 			} else {
-				api.pipeline.setFilterModel([
-					...current.filter((f) => f.field !== field),
-					{ columnId: col.columnId, field, operator, value },
-				]);
+				api.pipeline.setFilterModel([...current.filter((f) => f.field !== field), { columnId: col.columnId, field, operator, value }]);
 			}
 		});
 		renderer.setFilterChipRemoveCallback((columnId) => {
-			api.pipeline.setFilterModel(
-				api.pipeline.getFilterModel().filter((f) => String(f.columnId) !== columnId),
-			);
+			api.pipeline.setFilterModel(api.pipeline.getFilterModel().filter((f) => String(f.columnId) !== columnId));
 		});
 		renderer.setGroupPanelRemoveCallback((columnId) => {
-			api.pipeline.setGroupBy(
-				api.pipeline.getGroupBy().filter((g) => String(g.columnId) !== columnId),
-			);
+			api.pipeline.setGroupBy(api.pipeline.getGroupBy().filter((g) => String(g.columnId) !== columnId));
 		});
 
 		renderer.mount(container);
@@ -280,22 +268,9 @@ export function Grid<TRow extends object = Record<string, unknown>>({
 	}, [theme]);
 
 	return (
-		<div
-			className={className}
-			style={{ width: '100%', height: '100%', display: 'flex', overflow: 'hidden', ...style } as CSSProperties}
-		>
-			<div
-				ref={containerRef}
-				className="og-grid-container"
-				style={{ flex: 1, minWidth: 0, height: '100%' }}
-			/>
-			{sidebar && mountedApi && (
-				<GridSidebar
-					api={mountedApi}
-					config={sidebar}
-					container={containerRef.current}
-				/>
-			)}
+		<div className={className} style={{ width: '100%', height: '100%', display: 'flex', overflow: 'hidden', ...style } as CSSProperties}>
+			<div ref={containerRef} className='og-grid-container' style={{ flex: 1, minWidth: 0, height: '100%' }} />
+			{sidebar && mountedApi && <GridSidebar api={mountedApi} config={sidebar} container={containerRef.current} />}
 		</div>
 	);
 }

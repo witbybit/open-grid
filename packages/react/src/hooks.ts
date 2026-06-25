@@ -12,10 +12,7 @@ export function useGridApi<TRow = unknown>(): GridApi<TRow> {
 	return context as unknown as GridApi<TRow>;
 }
 
-export function useGridSelector<TRow = unknown, T = unknown>(
-	selector: (api: GridApi<TRow>) => T,
-	isEqual: (a: T, b: T) => boolean = Object.is
-): T {
+export function useGridSelector<TRow = unknown, T = unknown>(selector: (api: GridApi<TRow>) => T, isEqual: (a: T, b: T) => boolean = Object.is): T {
 	const api = useGridApi<TRow>();
 
 	const selectorRef = useRef(selector);
@@ -63,9 +60,6 @@ export function useGridSelector<TRow = unknown, T = unknown>(
  * Currently delegates to useGridSelector; will be refined when domain-specific
  * subscriptions are wired into GridApi.
  */
-export function useGridKeySelector<TRow = unknown, T = unknown>(
-	selector: (api: GridApi<TRow>) => T,
-	isEqual?: (a: T, b: T) => boolean
-): T {
+export function useGridKeySelector<TRow = unknown, T = unknown>(selector: (api: GridApi<TRow>) => T, isEqual?: (a: T, b: T) => boolean): T {
 	return useGridSelector<TRow, T>(selector, isEqual);
 }

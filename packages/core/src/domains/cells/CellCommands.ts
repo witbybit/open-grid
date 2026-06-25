@@ -35,7 +35,7 @@ export function registerCellCommands<TRow>(
 	kernel: GridKernel,
 	host: CellCommandHost,
 	engine: CellValueEngine<TRow>,
-	options: CellCommandOptions<TRow> = {},
+	options: CellCommandOptions<TRow> = {}
 ): () => void {
 	return kernel.register('cell.setValue', (command) => {
 		if (!host.capabilities.cellMutation) {

@@ -58,7 +58,7 @@ export class GridWorkspaceController {
 	constructor(
 		private readonly adapter: GridWorkspaceAdapter,
 		private readonly readState: () => SerializedGridState,
-		private readonly writeState: (state: SerializedGridState) => void,
+		private readonly writeState: (state: SerializedGridState) => void
 	) {}
 
 	listViews(): GridViewDefinition[] {
@@ -128,7 +128,9 @@ export class GridWorkspaceController {
 
 	subscribe = (fn: () => void): (() => void) => {
 		this.listeners.add(fn);
-		return () => { this.listeners.delete(fn); };
+		return () => {
+			this.listeners.delete(fn);
+		};
 	};
 
 	destroy(): void {

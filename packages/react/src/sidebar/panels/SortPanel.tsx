@@ -9,13 +9,13 @@ export function SortPanel({ api }: SortPanelProps) {
 	const sortModel = useSyncExternalStore(
 		api.subscribe,
 		() => api.pipeline.getSortModel(),
-		() => api.pipeline.getSortModel(),
+		() => api.pipeline.getSortModel()
 	);
 
 	const cols = useSyncExternalStore(
 		api.subscribe,
 		() => api.columns.getState(),
-		() => api.columns.getState(),
+		() => api.columns.getState()
 	);
 
 	function addSort(field: string) {
@@ -31,9 +31,7 @@ export function SortPanel({ api }: SortPanelProps) {
 	}
 
 	function toggleDirection(index: number) {
-		const next: SortModel = sortModel.map((k, i) =>
-			i === index ? { ...k, direction: k.direction === 'asc' ? 'desc' : 'asc' } : k,
-		);
+		const next: SortModel = sortModel.map((k, i) => (i === index ? { ...k, direction: k.direction === 'asc' ? 'desc' : 'asc' } : k));
 		api.pipeline.setSortModel(next);
 	}
 
@@ -76,13 +74,13 @@ export function SortPanel({ api }: SortPanelProps) {
 								fontSize: '13px',
 							}}
 						>
-							<span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-								{key.field}
-							</span>
+							<span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{key.field}</span>
 							<button style={btnStyle} onClick={() => toggleDirection(i)}>
 								{key.direction === 'asc' ? '▲ Asc' : '▼ Desc'}
 							</button>
-							<button style={btnStyle} onClick={() => removeSort(i)}>✕</button>
+							<button style={btnStyle} onClick={() => removeSort(i)}>
+								✕
+							</button>
 						</div>
 					))}
 				</div>
@@ -91,8 +89,13 @@ export function SortPanel({ api }: SortPanelProps) {
 			{/* Add sort */}
 			{availableCols.length > 0 && (
 				<select
-					defaultValue=""
-					onChange={(e) => { if (e.target.value) { addSort(e.target.value); e.target.value = ''; } }}
+					defaultValue=''
+					onChange={(e) => {
+						if (e.target.value) {
+							addSort(e.target.value);
+							e.target.value = '';
+						}
+					}}
 					style={{
 						padding: '6px 8px',
 						fontSize: '13px',
@@ -103,7 +106,7 @@ export function SortPanel({ api }: SortPanelProps) {
 						cursor: 'pointer',
 					}}
 				>
-					<option value="">+ Add sort…</option>
+					<option value=''>+ Add sort…</option>
 					{availableCols.map((c) => (
 						<option key={String(c.id)} value={c.field ?? String(c.id)}>
 							{c.header ?? c.field ?? String(c.id)}

@@ -117,10 +117,7 @@ export default function App() {
 	const rowHeightsMap = useMemo(() => ({ compact: 30, normal: 38, spacious: 48 }), []);
 
 	const filterModel = useMemo<readonly ColumnFilter[]>(
-		() =>
-			statusFilter === 'All'
-				? []
-				: [{ columnId: asColumnId('status'), field: 'status', operator: 'equals', value: statusFilter }],
+		() => (statusFilter === 'All' ? [] : [{ columnId: asColumnId('status'), field: 'status', operator: 'equals', value: statusFilter }]),
 		[statusFilter]
 	);
 

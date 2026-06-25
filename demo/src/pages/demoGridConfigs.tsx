@@ -1,10 +1,4 @@
-import {
-	dropdownColumnType,
-	multiSelectColumnType,
-	numberColumnType,
-	type ColumnDef,
-	type GridApi,
-} from '@open-grid/react';
+import { dropdownColumnType, multiSelectColumnType, numberColumnType, type ColumnDef, type GridApi } from '@open-grid/react';
 import {
 	GanttStatusBadgeRenderer,
 	GanttStatusDropdownEditor,

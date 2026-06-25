@@ -28,8 +28,6 @@ export function rejectedResult(reason: string, error?: Error): GridCommandResult
 	return error ? { status: 'rejected', reason, error } : { status: 'rejected', reason };
 }
 
-export function isApplied(
-	result: GridCommandResult,
-): result is Extract<GridCommandResult, { status: 'applied' }> {
+export function isApplied(result: GridCommandResult): result is Extract<GridCommandResult, { status: 'applied' }> {
 	return result.status === 'applied';
 }
