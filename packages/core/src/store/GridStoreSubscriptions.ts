@@ -1,4 +1,13 @@
-import type { ActiveEditState, CellSubscription, GridCellPointer, GridSnapshotKeyListener, GridSnapshotListener, GridSnapshotSelector, GridSnapshotSelectorEquality, GridStateSnapshot } from '../api/GridApi.js';
+import type {
+	ActiveEditState,
+	CellSubscription,
+	GridCellPointer,
+	GridSnapshotKeyListener,
+	GridSnapshotListener,
+	GridSnapshotSelector,
+	GridSnapshotSelectorEquality,
+	GridStateSnapshot,
+} from '../api/GridApi.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { VisualRow } from '../visualRow.js';
@@ -43,9 +52,7 @@ export interface GridStoreSubscriptionsDeps<TRowData = unknown> {
 	rowVersions: ReadonlyMap<string, number>;
 }
 
-export function createGridStoreSubscriptions<TRowData>(
-	deps: GridStoreSubscriptionsDeps<TRowData>
-): GridStoreSubscriptionsFacade<TRowData> {
+export function createGridStoreSubscriptions<TRowData>(deps: GridStoreSubscriptionsDeps<TRowData>): GridStoreSubscriptionsFacade<TRowData> {
 	const subscribeSnapshotProjection = <TValue>(
 		keys: readonly string[],
 		selector: (state: InternalGridState<TRowData>) => TValue,
@@ -81,19 +88,24 @@ export function createGridStoreSubscriptions<TRowData>(
 		subscribeToSnapshotSelector: (keys, selector, listener, isEqual = Object.is) =>
 			deps.subscribeToSelector(keys as readonly string[], () => selector(deps.getStateSnapshot()), listener, isEqual),
 		subscribeToIntegrity: (listener) => deps.subscribeToSelector(['integrity'], (state) => state.integrity, listener),
-		subscribeToViewport: (listener) => subscribeSnapshotProjection(['visibleRowRange'], (state) => state.visibleRowRange, listener, areViewportRangesEqual),
+		subscribeToViewport: (listener) =>
+			subscribeSnapshotProjection(['visibleRowRange'], (state) => state.visibleRowRange, listener, areViewportRangesEqual),
 		subscribeToSelection: (listener) => subscribeSnapshotProjection(['selection'], (state) => state.selection, listener),
 		subscribeToFocusedCell: (listener) =>
 			subscribeSnapshotProjection(['selection'], (state) => state.selection.focus, listener, areCellPointersEqual),
-		subscribeToEditingCell: (listener) =>
-			subscribeSnapshotProjection(['activeEdit'], (state) => state.activeEdit, listener, areActiveEditsEqual),
+		subscribeToEditingCell: (listener) => subscribeSnapshotProjection(['activeEdit'], (state) => state.activeEdit, listener, areActiveEditsEqual),
 		subscribeToCell: (rowId, colField, listener) => {
 			const sub: CellSubscription = { rowId, colField, onStoreChange: listener };
 			deps.registerCellSubscription(sub);
 			return () => deps.unregisterCellSubscription(sub);
 		},
 		subscribeToRow: (rowId, listener) =>
-			subscribeSnapshotProjection(['globalVersion', 'rowHeights'], () => getRowSubscriptionProjection(rowId), listener, areRowSubscriptionProjectionsEqual),
+			subscribeSnapshotProjection(
+				['globalVersion', 'rowHeights'],
+				() => getRowSubscriptionProjection(rowId),
+				listener,
+				areRowSubscriptionProjectionsEqual
+			),
 		subscribeToColumn: (colField, listener) =>
 			subscribeSnapshotProjection(
 				['columns', 'columnWidths', 'sortModel'],
@@ -120,14 +132,22 @@ function areCellPointersEqual(left: GridCellPointer | null, right: GridCellPoint
 }
 
 function areActiveEditsEqual(left: ActiveEditState | null, right: ActiveEditState | null): boolean {
-	return left === right || (!!left && !!right && left.rowId === right.rowId && left.colField === right.colField && left.validationError === right.validationError);
+	return (
+		left === right ||
+		(!!left && !!right && left.rowId === right.rowId && left.colField === right.colField && left.validationError === right.validationError)
+	);
 }
 
 function areRowSubscriptionProjectionsEqual(
 	left: { rowVersion: number; rowIndex: number | null; visualRowId: string | null; height: number | null },
 	right: { rowVersion: number; rowIndex: number | null; visualRowId: string | null; height: number | null }
 ): boolean {
-	return left.rowVersion === right.rowVersion && left.rowIndex === right.rowIndex && left.visualRowId === right.visualRowId && left.height === right.height;
+	return (
+		left.rowVersion === right.rowVersion &&
+		left.rowIndex === right.rowIndex &&
+		left.visualRowId === right.visualRowId &&
+		left.height === right.height
+	);
 }
 
 function areColumnSubscriptionProjectionsEqual(

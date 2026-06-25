@@ -232,7 +232,8 @@ export interface GridDiagnosticsCapabilityApi<TRowData = unknown> {
 }
 
 export interface GridApi<TRowData = unknown>
-	extends GridDataApi<TRowData>,
+	extends
+		GridDataApi<TRowData>,
 		GridSelectionEditingApi<TRowData>,
 		GridStructureApi<TRowData>,
 		GridRuntimeSubscriptionApi<TRowData>,

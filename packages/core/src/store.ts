@@ -1068,7 +1068,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public resetRenderStats = (): void => this.hostFacade.resetRenderStats();
 	public getRuntimeFaults = () => this.hostFacade.getRuntimeFaults();
 	public clearRuntimeFaults = (): void => this.hostFacade.clearRuntimeFaults();
-	public reportRuntimeFault = (fault: import('./diagnostics/RuntimeFaultReporter.js').RuntimeFaultInput) => this.hostFacade.reportRuntimeFault(fault);
+	public reportRuntimeFault = (fault: import('./diagnostics/RuntimeFaultReporter.js').RuntimeFaultInput) =>
+		this.hostFacade.reportRuntimeFault(fault);
 	public getTheme = (): ThemeTokens => this.hostFacade.getTheme();
 	public getThemeName = (): BuiltInThemeName | null => this.hostFacade.getThemeName();
 	public getAvailableThemes = (): BuiltInThemeName[] => this.hostFacade.getAvailableThemes();

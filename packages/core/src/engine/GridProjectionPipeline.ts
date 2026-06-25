@@ -69,11 +69,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 			);
 		}
 
-		if (
-			updatedSet.has('selection') ||
-			updatedSet.has('columns') ||
-			(updatedSet.has('globalVersion') && this.pendingStructuralBoundsUpdate)
-		) {
+		if (updatedSet.has('selection') || updatedSet.has('columns') || (updatedSet.has('globalVersion') && this.pendingStructuralBoundsUpdate)) {
 			if (updatedSet.has('globalVersion')) this.pendingStructuralBoundsUpdate = false;
 			const rangeBounds = this.deps.selection.calculateRangeBounds(
 				currState.selection.range,

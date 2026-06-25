@@ -828,8 +828,8 @@ export class GridEngine<TRowData = unknown> {
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): GridWriteResult {
 		return this.toGridWriteResult(
 			this.changeApplier.commit({
-			reason: 'data:set-cell-value',
-			domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
+				reason: 'data:set-cell-value',
+				domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
 			})
 		);
 	}
@@ -840,8 +840,8 @@ export class GridEngine<TRowData = unknown> {
 	): GridWriteResult {
 		return this.toGridWriteResult(
 			this.changeApplier.commit({
-			reason: 'data:batch-cell-values',
-			domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
+				reason: 'data:batch-cell-values',
+				domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
 			})
 		);
 	}
@@ -1060,7 +1060,12 @@ export class GridEngine<TRowData = unknown> {
 			},
 		});
 		const invalidations = [
-			...selectionChange.invalidatedCells.map((cell) => ({ kind: 'cell' as const, rowId: cell.rowId, colId: cell.colField, reason: 'selection' as const })),
+			...selectionChange.invalidatedCells.map((cell) => ({
+				kind: 'cell' as const,
+				rowId: cell.rowId,
+				colId: cell.colField,
+				reason: 'selection' as const,
+			})),
 			...selectionChange.invalidatedRows.map((rowId) => ({ kind: 'row' as const, rowId, reason: 'selection' as const })),
 			...(selectionChange.overlayChanged ? ([{ kind: 'overlay' as const, reason: 'selection' as const }] as const) : []),
 			{ kind: 'headers' as const, reason: 'selection' as const },

@@ -205,7 +205,7 @@ export class StateManager<TRowData = unknown> {
 		selector: (state: InternalGridState<TRowData>) => TValue,
 		listener: (value: TValue) => void,
 		isEqual: (left: TValue, right: TValue) => boolean = Object.is
-	): (() => void) {
+	): () => void {
 		const uniqueKeys = Array.from(new Set(keys));
 		if (uniqueKeys.length === 0) {
 			throw new Error('[open-grid] subscribeToSelector requires at least one key');

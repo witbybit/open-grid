@@ -29,7 +29,8 @@ export const GRID_DIRECT_WRITE_ALLOWLIST = [
 	{
 		file: 'renderer/RenderInvalidationCoordinator.ts',
 		kind: 'renderer-local-consumer',
-		justification: 'Renderer-only listeners coordinate paint timing, scroll alignment, and local geometry caches after commit-owned invalidations are declared.',
+		justification:
+			'Renderer-only listeners coordinate paint timing, scroll alignment, and local geometry caches after commit-owned invalidations are declared.',
 	},
 	{
 		file: 'store.ts',

@@ -2116,7 +2116,9 @@ describe('Architecture guardrails', () => {
 			const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
 			const subscriptionsContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreSubscriptions.ts'), 'utf-8');
 			expect(storeContent).toContain('createGridStoreSubscriptions<TRowData>');
-			expect(storeContent).toContain('subscribeToSelector: (keys, selector, listener, isEqual) => this.engine.subscribeToSelector(keys, selector, listener, isEqual)');
+			expect(storeContent).toContain(
+				'subscribeToSelector: (keys, selector, listener, isEqual) => this.engine.subscribeToSelector(keys, selector, listener, isEqual)'
+			);
 			expect(subscriptionsContent).toContain('subscribeToSnapshotSelector:');
 			expect(subscriptionsContent).toContain('subscribeToIntegrity:');
 			expect(subscriptionsContent).toContain('subscribeSnapshotProjection(');
