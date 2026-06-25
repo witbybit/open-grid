@@ -273,6 +273,7 @@ export class GridStateFeatureController<TRowData = unknown> {
 			state: { pagination: { pageSize: current.pageSize, page: nextPage } },
 			domains: ['rows'],
 			events: [{ type: GridEventName.paginationChanged, payload }],
+			invalidations: [{ kind: 'full', reason: 'pagination' }],
 			requestRender: true,
 		});
 	}
