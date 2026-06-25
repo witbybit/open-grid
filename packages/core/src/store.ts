@@ -132,6 +132,8 @@ import { GridPluginRegistry } from './plugins/GridPluginRegistry.js';
 import { createGridPluginRuntime } from './plugins/createGridPluginRuntime.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './features/ColumnAutoSizeController.js';
 import { makeNoopIntegrityApi } from './features/dataIntegrity/noopIntegrityApi.js';
+import { createGridStoreSubscriptions, type GridStoreSubscriptionsFacade } from './store/GridStoreSubscriptions.js';
+import { createGridStoreHostFacade, type GridStoreHostFacade } from './store/GridStoreHostFacade.js';
 
 export { validateRowIds } from './ids.js';
 
@@ -174,6 +176,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private storeDestroyed = false;
 	private cachedStateSnapshotState: InternalGridState<TRowData> | null = null;
 	private cachedStateSnapshot: GridStateSnapshot<TRowData> | null = null;
+	private readonly subscriptionsFacade: GridStoreSubscriptionsFacade<TRowData>;
+	private readonly hostFacade: GridStoreHostFacade;
 
 	constructor(
 		initialState: Partial<GridInitialState<TRowData>> = {},
@@ -234,6 +238,51 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
 		this.pluginRuntime = createGridPluginRuntime(this as unknown as GridPluginRuntime<TRowData>);
 		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime, this.engine.runtimeFaults);
+		this.subscriptionsFacade = createGridStoreSubscriptions<TRowData>({
+			subscribe: (listener) => this.engine.subscribe(listener),
+			subscribeToKey: (key, listener) => this.engine.subscribeToKey(key, listener),
+			subscribeToSelector: (keys, selector, listener, isEqual) => this.engine.subscribeToSelector(keys, selector, listener, isEqual),
+			getState: () => this.state,
+			getStateSnapshot: () => this.getStateSnapshot(),
+			getVisualIndexByRowId: (rowId) => this.getVisualIndexByRowId(rowId),
+			getVisualRow: (index) => this.getVisualRow(index),
+			registerCellSubscription: (sub) => this.registerCellSubscription(sub),
+			unregisterCellSubscription: (sub) => this.unregisterCellSubscription(sub),
+			rowVersions: this.engine.rowVersions,
+		});
+		this.hostFacade = createGridStoreHostFacade({
+			isDestroyed: () => this.storeDestroyed,
+			getActiveBindingGeneration: () => this.activeBindingGeneration,
+			setActiveBindingGeneration: (generation) => {
+				this.activeBindingGeneration = generation;
+			},
+			nextBindingGeneration: () => {
+				this.portBindingGeneration++;
+				return this.portBindingGeneration;
+			},
+			setRuntimePortsState: (ports) => {
+				this.rendererPorts = ports;
+			},
+			getRuntimePortsState: () => this.rendererPorts,
+			getFallbackRendererPorts: () => HEADLESS_PORTS,
+			setInstrumentationState: (inst) => {
+				this.instrumentation = inst;
+			},
+			getInstrumentationState: () => this.instrumentation,
+			setContainerElementState: (container) => {
+				this.containerElement = container;
+			},
+			getStateThemeName: () => this.state.themeName,
+			isBuiltInThemeName,
+			getBuiltInThemeOrder: () => BUILT_IN_THEME_ORDER,
+			setThemeName: (themeName) => this.engine.setThemeName(themeName),
+			getCompiledPlanVersion: () => this.engine.getCompiledPlanVersion(),
+			reportRuntimeFault: (fault) => this.engine.runtimeFaults.report(fault),
+			getRuntimeFaults: () => this.engine.runtimeFaults.snapshot(),
+			clearRuntimeFaults: () => this.engine.runtimeFaults.clear(),
+			setEngineInstrumentation: (inst) => this.engine.setInstrumentation(inst),
+			getInsightDiagnostics: () => this.engine.insights.getDiagnostics(),
+		});
 
 		// Wire up the lazy api ref so integrity modules can call GridApi methods in rules
 		this.engine.setApiRef(this as unknown as import('./api/GridApi.js').GridApi<TRowData>);
@@ -924,26 +973,17 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.viewportController.updateVisibleRanges();
 	};
 
-	public subscribe = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.engine.subscribe(() => listener(this.getStateSnapshot()));
-	};
-
-	public subscribeToKey = <K extends keyof GridStateSnapshot<TRowData>>(key: K, listener: GridSnapshotKeyListener<TRowData, K>): (() => void) => {
-		return this.engine.subscribeToKey(key as string, () => listener(this.getStateSnapshot()[key]));
-	};
-
+	public subscribe = (listener: GridSnapshotListener<TRowData>): (() => void) => this.subscriptionsFacade.subscribe(listener);
+	public subscribeToKey = <K extends keyof GridStateSnapshot<TRowData>>(key: K, listener: GridSnapshotKeyListener<TRowData, K>): (() => void) =>
+		this.subscriptionsFacade.subscribeToKey(key, listener);
 	public subscribeToSnapshotSelector = <K extends keyof GridStateSnapshot<TRowData>, TValue>(
 		keys: readonly K[],
 		selector: GridSnapshotSelector<TRowData, TValue>,
 		listener: (value: TValue) => void,
 		isEqual: GridSnapshotSelectorEquality<TValue> = Object.is
-	): (() => void) => {
-		return this.engine.subscribeToSelector(keys as readonly string[], () => selector(this.getStateSnapshot()), listener, isEqual);
-	};
-
-	public subscribeToIntegrity = (listener: (integrity: InternalGridState<TRowData>['integrity']) => void): (() => void) => {
-		return this.engine.subscribeToSelector(['integrity'], (state) => state.integrity, listener);
-	};
+	): (() => void) => this.subscriptionsFacade.subscribeToSnapshotSelector(keys, selector, listener, isEqual);
+	public subscribeToIntegrity = (listener: (integrity: InternalGridState<TRowData>['integrity']) => void): (() => void) =>
+		this.subscriptionsFacade.subscribeToIntegrity(listener);
 
 	public subscribeToDomainVersions = (listener: (v: GridDomainVersions) => void): (() => void) => {
 		return this.engine.subscribeToDomainVersions(listener);
@@ -953,58 +993,19 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.subscribeDomain(domain, listener);
 	};
 
-	public subscribeToViewport = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.subscribeSnapshotProjection(['visibleRowRange'], (state) => state.visibleRowRange, listener, areViewportRangesEqual);
-	};
-
-	public subscribeToSelection = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.subscribeSnapshotProjection(['selection'], (state) => state.selection, listener);
-	};
-
-	public subscribeToFocusedCell = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.subscribeSnapshotProjection(['selection'], (state) => state.selection.focus, listener, areCellPointersEqual);
-	};
-
-	public subscribeToEditingCell = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.subscribeSnapshotProjection(['activeEdit'], (state) => state.activeEdit, listener, areActiveEditsEqual);
-	};
-
-	public subscribeToCell = (rowId: string, colField: string, listener: () => void): (() => void) => {
-		const sub: CellSubscription = { rowId, colField, onStoreChange: listener };
-		this.registerCellSubscription(sub);
-		return () => this.unregisterCellSubscription(sub);
-	};
-
-	public subscribeToRow = (rowId: string, listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.subscribeSnapshotProjection(
-			['globalVersion', 'rowHeights'],
-			() => this.getRowSubscriptionProjection(rowId),
-			listener,
-			areRowSubscriptionProjectionsEqual
-		);
-	};
-
-	public subscribeToColumn = (colField: string, listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.subscribeSnapshotProjection(
-			['columns', 'columnWidths', 'sortModel'],
-			(state) => this.getColumnSubscriptionProjection(state, colField),
-			listener,
-			areColumnSubscriptionProjectionsEqual
-		);
-	};
-
-	public subscribeToHeaders = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.subscribeSnapshotProjection(
-			['columns', 'columnWidths', 'sortModel'],
-			(state) => ({
-				columns: state.columns,
-				columnWidths: state.columnWidths,
-				sortModel: state.sortModel,
-			}),
-			listener,
-			areHeaderSubscriptionProjectionsEqual
-		);
-	};
+	public subscribeToViewport = (listener: GridSnapshotListener<TRowData>): (() => void) => this.subscriptionsFacade.subscribeToViewport(listener);
+	public subscribeToSelection = (listener: GridSnapshotListener<TRowData>): (() => void) => this.subscriptionsFacade.subscribeToSelection(listener);
+	public subscribeToFocusedCell = (listener: GridSnapshotListener<TRowData>): (() => void) =>
+		this.subscriptionsFacade.subscribeToFocusedCell(listener);
+	public subscribeToEditingCell = (listener: GridSnapshotListener<TRowData>): (() => void) =>
+		this.subscriptionsFacade.subscribeToEditingCell(listener);
+	public subscribeToCell = (rowId: string, colField: string, listener: () => void): (() => void) =>
+		this.subscriptionsFacade.subscribeToCell(rowId, colField, listener);
+	public subscribeToRow = (rowId: string, listener: GridSnapshotListener<TRowData>): (() => void) =>
+		this.subscriptionsFacade.subscribeToRow(rowId, listener);
+	public subscribeToColumn = (colField: string, listener: GridSnapshotListener<TRowData>): (() => void) =>
+		this.subscriptionsFacade.subscribeToColumn(colField, listener);
+	public subscribeToHeaders = (listener: GridSnapshotListener<TRowData>): (() => void) => this.subscriptionsFacade.subscribeToHeaders(listener);
 
 	public triggerCellNotifications = (rowId: string): void => {
 		for (const col of this.state.columns) {
@@ -1054,170 +1055,34 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	/** Bind live renderer and theme ports for an active host. Returns a binding token.
 	 *  Rejects concurrent bindings — only one active host is allowed at a time. */
-	public bindRuntimePorts = (ports: GridRuntimePorts): RuntimePortBindResult => {
-		if (this.storeDestroyed) {
-			return { ok: false, reason: 'destroyed' };
-		}
-		if (this.activeBindingGeneration !== null) {
-			this.engine.runtimeFaults.report({
-				source: 'store',
-				operation: 'bindRuntimePorts',
-				error: new Error('Attempted to bind runtime ports while a binding is already active. Unbind first.'),
-			});
-			return { ok: false, reason: 'already-bound' };
-		}
-		this.portBindingGeneration++;
-		this.activeBindingGeneration = this.portBindingGeneration;
-		this.rendererPorts = ports;
-		const generation = this.portBindingGeneration;
-		return { ok: true, binding: { generation } };
-	};
+	public bindRuntimePorts = (ports: GridRuntimePorts): RuntimePortBindResult => this.hostFacade.bindRuntimePorts(ports);
 
 	/** Unbind the active host and restore headless ports. Stale binding tokens report a fault and no-op. */
-	public unbindRuntimePorts = (binding: RuntimePortBinding): void => {
-		if (binding.generation !== this.activeBindingGeneration) {
-			this.engine.runtimeFaults.report({
-				source: 'store',
-				operation: 'unbindRuntimePorts',
-				error: new Error('Attempted to unbind with a stale or unrecognised binding token.'),
-			});
-			return;
-		}
-		this.activeBindingGeneration = null;
-		this.rendererPorts = HEADLESS_PORTS;
-	};
+	public unbindRuntimePorts = (binding: RuntimePortBinding): void => this.hostFacade.unbindRuntimePorts(binding);
 
 	/** Returns true if the binding token corresponds to the currently active host. */
-	public isBindingCurrent = (binding: RuntimePortBinding): boolean => {
-		return binding.generation === this.activeBindingGeneration;
-	};
-
-	public getInstrumentation = (): GridInstrumentation => this.instrumentation;
-	public setInstrumentation = (inst: GridInstrumentation): void => {
-		this.instrumentation = inst;
-		this.engine.setInstrumentation(inst);
-	};
-
-	public getRenderStats = (): RenderStats => {
-		const stats = this.rendererPorts.renderer.getStats();
-		stats.compiledPlanVersion = this.engine.getCompiledPlanVersion();
-		return stats;
-	};
-
-	public resetRenderStats = (): void => this.rendererPorts.renderer.resetStats();
-
-	public getRuntimeFaults = () => this.engine.runtimeFaults.snapshot();
-
-	public clearRuntimeFaults = (): void => this.engine.runtimeFaults.clear();
-
-	public reportRuntimeFault = (fault: import('./diagnostics/RuntimeFaultReporter.js').RuntimeFaultInput) => this.engine.runtimeFaults.report(fault);
-
-	public getTheme = (): ThemeTokens => this.rendererPorts.theme.getTheme();
-
-	public getThemeName = (): BuiltInThemeName | null => {
-		const portName = this.rendererPorts.theme.getThemeName();
-		if (portName !== null) return portName;
-		const themeName = this.state.themeName;
-		return isBuiltInThemeName(themeName) ? themeName : null;
-	};
-
-	public getAvailableThemes = (): BuiltInThemeName[] => {
-		const t = this.rendererPorts.theme.getAvailableThemes();
-		return t.length > 0 ? t : BUILT_IN_THEME_ORDER.slice();
-	};
-	public switchTheme = (themeName: string): void => {
-		if (!isBuiltInThemeName(themeName) || this.state.themeName === themeName) return;
-		this.engine.setThemeName(themeName);
-		this.rendererPorts.theme.switchTheme(themeName);
-	};
-	public mergeTheme = (partial: Partial<ThemeTokens>): void => this.rendererPorts.theme.mergeTheme(partial);
-	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.rendererPorts.theme.onThemeChange(listener);
-	public setContainerElement = (c: HTMLElement): void => {
-		this.containerElement = c;
-	};
-	public getContainerElement = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
-	public getContainer = (): HTMLElement | null => this.rendererPorts.renderer.getContainer();
-
-	public getInsightDiagnostics = (): Record<string, unknown> => this.engine.insights.getDiagnostics();
-
-	private subscribeSnapshotProjection<TValue>(
-		keys: readonly string[],
-		selector: (state: InternalGridState<TRowData>) => TValue,
-		listener: GridSnapshotListener<TRowData>,
-		isEqual: (left: TValue, right: TValue) => boolean = Object.is
-	): () => void {
-		return this.engine.subscribeToSelector(keys, selector, () => listener(this.getStateSnapshot()), isEqual);
-	}
-
-	private getRowSubscriptionProjection(rowId: string) {
-		const rowIndex = this.getVisualIndexByRowId(rowId);
-		const visualRow = rowIndex === null ? null : this.getVisualRow(rowIndex);
-		const visualRowId = visualRow?.id ?? null;
-		return {
-			rowVersion: this.engine.rowVersions.get(rowId) ?? 0,
-			rowIndex,
-			visualRowId,
-			height: visualRowId ? (this.state.rowHeights[visualRowId] ?? visualRow?.height ?? this.state.defaultRowHeight) : null,
-		};
-	}
-
-	private getColumnSubscriptionProjection(state: InternalGridState<TRowData>, colField: string) {
-		const column = state.columns.find((candidate) => candidate.field === colField) ?? null;
-		return {
-			column,
-			width: state.columnWidths[colField] ?? column?.width ?? state.defaultColWidth,
-			sortEntry: state.sortModel?.find((entry) => entry.colId === colField) ?? null,
-		};
-	}
+	public isBindingCurrent = (binding: RuntimePortBinding): boolean => this.hostFacade.isBindingCurrent(binding);
+	public getInstrumentation = (): GridInstrumentation => this.hostFacade.getInstrumentation();
+	public setInstrumentation = (inst: GridInstrumentation): void => this.hostFacade.setInstrumentation(inst);
+	public getRenderStats = (): RenderStats => this.hostFacade.getRenderStats();
+	public resetRenderStats = (): void => this.hostFacade.resetRenderStats();
+	public getRuntimeFaults = () => this.hostFacade.getRuntimeFaults();
+	public clearRuntimeFaults = (): void => this.hostFacade.clearRuntimeFaults();
+	public reportRuntimeFault = (fault: import('./diagnostics/RuntimeFaultReporter.js').RuntimeFaultInput) => this.hostFacade.reportRuntimeFault(fault);
+	public getTheme = (): ThemeTokens => this.hostFacade.getTheme();
+	public getThemeName = (): BuiltInThemeName | null => this.hostFacade.getThemeName();
+	public getAvailableThemes = (): BuiltInThemeName[] => this.hostFacade.getAvailableThemes();
+	public switchTheme = (themeName: string): void => this.hostFacade.switchTheme(themeName);
+	public mergeTheme = (partial: Partial<ThemeTokens>): void => this.hostFacade.mergeTheme(partial);
+	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.hostFacade.onThemeChange(listener);
+	public setContainerElement = (c: HTMLElement): void => this.hostFacade.setContainerElement(c);
+	public getContainerElement = (): HTMLElement | null => this.hostFacade.getContainerElement();
+	public getContainer = (): HTMLElement | null => this.hostFacade.getContainer();
+	public getInsightDiagnostics = (): Record<string, unknown> => this.hostFacade.getInsightDiagnostics();
 
 	public destroy = (): void => {
 		this.storeDestroyed = true;
 		this.pluginRegistry.destroy();
 		this.engine.destroy();
 	};
-}
-
-function areViewportRangesEqual(left: ViewportRange, right: ViewportRange): boolean {
-	return left.startIdx === right.startIdx && left.endIdx === right.endIdx;
-}
-
-function areCellPointersEqual(left: GridCellPointer | null, right: GridCellPointer | null): boolean {
-	return left === right || (!!left && !!right && left.rowId === right.rowId && left.colField === right.colField);
-}
-
-function areActiveEditsEqual(left: ActiveEditState | null, right: ActiveEditState | null): boolean {
-	return (
-		left === right ||
-		(!!left &&
-			!!right &&
-			left.rowId === right.rowId &&
-			left.colField === right.colField &&
-			left.validationError === right.validationError)
-	);
-}
-
-function areRowSubscriptionProjectionsEqual(
-	left: { rowVersion: number; rowIndex: number | null; visualRowId: string | null; height: number | null },
-	right: { rowVersion: number; rowIndex: number | null; visualRowId: string | null; height: number | null }
-): boolean {
-	return (
-		left.rowVersion === right.rowVersion &&
-		left.rowIndex === right.rowIndex &&
-		left.visualRowId === right.visualRowId &&
-		left.height === right.height
-	);
-}
-
-function areColumnSubscriptionProjectionsEqual(
-	left: { column: ColumnDef<any> | null; width: number; sortEntry: SortModel[number] | null },
-	right: { column: ColumnDef<any> | null; width: number; sortEntry: SortModel[number] | null }
-): boolean {
-	return left.column === right.column && left.width === right.width && left.sortEntry === right.sortEntry;
-}
-
-function areHeaderSubscriptionProjectionsEqual(
-	left: { columns: readonly ColumnDef<any>[]; columnWidths: Record<string, number>; sortModel: SortModel | null },
-	right: { columns: readonly ColumnDef<any>[]; columnWidths: Record<string, number>; sortModel: SortModel | null }
-): boolean {
-	return left.columns === right.columns && left.columnWidths === right.columnWidths && left.sortModel === right.sortModel;
 }

@@ -875,7 +875,9 @@ describe('Architecture guardrails', () => {
 
 	it('deprecated setRendererPorts and createHeadlessPorts are deleted (Plan 090)', () => {
 		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		const hostFacadeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreHostFacade.ts'), 'utf-8');
 		expect(storeContent).not.toContain('setRendererPorts');
+		expect(hostFacadeContent).not.toContain('setRendererPorts');
 		const portsContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'rendererPorts.ts'), 'utf-8');
 		expect(portsContent).not.toContain('createHeadlessPorts');
 	});
@@ -1292,20 +1294,22 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('bindRuntimePorts returns RuntimePortBindResult and rejects concurrent binds (Plan 094)', () => {
-		const storePath = resolve(CORE_ROOT, 'src', 'store.ts');
-		const content = readFileSync(storePath, 'utf-8');
-		expect(content).toContain('RuntimePortBindResult');
+		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		const hostFacadeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreHostFacade.ts'), 'utf-8');
+		expect(storeContent).toContain('createGridStoreHostFacade');
+		expect(hostFacadeContent).toContain('RuntimePortBindResult');
 		// Must return early on already-bound without touching ports
-		expect(content).toContain("reason: 'already-bound'");
-		expect(content).toContain("reason: 'destroyed'");
+		expect(hostFacadeContent).toContain("reason: 'already-bound'");
+		expect(hostFacadeContent).toContain("reason: 'destroyed'");
 		// storeDestroyed flag
-		expect(content).toContain('storeDestroyed');
+		expect(storeContent).toContain('storeDestroyed');
 	});
 
 	it('unbindRuntimePorts reports a fault on stale tokens instead of silently ignoring (Plan 094)', () => {
-		const storePath = resolve(CORE_ROOT, 'src', 'store.ts');
-		const content = readFileSync(storePath, 'utf-8');
-		expect(content).toContain("operation: 'unbindRuntimePorts'");
+		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		const hostFacadeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreHostFacade.ts'), 'utf-8');
+		expect(storeContent).toContain('this.hostFacade.unbindRuntimePorts(binding)');
+		expect(hostFacadeContent).toContain("operation: 'unbindRuntimePorts'");
 	});
 
 	it('gridHost.ts checks bindResult.ok before mounting (Plan 094)', () => {
@@ -1733,17 +1737,19 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('store UI compatibility helpers route through GridEngine intent methods (Plan 103)', () => {
-		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
-		expect(content).toContain('this.engine.setRowOverscanPx(px);');
-		expect(content).toContain('this.engine.setSidebarOpenPanel(panelId);');
-		expect(content).toContain('this.engine.setSidebarOpenPanel(null);');
-		expect(content).toContain('this.engine.setChartOpen(true);');
-		expect(content).toContain('this.engine.setChartOpen(false);');
-		expect(content).toContain('this.engine.setThemeName(themeName);');
-		expect(content).not.toContain('this.setState({ rowOverscanPx: px })');
-		expect(content).not.toContain('this.setState({ sidebarOpenPanel:');
-		expect(content).not.toContain('this.setState({ chartOpen:');
-		expect(content).not.toContain('this.setState({ themeName');
+		const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		const hostFacadeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreHostFacade.ts'), 'utf-8');
+		expect(storeContent).toContain('this.engine.setRowOverscanPx(px);');
+		expect(storeContent).toContain('this.engine.setSidebarOpenPanel(panelId);');
+		expect(storeContent).toContain('this.engine.setSidebarOpenPanel(null);');
+		expect(storeContent).toContain('this.engine.setChartOpen(true);');
+		expect(storeContent).toContain('this.engine.setChartOpen(false);');
+		expect(storeContent).toContain('setThemeName: (themeName) => this.engine.setThemeName(themeName)');
+		expect(hostFacadeContent).toContain('deps.setThemeName(themeName);');
+		expect(storeContent).not.toContain('this.setState({ rowOverscanPx: px })');
+		expect(storeContent).not.toContain('this.setState({ sidebarOpenPanel:');
+		expect(storeContent).not.toContain('this.setState({ chartOpen:');
+		expect(storeContent).not.toContain('this.setState({ themeName');
 	});
 
 	it('store raw mutation surface no longer exposes compatibility setState forwarding (Plan 112 pre-gate)', () => {
@@ -2107,16 +2113,18 @@ describe('Architecture guardrails', () => {
 		});
 
 		it('store subscriptions must route through selector-grade projections, not coarse key listeners', () => {
-			const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
-			expect(content).toContain('subscribeToSnapshotSelector =');
-			expect(content).toContain('subscribeToIntegrity =');
-			expect(content).toContain('subscribeSnapshotProjection(');
-			expect(content).toContain('this.engine.subscribeToSelector(');
-			expect(content).not.toContain("subscribeToKey('globalVersion', notify)");
-			expect(content).not.toContain("subscribeToKey('columns', notify)");
-			expect(content).not.toContain("subscribeToKey('columnWidths', notify)");
-			expect(content).not.toContain("subscribeToKey('rowHeights', notify)");
-			expect(content).not.toContain("subscribeToKey('sortModel', notify)");
+			const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+			const subscriptionsContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreSubscriptions.ts'), 'utf-8');
+			expect(storeContent).toContain('createGridStoreSubscriptions<TRowData>');
+			expect(storeContent).toContain('subscribeToSelector: (keys, selector, listener, isEqual) => this.engine.subscribeToSelector(keys, selector, listener, isEqual)');
+			expect(subscriptionsContent).toContain('subscribeToSnapshotSelector:');
+			expect(subscriptionsContent).toContain('subscribeToIntegrity:');
+			expect(subscriptionsContent).toContain('subscribeSnapshotProjection(');
+			expect(subscriptionsContent).not.toContain("subscribeToKey('globalVersion', notify)");
+			expect(subscriptionsContent).not.toContain("subscribeToKey('columns', notify)");
+			expect(subscriptionsContent).not.toContain("subscribeToKey('columnWidths', notify)");
+			expect(subscriptionsContent).not.toContain("subscribeToKey('rowHeights', notify)");
+			expect(subscriptionsContent).not.toContain("subscribeToKey('sortModel', notify)");
 		});
 	});
 
@@ -2444,6 +2452,44 @@ describe('Architecture guardrails', () => {
 			expect(indexContent).not.toContain('features/liveStream');
 			expect(integrityContent).toContain('GridTransactionStreamHandle');
 			expect(integrityContent).toContain('GridTransactionStreamState');
+		});
+	});
+
+	describe('Plan 137 - control-surface decomposition guardrails', () => {
+		it('store delegates subscriptions and host binding to dedicated owners', () => {
+			const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+			const subscriptionsContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreSubscriptions.ts'), 'utf-8');
+			const hostContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreHostFacade.ts'), 'utf-8');
+			expect(storeContent).toContain('createGridStoreSubscriptions');
+			expect(storeContent).toContain('createGridStoreHostFacade');
+			expect(storeContent).not.toContain("subscribeToKey('globalVersion', notify)");
+			expect(subscriptionsContent).toContain('export function createGridStoreSubscriptions');
+			expect(subscriptionsContent).not.toContain('GridStore<');
+			expect(hostContent).toContain('export function createGridStoreHostFacade');
+			expect(hostContent).not.toContain('GridStore<');
+		});
+
+		it('GridEngine delegates domain and render update ownership to dedicated modules', () => {
+			const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			const domainContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainSubscriptionHub.ts'), 'utf-8');
+			const renderContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngineRenderBridge.ts'), 'utf-8');
+			expect(engineContent).toContain('new GridDomainSubscriptionHub');
+			expect(engineContent).toContain('new GridEngineRenderBridge');
+			expect(domainContent).toContain('export class GridDomainSubscriptionHub');
+			expect(domainContent).not.toContain('GridEngine<');
+			expect(renderContent).toContain('export class GridEngineRenderBridge');
+			expect(renderContent).not.toContain('GridEngine<');
+		});
+
+		it('GridApi exports conceptual surface contracts', () => {
+			const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+			const surfacesContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApiSurfaces.ts'), 'utf-8');
+			expect(apiContent).toContain("from './GridApiSurfaces.js'");
+			expect(surfacesContent).toContain('export interface GridDataApi');
+			expect(surfacesContent).toContain('export interface GridSelectionEditingApi');
+			expect(surfacesContent).toContain('export interface GridStructureApi');
+			expect(surfacesContent).toContain('export interface GridRuntimeSubscriptionApi');
+			expect(surfacesContent).not.toContain('GridStore<');
 		});
 	});
 });

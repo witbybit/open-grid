@@ -22,6 +22,14 @@ import type { ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { GridIntegrityApi, GridIntegrityIssue } from '../features/dataIntegrity/integrityTypes.js';
+export type {
+	GridDataApi,
+	GridSelectionEditingApi,
+	GridStructureApi,
+	GridRuntimeSubscriptionApi,
+	GridPersistenceWorkspaceApi,
+	GridDiagnosticsCapabilityApi,
+} from './GridApiSurfaces.js';
 
 export type { CsvExportOptions };
 export type { RuntimeFault };

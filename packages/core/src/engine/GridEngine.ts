@@ -65,6 +65,8 @@ import {
 import { defaultGridScheduler } from '../renderer/gridScheduler.js';
 import type { GridMutationRejection } from './GridDomainMutation.js';
 import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
+import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
+import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -124,8 +126,7 @@ export class GridEngine<TRowData = unknown> {
 		this.stateManager.instrumentation = inst;
 	}
 
-	private readonly domainVersionListeners = new Set<(v: GridDomainVersions) => void>();
-	private readonly domainListeners = new Map<keyof GridDomainVersions, Set<(version: number) => void>>();
+	private readonly domainSubscriptions: GridDomainSubscriptionHub;
 
 	/** Returns a snapshot of all formal domain version counters. */
 	public getDomainVersions(): GridDomainVersions {
@@ -143,36 +144,16 @@ export class GridEngine<TRowData = unknown> {
 
 	/** Subscribes to domain version changes. Returns an unsubscribe function. */
 	public subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void {
-		this.domainVersionListeners.add(listener);
-		return () => this.domainVersionListeners.delete(listener);
+		return this.domainSubscriptions.subscribeToDomainVersions(listener);
 	}
 
 	/** Subscribes to version increments for a single domain. Returns an unsubscribe function. */
 	public subscribeDomain(domain: keyof GridDomainVersions, listener: (version: number) => void): () => void {
-		let set = this.domainListeners.get(domain);
-		if (!set) {
-			set = new Set();
-			this.domainListeners.set(domain, set);
-		}
-		set.add(listener);
-		return () => {
-			const s = this.domainListeners.get(domain);
-			if (s) s.delete(listener);
-		};
+		return this.domainSubscriptions.subscribeDomain(domain, listener);
 	}
 
 	private notifyDomainVersionListeners(domains?: readonly (keyof GridDomainVersions)[]): void {
-		const v = this.getDomainVersions();
-		this.domainVersionListeners.forEach((l) => l(v));
-		if (domains) {
-			for (const domain of domains) {
-				const set = this.domainListeners.get(domain);
-				if (set) {
-					const version = v[domain];
-					set.forEach((l) => l(version));
-				}
-			}
-		}
+		if (domains) this.domainSubscriptions.publish(domains);
 	}
 
 	public incrementDomain(domain: keyof GridDomainVersions): void {
@@ -239,6 +220,7 @@ export class GridEngine<TRowData = unknown> {
 	public customRendererWarmMisses = 0;
 
 	private readonly cellNotifications: CellNotificationController<TRowData>;
+	private readonly renderBridge: GridEngineRenderBridge<TRowData>;
 	private renderTransactionDepth = 0;
 	private pendingRenderReason: string | null = null;
 
@@ -254,6 +236,7 @@ export class GridEngine<TRowData = unknown> {
 		this.commandHistory = new CommandHistory(this.runtimeFaults);
 		this.invalidation = new InvalidationManager();
 		this.insights = new GridInsightRegistry();
+		this.domainSubscriptions = new GridDomainSubscriptionHub({ getDomainVersions: () => this.getDomainVersions() });
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
@@ -371,6 +354,14 @@ export class GridEngine<TRowData = unknown> {
 		};
 
 		this.stateManager = new StateManager<TRowData>(initialState, undefined, this.runtimeFaults, this.instrumentation);
+		this.renderBridge = new GridEngineRenderBridge<TRowData>({
+			stateManager: this.stateManager,
+			commandHistory: this.commandHistory,
+			cellNotifications: this.cellNotifications,
+			requestRender: (reason) => this.requestRender(reason),
+			beginRenderTransaction: () => this.beginRenderTransaction(),
+			endRenderTransaction: () => this.endRenderTransaction(),
+		});
 
 		const capCfg = config.capabilities ?? (config.canPerformAction ? { canPerformAction: config.canPerformAction } : {});
 		this.capabilityManager = new GridCapabilityManager<TRowData>(
@@ -960,64 +951,47 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public batch = (callback: () => void): void => {
-		this.beginRenderTransaction();
-		this.stateManager.startTransaction();
-		try {
-			callback();
-		} finally {
-			this.stateManager.endTransaction();
-			this.flushCellUpdatesSync();
-			this.endRenderTransaction();
-		}
+		this.renderBridge.batch(callback);
 	};
 
 	public scheduleBatchFlush(): void {
-		this.cellNotifications.scheduleBatchFlush();
+		this.renderBridge.scheduleBatchFlush();
 	}
 
 	public flushCellUpdates(): void {
-		this.cellNotifications.flushCellUpdates();
+		this.renderBridge.flushCellUpdates();
 	}
 
 	public enqueueCellUpdate(rowId: string, colField: string): void {
-		this.cellNotifications.enqueueCellUpdate(rowId, colField);
+		this.renderBridge.enqueueCellUpdate(rowId, colField);
 	}
 
 	public flushCellUpdatesSync(): void {
-		this.cellNotifications.flushCellUpdatesSync();
+		this.renderBridge.flushCellUpdatesSync();
 	}
 
 	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
-		this.cellNotifications.notifyBulkCellChange(changes);
+		this.renderBridge.notifyBulkCellChange(changes);
 	}
 
 	public publishCommittedCellChanges(changes: Map<string, Set<string>>): void {
-		if (this.batchedUpdates) {
-			for (const [rowId, fields] of changes) {
-				for (const colField of fields) {
-					this.enqueueCellUpdate(rowId, colField);
-				}
-			}
-			this.scheduleBatchFlush();
-			return;
-		}
-		this.cellNotifications.publishCommittedCellChanges(changes);
+		this.renderBridge.publishCommittedCellChanges(changes, this.batchedUpdates);
 	}
 
 	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true): void {
-		this.cellNotifications.notifyCellChange(rowId, colField, includeRenderInvalidation);
+		this.renderBridge.notifyCellChange(rowId, colField, includeRenderInvalidation);
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
-		this.cellNotifications.registerCellSubscription(sub);
+		this.renderBridge.registerCellSubscription(sub);
 	};
 
 	public unregisterCellSubscription = (sub: CellSubscription): void => {
-		this.cellNotifications.unregisterCellSubscription(sub);
+		this.renderBridge.unregisterCellSubscription(sub);
 	};
 
 	public updateCellSubscription = (sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void => {
-		this.cellNotifications.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
+		this.renderBridge.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
 	};
 
 	// ── Row node selection ─────────────────────────────────────────────────────
@@ -1162,8 +1136,7 @@ export class GridEngine<TRowData = unknown> {
 		this.cellNotifications.clear();
 		this.eventBus.clear();
 		this.stateManager.destroy();
-		this.domainVersionListeners.clear();
-		this.domainListeners.clear();
+		this.domainSubscriptions.clear();
 	}
 
 	private toGridWriteResult(result: InternalGridCommitResult): GridWriteResult {
