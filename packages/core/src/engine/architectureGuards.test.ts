@@ -2105,6 +2105,19 @@ describe('Architecture guardrails', () => {
 			}
 			expect(violators, `files still importing from deleted features/dataQuality/: ${violators.join(', ')}`).toHaveLength(0);
 		});
+
+		it('store subscriptions must route through selector-grade projections, not coarse key listeners', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+			expect(content).toContain('subscribeToSnapshotSelector =');
+			expect(content).toContain('subscribeToIntegrity =');
+			expect(content).toContain('subscribeSnapshotProjection(');
+			expect(content).toContain('this.engine.subscribeToSelector(');
+			expect(content).not.toContain("subscribeToKey('globalVersion', notify)");
+			expect(content).not.toContain("subscribeToKey('columns', notify)");
+			expect(content).not.toContain("subscribeToKey('columnWidths', notify)");
+			expect(content).not.toContain("subscribeToKey('rowHeights', notify)");
+			expect(content).not.toContain("subscribeToKey('sortModel', notify)");
+		});
 	});
 
 	// ── Hardening: remove valueValidator from ColumnDef and editing path ──────

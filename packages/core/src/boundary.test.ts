@@ -277,6 +277,8 @@ describe('Public/internal boundary', () => {
 		it('exposes getStateSnapshot on the public API', () => {
 			const api = createClientGrid({ columns: [{ field: 'id' }], rows: [] });
 			expect(typeof api.getStateSnapshot).toBe('function');
+			expect(typeof api.subscribeToSnapshotSelector).toBe('function');
+			expect(typeof api.subscribeToIntegrity).toBe('function');
 			expect(api.getStateSnapshot()).toEqual(
 				expect.objectContaining({
 					columns: expect.any(Array),

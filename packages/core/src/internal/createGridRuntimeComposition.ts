@@ -14,6 +14,8 @@ import type {
 	GridSelectionSource,
 	GridSnapshotKeyListener,
 	GridSnapshotListener,
+	GridSnapshotSelector,
+	GridSnapshotSelectorEquality,
 	GridStateSnapshot,
 	RowDataTransaction,
 	RowNodeTransaction,
@@ -155,6 +157,13 @@ export function createGridRuntimeComposition<TRowData>({
 		subscribe: (listener: GridSnapshotListener<TRowData>) => runtime.subscribe(listener),
 		subscribeToKey: <K extends keyof GridStateSnapshot<TRowData>>(key: K, listener: GridSnapshotKeyListener<TRowData, K>) =>
 			runtime.subscribeToKey(key, listener),
+		subscribeToSnapshotSelector: <K extends keyof GridStateSnapshot<TRowData>, TValue>(
+			keys: readonly K[],
+			selector: GridSnapshotSelector<TRowData, TValue>,
+			listener: (value: TValue) => void,
+			isEqual?: GridSnapshotSelectorEquality<TValue>
+		) => runtime.subscribeToSnapshotSelector(keys, selector, listener, isEqual),
+		subscribeToIntegrity: (listener: Parameters<typeof runtime.subscribeToIntegrity>[0]) => runtime.subscribeToIntegrity(listener),
 		subscribeToDomainVersions: (listener: Parameters<typeof runtime.subscribeToDomainVersions>[0]) => runtime.subscribeToDomainVersions(listener),
 		subscribeDomain: (domain: Parameters<typeof runtime.subscribeDomain>[0], listener: Parameters<typeof runtime.subscribeDomain>[1]) =>
 			runtime.subscribeDomain(domain, listener),

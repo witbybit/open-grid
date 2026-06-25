@@ -92,6 +92,74 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it('suppresses unrelated selector wakeups for row, column, and integrity subscriptions', () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 50 },
+					{ field: 'name', header: 'Name', width: 150 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						cellRules: [{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'required' }) }],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const row = vi.fn();
+		const column = vi.fn();
+		const headers = vi.fn();
+		const integrity = vi.fn();
+		const selector = vi.fn();
+
+		const unsubscribers = [
+			store.subscribeToRow('1', row),
+			store.subscribeToColumn('name', column),
+			store.subscribeToHeaders(headers),
+			store.subscribeToIntegrity(integrity),
+			store.subscribeToSnapshotSelector(['selection'], (snapshot) => snapshot.selection.focus?.rowId ?? null, selector),
+		];
+
+		store.setCellValue('2', 'name', 'Product B+');
+		store.flushCellUpdatesSync();
+		store.setRowHeight('row:2', 60);
+		store.setColumnWidth('id', 80);
+		store.selectCell({ rowId: '1', colField: 'name' });
+
+		expect(row).not.toHaveBeenCalled();
+		expect(column).not.toHaveBeenCalled();
+		expect(headers).toHaveBeenCalledTimes(1);
+		expect(integrity).not.toHaveBeenCalled();
+		expect(selector).toHaveBeenCalledTimes(1);
+
+		store.integrity.publishIssues('system', [
+			{
+				id: 'integrity:system:1',
+				source: 'system',
+				type: 'custom',
+				severity: 'warning',
+				message: 'review',
+				createdAt: Date.now(),
+			},
+		]);
+
+		expect(integrity).toHaveBeenCalledTimes(1);
+
+		unsubscribers.forEach((unsubscribe) => unsubscribe());
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('executes a sync valueSetter exactly once for a direct cell write', () => {
 		const valueSetter = vi.fn(({ row, value }) => {
 			row.name = `${String(value)} accepted`;

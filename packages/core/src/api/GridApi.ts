@@ -4,7 +4,7 @@ import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from '../engine/rendererPorts.js';
 import type { InfiniteDatasource } from '../infiniteRowModel.js';
 import type { ServerDatasource, ServerPageState } from '../serverPageRowModel.js';
-import type { RowModelType } from '../state/GridState.js';
+import type { GridIntegrityState, RowModelType } from '../state/GridState.js';
 import type { RowModelCapability, RowModelCapabilities } from '../rowModel.js';
 import type { ColumnDef, GridStyleRule, CellRendererPhase } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
@@ -223,6 +223,9 @@ export type GridSnapshotListener<TRowData = unknown> = (snapshot: GridStateSnaps
 export type GridSnapshotKeyListener<TRowData = unknown, K extends keyof GridStateSnapshot<TRowData> = keyof GridStateSnapshot<TRowData>> = (
 	value: GridStateSnapshot<TRowData>[K]
 ) => void;
+export type GridSnapshotSelector<TRowData = unknown, TValue = unknown> = (snapshot: GridStateSnapshot<TRowData>) => TValue;
+export type GridSnapshotSelectorListener<TValue = unknown> = (value: TValue) => void;
+export type GridSnapshotSelectorEquality<TValue = unknown> = (left: TValue, right: TValue) => boolean;
 
 export interface GridPlugin<TRowData = unknown> {
 	readonly name: string;
@@ -586,6 +589,13 @@ export interface GridApi<TRowData = unknown> {
 	applyGridState(state: PersistedGridState): void;
 	subscribe(listener: GridSnapshotListener<TRowData>): () => void;
 	subscribeToKey<K extends keyof GridStateSnapshot<TRowData>>(key: K, listener: GridSnapshotKeyListener<TRowData, K>): () => void;
+	subscribeToSnapshotSelector<K extends keyof GridStateSnapshot<TRowData>, TValue>(
+		keys: readonly K[],
+		selector: GridSnapshotSelector<TRowData, TValue>,
+		listener: GridSnapshotSelectorListener<TValue>,
+		isEqual?: GridSnapshotSelectorEquality<TValue>
+	): () => void;
+	subscribeToIntegrity(listener: (integrity: GridIntegrityState<TRowData>) => void): () => void;
 	/** Subscribe to domain version changes. Fires once per committed logical mutation in any domain.
 	 *  Prefer this over broad `subscribe()` for consumers that only need to know *that* something changed. */
 	subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void;

@@ -639,6 +639,14 @@ export class GridEngine<TRowData = unknown> {
 	public subscribeToKey(key: string, listener: Listener<TRowData>): () => void {
 		return this.stateManager.subscribeToKey(key, listener);
 	}
+	public subscribeToSelector<TValue>(
+		keys: readonly string[],
+		selector: (state: import('../state/GridState.js').InternalGridState<TRowData>) => TValue,
+		listener: (value: TValue) => void,
+		isEqual?: (left: TValue, right: TValue) => boolean
+	): () => void {
+		return this.stateManager.subscribeToSelector(keys, selector, listener, isEqual);
+	}
 
 	public addEventListener<K extends keyof GridEventPayloadMap<TRowData>>(
 		type: K,

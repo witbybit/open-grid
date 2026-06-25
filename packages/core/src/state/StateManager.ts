@@ -3,6 +3,7 @@ import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.j
 import { type GridInstrumentation, GridMetric, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
 
 export class StateManager<TRowData = unknown> {
+	private static readonly MAX_SELECTOR_FANOUT = 8;
 	private state: InternalGridState<TRowData>;
 	private listeners = new Set<Listener<TRowData>>();
 	private keyListeners = new Map<string, Set<Listener<TRowData>>>();
@@ -198,6 +199,36 @@ export class StateManager<TRowData = unknown> {
 			}
 		};
 	};
+
+	public subscribeToSelector<TValue>(
+		keys: readonly string[],
+		selector: (state: InternalGridState<TRowData>) => TValue,
+		listener: (value: TValue) => void,
+		isEqual: (left: TValue, right: TValue) => boolean = Object.is
+	): (() => void) {
+		const uniqueKeys = Array.from(new Set(keys));
+		if (uniqueKeys.length === 0) {
+			throw new Error('[open-grid] subscribeToSelector requires at least one key');
+		}
+		if (uniqueKeys.length > StateManager.MAX_SELECTOR_FANOUT) {
+			throw new Error(
+				`[open-grid] subscribeToSelector fan-out ${String(uniqueKeys.length)} exceeds limit ${String(StateManager.MAX_SELECTOR_FANOUT)}`
+			);
+		}
+
+		let currentValue = selector(this.state);
+		const notifyIfChanged = (state: InternalGridState<TRowData>) => {
+			const nextValue = selector(state);
+			if (isEqual(currentValue, nextValue)) return;
+			currentValue = nextValue;
+			listener(nextValue);
+		};
+
+		const unsubscribers = uniqueKeys.map((key) => this.subscribeToKey(key, notifyIfChanged));
+		return () => {
+			for (const unsubscribe of unsubscribers) unsubscribe();
+		};
+	}
 
 	public triggerKeyChange(key: string, prevState: InternalGridState<TRowData>): void {
 		const targeted = this.keyListeners.get(key);

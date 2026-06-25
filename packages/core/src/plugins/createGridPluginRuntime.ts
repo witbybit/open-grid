@@ -101,6 +101,8 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		applyGridState: source.applyGridState,
 		subscribe: source.subscribe,
 		subscribeToKey: source.subscribeToKey,
+		subscribeToSnapshotSelector: source.subscribeToSnapshotSelector,
+		subscribeToIntegrity: source.subscribeToIntegrity,
 		subscribeToDomainVersions: source.subscribeToDomainVersions,
 		subscribeDomain: source.subscribeDomain,
 		getColumnIndex: source.getColumnIndex,

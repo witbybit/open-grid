@@ -99,6 +99,7 @@ import { validateColumns } from './columnDef.js';
 import type { VisualRow } from './visualRow.js';
 import type {
 	CellSubscription,
+	ActiveEditState,
 	GridCellPointer,
 	GridSelectionSource,
 	GridCellAccess,
@@ -118,6 +119,8 @@ import type {
 	InternalGridApi,
 	GridApi,
 	GridSnapshotKeyListener,
+	GridSnapshotSelector,
+	GridSnapshotSelectorEquality,
 	GridSnapshotListener,
 	GridStateSnapshot,
 } from './api/GridApi.js';
@@ -929,6 +932,19 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.engine.subscribeToKey(key as string, () => listener(this.getStateSnapshot()[key]));
 	};
 
+	public subscribeToSnapshotSelector = <K extends keyof GridStateSnapshot<TRowData>, TValue>(
+		keys: readonly K[],
+		selector: GridSnapshotSelector<TRowData, TValue>,
+		listener: (value: TValue) => void,
+		isEqual: GridSnapshotSelectorEquality<TValue> = Object.is
+	): (() => void) => {
+		return this.engine.subscribeToSelector(keys as readonly string[], () => selector(this.getStateSnapshot()), listener, isEqual);
+	};
+
+	public subscribeToIntegrity = (listener: (integrity: InternalGridState<TRowData>['integrity']) => void): (() => void) => {
+		return this.engine.subscribeToSelector(['integrity'], (state) => state.integrity, listener);
+	};
+
 	public subscribeToDomainVersions = (listener: (v: GridDomainVersions) => void): (() => void) => {
 		return this.engine.subscribeToDomainVersions(listener);
 	};
@@ -938,22 +954,19 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public subscribeToViewport = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		const unsubscribeRows = this.engine.subscribeToKey('visibleRowRange', () => listener(this.getStateSnapshot()));
-		return () => {
-			unsubscribeRows();
-		};
+		return this.subscribeSnapshotProjection(['visibleRowRange'], (state) => state.visibleRowRange, listener, areViewportRangesEqual);
 	};
 
 	public subscribeToSelection = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.engine.subscribeToKey('selection', () => listener(this.getStateSnapshot()));
+		return this.subscribeSnapshotProjection(['selection'], (state) => state.selection, listener);
 	};
 
 	public subscribeToFocusedCell = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.engine.subscribeToKey('selection', () => listener(this.getStateSnapshot()));
+		return this.subscribeSnapshotProjection(['selection'], (state) => state.selection.focus, listener, areCellPointersEqual);
 	};
 
 	public subscribeToEditingCell = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		return this.engine.subscribeToKey('activeEdit', () => listener(this.getStateSnapshot()));
+		return this.subscribeSnapshotProjection(['activeEdit'], (state) => state.activeEdit, listener, areActiveEditsEqual);
 	};
 
 	public subscribeToCell = (rowId: string, colField: string, listener: () => void): (() => void) => {
@@ -963,43 +976,34 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public subscribeToRow = (rowId: string, listener: GridSnapshotListener<TRowData>): (() => void) => {
-		const notify = (): void => listener(this.getStateSnapshot());
-		const unsubscribeData = this.engine.subscribeToKey('globalVersion', notify);
-		const unsubscribeHeights = this.engine.subscribeToKey('rowHeights', notify);
-		const unsubscribeEvent = this.addEventListener(GridEventName.rowResized, (event) => {
-			if (event.payload.rowId === rowId) notify();
-		});
-		return () => {
-			unsubscribeData();
-			unsubscribeHeights();
-			unsubscribeEvent();
-		};
+		return this.subscribeSnapshotProjection(
+			['globalVersion', 'rowHeights'],
+			() => this.getRowSubscriptionProjection(rowId),
+			listener,
+			areRowSubscriptionProjectionsEqual
+		);
 	};
 
 	public subscribeToColumn = (colField: string, listener: GridSnapshotListener<TRowData>): (() => void) => {
-		const notify = (): void => listener(this.getStateSnapshot());
-		const unsubscribeColumns = this.engine.subscribeToKey('columns', notify);
-		const unsubscribeWidths = this.engine.subscribeToKey('columnWidths', notify);
-		const unsubscribeEvent = this.addEventListener(GridEventName.columnResized, (event) => {
-			if (event.payload.colField === colField) notify();
-		});
-		return () => {
-			unsubscribeColumns();
-			unsubscribeWidths();
-			unsubscribeEvent();
-		};
+		return this.subscribeSnapshotProjection(
+			['columns', 'columnWidths', 'sortModel'],
+			(state) => this.getColumnSubscriptionProjection(state, colField),
+			listener,
+			areColumnSubscriptionProjectionsEqual
+		);
 	};
 
 	public subscribeToHeaders = (listener: GridSnapshotListener<TRowData>): (() => void) => {
-		const notify = (): void => listener(this.getStateSnapshot());
-		const unsubscribeColumns = this.engine.subscribeToKey('columns', notify);
-		const unsubscribeWidths = this.engine.subscribeToKey('columnWidths', notify);
-		const unsubscribeSort = this.engine.subscribeToKey('sortModel', notify);
-		return () => {
-			unsubscribeColumns();
-			unsubscribeWidths();
-			unsubscribeSort();
-		};
+		return this.subscribeSnapshotProjection(
+			['columns', 'columnWidths', 'sortModel'],
+			(state) => ({
+				columns: state.columns,
+				columnWidths: state.columnWidths,
+				sortModel: state.sortModel,
+			}),
+			listener,
+			areHeaderSubscriptionProjectionsEqual
+		);
 	};
 
 	public triggerCellNotifications = (rowId: string): void => {
@@ -1136,9 +1140,84 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getInsightDiagnostics = (): Record<string, unknown> => this.engine.insights.getDiagnostics();
 
+	private subscribeSnapshotProjection<TValue>(
+		keys: readonly string[],
+		selector: (state: InternalGridState<TRowData>) => TValue,
+		listener: GridSnapshotListener<TRowData>,
+		isEqual: (left: TValue, right: TValue) => boolean = Object.is
+	): () => void {
+		return this.engine.subscribeToSelector(keys, selector, () => listener(this.getStateSnapshot()), isEqual);
+	}
+
+	private getRowSubscriptionProjection(rowId: string) {
+		const rowIndex = this.getVisualIndexByRowId(rowId);
+		const visualRow = rowIndex === null ? null : this.getVisualRow(rowIndex);
+		const visualRowId = visualRow?.id ?? null;
+		return {
+			rowVersion: this.engine.rowVersions.get(rowId) ?? 0,
+			rowIndex,
+			visualRowId,
+			height: visualRowId ? (this.state.rowHeights[visualRowId] ?? visualRow?.height ?? this.state.defaultRowHeight) : null,
+		};
+	}
+
+	private getColumnSubscriptionProjection(state: InternalGridState<TRowData>, colField: string) {
+		const column = state.columns.find((candidate) => candidate.field === colField) ?? null;
+		return {
+			column,
+			width: state.columnWidths[colField] ?? column?.width ?? state.defaultColWidth,
+			sortEntry: state.sortModel?.find((entry) => entry.colId === colField) ?? null,
+		};
+	}
+
 	public destroy = (): void => {
 		this.storeDestroyed = true;
 		this.pluginRegistry.destroy();
 		this.engine.destroy();
 	};
+}
+
+function areViewportRangesEqual(left: ViewportRange, right: ViewportRange): boolean {
+	return left.startIdx === right.startIdx && left.endIdx === right.endIdx;
+}
+
+function areCellPointersEqual(left: GridCellPointer | null, right: GridCellPointer | null): boolean {
+	return left === right || (!!left && !!right && left.rowId === right.rowId && left.colField === right.colField);
+}
+
+function areActiveEditsEqual(left: ActiveEditState | null, right: ActiveEditState | null): boolean {
+	return (
+		left === right ||
+		(!!left &&
+			!!right &&
+			left.rowId === right.rowId &&
+			left.colField === right.colField &&
+			left.validationError === right.validationError)
+	);
+}
+
+function areRowSubscriptionProjectionsEqual(
+	left: { rowVersion: number; rowIndex: number | null; visualRowId: string | null; height: number | null },
+	right: { rowVersion: number; rowIndex: number | null; visualRowId: string | null; height: number | null }
+): boolean {
+	return (
+		left.rowVersion === right.rowVersion &&
+		left.rowIndex === right.rowIndex &&
+		left.visualRowId === right.visualRowId &&
+		left.height === right.height
+	);
+}
+
+function areColumnSubscriptionProjectionsEqual(
+	left: { column: ColumnDef<any> | null; width: number; sortEntry: SortModel[number] | null },
+	right: { column: ColumnDef<any> | null; width: number; sortEntry: SortModel[number] | null }
+): boolean {
+	return left.column === right.column && left.width === right.width && left.sortEntry === right.sortEntry;
+}
+
+function areHeaderSubscriptionProjectionsEqual(
+	left: { columns: readonly ColumnDef<any>[]; columnWidths: Record<string, number>; sortModel: SortModel | null },
+	right: { columns: readonly ColumnDef<any>[]; columnWidths: Record<string, number>; sortModel: SortModel | null }
+): boolean {
+	return left.columns === right.columns && left.columnWidths === right.columnWidths && left.sortModel === right.sortModel;
 }
