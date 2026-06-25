@@ -1,6 +1,8 @@
 import { GridKernel } from '../kernel/GridKernel.js';
 import type { GridCommand } from '../kernel/GridCommand.js';
 import { SidebarStore } from '../sidebar/SidebarStore.js';
+import { GridCapabilityManager } from '../plugins/GridCapabilityManager.js';
+import type { GridCapability } from '../plugins/GridCapabilityManager.js';
 import { DataIntegrityManager } from '../domains/integrity/DataIntegrityManager.js';
 import { PersistenceController } from '../domains/persistence/PersistenceController.js';
 import { GridWorkspaceController } from '../domains/persistence/GridWorkspaceController.js';
@@ -59,6 +61,8 @@ export interface GridCoreOptions<TRow> {
 	readonly loading?: boolean;
 	readonly persistenceAdapter?: PersistenceAdapter;
 	readonly workspaceAdapter?: GridWorkspaceAdapter;
+	/** Override the initial set of enabled capabilities. Defaults to the standard set. */
+	readonly capabilities?: Iterable<GridCapability>;
 }
 
 /**
@@ -70,6 +74,7 @@ export interface GridCoreOptions<TRow> {
 export class GridCore<TRow> {
 	readonly kernel = new GridKernel();
 	readonly sidebar = new SidebarStore();
+	readonly capabilities: GridCapabilityManager;
 	readonly integrity: DataIntegrityManager<TRow>;
 	readonly persistence: PersistenceController | null = null;
 	readonly workspace: GridWorkspaceController | null = null;
@@ -90,6 +95,7 @@ export class GridCore<TRow> {
 	private readonly displayConfig: RenderDisplayConfig;
 
 	constructor(options: GridCoreOptions<TRow>) {
+		this.capabilities = new GridCapabilityManager(options.capabilities);
 		const type = options.rowModelType ?? 'client';
 		this.rowModel = createRowModel<TRow>(type, options.getRowId);
 		const clientModel = this.rowModel instanceof ClientRowModel ? this.rowModel : null;
@@ -319,6 +325,7 @@ export class GridCore<TRow> {
 		this.workspace?.destroy();
 		this.integrity.destroy();
 		this.sidebar.destroy();
+		this.capabilities.destroy();
 		this.kernel.destroy();
 	}
 

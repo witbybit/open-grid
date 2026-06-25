@@ -26,6 +26,7 @@ import type { SerializedGridState } from '../domains/persistence/GridStateSchema
 import type { PersistenceStatus } from '../domains/persistence/PersistenceController.js';
 import type { GridViewDefinition } from '../domains/persistence/GridWorkspaceController.js';
 import type { ExportOptions } from '../domains/export/GridExportEngine.js';
+import type { GridCapability } from '../plugins/GridCapabilityManager.js';
 
 /**
  * The public, command-backed grid API (ARCHITECTURE.md "Public API Direction"). Every mutating
@@ -151,6 +152,16 @@ export interface GridApi<TRow> {
 		getIssuesBySeverity(severity: IntegritySeverity): GridIntegrityIssue[];
 		hasIssues(): boolean;
 		subscribe(fn: () => void): () => void;
+	};
+
+	/** Feature capabilities — check before activating UI or behaviour. */
+	readonly capabilities: {
+		has(cap: GridCapability): boolean;
+		enable(cap: GridCapability): void;
+		disable(cap: GridCapability): void;
+		toggle(cap: GridCapability): void;
+		getAll(): GridCapability[];
+		subscribe(fn: (cap: GridCapability) => void): () => void;
 	};
 
 	/** CSV / TSV export. */
@@ -311,6 +322,15 @@ export function createGrid<TRow>(options: GridCoreOptions<TRow>): GridApi<TRow> 
 			getIssuesBySeverity: (severity) => core.integrity.getIssuesBySeverity(severity),
 			hasIssues: () => core.integrity.hasIssues(),
 			subscribe: (fn) => core.integrity.subscribe(fn),
+		},
+
+		capabilities: {
+			has: (cap) => core.capabilities.has(cap),
+			enable: (cap) => core.capabilities.enable(cap),
+			disable: (cap) => core.capabilities.disable(cap),
+			toggle: (cap) => core.capabilities.toggle(cap),
+			getAll: () => core.capabilities.getAll(),
+			subscribe: (fn) => core.capabilities.subscribe(fn),
 		},
 
 		export: {

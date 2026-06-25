@@ -49,6 +49,15 @@ export type { GridViewDefinition, GridWorkspaceAdapter } from './domains/persist
 export { createGridStateSnapshot, applyGridState, isValidGridState, GRID_STATE_SCHEMA_VERSION } from './domains/persistence/GridStateSchema.js';
 export type { SerializedGridState, GridStateReadPort, GridStateWritePort } from './domains/persistence/GridStateSchema.js';
 
+export { GridCapabilityManager } from './plugins/GridCapabilityManager.js';
+export type { GridCapability } from './plugins/GridCapabilityManager.js';
+export { GridPluginRegistry } from './plugins/GridPluginRegistry.js';
+export type { GridPlugin } from './plugins/GridPluginRegistry.js';
+export { registerGridNavigation } from './plugins/registerGridNavigation.js';
+export type { GridNavigationOptions } from './plugins/registerGridNavigation.js';
+export { registerGridContextMenu } from './plugins/registerGridContextMenu.js';
+export type { ContextMenuItem, GridContextMenuOptions } from './plugins/registerGridContextMenu.js';
+
 export { GridExportEngine } from './domains/export/GridExportEngine.js';
 export type { ExportOptions } from './domains/export/GridExportEngine.js';
 export { ClipboardController } from './domains/export/ClipboardController.js';
