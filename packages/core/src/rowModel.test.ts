@@ -1093,10 +1093,10 @@ describe('row-transaction rollback restores full client row-model identity', () 
 		const originalVisualIds = Array.from({ length: store.getVisualRowCount() }, (_, index) => store.getVisualRow(index)?.id);
 		const originalRowOrder = store.getRowOrder();
 
-		const originalSetState = store.engine.stateManager.setState;
-		store.engine.stateManager.setState = vi.fn(() => {
+		const originalCommitState = store.engine.stateManager.commitState;
+		store.engine.stateManager.commitState = vi.fn(() => {
 			throw new Error('forced mixed-commit failure');
-		}) as typeof originalSetState;
+		}) as typeof originalCommitState;
 
 		const result = store.engine.changeApplier.commit({
 			reason: 'rows:apply-transaction',
@@ -1114,7 +1114,7 @@ describe('row-transaction rollback restores full client row-model identity', () 
 			state: { columnWidths: { category: 222 } },
 		});
 
-		store.engine.stateManager.setState = originalSetState;
+		store.engine.stateManager.commitState = originalCommitState;
 
 		expect(result.status).toBe('failed-before-commit');
 		expect(store.getRowNodeById('row-1')).toBe(originalNode1);

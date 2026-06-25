@@ -1377,16 +1377,11 @@ describe('Architecture guardrails', () => {
 		expect(incrementPos).toBeLessThan(dispatchPos);
 	});
 
-	it('GridStateReactionController no longer owns domain version increments (Plan 097)', () => {
-		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridStateReactionController.ts'), 'utf-8');
-		// These callbacks were removed — domain increments are declared on GridChange.domains
-		expect(content).not.toContain('incrementColumnVersion');
-		expect(content).not.toContain('incrementGeometryVersion');
-		expect(content).not.toContain('incrementRowModelVersion');
-		expect(content).not.toContain('incrementSelectionVersion');
-		expect(content).not.toContain('incrementEditingVersion');
-		expect(content).not.toContain('incrementFilteringVersion');
-		expect(content).not.toContain('incrementSortingVersion');
+	it('legacy GridStateReactionController file is gone and projection is wired through the commit kernel', () => {
+		expect(existsSync(resolve(CORE_ROOT, 'src', 'engine', 'GridStateReactionController.ts'))).toBe(false);
+		const applierContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
+		expect(applierContent).toContain('projectStateChange?: (phase: StateCommitPhase<TRowData>) => void;');
+		expect(applierContent).toContain('stateManager.commitState(mergedState');
 	});
 
 	it('feature controllers declare domains on their GridChange objects (Plan 097)', () => {
@@ -1916,17 +1911,11 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("this.reportCommitOutcome('redo', result);");
 	});
 
-	it('GridStateReactionController no longer owns selection invalidation or render requests (Plan 105)', () => {
-		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridStateReactionController.ts'), 'utf-8');
-		expect(content).not.toContain('invalidation: InvalidationManager');
-		expect(content).not.toContain('requestRender: (reason: string) => void;');
-		expect(content).not.toContain('GridEventName.selectionChanged');
-		expect(content).not.toContain('GridEventName.focusChanged');
-		expect(content).not.toContain("invalidateOverlay('selection')");
-		expect(content).not.toContain("invalidateCell(prevState.selection.focus.rowId, prevState.selection.focus.colField, 'focus')");
-		expect(content).not.toContain("invalidateCell(currState.selection.focus.rowId, currState.selection.focus.colField, 'focus')");
-		expect(content).not.toContain("invalidateCell(visualRow.rowId, col.field, 'selection')");
-		expect(content).not.toContain("requestRender('selection')");
+	it('projection pipeline owns derived selection synchronization instead of a reaction controller', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridProjectionPipeline.ts'), 'utf-8');
+		expect(content).toContain('export class GridProjectionPipeline');
+		expect(content).toContain('phase.setDerivedState({ selection })');
+		expect(content).not.toContain('eventBus.addEventListener');
 	});
 
 	it('GridEngine applySelectionRange owns selection and focus event publication (Plan 112)', () => {
@@ -1935,6 +1924,7 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('GridEventName.selectionChanged');
 		expect(content).toContain('GridEventName.focusChanged');
 		expect(content).toContain("reason: 'selection:set-range'");
+		expect(content).toContain("reason: 'selection' as const");
 	});
 
 	it('RenderInvalidationCoordinator no longer infers edit/validation paints from state keys (Plan 105)', () => {
@@ -1946,6 +1936,9 @@ describe('Architecture guardrails', () => {
 	it('RenderInvalidationCoordinator no longer requests selection flushes from rowSelectionChanged directly (Plan 105)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
 		expect(content).not.toContain('GridEventName.rowSelectionChanged');
+		expect(content).not.toContain("invalidateOverlay('selection')");
+		expect(content).not.toContain("invalidateHeaders('selection')");
+		expect(content).not.toContain("requestFlushGated('selection')");
 	});
 
 	it('layout-panel commands own showGroupPanel/showFloatingFilters/showFilterChipBar invalidation instead of RenderInvalidationCoordinator (Plan 105)', () => {
@@ -2382,6 +2375,41 @@ describe('Architecture guardrails', () => {
 			expect(clipboardContent).toContain("if (result.status === 'applied' || result.status === 'noop')");
 			expect(liveStreamContent).toContain("if (result.status !== 'applied' && result.status !== 'noop')");
 			expect(legacyLiveStreamContent).toContain("if (result.status !== 'applied' && result.status !== 'noop')");
+		});
+	});
+
+	describe('Plan 134 - commit-owned projection pipeline', () => {
+		it('GridChangeApplier exposes an explicit projection phase before domain publication', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
+			expect(content).toContain('projectStateChange?: (phase: StateCommitPhase<TRowData>) => void;');
+			expect(content).toContain('stateManager.commitState(mergedState');
+			const projectPos = content.indexOf('projectStateChange?.(phase)');
+			const publishPos = content.indexOf('publish-domains');
+			expect(projectPos).toBeGreaterThan(-1);
+			expect(projectPos).toBeLessThan(publishPos);
+		});
+
+		it('GridProjectionPipeline owns derived runtime recomputation instead of key-reaction mutation', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridProjectionPipeline.ts'), 'utf-8');
+			expect(content).toContain('export class GridProjectionPipeline');
+			expect(content).toContain('phase.setDerivedState({ selection })');
+			expect(content).toContain('visibleRowRange: nextRowRange');
+			expect(content).not.toContain('triggerKeyChange(');
+		});
+
+		it('selection invalidation is declared at commit time, not rebuilt in the renderer coordinator', () => {
+			const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			const ricContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
+			expect(engineContent).toContain("reason: 'selection:set-range'");
+			expect(engineContent).toContain("kind: 'headers' as const, reason: 'selection' as const");
+			expect(ricContent).not.toContain("invalidateHeaders('selection')");
+			expect(ricContent).not.toContain("invalidateOverlay('selection')");
+		});
+
+		it('direct-write allowlist no longer mentions GridStateReactionController and reclassifies renderer invalidation as local', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'gridDirectWriteAllowlist.ts'), 'utf-8');
+			expect(content).not.toContain('GridStateReactionController.ts');
+			expect(content).toContain("kind: 'renderer-local-consumer'");
 		});
 	});
 });

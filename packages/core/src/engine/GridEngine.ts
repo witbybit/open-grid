@@ -45,7 +45,7 @@ import { DataMutationController } from '../features/DataMutationController.js';
 import { GridStateFeatureController } from '../features/GridStateFeatureController.js';
 import { CellNotificationController } from './CellNotificationController.js';
 import { createDefaultGridDomainMutationExecutorRegistry } from './GridDomainMutation.js';
-import { GridStateReactionController } from './GridStateReactionController.js';
+import { GridProjectionPipeline } from './GridProjectionPipeline.js';
 import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import { ColumnAutoSizeController } from '../features/ColumnAutoSizeController.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from '../features/ColumnAutoSizeController.js';
@@ -91,7 +91,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly stateFeature: GridStateFeatureController<TRowData>;
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
-	private readonly stateReactions: GridStateReactionController<TRowData>;
+	private readonly projectionPipeline: GridProjectionPipeline<TRowData>;
 	public readonly capabilityManager: GridCapabilityManager<TRowData>;
 	public readonly insights: GridInsightRegistry;
 	public dataIntegrity: GridDataIntegrityManager<TRowData> | null = null;
@@ -309,8 +309,7 @@ export class GridEngine<TRowData = unknown> {
 			rowVersions: this.rowVersions,
 			faultReporter: this.runtimeFaults,
 		});
-		this.stateReactions = new GridStateReactionController<TRowData>({
-			getStateManager: () => this.stateManager,
+		this.projectionPipeline = new GridProjectionPipeline<TRowData>({
 			data: this.data,
 			columns: this.columns,
 			geometry: this.geometry,
@@ -371,12 +370,7 @@ export class GridEngine<TRowData = unknown> {
 			integrity: _createEmptyIntegrityState<TRowData>(),
 		};
 
-		this.stateManager = new StateManager<TRowData>(
-			initialState,
-			this.stateReactions.handleStateChanges,
-			this.runtimeFaults,
-			this.instrumentation
-		);
+		this.stateManager = new StateManager<TRowData>(initialState, undefined, this.runtimeFaults, this.instrumentation);
 
 		const capCfg = config.capabilities ?? (config.canPerformAction ? { canPerformAction: config.canPerformAction } : {});
 		this.capabilityManager = new GridCapabilityManager<TRowData>(
@@ -403,6 +397,7 @@ export class GridEngine<TRowData = unknown> {
 			},
 			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TRowData>(),
 			publishDomains: (domains) => this.publishDomains(domains),
+			projectStateChange: (phase) => this.projectionPipeline.run({ phase }),
 			faultReporter: this.runtimeFaults,
 		});
 
@@ -1001,8 +996,8 @@ export class GridEngine<TRowData = unknown> {
 		this.cellNotifications.publishCommittedCellChanges(changes);
 	}
 
-	public notifyCellChange(rowId: string, colField: string): void {
-		this.cellNotifications.notifyCellChange(rowId, colField);
+	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true): void {
+		this.cellNotifications.notifyCellChange(rowId, colField, includeRenderInvalidation);
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
@@ -1074,19 +1069,26 @@ export class GridEngine<TRowData = unknown> {
 				payload: { focus: selection.focus, selection },
 			});
 		}
+		const selectionChange = this.selection.describeChange(prevSelection, selection, this.rowModel, this.stateManager.getState().columns);
 		events.push({
 			type: GridEventName.selectionChanged,
 			payload: {
 				selection,
-				result: this.selection.describeChange(prevSelection, selection, this.rowModel, this.stateManager.getState().columns),
+				result: selectionChange,
 			},
 		});
+		const invalidations = [
+			...selectionChange.invalidatedCells.map((cell) => ({ kind: 'cell' as const, rowId: cell.rowId, colId: cell.colField, reason: 'selection' as const })),
+			...selectionChange.invalidatedRows.map((rowId) => ({ kind: 'row' as const, rowId, reason: 'selection' as const })),
+			...(selectionChange.overlayChanged ? ([{ kind: 'overlay' as const, reason: 'selection' as const }] as const) : []),
+			{ kind: 'headers' as const, reason: 'selection' as const },
+		];
 		this.changeApplier.apply({
 			reason: 'selection:set-range',
 			state: { selection },
+			invalidations,
 			domains: ['selection'],
 			events,
-			requestRender: false,
 		});
 	};
 

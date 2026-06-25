@@ -1,6 +1,6 @@
-import type { InternalGridState } from '../state/GridState.js';
+import type { GridStateUpdater, InternalGridState } from '../state/GridState.js';
 import type { RowModel } from '../rowModel.js';
-import type { StateManager } from '../state/StateManager.js';
+import type { StateCommitPhase } from '../state/StateManager.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { ColumnModel } from '../models/ColumnModel.js';
 import type { GeometryModel } from '../models/GeometryModel.js';
@@ -15,8 +15,7 @@ interface RangeBounds {
 	maxCol: number;
 }
 
-export interface GridStateReactionControllerDeps<TRowData = unknown> {
-	getStateManager: () => StateManager<TRowData>;
+export interface GridProjectionPipelineDeps<TRowData = unknown> {
 	data: DataModel<TRowData>;
 	columns: ColumnModel<TRowData>;
 	geometry: GeometryModel;
@@ -25,36 +24,31 @@ export interface GridStateReactionControllerDeps<TRowData = unknown> {
 	cellNotifications: CellNotificationController<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	getRowHeightsList: (rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number) => number[];
-	notifyCellChange: (rowId: string, colField: string) => void;
+	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
 }
 
-export class GridStateReactionController<TRowData = unknown> {
-	constructor(private readonly deps: GridStateReactionControllerDeps<TRowData>) {}
+export interface GridProjectionRunInput<TRowData = unknown> {
+	phase: StateCommitPhase<TRowData>;
+}
 
-	// True when a structural change (sort/filter/groupBy/expansion) has occurred that
-	// causes rows to reorder. The row model refreshes asynchronously via its event
-	// listeners (sortChanged → refresh() → bumpGlobalVersion()), so we defer bounds
-	// recalculation to the subsequent 'globalVersion' reaction when the model is current.
-	// Live data updates (updateRows) also bump globalVersion but must NOT shift bounds.
+export class GridProjectionPipeline<TRowData = unknown> {
+	constructor(private readonly deps: GridProjectionPipelineDeps<TRowData>) {}
+
 	private pendingStructuralBoundsUpdate = false;
 
-	public handleStateChanges = (prevState: InternalGridState<TRowData>, updatedKeys: string[]): void => {
-		const stateManager = this.deps.getStateManager();
-		let currState = stateManager.getState();
-		const updatedSet = new Set(updatedKeys);
+	public run({ phase }: GridProjectionRunInput<TRowData>): void {
+		let currState = phase.getState();
+		const updatedSet = new Set(phase.getChangedKeys());
+		const prevState = phase.prevState;
 
 		if (updatedSet.has('columns') || updatedSet.has('columnWidths') || updatedSet.has('defaultColWidth')) {
 			this.deps.columns.updateColumns(currState.columns, currState.columnWidths, currState.defaultColWidth);
-			// Domain version increments (columns, geometry) are declared on the GridChange.domains
-			// of the mutation that triggered this key change — not inferred here.
 		}
 
 		if (updatedSet.has('globalVersion')) {
 			this.deps.data.clearValueGetterCache();
 		}
 
-		// Flag structural row-order changes so the subsequent globalVersion reaction
-		// (fired by rowModel.refresh() → bumpGlobalVersion()) knows to recompute bounds.
 		if (updatedSet.has('sortModel') || updatedSet.has('filterModel') || updatedSet.has('groupBy') || updatedSet.has('expansion')) {
 			this.pendingStructuralBoundsUpdate = true;
 		}
@@ -73,26 +67,17 @@ export class GridStateReactionController<TRowData = unknown> {
 				this.deps.getRowHeightsList(rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight
 			);
-			// geometry domain version increment is declared on the mutation that triggered this —
-			// either via GridChange.domains or via explicit engine.incrementDomain() at the call site.
 		}
 
 		if (
 			updatedSet.has('selection') ||
 			updatedSet.has('columns') ||
-			// globalVersion only triggers bounds recalculation when a structural change
-			// (sort/filter/group/expansion) is pending. Plain data updates (updateRows at
-			// 10 hz) also bump globalVersion but must NOT shift the selection bounds —
-			// they carry no row-order change that the user initiated.
 			(updatedSet.has('globalVersion') && this.pendingStructuralBoundsUpdate)
 		) {
 			if (updatedSet.has('globalVersion')) this.pendingStructuralBoundsUpdate = false;
 			const rangeBounds = this.deps.selection.calculateRangeBounds(
 				currState.selection.range,
-				(id) => {
-					const activeRowModel = this.deps.getRowModel();
-					return activeRowModel ? activeRowModel.getVisualIndexByRowId(id) : -1;
-				},
+				(id) => this.deps.getRowModel()?.getVisualIndexByRowId(id) ?? -1,
 				(field) => this.deps.columns.getColumnIndex(field)
 			);
 			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds) ? currState.selection.bounds : rangeBounds;
@@ -101,22 +86,14 @@ export class GridStateReactionController<TRowData = unknown> {
 				bounds: nextBounds,
 			});
 			if (currState.selection !== selection) {
-				for (const key of stateManager.setDerivedState({ selection }, prevState)) {
-					const wasAlreadyUpdated = updatedSet.has(key);
-					updatedSet.add(key);
-					updatedKeys.push(key);
-					if (!wasAlreadyUpdated) {
-						stateManager.triggerKeyChange(key, prevState);
-					}
-				}
-				currState = stateManager.getState();
+				const affectedKeys = phase.setDerivedState({ selection });
+				for (const key of affectedKeys) updatedSet.add(key);
+				currState = phase.getState();
 			}
 		}
 
 		if (updatedSet.has('selection')) {
 			this.deps.selection.setSelection(currState.selection);
-			// selectionVersion is incremented by the mutation site (applySelectionRange or
-			// GridChange.domains: ['selection']), not by key observation.
 		}
 
 		const needsRangeUpdate =
@@ -144,39 +121,39 @@ export class GridStateReactionController<TRowData = unknown> {
 				currState.visibleColRange.endIdx !== nextColRange.endIdx;
 
 			if (rowRangeChanged || colRangeChanged) {
-				for (const key of stateManager.setDerivedState({ visibleRowRange: nextRowRange, visibleColRange: nextColRange }, prevState)) {
-					const wasAlreadyUpdated = updatedSet.has(key);
-					updatedSet.add(key);
-					updatedKeys.push(key);
-					if (!wasAlreadyUpdated) {
-						stateManager.triggerKeyChange(key, prevState);
-					}
-				}
-				currState = stateManager.getState();
+				const affectedKeys = phase.setDerivedState({
+					visibleRowRange: nextRowRange,
+					visibleColRange: nextColRange,
+				} satisfies GridStateUpdater<TRowData>);
+				for (const key of affectedKeys) updatedSet.add(key);
+				currState = phase.getState();
 			}
 		}
 
+		this.publishTargetedNotifications(prevState, currState, updatedSet);
+	}
+
+	private publishTargetedNotifications(
+		prevState: InternalGridState<TRowData>,
+		currState: InternalGridState<TRowData>,
+		updatedSet: ReadonlySet<string>
+	): void {
 		const notifiedCells = new Set<string>();
 		const notifyCellOnce = (rowId: string, colField: string): void => {
 			const key = `${rowId}:${colField}`;
 			if (notifiedCells.has(key)) return;
 			notifiedCells.add(key);
-			this.deps.notifyCellChange(rowId, colField);
+			this.deps.notifyCellChange(rowId, colField, false);
 		};
 
 		if (updatedSet.has('selection')) {
-			if (prevState.selection.focus) {
-				notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
-			}
-			if (currState.selection.focus) {
-				notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
-			}
+			if (prevState.selection.focus) notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
+			if (currState.selection.focus) notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
 		}
 
 		if (updatedSet.has('activeEdit')) {
 			if (prevState.activeEdit) notifyCellOnce(prevState.activeEdit.rowId, prevState.activeEdit.colField);
 			if (currState.activeEdit) notifyCellOnce(currState.activeEdit.rowId, currState.activeEdit.colField);
-			// editingVersion is incremented via GridChange.domains: ['editing'] on editing:start/stop changes.
 		}
 
 		if (updatedSet.has('selection')) {
@@ -203,17 +180,17 @@ export class GridStateReactionController<TRowData = unknown> {
 			const prevWidths = prevState.columnWidths;
 			const currWidths = currState.columnWidths;
 			const allCols = new Set([...Object.keys(prevWidths), ...Object.keys(currWidths)]);
-			allCols.forEach((colField) => {
+			for (const colField of allCols) {
 				if (prevWidths[colField] !== currWidths[colField]) {
 					this.deps.cellNotifications.notifyColumnSubscribers(colField);
 				}
-			});
+			}
 		}
 
 		if (updatedSet.has('globalVersion')) {
 			this.deps.cellNotifications.notifyAllCellSubscribers();
 		}
-	};
+	}
 
 	private areRangeBoundsEqual(left: RangeBounds | null, right: RangeBounds | null): boolean {
 		return (

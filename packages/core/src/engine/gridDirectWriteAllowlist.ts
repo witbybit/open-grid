@@ -19,7 +19,7 @@ export const GRID_DIRECT_WRITE_ALLOWLIST = [
 	{
 		file: 'engine/GridEngine.ts',
 		kind: 'bootstrap-derived',
-		justification: 'Construction/bootstrap and the remaining centralized derived runtime writes remain here temporarily.',
+		justification: 'Construction/bootstrap wiring remains here until the remaining facade splits are finished.',
 	},
 	{
 		file: 'engine/CellNotificationController.ts',
@@ -27,14 +27,9 @@ export const GRID_DIRECT_WRITE_ALLOWLIST = [
 		justification: 'Cell notifications emit renderer-local invalidations after data mutations.',
 	},
 	{
-		file: 'engine/GridStateReactionController.ts',
-		kind: 'legacy-derived',
-		justification: 'Legacy reaction-owned invalidation remains only for derived synchronization and is being reduced in Plan 105.',
-	},
-	{
 		file: 'renderer/RenderInvalidationCoordinator.ts',
-		kind: 'render-authority',
-		justification: 'Renderer authority bridges state/event observations into frame-coordinated paint work.',
+		kind: 'renderer-local-consumer',
+		justification: 'Renderer-only listeners coordinate paint timing, scroll alignment, and local geometry caches after commit-owned invalidations are declared.',
 	},
 	{
 		file: 'store.ts',

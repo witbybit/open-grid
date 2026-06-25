@@ -243,7 +243,7 @@ describe('InfiniteRowModelController', () => {
 		const stateBefore = store.getState();
 		const initialGlobalVersion = stateBefore.globalVersion;
 
-		const stateSpy = vi.spyOn(store.engine.stateManager, 'setState');
+		const stateSpy = vi.spyOn(store.engine.stateManager, 'commitState');
 
 		// Trigger fetch block 1 (subsequent block)
 		controller.loadVisibleBlocks(60, 60);

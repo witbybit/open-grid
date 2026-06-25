@@ -19,6 +19,7 @@ function makeApplier(): {
 	commandHistory: CommandHistory;
 	requestRender: ReturnType<typeof vi.fn>;
 	publishDomains: ReturnType<typeof vi.fn>;
+	projectStateChange: ReturnType<typeof vi.fn>;
 	faultReporter: RuntimeFaultReporter<TestRow>;
 } {
 	const stateManager = new StateManager<TestRow>({
@@ -48,6 +49,7 @@ function makeApplier(): {
 	const commandHistory = new CommandHistory(faultReporter);
 	const requestRender = vi.fn();
 	const publishDomains = vi.fn();
+	const projectStateChange = vi.fn();
 
 	const deps: GridChangeApplierDeps<TestRow> = {
 		stateManager,
@@ -56,6 +58,7 @@ function makeApplier(): {
 		commandHistory,
 		requestRender,
 		publishDomains,
+		projectStateChange,
 		faultReporter,
 	};
 
@@ -67,6 +70,7 @@ function makeApplier(): {
 		commandHistory,
 		requestRender,
 		publishDomains,
+		projectStateChange,
 		faultReporter,
 	};
 }
@@ -127,13 +131,16 @@ describe('GridChangeApplier', () => {
 	});
 
 	it('applies commit phases in deterministic order: state -> domains -> invalidations -> history -> render -> events', () => {
-		const { applier, stateManager, invalidation, eventBus, requestRender, publishDomains, commandHistory } = makeApplier();
+		const { applier, stateManager, invalidation, eventBus, requestRender, publishDomains, commandHistory, projectStateChange } = makeApplier();
 		const callOrder: string[] = [];
 
-		const origSetState = stateManager.setState;
-		stateManager.setState = vi.fn((...args) => {
+		const origCommitState = stateManager.commitState.bind(stateManager);
+		stateManager.commitState = vi.fn((...args) => {
 			callOrder.push('state');
-			return origSetState(...args);
+			return origCommitState(...args);
+		}) as typeof stateManager.commitState;
+		projectStateChange.mockImplementation(() => {
+			callOrder.push('projection');
 		});
 		publishDomains.mockImplementation(() => {
 			callOrder.push('domains');
@@ -163,7 +170,28 @@ describe('GridChangeApplier', () => {
 			events: [{ type: GridEventName.columnResized, payload: { colField: 'name', width: 300 } }],
 		});
 
-		expect(callOrder).toEqual(['state', 'domains', 'invalidation', 'history', 'render', 'event']);
+		expect(callOrder).toEqual(['state', 'projection', 'domains', 'invalidation', 'history', 'render', 'event']);
+	});
+
+	it('runs the projection phase exactly once per logical commit and before key listeners', () => {
+		const { applier, stateManager, projectStateChange } = makeApplier();
+		const seen: string[] = [];
+		stateManager.subscribeToKey('visibleRowRange', () => {
+			seen.push('listener');
+		});
+		projectStateChange.mockImplementation((phase) => {
+			seen.push('projection');
+			phase.setDerivedState({ visibleRowRange: { startIdx: 1, endIdx: 3 } } as Partial<InternalGridState<TestRow>>);
+		});
+
+		applier.apply({
+			reason: 'projection-once',
+			state: { columnWidths: { name: 240 } },
+		});
+
+		expect(projectStateChange).toHaveBeenCalledTimes(1);
+		expect(seen).toEqual(['projection', 'listener']);
+		expect(stateManager.getState().visibleRowRange).toEqual({ startIdx: 1, endIdx: 3 });
 	});
 
 	it('registers bounded history entries and replays them through the same commit protocol', () => {
@@ -910,10 +938,10 @@ describe('GridChangeApplier', () => {
 
 	it('state commit faults return failed-before-commit and do not publish follow-up phases', () => {
 		const { applier, stateManager, requestRender, publishDomains } = makeApplier();
-		const originalSetState = stateManager.setState;
-		stateManager.setState = vi.fn(() => {
+		const originalCommitState = stateManager.commitState;
+		stateManager.commitState = vi.fn(() => {
 			throw new Error('write failed');
-		}) as typeof originalSetState;
+		}) as typeof originalCommitState;
 
 		const result = applier.apply({
 			reason: 'state-fault',
@@ -925,6 +953,7 @@ describe('GridChangeApplier', () => {
 		expect(requestRender).not.toHaveBeenCalled();
 		expect(publishDomains).not.toHaveBeenCalled();
 		expect(stateManager.getState().columnWidths).toEqual({});
+		stateManager.commitState = originalCommitState;
 	});
 
 	it('multiple invalidations of different kinds are all applied', () => {

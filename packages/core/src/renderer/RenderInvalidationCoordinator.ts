@@ -46,38 +46,20 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		this.unsubscribers.push(this.deps.engine.eventBus.addEventListener(GridEventName.paginationChanged, () => this.deps.resetScroll()));
 		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.selectionChanged, (event) => {
-				const { result, selection } = event.payload;
-				for (const cell of result.invalidatedCells) {
-					this.deps.engine.invalidation.invalidateCell(cell.rowId, cell.colField, 'selection');
-				}
-				for (const rowId of result.invalidatedRows) {
-					this.deps.engine.invalidation.invalidateRow(rowId, 'selection');
-				}
-				if (result.overlayChanged) {
-					this.deps.engine.invalidation.invalidateOverlay('selection');
-				}
-				this.deps.engine.invalidation.invalidateHeaders('selection');
+				const { selection } = event.payload;
 				if (selection?.focus && selection.source !== 'pointer') {
 					this.deps.scrollCellIntoView(selection.focus.rowId, selection.focus.colField);
 				}
-				this.requestFlushGated('selection');
-			})
-		);
-		this.unsubscribers.push(
-			this.deps.engine.eventBus.addEventListener(GridEventName.cellInvalidated, () => {
-				this.requestFlushGated('cell');
 			})
 		);
 		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.columnResized, (event) => {
 				this.deps.geometryController.invalidateColumns([event.payload.colField]);
-				this.requestFlushGated('column resize');
 			})
 		);
 		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.rowResized, (event) => {
 				this.deps.geometryController.invalidateRows([event.payload.rowId]);
-				this.requestFlushGated('row resize');
 			})
 		);
 		this.unsubscribers.push(

@@ -10,7 +10,7 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
-	notifyCellChange: (rowId: string, colField: string) => void;
+	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
 	validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
@@ -19,7 +19,7 @@ export class EditingFeatureController<TRowData = unknown> {
 	private readonly ctx: GridFeatureContext<TRowData>;
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
-	private readonly notifyCellChange: (rowId: string, colField: string) => void;
+	private readonly notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
 	private readonly validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
 	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 
@@ -55,7 +55,7 @@ export class EditingFeatureController<TRowData = unknown> {
 			domains: ['editing'],
 			events: [{ type: GridEventName.editStarted, payload: { rowId, colField } }],
 		});
-		this.notifyCellChange(rowId, colField);
+		this.notifyCellChange(rowId, colField, false);
 	}
 
 	public stopEdit(cancel = false): void {
@@ -73,7 +73,7 @@ export class EditingFeatureController<TRowData = unknown> {
 			domains: ['editing'],
 			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel } }],
 		});
-		this.notifyCellChange(rowId, colField);
+		this.notifyCellChange(rowId, colField, false);
 	}
 
 	public async commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean> {
@@ -133,7 +133,7 @@ export class EditingFeatureController<TRowData = unknown> {
 			return false;
 		}
 
-		this.notifyCellChange(rowId, colField);
+		this.notifyCellChange(rowId, colField, false);
 		await this.validateCellPostCommit?.(rowId, colField);
 		return true;
 	}

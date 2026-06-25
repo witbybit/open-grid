@@ -13,6 +13,7 @@ import type {
 	GridDomainMutationExecutorRegistry,
 	PreparedDomainMutation,
 } from './GridDomainMutation.js';
+import type { StateCommitPhase } from '../state/StateManager.js';
 
 export type GridCommitReason =
 	| 'columns:set-data'
@@ -171,6 +172,7 @@ export interface GridCommitKernelDeps<TRowData = unknown> {
 	commitContext?: GridCommitContext<TRowData>;
 	domainMutationExecutorRegistry?: GridDomainMutationExecutorRegistry<TRowData>;
 	publishDomains?: (domains: readonly (keyof GridDomainVersions)[]) => void;
+	projectStateChange?: (phase: StateCommitPhase<TRowData>) => void;
 	faultReporter?: RuntimeFaultReporter<TRowData>;
 }
 
@@ -217,7 +219,9 @@ export class GridCommitKernel<TRowData = unknown> {
 					: mutationState.reduce<GridStateUpdater<TRowData>>((acc, next) => this.composeStateUpdaters(acc, next), change.state ?? {});
 			if (mergedState !== undefined) {
 				failureOperation = 'commit-state';
-				this.deps.stateManager.setState(mergedState);
+				this.deps.stateManager.commitState(mergedState, (phase) => {
+					this.deps.projectStateChange?.(phase);
+				});
 			}
 		} catch (error) {
 			const primaryRejections = error instanceof GridCommitRejectedError ? error.rejections : undefined;

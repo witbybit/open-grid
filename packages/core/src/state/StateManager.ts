@@ -34,20 +34,45 @@ export class StateManager<TRowData = unknown> {
 	}
 
 	public setState = (updater: GridStateUpdater<TRowData>): void => {
+		this.commitState(updater);
+	};
+
+	public commitState<TResult = void>(
+		updater: GridStateUpdater<TRowData>,
+		beforeNotify?: (phase: StateCommitPhase<TRowData>) => TResult
+	): TResult | undefined {
 		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
 
 		if (this.transactionDepth > 0) {
 			for (const key of Object.keys(nextState)) this.batchedKeys.add(key);
 			this.state = { ...this.state, ...nextState };
-			return;
+			return undefined;
 		}
 
 		const prevState = this.state;
 		this.state = { ...prevState, ...nextState };
+		const changedKeys = new Set<string>();
+		for (const key of Object.keys(nextState)) {
+			if (prevState[key as keyof InternalGridState<TRowData>] !== this.state[key as keyof InternalGridState<TRowData>]) {
+				changedKeys.add(key);
+			}
+		}
+		if (changedKeys.size === 0) return undefined;
 
-		const affectedKeys = Object.keys(nextState);
-		this.notifyChanges(prevState, affectedKeys);
-	};
+		const phaseResult = beforeNotify?.({
+			prevState,
+			getState: () => this.state,
+			getChangedKeys: () => Array.from(changedKeys),
+			setDerivedState: (derivedUpdater) => {
+				const affectedKeys = this.setDerivedState(derivedUpdater, prevState);
+				for (const key of affectedKeys) changedKeys.add(key);
+				return affectedKeys;
+			},
+		});
+
+		this.notifyChanges(prevState, Array.from(changedKeys));
+		return phaseResult;
+	}
 
 	public setDerivedState(updater: GridStateUpdater<TRowData>, prevStateForListeners: InternalGridState<TRowData>): string[] {
 		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
@@ -192,4 +217,11 @@ export class StateManager<TRowData = unknown> {
 		this.keyListeners.clear();
 		this.onChangesCallback = undefined;
 	}
+}
+
+export interface StateCommitPhase<TRowData = unknown> {
+	readonly prevState: InternalGridState<TRowData>;
+	readonly getState: () => InternalGridState<TRowData>;
+	readonly getChangedKeys: () => string[];
+	readonly setDerivedState: (updater: GridStateUpdater<TRowData>) => string[];
 }

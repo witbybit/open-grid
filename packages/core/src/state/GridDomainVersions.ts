@@ -3,13 +3,13 @@
  * committed logical mutation of that domain — never during reads or speculative work.
  *
  * Wired increment points:
- *   columns   — ColumnModel.updateColumns() via GridStateReactionController
- *   rows      — GridStateReactionController on globalVersion / sortModel / filterModel changes
- *   geometry  — GeometryModel.updateRows() via GridStateReactionController
- *   selection — GridStateReactionController on selection state key change
- *   editing   — GridStateReactionController on activeEdit state key change
- *   filtering — GridStateReactionController on filterModel state key change
- *   sorting   — GridStateReactionController on sortModel state key change
+ *   columns   — declared on commit records and published by GridCommitKernel
+ *   rows      — declared on row-model and data mutations, then published by GridCommitKernel
+ *   geometry  — declared on geometry-affecting commits and published after projection
+ *   selection — declared on selection commits
+ *   editing   — declared on editing lifecycle commits
+ *   filtering — declared on filter/query commits
+ *   sorting   — declared on sort commits
  *
  * The styling counter is present but not yet incremented. It will remain 0 until
  * the styling domain wires its increment.

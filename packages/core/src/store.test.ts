@@ -315,6 +315,37 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it('applies one deterministic invalidation plan for a logical selection mutation', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' });
+		void store.engine.invalidation.consume();
+
+		store.selectCell({ rowId: '2', colField: 'name' });
+		const frame = store.engine.invalidation.consume();
+
+		expect(frame.headers).toBe(true);
+		expect(frame.overlay).toBe(true);
+		expect(frame.cellsByRowId.get('1')).toEqual(new Set(['name']));
+		expect(frame.cellsByRowId.get('2')).toEqual(new Set(['name']));
+		expect(frame.rows).toEqual(new Set(['1', '2']));
+		expect(frame.invalidations.filter((entry) => entry.kind === 'cell')).toHaveLength(2);
+		expect(frame.invalidations.filter((entry) => entry.kind === 'row')).toHaveLength(2);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('should preserve initial style rules in grid state', () => {
 		const rowClass = { kind: 'row' as const, when: (row: TestRow) => row.price > 10, rowClass: 'expensive' };
 		const store = new GridStore<TestRow>({
