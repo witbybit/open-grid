@@ -19,6 +19,8 @@ export interface GridNextProps<TRow = unknown> {
 	loading?: boolean;
 	style?: CSSProperties;
 	className?: string;
+	/** Called once after the API + renderer are mounted. Useful for setting up plugins, DAG, etc. */
+	onMount?: (api: GridApi<TRow>) => void;
 }
 
 /**
@@ -41,6 +43,7 @@ export function GridNext<TRow = unknown>({
 	loading,
 	style,
 	className,
+	onMount,
 }: GridNextProps<TRow>) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const apiRef = useRef<GridApi<TRow> | null>(null);
@@ -62,6 +65,9 @@ export function GridNext<TRow = unknown>({
 	// and the rows-sync effect can dispatch without caring about API lifecycle.
 	const rowsRef = useRef(rows);
 	rowsRef.current = rows;
+
+	const onMountRef = useRef(onMount);
+	onMountRef.current = onMount;
 
 	// Co-create the API + renderer so both are destroyed together on cleanup.
 	// This pairs creation/destruction in one effect, which is React Strict Mode safe.
@@ -86,6 +92,8 @@ export function GridNext<TRow = unknown>({
 
 		// Prime with current rows immediately so the first paint has data.
 		api.rows.replace(rowsRef.current as readonly TRow[]);
+
+		onMountRef.current?.(api);
 
 		return () => {
 			renderer.unmount();

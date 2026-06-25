@@ -24,7 +24,8 @@ export type GridPageType =
 	| 'rowdrag'
 	| 'advancedfilters'
 	| 'integrity'
-	| 'new-engine';
+	| 'new-engine'
+	| 'plan133';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================

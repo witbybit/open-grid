@@ -174,6 +174,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			subtitle: 'Plan 133 · GridKernel · DomRenderer',
 			icon: Cpu,
 		},
+		{
+			id: 'plan133',
+			label: 'Full Architecture',
+			subtitle: 'P7-P13 · All Features · New API',
+			icon: Sparkles,
+		},
 	] as const;
 
 	return (
