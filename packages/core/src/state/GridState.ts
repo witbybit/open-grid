@@ -15,7 +15,7 @@ import type {
 	GridIntegritySummary,
 	GridTransactionStreamState,
 	ServerIntegrityReport,
-} from '../features/dataIntegrity/integrityTypes.js';
+} from './integrityStateTypes.js';
 
 /**
  * User-configured and persisted fields.

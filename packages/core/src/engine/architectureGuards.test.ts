@@ -2287,6 +2287,7 @@ describe('Architecture guardrails', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'state', 'GridState.ts'), 'utf-8');
 			expect(content).toContain('export interface GridIntegrityState');
 			expect(content).toContain('integrity: GridIntegrityState<TRowData>;');
+			expect(content).not.toContain("from '../features/dataIntegrity/");
 		});
 
 		it('GridDomainMutation defines typed integrity mutation kinds', () => {

@@ -1,9 +1,32 @@
 import type { ColumnDef } from '../../columnDef.js';
 import type { GridApi } from '../../api/GridApi.js';
+import type {
+	GridCellConflict,
+	GridCellDiff,
+	GridConflictSource,
+	GridDiffModel,
+	GridDiffResult,
+	GridIntegrityIssue,
+	GridIntegrityIssueSource,
+	GridIntegritySeverity,
+	GridIntegritySummary,
+	GridTransactionStreamState,
+	ServerIntegrityReport,
+} from '../../state/integrityStateTypes.js';
 
-// ── Issue model ───────────────────────────────────────────────────────────────
-
-export type GridIntegrityIssueSource = 'validation' | 'serverValidation' | 'dataQuality' | 'diff' | 'liveStream' | 'conflict' | 'system';
+export type {
+	GridCellConflict,
+	GridCellDiff,
+	GridConflictSource,
+	GridDiffModel,
+	GridDiffResult,
+	GridIntegrityIssue,
+	GridIntegrityIssueSource,
+	GridIntegritySeverity,
+	GridIntegritySummary,
+	GridTransactionStreamState,
+	ServerIntegrityReport,
+} from '../../state/integrityStateTypes.js';
 
 export type GridIntegrityIssueType =
 	| 'invalidValue'
@@ -22,33 +45,6 @@ export type GridIntegrityIssueType =
 	| 'conflict'
 	| 'custom';
 
-export type GridIntegritySeverity = 'info' | 'warning' | 'error';
-
-export interface GridIntegrityIssue {
-	readonly id: string;
-	readonly source: GridIntegrityIssueSource;
-	readonly type: GridIntegrityIssueType;
-	readonly severity: GridIntegritySeverity;
-
-	readonly rowId?: string;
-	readonly colField?: string;
-
-	readonly message: string;
-	readonly value?: unknown;
-
-	/**
-	 * Blocking issues prevent unsafe operations: submit, apply import,
-	 * accept unsafe diff, resolve conflict, unsafe remote overwrite.
-	 */
-	readonly blocking?: boolean;
-
-	readonly createdAt: number;
-	readonly data?: unknown;
-}
-
-// ── Commit result ─────────────────────────────────────────────────────────────
-
-/** Result returned by integrity-initiated cell writes (diff accept, conflict resolve). */
 export type GridCommitResult =
 	| { readonly status: 'applied'; readonly rowId: string; readonly colField: string; readonly value: unknown }
 	| { readonly status: 'notFound'; readonly reason: string }
@@ -57,16 +53,12 @@ export type GridCommitResult =
 	| { readonly status: 'blocked'; readonly reason: string; readonly issues?: readonly GridIntegrityIssue[] }
 	| { readonly status: 'failed'; readonly error: unknown };
 
-// ── Validate proposal ─────────────────────────────────────────────────────────
-
 export interface GridValidateCellProposalParams {
 	readonly rowId: string;
 	readonly colField: string;
 	readonly proposedValue: unknown;
 	readonly source?: 'edit' | 'diffAccept' | 'conflictResolve' | 'paste' | 'api';
 }
-
-// ── Issue filter ──────────────────────────────────────────────────────────────
 
 export interface GridIntegrityIssueFilter {
 	readonly source?: GridIntegrityIssueSource | readonly GridIntegrityIssueSource[];
@@ -77,22 +69,7 @@ export interface GridIntegrityIssueFilter {
 	readonly blockingOnly?: boolean;
 }
 
-// ── Summary ───────────────────────────────────────────────────────────────────
-
-export interface GridIntegritySummary {
-	readonly status: 'clean' | 'warning' | 'blocked' | 'checking';
-	readonly totalIssues: number;
-	readonly blockingIssues: number;
-	readonly warnings: number;
-	readonly errors: number;
-	readonly bySource: Partial<Record<GridIntegrityIssueSource, number>>;
-}
-
-// ── Scope ─────────────────────────────────────────────────────────────────────
-
 export type GridIntegrityScope = 'allRows' | 'loadedRows' | 'filteredRows' | 'selectedRows' | 'visibleRows' | 'currentPage' | 'serverProvided';
-
-// ── Row provider (row-model-aware data access) ────────────────────────────────
 
 export interface GridIntegrityRowRef<TRowData> {
 	readonly rowId: string;
@@ -119,8 +96,6 @@ export interface GridIntegrityRowProvider<TRowData> {
 	getRowsForIntegrityScope(scope: GridIntegrityScope): GridIntegrityRowsResult<TRowData>;
 }
 
-// ── Run options/result ────────────────────────────────────────────────────────
-
 export type GridIntegrityModuleId = 'validation' | 'quality' | 'diff' | 'liveStream' | 'conflicts';
 
 export interface GridIntegrityRunOptions {
@@ -133,8 +108,6 @@ export interface GridIntegrityRunResult {
 	readonly issues: readonly GridIntegrityIssue[];
 }
 
-// ── Module interface ──────────────────────────────────────────────────────────
-
 export interface GridIntegrityRunContext<TRowData> {
 	readonly scope: GridIntegrityScope;
 	readonly rows: readonly GridIntegrityRowRef<TRowData>[];
@@ -146,21 +119,13 @@ export interface GridIntegrityRunContext<TRowData> {
 
 export interface GridIntegrityModule<TRowData> {
 	readonly id: GridIntegrityModuleId;
-
 	isEnabled(): boolean;
-
 	run?(context: GridIntegrityRunContext<TRowData>): Promise<readonly GridIntegrityIssue[]> | readonly GridIntegrityIssue[];
-
 	getIssues?(): readonly GridIntegrityIssue[];
-
 	clearIssues?(): void;
-
 	getDiagnostics?(): unknown;
-
 	destroy?(): void;
 }
-
-// ── Validation config ─────────────────────────────────────────────────────────
 
 export interface GridIntegrityRuleResult {
 	readonly message: string;
@@ -174,7 +139,6 @@ export interface GridCellIntegrityRule<TRowData> {
 	readonly field: string;
 	readonly severity?: GridIntegritySeverity;
 	readonly blocking?: boolean;
-
 	validate(params: {
 		rowId: string;
 		row: TRowData;
@@ -188,7 +152,6 @@ export interface GridRowIntegrityRule<TRowData> {
 	readonly id: string;
 	readonly severity?: GridIntegritySeverity;
 	readonly blocking?: boolean;
-
 	validate(params: {
 		rowId: string;
 		row: TRowData;
@@ -198,21 +161,16 @@ export interface GridRowIntegrityRule<TRowData> {
 
 export interface GridValidationIntegrityOptions<TRowData> {
 	readonly enabled?: boolean;
-
 	readonly validateOnEdit?: boolean;
 	readonly validateOnBlur?: boolean;
 	readonly validateOnSubmit?: boolean;
 	readonly validateOnPaste?: boolean;
 	readonly validateOnFill?: boolean;
 	readonly showInlineErrors?: boolean;
-
 	readonly defaultScope?: GridIntegrityScope;
-
 	readonly cellRules?: readonly GridCellIntegrityRule<TRowData>[];
 	readonly rowRules?: readonly GridRowIntegrityRule<TRowData>[];
 }
-
-// ── Quality config ────────────────────────────────────────────────────────────
 
 export interface GridDataQualityRuleContext<TRowData> {
 	readonly scope: GridIntegrityScope;
@@ -225,7 +183,6 @@ export interface GridDataQualityRuleContext<TRowData> {
 export interface GridDataQualityRule<TRowData> {
 	readonly id: string;
 	readonly label: string;
-
 	run(context: GridDataQualityRuleContext<TRowData>): readonly GridIntegrityIssue[] | Promise<readonly GridIntegrityIssue[]>;
 }
 
@@ -234,39 +191,6 @@ export interface GridQualityIntegrityOptions<TRowData> {
 	readonly rules?: readonly GridDataQualityRule<TRowData>[];
 	readonly includeValidationIssues?: boolean;
 	readonly defaultScope?: GridIntegrityScope;
-}
-
-// ── Diff config ───────────────────────────────────────────────────────────────
-
-export interface GridDiffDataset<TRowData> {
-	readonly rows: readonly TRowData[];
-	readonly getRowId?: (row: TRowData) => string;
-}
-
-export interface GridDiffOptions {
-	readonly compareFields?: readonly string[];
-	readonly ignoreFields?: readonly string[];
-}
-
-export interface GridDiffModel<TRowData> {
-	readonly base: GridDiffDataset<TRowData>;
-	readonly compare: GridDiffDataset<TRowData>;
-	readonly options?: GridDiffOptions;
-}
-
-export interface GridDiffResult {
-	readonly addedRows: readonly string[];
-	readonly removedRows: readonly string[];
-	readonly changedRows: readonly string[];
-	readonly changedCells: readonly GridCellDiff[];
-}
-
-export interface GridCellDiff {
-	readonly rowId: string;
-	readonly colField: string;
-	readonly oldValue: unknown;
-	readonly newValue: unknown;
-	readonly status: 'changed' | 'added' | 'removed';
 }
 
 export type GridDiffAcceptResult =
@@ -282,36 +206,16 @@ export interface GridDiffIntegrityOptions {
 	readonly validateChangedValues?: boolean;
 }
 
-// ── Live stream config ────────────────────────────────────────────────────────
-
 export interface GridLiveStreamIntegrityOptions {
 	readonly enabled?: boolean;
 	readonly dirtyCellPolicy?: 'skip' | 'markConflict' | 'remoteWins';
 	readonly flashChanges?: boolean;
 }
 
-// ── Conflict config ───────────────────────────────────────────────────────────
-
 export interface GridConflictIntegrityOptions {
 	readonly enabled?: boolean;
 	readonly validateBeforeResolve?: boolean;
 	readonly checkCapabilitiesBeforeResolve?: boolean;
-}
-
-export type GridConflictSource = 'liveStream' | 'serverRefresh' | 'collaboration' | 'import';
-
-export interface GridCellConflict {
-	readonly id: string;
-	readonly rowId: string;
-	readonly colField: string;
-	readonly baseValue: unknown;
-	readonly localValue: unknown;
-	readonly remoteValue: unknown;
-	readonly localVersion?: string | number;
-	readonly remoteVersion?: string | number;
-	readonly source: GridConflictSource;
-	readonly createdAt: number;
-	readonly message?: string;
 }
 
 export interface ResolveConflictOptions {
@@ -327,8 +231,6 @@ export type ConflictResolutionResult =
 	| { status: 'notFound' }
 	| { status: 'failed'; error: unknown };
 
-// ── Top-level dataIntegrity config ────────────────────────────────────────────
-
 export interface GridDataIntegrityConfig<TRowData> {
 	readonly validation?: GridValidationIntegrityOptions<TRowData> | boolean;
 	readonly quality?: GridQualityIntegrityOptions<TRowData> | boolean;
@@ -337,67 +239,31 @@ export interface GridDataIntegrityConfig<TRowData> {
 	readonly conflicts?: GridConflictIntegrityOptions | boolean;
 }
 
-// ── Server-provided report ────────────────────────────────────────────────────
-
-export interface ServerIntegrityReport {
-	readonly scope: 'serverProvided';
-	readonly generatedAt: number;
-	readonly issues: readonly GridIntegrityIssue[];
-	readonly complete: boolean;
-	readonly totalRowsChecked?: number;
-}
-
-// ── Integrity API interface ───────────────────────────────────────────────────
-
 export interface GridIntegrityApi<TRowData> {
 	run(options?: GridIntegrityRunOptions): Promise<GridIntegrityRunResult>;
-
 	getSummary(): GridIntegritySummary;
-
 	getIssues(filter?: GridIntegrityIssueFilter): readonly GridIntegrityIssue[];
-
 	getCellIssues(rowId: string, colField: string): readonly GridIntegrityIssue[];
-
 	getRowIssues(rowId: string): readonly GridIntegrityIssue[];
-
 	getBlockingIssues(): readonly GridIntegrityIssue[];
-
 	canSubmit(): boolean;
-
 	publishIssues(source: GridIntegrityIssueSource, issues: readonly GridIntegrityIssue[]): void;
-
 	publishServerReport(report: ServerIntegrityReport): void;
-
 	clearIssues(filter?: GridIntegrityIssueFilter): void;
-
 	validateCell(rowId: string, colField: string): Promise<readonly GridIntegrityIssue[]>;
-
 	validateCellProposal(params: GridValidateCellProposalParams): Promise<readonly GridIntegrityIssue[]>;
-
 	validateRow(rowId: string): Promise<readonly GridIntegrityIssue[]>;
-
 	validateGrid(options?: { scope?: GridIntegrityScope }): Promise<GridIntegrityRunResult>;
-
 	setDiffModel(model: GridDiffModel<TRowData> | null): void;
-
 	clearDiff(): void;
-
 	getDiffResult(): GridDiffResult | null;
-
 	acceptCellDiff(rowId: string, colField: string): Promise<GridDiffAcceptResult>;
-
 	createStream(options?: GridLiveStreamOptions<TRowData>): GridTransactionStreamHandle<TRowData>;
-
 	getStreamState(): GridTransactionStreamState | null;
-
 	getConflicts(): readonly GridCellConflict[];
-
 	resolveConflict(conflictId: string, options: ResolveConflictOptions): Promise<ConflictResolutionResult>;
-
 	clearConflict(conflictId: string): void;
 }
-
-// ── Stream types (kept minimal; module owns the full impl) ────────────────────
 
 export interface GridLiveStreamOptions<TRowData> {
 	readonly batchMs?: number;
@@ -430,17 +296,6 @@ export interface GridRowStreamUpdate<TRowData> {
 	readonly source?: string;
 }
 
-export interface GridTransactionStreamState {
-	readonly paused: boolean;
-	readonly pendingUpdates: number;
-	readonly committedBatches: number;
-	readonly skippedDirtyUpdates: number;
-	readonly droppedUpdates: number;
-	readonly lastFlushDurationMs: number | null;
-	readonly lastError: string | null;
-	readonly backpressureActive: boolean;
-}
-
 export interface GridTransactionStreamHandle<TRowData> {
 	push(update: GridLiveStreamUpdate<TRowData>): void;
 	pushCells(updates: readonly GridCellStreamUpdate[]): void;
@@ -451,8 +306,6 @@ export interface GridTransactionStreamHandle<TRowData> {
 	destroy(): void;
 	getState(): GridTransactionStreamState;
 }
-
-// ── Repaint request ───────────────────────────────────────────────────────────
 
 export interface IntegrityRepaintRequest {
 	readonly reason: string;

@@ -14,21 +14,21 @@ import {
 import type { ColumnDef } from '../columnDef.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { GridIntegrityState, InternalGridState, GridStateUpdater } from '../state/GridState.js';
-import type { GridInvalidation } from '../renderer/invalidationManager.js';
-import type { GridCommitEvent, GridCommitReason, GridHistoryEntry } from './GridChangeApplier.js';
-import type { CellValueChangeOptions, CellValueChangeResult } from '../features/DataMutationController.js';
 import type {
 	GridCellConflict,
 	GridCellDiff,
 	GridDiffModel,
 	GridDiffResult,
 	GridIntegrityIssue,
-	GridIntegrityIssueFilter,
 	GridIntegrityIssueSource,
 	GridIntegritySummary,
 	GridTransactionStreamState,
 	ServerIntegrityReport,
-} from '../features/dataIntegrity/integrityTypes.js';
+} from '../state/integrityStateTypes.js';
+import type { GridInvalidation } from '../renderer/invalidationManager.js';
+import type { GridCommitEvent, GridCommitReason, GridHistoryEntry } from './GridChangeApplier.js';
+import type { CellValueChangeOptions, CellValueChangeResult } from '../features/DataMutationController.js';
+import type { GridIntegrityIssueFilter } from '../features/dataIntegrity/integrityTypes.js';
 
 export type GridDomain = keyof GridDomainVersions;
 
