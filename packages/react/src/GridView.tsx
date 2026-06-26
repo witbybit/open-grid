@@ -61,6 +61,8 @@ export function GridView<TRowData = unknown>({
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const hostRef = useRef<GridHostWithAdapter<TRowData> | null>(null);
+	const apiRef = useRef(api);
+	apiRef.current = api;
 	const [adapterHandle, setAdapterHandle] = useState<GridAdapterHandle<unknown> | null>(null);
 	const isGridActiveRef = useRef(false);
 
@@ -213,6 +215,14 @@ export function GridView<TRowData = unknown>({
 		},
 		enableNavigation
 	);
+	const navigationRef = useRef(navigation);
+	navigationRef.current = navigation;
+	const onCellClickRef = useRef(onCellClick);
+	onCellClickRef.current = onCellClick;
+	const contextMenuRef = useRef(contextMenu);
+	contextMenuRef.current = contextMenu;
+	const enableContextMenuRef = useRef(enableContextMenu);
+	enableContextMenuRef.current = enableContextMenu;
 
 	useEffect(() => {
 		if (!enableNavigation) return;
@@ -270,61 +280,43 @@ export function GridView<TRowData = unknown>({
 		return { cellEl, pointer };
 	}, []);
 
-	const getCellClickParams = useCallback(
-		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {
-			const access = hostRef.current?.adapterHandle.getCellAccess(pointer.rowId, pointer.colField) ?? null;
-			if (!access) return null;
-			return {
-				rowId: access.rowId,
-				rowIndex: access.rowIndex,
-				row: access.row,
-				node: access.node,
-				colField: access.colField,
-				colIndex: access.colIndex,
-				column: access.column,
-				value: access.value,
-				api,
-				event,
-			};
-		},
-		[api]
-	);
-
 	const handleMouseDown = useCallback(
 		(e: MouseEvent) => {
-			if (!navigation) return;
+			const nav = navigationRef.current;
+			if (!nav) return;
 			const target = getCellPointerFromEvent(e);
 			if (!target) return;
 			const { cellEl, pointer } = target;
 
 			isGridActiveRef.current = true;
-			const state = api.getStateSnapshot();
+			const state = apiRef.current.getStateSnapshot();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
 			// Skip range selection for columns that have canDrag (drag handle) or disableCellRangeSelection set.
-			const colDef = api.getColumnDef(pointer.colField);
+			const colDef = apiRef.current.getColumnDef(pointer.colField);
 			if (colDef && (colDef.canDrag !== undefined || colDef.disableCellRangeSelection)) return;
 
 			cellEl.tabIndex = -1;
 			cellEl.focus();
-			navigation.handleMouseDown(pointer.rowId, pointer.colField, e);
+			nav.handleMouseDown(pointer.rowId, pointer.colField, e);
 		},
-		[api, navigation, getCellPointerFromEvent]
+		[getCellPointerFromEvent]
 	);
 
 	const handleMouseOver = useCallback(
 		(e: MouseEvent) => {
-			if (!navigation) return;
+			const nav = navigationRef.current;
+			if (!nav) return;
 			const target = getCellPointerFromEvent(e);
 			if (!target) return;
 			const { cellEl, pointer } = target;
 
 			if (e.relatedTarget && cellEl.contains(e.relatedTarget as Node)) return;
 
-			navigation.handleMouseEnter(pointer.rowId, pointer.colField);
+			nav.handleMouseEnter(pointer.rowId, pointer.colField);
 		},
-		[navigation, getCellPointerFromEvent]
+		[getCellPointerFromEvent]
 	);
 
 	const handleClick = useCallback(
@@ -333,51 +325,67 @@ export function GridView<TRowData = unknown>({
 			if (!target) return;
 			const { pointer } = target;
 
-			const clickParams = getCellClickParams(pointer, e);
+			const access = hostRef.current?.adapterHandle.getCellAccess(pointer.rowId, pointer.colField) ?? null;
+			const clickParams = access
+				? {
+						rowId: access.rowId,
+						rowIndex: access.rowIndex,
+						row: access.row,
+						node: access.node,
+						colField: access.colField,
+						colIndex: access.colIndex,
+						column: access.column,
+						value: access.value,
+						api: apiRef.current,
+						event: e,
+					}
+				: null;
 			if (clickParams) {
-				onCellClick?.(clickParams);
-				api.dispatchEvent(GridEventName.cellClicked, clickParams);
+				onCellClickRef.current?.(clickParams as GridCellClickParams<TRowData>);
+				apiRef.current.dispatchEvent(GridEventName.cellClicked, clickParams as GridCellClickParams<TRowData>);
 			}
 
-			if (!navigation) return;
+			const nav = navigationRef.current;
+			if (!nav) return;
 
-			const state = api.getStateSnapshot();
+			const state = apiRef.current.getStateSnapshot();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
-			navigation.handleClick(pointer.rowId, pointer.colField, e);
+			nav.handleClick(pointer.rowId, pointer.colField, e);
 		},
-		[api, navigation, getCellPointerFromEvent, getCellClickParams, onCellClick]
+		[getCellPointerFromEvent]
 	);
 
 	const handleDoubleClick = useCallback(
 		(e: MouseEvent) => {
-			if (!navigation) return;
+			const nav = navigationRef.current;
+			if (!nav) return;
 			const target = getCellPointerFromEvent(e);
 			if (!target) return;
 			const { pointer } = target;
 
-			const state = api.getStateSnapshot();
+			const state = apiRef.current.getStateSnapshot();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
-			navigation.setCellEditing(pointer.rowId, pointer.colField, true);
+			nav.setCellEditing(pointer.rowId, pointer.colField, true);
 		},
-		[api, navigation, getCellPointerFromEvent]
+		[getCellPointerFromEvent]
 	);
 
 	const handleContextMenu = useCallback(
 		(e: MouseEvent) => {
-			if (!enableContextMenu || !contextMenu) return;
+			if (!enableContextMenuRef.current || !contextMenuRef.current) return;
 
 			const target = getCellPointerFromEvent(e);
 			if (!target) return;
 			const { pointer } = target;
 
 			e.preventDefault();
-			contextMenu.show(pointer.rowId, pointer.colField, e.clientX, e.clientY);
+			contextMenuRef.current.show(pointer.rowId, pointer.colField, e.clientX, e.clientY);
 		},
-		[enableContextMenu, contextMenu, getCellPointerFromEvent]
+		[getCellPointerFromEvent]
 	);
 
 	useEffect(() => {

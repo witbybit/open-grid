@@ -1264,6 +1264,51 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		addEventListenerSpy.mockRestore();
 		grid.api.destroy();
 	});
+
+	it('should keep container listeners stable while adopting the latest onCellClick callback on rerender', async () => {
+		const addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, 'addEventListener');
+		const firstClick = vi.fn();
+		const secondClick = vi.fn();
+
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		const { container, rerender, unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} onCellClick={firstClick} />
+			</GridProvider>
+		);
+
+		const openGridContainer = container.firstElementChild as HTMLElement;
+		await waitFor(() => {
+			expect(container.querySelector('.og-cell[data-col-field="name"]')).not.toBeNull();
+		});
+
+		addEventListenerSpy.mockClear();
+
+		rerender(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} onCellClick={secondClick} />
+			</GridProvider>
+		);
+
+		const updateAddCalls = addEventListenerSpy.mock.calls.filter((call, index) => {
+			const instance = addEventListenerSpy.mock.instances[index];
+			return instance === openGridContainer && ['mousedown', 'mouseover', 'click', 'dblclick', 'contextmenu'].includes(call[0]);
+		}).length;
+		expect(updateAddCalls).toBe(0);
+
+		fireEvent.click(container.querySelector('.og-cell[data-col-field="name"]')!);
+
+		expect(firstClick).not.toHaveBeenCalled();
+		expect(secondClick).toHaveBeenCalledTimes(1);
+
+		addEventListenerSpy.mockRestore();
+		unmount();
+		grid.api.destroy();
+	});
 });
 
 describe('Grid pagination prop', () => {
