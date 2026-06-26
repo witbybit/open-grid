@@ -620,9 +620,11 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('GridPlugin no longer initializes against InternalGridApi', () => {
-		const content = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
-		expect(content).not.toContain('onInit?(api: InternalGridApi');
-		expect(content).toContain('onInit?(api: GridPluginRuntime');
+		const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		const surfacesContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApiSurfaces.ts'), 'utf-8');
+		expect(apiContent).not.toContain('onInit?(api: InternalGridApi');
+		expect(apiContent).toContain('GridPluginRuntime');
+		expect(surfacesContent).toContain('export interface GridPluginRuntime');
 	});
 
 	it('react exposes Grid as the only public grid entrypoint', () => {
@@ -808,7 +810,9 @@ describe('Architecture guardrails', () => {
 		const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 		expect(engineContent).toContain('public subscribeDomain(');
 		const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
-		expect(apiContent).toContain('subscribeDomain(');
+		const surfacesContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApiSurfaces.ts'), 'utf-8');
+		expect(apiContent).toContain('GridRuntimeSubscriptionApi');
+		expect(surfacesContent).toContain('subscribeDomain(');
 	});
 
 	it('StateManager.debugGetStateCount is removed — reads route through GridInstrumentation (Plan 085)', () => {
@@ -2373,11 +2377,15 @@ describe('Architecture guardrails', () => {
 
 	describe('Plan 133 - public write api result protocol', () => {
 		it('GridApi advanced write methods return GridWriteResult instead of void', () => {
-			const content = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
-			expect(content).toContain('setCellValue(rowId: string, colField: string, value: unknown): GridWriteResult;');
-			expect(content).toContain("batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): GridWriteResult;");
-			expect(content).not.toContain('setCellValue(rowId: string, colField: string, value: unknown): void;');
-			expect(content).not.toContain("batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): void;");
+			const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+			const surfacesContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApiSurfaces.ts'), 'utf-8');
+			expect(apiContent).toContain('GridDataApi');
+			expect(surfacesContent).toContain('setCellValue(rowId: string, colField: string, value: unknown): GridWriteResult;');
+			expect(surfacesContent).toContain(
+				"batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): GridWriteResult;"
+			);
+			expect(surfacesContent).not.toContain('setCellValue(rowId: string, colField: string, value: unknown): void;');
+			expect(surfacesContent).not.toContain("batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): void;");
 		});
 
 		it('GridEngine advanced write methods map kernel commits to GridWriteResult', () => {
@@ -2487,10 +2495,14 @@ describe('Architecture guardrails', () => {
 			const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
 			const surfacesContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApiSurfaces.ts'), 'utf-8');
 			expect(apiContent).toContain("from './GridApiSurfaces.js'");
+			expect(apiContent).not.toContain('export interface GridApi<');
+			expect(apiContent).not.toContain('export interface InternalGridApi<');
 			expect(surfacesContent).toContain('export interface GridDataApi');
 			expect(surfacesContent).toContain('export interface GridSelectionEditingApi');
 			expect(surfacesContent).toContain('export interface GridStructureApi');
 			expect(surfacesContent).toContain('export interface GridRuntimeSubscriptionApi');
+			expect(surfacesContent).toContain('export interface GridApi<');
+			expect(surfacesContent).toContain('export interface InternalGridApi<');
 			expect(surfacesContent).not.toContain('GridStore<');
 		});
 	});
