@@ -472,6 +472,62 @@ describe('Server page loading state publication', () => {
 
 		ctrl.dispose();
 	});
+
+	it('page navigation clears stale page rows immediately and exposes loading placeholders until the new page resolves', async () => {
+		let resolveSecond!: (v: { rows: TestRow[]; totalRowCount: number }) => void;
+		let callCount = 0;
+		const getPage = vi.fn(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alice', amount: 100 },
+						{ id: '2', name: 'Bob', amount: 200 },
+					],
+					totalRowCount: 10,
+				});
+			}
+			return new Promise<{ rows: TestRow[]; totalRowCount: number }>((res) => {
+				resolveSecond = res;
+			});
+		});
+
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+		const ctrl = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			columns: COLUMNS,
+			pagination: { pageSize: 5 },
+		});
+
+		await new Promise((res) => setTimeout(res, 0));
+		expect(ctrl.getVisualRow(0)?.kind).toBe('data');
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(0);
+
+		ctrl.goToPage(1);
+
+		expect(store.getServerPageState()!.loading).toBe(true);
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(-1);
+		expect(ctrl.getVisualRowCount()).toBe(5);
+		expect(ctrl.getVisualRow(0)).toEqual(
+			expect.objectContaining({
+				kind: 'loading',
+				id: 'loading:0',
+				rowIndex: 0,
+			})
+		);
+
+		resolveSecond!({
+			rows: [{ id: '6', name: 'Page Two', amount: 600 }],
+			totalRowCount: 10,
+		});
+		await new Promise((res) => setTimeout(res, 0));
+
+		expect(store.getServerPageState()!.loading).toBe(false);
+		expect(ctrl.getVisualIndexByRowId('6')).toBe(0);
+		expect(ctrl.getVisualRow(0)?.kind).toBe('data');
+
+		ctrl.dispose();
+	});
 });
 
 // ── Infinite block stale row map cleanup ──────────────────────────────────────

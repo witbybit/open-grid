@@ -129,15 +129,15 @@ export class ServerPageRowModelController<TData = unknown>
 		this.unsubscribers.push(
 			this.runtime.addEventListener(GridEventName.sortChanged, () => {
 				this.currentPage = 0;
-				this.fetchPage();
+				this.fetchPage({ preserveVisibleRows: false });
 			}),
 			this.runtime.addEventListener(GridEventName.filterChanged, () => {
 				this.currentPage = 0;
-				this.fetchPage();
+				this.fetchPage({ preserveVisibleRows: false });
 			})
 		);
 
-		this.fetchPage();
+		this.fetchPage({ preserveVisibleRows: false });
 	}
 
 	public getCapabilities(): RowModelCapabilities {
@@ -147,24 +147,24 @@ export class ServerPageRowModelController<TData = unknown>
 	public setDatasource(datasource: ServerDatasource<TData>): void {
 		this.datasource = datasource;
 		this.currentPage = 0;
-		this.fetchPage();
+		this.fetchPage({ preserveVisibleRows: false });
 	}
 
 	public goToPage(page: number): void {
 		const clamped = Math.max(0, Math.min(page, Math.max(0, this.pageCount - 1)));
 		if (clamped === this.currentPage && !this.loading) return;
 		this.currentPage = clamped;
-		this.fetchPage();
+		this.fetchPage({ preserveVisibleRows: false });
 	}
 
 	public setPageSize(pageSize: number): void {
 		this.pageSize = Math.max(1, pageSize);
 		this.currentPage = 0;
-		this.fetchPage();
+		this.fetchPage({ preserveVisibleRows: false });
 	}
 
 	public reloadPage(_reason?: string): void {
-		this.fetchPage();
+		this.fetchPage({ preserveVisibleRows: true });
 	}
 
 	public getPageState(): ServerPageState {
@@ -257,16 +257,28 @@ export class ServerPageRowModelController<TData = unknown>
 		return { updatedNodes: [node], changedFieldsByRow, visualChange: 'none' };
 	};
 
-	private fetchPage = async (): Promise<void> => {
+	private clearActivePageRows(): void {
+		this.activeNodes = [];
+		this.visualRows = [];
+		this.nodeMap.clear();
+		this.visualRowIdToIndex.clear();
+		this.rowIdToVisualIndex.clear();
+	}
+
+	private fetchPage = async (options?: { preserveVisibleRows?: boolean }): Promise<void> => {
 		if (this.disposed) return;
 
 		this.requestGeneration++;
 		const generation = this.requestGeneration;
 		const page = this.currentPage;
 		const pageSize = this.pageSize;
+		const preserveVisibleRows = options?.preserveVisibleRows ?? false;
 
 		this.loading = true;
 		this.error = null;
+		if (!preserveVisibleRows) {
+			this.clearActivePageRows();
+		}
 		this.runtime.setLoadingState(true);
 		this.runtime.setServerPageState({
 			page,
@@ -295,11 +307,7 @@ export class ServerPageRowModelController<TData = unknown>
 			this.error = null;
 
 			// Replace active rows atomically
-			this.activeNodes = [];
-			this.visualRows = [];
-			this.nodeMap.clear();
-			this.visualRowIdToIndex.clear();
-			this.rowIdToVisualIndex.clear();
+			this.clearActivePageRows();
 
 			response.rows.forEach((row, idx) => {
 				const typedRow = row as TData;
@@ -364,7 +372,7 @@ export class ServerPageRowModelController<TData = unknown>
 	};
 
 	public refresh(_reason?: RowRefreshReason): RowModelRefreshResult {
-		this.fetchPage();
+		this.fetchPage({ preserveVisibleRows: true });
 		return { changed: true };
 	}
 }
