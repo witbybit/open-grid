@@ -5,6 +5,7 @@ import type { InternalGridState } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
+import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
 
 interface ClipboardContext<TRowData> {
 	getState(): InternalGridState<TRowData>;
@@ -16,6 +17,10 @@ interface ClipboardContext<TRowData> {
 	getRawRowById(rowId: string): TRowData | null;
 	batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill'): GridWriteResult;
 	dispatchEvent<K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void;
+	validateWriteProposal?: (
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'paste' | 'api' | 'fill' | 'edit' | 'undo' | 'redo'
+	) => Promise<readonly GridIntegrityIssue[]>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
@@ -105,6 +110,11 @@ export class ClipboardController<TRowData = unknown> {
 			}
 
 			if (updates.length > 0) {
+				const issues = await this.c.validateWriteProposal?.(
+					updates.map((update) => ({ rowId: update.rowId, colField: update.colField, proposedValue: update.value })),
+					'paste'
+				);
+				if ((issues?.length ?? 0) > 0) return;
 				const result = this.c.batchCellValues(updates, 'paste');
 				if (result.status === 'applied' || result.status === 'noop') {
 					this.c.dispatchEvent(GridEventName.cellsPasted, { rowCount: pastedRows, colCount: pastedCols });

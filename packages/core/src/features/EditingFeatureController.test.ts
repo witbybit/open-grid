@@ -215,4 +215,37 @@ describe('EditingFeatureController', () => {
 		ctrl.dispose();
 		store.destroy();
 	});
+
+	it('commitEdit rejects blocking proposal validation when validateOnSubmit is enabled', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 50 },
+					{ field: 'name', header: 'Name', width: 150 },
+					{ field: 'price', header: 'Price', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnSubmit: true,
+						cellRules: [{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) }],
+					},
+				},
+			}
+		);
+		const ctrl = makeController(store);
+
+		store.startEditing('1', 'name');
+		const result = await store.commitEdit('1', 'name', '');
+
+		expect(result).toBe(false);
+		expect(store.getState().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+		expect(store.getCellValue('1', 'name')).toBe('Product A');
+		expect(store.canUndo()).toBe(false);
+
+		ctrl.dispose();
+		store.destroy();
+	});
 });

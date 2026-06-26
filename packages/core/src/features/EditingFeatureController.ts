@@ -5,6 +5,7 @@ import type { DataModel } from '../models/DataModel.js';
 import type { RowModel } from '../rowModel.js';
 import { canEditCell } from '../visualRow.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
+import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
@@ -15,6 +16,10 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 		cells: readonly { rowId: string; colField: string }[],
 		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
 	) => Promise<void>;
+	validateWriteProposal?: (
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
+	) => Promise<readonly GridIntegrityIssue[]>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
@@ -27,6 +32,10 @@ export class EditingFeatureController<TRowData = unknown> {
 		cells: readonly { rowId: string; colField: string }[],
 		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
 	) => Promise<void>;
+	private readonly validateWriteProposal?: (
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
+	) => Promise<readonly GridIntegrityIssue[]>;
 	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 
 	constructor(deps: EditingFeatureControllerDeps<TRowData>) {
@@ -35,6 +44,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.data = deps.data;
 		this.notifyCellChange = deps.notifyCellChange;
 		this.validateCommittedCells = deps.validateCommittedCells;
+		this.validateWriteProposal = deps.validateWriteProposal;
 		this.checkCapability = deps.checkCapability;
 	}
 
@@ -114,6 +124,11 @@ export class EditingFeatureController<TRowData = unknown> {
 			}
 			committedValue = getValueByPath(draftRow, colField);
 			bypassValueSetter = true;
+		}
+
+		const proposalIssues = await this.validateWriteProposal?.([{ rowId, colField, proposedValue: committedValue }], 'edit');
+		if ((proposalIssues?.length ?? 0) > 0) {
+			return false;
 		}
 
 		const result = this.ctx.applyChange({

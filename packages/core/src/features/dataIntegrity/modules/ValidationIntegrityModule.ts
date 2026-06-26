@@ -64,6 +64,25 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		}
 	}
 
+	shouldPreflightWrite(source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'): boolean {
+		if (!this.isEnabled()) return false;
+		const validateOnSubmit = this.options.validateOnSubmit === true;
+		const validateOnPaste = this.options.validateOnPaste ?? validateOnSubmit;
+		const validateOnFill = this.options.validateOnFill ?? validateOnSubmit;
+
+		switch (source) {
+			case 'paste':
+				return validateOnPaste;
+			case 'fill':
+				return validateOnFill;
+			case 'api':
+			case 'edit':
+			case 'undo':
+			case 'redo':
+				return validateOnSubmit;
+		}
+	}
+
 	getIssues(): readonly GridIntegrityIssue[] {
 		return this.deps.getIntegrityState().validation.issues;
 	}
@@ -282,6 +301,27 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		return issues;
 	}
 
+	async validateWriteProposal(
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
+	): Promise<readonly GridIntegrityIssue[]> {
+		if (!this.shouldPreflightWrite(source) || updates.length === 0) return _EMPTY;
+
+		const issueMap = new Map<string, GridIntegrityIssue>();
+		for (const update of _dedupeProposalCells(updates)) {
+			const issues = await this.validateCellProposal({
+				rowId: update.rowId,
+				colField: update.colField,
+				proposedValue: update.proposedValue,
+				source: source === 'undo' || source === 'redo' ? 'api' : source,
+			});
+			for (const issue of issues) {
+				if (issue.blocking) issueMap.set(issue.id, issue);
+			}
+		}
+		return Array.from(issueMap.values());
+	}
+
 	clearIssues(): void {
 		this._commitIssues('integrity:validation:set-issues', []);
 		this.deps.requestRepaint();
@@ -441,6 +481,20 @@ function _dedupeCells(cells: readonly { rowId: string; colField: string }[]): Ar
 		if (seen.has(key)) continue;
 		seen.add(key);
 		unique.push({ rowId: cell.rowId, colField: cell.colField });
+	}
+	return unique;
+}
+
+function _dedupeProposalCells(
+	cells: readonly { rowId: string; colField: string; proposedValue: unknown }[]
+): Array<{ rowId: string; colField: string; proposedValue: unknown }> {
+	const unique: Array<{ rowId: string; colField: string; proposedValue: unknown }> = [];
+	const seen = new Set<string>();
+	for (const cell of cells) {
+		const key = `${cell.rowId}:${cell.colField}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		unique.push({ rowId: cell.rowId, colField: cell.colField, proposedValue: cell.proposedValue });
 	}
 	return unique;
 }

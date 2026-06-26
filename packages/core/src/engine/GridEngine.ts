@@ -435,6 +435,7 @@ export class GridEngine<TRowData = unknown> {
 			getRawRowById: (rowId) => this.rowModel?.getRawRowById(rowId) ?? null,
 			batchCellValues: (updates, source) => this.batchCellValues(updates, source),
 			dispatchEvent: (type, payload) => this.eventBus.dispatchEvent(type, payload),
+			validateWriteProposal: (updates, source) => this.dataIntegrity?.validateWriteProposal(updates, source) ?? Promise.resolve([]),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.groupingFeature = new GroupingFeatureController<TRowData>({
@@ -450,6 +451,7 @@ export class GridEngine<TRowData = unknown> {
 			data: this.data,
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
 			validateCommittedCells: (cells, source) => this.dataIntegrity?.validateCommittedCells(cells, source) ?? Promise.resolve(),
+			validateWriteProposal: (updates, source) => this.dataIntegrity?.validateWriteProposal(updates, source) ?? Promise.resolve([]),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);

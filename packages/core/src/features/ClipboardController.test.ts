@@ -222,6 +222,50 @@ describe('ClipboardController', () => {
 		store.destroy();
 	});
 
+	it('pasteFromClipboard rejects the whole paste before commit when blocking proposal validation is enabled', async () => {
+		const store = new GridStore<{ id: string; name: string; note: string }>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 80 },
+					{ field: 'name', header: 'Name', width: 150 },
+					{ field: 'note', header: 'Note', width: 150 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnSubmit: true,
+						cellRules: [{ id: 'required-note', field: 'note', validate: ({ value }) => (value ? null : { message: 'Note is required' }) }],
+					},
+				},
+			}
+		);
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alpha', note: 'ok' },
+				{ id: '2', name: 'Beta', note: 'keep' },
+			],
+			columns: store.getState().columns,
+		});
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.cellsPasted, handler);
+
+		clip.setStored('\t');
+		store.selectCell({ rowId: '1', colField: 'name' });
+		await store.pasteFromClipboard();
+
+		expect(handler).not.toHaveBeenCalled();
+		expect(store.getCellValue('1', 'name')).toBe('Alpha');
+		expect(store.getCellValue('1', 'note')).toBe('ok');
+		expect(store.getCellValue('2', 'name')).toBe('Beta');
+		expect(store.getCellValue('2', 'note')).toBe('keep');
+		expect(store.canUndo()).toBe(false);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('pasteFromClipboard uses the canonical dependency and sort reconciliation pipeline', async () => {
 		let getterCalls = 0;
 		const store = new GridStore<{ id: string; name: string; price: number; price_display: string }>({

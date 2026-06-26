@@ -51,7 +51,7 @@ export interface GridValidateCellProposalParams {
 	readonly rowId: string;
 	readonly colField: string;
 	readonly proposedValue: unknown;
-	readonly source?: 'edit' | 'diffAccept' | 'conflictResolve' | 'paste' | 'api';
+	readonly source?: 'edit' | 'diffAccept' | 'conflictResolve' | 'paste' | 'fill' | 'api';
 }
 
 export interface GridIntegrityIssueFilter {

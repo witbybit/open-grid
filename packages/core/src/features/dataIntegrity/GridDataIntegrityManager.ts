@@ -403,12 +403,24 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		return this.validationModule?.shouldAutoValidateWrite(source) ?? false;
 	}
 
+	shouldPreflightWrite(source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'): boolean {
+		return this.validationModule?.shouldPreflightWrite(source) ?? false;
+	}
+
 	async validateCommittedCells(
 		cells: readonly { rowId: string; colField: string }[],
 		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
 	): Promise<void> {
 		if (!this.validationModule || !this.shouldAutoValidateWrite(source)) return;
 		await this.validationModule.validateCells(cells);
+	}
+
+	async validateWriteProposal(
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
+	): Promise<readonly GridIntegrityIssue[]> {
+		if (!this.validationModule) return _EMPTY;
+		return this.validationModule.validateWriteProposal(updates, source);
 	}
 
 	async validateCellProposal(params: GridValidateCellProposalParams): Promise<readonly GridIntegrityIssue[]> {
