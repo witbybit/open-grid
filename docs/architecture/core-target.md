@@ -76,29 +76,29 @@ A module in layer N may import from layer N or any layer **below** N (higher lin
 
 Every mutable concern has exactly one owner. "Owner" means: the entity that decides the value, persists it in `GridState`, and is the single writer. All other layers read from the owner's projection.
 
-| Domain                                    | Owner class                                                  | Module                                              |
-| ----------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------- |
-| Raw row data                              | `DataModel`                                                  | `src/models/DataModel.ts`                           |
-| Column definitions and order              | `ColumnModel`                                                | `src/models/ColumnModel.ts`                         |
-| Column geometry (widths, lefts)           | `GeometryModel`                                              | `src/models/GeometryModel.ts`                       |
-| Row geometry (heights, tops)              | `GeometryModel`                                              | `src/models/GeometryModel.ts`                       |
-| Visual row list (filtered/sorted/grouped) | `RowPipeline` (client) / `ServerRowModelController` (server) | `src/rows/RowPipeline.ts` / `src/serverRowModel.ts` |
-| Viewport range (visible rows/cols)        | `ViewportModel`                                              | `src/models/ViewportModel.ts`                       |
-| Cell selection                            | `SelectionModel`                                             | `src/models/SelectionModel.ts`                      |
-| Focus (keyboard)                          | `SelectionModel`                                             | `src/models/SelectionModel.ts`                      |
-| Active edit                               | `EditModel`                                                  | `src/models/EditModel.ts`                           |
-| Validation errors                         | `ValidationManager`                                          | `src/features/ValidationManager.ts`                 |
-| Column filter state                       | `GridState.filters` via `StateManager`                       | `src/state/GridState.ts`                            |
-| Sort state                                | `GridState.sort` via `StateManager`                          | `src/state/GridState.ts`                            |
-| Group state                               | `GridState.grouping` via `StateManager`                      | `src/state/GridState.ts`                            |
-| Pagination state                          | `GridState.pagination` via `StateManager`                    | `src/state/GridState.ts`                            |
-| Domain versions (invalidation)            | `GridEngine`                                                 | `src/engine/GridEngine.ts`                          |
-| Renderer port binding                     | `GridStore` (`bindRuntimePorts`)                             | `src/store.ts`                                      |
-| Feature state (plugins)                   | `GridPluginRegistry`                                         | `src/plugins/GridPluginRegistry.ts`                 |
-| Grid events                               | `EventBus`                                                   | `src/events/EventBus.ts`                            |
-| Diagnostics / metrics                     | `GridInstrumentation`                                        | `src/diagnostics/GridInstrumentation.ts`            |
-| Undo / redo                               | `CommandHistory`                                             | `src/commands/CommandHistory.ts`                    |
-| Persistence                               | `statePersistence` helpers                                   | `src/persistence/statePersistence.ts`               |
+| Domain                                    | Owner class                                                  | Module                                                   |
+| ----------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| Raw row data                              | `DataModel`                                                  | `src/models/DataModel.ts`                                |
+| Column definitions and order              | `ColumnModel`                                                | `src/models/ColumnModel.ts`                              |
+| Column geometry (widths, lefts)           | `GeometryModel`                                              | `src/models/GeometryModel.ts`                            |
+| Row geometry (heights, tops)              | `GeometryModel`                                              | `src/models/GeometryModel.ts`                            |
+| Visual row list (filtered/sorted/grouped) | `RowPipeline` (client) / `ServerRowModelController` (server) | `src/rows/RowPipeline.ts` / `src/serverRowModel.ts`      |
+| Viewport range (visible rows/cols)        | `ViewportModel`                                              | `src/models/ViewportModel.ts`                            |
+| Cell selection                            | `SelectionModel`                                             | `src/models/SelectionModel.ts`                           |
+| Focus (keyboard)                          | `SelectionModel`                                             | `src/models/SelectionModel.ts`                           |
+| Active edit                               | `EditModel`                                                  | `src/models/EditModel.ts`                                |
+| Validation errors                         | `GridDataIntegrityManager`                                   | `src/features/dataIntegrity/GridDataIntegrityManager.ts` |
+| Column filter state                       | `GridState.filters` via `StateManager`                       | `src/state/GridState.ts`                                 |
+| Sort state                                | `GridState.sort` via `StateManager`                          | `src/state/GridState.ts`                                 |
+| Group state                               | `GridState.grouping` via `StateManager`                      | `src/state/GridState.ts`                                 |
+| Pagination state                          | `GridState.pagination` via `StateManager`                    | `src/state/GridState.ts`                                 |
+| Domain versions (invalidation)            | `GridEngine`                                                 | `src/engine/GridEngine.ts`                               |
+| Renderer port binding                     | `GridStore` (`bindRuntimePorts`)                             | `src/store.ts`                                           |
+| Feature state (plugins)                   | `GridPluginRegistry`                                         | `src/plugins/GridPluginRegistry.ts`                      |
+| Grid events                               | `EventBus`                                                   | `src/events/EventBus.ts`                                 |
+| Diagnostics / metrics                     | `GridInstrumentation`                                        | `src/diagnostics/GridInstrumentation.ts`                 |
+| Undo / redo                               | `CommandHistory`                                             | `src/commands/CommandHistory.ts`                         |
+| Persistence                               | `statePersistence` helpers                                   | `src/persistence/statePersistence.ts`                    |
 
 ---
 
@@ -286,45 +286,45 @@ Rules:
 
 Every major production class below has exactly one declared role. A future class that blurs two roles or duplicates an existing owner violates this constitution.
 
-| Class                           | Role                                                                   | Module                                          |
-| ------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------- |
-| `GridStore`                     | Store / Façade — wires API to engine, owns port binding                | `src/store.ts`                                  |
-| `GridEngine`                    | Engine — feature orchestration, domain versions, invalidation dispatch | `src/engine/GridEngine.ts`                      |
-| `GridStateReactionController`   | Engine — reacts to state changes, drives model updates                 | `src/engine/GridStateReactionController.ts`     |
-| `GridChangeApplier`             | Engine — applies mutation payloads to state                            | `src/engine/GridChangeApplier.ts`               |
-| `CellNotificationController`    | Engine — cell-level subscription delivery                              | `src/engine/CellNotificationController.ts`      |
-| `StateManager`                  | State — transactional state writes and listener dispatch               | `src/state/StateManager.ts`                     |
-| `DataModel`                     | Domain model — RowNode tree storage and value cache                    | `src/models/DataModel.ts`                       |
-| `ColumnModel`                   | Domain model — column definition state and render plan                 | `src/models/ColumnModel.ts`                     |
-| `GeometryModel`                 | Domain model — row/col pixel geometry                                  | `src/models/GeometryModel.ts`                   |
-| `SelectionModel`                | Domain model — cell selection and keyboard focus                       | `src/models/SelectionModel.ts`                  |
-| `EditModel`                     | Domain model — active cell edit state                                  | `src/models/EditModel.ts`                       |
-| `ViewportModel`                 | Domain model — visible row/col range                                   | `src/models/ViewportModel.ts`                   |
-| `RowPipeline`                   | Row processing — client-side transform pipeline                        | `src/rows/RowPipeline.ts`                       |
-| `ClientRowModelController`      | Row processing — client row model lifecycle                            | `src/rowModel.ts`                               |
-| `ServerRowModelController`      | Row processing — server row model / block cache                        | `src/serverRowModel.ts`                         |
-| `EditingFeatureController`      | Feature — edit entry/commit/cancel                                     | `src/features/EditingFeatureController.ts`      |
-| `RowSelectionFeatureController` | Feature — selection gestures                                           | `src/features/RowSelectionFeatureController.ts` |
-| `ColumnFeatureController`       | Feature — column operations (resize, reorder, pin)                     | `src/features/ColumnFeatureController.ts`       |
-| `DataMutationController`        | Feature — batch cell/row value writes                                  | `src/features/DataMutationController.ts`        |
-| `ValidationManager`             | Feature — validation error lifecycle                                   | `src/features/ValidationManager.ts`             |
-| `GroupingFeatureController`     | Feature — group/expand/collapse                                        | `src/features/GroupingFeatureController.ts`     |
-| `ClipboardController`           | Feature — copy/paste                                                   | `src/features/ClipboardController.ts`           |
-| `RowDragController`             | Feature — row drag/drop                                                | `src/features/RowDragController.ts`             |
-| `DefaultFrameCoordinator`       | Frame coordination — schedules rAF paint frames                        | `src/renderer/frameCoordinator.ts`              |
-| `GridScheduler`                 | Frame coordination — idle/deferred task queue                          | `src/renderer/gridScheduler.ts`                 |
-| `RenderEngine`                  | Physical renderer — owns all sub-renderers and paint entry             | `src/renderer/renderEngine.ts`                  |
-| `ViewportRenderer`              | Physical renderer — DOM structure (layers, scroll viewport)            | `src/renderer/viewportRenderer.ts`              |
-| `RowRenderer`                   | Physical renderer — row slot lifecycle and cell recycling              | `src/renderer/rowRenderer.ts`                   |
-| `CellRenderer`                  | Physical renderer — cell DOM writes (text, class, position)            | `src/renderer/cellRenderer.ts`                  |
-| `PortalMountManager`            | Physical renderer — deferred portal mount/unmount queue                | `src/renderer/portalMountManager.ts`            |
-| `CustomRendererManager`         | Physical renderer — warm cache for custom cell renderers               | `src/renderer/customRendererManager.ts`         |
-| `HeaderRenderer`                | Physical renderer — header cell layout                                 | `src/renderer/headerRenderer.ts`                |
-| `LayoutTransitionController`    | Physical renderer — WAAPI row transition animations                    | `src/renderer/layoutTransitionController.ts`    |
-| `EventBus`                      | Diagnostics / events — pub-sub for GridEvents                          | `src/events/EventBus.ts`                        |
-| `RuntimeFaultReporter`          | Diagnostics — fault collection and reporting                           | `src/diagnostics/RuntimeFaultReporter.ts`       |
-| `CommandHistory`                | Undo/redo — command stack                                              | `src/commands/CommandHistory.ts`                |
-| `GridPluginRegistry`            | Plugin system — plugin registration and lifecycle                      | `src/plugins/GridPluginRegistry.ts`             |
+| Class                           | Role                                                                           | Module                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `GridStore`                     | Store / Façade — wires API to engine, owns port binding                        | `src/store.ts`                                           |
+| `GridEngine`                    | Engine — feature orchestration, domain versions, invalidation dispatch         | `src/engine/GridEngine.ts`                               |
+| `GridStateReactionController`   | Engine — reacts to state changes, drives model updates                         | `src/engine/GridStateReactionController.ts`              |
+| `GridChangeApplier`             | Engine — applies mutation payloads to state                                    | `src/engine/GridChangeApplier.ts`                        |
+| `CellNotificationController`    | Engine — cell-level subscription delivery                                      | `src/engine/CellNotificationController.ts`               |
+| `StateManager`                  | State — transactional state writes and listener dispatch                       | `src/state/StateManager.ts`                              |
+| `DataModel`                     | Domain model — RowNode tree storage and value cache                            | `src/models/DataModel.ts`                                |
+| `ColumnModel`                   | Domain model — column definition state and render plan                         | `src/models/ColumnModel.ts`                              |
+| `GeometryModel`                 | Domain model — row/col pixel geometry                                          | `src/models/GeometryModel.ts`                            |
+| `SelectionModel`                | Domain model — cell selection and keyboard focus                               | `src/models/SelectionModel.ts`                           |
+| `EditModel`                     | Domain model — active cell edit state                                          | `src/models/EditModel.ts`                                |
+| `ViewportModel`                 | Domain model — visible row/col range                                           | `src/models/ViewportModel.ts`                            |
+| `RowPipeline`                   | Row processing — client-side transform pipeline                                | `src/rows/RowPipeline.ts`                                |
+| `ClientRowModelController`      | Row processing — client row model lifecycle                                    | `src/rowModel.ts`                                        |
+| `ServerRowModelController`      | Row processing — server row model / block cache                                | `src/serverRowModel.ts`                                  |
+| `EditingFeatureController`      | Feature — edit entry/commit/cancel                                             | `src/features/EditingFeatureController.ts`               |
+| `RowSelectionFeatureController` | Feature — selection gestures                                                   | `src/features/RowSelectionFeatureController.ts`          |
+| `ColumnFeatureController`       | Feature — column operations (resize, reorder, pin)                             | `src/features/ColumnFeatureController.ts`                |
+| `DataMutationController`        | Feature — batch cell/row value writes                                          | `src/features/DataMutationController.ts`                 |
+| `GridDataIntegrityManager`      | Feature — integrity orchestration, validation ownership, and issue publication | `src/features/dataIntegrity/GridDataIntegrityManager.ts` |
+| `GroupingFeatureController`     | Feature — group/expand/collapse                                                | `src/features/GroupingFeatureController.ts`              |
+| `ClipboardController`           | Feature — copy/paste                                                           | `src/features/ClipboardController.ts`                    |
+| `RowDragController`             | Feature — row drag/drop                                                        | `src/features/RowDragController.ts`                      |
+| `DefaultFrameCoordinator`       | Frame coordination — schedules rAF paint frames                                | `src/renderer/frameCoordinator.ts`                       |
+| `GridScheduler`                 | Frame coordination — idle/deferred task queue                                  | `src/renderer/gridScheduler.ts`                          |
+| `RenderEngine`                  | Physical renderer — owns all sub-renderers and paint entry                     | `src/renderer/renderEngine.ts`                           |
+| `ViewportRenderer`              | Physical renderer — DOM structure (layers, scroll viewport)                    | `src/renderer/viewportRenderer.ts`                       |
+| `RowRenderer`                   | Physical renderer — row slot lifecycle and cell recycling                      | `src/renderer/rowRenderer.ts`                            |
+| `CellRenderer`                  | Physical renderer — cell DOM writes (text, class, position)                    | `src/renderer/cellRenderer.ts`                           |
+| `PortalMountManager`            | Physical renderer — deferred portal mount/unmount queue                        | `src/renderer/portalMountManager.ts`                     |
+| `CustomRendererManager`         | Physical renderer — warm cache for custom cell renderers                       | `src/renderer/customRendererManager.ts`                  |
+| `HeaderRenderer`                | Physical renderer — header cell layout                                         | `src/renderer/headerRenderer.ts`                         |
+| `LayoutTransitionController`    | Physical renderer — WAAPI row transition animations                            | `src/renderer/layoutTransitionController.ts`             |
+| `EventBus`                      | Diagnostics / events — pub-sub for GridEvents                                  | `src/events/EventBus.ts`                                 |
+| `RuntimeFaultReporter`          | Diagnostics — fault collection and reporting                                   | `src/diagnostics/RuntimeFaultReporter.ts`                |
+| `CommandHistory`                | Undo/redo — command stack                                                      | `src/commands/CommandHistory.ts`                         |
+| `GridPluginRegistry`            | Plugin system — plugin registration and lifecycle                              | `src/plugins/GridPluginRegistry.ts`                      |
 
 ---
 

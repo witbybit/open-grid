@@ -125,6 +125,52 @@ describe('Row model capabilities', () => {
 		}
 		api.destroy();
 	});
+
+	it('client integrity capabilities are authoritative for dataset-backed scopes', () => {
+		const api = createClientGrid({
+			rows: [{ id: '1', name: 'Alpha', amount: 1 }],
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			dataIntegrity: { validation: true },
+		});
+
+		expect(api.integrity.getScopeCapability('allRows')).toMatchObject({ level: 'authoritative', complete: true });
+		expect(api.integrity.getScopeCapability('filteredRows')).toMatchObject({ level: 'authoritative', complete: true });
+		expect(api.integrity.getScopeCapability('visibleRows')).toMatchObject({ level: 'partial', complete: false });
+
+		api.destroy();
+	});
+
+	it('infinite integrity capabilities reject dishonest full-dataset scopes', () => {
+		const api = createInfiniteGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) },
+			dataIntegrity: { validation: true },
+		});
+
+		expect(api.integrity.getScopeCapability('allRows')).toMatchObject({ level: 'unsupported' });
+		expect(api.integrity.getScopeCapability('filteredRows')).toMatchObject({ level: 'unsupported' });
+		expect(api.integrity.getScopeCapability('loadedRows')).toMatchObject({ level: 'partial', complete: false });
+
+		api.destroy();
+	});
+
+	it('server-page integrity capabilities make currentPage explicit and partial', () => {
+		const api = createServerPageGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getPage: vi.fn().mockResolvedValue({ rows: [], totalRowCount: 0 }) },
+			pagination: { pageSize: 10 },
+			dataIntegrity: { validation: true },
+		});
+
+		expect(api.integrity.getScopeCapability('currentPage')).toMatchObject({ level: 'partial', complete: false });
+		expect(api.integrity.getScopeCapability('allRows')).toMatchObject({ level: 'unsupported' });
+		expect(api.integrity.getScopeCapability('filteredRows')).toMatchObject({ level: 'unsupported' });
+
+		api.destroy();
+	});
 });
 
 // ── Unsupported operation errors ──────────────────────────────────────────────

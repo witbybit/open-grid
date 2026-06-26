@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { GridStore, GridEventName, validateColumns, validateRowIds } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { InfiniteRowModelController, type InfiniteDatasource } from './infiniteRowModel.js';
+import { ServerPageRowModelController } from './serverPageRowModel.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 import type { ActiveEditState, ColumnDef } from './api/GridApi.js';
 
@@ -2081,6 +2082,83 @@ describe('GridStore undo and redo functionality', () => {
 				}),
 			})
 		);
+	});
+
+	it('integrity rejects unsupported allRows scans on infinite grids without pretending completeness', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [{ field: 'name', header: 'Name', width: 100 }],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: true,
+				},
+			}
+		);
+		const controller = new InfiniteRowModelController<TestRow>(store.getInfiniteRowModelRuntime(), {
+			columns: store.getState().columns,
+			getRowId: (row) => row.id,
+			datasource: {
+				getRows: async () => ({
+					rows: [{ id: '1', name: 'Alpha', price: 10 }],
+					totalCount: 1,
+				}),
+			},
+			blockSize: 25,
+		});
+
+		const result = await store.integrity.run({ scope: 'allRows' });
+
+		expect(result).toMatchObject({
+			status: 'unsupported',
+			scope: 'allRows',
+			reason: 'Infinite row model cannot authoritatively scan allRows without a serverProvided report.',
+		});
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('integrity reports currentPage as an explicit partial server-page scope', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [{ field: 'name', header: 'Name', width: 100 }],
+				getRowId: (row) => row.id,
+				pagination: { pageSize: 10 },
+			},
+			{
+				dataIntegrity: {
+					validation: true,
+				},
+			}
+		);
+		const controller = new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+			columns: store.getState().columns,
+			getRowId: (row) => row.id,
+			pagination: { pageSize: 10 },
+			datasource: {
+				getPage: async () => ({
+					rows: [{ id: '1', name: 'Alpha', price: 10 }],
+					totalRowCount: 1,
+				}),
+			},
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const result = await store.integrity.run({ scope: 'currentPage' });
+
+		expect(result).toMatchObject({
+			status: 'completed',
+			scope: 'currentPage',
+			complete: false,
+			capability: {
+				level: 'partial',
+			},
+		});
+
+		controller.dispose();
+		store.destroy();
 	});
 
 	it('avoids redundant state updates and geometry version increments on setRowHeights and setDefaultRowHeight', () => {

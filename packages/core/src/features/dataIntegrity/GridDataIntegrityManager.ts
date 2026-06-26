@@ -208,6 +208,8 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 	buildApi(): GridIntegrityApi<TRowData> {
 		return {
 			run: (options) => this.run(options),
+			getCapabilities: () => this.getCapabilities(),
+			getScopeCapability: (scope) => this.getScopeCapability(scope),
 			getSummary: () => this.getSummary(),
 			getIssues: (filter) => this.getIssues(filter),
 			getCellIssues: (rowId, colField) => this.getCellIssues(rowId, colField),
@@ -240,6 +242,16 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 		const moduleIds = options?.modules ?? 'enabled';
 
 		const rowsResult = this.deps.rowProvider.getRowsForIntegrityScope(scope);
+		if (rowsResult.status === 'unsupported') {
+			return {
+				status: 'unsupported',
+				scope,
+				capability: rowsResult.capability,
+				reason: rowsResult.reason,
+				summary: this.getSummary(),
+				issues: this._collectAllIssues(),
+			};
+		}
 		const rows = rowsResult.status === 'ok' ? rowsResult.rows : [];
 		const complete = rowsResult.status === 'ok' ? rowsResult.complete : false;
 		const state = this.deps.ctx.getState();
@@ -287,7 +299,23 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 
 		this.deps.requestIntegrityRepaint({ reason: 'run-complete', full: true });
 
-		return { summary: this.getSummary(), issues: this._collectAllIssues() };
+		return {
+			status: 'completed',
+			scope,
+			capability: rowsResult.capability,
+			complete,
+			message: rowsResult.message,
+			summary: this.getSummary(),
+			issues: this._collectAllIssues(),
+		};
+	}
+
+	getCapabilities() {
+		return this.deps.rowProvider.getCapabilities();
+	}
+
+	getScopeCapability(scope: GridIntegrityScope) {
+		return this.deps.rowProvider.getScopeCapability(scope);
 	}
 
 	// ── Issue registry ─────────────────────────────────────────────────────────

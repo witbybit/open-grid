@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { GridStore } from '../../store.js';
 import { ClientRowModelController } from '../../rowModel.js';
 import { GridDataIntegrityManager } from './GridDataIntegrityManager.js';
-import { ClientGridIntegrityRowProvider } from './GridIntegrityRowProvider.js';
+import { createGridIntegrityRowProvider } from './GridIntegrityRowProvider.js';
 import { defaultGridScheduler } from '../../renderer/gridScheduler.js';
 import type { GridDataIntegrityConfig, GridApi } from './integrityTypes.js';
+import { InfiniteRowModelController } from '../../infiniteRowModel.js';
+import { ServerPageRowModelController } from '../../serverPageRowModel.js';
 
 interface TestRow {
 	id: string;
@@ -52,13 +54,22 @@ function recreateManager(store: GridStore<TestRow>): GridDataIntegrityManager<Te
 		getRowModel: () => engine.getRowModel(),
 		getApi: () => store as unknown as GridApi<TestRow>,
 		scheduler: defaultGridScheduler,
-		rowProvider: new ClientGridIntegrityRowProvider<TestRow>(
-			() => engine.getRowModel(),
-			() => engine.getState()
-		),
+		rowProvider: createGridIntegrityRowProvider<TestRow>({
+			getRowModel: () => engine.getRowModel(),
+			getState: () => engine.getState(),
+			rowModelKind: 'client',
+		}),
 		capabilityManager: engine.capabilityManager,
 		commitCells: (updates) => engine.batchCellValues(updates as { rowId: string; colField: string; value: unknown }[], 'api'),
-		applyRowPatch: (rowId, patch) => store.updateRows((rows) => rows.map((row) => (row.id === rowId ? ({ ...row, ...patch } as TestRow) : row))),
+		applyRowPatch: (rowId, patch) => {
+			if (!store.getRowNodeById(rowId)?.data) {
+				return {
+					status: 'rejected',
+					reason: 'row unavailable in current row-model scope',
+				} as const;
+			}
+			return store.updateRows((rows) => rows.map((row) => (row.id === rowId ? ({ ...row, ...patch } as TestRow) : row)));
+		},
 		requestIntegrityRepaint: () => {},
 	});
 }
@@ -219,12 +230,101 @@ describe('GridDataIntegrityManager authoritative state', () => {
 
 		stream.pushRows([{ rowId: 'missing', patch: { name: 'Ghost' } }]);
 		stream.flush();
-		expect(manager.getStreamState()?.lastError).toBeNull();
+		expect(manager.getStreamState()?.lastError).toBe('row unavailable in current row-model scope');
 
 		stream.pushRows([{ rowId: '2', patch: { name: 'Patched via stream' } }]);
 		stream.flush();
 
 		expect(store.getRowNodeById('2')?.data.name).toBe('Patched via stream');
 		expect(manager.getStreamState()?.lastError).toBeNull();
+	});
+
+	it('surfaces an explicit integrity capability matrix for client row models', () => {
+		const store = createStore();
+
+		expect(store.integrity.getScopeCapability('allRows')).toMatchObject({
+			scope: 'allRows',
+			level: 'authoritative',
+			complete: true,
+		});
+		expect(store.integrity.getScopeCapability('visibleRows')).toMatchObject({
+			scope: 'visibleRows',
+			level: 'partial',
+			complete: false,
+		});
+		expect(store.integrity.getScopeCapability('serverProvided')).toMatchObject({
+			scope: 'serverProvided',
+			level: 'unsupported',
+		});
+	});
+
+	it('rejects unsupported allRows integrity scans on infinite row models up front', async () => {
+		const store = new GridStore<TestRow>({ getRowId: (row) => row.id, columns: [...COLUMNS] }, { dataIntegrity: { validation: true } });
+		new InfiniteRowModelController<TestRow>(store.getInfiniteRowModelRuntime(), {
+			columns: store.getState().columns,
+			getRowId: (row) => row.id,
+			datasource: {
+				getRows: async () => ({
+					rows: [
+						{ id: '1', name: 'Alpha', score: 1 },
+						{ id: '2', name: 'Beta', score: 2 },
+					],
+					totalCount: 2,
+				}),
+			},
+			blockSize: 50,
+		});
+
+		const result = await store.integrity.run({ scope: 'allRows' });
+		expect(result).toMatchObject({
+			status: 'unsupported',
+			scope: 'allRows',
+			reason: 'Infinite row model cannot authoritatively scan allRows without a serverProvided report.',
+		});
+		expect(store.integrity.getScopeCapability('loadedRows')).toMatchObject({
+			level: 'partial',
+			complete: false,
+		});
+
+		store.destroy();
+	});
+
+	it('reports partial but explicit currentPage semantics on server-page row models', async () => {
+		const store = new GridStore<TestRow>(
+			{ getRowId: (row) => row.id, columns: [...COLUMNS], pagination: { pageSize: 25 } },
+			{ dataIntegrity: { validation: true } }
+		);
+		new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+			columns: store.getState().columns,
+			getRowId: (row) => row.id,
+			pagination: { pageSize: 25 },
+			datasource: {
+				getPage: async () => ({
+					rows: [
+						{ id: '1', name: 'Alpha', score: 1 },
+						{ id: '2', name: 'Beta', score: 2 },
+					],
+					totalRowCount: 2,
+				}),
+			},
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const result = await store.integrity.run({ scope: 'currentPage' });
+
+		expect(result).toMatchObject({
+			status: 'completed',
+			scope: 'currentPage',
+			complete: false,
+			capability: {
+				level: 'partial',
+				scope: 'currentPage',
+			},
+		});
+		expect(store.integrity.getScopeCapability('filteredRows')).toMatchObject({
+			level: 'unsupported',
+		});
+
+		store.destroy();
 	});
 });

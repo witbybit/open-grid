@@ -57,11 +57,7 @@ import { GridCapabilityManager } from '../capabilities/GridCapabilityManager.js'
 import type { GridCapabilityAction, GridCapabilitiesConfig, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { GridInsightRegistry } from '../insights/GridInsightRegistry.js';
 import { GridDataIntegrityManager } from '../features/dataIntegrity/GridDataIntegrityManager.js';
-import {
-	ClientGridIntegrityRowProvider,
-	InfiniteGridIntegrityRowProvider,
-	ServerPageGridIntegrityRowProvider,
-} from '../features/dataIntegrity/GridIntegrityRowProvider.js';
+import { createGridIntegrityRowProvider, type GridIntegrityRowModelKind } from '../features/dataIntegrity/GridIntegrityRowProvider.js';
 import { defaultGridScheduler } from '../renderer/gridScheduler.js';
 import type { GridMutationRejection } from './GridDomainMutation.js';
 import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
@@ -473,22 +469,12 @@ export class GridEngine<TRowData = unknown> {
 				getState: () => this.stateManager.getState(),
 				applyChange: (change: import('./GridChangeApplier.js').GridCommit<TRowData>) => this.changeApplier.commit(change),
 			};
-			const modelType = (config.rowModelConfig as { type?: string } | undefined)?.type ?? 'client';
-			const rowProvider =
-				modelType === 'infinite'
-					? new InfiniteGridIntegrityRowProvider<TRowData>(
-							() => this.rowModel,
-							() => this.stateManager.getState()
-						)
-					: modelType === 'server'
-						? new ServerPageGridIntegrityRowProvider<TRowData>(
-								() => this.rowModel,
-								() => this.stateManager.getState()
-							)
-						: new ClientGridIntegrityRowProvider<TRowData>(
-								() => this.rowModel,
-								() => this.stateManager.getState()
-							);
+			const modelType = ((config.rowModelConfig as { type?: string } | undefined)?.type ?? 'client') as GridIntegrityRowModelKind;
+			const rowProvider = createGridIntegrityRowProvider<TRowData>({
+				getRowModel: () => this.rowModel,
+				getState: () => this.stateManager.getState(),
+				rowModelKind: modelType,
+			});
 
 			this.dataIntegrity = new GridDataIntegrityManager<TRowData>(config.dataIntegrity, {
 				ctx: diFeatureCtx,
@@ -501,7 +487,12 @@ export class GridEngine<TRowData = unknown> {
 				commitCells: (updates) => this.batchCellValues(updates as import('../api/GridApi.js').BatchCellValueUpdate[], 'api'),
 				applyRowPatch: (rowId, patch) => {
 					const row = this.rowModel?.getRawRowById(rowId);
-					if (!row) return { status: 'noop' } as const;
+					if (!row) {
+						return {
+							status: 'rejected',
+							reason: 'row unavailable in current row-model scope',
+						} as const;
+					}
 					const updated = { ...row, ...patch };
 					return this.toGridWriteResult(
 						this.changeApplier.commit({

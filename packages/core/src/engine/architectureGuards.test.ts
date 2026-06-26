@@ -2542,4 +2542,50 @@ describe('Architecture guardrails', () => {
 			expect(surfacesContent).not.toContain('GridStore<');
 		});
 	});
+
+	describe('Plan 140 - capability-driven integrity row model contract', () => {
+		it('integrity types expose an explicit capability matrix and unsupported run result', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'integrityTypes.ts'), 'utf-8');
+			expect(content).toContain("export type GridIntegrityCapabilityLevel = 'authoritative' | 'partial' | 'unsupported'");
+			expect(content).toContain('export type GridIntegrityCapabilityMatrix = Record<GridIntegrityScope, GridIntegrityScopeCapability>;');
+			expect(content).toContain("readonly status: 'unsupported';");
+			expect(content).toContain('getCapabilities(): GridIntegrityCapabilityMatrix;');
+			expect(content).toContain('getScopeCapability(scope: GridIntegrityScope): GridIntegrityScopeCapability;');
+		});
+
+		it('GridIntegrityRowProvider is unified behind a capability-driven factory instead of per-row-model classes', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridIntegrityRowProvider.ts'), 'utf-8');
+			expect(content).toContain('export function createGridIntegrityRowProvider');
+			expect(content).toContain('export class CapabilityDrivenGridIntegrityRowProvider');
+			expect(content).not.toContain('ClientGridIntegrityRowProvider');
+			expect(content).not.toContain('InfiniteGridIntegrityRowProvider');
+			expect(content).not.toContain('ServerPageGridIntegrityRowProvider');
+		});
+
+		it('non-client filteredRows and full-dataset scopes are explicitly unsupported instead of silently degraded', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridIntegrityRowProvider.ts'), 'utf-8');
+			expect(content).toContain('Infinite row model cannot authoritatively scan allRows without a serverProvided report.');
+			expect(content).toContain('Infinite row model cannot authoritatively expose filteredRows beyond currently loaded blocks.');
+			expect(content).toContain('Server-page row model cannot authoritatively scan allRows without a serverProvided report.');
+			expect(content).toContain('Server-page row model cannot authoritatively expose filteredRows outside the current page.');
+		});
+
+		it('GridEngine wires integrity through the unified provider factory and rejects row patches for unavailable rows', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			expect(content).toContain('createGridIntegrityRowProvider');
+			expect(content).toContain('rowModelKind: modelType');
+			expect(content).toContain("reason: 'row unavailable in current row-model scope'");
+			expect(content).not.toContain('new ClientGridIntegrityRowProvider');
+			expect(content).not.toContain('new InfiniteGridIntegrityRowProvider');
+			expect(content).not.toContain('new ServerPageGridIntegrityRowProvider');
+		});
+	});
+
+	describe('Architecture document stays aligned with integrity ownership', () => {
+		it('core-target architecture doc references GridDataIntegrityManager instead of the removed ValidationManager owner', () => {
+			const content = readFileSync(resolve(CORE_ROOT, '..', '..', 'docs', 'architecture', 'core-target.md'), 'utf-8');
+			expect(content).toContain('GridDataIntegrityManager');
+			expect(content).not.toContain('ValidationManager');
+		});
+	});
 });

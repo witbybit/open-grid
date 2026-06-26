@@ -65,6 +65,27 @@ export interface GridIntegrityIssueFilter {
 
 export type GridIntegrityScope = 'allRows' | 'loadedRows' | 'filteredRows' | 'selectedRows' | 'visibleRows' | 'currentPage' | 'serverProvided';
 
+export type GridIntegrityCapabilityLevel = 'authoritative' | 'partial' | 'unsupported';
+
+export interface GridIntegrityScopeCapability {
+	readonly scope: GridIntegrityScope;
+	readonly level: GridIntegrityCapabilityLevel;
+	readonly complete: boolean;
+	readonly source:
+		| 'allDataNodes'
+		| 'filteredDataNodes'
+		| 'currentPageDataNodes'
+		| 'visualRows'
+		| 'selectedRows'
+		| 'loadedRows'
+		| 'serverProvided'
+		| 'none';
+	readonly reason?: string;
+	readonly message?: string;
+}
+
+export type GridIntegrityCapabilityMatrix = Record<GridIntegrityScope, GridIntegrityScopeCapability>;
+
 export interface GridIntegrityRowRef<TRowData> {
 	readonly rowId: string;
 	readonly row: TRowData;
@@ -76,6 +97,7 @@ export type GridIntegrityRowsResult<TRowData> =
 	| {
 			readonly status: 'ok';
 			readonly scope: GridIntegrityScope;
+			readonly capability: GridIntegrityScopeCapability;
 			readonly rows: readonly GridIntegrityRowRef<TRowData>[];
 			readonly complete: boolean;
 			readonly message?: string;
@@ -83,10 +105,13 @@ export type GridIntegrityRowsResult<TRowData> =
 	| {
 			readonly status: 'unsupported';
 			readonly scope: GridIntegrityScope;
+			readonly capability: GridIntegrityScopeCapability;
 			readonly reason: string;
 	  };
 
 export interface GridIntegrityRowProvider<TRowData> {
+	getCapabilities(): GridIntegrityCapabilityMatrix;
+	getScopeCapability(scope: GridIntegrityScope): GridIntegrityScopeCapability;
 	getRowsForIntegrityScope(scope: GridIntegrityScope): GridIntegrityRowsResult<TRowData>;
 }
 
@@ -97,10 +122,24 @@ export interface GridIntegrityRunOptions {
 	readonly scope?: GridIntegrityScope;
 }
 
-export interface GridIntegrityRunResult {
-	readonly summary: GridIntegritySummary;
-	readonly issues: readonly GridIntegrityIssue[];
-}
+export type GridIntegrityRunResult =
+	| {
+			readonly status: 'completed';
+			readonly scope: GridIntegrityScope;
+			readonly capability: GridIntegrityScopeCapability;
+			readonly complete: boolean;
+			readonly summary: GridIntegritySummary;
+			readonly issues: readonly GridIntegrityIssue[];
+			readonly message?: string;
+	  }
+	| {
+			readonly status: 'unsupported';
+			readonly scope: GridIntegrityScope;
+			readonly capability: GridIntegrityScopeCapability;
+			readonly reason: string;
+			readonly summary: GridIntegritySummary;
+			readonly issues: readonly GridIntegrityIssue[];
+	  };
 
 export interface GridIntegrityRunContext<TRowData> {
 	readonly scope: GridIntegrityScope;
@@ -235,6 +274,8 @@ export interface GridDataIntegrityConfig<TRowData> {
 
 export interface GridIntegrityApi<TRowData> {
 	run(options?: GridIntegrityRunOptions): Promise<GridIntegrityRunResult>;
+	getCapabilities(): GridIntegrityCapabilityMatrix;
+	getScopeCapability(scope: GridIntegrityScope): GridIntegrityScopeCapability;
 	getSummary(): GridIntegritySummary;
 	getIssues(filter?: GridIntegrityIssueFilter): readonly GridIntegrityIssue[];
 	getCellIssues(rowId: string, colField: string): readonly GridIntegrityIssue[];

@@ -1,164 +1,151 @@
 import type { RowModel } from '../../rowModel.js';
 import type { InternalGridState } from '../../state/GridState.js';
-import type { GridIntegrityRowRef, GridIntegrityRowProvider, GridIntegrityRowsResult, GridIntegrityScope } from './integrityTypes.js';
+import type {
+	GridIntegrityCapabilityMatrix,
+	GridIntegrityRowRef,
+	GridIntegrityRowProvider,
+	GridIntegrityRowsResult,
+	GridIntegrityScope,
+	GridIntegrityScopeCapability,
+} from './integrityTypes.js';
 
-/**
- * Row-model-aware row access for Data Integrity modules.
- * Never falls back to visible rows as default — requires explicit scope.
- */
-export class ClientGridIntegrityRowProvider<TRowData> implements GridIntegrityRowProvider<TRowData> {
-	constructor(
-		private readonly getRowModel: () => RowModel<TRowData> | null,
-		private readonly getState: () => InternalGridState<TRowData>
-	) {}
+export type GridIntegrityRowModelKind = 'client' | 'infinite' | 'server';
 
-	getRowsForIntegrityScope(scope: GridIntegrityScope): GridIntegrityRowsResult<TRowData> {
-		const rowModel = this.getRowModel();
-		const state = this.getState();
+export interface GridIntegrityRowProviderOptions<TRowData> {
+	getRowModel: () => RowModel<TRowData> | null;
+	getState: () => InternalGridState<TRowData>;
+	rowModelKind: GridIntegrityRowModelKind;
+}
+
+export function createGridIntegrityRowProvider<TRowData>(options: GridIntegrityRowProviderOptions<TRowData>): GridIntegrityRowProvider<TRowData> {
+	return new CapabilityDrivenGridIntegrityRowProvider(options);
+}
+
+export class CapabilityDrivenGridIntegrityRowProvider<TRowData> implements GridIntegrityRowProvider<TRowData> {
+	constructor(private readonly options: GridIntegrityRowProviderOptions<TRowData>) {}
+
+	public getCapabilities(): GridIntegrityCapabilityMatrix {
+		return createCapabilityMatrix(this.getEffectiveKind(this.options.getRowModel()));
+	}
+
+	public getScopeCapability(scope: GridIntegrityScope): GridIntegrityScopeCapability {
+		return this.getCapabilities()[scope];
+	}
+
+	public getRowsForIntegrityScope(scope: GridIntegrityScope): GridIntegrityRowsResult<TRowData> {
+		const capability = this.getScopeCapability(scope);
+		const rowModel = this.options.getRowModel();
+		const state = this.options.getState();
 
 		if (!rowModel) {
 			return {
 				status: 'unsupported',
 				scope,
+				capability: {
+					...capability,
+					reason: 'Row model not yet available',
+				},
 				reason: 'Row model not yet available',
+			};
+		}
+
+		if (capability.level === 'unsupported') {
+			return {
+				status: 'unsupported',
+				scope,
+				capability,
+				reason: capability.reason ?? `Integrity scope '${scope}' is unsupported for this row model.`,
 			};
 		}
 
 		switch (scope) {
 			case 'allRows':
+				return this.scanAllRows(rowModel, capability);
 			case 'loadedRows':
-				return this._scanAllDataNodes(scope, rowModel, state);
-
+				return this.options.rowModelKind === 'client'
+					? this.scanAllRows(rowModel, capability)
+					: this.scanVisualRows(rowModel, scope, capability, sourceForLoaded(this.options.rowModelKind));
 			case 'filteredRows':
-				return this._scanFilteredNodes(rowModel, state);
-
+				return this.scanFilteredRows(rowModel, capability);
 			case 'selectedRows':
-				return this._scanSelectedRows(rowModel, state);
-
+				return this.scanSelectedRows(rowModel, state, capability);
 			case 'visibleRows':
-				return this._scanVisibleRows(rowModel);
-
+				return this.scanVisualRows(rowModel, scope, capability, 'visible');
 			case 'currentPage':
-				return this._scanCurrentPageNodes(rowModel, state);
-
+				return this.scanCurrentPageRows(rowModel, capability);
 			case 'serverProvided':
 				return {
 					status: 'unsupported',
 					scope,
-					reason: 'serverProvided scope must be published via api.integrity.publishServerReport()',
-				};
-
-			default:
-				return {
-					status: 'unsupported',
-					scope,
-					reason: `Unknown scope: ${scope as string}`,
+					capability,
+					reason: capability.reason ?? 'serverProvided scope must be supplied through publishServerReport().',
 				};
 		}
 	}
 
-	private _scanAllDataNodes(
-		scope: GridIntegrityScope,
-		rowModel: RowModel<TRowData>,
-		state: InternalGridState<TRowData>
-	): GridIntegrityRowsResult<TRowData> {
-		// Use getAllDataNodes() when available — this is the full client dataset,
-		// NOT getVisualRowCount()/getVisualRow() which is viewport/visual projection.
-		const allDataCapable = _asAllDataNodeCapable(rowModel);
-		if (allDataCapable) {
-			const nodes = allDataCapable.getAllDataNodes();
+	private scanAllRows(rowModel: RowModel<TRowData>, capability: GridIntegrityScopeCapability): GridIntegrityRowsResult<TRowData> {
+		const allDataCapable = asAllDataNodeCapable(rowModel);
+		if (!allDataCapable) {
+			return unsupportedFromMissingCapability('allRows', capability, 'Row model does not implement getAllDataNodes().');
+		}
+		return okResult('allRows', capability, toRowRefs(allDataCapable.getAllDataNodes(), 'client'));
+	}
+
+	private scanFilteredRows(rowModel: RowModel<TRowData>, capability: GridIntegrityScopeCapability): GridIntegrityRowsResult<TRowData> {
+		const filteredCapable = asFilteredDataNodeCapable(rowModel);
+		if (!filteredCapable) {
+			return unsupportedFromMissingCapability('filteredRows', capability, 'Row model does not implement getFilteredDataNodes().');
+		}
+		return okResult('filteredRows', capability, toRowRefs(filteredCapable.getFilteredDataNodes(), 'client'));
+	}
+
+	private scanCurrentPageRows(rowModel: RowModel<TRowData>, capability: GridIntegrityScopeCapability): GridIntegrityRowsResult<TRowData> {
+		const currentPageCapable = asCurrentPageCapable(rowModel);
+		if (currentPageCapable) {
+			return okResult(
+				'currentPage',
+				capability,
+				toRowRefs(currentPageCapable.getCurrentPageDataNodes(), sourceForCurrentPage(this.getEffectiveKind(rowModel)))
+			);
+		}
+		if (this.getEffectiveKind(rowModel) === 'server') {
 			const refs: GridIntegrityRowRef<TRowData>[] = [];
-			for (const node of nodes) {
-				if (node.data == null) continue;
+			const count = rowModel.getVisualRowCount();
+			for (let i = 0; i < count; i++) {
+				const vr = rowModel.getVisualRow(i);
+				if (!vr || vr.kind !== 'data' || vr.node.data == null) continue;
 				refs.push({
-					rowId: node.id,
-					row: node.data as TRowData,
-					source: 'client',
+					rowId: vr.node.id,
+					row: vr.node.data as TRowData,
+					rowIndex: i,
+					source: sourceForCurrentPage('server'),
 				});
 			}
-			return { status: 'ok', scope, rows: refs, complete: true };
+			return okResult('currentPage', capability, refs);
 		}
-
-		return {
-			status: 'unsupported',
-			scope,
-			reason: `Row model does not implement getAllDataNodes() — cannot scan scope '${scope}' without visual-row fallback. Implement AllDataNodesCapableRowModel to support this scope.`,
-		};
-
-		void state; // used only to avoid lint warning
+		return unsupportedFromMissingCapability('currentPage', capability, 'Row model does not implement getCurrentPageDataNodes().');
 	}
 
-	private _scanSelectedRows(rowModel: RowModel<TRowData>, state: InternalGridState<TRowData>): GridIntegrityRowsResult<TRowData> {
-		const selectedIds = state.selectedRowIds ?? [];
+	private scanSelectedRows(
+		rowModel: RowModel<TRowData>,
+		state: InternalGridState<TRowData>,
+		capability: GridIntegrityScopeCapability
+	): GridIntegrityRowsResult<TRowData> {
 		const refs: GridIntegrityRowRef<TRowData>[] = [];
-		for (const rowId of selectedIds) {
+		for (const rowId of state.selectedRowIds ?? []) {
 			const node = rowModel.getRowNodeById?.(rowId) ?? null;
 			if (!node || node.data == null) continue;
 			refs.push({ rowId, row: node.data as TRowData, source: 'selected' });
 		}
-		return { status: 'ok', scope: 'selectedRows', rows: refs, complete: true };
+		return okResult('selectedRows', capability, refs);
 	}
 
-	private _scanFilteredNodes(rowModel: RowModel<TRowData>, state: InternalGridState<TRowData>): GridIntegrityRowsResult<TRowData> {
-		const filteredCapable = _asFilteredDataNodeCapable(rowModel);
-		if (filteredCapable) {
-			const nodes = filteredCapable.getFilteredDataNodes();
-			const refs: GridIntegrityRowRef<TRowData>[] = [];
-			for (const node of nodes) {
-				if (node.data == null) continue;
-				refs.push({ rowId: node.id, row: node.data as TRowData, source: 'client' });
-			}
-			return { status: 'ok', scope: 'filteredRows', rows: refs, complete: true };
-		}
-
-		// If no filter-aware API, fall back to all data nodes (conservative: better too many than too few)
-		const allDataCapable = _asAllDataNodeCapable(rowModel);
-		if (allDataCapable) {
-			const nodes = allDataCapable.getAllDataNodes();
-			const refs: GridIntegrityRowRef<TRowData>[] = [];
-			for (const node of nodes) {
-				if (node.data == null) continue;
-				refs.push({ rowId: node.id, row: node.data as TRowData, source: 'client' });
-			}
-			return {
-				status: 'ok',
-				scope: 'filteredRows',
-				rows: refs,
-				complete: false,
-				message: 'filteredRows fell back to allRows — row model does not implement getFilteredDataNodes()',
-			};
-		}
-
-		return {
-			status: 'unsupported',
-			scope: 'filteredRows',
-			reason: 'Row model does not implement getFilteredDataNodes() or getAllDataNodes()',
-		};
-
-		void state; // used only to avoid lint warning
-	}
-
-	private _scanCurrentPageNodes(rowModel: RowModel<TRowData>, state: InternalGridState<TRowData>): GridIntegrityRowsResult<TRowData> {
-		const pageCapable = _asCurrentPageCapable(rowModel);
-		if (pageCapable) {
-			const nodes = pageCapable.getCurrentPageDataNodes();
-			const refs: GridIntegrityRowRef<TRowData>[] = [];
-			for (const node of nodes) {
-				if (node.data == null) continue;
-				refs.push({ rowId: node.id, row: node.data as TRowData, source: 'client' });
-			}
-			return { status: 'ok', scope: 'currentPage', rows: refs, complete: true };
-		}
-		return {
-			status: 'unsupported',
-			scope: 'currentPage',
-			reason: 'Row model does not implement getCurrentPageDataNodes()',
-		};
-
-		void state; // used only to avoid lint warning
-	}
-
-	private _scanVisibleRows(rowModel: RowModel<TRowData>): GridIntegrityRowsResult<TRowData> {
+	private scanVisualRows(
+		rowModel: RowModel<TRowData>,
+		scope: 'loadedRows' | 'visibleRows',
+		capability: GridIntegrityScopeCapability,
+		source: GridIntegrityRowRef<TRowData>['source']
+	): GridIntegrityRowsResult<TRowData> {
 		const refs: GridIntegrityRowRef<TRowData>[] = [];
 		const count = rowModel.getVisualRowCount();
 		for (let i = 0; i < count; i++) {
@@ -168,212 +155,234 @@ export class ClientGridIntegrityRowProvider<TRowData> implements GridIntegrityRo
 				rowId: vr.node.id,
 				row: vr.node.data as TRowData,
 				rowIndex: i,
-				source: 'visible',
+				source,
 			});
 		}
-		return { status: 'ok', scope: 'visibleRows', rows: refs, complete: false };
+		return okResult(scope, capability, refs);
+	}
+
+	private getEffectiveKind(rowModel: RowModel<TRowData> | null): GridIntegrityRowModelKind {
+		if (rowModel) {
+			const capable = asCapabilityReadableRowModel(rowModel);
+			if (capable) {
+				const capabilities = capable.getCapabilities();
+				if (capabilities.serverPagination) return 'server';
+				if (capabilities.blockLoading) return 'infinite';
+				if (capabilities.fullDataset) return 'client';
+			}
+			if (asAllDataNodeCapable(rowModel) && asFilteredDataNodeCapable(rowModel)) return 'client';
+			if (asCurrentPageCapable(rowModel)) return 'server';
+			if (this.options.rowModelKind !== 'client') return this.options.rowModelKind;
+			return 'infinite';
+		}
+		return this.options.rowModelKind;
 	}
 }
 
-export class InfiniteGridIntegrityRowProvider<TRowData> implements GridIntegrityRowProvider<TRowData> {
-	constructor(
-		private readonly getRowModel: () => RowModel<TRowData> | null,
-		private readonly getState: () => InternalGridState<TRowData>
-	) {}
-
-	getRowsForIntegrityScope(scope: GridIntegrityScope): GridIntegrityRowsResult<TRowData> {
-		const rowModel = this.getRowModel();
-		const state = this.getState();
-
-		if (!rowModel) {
-			return { status: 'unsupported', scope, reason: 'Row model not yet available' };
-		}
-
-		switch (scope) {
-			case 'allRows':
-				return {
-					status: 'unsupported',
-					scope,
-					reason: 'allRows is not available for infinite row model unless all blocks are loaded or a serverProvided report is supplied. Use loadedRows for loaded blocks only.',
-				};
-
-			case 'loadedRows': {
-				const refs = this._scanLoadedBlocks(rowModel);
-				return { status: 'ok', scope, rows: refs, complete: false };
-			}
-
-			case 'filteredRows': {
-				const refs = this._scanLoadedBlocks(rowModel);
-				return {
-					status: 'ok',
-					scope,
-					rows: refs,
-					complete: false,
-					message: 'filteredRows returns only loaded blocks for infinite row model',
-				};
-			}
-
-			case 'selectedRows':
-				return this._scanSelectedRows(rowModel, state);
-
-			case 'visibleRows': {
-				const refs = this._scanVisibleRows(rowModel);
-				return { status: 'ok', scope, rows: refs, complete: false };
-			}
-
-			case 'currentPage':
-				return {
-					status: 'unsupported',
-					scope,
-					reason: 'currentPage is not applicable to infinite row model; use loadedRows',
-				};
-
-			case 'serverProvided':
-				return {
-					status: 'unsupported',
-					scope,
-					reason: 'serverProvided scope must be published via api.integrity.publishServerReport()',
-				};
-
-			default:
-				return { status: 'unsupported', scope, reason: `Unknown scope: ${scope as string}` };
-		}
+function createCapabilityMatrix(kind: GridIntegrityRowModelKind): GridIntegrityCapabilityMatrix {
+	if (kind === 'client') {
+		return {
+			allRows: { scope: 'allRows', level: 'authoritative', complete: true, source: 'allDataNodes' },
+			loadedRows: { scope: 'loadedRows', level: 'authoritative', complete: true, source: 'allDataNodes' },
+			filteredRows: { scope: 'filteredRows', level: 'authoritative', complete: true, source: 'filteredDataNodes' },
+			selectedRows: { scope: 'selectedRows', level: 'authoritative', complete: true, source: 'selectedRows' },
+			visibleRows: {
+				scope: 'visibleRows',
+				level: 'partial',
+				complete: false,
+				source: 'visualRows',
+				message: 'visibleRows scans only the currently rendered visual rows.',
+			},
+			currentPage: { scope: 'currentPage', level: 'authoritative', complete: true, source: 'currentPageDataNodes' },
+			serverProvided: {
+				scope: 'serverProvided',
+				level: 'unsupported',
+				complete: false,
+				source: 'serverProvided',
+				reason: 'serverProvided integrity must be published through publishServerReport().',
+			},
+		};
 	}
 
-	private _scanLoadedBlocks(rowModel: RowModel<TRowData>): GridIntegrityRowRef<TRowData>[] {
-		const refs: GridIntegrityRowRef<TRowData>[] = [];
-		const count = rowModel.getVisualRowCount();
-		for (let i = 0; i < count; i++) {
-			const vr = rowModel.getVisualRow(i);
-			if (!vr || vr.kind !== 'data' || vr.node.data == null) continue;
-			refs.push({ rowId: vr.node.id, row: vr.node.data as TRowData, rowIndex: i, source: 'infiniteLoaded' });
-		}
-		return refs;
+	if (kind === 'infinite') {
+		return {
+			allRows: {
+				scope: 'allRows',
+				level: 'unsupported',
+				complete: false,
+				source: 'none',
+				reason: 'Infinite row model cannot authoritatively scan allRows without a serverProvided report.',
+			},
+			loadedRows: {
+				scope: 'loadedRows',
+				level: 'partial',
+				complete: false,
+				source: 'loadedRows',
+				message: 'loadedRows scans only the currently loaded blocks.',
+			},
+			filteredRows: {
+				scope: 'filteredRows',
+				level: 'unsupported',
+				complete: false,
+				source: 'none',
+				reason: 'Infinite row model cannot authoritatively expose filteredRows beyond currently loaded blocks.',
+			},
+			selectedRows: { scope: 'selectedRows', level: 'authoritative', complete: true, source: 'selectedRows' },
+			visibleRows: {
+				scope: 'visibleRows',
+				level: 'partial',
+				complete: false,
+				source: 'visualRows',
+				message: 'visibleRows scans only the currently rendered rows.',
+			},
+			currentPage: {
+				scope: 'currentPage',
+				level: 'unsupported',
+				complete: false,
+				source: 'none',
+				reason: 'currentPage is not defined for the infinite row model.',
+			},
+			serverProvided: {
+				scope: 'serverProvided',
+				level: 'unsupported',
+				complete: false,
+				source: 'serverProvided',
+				reason: 'serverProvided integrity must be published through publishServerReport().',
+			},
+		};
 	}
 
-	private _scanVisibleRows(rowModel: RowModel<TRowData>): GridIntegrityRowRef<TRowData>[] {
-		return this._scanLoadedBlocks(rowModel); // infinite: loaded ≈ visible
-	}
-
-	private _scanSelectedRows(rowModel: RowModel<TRowData>, state: InternalGridState<TRowData>): GridIntegrityRowsResult<TRowData> {
-		const selectedIds = state.selectedRowIds ?? [];
-		const refs: GridIntegrityRowRef<TRowData>[] = [];
-		for (const rowId of selectedIds) {
-			const node = rowModel.getRowNodeById?.(rowId) ?? null;
-			if (!node || node.data == null) continue;
-			refs.push({ rowId, row: node.data as TRowData, source: 'selected' });
-		}
-		return { status: 'ok', scope: 'selectedRows', rows: refs, complete: true };
-	}
+	return {
+		allRows: {
+			scope: 'allRows',
+			level: 'unsupported',
+			complete: false,
+			source: 'none',
+			reason: 'Server-page row model cannot authoritatively scan allRows without a serverProvided report.',
+		},
+		loadedRows: {
+			scope: 'loadedRows',
+			level: 'partial',
+			complete: false,
+			source: 'loadedRows',
+			message: 'loadedRows scans only the currently loaded page.',
+		},
+		filteredRows: {
+			scope: 'filteredRows',
+			level: 'unsupported',
+			complete: false,
+			source: 'none',
+			reason: 'Server-page row model cannot authoritatively expose filteredRows outside the current page.',
+		},
+		selectedRows: { scope: 'selectedRows', level: 'authoritative', complete: true, source: 'selectedRows' },
+		visibleRows: {
+			scope: 'visibleRows',
+			level: 'partial',
+			complete: false,
+			source: 'visualRows',
+			message: 'visibleRows scans only the currently rendered rows.',
+		},
+		currentPage: {
+			scope: 'currentPage',
+			level: 'partial',
+			complete: false,
+			source: 'currentPageDataNodes',
+			message: 'currentPage scans only the active server page.',
+		},
+		serverProvided: {
+			scope: 'serverProvided',
+			level: 'unsupported',
+			complete: false,
+			source: 'serverProvided',
+			reason: 'serverProvided integrity must be published through publishServerReport().',
+		},
+	};
 }
 
-export class ServerPageGridIntegrityRowProvider<TRowData> implements GridIntegrityRowProvider<TRowData> {
-	constructor(
-		private readonly getRowModel: () => RowModel<TRowData> | null,
-		private readonly getState: () => InternalGridState<TRowData>
-	) {}
-
-	getRowsForIntegrityScope(scope: GridIntegrityScope): GridIntegrityRowsResult<TRowData> {
-		const rowModel = this.getRowModel();
-		const state = this.getState();
-
-		if (!rowModel) {
-			return { status: 'unsupported', scope, reason: 'Row model not yet available' };
-		}
-
-		switch (scope) {
-			case 'allRows':
-				return {
-					status: 'unsupported',
-					scope,
-					reason: 'allRows is not available for server-page row model unless a serverProvided report is supplied. Use currentPage for the current page only.',
-				};
-
-			case 'loadedRows':
-			case 'currentPage': {
-				const refs = this._scanCurrentPage(rowModel);
-				return { status: 'ok', scope, rows: refs, complete: false };
-			}
-
-			case 'filteredRows': {
-				const refs = this._scanCurrentPage(rowModel);
-				return {
-					status: 'ok',
-					scope,
-					rows: refs,
-					complete: false,
-					message: 'filteredRows returns only current page for server-page row model',
-				};
-			}
-
-			case 'selectedRows':
-				return this._scanSelectedRows(rowModel, state);
-
-			case 'visibleRows': {
-				const refs = this._scanCurrentPage(rowModel);
-				return { status: 'ok', scope, rows: refs, complete: false };
-			}
-
-			case 'serverProvided':
-				return {
-					status: 'unsupported',
-					scope,
-					reason: 'serverProvided scope must be published via api.integrity.publishServerReport()',
-				};
-
-			default:
-				return { status: 'unsupported', scope, reason: `Unknown scope: ${scope as string}` };
-		}
-	}
-
-	private _scanCurrentPage(rowModel: RowModel<TRowData>): GridIntegrityRowRef<TRowData>[] {
-		const refs: GridIntegrityRowRef<TRowData>[] = [];
-		const count = rowModel.getVisualRowCount();
-		for (let i = 0; i < count; i++) {
-			const vr = rowModel.getVisualRow(i);
-			if (!vr || vr.kind !== 'data' || vr.node.data == null) continue;
-			refs.push({ rowId: vr.node.id, row: vr.node.data as TRowData, rowIndex: i, source: 'serverPage' });
-		}
-		return refs;
-	}
-
-	private _scanSelectedRows(rowModel: RowModel<TRowData>, state: InternalGridState<TRowData>): GridIntegrityRowsResult<TRowData> {
-		const selectedIds = state.selectedRowIds ?? [];
-		const refs: GridIntegrityRowRef<TRowData>[] = [];
-		for (const rowId of selectedIds) {
-			const node = rowModel.getRowNodeById?.(rowId) ?? null;
-			if (!node || node.data == null) continue;
-			refs.push({ rowId, row: node.data as TRowData, source: 'selected' });
-		}
-		return { status: 'ok', scope: 'selectedRows', rows: refs, complete: true };
-	}
+function sourceForLoaded(kind: GridIntegrityRowModelKind): GridIntegrityRowRef<unknown>['source'] {
+	return kind === 'server' ? 'serverPage' : 'infiniteLoaded';
 }
 
-// ── Internal helpers ──────────────────────────────────────────────────────────
+function sourceForCurrentPage(kind: GridIntegrityRowModelKind): GridIntegrityRowRef<unknown>['source'] {
+	return kind === 'server' ? 'serverPage' : 'client';
+}
+
+function okResult<TRowData>(
+	scope: GridIntegrityScope,
+	capability: GridIntegrityScopeCapability,
+	rows: readonly GridIntegrityRowRef<TRowData>[]
+): GridIntegrityRowsResult<TRowData> {
+	return {
+		status: 'ok',
+		scope,
+		capability,
+		rows,
+		complete: capability.complete,
+		message: capability.message,
+	};
+}
+
+function unsupportedFromMissingCapability<TRowData>(
+	scope: GridIntegrityScope,
+	capability: GridIntegrityScopeCapability,
+	reason: string
+): GridIntegrityRowsResult<TRowData> {
+	return {
+		status: 'unsupported',
+		scope,
+		capability: { ...capability, reason },
+		reason,
+	};
+}
+
+function toRowRefs<TRowData>(
+	nodes: Array<{ id: string; data: TRowData | null }>,
+	source: GridIntegrityRowRef<TRowData>['source']
+): GridIntegrityRowRef<TRowData>[] {
+	const refs: GridIntegrityRowRef<TRowData>[] = [];
+	for (const node of nodes) {
+		if (node.data == null) continue;
+		refs.push({ rowId: node.id, row: node.data as TRowData, source });
+	}
+	return refs;
+}
 
 interface AllDataNodeCapable<TRowData> {
 	getAllDataNodes(): Array<{ id: string; data: TRowData | null }>;
 }
 
-function _asAllDataNodeCapable<TRowData>(rowModel: RowModel<TRowData>): AllDataNodeCapable<TRowData> | null {
-	const m = rowModel as unknown as Partial<AllDataNodeCapable<TRowData>>;
-	return typeof m.getAllDataNodes === 'function' ? (m as AllDataNodeCapable<TRowData>) : null;
+function asAllDataNodeCapable<TRowData>(rowModel: RowModel<TRowData>): AllDataNodeCapable<TRowData> | null {
+	const model = rowModel as Partial<AllDataNodeCapable<TRowData>>;
+	return typeof model.getAllDataNodes === 'function' ? (model as AllDataNodeCapable<TRowData>) : null;
 }
 
 interface FilteredDataNodeCapable<TRowData> {
 	getFilteredDataNodes(): Array<{ id: string; data: TRowData | null }>;
 }
 
-function _asFilteredDataNodeCapable<TRowData>(rowModel: RowModel<TRowData>): FilteredDataNodeCapable<TRowData> | null {
-	const m = rowModel as unknown as Partial<FilteredDataNodeCapable<TRowData>>;
-	return typeof m.getFilteredDataNodes === 'function' ? (m as FilteredDataNodeCapable<TRowData>) : null;
+function asFilteredDataNodeCapable<TRowData>(rowModel: RowModel<TRowData>): FilteredDataNodeCapable<TRowData> | null {
+	const model = rowModel as Partial<FilteredDataNodeCapable<TRowData>>;
+	return typeof model.getFilteredDataNodes === 'function' ? (model as FilteredDataNodeCapable<TRowData>) : null;
 }
 
 interface CurrentPageCapable<TRowData> {
 	getCurrentPageDataNodes(): Array<{ id: string; data: TRowData | null }>;
 }
 
-function _asCurrentPageCapable<TRowData>(rowModel: RowModel<TRowData>): CurrentPageCapable<TRowData> | null {
-	const m = rowModel as unknown as Partial<CurrentPageCapable<TRowData>>;
-	return typeof m.getCurrentPageDataNodes === 'function' ? (m as CurrentPageCapable<TRowData>) : null;
+function asCurrentPageCapable<TRowData>(rowModel: RowModel<TRowData>): CurrentPageCapable<TRowData> | null {
+	const model = rowModel as Partial<CurrentPageCapable<TRowData>>;
+	return typeof model.getCurrentPageDataNodes === 'function' ? (model as CurrentPageCapable<TRowData>) : null;
+}
+
+interface CapabilityReadableRowModel {
+	getCapabilities(): {
+		fullDataset?: boolean;
+		blockLoading?: boolean;
+		serverPagination?: boolean;
+	};
+}
+
+function asCapabilityReadableRowModel(rowModel: RowModel<unknown>): CapabilityReadableRowModel | null {
+	const model = rowModel as Partial<CapabilityReadableRowModel>;
+	return typeof model.getCapabilities === 'function' ? (model as CapabilityReadableRowModel) : null;
 }
