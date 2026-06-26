@@ -7,6 +7,7 @@ import type { GeometryModel } from '../models/GeometryModel.js';
 import type { ViewportModel } from '../models/ViewportModel.js';
 import type { SelectionModel } from '../models/SelectionModel.js';
 import type { CellNotificationController } from './CellNotificationController.js';
+import type { GridSelectionState } from '../api/GridApi.js';
 
 interface RangeBounds {
 	minRow: number;
@@ -67,6 +68,25 @@ export class GridProjectionPipeline<TRowData = unknown> {
 				this.deps.getRowHeightsList(rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight
 			);
+		}
+
+		if (rowModel) {
+			const normalizedSelection = this.normalizeSelectionState(currState.selection, rowModel);
+			const normalizedActiveEdit = this.normalizeActiveEdit(currState.activeEdit, rowModel);
+			const derivedState: Partial<InternalGridState<TRowData>> = {};
+
+			if (normalizedSelection !== currState.selection) {
+				derivedState.selection = normalizedSelection;
+			}
+			if (normalizedActiveEdit !== currState.activeEdit) {
+				derivedState.activeEdit = normalizedActiveEdit;
+			}
+
+			if (Object.keys(derivedState).length > 0) {
+				const affectedKeys = phase.setDerivedState(derivedState);
+				for (const key of affectedKeys) updatedSet.add(key);
+				currState = phase.getState();
+			}
 		}
 
 		if (updatedSet.has('selection') || updatedSet.has('columns') || (updatedSet.has('globalVersion') && this.pendingStructuralBoundsUpdate)) {
@@ -186,6 +206,45 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		if (updatedSet.has('globalVersion')) {
 			this.deps.cellNotifications.notifyAllCellSubscribers();
 		}
+	}
+
+	private normalizeSelectionState(selection: GridSelectionState, rowModel: RowModel<TRowData>): GridSelectionState {
+		const hasPointer = (pointer: { rowId: string; colField: string } | null): boolean => {
+			if (!pointer) return false;
+			return rowModel.getVisualIndexByRowId(pointer.rowId) >= 0 && this.deps.columns.getColumnIndex(pointer.colField) >= 0;
+		};
+
+		if (!selection.focus) return selection;
+
+		if (!hasPointer(selection.focus)) {
+			return {
+				focus: null,
+				anchor: null,
+				range: null,
+				bounds: null,
+				source: selection.source,
+			};
+		}
+
+		const anchorValid = hasPointer(selection.anchor);
+		const rangeStartValid = hasPointer(selection.range?.start ?? null);
+		const rangeEndValid = hasPointer(selection.range?.end ?? null);
+
+		if (anchorValid && rangeStartValid && rangeEndValid) {
+			return selection;
+		}
+
+		return this.deps.selection.createCellSelection(selection.focus, selection.source);
+	}
+
+	private normalizeActiveEdit(
+		activeEdit: InternalGridState<TRowData>['activeEdit'],
+		rowModel: RowModel<TRowData>
+	): InternalGridState<TRowData>['activeEdit'] {
+		if (!activeEdit) return activeEdit;
+		if (rowModel.getVisualIndexByRowId(activeEdit.rowId) < 0) return null;
+		if (this.deps.columns.getColumnIndex(activeEdit.colField) < 0) return null;
+		return activeEdit;
 	}
 
 	private areRangeBoundsEqual(left: RangeBounds | null, right: RangeBounds | null): boolean {

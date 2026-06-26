@@ -528,6 +528,57 @@ describe('Server page loading state publication', () => {
 
 		ctrl.dispose();
 	});
+
+	it('page navigation clears stale focus, range, and active edit state when the edited row leaves the active page', async () => {
+		let resolveSecond!: (v: { rows: TestRow[]; totalRowCount: number }) => void;
+		let callCount = 0;
+		const getPage = vi.fn(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alice', amount: 100 },
+						{ id: '2', name: 'Bob', amount: 200 },
+					],
+					totalRowCount: 10,
+				});
+			}
+			return new Promise<{ rows: TestRow[]; totalRowCount: number }>((res) => {
+				resolveSecond = res;
+			});
+		});
+
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+		const ctrl = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			columns: COLUMNS,
+			pagination: { pageSize: 5 },
+		});
+
+		await new Promise((res) => setTimeout(res, 0));
+
+		store.selectRange({ rowId: '1', colField: 'name' }, { rowId: '2', colField: 'amount' });
+		store.startEditing('1', 'name');
+		expect(store.getState().selection.focus).toEqual({ rowId: '2', colField: 'amount' });
+		expect(store.getState().selection.anchor).toEqual({ rowId: '1', colField: 'name' });
+		expect(store.getState().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+
+		ctrl.goToPage(1);
+
+		expect(store.getState().selection.focus).toBeNull();
+		expect(store.getState().selection.anchor).toBeNull();
+		expect(store.getState().selection.range).toBeNull();
+		expect(store.getState().selection.bounds).toBeNull();
+		expect(store.getState().activeEdit).toBeNull();
+
+		resolveSecond!({
+			rows: [{ id: '6', name: 'Page Two', amount: 600 }],
+			totalRowCount: 10,
+		});
+		await new Promise((res) => setTimeout(res, 0));
+
+		ctrl.dispose();
+	});
 });
 
 // ── Infinite block stale row map cleanup ──────────────────────────────────────
@@ -624,6 +675,48 @@ describe('Infinite block reload — stale row map cleanup', () => {
 		const nodeX = ctrl.getRowNodeById('X');
 		expect(nodeX?.data.name).toBe('Xavier Updated');
 
+		ctrl.dispose();
+	});
+
+	it('setDatasource clears stale focus, range, and active edit state when loaded rows disappear', async () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+
+		const ctrl = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: {
+				getRows: vi.fn().mockResolvedValueOnce({
+					rows: [
+						{ id: 'A', name: 'Alice', amount: 1 },
+						{ id: 'B', name: 'Bob', amount: 2 },
+					],
+					totalCount: 2,
+				}),
+			},
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((res) => setTimeout(res, 0));
+
+		store.selectRange({ rowId: 'A', colField: 'name' }, { rowId: 'B', colField: 'amount' });
+		store.startEditing('A', 'name');
+		expect(store.getState().selection.focus).toEqual({ rowId: 'B', colField: 'amount' });
+		expect(store.getState().selection.anchor).toEqual({ rowId: 'A', colField: 'name' });
+		expect(store.getState().activeEdit).toEqual({ rowId: 'A', colField: 'name' });
+
+		ctrl.setDatasource({
+			getRows: vi.fn().mockResolvedValueOnce({
+				rows: [{ id: 'C', name: 'Carol', amount: 3 }],
+				totalCount: 1,
+			}),
+		});
+
+		expect(store.getState().selection.focus).toBeNull();
+		expect(store.getState().selection.anchor).toBeNull();
+		expect(store.getState().selection.range).toBeNull();
+		expect(store.getState().selection.bounds).toBeNull();
+		expect(store.getState().activeEdit).toBeNull();
+
+		await new Promise((res) => setTimeout(res, 0));
 		ctrl.dispose();
 	});
 });
