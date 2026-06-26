@@ -262,6 +262,121 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it('setCellValue returns validationFailed for blocking sync proposal rules', () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [{ field: 'name', header: 'Name', width: 150 }],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnSubmit: true,
+						cellRules: [{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) }],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const result = store.setCellValue('1', 'name', '');
+
+		expect(result.status).toBe('validationFailed');
+		if (result.status === 'validationFailed') {
+			expect(result.reason).toBe('Name is required');
+			expect(result.issues).toHaveLength(1);
+		}
+		expect(store.getCellValue('1', 'name')).toBe('Product A');
+		expect(store.canUndo()).toBe(false);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('setCellValueAsync awaits async proposal validation before committing', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [{ field: 'name', header: 'Name', width: 150 }],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnSubmit: true,
+						cellRules: [
+							{
+								id: 'server-name-check',
+								field: 'name',
+								validate: async ({ value }) => (value === 'Blocked' ? { message: 'Blocked by async validator' } : null),
+							},
+						],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const blocked = await store.setCellValueAsync('1', 'name', 'Blocked');
+		expect(blocked.status).toBe('validationFailed');
+		expect(store.getCellValue('1', 'name')).toBe('Product A');
+
+		const allowed = await store.setCellValueAsync('1', 'name', 'Allowed');
+		expect(allowed.status).toBe('applied');
+		expect(store.getCellValue('1', 'name')).toBe('Allowed');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('batchCellValuesAsync rejects atomically when async proposal validation blocks one update', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [
+					{ field: 'name', header: 'Name', width: 150 },
+					{ field: 'price', header: 'Price', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnSubmit: true,
+						cellRules: [
+							{
+								id: 'blocked-name',
+								field: 'name',
+								validate: async ({ value }) => (value === 'Blocked' ? { message: 'Blocked by async validator' } : null),
+							},
+						],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const result = await store.batchCellValuesAsync([
+			{ rowId: '1', colField: 'name', value: 'Blocked' },
+			{ rowId: '1', colField: 'price', value: 25 },
+		]);
+
+		expect(result.status).toBe('validationFailed');
+		expect(store.getCellValue('1', 'name')).toBe('Product A');
+		expect(store.getCellValue('1', 'price')).toBe(10);
+		expect(store.canUndo()).toBe(false);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('getStateSnapshot returns immutable defensive copies of public state', () => {
 		const store = new GridStore<TestRow>({
 			columns: [

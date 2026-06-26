@@ -1,5 +1,6 @@
 import { createFormulaRefKey } from '../ids.js';
 import type { GridCellRange } from '../api/GridApi.js';
+import type { GridWriteResult } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RowModel } from '../rowModel.js';
@@ -22,15 +23,28 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 	constructor(private readonly engine: GridEngine<TRowData>) {}
 
 	public fillRange(source: GridCellRange, target: GridCellRange): void {
+		const updates = this.buildFillUpdates(source, target);
+		if (updates.length > 0) {
+			this.engine.batchCellValues(updates, 'fill');
+		}
+	}
+
+	public async fillRangeAsync(source: GridCellRange, target: GridCellRange): Promise<GridWriteResult> {
+		const updates = this.buildFillUpdates(source, target);
+		if (updates.length === 0) return { status: 'noop' };
+		return this.engine.batchCellValuesAsync(updates, 'fill');
+	}
+
+	private buildFillUpdates(source: GridCellRange, target: GridCellRange): GridCellRangeFillUpdate[] {
 		const rowModel = this.engine.getRowModel();
-		if (!rowModel) return;
+		if (!rowModel) return [];
 
 		const state = this.engine.stateManager.getState();
 		const columns = state.columns;
 
 		const sourceBounds = this.resolveRangeBounds(source);
 		const targetBounds = this.resolveRangeBounds(target);
-		if (!sourceBounds || !targetBounds) return;
+		if (!sourceBounds || !targetBounds) return [];
 
 		let direction: FillDirection = 'DOWN';
 		if (targetBounds.minRow > sourceBounds.maxRow) direction = 'DOWN';
@@ -48,9 +62,7 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 			this.fillColumns(direction, sourceBounds, targetBounds, rowModel, columns, updates);
 		}
 
-		if (updates.length > 0) {
-			this.engine.batchCellValues(updates, 'fill');
-		}
+		return updates;
 	}
 
 	private fillRows(

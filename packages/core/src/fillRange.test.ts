@@ -288,7 +288,7 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 		controller.dispose();
 	});
 
-	it('fill auto-validates committed cells when validateOnFill is enabled', async () => {
+	it('fillRangeAsync rejects blocking fill proposals before commit when validateOnFill is enabled', async () => {
 		const store = new GridStore<FillRangeRow>(
 			{
 				columns: [
@@ -316,7 +316,7 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 			columns: store.getState().columns,
 		});
 
-		store.engine.fillRange(
+		const result = await store.engine.fillRangeAsync(
 			{
 				start: { rowId: 'r1', colField: 'text' },
 				end: { rowId: 'r1', colField: 'text' },
@@ -327,8 +327,8 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 			}
 		);
 
-		await new Promise((res) => setTimeout(res, 0));
-		expect(store.engine.dataIntegrity?.getCellErrorMessage('r2', 'text')).toBe('Text is required');
+		expect(result.status).toBe('validationFailed');
+		expect(store.getCellValue('r2', 'text')).toBe('seed');
 
 		controller.dispose();
 		store.destroy();

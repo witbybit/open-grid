@@ -356,6 +356,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	 */
 	public setCellValue = (rowId: string, colField: string, value: unknown): GridWriteResult => this.engine.setCellValue(rowId, colField, value);
 
+	public setCellValueAsync = (rowId: string, colField: string, value: unknown): Promise<GridWriteResult> =>
+		this.engine.setCellValueAsync(rowId, colField, value);
+
 	/**
 	 * Applies multiple cell value writes as a single atomic operation.
 	 * valueSetter runs per-cell, but notifications, cellValueChanged events, and undo
@@ -366,6 +369,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		updates: { rowId: string; colField: string; value: unknown }[],
 		source: 'paste' | 'api' | 'fill' = 'api'
 	): GridWriteResult => this.engine.batchCellValues(updates, source);
+
+	public batchCellValuesAsync = (
+		updates: { rowId: string; colField: string; value: unknown }[],
+		source: 'paste' | 'api' | 'fill' = 'api'
+	): Promise<GridWriteResult> => this.engine.batchCellValuesAsync(updates, source);
 
 	public getCellState = (rowId: string, colField: string): CellState => {
 		const computedValue = this.getCellValue(rowId, colField);

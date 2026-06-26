@@ -77,7 +77,9 @@ export interface GridDataApi<TRowData = unknown> {
 	setFormula(rowId: string, colField: string, formula: string): void;
 	clearFormula(rowId: string, colField: string): void;
 	setCellValue(rowId: string, colField: string, value: unknown): GridWriteResult;
+	setCellValueAsync(rowId: string, colField: string, value: unknown): Promise<GridWriteResult>;
 	batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): GridWriteResult;
+	batchCellValuesAsync(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): Promise<GridWriteResult>;
 	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRawRowById(rowId: string): TRowData | null;
 	rows(): GridRowsAccessor<TRowData>;

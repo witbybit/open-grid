@@ -929,6 +929,20 @@ export class GridEngine<TRowData = unknown> {
 		this.groupingFeature.setStickyGroupRows(enabled);
 	}
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): GridWriteResult {
+		const validationFailure = this.validateWriteProposalSync([{ rowId, colField, proposedValue: value }], 'api');
+		if (validationFailure) return validationFailure;
+
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'data:set-cell-value',
+			domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
+		});
+		this.scheduleAutoValidationForCommittedWrites(this.collectCommittedWriteCells(execution.appliedMutations), 'api');
+		return this.toGridWriteResult(execution.result);
+	}
+
+	public async setCellValueAsync(rowId: string, colField: string, value: unknown, undoable = true): Promise<GridWriteResult> {
+		const validationFailure = await this.validateWriteProposalAsync([{ rowId, colField, proposedValue: value }], 'api');
+		if (validationFailure) return validationFailure;
 		const execution = this.changeApplier.commitDetailed({
 			reason: 'data:set-cell-value',
 			domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
@@ -941,6 +955,30 @@ export class GridEngine<TRowData = unknown> {
 		updates: { rowId: string; colField: string; value: unknown }[],
 		source: 'paste' | 'api' | 'fill' = 'api'
 	): GridWriteResult {
+		const validationFailure = this.validateWriteProposalSync(
+			updates.map((update) => ({ rowId: update.rowId, colField: update.colField, proposedValue: update.value })),
+			source
+		);
+		if (validationFailure) return validationFailure;
+
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'data:batch-cell-values',
+			domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
+		});
+		this.scheduleAutoValidationForCommittedWrites(this.collectCommittedWriteCells(execution.appliedMutations), source);
+		return this.toGridWriteResult(execution.result);
+	}
+
+	public async batchCellValuesAsync(
+		updates: { rowId: string; colField: string; value: unknown }[],
+		source: 'paste' | 'api' | 'fill' = 'api'
+	): Promise<GridWriteResult> {
+		const validationFailure = await this.validateWriteProposalAsync(
+			updates.map((update) => ({ rowId: update.rowId, colField: update.colField, proposedValue: update.value })),
+			source
+		);
+		if (validationFailure) return validationFailure;
+
 		const execution = this.changeApplier.commitDetailed({
 			reason: 'data:batch-cell-values',
 			domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
@@ -1240,6 +1278,9 @@ export class GridEngine<TRowData = unknown> {
 	public fillRange(source: GridCellRange, target: GridCellRange): void {
 		this.spreadsheetFill.fillRange(source, target);
 	}
+	public fillRangeAsync(source: GridCellRange, target: GridCellRange): Promise<GridWriteResult> {
+		return this.spreadsheetFill.fillRangeAsync(source, target);
+	}
 	/** Request a full repaint triggered by an insight layer decoration change. */
 	public requestInsightRepaint(): void {
 		this.invalidation.invalidateFull('insight-decorations');
@@ -1319,6 +1360,34 @@ export class GridEngine<TRowData = unknown> {
 				context: { source, cellCount: cells.length },
 			});
 		});
+	}
+
+	private validateWriteProposalSync(
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
+	): GridWriteResult | null {
+		if (!this.dataIntegrity || !this.dataIntegrity.shouldPreflightWriteSync(source)) return null;
+		const issues = this.dataIntegrity.validateWriteProposalSync(updates, source);
+		return issues.length > 0 ? this.toValidationFailedWriteResult(issues) : null;
+	}
+
+	private async validateWriteProposalAsync(
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
+	): Promise<GridWriteResult | null> {
+		if (!this.dataIntegrity || !this.dataIntegrity.shouldPreflightWrite(source)) return null;
+		const issues = await this.dataIntegrity.validateWriteProposal(updates, source);
+		return issues.length > 0 ? this.toValidationFailedWriteResult(issues) : null;
+	}
+
+	private toValidationFailedWriteResult(
+		issues: readonly import('../features/dataIntegrity/integrityTypes.js').GridIntegrityIssue[]
+	): GridWriteResult {
+		return {
+			status: 'validationFailed',
+			reason: issues[0]?.message ?? 'blocking validation failed',
+			issues,
+		};
 	}
 }
 

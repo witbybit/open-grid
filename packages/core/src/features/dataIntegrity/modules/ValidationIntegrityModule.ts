@@ -83,6 +83,10 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		}
 	}
 
+	shouldPreflightWriteSync(source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'): boolean {
+		return this.shouldPreflightWrite(source);
+	}
+
 	getIssues(): readonly GridIntegrityIssue[] {
 		return this.deps.getIntegrityState().validation.issues;
 	}
@@ -301,6 +305,36 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		return issues;
 	}
 
+	validateCellProposalSync(params: GridValidateCellProposalParams): readonly GridIntegrityIssue[] {
+		if (!this.isEnabled()) return _EMPTY;
+		const { rowId, colField, proposedValue } = params;
+		const api = this.deps.getApi();
+		const rowModel = this.deps.getRowModel();
+		const node = rowModel?.getRowNodeById?.(rowId) ?? null;
+		const row = (node?.data ?? {}) as TRowData;
+		const issues: GridIntegrityIssue[] = [];
+
+		for (const rule of (this.options.cellRules ?? []).filter((candidate) => candidate.field === colField)) {
+			const result = this._maybeRunSyncRule(() => rule.validate({ rowId, row, field: colField, value: proposedValue, api }), rule.id);
+			if (result) issues.push(_makeCellIssue(rule, rowId, colField, proposedValue, result));
+		}
+
+		if ((this.options.rowRules?.length ?? 0) > 0) {
+			const draftRow = { ...(row as Record<string, unknown>) };
+			draftRow[colField] = proposedValue;
+			for (const rule of this.options.rowRules ?? []) {
+				const result = this._maybeRunSyncRule(() => rule.validate({ rowId, row: draftRow as TRowData, api }), rule.id);
+				if (!result) continue;
+				const fields = result.fields ?? [];
+				if (fields.includes(colField) || fields.length === 0) {
+					issues.push(_makeRowIssue(rule, rowId, fields, result));
+				}
+			}
+		}
+
+		return issues;
+	}
+
 	async validateWriteProposal(
 		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
 		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
@@ -310,6 +344,27 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		const issueMap = new Map<string, GridIntegrityIssue>();
 		for (const update of _dedupeProposalCells(updates)) {
 			const issues = await this.validateCellProposal({
+				rowId: update.rowId,
+				colField: update.colField,
+				proposedValue: update.proposedValue,
+				source: source === 'undo' || source === 'redo' ? 'api' : source,
+			});
+			for (const issue of issues) {
+				if (issue.blocking) issueMap.set(issue.id, issue);
+			}
+		}
+		return Array.from(issueMap.values());
+	}
+
+	validateWriteProposalSync(
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
+	): readonly GridIntegrityIssue[] {
+		if (!this.shouldPreflightWriteSync(source) || updates.length === 0) return _EMPTY;
+
+		const issueMap = new Map<string, GridIntegrityIssue>();
+		for (const update of _dedupeProposalCells(updates)) {
+			const issues = this.validateCellProposalSync({
 				rowId: update.rowId,
 				colField: update.colField,
 				proposedValue: update.proposedValue,
@@ -419,6 +474,19 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 
 		return newIssues;
 	}
+
+	private _maybeRunSyncRule(
+		run: () => import('../integrityTypes.js').GridIntegrityRuleResult | null | Promise<import('../integrityTypes.js').GridIntegrityRuleResult | null>,
+		ruleId: string
+	): import('../integrityTypes.js').GridIntegrityRuleResult | null {
+		try {
+			const result = run();
+			if (_isPromiseLike(result)) return null;
+			return result;
+		} catch {
+			return { message: `Rule "${ruleId}" threw an error` };
+		}
+	}
 }
 
 function _makeCellIssue(
@@ -497,6 +565,10 @@ function _dedupeProposalCells(
 		unique.push({ rowId: cell.rowId, colField: cell.colField, proposedValue: cell.proposedValue });
 	}
 	return unique;
+}
+
+function _isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+	return !!value && (typeof value === 'object' || typeof value === 'function') && 'then' in value;
 }
 
 function _now(): number {
