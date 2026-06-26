@@ -175,7 +175,9 @@ describe('Plan 142 - cross-feature composition gauntlets', () => {
 			{
 				dataIntegrity: {
 					validation: {
-						cellRules: [{ id: 'required-note', field: 'note', validate: ({ value }) => (value ? null : { message: 'Note is required' }) }],
+						cellRules: [
+							{ id: 'required-note', field: 'note', validate: ({ value }) => (value ? null : { message: 'Note is required' }) },
+						],
 					},
 				},
 			}
