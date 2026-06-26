@@ -82,9 +82,11 @@ export class EditingFeatureController<TRowData = unknown> {
 			if (!result.allowed) return false;
 		}
 		const col = this.ctx.columns.getColumnDef(colField);
+		if (!col) return false;
 		const oldValue = this.data.getRawCellValue(rowId, colField);
 		const node = this.getRowModel()?.getRowNodeById(rowId);
-		const row = node?.data ?? ({} as TRowData);
+		if (!node) return false;
+		const row = node.data;
 
 		let committedValue = value;
 		let bypassValueSetter = false;

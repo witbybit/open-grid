@@ -579,6 +579,58 @@ describe('Server page loading state publication', () => {
 
 		ctrl.dispose();
 	});
+
+	it('rejects stale server-page writes consistently after the target row leaves the active page', async () => {
+		let resolveSecond!: (v: { rows: TestRow[]; totalRowCount: number }) => void;
+		let callCount = 0;
+		const getPage = vi.fn(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [{ id: '1', name: 'Alice', amount: 100 }],
+					totalRowCount: 10,
+				});
+			}
+			return new Promise<{ rows: TestRow[]; totalRowCount: number }>((res) => {
+				resolveSecond = res;
+			});
+		});
+
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+		const ctrl = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			columns: COLUMNS,
+			pagination: { pageSize: 5 },
+		});
+
+		await new Promise((res) => setTimeout(res, 0));
+		ctrl.goToPage(1);
+
+		const single = store.setCellValue('1', 'name', 'Gone');
+		expect(single).toEqual({
+			status: 'rejected',
+			reason: 'row unavailable',
+			rejections: [{ mutationKind: 'cell-value', reason: 'row unavailable', index: undefined }],
+		});
+
+		const batch = store.batchCellValues([
+			{ rowId: '1', colField: 'name', value: 'Gone' },
+			{ rowId: '2', colField: 'amount', value: 200 },
+		]);
+		expect(batch).toEqual({
+			status: 'rejected',
+			reason: 'row unavailable',
+			rejections: [{ mutationKind: 'batch-cell', reason: 'row unavailable', index: 0 }],
+		});
+
+		resolveSecond!({
+			rows: [{ id: '6', name: 'Page Two', amount: 600 }],
+			totalRowCount: 10,
+		});
+		await new Promise((res) => setTimeout(res, 0));
+
+		ctrl.dispose();
+	});
 });
 
 // ── Infinite block stale row map cleanup ──────────────────────────────────────
@@ -715,6 +767,50 @@ describe('Infinite block reload — stale row map cleanup', () => {
 		expect(store.getState().selection.range).toBeNull();
 		expect(store.getState().selection.bounds).toBeNull();
 		expect(store.getState().activeEdit).toBeNull();
+
+		await new Promise((res) => setTimeout(res, 0));
+		ctrl.dispose();
+	});
+
+	it('rejects stale infinite writes consistently after loaded rows are purged', async () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+
+		const ctrl = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: {
+				getRows: vi.fn().mockResolvedValueOnce({
+					rows: [{ id: 'A', name: 'Alice', amount: 1 }],
+					totalCount: 1,
+				}),
+			},
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((res) => setTimeout(res, 0));
+
+		ctrl.setDatasource({
+			getRows: vi.fn().mockResolvedValueOnce({
+				rows: [{ id: 'C', name: 'Carol', amount: 3 }],
+				totalCount: 1,
+			}),
+		});
+
+		const single = store.setCellValue('A', 'name', 'Gone');
+		expect(single).toEqual({
+			status: 'rejected',
+			reason: 'row unavailable',
+			rejections: [{ mutationKind: 'cell-value', reason: 'row unavailable', index: undefined }],
+		});
+
+		const batch = store.batchCellValues([
+			{ rowId: 'A', colField: 'name', value: 'Gone' },
+			{ rowId: 'B', colField: 'amount', value: 2 },
+		]);
+		expect(batch).toEqual({
+			status: 'rejected',
+			reason: 'row unavailable',
+			rejections: [{ mutationKind: 'batch-cell', reason: 'row unavailable', index: 0 }],
+		});
 
 		await new Promise((res) => setTimeout(res, 0));
 		ctrl.dispose();

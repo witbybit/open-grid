@@ -156,4 +156,31 @@ describe('EditingFeatureController', () => {
 		ctrl.dispose();
 		store.destroy();
 	});
+
+	it('commitEdit returns false and does not call valueSetter when the row is no longer available', async () => {
+		const valueSetter = vi.fn(async () => true);
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 50 },
+			{
+				field: 'name',
+				header: 'Name',
+				width: 150,
+				valueSetter,
+			},
+			{ field: 'price', header: 'Price', width: 100 },
+		]);
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+
+		store.setRows([{ id: '2', name: 'Product B', price: 20 }]);
+
+		const result = await feature.commitEdit('1', 'name', 'Missing');
+
+		expect(result).toBe(false);
+		expect(valueSetter).not.toHaveBeenCalled();
+		expect(store.canUndo()).toBe(false);
+
+		ctrl.dispose();
+		store.destroy();
+	});
 });
