@@ -2188,6 +2188,19 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('deps.getApi().setCellValue(rowId, colField, value)');
 			expect(content).not.toContain("reason: 'data:set-cell-value'");
 		});
+
+		it('live stream row patches use GridWriteResult-aware applyRowPatch handling', () => {
+			const managerContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridDataIntegrityManager.ts'), 'utf-8');
+			const liveStreamContent = readFileSync(
+				resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'modules', 'LiveStreamIntegrityModule.ts'),
+				'utf-8'
+			);
+			const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			expect(managerContent).toContain('applyRowPatch: (rowId: string, patch: Partial<TRowData>) => GridWriteResult;');
+			expect(liveStreamContent).toContain("if (result.status !== 'applied' && result.status !== 'noop')");
+			expect(engineContent).not.toContain('this.applyTransaction({ update: [updated] });');
+			expect(engineContent).toContain("reason: 'rows:apply-transaction'");
+		});
 	});
 
 	// ── Hardening: validateCellProposal (validates proposed, not current) ─────
@@ -2380,16 +2393,22 @@ describe('Architecture guardrails', () => {
 			const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
 			const surfacesContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApiSurfaces.ts'), 'utf-8');
 			expect(apiContent).toContain('GridDataApi');
+			expect(surfacesContent).toContain('setRows(rows: TRowData[]): GridWriteResult;');
+			expect(surfacesContent).toContain('updateRows(updater: (rows: TRowData[]) => TRowData[]): GridWriteResult;');
 			expect(surfacesContent).toContain('setCellValue(rowId: string, colField: string, value: unknown): GridWriteResult;');
 			expect(surfacesContent).toContain(
 				"batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): GridWriteResult;"
 			);
+			expect(surfacesContent).not.toContain('setRows(rows: TRowData[]): void;');
+			expect(surfacesContent).not.toContain('updateRows(updater: (rows: TRowData[]) => TRowData[]): void;');
 			expect(surfacesContent).not.toContain('setCellValue(rowId: string, colField: string, value: unknown): void;');
 			expect(surfacesContent).not.toContain("batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): void;");
 		});
 
 		it('GridEngine advanced write methods map kernel commits to GridWriteResult', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			expect(content).toContain('public replaceRows(rows: readonly TRowData[]): GridWriteResult');
+			expect(content).toContain('public updateRows(updater: (rows: TRowData[]) => TRowData[]): GridWriteResult');
 			expect(content).toContain('public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): GridWriteResult');
 			expect(content).toContain('public batchCellValues(');
 			expect(content).toContain('return this.toGridWriteResult(');

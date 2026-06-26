@@ -8,6 +8,7 @@ import {
 	type RowModel,
 	type RowOrderCapableModel,
 	type RowModelTransactionSnapshot,
+	type RowModelWriteResult,
 	type TransactionalRowModel,
 	type RowWriteImpact,
 } from '../rowModel.js';
@@ -27,7 +28,7 @@ import type {
 } from '../state/integrityStateTypes.js';
 import type { GridInvalidation } from '../renderer/invalidationManager.js';
 import type { GridCommitEvent, GridCommitReason, GridHistoryEntry } from './GridChangeApplier.js';
-import type { CellValueChangeOptions, CellValueChangeResult } from '../features/DataMutationController.js';
+import type { CellValueChangeOptions, CellValueChangeResult, StructuralWriteEffectResult } from '../features/DataMutationController.js';
 import type { GridIntegrityIssueFilter } from '../features/dataIntegrity/integrityTypes.js';
 
 export type GridDomain = keyof GridDomainVersions;
@@ -186,6 +187,7 @@ export interface GridCommitContext<TRowData = unknown> {
 	getStoredCellValue?(rowId: string, colField: string): unknown;
 	getColumnDef?(colField: string): ColumnDef<TRowData> | undefined;
 	applyCellValueChange?: (rowId: string, colField: string, value: unknown, options?: CellValueChangeOptions) => CellValueChangeResult;
+	applyStructuralWriteEffects?: (writeResult: RowModelWriteResult<TRowData>) => StructuralWriteEffectResult;
 	publishCommittedCellChanges?: (changes: Map<string, Set<string>>) => void;
 }
 
@@ -304,6 +306,32 @@ function createEventsFromResults<TRowData>(results: readonly CellValueChangeResu
 				newValue: result.newComputedValue,
 			},
 		}));
+}
+
+function createRowsUpdatedEvents<TRowData>(params: {
+	changedValuesByRow?: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
+	changedNodes?: RowNodeTransaction<TRowData>['update'];
+	addedNodes?: RowNodeTransaction<TRowData>['add'];
+	removedNodes?: RowNodeTransaction<TRowData>['remove'];
+}): GridCommitEvent<TRowData>[] {
+	const changedNodes = params.changedNodes ?? [];
+	const addedNodes = params.addedNodes ?? [];
+	const removedNodes = params.removedNodes ?? [];
+	const changedValuesByRow = params.changedValuesByRow;
+	if (!changedValuesByRow && changedNodes.length === 0 && addedNodes.length === 0 && removedNodes.length === 0) {
+		return [];
+	}
+	return [
+		{
+			type: GridEventName.rowsUpdated,
+			payload: {
+				changedValuesByRow: changedValuesByRow ?? new Map(),
+				changedNodes,
+				addedNodes,
+				removedNodes,
+			},
+		},
+	];
 }
 
 function rollbackAppliedCellResults<TRowData>(
@@ -846,6 +874,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					}
 					if (structuralRowModel) {
 						const txResult = structuralRowModel.applyTransactionStructurally(mutation.transaction);
+						const writeEffects = context.applyStructuralWriteEffects?.(txResult);
 						const hasStructural = (txResult.addedNodes?.length ?? 0) > 0 || (txResult.removedNodes?.length ?? 0) > 0;
 						let impact: RowWriteImpact;
 						if (hasStructural) {
@@ -859,10 +888,17 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 							}
 							impact = allFields.size > 0 ? structuralRowModel.classifyFieldMutation(allFields) : 'value-only';
 						}
-						structuralRowModel.reconcileAfterDataWrite(txResult, impact);
+						const reconcileResult = structuralRowModel.reconcileAfterDataWrite(txResult, impact);
+						const changed = txResult.visualChange !== 'none' || reconcileResult.changed;
 						return {
 							domains: ['rows', 'geometry'],
-							invalidations: [{ kind: 'full', reason: 'data' }],
+							invalidations: changed ? [{ kind: 'full', reason: 'data' }] : [],
+							events: createRowsUpdatedEvents<TRowData>({
+								changedValuesByRow: txResult.changedValuesByRow,
+								changedNodes: txResult.update,
+								addedNodes: txResult.add,
+								removedNodes: txResult.remove,
+							}),
 							history: {
 								undo: {
 									reason: 'rows:apply-transaction',
@@ -881,7 +917,8 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 									requestRender: false,
 								},
 							},
-							requestRender: true,
+							requestRender: changed,
+							cellChanges: writeEffects?.cellChanges,
 							result: { add: txResult.add, remove: txResult.remove, update: txResult.update },
 						};
 					}
@@ -889,6 +926,11 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					return {
 						domains: ['rows', 'geometry'],
 						invalidations: [{ kind: 'full', reason: 'data' }],
+						events: createRowsUpdatedEvents<TRowData>({
+							changedNodes: result.update,
+							addedNodes: result.add,
+							removedNodes: result.remove,
+						}),
 						history: {
 							undo: {
 								reason: 'rows:apply-transaction',
@@ -938,11 +980,18 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 				apply(commitContext) {
 					const rowModel = asClientStructuralRowModel<TRowData>(commitContext.getRowModel())!;
 					const writeResult = rowModel.replaceRowsStructurally(mutation.rows as TRowData[]);
-					rowModel.reconcileAfterDataWrite(writeResult, 'value-only');
+					const reconcileResult = rowModel.reconcileAfterDataWrite(writeResult, 'value-only');
+					const changed = writeResult.visualChange !== 'none' || reconcileResult.changed;
 					return {
-						domains: ['rows', 'geometry'],
-						invalidations: [{ kind: 'full', reason: 'data' }],
-						requestRender: true,
+						domains: changed ? (['rows', 'geometry'] as const) : ([] as const),
+						invalidations: changed ? [{ kind: 'full' as const, reason: 'data' }] : [],
+						events: createRowsUpdatedEvents<TRowData>({
+							changedValuesByRow: writeResult.changedValuesByRow,
+							changedNodes: writeResult.updatedNodes,
+							addedNodes: writeResult.addedNodes,
+							removedNodes: writeResult.removedNodes,
+						}),
+						requestRender: changed,
 					};
 				},
 			};
@@ -969,6 +1018,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 				apply(commitContext) {
 					const rowModel = asClientStructuralRowModel<TRowData>(commitContext.getRowModel())!;
 					const writeResult = rowModel.updateRowsStructurally(mutation.updater);
+					const writeEffects = commitContext.applyStructuralWriteEffects?.(writeResult);
 					const allFields = new Set<string>();
 					if (writeResult.changedFieldsByRow) {
 						for (const fields of writeResult.changedFieldsByRow.values()) {
@@ -981,7 +1031,14 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					return {
 						domains: changed ? (['rows', 'geometry'] as const) : ([] as const),
 						invalidations: changed ? [{ kind: 'full' as const, reason: 'data' }] : [],
+						events: createRowsUpdatedEvents<TRowData>({
+							changedValuesByRow: writeResult.changedValuesByRow,
+							changedNodes: writeResult.updatedNodes,
+							addedNodes: writeResult.addedNodes,
+							removedNodes: writeResult.removedNodes,
+						}),
 						requestRender: changed,
+						cellChanges: writeEffects?.cellChanges,
 					};
 				},
 			};

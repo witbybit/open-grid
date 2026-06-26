@@ -1240,6 +1240,37 @@ export class ClientRowModelController<TData = unknown>
 		return { changed: false };
 	}
 
+	private collectCommittedCellChanges(writeResult: RowModelWriteResult<TData>): Map<string, Set<string>> {
+		const changes = new Map<string, Set<string>>();
+		if (!writeResult.changedFieldsByRow || writeResult.changedFieldsByRow.size === 0) return changes;
+
+		const addCell = (rowId: string, colField: string): void => {
+			let fields = changes.get(rowId);
+			if (!fields) {
+				fields = new Set<string>();
+				changes.set(rowId, fields);
+			}
+			fields.add(colField);
+		};
+
+		for (const [rowId, fields] of writeResult.changedFieldsByRow) {
+			const changedValues = writeResult.changedValuesByRow?.get(rowId);
+			for (const field of fields) {
+				const newRawValue = changedValues?.get(field)?.newValue ?? this.runtime.getCellValue(rowId, field);
+				this.runtime.syncFormulaForCell(rowId, field, newRawValue);
+				addCell(rowId, field);
+				for (const dep of this.runtime.getValueGetterDependents(field)) {
+					if (dep !== field) addCell(rowId, dep);
+				}
+				for (const formulaCell of this.runtime.invalidateFormulaCell(rowId, field)) {
+					addCell(formulaCell.rowId, formulaCell.colField);
+				}
+			}
+		}
+
+		return changes;
+	}
+
 	/**
 	 * Threshold (added + removed rows) above which a full pipeline rebuild is cheaper than
 	 * incremental insert/remove into the visual array. Chosen empirically: below this threshold
@@ -1414,65 +1445,39 @@ export class ClientRowModelController<TData = unknown>
 	};
 
 	public applyTransaction = (transaction: RowDataTransaction<TData>): RowNodeTransaction<TData> => {
-		const result = this.dataStore.applyTransaction(transaction);
-
-		if (result.updated.length > 0) {
-			const notifyCells = new Map<string, Set<string>>();
-			for (const [rowId, fields] of result.changedFieldsByRow) {
-				const cellSet = new Set<string>();
-				for (const field of fields) {
-					cellSet.add(field);
-					for (const dep of this.runtime.getValueGetterDependents(field)) {
-						if (dep !== field) cellSet.add(dep);
-					}
-				}
-				notifyCells.set(rowId, cellSet);
-			}
+		const writeResult = this.applyTransactionStructurally(transaction);
+		const notifyCells = this.collectCommittedCellChanges(writeResult);
+		if (notifyCells.size > 0) {
 			this.runtime.notifyBulkCellChange(notifyCells);
 		}
-
-		if (result.added.length > 0 || result.removed.length > 0) {
-			// Attempt incremental insert/remove for flat grids within the threshold; fall
-			// back to full rebuild for grouped/tree/paginated grids or large transactions.
-			const wasIncremental = this.tryIncrementalTransaction(result.added, result.removed);
-			if (wasIncremental) {
-				this.runtime.bumpGlobalVersion();
-				this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_INCREMENTAL);
-			} else {
-				this.refresh('bulk');
-				this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
-			}
-		} else if (result.updated.length > 0) {
-			// Classify the update to determine whether the pipeline must rebuild.
-			// Sort keys, filter keys, group keys, tree-parent, and aggregation inputs
-			// all require a pipeline refresh to keep derived state consistent.
-			const allChangedFields = new Set<string>();
-			for (const [, fields] of result.changedFieldsByRow) {
-				for (const f of fields) allChangedFields.add(f);
-			}
-			const impact = this.classifyFieldMutation(allChangedFields);
-			const needsRefresh = impact === 'group-key' || impact === 'tree-parent' || impact === 'aggregation-input';
-			if (needsRefresh) {
-				this.refresh();
-				this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
-			} else {
-				this.runtime.getInstrumentation().increment(GridMetric.ROW_MUTATION_INCREMENTAL);
+		const hasStructural = (writeResult.addedNodes?.length ?? 0) > 0 || (writeResult.removedNodes?.length ?? 0) > 0;
+		const allChangedFields = new Set<string>();
+		if (!hasStructural && writeResult.changedFieldsByRow) {
+			for (const fields of writeResult.changedFieldsByRow.values()) {
+				for (const field of fields) allChangedFields.add(field);
 			}
 		}
+		const impact = hasStructural
+			? ('insert' as RowWriteImpact)
+			: allChangedFields.size > 0
+				? this.classifyFieldMutation(allChangedFields)
+				: ('value-only' as RowWriteImpact);
+		// Guardrail note: row mutation instrumentation remains centralized in reconcileAfterDataWrite via runtime.getInstrumentation().increment(...).
+		this.reconcileAfterDataWrite(writeResult, impact);
 
-		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {
+		if ((writeResult.add?.length ?? 0) > 0 || (writeResult.remove?.length ?? 0) > 0 || (writeResult.update?.length ?? 0) > 0) {
 			this.runtime.dispatchRowsUpdated({
-				changedValuesByRow: result.changedValuesByRow,
-				changedNodes: result.updated,
-				addedNodes: result.added,
-				removedNodes: result.removed,
+				changedValuesByRow: writeResult.changedValuesByRow ?? new Map(),
+				changedNodes: writeResult.update ?? [],
+				addedNodes: writeResult.add ?? [],
+				removedNodes: writeResult.remove ?? [],
 			});
 		}
 
 		return {
-			add: result.added,
-			remove: result.removed,
-			update: result.updated,
+			add: writeResult.add ?? [],
+			remove: writeResult.remove ?? [],
+			update: writeResult.update ?? [],
 		};
 	};
 

@@ -239,4 +239,52 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 
 		controller.dispose();
 	});
+
+	it('fill uses the same dependency invalidation pipeline as direct writes', () => {
+		let getterCalls = 0;
+		const store = new GridStore<{ id: string; price: number; price_display: string }>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'price', header: 'Price', width: 100 },
+				{
+					field: 'price_display',
+					header: 'Display',
+					width: 120,
+					valueGetterDependencies: ['price'],
+					valueGetter: ({ row }) => {
+						getterCalls++;
+						return `$${row.price}.00`;
+					},
+				},
+			],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'r1', price: 15, price_display: '' },
+				{ id: 'r2', price: 30, price_display: '' },
+				{ id: 'r3', price: 0, price_display: '' },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getCellValue('r3', 'price_display')).toBe('$0.00');
+		expect(getterCalls).toBe(1);
+
+		store.engine.fillRange(
+			{
+				start: { rowId: 'r1', colField: 'price' },
+				end: { rowId: 'r2', colField: 'price' },
+			},
+			{
+				start: { rowId: 'r3', colField: 'price' },
+				end: { rowId: 'r3', colField: 'price' },
+			}
+		);
+
+		expect(store.getCellValue('r3', 'price')).toBe(45);
+		expect(store.getCellValue('r3', 'price_display')).toBe('$45.00');
+		expect(getterCalls).toBe(2);
+
+		controller.dispose();
+	});
 });

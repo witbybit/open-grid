@@ -222,6 +222,52 @@ describe('ClipboardController', () => {
 		store.destroy();
 	});
 
+	it('pasteFromClipboard uses the canonical dependency and sort reconciliation pipeline', async () => {
+		let getterCalls = 0;
+		const store = new GridStore<{ id: string; name: string; price: number; price_display: string }>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 80 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+				{
+					field: 'price_display',
+					header: 'Display',
+					width: 120,
+					valueGetterDependencies: ['price'],
+					valueGetter: ({ row }) => {
+						getterCalls++;
+						return `$${row.price}.00`;
+					},
+				},
+			],
+			getRowId: (row) => row.id,
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const ctrl = makeController(
+			store as GridStore<TestRow>,
+			[
+				{ id: '1', name: 'Alpha', price: 10, price_display: '' } as TestRow,
+				{ id: '2', name: 'Beta', price: 20, price_display: '' } as TestRow,
+				{ id: '3', name: 'Gamma', price: 30, price_display: '' } as TestRow,
+			] as TestRow[]
+		);
+
+		expect(store.getCellValue('1', 'price_display')).toBe('$10.00');
+		expect(getterCalls).toBe(1);
+
+		clip.setStored('25');
+		store.selectCell({ rowId: '1', colField: 'price' });
+		await store.pasteFromClipboard();
+
+		expect(store.getCellValue('1', 'price_display')).toBe('$25.00');
+		expect(getterCalls).toBe(2);
+		expect(store.getVisualIndexByRowId('2')).toBe(0);
+		expect(store.getVisualIndexByRowId('1')).toBe(1);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('copyRange copies explicit visual row/col bounds', async () => {
 		const store = makeStore();
 		const ctrl = makeController(store);

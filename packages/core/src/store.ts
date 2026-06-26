@@ -820,9 +820,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return createRowsAccessor(this);
 	};
 
-	public setRows = (rows: TRowData[]): void => {
+	public setRows = (rows: TRowData[]): GridWriteResult => {
 		this.assertClientStructuralRowModel('setRows');
-		this.engine.replaceRows(rows);
+		return this.engine.replaceRows(rows);
 	};
 
 	public getRowOrder = (): string[] => this.getClientStructuralRowModel()?.getRowOrder() ?? [];
@@ -830,9 +830,9 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.setRowOrder(rowIds);
 	};
 
-	public updateRows = (updater: (rows: TRowData[]) => TRowData[]): void => {
+	public updateRows = (updater: (rows: TRowData[]) => TRowData[]): GridWriteResult => {
 		this.assertClientStructuralRowModel('updateRows');
-		this.engine.updateRows(updater);
+		return this.engine.updateRows(updater);
 	};
 
 	public applyTransaction = (transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null => {

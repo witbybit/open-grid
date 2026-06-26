@@ -2,7 +2,7 @@ import type { DataModel } from '../models/DataModel.js';
 import type { ColumnModel } from '../models/ColumnModel.js';
 import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import type { BatchCellValueUpdate, GridCellPointer } from '../api/GridApi.js';
-import { asAnyModelCellWritable, type RowModel } from '../rowModel.js';
+import { asAnyModelCellWritable, type RowModel, type RowModelWriteResult } from '../rowModel.js';
 
 export type { BatchCellValueUpdate };
 
@@ -22,6 +22,11 @@ export interface CellValueChangeResult {
 	invalidatedCells: GridCellPointer[];
 }
 
+export interface StructuralWriteEffectResult {
+	invalidatedCells: GridCellPointer[];
+	cellChanges: Map<string, Set<string>>;
+}
+
 export interface DataMutationDeps<TRowData = unknown> {
 	data: DataModel<TRowData>;
 	columns: ColumnModel<TRowData>;
@@ -32,6 +37,51 @@ export interface DataMutationDeps<TRowData = unknown> {
 
 export class DataMutationController<TRowData = unknown> {
 	constructor(private readonly deps: DataMutationDeps<TRowData>) {}
+
+	applyStructuralWriteEffects(writeResult: RowModelWriteResult<TRowData>): StructuralWriteEffectResult {
+		const invalidatedCells: GridCellPointer[] = [];
+		const cellChanges = new Map<string, Set<string>>();
+		const seen = new Set<string>();
+
+		const addCell = (rowId: string, colField: string): void => {
+			const key = `${rowId}:${colField}`;
+			if (seen.has(key)) return;
+			seen.add(key);
+			invalidatedCells.push({ rowId, colField });
+			let rowFields = cellChanges.get(rowId);
+			if (!rowFields) {
+				rowFields = new Set<string>();
+				cellChanges.set(rowId, rowFields);
+			}
+			rowFields.add(colField);
+		};
+
+		const changedFieldsByRow = writeResult.changedFieldsByRow;
+		if (!changedFieldsByRow || changedFieldsByRow.size === 0) {
+			return { invalidatedCells, cellChanges };
+		}
+
+		for (const [rowId, fields] of changedFieldsByRow) {
+			const changedValues = writeResult.changedValuesByRow?.get(rowId);
+			for (const colField of fields) {
+				const newRawValue = changedValues?.get(colField)?.newValue ?? this.deps.data.getRawCellValue(rowId, colField);
+				this.deps.syncFormulaForCell(rowId, colField, newRawValue);
+				addCell(rowId, colField);
+				for (const dependentField of this.deps.columns.getValueGetterDependents(colField)) {
+					if (dependentField !== colField) addCell(rowId, dependentField);
+				}
+				for (const formulaCell of this.deps.invalidateFormulaCell(rowId, colField)) {
+					addCell(formulaCell.rowId, formulaCell.colField);
+				}
+			}
+		}
+
+		for (const cell of invalidatedCells) {
+			this.deps.data.clearValueGetterCache(cell.rowId, cell.colField);
+		}
+
+		return { invalidatedCells, cellChanges };
+	}
 
 	applyCellValueChange(rowId: string, colField: string, value: unknown, options: CellValueChangeOptions = {}): CellValueChangeResult {
 		const notApplied = (oldRawValue: unknown, oldComputedValue: unknown): CellValueChangeResult => ({
@@ -57,30 +107,7 @@ export class DataMutationController<TRowData = unknown> {
 			bypassValueSetter: options.bypassValueSetter === true,
 		});
 		if (!writeResult.updatedNodes?.length) return notApplied(oldRawValue, oldComputedValue);
-
-		this.deps.syncFormulaForCell(rowId, colField, value);
-
-		const invalidatedFormulaCells = this.deps.invalidateFormulaCell(rowId, colField);
-		const dependentFields = this.deps.columns.getValueGetterDependents(colField).filter((f) => f !== colField);
-
-		const invalidatedCells: GridCellPointer[] = [{ rowId, colField }];
-		const seen = new Set<string>();
-		seen.add(rowId + ':' + colField);
-
-		const addCell = (rId: string, cField: string): void => {
-			const key = rId + ':' + cField;
-			if (!seen.has(key)) {
-				seen.add(key);
-				invalidatedCells.push({ rowId: rId, colField: cField });
-			}
-		};
-
-		for (const f of dependentFields) addCell(rowId, f);
-		for (const c of invalidatedFormulaCells) addCell(c.rowId, c.colField);
-
-		for (const c of invalidatedCells) {
-			this.deps.data.clearValueGetterCache(c.rowId, c.colField);
-		}
+		const effects = this.applyStructuralWriteEffects(writeResult);
 
 		const newComputedValue = this.deps.data.getCellValue(rowId, colField);
 
@@ -92,7 +119,7 @@ export class DataMutationController<TRowData = unknown> {
 			oldComputedValue,
 			newRawValue: value,
 			newComputedValue,
-			invalidatedCells,
+			invalidatedCells: effects.invalidatedCells,
 		};
 	}
 }

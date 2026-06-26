@@ -58,12 +58,7 @@ function recreateManager(store: GridStore<TestRow>): GridDataIntegrityManager<Te
 		),
 		capabilityManager: engine.capabilityManager,
 		commitCells: (updates) => engine.batchCellValues(updates as { rowId: string; colField: string; value: unknown }[], 'api'),
-		applyRowPatch: (rowId, patch) => {
-			const row = engine.getRowModel()?.getRawRowById(rowId);
-			if (row) {
-				engine.applyTransaction({ update: [{ ...row, ...patch }] });
-			}
-		},
+		applyRowPatch: (rowId, patch) => store.updateRows((rows) => rows.map((row) => (row.id === rowId ? ({ ...row, ...patch } as TestRow) : row))),
 		requestIntegrityRepaint: () => {},
 	});
 }
@@ -215,5 +210,21 @@ describe('GridDataIntegrityManager authoritative state', () => {
 		expect(store.engine.getState().integrity.liveStream.session?.skippedDirtyUpdates).toBe(1);
 
 		store.stopEditing(true);
+	});
+
+	it('integrity row patches surface the same write result protocol as other canonical writes', () => {
+		const store = createStore();
+		const manager = recreateManager(store);
+		const stream = manager.createStream({ dirtyCellPolicy: 'remoteWins', flashChanges: false });
+
+		stream.pushRows([{ rowId: 'missing', patch: { name: 'Ghost' } }]);
+		stream.flush();
+		expect(manager.getStreamState()?.lastError).toBeNull();
+
+		stream.pushRows([{ rowId: '2', patch: { name: 'Patched via stream' } }]);
+		stream.flush();
+
+		expect(store.getRowNodeById('2')?.data.name).toBe('Patched via stream');
+		expect(manager.getStreamState()?.lastError).toBeNull();
 	});
 });

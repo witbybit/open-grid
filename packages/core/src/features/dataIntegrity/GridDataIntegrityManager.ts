@@ -55,7 +55,7 @@ export interface GridDataIntegrityManagerDeps<TRowData> {
 	rowProvider: GridIntegrityRowProvider<TRowData>;
 	capabilityManager: GridCapabilityManager<TRowData>;
 	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => GridWriteResult;
-	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => void;
+	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => GridWriteResult;
 	requestIntegrityRepaint: (request: IntegrityRepaintRequest) => void;
 }
 

@@ -384,6 +384,7 @@ export class GridEngine<TRowData = unknown> {
 				getStoredCellValue: (rowId, colField) => this.data.getStoredCellValue(rowId, colField),
 				getColumnDef: (colField) => this.columns.getColumnDef(colField),
 				applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
+				applyStructuralWriteEffects: (writeResult) => this.dataMutation.applyStructuralWriteEffects(writeResult),
 				publishCommittedCellChanges: (changes) => this.publishCommittedCellChanges(changes),
 			},
 			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TRowData>(),
@@ -484,10 +485,14 @@ export class GridEngine<TRowData = unknown> {
 				commitCells: (updates) => this.batchCellValues(updates as import('../api/GridApi.js').BatchCellValueUpdate[], 'api'),
 				applyRowPatch: (rowId, patch) => {
 					const row = this.rowModel?.getRawRowById(rowId);
-					if (row) {
-						const updated = { ...row, ...patch };
-						this.applyTransaction({ update: [updated] });
-					}
+					if (!row) return { status: 'noop' } as const;
+					const updated = { ...row, ...patch };
+					return this.toGridWriteResult(
+						this.changeApplier.commit({
+							reason: 'rows:apply-transaction',
+							domainMutations: [{ kind: 'row-transaction', transaction: { update: [updated] } }],
+						})
+					);
 				},
 				requestIntegrityRepaint: (request) => {
 					if (request.cells && request.cells.length > 0) {
@@ -570,12 +575,12 @@ export class GridEngine<TRowData = unknown> {
 		return result ?? null;
 	}
 
-	public replaceRows(rows: readonly TRowData[]): void {
-		this.changeApplier.commit({ reason: 'rows:replace', domainMutations: [{ kind: 'replace-rows', rows }] });
+	public replaceRows(rows: readonly TRowData[]): GridWriteResult {
+		return this.toGridWriteResult(this.changeApplier.commit({ reason: 'rows:replace', domainMutations: [{ kind: 'replace-rows', rows }] }));
 	}
 
-	public updateRows(updater: (rows: TRowData[]) => TRowData[]): void {
-		this.changeApplier.commit({ reason: 'rows:update', domainMutations: [{ kind: 'batch-row-update', updater }] });
+	public updateRows(updater: (rows: TRowData[]) => TRowData[]): GridWriteResult {
+		return this.toGridWriteResult(this.changeApplier.commit({ reason: 'rows:update', domainMutations: [{ kind: 'batch-row-update', updater }] }));
 	}
 
 	public updateExpansionState(updater: (expansion: InternalGridState<TRowData>['expansion']) => InternalGridState<TRowData>['expansion']): void {

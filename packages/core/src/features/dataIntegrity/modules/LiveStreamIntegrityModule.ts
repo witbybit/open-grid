@@ -29,7 +29,7 @@ export interface LiveStreamModuleDeps<TRowData> {
 	applyIntegrityChange: (change: GridCommit<TRowData>) => void;
 	getIntegrityState: () => GridIntegrityState<TRowData>;
 	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => GridWriteResult;
-	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => void;
+	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => GridWriteResult;
 	getRawCellValue: (rowId: string, colField: string) => unknown;
 	isCellDirty: (rowId: string, colField: string) => boolean;
 	getConflictModule: () => ConflictIntegrityModule<TRowData> | null;
@@ -202,7 +202,7 @@ export class LiveStreamIntegrityModule<TRowData> implements GridIntegrityModule<
 
 interface LiveStreamHandleDeps<TRowData> {
 	commitCells: (updates: readonly { rowId: string; colField: string; value: unknown }[]) => GridWriteResult;
-	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => void;
+	applyRowPatch: (rowId: string, patch: Partial<TRowData>) => GridWriteResult;
 	getRawCellValue: (rowId: string, colField: string) => unknown;
 	isCellDirty: (rowId: string, colField: string) => boolean;
 	onSkipped: (rowId: string, colField: string, remoteValue: unknown) => void;
@@ -403,7 +403,10 @@ class LiveStreamHandle<TRowData> implements GridTransactionStreamHandle<TRowData
 		if (this.pendingRows.size === 0) return;
 		for (const [, update] of this.pendingRows) {
 			try {
-				this.deps.applyRowPatch(update.rowId, update.patch);
+				const result = this.deps.applyRowPatch(update.rowId, update.patch);
+				if (result.status !== 'applied' && result.status !== 'noop') {
+					throw new Error(result.status === 'failed' ? result.error.message : result.reason);
+				}
 			} catch (error) {
 				this._lastError = error instanceof Error ? error.message : String(error);
 			}

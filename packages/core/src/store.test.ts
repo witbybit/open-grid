@@ -763,6 +763,61 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('applyTransaction keeps formula registration and recomputes dependent cells', () => {
+		const store = new GridStore<{ id: string; val: number; formula: unknown }>({
+			columns: [
+				{ field: 'val', header: 'Val' },
+				{ field: 'formula', header: 'Formula' },
+			],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'r1', val: 10, formula: '' }],
+			columns: store.getState().columns,
+		});
+
+		store.applyTransaction({ update: [{ id: 'r1', val: 10, formula: '=[r1:val]*2' }] });
+		expect(store.getCellState('r1', 'formula').value).toBe('=[r1:val]*2');
+		expect(store.getCellValue('r1', 'formula')).toBe(20);
+
+		store.applyTransaction({ update: [{ id: 'r1', val: 30, formula: '=[r1:val]*2' }] });
+		expect(store.getCellValue('r1', 'formula')).toBe(60);
+
+		controller.dispose();
+	});
+
+	it('updateRows invalidates declared valueGetter dependencies through the same write pipeline', () => {
+		let getterCalls = 0;
+		const store = new GridStore<{ id: string; price: number; name: string }>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+				{
+					field: 'price_display',
+					header: 'Price Tag',
+					valueGetterDependencies: ['price'],
+					valueGetter: ({ row }) => {
+						getterCalls++;
+						return `$${row.price}.00`;
+					},
+				},
+			],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'r1', name: 'Alpha', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getCellValue('r1', 'price_display')).toBe('$10.00');
+		expect(store.getCellValue('r1', 'price_display')).toBe('$10.00');
+		expect(getterCalls).toBe(1);
+
+		store.updateRows((rows) => rows.map((row) => (row.id === 'r1' ? { ...row, price: 25 } : row)));
+		expect(store.getCellValue('r1', 'price_display')).toBe('$25.00');
+		expect(getterCalls).toBe(2);
+
+		controller.dispose();
+	});
+
 	it('getCellState returns raw formula string in .value and computed value in .computedValue', () => {
 		const store = new GridStore<{ id: string; val: number; formula: unknown }>({
 			columns: [

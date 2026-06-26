@@ -51,8 +51,8 @@ export interface GridDataApi<TRowData = unknown> {
 	isRowLoading(rowId: string): boolean;
 	getDataRowAtVisualIndex(index: number): TRowData | null;
 	getDataRowNodeAtVisualIndex(index: number): RowNode<TRowData> | null;
-	setRows(rows: TRowData[]): void;
-	updateRows(updater: (rows: TRowData[]) => TRowData[]): void;
+	setRows(rows: TRowData[]): GridWriteResult;
+	updateRows(updater: (rows: TRowData[]) => TRowData[]): GridWriteResult;
 	applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null;
 	getRowOrder(): string[];
 	setRowOrder(rowIds: string[]): void;
