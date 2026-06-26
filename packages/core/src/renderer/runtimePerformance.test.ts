@@ -312,6 +312,35 @@ describe('Runtime Performance & Granular Versioning', () => {
 		cleanupGrid(grid);
 	});
 
+	it('keeps pinned-lane horizontal scroll portal-free and bounded', () => {
+		const grid = createWideGrid({ rows: 1000, cols: 1000, custom: true });
+		grid.store.setPinnedColumns({ left: 2, right: 2 });
+		grid.renderer.fullPaint();
+
+		const initialPlan = grid.store.engine.columns.getCompiledPlan();
+		const prevWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
+		grid.renderer.resetRenderStats();
+
+		grid.store.engine.viewport.setScrollPosition(0, 300);
+		grid.renderer.rowRenderer.recycleViewport(true, makeScrollCtx(grid.store) as any);
+
+		const nextWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
+		const delta = diffRenderWindow(prevWindow, nextWindow);
+		const activeRows = getRowIndices(nextWindow).length;
+		const pinnedCols = nextWindow.pinLeftCols + nextWindow.pinRightCols;
+		const stats = grid.renderer.getRenderStats();
+
+		expect(nextWindow.pinLeftCols).toBe(2);
+		expect(nextWindow.pinRightCols).toBe(2);
+		expect(grid.store.engine.columns.getCompiledPlan()).toBe(initialPlan);
+		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(activeRows * (delta.colsEntered.length + delta.colsExited.length + pinnedCols));
+		expect(stats.customRendererMountsDuringScroll).toBe(0);
+		expect(stats.portalMountsDuringScroll).toBe(0);
+		expect(stats.portalFlushesDuringScroll).toBe(0);
+
+		cleanupGrid(grid);
+	});
+
 	it('caps rendered rows and cells through runtime limits', () => {
 		const grid = createWideGrid({ rows: 100000, cols: 1000 });
 		const window = grid.renderer.rowRenderer.currentWindow as RenderWindow;
