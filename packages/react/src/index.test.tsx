@@ -50,6 +50,18 @@ const NavigationControllerOwner = ({ onCellValueChanged }: { onCellValueChanged:
 	return null;
 };
 
+const NavigationControllerProbe = ({
+	onCellValueChanged,
+	onRender,
+}: {
+	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onRender: (handle: ReturnType<typeof useGridNavigationController<TestRow>>) => void;
+}) => {
+	const handle = useGridNavigationController<TestRow>({ onCellValueChanged });
+	onRender(handle);
+	return <span data-testid='nav-controller-present'>{handle ? 'yes' : 'no'}</span>;
+};
+
 const ApiSurfaceInspector = () => {
 	const api = useGridApi<TestRow>();
 	return (
@@ -548,6 +560,64 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		expect(onCellValueChanged).not.toHaveBeenCalled();
+		grid.api.destroy();
+	});
+
+	it('should expose a stable navigation controller handle without effect-driven rerender churn', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Cell Content' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const firstCallback = vi.fn();
+		const secondCallback = vi.fn();
+		let renderCount = 0;
+		const handles: Array<ReturnType<typeof useGridNavigationController<TestRow>>> = [];
+
+		const { rerender, unmount } = render(
+			<GridProvider api={grid.api}>
+				<NavigationControllerProbe
+					onCellValueChanged={firstCallback}
+					onRender={(handle) => {
+						renderCount++;
+						handles.push(handle);
+					}}
+				/>
+			</GridProvider>
+		);
+
+		expect(screen.getByTestId('nav-controller-present').textContent).toBe('yes');
+		await act(async () => {});
+		expect(renderCount).toBe(1);
+		expect(handles[0]).not.toBeNull();
+
+		act(() => {
+			grid.api.setCellValue('1', 'name', 'After first mount');
+		});
+		expect(firstCallback).toHaveBeenCalledWith('1', 'name', 'After first mount');
+
+		rerender(
+			<GridProvider api={grid.api}>
+				<NavigationControllerProbe
+					onCellValueChanged={secondCallback}
+					onRender={(handle) => {
+						renderCount++;
+						handles.push(handle);
+					}}
+				/>
+			</GridProvider>
+		);
+
+		await act(async () => {});
+		expect(renderCount).toBe(2);
+		expect(handles[1]).toBe(handles[0]);
+
+		act(() => {
+			grid.api.setCellValue('1', 'name', 'After rerender');
+		});
+		expect(firstCallback).toHaveBeenCalledTimes(1);
+		expect(secondCallback).toHaveBeenCalledWith('1', 'name', 'After rerender');
+
+		unmount();
 		grid.api.destroy();
 	});
 
