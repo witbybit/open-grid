@@ -40,6 +40,13 @@ export interface GridViewProps<TRowData = unknown> {
 	enableChart?: boolean;
 }
 
+function warnInitialOnlyGridViewProp(propName: string): void {
+	console.warn(
+		`[open-grid/react] Prop "${propName}" is initial-only for the current grid instance. ` +
+			'Changing it after mount does not reconfigure the existing runtime. Remount or replace the grid api if you need the new value to take effect.'
+	);
+}
+
 export function GridView<TRowData = unknown>({
 	api,
 	pinLeftColumns,
@@ -65,6 +72,15 @@ export function GridView<TRowData = unknown>({
 	apiRef.current = api;
 	const [adapterHandle, setAdapterHandle] = useState<GridAdapterHandle<unknown> | null>(null);
 	const isGridActiveRef = useRef(false);
+	const warnedInitialOnlyPropsRef = useRef(new Set<string>());
+	const sidebarDefaultOpenRef = useRef(sidebar?.defaultOpen);
+	const sidebarInitialApiRef = useRef(api);
+
+	if (sidebarInitialApiRef.current !== api) {
+		sidebarInitialApiRef.current = api;
+		sidebarDefaultOpenRef.current = sidebar?.defaultOpen;
+		warnedInitialOnlyPropsRef.current.clear();
+	}
 
 	useEffect(() => {
 		if (pinLeftColumns !== undefined || pinRightColumns !== undefined) {
@@ -182,29 +198,29 @@ export function GridView<TRowData = unknown>({
 		};
 	}, [api, portalStore]);
 
-	const [contextMenu, setContextMenu] = useState<GridContextMenuHandle<TRowData> | null>(null);
 	const contextMenuOptionsRef = useRef(contextMenuOptions);
 	contextMenuOptionsRef.current = contextMenuOptions;
+	const contextMenuRef = useRef<GridContextMenuHandle<TRowData> | null>(null);
 
 	useEffect(() => {
 		if (!enableContextMenu) {
-			setContextMenu(null);
+			contextMenuRef.current = null;
 			return;
 		}
 		const plugin = registerGridContextMenu<TRowData>(api, contextMenuOptions);
-		setContextMenu(plugin);
+		contextMenuRef.current = plugin;
 
 		return () => {
+			if (contextMenuRef.current === plugin) {
+				contextMenuRef.current = null;
+			}
 			plugin.dispose();
-			setContextMenu(null);
 		};
 	}, [api, enableContextMenu]);
 
 	useEffect(() => {
-		if (contextMenu && contextMenuOptionsRef.current) {
-			contextMenu.setOptions(contextMenuOptionsRef.current);
-		}
-	}, [contextMenu, contextMenuOptions]);
+		contextMenuRef.current?.setOptions(contextMenuOptionsRef.current ?? {});
+	}, [contextMenuOptions]);
 
 	const navigation = useGridNavigationController<TRowData>(
 		{
@@ -220,8 +236,6 @@ export function GridView<TRowData = unknown>({
 	navigationRef.current = navigation;
 	const onCellClickRef = useRef(onCellClick);
 	onCellClickRef.current = onCellClick;
-	const contextMenuRef = useRef(contextMenu);
-	contextMenuRef.current = contextMenu;
 	const enableContextMenuRef = useRef(enableContextMenu);
 	enableContextMenuRef.current = enableContextMenu;
 
@@ -425,10 +439,18 @@ export function GridView<TRowData = unknown>({
 		};
 	}, [api]);
 
-	const sidebarDefaultOpenRef = useRef(sidebar?.defaultOpen);
 	useEffect(() => {
 		if (sidebarDefaultOpenRef.current != null) api.openPanel(sidebarDefaultOpenRef.current);
-	}, []);
+	}, [api]);
+
+	useEffect(() => {
+		const initialValue = sidebarDefaultOpenRef.current;
+		const currentValue = sidebar?.defaultOpen;
+		if (Object.is(initialValue, currentValue)) return;
+		if (warnedInitialOnlyPropsRef.current.has('sidebar.defaultOpen')) return;
+		warnedInitialOnlyPropsRef.current.add('sidebar.defaultOpen');
+		warnInitialOnlyGridViewProp('sidebar.defaultOpen');
+	}, [api, sidebar?.defaultOpen]);
 
 	const hasSidebar = sidebar != null;
 	const sidebarPosition = sidebar?.position ?? 'right';

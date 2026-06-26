@@ -141,7 +141,7 @@
 | 142 | [Add Cross-Feature Composition Gauntlets Before Advanced Grid Features](./142-cross-feature-composition-gauntlets.md) | DONE | working tree |
 | 143 | [Lock Projection and Invalidation to One Deterministic Commit-Owned Pipeline](./143-projection-and-invalidation-determinism.md) | DONE | working tree |
 | 144 | [Add Performance Guardrails for Hot Scroll, Slot Reuse, and High-Throughput Writes](./144-performance-guardrails-and-hot-scroll-budgets.md) | DONE | working tree |
-| 145 | [Make the React Adapter Lifecycle-Safe, Predictable, and Boring in Production](./145-react-adapter-lifecycle-and-public-contract-resilience.md) | TODO | c4f9506e |
+| 145 | [Make the React Adapter Lifecycle-Safe, Predictable, and Boring in Production](./145-react-adapter-lifecycle-and-public-contract-resilience.md) | DONE | working tree |
 | 146 | [Make Async, Infinite, and Server-Oriented Row Models Feel First-Class](./146-async-row-models-and-server-runtime-parity.md) | TODO | c4f9506e |
 | 147 | [Make Editing, Clipboard, Fill, Formulas, Validation, and Editors One Coherent System](./147-editing-clipboard-fill-formula-and-capability-maturity.md) | TODO | c4f9506e |
 | 148 | [Make Grouping, Tree Data, Master/Detail, and Pinned Lanes Compose Cleanly](./148-group-tree-master-detail-and-pinned-composition.md) | TODO | c4f9506e |

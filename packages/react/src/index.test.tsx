@@ -1380,6 +1380,68 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should adopt the latest context menu options on rerender without rebinding container listeners', async () => {
+		const addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, 'addEventListener');
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		const { container, rerender, unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView
+					api={grid.api}
+					enableNavigation={false}
+					contextMenuOptions={{
+						disableDefaults: true,
+						customItems: [{ label: 'First Action' }],
+					}}
+				/>
+			</GridProvider>
+		);
+
+		const openGridContainer = container.firstElementChild as HTMLElement;
+		await waitFor(() => {
+			expect(container.querySelector('.og-cell[data-col-field="name"]')).not.toBeNull();
+		});
+		const cell = container.querySelector('.og-cell[data-col-field="name"]') as HTMLElement;
+
+		fireEvent.contextMenu(cell, { clientX: 40, clientY: 50 });
+		await screen.findByText('First Action');
+
+		addEventListenerSpy.mockClear();
+		fireEvent.mouseDown(document.body);
+		await waitFor(() => expect(screen.queryByText('First Action')).toBeNull());
+
+		rerender(
+			<GridProvider api={grid.api}>
+				<GridView
+					api={grid.api}
+					enableNavigation={false}
+					contextMenuOptions={{
+						disableDefaults: true,
+						customItems: [{ label: 'Second Action' }],
+					}}
+				/>
+			</GridProvider>
+		);
+
+		const updateAddCalls = addEventListenerSpy.mock.calls.filter((call, index) => {
+			const instance = addEventListenerSpy.mock.instances[index];
+			return instance === openGridContainer && ['mousedown', 'mouseover', 'click', 'dblclick', 'contextmenu'].includes(call[0]);
+		}).length;
+		expect(updateAddCalls).toBe(0);
+
+		fireEvent.contextMenu(cell, { clientX: 45, clientY: 55 });
+		await screen.findByText('Second Action');
+		expect(screen.queryByText('First Action')).toBeNull();
+
+		addEventListenerSpy.mockRestore();
+		fireEvent.mouseDown(document.body);
+		unmount();
+		grid.api.destroy();
+	});
+
 	it('should keep global navigation listeners stable across nested grid rerenders and clean them up on unmount', async () => {
 		const windowAddSpy = vi.spyOn(window, 'addEventListener');
 		const windowRemoveSpy = vi.spyOn(window, 'removeEventListener');
@@ -1682,6 +1744,82 @@ describe('explicit React entrypoints', () => {
 
 		await act(async () => {});
 		grid.api.destroy();
+	});
+
+	it('GridView treats sidebar.defaultOpen as initial-only per api instance and reapplies the latest default when the api changes', async () => {
+		const firstGrid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Alice' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const secondGrid = createTestGrid<TestRow>({
+			rows: [{ id: '2', name: 'Bob' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const onCellClick = vi.fn();
+
+		const { rerender } = render(
+			<div style={{ width: 500, height: 320 }}>
+				<GridProvider api={firstGrid.api}>
+					<GridView
+						api={firstGrid.api}
+						enableNavigation={false}
+						onCellClick={onCellClick}
+						sidebar={{ panels: ['columns', 'filters'], defaultOpen: 'columns' }}
+					/>
+				</GridProvider>
+			</div>
+		);
+
+		await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
+		await waitFor(() => expect(firstGrid.api.getStateSnapshot().sidebarOpenPanel).toBe('columns'));
+
+		act(() => {
+			firstGrid.api.closePanel();
+		});
+		await waitFor(() => expect(firstGrid.api.getStateSnapshot().sidebarOpenPanel ?? null).toBeNull());
+
+		rerender(
+			<div style={{ width: 500, height: 320 }}>
+				<GridProvider api={firstGrid.api}>
+					<GridView
+						api={firstGrid.api}
+						enableNavigation={false}
+						onCellClick={onCellClick}
+						sidebar={{ panels: ['columns', 'filters'], defaultOpen: 'filters' }}
+					/>
+				</GridProvider>
+			</div>
+		);
+
+		await waitFor(() => {
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Prop "sidebar.defaultOpen" is initial-only'));
+		});
+		expect(firstGrid.api.getStateSnapshot().sidebarOpenPanel ?? null).toBeNull();
+
+		rerender(
+			<div style={{ width: 500, height: 320 }}>
+				<GridProvider api={secondGrid.api}>
+					<GridView
+						api={secondGrid.api}
+						enableNavigation={false}
+						onCellClick={onCellClick}
+						sidebar={{ panels: ['columns', 'filters'], defaultOpen: 'filters' }}
+					/>
+				</GridProvider>
+			</div>
+		);
+
+		await waitFor(() => expect(screen.getByText('Bob')).toBeTruthy());
+		expect(screen.queryByText('Alice')).toBeNull();
+		await waitFor(() => expect(secondGrid.api.getStateSnapshot().sidebarOpenPanel).toBe('filters'));
+
+		fireEvent.click(screen.getByText('Bob').closest('.og-cell')!);
+		expect(onCellClick).toHaveBeenCalledWith(expect.objectContaining({ rowId: '2', colField: 'name', value: 'Bob' }));
+
+		warnSpy.mockRestore();
+		firstGrid.api.destroy();
+		secondGrid.api.destroy();
 	});
 
 	it('Grid can own its api directly', async () => {
