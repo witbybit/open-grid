@@ -235,9 +235,12 @@ export function GridView<TRowData = unknown>({
 		const handleGlobalKeyDown = (e: KeyboardEvent) => {
 			const activeEl = document.activeElement;
 			const isInside = isWithinThisGrid(activeEl) || isGridActiveRef.current;
-			if (isInside && navigation) {
-				navigation.handleKeyDown(e);
+			if (isInside) {
+				navigationRef.current?.handleKeyDown(e);
 			}
+		};
+		const handleGlobalMouseUp = () => {
+			navigationRef.current?.handleMouseUp();
 		};
 		const handlePointerDown = (e: MouseEvent) => {
 			isGridActiveRef.current = isWithinThisGrid(e.target);
@@ -259,18 +262,18 @@ export function GridView<TRowData = unknown>({
 			container.addEventListener('focusout', handleFocusOut);
 		}
 		window.addEventListener('keydown', handleGlobalKeyDown);
-		if (navigation) window.addEventListener('mouseup', navigation.handleMouseUp);
+		window.addEventListener('mouseup', handleGlobalMouseUp);
 		document.addEventListener('mousedown', handlePointerDown, true);
 		return () => {
 			window.removeEventListener('keydown', handleGlobalKeyDown);
-			if (navigation) window.removeEventListener('mouseup', navigation.handleMouseUp);
+			window.removeEventListener('mouseup', handleGlobalMouseUp);
 			document.removeEventListener('mousedown', handlePointerDown, true);
 			if (container) {
 				container.removeEventListener('focusin', handleFocusIn);
 				container.removeEventListener('focusout', handleFocusOut);
 			}
 		};
-	}, [navigation, enableNavigation]);
+	}, [enableNavigation]);
 
 	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
 		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;

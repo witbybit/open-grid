@@ -1310,6 +1310,109 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should keep global navigation listeners stable across nested grid rerenders and clean them up on unmount', async () => {
+		const windowAddSpy = vi.spyOn(window, 'addEventListener');
+		const windowRemoveSpy = vi.spyOn(window, 'removeEventListener');
+		const documentAddSpy = vi.spyOn(document, 'addEventListener');
+		const documentRemoveSpy = vi.spyOn(document, 'removeEventListener');
+
+		const parentGrid = createTestGrid<TestRow>({
+			rows: [
+				{ id: 'p1', name: 'Parent A' },
+				{ id: 'p2', name: 'Parent B' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			initialState: {
+				rowModelConfig: {
+					type: 'client',
+					masterDetail: {
+						enabled: true,
+						expandedRowIds: { p1: true },
+						defaultDetailHeight: 120,
+					},
+				},
+			},
+		});
+		const childGrid = createTestGrid<TestRow>({
+			rows: [{ id: 'c1', name: 'Child A' }],
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+		});
+		const firstClick = vi.fn();
+		const secondClick = vi.fn();
+
+		const { rerender, unmount } = render(
+			<GridProvider api={parentGrid.api}>
+				<GridView
+					api={parentGrid.api}
+					enableNavigation
+					onCellClick={firstClick}
+					detailRowRenderer={() => (
+						<GridProvider api={childGrid.api}>
+							<GridView api={childGrid.api} enableNavigation />
+						</GridProvider>
+					)}
+				/>
+			</GridProvider>
+		);
+
+		await screen.findByText('Child A');
+
+		const addedWindowListeners = windowAddSpy.mock.calls.filter(([type]) => type === 'keydown' || type === 'mouseup');
+		const addedDocumentListeners = documentAddSpy.mock.calls.filter(([type, , options]) => type === 'mousedown' && options === true);
+		expect(addedWindowListeners).toHaveLength(4);
+		expect(addedDocumentListeners).toHaveLength(2);
+
+		windowAddSpy.mockClear();
+		windowRemoveSpy.mockClear();
+		documentAddSpy.mockClear();
+		documentRemoveSpy.mockClear();
+
+		rerender(
+			<GridProvider api={parentGrid.api}>
+				<GridView
+					api={parentGrid.api}
+					enableNavigation
+					onCellClick={secondClick}
+					detailRowRenderer={() => (
+						<GridProvider api={childGrid.api}>
+							<GridView api={childGrid.api} enableNavigation />
+						</GridProvider>
+					)}
+				/>
+			</GridProvider>
+		);
+
+		expect(windowAddSpy.mock.calls.filter(([type]) => type === 'keydown' || type === 'mouseup')).toHaveLength(0);
+		expect(windowRemoveSpy.mock.calls.filter(([type]) => type === 'keydown' || type === 'mouseup')).toHaveLength(0);
+		expect(documentAddSpy.mock.calls.filter(([type]) => type === 'mousedown')).toHaveLength(0);
+		expect(documentRemoveSpy.mock.calls.filter(([type]) => type === 'mousedown')).toHaveLength(0);
+
+		fireEvent.click((await screen.findByText('Parent A')).closest('.og-cell')!);
+		expect(firstClick).not.toHaveBeenCalled();
+		expect(secondClick).toHaveBeenCalledTimes(1);
+
+		unmount();
+
+		const removedWindowListeners = windowRemoveSpy.mock.calls.filter(([type]) => type === 'keydown' || type === 'mouseup');
+		const removedDocumentListeners = documentRemoveSpy.mock.calls.filter(([type, , options]) => type === 'mousedown' && options === true);
+		expect(removedWindowListeners.length).toBeGreaterThanOrEqual(addedWindowListeners.length);
+		expect(removedDocumentListeners.length).toBeGreaterThanOrEqual(addedDocumentListeners.length);
+
+		for (const [, listener] of addedWindowListeners) {
+			expect(removedWindowListeners).toContainEqual(expect.arrayContaining([expect.any(String), listener]));
+		}
+		for (const [, listener, options] of addedDocumentListeners) {
+			expect(removedDocumentListeners).toContainEqual(expect.arrayContaining(['mousedown', listener, options]));
+		}
+
+		windowAddSpy.mockRestore();
+		windowRemoveSpy.mockRestore();
+		documentAddSpy.mockRestore();
+		documentRemoveSpy.mockRestore();
+		parentGrid.api.destroy();
+		childGrid.api.destroy();
+	});
+
 	it('should survive repeated mount and unmount cycles without leaking portal content or cleanup warnings', async () => {
 		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
