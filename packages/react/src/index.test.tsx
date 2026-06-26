@@ -218,7 +218,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should render default text input when editing and no custom editor via PortalCell', () => {
+	it('should render default text input when editing and no custom editor via PortalCell', async () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
@@ -244,7 +244,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		fireEvent.change(input, { target: { value: 'Product B' } });
 		fireEvent.blur(input);
 
-		expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+		await waitFor(() => expect(grid.api.getCellValue('1', 'name')).toBe('Product B'));
 		grid.api.destroy();
 	});
 
@@ -275,7 +275,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should commit an in-progress edit when editStopped is dispatched without cancellation', () => {
+	it('should commit an in-progress edit when editStopped is dispatched without cancellation', async () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
@@ -301,11 +301,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			grid.api.stopEditing(false);
 		});
 
-		expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+		await waitFor(() => expect(grid.api.getCellValue('1', 'name')).toBe('Product B'));
 		grid.api.destroy();
 	});
 
-	it('should render custom cell editor via PortalCell', () => {
+	it('should render custom cell editor via PortalCell', async () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: [
@@ -345,11 +345,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		fireEvent.change(input, { target: { value: 'Product B' } });
 		fireEvent.blur(input);
 
-		expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+		await waitFor(() => expect(grid.api.getCellValue('1', 'name')).toBe('Product B'));
 		grid.api.destroy();
 	});
 
-	it('should commit custom cell editors immediately on Enter from the portal shell', () => {
+	it('should commit custom cell editors immediately on Enter from the portal shell', async () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],
 			columns: [
@@ -384,8 +384,10 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		fireEvent.change(input, { target: { value: 'Product B' } });
 		fireEvent.keyDown(input, { key: 'Enter' });
 
-		expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
-		expect(grid.api.getStateSnapshot().activeEdit).toBeNull();
+		await waitFor(() => {
+			expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+			expect(grid.api.getStateSnapshot().activeEdit).toBeNull();
+		});
 
 		grid.api.destroy();
 	});
@@ -1726,6 +1728,48 @@ describe('explicit React entrypoints', () => {
 		await waitFor(() => expect(onGridReady).toHaveBeenCalledTimes(1));
 		expect(onGridReady.mock.calls[0][0]).toEqual(expect.objectContaining({ rowModelType: 'client' }));
 		expect(screen.getByTestId('api-hook').textContent).toBe('yes');
+	});
+
+	it('Grid forwards writeBlocked events through the React callback surface', async () => {
+		const onGridReady = vi.fn();
+		const onWriteBlocked = vi.fn();
+
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid
+					rowModelType='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[{ field: 'name', header: 'Name', width: 100 }]}
+					getRowId={(row: TestRow) => row.id}
+					enableNavigation={false}
+					onGridReady={onGridReady}
+					onWriteBlocked={onWriteBlocked}
+				/>
+			</div>
+		);
+
+		await waitFor(() => expect(onGridReady).toHaveBeenCalledTimes(1));
+		const api = onGridReady.mock.calls[0][0].api;
+
+		act(() => {
+			api.dispatchEvent(GridEventName.writeBlocked, {
+				source: 'paste',
+				status: 'validationFailed',
+				reason: 'Invalid email format',
+				cells: [{ rowId: '1', colField: 'name' }],
+				rowCount: 1,
+				colCount: 1,
+				issues: [],
+			});
+		});
+
+		expect(onWriteBlocked).toHaveBeenCalledWith(
+			expect.objectContaining({
+				source: 'paste',
+				status: 'validationFailed',
+				reason: 'Invalid email format',
+			})
+		);
 	});
 
 	it('GridView renders against an explicit api', async () => {

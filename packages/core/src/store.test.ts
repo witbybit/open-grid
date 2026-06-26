@@ -272,7 +272,9 @@ describe('GridStore generic row-store functionality', () => {
 				dataIntegrity: {
 					validation: {
 						validateOnSubmit: true,
-						cellRules: [{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) }],
+						cellRules: [
+							{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) },
+						],
 					},
 				},
 			}

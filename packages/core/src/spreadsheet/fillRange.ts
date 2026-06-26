@@ -4,6 +4,7 @@ import type { GridWriteResult } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RowModel } from '../rowModel.js';
+import { dispatchWriteBlockedEvent, isWriteBlockedResult } from '../features/writeBlockedEvent.js';
 
 type FillDirection = 'DOWN' | 'UP' | 'RIGHT' | 'LEFT';
 
@@ -19,32 +20,86 @@ interface FillSeries {
 	step: number;
 }
 
+interface FillPlan {
+	updates: GridCellRangeFillUpdate[];
+	blockedCapabilityCells: Array<{ rowId: string; colField: string }>;
+	blockedCapabilityReason: string | null;
+}
+
 export class SpreadsheetFillEngine<TRowData = unknown> {
 	constructor(private readonly engine: GridEngine<TRowData>) {}
 
 	public fillRange(source: GridCellRange, target: GridCellRange): void {
-		const updates = this.buildFillUpdates(source, target);
-		if (updates.length > 0) {
-			this.engine.batchCellValues(updates, 'fill');
+		const plan = this.buildFillPlan(source, target);
+		if (plan.updates.length > 0) {
+			const result = this.engine.batchCellValues(plan.updates, 'fill');
+			if (isWriteBlockedResult(result)) {
+				dispatchWriteBlockedEvent(
+					this.engine.dispatchEvent.bind(this.engine),
+					'fill',
+					result,
+					plan.updates.map((update) => ({ rowId: update.rowId, colField: update.colField }))
+				);
+			} else if (plan.blockedCapabilityCells.length > 0 && plan.blockedCapabilityReason) {
+				dispatchWriteBlockedEvent(
+					this.engine.dispatchEvent.bind(this.engine),
+					'fill',
+					{ status: 'capabilityDenied', reason: plan.blockedCapabilityReason },
+					plan.blockedCapabilityCells
+				);
+			}
+		} else if (plan.blockedCapabilityCells.length > 0 && plan.blockedCapabilityReason) {
+			dispatchWriteBlockedEvent(
+				this.engine.dispatchEvent.bind(this.engine),
+				'fill',
+				{ status: 'capabilityDenied', reason: plan.blockedCapabilityReason },
+				plan.blockedCapabilityCells
+			);
 		}
 	}
 
 	public async fillRangeAsync(source: GridCellRange, target: GridCellRange): Promise<GridWriteResult> {
-		const updates = this.buildFillUpdates(source, target);
-		if (updates.length === 0) return { status: 'noop' };
-		return this.engine.batchCellValuesAsync(updates, 'fill');
+		const plan = this.buildFillPlan(source, target);
+		if (plan.updates.length === 0) {
+			if (plan.blockedCapabilityCells.length > 0 && plan.blockedCapabilityReason) {
+				dispatchWriteBlockedEvent(
+					this.engine.dispatchEvent.bind(this.engine),
+					'fill',
+					{ status: 'capabilityDenied', reason: plan.blockedCapabilityReason },
+					plan.blockedCapabilityCells
+				);
+			}
+			return { status: 'noop' };
+		}
+		const result = await this.engine.batchCellValuesAsync(plan.updates, 'fill');
+		if (isWriteBlockedResult(result)) {
+			dispatchWriteBlockedEvent(
+				this.engine.dispatchEvent.bind(this.engine),
+				'fill',
+				result,
+				plan.updates.map((update) => ({ rowId: update.rowId, colField: update.colField }))
+			);
+		} else if (plan.blockedCapabilityCells.length > 0 && plan.blockedCapabilityReason) {
+			dispatchWriteBlockedEvent(
+				this.engine.dispatchEvent.bind(this.engine),
+				'fill',
+				{ status: 'capabilityDenied', reason: plan.blockedCapabilityReason },
+				plan.blockedCapabilityCells
+			);
+		}
+		return result;
 	}
 
-	private buildFillUpdates(source: GridCellRange, target: GridCellRange): GridCellRangeFillUpdate[] {
+	private buildFillPlan(source: GridCellRange, target: GridCellRange): FillPlan {
 		const rowModel = this.engine.getRowModel();
-		if (!rowModel) return [];
+		if (!rowModel) return { updates: [], blockedCapabilityCells: [], blockedCapabilityReason: null };
 
 		const state = this.engine.stateManager.getState();
 		const columns = state.columns;
 
 		const sourceBounds = this.resolveRangeBounds(source);
 		const targetBounds = this.resolveRangeBounds(target);
-		if (!sourceBounds || !targetBounds) return [];
+		if (!sourceBounds || !targetBounds) return { updates: [], blockedCapabilityCells: [], blockedCapabilityReason: null };
 
 		let direction: FillDirection = 'DOWN';
 		if (targetBounds.minRow > sourceBounds.maxRow) direction = 'DOWN';
@@ -53,16 +108,26 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		else if (targetBounds.maxCol < sourceBounds.minCol) direction = 'LEFT';
 
 		const updates: GridCellRangeFillUpdate[] = [];
+		const blockedCapabilityCells: Array<{ rowId: string; colField: string }> = [];
+		let blockedCapabilityReason: string | null = null;
 
 		if (direction === 'DOWN' || direction === 'UP') {
-			this.fillRows(direction, sourceBounds, targetBounds, rowModel, columns, updates);
+			this.fillRows(direction, sourceBounds, targetBounds, rowModel, columns, updates, blockedCapabilityCells, (reason) => {
+				if (blockedCapabilityReason === null) {
+					blockedCapabilityReason = reason;
+				}
+			});
 		}
 
 		if (direction === 'RIGHT' || direction === 'LEFT') {
-			this.fillColumns(direction, sourceBounds, targetBounds, rowModel, columns, updates);
+			this.fillColumns(direction, sourceBounds, targetBounds, rowModel, columns, updates, blockedCapabilityCells, (reason) => {
+				if (blockedCapabilityReason === null) {
+					blockedCapabilityReason = reason;
+				}
+			});
 		}
 
-		return updates;
+		return { updates, blockedCapabilityCells, blockedCapabilityReason };
 	}
 
 	private fillRows(
@@ -71,7 +136,9 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		targetBounds: GridBounds,
 		rowModel: RowModel<TRowData>,
 		columns: ColumnDef<TRowData>[],
-		updates: GridCellRangeFillUpdate[]
+		updates: GridCellRangeFillUpdate[],
+		blockedCapabilityCells: Array<{ rowId: string; colField: string }>,
+		onCapabilityBlocked: (reason: string) => void
 	): void {
 		const fillRows = this.buildOrderedIndexes(targetBounds.minRow, targetBounds.maxRow, direction === 'UP');
 		for (let c = targetBounds.minCol; c <= targetBounds.maxCol; c++) {
@@ -93,7 +160,20 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 				const srcItem = sourceValues[idx % sourceValues.length];
 				const deltaRow = r - (direction === 'DOWN' ? sourceBounds.maxRow : sourceBounds.minRow);
-				this.applyFillValue(visualRow.rowId, col.field, idx, srcItem, series, deltaRow, 0, rowModel, columns, updates);
+				this.applyFillValue(
+					visualRow.rowId,
+					col.field,
+					idx,
+					srcItem,
+					series,
+					deltaRow,
+					0,
+					rowModel,
+					columns,
+					updates,
+					blockedCapabilityCells,
+					onCapabilityBlocked
+				);
 			});
 		}
 	}
@@ -104,7 +184,9 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		targetBounds: GridBounds,
 		rowModel: RowModel<TRowData>,
 		columns: ColumnDef<TRowData>[],
-		updates: GridCellRangeFillUpdate[]
+		updates: GridCellRangeFillUpdate[],
+		blockedCapabilityCells: Array<{ rowId: string; colField: string }>,
+		onCapabilityBlocked: (reason: string) => void
 	): void {
 		const fillCols = this.buildOrderedIndexes(targetBounds.minCol, targetBounds.maxCol, direction === 'LEFT');
 		for (let r = targetBounds.minRow; r <= targetBounds.maxRow; r++) {
@@ -126,7 +208,20 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 				const srcItem = sourceValues[idx % sourceValues.length];
 				const deltaCol = c - (direction === 'RIGHT' ? sourceBounds.maxCol : sourceBounds.minCol);
-				this.applyFillValue(visualRow.rowId, col.field, idx, srcItem, series, 0, deltaCol, rowModel, columns, updates);
+				this.applyFillValue(
+					visualRow.rowId,
+					col.field,
+					idx,
+					srcItem,
+					series,
+					0,
+					deltaCol,
+					rowModel,
+					columns,
+					updates,
+					blockedCapabilityCells,
+					onCapabilityBlocked
+				);
 			});
 		}
 	}
@@ -193,7 +288,9 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 		deltaCol: number,
 		rowModel: RowModel<TRowData>,
 		columns: ColumnDef<TRowData>[],
-		updates: GridCellRangeFillUpdate[]
+		updates: GridCellRangeFillUpdate[],
+		blockedCapabilityCells: Array<{ rowId: string; colField: string }>,
+		onCapabilityBlocked: (reason: string) => void
 	): void {
 		let nextValue = source.value;
 		let nextFormula: string | undefined;
@@ -208,7 +305,11 @@ export class SpreadsheetFillEngine<TRowData = unknown> {
 
 		if (this.engine.capabilityManager) {
 			const result = this.engine.capabilityManager.can('fill', { rowId, colField });
-			if (!result.allowed) return;
+			if (!result.allowed) {
+				blockedCapabilityCells.push({ rowId, colField });
+				onCapabilityBlocked(result.reason ?? 'fill blocked by capability policy');
+				return;
+			}
 		}
 		updates.push({
 			rowId,

@@ -6,6 +6,8 @@ import type { RowModel } from '../rowModel.js';
 import { canEditCell } from '../visualRow.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
+import type { GridEventPayloadMap } from '../api/GridEvents.js';
+import { dispatchWriteBlockedEvent } from './writeBlockedEvent.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
@@ -21,6 +23,7 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
 	) => Promise<readonly GridIntegrityIssue[]>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
+	dispatchEvent: <K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]) => void;
 }
 
 export class EditingFeatureController<TRowData = unknown> {
@@ -37,6 +40,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
 	) => Promise<readonly GridIntegrityIssue[]>;
 	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
+	private readonly dispatchEvent: EditingFeatureControllerDeps<TRowData>['dispatchEvent'];
 
 	constructor(deps: EditingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
@@ -46,6 +50,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.validateCommittedCells = deps.validateCommittedCells;
 		this.validateWriteProposal = deps.validateWriteProposal;
 		this.checkCapability = deps.checkCapability;
+		this.dispatchEvent = deps.dispatchEvent;
 	}
 
 	private canEditCell(rowId: string, colField: string): boolean {
@@ -95,7 +100,15 @@ export class EditingFeatureController<TRowData = unknown> {
 	public async commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean> {
 		if (this.checkCapability) {
 			const result = this.checkCapability('edit', { rowId, colField });
-			if (!result.allowed) return false;
+			if (!result.allowed) {
+				dispatchWriteBlockedEvent(
+					this.dispatchEvent,
+					'edit',
+					{ status: 'capabilityDenied', reason: result.reason ?? 'edit blocked by capability policy' },
+					[{ rowId, colField }]
+				);
+				return false;
+			}
 		}
 		const col = this.ctx.columns.getColumnDef(colField);
 		if (!col) return false;
@@ -128,6 +141,12 @@ export class EditingFeatureController<TRowData = unknown> {
 
 		const proposalIssues = await this.validateWriteProposal?.([{ rowId, colField, proposedValue: committedValue }], 'edit');
 		if ((proposalIssues?.length ?? 0) > 0) {
+			dispatchWriteBlockedEvent(
+				this.dispatchEvent,
+				'edit',
+				{ status: 'validationFailed', reason: proposalIssues![0]?.message ?? 'blocking validation failed', issues: proposalIssues! },
+				[{ rowId, colField }]
+			);
 			return false;
 		}
 
@@ -151,6 +170,11 @@ export class EditingFeatureController<TRowData = unknown> {
 			domains: ['editing'],
 			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel: false } }],
 		});
+
+		if (result.status === 'rejected') {
+			dispatchWriteBlockedEvent(this.dispatchEvent, 'edit', { status: 'rejected', reason: result.reason }, [{ rowId, colField }]);
+			return false;
+		}
 
 		if (result.status !== 'committed' && result.status !== 'noop') {
 			return false;

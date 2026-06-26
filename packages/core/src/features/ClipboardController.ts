@@ -6,6 +6,7 @@ import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
+import { dispatchWriteBlockedEvent, isWriteBlockedResult } from './writeBlockedEvent.js';
 
 interface ClipboardContext<TRowData> {
 	getState(): InternalGridState<TRowData>;
@@ -80,6 +81,8 @@ export class ClipboardController<TRowData = unknown> {
 
 			const lines = text.split(/\r?\n/);
 			const updates: { rowId: string; colField: string; value: unknown }[] = [];
+			const blockedCapabilityCells: Array<{ rowId: string; colField: string }> = [];
+			let blockedCapabilityReason: string | null = null;
 			let pastedRows = 0;
 			let pastedCols = 0;
 
@@ -100,7 +103,13 @@ export class ClipboardController<TRowData = unknown> {
 					}
 					if (this.c.checkCapability) {
 						const r = this.c.checkCapability('paste', { rowId, colField: col.field });
-						if (!r.allowed) continue;
+						if (!r.allowed) {
+							blockedCapabilityCells.push({ rowId, colField: col.field });
+							if (blockedCapabilityReason === null) {
+								blockedCapabilityReason = typeof r.reason === 'string' ? r.reason : 'paste blocked by capability policy';
+							}
+							continue;
+						}
 					}
 					updates.push({ rowId, colField: col.field, value });
 					colsPasted++;
@@ -114,11 +123,41 @@ export class ClipboardController<TRowData = unknown> {
 					updates.map((update) => ({ rowId: update.rowId, colField: update.colField, proposedValue: update.value })),
 					'paste'
 				);
-				if ((issues?.length ?? 0) > 0) return;
+				if ((issues?.length ?? 0) > 0) {
+					dispatchWriteBlockedEvent(
+						this.c.dispatchEvent,
+						'paste',
+						{ status: 'validationFailed', reason: issues![0]?.message ?? 'blocking validation failed', issues: issues! },
+						updates.map((update) => ({ rowId: update.rowId, colField: update.colField }))
+					);
+					return;
+				}
 				const result = this.c.batchCellValues(updates, 'paste');
 				if (result.status === 'applied' || result.status === 'noop') {
 					this.c.dispatchEvent(GridEventName.cellsPasted, { rowCount: pastedRows, colCount: pastedCols });
+					if (blockedCapabilityCells.length > 0 && blockedCapabilityReason) {
+						dispatchWriteBlockedEvent(
+							this.c.dispatchEvent,
+							'paste',
+							{ status: 'capabilityDenied', reason: blockedCapabilityReason },
+							blockedCapabilityCells
+						);
+					}
+				} else if (isWriteBlockedResult(result)) {
+					dispatchWriteBlockedEvent(
+						this.c.dispatchEvent,
+						'paste',
+						result,
+						updates.map((update) => ({ rowId: update.rowId, colField: update.colField }))
+					);
 				}
+			} else if (blockedCapabilityCells.length > 0 && blockedCapabilityReason) {
+				dispatchWriteBlockedEvent(
+					this.c.dispatchEvent,
+					'paste',
+					{ status: 'capabilityDenied', reason: blockedCapabilityReason },
+					blockedCapabilityCells
+				);
 			}
 		} catch {
 			// Clipboard access denied — silently ignore

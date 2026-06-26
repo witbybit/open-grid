@@ -5,6 +5,7 @@ import {
 	GridCellPointer,
 	GridContextMenuOptions,
 	GridContextMenuHandle,
+	type GridEventPayloadMap,
 	registerGridContextMenu,
 	VisualRow,
 } from '@open-grid/core';
@@ -28,6 +29,7 @@ export interface GridViewProps<TRowData = unknown> {
 	enableContextMenu?: boolean;
 	contextMenuOptions?: GridContextMenuOptions<TRowData>;
 	onCellClick?: (params: GridCellClickParams<TRowData>) => void;
+	onWriteBlocked?: (event: GridEventPayloadMap<TRowData>[GridEventName.writeBlocked]) => void;
 	navigationOptions?: {
 		editTrigger?: 'singleClick' | 'doubleClick';
 		arrowKeyNavigationEdit?: boolean;
@@ -58,6 +60,7 @@ export function GridView<TRowData = unknown>({
 	enableContextMenu = true,
 	contextMenuOptions,
 	onCellClick,
+	onWriteBlocked,
 	navigationOptions = {},
 	groupRowRenderer,
 	detailRowRenderer,
@@ -438,6 +441,13 @@ export function GridView<TRowData = unknown>({
 			cancelFlash?.();
 		};
 	}, [api]);
+
+	useEffect(() => {
+		if (!onWriteBlocked) return;
+		return api.addEventListener(GridEventName.writeBlocked, ({ payload }) => {
+			onWriteBlocked(payload);
+		});
+	}, [api, onWriteBlocked]);
 
 	useEffect(() => {
 		if (sidebarDefaultOpenRef.current != null) api.openPanel(sidebarDefaultOpenRef.current);

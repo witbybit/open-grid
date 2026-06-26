@@ -11,6 +11,7 @@ import type {
 	GridApi,
 	GridReadyEvent,
 	GridIntegrityIssue,
+	GridWriteBlockedEventPayload,
 	SidebarPanelDef,
 	GridCellIntegrityRule,
 	GridRowIntegrityRule,
@@ -193,6 +194,10 @@ const EMPLOYEE_CELL_RULES: GridCellIntegrityRule<Employee>[] = [
 			const s = String(value ?? '').trim();
 			if (!s) return { message: 'Email is required' };
 			if (!isValidEmail(s)) return { message: 'Invalid email format (user@domain.com)' };
+			await new Promise((resolve) => setTimeout(resolve, 220));
+			if (s.endsWith('@contractor.test')) {
+				return { message: 'Async policy: contractor.test addresses require manual approval' };
+			}
 			return null;
 		},
 	},
@@ -272,7 +277,11 @@ const EMPLOYEE_ROW_RULES: GridRowIntegrityRule<Employee>[] = [
 
 type SubmitStatus = 'idle' | 'validating' | 'submitting' | 'success' | 'error';
 
-type SubmissionLog = { kind: 'error'; errors: GridIntegrityIssue[] } | { kind: 'success'; rows: Employee[] } | null;
+type SubmissionLog =
+	| { kind: 'error'; errors: GridIntegrityIssue[] }
+	| { kind: 'success'; rows: Employee[] }
+	| { kind: 'writeBlocked'; blocked: GridWriteBlockedEventPayload }
+	| null;
 
 // ─── JSON syntax highlight helper ────────────────────────────────────────────
 
@@ -327,6 +336,23 @@ function SubmissionLogPanel({ log }: { log: SubmissionLog }) {
 		);
 	}
 
+	if (log.kind === 'writeBlocked') {
+		return (
+			<div className='flex h-full flex-col gap-3 overflow-hidden p-3'>
+				<div className='flex items-center gap-2'>
+					<AlertTriangle className='h-3.5 w-3.5 shrink-0 text-amber-400' />
+					<span className='text-[10px] font-extrabold uppercase tracking-wider text-amber-400'>
+						{log.blocked.source} blocked · {log.blocked.status}
+					</span>
+				</div>
+				<div className='rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-200'>{log.blocked.reason}</div>
+				<div className='min-h-0 flex-1 overflow-auto rounded-lg bg-slate-950/60 p-3'>
+					<JsonBlock value={log.blocked} />
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className='flex h-full flex-col gap-3 overflow-hidden p-3'>
 			<div className='flex items-center gap-2'>
@@ -359,6 +385,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 	const [validationSummary, setValidationSummary] = useState<GridIntegrityIssue[]>([]);
 	const [submissionLog, setSubmissionLog] = useState<SubmissionLog>(null);
 	const [errorSnapshot, setErrorSnapshot] = useState<GridIntegrityIssue[] | null>(null);
+	const [lastWriteBlocked, setLastWriteBlocked] = useState<GridWriteBlockedEventPayload | null>(null);
 	const [rows] = useState<Employee[]>(INITIAL_ROWS);
 
 	const handleGridReady = useCallback(
@@ -456,6 +483,23 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		api.applyTransaction({ add: [newRow] });
 	}, []);
 
+	const handleWriteBlocked = useCallback((blocked: GridWriteBlockedEventPayload) => {
+		setLastWriteBlocked(blocked);
+		setSubmitStatus('error');
+		setSubmitMessage(
+			`${blocked.source} blocked: ${blocked.reason}${
+				blocked.rowCount > 1 || blocked.colCount > 1
+					? ` (${blocked.rowCount} row${blocked.rowCount !== 1 ? 's' : ''}, ${blocked.colCount} column${blocked.colCount !== 1 ? 's' : ''})`
+					: ''
+			}`
+		);
+		if (blocked.issues && blocked.issues.length > 0) {
+			setValidationSummary([...blocked.issues]);
+		}
+		setSubmissionLog({ kind: 'writeBlocked', blocked });
+		apiRef.current?.openPanel('submission-log');
+	}, []);
+
 	const handleClearErrors = useCallback(() => {
 		apiRef.current?.integrity.clearIssues();
 		setValidationSummary([]);
@@ -463,6 +507,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		setSubmitMessage('');
 		setSubmissionLog(null);
 		setErrorSnapshot(null);
+		setLastWriteBlocked(null);
 	}, []);
 
 	// Synchronous read — no validators run, just reads current error state
@@ -581,6 +626,21 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				</div>
 			)}
 
+			{lastWriteBlocked && (
+				<div className='shrink-0 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3'>
+					<div className='mb-2 flex items-center gap-2'>
+						<AlertTriangle className='h-3.5 w-3.5 text-amber-400' />
+						<p className='text-[10px] font-extrabold uppercase tracking-wider text-amber-400'>
+							Last blocked write · {lastWriteBlocked.source} · {lastWriteBlocked.status}
+						</p>
+					</div>
+					<p className='text-[11px] text-amber-200'>{lastWriteBlocked.reason}</p>
+					<p className='mt-1 text-[10px] text-amber-300/80'>
+						Affected cells: {lastWriteBlocked.cells.map((cell) => `${cell.rowId}/${cell.colField}`).join(', ') || 'none'}
+					</p>
+				</div>
+			)}
+
 			{/* getAllValidationErrors snapshot panel */}
 			{errorSnapshot !== null && (
 				<div className='shrink-0 rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3'>
@@ -637,6 +697,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					pinLeftColumns={pinLeftColumns}
 					pinRightColumns={pinRightColumns}
 					onGridReady={handleGridReady}
+					onWriteBlocked={handleWriteBlocked}
 					showFilterChipBar
 					initialState={{ defaultColWidth: 130 }}
 					sidebar={{
@@ -666,6 +727,11 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				<span>
 					<strong className='text-slate-400'>Submit Changes</strong> may surface a server error pushed via{' '}
 					<code className='text-slate-400'>api.integrity.publishIssues()</code>
+				</span>
+				<span>Â·</span>
+				<span>
+					Try editing or pasting an email ending with <code className='text-slate-400'>@contractor.test</code> to see async pre-commit
+					validation block the write
 				</span>
 			</div>
 		</div>

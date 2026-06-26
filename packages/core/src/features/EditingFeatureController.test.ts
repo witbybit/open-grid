@@ -230,17 +230,31 @@ describe('EditingFeatureController', () => {
 				dataIntegrity: {
 					validation: {
 						validateOnSubmit: true,
-						cellRules: [{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) }],
+						cellRules: [
+							{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) },
+						],
 					},
 				},
 			}
 		);
 		const ctrl = makeController(store);
+		const blockedHandler = vi.fn();
+		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
 
 		store.startEditing('1', 'name');
 		const result = await store.commitEdit('1', 'name', '');
 
 		expect(result).toBe(false);
+		expect(blockedHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'edit',
+					status: 'validationFailed',
+					rowCount: 1,
+					colCount: 1,
+				}),
+			})
+		);
 		expect(store.getState().activeEdit).toEqual({ rowId: '1', colField: 'name' });
 		expect(store.getCellValue('1', 'name')).toBe('Product A');
 		expect(store.canUndo()).toBe(false);

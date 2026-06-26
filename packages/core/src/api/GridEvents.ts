@@ -5,6 +5,7 @@ import type { GridCellPointer, GridSelectionState, SelectionChangeResult, RowSel
 import type { ColumnDef } from '../columnDef.js';
 import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridViewDefinition, GridWorkspaceState } from '../workspace/workspaceTypes.js';
+import type { GridIntegrityIssue } from '../features/dataIntegrity/integrityTypes.js';
 
 export interface GridEvent<T = unknown> {
 	type: string;
@@ -20,6 +21,7 @@ export enum GridEventName {
 	cellsCopied = 'cellsCopied',
 	cellsPasted = 'cellsPasted',
 	cellValueChanged = 'cellValueChanged',
+	writeBlocked = 'writeBlocked',
 	columnOrderChanged = 'columnOrderChanged',
 	columnReorderToggled = 'columnReorderToggled',
 	columnResized = 'columnResized',
@@ -67,6 +69,19 @@ export enum GridEventName {
 	workspaceStateChanged = 'workspaceStateChanged',
 }
 
+export type GridWriteBlockedSource = 'edit' | 'paste' | 'fill';
+export type GridWriteBlockedStatus = 'validationFailed' | 'capabilityDenied' | 'rejected';
+
+export interface GridWriteBlockedEventPayload {
+	source: GridWriteBlockedSource;
+	status: GridWriteBlockedStatus;
+	reason: string;
+	cells: ReadonlyArray<{ rowId: string; colField: string }>;
+	rowCount: number;
+	colCount: number;
+	issues?: readonly GridIntegrityIssue[];
+}
+
 export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.aggDefsChanged]: { aggDefs: AggregationDef<TRowData>[] | undefined };
 	[GridEventName.cellClicked]: GridCellClickParams<TRowData>;
@@ -74,6 +89,7 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.cellsCopied]: { cells: Array<{ rowId: string; colField: string }>; rowCount: number; colCount: number; text: string };
 	[GridEventName.cellsPasted]: { rowCount: number; colCount: number };
 	[GridEventName.cellValueChanged]: { rowId: string; colField: string; oldValue: unknown; newValue: unknown };
+	[GridEventName.writeBlocked]: GridWriteBlockedEventPayload;
 	[GridEventName.columnOrderChanged]: { columns: ColumnDef<TRowData>[]; columnFields: string[] };
 	[GridEventName.columnReorderToggled]: { enabled: boolean };
 	[GridEventName.columnResized]: { colField: string; width: number };

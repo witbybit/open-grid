@@ -49,7 +49,7 @@ export { RowNode } from './rowNode.js';
 export { GridEventName } from './api/GridEvents.js';
 export type { RowDataTransaction, RowNodeTransaction } from './api/GridApi.js';
 export type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './api/GridApi.js';
-export type { GridEventPayloadMap } from './api/GridEvents.js';
+export type { GridEventPayloadMap, GridWriteBlockedEventPayload, GridWriteBlockedSource, GridWriteBlockedStatus } from './api/GridEvents.js';
 export type {
 	CellEditorProps,
 	CellPointer,

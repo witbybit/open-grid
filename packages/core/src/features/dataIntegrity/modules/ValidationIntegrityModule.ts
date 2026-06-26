@@ -476,7 +476,10 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 	}
 
 	private _maybeRunSyncRule(
-		run: () => import('../integrityTypes.js').GridIntegrityRuleResult | null | Promise<import('../integrityTypes.js').GridIntegrityRuleResult | null>,
+		run: () =>
+			| import('../integrityTypes.js').GridIntegrityRuleResult
+			| null
+			| Promise<import('../integrityTypes.js').GridIntegrityRuleResult | null>,
 		ruleId: string
 	): import('../integrityTypes.js').GridIntegrityRuleResult | null {
 		try {

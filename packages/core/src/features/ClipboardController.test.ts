@@ -236,7 +236,9 @@ describe('ClipboardController', () => {
 				dataIntegrity: {
 					validation: {
 						validateOnSubmit: true,
-						cellRules: [{ id: 'required-note', field: 'note', validate: ({ value }) => (value ? null : { message: 'Note is required' }) }],
+						cellRules: [
+							{ id: 'required-note', field: 'note', validate: ({ value }) => (value ? null : { message: 'Note is required' }) },
+						],
 					},
 				},
 			}
@@ -249,18 +251,73 @@ describe('ClipboardController', () => {
 			columns: store.getState().columns,
 		});
 		const handler = vi.fn();
+		const blockedHandler = vi.fn();
 		store.addEventListener(GridEventName.cellsPasted, handler);
+		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
 
 		clip.setStored('\t');
 		store.selectCell({ rowId: '1', colField: 'name' });
 		await store.pasteFromClipboard();
 
 		expect(handler).not.toHaveBeenCalled();
+		expect(blockedHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'paste',
+					status: 'validationFailed',
+				}),
+			})
+		);
 		expect(store.getCellValue('1', 'name')).toBe('Alpha');
 		expect(store.getCellValue('1', 'note')).toBe('ok');
 		expect(store.getCellValue('2', 'name')).toBe('Beta');
 		expect(store.getCellValue('2', 'note')).toBe('keep');
 		expect(store.canUndo()).toBe(false);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('pasteFromClipboard reports capability-denied cells even when part of the paste still succeeds', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 80 },
+					{ field: 'name', header: 'Name', width: 150 },
+					{ field: 'price', header: 'Price', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				capabilities: {
+					canPerformAction: ({ action, colField }) => {
+						if (action === 'paste' && colField === 'price') {
+							return { allowed: false, reason: 'Price column is locked' };
+						}
+						return { allowed: true };
+					},
+				},
+			}
+		);
+		const ctrl = makeController(store);
+		const blockedHandler = vi.fn();
+		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
+
+		clip.setStored('Gamma\t999');
+		store.selectCell({ rowId: '1', colField: 'name' });
+		await store.pasteFromClipboard();
+
+		expect(store.getCellValue('1', 'name')).toBe('Gamma');
+		expect(store.getCellValue('1', 'price')).toBe(10);
+		expect(blockedHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'paste',
+					status: 'capabilityDenied',
+					reason: 'Price column is locked',
+				}),
+			})
+		);
 
 		ctrl.dispose();
 		store.destroy();
