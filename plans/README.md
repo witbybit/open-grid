@@ -137,8 +137,8 @@
 | 138 | [Make Every Data Mutation Flow Through One Canonical Write Pipeline](./138-canonical-data-write-pipeline.md) | DONE | working tree |
 | 139 | [Converge Managed Row Drag Into the Canonical Runtime Instead of a DOM Side Channel](./139-row-drag-runtime-convergence.md) | DONE | working tree |
 | 140 | [Make Data Integrity Honest and Authoritative Across All Row Models](./140-row-model-integrity-parity.md) | DONE | working tree |
-| 141 | [Finish Write-Pipeline Convergence and Make Targeted Invalidations Real](./141-write-pipeline-and-targeted-invalidation-hardening.md) | TODO | working tree |
-| 142 | [Add Cross-Feature Composition Gauntlets Before Advanced Grid Features](./142-cross-feature-composition-gauntlets.md) | TODO | working tree |
+| 141 | [Finish Write-Pipeline Convergence and Make Targeted Invalidations Real](./141-write-pipeline-and-targeted-invalidation-hardening.md) | DONE | 06b29ac9 |
+| 142 | [Add Cross-Feature Composition Gauntlets Before Advanced Grid Features](./142-cross-feature-composition-gauntlets.md) | DONE | working tree |
 | 143 | [Lock Projection and Invalidation to One Deterministic Commit-Owned Pipeline](./143-projection-and-invalidation-determinism.md) | TODO | working tree |
 | 144 | [Add Performance Guardrails for Hot Scroll, Slot Reuse, and High-Throughput Writes](./144-performance-guardrails-and-hot-scroll-budgets.md) | TODO | working tree |
 

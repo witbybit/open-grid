@@ -2604,4 +2604,14 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('if (frame.viewport || hasStructuralViewportWork)');
 		});
 	});
+
+	describe('Plan 142 - cross-feature composition gauntlets', () => {
+		it('keeps a dedicated composition gauntlet suite for feature-stack regressions', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'featureComposition.gauntlet.test.ts'), 'utf-8');
+			expect(content).toContain('Plan 142 - cross-feature composition gauntlets');
+			expect(content).toContain('sort + filter + grouping composition');
+			expect(content).toContain('paste/fill writes, and undo/redo boundaries coherent');
+			expect(content).toContain('hot scroll path and custom renderer hydration stable under targeted writes');
+		});
+	});
 });
