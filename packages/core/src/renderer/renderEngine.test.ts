@@ -995,7 +995,7 @@ describe('RenderEngine', () => {
 		expect(afterViewport.fullPaints).toBe(0);
 		expect(afterViewport.viewportPaints).toBe(1);
 		expect(afterViewport.headerPaints).toBe(afterOverlay.headerPaints);
-		expect(afterViewport.overlayPaints).toBe(afterOverlay.overlayPaints);
+		expect(afterViewport.overlayPaints).toBe(afterOverlay.overlayPaints + 1);
 
 		renderer.unmount();
 		controller.dispose();
@@ -1054,7 +1054,7 @@ describe('RenderEngine', () => {
 		expect(afterData.geometryRecomputes - before.geometryRecomputes).toBe(0);
 		expect(afterData.viewportPaints - before.viewportPaints).toBe(1);
 		expect(afterData.headerPaints - before.headerPaints).toBe(0);
-		expect(afterData.overlayPaints - before.overlayPaints).toBe(0);
+		expect(afterData.overlayPaints - before.overlayPaints).toBe(1);
 
 		store.engine.setVisibleRanges({ startIdx: 50, endIdx: 75 }, store.getState().visibleColRange);
 		await Promise.resolve();
@@ -1063,7 +1063,7 @@ describe('RenderEngine', () => {
 		expect(afterViewport.fullPaints - afterData.fullPaints).toBe(0);
 		expect(afterViewport.viewportPaints - afterData.viewportPaints).toBe(1);
 		expect(afterViewport.headerPaints - afterData.headerPaints).toBe(0);
-		expect(afterViewport.overlayPaints - afterData.overlayPaints).toBe(0);
+		expect(afterViewport.overlayPaints - afterData.overlayPaints).toBe(1);
 
 		renderer.unmount();
 		controller.dispose();

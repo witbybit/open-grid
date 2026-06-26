@@ -2588,4 +2588,20 @@ describe('Architecture guardrails', () => {
 			expect(content).not.toContain('ValidationManager');
 		});
 	});
+
+	describe('Plan 141 - targeted invalidation convergence', () => {
+		it('canonical row-write executors derive invalidations from row-model refresh results instead of defaulting to full repaint', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts'), 'utf-8');
+			expect(content).toContain('createInvalidationsFromRefreshResult');
+			expect(content).not.toContain("if (reconcileResult.changed) invalidations = [{ kind: 'full', reason: 'data' }];");
+			expect(content).not.toContain("if (reconcileResult.changed) batchInvalidations = [{ kind: 'full', reason: 'data' }];");
+			expect(content).not.toContain("invalidations: changed ? [{ kind: 'full' as const, reason: 'data' }] : []");
+		});
+
+		it('RenderOrchestrator treats row-range and group invalidations as structural viewport work', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderOrchestrator.ts'), 'utf-8');
+			expect(content).toContain('const hasStructuralViewportWork = frame.rowRanges.length > 0 || frame.groups.size > 0;');
+			expect(content).toContain('if (frame.viewport || hasStructuralViewportWork)');
+		});
+	});
 });

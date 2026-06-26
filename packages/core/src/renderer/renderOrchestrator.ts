@@ -205,12 +205,15 @@ export class RenderOrchestrator {
 			return;
 		}
 
+		const rowRangeCount = this.countRowRanges(frame.rowRanges);
+		const hasStructuralViewportWork = frame.rowRanges.length > 0 || frame.groups.size > 0;
+
 		if (frame.geometry) {
 			this.stats.geometryRecomputes++;
 			this.targets.recomputeGeometry();
 		}
 
-		if (frame.viewport) {
+		if (frame.viewport || hasStructuralViewportWork) {
 			this.stats.viewportPaints++;
 			this.targets.syncViewport(frame);
 		}
@@ -218,6 +221,8 @@ export class RenderOrchestrator {
 		if (frame.rows.size > 0) {
 			this.stats.rowPaints += frame.rows.size;
 			this.targets.syncRows(frame);
+		} else if (rowRangeCount > 0) {
+			this.stats.rowPaints += rowRangeCount;
 		}
 
 		const cellCount = this.countCells(frame.cellsByRowId);
@@ -231,7 +236,7 @@ export class RenderOrchestrator {
 			this.targets.syncHeaders(frame);
 		}
 
-		if (frame.overlay || cellCount > 0 || frame.rows.size > 0) {
+		if (frame.overlay || frame.viewport || hasStructuralViewportWork || cellCount > 0 || frame.rows.size > 0) {
 			this.stats.overlayPaints++;
 			this.targets.syncOverlay(frame);
 		}
@@ -241,6 +246,14 @@ export class RenderOrchestrator {
 		let count = 0;
 		for (const colIds of cellsByRowId.values()) {
 			count += colIds.size;
+		}
+		return count;
+	}
+
+	private countRowRanges(rowRanges: readonly { startIndex: number; endIndex: number }[]): number {
+		let count = 0;
+		for (const range of rowRanges) {
+			count += Math.max(0, range.endIndex - range.startIndex + 1);
 		}
 		return count;
 	}

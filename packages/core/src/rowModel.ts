@@ -1049,13 +1049,13 @@ export class ClientRowModelController<TData = unknown>
 	 * pipeline rebuild. Only applicable to flat (non-grouped, non-tree) grids with an active sort
 	 * and no pagination. Returns false to signal that the caller must fall back to full refresh.
 	 */
-	private relocateSortedRows(changedNodes: RowNode<TData>[]): boolean {
+	private relocateSortedRows(changedNodes: RowNode<TData>[]): number | null {
 		const state = this.runtime.getState();
-		if (state.groupBy?.length) return false;
-		if (state.rowModelConfig?.treeData?.enabled) return false;
-		if (state.rowModelConfig?.masterDetail?.enabled) return false;
-		if (!state.sortModel || state.sortModel.length === 0) return false;
-		if (this._pageWindow !== null) return false;
+		if (state.groupBy?.length) return null;
+		if (state.rowModelConfig?.treeData?.enabled) return null;
+		if (state.rowModelConfig?.masterDetail?.enabled) return null;
+		if (!state.sortModel || state.sortModel.length === 0) return null;
+		if (this._pageWindow !== null) return null;
 
 		// Build sort key getters mirroring the pipeline's comparator
 		const columnById = createColumnLookup(state.columns);
@@ -1095,7 +1095,7 @@ export class ClientRowModelController<TData = unknown>
 			const vr = this.visualRows[oldIdx];
 			if (vr?.kind === 'data') toRelocate.push({ node, vr, oldIdx });
 		}
-		if (toRelocate.length === 0) return true;
+		if (toRelocate.length === 0) return 0;
 
 		// Remove in descending index order so prior splices don't shift remaining indices.
 		// After sort, toRelocate[last].oldIdx is the smallest (earliest) affected position.
@@ -1125,8 +1125,9 @@ export class ClientRowModelController<TData = unknown>
 
 		// Update maps in-place from the earliest affected index — no Map allocations.
 		this.visualRows = mutable;
-		this.reindexFrom(Math.min(earliestRemovedIndex, earliestInsertedIndex));
-		return true;
+		const changedStartIndex = Math.min(earliestRemovedIndex, earliestInsertedIndex);
+		this.reindexFrom(changedStartIndex);
+		return changedStartIndex;
 	}
 
 	public replaceRowsStructurally(rows: readonly TData[]): RowModelWriteResult<TData> {
@@ -1201,13 +1202,21 @@ export class ClientRowModelController<TData = unknown>
 	public reconcileAfterDataWrite(writeResult: RowModelWriteResult<TData>, impact: RowWriteImpact): RowModelRefreshResult {
 		const inst = this.runtime.getInstrumentation();
 		if (impact === 'insert' || impact === 'remove') {
+			const previousRowCount = this.visualRows.length;
 			const added = writeResult.addedNodes ?? [];
 			const removed = writeResult.removedNodes ?? [];
-			const wasIncremental = this.tryIncrementalTransaction(added, removed);
-			if (wasIncremental) {
+			const changedStartIndex = this.tryIncrementalTransaction(added, removed);
+			if (changedStartIndex !== null) {
 				this.runtime.bumpGlobalVersion();
 				inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
-				return { changed: true, reason: 'row-order' as RowRefreshReason };
+				return {
+					changed: true,
+					reason: 'row-order' as RowRefreshReason,
+					previousRowCount,
+					nextRowCount: this.visualRows.length,
+					changedStartIndex,
+					changedEndIndex: Math.max(changedStartIndex, this.visualRows.length - 1),
+				};
 			}
 			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
 			return this.refresh('bulk');
@@ -1222,10 +1231,15 @@ export class ClientRowModelController<TData = unknown>
 		}
 		if (impact === 'sort-key') {
 			const nodes = writeResult.updatedNodes ?? [];
-			const relocated = nodes.length > 0 && this.relocateSortedRows(nodes);
-			if (relocated) {
+			const changedStartIndex = nodes.length > 0 ? this.relocateSortedRows(nodes) : null;
+			if (changedStartIndex !== null) {
 				inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
-				return { changed: true, reason: 'sort' };
+				return {
+					changed: true,
+					reason: 'sort',
+					changedStartIndex,
+					changedEndIndex: Math.max(changedStartIndex, this.visualRows.length - 1),
+				};
 			}
 			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
 			return this.refresh('sort' as RowRefreshReason);
@@ -1314,13 +1328,13 @@ export class ClientRowModelController<TData = unknown>
 	 * Returns false to signal full rebuild is needed (grouped/tree/paginated grids, or when
 	 * the transaction exceeds the INCREMENTAL_TX_LIMIT threshold).
 	 */
-	private tryIncrementalTransaction(added: RowNode<TData>[], removed: RowNode<TData>[]): boolean {
+	private tryIncrementalTransaction(added: RowNode<TData>[], removed: RowNode<TData>[]): number | null {
 		const state = this.runtime.getState();
-		if (state.groupBy?.length) return false;
-		if (state.rowModelConfig?.treeData?.enabled) return false;
-		if (state.rowModelConfig?.masterDetail?.enabled) return false;
-		if (this._pageWindow !== null) return false;
-		if (added.length + removed.length > ClientRowModelController.INCREMENTAL_TX_LIMIT) return false;
+		if (state.groupBy?.length) return null;
+		if (state.rowModelConfig?.treeData?.enabled) return null;
+		if (state.rowModelConfig?.masterDetail?.enabled) return null;
+		if (this._pageWindow !== null) return null;
+		if (added.length + removed.length > ClientRowModelController.INCREMENTAL_TX_LIMIT) return null;
 
 		const mutable = this.visualRows.slice();
 		let earliestChangedIndex = mutable.length;
@@ -1420,7 +1434,7 @@ export class ClientRowModelController<TData = unknown>
 		// Update maps in-place from the earliest affected index — preserves Map identity.
 		this.visualRows = mutable;
 		this.reindexFrom(earliestChangedIndex);
-		return true;
+		return earliestChangedIndex === mutable.length ? 0 : earliestChangedIndex;
 	}
 
 	public captureTransactionSnapshot = (

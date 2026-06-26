@@ -295,6 +295,29 @@ function createInvalidationsFromCells(cells: readonly GridCellPointer[]): GridIn
 	return invalidations;
 }
 
+function createInvalidationsFromRefreshResult(
+	result: import('../rowModel.js').RowModelRefreshResult,
+	reason: GridInvalidation['reason'] = 'data'
+): GridInvalidation[] {
+	if (!result.changed) return [];
+	const invalidations: GridInvalidation[] = [{ kind: 'viewport', reason }];
+	if (result.groupId) {
+		invalidations.push({ kind: 'group', groupId: result.groupId, reason });
+	}
+	if (result.changedStartIndex !== undefined && result.changedEndIndex !== undefined) {
+		invalidations.push({
+			kind: 'row-range',
+			startIndex: result.changedStartIndex,
+			endIndex: result.changedEndIndex,
+			reason,
+		});
+	}
+	if (result.previousRowCount !== result.nextRowCount) {
+		invalidations.push({ kind: 'geometry', reason });
+	}
+	return invalidations;
+}
+
 function createEventsFromResults<TRowData>(results: readonly CellValueChangeResult[]): GridCommitEvent<TRowData>[] {
 	return results
 		.filter((result) => result.applied)
@@ -610,7 +633,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 								},
 								impact
 							);
-							if (reconcileResult.changed) invalidations = [{ kind: 'full', reason: 'data' }];
+							if (reconcileResult.changed) invalidations = [...invalidations, ...createInvalidationsFromRefreshResult(reconcileResult)];
 						}
 					}
 					return {
@@ -783,7 +806,9 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 									},
 									impact
 								);
-								if (reconcileResult.changed) batchInvalidations = [{ kind: 'full', reason: 'data' }];
+								if (reconcileResult.changed) {
+									batchInvalidations = [...batchInvalidations, ...createInvalidationsFromRefreshResult(reconcileResult)];
+								}
 							}
 						}
 					}
@@ -891,10 +916,11 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 							impact = allFields.size > 0 ? structuralRowModel.classifyFieldMutation(allFields) : 'value-only';
 						}
 						const reconcileResult = structuralRowModel.reconcileAfterDataWrite(txResult, impact);
-						const changed = txResult.visualChange !== 'none' || reconcileResult.changed;
+						const invalidations = reconcileResult.changed ? createInvalidationsFromRefreshResult(reconcileResult) : [];
+						const changed = txResult.visualChange !== 'none' || invalidations.length > 0;
 						return {
 							domains: ['rows', 'geometry'],
-							invalidations: changed ? [{ kind: 'full', reason: 'data' }] : [],
+							invalidations,
 							events: createRowsUpdatedEvents<TRowData>({
 								changedValuesByRow: txResult.changedValuesByRow,
 								changedNodes: txResult.update,
@@ -983,10 +1009,11 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					const rowModel = asClientStructuralRowModel<TRowData>(commitContext.getRowModel())!;
 					const writeResult = rowModel.replaceRowsStructurally(mutation.rows as TRowData[]);
 					const reconcileResult = rowModel.reconcileAfterDataWrite(writeResult, 'value-only');
-					const changed = writeResult.visualChange !== 'none' || reconcileResult.changed;
+					const invalidations = reconcileResult.changed ? createInvalidationsFromRefreshResult(reconcileResult) : [];
+					const changed = writeResult.visualChange !== 'none' || invalidations.length > 0;
 					return {
 						domains: changed ? (['rows', 'geometry'] as const) : ([] as const),
-						invalidations: changed ? [{ kind: 'full' as const, reason: 'data' }] : [],
+						invalidations,
 						events: createRowsUpdatedEvents<TRowData>({
 							changedValuesByRow: writeResult.changedValuesByRow,
 							changedNodes: writeResult.updatedNodes,
@@ -1029,10 +1056,11 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					}
 					const impact: RowWriteImpact = allFields.size > 0 ? rowModel.classifyFieldMutation(allFields) : 'value-only';
 					const reconcileResult = rowModel.reconcileAfterDataWrite(writeResult, impact);
-					const changed = writeResult.visualChange !== 'none' || reconcileResult.changed;
+					const invalidations = reconcileResult.changed ? createInvalidationsFromRefreshResult(reconcileResult) : [];
+					const changed = writeResult.visualChange !== 'none' || invalidations.length > 0;
 					return {
 						domains: changed ? (['rows', 'geometry'] as const) : ([] as const),
-						invalidations: changed ? [{ kind: 'full' as const, reason: 'data' }] : [],
+						invalidations,
 						events: createRowsUpdatedEvents<TRowData>({
 							changedValuesByRow: writeResult.changedValuesByRow,
 							changedNodes: writeResult.updatedNodes,

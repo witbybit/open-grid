@@ -1557,6 +1557,66 @@ describe('Fix 7 regression — applyTransaction update path uses sort/filter rec
 	});
 });
 
+describe('Plan 141 regression â€” targeted invalidations for canonical row writes', () => {
+	it('sort-key transaction updates emit viewport/range invalidations instead of forcing a full repaint', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'A', price: 10 },
+				{ id: '2', name: 'B', price: 20 },
+				{ id: '3', name: 'C', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		void store.engine.invalidation.consume();
+		store.applyTransaction({ update: [{ id: '1', name: 'A', price: 25 }] });
+		const frame = store.engine.invalidation.consume();
+
+		expect(frame.full).toBe(false);
+		expect(frame.viewport).toBe(true);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('sort-key cell writes emit viewport/range invalidations instead of forcing a full repaint', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'A', price: 10 },
+				{ id: '2', name: 'B', price: 20 },
+				{ id: '3', name: 'C', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		void store.engine.invalidation.consume();
+		store.setCellValue('1', 'price', 25);
+		const frame = store.engine.invalidation.consume();
+
+		expect(frame.full).toBe(false);
+		expect(frame.viewport).toBe(true);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+});
+
 describe('GridStore undo and redo functionality', () => {
 	it('should support undo and redo for cell value modifications', () => {
 		const store = new GridStore<TestRow>({
