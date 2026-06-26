@@ -1,5 +1,6 @@
 import type { GridStateUpdater, InternalGridState } from '../state/GridState.js';
 import type { RowModel } from '../rowModel.js';
+import { asCapableRowModel, asSelectableDataRowModel } from '../rowModel.js';
 import type { StateCommitPhase } from '../state/StateManager.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { ColumnModel } from '../models/ColumnModel.js';
@@ -73,6 +74,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		if (rowModel) {
 			const normalizedSelection = this.normalizeSelectionState(currState.selection, rowModel);
 			const normalizedActiveEdit = this.normalizeActiveEdit(currState.activeEdit, rowModel);
+			const normalizedSelectedRowIds = this.normalizeSelectedRowIds(currState.selectedRowIds, rowModel);
 			const derivedState: Partial<InternalGridState<TRowData>> = {};
 
 			if (normalizedSelection !== currState.selection) {
@@ -80,6 +82,9 @@ export class GridProjectionPipeline<TRowData = unknown> {
 			}
 			if (normalizedActiveEdit !== currState.activeEdit) {
 				derivedState.activeEdit = normalizedActiveEdit;
+			}
+			if (normalizedSelectedRowIds !== currState.selectedRowIds) {
+				derivedState.selectedRowIds = normalizedSelectedRowIds;
 			}
 
 			if (Object.keys(derivedState).length > 0) {
@@ -245,6 +250,25 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		if (rowModel.getVisualIndexByRowId(activeEdit.rowId) < 0) return null;
 		if (this.deps.columns.getColumnIndex(activeEdit.colField) < 0) return null;
 		return activeEdit;
+	}
+
+	private normalizeSelectedRowIds(selectedRowIds: string[], rowModel: RowModel<TRowData>): string[] {
+		if (selectedRowIds.length === 0) return selectedRowIds;
+
+		const capabilities = asCapableRowModel(rowModel)?.getCapabilities();
+		if (!capabilities || capabilities.allRowSelection) return selectedRowIds;
+		if (!capabilities.loadedRowSelection && !capabilities.pageRowSelection) return selectedRowIds;
+
+		const selectableRowModel = asSelectableDataRowModel(rowModel);
+		if (!selectableRowModel) return selectedRowIds;
+
+		const allowedIds = new Set(
+			selectableRowModel.getSelectableDataRowIds(capabilities.pageRowSelection ? 'page' : 'loaded')
+		);
+		if (allowedIds.size === 0) return [];
+
+		const nextIds = selectedRowIds.filter((rowId) => allowedIds.has(rowId));
+		return nextIds.length === selectedRowIds.length ? selectedRowIds : nextIds;
 	}
 
 	private areRangeBoundsEqual(left: RangeBounds | null, right: RangeBounds | null): boolean {

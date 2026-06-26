@@ -580,6 +580,50 @@ describe('Server page loading state publication', () => {
 		ctrl.dispose();
 	});
 
+	it('page navigation prunes selectedRowIds to the active page scope immediately', async () => {
+		let resolveSecond!: (v: { rows: TestRow[]; totalRowCount: number }) => void;
+		let callCount = 0;
+		const getPage = vi.fn(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alice', amount: 100 },
+						{ id: '2', name: 'Bob', amount: 200 },
+					],
+					totalRowCount: 10,
+				});
+			}
+			return new Promise<{ rows: TestRow[]; totalRowCount: number }>((res) => {
+				resolveSecond = res;
+			});
+		});
+
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+		const ctrl = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			columns: COLUMNS,
+			pagination: { pageSize: 5 },
+		});
+
+		await new Promise((res) => setTimeout(res, 0));
+
+		store.applyRowSelectionGesture({ kind: 'replace', rowIds: ['1', '2'], source: 'api' });
+		expect(store.getState().selectedRowIds).toEqual(['1', '2']);
+
+		ctrl.goToPage(1);
+
+		expect(store.getState().selectedRowIds).toEqual([]);
+
+		resolveSecond!({
+			rows: [{ id: '6', name: 'Page Two', amount: 600 }],
+			totalRowCount: 10,
+		});
+		await new Promise((res) => setTimeout(res, 0));
+
+		ctrl.dispose();
+	});
+
 	it('rejects stale server-page writes consistently after the target row leaves the active page', async () => {
 		let resolveSecond!: (v: { rows: TestRow[]; totalRowCount: number }) => void;
 		let callCount = 0;
@@ -767,6 +811,41 @@ describe('Infinite block reload — stale row map cleanup', () => {
 		expect(store.getState().selection.range).toBeNull();
 		expect(store.getState().selection.bounds).toBeNull();
 		expect(store.getState().activeEdit).toBeNull();
+
+		await new Promise((res) => setTimeout(res, 0));
+		ctrl.dispose();
+	});
+
+	it('setDatasource prunes selectedRowIds to loaded-row scope immediately', async () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+
+		const ctrl = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: {
+				getRows: vi.fn().mockResolvedValueOnce({
+					rows: [
+						{ id: 'A', name: 'Alice', amount: 1 },
+						{ id: 'B', name: 'Bob', amount: 2 },
+					],
+					totalCount: 2,
+				}),
+			},
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((res) => setTimeout(res, 0));
+
+		store.applyRowSelectionGesture({ kind: 'replace', rowIds: ['A', 'B'], source: 'api' });
+		expect(store.getState().selectedRowIds).toEqual(['A', 'B']);
+
+		ctrl.setDatasource({
+			getRows: vi.fn().mockResolvedValueOnce({
+				rows: [{ id: 'C', name: 'Carol', amount: 3 }],
+				totalCount: 1,
+			}),
+		});
+
+		expect(store.getState().selectedRowIds).toEqual([]);
 
 		await new Promise((res) => setTimeout(res, 0));
 		ctrl.dispose();
