@@ -1444,6 +1444,9 @@ export class ClientRowModelController<TData = unknown>
 		this.refresh('bulk');
 	};
 
+	// Compatibility shell only: structural writes and post-write lifecycle ownership stay centralized
+	// in applyTransactionStructurally(...) + reconcileAfterDataWrite(...) so transaction updates cannot
+	// diverge from setCellValue, batchCellValues, updateRows, or integrity-driven writes.
 	public applyTransaction = (transaction: RowDataTransaction<TData>): RowNodeTransaction<TData> => {
 		const writeResult = this.applyTransactionStructurally(transaction);
 		const notifyCells = this.collectCommittedCellChanges(writeResult);
