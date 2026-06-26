@@ -2603,6 +2603,22 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('const hasStructuralViewportWork = frame.rowRanges.length > 0 || frame.groups.size > 0;');
 			expect(content).toContain('if (frame.viewport || hasStructuralViewportWork)');
 		});
+
+		it('sort and filter model changes no longer hard-code full repaint invalidations when a row model can publish refresh scope', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridStateFeatureController.ts'), 'utf-8');
+			expect(content).toContain('const hasRowModel = this.deps.getRowModel?.() != null;');
+			expect(content).toContain("const forwardInvalidations = hasRowModel ? [] : [{ kind: 'headers', reason: 'sort' } as const, { kind: 'full', reason: 'sort' } as const];");
+			expect(content).toContain("const forwardInvalidations = hasRowModel ? [] : [{ kind: 'full' } as const];");
+			expect(content).toContain('requestRender: !hasRowModel');
+		});
+
+		it('ClientRowModelController publishes refresh-result invalidations for sort/filter events through the runtime bridge', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+			expect(content).toContain("this.runtime.applyRefreshInvalidation(this.refresh('sort'), {");
+			expect(content).toContain("requestRenderReason: 'rows:set-sort-model'");
+			expect(content).toContain("this.runtime.applyRefreshInvalidation(this.refresh('filter'), {");
+			expect(content).toContain("requestRenderReason: 'rows:set-filter-model'");
+		});
 	});
 
 	describe('Plan 142 - cross-feature composition gauntlets', () => {

@@ -3,10 +3,11 @@ import { GridEventName } from '../api/GridEvents.js';
 import type { ColumnDef, CompiledGridPlan } from '../columnDef.js';
 import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import type { GeometryModel } from '../models/GeometryModel.js';
-import type { RowModel } from '../rowModel.js';
+import type { RowModel, RowModelRefreshResult } from '../rowModel.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
+import type { GridInvalidationReason } from '../renderer/invalidationManager.js';
 
 export interface DataModelRuntime<TRowData = unknown> {
 	getState: () => InternalGridState<TRowData>;
@@ -56,6 +57,16 @@ export interface RowModelRuntimeBase<TRowData = unknown> {
 	getColumnDef: (colField: string) => ColumnDef<TRowData> | undefined;
 	getCellValue: (rowId: string, colField: string) => unknown;
 	bumpGlobalVersion: () => void;
+	applyRefreshInvalidation: (
+		refreshResult: RowModelRefreshResult | void,
+		options: {
+			invalidationReason: GridInvalidationReason;
+			requestRenderReason?: string;
+			includeHeaders?: boolean;
+			includeOverlay?: boolean;
+			groupId?: string;
+		}
+	) => void;
 	reportRowPipelineFault: (operation: string, error: unknown, context?: Record<string, unknown>) => RuntimeFault;
 	getInstrumentation: () => GridInstrumentation;
 }
@@ -99,6 +110,16 @@ export interface ServerPageRowModelRuntime<TRowData = unknown> extends RowModelR
 export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
 	initializeRowModelState: (model: { columns?: ColumnDef<TRowData>[]; getRowId?: ((row: TRowData) => string) | undefined }) => void;
 	bumpRowModelGlobalVersion: () => void;
+	applyRowModelRefreshInvalidation: (
+		refreshResult: RowModelRefreshResult | void,
+		options: {
+			invalidationReason: GridInvalidationReason;
+			requestRenderReason?: string;
+			includeHeaders?: boolean;
+			includeOverlay?: boolean;
+			groupId?: string;
+		}
+	) => void;
 	updateExpansionState: (updater: (expansion: InternalGridState<TRowData>['expansion']) => InternalGridState<TRowData>['expansion']) => void;
 	clearFormulas: () => void;
 	syncFormulaForCell: (rowId: string, colField: string, value: unknown) => void;

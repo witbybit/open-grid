@@ -11,6 +11,7 @@ export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStor
 		getColumnDef: store.getColumnDef,
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
+		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',
@@ -40,6 +41,7 @@ export function createInfiniteRowModelRuntime<TRowData>(store: RowModelRuntimeSt
 		getColumnDef: store.getColumnDef,
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
+		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',
@@ -82,6 +84,7 @@ export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntime
 		getColumnDef: store.getColumnDef,
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
+		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',

@@ -1615,6 +1615,72 @@ describe('Plan 141 regression â€” targeted invalidations for canonical row 
 		ctrl.dispose();
 		store.destroy();
 	});
+
+	it('grouped sort-model changes emit targeted viewport/header invalidations instead of a full repaint', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'name', header: 'Name', enableRowGroup: true },
+				{ field: 'price', header: 'Price' },
+			],
+			groupBy: ['name'],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'A', price: 10 },
+				{ id: '2', name: 'A', price: 20 },
+				{ id: '3', name: 'B', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+		const groupAId = ctrl.getVisualRow(0)?.kind === 'group' ? ctrl.getVisualRow(0)?.groupId : null;
+		expect(groupAId).not.toBeNull();
+		store.toggleGroupExpanded(groupAId!);
+		void store.engine.invalidation.consume();
+
+		store.setSortModel([{ colId: 'price', sort: 'desc' }]);
+		const frame = store.engine.invalidation.consume();
+
+		expect(frame.full).toBe(false);
+		expect(frame.viewport).toBe(true);
+		expect(frame.headers).toBe(true);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('grouped filter-model changes emit targeted viewport/overlay invalidations instead of a full repaint', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'name', header: 'Name', enableRowGroup: true },
+				{ field: 'price', header: 'Price' },
+			],
+			groupBy: ['name'],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'A', price: 10 },
+				{ id: '2', name: 'A', price: 20 },
+				{ id: '3', name: 'B', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+		const groupAId = ctrl.getVisualRow(0)?.kind === 'group' ? ctrl.getVisualRow(0)?.groupId : null;
+		expect(groupAId).not.toBeNull();
+		store.toggleGroupExpanded(groupAId!);
+		void store.engine.invalidation.consume();
+
+		store.setFilterModel({ price: { type: 'number', operator: 'gt', value: 15 } });
+		const frame = store.engine.invalidation.consume();
+
+		expect(frame.full).toBe(false);
+		expect(frame.viewport).toBe(true);
+		expect(frame.overlay).toBe(true);
+
+		ctrl.dispose();
+		store.destroy();
+	});
 });
 
 describe('GridStore undo and redo functionality', () => {

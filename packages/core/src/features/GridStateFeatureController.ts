@@ -1,6 +1,7 @@
 import { GridEventName } from '../api/GridEvents.js';
 import type { StateManager } from '../state/StateManager.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import type { RowModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { GridCommit, GridCommitResult } from '../engine/GridChangeApplier.js';
 import type { InternalGridState } from '../state/GridState.js';
@@ -9,6 +10,7 @@ import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult }
 export interface GridStateFeatureControllerDeps<TRowData = unknown> {
 	stateManager: StateManager<TRowData>;
 	applyChange: (change: GridCommit<TRowData>) => GridCommitResult;
+	getRowModel?: () => RowModel<TRowData> | null;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
@@ -151,13 +153,12 @@ export class GridStateFeatureController<TRowData = unknown> {
 			if (!result.allowed) return;
 		}
 		const oldSort = this.deps.stateManager.getState().sortModel;
+		const hasRowModel = this.deps.getRowModel?.() != null;
+		const forwardInvalidations = hasRowModel ? [] : [{ kind: 'headers', reason: 'sort' } as const, { kind: 'full', reason: 'sort' } as const];
 		this.deps.applyChange({
 			reason: 'rows:set-sort-model',
 			state: { sortModel },
-			invalidations: [
-				{ kind: 'headers', reason: 'sort' },
-				{ kind: 'full', reason: 'sort' },
-			],
+			invalidations: forwardInvalidations,
 			domains: ['rows', 'sorting'],
 			events: [{ type: GridEventName.sortChanged, payload: { sortModel } }],
 			history: undoable
@@ -165,28 +166,22 @@ export class GridStateFeatureController<TRowData = unknown> {
 						undo: {
 							reason: 'rows:set-sort-model',
 							state: { sortModel: oldSort },
-							invalidations: [
-								{ kind: 'headers', reason: 'sort' },
-								{ kind: 'full', reason: 'sort' },
-							],
+							invalidations: forwardInvalidations,
 							domains: ['rows', 'sorting'],
 							events: [{ type: GridEventName.sortChanged, payload: { sortModel: oldSort } }],
-							requestRender: true,
+							requestRender: !hasRowModel,
 						},
 						redo: {
 							reason: 'rows:set-sort-model',
 							state: { sortModel },
-							invalidations: [
-								{ kind: 'headers', reason: 'sort' },
-								{ kind: 'full', reason: 'sort' },
-							],
+							invalidations: forwardInvalidations,
 							domains: ['rows', 'sorting'],
 							events: [{ type: GridEventName.sortChanged, payload: { sortModel } }],
-							requestRender: true,
+							requestRender: !hasRowModel,
 						},
 					}
 				: undefined,
-			requestRender: true,
+			requestRender: !hasRowModel,
 		});
 	}
 
@@ -196,10 +191,12 @@ export class GridStateFeatureController<TRowData = unknown> {
 			if (!result.allowed) return;
 		}
 		const oldFilter = this.deps.stateManager.getState().filterModel;
+		const hasRowModel = this.deps.getRowModel?.() != null;
+		const forwardInvalidations = hasRowModel ? [] : [{ kind: 'full' } as const];
 		this.deps.applyChange({
 			reason: 'rows:set-filter-model',
 			state: { filterModel },
-			invalidations: [{ kind: 'full' }],
+			invalidations: forwardInvalidations,
 			domains: ['rows', 'filtering'],
 			events: [{ type: GridEventName.filterChanged, payload: { filterModel } }],
 			history: undoable
@@ -207,22 +204,22 @@ export class GridStateFeatureController<TRowData = unknown> {
 						undo: {
 							reason: 'rows:set-filter-model',
 							state: { filterModel: oldFilter },
-							invalidations: [{ kind: 'full' }],
+							invalidations: forwardInvalidations,
 							domains: ['rows', 'filtering'],
 							events: [{ type: GridEventName.filterChanged, payload: { filterModel: oldFilter } }],
-							requestRender: true,
+							requestRender: !hasRowModel,
 						},
 						redo: {
 							reason: 'rows:set-filter-model',
 							state: { filterModel },
-							invalidations: [{ kind: 'full' }],
+							invalidations: forwardInvalidations,
 							domains: ['rows', 'filtering'],
 							events: [{ type: GridEventName.filterChanged, payload: { filterModel } }],
-							requestRender: true,
+							requestRender: !hasRowModel,
 						},
 					}
 				: undefined,
-			requestRender: true,
+			requestRender: !hasRowModel,
 		});
 	}
 

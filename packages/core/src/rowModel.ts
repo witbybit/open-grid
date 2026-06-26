@@ -977,11 +977,19 @@ export class ClientRowModelController<TData = unknown>
 		this.unsubscribers.push(
 			this.runtime.addEventListener(GridEventName.sortChanged, () => {
 				this.rebuildDependencyRegistry();
-				this.refresh();
+				this.runtime.applyRefreshInvalidation(this.refresh('sort'), {
+					invalidationReason: 'sort',
+					requestRenderReason: 'rows:set-sort-model',
+					includeHeaders: true,
+				});
 			}),
 			this.runtime.addEventListener(GridEventName.filterChanged, () => {
 				this.rebuildDependencyRegistry();
-				this.refresh();
+				this.runtime.applyRefreshInvalidation(this.refresh('filter'), {
+					invalidationReason: 'filter',
+					requestRenderReason: 'rows:set-filter-model',
+					includeOverlay: true,
+				});
 			}),
 			this.runtime.addEventListener(GridEventName.queryModelChanged, () => {
 				this.refresh();

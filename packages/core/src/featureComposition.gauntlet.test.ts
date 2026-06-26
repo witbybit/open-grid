@@ -129,23 +129,25 @@ describe('Plan 142 - cross-feature composition gauntlets', () => {
 		expect(rowSelectionFrame.rows.has('r4')).toBe(true);
 		expect(rowSelectionFrame.headers).toBe(true);
 
-		store.setSortModel([{ colId: 'score', sort: 'desc' }]);
+		store.setSortModel([{ colId: 'score', sort: 'asc' }]);
 		const sortEvents = events.splice(0);
 		expect(sortEvents.filter((event) => event === 'sortChanged')).toHaveLength(1);
 		expect(sortEvents.indexOf('renderInvalidated')).toBeGreaterThanOrEqual(0);
 		expect(sortEvents.indexOf('sortChanged')).toBeGreaterThan(sortEvents.indexOf('renderInvalidated'));
 		const sortFrame = store.engine.invalidation.consume();
-		// This remains a known composition hotspot: grouped sort still escalates to full paint.
-		expect(sortFrame.full).toBe(true);
+		expect(sortFrame.full).toBe(false);
+		expect(sortFrame.viewport).toBe(true);
+		expect(sortFrame.headers).toBe(true);
 
-		store.setFilterModel({ city: { type: 'text', operator: 'contains', value: 'o' } });
+		store.setFilterModel({ city: { type: 'text', operator: 'contains', value: 'c' } });
 		const filterEvents = events.splice(0);
 		expect(filterEvents.filter((event) => event === 'filterChanged')).toHaveLength(1);
 		expect(filterEvents.indexOf('renderInvalidated')).toBeGreaterThanOrEqual(0);
 		expect(filterEvents.indexOf('filterChanged')).toBeGreaterThan(filterEvents.indexOf('renderInvalidated'));
 		const filterFrame = store.engine.invalidation.consume();
-		// Grouped filtering still escalates to full paint as well; keep that explicit until narrowed.
-		expect(filterFrame.full).toBe(true);
+		expect(filterFrame.full).toBe(false);
+		expect(filterFrame.viewport).toBe(true);
+		expect(filterFrame.overlay).toBe(true);
 
 		expect(store.getSelectedRowIds()).toEqual(['r4']);
 		expect(store.getState().selection.focus).toEqual({ rowId: 'r4', colField: 'score' });

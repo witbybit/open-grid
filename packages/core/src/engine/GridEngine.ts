@@ -17,7 +17,13 @@ import type {
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
-import { asAllDataNodesCapableRowModel, asRowOrderCapableModel, type RowModel, type VisualRowModel } from '../rowModel.js';
+import {
+	asAllDataNodesCapableRowModel,
+	asRowOrderCapableModel,
+	type RowModel,
+	type RowModelRefreshResult,
+	type VisualRowModel,
+} from '../rowModel.js';
 import type { RowNode } from '../rowNode.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
@@ -34,7 +40,7 @@ import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
-import { InvalidationManager } from '../renderer/invalidationManager.js';
+import { InvalidationManager, type GridInvalidationReason } from '../renderer/invalidationManager.js';
 import { GridCommitKernel } from './GridChangeApplier.js';
 import type { GridCommitEvent } from './GridChangeApplier.js';
 import { ColumnFeatureController } from '../features/ColumnFeatureController.js';
@@ -453,6 +459,7 @@ export class GridEngine<TRowData = unknown> {
 		this.stateFeature = new GridStateFeatureController<TRowData>({
 			stateManager: this.stateManager,
 			applyChange: (change) => this.changeApplier.commit(change),
+			getRowModel: () => this.rowModel,
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.dataMutation = new DataMutationController<TRowData>({
@@ -564,6 +571,42 @@ export class GridEngine<TRowData = unknown> {
 			domains: ['rows'],
 			requestRender: false,
 		});
+	}
+
+	public applyRowModelRefreshInvalidation(
+		refreshResult: RowModelRefreshResult | void,
+		options: {
+			invalidationReason: GridInvalidationReason;
+			requestRenderReason?: string;
+			includeHeaders?: boolean;
+			includeOverlay?: boolean;
+			groupId?: string;
+		}
+	): void {
+		const changed = refreshResult?.changed === true;
+		if (!changed && !options.includeHeaders && !options.includeOverlay) return;
+
+		const reason = options.invalidationReason;
+		const targetGroupId = refreshResult?.groupId ?? options.groupId;
+		if (targetGroupId) {
+			this.invalidation.invalidateGroup(targetGroupId, reason);
+		}
+		if (refreshResult?.changedStartIndex !== undefined && refreshResult.changedEndIndex !== undefined) {
+			this.invalidation.invalidateRowRange(refreshResult.changedStartIndex, refreshResult.changedEndIndex, reason);
+		}
+		if (refreshResult && refreshResult.previousRowCount !== refreshResult.nextRowCount) {
+			this.invalidation.invalidateGeometry(reason);
+		}
+		if (changed) {
+			this.invalidation.invalidateViewport(reason);
+		}
+		if (options.includeHeaders) {
+			this.invalidation.invalidateHeaders(reason);
+		}
+		if (options.includeOverlay) {
+			this.invalidation.invalidateOverlay(reason);
+		}
+		this.requestRender(options.requestRenderReason ?? String(reason));
 	}
 
 	public getManagedRowDragPolicy(): ManagedRowDragPolicyResult {
