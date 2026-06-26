@@ -1309,6 +1309,73 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		unmount();
 		grid.api.destroy();
 	});
+
+	it('should survive repeated mount and unmount cycles without leaking portal content or cleanup warnings', async () => {
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		for (let cycle = 0; cycle < 3; cycle++) {
+			const grid = createTestGrid<TestRow>({
+				rows: [
+					{ id: 'p1', name: `Parent ${cycle}` },
+					{ id: 'p2', name: `Other ${cycle}` },
+				],
+				columns: [
+					{
+						field: 'name',
+						header: 'Name',
+						width: 120,
+						renderer: {
+							kind: 'react',
+							component: ({ value }: { value: any }) => <span data-testid={`portal-content-${cycle}`}>{String(value)}</span>,
+						},
+					},
+				],
+				initialState: {
+					masterDetailEnabled: true,
+					detailRowHeight: 120,
+				},
+			});
+
+			const { unmount } = render(
+				<div style={{ width: 500, height: 320 }}>
+					<GridProvider api={grid.api}>
+						<GridView
+							api={grid.api}
+							enableNavigation={false}
+							detailRowRenderer={({ visualRow }) =>
+								visualRow.kind === 'detail' ? (
+									<div data-testid={`detail-portal-${cycle}`}>Details for {visualRow.parentId}</div>
+								) : null
+							}
+						/>
+					</GridProvider>
+				</div>
+			);
+
+			await waitFor(() => {
+				expect(screen.getAllByTestId(`portal-content-${cycle}`)).toHaveLength(2);
+			});
+
+			act(() => {
+				grid.api.toggleDetailExpanded('p1');
+			});
+
+			await screen.findByTestId(`detail-portal-${cycle}`);
+
+			unmount();
+			await act(async () => {});
+
+			expect(screen.queryByTestId(`portal-content-${cycle}`)).toBeNull();
+			expect(screen.queryByTestId(`detail-portal-${cycle}`)).toBeNull();
+			expect(document.body.querySelector('.og-row-portal-host')).toBeNull();
+
+			grid.api.destroy();
+		}
+
+		expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining('flushSync was called from inside a lifecycle method'));
+		expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining("Can't perform a React state update on an unmounted component"));
+		consoleError.mockRestore();
+	});
 });
 
 describe('Grid pagination prop', () => {

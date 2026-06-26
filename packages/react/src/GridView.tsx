@@ -176,8 +176,9 @@ export function GridView<TRowData = unknown>({
 		return () => {
 			hostRef.current = null;
 			setAdapterHandle(null);
+			isGridActiveRef.current = false;
 			host.destroy();
-			portalStore.clear();
+			portalStore.clear(true);
 		};
 	}, [api, portalStore]);
 

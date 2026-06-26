@@ -330,18 +330,22 @@ export function createPortalStore<TRowData = unknown>() {
 			notifyRowMenuStructural();
 		},
 
-		clear() {
+		clear(silent = false) {
 			portals.clear();
 			rowPortals.clear();
 			menuPortals.clear();
 			cellPortalKeyByContainer.clear();
 			rowPortalKeyByContainer.clear();
 			cellDataListeners.clear();
+			cellStructuralListeners.clear();
+			rowMenuStructuralListeners.clear();
 			imperativeUpdaters.clear();
 			rebuildCellSnapshot();
 			rebuildRowMenuSnapshot();
-			notifyCellStructural();
-			notifyRowMenuStructural();
+			if (!silent) {
+				notifyCellStructural();
+				notifyRowMenuStructural();
+			}
 		},
 	};
 }
