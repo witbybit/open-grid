@@ -2647,7 +2647,7 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('const previewSelection = {');
 			expect(content).toContain('const committedSelection = {');
 			expect(content).toContain('bounds: null,');
-			expect(content).toContain("payload: (state) => ({ focus: state.selection.focus, selection: state.selection })");
+			expect(content).toContain('payload: (state) => ({ focus: state.selection.focus, selection: state.selection })');
 			expect(content).toContain('selection: state.selection,');
 			expect(content).not.toContain('const selection = this.selection.setSelection(');
 		});
