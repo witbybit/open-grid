@@ -262,9 +262,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		const selectableRowModel = asSelectableDataRowModel(rowModel);
 		if (!selectableRowModel) return selectedRowIds;
 
-		const allowedIds = new Set(
-			selectableRowModel.getSelectableDataRowIds(capabilities.pageRowSelection ? 'page' : 'loaded')
-		);
+		const allowedIds = new Set(selectableRowModel.getSelectableDataRowIds(capabilities.pageRowSelection ? 'page' : 'loaded'));
 		if (allowedIds.size === 0) return [];
 
 		const nextIds = selectedRowIds.filter((rowId) => allowedIds.has(rowId));

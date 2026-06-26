@@ -449,10 +449,7 @@ export class GridEngine<TRowData = unknown> {
 			getRowModel: () => this.rowModel,
 			data: this.data,
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
-			validateCellPostCommit: (rowId, colField) =>
-				this.dataIntegrity?.validationModule?.isEnabled()
-					? this.dataIntegrity.validateCell(rowId, colField).then(() => undefined)
-					: Promise.resolve(),
+			validateCommittedCells: (cells, source) => this.dataIntegrity?.validateCommittedCells(cells, source) ?? Promise.resolve(),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
@@ -930,24 +927,24 @@ export class GridEngine<TRowData = unknown> {
 		this.groupingFeature.setStickyGroupRows(enabled);
 	}
 	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): GridWriteResult {
-		return this.toGridWriteResult(
-			this.changeApplier.commit({
-				reason: 'data:set-cell-value',
-				domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
-			})
-		);
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'data:set-cell-value',
+			domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
+		});
+		this.scheduleAutoValidationForCommittedWrites(this.collectCommittedWriteCells(execution.appliedMutations), 'api');
+		return this.toGridWriteResult(execution.result);
 	}
 
 	public batchCellValues(
 		updates: { rowId: string; colField: string; value: unknown }[],
 		source: 'paste' | 'api' | 'fill' = 'api'
 	): GridWriteResult {
-		return this.toGridWriteResult(
-			this.changeApplier.commit({
-				reason: 'data:batch-cell-values',
-				domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
-			})
-		);
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'data:batch-cell-values',
+			domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
+		});
+		this.scheduleAutoValidationForCommittedWrites(this.collectCommittedWriteCells(execution.appliedMutations), source);
+		return this.toGridWriteResult(execution.result);
 	}
 
 	public batchStreamCells(updates: readonly { rowId: string; colField: string; value: unknown }[]): void {
@@ -1284,6 +1281,42 @@ export class GridEngine<TRowData = unknown> {
 			reason: rejection.reason,
 			index: rejection.index,
 		}));
+	}
+
+	private collectCommittedWriteCells(
+		appliedMutations: readonly import('./GridDomainMutation.js').AppliedDomainMutation<TRowData>[]
+	): GridCellPointer[] {
+		const cells: GridCellPointer[] = [];
+		for (const mutation of appliedMutations) {
+			const result = mutation.result as
+				| import('../features/DataMutationController.js').CellValueChangeResult
+				| { committed?: readonly import('../features/DataMutationController.js').CellValueChangeResult[] }
+				| undefined;
+			if (!result) continue;
+			if ('applied' in result) {
+				if (result.applied) cells.push({ rowId: result.rowId, colField: result.colField });
+				continue;
+			}
+			for (const committed of result.committed ?? []) {
+				if (committed.applied) cells.push({ rowId: committed.rowId, colField: committed.colField });
+			}
+		}
+		return cells;
+	}
+
+	private scheduleAutoValidationForCommittedWrites(
+		cells: readonly GridCellPointer[],
+		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
+	): void {
+		if (!this.dataIntegrity || cells.length === 0 || !this.dataIntegrity.shouldAutoValidateWrite(source)) return;
+		void this.dataIntegrity.validateCommittedCells(cells, source).catch((error) => {
+			this.runtimeFaults.report({
+				source: 'grid-change',
+				operation: 'auto-validate-committed-writes',
+				error,
+				context: { source, cellCount: cells.length },
+			});
+		});
 	}
 }
 

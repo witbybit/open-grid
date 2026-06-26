@@ -287,4 +287,50 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 
 		controller.dispose();
 	});
+
+	it('fill auto-validates committed cells when validateOnFill is enabled', async () => {
+		const store = new GridStore<FillRangeRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 50 },
+					{ field: 'text', header: 'Text', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnFill: true,
+						cellRules: [
+							{ id: 'required-text', field: 'text', validate: ({ value }) => (value ? null : { message: 'Text is required' }) },
+						],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController<FillRangeRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'r1', text: '' },
+				{ id: 'r2', text: 'seed' },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.engine.fillRange(
+			{
+				start: { rowId: 'r1', colField: 'text' },
+				end: { rowId: 'r1', colField: 'text' },
+			},
+			{
+				start: { rowId: 'r2', colField: 'text' },
+				end: { rowId: 'r2', colField: 'text' },
+			}
+		);
+
+		await new Promise((res) => setTimeout(res, 0));
+		expect(store.engine.dataIntegrity?.getCellErrorMessage('r2', 'text')).toBe('Text is required');
+
+		controller.dispose();
+		store.destroy();
+	});
 });

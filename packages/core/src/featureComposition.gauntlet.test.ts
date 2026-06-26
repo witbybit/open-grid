@@ -197,6 +197,10 @@ describe('Plan 142 - cross-feature composition gauntlets', () => {
 		store.setCellValue('r1', 'formula', '=[r1:score]*2', false);
 		store.engine.invalidation.consume();
 
+		store.setCellValue('r1', 'note', '');
+		await new Promise((res) => setTimeout(res, 0));
+		expect(store.engine.dataIntegrity?.getCellErrorMessage('r1', 'note')).toBe('Note is required');
+
 		store.engine.fillRange(
 			{
 				start: { rowId: 'r1', colField: 'formula' },
@@ -230,9 +234,7 @@ describe('Plan 142 - cross-feature composition gauntlets', () => {
 		expect(store.getCellState('r3', 'formula').value).toBe('=[r3:score]*2');
 		expect(store.getCellValue('r2', 'formula')).toBe(14);
 		expect(store.getCellValue('r3', 'formula')).toBe(16);
-
-		await store.integrity.validateCell('r2', 'note');
-		await store.integrity.validateCell('r3', 'note');
+		await new Promise((res) => setTimeout(res, 0));
 		expect(store.engine.dataIntegrity?.getCellErrorMessage('r2', 'note')).toBe('Note is required');
 		expect(store.engine.dataIntegrity?.getCellErrorMessage('r3', 'note')).toBeNull();
 

@@ -11,7 +11,10 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
 	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
-	validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
+	validateCommittedCells?: (
+		cells: readonly { rowId: string; colField: string }[],
+		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
+	) => Promise<void>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
@@ -20,7 +23,10 @@ export class EditingFeatureController<TRowData = unknown> {
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
 	private readonly notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
-	private readonly validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
+	private readonly validateCommittedCells?: (
+		cells: readonly { rowId: string; colField: string }[],
+		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
+	) => Promise<void>;
 	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 
 	constructor(deps: EditingFeatureControllerDeps<TRowData>) {
@@ -28,7 +34,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.getRowModel = deps.getRowModel;
 		this.data = deps.data;
 		this.notifyCellChange = deps.notifyCellChange;
-		this.validateCellPostCommit = deps.validateCellPostCommit;
+		this.validateCommittedCells = deps.validateCommittedCells;
 		this.checkCapability = deps.checkCapability;
 	}
 
@@ -136,7 +142,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		}
 
 		this.notifyCellChange(rowId, colField, false);
-		await this.validateCellPostCommit?.(rowId, colField);
+		await this.validateCommittedCells?.([{ rowId, colField }], 'edit');
 		return true;
 	}
 }

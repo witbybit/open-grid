@@ -183,4 +183,36 @@ describe('EditingFeatureController', () => {
 		ctrl.dispose();
 		store.destroy();
 	});
+
+	it('commitEdit respects validateOnEdit: false and does not auto-publish validation errors', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 50 },
+					{ field: 'name', header: 'Name', width: 150 },
+					{ field: 'price', header: 'Price', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnEdit: false,
+						cellRules: [
+							{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) },
+						],
+					},
+				},
+			}
+		);
+		const ctrl = makeController(store);
+
+		await store.commitEdit('1', 'name', '');
+		await new Promise((res) => setTimeout(res, 0));
+
+		expect(store.engine.dataIntegrity?.getCellErrorMessage('1', 'name')).toBeNull();
+
+		ctrl.dispose();
+		store.destroy();
+	});
 });

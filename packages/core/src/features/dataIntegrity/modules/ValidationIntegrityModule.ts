@@ -45,6 +45,25 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 		return this.options.enabled !== false;
 	}
 
+	shouldAutoValidateWrite(source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'): boolean {
+		if (!this.isEnabled()) return false;
+		const validateOnEdit = this.options.validateOnEdit ?? true;
+		const validateOnPaste = this.options.validateOnPaste ?? validateOnEdit;
+		const validateOnFill = this.options.validateOnFill ?? validateOnEdit;
+
+		switch (source) {
+			case 'paste':
+				return validateOnPaste;
+			case 'fill':
+				return validateOnFill;
+			case 'api':
+			case 'edit':
+			case 'undo':
+			case 'redo':
+				return validateOnEdit;
+		}
+	}
+
 	getIssues(): readonly GridIntegrityIssue[] {
 		return this.deps.getIntegrityState().validation.issues;
 	}
@@ -123,76 +142,43 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 	}
 
 	async validateCell(rowId: string, colField: string): Promise<readonly GridIntegrityIssue[]> {
+		return this.validateCells([{ rowId, colField }]);
+	}
+
+	async validateCells(cells: readonly { rowId: string; colField: string }[]): Promise<readonly GridIntegrityIssue[]> {
 		if (!this.isEnabled()) return _EMPTY;
+		const uniqueCells = _dedupeCells(cells);
+		if (uniqueCells.length === 0) return _EMPTY;
 
-		const cellRules = (this.options.cellRules ?? []).filter((rule) => rule.field === colField);
-		const api = this.deps.getApi();
-		const rowModel = this.deps.getRowModel();
-		const node = rowModel?.getRowNodeById?.(rowId) ?? null;
-		const row = (node?.data ?? {}) as TRowData;
-		const rawValue = this.deps.data.getRawCellValue(rowId, colField);
-		const newIssues: GridIntegrityIssue[] = [];
-
-		for (const rule of cellRules) {
-			let result: import('../integrityTypes.js').GridIntegrityRuleResult | null = null;
-			try {
-				result = await rule.validate({ rowId, row, field: colField, value: rawValue, api });
-			} catch {
-				result = { message: `Rule "${rule.id}" threw an error` };
-			}
-			if (result) {
-				newIssues.push(_makeCellIssue(rule, rowId, colField, rawValue, result));
-			}
+		const issueMap = new Map<string, GridIntegrityIssue>();
+		for (const cell of uniqueCells) {
+			const issues = await this._collectCellIssues(cell.rowId, cell.colField);
+			for (const issue of issues) issueMap.set(issue.id, issue);
 		}
 
-		for (const rule of this.options.rowRules ?? []) {
-			let result: import('../integrityTypes.js').GridIntegrityRuleResult | null = null;
-			try {
-				result = await rule.validate({ rowId, row, api });
-			} catch {
-				result = null;
-			}
-			if (result) {
-				const fields = result.fields ?? [];
-				if (fields.includes(colField) || fields.length === 0) {
-					newIssues.push(_makeRowIssue(rule, rowId, fields, result));
-					for (const field of fields) {
-						if (
-							!newIssues.some(
-								(issue) =>
-									issue.colField === field &&
-									issue.rowId === rowId &&
-									issue.source === 'validation' &&
-									issue.type === 'rowValidation'
-							)
-						) {
-							newIssues.push(
-								_makeCellIssue(
-									{ id: `${rule.id}:${field}`, field, severity: rule.severity ?? 'error', blocking: rule.blocking ?? true },
-									rowId,
-									field,
-									undefined,
-									result
-								)
-							);
-						}
-					}
-				}
-			}
-		}
-
-		const retained = this.getIssues().filter((issue) => !_issueKeyMatches(issue, rowId, colField));
+		const targetedKeys = new Set(uniqueCells.map((cell) => `${cell.rowId}:${cell.colField}`));
+		const retained = this.getIssues().filter((issue) => !targetedKeys.has(`${issue.rowId ?? ''}:${issue.colField ?? ''}`));
+		const newIssues = Array.from(issueMap.values());
 		this.deps.ctx.applyChange({
 			reason: 'integrity:validation:set-issues',
 			domainMutations: [{ kind: 'integrity-set-validation-issues', issues: [...retained, ...newIssues] }],
-			invalidations: [{ kind: 'cell', rowId, colId: colField, reason: 'integrity-validation' }],
-			events:
-				newIssues.length > 0
-					? [{ type: GridEventName.cellValidationChanged, payload: { rowId, colField, error: newIssues[0]?.message ?? null } }]
-					: [],
+			invalidations: uniqueCells.map((cell) => ({
+				kind: 'cell' as const,
+				rowId: cell.rowId,
+				colId: cell.colField,
+				reason: 'integrity-validation',
+			})),
+			events: uniqueCells.map((cell) => ({
+				type: GridEventName.cellValidationChanged as const,
+				payload: {
+					rowId: cell.rowId,
+					colField: cell.colField,
+					error: newIssues.find((issue) => issue.rowId === cell.rowId && issue.colField === cell.colField)?.message ?? null,
+				},
+			})),
 		});
 
-		this.deps.requestRepaint([{ rowId, colField }]);
+		this.deps.requestRepaint(uniqueCells.map((cell) => ({ rowId: cell.rowId, colField: cell.colField })));
 		return newIssues;
 	}
 
@@ -338,6 +324,61 @@ export class ValidationIntegrityModule<TRowData> implements GridIntegrityModule<
 	destroy(): void {
 		this._commitIssues('integrity:validation:set-issues', []);
 	}
+
+	private async _collectCellIssues(rowId: string, colField: string): Promise<GridIntegrityIssue[]> {
+		const cellRules = (this.options.cellRules ?? []).filter((rule) => rule.field === colField);
+		const api = this.deps.getApi();
+		const rowModel = this.deps.getRowModel();
+		const node = rowModel?.getRowNodeById?.(rowId) ?? null;
+		const row = (node?.data ?? {}) as TRowData;
+		const rawValue = this.deps.data.getRawCellValue(rowId, colField);
+		const newIssues: GridIntegrityIssue[] = [];
+
+		for (const rule of cellRules) {
+			let result: import('../integrityTypes.js').GridIntegrityRuleResult | null = null;
+			try {
+				result = await rule.validate({ rowId, row, field: colField, value: rawValue, api });
+			} catch {
+				result = { message: `Rule "${rule.id}" threw an error` };
+			}
+			if (result) {
+				newIssues.push(_makeCellIssue(rule, rowId, colField, rawValue, result));
+			}
+		}
+
+		for (const rule of this.options.rowRules ?? []) {
+			let result: import('../integrityTypes.js').GridIntegrityRuleResult | null = null;
+			try {
+				result = await rule.validate({ rowId, row, api });
+			} catch {
+				result = null;
+			}
+			if (!result) continue;
+			const fields = result.fields ?? [];
+			if (!fields.includes(colField) && fields.length !== 0) continue;
+			newIssues.push(_makeRowIssue(rule, rowId, fields, result));
+			for (const field of fields) {
+				if (
+					!newIssues.some(
+						(issue) =>
+							issue.colField === field && issue.rowId === rowId && issue.source === 'validation' && issue.type === 'rowValidation'
+					)
+				) {
+					newIssues.push(
+						_makeCellIssue(
+							{ id: `${rule.id}:${field}`, field, severity: rule.severity ?? 'error', blocking: rule.blocking ?? true },
+							rowId,
+							field,
+							undefined,
+							result
+						)
+					);
+				}
+			}
+		}
+
+		return newIssues;
+	}
 }
 
 function _makeCellIssue(
@@ -390,6 +431,18 @@ function _fieldInColumns(field: string, columns: readonly { field?: string }[]):
 
 function _issueKeyMatches(issue: GridIntegrityIssue, rowId: string, colField: string): boolean {
 	return issue.rowId === rowId && issue.colField === colField && (issue.source === 'validation' || issue.source === 'serverValidation');
+}
+
+function _dedupeCells(cells: readonly { rowId: string; colField: string }[]): Array<{ rowId: string; colField: string }> {
+	const unique: Array<{ rowId: string; colField: string }> = [];
+	const seen = new Set<string>();
+	for (const cell of cells) {
+		const key = `${cell.rowId}:${cell.colField}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		unique.push({ rowId: cell.rowId, colField: cell.colField });
+	}
+	return unique;
 }
 
 function _now(): number {
