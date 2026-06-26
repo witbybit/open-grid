@@ -826,9 +826,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getRowOrder = (): string[] => this.getClientStructuralRowModel()?.getRowOrder() ?? [];
-	public setRowOrder = (rowIds: string[]): void => {
-		this.engine.setRowOrder(rowIds);
-	};
+	public setRowOrder = (rowIds: string[]): GridWriteResult => this.engine.setRowOrder(rowIds);
 
 	public updateRows = (updater: (rows: TRowData[]) => TRowData[]): GridWriteResult => {
 		this.assertClientStructuralRowModel('updateRows');

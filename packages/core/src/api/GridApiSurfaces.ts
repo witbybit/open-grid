@@ -55,7 +55,7 @@ export interface GridDataApi<TRowData = unknown> {
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): GridWriteResult;
 	applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null;
 	getRowOrder(): string[];
-	setRowOrder(rowIds: string[]): void;
+	setRowOrder(rowIds: string[]): GridWriteResult;
 	refreshRows(): void;
 	setRowHeights: (rowHeights: Record<string, number> | undefined) => void;
 	setDefaultRowHeight: (defaultRowHeight?: number | undefined) => void;

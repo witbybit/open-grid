@@ -17,7 +17,7 @@ import type {
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
-import { asAllDataNodesCapableRowModel, type RowModel, type VisualRowModel } from '../rowModel.js';
+import { asAllDataNodesCapableRowModel, asRowOrderCapableModel, type RowModel, type VisualRowModel } from '../rowModel.js';
 import type { RowNode } from '../rowNode.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
@@ -67,6 +67,22 @@ import type { GridMutationRejection } from './GridDomainMutation.js';
 import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
 import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
 import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
+
+export type ManagedRowDragBlockReason =
+	| 'unsupported-row-model'
+	| 'sort-active'
+	| 'filter-active'
+	| 'group-active'
+	| 'tree-active'
+	| 'pagination-active';
+
+export type ManagedRowDragPolicyResult =
+	| { allowed: true }
+	| {
+			allowed: false;
+			reason: ManagedRowDragBlockReason;
+			message: string;
+	  };
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -559,11 +575,60 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
-	public setRowOrder(rowIds: string[], emitEvent = true): void {
-		this.changeApplier.commit({
-			reason: 'rows:set-order',
-			domainMutations: [{ kind: 'row-order', rowIds, emitEvent }],
-		});
+	public getManagedRowDragPolicy(): ManagedRowDragPolicyResult {
+		const state = this.stateManager.getState();
+		if (!asRowOrderCapableModel(this.rowModel)) {
+			return {
+				allowed: false,
+				reason: 'unsupported-row-model',
+				message: 'Managed row drag requires a client row model with row-order support.',
+			};
+		}
+		if (state.sortModel && state.sortModel.length > 0) {
+			return {
+				allowed: false,
+				reason: 'sort-active',
+				message: 'Managed row drag is blocked while sort is active.',
+			};
+		}
+		if (state.filterModel && Object.keys(state.filterModel).length > 0) {
+			return {
+				allowed: false,
+				reason: 'filter-active',
+				message: 'Managed row drag is blocked while filters are active.',
+			};
+		}
+		if ((state.groupBy?.length ?? 0) > 0) {
+			return {
+				allowed: false,
+				reason: 'group-active',
+				message: 'Managed row drag is blocked while grouping is active.',
+			};
+		}
+		if (state.getParentId) {
+			return {
+				allowed: false,
+				reason: 'tree-active',
+				message: 'Managed row drag is blocked while tree data is active.',
+			};
+		}
+		if (state.pagination) {
+			return {
+				allowed: false,
+				reason: 'pagination-active',
+				message: 'Managed row drag is blocked while pagination is active.',
+			};
+		}
+		return { allowed: true };
+	}
+
+	public setRowOrder(rowIds: string[], emitEvent = true, reason: 'rows:set-order' | 'rows:drag-reorder' = 'rows:set-order'): GridWriteResult {
+		return this.toGridWriteResult(
+			this.changeApplier.commit({
+				reason,
+				domainMutations: [{ kind: 'row-order', rowIds, emitEvent, reason }],
+			})
+		);
 	}
 
 	public applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null {

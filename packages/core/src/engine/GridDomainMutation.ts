@@ -68,6 +68,7 @@ export interface RowOrderMutation {
 	kind: 'row-order';
 	rowIds: string[];
 	emitEvent?: boolean;
+	reason?: GridCommitReason;
 }
 
 export interface ReplaceRowsMutation<TRowData = unknown> {
@@ -354,12 +355,12 @@ function createRowOrderHistory<TRowData>(reason: GridCommitReason, currentOrder:
 	return {
 		undo: {
 			reason,
-			domainMutations: [{ kind: 'row-order', rowIds: currentOrder, emitEvent: true }],
+			domainMutations: [{ kind: 'row-order', rowIds: currentOrder, emitEvent: true, reason }],
 			requestRender: false,
 		},
 		redo: {
 			reason,
-			domainMutations: [{ kind: 'row-order', rowIds: nextOrder, emitEvent: true }],
+			domainMutations: [{ kind: 'row-order', rowIds: nextOrder, emitEvent: true, reason }],
 			requestRender: false,
 		},
 	};
@@ -437,6 +438,7 @@ export function createRowOrderMutationExecutor<TRowData = unknown>(
 			return { ok: true };
 		},
 		prepare(mutation, context) {
+			const commitReason = mutation.reason ?? reason;
 			const rowModel = getRowOrderCapableModel(context)!;
 			const currentOrder = rowModel.getRowOrder();
 			const nextOrder = mutation.rowIds.slice();
@@ -453,7 +455,7 @@ export function createRowOrderMutationExecutor<TRowData = unknown>(
 				mutation: { ...mutation, rowIds: nextOrder },
 				domains: ['rows'],
 				events: mutation.emitEvent === false ? [] : [{ type: GridEventName.rowOrderChanged, payload: { rowIds: nextOrder } }],
-				history: createRowOrderHistory(reason, currentOrder, nextOrder),
+				history: createRowOrderHistory(commitReason, currentOrder, nextOrder),
 				requestRender: true,
 				apply(commitContext) {
 					getRowOrderCapableModel(commitContext)!.setRowOrder(nextOrder);
@@ -461,7 +463,7 @@ export function createRowOrderMutationExecutor<TRowData = unknown>(
 						domains: ['rows'],
 						invalidations: [{ kind: 'full', reason: 'row order changed' }],
 						events: mutation.emitEvent === false ? [] : [{ type: GridEventName.rowOrderChanged, payload: { rowIds: nextOrder } }],
-						history: createRowOrderHistory(reason, currentOrder, nextOrder),
+						history: createRowOrderHistory(commitReason, currentOrder, nextOrder),
 						requestRender: true,
 					};
 				},

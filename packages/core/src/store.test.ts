@@ -1642,8 +1642,9 @@ describe('GridStore undo and redo functionality', () => {
 		const listener = vi.fn();
 		store.addEventListener(GridEventName.rowOrderChanged, listener);
 
-		store.setRowOrder(['3', '1', '2']);
+		const result = store.setRowOrder(['3', '1', '2']);
 
+		expect(result.status).toBe('applied');
 		expect(listener).toHaveBeenCalledOnce();
 		expect(listener).toHaveBeenCalledWith(expect.objectContaining({ payload: { rowIds: ['3', '1', '2'] } }));
 		expect((store as any).engine.getRowModel()?.getRowOrder()).toEqual(['3', '1', '2']);
@@ -1665,7 +1666,8 @@ describe('GridStore undo and redo functionality', () => {
 			columns: store.getState().columns,
 		});
 
-		store.setRowOrder(['3', '1', '2']);
+		const result = store.setRowOrder(['3', '1', '2']);
+		expect(result.status).toBe('applied');
 		expect(store.getRowOrder()).toEqual(['3', '1', '2']);
 		expect(store.canUndo()).toBe(true);
 
@@ -1674,6 +1676,30 @@ describe('GridStore undo and redo functionality', () => {
 
 		store.redo();
 		expect(store.getRowOrder()).toEqual(['3', '1', '2']);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('managed row drag policy blocks reorder while sort is active instead of clearing sort implicitly', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name' }],
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alpha', price: 10 },
+				{ id: '2', name: 'Beta', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(store.engine.getManagedRowDragPolicy()).toEqual({
+			allowed: false,
+			reason: 'sort-active',
+			message: 'Managed row drag is blocked while sort is active.',
+		});
+		expect(store.getState().sortModel).toEqual([{ colId: 'name', sort: 'asc' }]);
 
 		controller.dispose();
 		store.destroy();

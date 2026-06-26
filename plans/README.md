@@ -135,7 +135,7 @@
 | 136 | [Replace Broad Store Wakeups with Selector-Grade Domain Subscriptions](./136-selector-grade-subscription-surface.md) | TODO | 6dac6c08 |
 | 137 | [Decompose the Core Control Surfaces So Features Stop Accreting in GridEngine and GridStore](./137-core-surface-decomposition.md) | TODO | 6dac6c08 |
 | 138 | [Make Every Data Mutation Flow Through One Canonical Write Pipeline](./138-canonical-data-write-pipeline.md) | DONE | working tree |
-| 139 | [Converge Managed Row Drag Into the Canonical Runtime Instead of a DOM Side Channel](./139-row-drag-runtime-convergence.md) | TODO | 6a519297 |
+| 139 | [Converge Managed Row Drag Into the Canonical Runtime Instead of a DOM Side Channel](./139-row-drag-runtime-convergence.md) | DONE | working tree |
 | 140 | [Make Data Integrity Honest and Authoritative Across All Row Models](./140-row-model-integrity-parity.md) | TODO | 6a519297 |
 
 ## Execution order

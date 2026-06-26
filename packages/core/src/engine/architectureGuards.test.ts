@@ -355,7 +355,24 @@ describe('Architecture guardrails', () => {
 
 	it('GridEngine.setRowOrder routes through a typed row-order domain mutation', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
-		expect(content).toContain("domainMutations: [{ kind: 'row-order', rowIds, emitEvent }]");
+		expect(content).toContain("domainMutations: [{ kind: 'row-order', rowIds, emitEvent, reason }]");
+		expect(content).toContain('public setRowOrder(rowIds: string[], emitEvent = true, reason:');
+	});
+
+	it('managed row drag policy is explicit and owned by GridEngine', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+		expect(content).toContain('public getManagedRowDragPolicy(): ManagedRowDragPolicyResult');
+		expect(content).toContain("reason: 'sort-active'");
+		expect(content).toContain("reason: 'filter-active'");
+		expect(content).toContain("reason: 'group-active'");
+		expect(content).toContain("reason: 'tree-active'");
+		expect(content).toContain("reason: 'pagination-active'");
+	});
+
+	it('RowDragController uses explicit managed-drag policy checks instead of clearing sort state', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'RowDragController.ts'), 'utf-8');
+		expect(content).toContain('this.engine.getManagedRowDragPolicy()');
+		expect(content).not.toContain('setSortModel(null');
 	});
 
 	it('GridEngine.applyTransaction routes through a typed row-transaction domain mutation', () => {
