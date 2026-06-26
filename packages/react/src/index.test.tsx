@@ -1413,4 +1413,106 @@ describe('explicit React entrypoints', () => {
 
 		await act(async () => {});
 	});
+
+	it('syncs supported live props on rerender without recreating the grid api', async () => {
+		const onGridReady = vi.fn();
+		const getRowId = (row: TestRow) => row.id;
+
+		const { container, rerender } = render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid
+					rowModelType='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[{ field: 'name', header: 'Name', width: 100 }]}
+					getRowId={getRowId}
+					enableNavigation={false}
+					showFloatingFilters={false}
+					showFilterChipBar={false}
+					onGridReady={onGridReady}
+				/>
+			</div>
+		);
+
+		await waitFor(() => expect(onGridReady).toHaveBeenCalledTimes(1));
+		const api = onGridReady.mock.calls[0][0].api;
+		const gridContainer = container.querySelector('.og-grid-container') as HTMLElement;
+		expect(gridContainer.style.getPropertyValue('--og-floating-filter-height')).toBe('0px');
+
+		rerender(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid
+					rowModelType='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[{ field: 'name', header: 'Name', width: 100 }]}
+					getRowId={getRowId}
+					enableNavigation={false}
+					showFloatingFilters
+					showFilterChipBar
+					onGridReady={onGridReady}
+				/>
+			</div>
+		);
+
+		await waitFor(() => {
+			expect(onGridReady).toHaveBeenCalledTimes(1);
+			expect(gridContainer.style.getPropertyValue('--og-floating-filter-height')).toBe('36px');
+		});
+
+		act(() => {
+			api.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'Ali' } });
+		});
+
+		await waitFor(() => {
+			expect(screen.getByText('Name: contains "Ali"')).toBeTruthy();
+		});
+	});
+
+	it('warns when initial-only Grid props change after mount', async () => {
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const onGridReady = vi.fn();
+		const getRowId = (row: TestRow) => row.id;
+
+		const { rerender } = render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid
+					rowModelType='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[{ field: 'name', header: 'Name', width: 100 }]}
+					getRowId={getRowId}
+					enableNavigation={false}
+					persistence='grid-a'
+					rowOverscanPx={40}
+					showStatusBar
+					rowSelection='single'
+					onGridReady={onGridReady}
+				/>
+			</div>
+		);
+
+		await waitFor(() => expect(onGridReady).toHaveBeenCalledTimes(1));
+
+		rerender(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid
+					rowModelType='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[{ field: 'name', header: 'Name', width: 100 }]}
+					getRowId={getRowId}
+					enableNavigation={false}
+					persistence='grid-b'
+					rowOverscanPx={120}
+					showStatusBar={false}
+					rowSelection='multiple'
+					onGridReady={onGridReady}
+				/>
+			</div>
+		);
+
+		await waitFor(() => {
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Prop "persistence" is initial-only'));
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Prop "rowOverscanPx" is initial-only'));
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Prop "showStatusBar" is initial-only'));
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Prop "rowSelection" is initial-only'));
+		});
+	});
 });

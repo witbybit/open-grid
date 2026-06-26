@@ -118,6 +118,13 @@ function createInitialState<TRowData>(
 	return merged;
 }
 
+function warnInitialOnlyGridProp(propName: string): void {
+	console.warn(
+		`[open-grid/react] Prop "${propName}" is initial-only on <Grid /> after mount. ` +
+			'Changing it does not reconfigure the existing grid instance. Remount the grid if you need the new value to take effect.'
+	);
+}
+
 export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	const {
 		rowModelType,
@@ -161,7 +168,26 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	const lastColumnsRef = useRef(columns);
 	const lastColumnTypesRef = useRef(columnTypes);
 	const didMountServerRef = useRef(false);
+	const warnedInitialOnlyPropsRef = useRef(new Set<string>());
 	const paginationConfig = useMemo(() => normalizePagination(pagination), [pagination]);
+	const initialOnlyPropsRef = useRef({
+		rowModelType,
+		getRowId,
+		initialState,
+		persistence,
+		workspace,
+		rowOverscanPx,
+		overscanAdaptive,
+		runtimeLimits,
+		dataIntegrity,
+		capabilities,
+		detailRowHeight,
+		pagination,
+		rowSelection,
+		showStatusBar,
+		rowDragMode,
+		blockSize,
+	});
 
 	const api = useMemo(() => {
 		// Normalize string persistence key to a GridPersistenceAdapter so core always receives the adapter type.
@@ -233,6 +259,14 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	}, [api, styleRules]);
 
 	useEffect(() => {
+		api.setShowFloatingFilters(!!showFloatingFilters);
+	}, [api, showFloatingFilters]);
+
+	useEffect(() => {
+		api.setShowFilterChipBar(!!showFilterChipBar);
+	}, [api, showFilterChipBar]);
+
+	useEffect(() => {
 		if (rowModelType !== 'client' && rowModelType !== undefined) return;
 		api.setRows(rows as TRowData[]);
 	}, [api, rowModelType, rows]);
@@ -268,6 +302,52 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		const resolvedRowModelType = rowModelType ?? 'client';
 		onGridReady?.({ api, rowModelType: resolvedRowModelType });
 	}, [api, rowModelType, onGridReady]);
+
+	useEffect(() => {
+		const initialOnlyProps = initialOnlyPropsRef.current;
+		const checks: Array<[string, unknown, unknown]> = [
+			['rowModelType', initialOnlyProps.rowModelType, rowModelType],
+			['getRowId', initialOnlyProps.getRowId, getRowId],
+			['initialState', initialOnlyProps.initialState, initialState],
+			['persistence', initialOnlyProps.persistence, persistence],
+			['workspace', initialOnlyProps.workspace, workspace],
+			['rowOverscanPx', initialOnlyProps.rowOverscanPx, rowOverscanPx],
+			['overscanAdaptive', initialOnlyProps.overscanAdaptive, overscanAdaptive],
+			['runtimeLimits', initialOnlyProps.runtimeLimits, runtimeLimits],
+			['dataIntegrity', initialOnlyProps.dataIntegrity, dataIntegrity],
+			['capabilities', initialOnlyProps.capabilities, capabilities],
+			['detailRowHeight', initialOnlyProps.detailRowHeight, detailRowHeight],
+			['pagination', initialOnlyProps.pagination, pagination],
+			['rowSelection', initialOnlyProps.rowSelection, rowSelection],
+			['showStatusBar', initialOnlyProps.showStatusBar, showStatusBar],
+			['rowDragMode', initialOnlyProps.rowDragMode, rowDragMode],
+			['blockSize', initialOnlyProps.blockSize, blockSize],
+		];
+
+		for (const [propName, initialValue, currentValue] of checks) {
+			if (Object.is(initialValue, currentValue)) continue;
+			if (warnedInitialOnlyPropsRef.current.has(propName)) continue;
+			warnedInitialOnlyPropsRef.current.add(propName);
+			warnInitialOnlyGridProp(propName);
+		}
+	}, [
+		rowModelType,
+		getRowId,
+		initialState,
+		persistence,
+		workspace,
+		rowOverscanPx,
+		overscanAdaptive,
+		runtimeLimits,
+		dataIntegrity,
+		capabilities,
+		detailRowHeight,
+		pagination,
+		rowSelection,
+		showStatusBar,
+		rowDragMode,
+		blockSize,
+	]);
 
 	useInsertionEffect(() => {
 		return () => {
