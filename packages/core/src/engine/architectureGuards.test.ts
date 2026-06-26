@@ -1952,6 +1952,7 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('GridEventName.focusChanged');
 		expect(content).toContain("reason: 'selection:set-range'");
 		expect(content).toContain("reason: 'selection' as const");
+		expect(content).not.toContain('const selection = this.selection.setSelection(');
 	});
 
 	it('RenderInvalidationCoordinator no longer infers edit/validation paints from state keys (Plan 105)', () => {
@@ -2630,6 +2631,25 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('sort + filter + grouping composition');
 			expect(content).toContain('paste/fill writes, and undo/redo boundaries coherent');
 			expect(content).toContain('hot scroll path and custom renderer hydration stable under targeted writes');
+		});
+	});
+
+	describe('Plan 143 - projection and invalidation determinism', () => {
+		it('GridChangeApplier supports event payload resolution from committed state', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridChangeApplier.ts'), 'utf-8');
+			expect(content).toContain('export type GridCommitEventPayloadResolver');
+			expect(content).toContain("typeof event.payload === 'function'");
+			expect(content).toContain('this.deps.stateManager.getState()');
+		});
+
+		it('selection commits keep bounds projection-owned and resolve event payloads after projection', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			expect(content).toContain('const previewSelection = {');
+			expect(content).toContain('const committedSelection = {');
+			expect(content).toContain('bounds: null,');
+			expect(content).toContain("payload: (state) => ({ focus: state.selection.focus, selection: state.selection })");
+			expect(content).toContain('selection: state.selection,');
+			expect(content).not.toContain('const selection = this.selection.setSelection(');
 		});
 	});
 });

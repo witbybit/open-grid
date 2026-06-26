@@ -87,10 +87,15 @@ export type GridChangeReason = GridCommitReason;
 
 export type GridHistoryPolicy = 'record' | 'suppress';
 
+export type GridCommitEventPayloadResolver<
+	TRowData = unknown,
+	K extends keyof GridEventPayloadMap<TRowData> = keyof GridEventPayloadMap<TRowData>,
+> = (state: Readonly<InternalGridState<TRowData>>) => GridEventPayloadMap<TRowData>[K];
+
 export type GridCommitEvent<TRowData = unknown, K extends keyof GridEventPayloadMap<TRowData> = keyof GridEventPayloadMap<TRowData>> = {
 	[Type in K]: {
 		type: Type;
-		payload: GridEventPayloadMap<TRowData>[Type];
+		payload: GridEventPayloadMap<TRowData>[Type] | GridCommitEventPayloadResolver<TRowData, Type>;
 	};
 }[K];
 
@@ -320,7 +325,11 @@ export class GridCommitKernel<TRowData = unknown> {
 		if (record.events.length > 0) {
 			isolate('dispatch-events', () => {
 				for (const event of record.events) {
-					this.deps.eventBus.dispatchEvent(event.type, event.payload);
+					const payload =
+						typeof event.payload === 'function'
+							? (event.payload as GridCommitEventPayloadResolver<TRowData, typeof event.type>)(this.deps.stateManager.getState())
+							: event.payload;
+					this.deps.eventBus.dispatchEvent(event.type, payload);
 				}
 			});
 		}

@@ -1137,7 +1137,7 @@ export class GridEngine<TRowData = unknown> {
 			end = validEnd;
 		}
 		const range = start !== null && end !== null ? { start, end } : null;
-		const selection = this.selection.setSelection({
+		const previewSelection = {
 			focus: end,
 			anchor: start,
 			range,
@@ -1147,21 +1147,28 @@ export class GridEngine<TRowData = unknown> {
 				(field) => this.columns.getColumnIndex(field)
 			),
 			source,
-		});
+		};
+		const committedSelection = {
+			focus: end,
+			anchor: start,
+			range,
+			bounds: null,
+			source,
+		};
 		const events: GridCommitEvent<TRowData>[] = [];
-		if (prevSelection.focus !== selection.focus) {
+		if (prevSelection.focus !== previewSelection.focus) {
 			events.push({
 				type: GridEventName.focusChanged,
-				payload: { focus: selection.focus, selection },
+				payload: (state) => ({ focus: state.selection.focus, selection: state.selection }),
 			});
 		}
-		const selectionChange = this.selection.describeChange(prevSelection, selection, this.rowModel, this.stateManager.getState().columns);
+		const selectionChange = this.selection.describeChange(prevSelection, previewSelection, this.rowModel, this.stateManager.getState().columns);
 		events.push({
 			type: GridEventName.selectionChanged,
-			payload: {
-				selection,
+			payload: (state) => ({
+				selection: state.selection,
 				result: selectionChange,
-			},
+			}),
 		});
 		const invalidations = [
 			...selectionChange.invalidatedCells.map((cell) => ({
@@ -1176,7 +1183,7 @@ export class GridEngine<TRowData = unknown> {
 		];
 		this.changeApplier.apply({
 			reason: 'selection:set-range',
-			state: { selection },
+			state: { selection: committedSelection },
 			invalidations,
 			domains: ['selection'],
 			events,

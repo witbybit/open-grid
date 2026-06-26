@@ -194,6 +194,25 @@ describe('GridChangeApplier', () => {
 		expect(stateManager.getState().visibleRowRange).toEqual({ startIdx: 1, endIdx: 3 });
 	});
 
+	it('resolves event payload factories after projection against committed state', () => {
+		const { applier } = makeApplier();
+		const listener = vi.fn();
+		applier['deps'].eventBus.addEventListener(GridEventName.columnResized, listener);
+
+		applier.apply({
+			reason: 'event-payload-factory',
+			state: { columnWidths: { name: 240 } },
+			events: [
+				{
+					type: GridEventName.columnResized,
+					payload: (state) => ({ colField: 'name', width: state.columnWidths['name'] ?? 0 }),
+				},
+			],
+		});
+
+		expect(listener).toHaveBeenCalledWith(expect.objectContaining({ payload: { colField: 'name', width: 240 } }));
+	});
+
 	it('registers bounded history entries and replays them through the same commit protocol', () => {
 		const { applier, commandHistory, stateManager } = makeApplier();
 

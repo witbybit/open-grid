@@ -741,6 +741,39 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('selection change events publish projection-owned bounds from committed state', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const listener = vi.fn();
+		store.addEventListener(GridEventName.selectionChanged, listener);
+
+		store.selectRange({ rowId: '1', colField: 'name' }, { rowId: '2', colField: 'price' }, 'keyboard');
+
+		expect(listener).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					selection: expect.objectContaining({
+						bounds: { minRow: 0, maxRow: 1, minCol: 1, maxCol: 2 },
+					}),
+				}),
+			})
+		);
+
+		controller.dispose();
+	});
+
 	it('setCellValue preserves formula string and recomputes on dependency change', () => {
 		const store = new GridStore<{ id: string; val: number; formula: unknown }>({
 			columns: [
