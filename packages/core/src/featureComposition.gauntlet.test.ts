@@ -14,6 +14,8 @@ type CompositionRow = {
 	note: string;
 	formula: string;
 	name: string;
+	parentId?: string | null;
+	status?: string;
 };
 
 function createContainer(): HTMLDivElement {
@@ -336,6 +338,155 @@ describe('Plan 142 - cross-feature composition gauntlets', () => {
 		expect(lifecycleLog).toContain('update');
 		expect(renderer.portalMountManager.onUnmountCellContent).not.toHaveBeenCalled();
 		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotDomCount(rowsContainer));
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps tree structure, pinned lanes, focus, selection, and copy coherent through structural moves', async () => {
+		const clipboard = mockClipboard();
+		const store = new GridStore<CompositionRow>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'name', header: 'Name', width: 160, pinned: 'left' },
+				{ field: 'score', header: 'Score', width: 100 },
+				{ field: 'status', header: 'Status', width: 120, pinned: 'right' },
+			],
+			pinnedColumns: { left: 1, right: 1 },
+			rowModelConfig: {
+				type: 'client',
+				treeData: {
+					enabled: true,
+					getParentId: (row) => row.parentId ?? null,
+					getParentIdDependencies: ['parentId'],
+				},
+			},
+			expansion: {
+				groups: {},
+				treeRows: { root: true, other: true },
+				details: {},
+			},
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'root', parentId: null, name: 'Root', team: 'A', city: 'Austin', score: 0, note: 'ok', formula: '', status: 'Open' },
+				{ id: 'child-a', parentId: 'root', name: 'Child A', team: 'A', city: 'Boston', score: 1, note: 'ok', formula: '', status: 'Open' },
+				{ id: 'child-b', parentId: 'root', name: 'Child B', team: 'A', city: 'Chicago', score: 2, note: 'ok', formula: '', status: 'Open' },
+				{ id: 'other', parentId: null, name: 'Other Root', team: 'B', city: 'Denver', score: 3, note: 'ok', formula: '', status: 'Closed' },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getPinnedColumns()).toEqual({ left: 1, right: 1 });
+		store.selectCell({ rowId: 'child-b', colField: 'name' });
+		store.applyRowSelectionGesture({ kind: 'replace', rowIds: ['child-b'], source: 'api' });
+		await store.copySelectedRange();
+		expect(clipboard.writeText).toHaveBeenCalledWith('Child B');
+
+		const beforeMoveIndex = store.getVisualIndexByRowId('child-b');
+		store.updateRows((rows) => rows.map((row) => (row.id === 'child-b' ? { ...row, parentId: 'other' } : row)));
+
+		expect(store.getState().selection.focus).toEqual({ rowId: 'child-b', colField: 'name' });
+		expect(store.getSelectedRowIds()).toEqual(['child-b']);
+		expect(store.getVisualIndexByRowId('child-b')).not.toBe(beforeMoveIndex);
+		expect(store.getVisualIndexByRowId('child-b')).toBeGreaterThan(store.getVisualIndexByRowId('other'));
+
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'Child' } });
+		expect(store.getVisualIndexByRowId('other')).toBeGreaterThanOrEqual(0);
+		expect(store.getVisualIndexByRowId('child-b')).toBeGreaterThan(store.getVisualIndexByRowId('other'));
+		expect(store.getState().selection.focus).toEqual({ rowId: 'child-b', colField: 'name' });
+
+		store.selectCell({ rowId: 'other', colField: 'name' });
+		store.toggleGroupExpanded('other');
+		expect(store.getState().selection.focus).toEqual({ rowId: 'other', colField: 'name' });
+		expect(store.getSelectedRowIds()).toEqual(['child-b']);
+		expect(store.getVisualIndexByRowId('child-b')).toBeNull();
+
+		store.toggleGroupExpanded('other');
+		expect(store.getState().selection.focus).toEqual({ rowId: 'other', colField: 'name' });
+		expect(store.getSelectedRowIds()).toEqual(['child-b']);
+		expect(store.getVisualIndexByRowId('child-b')).toBeGreaterThan(store.getVisualIndexByRowId('other'));
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps grouped detail rows, sticky structure, pinned lanes, and variable-height geometry coherent under scroll and targeted writes', () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callbacks.push(callback);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+
+		const store = new GridStore<CompositionRow>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'name', header: 'Name', width: 160 },
+				{ field: 'team', header: 'Team', width: 120 },
+				{ field: 'score', header: 'Score', width: 120 },
+				{ field: 'status', header: 'Status', width: 120 },
+			],
+			groupBy: ['team'],
+			enableStickyGroupRows: true,
+			masterDetailEnabled: true,
+			detailRowHeight: 120,
+			pinnedColumns: { left: 1, right: 1 },
+			expansion: {
+				groups: { 'group:team=East': true, 'group:team=West': true },
+				treeRows: {},
+				details: { 'row-12': true },
+			},
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			rowOverscanPx: 0,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, index) => ({
+				id: `row-${index}`,
+				name: `Row ${index}`,
+				team: index < 20 ? 'East' : 'West',
+				city: `City ${index}`,
+				score: index,
+				note: 'ok',
+				formula: '',
+				status: index % 2 === 0 ? 'Ready' : 'Hold',
+			})),
+			columns: store.getState().columns,
+		});
+		const container = createContainer();
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		store.selectCell({ rowId: 'row-12', colField: 'name' });
+		const rowIndexBeforeSort = store.getVisualIndexByRowId('row-12');
+		expect(store.getVisualRow(rowIndexBeforeSort + 1)?.kind).toBe('detail');
+		expect(Array.from(store.engine.geometry.rowHeights)[rowIndexBeforeSort + 1]).toBe(120);
+
+		store.setSortModel([{ colId: 'score', sort: 'desc' }]);
+		const rowIndexAfterSort = store.getVisualIndexByRowId('row-12');
+		expect(rowIndexAfterSort).not.toBe(rowIndexBeforeSort);
+		expect(store.getVisualRow(rowIndexAfterSort + 1)?.kind).toBe('detail');
+		expect(Array.from(store.engine.geometry.rowHeights)[rowIndexAfterSort + 1]).toBe(120);
+		expect(store.getState().selection.focus).toEqual({ rowId: 'row-12', colField: 'name' });
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = Math.max(0, rowIndexAfterSort * 40 - 80);
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		drainRafQueue(callbacks);
+
+		expect(container.querySelector('.og-sticky-group-row-host')).not.toBeNull();
+		expect(container.querySelector('.og-cell-pinned-left')).not.toBeNull();
+		expect(container.querySelector('.og-cell-pinned-right')).not.toBeNull();
+
+		store.setCellValue('row-12', 'status', 'Updated');
+		drainRafQueue(callbacks);
+		expect(store.getCellValue('row-12', 'status')).toBe('Updated');
+		expect(store.getVisualRow(store.getVisualIndexByRowId('row-12') + 1)?.kind).toBe('detail');
+		expect(container.querySelector('.og-row-detail')).not.toBeNull();
 
 		renderer.unmount();
 		controller.dispose();

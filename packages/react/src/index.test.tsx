@@ -392,6 +392,67 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('keeps advanced editors on the canonical blocked-write path when validation rejects the commit', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{
+					field: 'name',
+					header: 'Name',
+					width: 100,
+					cellEditor: ({ value, onChange, onCommit }) => (
+						<input
+							data-testid='validated-editor'
+							value={String(value)}
+							onChange={(e) => onChange(e.target.value)}
+							onBlur={() => onCommit()}
+						/>
+					),
+				},
+			],
+			dataIntegrity: {
+				validation: {
+					validateOnSubmit: true,
+					cellRules: [{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) }],
+				},
+			},
+		});
+
+		const colDef = grid.api.getColumnDef('name')!;
+		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const blockedHandler = vi.fn();
+		grid.api.addEventListener(GridEventName.writeBlocked, blockedHandler);
+
+		act(() => {
+			grid.api.startEditing('1', 'name');
+		});
+
+		render(
+			<GridProvider api={grid.api}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={colDef} node={node} isEditing={true} isLoading={false} />
+			</GridProvider>
+		);
+
+		const input = screen.getByTestId('validated-editor') as HTMLInputElement;
+		fireEvent.change(input, { target: { value: '' } });
+		fireEvent.blur(input);
+
+		await waitFor(() => {
+			expect(grid.api.getCellValue('1', 'name')).toBe('Product A');
+			expect(grid.api.getStateSnapshot().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+		});
+		expect(blockedHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'edit',
+					status: 'validationFailed',
+				}),
+			})
+		);
+
+		grid.api.destroy();
+	});
+
 	it('should render portals inside PortalManager', () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],
