@@ -100,6 +100,7 @@ export function createGridRuntimeComposition<TRowData>({
 		autoSizeColumn: (colField: string, options?: Parameters<typeof runtime.autoSizeColumn>[1]) => runtime.autoSizeColumn(colField, options),
 		autoSizeAllColumns: (options?: Parameters<typeof runtime.autoSizeAllColumns>[0]) => runtime.autoSizeAllColumns(options),
 		getColumnDistinctValues: (colField: string) => runtime.getColumnDistinctValues(colField),
+		getColumnDistinctValueSummary: (colField: string) => runtime.getColumnDistinctValueSummary(colField),
 		copySelectedRange: () => runtime.copySelectedRange(),
 		pasteFromClipboard: () => runtime.pasteFromClipboard(),
 		copyRange: (minRow: number, maxRow: number, minCol: number, maxCol: number) => runtime.copyRange(minRow, maxRow, minCol, maxCol),

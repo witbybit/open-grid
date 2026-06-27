@@ -56,7 +56,8 @@ import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import { ColumnAutoSizeController } from '../features/ColumnAutoSizeController.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from '../features/ColumnAutoSizeController.js';
 import { ClipboardController } from '../features/ClipboardController.js';
-import { computeDistinctValues } from '../filterModel.js';
+import type { GridDistinctValueSummary } from '../distinctValues.js';
+import { computeDistinctValueSummary } from '../distinctValues.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
 import { GridCapabilityManager } from '../capabilities/GridCapabilityManager.js';
@@ -841,7 +842,12 @@ export class GridEngine<TRowData = unknown> {
 		return this.clipboard.copyRange(minRow, maxRow, minCol, maxCol);
 	}
 	public getColumnDistinctValues(colField: string): (string | number | null)[] {
-		return computeDistinctValues(this.getDistinctValueSourceNodes(), colField);
+		return [...this.getColumnDistinctValueSummary(colField).values];
+	}
+	public getColumnDistinctValueSummary(colField: string): GridDistinctValueSummary {
+		return computeDistinctValueSummary(this.getDistinctValueSourceNodes(), colField, {
+			maxValues: this.stateManager.getState().runtimeLimits?.maxFilterDistinctValues,
+		});
 	}
 	public moveColumn(colField: string, toIndex: number): void {
 		this.columnFeature.moveColumn(colField, toIndex);

@@ -20,6 +20,9 @@ export type {
 	QueryConditionDiagnostic,
 } from './query/GridQueryModel.js';
 export { createEmptyQueryModel, isQueryModelActive, countQueryNodes } from './query/GridQueryModel.js';
+export type { GridAnalysisStateSummary } from './analysis/analysisState.js';
+export { summarizeAnalysisState } from './analysis/analysisState.js';
+export type { GridDistinctValueSummary } from './distinctValues.js';
 export { getQueryOperator, getQueryOperatorsForType } from './query/queryOperatorRegistry.js';
 export type { QueryOperatorDefinition, QueryEvaluateParams } from './query/queryOperatorRegistry.js';
 export { evaluateQueryModel, applyQueryModelFilter, createQueryEvaluationContext } from './query/evaluateQueryModel.js';

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { GridStore } from '../store.js';
 import { ClientRowModelController } from '../rowModel.js';
-import { computeGridLayoutPlan, GROUP_BAND_HEIGHT, GROUP_PANEL_HEIGHT, LEAF_HEADER_HEIGHT } from './layoutPlan.js';
+import { computeGridLayoutPlan, FILTER_CHIP_BAR_HEIGHT, GROUP_BAND_HEIGHT, GROUP_PANEL_HEIGHT, LEAF_HEADER_HEIGHT } from './layoutPlan.js';
 
 describe('GridLayoutPlan', () => {
 	it('uses one chrome contract for group panel, header, sticky group, and overlay origins', () => {
@@ -51,6 +51,37 @@ describe('GridLayoutPlan', () => {
 		expect(plan.chrome.topChromeHeight).toBe(LEAF_HEADER_HEIGHT);
 		expect(plan.origins.headerTop).toBe(0);
 		expect(plan.origins.overlayTop).toBe(LEAF_HEADER_HEIGHT);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('allocates filter chip bar chrome for query-only analysis state', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name', filterType: 'text' }],
+			defaultRowHeight: 40,
+			showFilterChipBar: true,
+			queryModel: {
+				version: 1,
+				root: {
+					kind: 'group',
+					id: 'root',
+					operator: 'and',
+					children: [{ kind: 'condition', id: 'q1', columnId: 'name', operator: 'contains', value: 'o' }],
+				},
+			},
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'One' }],
+			columns: store.getState().columns,
+		});
+
+		store.setViewportSize(500, 300);
+		const plan = computeGridLayoutPlan(store.engine);
+
+		expect(plan.chrome.filterChipBarHeight).toBe(FILTER_CHIP_BAR_HEIGHT);
+		expect(plan.origins.headerTop).toBe(FILTER_CHIP_BAR_HEIGHT);
 
 		controller.dispose();
 		store.destroy();

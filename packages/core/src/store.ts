@@ -230,6 +230,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				maxRenderedRows: 500,
 				maxRenderedCells: 20_000,
 				suppressRenderedRangeLimit: false,
+				maxFilterDistinctValues: 500,
 				...initialState.runtimeLimits,
 			},
 			overscanAdaptive: initialState.overscanAdaptive,
@@ -433,6 +434,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public autoSizeColumn = (colField: string, options?: AutoSizeColumnOptions): void => this.engine.autoSizeColumn(colField, options);
 	public autoSizeAllColumns = (options?: AutoSizeAllColumnsOptions): void => this.engine.autoSizeAllColumns(options);
 	public getColumnDistinctValues = (colField: string): (string | number | null)[] => this.engine.getColumnDistinctValues(colField);
+	public getColumnDistinctValueSummary = (colField: string) => this.engine.getColumnDistinctValueSummary(colField);
 	public copySelectedRange = (): Promise<void> => this.engine.copySelectedRange();
 	public pasteFromClipboard = (): Promise<void> => this.engine.pasteFromClipboard();
 	public copyRange = (minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void> =>

@@ -145,7 +145,7 @@
 | 146 | [Make Async, Infinite, and Server-Oriented Row Models Feel First-Class](./146-async-row-models-and-server-runtime-parity.md) | TODO | c4f9506e |
 | 147 | [Make Editing, Clipboard, Fill, Formulas, Validation, and Editors One Coherent System](./147-editing-clipboard-fill-formula-and-capability-maturity.md) | DONE | working tree |
 | 148 | [Make Grouping, Tree Data, Master/Detail, and Pinned Lanes Compose Cleanly](./148-group-tree-master-detail-and-pinned-composition.md) | DONE | working tree |
-| 149 | [Converge Filtering, Query Building, and Analysis Surfaces Into One Serious Workflow](./149-filtering-query-and-analysis-surface-convergence.md) | TODO | c4f9506e |
+| 149 | [Converge Filtering, Query Building, and Analysis Surfaces Into One Serious Workflow](./149-filtering-query-and-analysis-surface-convergence.md) | DONE | working tree |
 | 150 | [Make Open Grid Easy to Integrate Into Real Business Workflows](./150-import-export-and-interoperability-foundation.md) | TODO | c4f9506e |
 | 151 | [Keep the Grid Fast After Millions of Interactions, Not Just the First Minute](./151-long-session-performance-memory-and-scheduler-resilience.md) | TODO | c4f9506e |
 | 152 | [Make Customization Powerful Without Letting Consumers Break the Core](./152-extension-surface-and-enterprise-customization-contract.md) | TODO | c4f9506e |

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useGridKeySelector } from '../hooks.js';
 import type { GridApi } from '../types.js';
+import { summarizeAnalysisState } from '@open-grid/core';
 import { ColumnsPanel } from './panels/ColumnsPanel.js';
 import { FiltersPanel } from './panels/FiltersPanel.js';
 import { SortPanel } from './panels/SortPanel.js';
@@ -129,11 +130,15 @@ export function GridSidebar<TRowData>({ api, config }: { api: GridApi<TRowData>;
 	const { panels = ['columns', 'filters', 'sort', 'themes', 'views'], position = 'right', width = 264 } = config;
 	const activeId = useGridKeySelector<string | null>('sidebarOpenPanel', (s) => s.sidebarOpenPanel ?? null);
 	const themeName = useGridKeySelector('themeName', (s) => s.themeName);
-	const filterCount = useGridKeySelector<number>('filterModel', (s) => (s.filterModel ? Object.keys(s.filterModel).length : 0));
+	const filterCount = useGridKeySelector<number>('filterModel', (s) => summarizeAnalysisState(s.filterModel, null).filterCount);
+	const queryConditionCount = useGridKeySelector<number>(
+		'queryModel',
+		(s) => summarizeAnalysisState(null, s.queryModel ?? null).queryConditionCount
+	);
 	const sortCount = useGridKeySelector<number>('sortModel', (s) => (s.sortModel ? s.sortModel.length : 0));
 	const theme = api.getTheme();
 
-	const getBadge = (id: string) => (id === 'filters' ? filterCount : id === 'sort' ? sortCount : 0);
+	const getBadge = (id: string) => (id === 'filters' ? filterCount : id === 'query' ? queryConditionCount : id === 'sort' ? sortCount : 0);
 	const resolvedPanels = (panels as Array<BuiltinSidebarPanelId | SidebarPanelDef<TRowData>>).map(_resolvePanel);
 	const activeDef = resolvedPanels.find((p) => p.id === activeId) ?? null;
 

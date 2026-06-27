@@ -5,6 +5,7 @@ import { InfiniteRowModelController, type InfiniteDatasource } from './infiniteR
 import { ServerPageRowModelController } from './serverPageRowModel.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 import type { ActiveEditState, ColumnDef } from './api/GridApi.js';
+import type { GridQueryModel } from './query/GridQueryModel.js';
 
 interface TestRow {
 	id: string;
@@ -380,6 +381,15 @@ describe('GridStore generic row-store functionality', () => {
 	});
 
 	it('getStateSnapshot returns immutable defensive copies of public state', () => {
+		const queryModel: GridQueryModel = {
+			version: 1,
+			root: {
+				kind: 'group',
+				id: 'root',
+				operator: 'and',
+				children: [{ kind: 'condition', id: 'c1', columnId: 'name', operator: 'contains', value: 'A' }],
+			},
+		};
 		const store = new GridStore<TestRow>({
 			columns: [
 				{ field: 'id', header: 'ID', width: 50 },
@@ -387,6 +397,7 @@ describe('GridStore generic row-store functionality', () => {
 			],
 			sortModel: [{ colId: 'name', sort: 'asc' }],
 			filterModel: { name: { type: 'text', operator: 'contains', value: 'A' } },
+			queryModel,
 			selectedRowIds: ['1'],
 			activeEdit: { rowId: '1', colField: 'name', validationError: 'Required' },
 			pagination: { pageSize: 25, page: 2 },
@@ -403,6 +414,9 @@ describe('GridStore generic row-store functionality', () => {
 		}).toThrow();
 		expect(() => {
 			(snapshot.filterModel as Record<string, any>).name.value = 'Changed';
+		}).toThrow();
+		expect(() => {
+			((snapshot.queryModel as GridQueryModel).root.children as Array<{ value?: unknown }>)[0]!.value = 'Mutated';
 		}).toThrow();
 		expect(() => {
 			(snapshot.selection as any).focus = { rowId: 'x', colField: 'y' };
@@ -426,6 +440,7 @@ describe('GridStore generic row-store functionality', () => {
 		expect(liveAfter.columns[0]?.header).toBe(liveBefore.columns[0]?.header);
 		expect(liveAfter.sortModel).toEqual([{ colId: 'name', sort: 'asc' }]);
 		expect(liveAfter.filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'A' } });
+		expect(liveAfter.queryModel).toEqual(queryModel);
 		expect(liveAfter.selection.focus).toBeNull();
 		expect(liveAfter.selectedRowIds).toEqual(['1']);
 		expect(liveAfter.activeEdit?.validationError).toBe('Required');
@@ -434,6 +449,7 @@ describe('GridStore generic row-store functionality', () => {
 		expect(freshSnapshot.columns[0]?.header).toBe('ID');
 		expect(freshSnapshot.sortModel).toEqual([{ colId: 'name', sort: 'asc' }]);
 		expect(freshSnapshot.filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'A' } });
+		expect(freshSnapshot.queryModel).toEqual(queryModel);
 		expect(freshSnapshot.selectedRowIds).toEqual(['1']);
 		expect(freshSnapshot.activeEdit?.validationError).toBe('Required');
 		expect(freshSnapshot.pagination?.page).toBe(2);

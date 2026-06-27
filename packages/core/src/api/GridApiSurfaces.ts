@@ -12,6 +12,7 @@ import type { RenderStats } from '../renderer/renderOrchestrator.js';
 import type { PersistenceStatus, PersistedGridState } from '../persistence/statePersistence.js';
 import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from '../workspace/workspaceTypes.js';
 import type { CsvExportOptions } from '../export/csvExport.js';
+import type { GridDistinctValueSummary } from '../distinctValues.js';
 import type { GridEventPayloadMap, GridEventListener } from './GridEvents.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
@@ -128,6 +129,7 @@ export interface GridStructureApi<TRowData = unknown> {
 	clearQueryModel(): void;
 	evaluateQueryForRow(rowId: string): boolean;
 	getColumnDistinctValues(colField: string): (string | number | null)[];
+	getColumnDistinctValueSummary(colField: string): GridDistinctValueSummary;
 	setStyleRules(styleRules: GridStyleRule<TRowData>[] | undefined): void;
 	setGroupBy(colIds: string[]): void;
 	getGroupBy(): string[];

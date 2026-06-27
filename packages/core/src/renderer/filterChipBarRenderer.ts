@@ -2,20 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { HeaderMenuController } from './headerMenuController.js';
 import type { ColumnFilter } from '../filterModel.js';
 import { getFilterChipText, applyFilterToModel } from '../filterOperations.js';
-import type { GridQueryGroup, GridQueryNode } from '../query/GridQueryModel.js';
-
-function countQueryConditions(group: GridQueryGroup): number {
-	let count = 0;
-	function visit(node: GridQueryNode): void {
-		if (node.kind === 'condition') {
-			count++;
-		} else {
-			for (const child of node.children) visit(child);
-		}
-	}
-	visit(group);
-	return count;
-}
+import { summarizeAnalysisState } from '../analysis/analysisState.js';
 
 /**
  * Renders a horizontal chip strip below the group panel (above the column headers)
@@ -67,12 +54,10 @@ export class FilterChipBarRenderer<TRowData = unknown> {
 		const state = this.engine.stateManager.getState();
 		const filterModel = state.filterModel;
 		const queryModel = state.queryModel;
+		const analysis = summarizeAnalysisState(filterModel, queryModel);
 		bar.innerHTML = '';
 
-		const filterCount = filterModel ? Object.keys(filterModel).length : 0;
-		const hasQuery = queryModel && queryModel.root.children.length > 0;
-
-		if (!state.showFilterChipBar || (filterCount === 0 && !hasQuery)) return;
+		if (!state.showFilterChipBar || analysis.totalActiveItems === 0) return;
 
 		for (const [colField, filterItem] of Object.entries(filterModel ?? {})) {
 			const col = state.columns.find((c) => c.field === colField);
@@ -104,8 +89,8 @@ export class FilterChipBarRenderer<TRowData = unknown> {
 		}
 
 		// Query chip — shows a summary of the active query model
-		if (hasQuery) {
-			const conditionCount = countQueryConditions(queryModel!.root);
+		if (analysis.hasQuery) {
+			const conditionCount = analysis.queryConditionCount;
 			const chip = document.createElement('div');
 			chip.className = 'og-filter-chip og-filter-chip--query';
 
@@ -132,7 +117,7 @@ export class FilterChipBarRenderer<TRowData = unknown> {
 		}
 
 		// "Clear all" button — only shown when 2+ chips are visible
-		const totalChips = filterCount + (hasQuery ? 1 : 0);
+		const totalChips = analysis.filterCount + (analysis.hasQuery ? 1 : 0);
 		if (totalChips >= 2) {
 			const clearAll = document.createElement('button');
 			clearAll.className = 'og-filter-clear-all';

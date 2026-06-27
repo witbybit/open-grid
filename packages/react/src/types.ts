@@ -128,6 +128,7 @@ export type {
 	QueryConditionDiagnostic,
 	QueryEvaluationContext,
 	QueryOperatorDefinition,
+	GridDistinctValueSummary,
 } from '@open-grid/core';
 export { createEmptyQueryModel, isQueryModelActive, countQueryNodes, getQueryOperator, getQueryOperatorsForType } from '@open-grid/core';
 

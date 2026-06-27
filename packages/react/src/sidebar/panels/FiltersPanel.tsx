@@ -14,7 +14,7 @@ import type {
 	DateFilterOperator,
 } from '../../types.js';
 import { useGridKeySelector } from '../../hooks.js';
-import type { ThemeTokens, CustomFilterRendererParams } from '@open-grid/core';
+import type { ThemeTokens, CustomFilterRendererParams, GridDistinctValueSummary } from '@open-grid/core';
 import { resolveColumnFilterDef } from '@open-grid/core';
 import { ColumnFilterRenderer } from '../../filters/ColumnFilterRenderer.js';
 
@@ -364,16 +364,17 @@ function DateFilterEditor({
 
 function SetFilterEditor({
 	condition,
-	allValues,
+	distinctValues,
 	onChange,
 	theme,
 }: {
 	condition: SetFilterCondition | null;
-	allValues: (string | number | null)[];
+	distinctValues: GridDistinctValueSummary;
 	onChange: (c: SetFilterCondition | null) => void;
 	theme: ThemeTokens;
 }) {
 	const [search, setSearch] = useState('');
+	const allValues = useMemo(() => [...distinctValues.values], [distinctValues.values]);
 	const selected = useMemo(() => new Set(condition?.values.map((v) => String(v ?? '\0null')) ?? []), [condition]);
 
 	const filtered = useMemo(
@@ -448,6 +449,12 @@ function SetFilterEditor({
 					);
 				})}
 			</div>
+			{distinctValues.truncated && (
+				<div style={{ fontSize: 10, color: theme.headerText, lineHeight: 1.4 }}>
+					Showing the first {distinctValues.limit} distinct values. Narrow the dataset or raise `runtimeLimits.maxFilterDistinctValues` to
+					inspect more.
+				</div>
+			)}
 		</div>
 	);
 }
@@ -471,12 +478,14 @@ function ConditionEditor({
 	ft,
 	condition,
 	allSetValues,
+	distinctValueSummary,
 	onChange,
 	theme,
 }: {
 	ft: FilterType;
 	condition: FilterCondition | null;
 	allSetValues: (string | number | null)[];
+	distinctValueSummary: GridDistinctValueSummary;
 	onChange: (c: FilterCondition | null) => void;
 	theme: ThemeTokens;
 }) {
@@ -488,7 +497,12 @@ function ConditionEditor({
 	}
 	if (ft === 'set') {
 		return (
-			<SetFilterEditor condition={condition?.type === 'set' ? condition : null} allValues={allSetValues} onChange={onChange} theme={theme} />
+			<SetFilterEditor
+				condition={condition?.type === 'set' ? condition : null}
+				distinctValues={distinctValueSummary}
+				onChange={onChange}
+				theme={theme}
+			/>
 		);
 	}
 	return <TextFilterEditor condition={condition?.type === 'text' ? condition : null} onChange={onChange} theme={theme} />;
@@ -629,11 +643,12 @@ function LegacyColumnFilterRow({
 	const [showSecond, setShowSecond] = useState(columnFilter?.type === 'compound');
 	const [compoundOp, setCompoundOp] = useState<'AND' | 'OR'>(getCompoundOp(columnFilter));
 
-	const allSetValues = useMemo(
-		() => (ft === 'set' ? api.getColumnDistinctValues(col.field) : []),
+	const distinctValueSummary = useMemo(
+		() => (ft === 'set' ? api.getColumnDistinctValueSummary(col.field) : { values: [], truncated: false, limit: null }),
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[ft, col.field]
 	);
+	const allSetValues = useMemo(() => [...distinctValueSummary.values], [distinctValueSummary.values]);
 
 	useEffect(() => {
 		setShowSecond(columnFilter?.type === 'compound');
@@ -665,7 +680,14 @@ function LegacyColumnFilterRow({
 		<div style={{ padding: '4px 12px 10px' }}>
 			<ColumnFilterRowHeader col={col} hasValue={hasAnyValue} theme={theme} onClear={() => commit(null, null, compoundOp)} />
 
-			<ConditionEditor ft={ft} condition={c1} allSetValues={allSetValues} onChange={handleC1Change} theme={theme} />
+			<ConditionEditor
+				ft={ft}
+				condition={c1}
+				allSetValues={allSetValues}
+				distinctValueSummary={distinctValueSummary}
+				onChange={handleC1Change}
+				theme={theme}
+			/>
 
 			{ft !== 'set' && (
 				<>
@@ -724,7 +746,14 @@ function LegacyColumnFilterRow({
 									<ClearIcon />
 								</button>
 							</div>
-							<ConditionEditor ft={ft} condition={c2} allSetValues={allSetValues} onChange={handleC2Change} theme={theme} />
+							<ConditionEditor
+								ft={ft}
+								condition={c2}
+								allSetValues={allSetValues}
+								distinctValueSummary={distinctValueSummary}
+								onChange={handleC2Change}
+								theme={theme}
+							/>
 						</>
 					)}
 				</>

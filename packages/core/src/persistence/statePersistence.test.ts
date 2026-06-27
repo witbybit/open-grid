@@ -13,10 +13,21 @@ import {
 } from './statePersistence.js';
 import type { ColumnDef } from '../store.js';
 import type { GridInitialState, InternalGridState } from '../state/GridState.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
 
 function wrapState(state: SerializedGridState): PersistedGridState {
 	return { v: GRID_STATE_SCHEMA_VERSION, state };
 }
+
+const QUERY_MODEL: GridQueryModel = {
+	version: 1,
+	root: {
+		kind: 'group',
+		id: 'root',
+		operator: 'and',
+		children: [{ kind: 'condition', id: 'q1', columnId: 'name', operator: 'contains', value: 'Alice' }],
+	},
+};
 
 describe('statePersistence', () => {
 	describe('schema versioning', () => {
@@ -49,6 +60,7 @@ describe('statePersistence', () => {
 				columnWidths: { id: 50, name: 100, age: 85 },
 				sortModel: [{ colId: 'id', sort: 'asc' }],
 				filterModel: { age: { type: 'number', operator: 'gt', value: 18 } },
+				queryModel: QUERY_MODEL,
 				themeName: 'light',
 				groupBy: ['age'],
 				showGroupFooter: true,
@@ -67,6 +79,7 @@ describe('statePersistence', () => {
 					columnWidths: { id: 50, name: 100, age: 85 },
 					sortModel: [{ colId: 'id', sort: 'asc' }],
 					filterModel: { age: { type: 'number', operator: 'gt', value: 18 } },
+					queryModel: QUERY_MODEL,
 					themeName: 'light',
 					groupBy: ['age'],
 					showGroupFooter: true,
@@ -117,6 +130,7 @@ describe('statePersistence', () => {
 				columnVisibility: { name: false, age: true },
 				sortModel: [{ colId: 'id', sort: 'desc' }],
 				filterModel: { name: { type: 'text', operator: 'contains', value: 'Alice' } },
+				queryModel: QUERY_MODEL,
 				themeName: 'light',
 				groupBy: ['age', 'invalidCol'],
 				showGroupFooter: true,
@@ -135,6 +149,7 @@ describe('statePersistence', () => {
 			expect(result.columns?.[0].hide).toBe(false);
 			expect(result.sortModel).toEqual([{ colId: 'id', sort: 'desc' }]);
 			expect(result.filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'Alice' } });
+			expect(result.queryModel).toEqual(QUERY_MODEL);
 			expect(result.themeName).toBe('light');
 			expect(result.groupBy).toEqual(['age']);
 			expect(result.showGroupFooter).toBe(true);
@@ -367,6 +382,7 @@ describe('statePersistence', () => {
 				columnWidths: { id: 50 },
 				sortModel: [{ colId: 'id', sort: 'asc' }],
 				filterModel: { id: { type: 'text', operator: 'equals', value: '1' } },
+				queryModel: QUERY_MODEL,
 				themeName: 'light',
 				groupBy: ['name'],
 				showGroupFooter: true,
@@ -383,6 +399,7 @@ describe('statePersistence', () => {
 			expect(stateMutation.columns?.find((c) => c.field === 'id')?.hide).toBe(true);
 			expect(stateMutation.columnWidths?.['id']).toBe(50);
 			expect(stateMutation.sortModel).toEqual([{ colId: 'id', sort: 'asc' }]);
+			expect(stateMutation.queryModel).toEqual(QUERY_MODEL);
 			expect(stateMutation.themeName).toBe('light');
 			expect(stateMutation.groupBy).toContain('name');
 			expect(stateMutation.showGroupFooter).toBe(true);

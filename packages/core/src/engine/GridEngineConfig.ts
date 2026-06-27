@@ -63,6 +63,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 		maxRenderedRows?: number;
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
+		maxFilterDistinctValues?: number;
 	};
 	/**
 	 * When true, the overscan buffer automatically expands in the scroll direction proportional

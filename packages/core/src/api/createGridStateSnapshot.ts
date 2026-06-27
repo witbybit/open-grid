@@ -1,5 +1,6 @@
 import type { ColumnDef } from '../columnDef.js';
 import type { FilterModel, SortModel } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { ActiveEditState, GridSelectionState, GridStateSnapshot } from './GridApi.js';
 
@@ -51,6 +52,10 @@ function cloneFilterModel(filterModel: FilterModel | null): FilterModel | null {
 	return filterModel ? (cloneFilterValue(filterModel) as FilterModel) : null;
 }
 
+function cloneQueryModel(queryModel: GridQueryModel | null): GridQueryModel | null {
+	return queryModel ? (cloneFilterValue(queryModel) as GridQueryModel) : null;
+}
+
 function cloneColumns<TRowData>(columns: readonly ColumnDef<TRowData>[]): readonly ColumnDef<TRowData>[] {
 	return Object.freeze(columns.map((column) => freezeCopy(column)));
 }
@@ -60,7 +65,7 @@ export function createGridStateSnapshot<TRowData>(state: InternalGridState<TRowD
 		columns: cloneColumns(state.columns),
 		sortModel: cloneSortModel(state.sortModel),
 		filterModel: cloneFilterModel(state.filterModel),
-		queryModel: state.queryModel ?? null,
+		queryModel: cloneQueryModel(state.queryModel ?? null),
 		selection: cloneSelection(state.selection),
 		selectedRowIds: Object.freeze(state.selectedRowIds.slice()),
 		activeEdit: cloneActiveEdit(state.activeEdit),

@@ -90,6 +90,7 @@ export interface GridModelState<TRowData = unknown> {
 		maxRenderedRows?: number;
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
+		maxFilterDistinctValues?: number;
 	};
 	overscanAdaptive?: boolean;
 }

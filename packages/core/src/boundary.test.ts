@@ -122,6 +122,7 @@ describe('Public/internal boundary', () => {
 				'registerGridNavigation',
 				'required',
 				'resolveColumnFilterDef',
+				'summarizeAnalysisState',
 				'themeToCSSVariables',
 				'validateSchemaVersion',
 			]);

@@ -134,6 +134,9 @@ function parseSerializedGridState(raw: unknown): SerializedGridStateParseResult 
 	if (raw.filterModel !== undefined && raw.filterModel !== null && !isRecord(raw.filterModel)) {
 		return { ok: false, error: '[open-grid] persisted grid state field `state.filterModel` must be null or an object.' };
 	}
+	if (raw.queryModel !== undefined && raw.queryModel !== null && !isRecord(raw.queryModel)) {
+		return { ok: false, error: '[open-grid] persisted grid state field `state.queryModel` must be null or an object.' };
+	}
 	if (raw.themeName !== undefined && typeof raw.themeName !== 'string') {
 		return { ok: false, error: '[open-grid] persisted grid state field `state.themeName` must be a string.' };
 	}
@@ -168,6 +171,7 @@ function parseSerializedGridState(raw: unknown): SerializedGridStateParseResult 
 		columnVisibility: raw.columnVisibility as SerializedGridState['columnVisibility'],
 		sortModel: raw.sortModel as SerializedGridState['sortModel'],
 		filterModel: raw.filterModel as SerializedGridState['filterModel'],
+		queryModel: raw.queryModel as SerializedGridState['queryModel'],
 		themeName: raw.themeName as SerializedGridState['themeName'],
 		groupBy: raw.groupBy as SerializedGridState['groupBy'],
 		showGroupFooter: raw.showGroupFooter as SerializedGridState['showGroupFooter'],
@@ -381,6 +385,9 @@ export function applyPersistedState<TRowData>(
 	// Filter model
 	if (serializedState.filterModel !== undefined) {
 		result.filterModel = serializedState.filterModel as GridInitialState<TRowData>['filterModel'];
+	}
+	if (serializedState.queryModel !== undefined) {
+		result.queryModel = serializedState.queryModel as GridInitialState<TRowData>['queryModel'];
 	}
 
 	if (serializedState.themeName !== undefined && isBuiltInThemeName(serializedState.themeName)) {
