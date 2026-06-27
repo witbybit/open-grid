@@ -31,6 +31,7 @@ const FloatingFiltersDemo = lazy(() => import('./pages/FloatingFiltersDemo'));
 const RowDragDemo = lazy(() => import('./pages/RowDragDemo'));
 const AdvancedFiltersDemo = lazy(() => import('./pages/AdvancedFiltersDemo'));
 const DataIntegrityLab = lazy(() => import('./pages/DataIntegrityLab'));
+const ProjectsComplianceDemo = lazy(() => import('./pages/ProjectsComplianceDemo'));
 
 const PAGES: readonly GridPageType[] = [
 	'perf',
@@ -54,6 +55,7 @@ const PAGES: readonly GridPageType[] = [
 	'rowdrag',
 	'advancedfilters',
 	'integrity',
+	'projects',
 ];
 
 function GridPageFallback() {
@@ -246,6 +248,7 @@ export default function App() {
 		if (activePage === 'rowdrag') return <RowDragDemo />;
 		if (activePage === 'advancedfilters') return <AdvancedFiltersDemo />;
 		if (activePage === 'integrity') return <DataIntegrityLab />;
+		if (activePage === 'projects') return <ProjectsComplianceDemo onGridReady={handleGridReady} />;
 		return <CrudValidationDemo {...commonGridProps} />;
 	})();
 

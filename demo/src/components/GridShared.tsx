@@ -23,7 +23,8 @@ export type GridPageType =
 	| 'floatingfilters'
 	| 'rowdrag'
 	| 'advancedfilters'
-	| 'integrity';
+	| 'integrity'
+	| 'projects';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================

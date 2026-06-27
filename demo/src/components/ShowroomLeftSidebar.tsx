@@ -24,6 +24,7 @@ import {
 	SlidersHorizontal,
 	GripVertical,
 	ShieldCheck,
+	Building2,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -167,6 +168,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Data Integrity Lab',
 			subtitle: 'Quality · Diff · Live · Conflicts',
 			icon: ShieldCheck,
+		},
+		{
+			id: 'projects',
+			label: 'Projects Compliance',
+			subtitle: 'Tree · Compliance · Watchlist',
+			icon: Building2,
 		},
 	] as const;
 

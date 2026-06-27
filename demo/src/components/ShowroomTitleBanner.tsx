@@ -17,6 +17,7 @@ import {
 	SlidersHorizontal,
 	GripVertical,
 	ShieldCheck,
+	Building2,
 } from 'lucide-react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
@@ -59,6 +60,7 @@ export default function ShowroomTitleBanner({
 					{activePage === 'floatingfilters' && <SlidersHorizontal className='w-4.5 h-4.5' />}
 					{activePage === 'rowdrag' && <GripVertical className='w-4.5 h-4.5' />}
 					{activePage === 'integrity' && <ShieldCheck className='w-4.5 h-4.5' />}
+					{activePage === 'projects' && <Building2 className='w-4.5 h-4.5' />}
 				</span>
 				<div>
 					<h2 className='text-sm font-extrabold text-slate-200 leading-tight uppercase tracking-wider flex items-center gap-2'>
@@ -78,6 +80,7 @@ export default function ShowroomTitleBanner({
 						{activePage === 'colgroups' && 'Multi-Level Column Header Groups'}
 						{activePage === 'floatingfilters' && 'Floating Filters — Inline Filter Row with Custom Renderers'}
 						{activePage === 'rowdrag' && 'Row Drag & Drop — Managed and Unmanaged Reorder Modes'}
+						{activePage === 'projects' && 'Projects Compliance Dashboard — Tree Data · Style Rules · Live Filter'}
 					</h2>
 					<p className='text-[10px] text-slate-400 leading-tight mt-0.5'>
 						{activePage === 'lab' &&
@@ -111,6 +114,8 @@ export default function ShowroomTitleBanner({
 							'Drag the gripper handle to reorder rows. Managed mode auto-applies the new order; unmanaged mode lets the host drive the update. Auto-scroll at viewport edges, Escape to cancel.'}
 						{activePage === 'integrity' &&
 							'Walk through all 5 insight layers: data quality rules, EOD diff comparison, live price streaming, and server-vs-local conflict resolution — all composable on the same grid.'}
+						{activePage === 'projects' &&
+							'17 projects × 77 subprojects rendered via tree data. Compliance bars, per-row style rules, and live search + status filter — all wired to a flat row array.'}
 					</p>
 				</div>
 			</div>
