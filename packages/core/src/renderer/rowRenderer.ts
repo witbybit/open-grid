@@ -19,7 +19,7 @@ import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
 import { asVisibleBlockLoadCapableRowModel } from '../rowModel.js';
 import { compileStyleRules, evaluateDetailRowStyleRules, evaluateGroupRowStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
 import { PinnedContainerManager } from './pinnedContainerManager.js';
-import { compileColumnTopology } from './columnTopology.js';
+import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
 
 // Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
 const ROW_KIND_BASE: Record<string, string> = {
@@ -158,6 +158,8 @@ export class RowRenderer<TRowData = unknown> {
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 	private readonly runtime: RowRendererRuntimeBridge<TRowData>;
 	private readonly pinnedContainers = new PinnedContainerManager<TRowData>();
+	private cachedColumnTopology: CompiledColumnTopology | null = null;
+	private cachedColumnTopologyVersion = -1;
 	/** Live column-reorder preview source, wired by RenderEngine to the
 	 *  ColumnInteractionController. Returns 0 outside an active header drag. */
 	public columnShiftSource: ((colIndex: number) => number) | null = null;
@@ -273,6 +275,35 @@ export class RowRenderer<TRowData = unknown> {
 		}
 	}
 
+	private getCompiledColumnTopology(plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>): CompiledColumnTopology {
+		if (this.cachedColumnTopology && this.cachedColumnTopologyVersion === plan.version) {
+			return this.cachedColumnTopology;
+		}
+		const topology = compileColumnTopology(plan);
+		this.cachedColumnTopology = topology;
+		this.cachedColumnTopologyVersion = plan.version;
+		return topology;
+	}
+
+	private getRenderedRowTop(
+		rowIndex: number,
+		rowTops: ArrayLike<number>,
+		scrollTop: number,
+		pinTopRows: number,
+		rowCount: number,
+		pinBottomRows: number,
+		viewportHeight: number,
+		totalHeight: number
+	): number {
+		if (rowIndex < pinTopRows) {
+			return rowTops[rowIndex] + scrollTop;
+		}
+		if (rowIndex >= rowCount - pinBottomRows) {
+			return scrollTop + viewportHeight - (totalHeight - rowTops[rowIndex]);
+		}
+		return rowTops[rowIndex];
+	}
+
 	// ── Slot-based viewport virtualization core ─────────────────────────────────────
 	//
 	// Row slot contract:
@@ -323,7 +354,7 @@ export class RowRenderer<TRowData = unknown> {
 		const rowModel = this.engine.getVisualRowModel();
 
 		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
-		const columnTopology = compileColumnTopology(plan);
+		const columnTopology = this.getCompiledColumnTopology(plan);
 		const columns = plan.displayedColumns;
 		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
 
@@ -423,20 +454,22 @@ export class RowRenderer<TRowData = unknown> {
 			if (
 				isScrollFrameActive &&
 				canTrustStableIdentity &&
-				!columnLayoutChanged &&
+				(!columnLayoutChanged || !isRowVisible) &&
 				!rowNeedsContentRefresh &&
 				slot.visualIndex === r &&
 				slot.rowKind !== '' &&
 				slot.rowKind !== 'loading'
 			) {
-				let top: number;
-				if (r < pinTopRows) {
-					top = rowTops[r] + scrollTop;
-				} else if (r >= nextWindow.rowCount - pinBottomRows) {
-					top = scrollTop + viewportHeight - (hoistedTotalHeight - rowTops[r]);
-				} else {
-					top = rowTops[r];
-				}
+				const top = this.getRenderedRowTop(
+					r,
+					rowTops,
+					scrollTop,
+					pinTopRows,
+					nextWindow.rowCount,
+					pinBottomRows,
+					viewportHeight,
+					hoistedTotalHeight
+				);
 				slot.updatePosition(top);
 				if (hasRowClassHook && slot.rowKind === 'data') {
 					this.dirtyRowsAfterScroll.add(r);
@@ -475,20 +508,22 @@ export class RowRenderer<TRowData = unknown> {
 			if (
 				isScrollFrameActive &&
 				!isRowRebind &&
-				!columnLayoutChanged &&
+				(!columnLayoutChanged || !isRowVisible) &&
 				!rowNeedsContentRefresh &&
 				slot.visualIndex === r &&
 				slot.rowKind !== '' &&
 				slot.rowKind !== 'loading'
 			) {
-				let top: number;
-				if (r < pinTopRows) {
-					top = rowTops[r] + scrollTop;
-				} else if (r >= nextWindow.rowCount - pinBottomRows) {
-					top = scrollTop + viewportHeight - (hoistedTotalHeight - rowTops[r]);
-				} else {
-					top = rowTops[r];
-				}
+				const top = this.getRenderedRowTop(
+					r,
+					rowTops,
+					scrollTop,
+					pinTopRows,
+					nextWindow.rowCount,
+					pinBottomRows,
+					viewportHeight,
+					hoistedTotalHeight
+				);
 				slot.updatePosition(top);
 				if (hasRowClassHook && slot.rowKind === 'data') {
 					this.dirtyRowsAfterScroll.add(r);
@@ -511,12 +546,16 @@ export class RowRenderer<TRowData = unknown> {
 			let rowTop = rowTops[r];
 			const rowHeight = rowHeights[r];
 
-			if (r < pinTopRows) {
-				rowTop = rowTop + scrollTop;
-			} else if (r >= nextWindow.rowCount - pinBottomRows) {
-				const bottomOffset = hoistedTotalHeight - rowTops[r];
-				rowTop = scrollTop + viewportHeight - bottomOffset;
-			}
+			rowTop = this.getRenderedRowTop(
+				r,
+				rowTops,
+				scrollTop,
+				pinTopRows,
+				nextWindow.rowCount,
+				pinBottomRows,
+				viewportHeight,
+				hoistedTotalHeight
+			);
 
 			// ── Row class name ────────────────────────────────────────────────────────
 			let rowClassName = ROW_KIND_BASE[visualRow.kind] ?? 'og-row';
