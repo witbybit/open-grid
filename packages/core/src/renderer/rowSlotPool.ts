@@ -99,10 +99,20 @@ export class RowSlotPool<TRowData = unknown> {
 		if (normalized === 0) {
 			return { moved: 0, rotation: 0 };
 		}
-		const slice = this._slots.splice(start, count);
-		const rotated = slice.slice(normalized).concat(slice.slice(0, normalized));
-		this._slots.splice(start, 0, ...rotated);
+		this.reverseRange(start, start + normalized - 1);
+		this.reverseRange(start + normalized, start + count - 1);
+		this.reverseRange(start, start + count - 1);
 		return { moved: count, rotation: normalized };
+	}
+
+	private reverseRange(start: number, end: number): void {
+		while (start < end) {
+			const tmp = this._slots[start];
+			this._slots[start] = this._slots[end];
+			this._slots[end] = tmp;
+			start++;
+			end--;
+		}
 	}
 
 	public resetScrollStats(): void {

@@ -291,6 +291,50 @@ describe('Runtime Performance & Granular Versioning', () => {
 		cleanupGrid(grid);
 	});
 
+	it('avoids row-model lookups for stayed rows during a one-row vertical scroll', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			defaultRowHeight: 40,
+			rowOverscanPx: 0,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns: store.getState().columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const visualRowModel = store.engine.getVisualRowModel()!;
+		const getVisualRowSpy = vi.spyOn(visualRowModel, 'getVisualRow');
+		renderer.resetRenderStats();
+
+		store.engine.viewport.setScrollPosition(40, 0);
+		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
+
+		expect(getVisualRowSpy).toHaveBeenCalledTimes(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('keeps horizontal scroll work bounded to entered/exited columns across active rows', () => {
 		const grid = createWideGrid({ rows: 1000, cols: 1000, custom: true });
 		const prevWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;

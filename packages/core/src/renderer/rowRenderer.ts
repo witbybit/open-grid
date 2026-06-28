@@ -384,6 +384,10 @@ export class RowRenderer<TRowData = unknown> {
 		const viewportHeight = this.engine.viewport.viewportHeight;
 		const rowTops = this.engine.geometry.rowTops;
 		const rowHeights = this.engine.geometry.rowHeights;
+		const canTrustStableIdentity =
+			!!this.currentWindow &&
+			(this.currentWindow.rowModelVersion ?? 0) === (nextWindow.rowModelVersion ?? 0) &&
+			(this.currentWindow.columnVersion ?? 0) === (nextWindow.columnVersion ?? 0);
 
 		const compiledStyleRules = compileStyleRules(state.styleRules);
 		const hasRowClassHook = compiledStyleRules.hasRowRules;
@@ -398,6 +402,29 @@ export class RowRenderer<TRowData = unknown> {
 			if (!slot) continue;
 
 			if (isScrollFrameActive) this.currentScrollRowsVisited++;
+
+			if (
+				isScrollFrameActive &&
+				canTrustStableIdentity &&
+				!columnLayoutChanged &&
+				slot.visualIndex === r &&
+				slot.rowKind !== '' &&
+				slot.rowKind !== 'loading'
+			) {
+				let top: number;
+				if (r < pinTopRows) {
+					top = rowTops[r] + scrollTop;
+				} else if (r >= nextWindow.rowCount - pinBottomRows) {
+					top = scrollTop + viewportHeight - (hoistedTotalHeight - rowTops[r]);
+				} else {
+					top = rowTops[r];
+				}
+				slot.updatePosition(top);
+				if (hasRowClassHook && slot.rowKind === 'data') {
+					this.dirtyRowsAfterScroll.add(r);
+				}
+				continue;
+			}
 
 			// Resolve the visual row early — needed for identity-based rebind check.
 			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
@@ -427,14 +454,7 @@ export class RowRenderer<TRowData = unknown> {
 			// below anyway). Data/selection/hover changes are gated during scroll and
 			// repainted post-scroll, so nothing here can go stale. Excluded: loading
 			// rows (kind may flip when a block lands).
-			if (
-				isScrollFrameActive &&
-				!isRowRebind &&
-				!columnLayoutChanged &&
-				slot.visualIndex === r &&
-				slot.rowKind !== '' &&
-				slot.rowKind !== 'loading'
-			) {
+			if (isScrollFrameActive && !isRowRebind && !columnLayoutChanged && slot.visualIndex === r && slot.rowKind !== '' && slot.rowKind !== 'loading') {
 				let top: number;
 				if (r < pinTopRows) {
 					top = rowTops[r] + scrollTop;
