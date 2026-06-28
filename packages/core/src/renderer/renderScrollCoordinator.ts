@@ -1,5 +1,11 @@
 import { type GridScheduler } from './gridScheduler.js';
-import { applyRenderWindowRuntimeLimits, computeRenderWindowInto, sameRenderedWindow, sameVisibleContentWindow, type RenderWindow } from './renderWindow.js';
+import {
+	applyRenderWindowRuntimeLimits,
+	computeRenderWindowInto,
+	sameRenderedWindow,
+	sameVisibleContentWindow,
+	type RenderWindow,
+} from './renderWindow.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type { GridLayoutPlan } from './layoutPlan.js';

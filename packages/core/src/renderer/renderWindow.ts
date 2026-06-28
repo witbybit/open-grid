@@ -351,8 +351,7 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	const viewportHeight = engine.viewport.viewportHeight;
 	const visibleTop = scrollTop + pinnedTopHeight;
 	const visibleBottom = scrollTop + viewportHeight - pinnedBottomHeight;
-	const visibleRowStart =
-		rowCount > pinTopRows + pinBottomRows ? Math.max(pinTopRows, engine.geometry.getRowIndexAtOffset(visibleTop)) : -1;
+	const visibleRowStart = rowCount > pinTopRows + pinBottomRows ? Math.max(pinTopRows, engine.geometry.getRowIndexAtOffset(visibleTop)) : -1;
 	const visibleRowEnd =
 		rowCount > pinTopRows + pinBottomRows
 			? Math.min(rowCount - 1 - pinBottomRows, engine.geometry.getRowIndexAtOffset(Math.max(visibleTop, visibleBottom - 1)))
@@ -363,7 +362,8 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	const lastRenderedBottom = newRowRange.endIdx >= 0 ? engine.geometry.getRowBottom(newRowRange.endIdx, defaultRowHeight) : visibleBottom;
 	const centerViewportLeft = engine.viewport.scrollLeft;
 	const centerViewportRight = engine.viewport.scrollLeft + engine.viewport.viewportWidth;
-	const visibleColStart = colCount > pinLeftCols + pinRightCols ? Math.max(pinLeftCols, engine.geometry.getColIndexAtOffset(centerViewportLeft)) : -1;
+	const visibleColStart =
+		colCount > pinLeftCols + pinRightCols ? Math.max(pinLeftCols, engine.geometry.getColIndexAtOffset(centerViewportLeft)) : -1;
 	const visibleColEnd =
 		colCount > pinLeftCols + pinRightCols
 			? Math.min(colCount - 1 - pinRightCols, engine.geometry.getColIndexAtOffset(Math.max(centerViewportLeft, centerViewportRight - 1)))

@@ -310,8 +310,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		isRowRebind,
 		forceCellRefresh,
 		isRowVisible,
-	} =
-		request;
+	} = request;
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 	const pinRightWidth = plan.pinRightWidth;
@@ -405,10 +404,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const col = columns[c];
 		const cellSlot = slot.centerCells[i];
 		if (!col || !cellSlot) continue;
-		const isVisibleContent =
-			isRowVisible &&
-			c >= visibleColStart &&
-			c <= visibleColEnd;
+		const isVisibleContent = isRowVisible && c >= visibleColStart && c <= visibleColEnd;
 		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) continue;
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		const leftArg = plan.colLefts[c];

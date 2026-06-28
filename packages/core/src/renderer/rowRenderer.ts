@@ -446,7 +446,8 @@ export class RowRenderer<TRowData = unknown> {
 
 			const isPinnedVisibleRow = r < pinTopRows || r >= nextWindow.rowCount - pinBottomRows;
 			const isRowVisible = isPinnedVisibleRow || (r >= nextVisibleRowStart && r <= nextVisibleRowEnd);
-			const wasPinnedVisibleRow = r < pinTopRows || (this.currentWindow ? r >= this.currentWindow.rowCount - this.currentWindow.pinBottomRows : false);
+			const wasPinnedVisibleRow =
+				r < pinTopRows || (this.currentWindow ? r >= this.currentWindow.rowCount - this.currentWindow.pinBottomRows : false);
 			const wasRowVisible = wasPinnedVisibleRow || (r >= prevVisibleRowStart && r <= prevVisibleRowEnd);
 			const rowVisibilityChanged = wasRowVisible !== isRowVisible;
 			const rowNeedsContentRefresh = isScrollFrameActive && (rowVisibilityChanged || (isRowVisible && visibleColumnsChanged));
