@@ -171,12 +171,8 @@ export class RowSlot<TRowData = unknown> {
 		delete this.element.dataset.rowId;
 		this.element.removeAttribute('aria-rowindex');
 		this.element.style.visibility = 'hidden';
-		for (const cell of this.cellsByColumnId.values()) {
-			if (cell.element.parentNode) {
-				cell.element.remove();
-			}
-		}
-		// Cell slots remain mounted — they will be rebound on next renderViewport.
+		// Cell DOM stays attached and warm. The row itself is hidden, so we avoid
+		// visible stale content without paying detach/reattach churn on the next bind.
 	}
 
 	/**

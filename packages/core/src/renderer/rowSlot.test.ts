@@ -79,4 +79,21 @@ describe('RowSlot & CellSlot Controllers', () => {
 		const updated2 = row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');
 		expect(updated2).toBe(false);
 	});
+
+	it('unbindHot() hides the row without detaching warm cell DOM', () => {
+		const rowEl = document.createElement('div');
+		const row = new RowSlot('row-1', rowEl);
+		const cellEl = document.createElement('div');
+		const cell = new CellSlot(cellEl);
+		cell.columnId = 'name';
+		row.cellsByColumnId.set('name', cell);
+		row.centerCells.push(cell);
+		rowEl.appendChild(cellEl);
+
+		row.unbindHot();
+
+		expect(rowEl.style.visibility).toBe('hidden');
+		expect(cellEl.parentNode).toBe(rowEl);
+		expect(row.cellsByColumnId.get('name')).toBe(cell);
+	});
 });

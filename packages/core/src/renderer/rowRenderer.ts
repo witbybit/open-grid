@@ -485,6 +485,7 @@ export class RowRenderer<TRowData = unknown> {
 			}
 			if (!visualRow) {
 				const prevUnbind = slot.visualIndex;
+				this.releaseRowPortal(slot);
 				slot.unbindHot();
 				if (prevUnbind >= 0) this.activeRows.delete(prevUnbind);
 				continue;
