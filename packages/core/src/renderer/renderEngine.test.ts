@@ -1399,7 +1399,7 @@ describe('RenderEngine', () => {
 		// Offscreen buffered portals are now dropped during scroll so only the visible band stays hot.
 		expect(unmountCount).toBe(0);
 		expect(flushPortalContent).not.toHaveBeenCalled();
-		expect(stats.portalReleasesDuringScroll).toBeGreaterThan(0);
+		expect(stats.portalReleasesDuringScroll).toBe(0);
 		expect(stats.portalFlushesDuringScroll).toBe(0);
 		// Visible portals stay live immediately during scroll, whether via in-place update or remount.
 		expect(stats.portalMountsDuringScroll).toBeGreaterThanOrEqual(0);

@@ -494,7 +494,15 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	}
 
 	if (!isInVisibleContent) {
-		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'scrolled-out');
+		const preservedContentMode: CellContentMode = cellSlot.lastPortalKey
+			? 'portal'
+			: rendererKind === 'loading'
+				? 'loading'
+				: cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback'
+					? cellSlot.lastContentMode
+					: cellSlot.lastContentMode === 'custom'
+						? 'custom'
+						: 'empty';
 		const didWriteBuffered = cellSlot.update(
 			colIndex,
 			col.field,
@@ -504,10 +512,10 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			right,
 			width,
 			cellClassName,
-			'empty',
+			preservedContentMode,
 			undefined,
-			'',
-			undefined
+			preservedContentMode === 'text' || preservedContentMode === 'fallback' ? (cellSlot.lastFormattedValue ?? '') : '',
+			preservedContentMode === 'portal' ? cellSlot.lastPortalKey : undefined
 		);
 		if (didWriteBuffered) deps.incrementCurrentScrollCellsWritten();
 		deps.incrementCellsBoundDuringScroll();

@@ -359,7 +359,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		store.destroy();
 	});
 
-	it('drops buffered custom-cell content outside the visible row band during scroll', () => {
+	it('keeps buffered custom-cell content warm outside the visible row band during scroll', () => {
 		const columns: ColumnDef<{ id: string; name: string }>[] = [
 			{
 				field: 'name',
@@ -393,7 +393,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		const bufferedRow0Cell = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="name"]') as HTMLDivElement;
 		const visibleRow1Cell = container.querySelector('.og-cell[data-row-id="row-1"][data-col-field="name"]') as HTMLDivElement;
 
-		expect(bufferedRow0Cell.dataset.contentMode).toBe('empty');
+		expect(bufferedRow0Cell.dataset.contentMode).toBe('portal');
 		expect(visibleRow1Cell.dataset.contentMode).toBe('portal');
 
 		renderer.unmount();
