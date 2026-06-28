@@ -254,6 +254,26 @@ describe('Runtime Performance & Granular Versioning', () => {
 		}
 	});
 
+	it('reuses the cached selected-row membership set across scroll frames when selection is unchanged', () => {
+		const grid = createWideGrid({ rows: 200, cols: 8 });
+		try {
+			grid.store.selectRows(['row-1', 'row-5']);
+			grid.renderer.fullPaint();
+
+			const selectionPaint = grid.renderer.rowRenderer.selectionPaint;
+			const firstSet = selectionPaint.getSelectedRowIdSet(grid.store.getState().selectedRowIds);
+			expect(firstSet).not.toBeNull();
+
+			grid.store.engine.viewport.setScrollPosition(40, 0);
+			grid.renderer.rowRenderer.recycleViewport(true, makeScrollCtx(grid.store) as any);
+			const secondSet = selectionPaint.getSelectedRowIdSet(grid.store.getState().selectedRowIds);
+
+			expect(secondSet).toBe(firstSet);
+		} finally {
+			cleanupGrid(grid);
+		}
+	});
+
 	it('does zero row and cell work when the scroll render window is unchanged', () => {
 		const grid = createWideGrid({ rows: 1000, cols: 100 });
 		grid.renderer.resetRenderStats();

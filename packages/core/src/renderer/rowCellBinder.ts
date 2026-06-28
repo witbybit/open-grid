@@ -282,7 +282,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	if (col.checkboxSelection) {
 		const cell = cellSlot.contentElement;
 		const rowId = node.id;
-		const isChecked = (deps.selectionPaint.selectedRowIdSet ?? new Set(state.selectedRowIds)).has(rowId);
+		const isChecked = !!deps.selectionPaint.getSelectedRowIdSet(state.selectedRowIds)?.has(rowId);
 		cellClassName += ' og-cell-row-selector';
 		let checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
 		if (!checkbox) {
