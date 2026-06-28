@@ -946,7 +946,7 @@ export class ClientRowModelController<TData = unknown>
 
 	public expandAllGroups = (): RowModelRefreshResult => {
 		const state = this.runtime.getState();
-		const allIds = this.pipeline.collectAllGroupIds({
+		const expansionIds = this.pipeline.collectAllExpansionIds({
 			nodes: this.dataStore.getAllNodes(),
 			columns: state.columns,
 			groupBy: state.groupBy,
@@ -954,13 +954,15 @@ export class ClientRowModelController<TData = unknown>
 			filterModel: state.filterModel,
 		});
 		const groups: Record<string, true> = {};
-		for (const id of allIds) groups[id] = true;
-		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups }));
+		for (const id of expansionIds.groupIds) groups[id] = true;
+		const treeRows: Record<string, true> = {};
+		for (const id of expansionIds.treeRowIds) treeRows[id] = true;
+		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups, treeRows }));
 		return this.refresh('expansion');
 	};
 
 	public collapseAllGroups = (): RowModelRefreshResult => {
-		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups: {} }));
+		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups: {}, treeRows: {} }));
 		return this.refresh('expansion');
 	};
 

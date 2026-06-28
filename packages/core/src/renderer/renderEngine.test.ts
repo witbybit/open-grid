@@ -2982,6 +2982,55 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('rotates the viewport slot window and only rebinds one row for a one-row scroll', () => {
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			cb(0);
+			return 1;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (_id: number) => {});
+
+		const columns = [{ field: 'a', header: 'A', width: 120 }];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowOverscanPx: 0,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		renderer.resetRenderStats();
+		scrollViewport.scrollTop = 40;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		const stats = renderer.getRenderStats();
+		expect(stats.rowSlotMoves).toBeGreaterThan(0);
+		expect(stats.rowSlotRebinds).toBe(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('stable-slot model: custom renderers are updated in-place when slots rebind to new rows', () => {
 		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 			cb(0);

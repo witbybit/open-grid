@@ -3,6 +3,7 @@ import type { RowNode } from '../rowNode.js';
 import type { GridCellContentMount, GridCellContentUnmount, RendererLifecycleOperation } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { createEditRendererKey, createSlotRendererKey, createIndexRendererKey } from './identityKeys.js';
+import type { RenderRuntimeStats } from './renderTelemetry.js';
 
 export interface RendererInstance<TRowData = unknown> {
 	rendererKey: string;
@@ -90,10 +91,15 @@ export class CustomRendererManager<TRowData = unknown> {
 
 	// Warm DOM moves deferred during scroll — flushed in budgeted chunks after scroll idle.
 	private pendingWarmMoves: RendererInstance<TRowData>[] = [];
+	private runtimeStats: RenderRuntimeStats | null = null;
 
 	private hiddenContainer: HTMLDivElement | null = null;
 
 	constructor(private engine?: GridEngine<TRowData>) {}
+
+	public setRuntimeStats(stats: RenderRuntimeStats): void {
+		this.runtimeStats = stats;
+	}
 
 	private ensureHiddenContainer(): HTMLDivElement | null {
 		if (!this.hiddenContainer && typeof document !== 'undefined') {
@@ -210,6 +216,9 @@ export class CustomRendererManager<TRowData = unknown> {
 
 		this.removeSiblingContainers(newInstance.rendererKey, params.parentContainer, newInstance.container);
 		this.registerActive(newInstance);
+		if (this.runtimeStats) {
+			this.runtimeStats.reactMounts++;
+		}
 
 		this.onMountCellContent?.({
 			cellKey: params.cellKey,
@@ -277,6 +286,9 @@ export class CustomRendererManager<TRowData = unknown> {
 		}
 
 		// Otherwise, destroy immediately
+		if (this.runtimeStats) {
+			this.runtimeStats.reactUnmounts++;
+		}
 		this.destroyInstance(instance);
 		return true;
 	}
@@ -400,6 +412,9 @@ export class CustomRendererManager<TRowData = unknown> {
 		this.registerActive(instance);
 
 		if (needsUpdate) {
+			if (this.runtimeStats) {
+				this.runtimeStats.reactRefreshes++;
+			}
 			this.onMountCellContent?.({
 				cellKey: params.cellKey,
 				rowSlotId: params.rowSlotId,

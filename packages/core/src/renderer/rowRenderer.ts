@@ -14,7 +14,6 @@ import type { GridCellContentUnmount } from './IGridRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { RowSlot } from './rowSlot.js';
 import { RowSlotPool } from './rowSlotPool.js';
-import { StableSlotAssigner } from './stableSlotAssigner.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
 import { asVisibleBlockLoadCapableRowModel } from '../rowModel.js';
@@ -165,12 +164,6 @@ export class RowRenderer<TRowData = unknown> {
 	/** Manages row selection paint state, row class building, and row click handling. */
 	public readonly selectionPaint: SelectionPaintManager<TRowData>;
 
-	// Stable slot assigner — single implementation shared with tests.
-	// Internal scratch buffers are reused per call: zero per-frame allocations.
-	private readonly _slotAssigner = new StableSlotAssigner();
-	// Pre-allocated scratch for extracting current visual indices from the slot pool.
-	private _currentSlotRowsScratch: number[] = [];
-
 	constructor(
 		engine: GridEngine<TRowData>,
 		geometryController: GeometryController<TRowData>,
@@ -249,6 +242,36 @@ export class RowRenderer<TRowData = unknown> {
 		return this.pinnedContainers.ensure(slot, side, width);
 	}
 
+	private rotateViewportSlots(nextWindow: RenderWindow): void {
+		const previous = this.currentWindow;
+		if (!previous) return;
+		if (
+			previous.pinTopRows !== nextWindow.pinTopRows ||
+			previous.pinBottomRows !== nextWindow.pinBottomRows ||
+			previous.rowCount !== nextWindow.rowCount
+		) {
+			return;
+		}
+
+		const previousCenterCount = Math.max(0, previous.rowEnd - previous.rowStart + 1);
+		const nextCenterCount = Math.max(0, nextWindow.rowEnd - nextWindow.rowStart + 1);
+		if (previousCenterCount !== nextCenterCount || previousCenterCount <= 1) {
+			return;
+		}
+
+		const delta = nextWindow.rowStart - previous.rowStart;
+		if (delta === 0 || Math.abs(delta) >= previousCenterCount) {
+			return;
+		}
+
+		const topCount = nextWindow.pinTopRows;
+		const normalizedRotation = delta > 0 ? delta : previousCenterCount + delta;
+		const result = this.rowSlotPool.rotateRange(topCount, previousCenterCount, normalizedRotation);
+		if (this.renderStats) {
+			this.renderStats.rowSlotMoves += result.moved;
+		}
+	}
+
 	// ── Slot-based viewport virtualization core ─────────────────────────────────────
 	//
 	// Row slot contract:
@@ -304,21 +327,8 @@ export class RowRenderer<TRowData = unknown> {
 		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
 
 		// ── Slot count management ─────────────────────────────────────────────────────
-		// Stable slot assignment: rows that are still in the window keep their current
-		// slot (isRowRebind = false), preserving their custom-live portals in place.
-		// Only entering/exiting rows use recycled slots (isRowRebind = true).
 		const sortedRows = getRowIndices(nextWindow, this._rowIndicesScratch);
 		const totalSlots = sortedRows.length;
-
-		// Extract current visual indices from the slot pool into pre-allocated scratch,
-		// then run stable-slot assignment through the single shared implementation.
-		const poolCount = this.rowSlotPool.count;
-		this._currentSlotRowsScratch.length = poolCount;
-		for (let i = 0; i < poolCount; i++) {
-			const slot = this.rowSlotPool.getSlot(i);
-			this._currentSlotRowsScratch[i] = slot ? slot.visualIndex : -1;
-		}
-		const allRows = this._slotAssigner.assign(this._currentSlotRowsScratch, sortedRows);
 
 		this.rowSlotPool.resetScrollStats();
 
@@ -342,6 +352,11 @@ export class RowRenderer<TRowData = unknown> {
 		}
 
 		this.rowSlotPool.ensureSlotCount(totalSlots, isScrollFrameActive);
+		this.rotateViewportSlots(nextWindow);
+		const allRows = sortedRows;
+		if (this.renderStats) {
+			this.renderStats.rowSlotAssigns += allRows.length;
+		}
 
 		if (isScrollFrameActive) {
 			this.slotStats.rowSlotAppendsTotal += this.rowSlotPool.slotAppendCount;
@@ -374,12 +389,9 @@ export class RowRenderer<TRowData = unknown> {
 		const hasRowClassHook = compiledStyleRules.hasRowRules;
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
-		// Each slot[i] binds to allRows[i]. Stable-slot assignment keeps staying rows
-		// in their current slots (isRowRebind=false) and recycles exiting-row slots
-		// for entering rows (isRowRebind=true).
-		//   slot DOM element never moves.
-		//   slot.visualIndex tracks which visual row is currently bound.
-		//   When isRowRebind=true the row portal is released before the new row binds.
+		// Each slot[i] binds to allRows[i], where slot index is the viewport-position contract.
+		// Contiguous scrolling rotates the center slice ahead of time so staying rows keep their
+		// physical slot and only true entered/exited rows rebind.
 		for (let slotIdx = 0; slotIdx < allRows.length; slotIdx++) {
 			const r = allRows[slotIdx];
 			const slot = this.rowSlotPool.getSlot(slotIdx);
@@ -404,6 +416,9 @@ export class RowRenderer<TRowData = unknown> {
 			// visual index but now holds a different row (e.g. a detail row collapses and
 			// the row below slides up to fill its position) must still release its portal.
 			const isRowRebind = slot.visualIndex >= 0 && (slot.visualIndex !== r || slot.lastVisualRowId !== visualRow.id);
+			if (isRowRebind && this.renderStats) {
+				this.renderStats.rowSlotRebinds++;
+			}
 
 			// ── Staying-row cheap path ───────────────────────────────────────────────
 			// During a scroll frame, a slot that keeps its visual row and whose column
@@ -557,8 +572,12 @@ export class RowRenderer<TRowData = unknown> {
 			}
 		}
 
-		// activeRows is maintained incrementally above — no O(n) rebuild needed.
-		// All slot index changes (bind, rebind, unbind, destroy) update the map at the point of change.
+		this.activeRows.clear();
+		for (const slot of this.rowSlotPool.getSlots()) {
+			if (slot.visualIndex >= 0) {
+				this.activeRows.set(slot.visualIndex, slot);
+			}
+		}
 
 		this.currentWindow = nextWindow;
 	}

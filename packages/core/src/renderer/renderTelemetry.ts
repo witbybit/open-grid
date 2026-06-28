@@ -4,6 +4,15 @@ import { type RenderOrchestrator, type RenderStats } from './renderOrchestrator.
 import type { RowRenderer } from './rowRenderer.js';
 
 export interface RenderRuntimeStats {
+	rowSlotAssigns: number;
+	rowSlotMoves: number;
+	rowSlotRebinds: number;
+	cellSlotRebinds: number;
+	fullCellBinds: number;
+	geometryOnlyCellBinds: number;
+	reactMounts: number;
+	reactRefreshes: number;
+	reactUnmounts: number;
 	scrollFrames: number;
 	viewportRecycles: number;
 	headerPaintsDuringScroll: number;
@@ -43,6 +52,15 @@ export interface RenderRuntimeStats {
 
 export function createRenderRuntimeStats(): RenderRuntimeStats {
 	return {
+		rowSlotAssigns: 0,
+		rowSlotMoves: 0,
+		rowSlotRebinds: 0,
+		cellSlotRebinds: 0,
+		fullCellBinds: 0,
+		geometryOnlyCellBinds: 0,
+		reactMounts: 0,
+		reactRefreshes: 0,
+		reactUnmounts: 0,
 		scrollFrames: 0,
 		viewportRecycles: 0,
 		headerPaintsDuringScroll: 0,
@@ -93,6 +111,15 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 	const portalScrollStats = deps.portalMountManager.getScrollStats();
 	return {
 		...stats,
+		rowSlotAssigns: deps.runtimeStats.rowSlotAssigns,
+		rowSlotMoves: deps.runtimeStats.rowSlotMoves,
+		rowSlotRebinds: deps.runtimeStats.rowSlotRebinds,
+		cellSlotRebinds: deps.runtimeStats.cellSlotRebinds,
+		fullCellBinds: deps.runtimeStats.fullCellBinds,
+		geometryOnlyCellBinds: deps.runtimeStats.geometryOnlyCellBinds,
+		reactMounts: deps.runtimeStats.reactMounts,
+		reactRefreshes: deps.runtimeStats.reactRefreshes,
+		reactUnmounts: deps.runtimeStats.reactUnmounts,
 		scrollFrames: deps.runtimeStats.scrollFrames,
 		viewportRecycles: deps.runtimeStats.viewportRecycles,
 		headerPaintsDuringScroll: deps.runtimeStats.headerPaintsDuringScroll,

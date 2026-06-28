@@ -287,27 +287,53 @@ export class RowPipeline<TData = unknown> {
 		};
 	}
 
-	public collectAllGroupIds(
+	public collectAllExpansionIds(
 		input: Pick<RowPipelineInput<TData>, 'nodes' | 'columns' | 'groupBy' | 'rowModelConfig' | 'filterModel' | 'queryModel'>
-	): string[] {
+	): { groupIds: string[]; treeRowIds: string[] } {
 		const { nodes, columns, groupBy, rowModelConfig, filterModel, queryModel } = input;
 		const groupingConfig = rowModelConfig?.grouping;
 		const groupDefs: GroupDef<TData>[] = groupingConfig?.model ?? (groupBy ?? []).map((colId) => ({ colId }));
-		if (groupDefs.length === 0) return [];
 		const filteredNodes = applyQueryModelFilter(applyClientFilterOnly(nodes, columns, filterModel), columns, queryModel);
 		const context = createRowPipelineContext(columns, { groups: new Set(), treeRows: new Set(), details: new Set() });
-		const roots = groupStage(filteredNodes, groupDefs, context);
-		const ids: string[] = [];
-		const collect = (nodes: RowTreeNode<TData>[]) => {
-			for (const node of nodes) {
-				if (node.kind === 'group') {
-					ids.push(toGroupVisualRowId(node.path));
-					collect(node.children);
+		const groupIds: string[] = [];
+		const treeRowIds: string[] = [];
+
+		if (groupDefs.length > 0) {
+			const roots = groupStage(filteredNodes, groupDefs, context);
+			const collectGroups = (nodes: RowTreeNode<TData>[]) => {
+				for (const node of nodes) {
+					if (node.kind === 'group') {
+						groupIds.push(toGroupVisualRowId(node.path));
+						collectGroups(node.children);
+					}
 				}
-			}
-		};
-		collect(roots);
-		return ids;
+			};
+			collectGroups(roots);
+		}
+
+		const treeConfig = rowModelConfig?.treeData?.enabled ? rowModelConfig.treeData : undefined;
+		if (treeConfig?.getParentId) {
+			const roots = treeStage(filteredNodes, treeConfig.getParentId);
+			const collectTreeRows = (nodes: RowTreeNode<TData>[]) => {
+				for (const node of nodes) {
+					if (node.kind === 'data' && node.children && node.children.length > 0) {
+						treeRowIds.push(node.rowId);
+					}
+					if (node.kind === 'data' && node.children) {
+						collectTreeRows(node.children);
+					}
+				}
+			};
+			collectTreeRows(roots);
+		}
+
+		return { groupIds, treeRowIds };
+	}
+
+	public collectAllGroupIds(
+		input: Pick<RowPipelineInput<TData>, 'nodes' | 'columns' | 'groupBy' | 'rowModelConfig' | 'filterModel' | 'queryModel'>
+	): string[] {
+		return this.collectAllExpansionIds(input).groupIds;
 	}
 
 	private filterTreeByQuery<TData>(roots: RowTreeNode<TData>[], columns: ColumnDef<TData>[], queryModel: GridQueryModel): RowTreeNode<TData>[] {

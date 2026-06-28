@@ -76,6 +76,13 @@ export type ImperativeUpdaterFn<TRowData> = (
 ) => boolean;
 
 export interface PortalStore<TRowData = unknown> {
+	getDebugStats?(): {
+		cellStructuralPublishes: number;
+		rowMenuStructuralPublishes: number;
+		cellSnapshotRebuilds: number;
+		rowMenuSnapshotRebuilds: number;
+	};
+	resetDebugStats?(): void;
 	subscribeToCell?(cellKey: string, listener: () => void): () => void;
 	getCellData?(cellKey: string): PortalData<TRowData> | undefined;
 	// Optimised split subscriptions — implemented by createPortalStore

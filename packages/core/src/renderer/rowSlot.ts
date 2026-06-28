@@ -60,6 +60,7 @@ export class RowSlot<TRowData = unknown> {
 		this.id = id;
 		this.element = element;
 		if (element.getAttribute('role') !== 'row') element.setAttribute('role', 'row');
+		element.dataset.rowSlotId = id;
 	}
 
 	// ── Lookup ───────────────────────────────────────────────────────────────────────
@@ -166,6 +167,15 @@ export class RowSlot<TRowData = unknown> {
 		this.rowHeight = -1;
 		this.keepAlive = false;
 		this.lastPortalRowKey = undefined;
+		delete this.element.dataset.rowIndex;
+		delete this.element.dataset.rowId;
+		this.element.removeAttribute('aria-rowindex');
+		this.element.style.visibility = 'hidden';
+		for (const cell of this.cellsByColumnId.values()) {
+			if (cell.element.parentNode) {
+				cell.element.remove();
+			}
+		}
 		// Cell slots remain mounted — they will be rebound on next renderViewport.
 	}
 

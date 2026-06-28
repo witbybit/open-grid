@@ -25,6 +25,12 @@ function isSamePhysicalIdentity(left: CellPortalPhysicalIdentity | undefined, ri
 }
 
 export function createPortalStore<TRowData = unknown>() {
+	const debugStats = {
+		cellStructuralPublishes: 0,
+		rowMenuStructuralPublishes: 0,
+		cellSnapshotRebuilds: 0,
+		rowMenuSnapshotRebuilds: 0,
+	};
 	// Mutable maps — source of truth
 	const portals = new Map<string, PortalData<TRowData>>();
 	const rowPortals = new Map<string, RowPortalData<TRowData>>();
@@ -61,15 +67,18 @@ export function createPortalStore<TRowData = unknown>() {
 
 	function rebuildCellSnapshot() {
 		cellSnapshotDirty = true;
+		debugStats.cellSnapshotRebuilds++;
 	}
 
 	function rebuildRowMenuSnapshot() {
 		rowMenuSnapshotDirty = true;
+		debugStats.rowMenuSnapshotRebuilds++;
 	}
 
 	// ── Notification helpers ───────────────────────────────────────────────────
 
 	function notifyCellStructural(sync = false) {
+		debugStats.cellStructuralPublishes++;
 		if (sync) {
 			flushSync(() => {
 				for (const l of cellStructuralListeners) l();
@@ -85,6 +94,7 @@ export function createPortalStore<TRowData = unknown>() {
 	}
 
 	function notifyRowMenuStructural() {
+		debugStats.rowMenuStructuralPublishes++;
 		if (rowMenuScheduled) return;
 		rowMenuScheduled = true;
 		queueMicrotask(() => {
@@ -102,6 +112,15 @@ export function createPortalStore<TRowData = unknown>() {
 	// ── Public API ─────────────────────────────────────────────────────────────
 
 	return {
+		getDebugStats() {
+			return { ...debugStats };
+		},
+		resetDebugStats() {
+			debugStats.cellStructuralPublishes = 0;
+			debugStats.rowMenuStructuralPublishes = 0;
+			debugStats.cellSnapshotRebuilds = 0;
+			debugStats.rowMenuSnapshotRebuilds = 0;
+		},
 		// Per-cell data subscription — PortalCellWrapper subscribes here for value/props updates
 		subscribeToCell(cellKey: string, listener: () => void) {
 			let list = cellDataListeners.get(cellKey);

@@ -1,6 +1,15 @@
 import type { GridInvalidation, InvalidationFrame } from './invalidationManager.js';
 
 export interface RenderStats {
+	rowSlotAssigns?: number;
+	rowSlotMoves?: number;
+	rowSlotRebinds?: number;
+	cellSlotRebinds?: number;
+	fullCellBinds?: number;
+	geometryOnlyCellBinds?: number;
+	reactMounts?: number;
+	reactRefreshes?: number;
+	reactUnmounts?: number;
 	fullPaints: number;
 	runtimeLimitsClamped?: number;
 	rowPaints: number;
@@ -65,6 +74,15 @@ export interface RenderStats {
 /** Returns a zero-value RenderStats object. Used by GridStore.getRenderStats() when no render engine is mounted. */
 export function createEmptyRenderStats(): RenderStats {
 	return {
+		rowSlotAssigns: 0,
+		rowSlotMoves: 0,
+		rowSlotRebinds: 0,
+		cellSlotRebinds: 0,
+		fullCellBinds: 0,
+		geometryOnlyCellBinds: 0,
+		reactMounts: 0,
+		reactRefreshes: 0,
+		reactUnmounts: 0,
 		fullPaints: 0,
 		rowPaints: 0,
 		cellPaints: 0,
@@ -139,6 +157,15 @@ export interface RenderOrchestratorTargets {
 export class RenderOrchestrator {
 	private readonly targets: RenderOrchestratorTargets;
 	private readonly stats: RenderStats = {
+		rowSlotAssigns: 0,
+		rowSlotMoves: 0,
+		rowSlotRebinds: 0,
+		cellSlotRebinds: 0,
+		fullCellBinds: 0,
+		geometryOnlyCellBinds: 0,
+		reactMounts: 0,
+		reactRefreshes: 0,
+		reactUnmounts: 0,
 		fullPaints: 0,
 		runtimeLimitsClamped: 0,
 		rowPaints: 0,

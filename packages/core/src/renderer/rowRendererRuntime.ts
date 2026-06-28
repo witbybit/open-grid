@@ -129,6 +129,15 @@ function createRowCellBinderDeps<TRowData>(args: RowRendererRuntimeArgs<TRowData
 		incrementCurrentScrollCellsWritten: () => {
 			args.incrementCurrentScrollCellsWritten();
 		},
+		incrementFullCellBinds: () => {
+			if (args.renderStats) args.renderStats.fullCellBinds++;
+		},
+		incrementGeometryOnlyCellBinds: () => {
+			if (args.renderStats) args.renderStats.geometryOnlyCellBinds++;
+		},
+		incrementCellSlotRebinds: () => {
+			if (args.renderStats) args.renderStats.cellSlotRebinds++;
+		},
 		getColumnShift: args.getColumnShift,
 	};
 }

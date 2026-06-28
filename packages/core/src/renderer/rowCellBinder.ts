@@ -48,6 +48,9 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	incrementStyleHookCallsDuringScroll: () => void;
 	incrementCellsBoundDuringScroll: () => void;
 	incrementCurrentScrollCellsWritten: () => void;
+	incrementFullCellBinds?: () => void;
+	incrementGeometryOnlyCellBinds?: () => void;
+	incrementCellSlotRebinds?: () => void;
 	/** Live column-reorder preview offset (px) for a displayed column index.
 	 *  0 outside an active header drag. Only consulted on the full-bind path. */
 	getColumnShift?: (colIndex: number) => number;
@@ -184,6 +187,8 @@ function assignRendererHandle<TRowData>(cellSlot: CellSlot<TRowData>, contentMod
 }
 
 export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellFullRequest<TRowData>): void {
+	deps.incrementFullCellBinds?.();
+	deps.incrementCellSlotRebinds?.();
 	const { cellSlot, slotId, node, rowIndex, colIndex, col, lane, pinRightBaseLeft, plan, state, ctx, phase = 'initial' } = request;
 	const access = deps.engine.cellAccess.get(node.id, rowIndex, node, node.data, colIndex, col, undefined, state);
 
@@ -454,6 +459,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 }
 
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
+	deps.incrementGeometryOnlyCellBinds?.();
+	deps.incrementCellSlotRebinds?.();
 	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, pooledRowId, left, right, width, isRowRebind, isRowLoading } = request;
 
 	if (col.checkboxSelection) {

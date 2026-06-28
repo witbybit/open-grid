@@ -212,6 +212,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		engine.setScrollStateProvider(this.runtimeState);
 		this.rowRenderer.runtimeState = this.runtimeState;
 		this.portalMountManager.setRuntimeState(this.runtimeState);
+		this.portalMountManager.setRuntimeStats(this.renderStats);
 		this.portalMountManager.setPhysicalRowSlotIdResolver((rowIndex) => this.rowRenderer.activeRows.get(rowIndex)?.id);
 		this.layoutTransition = new LayoutTransitionController(() => this.rowRenderer.activeRows, {
 			getExitLayer: () => this.viewportRenderer.getLayer('exiting'),

@@ -23,6 +23,7 @@ import {
 	createCellInstanceRendererKey,
 } from './identityKeys.js';
 import { GridMetric } from '../diagnostics/GridInstrumentation.js';
+import type { RenderRuntimeStats } from './renderTelemetry.js';
 
 function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
 	if (a === b) return true;
@@ -127,6 +128,10 @@ export class PortalMountManager<TRowData = unknown> {
 
 	public setRuntimeState(state: RenderRuntimeState): void {
 		this.runtimeState = state;
+	}
+
+	public setRuntimeStats(stats: RenderRuntimeStats): void {
+		this.customRendererManager.setRuntimeStats(stats);
 	}
 
 	private get scrolling(): boolean {

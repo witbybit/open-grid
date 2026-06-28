@@ -9,15 +9,20 @@ export interface SlotCountChange {
 	destroyed: number;
 }
 
+export interface SlotRotationResult {
+	moved: number;
+	rotation: number;
+}
+
 /**
  * Fixed viewport slot pool — stable physical DOM owners.
  *
  * Key contract:
- *  - Row slots are stable physical DOM owners. A slot may keep ownership of the same
- *    visual row across many scroll frames while that row remains visible.
- *  - Slot index is NOT the same as viewport position. Visual order is determined by
- *    absolute positioning/transform applied to each slot element; DOM order must not
- *    be treated as visual row order.
+ *  - Row slots are stable physical DOM owners.
+ *  - Slot index IS the viewport position contract used by RowRenderer. During a
+ *    contiguous scroll, callers rotate the center-window slice so viewport position 0
+ *    still means "top rendered slot", viewport position 1 means "next slot", etc.
+ *  - DOM order remains irrelevant because rows are absolutely positioned by transform.
  *  - slot DOM elements NEVER leave the rows container during steady-state scroll.
  *  - When the rendered row count changes, ensureSlotCount() grows or shrinks the array.
  *  - Growth: createElement, append once, push to slots[].
@@ -29,7 +34,7 @@ export interface SlotCountChange {
  *   slot = rowSlotPool.getSlot(slotIndex)          // always O(1)
  */
 export class RowSlotPool<TRowData = unknown> {
-	/** All active slots in physical pool order. Slot index ≠ viewport position. */
+	/** All active slots in viewport-position order. */
 	private readonly _slots: RowSlot<TRowData>[] = [];
 	private readonly container: HTMLElement;
 
@@ -84,6 +89,20 @@ export class RowSlotPool<TRowData = unknown> {
 
 	public getSlots(): readonly RowSlot<TRowData>[] {
 		return this._slots;
+	}
+
+	public rotateRange(start: number, count: number, rotation: number): SlotRotationResult {
+		if (count <= 1 || rotation === 0) {
+			return { moved: 0, rotation: 0 };
+		}
+		const normalized = ((rotation % count) + count) % count;
+		if (normalized === 0) {
+			return { moved: 0, rotation: 0 };
+		}
+		const slice = this._slots.splice(start, count);
+		const rotated = slice.slice(normalized).concat(slice.slice(0, normalized));
+		this._slots.splice(start, 0, ...rotated);
+		return { moved: count, rotation: normalized };
 	}
 
 	public resetScrollStats(): void {

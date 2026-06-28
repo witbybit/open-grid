@@ -444,6 +444,44 @@ describe('ClientRowModelController', () => {
 		expect(controller.getVisualRow(1)?.id).toBe('row:c');
 	});
 
+	it('expandAllGroups expands tree parents in a single refresh result', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			rowModelConfig: {
+				type: 'client',
+				treeData: {
+					enabled: true,
+					getParentId: (row) => row.parentId,
+					defaultExpanded: false,
+				},
+			},
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'root', name: 'Root', parentId: null },
+				{ id: 'child-a', name: 'Child A', parentId: 'root' },
+				{ id: 'child-b', name: 'Child B', parentId: 'root' },
+				{ id: 'grandchild', name: 'Grandchild', parentId: 'child-a' },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(controller.getVisualRowCount()).toBe(1);
+
+		const refresh = controller.expandAllGroups();
+		expect(refresh.changed).toBe(true);
+		expect(refresh.reason).toBe('expansion');
+		expect(refresh.previousRowCount).toBe(1);
+		expect(refresh.nextRowCount).toBe(4);
+		expect(store.getState().expansion.treeRows).toEqual({ root: true, 'child-a': true });
+		expect(controller.getVisualRowCount()).toBe(4);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('injects detail rows without changing rowIdToVisualIndex', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
