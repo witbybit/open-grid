@@ -89,6 +89,7 @@ export interface BindCellDuringScrollRequest<TRowData = unknown> {
 	width: number;
 	isRowRebind: boolean;
 	isRowLoading: boolean;
+	isInVisibleContent: boolean;
 }
 
 function applyValueFormatter<TRowData>(col: ColumnDef<TRowData>, value: unknown, node: RowNode<TRowData>): string {
@@ -461,10 +462,11 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
 	deps.incrementGeometryOnlyCellBinds?.();
 	deps.incrementCellSlotRebinds?.();
-	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, pooledRowId, left, right, width, isRowRebind, isRowLoading } = request;
+	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, pooledRowId, left, right, width, isRowRebind, isRowLoading, isInVisibleContent } =
+		request;
 
 	if (col.checkboxSelection) {
-		deps.markCellDirtyAfterScroll(cellSlot.element);
+		if (isInVisibleContent) deps.markCellDirtyAfterScroll(cellSlot.element);
 		const cellClassName = buildCellPinClass(lane) + ' og-cell-row-selector';
 		cellSlot.update(colIndex, col.field, rowIndex, node.id, left, right, width, cellClassName, 'custom', undefined, '', undefined);
 		return;
@@ -486,9 +488,30 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (isProgrammatic) deps.clearProgrammaticScrollCell();
 	}
 
-	if (ctx.hasDeferredCellStyleRules) {
+	if (ctx.hasDeferredCellStyleRules && isInVisibleContent) {
 		deps.markCellDirtyAfterScroll(cellSlot.element);
 		deps.incrementStyleHookCallsDuringScroll();
+	}
+
+	if (!isInVisibleContent) {
+		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'scrolled-out');
+		const didWriteBuffered = cellSlot.update(
+			colIndex,
+			col.field,
+			rowIndex,
+			node.id,
+			left,
+			right,
+			width,
+			cellClassName,
+			'empty',
+			undefined,
+			'',
+			undefined
+		);
+		if (didWriteBuffered) deps.incrementCurrentScrollCellsWritten();
+		deps.incrementCellsBoundDuringScroll();
+		return;
 	}
 
 	let contentMode: CellContentMode = 'empty';

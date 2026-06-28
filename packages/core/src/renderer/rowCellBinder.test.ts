@@ -61,6 +61,7 @@ describe('bindCellDuringScroll', () => {
 				isScrolling: true,
 				loadingVersion: 0,
 				plan: { columnPlans: [{ isCustom: true, mode: 'custom' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
 				rowVersions: new Map(),
 			} as any,
 			pooledRowId: 'slot-1',
@@ -70,6 +71,7 @@ describe('bindCellDuringScroll', () => {
 			width: 100,
 			isRowRebind: false,
 			isRowLoading: false,
+			isInVisibleContent: true,
 		});
 
 		expect(dirty).toHaveBeenCalledWith(cellSlot.element);

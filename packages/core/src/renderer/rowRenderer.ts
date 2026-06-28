@@ -34,6 +34,7 @@ import {
 	diffRenderWindow,
 	createEmptyViewportDelta,
 	getRowIndices,
+	sameVisibleContentWindow,
 	sameRenderedWindow,
 	type RenderWindow,
 } from './renderWindow.js';
@@ -295,7 +296,7 @@ export class RowRenderer<TRowData = unknown> {
 		// ── Same-window bailout ───────────────────────────────────────────────────────
 		// If everything is unchanged (rowStart, rowEnd, colStart, colEnd, scroll geometry),
 		// skip all row slot binding, cell slot binding, and custom renderer work.
-		if (isScrollFrameActive && sameRenderedWindow(this.currentWindow, nextWindow)) {
+		if (isScrollFrameActive && sameRenderedWindow(this.currentWindow, nextWindow) && sameVisibleContentWindow(this.currentWindow, nextWindow)) {
 			this.slotStats.sameWindowBailouts++;
 			return;
 		}
@@ -384,6 +385,15 @@ export class RowRenderer<TRowData = unknown> {
 		const viewportHeight = this.engine.viewport.viewportHeight;
 		const rowTops = this.engine.geometry.rowTops;
 		const rowHeights = this.engine.geometry.rowHeights;
+		const prevVisibleRowStart = this.currentWindow?.visibleRowStart ?? -1;
+		const prevVisibleRowEnd = this.currentWindow?.visibleRowEnd ?? -1;
+		const prevVisibleColStart = this.currentWindow?.visibleColStart ?? -1;
+		const prevVisibleColEnd = this.currentWindow?.visibleColEnd ?? -1;
+		const nextVisibleRowStart = nextWindow.visibleRowStart ?? nextWindow.rowStart;
+		const nextVisibleRowEnd = nextWindow.visibleRowEnd ?? nextWindow.rowEnd;
+		const nextVisibleColStart = nextWindow.visibleColStart ?? nextWindow.colStart;
+		const nextVisibleColEnd = nextWindow.visibleColEnd ?? nextWindow.colEnd;
+		const visibleColumnsChanged = prevVisibleColStart !== nextVisibleColStart || prevVisibleColEnd !== nextVisibleColEnd;
 		const canTrustStableIdentity =
 			!!this.currentWindow &&
 			(this.currentWindow.rowModelVersion ?? 0) === (nextWindow.rowModelVersion ?? 0) &&
@@ -403,10 +413,18 @@ export class RowRenderer<TRowData = unknown> {
 
 			if (isScrollFrameActive) this.currentScrollRowsVisited++;
 
+			const isPinnedVisibleRow = r < pinTopRows || r >= nextWindow.rowCount - pinBottomRows;
+			const isRowVisible = isPinnedVisibleRow || (r >= nextVisibleRowStart && r <= nextVisibleRowEnd);
+			const wasPinnedVisibleRow = r < pinTopRows || (this.currentWindow ? r >= this.currentWindow.rowCount - this.currentWindow.pinBottomRows : false);
+			const wasRowVisible = wasPinnedVisibleRow || (r >= prevVisibleRowStart && r <= prevVisibleRowEnd);
+			const rowVisibilityChanged = wasRowVisible !== isRowVisible;
+			const rowNeedsContentRefresh = isScrollFrameActive && (rowVisibilityChanged || (isRowVisible && visibleColumnsChanged));
+
 			if (
 				isScrollFrameActive &&
 				canTrustStableIdentity &&
 				!columnLayoutChanged &&
+				!rowNeedsContentRefresh &&
 				slot.visualIndex === r &&
 				slot.rowKind !== '' &&
 				slot.rowKind !== 'loading'
@@ -454,7 +472,15 @@ export class RowRenderer<TRowData = unknown> {
 			// below anyway). Data/selection/hover changes are gated during scroll and
 			// repainted post-scroll, so nothing here can go stale. Excluded: loading
 			// rows (kind may flip when a block lands).
-			if (isScrollFrameActive && !isRowRebind && !columnLayoutChanged && slot.visualIndex === r && slot.rowKind !== '' && slot.rowKind !== 'loading') {
+			if (
+				isScrollFrameActive &&
+				!isRowRebind &&
+				!columnLayoutChanged &&
+				!rowNeedsContentRefresh &&
+				slot.visualIndex === r &&
+				slot.rowKind !== '' &&
+				slot.rowKind !== 'loading'
+			) {
 				let top: number;
 				if (r < pinTopRows) {
 					top = rowTops[r] + scrollTop;
@@ -585,6 +611,8 @@ export class RowRenderer<TRowData = unknown> {
 					ctx,
 					state,
 					isRowRebind,
+					forceCellRefresh: rowNeedsContentRefresh,
+					isRowVisible,
 				});
 			} else {
 				// Full-width row (group / detail / footer)

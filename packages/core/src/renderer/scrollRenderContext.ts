@@ -22,6 +22,7 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	hasCustomRenderers: boolean;
 
 	plan: CompiledGridPlan<TRowData>;
+	visibleRowRange: { startIdx: number; endIdx: number };
 	visibleColRange: { startIdx: number; endIdx: number };
 
 	focusedCell: GridCellPointer | null;

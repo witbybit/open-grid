@@ -100,6 +100,7 @@ function makeScrollCtx(store: GridStore<RuntimePerfRow>) {
 		hasDeferredCellStyleRules: !!state.styleRules?.length,
 		hasCustomRenderers: plan.hasCustomRenderers,
 		plan,
+		visibleRowRange: store.engine.viewport.getVisibleRowRange(store.engine.getVisualRowModel()?.getVisualRowCount() ?? 0),
 		visibleColRange: store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),
 		focusedCell: state.selection.focus,
 		selectionBounds: state.selection.bounds ?? undefined,
@@ -277,12 +278,15 @@ describe('Runtime Performance & Granular Versioning', () => {
 
 		const nextWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
 		const delta = diffRenderWindow(prevWindow, nextWindow);
-		const pinnedRows = nextWindow.pinTopRows + nextWindow.pinBottomRows;
+		const visibleContentRows =
+			nextWindow.visibleRowStart !== undefined && nextWindow.visibleRowEnd !== undefined && nextWindow.visibleRowStart >= 0
+				? nextWindow.visibleRowEnd - nextWindow.visibleRowStart + 1 + nextWindow.pinTopRows + nextWindow.pinBottomRows
+				: getRowIndices(nextWindow).length;
 		const stats = grid.renderer.getRenderStats();
 
 		expect(stats.rowsVisitedDuringScroll).toBeLessThanOrEqual(getRowIndices(nextWindow).length);
 		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(
-			(stats.rowsReboundDuringScroll ?? 0) * getColIndices(nextWindow).length + pinnedRows * getColIndices(nextWindow).length
+			visibleContentRows * getColIndices(nextWindow).length + getColIndices(nextWindow).length
 		);
 		expect(stats.valueGetterCallsDuringScroll).toBe(0);
 		expect(stats.formulaCallsDuringScroll).toBe(0);
@@ -328,7 +332,49 @@ describe('Runtime Performance & Granular Versioning', () => {
 		store.engine.viewport.setScrollPosition(40, 0);
 		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
 
-		expect(getVisualRowSpy).toHaveBeenCalledTimes(1);
+		expect(getVisualRowSpy).toHaveBeenCalledTimes(2);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('drops buffered custom-cell content outside the visible row band during scroll', () => {
+		const columns: ColumnDef<{ id: string; name: string }>[] = [
+			{
+				field: 'name',
+				header: 'Name',
+				width: 120,
+				cellRenderer: () => 'Rendered',
+				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+			},
+		];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			rowOverscanPx: 80,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 40 }, (_, i) => ({ id: `row-${i}`, name: `Row ${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns,
+		});
+		const container = createContainer(500, 160);
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const initialRow0Cell = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="name"]') as HTMLDivElement;
+		expect(initialRow0Cell.dataset.contentMode).toBe('portal');
+
+		store.engine.viewport.setScrollPosition(40, 0);
+		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
+
+		const bufferedRow0Cell = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="name"]') as HTMLDivElement;
+		const visibleRow1Cell = container.querySelector('.og-cell[data-row-id="row-1"][data-col-field="name"]') as HTMLDivElement;
+
+		expect(bufferedRow0Cell.dataset.contentMode).toBe('empty');
+		expect(visibleRow1Cell.dataset.contentMode).toBe('portal');
 
 		renderer.unmount();
 		controller.dispose();
@@ -344,13 +390,16 @@ describe('Runtime Performance & Granular Versioning', () => {
 		grid.renderer.rowRenderer.recycleViewport(true, makeScrollCtx(grid.store) as any);
 
 		const nextWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
-		const delta = diffRenderWindow(prevWindow, nextWindow);
-		const activeRows = getRowIndices(nextWindow).length;
-		const pinnedCols = nextWindow.pinLeftCols + nextWindow.pinRightCols;
+		const visibleContentRows =
+			nextWindow.visibleRowStart !== undefined && nextWindow.visibleRowEnd !== undefined && nextWindow.visibleRowStart >= 0
+				? nextWindow.visibleRowEnd - nextWindow.visibleRowStart + 1 + nextWindow.pinTopRows + nextWindow.pinBottomRows
+				: getRowIndices(nextWindow).length;
 		const stats = grid.renderer.getRenderStats();
 
-		expect(stats.rowsVisitedDuringScroll).toBeLessThanOrEqual(activeRows);
-		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(activeRows * (delta.colsEntered.length + delta.colsExited.length + pinnedCols));
+		expect(stats.rowsVisitedDuringScroll).toBeLessThanOrEqual(getRowIndices(nextWindow).length);
+		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(
+			visibleContentRows * getColIndices(nextWindow).length + getColIndices(nextWindow).length
+		);
 		expect(stats.customRendererMountsDuringScroll).toBe(0);
 
 		cleanupGrid(grid);
@@ -458,7 +507,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(dCol.colsExited).toEqual([1]);
 	});
 
-	it('should verify sameRenderedWindow ignores scrollTop/scrollLeft and sameWindowBailouts works (Task 1, 4, 5)', () => {
+	it('keeps state reads at zero even when a sub-row scroll crosses the visible content band', () => {
 		const grid = createWideGrid({ rows: 1000, cols: 100 });
 
 		// Establish initial window
@@ -473,7 +522,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		(grid.renderer as any).flushScrollFrame();
 
 		const stats = grid.renderer.getRenderStats();
-		expect(stats.sameWindowBailouts).toBe(1);
+		expect(stats.sameWindowBailouts).toBe(0);
 		expect(stats.stateReadsDuringScroll).toBe(0);
 
 		cleanupGrid(grid);

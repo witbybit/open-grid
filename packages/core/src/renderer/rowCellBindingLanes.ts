@@ -71,6 +71,8 @@ export interface BindAllDataCellsRequest<TRowData = unknown> {
 	ctx?: ScrollRenderContext<TRowData>;
 	state: InternalGridState<TRowData>;
 	isRowRebind: boolean;
+	forceCellRefresh: boolean;
+	isRowVisible: boolean;
 }
 
 export interface BindAllLoadingCellsRequest<TRowData = unknown> {
@@ -293,12 +295,29 @@ function reconcileCellTopologyForScroll<TRowData>(
 export { reconcileTopology, reconcileCellTopologyForScroll };
 
 export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData>, request: BindAllDataCellsRequest<TRowData>): void {
-	const { slot, node, rowIndex, centerColStart, centerColCount, columns, plan, columnTopology, isScrollFrameActive, ctx, state, isRowRebind } =
+	const {
+		slot,
+		node,
+		rowIndex,
+		centerColStart,
+		centerColCount,
+		columns,
+		plan,
+		columnTopology,
+		isScrollFrameActive,
+		ctx,
+		state,
+		isRowRebind,
+		forceCellRefresh,
+		isRowVisible,
+	} =
 		request;
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 	const pinRightWidth = plan.pinRightWidth;
 	const isRowLoading = ctx ? ctx.loadingVersion > 0 && deps.engine.data.isRowLoading(node.id) : false;
+	const visibleColStart = ctx?.visibleColRange?.startIdx ?? centerColStart;
+	const visibleColEnd = ctx?.visibleColRange?.endIdx ?? centerColStart + centerColCount - 1;
 
 	const pinLeftContainer = deps.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 	const pinRightContainer = deps.ensurePinnedContainer(slot, 'right', pinRightWidth);
@@ -339,7 +358,8 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const col = columns[placement.absoluteIndex];
 		const cellSlot = slot.leftCells[i];
 		if (!col || !cellSlot) continue;
-		if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === placement.absoluteIndex) continue;
+		const isVisibleContent = isRowVisible;
+		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === placement.absoluteIndex) continue;
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		const leftArg = placement.laneOffset;
 		const cellWidth = plan.colWidths[placement.absoluteIndex];
@@ -360,6 +380,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				width: cellWidth,
 				isRowRebind,
 				isRowLoading,
+				isInVisibleContent: isVisibleContent,
 			});
 		} else {
 			bindCellFull(deps.cellBinderDeps, {
@@ -384,7 +405,11 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const col = columns[c];
 		const cellSlot = slot.centerCells[i];
 		if (!col || !cellSlot) continue;
-		if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === c) continue;
+		const isVisibleContent =
+			isRowVisible &&
+			c >= visibleColStart &&
+			c <= visibleColEnd;
+		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) continue;
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		const leftArg = plan.colLefts[c];
 		const cellWidth = plan.colWidths[c];
@@ -405,6 +430,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				width: cellWidth,
 				isRowRebind,
 				isRowLoading,
+				isInVisibleContent: isVisibleContent,
 			});
 		} else {
 			bindCellFull(deps.cellBinderDeps, {
@@ -430,7 +456,8 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const col = columns[c];
 		const cellSlot = slot.rightCells[i];
 		if (!col || !cellSlot) continue;
-		if (isScrollFrameActive && !isRowRebind && cellSlot.colIndex === c) continue;
+		const isVisibleContent = isRowVisible;
+		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) continue;
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		// Use topology laneOffset for right cells (= absoluteLeft - pinRightBaseLeft).
 		const leftArg = placement.laneOffset;
@@ -452,6 +479,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				width: cellWidth,
 				isRowRebind,
 				isRowLoading,
+				isInVisibleContent: isVisibleContent,
 			});
 		} else {
 			bindCellFull(deps.cellBinderDeps, {

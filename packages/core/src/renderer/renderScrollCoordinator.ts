@@ -1,5 +1,5 @@
 import { type GridScheduler } from './gridScheduler.js';
-import { applyRenderWindowRuntimeLimits, computeRenderWindowInto, sameRenderedWindow, type RenderWindow } from './renderWindow.js';
+import { applyRenderWindowRuntimeLimits, computeRenderWindowInto, sameRenderedWindow, sameVisibleContentWindow, type RenderWindow } from './renderWindow.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
@@ -112,7 +112,10 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const nextWindow = applyRenderWindowRuntimeLimits(candidateBuf, state.runtimeLimits);
 		const layoutPlan = this.deps.syncLayoutPlan(nextWindow);
 
-		if (sameRenderedWindow(this.deps.rowRenderer.currentWindow, nextWindow)) {
+		if (
+			sameRenderedWindow(this.deps.rowRenderer.currentWindow, nextWindow) &&
+			sameVisibleContentWindow(this.deps.rowRenderer.currentWindow, nextWindow)
+		) {
 			this.deps.renderStats.scrollFrames++;
 			this.deps.renderStats.sameWindowBailouts = (this.deps.renderStats.sameWindowBailouts || 0) + 1;
 			// Phase is already scroll-frame (set by FrameCoordinator before calling this callback).
@@ -147,8 +150,10 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			scrollCtx.hasDeferredCellStyleRules = compileStyleRules(state.styleRules).hasCellRules;
 			scrollCtx.hasCustomRenderers = plan.hasCustomRenderers;
 			scrollCtx.plan = plan;
-			scrollCtx.visibleColRange.startIdx = nextWindow.colStart;
-			scrollCtx.visibleColRange.endIdx = nextWindow.colEnd;
+			scrollCtx.visibleRowRange.startIdx = nextWindow.visibleRowStart ?? nextWindow.rowStart;
+			scrollCtx.visibleRowRange.endIdx = nextWindow.visibleRowEnd ?? nextWindow.rowEnd;
+			scrollCtx.visibleColRange.startIdx = nextWindow.visibleColStart ?? nextWindow.colStart;
+			scrollCtx.visibleColRange.endIdx = nextWindow.visibleColEnd ?? nextWindow.colEnd;
 			const visibleColRange = scrollCtx.visibleColRange;
 			scrollCtx.focusedCell = state.selection.focus;
 			scrollCtx.selectionBounds = state.selection.bounds ?? undefined;
