@@ -15,6 +15,7 @@ import { CellSlot } from './cellSlot.js';
 import { bindAllDataCells, reconcileTopology, reconcileCellTopologyForScroll } from './rowCellBindingLanes.js';
 import type { ColumnDef, CompiledGridPlan } from '../columnDef.js';
 import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
+import { createCellInstanceRendererKey } from './identityKeys.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -750,5 +751,61 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 
 		expect(onScrollCellPatched).toHaveBeenCalledTimes(1);
 		expect(slot.centerCells[1].element.textContent).toContain('b-value');
+	});
+
+	it('does not skip a visible custom cell whose portal host is empty', () => {
+		const cols = [makeCol('a')];
+		const slot = makeRowSlot();
+		const plan = makePlan(cols, 0, 0, 1, [{ isCustom: true, mode: 'custom-live' }]);
+		const topology = compileColumnTopology(plan);
+		reconcileTopology(slot, topology, null, 0, 1, null, cols, initCell, vi.fn());
+
+		const cell = slot.centerCells[0];
+		const portalKey = createCellInstanceRendererKey(cell.cellInstanceId, 'a');
+		const host = document.createElement('div');
+		cell.element.appendChild(host);
+		cell.update(0, 'a', 5, 'r1', 0, -1, 100, 'og-cell', 'portal', undefined, '', portalKey);
+		cell.lastMountedGlobalVersion = 1;
+		cell.lastMountedRowVersion = 1;
+
+		const { deps, onScrollCellPatched } = makeBindingDeps();
+		(deps.cellBinderDeps.portalMountManager.isCellMounted as ReturnType<typeof vi.fn>).mockReturnValue(true);
+		(deps.cellBinderDeps.portalMountManager.mountCellImmediately as ReturnType<typeof vi.fn>).mockClear();
+		deps.cellBinderDeps.getCellPortalHost = () => host;
+		deps.cellBinderDeps.ensureCellPortalHost = () => host;
+
+		bindAllDataCells(deps as any, {
+			slot,
+			node: { id: 'r1', data: { id: 'r1', a: 'A1' } } as any,
+			rowIndex: 5,
+			centerColStart: 0,
+			centerColCount: 1,
+			columns: cols,
+			plan,
+			columnTopology: topology,
+			isScrollFrameActive: true,
+			ctx: {
+				globalVersion: 1,
+				rowVersions: new Map([['r1', 1]]),
+				loadingVersion: 0,
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				hasInsightDecorations: false,
+				hasDeferredCellStyleRules: false,
+				activeEdit: null,
+				focusedCell: null,
+				isScrolling: true,
+				plan,
+			} as any,
+			state: {} as any,
+			isRowRebind: false,
+			forceCellRefresh: false,
+			isRowVisible: true,
+			refreshVisibleColumns: null,
+		});
+
+		expect(onScrollCellPatched).toHaveBeenCalledTimes(1);
+		expect(deps.cellBinderDeps.portalMountManager.mountCellImmediately).toHaveBeenCalledWith(
+			expect.objectContaining({ cellKey: portalKey, container: host })
+		);
 	});
 });

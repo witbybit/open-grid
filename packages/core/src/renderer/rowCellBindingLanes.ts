@@ -320,36 +320,49 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const visibleColStart = ctx?.visibleColRange?.startIdx ?? centerColStart;
 	const visibleColEnd = ctx?.visibleColRange?.endIdx ?? centerColStart + centerColCount - 1;
 	const currentRowVersion = ctx?.rowVersions?.get(node.id);
-	const shouldSkipStableCellDuringScroll = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
-		if (!isScrollFrameActive || forceCellRefresh || isRowRebind) return false;
-		if (cellSlot.colIndex !== columnIndex || cellSlot.rowId !== node.id || cellSlot.rowIndex !== rowIndex) return false;
-		if (!isVisibleContent) return true;
-		return !refreshVisibleColumns?.has(columnIndex);
-	};
-	const shouldRefreshWarmVisibleCell = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
-		if (!isScrollFrameActive || !isVisibleContent || !refreshVisibleColumns?.has(columnIndex) || !ctx) return false;
+	const getWarmVisibleCellStatus = (cellSlot: CellSlot<TRowData>) => {
+		if (!ctx) return { needsImmediateWake: false, needsDeferredRefresh: false };
 		const lastPortalKey = cellSlot.lastPortalKey;
+		const portalHost =
+			cellSlot.lastContentMode === 'portal' ? deps.cellBinderDeps.getCellPortalHost(cellSlot.element) : null;
 		const hasStalePortalMount =
 			cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !deps.cellBinderDeps.portalMountManager.isCellMounted(lastPortalKey);
+		const hasEmptyPortalHost =
+			cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !!portalHost && portalHost.childElementCount === 0;
 		const hasSuspiciousWarmState =
 			cellSlot.lastMountedRowVersion === -1 ||
 			cellSlot.lastMountedGlobalVersion === -1 ||
 			cellSlot.lastContentMode === 'pending' ||
 			(cellSlot.lastContentMode === 'text' && cellSlot.lastFormattedValue === '...') ||
-			hasStalePortalMount;
+			hasStalePortalMount ||
+			hasEmptyPortalHost;
 		const globalDataChanged =
 			cellSlot.lastMountedGlobalVersion !== -1 && (ctx.globalChangedDuringScroll || ctx.globalVersion !== cellSlot.lastMountedGlobalVersion);
 		const rowDataChanged =
 			cellSlot.lastMountedRowVersion !== -1 && currentRowVersion !== undefined && currentRowVersion !== cellSlot.lastMountedRowVersion;
-		return (
-			hasSuspiciousWarmState ||
-			ctx.hasInsightDecorations ||
-			globalDataChanged ||
-			rowDataChanged ||
-			ctx.styleChangedDuringScroll ||
-			ctx.selectionChangedDuringScroll ||
-			ctx.loadingChangedDuringScroll
-		);
+		return {
+			needsImmediateWake: hasSuspiciousWarmState || globalDataChanged || rowDataChanged,
+			needsDeferredRefresh:
+				hasSuspiciousWarmState ||
+				globalDataChanged ||
+				rowDataChanged ||
+				ctx.hasInsightDecorations ||
+				ctx.styleChangedDuringScroll ||
+				ctx.selectionChangedDuringScroll ||
+				ctx.loadingChangedDuringScroll,
+		};
+	};
+	const shouldSkipStableCellDuringScroll = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
+		if (!isScrollFrameActive || forceCellRefresh || isRowRebind) return false;
+		if (cellSlot.colIndex !== columnIndex || cellSlot.rowId !== node.id || cellSlot.rowIndex !== rowIndex) return false;
+		if (!isVisibleContent) return true;
+		if (getWarmVisibleCellStatus(cellSlot).needsImmediateWake) return false;
+		return !refreshVisibleColumns?.has(columnIndex);
+	};
+	const shouldRefreshWarmVisibleCell = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
+		if (!isScrollFrameActive || !isVisibleContent || !ctx) return false;
+		if (refreshVisibleColumns?.has(columnIndex)) return true;
+		return getWarmVisibleCellStatus(cellSlot).needsDeferredRefresh;
 	};
 
 	const pinLeftContainer = deps.ensurePinnedContainer(slot, 'left', pinLeftWidth);
