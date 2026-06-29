@@ -1889,7 +1889,9 @@ describe('RenderEngine', () => {
 			{
 				dataIntegrity: {
 					validation: {
-						cellRules: [{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) }],
+						cellRules: [
+							{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) },
+						],
 					},
 				},
 			}
@@ -1935,8 +1937,7 @@ describe('RenderEngine', () => {
 		};
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
-		const findInvalidCell = () =>
-			container.querySelector('[data-row-id="row-30"][data-col-field="name"]') as HTMLDivElement | null;
+		const findInvalidCell = () => container.querySelector('[data-row-id="row-30"][data-col-field="name"]') as HTMLDivElement | null;
 
 		scrollViewport.scrollTop = 1200;
 		scrollViewport.dispatchEvent(new Event('scroll'));
@@ -2586,6 +2587,84 @@ describe('RenderEngine', () => {
 
 		// Now it should be resolved to the computed value
 		expect(computedCell.textContent).toBe('Row 10!');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('does not leave rows blank when they move from overscan into the visible viewport', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		const columns = [
+			{ field: 'name', header: 'Name', width: 120 },
+			{ field: 'computed', header: 'Computed', width: 120, valueGetter: ({ row }) => `${row.name}!` },
+		];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			rowOverscanPx: 80,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 50 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(1);
+		callbacks[0](0);
+
+		scrollViewport.scrollTop = 480;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(2);
+		callbacks[1](0);
+
+		const row15 = container.querySelector('[data-row-id="row:row-15"]') as HTMLDivElement;
+		expect(row15).not.toBeNull();
+		const computedCell = row15.querySelector('[data-col-field="computed"]') as HTMLDivElement;
+		expect(computedCell).not.toBeNull();
+		expect(computedCell.textContent).not.toBe('');
+
+		let i = 2;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+
+		expect(computedCell.textContent).toBe('Row 15!');
 
 		renderer.unmount();
 		controller.dispose();

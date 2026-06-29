@@ -316,13 +316,13 @@ describe('Runtime Performance & Granular Versioning', () => {
 
 		const stats = renderer.getRenderStats();
 
-		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(1);
-		expect(stats.cellsWrittenDuringScroll).toBeLessThanOrEqual(1);
-		expect(stats.cellTextWrites).toBeLessThanOrEqual(1);
-		expect(stats.cellClassWrites).toBeLessThanOrEqual(1);
-		expect(stats.cellWidthWrites).toBeLessThanOrEqual(1);
-		expect(stats.cellLeftWrites).toBeLessThanOrEqual(1);
-		expect(stats.rowClassWrites).toBeLessThanOrEqual(1);
+		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(2);
+		expect(stats.cellsWrittenDuringScroll).toBeLessThanOrEqual(2);
+		expect(stats.cellTextWrites).toBeLessThanOrEqual(2);
+		expect(stats.cellClassWrites).toBeLessThanOrEqual(2);
+		expect(stats.cellWidthWrites).toBeLessThanOrEqual(2);
+		expect(stats.cellLeftWrites).toBeLessThanOrEqual(2);
+		expect(stats.rowClassWrites).toBeLessThanOrEqual(2);
 		expect(stats.customRendererMountsDuringScroll).toBe(0);
 
 		renderer.unmount();
@@ -425,7 +425,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		store.engine.viewport.setScrollPosition(40, 0);
 		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
 
-		expect(getVisualRowSpy).toHaveBeenCalledTimes(1);
+		expect(getVisualRowSpy).toHaveBeenCalledTimes(2);
 
 		renderer.unmount();
 		controller.dispose();

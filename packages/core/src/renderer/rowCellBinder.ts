@@ -475,10 +475,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		isInVisibleContent &&
 		(ctx.hasInsightDecorations ||
 			(ctx.hasDeferredCellStyleRules &&
-				(!canPreserveWarmVisuals ||
-					ctx.styleChangedDuringScroll ||
-					ctx.selectionChangedDuringScroll ||
-					ctx.loadingChangedDuringScroll)));
+				(!canPreserveWarmVisuals || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll)));
 
 	if (col.checkboxSelection) {
 		if (isInVisibleContent) deps.markCellDirtyAfterScroll(cellSlot.element);

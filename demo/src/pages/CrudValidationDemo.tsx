@@ -610,7 +610,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					<p className='mb-2 text-[10px] font-extrabold uppercase tracking-wider text-rose-400'>
 						{validationSummary.length} validation error{validationSummary.length > 1 ? 's' : ''}
 					</p>
-					<ul className='flex flex-col gap-1'>
+					<ul className='flex flex-col gap-1 h-[70px] overflow-auto'>
 						{validationSummary.map((e, i) => (
 							<li key={i} className='flex items-start gap-2 text-[11px] text-rose-300/80'>
 								<span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400' />
@@ -663,7 +663,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					{errorSnapshot.length === 0 ? (
 						<p className='text-[11px] text-sky-600 italic'>No errors in current state — run Validate All first to populate errors.</p>
 					) : (
-						<ul className='flex flex-col gap-1'>
+						<ul className='flex flex-col gap-1 h-[70px] overflow-auto'>
 							{errorSnapshot.map((e, i) => (
 								<li key={i} className='flex items-start gap-2 text-[11px] text-sky-300/80'>
 									<span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400' />

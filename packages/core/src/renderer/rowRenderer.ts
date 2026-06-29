@@ -464,11 +464,13 @@ export class RowRenderer<TRowData = unknown> {
 			const wasPinnedVisibleRow =
 				r < pinTopRows || (this.currentWindow ? r >= this.currentWindow.rowCount - this.currentWindow.pinBottomRows : false);
 			const wasRowVisible = wasPinnedVisibleRow || (r >= prevVisibleRowStart && r <= prevVisibleRowEnd);
+			const rowEnteredVisibleContent = isRowVisible && !wasRowVisible;
 			// A row crossing the visible-content band should not force a cell refresh during
 			// active vertical scroll if the row identity and column window stayed stable.
 			// Warm slots already retain their text/portal/custom content; post-scroll repaint
 			// will reconcile deferred styling and selection state.
-			const rowNeedsContentRefresh = isScrollFrameActive && isRowVisible && !!refreshVisibleColumns && refreshVisibleColumns.size > 0;
+			const rowNeedsContentRefresh =
+				isScrollFrameActive && (rowEnteredVisibleContent || (isRowVisible && !!refreshVisibleColumns && refreshVisibleColumns.size > 0));
 
 			if (
 				isScrollFrameActive &&
@@ -683,7 +685,7 @@ export class RowRenderer<TRowData = unknown> {
 					ctx,
 					state,
 					isRowRebind,
-					forceCellRefresh: false,
+					forceCellRefresh: rowEnteredVisibleContent,
 					isRowVisible,
 					refreshVisibleColumns,
 				});

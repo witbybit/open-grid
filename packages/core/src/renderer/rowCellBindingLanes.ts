@@ -320,13 +320,17 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const visibleColStart = ctx?.visibleColRange?.startIdx ?? centerColStart;
 	const visibleColEnd = ctx?.visibleColRange?.endIdx ?? centerColStart + centerColCount - 1;
 	const currentRowVersion = ctx?.rowVersions?.get(node.id);
+	const shouldSkipStableCellDuringScroll = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
+		if (!isScrollFrameActive || forceCellRefresh || isRowRebind) return false;
+		if (cellSlot.colIndex !== columnIndex || cellSlot.rowId !== node.id || cellSlot.rowIndex !== rowIndex) return false;
+		if (!isVisibleContent) return true;
+		return !refreshVisibleColumns?.has(columnIndex);
+	};
 	const shouldRefreshWarmVisibleCell = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
 		if (!isScrollFrameActive || !isVisibleContent || !refreshVisibleColumns?.has(columnIndex) || !ctx) return false;
 		const lastPortalKey = cellSlot.lastPortalKey;
 		const hasStalePortalMount =
-			cellSlot.lastContentMode === 'portal' &&
-			!!lastPortalKey &&
-			!deps.cellBinderDeps.portalMountManager.isCellMounted(lastPortalKey);
+			cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !deps.cellBinderDeps.portalMountManager.isCellMounted(lastPortalKey);
 		const hasSuspiciousWarmState =
 			cellSlot.lastMountedRowVersion === -1 ||
 			cellSlot.lastMountedGlobalVersion === -1 ||
@@ -389,7 +393,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		if (!col || !cellSlot) continue;
 		const isVisibleContent = isRowVisible;
 		const needsVisibleRefresh = shouldRefreshWarmVisibleCell(cellSlot, placement.absoluteIndex, isVisibleContent);
-		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === placement.absoluteIndex) {
+		if (shouldSkipStableCellDuringScroll(cellSlot, placement.absoluteIndex, isVisibleContent)) {
 			if (needsVisibleRefresh) deps.markCellDirtyAfterScroll(cellSlot.element);
 			continue;
 		}
@@ -440,7 +444,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		if (!col || !cellSlot) continue;
 		const isVisibleContent = isRowVisible && c >= visibleColStart && c <= visibleColEnd;
 		const needsVisibleRefresh = shouldRefreshWarmVisibleCell(cellSlot, c, isVisibleContent);
-		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) {
+		if (shouldSkipStableCellDuringScroll(cellSlot, c, isVisibleContent)) {
 			if (needsVisibleRefresh) deps.markCellDirtyAfterScroll(cellSlot.element);
 			continue;
 		}
@@ -492,7 +496,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		if (!col || !cellSlot) continue;
 		const isVisibleContent = isRowVisible;
 		const needsVisibleRefresh = shouldRefreshWarmVisibleCell(cellSlot, c, isVisibleContent);
-		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) {
+		if (shouldSkipStableCellDuringScroll(cellSlot, c, isVisibleContent)) {
 			if (needsVisibleRefresh) deps.markCellDirtyAfterScroll(cellSlot.element);
 			continue;
 		}

@@ -12,7 +12,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RowSlot } from './rowSlot.js';
 import { CellSlot } from './cellSlot.js';
-import { reconcileTopology, reconcileCellTopologyForScroll } from './rowCellBindingLanes.js';
+import { bindAllDataCells, reconcileTopology, reconcileCellTopologyForScroll } from './rowCellBindingLanes.js';
 import type { ColumnDef, CompiledGridPlan } from '../columnDef.js';
 import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
 
@@ -37,6 +37,16 @@ const initCell = (el: HTMLDivElement): void => {
 
 /** Builds a CompiledColumnTopology from simple lane-membership parameters for testing. */
 function makeTopology(cols: ColumnDef<unknown>[], pinLeftCount: number, pinRightCount: number, pinRightStart: number): CompiledColumnTopology {
+	return compileColumnTopology(makePlan(cols, pinLeftCount, pinRightCount, pinRightStart));
+}
+
+function makePlan(
+	cols: ColumnDef<unknown>[],
+	pinLeftCount: number,
+	pinRightCount: number,
+	pinRightStart: number,
+	columnPlans?: Array<{ isCustom: boolean; mode: string }>
+): CompiledGridPlan<unknown> {
 	const colWidth = 100;
 	const colCount = cols.length;
 	const colLefts = cols.map((_, i) => i * colWidth);
@@ -45,7 +55,7 @@ function makeTopology(cols: ColumnDef<unknown>[], pinLeftCount: number, pinRight
 	const pinRightBaseLeft = pinRightStart * colWidth;
 	const pinRightWidth = pinRightCount * colWidth;
 	const totalWidth = colCount * colWidth;
-	return compileColumnTopology({
+	return {
 		displayedColumns: cols,
 		colLefts,
 		colWidths,
@@ -57,7 +67,8 @@ function makeTopology(cols: ColumnDef<unknown>[], pinLeftCount: number, pinRight
 		pinRightBaseLeft,
 		totalWidth,
 		version: 1,
-	} as unknown as CompiledGridPlan<unknown>);
+		columnPlans: columnPlans ?? cols.map(() => ({ isCustom: false, mode: 'primitive' })),
+	} as unknown as CompiledGridPlan<unknown>;
 }
 
 // ── cellInstanceId invariants ──────────────────────────────────────────────────
@@ -596,5 +607,148 @@ describe('reconcileTopology — unrelated column stability', () => {
 
 		expect(slot.cellsByColumnId.get('b')!.cellInstanceId).toBe(idB);
 		expect(slot.cellsByColumnId.get('c')!.cellInstanceId).toBe(idC);
+	});
+});
+
+describe('bindAllDataCells — visibility boundary refresh', () => {
+	function makeBindingDeps() {
+		const onScrollCellPatched = vi.fn();
+		return {
+			deps: {
+				engine: {
+					data: {
+						isRowLoading: vi.fn(() => false),
+					},
+					instrumentation: undefined,
+				} as any,
+				initCell,
+				releaseCellFn: vi.fn(),
+				ensurePinnedContainer: vi.fn(() => null),
+				cellBinderDeps: {
+					engine: {
+						data: {
+							getCachedDisplayValue: vi.fn((_rowId: string, colField: string) => `${colField}-value`),
+						},
+						hasFormula: vi.fn(() => false),
+					} as any,
+					cellRenderer: { showPortalContent: vi.fn(), ensureLoadingSkeleton: vi.fn() } as any,
+					portalMountManager: {
+						isCellMounted: vi.fn(() => false),
+						mountCellImmediately: vi.fn(),
+					} as any,
+					selectionPaint: {} as any,
+					cellClassScratch: {} as any,
+					getViewportContainer: () => null,
+					getIsScrolling: () => true,
+					getIsScrollFrameActive: () => true,
+					programmaticScrollCell: null,
+					clearProgrammaticScrollCell: vi.fn(),
+					setDeferredFocusCell: vi.fn(),
+					applyFocus: vi.fn(),
+					isEditorInteractiveElement: () => false,
+					ensureCellPortalHost: (cell: HTMLDivElement) => cell,
+					getCellPortalHost: () => null,
+					markCellDirtyAfterScroll: vi.fn(),
+					releaseCellPortal: vi.fn(),
+					incrementStyleHookCallsDuringScroll: vi.fn(),
+					incrementCellsBoundDuringScroll: vi.fn(),
+					incrementCurrentScrollCellsWritten: vi.fn(),
+				},
+				markCellDirtyAfterScroll: vi.fn(),
+				releaseCellPortal: vi.fn(),
+				ensureLoadingSkeleton: vi.fn(),
+				onScrollCellVisited: vi.fn(),
+				onScrollCellPatched,
+				onScrollCellWritten: vi.fn(),
+			},
+			onScrollCellPatched,
+		};
+	}
+
+	it('rebinds stable cells when a row newly enters the visible band', () => {
+		const cols = [makeCol('a')];
+		const slot = makeRowSlot();
+		const plan = makePlan(cols, 0, 0, 1);
+		const topology = compileColumnTopology(plan);
+		reconcileTopology(slot, topology, null, 0, 1, null, cols, initCell, vi.fn());
+		slot.centerCells[0].update(0, 'a', 5, 'r1', 0, -1, 100, 'og-cell', 'empty', undefined, '');
+
+		const { deps, onScrollCellPatched } = makeBindingDeps();
+
+		bindAllDataCells(deps as any, {
+			slot,
+			node: { id: 'r1', data: { id: 'r1', a: 'A1' } } as any,
+			rowIndex: 5,
+			centerColStart: 0,
+			centerColCount: 1,
+			columns: cols,
+			plan,
+			columnTopology: topology,
+			isScrollFrameActive: true,
+			ctx: {
+				globalVersion: 1,
+				rowVersions: new Map([['r1', 1]]),
+				loadingVersion: 0,
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				hasInsightDecorations: false,
+				hasDeferredCellStyleRules: false,
+				activeEdit: null,
+				focusedCell: null,
+				isScrolling: true,
+				plan,
+			} as any,
+			state: {} as any,
+			isRowRebind: false,
+			forceCellRefresh: true,
+			isRowVisible: true,
+			refreshVisibleColumns: null,
+		});
+
+		expect(onScrollCellPatched).toHaveBeenCalledTimes(1);
+		expect(slot.centerCells[0].element.textContent).toContain('a-value');
+	});
+
+	it('does not skip stable center cells when their column newly enters the visible band', () => {
+		const cols = [makeCol('a'), makeCol('b')];
+		const slot = makeRowSlot();
+		const plan = makePlan(cols, 0, 0, 2);
+		const topology = compileColumnTopology(plan);
+		reconcileTopology(slot, topology, null, 0, 2, null, cols, initCell, vi.fn());
+		slot.centerCells[0].update(0, 'a', 5, 'r1', 0, -1, 100, 'og-cell', 'text', undefined, 'old-a');
+		slot.centerCells[1].update(1, 'b', 5, 'r1', 100, -1, 100, 'og-cell', 'empty', undefined, '');
+
+		const { deps, onScrollCellPatched } = makeBindingDeps();
+
+		bindAllDataCells(deps as any, {
+			slot,
+			node: { id: 'r1', data: { id: 'r1', a: 'A1', b: 'B1' } } as any,
+			rowIndex: 5,
+			centerColStart: 0,
+			centerColCount: 2,
+			columns: cols,
+			plan,
+			columnTopology: topology,
+			isScrollFrameActive: true,
+			ctx: {
+				globalVersion: 1,
+				rowVersions: new Map([['r1', 1]]),
+				loadingVersion: 0,
+				visibleColRange: { startIdx: 1, endIdx: 1 },
+				hasInsightDecorations: false,
+				hasDeferredCellStyleRules: false,
+				activeEdit: null,
+				focusedCell: null,
+				isScrolling: true,
+				plan,
+			} as any,
+			state: {} as any,
+			isRowRebind: false,
+			forceCellRefresh: false,
+			isRowVisible: true,
+			refreshVisibleColumns: new Set([1]),
+		});
+
+		expect(onScrollCellPatched).toHaveBeenCalledTimes(1);
+		expect(slot.centerCells[1].element.textContent).toContain('b-value');
 	});
 });
