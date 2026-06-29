@@ -2,7 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
-import { CellSlot } from './cellSlot.js';
+import { CellSlot, matchesCellSlotMountedVisualVersions, recordCellSlotMountedVisualVersions } from './cellSlot.js';
 import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './rowCellBinder.js';
 import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
@@ -373,9 +373,22 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const styleVisualStale =
 			ctx.hasDeferredCellStyleRules &&
 			(cellSlot.lastMountedStyleVersion === -1 || cellSlot.lastMountedStyleVersion !== ctx.styleVersion);
-		const loadingVisualStale = cellSlot.lastMountedLoadingVersion === -1 || cellSlot.lastMountedLoadingVersion !== ctx.loadingVersion;
+		const loadingVisualStale =
+			cellSlot.lastMountedLoadingVersion === -1 ||
+			!matchesCellSlotMountedVisualVersions(cellSlot, {
+				insightVersion: cellSlot.lastMountedInsightVersion,
+				styleVersion: cellSlot.lastMountedStyleVersion,
+				loadingVersion: ctx.loadingVersion,
+				selectionVersion: cellSlot.lastMountedSelectionVersion,
+			});
 		const selectionVisualStale =
-			cellSlot.lastMountedSelectionVersion === -1 || cellSlot.lastMountedSelectionVersion !== ctx.selectionVersion;
+			cellSlot.lastMountedSelectionVersion === -1 ||
+			!matchesCellSlotMountedVisualVersions(cellSlot, {
+				insightVersion: cellSlot.lastMountedInsightVersion,
+				styleVersion: cellSlot.lastMountedStyleVersion,
+				loadingVersion: cellSlot.lastMountedLoadingVersion,
+				selectionVersion: ctx.selectionVersion,
+			});
 		return {
 			needsImmediateWake: hasSuspiciousWarmState || globalDataChanged || rowDataChanged,
 			needsDeferredRefresh:
@@ -644,10 +657,12 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 		const didWrite = cellSlot.update(c, col.field, rowIndex, rowId, leftArg, -1, cellWidth, cellClassName, 'loading', undefined, '', undefined);
 		cellSlot.lastMountedRowVersion = -1;
 		cellSlot.lastMountedGlobalVersion = globalVersion;
-		cellSlot.lastMountedInsightVersion = deps.engine.insights.getVersion();
-		cellSlot.lastMountedStyleVersion = snapshotVisualVersions.styleVersion;
-		cellSlot.lastMountedLoadingVersion = snapshotVisualVersions.loadingVersion;
-		cellSlot.lastMountedSelectionVersion = deps.engine.selectionVersion;
+		recordCellSlotMountedVisualVersions(cellSlot, {
+			insightVersion: deps.engine.insights.getVersion(),
+			styleVersion: snapshotVisualVersions.styleVersion,
+			loadingVersion: snapshotVisualVersions.loadingVersion,
+			selectionVersion: deps.engine.selectionVersion,
+		});
 		deps.engine.cellDisplaySnapshots.set(
 			createCellDisplaySnapshot({
 				rowId,

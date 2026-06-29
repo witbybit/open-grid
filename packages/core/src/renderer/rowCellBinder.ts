@@ -6,7 +6,12 @@ import type { GridCellPointer } from '../api/GridApi.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
-import type { CellSlot, CellContentMode } from './cellSlot.js';
+import {
+	recordCellSlotMountedVisualVersions,
+	matchesCellSlotMountedVisualVersions,
+	type CellSlot,
+	type CellContentMode,
+} from './cellSlot.js';
 import {
 	TextRendererHandle,
 	FallbackRendererHandle,
@@ -91,16 +96,6 @@ function storeCellSnapshot<TRowData>(deps: RowCellBinderDeps<TRowData>, snapshot
 		cellDisplaySnapshots?: { set?: (snapshot: CellDisplaySnapshot) => void };
 	};
 	snapshotLookup.cellDisplaySnapshots?.set?.(snapshot);
-}
-
-function recordMountedVisualVersions(
-	cellSlot: CellSlot,
-	versions: { insightVersion: number; styleVersion: number; loadingVersion: number; selectionVersion: number }
-): void {
-	cellSlot.lastMountedInsightVersion = versions.insightVersion;
-	cellSlot.lastMountedStyleVersion = versions.styleVersion;
-	cellSlot.lastMountedLoadingVersion = versions.loadingVersion;
-	cellSlot.lastMountedSelectionVersion = versions.selectionVersion;
 }
 
 function materializeVisiblePrimitiveCompatibilitySnapshot<TRowData>(
@@ -514,7 +509,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		);
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = state.globalVersion;
-		recordMountedVisualVersions(cellSlot, currentVisualVersions);
+		recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
 		return;
 	}
 
@@ -651,7 +646,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	}
 	cellSlot.lastMountedRowVersion = rowVersion;
 	cellSlot.lastMountedGlobalVersion = state.globalVersion;
-	recordMountedVisualVersions(cellSlot, currentVisualVersions);
+	recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
 }
 
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
@@ -665,10 +660,12 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		canPreserveWarmVisuals &&
 		cellSlot.lastMountedGlobalVersion === ctx.globalVersion &&
 		cellSlot.lastMountedRowVersion === rowVersion &&
-		cellSlot.lastMountedInsightVersion === ctx.insightVersion &&
-		cellSlot.lastMountedStyleVersion === ctx.styleVersion &&
-		cellSlot.lastMountedLoadingVersion === ctx.loadingVersion &&
-		cellSlot.lastMountedSelectionVersion === ctx.selectionVersion;
+		matchesCellSlotMountedVisualVersions(cellSlot, {
+			insightVersion: ctx.insightVersion,
+			styleVersion: ctx.styleVersion,
+			loadingVersion: ctx.loadingVersion,
+			selectionVersion: ctx.selectionVersion,
+		});
 	const cellKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
 	const portalHost = cellSlot.lastContentMode === 'portal' ? deps.getCellPortalHost(cellSlot.element) : null;
 	const hasEmptyPortalHost =
@@ -680,7 +677,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		cellSlot.update(colIndex, col.field, rowIndex, node.id, left, right, width, cellClassName, 'custom', undefined, '', undefined);
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-		recordMountedVisualVersions(cellSlot, {
+		recordCellSlotMountedVisualVersions(cellSlot, {
 			insightVersion: ctx.insightVersion,
 			styleVersion: ctx.styleVersion,
 			loadingVersion: ctx.loadingVersion,
@@ -799,7 +796,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (snapshot) {
 			cellSlot.lastMountedRowVersion = rowVersion;
 			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-			recordMountedVisualVersions(cellSlot, snapshot);
+			recordCellSlotMountedVisualVersions(cellSlot, snapshot);
 		}
 		if (didWriteBuffered) deps.incrementCurrentScrollCellsWritten();
 		deps.incrementCellsBoundDuringScroll();
@@ -843,7 +840,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (snapshot) {
 			cellSlot.lastMountedRowVersion = rowVersion;
 			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-			recordMountedVisualVersions(cellSlot, snapshot);
+			recordCellSlotMountedVisualVersions(cellSlot, snapshot);
 		}
 		if (didWritePrimitive) deps.incrementCurrentScrollCellsWritten();
 		deps.incrementCellsBoundDuringScroll();
@@ -935,7 +932,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	if (snapshot) {
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-		recordMountedVisualVersions(cellSlot, snapshot);
+		recordCellSlotMountedVisualVersions(cellSlot, snapshot);
 	}
 	if (didWrite) deps.incrementCurrentScrollCellsWritten();
 	deps.incrementCellsBoundDuringScroll();

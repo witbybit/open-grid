@@ -2,6 +2,13 @@ export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallbac
 
 import type { CellRendererHandle, CellPlacement } from './cellRendererHandle.js';
 
+export interface CellSlotMountedVisualVersions {
+	insightVersion: number;
+	styleVersion: number;
+	loadingVersion: number;
+	selectionVersion: number;
+}
+
 // Monotonic counter — advances once per CellSlot construction.
 // A cell that is destroyed and recreated at the same position gets a strictly
 // larger id, so stale portal keys from the destroyed instance never match the
@@ -45,6 +52,22 @@ export function resetCellSlotWriteStats(): void {
 	cellSlotWriteStats.cellWidthWrites = 0;
 	cellSlotWriteStats.cellLeftWrites = 0;
 	cellSlotWriteStats.cellDomReadsAvoided = 0;
+}
+
+export function recordCellSlotMountedVisualVersions(cellSlot: CellSlot, versions: CellSlotMountedVisualVersions): void {
+	cellSlot.lastMountedInsightVersion = versions.insightVersion;
+	cellSlot.lastMountedStyleVersion = versions.styleVersion;
+	cellSlot.lastMountedLoadingVersion = versions.loadingVersion;
+	cellSlot.lastMountedSelectionVersion = versions.selectionVersion;
+}
+
+export function matchesCellSlotMountedVisualVersions(cellSlot: CellSlot, versions: CellSlotMountedVisualVersions): boolean {
+	return (
+		cellSlot.lastMountedInsightVersion === versions.insightVersion &&
+		cellSlot.lastMountedStyleVersion === versions.styleVersion &&
+		cellSlot.lastMountedLoadingVersion === versions.loadingVersion &&
+		cellSlot.lastMountedSelectionVersion === versions.selectionVersion
+	);
 }
 
 export class CellSlot<TRowData = unknown> {
