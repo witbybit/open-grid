@@ -319,6 +319,16 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const isRowLoading = ctx ? ctx.loadingVersion > 0 && deps.engine.data.isRowLoading(node.id) : false;
 	const visibleColStart = ctx?.visibleColRange?.startIdx ?? centerColStart;
 	const visibleColEnd = ctx?.visibleColRange?.endIdx ?? centerColStart + centerColCount - 1;
+	const currentRowVersion = ctx?.rowVersions?.get(node.id);
+	const shouldRefreshWarmVisibleCell = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
+		if (!isScrollFrameActive || !isVisibleContent || !refreshVisibleColumns?.has(columnIndex) || !ctx) return false;
+		const globalDataChanged =
+			cellSlot.lastMountedGlobalVersion !== -1 &&
+			(ctx.globalChangedDuringScroll || ctx.globalVersion !== cellSlot.lastMountedGlobalVersion);
+		const rowDataChanged =
+			cellSlot.lastMountedRowVersion !== -1 && currentRowVersion !== undefined && currentRowVersion !== cellSlot.lastMountedRowVersion;
+		return globalDataChanged || rowDataChanged || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll;
+	};
 
 	const pinLeftContainer = deps.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 	const pinRightContainer = deps.ensurePinnedContainer(slot, 'right', pinRightWidth);
@@ -360,7 +370,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const cellSlot = slot.leftCells[i];
 		if (!col || !cellSlot) continue;
 		const isVisibleContent = isRowVisible;
-		const needsVisibleRefresh = !!(isScrollFrameActive && isVisibleContent && refreshVisibleColumns?.has(placement.absoluteIndex));
+		const needsVisibleRefresh = shouldRefreshWarmVisibleCell(cellSlot, placement.absoluteIndex, isVisibleContent);
 		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === placement.absoluteIndex) {
 			if (needsVisibleRefresh) deps.markCellDirtyAfterScroll(cellSlot.element);
 			continue;
@@ -411,7 +421,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const cellSlot = slot.centerCells[i];
 		if (!col || !cellSlot) continue;
 		const isVisibleContent = isRowVisible && c >= visibleColStart && c <= visibleColEnd;
-		const needsVisibleRefresh = !!(isScrollFrameActive && isVisibleContent && refreshVisibleColumns?.has(c));
+		const needsVisibleRefresh = shouldRefreshWarmVisibleCell(cellSlot, c, isVisibleContent);
 		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) {
 			if (needsVisibleRefresh) deps.markCellDirtyAfterScroll(cellSlot.element);
 			continue;
@@ -463,7 +473,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const cellSlot = slot.rightCells[i];
 		if (!col || !cellSlot) continue;
 		const isVisibleContent = isRowVisible;
-		const needsVisibleRefresh = !!(isScrollFrameActive && isVisibleContent && refreshVisibleColumns?.has(c));
+		const needsVisibleRefresh = shouldRefreshWarmVisibleCell(cellSlot, c, isVisibleContent);
 		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) {
 			if (needsVisibleRefresh) deps.markCellDirtyAfterScroll(cellSlot.element);
 			continue;

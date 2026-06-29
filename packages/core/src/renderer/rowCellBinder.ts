@@ -192,6 +192,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	deps.incrementCellSlotRebinds?.();
 	const { cellSlot, slotId, node, rowIndex, colIndex, col, lane, pinRightBaseLeft, plan, state, ctx, phase = 'initial' } = request;
 	const access = deps.engine.cellAccess.get(node.id, rowIndex, node, node.data, colIndex, col, undefined, state);
+	const rowVersion = deps.engine.rowVersions.get(node.id) ?? -1;
 
 	let cellClassName = buildCellPinClass(lane);
 	if (access.isFocused) {
@@ -333,6 +334,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			dragShift,
 			access.isSelected
 		);
+		cellSlot.lastMountedRowVersion = rowVersion;
+		cellSlot.lastMountedGlobalVersion = state.globalVersion;
 		return;
 	}
 
@@ -457,6 +460,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		el._dragHandle.remove();
 		delete el._dragHandle;
 	}
+	cellSlot.lastMountedRowVersion = rowVersion;
+	cellSlot.lastMountedGlobalVersion = state.globalVersion;
 }
 
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
@@ -465,6 +470,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, pooledRowId, left, right, width, isRowRebind, isRowLoading, isInVisibleContent } =
 		request;
 	const canPreserveWarmVisuals = !isRowRebind && cellSlot.rowId === node.id && cellSlot.colField === col.field && !isRowLoading;
+	const rowVersion = ctx.rowVersions?.get(node.id) ?? -1;
 	const shouldDeferCellStyleRefresh =
 		ctx.hasDeferredCellStyleRules &&
 		isInVisibleContent &&
@@ -474,6 +480,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (isInVisibleContent) deps.markCellDirtyAfterScroll(cellSlot.element);
 		const cellClassName = buildCellPinClass(lane) + ' og-cell-row-selector';
 		cellSlot.update(colIndex, col.field, rowIndex, node.id, left, right, width, cellClassName, 'custom', undefined, '', undefined);
+		cellSlot.lastMountedRowVersion = rowVersion;
+		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 		return;
 	}
 
@@ -565,6 +573,10 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			undefined
 		);
 		if (didWritePrimitive) deps.incrementCurrentScrollCellsWritten();
+		if (cachedVal !== undefined) {
+			cellSlot.lastMountedRowVersion = rowVersion;
+			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+		}
 		deps.incrementCellsBoundDuringScroll();
 		return;
 	} else {
@@ -577,7 +589,6 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const isMounted = deps.portalMountManager.isCellMounted(cellKey);
 	const canFreezePortal = cellSlot.lastPortalKey === cellKey && isMounted;
 	const globalChanged = cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalVersion !== cellSlot.lastMountedGlobalVersion;
-	const rowVersion = ctx.rowVersions.get(node.id);
 	const rowChanged = cellSlot.lastMountedRowVersion !== -1 && rowVersion !== undefined && rowVersion !== cellSlot.lastMountedRowVersion;
 	const isDataStale = !isRowRebind && canFreezePortal && (globalChanged || rowChanged);
 	const isPortalFrozen = !isRowRebind && canFreezePortal && !isDataStale;
@@ -590,7 +601,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		contentMode = 'portal';
 
 		if (isPortalFrozen && scrollMode === 'custom-live') {
-			cellSlot.lastMountedRowVersion = ctx.rowVersions.get(node.id) ?? -1;
+			cellSlot.lastMountedRowVersion = rowVersion;
 			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 		} else if (!isPortalFrozen || shouldDirtyFrozenPortal) {
 			deps.markCellDirtyAfterScroll(cellSlot.element);
@@ -622,7 +633,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			isSelected: false,
 		});
 		contentMode = 'portal';
-		cellSlot.lastMountedRowVersion = ctx.rowVersions.get(node.id) ?? -1;
+		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 	}
 
