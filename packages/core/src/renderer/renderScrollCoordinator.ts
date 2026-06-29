@@ -498,6 +498,58 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			return canContinue();
 		});
 
+		visitApproachBand((rowIndex, colIndex) => {
+			if (!canContinue()) return false;
+			const visualRow = rowModel.getVisualRow(rowIndex);
+			if (visualRow?.kind !== 'data') return true;
+			const col = columns[colIndex];
+			if (!col) return true;
+			const rowId = visualRow.node.id;
+			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
+			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
+			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
+			const hasInsightDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field).length > 0;
+			const isFocused = isCellFocused(rowId, col.field, focusedCell);
+			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
+			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
+			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
+			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
+			if (
+				col.valueGetter ||
+				shouldPrimeFormula ||
+				hasRegisteredFormula ||
+				hasInsightDecorations ||
+				isFocused ||
+				isSelected ||
+				needsReadonlyEvaluation ||
+				needsTooltipSnapshot ||
+				needsStyleSnapshot
+			) {
+				return true;
+			}
+			recordWork();
+			const formattedValue = this.deps.engine.getCheapDisplayValue(rowId, col.field);
+			this.deps.engine.cellDisplaySnapshots.set(
+				createCellDisplaySnapshot({
+					rowId,
+					colField: col.field,
+					rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+					globalVersion: state.globalVersion,
+					insightVersion: this.deps.engine.insights.getVersion(),
+					styleVersion: this.deps.rowRenderer.styleVersion,
+					loadingVersion: this.deps.rowRenderer.loadingVersion,
+					selectionVersion: this.deps.engine.selectionVersion,
+					baseClassName: 'og-cell',
+					contentKind: formattedValue !== '' ? 'text' : 'empty',
+					contentMode: formattedValue !== '' ? 'text' : 'empty',
+					formattedValue,
+					title: '',
+				})
+			);
+			this.deps.renderStats.prewarmedCellSnapshots++;
+			return canContinue();
+		});
+
 		if (workDone >= budget && !this.state.prewarmScheduled && this.deps.gridScheduler.supportsIdle()) {
 			this.state.prewarmScheduled = true;
 			this.state.prewarmTimer = this.deps.gridScheduler.idle((nextDeadline) => {
