@@ -104,9 +104,7 @@ function materializeVisiblePrimitiveCompatibilitySnapshot<TRowData>(
 	if (cellDecorations.length === 0) return undefined;
 	const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
 	const baseClassName = buildCellPinClass(lane);
-	const stateClassName = canPreserveWarmVisuals
-		? subtractNormalizedClassName(cellSlot.lastClassName ?? baseClassName, baseClassName)
-		: '';
+	const stateClassName = canPreserveWarmVisuals ? subtractNormalizedClassName(cellSlot.lastClassName ?? baseClassName, baseClassName) : '';
 	const warmContentMode =
 		canPreserveWarmVisuals && (cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback')
 			? cellSlot.lastContentMode
@@ -590,16 +588,6 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const hasEmptyPortalHost =
 		cellSlot.lastContentMode === 'portal' && !!cellSlot.lastPortalKey && !!portalHost && portalHost.childElementCount === 0;
 	let snapshot = getFreshCellSnapshot(deps, node.id, col.field, ctx);
-	const shouldDeferCellStyleRefresh =
-		isInVisibleContent &&
-		((ctx.hasInsightDecorations && !snapshot) ||
-			(ctx.hasDeferredCellStyleRules &&
-				(!snapshot &&
-					(ctx.selectionChangedDuringScroll ||
-						!canPreserveWarmVisuals ||
-						ctx.styleChangedDuringScroll ||
-						ctx.loadingChangedDuringScroll))));
-
 	if (col.checkboxSelection) {
 		if (isInVisibleContent) deps.markCellDirtyAfterScroll(cellSlot.element);
 		const cellClassName = buildCellPinClass(lane) + ' og-cell-row-selector';
@@ -612,8 +600,6 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const plan = ctx.plan.columnPlans[colIndex];
 	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
 	const rendererKind: 'primitive' | 'portal' | 'loading' = isRowLoading ? 'loading' : isEditing || plan?.isCustom ? 'portal' : 'primitive';
-	let liveInsightTitle = '';
-	let liveValidationError: string | undefined;
 
 	let cellClassName = buildCellPinClass(lane);
 	if (rendererKind === 'loading') cellClassName += ' og-cell-loading';
@@ -628,6 +614,12 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			canPreserveWarmVisuals,
 		});
 	}
+	const shouldDeferCellStyleRefresh =
+		isInVisibleContent &&
+		((ctx.hasInsightDecorations && !snapshot) ||
+			(ctx.hasDeferredCellStyleRules &&
+				!snapshot &&
+				(ctx.selectionChangedDuringScroll || !canPreserveWarmVisuals || ctx.styleChangedDuringScroll || ctx.loadingChangedDuringScroll)));
 	if (snapshot?.className) {
 		cellClassName = snapshot.className;
 	} else if (canPreserveWarmVisuals && cellSlot.lastClassName) {
@@ -673,12 +665,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 					: rendererKind === 'loading'
 						? 'loading'
 						: 'empty';
-		applyCellTitlesAndValidation(
-			cellSlot.element,
-			snapshot?.title || null,
-			snapshot ? '' : liveInsightTitle,
-			snapshot?.validationError ?? liveValidationError
-		);
+		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
 		const didWriteBuffered = cellSlot.update(
 			colIndex,
 			col.field,
@@ -721,12 +708,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			deps.markCellDirtyAfterScroll(cellSlot.element);
 		}
 		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-		applyCellTitlesAndValidation(
-			cellSlot.element,
-			snapshot?.title || null,
-			snapshot ? '' : liveInsightTitle,
-			snapshot?.validationError ?? liveValidationError
-		);
+		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
 		const didWritePrimitive = cellSlot.update(
 			colIndex,
 			col.field,
@@ -764,10 +746,11 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const isPortalFrozen =
 		!isRowRebind && canFreezePortal && (!isDataStale || (isPortalSnapshotContent(snapshot) && snapshot.contentKind === 'portal-frozen'));
 	const isStaleFrozen = (isRowRebind || isDataStale) && canFreezePortal;
+	const hasSnapshotCoverageForDecorations = !ctx.hasInsightDecorations || !!snapshot;
 	const shouldDirtyFrozenPortal =
 		isFocused ||
 		isEditing ||
-		ctx.hasInsightDecorations ||
+		!hasSnapshotCoverageForDecorations ||
 		(ctx.hasDeferredCellStyleRules &&
 			(!snapshot || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
 
@@ -811,12 +794,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 	}
-	applyCellTitlesAndValidation(
-		cellSlot.element,
-		snapshot?.title || null,
-		snapshot ? '' : liveInsightTitle,
-		snapshot?.validationError ?? liveValidationError
-	);
+	applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
 
 	const didWrite = cellSlot.update(
 		colIndex,

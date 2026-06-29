@@ -26,11 +26,7 @@ import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
 import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
 
-function isCellSelected(
-	rowIndex: number,
-	colIndex: number,
-	selectionBounds: GridCellRangeBounds | null | undefined
-): boolean {
+function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: GridCellRangeBounds | null | undefined): boolean {
 	return (
 		!!selectionBounds &&
 		rowIndex >= selectionBounds.minRow &&
@@ -514,18 +510,12 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
 			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
 			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
-			if (
-				hasInsightDecorations ||
-				isFocused ||
-				isSelected ||
-				needsReadonlyEvaluation ||
-				needsTooltipSnapshot ||
-				needsStyleSnapshot
-			) {
+			if (hasInsightDecorations || isFocused || isSelected || needsReadonlyEvaluation || needsTooltipSnapshot || needsStyleSnapshot) {
 				return true;
 			}
 			recordWork();
-			const formattedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field) ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
+			const formattedValue =
+				this.deps.engine.getCachedDisplayValue(rowId, col.field) ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
 			this.deps.engine.cellDisplaySnapshots.set(
 				createCellDisplaySnapshot({
 					rowId,
