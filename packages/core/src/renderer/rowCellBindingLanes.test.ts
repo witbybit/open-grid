@@ -614,6 +614,7 @@ describe('reconcileTopology — unrelated column stability', () => {
 describe('bindAllDataCells — visibility boundary refresh', () => {
 	function makeBindingDeps() {
 		const onScrollCellPatched = vi.fn();
+		const markCellDirtyAfterScroll = vi.fn();
 		return {
 			deps: {
 				engine: {
@@ -694,7 +695,7 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 					incrementCurrentScrollCellsWritten: vi.fn(),
 					getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 				},
-				markCellDirtyAfterScroll: vi.fn(),
+				markCellDirtyAfterScroll,
 				releaseCellPortal: vi.fn(),
 				ensureLoadingSkeleton: vi.fn(),
 				onScrollCellVisited: vi.fn(),
@@ -702,6 +703,7 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 				onScrollCellWritten: vi.fn(),
 			},
 			onScrollCellPatched,
+			markCellDirtyAfterScroll,
 		};
 	}
 
@@ -855,5 +857,58 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 		expect(deps.cellBinderDeps.portalMountManager.mountCellImmediately).toHaveBeenCalledWith(
 			expect.objectContaining({ cellKey: portalKey, container: host })
 		);
+	});
+
+	it('does not mark a warm visible cell dirty solely because insight layers exist when its mounted visual versions are fresh', () => {
+		const cols = [makeCol('a')];
+		const slot = makeRowSlot();
+		const plan = makePlan(cols, 0, 0, 1);
+		const topology = compileColumnTopology(plan);
+		reconcileTopology(slot, topology, null, 0, 1, null, cols, initCell, vi.fn());
+		const cell = slot.centerCells[0];
+		cell.update(0, 'a', 5, 'r1', 0, -1, 100, 'og-cell', 'text', undefined, 'a-value');
+		cell.lastMountedGlobalVersion = 1;
+		cell.lastMountedRowVersion = 1;
+		cell.lastMountedInsightVersion = 4;
+		cell.lastMountedStyleVersion = 0;
+		cell.lastMountedLoadingVersion = 0;
+		cell.lastMountedSelectionVersion = 0;
+
+		const { deps, onScrollCellPatched, markCellDirtyAfterScroll } = makeBindingDeps();
+
+		bindAllDataCells(deps as any, {
+			slot,
+			node: { id: 'r1', data: { id: 'r1', a: 'A1' } } as any,
+			rowIndex: 5,
+			centerColStart: 0,
+			centerColCount: 1,
+			columns: cols,
+			plan,
+			columnTopology: topology,
+			isScrollFrameActive: true,
+			ctx: {
+				globalVersion: 1,
+				insightVersion: 4,
+				styleVersion: 0,
+				selectionVersion: 0,
+				rowVersions: new Map([['r1', 1]]),
+				loadingVersion: 0,
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				hasInsightDecorations: true,
+				hasDeferredCellStyleRules: false,
+				activeEdit: null,
+				focusedCell: null,
+				isScrolling: true,
+				plan,
+			} as any,
+			state: {} as any,
+			isRowRebind: false,
+			forceCellRefresh: false,
+			isRowVisible: true,
+			refreshVisibleColumns: null,
+		});
+
+		expect(onScrollCellPatched).not.toHaveBeenCalled();
+		expect(markCellDirtyAfterScroll).not.toHaveBeenCalled();
 	});
 });

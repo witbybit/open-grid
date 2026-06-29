@@ -904,6 +904,10 @@ describe('bindCellDuringScroll', () => {
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell portal-warm', 'portal', undefined, '', portalKey);
 		cellSlot.element.title = 'Portal warm title';
 		cellSlot.element.dataset.validationError = 'Needs review';
+		cellSlot.lastMountedInsightVersion = 0;
+		cellSlot.lastMountedStyleVersion = 0;
+		cellSlot.lastMountedLoadingVersion = 0;
+		cellSlot.lastMountedSelectionVersion = 0;
 		const snapshotSet = vi.fn();
 
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
@@ -1290,6 +1294,10 @@ describe('bindCellDuringScroll', () => {
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell custom-class', 'portal', undefined, '', portalKey);
 		cellSlot.lastMountedGlobalVersion = 1;
 		cellSlot.lastMountedRowVersion = 2;
+		cellSlot.lastMountedInsightVersion = 0;
+		cellSlot.lastMountedStyleVersion = 0;
+		cellSlot.lastMountedLoadingVersion = 0;
+		cellSlot.lastMountedSelectionVersion = 0;
 
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
 			engine: {
@@ -1372,6 +1380,10 @@ describe('bindCellDuringScroll', () => {
 		cellSlot.lastMountedRowVersion = 2;
 		cellSlot.element.title = 'Portal warm title';
 		cellSlot.element.dataset.validationError = 'Needs review';
+		cellSlot.lastMountedInsightVersion = 0;
+		cellSlot.lastMountedStyleVersion = 0;
+		cellSlot.lastMountedLoadingVersion = 0;
+		cellSlot.lastMountedSelectionVersion = 0;
 
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
 			engine: {
@@ -1469,6 +1481,10 @@ describe('bindCellDuringScroll', () => {
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell custom-class', 'portal', undefined, '', portalKey);
 		cellSlot.lastMountedGlobalVersion = 4;
 		cellSlot.lastMountedRowVersion = 7;
+		cellSlot.lastMountedInsightVersion = 0;
+		cellSlot.lastMountedStyleVersion = 0;
+		cellSlot.lastMountedLoadingVersion = 0;
+		cellSlot.lastMountedSelectionVersion = 0;
 
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
 			engine: {
@@ -1656,6 +1672,10 @@ describe('bindCellDuringScroll', () => {
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell custom-class', 'portal', undefined, '', portalKey);
 		cellSlot.lastMountedGlobalVersion = 4;
 		cellSlot.lastMountedRowVersion = 7;
+		cellSlot.lastMountedInsightVersion = 0;
+		cellSlot.lastMountedStyleVersion = 0;
+		cellSlot.lastMountedLoadingVersion = 0;
+		cellSlot.lastMountedSelectionVersion = 0;
 
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
 			engine: {

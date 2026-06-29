@@ -59,12 +59,20 @@ describe('RowSlot & CellSlot Controllers', () => {
 		cell.setBinding('slot-1', 'row-1', 0, 'name', 0, 'slot-1::name', 'text');
 		cell.lastMountedRowVersion = 5;
 		cell.lastMountedGlobalVersion = 3;
+		cell.lastMountedInsightVersion = 2;
+		cell.lastMountedStyleVersion = 4;
+		cell.lastMountedLoadingVersion = 1;
+		cell.lastMountedSelectionVersion = 6;
 
 		cell.unbindCold();
 
 		expect(cell.binding).toBeNull();
 		expect(cell.lastMountedRowVersion).toBe(-1);
 		expect(cell.lastMountedGlobalVersion).toBe(-1);
+		expect(cell.lastMountedInsightVersion).toBe(-1);
+		expect(cell.lastMountedStyleVersion).toBe(-1);
+		expect(cell.lastMountedLoadingVersion).toBe(-1);
+		expect(cell.lastMountedSelectionVersion).toBe(-1);
 	});
 
 	it('should prevent redundant DOM writes on RowSlot if layout values match', () => {

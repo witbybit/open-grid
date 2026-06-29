@@ -367,16 +367,25 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			cellSlot.lastMountedGlobalVersion !== -1 && (ctx.globalChangedDuringScroll || ctx.globalVersion !== cellSlot.lastMountedGlobalVersion);
 		const rowDataChanged =
 			cellSlot.lastMountedRowVersion !== -1 && currentRowVersion !== undefined && currentRowVersion !== cellSlot.lastMountedRowVersion;
+		const insightVisualStale =
+			ctx.hasInsightDecorations &&
+			(cellSlot.lastMountedInsightVersion === -1 || cellSlot.lastMountedInsightVersion !== ctx.insightVersion);
+		const styleVisualStale =
+			ctx.hasDeferredCellStyleRules &&
+			(cellSlot.lastMountedStyleVersion === -1 || cellSlot.lastMountedStyleVersion !== ctx.styleVersion);
+		const loadingVisualStale = cellSlot.lastMountedLoadingVersion === -1 || cellSlot.lastMountedLoadingVersion !== ctx.loadingVersion;
+		const selectionVisualStale =
+			cellSlot.lastMountedSelectionVersion === -1 || cellSlot.lastMountedSelectionVersion !== ctx.selectionVersion;
 		return {
 			needsImmediateWake: hasSuspiciousWarmState || globalDataChanged || rowDataChanged,
 			needsDeferredRefresh:
 				hasSuspiciousWarmState ||
 				globalDataChanged ||
 				rowDataChanged ||
-				ctx.hasInsightDecorations ||
-				ctx.styleChangedDuringScroll ||
-				ctx.selectionChangedDuringScroll ||
-				ctx.loadingChangedDuringScroll,
+				insightVisualStale ||
+				styleVisualStale ||
+				(ctx.loadingChangedDuringScroll && loadingVisualStale) ||
+				(ctx.selectionChangedDuringScroll && selectionVisualStale),
 		};
 	};
 	const shouldSkipStableCellDuringScroll = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
@@ -633,6 +642,12 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 			deps.ensureLoadingSkeleton(cellSlot.element);
 		}
 		const didWrite = cellSlot.update(c, col.field, rowIndex, rowId, leftArg, -1, cellWidth, cellClassName, 'loading', undefined, '', undefined);
+		cellSlot.lastMountedRowVersion = -1;
+		cellSlot.lastMountedGlobalVersion = globalVersion;
+		cellSlot.lastMountedInsightVersion = deps.engine.insights.getVersion();
+		cellSlot.lastMountedStyleVersion = snapshotVisualVersions.styleVersion;
+		cellSlot.lastMountedLoadingVersion = snapshotVisualVersions.loadingVersion;
+		cellSlot.lastMountedSelectionVersion = deps.engine.selectionVersion;
 		deps.engine.cellDisplaySnapshots.set(
 			createCellDisplaySnapshot({
 				rowId,

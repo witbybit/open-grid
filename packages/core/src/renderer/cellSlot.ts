@@ -124,6 +124,10 @@ export class CellSlot<TRowData = unknown> {
 	// (only that row thaws); if globalVersion !== lastMountedGlobalVersion everything thaws.
 	public lastMountedRowVersion = -1;
 	public lastMountedGlobalVersion = -1;
+	public lastMountedInsightVersion = -1;
+	public lastMountedStyleVersion = -1;
+	public lastMountedLoadingVersion = -1;
+	public lastMountedSelectionVersion = -1;
 
 	constructor(element: HTMLDivElement) {
 		this.cellInstanceId = `ci${++_cellInstanceCounter}`;
@@ -188,6 +192,10 @@ export class CellSlot<TRowData = unknown> {
 		this.hasTabIndex = false;
 		this.lastMountedRowVersion = -1;
 		this.lastMountedGlobalVersion = -1;
+		this.lastMountedInsightVersion = -1;
+		this.lastMountedStyleVersion = -1;
+		this.lastMountedLoadingVersion = -1;
+		this.lastMountedSelectionVersion = -1;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;
@@ -391,6 +399,10 @@ export class CellSlot<TRowData = unknown> {
 		this.lastRawValue = undefined;
 		this.lastMountedRowVersion = -1;
 		this.lastMountedGlobalVersion = -1;
+		this.lastMountedInsightVersion = -1;
+		this.lastMountedStyleVersion = -1;
+		this.lastMountedLoadingVersion = -1;
+		this.lastMountedSelectionVersion = -1;
 		// Use JS-side flag to skip DOM read in hot path.
 		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');
@@ -427,6 +439,10 @@ export class CellSlot<TRowData = unknown> {
 		this.hasTabIndex = false;
 		this.lastMountedRowVersion = -1;
 		this.lastMountedGlobalVersion = -1;
+		this.lastMountedInsightVersion = -1;
+		this.lastMountedStyleVersion = -1;
+		this.lastMountedLoadingVersion = -1;
+		this.lastMountedSelectionVersion = -1;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;
