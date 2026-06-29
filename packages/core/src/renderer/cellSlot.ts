@@ -70,6 +70,21 @@ export function matchesCellSlotMountedVisualVersions(cellSlot: CellSlot, version
 	);
 }
 
+export function matchesCellSlotMountedFreshness(
+	cellSlot: CellSlot,
+	request: {
+		rowVersion: number;
+		globalVersion: number;
+		visualVersions: CellSlotMountedVisualVersions;
+	}
+): boolean {
+	return (
+		cellSlot.lastMountedRowVersion === request.rowVersion &&
+		cellSlot.lastMountedGlobalVersion === request.globalVersion &&
+		matchesCellSlotMountedVisualVersions(cellSlot, request.visualVersions)
+	);
+}
+
 export class CellSlot<TRowData = unknown> {
 	public readonly element: HTMLDivElement;
 	public readonly contentElement: HTMLDivElement;

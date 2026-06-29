@@ -7,6 +7,7 @@ import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import {
+	matchesCellSlotMountedFreshness,
 	recordCellSlotMountedVisualVersions,
 	matchesCellSlotMountedVisualVersions,
 	type CellSlot,
@@ -658,13 +659,15 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const rowVersion = ctx.rowVersions?.get(node.id) ?? -1;
 	const isWarmBindingVersionFresh =
 		canPreserveWarmVisuals &&
-		cellSlot.lastMountedGlobalVersion === ctx.globalVersion &&
-		cellSlot.lastMountedRowVersion === rowVersion &&
-		matchesCellSlotMountedVisualVersions(cellSlot, {
-			insightVersion: ctx.insightVersion,
-			styleVersion: ctx.styleVersion,
-			loadingVersion: ctx.loadingVersion,
-			selectionVersion: ctx.selectionVersion,
+		matchesCellSlotMountedFreshness(cellSlot, {
+			rowVersion,
+			globalVersion: ctx.globalVersion,
+			visualVersions: {
+				insightVersion: ctx.insightVersion,
+				styleVersion: ctx.styleVersion,
+				loadingVersion: ctx.loadingVersion,
+				selectionVersion: ctx.selectionVersion,
+			},
 		});
 	const cellKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
 	const portalHost = cellSlot.lastContentMode === 'portal' ? deps.getCellPortalHost(cellSlot.element) : null;

@@ -2,7 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
-import { CellSlot, matchesCellSlotMountedVisualVersions, recordCellSlotMountedVisualVersions } from './cellSlot.js';
+import { CellSlot, matchesCellSlotMountedFreshness, matchesCellSlotMountedVisualVersions, recordCellSlotMountedVisualVersions } from './cellSlot.js';
 import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './rowCellBinder.js';
 import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
@@ -367,6 +367,16 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			cellSlot.lastMountedGlobalVersion !== -1 && (ctx.globalChangedDuringScroll || ctx.globalVersion !== cellSlot.lastMountedGlobalVersion);
 		const rowDataChanged =
 			cellSlot.lastMountedRowVersion !== -1 && currentRowVersion !== undefined && currentRowVersion !== cellSlot.lastMountedRowVersion;
+		const mountedFreshnessMatches = matchesCellSlotMountedFreshness(cellSlot, {
+			rowVersion: currentRowVersion ?? -1,
+			globalVersion: ctx.globalVersion,
+			visualVersions: {
+				insightVersion: ctx.insightVersion,
+				styleVersion: ctx.styleVersion,
+				loadingVersion: ctx.loadingVersion,
+				selectionVersion: ctx.selectionVersion,
+			},
+		});
 		const insightVisualStale =
 			ctx.hasInsightDecorations &&
 			(cellSlot.lastMountedInsightVersion === -1 || cellSlot.lastMountedInsightVersion !== ctx.insightVersion);
@@ -395,6 +405,11 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				hasSuspiciousWarmState ||
 				globalDataChanged ||
 				rowDataChanged ||
+				(!mountedFreshnessMatches &&
+					cellSlot.lastMountedInsightVersion !== -1 &&
+					cellSlot.lastMountedStyleVersion !== -1 &&
+					cellSlot.lastMountedLoadingVersion !== -1 &&
+					cellSlot.lastMountedSelectionVersion !== -1) ||
 				insightVisualStale ||
 				styleVisualStale ||
 				(ctx.loadingChangedDuringScroll && loadingVisualStale) ||
