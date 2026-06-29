@@ -9,7 +9,6 @@ import {
 	getColIndices,
 	getRowIndices,
 	type RenderWindow,
-	sameRenderedWindow,
 	computeRenderWindow,
 	applyRenderWindowRuntimeLimits,
 } from './renderWindow.js';
@@ -288,6 +287,39 @@ describe('Runtime Performance & Granular Versioning', () => {
 		cleanupGrid(grid);
 	});
 
+	it('limits vertical scroll cell work to newly entered rows when columns stay stable', () => {
+		const columns: ColumnDef<{ id: string; name: string }>[] = [{ field: 'name', header: 'Name', width: 100 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			rowOverscanPx: 120,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns,
+		});
+		const container = createContainer(500, 160);
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		renderer.resetRenderStats();
+
+		store.engine.viewport.setScrollPosition(40, 0);
+		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
+
+		const stats = renderer.getRenderStats();
+
+		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(1);
+		expect(stats.cellsWrittenDuringScroll).toBeLessThanOrEqual(1);
+		expect(stats.customRendererMountsDuringScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('keeps vertical scroll work bounded to entered rows instead of the full visible range', () => {
 		const grid = createWideGrid({ rows: 100000, cols: 1000, custom: true, valueGetter: true });
 		const prevWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
@@ -352,7 +384,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		store.engine.viewport.setScrollPosition(40, 0);
 		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
 
-		expect(getVisualRowSpy).toHaveBeenCalledTimes(2);
+		expect(getVisualRowSpy).toHaveBeenCalledTimes(1);
 
 		renderer.unmount();
 		controller.dispose();

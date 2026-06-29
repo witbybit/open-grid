@@ -464,6 +464,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	deps.incrementCellSlotRebinds?.();
 	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, pooledRowId, left, right, width, isRowRebind, isRowLoading, isInVisibleContent } =
 		request;
+	const canPreserveWarmVisuals = !isRowRebind && cellSlot.rowId === node.id && cellSlot.colField === col.field && !isRowLoading;
 
 	if (col.checkboxSelection) {
 		if (isInVisibleContent) deps.markCellDirtyAfterScroll(cellSlot.element);
@@ -478,6 +479,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	let cellClassName = buildCellPinClass(lane);
 	if (rendererKind === 'loading') cellClassName += ' og-cell-loading';
+	if (canPreserveWarmVisuals && cellSlot.lastClassName) {
+		cellClassName = cellSlot.lastClassName;
+	}
 
 	if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {
 		cellSlot.element.tabIndex = -1;
@@ -532,6 +536,10 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (cachedVal !== undefined) {
 			formattedValue = cachedVal;
 			contentMode = formattedValue === '' ? 'empty' : 'text';
+		} else if (canPreserveWarmVisuals && (cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback')) {
+			formattedValue = cellSlot.lastFormattedValue ?? '';
+			contentMode = cellSlot.lastContentMode;
+			deps.markCellDirtyAfterScroll(cellSlot.element);
 		} else {
 			formattedValue = '...';
 			contentMode = 'text';
