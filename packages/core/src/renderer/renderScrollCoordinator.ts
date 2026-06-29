@@ -391,12 +391,41 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
 			const shouldPrimeDisplayValue = col.valueGetter || shouldPrimeFormula || hasRegisteredFormula;
 			if (!shouldPrimeDisplayValue) return true;
+			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
+			const hasInsightDecorations = cellDecorations.length > 0;
+			const isFocused = isCellFocused(rowId, col.field, focusedCell);
+			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
+			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
+			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
+			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
 			const cachedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field);
-			if ((col.valueGetter || hasRegisteredFormula) && cachedValue !== undefined) return true;
-			const primedValue = this.deps.engine.primeDisplayValue(rowId, col.field);
-			if (primedValue !== undefined) {
+			const plainSnapshotEligible =
+				!hasInsightDecorations && !isFocused && !isSelected && !needsReadonlyEvaluation && !needsTooltipSnapshot && !needsStyleSnapshot;
+			const displayValue =
+				(col.valueGetter || hasRegisteredFormula) && cachedValue !== undefined ? cachedValue : this.deps.engine.primeDisplayValue(rowId, col.field);
+			if (displayValue !== undefined) {
 				recordWork();
 				this.deps.renderStats.prewarmedDisplayValues++;
+				if (plainSnapshotEligible) {
+					this.deps.engine.cellDisplaySnapshots.set(
+						createCellDisplaySnapshot({
+							rowId,
+							colField: col.field,
+							rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+							globalVersion: state.globalVersion,
+							insightVersion: this.deps.engine.insights.getVersion(),
+							styleVersion: this.deps.rowRenderer.styleVersion,
+							loadingVersion: this.deps.rowRenderer.loadingVersion,
+							selectionVersion: this.deps.engine.selectionVersion,
+							baseClassName: 'og-cell',
+							contentKind: displayValue !== '' ? 'text' : 'empty',
+							contentMode: displayValue !== '' ? 'text' : 'empty',
+							formattedValue: displayValue,
+							title: '',
+						})
+					);
+					this.deps.renderStats.prewarmedCellSnapshots++;
+				}
 			}
 			return canContinue();
 		});

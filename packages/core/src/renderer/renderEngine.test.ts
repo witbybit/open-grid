@@ -2509,7 +2509,7 @@ describe('RenderEngine', () => {
 			expect(callbacks.length).toBeGreaterThanOrEqual(1);
 			callbacks[0](0);
 			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
-			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 });
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
 
 			scrollViewport.scrollLeft = 200;
 			scrollViewport.dispatchEvent(new Event('scroll'));
@@ -2524,6 +2524,7 @@ describe('RenderEngine', () => {
 			const stats = renderer.getRenderStats();
 			expect(stats.valueGetterCallsDuringScroll).toBe(0);
 			expect(stats.prewarmedDisplayValues).toBeGreaterThan(0);
+			expect(stats.prewarmedCellSnapshots).toBeGreaterThan(0);
 			expect(stats.prewarmPasses).toBeGreaterThan(0);
 		} finally {
 			if (previousRequestIdleCallback === undefined) {
@@ -2620,7 +2621,7 @@ describe('RenderEngine', () => {
 			expect(callbacks.length).toBeGreaterThanOrEqual(1);
 			callbacks[0](0);
 			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
-			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 });
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
 
 			scrollViewport.scrollLeft = 200;
 			scrollViewport.dispatchEvent(new Event('scroll'));
@@ -2636,6 +2637,7 @@ describe('RenderEngine', () => {
 			expect(stats.getCellValueCallsDuringScroll).toBe(0);
 			expect(stats.formulaCallsDuringScroll).toBe(0);
 			expect(stats.prewarmedDisplayValues).toBeGreaterThan(0);
+			expect(stats.prewarmedCellSnapshots).toBeGreaterThan(0);
 		} finally {
 			if (previousRequestIdleCallback === undefined) {
 				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
