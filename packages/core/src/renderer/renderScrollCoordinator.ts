@@ -152,6 +152,10 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			scrollCtx.globalVersion = state.globalVersion;
 			scrollCtx.styleVersion = this.deps.rowRenderer.styleVersion;
 			scrollCtx.loadingVersion = this.deps.rowRenderer.loadingVersion;
+			scrollCtx.styleChangedDuringScroll = this.deps.rowRenderer.styleVersion !== this.deps.rowRenderer.scrollStartStyleVersion;
+			scrollCtx.loadingChangedDuringScroll = this.deps.rowRenderer.loadingVersion !== this.deps.rowRenderer.scrollStartLoadingVersion;
+			scrollCtx.selectionChangedDuringScroll = this.deps.engine.selectionVersion !== this.deps.rowRenderer.scrollStartSelectionVersion;
+			scrollCtx.globalChangedDuringScroll = state.globalVersion !== this.deps.rowRenderer.scrollStartGlobalVersion;
 			scrollCtx.activeEdit = state.activeEdit;
 			scrollCtx.hasDeferredCellStyleRules = compileStyleRules(state.styleRules).hasCellRules;
 			scrollCtx.hasCustomRenderers = plan.hasCustomRenderers;
@@ -193,10 +197,20 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const wasScrolling = this.deps.runtimeState.isScrolling();
 		const phase = this.deps.runtimeState.phase;
 		if (!wasScrolling) {
+			const state = this.deps.engine.stateManager.getState();
+			this.deps.rowRenderer.scrollStartStyleVersion = this.deps.rowRenderer.styleVersion;
+			this.deps.rowRenderer.scrollStartLoadingVersion = this.deps.rowRenderer.loadingVersion;
+			this.deps.rowRenderer.scrollStartSelectionVersion = this.deps.engine.selectionVersion;
+			this.deps.rowRenderer.scrollStartGlobalVersion = state.globalVersion;
 			this.deps.viewportRenderer.setScrollingClass(true);
 			this.deps.runtimeState.transitionTo('scroll-pending');
 		} else if (phase === 'post-scroll') {
 			// New scroll event during post-scroll window: re-enter scroll-pending (increments scrollEpoch).
+			const state = this.deps.engine.stateManager.getState();
+			this.deps.rowRenderer.scrollStartStyleVersion = this.deps.rowRenderer.styleVersion;
+			this.deps.rowRenderer.scrollStartLoadingVersion = this.deps.rowRenderer.loadingVersion;
+			this.deps.rowRenderer.scrollStartSelectionVersion = this.deps.engine.selectionVersion;
+			this.deps.rowRenderer.scrollStartGlobalVersion = state.globalVersion;
 			this.deps.runtimeState.transitionTo('scroll-pending');
 		}
 		this.clearPostScrollDecorationTimer();

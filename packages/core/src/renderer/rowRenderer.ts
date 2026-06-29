@@ -78,6 +78,10 @@ export class RowRenderer<TRowData = unknown> {
 	public styleVersion = 0;
 	public selectionVersion = 0;
 	public loadingVersion = 0;
+	public scrollStartStyleVersion = 0;
+	public scrollStartSelectionVersion = 0;
+	public scrollStartLoadingVersion = 0;
+	public scrollStartGlobalVersion = 0;
 	/** Forwarded to SelectionPaintManager — renderEngine.ts accesses this directly. */
 	public get hoveredRowIndex(): number | null {
 		return this.selectionPaint.hoveredRowIndex;
@@ -436,6 +440,9 @@ export class RowRenderer<TRowData = unknown> {
 
 		const compiledStyleRules = compileStyleRules(state.styleRules);
 		const hasRowClassHook = compiledStyleRules.hasRowRules;
+		const shouldDeferWarmRowVisualRefresh =
+			!!ctx &&
+			(ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll || (hasRowClassHook && ctx.styleChangedDuringScroll));
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
 		// Each slot[i] binds to allRows[i], where slot index is the viewport-position contract.
@@ -479,7 +486,7 @@ export class RowRenderer<TRowData = unknown> {
 					hoistedTotalHeight
 				);
 				slot.updatePosition(top);
-				if (hasRowClassHook && slot.rowKind === 'data') {
+				if (shouldDeferWarmRowVisualRefresh && slot.rowKind === 'data') {
 					this.dirtyRowsAfterScroll.add(r);
 				}
 				continue;
@@ -534,7 +541,7 @@ export class RowRenderer<TRowData = unknown> {
 					hoistedTotalHeight
 				);
 				slot.updatePosition(top);
-				if (hasRowClassHook && slot.rowKind === 'data') {
+				if (shouldDeferWarmRowVisualRefresh && slot.rowKind === 'data') {
 					this.dirtyRowsAfterScroll.add(r);
 				}
 				continue;
@@ -592,7 +599,9 @@ export class RowRenderer<TRowData = unknown> {
 					isScrollFrameActive && !isRowRebind && slot.lastVisualRowId === visualRow.id && slot.rowKind === 'data' && slot.lastClassName !== '';
 				if (canPreserveWarmRowClass) {
 					rowClassName = slot.lastClassName;
-					this.dirtyRowsAfterScroll.add(r);
+					if (shouldDeferWarmRowVisualRefresh) {
+						this.dirtyRowsAfterScroll.add(r);
+					}
 				} else {
 					const isFocusedRow = state.selection.focus?.rowId === node.id;
 					const isSelectedRow = !!state.selection.bounds && r >= state.selection.bounds.minRow && r <= state.selection.bounds.maxRow;

@@ -95,6 +95,10 @@ function makeScrollCtx(store: GridStore<RuntimePerfRow>) {
 		globalVersion: state.globalVersion,
 		styleVersion: 0,
 		loadingVersion: 0,
+		styleChangedDuringScroll: false,
+		loadingChangedDuringScroll: false,
+		selectionChangedDuringScroll: false,
+		globalChangedDuringScroll: false,
 		activeEdit: state.activeEdit,
 		hasDeferredCellStyleRules: !!state.styleRules?.length,
 		hasCustomRenderers: plan.hasCustomRenderers,
@@ -319,6 +323,37 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(stats.cellLeftWrites).toBeLessThanOrEqual(1);
 		expect(stats.rowClassWrites).toBeLessThanOrEqual(1);
 		expect(stats.customRendererMountsDuringScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps deferred style-hook churn bounded to newly entered visible cells during vertical scroll', () => {
+		const columns: ColumnDef<{ id: string; name: string }>[] = [{ field: 'name', header: 'Name', width: 100 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			rowOverscanPx: 120,
+			getRowId: (row) => row.id,
+			styleRules: [{ kind: 'cell', when: () => true, cellClass: 'styled-cell' }],
+		});
+		const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns,
+		});
+		const container = createContainer(500, 160);
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.resetRenderStats();
+
+		store.engine.viewport.setScrollPosition(40, 0);
+		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
+
+		const stats = renderer.getRenderStats();
+		expect(stats.styleHookCallsDuringScroll).toBeLessThanOrEqual(1);
+		expect(stats.dirtyCellsMarkedDuringScroll).toBeLessThanOrEqual(1);
 
 		renderer.unmount();
 		controller.dispose();

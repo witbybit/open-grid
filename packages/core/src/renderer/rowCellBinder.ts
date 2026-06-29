@@ -465,6 +465,10 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, pooledRowId, left, right, width, isRowRebind, isRowLoading, isInVisibleContent } =
 		request;
 	const canPreserveWarmVisuals = !isRowRebind && cellSlot.rowId === node.id && cellSlot.colField === col.field && !isRowLoading;
+	const shouldDeferCellStyleRefresh =
+		ctx.hasDeferredCellStyleRules &&
+		isInVisibleContent &&
+		(!canPreserveWarmVisuals || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll);
 
 	if (col.checkboxSelection) {
 		if (isInVisibleContent) deps.markCellDirtyAfterScroll(cellSlot.element);
@@ -492,7 +496,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (isProgrammatic) deps.clearProgrammaticScrollCell();
 	}
 
-	if (ctx.hasDeferredCellStyleRules && isInVisibleContent) {
+	if (shouldDeferCellStyleRefresh) {
 		deps.markCellDirtyAfterScroll(cellSlot.element);
 		deps.incrementStyleHookCallsDuringScroll();
 	}
@@ -578,7 +582,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const isDataStale = !isRowRebind && canFreezePortal && (globalChanged || rowChanged);
 	const isPortalFrozen = !isRowRebind && canFreezePortal && !isDataStale;
 	const isStaleFrozen = (isRowRebind || isDataStale) && canFreezePortal;
-	const shouldDirtyFrozenPortal = ctx.hasDeferredCellStyleRules || isFocused || isEditing;
+	const shouldDirtyFrozenPortal =
+		isFocused || isEditing || (ctx.hasDeferredCellStyleRules && (ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
 
 	if (isPortalFrozen || isStaleFrozen) {
 		deps.cellRenderer.showPortalContent(cellSlot.element);

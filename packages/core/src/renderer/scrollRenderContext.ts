@@ -15,6 +15,10 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	globalVersion: number;
 	styleVersion: number;
 	loadingVersion: number;
+	styleChangedDuringScroll: boolean;
+	loadingChangedDuringScroll: boolean;
+	selectionChangedDuringScroll: boolean;
+	globalChangedDuringScroll: boolean;
 
 	activeEdit: GridCellPointer | null;
 
