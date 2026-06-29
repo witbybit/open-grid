@@ -32,6 +32,12 @@ export interface RenderStats {
 	maxPortalOpsFlushedInOneChunk: number;
 	focusCallsDuringScroll: number;
 	rootTextContentWritesOnPortalCells: number;
+	cellTextWrites: number;
+	cellClassWrites: number;
+	cellTransformWrites: number;
+	cellWidthWrites: number;
+	cellLeftWrites: number;
+	cellDomReadsAvoided: number;
 	cellsBoundDuringScroll: number;
 	rowsVisitedDuringScroll: number;
 	rowsReboundDuringScroll: number;
@@ -104,6 +110,12 @@ export function createEmptyRenderStats(): RenderStats {
 		maxPortalOpsFlushedInOneChunk: 0,
 		focusCallsDuringScroll: 0,
 		rootTextContentWritesOnPortalCells: 0,
+		cellTextWrites: 0,
+		cellClassWrites: 0,
+		cellTransformWrites: 0,
+		cellWidthWrites: 0,
+		cellLeftWrites: 0,
+		cellDomReadsAvoided: 0,
 		cellsBoundDuringScroll: 0,
 		rowsVisitedDuringScroll: 0,
 		rowsReboundDuringScroll: 0,
@@ -188,6 +200,12 @@ export class RenderOrchestrator {
 		maxPortalOpsFlushedInOneChunk: 0,
 		focusCallsDuringScroll: 0,
 		rootTextContentWritesOnPortalCells: 0,
+		cellTextWrites: 0,
+		cellClassWrites: 0,
+		cellTransformWrites: 0,
+		cellWidthWrites: 0,
+		cellLeftWrites: 0,
+		cellDomReadsAvoided: 0,
 		cellsBoundDuringScroll: 0,
 		rowsVisitedDuringScroll: 0,
 		rowsReboundDuringScroll: 0,

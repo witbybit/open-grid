@@ -2,6 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import { type RenderOrchestrator, type RenderStats } from './renderOrchestrator.js';
 import type { RowRenderer } from './rowRenderer.js';
+import { cellSlotWriteStats, resetCellSlotWriteStats } from './cellSlot.js';
 
 export interface RenderRuntimeStats {
 	rowSlotAssigns: number;
@@ -24,6 +25,12 @@ export interface RenderRuntimeStats {
 	stateReadsDuringScroll: number;
 	focusCallsDuringScroll: number;
 	rootTextContentWritesOnPortalCells: number;
+	cellTextWrites: number;
+	cellClassWrites: number;
+	cellTransformWrites: number;
+	cellWidthWrites: number;
+	cellLeftWrites: number;
+	cellDomReadsAvoided: number;
 	rowsVisitedDuringScroll: number;
 	rowsReboundDuringScroll: number;
 	cellsVisitedDuringScroll: number;
@@ -72,6 +79,12 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		stateReadsDuringScroll: 0,
 		focusCallsDuringScroll: 0,
 		rootTextContentWritesOnPortalCells: 0,
+		cellTextWrites: 0,
+		cellClassWrites: 0,
+		cellTransformWrites: 0,
+		cellWidthWrites: 0,
+		cellLeftWrites: 0,
+		cellDomReadsAvoided: 0,
 		rowsVisitedDuringScroll: 0,
 		rowsReboundDuringScroll: 0,
 		cellsVisitedDuringScroll: 0,
@@ -128,6 +141,12 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		overlayCheapSyncsDuringScroll: deps.runtimeStats.overlayCheapSyncsDuringScroll,
 		focusCallsDuringScroll: deps.runtimeStats.focusCallsDuringScroll,
 		rootTextContentWritesOnPortalCells: deps.runtimeStats.rootTextContentWritesOnPortalCells,
+		cellTextWrites: cellSlotWriteStats.cellTextWrites,
+		cellClassWrites: cellSlotWriteStats.cellClassWrites,
+		cellTransformWrites: cellSlotWriteStats.cellTransformWrites,
+		cellWidthWrites: cellSlotWriteStats.cellWidthWrites,
+		cellLeftWrites: cellSlotWriteStats.cellLeftWrites,
+		cellDomReadsAvoided: cellSlotWriteStats.cellDomReadsAvoided,
 		cellsBoundDuringScroll: deps.rowRenderer.currentScrollCellsPatched,
 		rowsVisitedDuringScroll: deps.rowRenderer.currentScrollRowsVisited,
 		rowsReboundDuringScroll: deps.rowRenderer.currentScrollRowsRebound,
@@ -197,4 +216,5 @@ export function resetRenderTelemetry<TRowData>(
 	engine.customRendererHydrationChunks = 0;
 	engine.customRendererWarmHits = 0;
 	engine.customRendererWarmMisses = 0;
+	resetCellSlotWriteStats();
 }

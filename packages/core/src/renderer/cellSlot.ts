@@ -38,6 +38,15 @@ export const cellSlotWriteStats = {
 	cellDomReadsAvoided: 0,
 };
 
+export function resetCellSlotWriteStats(): void {
+	cellSlotWriteStats.cellTextWrites = 0;
+	cellSlotWriteStats.cellClassWrites = 0;
+	cellSlotWriteStats.cellTransformWrites = 0;
+	cellSlotWriteStats.cellWidthWrites = 0;
+	cellSlotWriteStats.cellLeftWrites = 0;
+	cellSlotWriteStats.cellDomReadsAvoided = 0;
+}
+
 export class CellSlot<TRowData = unknown> {
 	public readonly element: HTMLDivElement;
 	public readonly contentElement: HTMLDivElement;
@@ -242,6 +251,7 @@ export class CellSlot<TRowData = unknown> {
 			if (this.lastRight !== right) {
 				this.lastRight = right;
 				this.element.style.right = toPx(right);
+				cellSlotWriteStats.cellLeftWrites++;
 				domUpdated = true;
 			}
 			if (this.lastLeft !== -1) {
@@ -252,6 +262,7 @@ export class CellSlot<TRowData = unknown> {
 			if (this.lastLeft !== left) {
 				this.lastLeft = left;
 				this.element.style.left = toPx(left);
+				cellSlotWriteStats.cellLeftWrites++;
 				domUpdated = true;
 			}
 			if (this.lastRight !== -1) {
@@ -273,6 +284,7 @@ export class CellSlot<TRowData = unknown> {
 		if (dragShift !== this.lastShift) {
 			this.lastShift = dragShift;
 			this.element.style.transform = dragShift !== 0 ? `translateX(${toPx(dragShift)})` : '';
+			cellSlotWriteStats.cellTransformWrites++;
 			domUpdated = true;
 		}
 
@@ -341,6 +353,7 @@ export class CellSlot<TRowData = unknown> {
 		if (this.lastLeft !== left) {
 			this.lastLeft = left;
 			this.element.style.left = toPx(left);
+			cellSlotWriteStats.cellLeftWrites++;
 			domUpdated = true;
 		}
 		if (this.lastRight !== -1) {
