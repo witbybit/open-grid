@@ -171,6 +171,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			insightVersion: 0,
 			styleVersion: 0,
 			loadingVersion: 0,
+			selectionVersion: 0,
 			styleChangedDuringScroll: false,
 			loadingChangedDuringScroll: false,
 			selectionChangedDuringScroll: false,

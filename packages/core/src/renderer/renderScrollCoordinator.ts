@@ -24,6 +24,25 @@ import { compileStyleRules } from '../styling/styleRules.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
+import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
+
+function isCellSelected(
+	rowIndex: number,
+	colIndex: number,
+	selectionBounds: GridCellRangeBounds | null | undefined
+): boolean {
+	return (
+		!!selectionBounds &&
+		rowIndex >= selectionBounds.minRow &&
+		rowIndex <= selectionBounds.maxRow &&
+		colIndex >= selectionBounds.minCol &&
+		colIndex <= selectionBounds.maxCol
+	);
+}
+
+function isCellFocused(rowId: string, colField: string, focusedCell: GridCellPointer | null | undefined): boolean {
+	return focusedCell?.rowId === rowId && focusedCell?.colField === colField;
+}
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	viewportDirtyAfterScroll: boolean;
@@ -161,6 +180,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			scrollCtx.insightVersion = this.deps.engine.insights.getVersion();
 			scrollCtx.styleVersion = this.deps.rowRenderer.styleVersion;
 			scrollCtx.loadingVersion = this.deps.rowRenderer.loadingVersion;
+			scrollCtx.selectionVersion = this.deps.engine.selectionVersion;
 			scrollCtx.styleChangedDuringScroll = this.deps.rowRenderer.styleVersion !== this.deps.rowRenderer.scrollStartStyleVersion;
 			scrollCtx.loadingChangedDuringScroll = this.deps.rowRenderer.loadingVersion !== this.deps.rowRenderer.scrollStartLoadingVersion;
 			scrollCtx.selectionChangedDuringScroll = this.deps.engine.selectionVersion !== this.deps.rowRenderer.scrollStartSelectionVersion;
@@ -310,6 +330,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const rowModel = this.deps.engine.getVisualRowModel();
 		if (!rowModel) return;
 		const state = this.deps.engine.stateManager.getState();
+		const focusedCell = state.selection.focus;
+		const selectionBounds = state.selection.bounds;
 
 		const columns = this.deps.engine.columns.getDisplayedColumns();
 		const rowCount = rowModel.getVisualRowCount();
@@ -364,13 +386,18 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
 				className += decorationMetadata.classNameSuffix;
 				let stateClassName = '';
+				if (isCellFocused(rowId, col.field, focusedCell)) {
+					stateClassName += stateClassName ? ' og-cell-focused' : 'og-cell-focused';
+				}
+				if (isCellSelected(rowIndex, colIndex, selectionBounds)) {
+					stateClassName += stateClassName ? ' og-cell-selected' : 'og-cell-selected';
+				}
 				if (col.canEdit !== undefined && visualRow.node.data !== null) {
 					const isEditable = normalizeCapabilityResult(
 						col.canEdit({ action: 'edit', row: visualRow.node.data, rowId, colField: col.field })
 					).allowed;
 					if (!isEditable) {
-						className += ' og-cell-readonly';
-						stateClassName = 'og-cell-readonly';
+						stateClassName += stateClassName ? ' og-cell-readonly' : 'og-cell-readonly';
 					}
 				}
 				const tooltipText =
@@ -393,6 +420,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 						insightVersion: this.deps.engine.insights.getVersion(),
 						styleVersion: this.deps.rowRenderer.styleVersion,
 						loadingVersion: this.deps.rowRenderer.loadingVersion,
+						selectionVersion: this.deps.engine.selectionVersion,
 						baseClassName: 'og-cell',
 						stateClassName,
 						decorationClassName: decorationMetadata.classNameSuffix,

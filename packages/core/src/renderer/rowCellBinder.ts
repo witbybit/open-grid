@@ -93,6 +93,7 @@ function getFreshCellSnapshot<TRowData>(
 	if (snapshot.insightVersion !== ctx.insightVersion) return undefined;
 	if (snapshot.styleVersion !== ctx.styleVersion) return undefined;
 	if (snapshot.loadingVersion !== ctx.loadingVersion) return undefined;
+	if (snapshot.selectionVersion !== ctx.selectionVersion) return undefined;
 	if (snapshot.rowVersion !== currentRowVersion) return undefined;
 	return snapshot;
 }
@@ -502,6 +503,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			insightVersion: deps.engine.insights.getVersion(),
 			styleVersion: snapshotVisualVersions.styleVersion,
 			loadingVersion: snapshotVisualVersions.loadingVersion,
+			selectionVersion: deps.engine.selectionVersion,
 			baseClassName: baseCellClassName,
 			stateClassName: subtractNormalizedClassName(cellClassName, baseCellClassName + decorationMetadata.classNameSuffix),
 			decorationClassName: decorationMetadata.classNameSuffix,
@@ -557,8 +559,11 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		isInVisibleContent &&
 		((ctx.hasInsightDecorations && !snapshot) ||
 			(ctx.hasDeferredCellStyleRules &&
-				(ctx.selectionChangedDuringScroll ||
-					(!snapshot && (!canPreserveWarmVisuals || ctx.styleChangedDuringScroll || ctx.loadingChangedDuringScroll)))));
+				(!snapshot &&
+					(ctx.selectionChangedDuringScroll ||
+						!canPreserveWarmVisuals ||
+						ctx.styleChangedDuringScroll ||
+						ctx.loadingChangedDuringScroll))));
 
 	if (col.checkboxSelection) {
 		if (isInVisibleContent) deps.markCellDirtyAfterScroll(cellSlot.element);
@@ -730,7 +735,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		isFocused ||
 		isEditing ||
 		ctx.hasInsightDecorations ||
-		(ctx.hasDeferredCellStyleRules && (ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
+		(ctx.hasDeferredCellStyleRules &&
+			(!snapshot || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
 
 	if (isPortalFrozen || isStaleFrozen) {
 		deps.cellRenderer.showPortalContent(cellSlot.element);

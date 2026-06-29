@@ -16,6 +16,7 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	insightVersion: number;
 	styleVersion: number;
 	loadingVersion: number;
+	selectionVersion: number;
 	styleChangedDuringScroll: boolean;
 	loadingChangedDuringScroll: boolean;
 	selectionChangedDuringScroll: boolean;
