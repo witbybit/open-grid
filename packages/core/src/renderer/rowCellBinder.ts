@@ -131,6 +131,59 @@ function materializeVisiblePrimitiveCompatibilitySnapshot<TRowData>(
 	return snapshot;
 }
 
+function materializeWarmCompatibilitySnapshot<TRowData>(
+	deps: RowCellBinderDeps<TRowData>,
+	request: {
+		cellSlot: CellSlot<TRowData>;
+		node: RowNode<TRowData>;
+		col: ColumnDef<TRowData>;
+		lane: 'left' | 'center' | 'right';
+		ctx: ScrollRenderContext<TRowData>;
+		rowVersion: number;
+	}
+): CellDisplaySnapshot | undefined {
+	const { cellSlot, node, col, lane, ctx, rowVersion } = request;
+	const lastContentMode = cellSlot.lastContentMode;
+	if (!lastContentMode) return undefined;
+	const baseClassName = buildCellPinClass(lane);
+	const stateClassName = subtractNormalizedClassName(cellSlot.lastClassName ?? baseClassName, baseClassName);
+	let contentKind: CellDisplaySnapshot['contentKind'];
+	let contentMode: CellContentMode;
+	let formattedValue = '';
+
+	if (lastContentMode === 'portal') {
+		if (!cellSlot.lastPortalKey) return undefined;
+		contentKind = 'portal-frozen';
+		contentMode = 'portal';
+	} else if (lastContentMode === 'text' || lastContentMode === 'fallback' || lastContentMode === 'empty') {
+		contentKind = lastContentMode;
+		contentMode = lastContentMode;
+		formattedValue = lastContentMode === 'empty' ? '' : (cellSlot.lastFormattedValue ?? '');
+	} else {
+		return undefined;
+	}
+
+	const snapshot = createCellDisplaySnapshot({
+		rowId: node.id,
+		colField: col.field,
+		rowVersion,
+		globalVersion: ctx.globalVersion,
+		insightVersion: ctx.insightVersion,
+		styleVersion: ctx.styleVersion,
+		loadingVersion: ctx.loadingVersion,
+		selectionVersion: ctx.selectionVersion,
+		baseClassName,
+		stateClassName,
+		contentKind,
+		contentMode,
+		formattedValue,
+		title: cellSlot.element.title || '',
+		validationError: cellSlot.element.dataset.validationError,
+	});
+	deps.engine.cellDisplaySnapshots.set(snapshot);
+	return snapshot;
+}
+
 export interface SnapshotVisualVersions {
 	styleVersion: number;
 	loadingVersion: number;
@@ -642,6 +695,16 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	if (!isInVisibleContent) {
 		const canPreserveBufferedContent = canPreserveWarmVisuals && !isRowRebind;
+		if (!snapshot && canPreserveBufferedContent) {
+			snapshot = materializeWarmCompatibilitySnapshot(deps, {
+				cellSlot,
+				node,
+				col,
+				lane,
+				ctx,
+				rowVersion,
+			});
+		}
 		const primitiveSnapshot = isPrimitiveSnapshotContent(snapshot) ? snapshot : undefined;
 		const canReuseSnapshotContent = !!primitiveSnapshot;
 		const canReuseSnapshotPortal = snapshot?.contentMode === 'portal' && !!cellSlot.lastPortalKey;
