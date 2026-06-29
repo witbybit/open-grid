@@ -515,9 +515,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
 			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
 			if (
-				col.valueGetter ||
-				shouldPrimeFormula ||
-				hasRegisteredFormula ||
 				hasInsightDecorations ||
 				isFocused ||
 				isSelected ||
@@ -528,7 +525,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				return true;
 			}
 			recordWork();
-			const formattedValue = this.deps.engine.getCheapDisplayValue(rowId, col.field);
+			const formattedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field) ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
 			this.deps.engine.cellDisplaySnapshots.set(
 				createCellDisplaySnapshot({
 					rowId,

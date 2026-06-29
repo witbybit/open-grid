@@ -254,14 +254,13 @@ describe('bindCellDuringScroll', () => {
 	});
 
 	it('prefers a fresh logical snapshot over warm primitive content for visible cells during scroll', () => {
-		const getCachedDisplayValue = vi.fn(() => 'Cached value that should not win');
 		const cellSlot = new CellSlot(document.createElement('div'));
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell warm-class', 'text', undefined, 'Warm value');
 		cellSlot.lastMountedGlobalVersion = 7;
 		cellSlot.lastMountedRowVersion = 3;
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
 			engine: {
-				data: { getCachedDisplayValue },
+				data: { getCachedDisplayValue: vi.fn(() => 'Cached value that should not win') },
 				hasFormula: vi.fn(() => false),
 				getCellDisplaySnapshot: vi.fn(() => ({
 					rowId: 'r1',
@@ -345,7 +344,83 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.lastFormattedValue).toBe('Snapshot value');
 		expect(cellSlot.lastClassName).toBe('og-cell snap-class');
 		expect(cellSlot.element.title).toBe('Snapshot title');
+		expect((deps.engine.data.getCachedDisplayValue as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+	});
+
+	it('does not read cached display values for a visible primitive cell during scroll when no snapshot exists', () => {
+		const getCachedDisplayValue = vi.fn(() => 'Cached value that should not win');
+		const markCellDirtyAfterScroll = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: { getCachedDisplayValue },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => undefined),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => false),
+				mountCellImmediately: vi.fn(),
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name' } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
+				hasDeferredCellStyleRules: false,
+				hasInsightDecorations: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: false, mode: 'primitive' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: true,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
 		expect(getCachedDisplayValue).not.toHaveBeenCalled();
+		expect(cellSlot.lastFormattedValue).toBe('...');
+		expect(markCellDirtyAfterScroll).toHaveBeenCalledWith(cellSlot.element);
 	});
 
 	it('does not dirty a visible primitive cell solely because insight layers exist when the snapshot insight version is fresh', () => {

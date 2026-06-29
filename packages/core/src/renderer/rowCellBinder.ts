@@ -667,13 +667,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	if (rendererKind === 'loading') {
 		contentMode = 'loading';
 	} else if (rendererKind !== 'portal') {
-		const cachedVal = isPrimitiveSnapshotContent(snapshot) ? undefined : deps.engine.data.getCachedDisplayValue(node.id, col.field);
 		if (isPrimitiveSnapshotContent(snapshot)) {
 			formattedValue = snapshot.formattedValue;
 			contentMode = snapshot.contentMode;
-		} else if (cachedVal !== undefined) {
-			formattedValue = cachedVal;
-			contentMode = formattedValue === '' ? 'empty' : 'text';
 		} else if (canPreserveWarmVisuals && (cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback')) {
 			formattedValue = cellSlot.lastFormattedValue ?? '';
 			contentMode = cellSlot.lastContentMode;
@@ -705,10 +701,6 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			undefined
 		);
 		if (didWritePrimitive) deps.incrementCurrentScrollCellsWritten();
-		if (cachedVal !== undefined) {
-			cellSlot.lastMountedRowVersion = rowVersion;
-			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-		}
 		deps.incrementCellsBoundDuringScroll();
 		return;
 	} else {
