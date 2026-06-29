@@ -323,11 +323,12 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const shouldRefreshWarmVisibleCell = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
 		if (!isScrollFrameActive || !isVisibleContent || !refreshVisibleColumns?.has(columnIndex) || !ctx) return false;
 		const globalDataChanged =
-			cellSlot.lastMountedGlobalVersion !== -1 &&
-			(ctx.globalChangedDuringScroll || ctx.globalVersion !== cellSlot.lastMountedGlobalVersion);
+			cellSlot.lastMountedGlobalVersion !== -1 && (ctx.globalChangedDuringScroll || ctx.globalVersion !== cellSlot.lastMountedGlobalVersion);
 		const rowDataChanged =
 			cellSlot.lastMountedRowVersion !== -1 && currentRowVersion !== undefined && currentRowVersion !== cellSlot.lastMountedRowVersion;
-		return globalDataChanged || rowDataChanged || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll;
+		return (
+			globalDataChanged || rowDataChanged || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll
+		);
 	};
 
 	const pinLeftContainer = deps.ensurePinnedContainer(slot, 'left', pinLeftWidth);

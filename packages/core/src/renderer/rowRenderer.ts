@@ -441,8 +441,7 @@ export class RowRenderer<TRowData = unknown> {
 		const compiledStyleRules = compileStyleRules(state.styleRules);
 		const hasRowClassHook = compiledStyleRules.hasRowRules;
 		const shouldDeferWarmRowVisualRefresh =
-			!!ctx &&
-			(ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll || (hasRowClassHook && ctx.styleChangedDuringScroll));
+			!!ctx && (ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll || (hasRowClassHook && ctx.styleChangedDuringScroll));
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
 		// Each slot[i] binds to allRows[i], where slot index is the viewport-position contract.
@@ -596,7 +595,11 @@ export class RowRenderer<TRowData = unknown> {
 			} else if (visualRow.kind === 'data') {
 				const node = visualRow.node;
 				const canPreserveWarmRowClass =
-					isScrollFrameActive && !isRowRebind && slot.lastVisualRowId === visualRow.id && slot.rowKind === 'data' && slot.lastClassName !== '';
+					isScrollFrameActive &&
+					!isRowRebind &&
+					slot.lastVisualRowId === visualRow.id &&
+					slot.rowKind === 'data' &&
+					slot.lastClassName !== '';
 				if (canPreserveWarmRowClass) {
 					rowClassName = slot.lastClassName;
 					if (shouldDeferWarmRowVisualRefresh) {

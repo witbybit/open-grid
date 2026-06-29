@@ -594,7 +594,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const isPortalFrozen = !isRowRebind && canFreezePortal && !isDataStale;
 	const isStaleFrozen = (isRowRebind || isDataStale) && canFreezePortal;
 	const shouldDirtyFrozenPortal =
-		isFocused || isEditing || (ctx.hasDeferredCellStyleRules && (ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
+		isFocused ||
+		isEditing ||
+		(ctx.hasDeferredCellStyleRules && (ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
 
 	if (isPortalFrozen || isStaleFrozen) {
 		deps.cellRenderer.showPortalContent(cellSlot.element);
