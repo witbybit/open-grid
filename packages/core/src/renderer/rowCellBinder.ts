@@ -86,6 +86,13 @@ function getFreshCellSnapshot<TRowData>(
 	return snapshot;
 }
 
+function storeCellSnapshot<TRowData>(deps: RowCellBinderDeps<TRowData>, snapshot: CellDisplaySnapshot): void {
+	const snapshotLookup = deps.engine as GridEngine<TRowData> & {
+		cellDisplaySnapshots?: { set?: (snapshot: CellDisplaySnapshot) => void };
+	};
+	snapshotLookup.cellDisplaySnapshots?.set?.(snapshot);
+}
+
 function materializeVisiblePrimitiveCompatibilitySnapshot<TRowData>(
 	deps: RowCellBinderDeps<TRowData>,
 	request: {
@@ -127,7 +134,7 @@ function materializeVisiblePrimitiveCompatibilitySnapshot<TRowData>(
 		title: mergeCellSnapshotTitle(cellSlot.element.title || null, decorationMetadata.insightTitle),
 		validationError: decorationMetadata.validationError,
 	});
-	deps.engine.cellDisplaySnapshots.set(snapshot);
+	storeCellSnapshot(deps, snapshot);
 	return snapshot;
 }
 
@@ -180,7 +187,7 @@ function materializeWarmCompatibilitySnapshot<TRowData>(
 		title: cellSlot.element.title || '',
 		validationError: cellSlot.element.dataset.validationError,
 	});
-	deps.engine.cellDisplaySnapshots.set(snapshot);
+	storeCellSnapshot(deps, snapshot);
 	return snapshot;
 }
 
@@ -636,6 +643,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		request;
 	const canPreserveWarmVisuals = !isRowRebind && cellSlot.rowId === node.id && cellSlot.colField === col.field && !isRowLoading;
 	const rowVersion = ctx.rowVersions?.get(node.id) ?? -1;
+	const isWarmBindingVersionFresh =
+		canPreserveWarmVisuals && cellSlot.lastMountedGlobalVersion === ctx.globalVersion && cellSlot.lastMountedRowVersion === rowVersion;
 	const cellKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
 	const portalHost = cellSlot.lastContentMode === 'portal' ? deps.getCellPortalHost(cellSlot.element) : null;
 	const hasEmptyPortalHost =
@@ -665,6 +674,16 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			ctx,
 			rowVersion,
 			canPreserveWarmVisuals,
+		});
+	}
+	if (!snapshot && isInVisibleContent && rendererKind === 'portal' && isWarmBindingVersionFresh) {
+		snapshot = materializeWarmCompatibilitySnapshot(deps, {
+			cellSlot,
+			node,
+			col,
+			lane,
+			ctx,
+			rowVersion,
 		});
 	}
 	const shouldDeferCellStyleRefresh =
