@@ -588,6 +588,7 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 	const pinRightWidth = plan.pinRightWidth;
 	const globalVersion = deps.engine.stateManager.getState().globalVersion;
+	const snapshotVisualVersions = deps.cellBinderDeps.getSnapshotVisualVersions();
 
 	const pinLeftContainer = deps.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 	const pinRightContainer = deps.ensurePinnedContainer(slot, 'right', pinRightWidth);
@@ -639,6 +640,8 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 				rowVersion: -1,
 				globalVersion,
 				insightVersion: deps.engine.insights.getVersion(),
+				styleVersion: snapshotVisualVersions.styleVersion,
+				loadingVersion: snapshotVisualVersions.loadingVersion,
 				baseClassName: 'og-cell og-cell-loading',
 				decorationClassName: cellClassName.replace('og-cell og-cell-loading', '').trim(),
 				contentKind: 'loading',

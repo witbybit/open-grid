@@ -91,8 +91,15 @@ function getFreshCellSnapshot<TRowData>(
 	const currentRowVersion = ctx.rowVersions?.get(rowId) ?? -1;
 	if (snapshot.globalVersion !== ctx.globalVersion) return undefined;
 	if (snapshot.insightVersion !== ctx.insightVersion) return undefined;
+	if (snapshot.styleVersion !== ctx.styleVersion) return undefined;
+	if (snapshot.loadingVersion !== ctx.loadingVersion) return undefined;
 	if (snapshot.rowVersion !== currentRowVersion) return undefined;
 	return snapshot;
+}
+
+export interface SnapshotVisualVersions {
+	styleVersion: number;
+	loadingVersion: number;
 }
 
 export interface RowCellBinderDeps<TRowData = unknown> {
@@ -119,6 +126,7 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	incrementFullCellBinds?: () => void;
 	incrementGeometryOnlyCellBinds?: () => void;
 	incrementCellSlotRebinds?: () => void;
+	getSnapshotVisualVersions: () => SnapshotVisualVersions;
 	/** Live column-reorder preview offset (px) for a displayed column index.
 	 *  0 outside an active header drag. Only consulted on the full-bind path. */
 	getColumnShift?: (colIndex: number) => number;
@@ -261,6 +269,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	const { cellSlot, slotId, node, rowIndex, colIndex, col, lane, pinRightBaseLeft, plan, state, ctx, phase = 'initial' } = request;
 	const access = deps.engine.cellAccess.get(node.id, rowIndex, node, node.data, colIndex, col, undefined, state);
 	const rowVersion = deps.engine.rowVersions.get(node.id) ?? -1;
+	const snapshotVisualVersions = deps.getSnapshotVisualVersions();
 
 	const baseCellClassName = buildCellPinClass(lane);
 	let cellClassName = baseCellClassName;
@@ -491,6 +500,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			rowVersion,
 			globalVersion: state.globalVersion,
 			insightVersion: deps.engine.insights.getVersion(),
+			styleVersion: snapshotVisualVersions.styleVersion,
+			loadingVersion: snapshotVisualVersions.loadingVersion,
 			baseClassName: baseCellClassName,
 			stateClassName: subtractNormalizedClassName(cellClassName, baseCellClassName + decorationMetadata.classNameSuffix),
 			decorationClassName: decorationMetadata.classNameSuffix,
@@ -546,7 +557,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		isInVisibleContent &&
 		((ctx.hasInsightDecorations && !snapshot) ||
 			(ctx.hasDeferredCellStyleRules &&
-				(!canPreserveWarmVisuals || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll)));
+				(ctx.selectionChangedDuringScroll ||
+					(!snapshot && (!canPreserveWarmVisuals || ctx.styleChangedDuringScroll || ctx.loadingChangedDuringScroll)))));
 
 	if (col.checkboxSelection) {
 		if (isInVisibleContent) deps.markCellDirtyAfterScroll(cellSlot.element);

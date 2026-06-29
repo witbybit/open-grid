@@ -196,6 +196,10 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 			incrementCellSlotRebinds: () => {
 				if (this.deps.stateHost.renderStats) this.deps.stateHost.renderStats.cellSlotRebinds++;
 			},
+			getSnapshotVisualVersions: () => ({
+				styleVersion: (this.deps.stateHost as unknown as { styleVersion?: number }).styleVersion ?? 0,
+				loadingVersion: (this.deps.stateHost as unknown as { loadingVersion?: number }).loadingVersion ?? 0,
+			}),
 			getColumnShift: this.deps.getColumnShift,
 		};
 

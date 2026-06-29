@@ -654,6 +654,7 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 					incrementStyleHookCallsDuringScroll: vi.fn(),
 					incrementCellsBoundDuringScroll: vi.fn(),
 					incrementCurrentScrollCellsWritten: vi.fn(),
+					getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 				},
 				markCellDirtyAfterScroll: vi.fn(),
 				releaseCellPortal: vi.fn(),

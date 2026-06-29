@@ -45,6 +45,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -119,6 +120,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: wrote,
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -170,6 +172,8 @@ describe('bindCellDuringScroll', () => {
 					rowVersion: 3,
 					globalVersion: 7,
 					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
 					baseClassName: 'og-cell',
 					stateClassName: 'snap-class',
 					decorationClassName: '',
@@ -208,6 +212,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -222,6 +227,7 @@ describe('bindCellDuringScroll', () => {
 				focusedCell: null,
 				globalVersion: 7,
 				insightVersion: 0,
+				styleVersion: 0,
 				hasDeferredCellStyleRules: false,
 				isScrolling: true,
 				loadingVersion: 0,
@@ -261,6 +267,8 @@ describe('bindCellDuringScroll', () => {
 					rowVersion: 3,
 					globalVersion: 7,
 					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
 					baseClassName: 'og-cell',
 					stateClassName: 'snap-class',
 					decorationClassName: '',
@@ -312,6 +320,7 @@ describe('bindCellDuringScroll', () => {
 				focusedCell: null,
 				globalVersion: 7,
 				insightVersion: 0,
+				styleVersion: 0,
 				hasDeferredCellStyleRules: false,
 				isScrolling: true,
 				loadingVersion: 0,
@@ -349,6 +358,8 @@ describe('bindCellDuringScroll', () => {
 					rowVersion: 3,
 					globalVersion: 7,
 					insightVersion: 4,
+					styleVersion: 0,
+					loadingVersion: 0,
 					baseClassName: 'og-cell',
 					stateClassName: '',
 					decorationClassName: 'og-cell-validation-error',
@@ -387,6 +398,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll,
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -401,6 +413,7 @@ describe('bindCellDuringScroll', () => {
 				focusedCell: null,
 				globalVersion: 7,
 				insightVersion: 4,
+				styleVersion: 0,
 				hasDeferredCellStyleRules: false,
 				hasInsightDecorations: true,
 				isScrolling: true,
@@ -424,6 +437,100 @@ describe('bindCellDuringScroll', () => {
 		expect(incrementStyleHookCallsDuringScroll).not.toHaveBeenCalled();
 	});
 
+	it('does not dirty a visible primitive cell solely because style rules changed when the snapshot style version is fresh', () => {
+		const markCellDirtyAfterScroll = vi.fn();
+		const incrementStyleHookCallsDuringScroll = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 3,
+					globalVersion: 7,
+					insightVersion: 0,
+					styleVersion: 5,
+					loadingVersion: 0,
+					baseClassName: 'og-cell',
+					stateClassName: 'styled-cell',
+					decorationClassName: '',
+					classTokens: ['og-cell', 'styled-cell'],
+					className: 'og-cell styled-cell',
+					contentKind: 'text',
+					contentMode: 'text',
+					formattedValue: 'Snapshot value',
+					title: '',
+				})),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => false),
+				mountCellImmediately: vi.fn(),
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll,
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 5, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name' } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				insightVersion: 0,
+				styleVersion: 5,
+				hasDeferredCellStyleRules: true,
+				hasInsightDecorations: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				styleChangedDuringScroll: true,
+				selectionChangedDuringScroll: false,
+				plan: { columnPlans: [{ isCustom: false, mode: 'primitive' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(cellSlot.lastClassName).toBe('og-cell styled-cell');
+		expect(markCellDirtyAfterScroll).not.toHaveBeenCalled();
+		expect(incrementStyleHookCallsDuringScroll).not.toHaveBeenCalled();
+	});
+
 	it('reuses a fresh logical portal snapshot for buffered offscreen cells instead of downgrading them to empty', () => {
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
@@ -440,6 +547,8 @@ describe('bindCellDuringScroll', () => {
 					rowVersion: 3,
 					globalVersion: 7,
 					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
 					baseClassName: 'og-cell',
 					stateClassName: 'portal-warm',
 					decorationClassName: '',
@@ -477,6 +586,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -491,6 +601,7 @@ describe('bindCellDuringScroll', () => {
 				focusedCell: null,
 				globalVersion: 7,
 				insightVersion: 0,
+				styleVersion: 0,
 				hasDeferredCellStyleRules: false,
 				isScrolling: true,
 				loadingVersion: 0,
@@ -542,6 +653,8 @@ describe('bindCellDuringScroll', () => {
 					rowVersion: 3,
 					globalVersion: 7,
 					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
 					baseClassName: 'og-cell',
 					stateClassName: 'portal-warm',
 					decorationClassName: '',
@@ -575,6 +688,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -589,6 +703,7 @@ describe('bindCellDuringScroll', () => {
 				focusedCell: null,
 				globalVersion: 7,
 				insightVersion: 0,
+				styleVersion: 0,
 				hasDeferredCellStyleRules: false,
 				isScrolling: true,
 				loadingVersion: 0,
@@ -658,6 +773,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -744,6 +860,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -824,6 +941,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -902,6 +1020,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {
@@ -978,6 +1097,7 @@ describe('bindCellDuringScroll', () => {
 			incrementStyleHookCallsDuringScroll: vi.fn(),
 			incrementCellsBoundDuringScroll: vi.fn(),
 			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
 		};
 
 		bindCellDuringScroll(deps, {

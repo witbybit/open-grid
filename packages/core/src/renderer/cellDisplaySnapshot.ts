@@ -9,6 +9,8 @@ export interface CellDisplaySnapshot {
 	rowVersion: number;
 	globalVersion: number;
 	insightVersion: number;
+	styleVersion: number;
+	loadingVersion: number;
 	baseClassName: string;
 	stateClassName: string;
 	decorationClassName: string;
@@ -74,6 +76,8 @@ export interface CreateCellDisplaySnapshotOptions {
 	rowVersion: number;
 	globalVersion: number;
 	insightVersion: number;
+	styleVersion: number;
+	loadingVersion: number;
 	baseClassName: string;
 	stateClassName?: string;
 	decorationClassName?: string;
@@ -95,6 +99,8 @@ export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOpti
 		rowVersion: options.rowVersion,
 		globalVersion: options.globalVersion,
 		insightVersion: options.insightVersion,
+		styleVersion: options.styleVersion,
+		loadingVersion: options.loadingVersion,
 		baseClassName,
 		stateClassName,
 		decorationClassName,

@@ -391,6 +391,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 						rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
 						globalVersion: state.globalVersion,
 						insightVersion: this.deps.engine.insights.getVersion(),
+						styleVersion: this.deps.rowRenderer.styleVersion,
+						loadingVersion: this.deps.rowRenderer.loadingVersion,
 						baseClassName: 'og-cell',
 						stateClassName,
 						decorationClassName: decorationMetadata.classNameSuffix,
