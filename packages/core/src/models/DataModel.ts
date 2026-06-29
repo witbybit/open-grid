@@ -103,6 +103,12 @@ export class DataModel<TRowData = unknown> {
 		}
 
 		const col = this.runtime.getColumnDef(colField);
+		const rawValue = this.getRawCellValueInternal(rowId, colField, false);
+		if (this.runtime.hasFormula(rowId, colField) || (typeof rawValue === 'string' && rawValue.startsWith('='))) {
+			const value = this.getCellValueInternal(rowId, colField, false);
+			return value == null ? '' : String(value);
+		}
+
 		if (!col?.valueGetter) {
 			return this.getCachedDisplayValue(rowId, colField);
 		}
@@ -126,7 +132,7 @@ export class DataModel<TRowData = unknown> {
 		return value == null ? '' : String(value);
 	}
 
-	public getRawCellValue = (rowId: string, colField: string): unknown => {
+	private getRawCellValueInternal(rowId: string, colField: string, trackDuringScroll: boolean): unknown {
 		if (this.isRowLoading(rowId)) {
 			return '';
 		}
@@ -145,17 +151,21 @@ export class DataModel<TRowData = unknown> {
 			if (!row) return '';
 			if (col.valueGetter) {
 				const dummyNode = new RowNode<TRowData>(rowId, row);
-				return this.getValueGetterValue(rowId, colField, col, dummyNode);
+				return this.getValueGetterValueInternal(rowId, colField, col, dummyNode, trackDuringScroll);
 			}
 			const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
 			return getter(row);
 		}
 
 		if (col.valueGetter) {
-			return this.getValueGetterValue(rowId, colField, col, node);
+			return this.getValueGetterValueInternal(rowId, colField, col, node, trackDuringScroll);
 		}
 		const getter = this.compiledGetters.get(colField) || compilePathGetter(colField);
 		return node.getCellValue(colField, getter);
+	}
+
+	public getRawCellValue = (rowId: string, colField: string): unknown => {
+		return this.getRawCellValueInternal(rowId, colField, true);
 	};
 
 	public getStoredCellValue = (rowId: string, colField: string): unknown => {
@@ -249,11 +259,11 @@ export class DataModel<TRowData = unknown> {
 		return this.getCellValue(rowId, colField);
 	}
 
-	public getCellValue = (rowId: string, colField: string): unknown => {
+	private getCellValueInternal(rowId: string, colField: string, trackDuringScroll: boolean): unknown {
 		if (this.runtime.isScrolling() || this.runtime.isScrollFrameActive()) {
-			this.runtime.recordGetCellValueDuringScroll();
+			if (trackDuringScroll) this.runtime.recordGetCellValueDuringScroll();
 		}
-		const rawVal = this.getRawCellValue(rowId, colField);
+		const rawVal = this.getRawCellValueInternal(rowId, colField, trackDuringScroll);
 		if (typeof rawVal === 'string' && rawVal.startsWith('=')) {
 			if (!this.runtime.hasFormula(rowId, colField) || this.runtime.getFormula(rowId, colField) !== rawVal) {
 				this.runtime.syncFormulaForCell(rowId, colField, rawVal);
@@ -266,11 +276,15 @@ export class DataModel<TRowData = unknown> {
 
 		if (this.runtime.hasFormula(rowId, colField)) {
 			if (this.runtime.isScrolling() || this.runtime.isScrollFrameActive()) {
-				this.runtime.recordFormulaDuringScroll();
+				if (trackDuringScroll) this.runtime.recordFormulaDuringScroll();
 			}
-			return this.runtime.evaluateFormulaCell(rowId, colField, (rId, cField) => this.getRawCellValue(rId, cField));
+			return this.runtime.evaluateFormulaCell(rowId, colField, (rId, cField) => this.getRawCellValueInternal(rId, cField, trackDuringScroll));
 		}
 
 		return rawVal;
+	}
+
+	public getCellValue = (rowId: string, colField: string): unknown => {
+		return this.getCellValueInternal(rowId, colField, true);
 	};
 }

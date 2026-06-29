@@ -22,6 +22,8 @@ import type { ViewportRenderer } from './viewportRenderer.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
 import { compileStyleRules } from '../styling/styleRules.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
+import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
+import { collectCellDecorationSnapshotMetadata, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	viewportDirtyAfterScroll: boolean;
@@ -296,6 +298,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.state.prewarmTimer = this.deps.gridScheduler.idle((deadline) => {
 			this.state.prewarmTimer = null;
 			this.state.prewarmScheduled = false;
+			this.deps.renderStats.prewarmPasses++;
 			this.runApproachBandPrewarm(deadline);
 		});
 	}
@@ -305,6 +308,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		if (!request) return;
 		const rowModel = this.deps.engine.getVisualRowModel();
 		if (!rowModel) return;
+		const state = this.deps.engine.stateManager.getState();
 
 		const columns = this.deps.engine.columns.getDisplayedColumns();
 		const rowCount = rowModel.getVisualRowCount();
@@ -334,10 +338,60 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const visualRow = rowModel.getVisualRow(rowIndex);
 			if (visualRow?.kind !== 'data') return true;
 			const col = columns[colIndex];
-			if (!col?.valueGetter) return true;
-			if (this.deps.engine.getCachedDisplayValue(visualRow.node.id, col.field) !== undefined) return true;
-			const primedValue = this.deps.engine.primeDisplayValue(visualRow.node.id, col.field);
-			if (primedValue !== undefined) primed++;
+			if (!col) return true;
+			const rowId = visualRow.node.id;
+			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
+			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
+			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
+			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
+			const hasInsightDecorations = cellDecorations.length > 0;
+			if (!col.valueGetter && !shouldPrimeFormula && !hasRegisteredFormula && !hasInsightDecorations) return true;
+			const cachedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field);
+			if (col.valueGetter) {
+				if (cachedValue !== undefined) return true;
+			} else if (hasRegisteredFormula) {
+				if (cachedValue !== undefined) return true;
+			}
+			const primedValue =
+				col.valueGetter || shouldPrimeFormula || hasRegisteredFormula ? this.deps.engine.primeDisplayValue(rowId, col.field) : cachedValue;
+			if (primedValue !== undefined) {
+				primed++;
+				this.deps.renderStats.prewarmedDisplayValues++;
+			}
+			if (hasInsightDecorations) {
+				let className = 'og-cell';
+				const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
+				className += decorationMetadata.classNameSuffix;
+				if (col.canEdit !== undefined && visualRow.node.data !== null) {
+					const isEditable = normalizeCapabilityResult(
+						col.canEdit({ action: 'edit', row: visualRow.node.data, rowId, colField: col.field })
+					).allowed;
+					if (!isEditable) className += ' og-cell-readonly';
+				}
+				const tooltipText =
+					col.tooltip !== undefined && visualRow.node.data !== null
+						? typeof col.tooltip === 'string'
+							? col.tooltip
+							: col.tooltip({
+									row: visualRow.node.data,
+									rowId,
+									colField: col.field,
+									value: rawValue ?? primedValue,
+								})
+						: null;
+				this.deps.engine.cellDisplaySnapshots.set({
+					rowId,
+					colField: col.field,
+					rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+					globalVersion: state.globalVersion,
+					className,
+					contentMode: primedValue && primedValue !== '' ? 'text' : 'empty',
+					formattedValue: primedValue ?? '',
+					title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
+					validationError: decorationMetadata.validationError,
+				});
+				this.deps.renderStats.prewarmedCellSnapshots++;
+			}
 			return canContinue();
 		};
 
@@ -367,6 +421,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.state.prewarmTimer = this.deps.gridScheduler.idle((nextDeadline) => {
 				this.state.prewarmTimer = null;
 				this.state.prewarmScheduled = false;
+				this.deps.renderStats.prewarmPasses++;
 				this.runApproachBandPrewarm(nextDeadline);
 			});
 		}

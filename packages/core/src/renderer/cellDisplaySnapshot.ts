@@ -1,4 +1,5 @@
 import type { CellContentMode } from './cellSlot.js';
+import type { GridCellDecoration } from '../insights/insightTypes.js';
 
 export interface CellDisplaySnapshot {
 	rowId: string;
@@ -10,6 +11,29 @@ export interface CellDisplaySnapshot {
 	formattedValue: string;
 	title: string;
 	validationError?: string;
+}
+
+export interface CellDecorationSnapshotMetadata {
+	classNameSuffix: string;
+	insightTitle: string;
+	validationError?: string;
+}
+
+export function collectCellDecorationSnapshotMetadata(decorations: readonly GridCellDecoration[]): CellDecorationSnapshotMetadata {
+	let classNameSuffix = '';
+	let insightTitle = '';
+	let validationError: string | undefined;
+	for (const decoration of decorations) {
+		if (decoration.className) classNameSuffix += ` ${decoration.className}`;
+		if (decoration.title) insightTitle = insightTitle ? `${insightTitle}\n${decoration.title}` : decoration.title;
+		if (decoration.kind === 'validationError' && decoration.title) validationError = decoration.title;
+	}
+	return { classNameSuffix, insightTitle, validationError };
+}
+
+export function mergeCellSnapshotTitle(tooltipText: string | null, insightTitle: string): string {
+	if (tooltipText && insightTitle) return `${tooltipText}\n${insightTitle}`;
+	return tooltipText || insightTitle || '';
 }
 
 function buildCellSnapshotKey(rowId: string, colField: string): string {

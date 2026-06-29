@@ -323,12 +323,10 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const getWarmVisibleCellStatus = (cellSlot: CellSlot<TRowData>) => {
 		if (!ctx) return { needsImmediateWake: false, needsDeferredRefresh: false };
 		const lastPortalKey = cellSlot.lastPortalKey;
-		const portalHost =
-			cellSlot.lastContentMode === 'portal' ? deps.cellBinderDeps.getCellPortalHost(cellSlot.element) : null;
+		const portalHost = cellSlot.lastContentMode === 'portal' ? deps.cellBinderDeps.getCellPortalHost(cellSlot.element) : null;
 		const hasStalePortalMount =
 			cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !deps.cellBinderDeps.portalMountManager.isCellMounted(lastPortalKey);
-		const hasEmptyPortalHost =
-			cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !!portalHost && portalHost.childElementCount === 0;
+		const hasEmptyPortalHost = cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !!portalHost && portalHost.childElementCount === 0;
 		const hasSuspiciousWarmState =
 			cellSlot.lastMountedRowVersion === -1 ||
 			cellSlot.lastMountedGlobalVersion === -1 ||

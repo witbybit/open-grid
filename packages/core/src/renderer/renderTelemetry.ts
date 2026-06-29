@@ -59,6 +59,9 @@ export interface RenderRuntimeStats {
 	sameWindowBailouts: number;
 	cellsBoundDuringScroll: number;
 	runtimeLimitsClamped?: number;
+	prewarmedDisplayValues: number;
+	prewarmPasses: number;
+	prewarmedCellSnapshots: number;
 }
 
 export function createRenderRuntimeStats(): RenderRuntimeStats {
@@ -115,6 +118,9 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		cellsSkippedDuringScroll: 0,
 		sameWindowBailouts: 0,
 		cellsBoundDuringScroll: 0,
+		prewarmedDisplayValues: 0,
+		prewarmPasses: 0,
+		prewarmedCellSnapshots: 0,
 	};
 }
 
@@ -188,6 +194,9 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		customRendererHydrationChunks: deps.engine.customRendererHydrationChunks,
 		customRendererWarmHits: deps.engine.customRendererWarmHits,
 		customRendererWarmMisses: deps.engine.customRendererWarmMisses,
+		prewarmedDisplayValues: deps.runtimeStats.prewarmedDisplayValues,
+		prewarmPasses: deps.runtimeStats.prewarmPasses,
+		prewarmedCellSnapshots: deps.runtimeStats.prewarmedCellSnapshots,
 		...portalScrollStats,
 		hotDomReleases: deps.runtimeStats.rowsRecycledPerScrollFrame.reduce((a: number, b: number) => a + b, 0),
 		coldDomReleases: 0,

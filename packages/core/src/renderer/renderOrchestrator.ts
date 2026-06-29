@@ -78,6 +78,9 @@ export interface RenderStats {
 	customRendererHydrationChunks?: number;
 	customRendererWarmHits?: number;
 	customRendererWarmMisses?: number;
+	prewarmedDisplayValues?: number;
+	prewarmPasses?: number;
+	prewarmedCellSnapshots?: number;
 }
 
 /** Returns a zero-value RenderStats object. Used by GridStore.getRenderStats() when no render engine is mounted. */
@@ -153,6 +156,9 @@ export function createEmptyRenderStats(): RenderStats {
 		customRendererHydrationChunks: 0,
 		customRendererWarmHits: 0,
 		customRendererWarmMisses: 0,
+		prewarmedDisplayValues: 0,
+		prewarmPasses: 0,
+		prewarmedCellSnapshots: 0,
 		cellAccessReadsDuringScroll: 0,
 		cellClassComputesDuringScroll: 0,
 		dirtyCellsMarkedDuringScroll: 0,
