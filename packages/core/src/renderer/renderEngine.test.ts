@@ -1396,10 +1396,10 @@ describe('RenderEngine', () => {
 
 		const unmountCount = (renderer.portalMountManager.onUnmountCellContent as ReturnType<typeof vi.fn>).mock.calls.length;
 		const stats = renderer.getRenderStats();
-		// Offscreen buffered portals are now dropped during scroll so only the visible band stays hot.
+		// Offscreen recycled portals may be internally released, but they must not synchronously
+		// unmount or flush while the visible band stays live during scroll.
 		expect(unmountCount).toBe(0);
 		expect(flushPortalContent).not.toHaveBeenCalled();
-		expect(stats.portalReleasesDuringScroll).toBe(0);
 		expect(stats.portalFlushesDuringScroll).toBe(0);
 		// Visible portals stay live immediately during scroll, whether via in-place update or remount.
 		expect(stats.portalMountsDuringScroll).toBeGreaterThanOrEqual(0);
@@ -2345,6 +2345,91 @@ describe('RenderEngine', () => {
 		expect(stats.portalFlushesDuringScroll).toBe(0);
 		// New columns entering the viewport are mounted immediately.
 		expect(stats.portalMountsDuringScroll).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('wakes buffered offscreen columns when horizontal scroll moves them into the visible viewport', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+			valueGetter: ({ row }: { row: Record<string, string> }) => `${row.id}:${index}`,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 4,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(1);
+		callbacks[0](0);
+
+		scrollViewport.scrollLeft = 200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(2);
+		callbacks[1](0);
+
+		const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+		expect(row10).not.toBeNull();
+		const newlyVisibleCell = row10.querySelector('[data-col-field="col_6"]') as HTMLDivElement;
+		expect(newlyVisibleCell).not.toBeNull();
+		expect(newlyVisibleCell.textContent).not.toBe('row-2:6');
+
+		let i = 2;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+
+		expect(newlyVisibleCell.textContent).toBe('row-10:6');
 
 		renderer.unmount();
 		controller.dispose();

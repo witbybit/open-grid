@@ -429,10 +429,18 @@ export class RowRenderer<TRowData = unknown> {
 		const nextVisibleColStart = nextWindow.visibleColStart ?? nextWindow.colStart;
 		const nextVisibleColEnd = nextWindow.visibleColEnd ?? nextWindow.colEnd;
 		const visibleColumnsChanged = prevVisibleColStart !== nextVisibleColStart || prevVisibleColEnd !== nextVisibleColEnd;
-		const refreshVisibleColumns =
+		const visibleColumnsEntered =
 			isScrollFrameActive && visibleColumnsChanged
-				? new Set(delta.colsEntered.filter((c) => c >= nextVisibleColStart && c <= nextVisibleColEnd))
+				? (() => {
+						const entered = new Set<number>();
+						for (let c = nextVisibleColStart; c <= nextVisibleColEnd; c++) {
+							if (c < prevVisibleColStart || c > prevVisibleColEnd) entered.add(c);
+						}
+						return entered;
+					})()
 				: null;
+		const refreshVisibleColumns =
+			visibleColumnsEntered && visibleColumnsEntered.size > 0 ? visibleColumnsEntered : null;
 		const canTrustStableIdentity =
 			!!this.currentWindow &&
 			(this.currentWindow.rowModelVersion ?? 0) === (nextWindow.rowModelVersion ?? 0) &&

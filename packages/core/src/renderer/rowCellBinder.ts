@@ -511,15 +511,23 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	}
 
 	if (!isInVisibleContent) {
-		const preservedContentMode: CellContentMode = cellSlot.lastPortalKey
-			? 'portal'
+		const canPreserveBufferedContent = canPreserveWarmVisuals && !isRowRebind;
+		if (!canPreserveBufferedContent && cellSlot.lastPortalKey) {
+			deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+		}
+		const preservedContentMode: CellContentMode = canPreserveBufferedContent
+			? cellSlot.lastPortalKey
+				? 'portal'
+				: rendererKind === 'loading'
+					? 'loading'
+					: cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback'
+						? cellSlot.lastContentMode
+						: cellSlot.lastContentMode === 'custom'
+							? 'custom'
+							: 'empty'
 			: rendererKind === 'loading'
 				? 'loading'
-				: cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback'
-					? cellSlot.lastContentMode
-					: cellSlot.lastContentMode === 'custom'
-						? 'custom'
-						: 'empty';
+				: 'empty';
 		const didWriteBuffered = cellSlot.update(
 			colIndex,
 			col.field,
@@ -531,8 +539,10 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			cellClassName,
 			preservedContentMode,
 			undefined,
-			preservedContentMode === 'text' || preservedContentMode === 'fallback' ? (cellSlot.lastFormattedValue ?? '') : '',
-			preservedContentMode === 'portal' ? cellSlot.lastPortalKey : undefined
+			canPreserveBufferedContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
+				? (cellSlot.lastFormattedValue ?? '')
+				: '',
+			canPreserveBufferedContent && preservedContentMode === 'portal' ? cellSlot.lastPortalKey : undefined
 		);
 		if (didWriteBuffered) deps.incrementCurrentScrollCellsWritten();
 		deps.incrementCellsBoundDuringScroll();
