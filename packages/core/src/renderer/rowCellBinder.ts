@@ -472,9 +472,13 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const canPreserveWarmVisuals = !isRowRebind && cellSlot.rowId === node.id && cellSlot.colField === col.field && !isRowLoading;
 	const rowVersion = ctx.rowVersions?.get(node.id) ?? -1;
 	const shouldDeferCellStyleRefresh =
-		ctx.hasDeferredCellStyleRules &&
 		isInVisibleContent &&
-		(!canPreserveWarmVisuals || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll);
+		(ctx.hasInsightDecorations ||
+			(ctx.hasDeferredCellStyleRules &&
+				(!canPreserveWarmVisuals ||
+					ctx.styleChangedDuringScroll ||
+					ctx.selectionChangedDuringScroll ||
+					ctx.loadingChangedDuringScroll)));
 
 	if (col.checkboxSelection) {
 		if (isInVisibleContent) deps.markCellDirtyAfterScroll(cellSlot.element);
@@ -596,6 +600,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const shouldDirtyFrozenPortal =
 		isFocused ||
 		isEditing ||
+		ctx.hasInsightDecorations ||
 		(ctx.hasDeferredCellStyleRules && (ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
 
 	if (isPortalFrozen || isStaleFrozen) {

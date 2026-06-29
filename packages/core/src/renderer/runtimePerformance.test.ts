@@ -102,6 +102,7 @@ function makeScrollCtx(store: GridStore<RuntimePerfRow>) {
 		activeEdit: state.activeEdit,
 		hasDeferredCellStyleRules: !!state.styleRules?.length,
 		hasCustomRenderers: plan.hasCustomRenderers,
+		hasInsightDecorations: false,
 		plan,
 		visibleRowRange: store.engine.viewport.getVisibleRowRange(store.engine.getVisualRowModel()?.getVisualRowCount() ?? 0),
 		visibleColRange: store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),

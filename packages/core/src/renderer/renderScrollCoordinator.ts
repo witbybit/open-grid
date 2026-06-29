@@ -159,6 +159,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			scrollCtx.activeEdit = state.activeEdit;
 			scrollCtx.hasDeferredCellStyleRules = compileStyleRules(state.styleRules).hasCellRules;
 			scrollCtx.hasCustomRenderers = plan.hasCustomRenderers;
+			scrollCtx.hasInsightDecorations = this.deps.engine.insights.size > 0;
 			scrollCtx.plan = plan;
 			scrollCtx.visibleRowRange.startIdx = nextWindow.visibleRowStart ?? nextWindow.rowStart;
 			scrollCtx.visibleRowRange.endIdx = nextWindow.visibleRowEnd ?? nextWindow.rowEnd;

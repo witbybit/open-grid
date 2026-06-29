@@ -1868,6 +1868,103 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('restores validation decorations when a row scrolls out and back in', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+
+		const columns = [{ field: 'name', header: 'Name', width: 160 }];
+		const store = new GridStore<{ id: string; name: string }>(
+			{
+				columns,
+				defaultRowHeight: 40,
+				defaultColWidth: 160,
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						cellRules: [{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) }],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 80 }, (_, index) => ({
+				id: `row-${index}`,
+				name: index === 30 ? '' : `Name ${index}`,
+			})),
+			columns,
+		});
+		await store.integrity.validateCell('row-30', 'name');
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const flushScrollIdle = async () => {
+			let i = 0;
+			while (i < callbacks.length) {
+				callbacks[i](0);
+				i++;
+			}
+			await Promise.resolve();
+			await Promise.resolve();
+			while (i < callbacks.length) {
+				callbacks[i](0);
+				i++;
+			}
+		};
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		const findInvalidCell = () =>
+			container.querySelector('[data-row-id="row-30"][data-col-field="name"]') as HTMLDivElement | null;
+
+		scrollViewport.scrollTop = 1200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await flushScrollIdle();
+
+		let invalidCell = findInvalidCell();
+		expect(invalidCell).not.toBeNull();
+		expect(invalidCell?.className).toContain('og-cell-validation-error');
+		expect(invalidCell?.dataset.validationError).toBe('Name is required');
+
+		scrollViewport.scrollTop = 0;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await flushScrollIdle();
+
+		scrollViewport.scrollTop = 1200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await flushScrollIdle();
+
+		invalidCell = findInvalidCell();
+		expect(invalidCell).not.toBeNull();
+		expect(invalidCell?.className).toContain('og-cell-validation-error');
+		expect(invalidCell?.dataset.validationError).toBe('Name is required');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('defers loading skeleton DOM queries until after scroll idle', async () => {
 		vi.useFakeTimers();
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {

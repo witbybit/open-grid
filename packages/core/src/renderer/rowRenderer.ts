@@ -440,8 +440,13 @@ export class RowRenderer<TRowData = unknown> {
 
 		const compiledStyleRules = compileStyleRules(state.styleRules);
 		const hasRowClassHook = compiledStyleRules.hasRowRules;
+		const hasInsightDecorations = this.engine.insights.size > 0;
 		const shouldDeferWarmRowVisualRefresh =
-			!!ctx && (ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll || (hasRowClassHook && ctx.styleChangedDuringScroll));
+			!!ctx &&
+			(ctx.selectionChangedDuringScroll ||
+				ctx.loadingChangedDuringScroll ||
+				hasInsightDecorations ||
+				(hasRowClassHook && ctx.styleChangedDuringScroll));
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
 		// Each slot[i] binds to allRows[i], where slot index is the viewport-position contract.

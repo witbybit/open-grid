@@ -322,12 +322,29 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const currentRowVersion = ctx?.rowVersions?.get(node.id);
 	const shouldRefreshWarmVisibleCell = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
 		if (!isScrollFrameActive || !isVisibleContent || !refreshVisibleColumns?.has(columnIndex) || !ctx) return false;
+		const lastPortalKey = cellSlot.lastPortalKey;
+		const hasStalePortalMount =
+			cellSlot.lastContentMode === 'portal' &&
+			!!lastPortalKey &&
+			!deps.cellBinderDeps.portalMountManager.isCellMounted(lastPortalKey);
+		const hasSuspiciousWarmState =
+			cellSlot.lastMountedRowVersion === -1 ||
+			cellSlot.lastMountedGlobalVersion === -1 ||
+			cellSlot.lastContentMode === 'pending' ||
+			(cellSlot.lastContentMode === 'text' && cellSlot.lastFormattedValue === '...') ||
+			hasStalePortalMount;
 		const globalDataChanged =
 			cellSlot.lastMountedGlobalVersion !== -1 && (ctx.globalChangedDuringScroll || ctx.globalVersion !== cellSlot.lastMountedGlobalVersion);
 		const rowDataChanged =
 			cellSlot.lastMountedRowVersion !== -1 && currentRowVersion !== undefined && currentRowVersion !== cellSlot.lastMountedRowVersion;
 		return (
-			globalDataChanged || rowDataChanged || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll
+			hasSuspiciousWarmState ||
+			ctx.hasInsightDecorations ||
+			globalDataChanged ||
+			rowDataChanged ||
+			ctx.styleChangedDuringScroll ||
+			ctx.selectionChangedDuringScroll ||
+			ctx.loadingChangedDuringScroll
 		);
 	};
 

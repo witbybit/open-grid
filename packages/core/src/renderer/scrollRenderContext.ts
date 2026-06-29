@@ -24,6 +24,7 @@ export interface ScrollRenderContext<TRowData = unknown> {
 
 	hasDeferredCellStyleRules: boolean;
 	hasCustomRenderers: boolean;
+	hasInsightDecorations: boolean;
 
 	plan: CompiledGridPlan<TRowData>;
 	visibleRowRange: { startIdx: number; endIdx: number };

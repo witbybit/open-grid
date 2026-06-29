@@ -174,6 +174,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			activeEdit: null,
 			hasDeferredCellStyleRules: false,
 			hasCustomRenderers: false,
+			hasInsightDecorations: false,
 			plan: this.engine.columns.getCompiledPlan(),
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
 			visibleColRange: { startIdx: 0, endIdx: 0 },
