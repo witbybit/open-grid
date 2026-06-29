@@ -389,11 +389,8 @@ export class CellSlot<TRowData = unknown> {
 		this.rowIndex = -1;
 		this.rowId = '';
 		this.lastRawValue = undefined;
-		this.lastPortalKey = undefined;
 		this.lastMountedRowVersion = -1;
 		this.lastMountedGlobalVersion = -1;
-		delete this.element.dataset.cellKey;
-		delete this.element.dataset.contentMode;
 		// Use JS-side flag to skip DOM read in hot path.
 		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');

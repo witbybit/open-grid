@@ -96,4 +96,16 @@ describe('RowSlot & CellSlot Controllers', () => {
 		expect(cellEl.parentNode).toBe(rowEl);
 		expect(row.cellsByColumnId.get('name')).toBe(cell);
 	});
+
+	it('unbindHot() preserves warm row dataset mirrors for same-row rebound', () => {
+		const rowEl = document.createElement('div');
+		const row = new RowSlot('row-1', rowEl);
+
+		row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');
+		row.unbindHot();
+
+		expect(rowEl.dataset.rowIndex).toBe('2');
+		expect(rowEl.dataset.rowId).toBe('row-2');
+		expect(rowEl.getAttribute('aria-rowindex')).toBe('3');
+	});
 });

@@ -183,12 +183,9 @@ export class RowSlot<TRowData = unknown> {
 		this.rowHeight = -1;
 		this.keepAlive = false;
 		this.lastPortalRowKey = undefined;
-		delete this.element.dataset.rowIndex;
-		delete this.element.dataset.rowId;
-		this.element.removeAttribute('aria-rowindex');
 		this.element.style.visibility = 'hidden';
-		// Cell DOM stays attached and warm. The row itself is hidden, so we avoid
-		// visible stale content without paying detach/reattach churn on the next bind.
+		// Keep dataset/ARIA mirrors warm as well as the DOM subtree. A rebound to the same
+		// visual row should not need to rewrite debug mirrors we just tore down.
 	}
 
 	/**

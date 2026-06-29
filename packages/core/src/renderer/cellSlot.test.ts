@@ -271,4 +271,15 @@ describe('CellSlot transient style reset', () => {
 
 		expect(slot.element.style.visibility).toBe('');
 	});
+
+	it('preserves warm content-mode and portal-key mirrors on hot unbind', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'portal', undefined, '', 'portal-key');
+
+		slot.unbindHot();
+
+		expect(slot.element.dataset.contentMode).toBe('portal');
+		expect(slot.element.dataset.cellKey).toBe('portal-key');
+		expect(slot.lastPortalKey).toBe('portal-key');
+	});
 });
