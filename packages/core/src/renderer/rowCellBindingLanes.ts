@@ -73,6 +73,7 @@ export interface BindAllDataCellsRequest<TRowData = unknown> {
 	isRowRebind: boolean;
 	forceCellRefresh: boolean;
 	isRowVisible: boolean;
+	refreshVisibleColumns?: ReadonlySet<number> | null;
 }
 
 export interface BindAllLoadingCellsRequest<TRowData = unknown> {
@@ -310,6 +311,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		isRowRebind,
 		forceCellRefresh,
 		isRowVisible,
+		refreshVisibleColumns,
 	} = request;
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
@@ -358,7 +360,11 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const cellSlot = slot.leftCells[i];
 		if (!col || !cellSlot) continue;
 		const isVisibleContent = isRowVisible;
-		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === placement.absoluteIndex) continue;
+		const needsVisibleRefresh = !!(isScrollFrameActive && isVisibleContent && refreshVisibleColumns?.has(placement.absoluteIndex));
+		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === placement.absoluteIndex) {
+			if (needsVisibleRefresh) deps.markCellDirtyAfterScroll(cellSlot.element);
+			continue;
+		}
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		const leftArg = placement.laneOffset;
 		const cellWidth = plan.colWidths[placement.absoluteIndex];
@@ -405,7 +411,11 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const cellSlot = slot.centerCells[i];
 		if (!col || !cellSlot) continue;
 		const isVisibleContent = isRowVisible && c >= visibleColStart && c <= visibleColEnd;
-		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) continue;
+		const needsVisibleRefresh = !!(isScrollFrameActive && isVisibleContent && refreshVisibleColumns?.has(c));
+		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) {
+			if (needsVisibleRefresh) deps.markCellDirtyAfterScroll(cellSlot.element);
+			continue;
+		}
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		const leftArg = plan.colLefts[c];
 		const cellWidth = plan.colWidths[c];
@@ -453,7 +463,11 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		const cellSlot = slot.rightCells[i];
 		if (!col || !cellSlot) continue;
 		const isVisibleContent = isRowVisible;
-		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) continue;
+		const needsVisibleRefresh = !!(isScrollFrameActive && isVisibleContent && refreshVisibleColumns?.has(c));
+		if (isScrollFrameActive && !forceCellRefresh && !isRowRebind && cellSlot.colIndex === c) {
+			if (needsVisibleRefresh) deps.markCellDirtyAfterScroll(cellSlot.element);
+			continue;
+		}
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		// Use topology laneOffset for right cells (= absoluteLeft - pinRightBaseLeft).
 		const leftArg = placement.laneOffset;

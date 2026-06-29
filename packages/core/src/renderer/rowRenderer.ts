@@ -425,6 +425,10 @@ export class RowRenderer<TRowData = unknown> {
 		const nextVisibleColStart = nextWindow.visibleColStart ?? nextWindow.colStart;
 		const nextVisibleColEnd = nextWindow.visibleColEnd ?? nextWindow.colEnd;
 		const visibleColumnsChanged = prevVisibleColStart !== nextVisibleColStart || prevVisibleColEnd !== nextVisibleColEnd;
+		const refreshVisibleColumns =
+			isScrollFrameActive && visibleColumnsChanged
+				? new Set(delta.colsEntered.filter((c) => c >= nextVisibleColStart && c <= nextVisibleColEnd))
+				: null;
 		const canTrustStableIdentity =
 			!!this.currentWindow &&
 			(this.currentWindow.rowModelVersion ?? 0) === (nextWindow.rowModelVersion ?? 0) &&
@@ -453,7 +457,7 @@ export class RowRenderer<TRowData = unknown> {
 			// active vertical scroll if the row identity and column window stayed stable.
 			// Warm slots already retain their text/portal/custom content; post-scroll repaint
 			// will reconcile deferred styling and selection state.
-			const rowNeedsContentRefresh = isScrollFrameActive && isRowVisible && visibleColumnsChanged;
+			const rowNeedsContentRefresh = isScrollFrameActive && isRowVisible && !!refreshVisibleColumns && refreshVisibleColumns.size > 0;
 
 			if (
 				isScrollFrameActive &&
@@ -655,8 +659,9 @@ export class RowRenderer<TRowData = unknown> {
 					ctx,
 					state,
 					isRowRebind,
-					forceCellRefresh: rowNeedsContentRefresh,
+					forceCellRefresh: false,
 					isRowVisible,
+					refreshVisibleColumns,
 				});
 			} else {
 				// Full-width row (group / detail / footer)
