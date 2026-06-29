@@ -33,18 +33,6 @@ function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
 	return 'og-cell';
 }
 
-function appendClassTokens(baseClassName: string, classNameSuffix: string): string {
-	if (!classNameSuffix) return baseClassName;
-	let nextClassName = baseClassName;
-	for (const token of classNameSuffix.trim().split(/\s+/)) {
-		if (!token) continue;
-		if (!nextClassName.split(/\s+/).includes(token)) {
-			nextClassName += ` ${token}`;
-		}
-	}
-	return nextClassName;
-}
-
 function subtractNormalizedClassName(fullClassName: string, baseClassName: string): string {
 	const fullTokens = fullClassName.trim().split(/\s+/).filter(Boolean);
 	if (fullTokens.length === 0) return '';
@@ -95,6 +83,53 @@ function getFreshCellSnapshot<TRowData>(
 	if (snapshot.loadingVersion !== ctx.loadingVersion) return undefined;
 	if (snapshot.selectionVersion !== ctx.selectionVersion) return undefined;
 	if (snapshot.rowVersion !== currentRowVersion) return undefined;
+	return snapshot;
+}
+
+function materializeVisiblePrimitiveCompatibilitySnapshot<TRowData>(
+	deps: RowCellBinderDeps<TRowData>,
+	request: {
+		cellSlot: CellSlot<TRowData>;
+		node: RowNode<TRowData>;
+		col: ColumnDef<TRowData>;
+		lane: 'left' | 'center' | 'right';
+		ctx: ScrollRenderContext<TRowData>;
+		rowVersion: number;
+		canPreserveWarmVisuals: boolean;
+	}
+): CellDisplaySnapshot | undefined {
+	const { cellSlot, node, col, lane, ctx, rowVersion, canPreserveWarmVisuals } = request;
+	if (!ctx.hasInsightDecorations) return undefined;
+	const cellDecorations = deps.engine.insights.getCellDecorations(node.id, col.field);
+	if (cellDecorations.length === 0) return undefined;
+	const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
+	const baseClassName = buildCellPinClass(lane);
+	const stateClassName = canPreserveWarmVisuals
+		? subtractNormalizedClassName(cellSlot.lastClassName ?? baseClassName, baseClassName)
+		: '';
+	const warmContentMode =
+		canPreserveWarmVisuals && (cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback')
+			? cellSlot.lastContentMode
+			: 'empty';
+	const snapshot = createCellDisplaySnapshot({
+		rowId: node.id,
+		colField: col.field,
+		rowVersion,
+		globalVersion: ctx.globalVersion,
+		insightVersion: ctx.insightVersion,
+		styleVersion: ctx.styleVersion,
+		loadingVersion: ctx.loadingVersion,
+		selectionVersion: ctx.selectionVersion,
+		baseClassName,
+		stateClassName,
+		decorationClassName: decorationMetadata.classNameSuffix,
+		contentKind: warmContentMode === 'empty' ? 'empty' : warmContentMode,
+		contentMode: warmContentMode,
+		formattedValue: warmContentMode === 'empty' ? '' : (cellSlot.lastFormattedValue ?? ''),
+		title: mergeCellSnapshotTitle(cellSlot.element.title || null, decorationMetadata.insightTitle),
+		validationError: decorationMetadata.validationError,
+	});
+	deps.engine.cellDisplaySnapshots.set(snapshot);
 	return snapshot;
 }
 
@@ -554,7 +589,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const portalHost = cellSlot.lastContentMode === 'portal' ? deps.getCellPortalHost(cellSlot.element) : null;
 	const hasEmptyPortalHost =
 		cellSlot.lastContentMode === 'portal' && !!cellSlot.lastPortalKey && !!portalHost && portalHost.childElementCount === 0;
-	const snapshot = getFreshCellSnapshot(deps, node.id, col.field, ctx);
+	let snapshot = getFreshCellSnapshot(deps, node.id, col.field, ctx);
 	const shouldDeferCellStyleRefresh =
 		isInVisibleContent &&
 		((ctx.hasInsightDecorations && !snapshot) ||
@@ -582,16 +617,21 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	let cellClassName = buildCellPinClass(lane);
 	if (rendererKind === 'loading') cellClassName += ' og-cell-loading';
+	if (!snapshot && isInVisibleContent && rendererKind === 'primitive') {
+		snapshot = materializeVisiblePrimitiveCompatibilitySnapshot(deps, {
+			cellSlot,
+			node,
+			col,
+			lane,
+			ctx,
+			rowVersion,
+			canPreserveWarmVisuals,
+		});
+	}
 	if (snapshot?.className) {
 		cellClassName = snapshot.className;
 	} else if (canPreserveWarmVisuals && cellSlot.lastClassName) {
 		cellClassName = cellSlot.lastClassName;
-	}
-	if (isInVisibleContent && ctx.hasInsightDecorations && !snapshot) {
-		const decorationMetadata = collectCellDecorationSnapshotMetadata(deps.engine.insights.getCellDecorations(node.id, col.field));
-		cellClassName = appendClassTokens(cellClassName, decorationMetadata.classNameSuffix);
-		liveInsightTitle = decorationMetadata.insightTitle;
-		liveValidationError = decorationMetadata.validationError;
 	}
 
 	if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {
@@ -610,7 +650,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	if (!isInVisibleContent) {
 		const canPreserveBufferedContent = canPreserveWarmVisuals && !isRowRebind;
-		const canReuseSnapshotContent = isPrimitiveSnapshotContent(snapshot);
+		const primitiveSnapshot = isPrimitiveSnapshotContent(snapshot) ? snapshot : undefined;
+		const canReuseSnapshotContent = !!primitiveSnapshot;
 		const canReuseSnapshotPortal = snapshot?.contentMode === 'portal' && !!cellSlot.lastPortalKey;
 		if (!canPreserveBufferedContent && !canReuseSnapshotPortal && cellSlot.lastPortalKey) {
 			deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
@@ -618,7 +659,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		const preservedContentMode: CellContentMode = canReuseSnapshotPortal
 			? 'portal'
 			: canReuseSnapshotContent
-				? snapshot.contentMode
+				? primitiveSnapshot.contentMode
 				: canPreserveBufferedContent
 					? cellSlot.lastPortalKey
 						? 'portal'
@@ -650,7 +691,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			preservedContentMode,
 			undefined,
 			canReuseSnapshotContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
-				? snapshot.formattedValue
+				? primitiveSnapshot.formattedValue
 				: canPreserveBufferedContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
 					? (cellSlot.lastFormattedValue ?? '')
 					: '',

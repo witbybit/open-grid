@@ -910,15 +910,20 @@ describe('bindCellDuringScroll', () => {
 		expect(mountCellImmediately).not.toHaveBeenCalled();
 	});
 
-	it('applies live insight decorations immediately for visible primitive cells when no snapshot exists yet', () => {
+	it('materializes a compatibility snapshot for visible primitive cells when insight decorations are missing from the snapshot cache', () => {
 		const dirty = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
+		const snapshotSet = vi.fn();
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
 			engine: {
 				data: {
 					getCachedDisplayValue: vi.fn(() => 'Name 1'),
 				},
 				hasFormula: vi.fn(() => false),
+				cellDisplaySnapshots: {
+					get: vi.fn(() => undefined),
+					set: snapshotSet,
+				},
 				insights: {
 					getCellDecorations: vi.fn(() => [
 						{
@@ -991,14 +996,16 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.lastClassName).toContain('og-cell-validation-error');
 		expect(cellSlot.element.dataset.validationError).toBe('Needs review');
 		expect(cellSlot.element.title).toContain('Needs review');
+		expect(snapshotSet).toHaveBeenCalledTimes(1);
 	});
 
-	it('merges live insight decorations into preserved warm visible cells when no snapshot exists', () => {
+	it('materializes a compatibility snapshot that preserves warm primitive content when insight decorations are missing', () => {
 		const dirty = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell preserved', 'text', undefined, 'Name 1', undefined);
 		cellSlot.lastMountedGlobalVersion = 7;
 		cellSlot.lastMountedRowVersion = 3;
+		const snapshotSet = vi.fn();
 
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
 			engine: {
@@ -1006,6 +1013,10 @@ describe('bindCellDuringScroll', () => {
 					getCachedDisplayValue: vi.fn(() => 'Name 1'),
 				},
 				hasFormula: vi.fn(() => false),
+				cellDisplaySnapshots: {
+					get: vi.fn(() => undefined),
+					set: snapshotSet,
+				},
 				insights: {
 					getCellDecorations: vi.fn(() => [
 						{
@@ -1079,6 +1090,7 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.lastClassName).toContain('og-cell-validation-error');
 		expect(cellSlot.element.dataset.validationError).toBe('Needs review');
 		expect(cellSlot.element.title).toContain('Needs review');
+		expect(snapshotSet).toHaveBeenCalledTimes(1);
 	});
 
 	it('does not mark a stable frozen portal cell dirty during scroll when nothing changed', () => {
