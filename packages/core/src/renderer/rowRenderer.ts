@@ -588,35 +588,42 @@ export class RowRenderer<TRowData = unknown> {
 				}
 			} else if (visualRow.kind === 'data') {
 				const node = visualRow.node;
-				const isFocusedRow = state.selection.focus?.rowId === node.id;
-				const isSelectedRow = !!state.selection.bounds && r >= state.selection.bounds.minRow && r <= state.selection.bounds.maxRow;
-				const isLoadingRow = this.engine.data.isRowLoading(node.id);
-
-				if (r < pinTopRows) rowClassName += ' og-row-pinned-top';
-				else if (r >= nextWindow.rowCount - pinBottomRows) rowClassName += ' og-row-pinned-bottom';
-
-				if (this.selectionPaint.hoveredRowIndex === r) rowClassName += ' og-row-hovered';
-				if (isSelectedRow || isFocusedRow) rowClassName += ' og-row-selected';
-				if (isFocusedRow) rowClassName += ' og-row-focused';
-				if (this.selectionPaint.selectedRowIdSet?.has(node.id)) rowClassName += ' og-row-node-selected';
-				if (isLoadingRow) rowClassName += ' og-row-loading';
-
-				if (isScrollFrameActive && compiledStyleRules.hasRowRules && node.data) {
+				const canPreserveWarmRowClass =
+					isScrollFrameActive && !isRowRebind && slot.lastVisualRowId === visualRow.id && slot.rowKind === 'data' && slot.lastClassName !== '';
+				if (canPreserveWarmRowClass) {
+					rowClassName = slot.lastClassName;
 					this.dirtyRowsAfterScroll.add(r);
-				} else if (compiledStyleRules.hasRowRules && node.data) {
-					try {
-						const rs = this.selectionPaint.rowClassScratchRef;
-						rs.row = node.data;
-						rs.rowId = node.id;
-						rs.rowIndex = r;
-						rs.isFocused = isFocusedRow;
-						rs.isSelected = isSelectedRow || isFocusedRow;
-						rs.isLoading = isLoadingRow;
-						rs.selection = state.selection;
-						const customRowClass = evaluateRowStyleRules(compiledStyleRules, node.data, rs);
-						if (customRowClass) rowClassName += ' ' + customRowClass;
-					} catch (e) {
-						reportRendererFault(this.engine, 'row-class', e, { rowId: node.id, rowIndex: r });
+				} else {
+					const isFocusedRow = state.selection.focus?.rowId === node.id;
+					const isSelectedRow = !!state.selection.bounds && r >= state.selection.bounds.minRow && r <= state.selection.bounds.maxRow;
+					const isLoadingRow = this.engine.data.isRowLoading(node.id);
+
+					if (r < pinTopRows) rowClassName += ' og-row-pinned-top';
+					else if (r >= nextWindow.rowCount - pinBottomRows) rowClassName += ' og-row-pinned-bottom';
+
+					if (this.selectionPaint.hoveredRowIndex === r) rowClassName += ' og-row-hovered';
+					if (isSelectedRow || isFocusedRow) rowClassName += ' og-row-selected';
+					if (isFocusedRow) rowClassName += ' og-row-focused';
+					if (this.selectionPaint.selectedRowIdSet?.has(node.id)) rowClassName += ' og-row-node-selected';
+					if (isLoadingRow) rowClassName += ' og-row-loading';
+
+					if (isScrollFrameActive && compiledStyleRules.hasRowRules && node.data) {
+						this.dirtyRowsAfterScroll.add(r);
+					} else if (compiledStyleRules.hasRowRules && node.data) {
+						try {
+							const rs = this.selectionPaint.rowClassScratchRef;
+							rs.row = node.data;
+							rs.rowId = node.id;
+							rs.rowIndex = r;
+							rs.isFocused = isFocusedRow;
+							rs.isSelected = isSelectedRow || isFocusedRow;
+							rs.isLoading = isLoadingRow;
+							rs.selection = state.selection;
+							const customRowClass = evaluateRowStyleRules(compiledStyleRules, node.data, rs);
+							if (customRowClass) rowClassName += ' ' + customRowClass;
+						} catch (e) {
+							reportRendererFault(this.engine, 'row-class', e, { rowId: node.id, rowIndex: r });
+						}
 					}
 				}
 			}

@@ -1,5 +1,17 @@
 import { CellSlot, toPx } from './cellSlot.js';
 
+export const rowSlotWriteStats = {
+	rowClassWrites: 0,
+	rowTransformWrites: 0,
+	rowHeightWrites: 0,
+};
+
+export function resetRowSlotWriteStats(): void {
+	rowSlotWriteStats.rowClassWrites = 0;
+	rowSlotWriteStats.rowTransformWrites = 0;
+	rowSlotWriteStats.rowHeightWrites = 0;
+}
+
 export class RowSlot<TRowData = unknown> {
 	public readonly id: string;
 	public readonly element: HTMLDivElement;
@@ -117,11 +129,13 @@ export class RowSlot<TRowData = unknown> {
 			// translateY (not top): moving a row must never invalidate layout — transform
 			// changes are paint/composite-only. Rows sit at top:0 and are offset here.
 			this.element.style.transform = `translateY(${rowTop}px)`;
+			rowSlotWriteStats.rowTransformWrites++;
 			domUpdated = true;
 		}
 		if (this.lastHeight !== rowHeight) {
 			this.lastHeight = rowHeight;
 			this.element.style.height = toPx(rowHeight);
+			rowSlotWriteStats.rowHeightWrites++;
 			domUpdated = true;
 		}
 
@@ -140,6 +154,7 @@ export class RowSlot<TRowData = unknown> {
 		if (this.lastClassName !== className) {
 			this.lastClassName = className;
 			this.element.className = className;
+			rowSlotWriteStats.rowClassWrites++;
 			domUpdated = true;
 		}
 
@@ -151,6 +166,7 @@ export class RowSlot<TRowData = unknown> {
 		if (this.lastTop !== rowTop) {
 			this.lastTop = rowTop;
 			this.element.style.transform = `translateY(${rowTop}px)`;
+			rowSlotWriteStats.rowTransformWrites++;
 		}
 	}
 

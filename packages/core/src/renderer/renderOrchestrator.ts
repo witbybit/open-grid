@@ -38,6 +38,9 @@ export interface RenderStats {
 	cellWidthWrites: number;
 	cellLeftWrites: number;
 	cellDomReadsAvoided: number;
+	rowClassWrites: number;
+	rowTransformWrites: number;
+	rowHeightWrites: number;
 	cellsBoundDuringScroll: number;
 	rowsVisitedDuringScroll: number;
 	rowsReboundDuringScroll: number;
@@ -116,6 +119,9 @@ export function createEmptyRenderStats(): RenderStats {
 		cellWidthWrites: 0,
 		cellLeftWrites: 0,
 		cellDomReadsAvoided: 0,
+		rowClassWrites: 0,
+		rowTransformWrites: 0,
+		rowHeightWrites: 0,
 		cellsBoundDuringScroll: 0,
 		rowsVisitedDuringScroll: 0,
 		rowsReboundDuringScroll: 0,
@@ -206,6 +212,9 @@ export class RenderOrchestrator {
 		cellWidthWrites: 0,
 		cellLeftWrites: 0,
 		cellDomReadsAvoided: 0,
+		rowClassWrites: 0,
+		rowTransformWrites: 0,
+		rowHeightWrites: 0,
 		cellsBoundDuringScroll: 0,
 		rowsVisitedDuringScroll: 0,
 		rowsReboundDuringScroll: 0,

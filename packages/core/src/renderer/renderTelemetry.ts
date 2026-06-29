@@ -3,6 +3,7 @@ import type { PortalMountManager } from './portalMountManager.js';
 import { type RenderOrchestrator, type RenderStats } from './renderOrchestrator.js';
 import type { RowRenderer } from './rowRenderer.js';
 import { cellSlotWriteStats, resetCellSlotWriteStats } from './cellSlot.js';
+import { resetRowSlotWriteStats, rowSlotWriteStats } from './rowSlot.js';
 
 export interface RenderRuntimeStats {
 	rowSlotAssigns: number;
@@ -31,6 +32,9 @@ export interface RenderRuntimeStats {
 	cellWidthWrites: number;
 	cellLeftWrites: number;
 	cellDomReadsAvoided: number;
+	rowClassWrites: number;
+	rowTransformWrites: number;
+	rowHeightWrites: number;
 	rowsVisitedDuringScroll: number;
 	rowsReboundDuringScroll: number;
 	cellsVisitedDuringScroll: number;
@@ -85,6 +89,9 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		cellWidthWrites: 0,
 		cellLeftWrites: 0,
 		cellDomReadsAvoided: 0,
+		rowClassWrites: 0,
+		rowTransformWrites: 0,
+		rowHeightWrites: 0,
 		rowsVisitedDuringScroll: 0,
 		rowsReboundDuringScroll: 0,
 		cellsVisitedDuringScroll: 0,
@@ -147,6 +154,9 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		cellWidthWrites: cellSlotWriteStats.cellWidthWrites,
 		cellLeftWrites: cellSlotWriteStats.cellLeftWrites,
 		cellDomReadsAvoided: cellSlotWriteStats.cellDomReadsAvoided,
+		rowClassWrites: rowSlotWriteStats.rowClassWrites,
+		rowTransformWrites: rowSlotWriteStats.rowTransformWrites,
+		rowHeightWrites: rowSlotWriteStats.rowHeightWrites,
 		cellsBoundDuringScroll: deps.rowRenderer.currentScrollCellsPatched,
 		rowsVisitedDuringScroll: deps.rowRenderer.currentScrollRowsVisited,
 		rowsReboundDuringScroll: deps.rowRenderer.currentScrollRowsRebound,
@@ -217,4 +227,5 @@ export function resetRenderTelemetry<TRowData>(
 	engine.customRendererWarmHits = 0;
 	engine.customRendererWarmMisses = 0;
 	resetCellSlotWriteStats();
+	resetRowSlotWriteStats();
 }

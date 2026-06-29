@@ -317,6 +317,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(stats.cellClassWrites).toBeLessThanOrEqual(1);
 		expect(stats.cellWidthWrites).toBeLessThanOrEqual(1);
 		expect(stats.cellLeftWrites).toBeLessThanOrEqual(1);
+		expect(stats.rowClassWrites).toBeLessThanOrEqual(1);
 		expect(stats.customRendererMountsDuringScroll).toBe(0);
 
 		renderer.unmount();
