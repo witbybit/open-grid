@@ -8,6 +8,7 @@ import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { CompiledColumnTopology } from './columnTopology.js';
 import { GridMetric, type GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
+import { collectCellDecorationSnapshotMetadata } from './cellDisplaySnapshot.js';
 
 export interface RowCellLaneFullBindRequest<TRowData = unknown> {
 	cellSlot: CellSlot<TRowData>;
@@ -294,6 +295,34 @@ function reconcileCellTopologyForScroll<TRowData>(
 }
 
 export { reconcileTopology, reconcileCellTopologyForScroll };
+
+function applyLoadingInsightState<TRowData>(
+	deps: RowCellBindingLaneDeps<TRowData>,
+	cellSlot: CellSlot<TRowData>,
+	rowId: string,
+	colField: string
+): string {
+	let cellClassName = 'og-cell og-cell-loading';
+	if (deps.engine.insights.size === 0) {
+		if (cellSlot.element.dataset.validationError !== undefined) delete cellSlot.element.dataset.validationError;
+		if (cellSlot.element.title) cellSlot.element.removeAttribute('title');
+		return cellClassName;
+	}
+
+	const decorationMetadata = collectCellDecorationSnapshotMetadata(deps.engine.insights.getCellDecorations(rowId, colField));
+	if (decorationMetadata.classNameSuffix) cellClassName += decorationMetadata.classNameSuffix;
+	if (decorationMetadata.validationError) {
+		cellSlot.element.dataset.validationError = decorationMetadata.validationError;
+	} else if (cellSlot.element.dataset.validationError !== undefined) {
+		delete cellSlot.element.dataset.validationError;
+	}
+	if (decorationMetadata.insightTitle) {
+		cellSlot.element.title = decorationMetadata.insightTitle;
+	} else if (cellSlot.element.title) {
+		cellSlot.element.removeAttribute('title');
+	}
+	return cellClassName;
+}
 
 export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData>, request: BindAllDataCellsRequest<TRowData>): void {
 	const {
@@ -593,26 +622,15 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 		if (isScrollFrameActive) deps.onScrollCellVisited();
 		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element);
 		const cellWidth = plan.colWidths[c];
+		const rowId = `loading:${rowIndex}`;
+		const cellClassName = applyLoadingInsightState(deps, cellSlot, rowId, col.field);
 		if (isScrollFrameActive) {
 			deps.onScrollCellPatched();
 			deps.markCellDirtyAfterScroll(cellSlot.element);
 		} else {
 			deps.ensureLoadingSkeleton(cellSlot.element);
 		}
-		const didWrite = cellSlot.update(
-			c,
-			col.field,
-			rowIndex,
-			`loading:${rowIndex}`,
-			leftArg,
-			-1,
-			cellWidth,
-			'og-cell og-cell-loading',
-			'loading',
-			undefined,
-			'',
-			undefined
-		);
+		const didWrite = cellSlot.update(c, col.field, rowIndex, rowId, leftArg, -1, cellWidth, cellClassName, 'loading', undefined, '', undefined);
 		if (isScrollFrameActive && didWrite) deps.onScrollCellWritten();
 	};
 

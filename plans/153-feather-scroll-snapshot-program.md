@@ -38,6 +38,9 @@ That is enough to produce numbers, but not enough to produce the “weightless p
 
 ## Current state to replace
 
+Phase A progress note:
+The feather-scroll perceptual contract is now explicitly defined in `docs/architecture/plan-153-feather-scroll-contract.md`, and executable scenario evidence lives in `packages/core/src/renderer/serverRuntimePerformance.test.ts`. The portal-heavy visible blanking characterization and the integrity-heavy visible decoration-loss characterization are now both closed in automated coverage. That means the contract-definition phase is established and measurable, and the remaining work is architectural convergence around snapshot authority, motion/fidelity separation, impostors, and deterministic fidelity upgrades rather than unresolved baseline-characterization debt.
+
 Open Grid already has:
 
 - stable slot ownership

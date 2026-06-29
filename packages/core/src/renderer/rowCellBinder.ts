@@ -28,6 +28,18 @@ function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
 	return 'og-cell';
 }
 
+function appendClassTokens(baseClassName: string, classNameSuffix: string): string {
+	if (!classNameSuffix) return baseClassName;
+	let nextClassName = baseClassName;
+	for (const token of classNameSuffix.trim().split(/\s+/)) {
+		if (!token) continue;
+		if (!nextClassName.split(/\s+/).includes(token)) {
+			nextClassName += ` ${token}`;
+		}
+	}
+	return nextClassName;
+}
+
 function applyCellTitlesAndValidation(element: HTMLDivElement, tooltipText: string | null, insightTitle: string, validationError?: string): void {
 	const prevValidationAttr = element.dataset.validationError;
 	if (validationError) {
@@ -520,6 +532,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
 	const rendererKind: 'primitive' | 'portal' | 'loading' = isRowLoading ? 'loading' : isEditing || plan?.isCustom ? 'portal' : 'primitive';
 	const snapshot = getFreshCellSnapshot(deps, node.id, col.field, ctx);
+	let liveInsightTitle = '';
+	let liveValidationError: string | undefined;
 
 	let cellClassName = buildCellPinClass(lane);
 	if (rendererKind === 'loading') cellClassName += ' og-cell-loading';
@@ -527,6 +541,12 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		cellClassName = cellSlot.lastClassName;
 	} else if (snapshot?.className) {
 		cellClassName = snapshot.className;
+	}
+	if (isInVisibleContent && ctx.hasInsightDecorations && (!snapshot || canPreserveWarmVisuals)) {
+		const decorationMetadata = collectCellDecorationSnapshotMetadata(deps.engine.insights.getCellDecorations(node.id, col.field));
+		cellClassName = appendClassTokens(cellClassName, decorationMetadata.classNameSuffix);
+		liveInsightTitle = decorationMetadata.insightTitle;
+		liveValidationError = decorationMetadata.validationError;
 	}
 
 	if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {
@@ -565,7 +585,12 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 				: rendererKind === 'loading'
 					? 'loading'
 					: 'empty';
-		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
+		applyCellTitlesAndValidation(
+			cellSlot.element,
+			snapshot?.title || null,
+			snapshot ? '' : liveInsightTitle,
+			snapshot?.validationError ?? liveValidationError
+		);
 		const didWriteBuffered = cellSlot.update(
 			colIndex,
 			col.field,
@@ -612,7 +637,12 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			deps.markCellDirtyAfterScroll(cellSlot.element);
 		}
 		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
+		applyCellTitlesAndValidation(
+			cellSlot.element,
+			snapshot?.title || null,
+			snapshot ? '' : liveInsightTitle,
+			snapshot?.validationError ?? liveValidationError
+		);
 		const didWritePrimitive = cellSlot.update(
 			colIndex,
 			col.field,
@@ -694,7 +724,12 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 	}
-	applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
+	applyCellTitlesAndValidation(
+		cellSlot.element,
+		snapshot?.title || null,
+		snapshot ? '' : liveInsightTitle,
+		snapshot?.validationError ?? liveValidationError
+	);
 
 	const didWrite = cellSlot.update(
 		colIndex,

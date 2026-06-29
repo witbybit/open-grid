@@ -238,6 +238,175 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.element.dataset.validationError).toBe('Invalid value');
 	});
 
+	it('applies live insight decorations immediately for visible primitive cells when no snapshot exists yet', () => {
+		const dirty = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: {
+					getCachedDisplayValue: vi.fn(() => 'Name 1'),
+				},
+				hasFormula: vi.fn(() => false),
+				insights: {
+					getCellDecorations: vi.fn(() => [
+						{
+							layerId: 'integrity',
+							kind: 'validationError',
+							className: 'og-cell-validation-error',
+							title: 'Needs review',
+						},
+					]),
+				},
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => false),
+				mountCellImmediately: vi.fn(),
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name' } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				hasDeferredCellStyleRules: false,
+				hasInsightDecorations: true,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: false, mode: 'primitive' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: true,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(cellSlot.lastClassName).toContain('og-cell-validation-error');
+		expect(cellSlot.element.dataset.validationError).toBe('Needs review');
+		expect(cellSlot.element.title).toContain('Needs review');
+	});
+
+	it('merges live insight decorations into preserved warm visible cells when no snapshot exists', () => {
+		const dirty = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell preserved', 'text', undefined, 'Name 1', undefined);
+		cellSlot.lastMountedGlobalVersion = 7;
+		cellSlot.lastMountedRowVersion = 3;
+
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: {
+					getCachedDisplayValue: vi.fn(() => 'Name 1'),
+				},
+				hasFormula: vi.fn(() => false),
+				insights: {
+					getCellDecorations: vi.fn(() => [
+						{
+							layerId: 'integrity',
+							kind: 'validationError',
+							className: 'og-cell-validation-error',
+							title: 'Needs review',
+						},
+					]),
+				},
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => false),
+				mountCellImmediately: vi.fn(),
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name' } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				hasDeferredCellStyleRules: false,
+				hasInsightDecorations: true,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: false, mode: 'primitive' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(cellSlot.lastClassName).toContain('preserved');
+		expect(cellSlot.lastClassName).toContain('og-cell-validation-error');
+		expect(cellSlot.element.dataset.validationError).toBe('Needs review');
+		expect(cellSlot.element.title).toContain('Needs review');
+	});
+
 	it('does not mark a stable frozen portal cell dirty during scroll when nothing changed', () => {
 		const dirty = vi.fn();
 		const showPortalContent = vi.fn();
