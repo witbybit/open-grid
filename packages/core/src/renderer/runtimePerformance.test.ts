@@ -447,6 +447,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		grid.renderer.rowRenderer.recycleViewport(true, makeScrollCtx(grid.store) as any);
 
 		const nextWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
+		const delta = diffRenderWindow(prevWindow, nextWindow);
 		const visibleContentRows =
 			nextWindow.visibleRowStart !== undefined && nextWindow.visibleRowEnd !== undefined && nextWindow.visibleRowStart >= 0
 				? nextWindow.visibleRowEnd - nextWindow.visibleRowStart + 1 + nextWindow.pinTopRows + nextWindow.pinBottomRows
@@ -457,6 +458,9 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(
 			visibleContentRows * getColIndices(nextWindow).length + getColIndices(nextWindow).length
 		);
+		expect(stats.cellLeftWrites).toBeLessThanOrEqual(visibleContentRows * Math.max(1, delta.colsEntered.length));
+		expect(stats.cellWidthWrites).toBeLessThanOrEqual(visibleContentRows * Math.max(1, delta.colsEntered.length));
+		expect(stats.rowClassWrites).toBe(0);
 		expect(stats.customRendererMountsDuringScroll).toBe(0);
 
 		cleanupGrid(grid);
