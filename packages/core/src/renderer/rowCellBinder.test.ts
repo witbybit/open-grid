@@ -156,6 +156,88 @@ describe('bindCellDuringScroll', () => {
 		expect(wrote).not.toHaveBeenCalled();
 	});
 
+	it('reuses a fresh logical snapshot for offscreen primitive cells instead of blanking them', () => {
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: {
+					getCachedDisplayValue: vi.fn(() => undefined),
+				},
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 3,
+					globalVersion: 7,
+					className: 'og-cell snap-class',
+					contentMode: 'text',
+					formattedValue: 'Snapshot value',
+					title: 'Snapshot title',
+					validationError: 'Invalid value',
+				})),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => false),
+				mountCellImmediately: vi.fn(),
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: vi.fn(),
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name' } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: false, mode: 'primitive' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: false,
+		});
+
+		expect(cellSlot.lastFormattedValue).toBe('Snapshot value');
+		expect(cellSlot.lastClassName).toBe('og-cell snap-class');
+		expect(cellSlot.element.title).toBe('Snapshot title');
+		expect(cellSlot.element.dataset.validationError).toBe('Invalid value');
+	});
+
 	it('does not mark a stable frozen portal cell dirty during scroll when nothing changed', () => {
 		const dirty = vi.fn();
 		const showPortalContent = vi.fn();

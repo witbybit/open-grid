@@ -68,14 +68,14 @@ Scrolling becomes a **camera move over a precomputed visual scene**, not a seman
 The authoritative runtime becomes a two-layer model:
 
 1. **Scroll snapshot layer**
-   - cheap, display-ready visual state per visible/prewarmed cell
-   - consumable without row-model, integrity, or style-system queries during active scroll
-   - authoritative for active scroll presentation
+    - cheap, display-ready visual state per visible/prewarmed cell
+    - consumable without row-model, integrity, or style-system queries during active scroll
+    - authoritative for active scroll presentation
 
 2. **Interactive fidelity layer**
-   - editors, portals, full decorators, tooltips, tree affordances, rich live renderers
-   - reconciled after scroll or on direct interaction/focus/edit
-   - never required just to avoid blanks during scroll
+    - editors, portals, full decorators, tooltips, tree affordances, rich live renderers
+    - reconciled after scroll or on direct interaction/focus/edit
+    - never required just to avoid blanks during scroll
 
 The user-visible result should be:
 

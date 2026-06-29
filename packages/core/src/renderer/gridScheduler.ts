@@ -18,6 +18,7 @@ export interface GridScheduler {
 	 */
 	idle(callback: (deadline?: GridIdleDeadline) => void): number;
 	cancelIdle(id: number): void;
+	supportsIdle(): boolean;
 	/** Schedule a callback after a delay (ms). */
 	timeout(callback: () => void, ms: number): ReturnType<typeof setTimeout>;
 	clearTimeout(id: ReturnType<typeof setTimeout>): void;
@@ -65,6 +66,10 @@ export class DefaultGridScheduler implements GridScheduler {
 		} else {
 			this.cancelRaf(id);
 		}
+	}
+
+	supportsIdle(): boolean {
+		return typeof window !== 'undefined' && 'requestIdleCallback' in window;
 	}
 
 	timeout(callback: () => void, ms: number): ReturnType<typeof setTimeout> {

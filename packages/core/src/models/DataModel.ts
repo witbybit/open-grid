@@ -66,8 +66,18 @@ export class DataModel<TRowData = unknown> {
 	}
 
 	private getValueGetterValue(rowId: string, colField: string, col: ColumnDef<TRowData>, node: RowNode<TRowData>): unknown {
+		return this.getValueGetterValueInternal(rowId, colField, col, node, true);
+	}
+
+	private getValueGetterValueInternal(
+		rowId: string,
+		colField: string,
+		col: ColumnDef<TRowData>,
+		node: RowNode<TRowData>,
+		trackDuringScroll: boolean
+	): unknown {
 		if (this.runtime.isScrolling() || this.runtime.isScrollFrameActive()) {
-			this.runtime.recordValueGetterDuringScroll();
+			if (trackDuringScroll) this.runtime.recordValueGetterDuringScroll();
 		}
 		if (!col.valueGetterDependencies) {
 			return col.valueGetter!({ node, row: node.data, colField });
@@ -85,6 +95,35 @@ export class DataModel<TRowData = unknown> {
 		const value = col.valueGetter!({ node, row: node.data, colField });
 		rowCache.set(colField, value);
 		return value;
+	}
+
+	public primeDisplayValue(rowId: string, colField: string): string | undefined {
+		if (this.isRowLoading(rowId)) {
+			return '';
+		}
+
+		const col = this.runtime.getColumnDef(colField);
+		if (!col?.valueGetter) {
+			return this.getCachedDisplayValue(rowId, colField);
+		}
+
+		const rowModel = this.runtime.getRowModel();
+		if (!rowModel) return undefined;
+		const node = rowModel.getRowNodeById ? rowModel.getRowNodeById(rowId) : null;
+		if (node?.data) {
+			const value = this.getValueGetterValueInternal(rowId, colField, col, node, false);
+			return value == null ? '' : String(value);
+		}
+
+		const idx = rowModel.getVisualIndexByRowId(rowId);
+		if (idx === -1) return undefined;
+		const visualRow = rowModel.getVisualRow(idx);
+		const row = visualRow?.kind === 'data' ? visualRow.node.data : null;
+		if (!row) return undefined;
+
+		const dummyNode = new RowNode<TRowData>(rowId, row);
+		const value = this.getValueGetterValueInternal(rowId, colField, col, dummyNode, false);
+		return value == null ? '' : String(value);
 	}
 
 	public getRawCellValue = (rowId: string, colField: string): unknown => {

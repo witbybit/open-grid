@@ -2436,6 +2436,109 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('prewarms valueGetter columns just outside the visible band so horizontal re-entry wakes immediately', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline?: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const previousRequestIdleCallback = (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+		const previousCancelIdleCallback = (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+				cancelIdleCallback?: (id: number) => void;
+			}
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
+
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+			valueGetterDependencies: [`col_${index}`],
+			valueGetter: ({ row }: { row: Record<string, string> }) => `Snapshot:${row.id}:${index}`,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 0,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+			scrollViewport.scrollTop = 400;
+			scrollViewport.scrollLeft = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(1);
+			callbacks[0](0);
+			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 });
+
+			scrollViewport.scrollLeft = 200;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(2);
+			callbacks[1](0);
+
+			const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+			expect(row10).not.toBeNull();
+			const reenteredCell = row10.querySelector('[data-col-field="col_2"]') as HTMLDivElement;
+			expect(reenteredCell).not.toBeNull();
+			expect(reenteredCell.textContent).toBe('Snapshot:row-10:2');
+			expect(renderer.getRenderStats().valueGetterCallsDuringScroll).toBe(0);
+		} finally {
+			if (previousRequestIdleCallback === undefined) {
+				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			} else {
+				(window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = previousRequestIdleCallback;
+			}
+			if (previousCancelIdleCallback === undefined) {
+				delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			} else {
+				(window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = previousCancelIdleCallback;
+			}
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
+	});
+
 	it('updates cell widths immediately on column resize', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);

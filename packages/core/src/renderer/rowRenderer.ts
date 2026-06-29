@@ -439,8 +439,7 @@ export class RowRenderer<TRowData = unknown> {
 						return entered;
 					})()
 				: null;
-		const refreshVisibleColumns =
-			visibleColumnsEntered && visibleColumnsEntered.size > 0 ? visibleColumnsEntered : null;
+		const refreshVisibleColumns = visibleColumnsEntered && visibleColumnsEntered.size > 0 ? visibleColumnsEntered : null;
 		const canTrustStableIdentity =
 			!!this.currentWindow &&
 			(this.currentWindow.rowModelVersion ?? 0) === (nextWindow.rowModelVersion ?? 0) &&

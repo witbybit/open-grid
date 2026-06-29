@@ -70,6 +70,7 @@ import type { GridMutationRejection } from './GridDomainMutation.js';
 import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
 import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
 import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
+import { CellDisplaySnapshotStore, type CellDisplaySnapshot } from '../renderer/cellDisplaySnapshot.js';
 
 export type ManagedRowDragBlockReason =
 	| 'unsupported-row-model'
@@ -214,6 +215,7 @@ export class GridEngine<TRowData = unknown> {
 
 	// Per-row version map for zero-allocation mutation tracking.
 	public readonly rowVersions = new Map<string, number>();
+	public readonly cellDisplaySnapshots = new CellDisplaySnapshotStore();
 
 	private _scrollStateProvider: { isScrolling(): boolean; phase: string } | null = null;
 
@@ -766,6 +768,12 @@ export class GridEngine<TRowData = unknown> {
 	}
 	public getCachedDisplayValue(rowId: string, colField: string): string | undefined {
 		return this.data.getCachedDisplayValue(rowId, colField);
+	}
+	public primeDisplayValue(rowId: string, colField: string): string | undefined {
+		return this.data.primeDisplayValue(rowId, colField);
+	}
+	public getCellDisplaySnapshot(rowId: string, colField: string): CellDisplaySnapshot | undefined {
+		return this.cellDisplaySnapshots.get(rowId, colField);
 	}
 	public getCheapDisplayValue(rowId: string, colField: string): string {
 		return this.data.getCheapDisplayValue(rowId, colField);

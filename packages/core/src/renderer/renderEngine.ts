@@ -106,6 +106,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private readonly portalFlushBudget = 24;
 	private readonly postScrollDecorationBudget = 32;
+	private readonly scrollPrewarmBudget = 48;
+	private readonly scrollPrewarmRowPadding = 2;
+	private readonly scrollPrewarmColPadding = 2;
 
 	private renderStats = createRenderRuntimeStats();
 
@@ -298,6 +301,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			flushPendingAfterScroll: false,
 			needsPostScrollPortalFlush: false,
 			portalFlushScheduled: false,
+			prewarmScheduled: false,
+			prewarmTimer: null,
+			prewarmRequest: null,
 			postScrollDecorationScheduled: false,
 			postScrollDecorationTimer: null,
 			cachedMaxScrollLeft: this.cachedMaxScrollLeft,
@@ -310,6 +316,9 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			activeRenderWindowBufIdx: this._activeRenderWindowBufIdx,
 			portalFlushBudget: this.portalFlushBudget,
 			postScrollDecorationBudget: this.postScrollDecorationBudget,
+			scrollPrewarmBudget: this.scrollPrewarmBudget,
+			scrollPrewarmRowPadding: this.scrollPrewarmRowPadding,
+			scrollPrewarmColPadding: this.scrollPrewarmColPadding,
 		};
 		this.scrollCoordinator = new RenderScrollCoordinator<TRowData>(
 			{

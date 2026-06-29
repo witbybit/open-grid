@@ -20,11 +20,49 @@ import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
+import type { CellDisplaySnapshot } from './cellDisplaySnapshot.js';
 
 function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
 	if (lane === 'left') return 'og-cell og-cell-pinned-left';
 	if (lane === 'right') return 'og-cell og-cell-pinned-right';
 	return 'og-cell';
+}
+
+function applyCellTitlesAndValidation(element: HTMLDivElement, tooltipText: string | null, insightTitle: string, validationError?: string): void {
+	const prevValidationAttr = element.dataset.validationError;
+	if (validationError) {
+		if (prevValidationAttr !== validationError) element.dataset.validationError = validationError;
+	} else if (prevValidationAttr !== undefined) {
+		delete element.dataset.validationError;
+	}
+
+	let title = tooltipText ?? '';
+	if (insightTitle) {
+		title = title ? `${title}\n${insightTitle}` : insightTitle;
+	}
+	if (title) {
+		element.title = title;
+	} else if (element.title) {
+		element.removeAttribute('title');
+	}
+}
+
+function getFreshCellSnapshot<TRowData>(
+	deps: RowCellBinderDeps<TRowData>,
+	rowId: string,
+	colField: string,
+	ctx?: ScrollRenderContext<TRowData>
+): CellDisplaySnapshot | undefined {
+	const snapshotLookup = deps.engine as GridEngine<TRowData> & {
+		getCellDisplaySnapshot?: (rowId: string, colField: string) => CellDisplaySnapshot | undefined;
+		cellDisplaySnapshots?: { get: (rowId: string, colField: string) => CellDisplaySnapshot | undefined };
+	};
+	const snapshot = snapshotLookup.getCellDisplaySnapshot?.(rowId, colField) ?? snapshotLookup.cellDisplaySnapshots?.get(rowId, colField);
+	if (!snapshot || !ctx) return snapshot;
+	const currentRowVersion = ctx.rowVersions?.get(rowId) ?? -1;
+	if (snapshot.globalVersion !== ctx.globalVersion) return undefined;
+	if (snapshot.rowVersion !== currentRowVersion) return undefined;
+	return snapshot;
 }
 
 export interface RowCellBinderDeps<TRowData = unknown> {
@@ -242,13 +280,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	}
 
 	// Sync data-validation-error for ValidationTooltipController (hover tooltip).
-	const prevValidationAttr = cellSlot.element.dataset.validationError;
-	if (validationDecTitle) {
-		if (prevValidationAttr !== validationDecTitle) cellSlot.element.dataset.validationError = validationDecTitle;
-	} else if (prevValidationAttr !== undefined) {
-		delete cellSlot.element.dataset.validationError;
-	}
-
 	const compiledStyleRules = compileStyleRules(state.styleRules);
 	if (compiledStyleRules.hasCellRules && node.data) {
 		try {
@@ -396,24 +427,14 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	}
 
 	// Cell tooltip (title attribute) — only for data rows with tooltip defined
+	let tooltipText: string | null = null;
 	if (col.tooltip !== undefined && node.data !== null) {
-		const tooltipText =
+		tooltipText =
 			typeof col.tooltip === 'string'
 				? col.tooltip
 				: col.tooltip({ row: node.data as TRowData, rowId: node.id, colField: col.field, value: access.rawValue });
-		if (tooltipText) {
-			cellSlot.element.title = tooltipText;
-		} else if (cellSlot.element.title) {
-			cellSlot.element.removeAttribute('title');
-		}
-	} else if (col.tooltip === undefined && cellSlot.element.title) {
-		cellSlot.element.removeAttribute('title');
 	}
-	// Merge insight decoration titles after col.tooltip so they always appear.
-	if (insightTitle) {
-		const prev = cellSlot.element.title;
-		cellSlot.element.title = prev ? prev + '\n' + insightTitle : insightTitle;
-	}
+	applyCellTitlesAndValidation(cellSlot.element, tooltipText, insightTitle, validationDecTitle);
 
 	cellSlot.update(
 		colIndex,
@@ -435,6 +456,17 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	// WS2: assign the renderer handle based on the resolved content mode.
 	// Destroy the previous handle when the renderer kind or portal key changes.
 	assignRendererHandle(cellSlot, contentMode, formattedValue, stableKey);
+	deps.engine.cellDisplaySnapshots.set({
+		rowId: node.id,
+		colField: col.field,
+		rowVersion,
+		globalVersion: state.globalVersion,
+		className: cellClassName,
+		contentMode,
+		formattedValue,
+		title: cellSlot.element.title,
+		validationError: validationDecTitle,
+	});
 
 	// Drag handle — injected when col.canDrag is defined (opt-in). Stored on the element to avoid re-querying.
 	const el = cellSlot.element as HTMLDivElement & { _dragHandle?: HTMLDivElement };
@@ -489,11 +521,14 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const plan = ctx.plan.columnPlans[colIndex];
 	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
 	const rendererKind: 'primitive' | 'portal' | 'loading' = isRowLoading ? 'loading' : isEditing || plan?.isCustom ? 'portal' : 'primitive';
+	const snapshot = getFreshCellSnapshot(deps, node.id, col.field, ctx);
 
 	let cellClassName = buildCellPinClass(lane);
 	if (rendererKind === 'loading') cellClassName += ' og-cell-loading';
 	if (canPreserveWarmVisuals && cellSlot.lastClassName) {
 		cellClassName = cellSlot.lastClassName;
+	} else if (snapshot?.className) {
+		cellClassName = snapshot.className;
 	}
 
 	if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {
@@ -512,6 +547,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	if (!isInVisibleContent) {
 		const canPreserveBufferedContent = canPreserveWarmVisuals && !isRowRebind;
+		const canReuseSnapshotContent =
+			!!snapshot && (snapshot.contentMode === 'text' || snapshot.contentMode === 'empty' || snapshot.contentMode === 'fallback');
 		if (!canPreserveBufferedContent && cellSlot.lastPortalKey) {
 			deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		}
@@ -525,9 +562,12 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 						: cellSlot.lastContentMode === 'custom'
 							? 'custom'
 							: 'empty'
-			: rendererKind === 'loading'
-				? 'loading'
-				: 'empty';
+			: canReuseSnapshotContent
+				? snapshot.contentMode
+				: rendererKind === 'loading'
+					? 'loading'
+					: 'empty';
+		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
 		const didWriteBuffered = cellSlot.update(
 			colIndex,
 			col.field,
@@ -541,7 +581,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			undefined,
 			canPreserveBufferedContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
 				? (cellSlot.lastFormattedValue ?? '')
-				: '',
+				: canReuseSnapshotContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
+					? snapshot.formattedValue
+					: '',
 			canPreserveBufferedContent && preservedContentMode === 'portal' ? cellSlot.lastPortalKey : undefined
 		);
 		if (didWriteBuffered) deps.incrementCurrentScrollCellsWritten();
@@ -559,6 +601,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (cachedVal !== undefined) {
 			formattedValue = cachedVal;
 			contentMode = formattedValue === '' ? 'empty' : 'text';
+		} else if (snapshot && (snapshot.contentMode === 'text' || snapshot.contentMode === 'empty' || snapshot.contentMode === 'fallback')) {
+			formattedValue = snapshot.formattedValue;
+			contentMode = snapshot.contentMode;
 		} else if (canPreserveWarmVisuals && (cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback')) {
 			formattedValue = cellSlot.lastFormattedValue ?? '';
 			contentMode = cellSlot.lastContentMode;
@@ -569,6 +614,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			deps.markCellDirtyAfterScroll(cellSlot.element);
 		}
 		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
 		const didWritePrimitive = cellSlot.update(
 			colIndex,
 			col.field,
@@ -650,6 +696,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 	}
+	applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
 
 	const didWrite = cellSlot.update(
 		colIndex,

@@ -28,6 +28,9 @@ export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	flushPendingAfterScroll: boolean;
 	needsPostScrollPortalFlush: boolean;
 	portalFlushScheduled: boolean;
+	prewarmScheduled: boolean;
+	prewarmTimer: number | null;
+	prewarmRequest: { visibleRowStart: number; visibleRowEnd: number; visibleColStart: number; visibleColEnd: number } | null;
 	postScrollDecorationScheduled: boolean;
 	postScrollDecorationTimer: number | null;
 	cachedMaxScrollLeft: number;
@@ -40,6 +43,9 @@ export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	activeRenderWindowBufIdx: number;
 	portalFlushBudget: number;
 	postScrollDecorationBudget: number;
+	scrollPrewarmBudget: number;
+	scrollPrewarmRowPadding: number;
+	scrollPrewarmColPadding: number;
 }
 
 export interface RenderScrollCoordinatorDeps<TRowData = unknown> {
@@ -170,6 +176,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			scrollCtx.selectionBounds = state.selection.bounds ?? undefined;
 
 			this.deps.recycleViewport(true, scrollCtx, nextWindow);
+			this.scheduleApproachBandPrewarm(nextWindow);
 			this.deps.stickyGroupRenderer.sync(layoutPlan);
 
 			this.deps.floatingFilterRenderer.syncScrollLeft(layoutPlan);
@@ -274,6 +281,95 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.state.postScrollDecorationTimer = null;
 		}
 		this.state.postScrollDecorationScheduled = false;
+	}
+
+	private scheduleApproachBandPrewarm(nextWindow: RenderWindow): void {
+		if (!this.deps.gridScheduler.supportsIdle()) return;
+		this.state.prewarmRequest = {
+			visibleRowStart: nextWindow.visibleRowStart ?? nextWindow.rowStart,
+			visibleRowEnd: nextWindow.visibleRowEnd ?? nextWindow.rowEnd,
+			visibleColStart: nextWindow.visibleColStart ?? nextWindow.colStart,
+			visibleColEnd: nextWindow.visibleColEnd ?? nextWindow.colEnd,
+		};
+		if (this.state.prewarmScheduled) return;
+		this.state.prewarmScheduled = true;
+		this.state.prewarmTimer = this.deps.gridScheduler.idle((deadline) => {
+			this.state.prewarmTimer = null;
+			this.state.prewarmScheduled = false;
+			this.runApproachBandPrewarm(deadline);
+		});
+	}
+
+	private runApproachBandPrewarm(deadline?: { timeRemaining(): number }): void {
+		const request = this.state.prewarmRequest;
+		if (!request) return;
+		const rowModel = this.deps.engine.getVisualRowModel();
+		if (!rowModel) return;
+
+		const columns = this.deps.engine.columns.getDisplayedColumns();
+		const rowCount = rowModel.getVisualRowCount();
+		const colCount = columns.length;
+		if (rowCount === 0 || colCount === 0) return;
+
+		const rowPadding = this.state.scrollPrewarmRowPadding;
+		const colPadding = this.state.scrollPrewarmColPadding;
+		const leftColStart = Math.max(0, request.visibleColStart - colPadding);
+		const leftColEnd = Math.max(-1, request.visibleColStart - 1);
+		const rightColStart = Math.min(colCount, request.visibleColEnd + 1);
+		const rightColEnd = Math.min(colCount - 1, request.visibleColEnd + colPadding);
+		const topRowStart = Math.max(0, request.visibleRowStart - rowPadding);
+		const topRowEnd = Math.max(-1, request.visibleRowStart - 1);
+		const bottomRowStart = Math.min(rowCount, request.visibleRowEnd + 1);
+		const bottomRowEnd = Math.min(rowCount - 1, request.visibleRowEnd + rowPadding);
+
+		let primed = 0;
+		const budget = this.state.scrollPrewarmBudget;
+		const canContinue = (): boolean => {
+			if (primed >= budget) return false;
+			if (!deadline) return true;
+			return primed === 0 || deadline.timeRemaining() > 1;
+		};
+		const primeCell = (rowIndex: number, colIndex: number): boolean => {
+			if (!canContinue()) return false;
+			const visualRow = rowModel.getVisualRow(rowIndex);
+			if (visualRow?.kind !== 'data') return true;
+			const col = columns[colIndex];
+			if (!col?.valueGetter) return true;
+			if (this.deps.engine.getCachedDisplayValue(visualRow.node.id, col.field) !== undefined) return true;
+			const primedValue = this.deps.engine.primeDisplayValue(visualRow.node.id, col.field);
+			if (primedValue !== undefined) primed++;
+			return canContinue();
+		};
+
+		for (let row = request.visibleRowStart; row <= request.visibleRowEnd && canContinue(); row++) {
+			for (let col = leftColStart; col <= leftColEnd && canContinue(); col++) {
+				if (!primeCell(row, col)) break;
+			}
+			for (let col = rightColStart; col <= rightColEnd && canContinue(); col++) {
+				if (!primeCell(row, col)) break;
+			}
+		}
+
+		for (let row = topRowStart; row <= topRowEnd && canContinue(); row++) {
+			for (let col = request.visibleColStart; col <= request.visibleColEnd && canContinue(); col++) {
+				if (!primeCell(row, col)) break;
+			}
+		}
+
+		for (let row = bottomRowStart; row <= bottomRowEnd && canContinue(); row++) {
+			for (let col = request.visibleColStart; col <= request.visibleColEnd && canContinue(); col++) {
+				if (!primeCell(row, col)) break;
+			}
+		}
+
+		if (primed >= budget && !this.state.prewarmScheduled && this.deps.gridScheduler.supportsIdle()) {
+			this.state.prewarmScheduled = true;
+			this.state.prewarmTimer = this.deps.gridScheduler.idle((nextDeadline) => {
+				this.state.prewarmTimer = null;
+				this.state.prewarmScheduled = false;
+				this.runApproachBandPrewarm(nextDeadline);
+			});
+		}
 	}
 
 	public scheduleBudgetedDecoration(): void {
