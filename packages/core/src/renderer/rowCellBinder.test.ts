@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CellSlot } from './cellSlot.js';
 import { bindCellDuringScroll, type RowCellBinderDeps } from './rowCellBinder.js';
+import { createCellInstanceRendererKey } from './identityKeys.js';
 
 describe('bindCellDuringScroll', () => {
 	it('marks newly mounted portal cells dirty and avoids stale previous-column values when the display cache misses', () => {
@@ -153,5 +154,83 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.lastClassName).toBe('og-cell og-cell-selected custom-class');
 		expect(cellSlot.element.textContent).toContain('Warm value');
 		expect(wrote).not.toHaveBeenCalled();
+	});
+
+	it('does not mark a stable frozen portal cell dirty during scroll when nothing changed', () => {
+		const dirty = vi.fn();
+		const showPortalContent = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell custom-class', 'portal', undefined, '', portalKey);
+		cellSlot.lastMountedGlobalVersion = 1;
+		cellSlot.lastMountedRowVersion = 2;
+
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: {
+					getCachedDisplayValue: vi.fn(() => undefined),
+				},
+				hasFormula: vi.fn(() => false),
+			} as any,
+			cellRenderer: { showPortalContent } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => true),
+				mountCellImmediately,
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name', cellRenderer: () => null } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 1,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 2]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(showPortalContent).toHaveBeenCalledWith(cellSlot.element);
+		expect(dirty).not.toHaveBeenCalled();
+		expect(mountCellImmediately).not.toHaveBeenCalled();
 	});
 });

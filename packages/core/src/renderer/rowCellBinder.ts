@@ -578,6 +578,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const isDataStale = !isRowRebind && canFreezePortal && (globalChanged || rowChanged);
 	const isPortalFrozen = !isRowRebind && canFreezePortal && !isDataStale;
 	const isStaleFrozen = (isRowRebind || isDataStale) && canFreezePortal;
+	const shouldDirtyFrozenPortal = ctx.hasDeferredCellStyleRules || isFocused || isEditing;
 
 	if (isPortalFrozen || isStaleFrozen) {
 		deps.cellRenderer.showPortalContent(cellSlot.element);
@@ -607,7 +608,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			});
 			cellSlot.lastMountedRowVersion = ctx.rowVersions.get(node.id) ?? -1;
 			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-		} else {
+		} else if (!isPortalFrozen || shouldDirtyFrozenPortal) {
 			deps.markCellDirtyAfterScroll(cellSlot.element);
 		}
 	} else {
