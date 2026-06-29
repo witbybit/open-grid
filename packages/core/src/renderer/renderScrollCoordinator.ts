@@ -23,7 +23,7 @@ import type { LayoutTransitionController } from './layoutTransitionController.js
 import { compileStyleRules } from '../styling/styleRules.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
-import { collectCellDecorationSnapshotMetadata, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
+import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	viewportDirtyAfterScroll: boolean;
@@ -362,11 +362,15 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				let className = 'og-cell';
 				const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
 				className += decorationMetadata.classNameSuffix;
+				let stateClassName = '';
 				if (col.canEdit !== undefined && visualRow.node.data !== null) {
 					const isEditable = normalizeCapabilityResult(
 						col.canEdit({ action: 'edit', row: visualRow.node.data, rowId, colField: col.field })
 					).allowed;
-					if (!isEditable) className += ' og-cell-readonly';
+					if (!isEditable) {
+						className += ' og-cell-readonly';
+						stateClassName = 'og-cell-readonly';
+					}
 				}
 				const tooltipText =
 					col.tooltip !== undefined && visualRow.node.data !== null
@@ -379,17 +383,22 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 									value: rawValue ?? primedValue,
 								})
 						: null;
-				this.deps.engine.cellDisplaySnapshots.set({
-					rowId,
-					colField: col.field,
-					rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
-					globalVersion: state.globalVersion,
-					className,
-					contentMode: primedValue && primedValue !== '' ? 'text' : 'empty',
-					formattedValue: primedValue ?? '',
-					title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
-					validationError: decorationMetadata.validationError,
-				});
+				this.deps.engine.cellDisplaySnapshots.set(
+					createCellDisplaySnapshot({
+						rowId,
+						colField: col.field,
+						rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+						globalVersion: state.globalVersion,
+						baseClassName: 'og-cell',
+						stateClassName,
+						decorationClassName: decorationMetadata.classNameSuffix,
+						contentKind: primedValue && primedValue !== '' ? 'text' : 'empty',
+						contentMode: primedValue && primedValue !== '' ? 'text' : 'empty',
+						formattedValue: primedValue ?? '',
+						title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
+						validationError: decorationMetadata.validationError,
+					})
+				);
 				this.deps.renderStats.prewarmedCellSnapshots++;
 			}
 			return canContinue();

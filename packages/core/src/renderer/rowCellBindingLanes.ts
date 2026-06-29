@@ -8,7 +8,7 @@ import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { CompiledColumnTopology } from './columnTopology.js';
 import { GridMetric, type GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
-import { collectCellDecorationSnapshotMetadata } from './cellDisplaySnapshot.js';
+import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot } from './cellDisplaySnapshot.js';
 
 export interface RowCellLaneFullBindRequest<TRowData = unknown> {
 	cellSlot: CellSlot<TRowData>;
@@ -587,6 +587,7 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 	const pinRightWidth = plan.pinRightWidth;
+	const globalVersion = deps.engine.stateManager.getState().globalVersion;
 
 	const pinLeftContainer = deps.ensurePinnedContainer(slot, 'left', pinLeftWidth);
 	const pinRightContainer = deps.ensurePinnedContainer(slot, 'right', pinRightWidth);
@@ -631,6 +632,21 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 			deps.ensureLoadingSkeleton(cellSlot.element);
 		}
 		const didWrite = cellSlot.update(c, col.field, rowIndex, rowId, leftArg, -1, cellWidth, cellClassName, 'loading', undefined, '', undefined);
+		deps.engine.cellDisplaySnapshots.set(
+			createCellDisplaySnapshot({
+				rowId,
+				colField: col.field,
+				rowVersion: -1,
+				globalVersion,
+				baseClassName: 'og-cell og-cell-loading',
+				decorationClassName: cellClassName.replace('og-cell og-cell-loading', '').trim(),
+				contentKind: 'loading',
+				contentMode: 'loading',
+				formattedValue: '',
+				title: cellSlot.element.title,
+				validationError: cellSlot.element.dataset.validationError,
+			})
+		);
 		if (isScrollFrameActive && didWrite) deps.onScrollCellWritten();
 	};
 

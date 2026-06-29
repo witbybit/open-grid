@@ -41,6 +41,9 @@ That is enough to produce numbers, but not enough to produce the “weightless p
 Phase A progress note:
 The feather-scroll perceptual contract is now explicitly defined in `docs/architecture/plan-153-feather-scroll-contract.md`, and executable scenario evidence lives in `packages/core/src/renderer/serverRuntimePerformance.test.ts`. The portal-heavy visible blanking characterization and the integrity-heavy visible decoration-loss characterization are now both closed in automated coverage. That means the contract-definition phase is established and measurable, and the remaining work is architectural convergence around snapshot authority, motion/fidelity separation, impostors, and deterministic fidelity upgrades rather than unresolved baseline-characterization debt.
 
+Phase B progress note:
+The cell display snapshot has been upgraded from a flat `className + text` cache into a canonical payload with explicit base/state/decoration class segments, canonical tokenization, and an explicit `contentKind`. Full-bind paints, prewarm snapshot production, and loading-row binds now all write through that shared snapshot builder. This does not finish Phase B, but it creates a stronger snapshot authority surface so later passes can delete more scroll-time class/decor recomputation instead of adding new warm-state heuristics.
+
 Open Grid already has:
 
 - stable slot ownership

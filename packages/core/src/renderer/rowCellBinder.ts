@@ -20,7 +20,12 @@ import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
-import { collectCellDecorationSnapshotMetadata, mergeCellSnapshotTitle, type CellDisplaySnapshot } from './cellDisplaySnapshot.js';
+import {
+	collectCellDecorationSnapshotMetadata,
+	createCellDisplaySnapshot,
+	mergeCellSnapshotTitle,
+	type CellDisplaySnapshot,
+} from './cellDisplaySnapshot.js';
 
 function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
 	if (lane === 'left') return 'og-cell og-cell-pinned-left';
@@ -38,6 +43,13 @@ function appendClassTokens(baseClassName: string, classNameSuffix: string): stri
 		}
 	}
 	return nextClassName;
+}
+
+function subtractNormalizedClassName(fullClassName: string, baseClassName: string): string {
+	const fullTokens = fullClassName.trim().split(/\s+/).filter(Boolean);
+	if (fullTokens.length === 0) return '';
+	const baseTokenSet = new Set(baseClassName.trim().split(/\s+/).filter(Boolean));
+	return fullTokens.filter((token) => !baseTokenSet.has(token)).join(' ');
 }
 
 function applyCellTitlesAndValidation(element: HTMLDivElement, tooltipText: string | null, insightTitle: string, validationError?: string): void {
@@ -241,7 +253,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	const access = deps.engine.cellAccess.get(node.id, rowIndex, node, node.data, colIndex, col, undefined, state);
 	const rowVersion = deps.engine.rowVersions.get(node.id) ?? -1;
 
-	let cellClassName = buildCellPinClass(lane);
+	const baseCellClassName = buildCellPinClass(lane);
+	let cellClassName = baseCellClassName;
 	if (access.isFocused) {
 		cellClassName += ' og-cell-focused';
 		cellSlot.element.tabIndex = -1;
@@ -462,17 +475,22 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	// WS2: assign the renderer handle based on the resolved content mode.
 	// Destroy the previous handle when the renderer kind or portal key changes.
 	assignRendererHandle(cellSlot, contentMode, formattedValue, stableKey);
-	deps.engine.cellDisplaySnapshots.set({
-		rowId: node.id,
-		colField: col.field,
-		rowVersion,
-		globalVersion: state.globalVersion,
-		className: cellClassName,
-		contentMode,
-		formattedValue,
-		title: cellSlot.element.title,
-		validationError: validationDecTitle,
-	});
+	deps.engine.cellDisplaySnapshots.set(
+		createCellDisplaySnapshot({
+			rowId: node.id,
+			colField: col.field,
+			rowVersion,
+			globalVersion: state.globalVersion,
+			baseClassName: baseCellClassName,
+			stateClassName: subtractNormalizedClassName(cellClassName, baseCellClassName + decorationMetadata.classNameSuffix),
+			decorationClassName: decorationMetadata.classNameSuffix,
+			contentKind: contentMode === 'portal' ? 'portal-live' : contentMode,
+			contentMode,
+			formattedValue,
+			title: cellSlot.element.title,
+			validationError: validationDecTitle,
+		})
+	);
 
 	// Drag handle — injected when col.canDrag is defined (opt-in). Stored on the element to avoid re-querying.
 	const el = cellSlot.element as HTMLDivElement & { _dragHandle?: HTMLDivElement };
