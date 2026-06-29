@@ -585,27 +585,6 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		contentMode = 'portal';
 
 		if (isPortalFrozen && scrollMode === 'custom-live') {
-			const portalHost = deps.ensureCellPortalHost(cellSlot.element);
-			deps.portalMountManager.mountCellImmediately({
-				cellKey,
-				container: portalHost,
-				value: getScrollMountValue(deps, node, col, cellSlot),
-				node,
-				col,
-				rowIndex,
-				colIndex,
-				rowSlotId: pooledRowId,
-				slotGeneration: request.pooledRowGeneration,
-				cellRowBindingGeneration: cellSlot.rowBindingGeneration,
-				cellInstanceId: cellSlot.cellInstanceId,
-				portalHostId: cellSlot.portalHostId,
-				isEditing,
-				isLoading: false,
-				phase: 'scroll',
-				isScrolling: false,
-				isFocused,
-				isSelected: false,
-			});
 			cellSlot.lastMountedRowVersion = ctx.rowVersions.get(node.id) ?? -1;
 			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 		} else if (!isPortalFrozen || shouldDirtyFrozenPortal) {
