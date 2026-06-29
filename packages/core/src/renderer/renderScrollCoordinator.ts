@@ -20,7 +20,7 @@ import type { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
-import { compileStyleRules } from '../styling/styleRules.js';
+import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
@@ -332,6 +332,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const state = this.deps.engine.stateManager.getState();
 		const focusedCell = state.selection.focus;
 		const selectionBounds = state.selection.bounds;
+		const compiledStyleRules = compileStyleRules(state.styleRules);
 
 		const columns = this.deps.engine.columns.getDisplayedColumns();
 		const rowCount = rowModel.getVisualRowCount();
@@ -349,14 +350,40 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const bottomRowStart = Math.min(rowCount, request.visibleRowEnd + 1);
 		const bottomRowEnd = Math.min(rowCount - 1, request.visibleRowEnd + rowPadding);
 
-		let primed = 0;
+		let workDone = 0;
 		const budget = this.state.scrollPrewarmBudget;
 		const canContinue = (): boolean => {
-			if (primed >= budget) return false;
+			if (workDone >= budget) return false;
 			if (!deadline) return true;
-			return primed === 0 || deadline.timeRemaining() > 1;
+			return workDone === 0 || deadline.timeRemaining() > 1;
 		};
-		const primeCell = (rowIndex: number, colIndex: number): boolean => {
+		const recordWork = (): void => {
+			workDone++;
+		};
+		const visitApproachBand = (visit: (rowIndex: number, colIndex: number) => boolean): void => {
+			for (let row = request.visibleRowStart; row <= request.visibleRowEnd && canContinue(); row++) {
+				for (let col = leftColStart; col <= leftColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+				for (let col = rightColStart; col <= rightColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
+
+			for (let row = topRowStart; row <= topRowEnd && canContinue(); row++) {
+				for (let col = request.visibleColStart; col <= request.visibleColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
+
+			for (let row = bottomRowStart; row <= bottomRowEnd && canContinue(); row++) {
+				for (let col = request.visibleColStart; col <= request.visibleColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
+		};
+
+		visitApproachBand((rowIndex, colIndex) => {
 			if (!canContinue()) return false;
 			const visualRow = rowModel.getVisualRow(rowIndex);
 			if (visualRow?.kind !== 'data') return true;
@@ -366,98 +393,112 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
 			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
 			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
-			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
-			const hasInsightDecorations = cellDecorations.length > 0;
-			if (!col.valueGetter && !shouldPrimeFormula && !hasRegisteredFormula && !hasInsightDecorations) return true;
+			const shouldPrimeDisplayValue = col.valueGetter || shouldPrimeFormula || hasRegisteredFormula;
+			if (!shouldPrimeDisplayValue) return true;
 			const cachedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field);
-			if (col.valueGetter) {
-				if (cachedValue !== undefined) return true;
-			} else if (hasRegisteredFormula) {
-				if (cachedValue !== undefined) return true;
-			}
-			const primedValue =
-				col.valueGetter || shouldPrimeFormula || hasRegisteredFormula ? this.deps.engine.primeDisplayValue(rowId, col.field) : cachedValue;
+			if ((col.valueGetter || hasRegisteredFormula) && cachedValue !== undefined) return true;
+			const primedValue = this.deps.engine.primeDisplayValue(rowId, col.field);
 			if (primedValue !== undefined) {
-				primed++;
+				recordWork();
 				this.deps.renderStats.prewarmedDisplayValues++;
 			}
-			if (hasInsightDecorations) {
-				let className = 'og-cell';
-				const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
-				className += decorationMetadata.classNameSuffix;
-				let stateClassName = '';
-				if (isCellFocused(rowId, col.field, focusedCell)) {
-					stateClassName += stateClassName ? ' og-cell-focused' : 'og-cell-focused';
-				}
-				if (isCellSelected(rowIndex, colIndex, selectionBounds)) {
-					stateClassName += stateClassName ? ' og-cell-selected' : 'og-cell-selected';
-				}
-				if (col.canEdit !== undefined && visualRow.node.data !== null) {
-					const isEditable = normalizeCapabilityResult(
-						col.canEdit({ action: 'edit', row: visualRow.node.data, rowId, colField: col.field })
-					).allowed;
-					if (!isEditable) {
-						stateClassName += stateClassName ? ' og-cell-readonly' : 'og-cell-readonly';
-					}
-				}
-				const tooltipText =
-					col.tooltip !== undefined && visualRow.node.data !== null
-						? typeof col.tooltip === 'string'
-							? col.tooltip
-							: col.tooltip({
-									row: visualRow.node.data,
-									rowId,
-									colField: col.field,
-									value: rawValue ?? primedValue,
-								})
-						: null;
-				this.deps.engine.cellDisplaySnapshots.set(
-					createCellDisplaySnapshot({
-						rowId,
-						colField: col.field,
-						rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
-						globalVersion: state.globalVersion,
-						insightVersion: this.deps.engine.insights.getVersion(),
-						styleVersion: this.deps.rowRenderer.styleVersion,
-						loadingVersion: this.deps.rowRenderer.loadingVersion,
-						selectionVersion: this.deps.engine.selectionVersion,
-						baseClassName: 'og-cell',
-						stateClassName,
-						decorationClassName: decorationMetadata.classNameSuffix,
-						contentKind: primedValue && primedValue !== '' ? 'text' : 'empty',
-						contentMode: primedValue && primedValue !== '' ? 'text' : 'empty',
-						formattedValue: primedValue ?? '',
-						title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
-						validationError: decorationMetadata.validationError,
-					})
-				);
-				this.deps.renderStats.prewarmedCellSnapshots++;
-			}
 			return canContinue();
-		};
+		});
 
-		for (let row = request.visibleRowStart; row <= request.visibleRowEnd && canContinue(); row++) {
-			for (let col = leftColStart; col <= leftColEnd && canContinue(); col++) {
-				if (!primeCell(row, col)) break;
+		visitApproachBand((rowIndex, colIndex) => {
+			if (!canContinue()) return false;
+			const visualRow = rowModel.getVisualRow(rowIndex);
+			if (visualRow?.kind !== 'data') return true;
+			const col = columns[colIndex];
+			if (!col) return true;
+			const rowId = visualRow.node.id;
+			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
+			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
+			const hasInsightDecorations = cellDecorations.length > 0;
+			const isFocused = isCellFocused(rowId, col.field, focusedCell);
+			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
+			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
+			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
+			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
+			if (!hasInsightDecorations && !isFocused && !isSelected && !needsReadonlyEvaluation && !needsTooltipSnapshot && !needsStyleSnapshot) {
+				return true;
 			}
-			for (let col = rightColStart; col <= rightColEnd && canContinue(); col++) {
-				if (!primeCell(row, col)) break;
+			const primedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field);
+			const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
+			let stateClassName = '';
+			if (isFocused) {
+				stateClassName += stateClassName ? ' og-cell-focused' : 'og-cell-focused';
 			}
-		}
+			if (isSelected) {
+				stateClassName += stateClassName ? ' og-cell-selected' : 'og-cell-selected';
+			}
+			if (needsReadonlyEvaluation) {
+				const isEditable = normalizeCapabilityResult(
+					col.canEdit!({ action: 'edit', row: visualRow.node.data, rowId, colField: col.field })
+				).allowed;
+				if (!isEditable) {
+					stateClassName += stateClassName ? ' og-cell-readonly' : 'og-cell-readonly';
+				}
+			}
+			if (needsStyleSnapshot) {
+				const styleScratch = this.deps.rowRenderer.cellClassScratch;
+				styleScratch.row = visualRow.node.data;
+				styleScratch.rowId = rowId;
+				styleScratch.rowIndex = rowIndex;
+				styleScratch.col = col;
+				styleScratch.colField = col.field;
+				styleScratch.colIndex = colIndex;
+				styleScratch.isFocused = isFocused;
+				styleScratch.isRowFocused = focusedCell?.rowId === rowId;
+				styleScratch.isRowSelected = isSelected;
+				styleScratch.isSelected = isSelected;
+				styleScratch.isEditing = false;
+				styleScratch.value = primedValue;
+				styleScratch.rawValue = rawValue ?? primedValue;
+				styleScratch.isLoading = false;
+				styleScratch.selection = state.selection;
+				const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, visualRow.node.data, styleScratch);
+				if (customCellClass) stateClassName += stateClassName ? ` ${customCellClass}` : customCellClass;
+			}
+			const tooltipText =
+				col.tooltip !== undefined && visualRow.node.data !== null
+					? typeof col.tooltip === 'string'
+						? col.tooltip
+						: col.tooltip({
+								row: visualRow.node.data,
+								rowId,
+								colField: col.field,
+								value: rawValue ?? primedValue,
+							})
+					: null;
+			const shouldWriteSnapshot = hasInsightDecorations || !!stateClassName || !!tooltipText;
+			if (!shouldWriteSnapshot) return true;
+			recordWork();
+			this.deps.engine.cellDisplaySnapshots.set(
+				createCellDisplaySnapshot({
+					rowId,
+					colField: col.field,
+					rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+					globalVersion: state.globalVersion,
+					insightVersion: this.deps.engine.insights.getVersion(),
+					styleVersion: this.deps.rowRenderer.styleVersion,
+					loadingVersion: this.deps.rowRenderer.loadingVersion,
+					selectionVersion: this.deps.engine.selectionVersion,
+					baseClassName: 'og-cell',
+					stateClassName,
+					decorationClassName: decorationMetadata.classNameSuffix,
+					contentKind: primedValue && primedValue !== '' ? 'text' : 'empty',
+					contentMode: primedValue && primedValue !== '' ? 'text' : 'empty',
+					formattedValue: primedValue ?? '',
+					title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
+					validationError: decorationMetadata.validationError,
+				})
+			);
+			this.deps.renderStats.prewarmedCellSnapshots++;
+			return canContinue();
+		});
 
-		for (let row = topRowStart; row <= topRowEnd && canContinue(); row++) {
-			for (let col = request.visibleColStart; col <= request.visibleColEnd && canContinue(); col++) {
-				if (!primeCell(row, col)) break;
-			}
-		}
-
-		for (let row = bottomRowStart; row <= bottomRowEnd && canContinue(); row++) {
-			for (let col = request.visibleColStart; col <= request.visibleColEnd && canContinue(); col++) {
-				if (!primeCell(row, col)) break;
-			}
-		}
-
-		if (primed >= budget && !this.state.prewarmScheduled && this.deps.gridScheduler.supportsIdle()) {
+		if (workDone >= budget && !this.state.prewarmScheduled && this.deps.gridScheduler.supportsIdle()) {
 			this.state.prewarmScheduled = true;
 			this.state.prewarmTimer = this.deps.gridScheduler.idle((nextDeadline) => {
 				this.state.prewarmTimer = null;
