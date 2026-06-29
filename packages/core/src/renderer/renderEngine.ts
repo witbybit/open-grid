@@ -168,6 +168,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			stateVersion: 0,
 			rowVersions: this.engine.rowVersions,
 			globalVersion: 0,
+			insightVersion: 0,
 			styleVersion: 0,
 			loadingVersion: 0,
 			styleChangedDuringScroll: false,

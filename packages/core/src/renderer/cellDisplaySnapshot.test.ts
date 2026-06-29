@@ -4,20 +4,23 @@ import { CellDisplaySnapshotStore, createCellDisplaySnapshot, joinCellSnapshotCl
 describe('CellDisplaySnapshotStore', () => {
 	it('stores snapshots by logical cell identity', () => {
 		const store = new CellDisplaySnapshotStore();
-		store.set(createCellDisplaySnapshot({
-			rowId: 'r1',
-			colField: 'name',
-			rowVersion: 2,
-			globalVersion: 5,
-			baseClassName: 'og-cell',
-			stateClassName: 'highlight',
-			decorationClassName: 'og-cell-validation-error',
-			contentKind: 'text',
-			contentMode: 'text',
-			formattedValue: 'Alice',
-			title: 'User name',
-			validationError: 'Required',
-		}));
+		store.set(
+			createCellDisplaySnapshot({
+				rowId: 'r1',
+				colField: 'name',
+				rowVersion: 2,
+				globalVersion: 5,
+				insightVersion: 1,
+				baseClassName: 'og-cell',
+				stateClassName: 'highlight',
+				decorationClassName: 'og-cell-validation-error',
+				contentKind: 'text',
+				contentMode: 'text',
+				formattedValue: 'Alice',
+				title: 'User name',
+				validationError: 'Required',
+			})
+		);
 
 		expect(store.get('r1', 'name')).toMatchObject({
 			formattedValue: 'Alice',
@@ -30,29 +33,35 @@ describe('CellDisplaySnapshotStore', () => {
 
 	it('replaces existing snapshots for the same logical cell', () => {
 		const store = new CellDisplaySnapshotStore();
-		store.set(createCellDisplaySnapshot({
-			rowId: 'r1',
-			colField: 'name',
-			rowVersion: 1,
-			globalVersion: 1,
-			baseClassName: 'og-cell',
-			contentKind: 'text',
-			contentMode: 'text',
-			formattedValue: 'Alice',
-			title: '',
-		}));
-		store.set(createCellDisplaySnapshot({
-			rowId: 'r1',
-			colField: 'name',
-			rowVersion: 2,
-			globalVersion: 3,
-			baseClassName: 'og-cell',
-			stateClassName: 'fresh',
-			contentKind: 'text',
-			contentMode: 'text',
-			formattedValue: 'Alicia',
-			title: 'Updated',
-		}));
+		store.set(
+			createCellDisplaySnapshot({
+				rowId: 'r1',
+				colField: 'name',
+				rowVersion: 1,
+				globalVersion: 1,
+				insightVersion: 0,
+				baseClassName: 'og-cell',
+				contentKind: 'text',
+				contentMode: 'text',
+				formattedValue: 'Alice',
+				title: '',
+			})
+		);
+		store.set(
+			createCellDisplaySnapshot({
+				rowId: 'r1',
+				colField: 'name',
+				rowVersion: 2,
+				globalVersion: 3,
+				insightVersion: 0,
+				baseClassName: 'og-cell',
+				stateClassName: 'fresh',
+				contentKind: 'text',
+				contentMode: 'text',
+				formattedValue: 'Alicia',
+				title: 'Updated',
+			})
+		);
 
 		expect(store.get('r1', 'name')).toMatchObject({
 			rowVersion: 2,
@@ -68,6 +77,7 @@ describe('CellDisplaySnapshotStore', () => {
 			colField: 'status',
 			rowVersion: 7,
 			globalVersion: 9,
+			insightVersion: 4,
 			baseClassName: 'og-cell  og-cell-pinned-left',
 			stateClassName: ' og-cell-selected og-cell-readonly ',
 			decorationClassName: 'og-cell-validation-error og-cell-selected',
@@ -78,13 +88,7 @@ describe('CellDisplaySnapshotStore', () => {
 		});
 
 		expect(snapshot.className).toBe('og-cell og-cell-pinned-left og-cell-selected og-cell-readonly og-cell-validation-error');
-		expect(snapshot.classTokens).toEqual([
-			'og-cell',
-			'og-cell-pinned-left',
-			'og-cell-selected',
-			'og-cell-readonly',
-			'og-cell-validation-error',
-		]);
+		expect(snapshot.classTokens).toEqual(['og-cell', 'og-cell-pinned-left', 'og-cell-selected', 'og-cell-readonly', 'og-cell-validation-error']);
 		expect(snapshot.contentKind).toBe('portal-frozen');
 	});
 

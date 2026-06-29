@@ -16,15 +16,25 @@ const EMPTY_ROW_DECORATIONS: readonly GridRowDecoration[] = [];
  */
 export class GridInsightRegistry {
 	private readonly layers = new Map<GridInsightLayerId, GridInsightLayer>();
+	private version = 0;
 
 	get size(): number {
 		return this.layers.size;
+	}
+
+	getVersion(): number {
+		return this.version;
+	}
+
+	private bumpVersion(): void {
+		this.version++;
 	}
 
 	register(layer: GridInsightLayer): void {
 		const existing = this.layers.get(layer.id);
 		existing?.destroy?.();
 		this.layers.set(layer.id, layer);
+		this.bumpVersion();
 	}
 
 	unregister(id: GridInsightLayerId): void {
@@ -32,6 +42,7 @@ export class GridInsightRegistry {
 		if (layer) {
 			layer.destroy?.();
 			this.layers.delete(id);
+			this.bumpVersion();
 		}
 	}
 
@@ -72,9 +83,11 @@ export class GridInsightRegistry {
 
 	/** Destroys and removes all registered layers. Called on grid destroy. */
 	clear(): void {
+		if (this.layers.size === 0) return;
 		for (const layer of this.layers.values()) {
 			layer.destroy?.();
 		}
 		this.layers.clear();
+		this.bumpVersion();
 	}
 }

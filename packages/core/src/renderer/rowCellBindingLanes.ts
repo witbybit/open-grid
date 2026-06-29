@@ -638,6 +638,7 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 				colField: col.field,
 				rowVersion: -1,
 				globalVersion,
+				insightVersion: deps.engine.insights.getVersion(),
 				baseClassName: 'og-cell og-cell-loading',
 				decorationClassName: cellClassName.replace('og-cell og-cell-loading', '').trim(),
 				contentKind: 'loading',

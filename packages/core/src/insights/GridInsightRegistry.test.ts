@@ -12,15 +12,19 @@ function makeLayer(overrides: Partial<GridInsightLayer> = {}): GridInsightLayer 
 describe('GridInsightRegistry', () => {
 	it('can register an insight layer', () => {
 		const reg = new GridInsightRegistry();
+		expect(reg.getVersion()).toBe(0);
 		reg.register(makeLayer({ id: 'dataQuality' }));
 		expect(reg.size).toBe(1);
+		expect(reg.getVersion()).toBe(1);
 	});
 
 	it('can unregister an insight layer', () => {
 		const reg = new GridInsightRegistry();
 		reg.register(makeLayer({ id: 'dataQuality' }));
+		expect(reg.getVersion()).toBe(1);
 		reg.unregister('dataQuality');
 		expect(reg.size).toBe(0);
+		expect(reg.getVersion()).toBe(2);
 	});
 
 	it('calls destroy() on unregister', () => {
@@ -38,6 +42,7 @@ describe('GridInsightRegistry', () => {
 		reg.register(makeLayer({ id: 'dataQuality' }));
 		expect(destroy1).toHaveBeenCalledOnce();
 		expect(reg.size).toBe(1);
+		expect(reg.getVersion()).toBe(2);
 	});
 
 	it('clear() destroys all layers', () => {
@@ -50,6 +55,7 @@ describe('GridInsightRegistry', () => {
 		expect(destroyA).toHaveBeenCalledOnce();
 		expect(destroyB).toHaveBeenCalledOnce();
 		expect(reg.size).toBe(0);
+		expect(reg.getVersion()).toBe(3);
 	});
 
 	it('aggregates cell decorations from multiple layers', () => {
@@ -124,5 +130,6 @@ describe('GridInsightRegistry', () => {
 	it('clearing an empty registry is a no-op', () => {
 		const reg = new GridInsightRegistry();
 		expect(() => reg.clear()).not.toThrow();
+		expect(reg.getVersion()).toBe(0);
 	});
 });

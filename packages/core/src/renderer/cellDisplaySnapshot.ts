@@ -8,6 +8,7 @@ export interface CellDisplaySnapshot {
 	colField: string;
 	rowVersion: number;
 	globalVersion: number;
+	insightVersion: number;
 	baseClassName: string;
 	stateClassName: string;
 	decorationClassName: string;
@@ -44,11 +45,7 @@ export function mergeCellSnapshotTitle(tooltipText: string | null, insightTitle:
 }
 
 function normalizeClassNameSegment(className: string): string {
-	return className
-		.trim()
-		.split(/\s+/)
-		.filter(Boolean)
-		.join(' ');
+	return className.trim().split(/\s+/).filter(Boolean).join(' ');
 }
 
 function tokenizeClassName(className: string): string[] {
@@ -76,6 +73,7 @@ export interface CreateCellDisplaySnapshotOptions {
 	colField: string;
 	rowVersion: number;
 	globalVersion: number;
+	insightVersion: number;
 	baseClassName: string;
 	stateClassName?: string;
 	decorationClassName?: string;
@@ -96,6 +94,7 @@ export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOpti
 		colField: options.colField,
 		rowVersion: options.rowVersion,
 		globalVersion: options.globalVersion,
+		insightVersion: options.insightVersion,
 		baseClassName,
 		stateClassName,
 		decorationClassName,

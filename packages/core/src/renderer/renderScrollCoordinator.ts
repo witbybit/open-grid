@@ -158,6 +158,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			scrollCtx.state = state;
 			scrollCtx.rowVersions = this.deps.engine.rowVersions;
 			scrollCtx.globalVersion = state.globalVersion;
+			scrollCtx.insightVersion = this.deps.engine.insights.getVersion();
 			scrollCtx.styleVersion = this.deps.rowRenderer.styleVersion;
 			scrollCtx.loadingVersion = this.deps.rowRenderer.loadingVersion;
 			scrollCtx.styleChangedDuringScroll = this.deps.rowRenderer.styleVersion !== this.deps.rowRenderer.scrollStartStyleVersion;
@@ -389,6 +390,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 						colField: col.field,
 						rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
 						globalVersion: state.globalVersion,
+						insightVersion: this.deps.engine.insights.getVersion(),
 						baseClassName: 'og-cell',
 						stateClassName,
 						decorationClassName: decorationMetadata.classNameSuffix,

@@ -13,6 +13,7 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	// Bumped on any structural change (sort, filter, group, row add/remove).
 	// When this changes all frozen portals must thaw.
 	globalVersion: number;
+	insightVersion: number;
 	styleVersion: number;
 	loadingVersion: number;
 	styleChangedDuringScroll: boolean;

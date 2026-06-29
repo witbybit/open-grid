@@ -169,6 +169,7 @@ describe('bindCellDuringScroll', () => {
 					colField: 'name',
 					rowVersion: 3,
 					globalVersion: 7,
+					insightVersion: 0,
 					baseClassName: 'og-cell',
 					stateClassName: 'snap-class',
 					decorationClassName: '',
@@ -220,6 +221,7 @@ describe('bindCellDuringScroll', () => {
 				activeEdit: null,
 				focusedCell: null,
 				globalVersion: 7,
+				insightVersion: 0,
 				hasDeferredCellStyleRules: false,
 				isScrolling: true,
 				loadingVersion: 0,
@@ -241,6 +243,373 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.lastClassName).toBe('og-cell snap-class');
 		expect(cellSlot.element.title).toBe('Snapshot title');
 		expect(cellSlot.element.dataset.validationError).toBe('Invalid value');
+	});
+
+	it('prefers a fresh logical snapshot over warm primitive content for visible cells during scroll', () => {
+		const getCachedDisplayValue = vi.fn(() => 'Cached value that should not win');
+		const cellSlot = new CellSlot(document.createElement('div'));
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell warm-class', 'text', undefined, 'Warm value');
+		cellSlot.lastMountedGlobalVersion = 7;
+		cellSlot.lastMountedRowVersion = 3;
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: { getCachedDisplayValue },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 3,
+					globalVersion: 7,
+					insightVersion: 0,
+					baseClassName: 'og-cell',
+					stateClassName: 'snap-class',
+					decorationClassName: '',
+					classTokens: ['og-cell', 'snap-class'],
+					className: 'og-cell snap-class',
+					contentKind: 'text',
+					contentMode: 'text',
+					formattedValue: 'Snapshot value',
+					title: 'Snapshot title',
+				})),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => false),
+				mountCellImmediately: vi.fn(),
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: vi.fn(),
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name' } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				insightVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: false, mode: 'primitive' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(cellSlot.lastFormattedValue).toBe('Snapshot value');
+		expect(cellSlot.lastClassName).toBe('og-cell snap-class');
+		expect(cellSlot.element.title).toBe('Snapshot title');
+		expect(getCachedDisplayValue).not.toHaveBeenCalled();
+	});
+
+	it('does not dirty a visible primitive cell solely because insight layers exist when the snapshot insight version is fresh', () => {
+		const markCellDirtyAfterScroll = vi.fn();
+		const incrementStyleHookCallsDuringScroll = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 3,
+					globalVersion: 7,
+					insightVersion: 4,
+					baseClassName: 'og-cell',
+					stateClassName: '',
+					decorationClassName: 'og-cell-validation-error',
+					classTokens: ['og-cell', 'og-cell-validation-error'],
+					className: 'og-cell og-cell-validation-error',
+					contentKind: 'text',
+					contentMode: 'text',
+					formattedValue: 'Snapshot value',
+					title: 'Needs review',
+					validationError: 'Needs review',
+				})),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => false),
+				mountCellImmediately: vi.fn(),
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll,
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name' } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				insightVersion: 4,
+				hasDeferredCellStyleRules: false,
+				hasInsightDecorations: true,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: false, mode: 'primitive' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(cellSlot.lastClassName).toBe('og-cell og-cell-validation-error');
+		expect(markCellDirtyAfterScroll).not.toHaveBeenCalled();
+		expect(incrementStyleHookCallsDuringScroll).not.toHaveBeenCalled();
+	});
+
+	it('reuses a fresh logical portal snapshot for buffered offscreen cells instead of downgrading them to empty', () => {
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell portal-warm', 'portal', undefined, '', portalKey);
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: {
+					getCachedDisplayValue: vi.fn(() => undefined),
+				},
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 3,
+					globalVersion: 7,
+					insightVersion: 0,
+					baseClassName: 'og-cell',
+					stateClassName: 'portal-warm',
+					decorationClassName: '',
+					classTokens: ['og-cell', 'portal-warm'],
+					className: 'og-cell portal-warm',
+					contentKind: 'portal-live',
+					contentMode: 'portal',
+					formattedValue: '',
+					title: 'Portal snapshot',
+				})),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => true),
+				mountCellImmediately: vi.fn(),
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: vi.fn(),
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name', cellRenderer: () => null } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				insightVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: false,
+		});
+
+		expect(cellSlot.lastContentMode).toBe('portal');
+		expect(cellSlot.lastPortalKey).toBe(portalKey);
+		expect(cellSlot.element.title).toBe('Portal snapshot');
+	});
+
+	it('trusts a fresh visible portal snapshot and host presence before consulting the mount registry', () => {
+		const dirty = vi.fn();
+		const showPortalContent = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const isCellMounted = vi.fn(() => {
+			throw new Error('mount registry should not be consulted when snapshot + host are fresh');
+		});
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const host = document.createElement('div');
+		host.appendChild(document.createElement('span'));
+		cellSlot.element.appendChild(host);
+		cellSlot.portalHostElement = host;
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell portal-warm', 'portal', undefined, '', portalKey);
+		cellSlot.lastMountedGlobalVersion = 7;
+		cellSlot.lastMountedRowVersion = 3;
+
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: {
+					getCachedDisplayValue: vi.fn(() => undefined),
+				},
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 3,
+					globalVersion: 7,
+					insightVersion: 0,
+					baseClassName: 'og-cell',
+					stateClassName: 'portal-warm',
+					decorationClassName: '',
+					classTokens: ['og-cell', 'portal-warm'],
+					className: 'og-cell portal-warm',
+					contentKind: 'portal-live',
+					contentMode: 'portal',
+					formattedValue: '',
+					title: 'Portal snapshot',
+				})),
+			} as any,
+			cellRenderer: { showPortalContent } as any,
+			portalMountManager: {
+				isCellMounted,
+				mountCellImmediately,
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: () => host,
+			getCellPortalHost: () => host,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name', cellRenderer: () => null } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				insightVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(showPortalContent).toHaveBeenCalledWith(cellSlot.element);
+		expect(isCellMounted).not.toHaveBeenCalled();
+		expect(dirty).not.toHaveBeenCalled();
+		expect(mountCellImmediately).not.toHaveBeenCalled();
 	});
 
 	it('applies live insight decorations immediately for visible primitive cells when no snapshot exists yet', () => {
