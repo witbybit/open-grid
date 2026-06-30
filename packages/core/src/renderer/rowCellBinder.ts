@@ -440,7 +440,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 				: access.value != null
 					? String(access.value)
 					: deps.engine.getCheapDisplayValue(node.id, col.field);
-		const scrollImpostorFn = col.cellRendererCapabilities?.scrollImpostor;
+		const scrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
 		portalImpostorValue =
 			scrollImpostorFn != null
 				? scrollImpostorFn({ value: access.value, formattedValue: formattedForImpostor }) || formattedForImpostor
@@ -784,7 +784,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		!isRowRebind && cellSlot.lastPortalKey === portalCellKey && hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
 	if (hasScrollImpostorCapability && !isEditing && !isFocused && !canFreezePortal && !hasExistingLivePortalContent) {
 		const genericCheap = deps.engine.getCheapDisplayValue?.(node.id, col.field) ?? '';
-		const scrollImpostorFn = col.cellRendererCapabilities?.scrollImpostor;
+		const scrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
 		const cheapValue =
 			isWarmBindingVersionFresh && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
 				? cellSlot.lastFormattedValue
