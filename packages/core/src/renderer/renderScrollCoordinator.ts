@@ -398,6 +398,24 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 					if (!visit(row, col)) return;
 				}
 			}
+
+			// Corner cells: approach rows × approach columns — needed for diagonal scroll entry.
+			for (let row = topRowStart; row <= topRowEnd && canContinue(); row++) {
+				for (let col = leftColStart; col <= leftColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+				for (let col = rightColStart; col <= rightColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
+			for (let row = bottomRowStart; row <= bottomRowEnd && canContinue(); row++) {
+				for (let col = leftColStart; col <= leftColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+				for (let col = rightColStart; col <= rightColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
 		};
 
 		visitApproachBand((rowIndex, colIndex) => {
@@ -662,7 +680,31 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				return;
 			}
 			if (result.remainingFidelity > 0) {
-				this.scheduleBudgetedFidelityDecoration();
+				// Run the first fidelity batch in this same idle slice so visible rich cells
+				// do not remain as impostors for an extra idle-to-idle gap.
+				this.deps.renderStats.postScrollDecorationChunks++;
+				this.deps.renderStats.postScrollFidelityChunks++;
+				this.deps.portalMountManager.beginCellReleaseTransaction();
+				let fidelityResult;
+				try {
+					fidelityResult = this.deps.rowRenderer.decorateDirtyCellsAfterScroll({
+						maxCells: this.state.postScrollFidelityBudget,
+						lane: 'fidelity',
+					});
+				} finally {
+					this.deps.portalMountManager.endCellReleaseTransaction();
+				}
+				if (fidelityResult.processed > this.deps.renderStats.maxCellsDecoratedInOneChunk) {
+					this.deps.renderStats.maxCellsDecoratedInOneChunk = fidelityResult.processed;
+				}
+				if (fidelityResult.processed > this.deps.renderStats.maxFidelityCellsDecoratedInOneChunk) {
+					this.deps.renderStats.maxFidelityCellsDecoratedInOneChunk = fidelityResult.processed;
+				}
+				this.deps.renderStats.cellsDecoratedAfterScroll += fidelityResult.processed;
+				this.deps.renderStats.fidelityCellsDecoratedAfterScroll += fidelityResult.processed;
+				if (fidelityResult.remainingFidelity > 0) {
+					this.scheduleBudgetedFidelityDecoration();
+				}
 			}
 		});
 	}

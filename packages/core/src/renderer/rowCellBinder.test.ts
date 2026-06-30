@@ -1190,6 +1190,180 @@ describe('bindCellDuringScroll', () => {
 		expect(mountCellImmediately).not.toHaveBeenCalled();
 	});
 
+	it('uses impostor snapshot for a pinned-left custom-live cell during scroll, same as center lane', () => {
+		const dirty = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 1,
+					globalVersion: 5,
+					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
+					selectionVersion: 0,
+					baseClassName: 'og-cell og-cell-pinned-left',
+					stateClassName: '',
+					decorationClassName: '',
+					classTokens: ['og-cell', 'og-cell-pinned-left'],
+					className: 'og-cell og-cell-pinned-left',
+					contentKind: 'impostor',
+					contentMode: 'fallback',
+					formattedValue: 'Pinned value',
+					title: '',
+				})),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name', cellRenderer: () => null } as any,
+			lane: 'left',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 5,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 1]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 120,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(cellSlot.lastContentMode).toBe('fallback');
+		expect(cellSlot.lastFormattedValue).toBe('Pinned value');
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+	});
+
+	it('uses impostor snapshot for a pinned-right custom-live cell during scroll, same as center lane', () => {
+		const dirty = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; score: number }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r2',
+					colField: 'score',
+					rowVersion: 2,
+					globalVersion: 9,
+					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
+					selectionVersion: 0,
+					baseClassName: 'og-cell og-cell-pinned-right',
+					stateClassName: '',
+					decorationClassName: '',
+					classTokens: ['og-cell', 'og-cell-pinned-right'],
+					className: 'og-cell og-cell-pinned-right',
+					contentKind: 'impostor',
+					contentMode: 'fallback',
+					formattedValue: '99',
+					title: '',
+				})),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r2', data: { id: 'r2', score: 99 } } as any,
+			rowIndex: 3,
+			colIndex: 0,
+			col: { field: 'score', cellRenderer: () => null } as any,
+			lane: 'right',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 9,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r2', 2]]),
+			} as any,
+			pooledRowId: 'slot-2',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: 0,
+			width: 80,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(cellSlot.lastContentMode).toBe('fallback');
+		expect(cellSlot.lastFormattedValue).toBe('99');
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+	});
+
 	it('marks visible primitive cells dirty instead of materializing insight snapshots during scroll', () => {
 		const dirty = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
