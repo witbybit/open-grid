@@ -425,6 +425,75 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 						})
 					);
 					this.deps.renderStats.prewarmedCellSnapshots++;
+				} else {
+					const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
+					let stateClassName = '';
+					if (isFocused) {
+						stateClassName += stateClassName ? ' og-cell-focused' : 'og-cell-focused';
+					}
+					if (isSelected) {
+						stateClassName += stateClassName ? ' og-cell-selected' : 'og-cell-selected';
+					}
+					if (needsReadonlyEvaluation) {
+						const isEditable = normalizeCapabilityResult(
+							col.canEdit!({ action: 'edit', row: visualRow.node.data, rowId, colField: col.field })
+						).allowed;
+						if (!isEditable) {
+							stateClassName += stateClassName ? ' og-cell-readonly' : 'og-cell-readonly';
+						}
+					}
+					if (needsStyleSnapshot) {
+						const styleScratch = this.deps.rowRenderer.cellClassScratch;
+						styleScratch.row = visualRow.node.data;
+						styleScratch.rowId = rowId;
+						styleScratch.rowIndex = rowIndex;
+						styleScratch.col = col;
+						styleScratch.colField = col.field;
+						styleScratch.colIndex = colIndex;
+						styleScratch.isFocused = isFocused;
+						styleScratch.isRowFocused = focusedCell?.rowId === rowId;
+						styleScratch.isRowSelected = isSelected;
+						styleScratch.isSelected = isSelected;
+						styleScratch.isEditing = false;
+						styleScratch.value = displayValue;
+						styleScratch.rawValue = rawValue ?? displayValue;
+						styleScratch.isLoading = false;
+						styleScratch.selection = state.selection;
+						const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, visualRow.node.data, styleScratch);
+						if (customCellClass) stateClassName += stateClassName ? ` ${customCellClass}` : customCellClass;
+					}
+					const tooltipText =
+						col.tooltip !== undefined && visualRow.node.data !== null
+							? typeof col.tooltip === 'string'
+								? col.tooltip
+								: col.tooltip({
+										row: visualRow.node.data,
+										rowId,
+										colField: col.field,
+										value: rawValue ?? displayValue,
+									})
+							: null;
+					this.deps.engine.cellDisplaySnapshots.set(
+						createCellDisplaySnapshot({
+							rowId,
+							colField: col.field,
+							rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+							globalVersion: state.globalVersion,
+							insightVersion: this.deps.engine.insights.getVersion(),
+							styleVersion: this.deps.rowRenderer.styleVersion,
+							loadingVersion: this.deps.rowRenderer.loadingVersion,
+							selectionVersion: this.deps.engine.selectionVersion,
+							baseClassName: 'og-cell',
+							stateClassName,
+							decorationClassName: decorationMetadata.classNameSuffix,
+							contentKind: displayValue !== '' ? 'text' : 'empty',
+							contentMode: displayValue !== '' ? 'text' : 'empty',
+							formattedValue: displayValue,
+							title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
+							validationError: decorationMetadata.validationError,
+						})
+					);
+					this.deps.renderStats.prewarmedCellSnapshots++;
 				}
 			}
 			return canContinue();

@@ -2746,7 +2746,7 @@ describe('RenderEngine', () => {
 			expect(callbacks.length).toBeGreaterThanOrEqual(1);
 			callbacks[0](0);
 			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
-			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 });
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
 
 			scrollViewport.scrollLeft = 200;
 			scrollViewport.dispatchEvent(new Event('scroll'));
@@ -2764,6 +2764,7 @@ describe('RenderEngine', () => {
 			expect(decoratedCell.title).toContain('Needs review');
 			const stats = renderer.getRenderStats();
 			expect(stats.prewarmedCellSnapshots).toBeGreaterThan(0);
+			expect(stats.prewarmedDisplayValues).toBe(0);
 		} finally {
 			if (previousRequestIdleCallback === undefined) {
 				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
@@ -2864,7 +2865,7 @@ describe('RenderEngine', () => {
 			expect(callbacks.length).toBeGreaterThanOrEqual(1);
 			callbacks[0](0);
 			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
-			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 });
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
 
 			scrollViewport.scrollLeft = 200;
 			scrollViewport.dispatchEvent(new Event('scroll'));
