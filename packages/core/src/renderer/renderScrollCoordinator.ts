@@ -48,6 +48,7 @@ export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	prewarmScheduled: boolean;
 	prewarmTimer: number | null;
 	prewarmRequest: { visibleRowStart: number; visibleRowEnd: number; visibleColStart: number; visibleColEnd: number } | null;
+	lastPrewarmRequest: { visibleRowStart: number; visibleRowEnd: number; visibleColStart: number; visibleColEnd: number } | null;
 	postScrollDecorationScheduled: boolean;
 	postScrollDecorationTimer: number | null;
 	postScrollFidelityScheduled: boolean;
@@ -344,16 +345,27 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const colCount = columns.length;
 		if (rowCount === 0 || colCount === 0) return;
 
-		const rowPadding = this.state.scrollPrewarmRowPadding;
-		const colPadding = this.state.scrollPrewarmColPadding;
-		const leftColStart = Math.max(0, request.visibleColStart - colPadding);
+		// Bias the prewarm ring toward the direction of travel so fast scroll arrives at
+		// prewarmed snapshots. The leading edge gets 2× the base padding; the trailing edge gets 1×.
+		const base = this.state.scrollPrewarmRowPadding;
+		const baseCol = this.state.scrollPrewarmColPadding;
+		const prev = this.state.lastPrewarmRequest;
+		const rowDelta = prev ? request.visibleRowStart - prev.visibleRowStart : 0;
+		const colDelta = prev ? request.visibleColStart - prev.visibleColStart : 0;
+		const rowBefore = rowDelta > 0 ? base : rowDelta < 0 ? base * 2 : base;
+		const rowAfter  = rowDelta > 0 ? base * 2 : rowDelta < 0 ? base : base;
+		const colBefore = colDelta > 0 ? baseCol : colDelta < 0 ? baseCol * 2 : baseCol;
+		const colAfter  = colDelta > 0 ? baseCol * 2 : colDelta < 0 ? baseCol : baseCol;
+		this.state.lastPrewarmRequest = { ...request };
+
+		const leftColStart = Math.max(0, request.visibleColStart - colBefore);
 		const leftColEnd = Math.max(-1, request.visibleColStart - 1);
 		const rightColStart = Math.min(colCount, request.visibleColEnd + 1);
-		const rightColEnd = Math.min(colCount - 1, request.visibleColEnd + colPadding);
-		const topRowStart = Math.max(0, request.visibleRowStart - rowPadding);
+		const rightColEnd = Math.min(colCount - 1, request.visibleColEnd + colAfter);
+		const topRowStart = Math.max(0, request.visibleRowStart - rowBefore);
 		const topRowEnd = Math.max(-1, request.visibleRowStart - 1);
 		const bottomRowStart = Math.min(rowCount, request.visibleRowEnd + 1);
-		const bottomRowEnd = Math.min(rowCount - 1, request.visibleRowEnd + rowPadding);
+		const bottomRowEnd = Math.min(rowCount - 1, request.visibleRowEnd + rowAfter);
 
 		let workDone = 0;
 		const budget = this.state.scrollPrewarmBudget;

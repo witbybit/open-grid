@@ -3312,6 +3312,81 @@ describe('RenderEngine', () => {
 		}
 	});
 
+	it('prewarms more rows in the direction of vertical scroll travel than the trailing edge', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const prevRIC = (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+		const prevCIC = (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(window as Window & { requestIdleCallback?: (cb: (d: { timeRemaining(): number; didTimeout: boolean }) => void) => number }).requestIdleCallback =
+			(cb) => { idleCallbacks.push(cb); return idleCallbacks.length; };
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback =
+			(id) => { if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {}; };
+
+		const columns = [{ field: 'v', header: 'V', width: 100 }];
+		const store = new GridStore<{ id: string; v: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 80 }, (_, i) => ({ id: `r${i}`, v: `V${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0, y: 0, top: 0, left: 0, right: 200, bottom: 160, width: 200, height: 160, toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+
+			// First scroll: establish a base position (rows 10-13 visible at scrollTop=400).
+			// This also primes lastPrewarmRequest to {visibleRowStart:10, ...}.
+			scrollViewport.scrollTop = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			callbacks[callbacks.length - 1]?.(0);
+			idleCallbacks[idleCallbacks.length - 1]?.({ didTimeout: false, timeRemaining: () => 50 });
+
+			// Second scroll: jump down to rows 20-23 visible (scrollTop=800).
+			// rowDelta = 20-10 = 10 > 0 → scrolling down.
+			// rowBefore (trailing) = base = 2 → prewarms rows 18-19.
+			// rowAfter (leading)   = base × 2 = 4 → prewarms rows 24-27.
+			scrollViewport.scrollTop = 800;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			callbacks[callbacks.length - 1]?.(0);
+			idleCallbacks[idleCallbacks.length - 1]?.({ didTimeout: false, timeRemaining: () => 50 });
+
+			// Leading edge (rows 24-27): should be prewarmed.
+			expect(store.engine.getCellDisplaySnapshot('r27', 'v')).toBeDefined();
+			// Beyond leading edge (row 28): not yet prewarmed.
+			expect(store.engine.getCellDisplaySnapshot('r28', 'v')).toBeUndefined();
+
+			// Trailing edge: only 2 rows back (rows 18-19). Row 16 is 4 rows back — out of range.
+			expect(store.engine.getCellDisplaySnapshot('r18', 'v')).toBeDefined();
+			expect(store.engine.getCellDisplaySnapshot('r16', 'v')).toBeUndefined();
+		} finally {
+			if (prevRIC === undefined) delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			else (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = prevRIC;
+			if (prevCIC === undefined) delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			else (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = prevCIC;
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
+	});
+
 	it('updates cell widths immediately on column resize', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);

@@ -307,6 +307,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			prewarmScheduled: false,
 			prewarmTimer: null,
 			prewarmRequest: null,
+			lastPrewarmRequest: null,
 			postScrollDecorationScheduled: false,
 			postScrollDecorationTimer: null,
 			postScrollFidelityScheduled: false,
