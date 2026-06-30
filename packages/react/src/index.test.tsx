@@ -45,19 +45,12 @@ const SelectorInspector = () => {
 	);
 };
 
-const NavigationControllerOwner = ({ onCellValueChanged }: { onCellValueChanged: (rowId: string, colField: string, val: unknown) => void }) => {
-	useGridNavigationController<TestRow>({ onCellValueChanged });
-	return null;
-};
-
 const NavigationControllerProbe = ({
-	onCellValueChanged,
 	onRender,
 }: {
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
 	onRender: (handle: ReturnType<typeof useGridNavigationController<TestRow>>) => void;
 }) => {
-	const handle = useGridNavigationController<TestRow>({ onCellValueChanged });
+	const handle = useGridNavigationController<TestRow>({});
 	onRender(handle);
 	return <span data-testid='nav-controller-present'>{handle ? 'yes' : 'no'}</span>;
 };
@@ -602,7 +595,36 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should dispose navigation controller event listeners on unmount', () => {
+	it('should fire onCellValueChanged with old and new value when a cell is edited', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Original' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		const onCellValueChanged = vi.fn();
+
+		render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} onCellValueChanged={onCellValueChanged} />
+			</GridProvider>
+		);
+
+		act(() => {
+			grid.api.setCellValue('1', 'name', 'Updated');
+		});
+
+		expect(onCellValueChanged).toHaveBeenCalledTimes(1);
+		expect(onCellValueChanged).toHaveBeenCalledWith({
+			rowId: '1',
+			colField: 'name',
+			oldValue: 'Original',
+			newValue: 'Updated',
+		});
+
+		grid.api.destroy();
+	});
+
+	it('should stop firing onCellValueChanged after GridView unmounts', () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Cell Content' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
@@ -612,7 +634,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		const { unmount } = render(
 			<GridProvider api={grid.api}>
-				<NavigationControllerOwner onCellValueChanged={onCellValueChanged} />
+				<GridView api={grid.api} onCellValueChanged={onCellValueChanged} />
 			</GridProvider>
 		);
 
@@ -631,15 +653,12 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			rows: [{ id: '1', name: 'Cell Content' }],
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
-		const firstCallback = vi.fn();
-		const secondCallback = vi.fn();
 		let renderCount = 0;
 		const handles: Array<ReturnType<typeof useGridNavigationController<TestRow>>> = [];
 
 		const { rerender, unmount } = render(
 			<GridProvider api={grid.api}>
 				<NavigationControllerProbe
-					onCellValueChanged={firstCallback}
 					onRender={(handle) => {
 						renderCount++;
 						handles.push(handle);
@@ -653,15 +672,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(renderCount).toBe(1);
 		expect(handles[0]).not.toBeNull();
 
-		act(() => {
-			grid.api.setCellValue('1', 'name', 'After first mount');
-		});
-		expect(firstCallback).toHaveBeenCalledWith('1', 'name', 'After first mount');
-
 		rerender(
 			<GridProvider api={grid.api}>
 				<NavigationControllerProbe
-					onCellValueChanged={secondCallback}
 					onRender={(handle) => {
 						renderCount++;
 						handles.push(handle);
@@ -673,12 +686,6 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		await act(async () => {});
 		expect(renderCount).toBe(2);
 		expect(handles[1]).toBe(handles[0]);
-
-		act(() => {
-			grid.api.setCellValue('1', 'name', 'After rerender');
-		});
-		expect(firstCallback).toHaveBeenCalledTimes(1);
-		expect(secondCallback).toHaveBeenCalledWith('1', 'name', 'After rerender');
 
 		unmount();
 		grid.api.destroy();

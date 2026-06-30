@@ -210,7 +210,7 @@ export default function InfiniteServerScroll({
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged: () => {} }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
 						onGridReady={(event) => {
 							setApi(event.api);
 							setIsLoading(!!event.api.getStateSnapshot().loading);

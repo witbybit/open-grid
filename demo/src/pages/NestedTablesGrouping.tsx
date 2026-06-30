@@ -236,10 +236,10 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 	);
 
 	// Trigger latency profiling on cell change
-	const handleChildCellValueChanged = (rowId: string, colField: string, val: unknown) => {
+	const handleChildCellValueChanged = ({ rowId, colField, newValue }: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => {
 		const start = performance.now();
 		if (colField === 'quantity' && detailApi) {
-			const q = parseInt(String(val)) || 0;
+			const q = parseInt(String(newValue)) || 0;
 			const row = detailApi.getRawRowById(rowId);
 			if (row) {
 				const p = row.price;
@@ -285,10 +285,8 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 					rows={items}
 					columns={detailColumns}
 					enableNavigation={true}
-					navigationOptions={{
-						editTrigger: 'singleClick',
-						onCellValueChanged: handleChildCellValueChanged,
-					}}
+					navigationOptions={{ editTrigger: 'singleClick' }}
+					onCellValueChanged={handleChildCellValueChanged}
 					onGridReady={({ api }) => setDetailApi(api)}
 				/>
 			</div>

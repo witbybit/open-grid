@@ -139,12 +139,12 @@ export default function App() {
 	const handleGridReady = useCallback((event: GridReadyEvent<any>) => registerGridApi(activePage, event), [activePage, registerGridApi]);
 
 	const handleCellValueChanged = useCallback(
-		(rowId: string, colField: string, value: unknown) => {
+		({ rowId, colField, newValue }: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => {
 			if (!activeApi) return;
-			setInactiveRiskSideEffects(activeApi, rowId, colField, value);
+			setInactiveRiskSideEffects(activeApi, rowId, colField, newValue);
 			if (activePage === 'gantt' && colField === 'status') {
-				if (value === 'Done') activeApi.setCellValue(rowId, 'progress', 100);
-				else if (value === 'Pending') activeApi.setCellValue(rowId, 'progress', 0);
+				if (newValue === 'Done') activeApi.setCellValue(rowId, 'progress', 100);
+				else if (newValue === 'Pending') activeApi.setCellValue(rowId, 'progress', 0);
 			}
 			performance.mark('open-grid-demo-cell-change');
 		},

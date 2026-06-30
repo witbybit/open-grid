@@ -30,10 +30,10 @@ export interface GridViewProps<TRowData = unknown> {
 	contextMenuOptions?: GridContextMenuOptions<TRowData>;
 	onCellClick?: (params: GridCellClickParams<TRowData>) => void;
 	onWriteBlocked?: (event: GridEventPayloadMap<TRowData>[GridEventName.writeBlocked]) => void;
+	onCellValueChanged?: (event: GridEventPayloadMap<TRowData>[GridEventName.cellValueChanged]) => void;
 	navigationOptions?: {
 		editTrigger?: 'singleClick' | 'doubleClick';
 		arrowKeyNavigationEdit?: boolean;
-		onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	};
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => ReactNode;
@@ -61,6 +61,7 @@ export function GridView<TRowData = unknown>({
 	contextMenuOptions,
 	onCellClick,
 	onWriteBlocked,
+	onCellValueChanged,
 	navigationOptions = {},
 	groupRowRenderer,
 	detailRowRenderer,
@@ -227,9 +228,6 @@ export function GridView<TRowData = unknown>({
 
 	const navigation = useGridNavigationController<TRowData>(
 		{
-			onCellValueChanged: (rowId, colField, val) => {
-				if (enableNavigation) navigationOptions.onCellValueChanged?.(rowId, colField, val);
-			},
 			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
 			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
 		},
@@ -448,6 +446,13 @@ export function GridView<TRowData = unknown>({
 			onWriteBlocked(payload);
 		});
 	}, [api, onWriteBlocked]);
+
+	useEffect(() => {
+		if (!onCellValueChanged) return;
+		return api.addEventListener(GridEventName.cellValueChanged, ({ payload }) => {
+			onCellValueChanged(payload);
+		});
+	}, [api, onCellValueChanged]);
 
 	useEffect(() => {
 		if (sidebarDefaultOpenRef.current != null) api.openPanel(sidebarDefaultOpenRef.current);

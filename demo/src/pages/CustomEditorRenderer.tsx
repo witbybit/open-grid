@@ -7,7 +7,7 @@ import type { CustomShowcaseRow } from '../components/GridShared';
 interface CustomEditorRendererProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<CustomShowcaseRow>) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
@@ -120,7 +120,8 @@ export default function CustomEditorRenderer({
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+					onCellValueChanged={onCellValueChanged}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);

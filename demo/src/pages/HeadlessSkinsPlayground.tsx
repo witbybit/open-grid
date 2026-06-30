@@ -7,7 +7,7 @@ import { ThemeTweaker } from '../components/ThemeTweaker';
 interface HeadlessSkinsPlaygroundProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<any>) => void;
 }
 
@@ -54,11 +54,8 @@ export default function HeadlessSkinsPlayground({
 						getRowId={(row) => row.id}
 						pinLeftColumns={1}
 						pinRightColumns={1}
-						navigationOptions={{
-							editTrigger,
-							arrowKeyNavigationEdit,
-							onCellValueChanged,
-						}}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+						onCellValueChanged={onCellValueChanged}
 						onGridReady={handleGridReady}
 					/>
 				</div>

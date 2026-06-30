@@ -17,7 +17,7 @@ import type { DashboardStockRow } from '../components/FastRenderers';
 interface RealtimeDashboardProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<DashboardStockRow>) => void;
 }
 
@@ -380,7 +380,8 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 						enableChart
 						pinLeftColumns={2}
 						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+					onCellValueChanged={onCellValueChanged}
 						dataIntegrity={{
 							validation: {
 								enabled: true,

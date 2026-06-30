@@ -6,7 +6,7 @@ import { createGanttColumns, createGanttRows, type GanttRow } from './demoGridCo
 interface GanttSchedulingWorkspaceProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<GanttRow>) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
@@ -158,7 +158,8 @@ export default function GanttSchedulingWorkspace({
 						styleRules={styleRules}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+					onCellValueChanged={onCellValueChanged}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);

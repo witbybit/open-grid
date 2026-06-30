@@ -1,8 +1,6 @@
 import type { GridCellPointer, GridPlugin, GridPluginRuntime } from './api/GridApi.js';
-import { GridEventName } from './api/GridEvents.js';
 
 export interface GridNavigationOptions {
-	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	editTrigger?: 'singleClick' | 'doubleClick'; // default: 'doubleClick'
 	arrowKeyNavigationEdit?: boolean; // default: false
 }
@@ -13,7 +11,6 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	private isSelecting = false;
 	private rangeStart: GridCellPointer | null = null;
 	private options: GridNavigationOptions;
-	private unsubscribeCellValueChanged?: () => void;
 
 	constructor(options: GridNavigationOptions = {}) {
 		this.options = options;
@@ -21,24 +18,13 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 	public onInit(api: GridPluginRuntime<TRowData>): void {
 		this.runtime = api;
-
-		// Bind store event listener to invoke options callback when edits are committed
-		if (this.options.onCellValueChanged) {
-			this.unsubscribeCellValueChanged = this.runtime.addEventListener(GridEventName.cellValueChanged, (event) => {
-				const { rowId, colField, newValue } = event.payload;
-				this.options.onCellValueChanged?.(rowId, colField, newValue);
-			});
-		}
 	}
 
 	public onDestroy(): void {
 		this.dispose();
 	}
 
-	public dispose(): void {
-		this.unsubscribeCellValueChanged?.();
-		this.unsubscribeCellValueChanged = undefined;
-	}
+	public dispose(): void {}
 
 	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
 		const state = this.runtime.getStateSnapshot();

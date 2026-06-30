@@ -148,7 +148,6 @@ export function useGridNavigationController<TRowData = unknown>(options: GridNav
 			return;
 		}
 		const nav = registerGridNavigation<TRowData>(api, {
-			onCellValueChanged: (rowId, colField, val) => optionsRef.current.onCellValueChanged?.(rowId, colField, val),
 			get editTrigger() {
 				return optionsRef.current.editTrigger;
 			},

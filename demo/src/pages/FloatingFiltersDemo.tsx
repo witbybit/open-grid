@@ -203,7 +203,7 @@ function buildColumns(): ColumnDef<DealRow>[] {
 interface FloatingFiltersDemoProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<any>) => void;
 }
 
@@ -328,11 +328,8 @@ export default function FloatingFiltersDemo({ editTrigger, arrowKeyNavigationEdi
 					showFloatingFilters={showFloating}
 					showFilterChipBar={true}
 					pinLeftColumns={1}
-					navigationOptions={{
-						editTrigger,
-						arrowKeyNavigationEdit,
-						onCellValueChanged,
-					}}
+					navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+					onCellValueChanged={onCellValueChanged}
 					onGridReady={handleGridReady}
 				/>
 			</div>

@@ -7,7 +7,7 @@ import { createSpreadsheetColumns, createSpreadsheetRows } from './demoGridConfi
 interface SpreadsheetWorkspaceProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<SpreadsheetRow>) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
@@ -123,9 +123,8 @@ export default function SpreadsheetWorkspace({
 	const handleCommitFormula = useCallback(() => {
 		if (!api || !focusedCell) return;
 		api.setCellValue(focusedCell.rowId, focusedCell.colField, formulaText);
-		onCellValueChanged(focusedCell.rowId, focusedCell.colField, formulaText);
 		isEditingRef.current = false;
-	}, [api, focusedCell, formulaText, onCellValueChanged]);
+	}, [api, focusedCell, formulaText]);
 
 	const handleApplyToSelection = useCallback(
 		(mapValue: (value: number) => unknown, emptyValue?: unknown) => {
@@ -240,7 +239,8 @@ export default function SpreadsheetWorkspace({
 						getRowId={(row) => row.id}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+					onCellValueChanged={onCellValueChanged}
 						enableContextMenu={contextMenuEnabled}
 						contextMenuOptions={customContextMenuOptions}
 						onGridReady={(event) => {

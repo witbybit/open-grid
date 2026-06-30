@@ -111,7 +111,7 @@ const ROWS = generateRows(50);
 
 interface ColumnGroupHeaderDemoProps {
 	onGridReady?: (event: GridReadyEvent<any>) => void;
-	onCellValueChanged?: (rowId: string, colField: string, value: unknown) => void;
+	onCellValueChanged?: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
 	editTrigger?: 'singleClick' | 'doubleClick';

@@ -8,7 +8,7 @@ interface DynamicLayoutProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	rowHeightsMap: Record<string, number>;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<PerformanceRow>) => void;
 	compactLayout: 'compact' | 'normal' | 'spacious';
 	visibleColumns?: Record<string, boolean>;
@@ -73,7 +73,8 @@ export default function DynamicLayout({
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+					onCellValueChanged={onCellValueChanged}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);

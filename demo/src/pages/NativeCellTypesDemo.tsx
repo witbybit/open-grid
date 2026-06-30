@@ -390,7 +390,7 @@ function NativeCellTypesDemoInner({ rows, onGridReady }: { rows: SkaterRow[]; on
 						rows={rows}
 						columns={SKATER_COLUMNS}
 						columnTypes={SKATER_COLUMN_TYPES}
-						navigationOptions={{ editTrigger: 'doubleClick', onCellValueChanged: () => {} }}
+						navigationOptions={{ editTrigger: 'doubleClick' }}
 						pinLeftColumns={1}
 						onGridReady={onGridReady}
 					/>
