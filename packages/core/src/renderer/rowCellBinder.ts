@@ -740,6 +740,62 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const scrollMode = plan?.mode;
 	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
 	const hasScrollImpostorCapability = scrollMode === 'custom-live' || scrollMode === 'custom-imperative' || scrollMode === 'custom';
+
+	// Compute live-content guard BEFORE any impostor path. If the cell is already showing rendered
+	// portal content for this exact row+key, freeze it in place during scroll rather than replacing
+	// it with a text impostor. This prevents the portal→text→portal flash that occurs on cells
+	// that were already visible and rendered when the scroll began.
+	// A row rebind (different row reusing this slot) is excluded — existing content belongs to the
+	// old row identity and must never bleed into the incoming row.
+	const hasExistingLivePortalContent =
+		!isRowRebind && cellSlot.lastPortalKey === portalCellKey && hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
+
+	// A prewarm snapshot that explicitly says 'fallback' (impostor) takes authority over the freeze
+	// path: the snapshot system decided this cell should show a cheap impostor, and that decision
+	// should be honored even when live portal content still exists in the slot (e.g. after the cell
+	// was visible, went out of view, and is re-entering via horizontal scroll with a fresh prewarm).
+	const snapshotDemandsImpostor = snapshot?.contentMode === 'fallback';
+
+	if (hasScrollImpostorCapability && hasExistingLivePortalContent && !isEditing && !isFocused && !snapshotDemandsImpostor) {
+		// Freeze: keep existing portal content visible during scroll without remounting the portal.
+		deps.cellRenderer.showPortalContent(cellSlot.element);
+		// Apply fresh title/validation from the snapshot if one is available, so insight decoration
+		// attributes stay current on the frozen cell even though the portal itself is not remounted.
+		if (snapshot) {
+			applyCellTitlesAndValidation(cellSlot.element, snapshot.title || null, '', snapshot.validationError);
+		}
+		// Only schedule a fidelity upgrade when something actually changed. Stable cells should stay
+		// quiet — marking them dirty unconditionally causes unnecessary fidelity-lane churn.
+		const globalChanged = cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalVersion !== cellSlot.lastMountedGlobalVersion;
+		const rowChanged = cellSlot.lastMountedRowVersion !== -1 && rowVersion !== undefined && rowVersion !== cellSlot.lastMountedRowVersion;
+		const hasSnapshotCoverageForDecorations = !ctx.hasInsightDecorations || !!snapshot;
+		const shouldDirtyFrozen =
+			globalChanged ||
+			rowChanged ||
+			!hasSnapshotCoverageForDecorations ||
+			(ctx.hasDeferredCellStyleRules &&
+				(!snapshot || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
+		if (shouldDirtyFrozen) deps.markCellDirtyAfterScroll(cellSlot.element);
+		const didWriteFreeze = cellSlot.update(
+			colIndex,
+			col.field,
+			rowIndex,
+			node.id,
+			left,
+			right,
+			width,
+			cellClassName,
+			'portal',
+			undefined,
+			'',
+			portalCellKey
+		);
+		if (didWriteFreeze) deps.incrementCurrentScrollCellsWritten();
+		deps.incrementCellsBoundDuringScroll();
+		return;
+	}
+
+	// Impostor paths — only reached when the slot has no live portal content for the current row/key.
 	const portalImpostorSnapshot =
 		hasScrollImpostorCapability && !isEditing && !isFocused && snapshot && snapshot.contentMode === 'fallback' ? snapshot : undefined;
 	if (portalImpostorSnapshot) {
@@ -774,15 +830,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
 	const canFreezePortal = canTrustSnapshotPortalHost;
 
-	// For custom-live cells with no portal to freeze, no prewarm snapshot, and no existing live
-	// portal content: synthesize a cheap text impostor so the scroll frame stays portal-free.
-	// Cells that already have live content in their portal host fall through to the freeze path.
-	// The full portal mount is deferred to the post-scroll fidelity lane.
-	// A rebind resets the slot to a new row identity — any existing portal content belongs to the
-	// old row and must not be treated as valid content for the incoming row.
-	const hasExistingLivePortalContent =
-		!isRowRebind && cellSlot.lastPortalKey === portalCellKey && hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
-	if (hasScrollImpostorCapability && !isEditing && !isFocused && !canFreezePortal && !hasExistingLivePortalContent) {
+	// Synthesis impostor: no snapshot, no live content, no freeze path — show cheap text stand-in
+	// so the scroll frame stays portal-free. Fidelity lane mounts the real portal post-scroll.
+	if (hasScrollImpostorCapability && !isEditing && !isFocused && !canFreezePortal) {
 		const genericCheap = deps.engine.getCheapDisplayValue?.(node.id, col.field) ?? '';
 		const scrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
 		const cheapValue =

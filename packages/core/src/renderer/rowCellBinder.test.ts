@@ -1913,7 +1913,7 @@ describe('bindCellDuringScroll', () => {
 		expect(mountCellImmediately).not.toHaveBeenCalled();
 	});
 
-	it('materializes a visible warm portal compatibility snapshot before preserving a stable frozen portal cell', () => {
+	it('freezes a cell with live portal content in place during scroll without remounting when no snapshot is available', () => {
 		const dirty = vi.fn();
 		const showPortalContent = vi.fn();
 		const mountCellImmediately = vi.fn();
@@ -2005,9 +2005,9 @@ describe('bindCellDuringScroll', () => {
 			isInVisibleContent: true,
 		});
 
-		expect(showPortalContent).not.toHaveBeenCalled();
-		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
-		expect(mountCellImmediately).toHaveBeenCalledTimes(1);
+		expect(showPortalContent).toHaveBeenCalledWith(cellSlot.element);
+		expect(dirty).not.toHaveBeenCalled();
+		expect(mountCellImmediately).not.toHaveBeenCalled();
 		expect(snapshotSet).not.toHaveBeenCalled();
 	});
 
