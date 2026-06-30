@@ -5,7 +5,7 @@ import { bindCellDuringScroll, type RowCellBinderDeps } from './rowCellBinder.js
 import { createCellInstanceRendererKey } from './identityKeys.js';
 
 describe('bindCellDuringScroll', () => {
-	it('marks newly mounted portal cells dirty and avoids stale previous-column values when the display cache misses', () => {
+	it('shows text impostor for custom-mode portal cells during scroll without mounting the portal', () => {
 		const dirty = vi.fn();
 		const mountCellImmediately = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
@@ -76,8 +76,12 @@ describe('bindCellDuringScroll', () => {
 			isInVisibleContent: true,
 		});
 
+		// custom-mode portals take the impostor path during scroll — no synchronous mount.
 		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
-		expect(mountCellImmediately).toHaveBeenCalledWith(expect.objectContaining({ value: '' }));
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+		// stale previous-column value must not bleed through (isWarmBindingVersionFresh is false for a new slot)
+		expect(cellSlot.lastFormattedValue).toBe('');
+		expect(cellSlot.lastContentMode).toBe('empty');
 		expect((deps.engine.data as any).getCellValue).not.toHaveBeenCalled();
 	});
 

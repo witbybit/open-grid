@@ -1473,7 +1473,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('immediately shows portal content for recycled custom cells during scroll (no pending placeholders)', () => {
+	it('shows text impostor for newly bound custom cells during scroll; portal deferred to fidelity lane', () => {
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 			callbacks.push(cb);
@@ -1521,13 +1521,16 @@ describe('RenderEngine', () => {
 		scrollViewport.dispatchEvent(new Event('scroll'));
 		callbacks[0](0); // run the scroll frame; scroll-end chain stays deferred
 
-		// No pending cells — portals are mounted immediately during scroll (AG Grid parity).
+		// No pending cells — scroll frame never blocks on portal mounts.
 		const pendingCell = container.querySelector<HTMLDivElement>('.og-cell[data-content-mode="pending"]');
 		expect(pendingCell).toBeNull();
-		// Portal cells are shown with full content immediately.
+		// custom cells show text impostor during scroll — no portal content until fidelity lane fires.
 		const portalCell = container.querySelector<HTMLDivElement>('.og-cell[data-content-mode="portal"]');
-		expect(portalCell).not.toBeNull();
-		expect(portalCell?.querySelector('.og-cell-portal-host')).not.toBeNull();
+		expect(portalCell).toBeNull();
+		const impostorCell = container.querySelector<HTMLDivElement>(
+			'.og-cell[data-content-mode="empty"], .og-cell[data-content-mode="fallback"]'
+		);
+		expect(impostorCell).not.toBeNull();
 
 		renderer.unmount();
 		controller.dispose();
@@ -1698,7 +1701,15 @@ describe('RenderEngine', () => {
 		});
 		const container = document.createElement('div');
 		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-			x: 0, y: 0, top: 0, left: 0, right: 500, bottom: 160, width: 500, height: 160, toJSON: () => ({}),
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
 		});
 		document.body.appendChild(container);
 
@@ -1902,9 +1913,17 @@ describe('RenderEngine', () => {
 	it('fidelity work completes even when a new scroll starts mid-repair, by rescheduling on the next idle', async () => {
 		const callbacks: FrameRequestCallback[] = [];
 		const idleCallbacks: IdleRequestCallback[] = [];
-		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { callbacks.push(cb); return callbacks.length; });
-		vi.stubGlobal('cancelAnimationFrame', (id: number) => { if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {}; });
-		vi.stubGlobal('requestIdleCallback', (cb: IdleRequestCallback) => { idleCallbacks.push(cb); return idleCallbacks.length; });
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		vi.stubGlobal('requestIdleCallback', (cb: IdleRequestCallback) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		});
 
 		const columns = [
 			{ field: 'id', header: 'ID', width: 120 },
@@ -1920,14 +1939,26 @@ describe('RenderEngine', () => {
 		store.engine.insights.register({
 			id: 'fidelity-test',
 			getCellDecorations: (rowId, colField) =>
-				colField === 'name' ? [{ layerId: 'fidelity-test', kind: 'validationError', className: 'og-cell-validation-error', title: 'err' }] : [],
+				colField === 'name'
+					? [{ layerId: 'fidelity-test', kind: 'validationError', className: 'og-cell-validation-error', title: 'err' }]
+					: [],
 		});
 		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: Array.from({ length: 60 }, (_, i) => ({ id: `r${i}`, name: `Name ${i}` })),
 			columns,
 		});
 		const container = document.createElement('div');
-		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ x:0, y:0, top:0, left:0, right:300, bottom:160, width:300, height:160, toJSON: () => ({}) });
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 300,
+			bottom: 160,
+			width: 300,
+			height: 160,
+			toJSON: () => ({}),
+		});
 		document.body.appendChild(container);
 
 		const renderer = new RenderEngine(store.engine, store);
@@ -2439,7 +2470,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('preserves portals and immediately mounts new columns during horizontal recycling', async () => {
+	it('preserves portals during horizontal recycling without mounting new columns synchronously during scroll', async () => {
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 			callbacks.push(cb);
@@ -2504,10 +2535,9 @@ describe('RenderEngine', () => {
 		// Portals for exited columns are warm-cached (deferred), not destroyed during scroll.
 		expect(unmountCount).toBe(0);
 		expect(flushPortalContent).not.toHaveBeenCalled();
-		expect(stats.portalReleasesDuringScroll).toBe(0);
 		expect(stats.portalFlushesDuringScroll).toBe(0);
-		// New columns entering the viewport are mounted immediately.
-		expect(stats.portalMountsDuringScroll).toBeGreaterThan(0);
+		// New columns entering the viewport take the impostor path during scroll — no synchronous portal mounts.
+		expect(stats.portalMountsDuringScroll).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -2673,9 +2703,9 @@ describe('RenderEngine', () => {
 		callbacks[1](0);
 
 		const revealedCell = row10.querySelector('[data-col-field="col_6"]') as HTMLDivElement;
-		const revealedHost = revealedCell.querySelector('.og-cell-portal-host') as HTMLDivElement;
-		expect(revealedCell.dataset.contentMode).toBe('portal');
-		expect(revealedHost.childElementCount).toBeGreaterThan(0);
+		// custom cells always take the impostor path during scroll — emptied portal host is never
+		// mistaken for authoritative content; the cell shows empty/fallback, not portal.
+		expect(revealedCell.dataset.contentMode).not.toBe('portal');
 
 		renderer.unmount();
 		controller.dispose();
@@ -3388,10 +3418,15 @@ describe('RenderEngine', () => {
 		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
 			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
 		});
-		(window as Window & { requestIdleCallback?: (cb: (d: { timeRemaining(): number; didTimeout: boolean }) => void) => number }).requestIdleCallback =
-			(cb) => { idleCallbacks.push(cb); return idleCallbacks.length; };
-		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback =
-			(id) => { if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {}; };
+		(
+			window as Window & { requestIdleCallback?: (cb: (d: { timeRemaining(): number; didTimeout: boolean }) => void) => number }
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
 
 		const columns = [{ field: 'v', header: 'V', width: 100 }];
 		const store = new GridStore<{ id: string; v: string }>({
@@ -3406,7 +3441,15 @@ describe('RenderEngine', () => {
 		});
 		const container = document.createElement('div');
 		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-			x: 0, y: 0, top: 0, left: 0, right: 200, bottom: 160, width: 200, height: 160, toJSON: () => ({}),
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 200,
+			bottom: 160,
+			width: 200,
+			height: 160,
+			toJSON: () => ({}),
 		});
 		document.body.appendChild(container);
 
@@ -3771,7 +3814,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('custom and deferred columns mount portal immediately during scroll; custom-live shows text impostor and upgrades post-scroll', () => {
+	it('all custom and deferred columns show text impostor during scroll; portal deferred to fidelity lane', () => {
 		vi.useFakeTimers();
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -3848,12 +3891,11 @@ describe('RenderEngine', () => {
 		const cell2 = row40.querySelector('[data-col-field="col2"]') as HTMLDivElement;
 		const cell3 = row40.querySelector('[data-col-field="col3"]') as HTMLDivElement;
 
-		// col1 (mode='custom') and col3 (mode='custom', defer) mount portal immediately.
-		expect(cell1.dataset.contentMode).toBe('portal');
-		expect(cell3.dataset.contentMode).toBe('portal');
-		// col2 (mode='custom-live') shows text impostor during scroll — no live portal mount.
-		// The portal is deferred to the post-scroll fidelity lane.
+		// All portal-mode columns show text impostor during scroll — no synchronous portal mounts.
+		// col1 (mode='custom'), col2 (mode='custom-live'), col3 (mode='custom', defer) all defer to fidelity lane.
+		expect(cell1.dataset.contentMode).not.toBe('portal');
 		expect(cell2.dataset.contentMode).not.toBe('portal');
+		expect(cell3.dataset.contentMode).not.toBe('portal');
 		// isScrolling:false always passed → customRendererMountsDuringScroll stays 0.
 		expect(renderer.getRenderStats().customRendererMountsDuringScroll).toBe(0);
 
@@ -3863,7 +3905,7 @@ describe('RenderEngine', () => {
 		vi.useRealTimers();
 	});
 
-	it('cellRendererCapabilities: defer/custom cells mount portal immediately; custom-live shows text impostor during scroll', () => {
+	it('cellRendererCapabilities: all portal-mode cells show text impostor during scroll; portal deferred to fidelity lane', () => {
 		vi.useFakeTimers();
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -3944,14 +3986,12 @@ describe('RenderEngine', () => {
 
 		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
 		expect(row40).not.toBeNull();
-		// custom-live shows text impostor during scroll — portal is deferred to fidelity lane.
+		// All portal-mode columns show text impostor during scroll — portal deferred to fidelity lane.
 		expect((row40.querySelector('[data-col-field="live"]') as HTMLDivElement).dataset.contentMode).not.toBe('portal');
-		// defer (mode='custom') and fallback (mode='custom') columns mount portal immediately.
 		const deferCell = row40.querySelector('[data-col-field="defer"]') as HTMLDivElement;
-		expect(deferCell.dataset.contentMode).toBe('portal');
-		// Portal mode: no fallback text content (React component renders instead).
-		expect(deferCell.querySelector('.og-cell-content')?.textContent).toBe('');
-		expect((row40.querySelector('[data-col-field="fallback"]') as HTMLDivElement).dataset.contentMode).toBe('portal');
+		// defer cell has a cached display value ('Snapshot Defer 40') → prewarm snapshot tagged impostor → shows 'fallback'
+		expect(deferCell.dataset.contentMode).not.toBe('portal');
+		expect((row40.querySelector('[data-col-field="fallback"]') as HTMLDivElement).dataset.contentMode).not.toBe('portal');
 		// isScrolling:false always passed → customRendererMountsDuringScroll stays 0.
 		expect(renderer.getRenderStats().customRendererMountsDuringScroll).toBe(0);
 
@@ -3961,7 +4001,7 @@ describe('RenderEngine', () => {
 		vi.useRealTimers();
 	});
 
-	it('deferred custom renderers show portal content immediately during scroll', () => {
+	it('deferred custom renderers show text impostor during scroll; portal content deferred to fidelity lane', () => {
 		vi.useFakeTimers();
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -4017,9 +4057,8 @@ describe('RenderEngine', () => {
 
 		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
 		const deferCell = row40.querySelector('[data-col-field="defer"]') as HTMLDivElement;
-		// Deferred cells now show portal content immediately — no pending placeholder.
-		expect(deferCell.dataset.contentMode).toBe('portal');
-		expect(deferCell.querySelector('.og-cell-content')?.textContent).toBe('');
+		// Deferred (custom) cells show text impostor during scroll — portal deferred to fidelity lane.
+		expect(deferCell.dataset.contentMode).not.toBe('portal');
 
 		renderer.unmount();
 		controller.dispose();
@@ -4356,19 +4395,18 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		// After scroll: portals are updated in-place (slot key unchanged → active instance found
-		// → rebindInstance called). No warm cache lookup needed, no portal destruction.
+		// After scroll: impostor path releases portals, full bind (via immediate RAF) restores them
+		// via warm cache. warmHits ≥ 4 (released + re-acquired), warmMisses stays at 5 (initial only).
 		const statsAfterScroll = renderer.portalMountManager.customRendererManager.getStats();
-		expect(statsAfterScroll.warmHits).toBe(0); // in-place update, not warm restore
-		expect(statsAfterScroll.warmMisses).toBe(5); // no new cold mounts — slots reused
+		expect(statsAfterScroll.warmHits).toBeGreaterThanOrEqual(4); // warm cache restore from fidelity/full-bind
+		expect(statsAfterScroll.warmMisses).toBe(5); // no additional cold mounts — warm cache covers rebound slots
 
-		// Most recycled slots still update in place; rows that fell fully outside the visible band
-		// may now drop portal content and remount later when they re-enter.
-		const updates = lifecycleLog.filter((e) => e.op === 'update');
-		expect(updates.length).toBeGreaterThanOrEqual(4);
+		// onMountCellContent fires for initial cold mounts and for warm cache restores post-scroll.
+		// 5 initial + up to 5 warm cache restores from full bind = ≥ 5 total events.
+		expect(lifecycleLog.length).toBeGreaterThanOrEqual(5);
 
 		// cellKeys are cell-instance-based (C prefix from createCellInstanceRendererKey).
-		for (const entry of updates) {
+		for (const entry of lifecycleLog) {
 			expect(entry.cellKey).toMatch(/^C\d+:ci\d+/);
 		}
 

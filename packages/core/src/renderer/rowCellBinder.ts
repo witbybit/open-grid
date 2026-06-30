@@ -521,7 +521,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	const fullBindHasImpostorCapability =
 		scrollMode === 'custom-live' ||
 		scrollMode === 'custom-imperative' ||
-		(scrollMode === 'custom' && col.cellRendererCapabilities?.scrollImpostor != null);
+		scrollMode === 'custom';
 	const snapshotContentKind =
 		contentMode === 'portal'
 			? !access.isEditing && fullBindHasImpostorCapability && portalImpostorValue !== ''
@@ -745,7 +745,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const hasScrollImpostorCapability =
 		scrollMode === 'custom-live' ||
 		scrollMode === 'custom-imperative' ||
-		(scrollMode === 'custom' && col.cellRendererCapabilities?.scrollImpostor != null);
+		scrollMode === 'custom';
 	const portalImpostorSnapshot =
 		hasScrollImpostorCapability &&
 		!isEditing &&
