@@ -969,4 +969,100 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		renderer.unmount();
 		container.remove();
 	});
+
+	it('feather-scroll A/B: all custom-renderer columns are portal-free during every scroll frame', async () => {
+		// A grid with 100% custom-renderer columns (worst case for the old synchronous-mount path).
+		// Prior to Plan 153 Step 3, custom (defer) cells called mountCellImmediately during scroll;
+		// portalMountsDuringScroll and customRendererMountsDuringScroll would both have been > 0.
+		// After: every scroll frame is portal-free. Portals mount in the fidelity idle lane instead.
+		const columns = Array.from({ length: 80 }, (_, i): ColumnDef<AuditPerfRow> => {
+			const mode = i % 3 === 0 ? ('live' as const) : ('defer' as const);
+			return {
+				field: i === 0 ? 'id' : `auditMetric_${i + 100}`,
+				header: `Col ${i}`,
+				width: 120 + (i % 4) * 20,
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollBehavior: mode },
+				valueGetter: i % 5 === 0 ? ({ row }: { row: AuditPerfRow }) => `m${i}|${row.severity}` : undefined,
+			};
+		});
+
+		const store = new GridStore<AuditPerfRow>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			rowOverscanPx: 40,
+			colBuffer: 1,
+			getRowId: (row) => row.id,
+		});
+		const datasource: InfiniteDatasource<AuditPerfRow> = {
+			getRows: async ({ startRow, endRow }) => ({
+				rows: Array.from({ length: endRow - startRow }, (_, offset) => createAuditRow(startRow + offset)),
+				totalCount: 10_000,
+			}),
+		};
+		const controller = new InfiniteRowModelController<AuditPerfRow>(store.getInfiniteRowModelRuntime(), {
+			datasource,
+			blockSize: 100,
+			columns,
+		});
+		const container = createContainer();
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.onMountCellContent = ({ cellKey, container: host }) => {
+			const el = document.createElement('span');
+			el.textContent = cellKey;
+			host.replaceChildren(el);
+		};
+		renderer.mount(container);
+		await flushAsync();
+		renderer.fullPaint();
+		await settleVisibleServerRows({ store, container, renderer } as any);
+
+		const scenarios: Array<{ label: string; top: number; left: number }> = [
+			{ label: 'vertical short', top: 200, left: 0 },
+			{ label: 'vertical long', top: 4_000, left: 0 },
+			{ label: 'horizontal', top: 4_000, left: 3_000 },
+			{ label: 'diagonal', top: 8_000, left: 6_000 },
+			{ label: 'back to top', top: 0, left: 0 },
+		];
+
+		for (const { label, top, left } of scenarios) {
+			renderer.resetRenderStats();
+			await browserScrollTo({ store, container, renderer } as any, top, left);
+			await settleVisibleServerRows({ store, container, renderer } as any);
+
+			const ev = collectFeatherScenarioEvidence({ store, container, renderer } as any);
+
+			// Motion lane: scroll frames are portal-free.
+			expect(ev.motion.customRendererMountsDuringScroll).toBe(0);
+			expect(ev.motion.valueGetterCallsDuringScroll).toBe(0);
+			expect(ev.motion.getCellValueCallsDuringScroll).toBe(0);
+			expect(ev.motion.formulaCallsDuringScroll).toBe(0);
+
+			// Quality: no blank visible cells after scroll settles.
+			assertNoBlankVisibleCells({ store, container, renderer } as any, top, left);
+
+			if (ev.motion.scrollFrames > 0) {
+				// Fidelity lane ran and upgraded cells post-scroll.
+				expect(ev.fidelity.fidelityCellsDecoratedAfterScroll).toBeGreaterThan(0);
+			}
+
+			assertWindowIsContiguousAndCapped({ store, container, renderer } as any);
+			assertNoStaleOrOverlappingDom({ store, container, renderer } as any);
+
+			if (process.env.FEATHER_BENCH) {
+				// eslint-disable-next-line no-console
+				console.log(
+					`[feather-bench] ${label}: scrollFrames=${ev.motion.scrollFrames} ` +
+						`written=${ev.motion.cellsWrittenDuringScroll} ` +
+						`portalOps=${ev.motion.portalOpsDuringScroll} ` +
+						`fidelityCells=${ev.fidelity.fidelityCellsDecoratedAfterScroll}`
+				);
+			}
+		}
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	}, 30_000);
 });
