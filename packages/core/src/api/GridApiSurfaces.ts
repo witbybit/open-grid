@@ -157,6 +157,8 @@ export interface GridStructureApi<TRowData = unknown> {
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
+	scrollToRow(rowId: string): void;
+	scrollToCell(rowId: string, colField: string): void;
 }
 
 export interface GridRuntimeSubscriptionApi<TRowData = unknown> {

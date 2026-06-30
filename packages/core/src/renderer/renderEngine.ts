@@ -618,6 +618,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.viewportCoordinator.scrollCellIntoView(rowId, colField);
 	}
 
+	public scrollRowIntoView(rowId: string): void {
+		this.viewportCoordinator.scrollRowIntoView(rowId);
+	}
+
 	private onRowMouseOver = (event: MouseEvent): void => {
 		// During scroll the viewport is moving — hover state would flicker across every
 		// row the pointer passes over and trigger className writes + style recalcs on each.

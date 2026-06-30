@@ -110,6 +110,8 @@ export function mountGridHost<TRowData>(
 			getStats: () => renderEngine.getRenderStats(),
 			resetStats: () => renderEngine.resetRenderStats(),
 			getContainer: () => container,
+			scrollCellIntoView: (rowId, colField) => renderEngine.scrollCellIntoView(rowId, colField),
+			scrollRowIntoView: (rowId) => renderEngine.scrollRowIntoView(rowId),
 		},
 		theme: {
 			getTheme: () => renderEngine.viewportRenderer.getTheme(),

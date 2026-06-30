@@ -24,6 +24,8 @@ export interface GridStoreHostFacade {
 	setContainerElement(c: HTMLElement): void;
 	getContainerElement(): HTMLElement | null;
 	getContainer(): HTMLElement | null;
+	scrollCellIntoView(rowId: string, colField: string): void;
+	scrollRowIntoView(rowId: string): void;
 	getInsightDiagnostics(): Record<string, unknown>;
 }
 
@@ -117,6 +119,8 @@ export function createGridStoreHostFacade(deps: GridStoreHostFacadeDeps): GridSt
 		setContainerElement: (container) => deps.setContainerElementState(container),
 		getContainerElement: () => deps.getRuntimePortsState().renderer.getContainer(),
 		getContainer: () => deps.getRuntimePortsState().renderer.getContainer(),
+		scrollCellIntoView: (rowId, colField) => deps.getRuntimePortsState().renderer.scrollCellIntoView(rowId, colField),
+		scrollRowIntoView: (rowId) => deps.getRuntimePortsState().renderer.scrollRowIntoView(rowId),
 		getInsightDiagnostics: () => deps.getInsightDiagnostics(),
 	};
 }

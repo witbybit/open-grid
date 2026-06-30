@@ -12,6 +12,8 @@ export interface RendererPort {
 	getStats(): RenderStats;
 	resetStats(): void;
 	getContainer(): HTMLElement | null;
+	scrollCellIntoView(rowId: string, colField: string): void;
+	scrollRowIntoView(rowId: string): void;
 }
 
 /**
@@ -42,6 +44,8 @@ export const headlessRendererPort: RendererPort = {
 	getStats: () => createEmptyRenderStats(),
 	resetStats: () => {},
 	getContainer: () => null,
+	scrollCellIntoView: () => {},
+	scrollRowIntoView: () => {},
 };
 
 /** Default theme port for headless contexts — returns dark theme tokens, accepts but ignores mutations. */

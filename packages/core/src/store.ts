@@ -1087,6 +1087,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public setContainerElement = (c: HTMLElement): void => this.hostFacade.setContainerElement(c);
 	public getContainerElement = (): HTMLElement | null => this.hostFacade.getContainerElement();
 	public getContainer = (): HTMLElement | null => this.hostFacade.getContainer();
+	public scrollToCell = (rowId: string, colField: string): void => this.hostFacade.scrollCellIntoView(rowId, colField);
+	public scrollToRow = (rowId: string): void => this.hostFacade.scrollRowIntoView(rowId);
 	public getInsightDiagnostics = (): Record<string, unknown> => this.hostFacade.getInsightDiagnostics();
 
 	public destroy = (): void => {

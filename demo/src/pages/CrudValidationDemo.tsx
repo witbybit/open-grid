@@ -4,7 +4,7 @@
  * Demonstrates the full validation lifecycle:
  *   - Sidebar "Submission Log" panel showing errors or success payload as JSON
  */
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Grid } from '@open-grid/react';
 import type {
 	ColumnDef,
@@ -16,7 +16,7 @@ import type {
 	GridCellIntegrityRule,
 	GridRowIntegrityRule,
 } from '@open-grid/react';
-import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson, Scan } from 'lucide-react';
+import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson, Scan, Navigation2 } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
@@ -387,6 +387,9 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 	const [errorSnapshot, setErrorSnapshot] = useState<GridIntegrityIssue[] | null>(null);
 	const [lastWriteBlocked, setLastWriteBlocked] = useState<GridWriteBlockedEventPayload | null>(null);
 	const [rows] = useState<Employee[]>(INITIAL_ROWS);
+	const [jumpRowId, setJumpRowId] = useState('');
+	const [jumpColField, setJumpColField] = useState('');
+	const [lastJumped, setLastJumped] = useState<{ rowId: string; colField: string } | null>(null);
 
 	const handleGridReady = useCallback(
 		(event: GridReadyEvent<Employee>) => {
@@ -510,6 +513,30 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		setLastWriteBlocked(null);
 	}, []);
 
+	const handleJump = useCallback(() => {
+		const api = apiRef.current;
+		if (!api || !jumpRowId.trim()) return;
+		const col = jumpColField.trim();
+		if (col) {
+			api.scrollToCell(jumpRowId.trim(), col);
+			setLastJumped({ rowId: jumpRowId.trim(), colField: col });
+		} else {
+			api.scrollToRow(jumpRowId.trim());
+			setLastJumped({ rowId: jumpRowId.trim(), colField: '' });
+		}
+	}, [jumpRowId, jumpColField]);
+
+	const handleScrollToError = useCallback((rowId: string, colField: string) => {
+		apiRef.current?.scrollToCell(rowId, colField);
+		setLastJumped({ rowId, colField });
+	}, []);
+
+	useEffect(() => {
+		if (!lastJumped) return;
+		const t = setTimeout(() => setLastJumped(null), 1500);
+		return () => clearTimeout(t);
+	}, [lastJumped]);
+
 	// Synchronous read — no validators run, just reads current error state
 	const handleSnapshotErrors = useCallback(() => {
 		const api = apiRef.current;
@@ -571,7 +598,34 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					Snapshot Errors
 				</button>
 
-				<div className='ml-auto'>
+				<div className='ml-auto flex items-center gap-2'>
+					{/* Jump to Row / Cell ──────────────────────────────────────────── */}
+					<div className='flex items-center gap-1.5 rounded-lg border border-indigo-500/25 bg-indigo-500/8 px-2.5 py-1'>
+						<Navigation2 className='h-3 w-3 shrink-0 text-indigo-400' />
+						<span className='text-[10px] font-bold uppercase tracking-wider text-indigo-400'>Jump</span>
+						<input
+							value={jumpRowId}
+							onChange={(e) => setJumpRowId(e.target.value)}
+							onKeyDown={(e) => e.key === 'Enter' && handleJump()}
+							placeholder='row id'
+							className='w-14 rounded bg-slate-900/60 px-1.5 py-0.5 text-[10px] text-slate-300 placeholder-slate-600 outline-none ring-1 ring-slate-700 focus:ring-indigo-500/50'
+						/>
+						<input
+							value={jumpColField}
+							onChange={(e) => setJumpColField(e.target.value)}
+							onKeyDown={(e) => e.key === 'Enter' && handleJump()}
+							placeholder='field (opt)'
+							className='w-20 rounded bg-slate-900/60 px-1.5 py-0.5 text-[10px] text-slate-300 placeholder-slate-600 outline-none ring-1 ring-slate-700 focus:ring-indigo-500/50'
+						/>
+						<button
+							onClick={handleJump}
+							disabled={!jumpRowId.trim()}
+							className='rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white transition-all hover:bg-indigo-500 disabled:opacity-40'
+						>
+							Go
+						</button>
+					</div>
+
 					<button
 						onClick={handleAddRow}
 						className='flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-bold text-emerald-300 transition-all hover:bg-emerald-500/20'
@@ -607,21 +661,35 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 			{/* Validation error list */}
 			{validationSummary.length > 0 && (
 				<div className='shrink-0 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-3'>
-					<p className='mb-2 text-[10px] font-extrabold uppercase tracking-wider text-rose-400'>
-						{validationSummary.length} validation error{validationSummary.length > 1 ? 's' : ''}
-					</p>
+					<div className='mb-2 flex items-center justify-between'>
+						<p className='text-[10px] font-extrabold uppercase tracking-wider text-rose-400'>
+							{validationSummary.length} validation error{validationSummary.length > 1 ? 's' : ''}
+						</p>
+						<span className='text-[9px] text-rose-600 italic'>click a row to scroll to it</span>
+					</div>
 					<ul className='flex flex-col gap-1 h-[70px] overflow-auto'>
-						{validationSummary.map((e, i) => (
-							<li key={i} className='flex items-start gap-2 text-[11px] text-rose-300/80'>
-								<span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400' />
-								<span>
-									<span className='font-semibold text-rose-300'>
-										Row {e.rowId} / {e.colField}:
-									</span>{' '}
-									{e.message}
-								</span>
-							</li>
-						))}
+						{validationSummary.map((e, i) => {
+							const isJumped = !!e.rowId && !!e.colField && lastJumped?.rowId === e.rowId && lastJumped?.colField === e.colField;
+							return (
+								<li
+									key={i}
+									onClick={() => e.rowId && e.colField && handleScrollToError(e.rowId, e.colField)}
+									className={`-mx-1 flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 text-[11px] text-rose-300/80 transition-colors ${
+										isJumped ? 'bg-rose-500/20 text-rose-200' : 'hover:bg-rose-500/10 hover:text-rose-200'
+									}`}
+								>
+									<Navigation2
+										className={`mt-0.5 h-3 w-3 shrink-0 transition-colors ${isJumped ? 'text-rose-300' : 'text-rose-600'}`}
+									/>
+									<span>
+										<span className='font-semibold text-rose-300'>
+											Row {e.rowId} / {e.colField}:
+										</span>{' '}
+										{e.message}
+									</span>
+								</li>
+							);
+						})}
 					</ul>
 				</div>
 			)}
@@ -664,17 +732,28 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 						<p className='text-[11px] text-sky-600 italic'>No errors in current state — run Validate All first to populate errors.</p>
 					) : (
 						<ul className='flex flex-col gap-1 h-[70px] overflow-auto'>
-							{errorSnapshot.map((e, i) => (
-								<li key={i} className='flex items-start gap-2 text-[11px] text-sky-300/80'>
-									<span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400' />
-									<span>
-										<span className='font-semibold text-sky-300'>
-											Row {e.rowId} / {e.colField}:
-										</span>{' '}
-										{e.message}
-									</span>
-								</li>
-							))}
+							{errorSnapshot.map((e, i) => {
+								const isJumped = !!e.rowId && !!e.colField && lastJumped?.rowId === e.rowId && lastJumped?.colField === e.colField;
+								return (
+									<li
+										key={i}
+										onClick={() => e.rowId && e.colField && handleScrollToError(e.rowId, e.colField)}
+										className={`-mx-1 flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 text-[11px] text-sky-300/80 transition-colors ${
+											isJumped ? 'bg-sky-500/20 text-sky-200' : 'hover:bg-sky-500/10 hover:text-sky-200'
+										}`}
+									>
+										<Navigation2
+											className={`mt-0.5 h-3 w-3 shrink-0 transition-colors ${isJumped ? 'text-sky-300' : 'text-sky-600'}`}
+										/>
+										<span>
+											<span className='font-semibold text-sky-300'>
+												Row {e.rowId} / {e.colField}:
+											</span>{' '}
+											{e.message}
+										</span>
+									</li>
+								);
+							})}
 						</ul>
 					)}
 				</div>
@@ -732,6 +811,12 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				<span>
 					Try editing or pasting an email ending with <code className='text-slate-400'>@contractor.test</code> to see async pre-commit
 					validation block the write
+				</span>
+				<span>·</span>
+				<span>
+					<strong className='text-slate-400'>Click any error row</strong> to scroll to that cell via{' '}
+					<code className='text-slate-400'>api.scrollToCell()</code> — or use the <strong className='text-slate-400'>Jump</strong> input to
+					call <code className='text-slate-400'>scrollToRow()</code> / <code className='text-slate-400'>scrollToCell()</code> directly
 				</span>
 			</div>
 		</div>
