@@ -312,6 +312,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			postScrollDecorationTimer: null,
 			postScrollFidelityScheduled: false,
 			postScrollFidelityTimer: null,
+			fidelityEpoch: 0,
 			cachedMaxScrollLeft: this.cachedMaxScrollLeft,
 			cachedTotalWidth: this.cachedTotalWidth,
 			cachedTotalHeight: this.cachedTotalHeight,

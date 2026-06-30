@@ -1899,6 +1899,70 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('fidelity work completes even when a new scroll starts mid-repair, by rescheduling on the next idle', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: IdleRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { callbacks.push(cb); return callbacks.length; });
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => { if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {}; });
+		vi.stubGlobal('requestIdleCallback', (cb: IdleRequestCallback) => { idleCallbacks.push(cb); return idleCallbacks.length; });
+
+		const columns = [
+			{ field: 'id', header: 'ID', width: 120 },
+			{ field: 'name', header: 'Name', width: 120, cellRenderer: () => null, cellRendererCapabilities: { scrollBehavior: 'live' as const } },
+		];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowOverscanPx: 80,
+		});
+		store.engine.insights.register({
+			id: 'fidelity-test',
+			getCellDecorations: (rowId, colField) =>
+				colField === 'name' ? [{ layerId: 'fidelity-test', kind: 'validationError', className: 'og-cell-validation-error', title: 'err' }] : [],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 60 }, (_, i) => ({ id: `r${i}`, name: `Name ${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ x:0, y:0, top:0, left:0, right:300, bottom:160, width:300, height:160, toJSON: () => ({}) });
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+
+		// First scroll
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		let i = callbacks.length - 1;
+		while (i < callbacks.length) callbacks[i++]?.(0);
+
+		// Second scroll starts before any idles fire (simulates rapid scroll)
+		scrollViewport.scrollTop = 800;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		while (i < callbacks.length) callbacks[i++]?.(0);
+
+		// Drain all idles to completion (including any reschedules)
+		let idleIdx = 0;
+		let safety = 50;
+		while (idleIdx < idleCallbacks.length && safety-- > 0) {
+			idleCallbacks[idleIdx++]?.({ didTimeout: false, timeRemaining: () => 50 });
+			while (i < callbacks.length) callbacks[i++]?.(0);
+		}
+
+		// Fidelity cells must have been decorated — the repair pipeline must complete
+		// even through the mid-scroll interruption.
+		const stats = renderer.getRenderStats();
+		expect(stats.fidelityCellsDecoratedAfterScroll).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('keeps custom row classes during scroll', async () => {
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {

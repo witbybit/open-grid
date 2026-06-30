@@ -53,6 +53,8 @@ export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	postScrollDecorationTimer: number | null;
 	postScrollFidelityScheduled: boolean;
 	postScrollFidelityTimer: number | null;
+	/** scrollEpoch captured when scheduleBudgetedFidelityDecoration was last called. */
+	fidelityEpoch: number;
 	cachedMaxScrollLeft: number;
 	cachedTotalWidth: number;
 	cachedTotalHeight: number;
@@ -724,12 +726,19 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	public scheduleBudgetedFidelityDecoration(): void {
 		if (this.state.postScrollFidelityScheduled) return;
 		this.state.postScrollFidelityScheduled = true;
+		this.state.fidelityEpoch = this.deps.runtimeState.scrollEpoch;
 		this.state.postScrollFidelityTimer = this.deps.gridScheduler.idle(() => {
 			this.state.postScrollFidelityTimer = null;
 			this.state.postScrollFidelityScheduled = false;
 			if (this.deps.runtimeState.isScrolling()) {
+				// A new scroll is active — reschedule so this work fires after it ends
+				// rather than silently dropping the remaining queue.
+				this.scheduleBudgetedFidelityDecoration();
 				return;
 			}
+			// If a new scroll epoch has completed since we were scheduled, the motion
+			// lane already ran a fresh decoration pass. Re-run under the current epoch.
+			this.state.fidelityEpoch = this.deps.runtimeState.scrollEpoch;
 			this.deps.renderStats.postScrollDecorationChunks++;
 			this.deps.renderStats.postScrollFidelityChunks++;
 			this.deps.portalMountManager.beginCellReleaseTransaction();
