@@ -800,7 +800,7 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 		expect(slot.centerCells[1].element.textContent).toContain('b-value');
 	});
 
-	it('does not skip a visible custom cell whose portal host is empty', () => {
+	it('defers the portal mount for a custom-live cell with empty host to the fidelity lane rather than mounting synchronously', () => {
 		const cols = [makeCol('a')];
 		const slot = makeRowSlot();
 		const plan = makePlan(cols, 0, 0, 1, [{ isCustom: true, mode: 'custom-live' }]);
@@ -809,7 +809,7 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 
 		const cell = slot.centerCells[0];
 		const portalKey = createCellInstanceRendererKey(cell.cellInstanceId, 'a');
-		const host = document.createElement('div');
+		const host = document.createElement('div'); // empty — no live portal content
 		cell.element.appendChild(host);
 		cell.update(0, 'a', 5, 'r1', 0, -1, 100, 'og-cell', 'portal', undefined, '', portalKey);
 		cell.lastMountedGlobalVersion = 1;
@@ -853,10 +853,10 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 			refreshVisibleColumns: null,
 		});
 
+		// custom-live with empty portal host → synthesizes impostor; fidelity lane upgrades it.
 		expect(onScrollCellPatched).toHaveBeenCalledTimes(1);
-		expect(deps.cellBinderDeps.portalMountManager.mountCellImmediately).toHaveBeenCalledWith(
-			expect.objectContaining({ cellKey: portalKey, container: host })
-		);
+		expect(deps.cellBinderDeps.portalMountManager.mountCellImmediately).not.toHaveBeenCalled();
+		expect(cell.lastContentMode).toBe('empty'); // no getCheapDisplayValue mock → empty impostor
 	});
 
 	it('does not mark a warm visible cell dirty solely because insight layers exist when its mounted visual versions are fresh', () => {
